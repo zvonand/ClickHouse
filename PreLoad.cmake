@@ -31,7 +31,7 @@ if (OS MATCHES "Linux"
     AND (USE_STATIC_LIBRARIES OR NOT DEFINED USE_STATIC_LIBRARIES))
 
     if (ARCH MATCHES "amd64|x86_64")
-        set (CMAKE_TOOLCHAIN_FILE "cmake/linux/toolchain-x86_64.cmake" CACHE INTERNAL "" FORCE)
+        set (CMAKE_TOOLCHAIN_FILE "cmake/linux/toolchain-x86_64-musl.cmake" CACHE INTERNAL "" FORCE)
     elseif (ARCH MATCHES "^(aarch64.*|AARCH64.*|arm64.*|ARM64.*)")
         set (CMAKE_TOOLCHAIN_FILE "cmake/linux/toolchain-aarch64.cmake" CACHE INTERNAL "" FORCE)
     elseif (ARCH MATCHES "^(ppc64le.*|PPC64LE.*)")

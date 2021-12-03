@@ -3,7 +3,7 @@ set -euo pipefail
 
 echo "Running prepare script"
 export DEBIAN_FRONTEND=noninteractive
-export RUNNER_VERSION=2.283.1
+export RUNNER_VERSION=2.285.0
 export RUNNER_HOME=/home/ubuntu/actions-runner
 
 apt-get update
@@ -37,7 +37,7 @@ EOT
 
 systemctl restart docker
 
-pip install boto3 pygithub requests urllib3 unidiff
+pip install boto3 pygithub requests urllib3 unidiff dohq-artifactory
 
 mkdir -p $RUNNER_HOME && cd $RUNNER_HOME
 
@@ -55,3 +55,11 @@ unzip awscliv2.zip
 ./aws/install
 
 rm -rf /home/ubuntu/awscliv2.zip /home/ubuntu/aws
+
+# SSH keys of core team
+mkdir -p /home/ubuntu/.ssh
+
+# ~/.ssh/authorized_keys and ~/.ssh/authorized_keys2 are cleaned out, so we'll put them near
+aws lambda invoke --region us-east-1 --function-name team-keys-lambda /home/ubuntu/.ssh/core_team_authorized_keys
+chown ubuntu: /home/ubuntu/.ssh -R
+chmod 0700 /home/ubuntu/.ssh

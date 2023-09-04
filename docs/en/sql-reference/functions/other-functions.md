@@ -660,7 +660,7 @@ SELECT
 
 ## formatReadableTimeDelta
 
-Given a time interval (delta) in seconds, this function returns a time delta with year/month/day/hour/minute/second as string.
+Given a time interval (delta) in seconds, this function returns a time delta with year/month/day/hour/minute/second/millisecond/microsecond/nanosecond as string.
 
 **Syntax**
 
@@ -671,7 +671,7 @@ formatReadableTimeDelta(column[, maximum_unit])
 **Arguments**
 
 - `column` — A column with a numeric time delta.
-- `maximum_unit` — Optional. Maximum unit to show. Acceptable values `seconds`, `minutes`, `hours`, `days`, `months`, `years`.
+- `maximum_unit` — Optional. Maximum unit to show. Acceptable values `nanoseconds`, `microseconds`, `milliseconds`, `seconds`, `minutes`, `hours`, `days`, `months`, `years`.
 
 Example:
 

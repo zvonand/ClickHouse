@@ -672,10 +672,35 @@ formatReadableTimeDelta(column[, maximum_unit])
 
 **Аргументы**
 
--   `column` — Столбец с числовой дельтой времени.
--   `maximum_unit` — Опциональный параметр. Максимальная единица измерения для отображения. Допустимые значения: нано/микро/миллисекунды, секунды, минуты, часы, дни, месяцы, годы.
+- `column` — Столбец с числовой дельтой времени.
+- `maximum_unit` — Опциональный параметр. Максимальная единица измерения для отображения.
+  * Допустимые значения: `nanoseconds`, `microseconds`, `milliseconds`, `seconds`, `minutes`, `hours`, `days`, `months`, `years`.
+  * Значение по умолчанию: `years`.
+- `minimum_unit` — Опциональный параметр. Минимальная единица измерения для отображения. Более мелкие единицы будут отброшены.
+    * Допустимые значения: `nanoseconds`, `microseconds`, `milliseconds`, `seconds`, `minutes`, `hours`, `days`, `months`, `years`.
+    * Если минимальная единица задана явно и превышает максимальную единицу, будет выкинуто исключение.
+    * Значение по умолчанию: `seconds` если максимальная единица -- секунда или более крупный интервал, в противном случае -- `nanoseconds`.
 
-Пример:
+:::warning
+Точность отображения дробных частей секунд оставляет желать лучшего из-за внутреннего представления чисел с плавающей точкой. См. пример:
+:::
+
+``` sql
+SELECT formatReadableTimeDelta(123.3, 'seconds', 'nanoseconds') AS bad_representation;
+SELECT formatReadableTimeDelta(123.4, 'seconds', 'nanoseconds') AS good_representation;
+```
+
+``` text
+┌─bad_representation──────────────────────────────────────────────────┐
+│ 123 seconds, 299 milliseconds, 999 microseconds and 999 nanoseconds │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─good_representation────────────────────────────────────────────────┐
+│ 123 seconds and 400 milliseconds, 0 microseconds and 0 nanoseconds │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+Ещё примеры:
 
 ``` sql
 SELECT

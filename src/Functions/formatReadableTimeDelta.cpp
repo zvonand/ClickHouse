@@ -146,7 +146,6 @@ public:
                 " 'nanoseconds', 'microseconds', 'nanoseconds', 'seconds', 'minutes', 'hours', 'days', 'months', 'years'.",
                 maximum_unit_str, getName());
 
-        std::cerr << "\nMinimum unis str: " << minimum_unit_str << "\n";
         if (minimum_unit_str.empty() || minimum_unit_str == "seconds") // Set seconds as min_unit by default not to ruin old use cases
             min_unit = Seconds;
         else if (minimum_unit_str == "years")
@@ -171,7 +170,6 @@ public:
                             " 'nanoseconds', 'microseconds', 'nanoseconds', 'seconds', 'minutes', 'hours', 'days', 'months', 'years'.",
                             minimum_unit_str, getName());
 
-        std::cerr << "min_unit: " << min_unit << ", max_unit: " << max_unit << "\n";
         if (min_unit > max_unit)
         {
             if (minimum_unit_str.empty())
@@ -258,13 +256,13 @@ public:
                         [[fallthrough]];
 
                     case Microseconds:
-                        processUnit(1, 1000, " microsecond", 12, value, buf_to, has_output, min_unit, min_unit == Microseconds);
+                        processUnit(1, 1000000, " microsecond", 12, value, buf_to, has_output, min_unit, min_unit == Microseconds);
                         if (min_unit == Microseconds)
                             break;
                         [[fallthrough]];
 
                     case Nanoseconds:
-                        processUnit(1, 1000, " nanosecond", 11, value, buf_to, has_output, min_unit, true);
+                        processUnit(1, 1000000000, " nanosecond", 11, value, buf_to, has_output, min_unit, true);
                 }
             }
 
@@ -295,7 +293,7 @@ public:
         {
             num_units = static_cast<UInt64>(std::floor(value / unit_multiplier));
 
-            if (!num_units)
+            if (!num_units && !is_minimum_unit)
             {
                 /// Zero units, no need to print. But if it's the last (seconds) and the only unit, print "0 seconds" nevertheless.
                 if (unit_multiplier != 1 || has_output)
@@ -314,18 +312,26 @@ public:
                     writeCString(", ", buf_to);
             }
         }
-        else   /// dealing with sub-seconds, need separate workaround due to float precision issues
+        else   /// dealing with sub-seconds, a bit more peculiar to avoid more precision issues
         {
-            value *= 1000;
+            Float64 shifted_unit_to_whole = value * unit_divisor;
 
             Float64 num_units_f;
-            value = std::modf(value, &num_units_f);
+            value = std::modf(shifted_unit_to_whole, &num_units_f);
             num_units = static_cast<UInt64>(std::llround(num_units_f));
+            value /= unit_divisor;
+
+            if (!num_units)
+            {
+                /// Zero units, no need to print. But if it's the last (nanoseconds) and the only unit, print "0 nanoseconds" nevertheless.
+                if (!is_minimum_unit || has_output)
+                    return;
+            }
 
             if (has_output)
             {
                 /// Need delimiter between values. The last delimiter is " and ", all previous are comma.
-                if (is_minimum_unit || std::abs(value) < 1E-9)
+                if (is_minimum_unit || std::abs(value) <= 1E-9)
                     writeCString(" and ", buf_to);
                 else
                     writeCString(", ", buf_to);

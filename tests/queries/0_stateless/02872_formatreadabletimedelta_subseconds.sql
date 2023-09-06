@@ -8,7 +8,7 @@ SELECT
 -- max_unit smaller than second, min_unit omitted (and considered 'nanoseconds')
 WITH
     'milliseconds' AS maximum_unit,
-    arrayJoin([1.12, 60.2, 123.33, 24.45, 35.57, 66.64, 67.79, 48.88, 99.96, 3600]) AS elapsed
+    arrayJoin([1.12, 60.2, 123.33, 24.45, 35.57, 66.64, 67.79797979, 48.888888, 99.96, 3600]) AS elapsed
 SELECT
     formatReadableTimeDelta(elapsed, maximum_unit) AS time_delta;
 

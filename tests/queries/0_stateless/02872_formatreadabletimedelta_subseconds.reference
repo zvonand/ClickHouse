@@ -20,5 +20,5 @@
 3600000 milliseconds
 0 seconds
 1 hour, 1 second
-milliseconds	0	0 nanoseconds
-milliseconds	1.0005	1000 milliseconds and 500 microseconds
+0 nanoseconds
+1000 milliseconds and 500 microseconds

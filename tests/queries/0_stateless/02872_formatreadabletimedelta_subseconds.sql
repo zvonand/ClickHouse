@@ -16,14 +16,15 @@ SELECT
 SELECT formatReadableTimeDelta(1.1, 'seconds', 'hours'); -- { serverError BAD_ARGUMENTS }
 
 -- Check empty units are omitted unless they are the only one
-with
+WITH
     'hours' AS maximum_unit,
     'microseconds' as minimum_unit,
     arrayJoin([0, 3601.000000003]) AS elapsed
 SELECT
 formatReadableTimeDelta(elapsed, maximum_unit, minimum_unit);
 
-SELECT
+WITH
     'milliseconds' AS maximum_unit,
-    arrayJoin([0, 1.0005]) AS elapsed,
+    arrayJoin([0, 1.0005]) AS elapsed
+SELECT
     formatReadableTimeDelta(elapsed, maximum_unit);

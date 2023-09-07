@@ -122,53 +122,10 @@ public:
         Unit max_unit, min_unit;
 
         /// Default means "use all available whole units".
-        if (maximum_unit_str.empty() || maximum_unit_str == "years")
-            max_unit = Years;
-        else if (maximum_unit_str == "months")
-            max_unit = Months;
-        else if (maximum_unit_str == "days")
-            max_unit = Days;
-        else if (maximum_unit_str == "hours")
-            max_unit = Hours;
-        else if (maximum_unit_str == "minutes")
-            max_unit = Minutes;
-        else if (maximum_unit_str == "seconds")
-            max_unit = Seconds;
-        else if (maximum_unit_str == "milliseconds")
-            max_unit = Milliseconds;
-        else if (maximum_unit_str == "microseconds")
-            max_unit = Microseconds;
-        else if (maximum_unit_str == "nanoseconds")
-            max_unit = Nanoseconds;
-        else
-            throw Exception(ErrorCodes::BAD_ARGUMENTS,
-                "Unexpected value of maximum unit argument ({}) for function {}, the only allowed values are:"
-                " 'nanoseconds', 'microseconds', 'nanoseconds', 'seconds', 'minutes', 'hours', 'days', 'months', 'years'.",
-                maximum_unit_str, getName());
+        max_unit = dispatchUnit(maximum_unit_str, Years, "maximum");
 
-        if (minimum_unit_str.empty() || minimum_unit_str == "seconds") // Set seconds as min_unit by default not to ruin old use cases
-            min_unit = Seconds;
-        else if (minimum_unit_str == "years")
-            min_unit = Years;
-        else if (minimum_unit_str == "months")
-            min_unit = Months;
-        else if (minimum_unit_str == "days")
-            min_unit = Days;
-        else if (minimum_unit_str == "hours")
-            min_unit = Hours;
-        else if (minimum_unit_str == "minutes")
-            min_unit = Minutes;
-        else if (minimum_unit_str == "milliseconds")
-            min_unit = Milliseconds;
-        else if (minimum_unit_str == "microseconds")
-            min_unit = Microseconds;
-        else if (minimum_unit_str == "nanoseconds")
-            min_unit = Nanoseconds;
-        else
-            throw Exception(ErrorCodes::BAD_ARGUMENTS,
-                            "Unexpected value of minimum unit argument ({}) for function {}, the only allowed values are:"
-                            " 'nanoseconds', 'microseconds', 'nanoseconds', 'seconds', 'minutes', 'hours', 'days', 'months', 'years'.",
-                            minimum_unit_str, getName());
+        // Set seconds as min_unit by default not to ruin old use cases
+        min_unit = dispatchUnit(minimum_unit_str, Seconds, "minimum");
 
         if (min_unit > max_unit)
         {
@@ -346,6 +303,36 @@ public:
             writeChar('s', buf_to);
 
         has_output = true;
+    }
+
+private:
+    Unit dispatchUnit(const std::string_view & unit_str, const Unit default_unit, const std::string & bound_name) const
+    {
+        if (unit_str.empty())
+            return default_unit;
+        else if (unit_str == "years")
+            return Years;
+        else if (unit_str == "months")
+            return Months;
+        else if (unit_str == "days")
+            return Days;
+        else if (unit_str == "hours")
+            return Hours;
+        else if (unit_str == "minutes")
+            return Minutes;
+        else if (unit_str == "seconds")
+            return Seconds;
+        else if (unit_str == "milliseconds")
+            return Milliseconds;
+        else if (unit_str == "microseconds")
+            return Microseconds;
+        else if (unit_str == "nanoseconds")
+            return Nanoseconds;
+        else
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Unexpected value of {} unit argument ({}) for function {}, the only allowed values are:"
+                " 'nanoseconds', 'microseconds', 'nanoseconds', 'seconds', 'minutes', 'hours', 'days', 'months', 'years'.",
+                bound_name, unit_str, getName());
     }
 };
 

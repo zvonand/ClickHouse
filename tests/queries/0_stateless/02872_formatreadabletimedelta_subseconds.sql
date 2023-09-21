@@ -12,7 +12,7 @@ WITH
 SELECT
     formatReadableTimeDelta(elapsed, maximum_unit) AS time_delta;
 
--- Check exceprion is thrown
+-- Check exception is thrown
 SELECT formatReadableTimeDelta(1.1, 'seconds', 'hours'); -- { serverError BAD_ARGUMENTS }
 
 -- Check empty units are omitted unless they are the only one

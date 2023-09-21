@@ -119,9 +119,6 @@ public:
                     minimum_unit_str = minimum_unit_const_col->getDataColumn().getDataAt(0).toView();
             }
         }
-        Unit max_unit = dispatchUnit(maximum_unit_str, Years, "maximum");
-        Unit min_unit = dispatchUnit(minimum_unit_str, Seconds, "minimum");
-
         /// Default means "use all available whole units".
         max_unit = dispatchUnit(maximum_unit_str, Years, "maximum");
 

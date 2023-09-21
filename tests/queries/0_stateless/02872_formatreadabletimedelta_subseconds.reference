@@ -1,5 +1,5 @@
 1 second
-1 minute and 0 seconds
+1 minute
 2 minutes and 3 seconds
 24 seconds
 35 seconds
@@ -7,7 +7,7 @@
 1 minute and 7 seconds
 48 seconds
 1 minute and 39 seconds
-1 hour and 0 seconds
+1 hour
 1120 milliseconds
 60200 milliseconds
 123330 milliseconds
@@ -19,6 +19,6 @@
 99960 milliseconds
 3600000 milliseconds
 0 seconds
-1 hour, 1 second
+1 hour and 1 second
 0 nanoseconds
 1000 milliseconds and 500 microseconds

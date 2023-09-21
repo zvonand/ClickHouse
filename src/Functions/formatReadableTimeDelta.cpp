@@ -139,6 +139,14 @@ public:
                                 minimum_unit_str, getName(), maximum_unit_str);
         }
 
+        UInt64 min_unit_divisor = 1;
+        if (min_unit == Milliseconds)
+            min_unit_divisor = 1000;
+        else if (min_unit == Microseconds)
+            min_unit_divisor = 1000000;
+        else if (min_unit == Nanoseconds)
+            min_unit_divisor = 1000000000;
+
         auto col_to = ColumnString::create();
 
         ColumnString::Chars & data_to = col_to->getChars();
@@ -172,55 +180,55 @@ public:
                 switch (max_unit) /// A kind of Duff Device.
                 {
                     case Years:
-                        processUnit(365 * 24 * 3600, 1, " year", 5, value, buf_to, has_output, min_unit, min_unit == Years);
+                        processUnit(365 * 24 * 3600, 1, " year", 5, value, buf_to, has_output, min_unit_divisor, min_unit == Years);
                         if (min_unit == Years)
                             break;
                         [[fallthrough]];
 
                     case Months:
-                        processUnit(static_cast<UInt64>(30.5 * 24 * 3600), 1, " month", 6, value, buf_to, has_output, min_unit, min_unit == Months);
+                        processUnit(static_cast<UInt64>(30.5 * 24 * 3600), 1, " month", 6, value, buf_to, has_output, min_unit_divisor, min_unit == Months);
                         if (min_unit == Months)
                             break;
                         [[fallthrough]];
 
                     case Days:
-                        processUnit(24 * 3600, 1, " day", 4, value, buf_to, has_output, min_unit, min_unit == Days);
+                        processUnit(24 * 3600, 1, " day", 4, value, buf_to, has_output, min_unit_divisor, min_unit == Days);
                         if (min_unit == Days)
                             break;
                         [[fallthrough]];
 
                     case Hours:
-                        processUnit(3600, 1, " hour", 5, value, buf_to, has_output, min_unit, min_unit == Hours);
+                        processUnit(3600, 1, " hour", 5, value, buf_to, has_output, min_unit_divisor, min_unit == Hours);
                         if (min_unit == Hours)
                             break;
                         [[fallthrough]];
 
                     case Minutes:
-                        processUnit(60, 1, " minute", 7, value, buf_to, has_output, min_unit, min_unit == Minutes);
+                        processUnit(60, 1, " minute", 7, value, buf_to, has_output, min_unit_divisor, min_unit == Minutes);
                         if (min_unit == Minutes)
                             break;
                         [[fallthrough]];
 
                     case Seconds:
-                        processUnit(1, 1, " second", 7, value, buf_to, has_output, min_unit, min_unit == Seconds);
+                        processUnit(1, 1, " second", 7, value, buf_to, has_output, min_unit_divisor, min_unit == Seconds);
                         if (min_unit == Seconds)
                             break;
                         [[fallthrough]];
 
                     case Milliseconds:
-                        processUnit(1, 1000, " millisecond", 12, value, buf_to, has_output, min_unit, min_unit == Milliseconds);
+                        processUnit(1, 1000, " millisecond", 12, value, buf_to, has_output, min_unit_divisor, min_unit == Milliseconds);
                         if (min_unit == Milliseconds)
                             break;
                         [[fallthrough]];
 
                     case Microseconds:
-                        processUnit(1, 1000000, " microsecond", 12, value, buf_to, has_output, min_unit, min_unit == Microseconds);
+                        processUnit(1, 1000000, " microsecond", 12, value, buf_to, has_output, min_unit_divisor, min_unit == Microseconds);
                         if (min_unit == Microseconds)
                             break;
                         [[fallthrough]];
 
                     case Nanoseconds:
-                        processUnit(1, 1000000000, " nanosecond", 11, value, buf_to, has_output, min_unit, true);
+                        processUnit(1, 1000000000, " nanosecond", 11, value, buf_to, has_output, min_unit_divisor, true);
                 }
             }
 
@@ -234,7 +242,7 @@ public:
 
     static void processUnit(
         UInt64 unit_multiplier, UInt64 unit_divisor, const char * unit_name, size_t unit_name_size,
-        Float64 & value, WriteBuffer & buf_to, bool & has_output, Unit min_unit, bool is_minimum_unit)
+        Float64 & value, WriteBuffer & buf_to, bool & has_output, UInt64 min_unit_divisor, bool is_minimum_unit)
     {
         if (unlikely(value + 1.0 == value))
         {
@@ -260,15 +268,6 @@ public:
 
             /// Remaining value to print on next iteration.
             value -= num_units * unit_multiplier;
-
-            if (has_output)
-            {
-                /// Need delimiter between values. The last delimiter is " and ", all previous are comma.
-                if ((value < 1 && min_unit >= Seconds) || is_minimum_unit)
-                    writeCString(" and ", buf_to);
-                else
-                    writeCString(", ", buf_to);
-            }
         }
         else   /// dealing with sub-seconds, a bit more peculiar to avoid more precision issues
         {
@@ -285,15 +284,15 @@ public:
                 if (!is_minimum_unit || has_output)
                     return;
             }
+        }
 
-            if (has_output)
-            {
-                /// Need delimiter between values. The last delimiter is " and ", all previous are comma.
-                if (is_minimum_unit || std::abs(value) <= 1E-9)
-                    writeCString(" and ", buf_to);
-                else
-                    writeCString(", ", buf_to);
-            }
+        if (has_output)
+        {
+            /// Need delimiter between values. The last delimiter is " and ", all previous are comma.
+            if (is_minimum_unit || std::abs(value) < (Float64(1)/min_unit_divisor))
+                writeCString(" and ", buf_to);
+            else
+                writeCString(", ", buf_to);
         }
 
         writeText(num_units, buf_to);

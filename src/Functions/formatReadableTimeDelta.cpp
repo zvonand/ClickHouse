@@ -250,7 +250,7 @@ public:
         {
             num_units = static_cast<UInt64>(std::floor(value / unit_multiplier));
 
-            if (!num_units && !is_minimum_unit)
+            if (!num_units)
             {
                 /// Zero units, no need to print. But if it's the last (seconds) and the only unit, print "0 seconds" nevertheless.
                 if (unit_multiplier != 1 || has_output)

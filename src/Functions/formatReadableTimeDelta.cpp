@@ -120,10 +120,9 @@ public:
             }
         }
         /// Default means "use all available whole units".
-        max_unit = dispatchUnit(maximum_unit_str, Years, "maximum");
-
-        // Set seconds as min_unit by default not to ruin old use cases
-        min_unit = dispatchUnit(minimum_unit_str, Seconds, "minimum");
+        Unit max_unit = dispatchUnit(maximum_unit_str, Years, "maximum");
+        /// Set seconds as min_unit by default not to ruin old use cases
+        Unit min_unit = dispatchUnit(minimum_unit_str, Seconds, "minimum");
 
         if (min_unit > max_unit)
         {

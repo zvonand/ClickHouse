@@ -5,8 +5,10 @@
 #include <Columns/ColumnVector.h>
 #include <Common/NaNUtils.h>
 #include <DataTypes/DataTypeString.h>
+#include <IO/WriteBufferFromString.h>
 #include <IO/WriteBufferFromVector.h>
 #include <IO/WriteHelpers.h>
+#include <IO/DoubleConverter.h>
 
 
 namespace DB
@@ -135,14 +137,6 @@ public:
                                 minimum_unit_str, getName(), maximum_unit_str);
         }
 
-        UInt64 min_unit_divisor = 1;
-        if (min_unit == Milliseconds)
-            min_unit_divisor = 1000;
-        else if (min_unit == Microseconds)
-            min_unit_divisor = 1000000;
-        else if (min_unit == Nanoseconds)
-            min_unit_divisor = 1000000000;
-
         auto col_to = ColumnString::create();
 
         ColumnString::Chars & data_to = col_to->getChars();
@@ -173,58 +167,61 @@ public:
                 /// To output separators between parts: ", " and " and ".
                 bool has_output = false;
 
+                Float64 whole_part;
+                std::string fractional_str = getFractionalString(std::modf(value, &whole_part));
+
                 switch (max_unit) /// A kind of Duff Device.
                 {
                     case Years:
-                        processUnit(365 * 24 * 3600, 1, " year", 5, value, buf_to, has_output, min_unit_divisor, min_unit == Years);
+                        processUnit(365 * 24 * 3600, 0, " year", 5, whole_part, fractional_str, buf_to, has_output, min_unit, min_unit == Years);
                         if (min_unit == Years)
                             break;
                         [[fallthrough]];
 
                     case Months:
-                        processUnit(static_cast<UInt64>(30.5 * 24 * 3600), 1, " month", 6, value, buf_to, has_output, min_unit_divisor, min_unit == Months);
+                        processUnit(static_cast<UInt64>(30.5 * 24 * 3600), 0, " month", 6, whole_part, fractional_str, buf_to, has_output, min_unit, min_unit == Months);
                         if (min_unit == Months)
                             break;
                         [[fallthrough]];
 
                     case Days:
-                        processUnit(24 * 3600, 1, " day", 4, value, buf_to, has_output, min_unit_divisor, min_unit == Days);
+                        processUnit(24 * 3600, 0, " day", 4, whole_part, fractional_str, buf_to, has_output, min_unit, min_unit == Days);
                         if (min_unit == Days)
                             break;
                         [[fallthrough]];
 
                     case Hours:
-                        processUnit(3600, 1, " hour", 5, value, buf_to, has_output, min_unit_divisor, min_unit == Hours);
+                        processUnit(3600, 0, " hour", 5, whole_part, fractional_str, buf_to, has_output, min_unit, min_unit == Hours);
                         if (min_unit == Hours)
                             break;
                         [[fallthrough]];
 
                     case Minutes:
-                        processUnit(60, 1, " minute", 7, value, buf_to, has_output, min_unit_divisor, min_unit == Minutes);
+                        processUnit(60, 0, " minute", 7, whole_part, fractional_str, buf_to, has_output, min_unit, min_unit == Minutes);
                         if (min_unit == Minutes)
                             break;
                         [[fallthrough]];
 
                     case Seconds:
-                        processUnit(1, 1, " second", 7, value, buf_to, has_output, min_unit_divisor, min_unit == Seconds);
+                        processUnit(1, 0, " second", 7, whole_part, fractional_str, buf_to, has_output, min_unit, min_unit == Seconds);
                         if (min_unit == Seconds)
                             break;
                         [[fallthrough]];
 
                     case Milliseconds:
-                        processUnit(1, 1000, " millisecond", 12, value, buf_to, has_output, min_unit_divisor, min_unit == Milliseconds);
+                        processUnit(1, 3, " millisecond", 12, whole_part, fractional_str, buf_to, has_output, min_unit, min_unit == Milliseconds);
                         if (min_unit == Milliseconds)
                             break;
                         [[fallthrough]];
 
                     case Microseconds:
-                        processUnit(1, 1000000, " microsecond", 12, value, buf_to, has_output, min_unit_divisor, min_unit == Microseconds);
+                        processUnit(1, 6, " microsecond", 12, whole_part, fractional_str, buf_to, has_output, min_unit, min_unit == Microseconds);
                         if (min_unit == Microseconds)
                             break;
                         [[fallthrough]];
 
                     case Nanoseconds:
-                        processUnit(1, 1000000000, " nanosecond", 11, value, buf_to, has_output, min_unit_divisor, true);
+                        processUnit(1, 9, " nanosecond", 11, whole_part, fractional_str, buf_to, has_output, min_unit, true);
                 }
             }
 
@@ -237,23 +234,23 @@ public:
     }
 
     static void processUnit(
-        UInt64 unit_multiplier, UInt64 unit_divisor, const char * unit_name, size_t unit_name_size,
-        Float64 & value, WriteBuffer & buf_to, bool & has_output, UInt64 min_unit_divisor, bool is_minimum_unit)
+        UInt64 unit_multiplier, UInt32 unit_scale, const char * unit_name, size_t unit_name_size, Float64 & whole_part,
+        String & fractional_str, WriteBuffer & buf_to, bool & has_output,  Unit min_unit, bool is_minimum_unit)
     {
-        if (unlikely(value + 1.0 == value))
+        if (unlikely(whole_part + 1.0 == whole_part))
         {
             /// The case when value is too large so exact representation for subsequent smaller units is not possible.
-            writeText(std::floor(value * unit_divisor / unit_multiplier), buf_to);
+            writeText(std::floor(whole_part * DecimalUtils::scaleMultiplier<Int64>(unit_scale) / unit_multiplier), buf_to);
             buf_to.write(unit_name, unit_name_size);
             writeChar('s', buf_to);
             has_output = true;
-            value = 0;
+            whole_part = 0;
             return;
         }
-        UInt64 num_units;
-        if (unit_divisor == 1)  /// dealing with whole number of seconds
+        UInt64 num_units = 0;
+        if (unit_scale == 0)  /// dealing with whole number of seconds
         {
-            num_units = static_cast<UInt64>(std::floor(value / unit_multiplier));
+            num_units = static_cast<UInt64>(std::floor(whole_part / unit_multiplier));
 
             if (!num_units)
             {
@@ -263,16 +260,21 @@ public:
             }
 
             /// Remaining value to print on next iteration.
-            value -= num_units * unit_multiplier;
+            whole_part -= num_units * unit_multiplier;
         }
         else   /// dealing with sub-seconds, a bit more peculiar to avoid more precision issues
         {
-            Float64 shifted_unit_to_whole = value * unit_divisor;
+            if (whole_part >= 1)  /// There were no whole units printed
+            {
+                num_units += static_cast<UInt64>(whole_part) * DecimalUtils::scaleMultiplier<Int64>(unit_scale);
+                whole_part = 0;
+            }
 
-            Float64 num_units_f;
-            value = std::modf(shifted_unit_to_whole, &num_units_f);
-            num_units = static_cast<UInt64>(std::llround(num_units_f));
-            value /= unit_divisor;
+            for (UInt32 i = 0; i < unit_scale; ++i)
+            {
+                num_units += (fractional_str[i] - '0') * DecimalUtils::scaleMultiplier<Int64>(unit_scale - i - 1);
+                fractional_str[i] = '0';
+            }
 
             if (!num_units)
             {
@@ -282,16 +284,18 @@ public:
             }
         }
 
+        /// Write number of units
         if (has_output)
         {
             /// Need delimiter between values. The last delimiter is " and ", all previous are comma.
-            if (is_minimum_unit || std::abs(value) < (Float64(1)/min_unit_divisor))
+            if (is_minimum_unit || (whole_part < 1 && fractional_str.substr(0, (4 - min_unit) * 3) == std::string((4 - min_unit) * 3, '0')))
                 writeCString(" and ", buf_to);
             else
                 writeCString(", ", buf_to);
         }
 
         writeText(num_units, buf_to);
+
         buf_to.write(unit_name, unit_name_size); /// If we just leave strlen(unit_name) here, clang-11 fails to make it compile-time.
 
         /// How to pronounce: unit vs. units.
@@ -302,6 +306,17 @@ public:
     }
 
 private:
+    static std::string getFractionalString(const Float64 & fractional_part)
+    {
+        DB::DoubleConverter<true>::BufferType buffer;
+        double_conversion::StringBuilder builder{buffer, sizeof(buffer)};
+
+        if (!DB::DoubleConverter<false>::instance().ToFixed(fractional_part, 9, &builder))
+            throw DB::Exception(DB::ErrorCodes::CANNOT_PRINT_FLOAT_OR_DOUBLE_NUMBER, "Cannot print float or double number");
+
+        return std::string(buffer, builder.position()).substr(2);   /// do not return `0.` -- we don't need it
+    }
+
     Unit dispatchUnit(const std::string_view & unit_str, const Unit default_unit, const std::string & bound_name) const
     {
         if (unit_str.empty())

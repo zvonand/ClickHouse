@@ -681,26 +681,7 @@ formatReadableTimeDelta(column[, maximum_unit])
     * Если минимальная единица задана явно и превышает максимальную единицу, будет выкинуто исключение.
     * Значение по умолчанию: `seconds` если максимальная единица -- секунда или более крупный интервал, в противном случае -- `nanoseconds`.
 
-:::warning
-Точность отображения дробных частей секунд оставляет желать лучшего из-за внутреннего представления чисел с плавающей точкой. См. пример:
-:::
-
-``` sql
-SELECT formatReadableTimeDelta(123.3, 'seconds', 'nanoseconds') AS bad_representation;
-SELECT formatReadableTimeDelta(123.4, 'seconds', 'nanoseconds') AS good_representation;
-```
-
-``` text
-┌─bad_representation──────────────────────────────────────────────────┐
-│ 123 seconds, 299 milliseconds, 999 microseconds and 999 nanoseconds │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌─good_representation────────────────────────────────────────────────┐
-│ 123 seconds and 400 milliseconds, 0 microseconds and 0 nanoseconds │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-Ещё примеры:
+**Пример**
 
 ``` sql
 SELECT

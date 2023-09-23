@@ -677,29 +677,9 @@ formatReadableTimeDelta(column[, maximum_unit, minimum_unit])
 - `minimum_unit` — Optional. Minimum unit to show. All smaller units are truncated.
   * Acceptable values: `nanoseconds`, `microseconds`, `milliseconds`, `seconds`, `minutes`, `hours`, `days`, `months`, `years`. 
   * If explicitly specified value is bigger than `maximum_unit`, an exception will be thrown.
-  * Default value: `seconds` if `maximum_unit` is `seconds` or bigger, `nanoseconds` otherwise.  
+  * Default value: `seconds` if `maximum_unit` is `seconds` or bigger, `nanoseconds` otherwise.
 
-:::warning
-Sub-second precision may be bad due to the nature of floating-point numbers internal representation. See example below:
-:::
-
-``` sql
-SELECT formatReadableTimeDelta(123.3, 'seconds', 'nanoseconds') AS bad_representation;
-SELECT formatReadableTimeDelta(123.4, 'seconds', 'nanoseconds') AS good_representation;
-```
-
-``` text
-┌─bad_representation──────────────────────────────────────────────────┐
-│ 123 seconds, 299 milliseconds, 999 microseconds and 999 nanoseconds │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌─good_representation────────────────────────────────────────────────┐
-│ 123 seconds and 400 milliseconds, 0 microseconds and 0 nanoseconds │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-Other examples:
-
+**Example**
 ``` sql
 SELECT
     arrayJoin([100, 12345, 432546534]) AS elapsed,

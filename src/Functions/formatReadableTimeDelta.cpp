@@ -2,10 +2,8 @@
 #include <Functions/IFunction.h>
 #include <Functions/FunctionHelpers.h>
 #include <Columns/ColumnString.h>
-#include <Columns/ColumnVector.h>
 #include <Common/NaNUtils.h>
 #include <DataTypes/DataTypeString.h>
-#include <IO/WriteBufferFromString.h>
 #include <IO/WriteBufferFromVector.h>
 #include <IO/WriteHelpers.h>
 #include <IO/DoubleConverter.h>
@@ -16,6 +14,7 @@ namespace DB
 
 namespace ErrorCodes
 {
+    extern const int CANNOT_PRINT_FLOAT_OR_DOUBLE_NUMBER;
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
     extern const int ILLEGAL_TYPE_OF_ARGUMENT;
     extern const int BAD_ARGUMENTS;
@@ -312,7 +311,7 @@ private:
         double_conversion::StringBuilder builder{buffer, sizeof(buffer)};
 
         if (!DB::DoubleConverter<false>::instance().ToFixed(fractional_part, 9, &builder))
-            throw DB::Exception(DB::ErrorCodes::CANNOT_PRINT_FLOAT_OR_DOUBLE_NUMBER, "Cannot print float or double number");
+            throw DB::Exception(DB::ErrorCodes::CANNOT_PRINT_FLOAT_OR_DOUBLE_NUMBER, "Cannot print double number: {}", fractional_part);
 
         return std::string(buffer, builder.position()).substr(2);   /// do not return `0.` -- we don't need it
     }

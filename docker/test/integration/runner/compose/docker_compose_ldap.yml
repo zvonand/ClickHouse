@@ -1,24 +1,21 @@
 version: '2.3'
-
 services:
-  openldap:
-    image: osixia/openldap:1.4.0
-    command: "--copy-service --loglevel debug"
-    environment:
-      LDAP_ORGANIZATION: "company"
-      LDAP_DOMAIN: "company.com"
-      LDAP_ADMIN_PASSWORD: "admin"
-      LDAP_TLS: "false"
-    volumes:
-      - ${LDAP_DIR}/../configs/ldap:/container/service/slapd/assets/config/bootstrap/ldif/custom
-    expose:
-      - "389"
-      - "636"
-    healthcheck:
-      test: ldapsearch -x -H ldap://localhost:$${LDAP_PORT:-389} -b "dc=company,dc=com" -D "cn=admin,dc=company,dc=com" -w admin
-      interval: 10s
-      timeout: 10s
-      retries: 3
-      start_period: 300s
-    security_opt:
-      - label:disable
+    openldap:
+        image: bitnami/openldap:2.6.6
+        restart: always
+        environment:
+            LDAP_ROOT: dc=example,dc=org
+            LDAP_ADMIN_DN: cn=admin,dc=example,dc=org
+            LDAP_ADMIN_USERNAME: admin
+            LDAP_ADMIN_PASSWORD: clickhouse
+            LDAP_USER_DC: users
+            LDAP_USERS: janedoe,johndoe
+            LDAP_PASSWORDS: qwerty,qwertz
+            LDAP_PORT_NUMBER: ${LDAP_INTERNAL_PORT:-1389}
+        ports:
+            - ${LDAP_EXTERNAL_PORT:-1389}:${LDAP_INTERNAL_PORT:-1389}
+        healthcheck:
+            test: "ldapsearch -x -b dc=example,dc=org cn > /dev/null"
+            interval: 10s
+            retries: 10
+            timeout: 2s

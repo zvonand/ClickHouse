@@ -24,7 +24,7 @@ SELECT * FROM queue_mode_test WHERE (_queue_block_number, _queue_block_offset) >
 -- queue columns cannot be directly inserted (shall be materialized)
 INSERT INTO queue_mode_test (a,b,_queue_block_number,_queue_block_offset) SELECT number, number, number, number FROM numbers(2); -- { serverError ILLEGAL_COLUMN }
 
--- queue columns shall not be altered
+-- queue columns shall NOT be altered. (only DROP is checked here, it is enough)
 ALTER TABLE queue_mode_test DROP COLUMN _queue_block_offset; -- { serverError ILLEGAL_COLUMN }
 ALTER TABLE queue_mode_test DROP COLUMN _queue_block_number; -- { serverError ILLEGAL_COLUMN }
 
@@ -33,6 +33,16 @@ ALTER TABLE queue_mode_test DELETE WHERE _queue_block_number == 4;
 OPTIMIZE TABLE queue_mode_test;
 INSERT INTO queue_mode_test (*) SELECT number, number FROM numbers(5);
 OPTIMIZE TABLE queue_mode_test;
-SELECT * FROM queue_mode_test;
+SELECT count() FROM queue_mode_test where _queue_block_number == 4;
+
+-- _queue_block_number, _queue_block_offset cannot be manually created in a non-queue table
+CREATE TABLE queue_mode_test(_queue_block_offset UInt64) ENGINE=MergeTree() ORDER BY (_queue_block_offset); -- { serverError ILLEGAL_COLUMN }
+CREATE TABLE queue_mode_test(_queue_block_number UInt64) ENGINE=MergeTree() ORDER BY (_queue_block_number); -- { serverError ILLEGAL_COLUMN }
+
+-- _queue_block_number, _queue_block_offset cannot be added to a non-queue table
+CREATE TABLE queue_mode_test_2(a UInt64) ENGINE=MergeTree() ORDER BY (a);
+ALTER TABLE queue ADD COLUMN _queue_block_number UInt32 FIRST; -- { serverError ILLEGAL_COLUMN }
+ALTER TABLE queue ADD COLUMN _queue_block_offset UInt32 FIRST; -- { serverError ILLEGAL_COLUMN }
+
 
 DROP TABLE queue_mode_test SYNC;

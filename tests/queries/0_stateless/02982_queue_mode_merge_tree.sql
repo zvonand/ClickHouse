@@ -21,4 +21,18 @@ SELECT * FROM queue_mode_test;
 SELECT 'cursor lookup';
 SELECT * FROM queue_mode_test WHERE (_queue_block_number, _queue_block_offset) > (3, 1);
 
-SELECT 'end';
+-- queue columns cannot be directly inserted (shall be materialized)
+INSERT INTO queue_mode_test (a,b,_queue_block_number,_queue_block_offset) SELECT number, number, number, number FROM numbers(2); -- { serverError ILLEGAL_COLUMN }
+
+-- queue columns shall not be altered
+ALTER TABLE queue_mode_test DROP COLUMN _queue_block_offset; -- { serverError ILLEGAL_COLUMN }
+ALTER TABLE queue_mode_test DROP COLUMN _queue_block_number; -- { serverError ILLEGAL_COLUMN }
+
+-- _queue_block_number shall NOT be reused
+ALTER TABLE queue_mode_test DELETE WHERE _queue_block_number == 4;
+OPTIMIZE TABLE queue_mode_test;
+INSERT INTO queue_mode_test (*) SELECT number, number FROM numbers(5);
+OPTIMIZE TABLE queue_mode_test;
+SELECT * FROM queue_mode_test;
+
+DROP TABLE queue_mode_test SYNC;

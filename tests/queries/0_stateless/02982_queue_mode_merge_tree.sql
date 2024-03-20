@@ -45,6 +45,9 @@ ALTER TABLE queue_mode_test_3 ADD COLUMN _queue_block_number UInt32 FIRST;
 ALTER TABLE queue_mode_test_3 ADD COLUMN _queue_block_offset UInt32 FIRST;
 DROP TABLE queue_mode_test_3 SYNC;
 
+-- setting can be disabled
+ALTER TABLE queue_mode_test MODIFY SETTING queue_mode=0;
+
 DROP TABLE queue_mode_test SYNC;
 
 SELECT 'end';

@@ -437,6 +437,7 @@ Jitter
 Joda
 JumpConsistentHash
 Jupyter
+JWKS
 KDevelop
 KafkaAssignedPartitions
 KafkaBackgroundReads
@@ -1894,6 +1895,7 @@ jsonstrings
 jsonstringseachrow
 jsonstringseachrowwithprogress
 jumpConsistentHash
+jwks
 kRing
 kafka
 kafkaMurmurHash

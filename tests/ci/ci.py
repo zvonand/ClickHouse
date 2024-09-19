@@ -1876,6 +1876,7 @@ def main() -> int:
             else {}
         )
 
+        print(pr_info.event)
         if not args.skip_jobs and pr_info.has_changes_in_documentation_only():
             _update_config_for_docs_only(jobs_data)
 

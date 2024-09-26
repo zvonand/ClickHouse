@@ -444,7 +444,7 @@ bugfix_validate_check = DigestConfig(
 # common test params
 docker_server_job_config = JobConfig(
     required_on_release_branch=True,
-    run_command='docker_server.py --check-name "$CHECK_NAME" --release-type head --allow-build-reuse',
+    run_command='docker_server.py --check-name "$CHECK_NAME" --release-type head --allow-build-reuse --push',
     digest=DigestConfig(
         include_paths=[
             "tests/ci/docker_server.py",
@@ -1239,8 +1239,7 @@ CI_CONFIG = CIConfig(
         ),
         JobNames.INTEGRATION_TEST_ARM: TestConfig(
             Build.PACKAGE_AARCH64,
-            # add [run_by_label="test arm"] to not run in regular pr workflow by default
-            job_config=JobConfig(num_batches=6, **integration_test_common_params, run_by_label="test arm"),  # type: ignore
+            job_config=JobConfig(num_batches=6, **integration_test_common_params),  # type: ignore
         ),
         JobNames.INTEGRATION_TEST: TestConfig(
             Build.PACKAGE_RELEASE,

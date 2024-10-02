@@ -779,7 +779,8 @@ class CiOptions:
         )
 
         pattern = r"(#|- \[x\] +<!---)(\w+)"
-        matches = [match[-1] for match in re.findall(pattern, message)]
+        #NOTE(vnemkov): functionality of selectively skipping builds based on PR description causes issues with our CI/CD
+        matches = []#[match[-1] for match in re.findall(pattern, message)]
         print(f"CI tags from commit message: [{matches}]")
 
         if not debug_message:  # to be skipped if debug/test

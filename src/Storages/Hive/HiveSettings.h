@@ -6,7 +6,8 @@
 
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Core/BaseSettings.h>
-#include <Core/Settings.h>
+#include <Core/FormatFactorySettingsDeclaration.h>
+#include <Core/SettingsEnums.h>
 
 namespace DB
 {
@@ -20,7 +21,7 @@ class ASTStorage;
 
 #define LIST_OF_HIVE_SETTINGS(M, ALIAS) \
     HIVE_RELATED_SETTINGS(M, ALIAS) \
-    FORMAT_FACTORY_SETTINGS(M, ALIAS)
+    LIST_OF_ALL_FORMAT_SETTINGS(M, ALIAS)
 
 DECLARE_SETTINGS_TRAITS(HiveSettingsTraits, LIST_OF_HIVE_SETTINGS)
 

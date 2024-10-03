@@ -63,27 +63,19 @@ public:
     StoragePolicyPtr getStoragePolicy() const override { return nullptr; }
     bool storesDataOnDisk() const override { return false; }
 
-    String getName() const override
-    {
-        std::lock_guard lock{nested_mutex};
-        if (nested)
-            return nested->getName();
-        return StorageProxy::getName();
-    }
-
     void startup() override { }
-    void shutdown() override
+    void shutdown(bool is_drop) override
     {
         std::lock_guard lock{nested_mutex};
         if (nested)
-            nested->shutdown();
+            nested->shutdown(is_drop);
     }
 
-    void flush() override
+    void flushAndPrepareForShutdown() override
     {
         std::lock_guard lock{nested_mutex};
         if (nested)
-            nested->flush();
+            nested->flushAndPrepareForShutdown();
     }
 
     void drop() override
@@ -120,7 +112,7 @@ public:
 
             auto step = std::make_unique<ExpressionStep>(
                 query_plan.getCurrentDataStream(),
-                convert_actions_dag);
+                std::move(convert_actions_dag));
 
             step->setStepDescription("Converting columns");
             query_plan.addStep(std::move(step));
@@ -153,10 +145,10 @@ public:
     }
 
     bool isView() const override { return false; }
-    void checkTableCanBeDropped() const override {}
+    void checkTableCanBeDropped([[ maybe_unused ]] ContextPtr query_context) const override {}
 
 private:
-    mutable std::mutex nested_mutex;
+    mutable std::recursive_mutex nested_mutex;
     mutable GetNestedStorageFunc get_nested;
     mutable StoragePtr nested;
     const bool add_conversion;

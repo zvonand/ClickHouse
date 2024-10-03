@@ -53,11 +53,11 @@ String DiskEncryptedSettings::findKeyByFingerprint(UInt128 key_fingerprint, cons
     return it->second;
 }
 
-void DiskEncryptedTransaction::copyFile(const std::string & from_file_path, const std::string & to_file_path)
+void DiskEncryptedTransaction::copyFile(const std::string & from_file_path, const std::string & to_file_path, const ReadSettings & read_settings, const WriteSettings & write_settings)
 {
     auto wrapped_from_path = wrappedPath(from_file_path);
     auto wrapped_to_path = wrappedPath(to_file_path);
-    delegate_transaction->copyFile(wrapped_from_path, wrapped_to_path);
+    delegate_transaction->copyFile(wrapped_from_path, wrapped_to_path, read_settings, write_settings);
 }
 
 std::unique_ptr<WriteBufferFromFileBase> DiskEncryptedTransaction::writeFile( // NOLINT
@@ -78,7 +78,7 @@ std::unique_ptr<WriteBufferFromFileBase> DiskEncryptedTransaction::writeFile( //
         if (old_file_size)
         {
             /// Append mode: we continue to use the same header.
-            auto read_buffer = delegate_disk->readFile(wrapped_path, ReadSettings().adjustBufferSize(FileEncryption::Header::kSize));
+            auto read_buffer = delegate_disk->readFile(wrapped_path, getReadSettings().adjustBufferSize(FileEncryption::Header::kSize));
             header = readHeader(*read_buffer);
             key = current_settings.findKeyByFingerprint(header.key_fingerprint, path);
         }

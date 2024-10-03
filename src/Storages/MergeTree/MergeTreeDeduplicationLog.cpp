@@ -10,8 +10,15 @@
 #include <Disks/WriteMode.h>
 #include <Disks/IDisk.h>
 
+#include <Common/Exception.h>
+
 namespace DB
 {
+
+namespace ErrorCodes
+{
+    extern const int ABORTED;
+}
 
 namespace
 {
@@ -133,7 +140,7 @@ void MergeTreeDeduplicationLog::load()
 
 size_t MergeTreeDeduplicationLog::loadSingleLog(const std::string & path)
 {
-    auto read_buf = disk->readFile(path);
+    auto read_buf = disk->readFile(path, getReadSettings());
 
     size_t total_entries = 0;
     while (!read_buf->eof())
@@ -231,6 +238,11 @@ std::pair<MergeTreePartInfo, bool> MergeTreeDeduplicationLog::addPart(const std:
         return std::make_pair(info, false);
     }
 
+    if (stopped)
+    {
+        throw Exception(ErrorCodes::ABORTED, "Storage has been shutdown when we add this part.");
+    }
+
     chassert(current_writer != nullptr);
 
     /// Create new record
@@ -260,6 +272,11 @@ void MergeTreeDeduplicationLog::dropPart(const MergeTreePartInfo & drop_part_inf
     /// threads and so on.
     if (deduplication_window == 0)
         return;
+
+    if (stopped)
+    {
+        throw Exception(ErrorCodes::ABORTED, "Storage has been shutdown when we drop this part.");
+    }
 
     chassert(current_writer != nullptr);
 
@@ -324,21 +341,25 @@ void MergeTreeDeduplicationLog::shutdown()
     stopped = true;
     if (current_writer)
     {
-        current_writer->finalize();
-        current_writer.reset();
+        /// If an error has occurred during finalize, we'd like to have the exception set for reset.
+        /// Otherwise, we'll be in a situation when a finalization didn't happen, and we didn't get
+        /// any error, causing logical error (see ~MemoryBuffer()).
+        try
+        {
+            current_writer->finalize();
+            current_writer.reset();
+        }
+        catch (...)
+        {
+            tryLogCurrentException(__PRETTY_FUNCTION__);
+            current_writer.reset();
+        }
     }
 }
 
 MergeTreeDeduplicationLog::~MergeTreeDeduplicationLog()
 {
-    try
-    {
-        shutdown();
-    }
-    catch (...)
-    {
-        tryLogCurrentException(__PRETTY_FUNCTION__);
-    }
+    shutdown();
 }
 
 }

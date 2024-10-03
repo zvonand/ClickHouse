@@ -5,6 +5,7 @@
 #include <base/types.h>
 #include <Common/CurrentMetrics.h>
 #include <Common/VariableContext.h>
+#include <Common/AllocationTrace.h>
 
 #if !defined(NDEBUG)
 #define MEMORY_TRACKER_DEBUG_CHECKS
@@ -55,9 +56,8 @@ private:
     std::atomic<Int64> soft_limit {0};
     std::atomic<Int64> hard_limit {0};
     std::atomic<Int64> profiler_limit {0};
-    std::atomic_bool allow_use_jemalloc_memory {true};
 
-    static std::atomic<Int64> free_memory_in_allocator_arenas;
+    std::atomic<Int64> rss{0};
 
     Int64 profiler_step = 0;
 
@@ -65,7 +65,13 @@ private:
     double fault_probability = 0;
 
     /// To randomly sample allocations and deallocations in trace_log.
-    double sample_probability = 0;
+    double sample_probability = -1;
+
+    /// Randomly sample allocations only larger or equal to this size
+    UInt64 min_allocation_size_bytes = 0;
+
+    /// Randomly sample allocations only smaller or equal to this size
+    UInt64 max_allocation_size_bytes = 0;
 
     /// Singly-linked list. All information will be passed to subsequent memory trackers also (it allows to implement trackers hierarchy).
     /// In terms of tree nodes it is the list of parents. Lifetime of these trackers should "include" lifetime of current tracker.
@@ -88,13 +94,16 @@ private:
 
     void setOrRaiseProfilerLimit(Int64 value);
 
+    bool isSizeOkForSampling(UInt64 size) const;
+
     /// allocImpl(...) and free(...) should not be used directly
     friend struct CurrentMemoryTracker;
-    void allocImpl(Int64 size, bool throw_if_memory_exceeded, MemoryTracker * query_tracker = nullptr);
-    void free(Int64 size);
+    [[nodiscard]] AllocationTrace allocImpl(Int64 size, bool throw_if_memory_exceeded, MemoryTracker * query_tracker = nullptr, double _sample_probability = -1.0);
+    [[nodiscard]] AllocationTrace free(Int64 size, double _sample_probability = -1.0);
 public:
 
     static constexpr auto USAGE_EVENT_NAME = "MemoryTrackerUsage";
+    static constexpr auto PEAK_USAGE_EVENT_NAME = "MemoryTrackerPeakUsage";
 
     explicit MemoryTracker(VariableContext level_ = VariableContext::Thread);
     explicit MemoryTracker(MemoryTracker * parent_, VariableContext level_ = VariableContext::Thread);
@@ -109,6 +118,11 @@ public:
     Int64 get() const
     {
         return amount.load(std::memory_order_relaxed);
+    }
+
+    Int64 getRSS() const
+    {
+        return rss.load(std::memory_order_relaxed);
     }
 
     // Merges and mutations may pass memory ownership to other threads thus in the end of execution
@@ -143,10 +157,6 @@ public:
     {
         return soft_limit.load(std::memory_order_relaxed);
     }
-    void setAllowUseJemallocMemory(bool value)
-    {
-        allow_use_jemalloc_memory.store(value, std::memory_order_relaxed);
-    }
 
     /** Set limit if it was not set.
       * Otherwise, set limit to new value, if new value is greater than previous limit.
@@ -165,6 +175,18 @@ public:
         sample_probability = value;
     }
 
+    double getSampleProbability(UInt64 size);
+
+    void setSampleMinAllocationSize(UInt64 value)
+    {
+        min_allocation_size_bytes = value;
+    }
+
+    void setSampleMaxAllocationSize(UInt64 value)
+    {
+        max_allocation_size_bytes = value;
+    }
+
     void setProfilerStep(Int64 value)
     {
         profiler_step = value;
@@ -173,10 +195,7 @@ public:
 
     /// next should be changed only once: from nullptr to some value.
     /// NOTE: It is not true in MergeListElement
-    void setParent(MemoryTracker * elem)
-    {
-        parent.store(elem, std::memory_order_relaxed);
-    }
+    void setParent(MemoryTracker * elem);
 
     MemoryTracker * getParent()
     {
@@ -225,10 +244,9 @@ public:
     /// Reset the accumulated data.
     void reset();
 
-    /// Reset current counter to an RSS value.
-    /// Jemalloc may have pre-allocated arenas, they are accounted in RSS.
-    /// We can free this arenas in case of exception to avoid OOM.
-    static void setRSS(Int64 rss_, Int64 free_memory_in_allocator_arenas_);
+    /// update values based on external information (e.g. jemalloc's stat)
+    static void updateRSS(Int64 rss_);
+    static void updateAllocated(Int64 allocated_);
 
     /// Prints info about peak memory consumption into log.
     void logPeakMemoryUsage();

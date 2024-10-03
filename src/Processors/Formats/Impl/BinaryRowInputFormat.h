@@ -10,12 +10,16 @@ namespace DB
 
 class ReadBuffer;
 
+template <bool>
+class BinaryFormatReader;
+
 /** A stream for inputting data in a binary line-by-line format.
   */
-class BinaryRowInputFormat final : public RowInputFormatWithNamesAndTypes
+template <bool with_defaults = false>
+class BinaryRowInputFormat final : public RowInputFormatWithNamesAndTypes<BinaryFormatReader<with_defaults>>
 {
 public:
-    BinaryRowInputFormat(ReadBuffer & in_, const Block & header, Params params_, bool with_names_, bool with_types_, const FormatSettings & format_settings_);
+    BinaryRowInputFormat(ReadBuffer & in_, const Block & header, IRowInputFormat::Params params_, bool with_names_, bool with_types_, const FormatSettings & format_settings_);
 
     String getName() const override { return "BinaryRowInputFormat"; }
 
@@ -25,6 +29,7 @@ public:
     std::string getDiagnosticInfo() override { return {}; }
 };
 
+template <bool with_defaults = false>
 class BinaryFormatReader final : public FormatWithNamesAndTypesReader
 {
 public:
@@ -54,7 +59,7 @@ public:
     BinaryWithNamesAndTypesSchemaReader(ReadBuffer & in_, const FormatSettings & format_settings_);
 
 private:
-    BinaryFormatReader reader;
+    BinaryFormatReader<false> reader;
 };
 
 }

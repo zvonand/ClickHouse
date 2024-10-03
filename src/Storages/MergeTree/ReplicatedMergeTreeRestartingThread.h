@@ -5,6 +5,7 @@
 #include <base/types.h>
 #include <thread>
 #include <atomic>
+#include <Common/logger_useful.h>
 
 
 namespace DB
@@ -23,23 +24,18 @@ class ReplicatedMergeTreeRestartingThread
 public:
     explicit ReplicatedMergeTreeRestartingThread(StorageReplicatedMergeTree & storage_);
 
-    void start(bool schedule = true)
-    {
-        if (schedule)
-            task->activateAndSchedule();
-        else
-            task->activate();
-    }
+    void start(bool schedule);
 
-    void wakeup() { task->schedule(); }
+    void wakeup();
 
     void shutdown(bool part_of_full_shutdown);
 
     void run();
+
 private:
     StorageReplicatedMergeTree & storage;
     String log_name;
-    Poco::Logger * log;
+    LoggerPtr log;
     std::atomic<bool> need_stop {false};
 
     /// The random data we wrote into `/replicas/me/is_active`.

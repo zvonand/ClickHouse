@@ -1,6 +1,7 @@
 #pragma once
 
 #include <TableFunctions/ITableFunction.h>
+#include "Core/Names.h"
 #include "Parsers/IAST_fwd.h"
 
 namespace DB
@@ -14,6 +15,7 @@ class Context;
 class ITableFunctionFileLike : public ITableFunction
 {
 public:
+    static constexpr auto max_number_of_arguments = 4;
     static constexpr auto signature = " - filename\n"
                                       " - filename, format\n"
                                       " - filename, format, structure\n"
@@ -27,11 +29,13 @@ public:
 
     void setStructureHint(const ColumnsDescription & structure_hint_) override { structure_hint = structure_hint_; }
 
-    bool supportsReadingSubsetOfColumns() override;
+    bool supportsReadingSubsetOfColumns(const ContextPtr & context) override;
 
-    static size_t getMaxNumberOfArguments() { return 4; }
+    NameSet getVirtualsToCheckBeforeUsingStructureHint() const override;
 
-    static void addColumnsStructureToArguments(ASTs & args, const String & structure, const ContextPtr &);
+    static size_t getMaxNumberOfArguments() { return max_number_of_arguments; }
+
+    static void updateStructureAndFormatArgumentsIfNeeded(ASTs & args, const String & structure, const String & format, const ContextPtr &);
 
 protected:
 
@@ -39,7 +43,7 @@ protected:
     virtual void parseArgumentsImpl(ASTs & args, const ContextPtr & context);
 
     virtual void parseFirstArguments(const ASTPtr & arg, const ContextPtr & context);
-    virtual String getFormatFromFirstArgument();
+    virtual std::optional<String> tryGetFormatFromFirstArgument();
 
     String filename;
     String format = "auto";
@@ -48,7 +52,7 @@ protected:
     ColumnsDescription structure_hint;
 
 private:
-    StoragePtr executeImpl(const ASTPtr & ast_function, ContextPtr context, const std::string & table_name, ColumnsDescription cached_columns) const override;
+    StoragePtr executeImpl(const ASTPtr & ast_function, ContextPtr context, const std::string & table_name, ColumnsDescription cached_columns, bool is_insert_query) const override;
 
     virtual StoragePtr getStorage(
         const String & source, const String & format, const ColumnsDescription & columns, ContextPtr global_context,

@@ -8,6 +8,7 @@
 #include <Common/filesystemHelpers.h>
 
 #include <Core/Block.h>
+#include <Core/Settings.h>
 
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
@@ -20,6 +21,7 @@
 #include <Processors/Sources/SourceFromSingleChunk.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/InterpreterSelectWithUnionQuery.h>
+#include <Interpreters/InterpreterSelectQueryAnalyzer.h>
 #include <Interpreters/evaluateConstantExpression.h>
 #include <Storages/StorageFactory.h>
 #include <Storages/checkAndGetLiteralArgument.h>
@@ -27,6 +29,11 @@
 
 namespace DB
 {
+namespace Setting
+{
+    extern const SettingsBool allow_experimental_analyzer;
+    extern const SettingsSeconds max_execution_time;
+}
 
 namespace ErrorCodes
 {
@@ -75,15 +82,17 @@ StorageExecutable::StorageExecutable(
     const ExecutableSettings & settings_,
     const std::vector<ASTPtr> & input_queries_,
     const ColumnsDescription & columns,
-    const ConstraintsDescription & constraints)
+    const ConstraintsDescription & constraints,
+    const String & comment)
     : IStorage(table_id_)
     , settings(settings_)
     , input_queries(input_queries_)
-    , log(settings.is_executable_pool ? &Poco::Logger::get("StorageExecutablePool") : &Poco::Logger::get("StorageExecutable"))
+    , log(settings.is_executable_pool ? getLogger("StorageExecutablePool") : getLogger("StorageExecutable"))
 {
     StorageInMemoryMetadata storage_metadata;
     storage_metadata.setColumns(columns);
     storage_metadata.setConstraints(constraints);
+    storage_metadata.setComment(comment);
     setInMemoryMetadata(storage_metadata);
 
     ShellCommandSourceCoordinator::Configuration configuration
@@ -92,6 +101,8 @@ StorageExecutable::StorageExecutable(
         .command_termination_timeout_seconds = settings.command_termination_timeout,
         .command_read_timeout_milliseconds = settings.command_read_timeout,
         .command_write_timeout_milliseconds = settings.command_write_timeout,
+        .stderr_reaction = settings.stderr_reaction,
+        .check_exit_code = settings.check_exit_code,
 
         .pool_size = settings.pool_size,
         .max_command_execution_time_seconds = settings.max_command_execution_time,
@@ -143,8 +154,11 @@ void StorageExecutable::read(
 
     for (auto & input_query : input_queries)
     {
-        InterpreterSelectWithUnionQuery interpreter(input_query, context, {});
-        auto builder = interpreter.buildQueryPipeline();
+        QueryPipelineBuilder builder;
+        if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
+            builder = InterpreterSelectQueryAnalyzer(input_query, context, {}).buildQueryPipeline();
+        else
+            builder = InterpreterSelectWithUnionQuery(input_query, context, {}).buildQueryPipeline();
         inputs.emplace_back(QueryPipelineBuilder::getPipe(std::move(builder), resources));
     }
 
@@ -219,7 +233,7 @@ void registerStorageExecutable(StorageFactory & factory)
         {
             size_t max_command_execution_time = 10;
 
-            size_t max_execution_time_seconds = static_cast<size_t>(args.getContext()->getSettings().max_execution_time.totalSeconds());
+            size_t max_execution_time_seconds = static_cast<size_t>(args.getContext()->getSettingsRef()[Setting::max_execution_time].totalSeconds());
             if (max_execution_time_seconds != 0 && max_command_execution_time > max_execution_time_seconds)
                 max_command_execution_time = max_execution_time_seconds;
 
@@ -230,7 +244,7 @@ void registerStorageExecutable(StorageFactory & factory)
             settings.loadFromQuery(*args.storage_def);
 
         auto global_context = args.getContext()->getGlobalContext();
-        return std::make_shared<StorageExecutable>(args.table_id, format, settings, input_queries, columns, constraints);
+        return std::make_shared<StorageExecutable>(args.table_id, format, settings, input_queries, columns, constraints, args.comment);
     };
 
     StorageFactory::StorageFeatures storage_features;
@@ -248,4 +262,3 @@ void registerStorageExecutable(StorageFactory & factory)
 }
 
 }
-

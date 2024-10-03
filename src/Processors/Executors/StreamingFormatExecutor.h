@@ -33,8 +33,14 @@ public:
     /// Execute with provided read buffer.
     size_t execute(ReadBuffer & buffer);
 
+    /// Inserts into result columns already preprocessed chunk.
+    size_t insertChunk(Chunk chunk);
+
     /// Releases currently accumulated columns.
     MutableColumns getResultColumns();
+
+    /// Sets query parameters for input format if applicable.
+    void setQueryParameters(const NameToNameMap & parameters);
 
 private:
     const Block header;

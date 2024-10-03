@@ -53,10 +53,6 @@ void ExternalQueryBuilder::writeQuoted(const std::string & s, WriteBuffer & out)
 {
     switch (quoting_style)
     {
-        case IdentifierQuotingStyle::None:
-            writeString(s, out);
-            break;
-
         case IdentifierQuotingStyle::Backticks:
             writeBackQuotedString(s, out);
             break;
@@ -396,17 +392,19 @@ std::string ExternalQueryBuilder::composeLoadKeysQuery(
     }
     else
     {
-        writeString(query, out);
-
         auto condition_position = query.find(CONDITION_PLACEHOLDER_TO_REPLACE_VALUE);
         if (condition_position == std::string::npos)
         {
-            writeString(" WHERE ", out);
+            writeString("SELECT * FROM (", out);
+            writeString(query, out);
+            writeString(") AS subquery WHERE ", out);
             composeKeysCondition(key_columns, requested_rows, method, partition_key_prefix, out);
             writeString(";", out);
 
             return out.str();
         }
+
+        writeString(query, out);
 
         WriteBufferFromOwnString condition_value_buffer;
         composeKeysCondition(key_columns, requested_rows, method, partition_key_prefix, condition_value_buffer);

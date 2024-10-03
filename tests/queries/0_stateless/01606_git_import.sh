@@ -13,13 +13,13 @@ cd $CLICKHOUSE_TMP || exit
 # Protection for network errors
 for _ in {1..10}; do
     rm -rf ./clickhouse-odbc
-    git clone --quiet https://github.com/ClickHouse/clickhouse-odbc.git && pushd clickhouse-odbc > /dev/null && git checkout --quiet 5d84ec591c53cbb272593f024230a052690fdf69 && break
+    git clone --quiet https://github.com/ClickHouse/clickhouse-odbc.git && pushd clickhouse-odbc 2> /dev/null > /dev/null && git checkout --quiet 5d84ec591c53cbb272593f024230a052690fdf69 && break
     sleep 1
 done
 
 ${CLICKHOUSE_GIT_IMPORT} 2>&1 | wc -l
 
-${CLICKHOUSE_CLIENT} --multiline --multiquery --query "
+${CLICKHOUSE_CLIENT} --multiline --query "
 
 DROP TABLE IF EXISTS commits;
 DROP TABLE IF EXISTS file_changes;
@@ -122,7 +122,7 @@ ${CLICKHOUSE_CLIENT} --query "SELECT count() FROM commits"
 ${CLICKHOUSE_CLIENT} --query "SELECT count() FROM file_changes"
 ${CLICKHOUSE_CLIENT} --query "SELECT count(), round(avg(indent), 1) FROM line_changes"
 
-${CLICKHOUSE_CLIENT} --multiline --multiquery --query "
+${CLICKHOUSE_CLIENT} --multiline --query "
 DROP TABLE commits;
 DROP TABLE file_changes;
 DROP TABLE line_changes;

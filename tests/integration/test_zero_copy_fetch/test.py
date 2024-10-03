@@ -4,11 +4,11 @@ import logging
 import random
 import string
 import time
-
 from multiprocessing.dummy import Pool
-import pytest
-from helpers.cluster import ClickHouseCluster
 
+import pytest
+
+from helpers.cluster import ClickHouseCluster
 
 cluster = ClickHouseCluster(__file__)
 
@@ -19,12 +19,14 @@ def started_cluster():
         cluster.add_instance(
             "node1",
             main_configs=["configs/storage_conf.xml"],
+            user_configs=["configs/users.xml"],
             with_minio=True,
             with_zookeeper=True,
         )
         cluster.add_instance(
             "node2",
             main_configs=["configs/storage_conf.xml"],
+            user_configs=["configs/users.xml"],
             with_minio=True,
             with_zookeeper=True,
         )

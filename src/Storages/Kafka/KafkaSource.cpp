@@ -1,11 +1,12 @@
 #include <Storages/Kafka/KafkaSource.h>
 
+#include <Core/Settings.h>
 #include <Formats/FormatFactory.h>
 #include <IO/EmptyReadBuffer.h>
-#include <Storages/Kafka/KafkaConsumer.h>
-#include <Processors/Executors/StreamingFormatExecutor.h>
-#include <Common/logger_useful.h>
 #include <Interpreters/Context.h>
+#include <Processors/Executors/StreamingFormatExecutor.h>
+#include <Storages/Kafka/KafkaConsumer.h>
+#include <Common/logger_useful.h>
 
 #include <Common/ProfileEvents.h>
 
@@ -19,6 +20,11 @@ namespace ProfileEvents
 
 namespace DB
 {
+namespace Setting
+{
+    extern const SettingsMilliseconds kafka_max_wait_ms;
+}
+
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
@@ -33,7 +39,7 @@ KafkaSource::KafkaSource(
     const StorageSnapshotPtr & storage_snapshot_,
     const ContextPtr & context_,
     const Names & columns,
-    Poco::Logger * log_,
+    LoggerPtr log_,
     size_t max_block_size_,
     bool commit_in_suffix_)
     : ISource(storage_snapshot_->getSampleBlockForColumns(columns))
@@ -45,8 +51,8 @@ KafkaSource::KafkaSource(
     , max_block_size(max_block_size_)
     , commit_in_suffix(commit_in_suffix_)
     , non_virtual_header(storage_snapshot->metadata->getSampleBlockNonMaterialized())
-    , virtual_header(storage_snapshot->getSampleBlockForColumns(storage.getVirtualColumnNames()))
-    , handle_error_mode(storage.getHandleKafkaErrorMode())
+    , virtual_header(storage.getVirtualsHeader())
+    , handle_error_mode(storage.getStreamingHandleErrorMode())
 {
 }
 
@@ -78,7 +84,7 @@ Chunk KafkaSource::generateImpl()
 {
     if (!consumer)
     {
-        auto timeout = std::chrono::milliseconds(context->getSettingsRef().kafka_max_wait_ms.totalMilliseconds());
+        auto timeout = std::chrono::milliseconds(context->getSettingsRef()[Setting::kafka_max_wait_ms].totalMilliseconds());
         consumer = storage.popConsumer(timeout);
 
         if (!consumer)
@@ -98,7 +104,7 @@ Chunk KafkaSource::generateImpl()
     // otherwise external iteration will reuse that and logic will became even more fuzzy
     MutableColumns virtual_columns = virtual_header.cloneEmptyColumns();
 
-    auto put_error_to_stream = handle_error_mode == HandleKafkaErrorMode::STREAM;
+    auto put_error_to_stream = handle_error_mode == StreamingHandleErrorMode::STREAM;
 
     EmptyReadBuffer empty_buf;
     auto input_format = FormatFactory::instance().getInput(
@@ -133,6 +139,7 @@ Chunk KafkaSource::generateImpl()
         {
             e.addMessage("while parsing Kafka message (topic: {}, partition: {}, offset: {})'",
                 consumer->currentTopic(), consumer->currentPartition(), consumer->currentOffset());
+            consumer->setExceptionInfo(e.message());
             throw std::move(e);
         }
     };
@@ -206,9 +213,9 @@ Chunk KafkaSource::generateImpl()
                 {
                     if (exception_message)
                     {
-                        auto payload = consumer->currentPayload();
-                        virtual_columns[8]->insert(payload);
-                        virtual_columns[9]->insert(*exception_message);
+                        const auto & payload = consumer->currentPayload();
+                        virtual_columns[8]->insertData(reinterpret_cast<const char *>(payload.get_data()), payload.get_size());
+                        virtual_columns[9]->insertData(exception_message->data(), exception_message->size());
                     }
                     else
                     {
@@ -261,7 +268,7 @@ Chunk KafkaSource::generateImpl()
     // they are not needed here:
     // and it's misleading to use them here,
     // as columns 'materialized' that way stays 'ephemeral'
-    // i.e. will not be stored anythere
+    // i.e. will not be stored anywhere
     // If needed any extra columns can be added using DEFAULT they can be added at MV level if needed.
 
     auto result_block  = non_virtual_header.cloneWithColumns(executor.getResultColumns());

@@ -53,7 +53,7 @@ public:
     {}
 
     template <typename ... Args>
-    inline auto NO_SANITIZE_UNDEFINED execute(const DateTime64 & t, Args && ... args) const
+    auto NO_SANITIZE_UNDEFINED execute(const DateTime64 & t, Args && ... args) const
     {
         /// Type conversion from float to integer may be required.
         /// We are Ok with implementation specific result for out of range and denormals conversion.
@@ -88,15 +88,16 @@ public:
         }
     }
 
-    template <typename T, typename ... Args, typename = std::enable_if_t<!std::is_same_v<T, DateTime64>>>
-    inline auto execute(const T & t, Args && ... args) const
+    template <typename T, typename... Args>
+    requires(!std::same_as<T, DateTime64>)
+    auto execute(const T & t, Args &&... args) const
     {
         return wrapped_transform.execute(t, std::forward<Args>(args)...);
     }
 
 
     template <typename ... Args>
-    inline auto NO_SANITIZE_UNDEFINED executeExtendedResult(const DateTime64 & t, Args && ... args) const
+    auto NO_SANITIZE_UNDEFINED executeExtendedResult(const DateTime64 & t, Args && ... args) const
     {
         /// Type conversion from float to integer may be required.
         /// We are Ok with implementation specific result for out of range and denormals conversion.
@@ -128,8 +129,9 @@ public:
         }
     }
 
-    template <typename T, typename ... Args, typename = std::enable_if_t<!std::is_same_v<T, DateTime64>>>
-    inline auto executeExtendedResult(const T & t, Args && ... args) const
+    template <typename T, typename ... Args>
+    requires (!std::same_as<T, DateTime64>)
+    auto executeExtendedResult(const T & t, Args && ... args) const
     {
         return wrapped_transform.executeExtendedResult(t, std::forward<Args>(args)...);
     }

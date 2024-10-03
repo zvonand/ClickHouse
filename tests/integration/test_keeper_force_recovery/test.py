@@ -1,12 +1,12 @@
 import os
-import pytest
 import socket
-from helpers.cluster import ClickHouseCluster
-import helpers.keeper_utils as keeper_utils
 import time
 
-
+import pytest
 from kazoo.client import KazooClient, KazooRetry
+
+import helpers.keeper_utils as keeper_utils
+from helpers.cluster import ClickHouseCluster
 
 CLUSTER_SIZE = 5
 QUORUM_SIZE = CLUSTER_SIZE // 2 + 1
@@ -22,10 +22,7 @@ def get_nodes():
         nodes.append(
             cluster.add_instance(
                 f"node{i+1}",
-                main_configs=[
-                    f"configs/enable_keeper{i+1}.xml",
-                    f"configs/use_keeper.xml",
-                ],
+                main_configs=[f"configs/enable_keeper{i+1}.xml"],
                 stay_alive=True,
             )
         )

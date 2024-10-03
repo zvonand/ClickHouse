@@ -1,14 +1,10 @@
 #pragma once
 
-#include "config.h"
-
 #include <Interpreters/Context.h>
 #include <Interpreters/evaluateConstantExpression.h>
-#include <Storages/StorageS3Cluster.h>
 #include <Storages/checkAndGetLiteralArgument.h>
 #include <TableFunctions/ITableFunction.h>
-#include <TableFunctions/TableFunctionAzureBlobStorage.h>
-#include <TableFunctions/TableFunctionS3.h>
+#include <TableFunctions/TableFunctionObjectStorage.h>
 
 
 namespace DB
@@ -17,7 +13,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
-    extern const int BAD_GET;
+    extern const int CLUSTER_DOESNT_EXIST;
     extern const int LOGICAL_ERROR;
 }
 
@@ -27,16 +23,15 @@ class ITableFunctionCluster : public Base
 {
 public:
     String getName() const override = 0;
-    String getSignature() const override = 0;
 
-    static void addColumnsStructureToArguments(ASTs & args, const String & desired_structure, const ContextPtr & context)
+    static void updateStructureAndFormatArgumentsIfNeeded(ASTs & args, const String & structure_, const String & format_, const ContextPtr & context)
     {
         if (args.empty())
             throw Exception(ErrorCodes::LOGICAL_ERROR, "Unexpected empty list of arguments for {}Cluster table function", Base::name);
 
         ASTPtr cluster_name_arg = args.front();
         args.erase(args.begin());
-        Base::addColumnsStructureToArguments(args, desired_structure, context);
+        Base::updateStructureAndFormatArgumentsIfNeeded(args, structure_, format_, context);
         args.insert(args.begin(), cluster_name_arg);
     }
 
@@ -50,7 +45,11 @@ protected:
     void parseArgumentsImpl(ASTs & args, const ContextPtr & context) override
     {
         if (args.empty())
-            throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "The signature of table function {} shall be the following:\n{}", getName(), getSignature());
+            throw Exception(
+                ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
+                "The function {} should have arguments. The first argument must be the cluster name and the rest are the arguments of "
+                "corresponding table function",
+                getName());
 
         /// Evaluate only first argument, everything else will be done Base class
         args[0] = evaluateConstantExpressionOrIdentifierAsLiteral(args[0], context);
@@ -59,7 +58,7 @@ protected:
         cluster_name = checkAndGetLiteralArgument<String>(args[0], "cluster_name");
 
         if (!context->tryGetCluster(cluster_name))
-            throw Exception(ErrorCodes::BAD_GET, "Requested cluster '{}' not found", cluster_name);
+            throw Exception(ErrorCodes::CLUSTER_DOESNT_EXIST, "Requested cluster '{}' not found", cluster_name);
 
         /// Just cut the first arg (cluster_name) and try to parse other table function arguments as is
         args.erase(args.begin());

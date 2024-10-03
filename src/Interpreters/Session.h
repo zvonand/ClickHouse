@@ -4,9 +4,11 @@
 #include <Access/AuthenticationData.h>
 #include <Interpreters/ClientInfo.h>
 #include <Interpreters/Context_fwd.h>
+#include <Interpreters/SessionTracker.h>
 
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -42,10 +44,10 @@ public:
     Session & operator=(const Session &) = delete;
 
     /// Provides information about the authentication type of a specified user.
-    AuthenticationType getAuthenticationType(const String & user_name) const;
+    std::unordered_set<AuthenticationType> getAuthenticationTypes(const String & user_name) const;
 
     /// Same as getAuthenticationType, but adds LoginFailure event in case of error.
-    AuthenticationType getAuthenticationTypeOrLogInFailure(const String & user_name) const;
+    std::unordered_set<AuthenticationType> getAuthenticationTypesOrLogInFailure(const String & user_name) const;
 
     /// Sets the current user, checks the credentials and that the specified address is allowed to connect from.
     /// The function throws an exception if there is no such user or password is wrong.
@@ -55,12 +57,29 @@ public:
     /// Role is not granted if it can't be found by name via AccessControl (i.e. doesn't exist on this instance).
     void authenticate(const Credentials & credentials_, const Poco::Net::SocketAddress & address_, const Strings & external_roles_ = {});
 
+    // Verifies whether the user's validity extends beyond the current time.
+    // Throws an exception if the user's validity has expired.
+    void checkIfUserIsStillValid();
+
     /// Writes a row about login failure into session log (if enabled)
     void onAuthenticationFailure(const std::optional<String> & user_name, const Poco::Net::SocketAddress & address_, const Exception & e);
 
-    /// Returns a reference to session ClientInfo.
-    ClientInfo & getClientInfo();
+    /// Returns a reference to the session's ClientInfo.
     const ClientInfo & getClientInfo() const;
+
+    /// Modify the session's ClientInfo.
+    void setClientInfo(const ClientInfo & client_info);
+    void setClientName(const String & client_name);
+    void setClientInterface(ClientInfo::Interface interface);
+    void setClientVersion(UInt64 client_version_major, UInt64 client_version_minor, UInt64 client_version_patch, unsigned client_tcp_protocol_version);
+    void setClientConnectionId(uint32_t connection_id);
+    void setHTTPClientInfo(const Poco::Net::HTTPRequest & request);
+    void setForwardedFor(const String & forwarded_for);
+    void setQuotaClientKey(const String & quota_key);
+    void setConnectionClientVersion(UInt64 client_version_major, UInt64 client_version_minor, UInt64 client_version_patch, unsigned client_tcp_protocol_version);
+
+    const OpenTelemetry::TracingContext & getClientTraceContext() const;
+    OpenTelemetry::TracingContext & getClientTraceContext();
 
     /// Makes a session context, can be used one or zero times.
     /// The function also assigns an user to this context.
@@ -87,6 +106,7 @@ public:
 private:
     std::shared_ptr<SessionLog> getSessionLog() const;
     ContextMutablePtr makeQueryContextImpl(const ClientInfo * client_info_to_copy, ClientInfo * client_info_to_move) const;
+    void recordLoginSuccess(ContextPtr login_context) const;
 
     mutable bool notified_session_log_about_login = false;
     const UUID auth_id;
@@ -98,6 +118,7 @@ private:
     mutable UserPtr user;
     std::optional<UUID> user_id;
     std::vector<UUID> external_roles;
+    AuthenticationData user_authenticated_with;
 
     ContextMutablePtr session_context;
     mutable bool query_context_created = false;
@@ -105,7 +126,13 @@ private:
     std::shared_ptr<NamedSessionData> named_session;
     bool named_session_created = false;
 
-    Poco::Logger * log = nullptr;
+    SessionTracker::SessionTrackerHandle session_tracker_handle;
+
+    /// Settings received from authentication server during authentication process
+    /// to set when creating a session context
+    SettingsChanges settings_from_auth_server;
+
+    LoggerPtr log = nullptr;
 };
 
 }

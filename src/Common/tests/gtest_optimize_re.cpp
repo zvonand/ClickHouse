@@ -19,6 +19,9 @@ TEST(OptimizeRE, analyze)
     };
     test_f("abc", "abc", {}, true, true);
     test_f("c([^k]*)de", "");
+    test_f("(?-s)bob", "bob", {}, false, true);
+    test_f("(?s)bob", "bob", {}, false, true);
+    test_f("(?ssss", "");
     test_f("abc(de)fg", "abcdefg", {}, false, true);
     test_f("abc(de|xyz)fg", "abc", {"abcdefg", "abcxyzfg"}, false, true);
     test_f("abc(de?f|xyz)fg", "abc", {"abcd", "abcxyzfg"}, false, true);
@@ -47,4 +50,8 @@ TEST(OptimizeRE, analyze)
     test_f("abc|(:?xx|yy|zz|x?)def", "", {"abc", "def"});
     test_f("abc|(:?xx|yy|zz|x?){1,2}def", "", {"abc", "def"});
     test_f(R"(\\A(?:(?:[-0-9_a-z]+(?:\\.[-0-9_a-z]+)*)/k8s1)\\z)", "/k8s1");
+    test_f("[a-zA-Z]+(?P<num>\\d+)", "");
+    test_f("[a-zA-Z]+(?<num>\\d+)", "");
+    test_f("[a-zA-Z]+(?'num'\\d+)", "");
+    test_f("[a-zA-Z]+(?x<num>\\d+)", "x<num>");
 }

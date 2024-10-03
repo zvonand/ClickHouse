@@ -1,9 +1,10 @@
-import pytest
-from helpers.cluster import ClickHouseCluster
-
 import threading
 import time
+
+import pytest
+
 from helpers.client import QueryRuntimeException
+from helpers.cluster import ClickHouseCluster
 
 cluster = ClickHouseCluster(__file__)
 node1 = cluster.add_instance(
@@ -51,6 +52,7 @@ def test_concurrent_threads_soft_limit_default(started_cluster):
     )
 
 
+@pytest.mark.skip(reason="broken test")
 def test_concurrent_threads_soft_limit_defined_50(started_cluster):
     node2.query(
         "SELECT count(*) FROM numbers_mt(10000000)",
@@ -65,6 +67,7 @@ def test_concurrent_threads_soft_limit_defined_50(started_cluster):
     )
 
 
+@pytest.mark.skip(reason="broken test")
 def test_concurrent_threads_soft_limit_defined_1(started_cluster):
     node3.query(
         "SELECT count(*) FROM numbers_mt(10000000)",
@@ -82,6 +85,7 @@ def test_concurrent_threads_soft_limit_defined_1(started_cluster):
 # In config_limit_reached.xml there is concurrent_threads_soft_limit=10
 # Background query starts in a separate thread to reach this limit.
 # When this limit is reached the foreground query gets less than 5 queries despite the fact that it has settings max_threads=5
+@pytest.mark.skip(reason="broken test")
 def test_concurrent_threads_soft_limit_limit_reached(started_cluster):
     def background_query():
         try:

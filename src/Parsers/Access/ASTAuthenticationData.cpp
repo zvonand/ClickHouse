@@ -26,6 +26,7 @@ std::optional<String> ASTAuthenticationData::getPassword() const
 
     return {};
 }
+
 std::optional<String> ASTAuthenticationData::getSalt() const
 {
     if (type && *type == AuthenticationType::SHA256_PASSWORD && children.size() == 2)
@@ -43,7 +44,7 @@ void ASTAuthenticationData::formatImpl(const FormatSettings & settings, FormatSt
 {
     if (type && *type == AuthenticationType::NO_PASSWORD)
     {
-        settings.ostr << (settings.hilite ? IAST::hilite_keyword : "") << " NOT IDENTIFIED"
+        settings.ostr << (settings.hilite ? IAST::hilite_keyword : "") << " no_password"
                       << (settings.hilite ? IAST::hilite_none : "");
         return;
     }
@@ -54,6 +55,7 @@ void ASTAuthenticationData::formatImpl(const FormatSettings & settings, FormatSt
     bool salt = false;
     bool parameter = false;
     bool parameters = false;
+    bool scheme = false;
 
     if (type)
     {
@@ -87,6 +89,12 @@ void ASTAuthenticationData::formatImpl(const FormatSettings & settings, FormatSt
                 password = true;
                 break;
             }
+            case AuthenticationType::JWT:
+            {
+                prefix = "CLAIMS";
+                parameter = true;
+                break;
+            }
             case AuthenticationType::LDAP:
             {
                 prefix = "SERVER";
@@ -104,7 +112,7 @@ void ASTAuthenticationData::formatImpl(const FormatSettings & settings, FormatSt
             }
             case AuthenticationType::SSL_CERTIFICATE:
             {
-                prefix = "CN";
+                prefix = ssl_cert_subject_type.value();
                 parameters = true;
                 break;
             }
@@ -115,6 +123,20 @@ void ASTAuthenticationData::formatImpl(const FormatSettings & settings, FormatSt
 
                 prefix = "BY";
                 password = true;
+                break;
+            }
+            case AuthenticationType::SSH_KEY:
+            {
+                prefix = "BY";
+                parameters = true;
+                break;
+            }
+            case AuthenticationType::HTTP:
+            {
+                prefix = "SERVER";
+                parameter = true;
+                if (children.size() == 2)
+                    scheme = true;
                 break;
             }
             case AuthenticationType::NO_PASSWORD: [[fallthrough]];
@@ -138,12 +160,9 @@ void ASTAuthenticationData::formatImpl(const FormatSettings & settings, FormatSt
             auth_type_name = AuthenticationTypeInfo::get(*type).name;
     }
 
-    settings.ostr << (settings.hilite ? IAST::hilite_keyword : "") << " IDENTIFIED" << (settings.hilite ? IAST::hilite_none : "");
-
     if (!auth_type_name.empty())
     {
-        settings.ostr << (settings.hilite ? IAST::hilite_keyword : "") << " WITH " << auth_type_name
-                        << (settings.hilite ? IAST::hilite_none : "");
+        settings.ostr << (settings.hilite ? IAST::hilite_keyword : "") << " " << auth_type_name << (settings.hilite ? IAST::hilite_none : "");
     }
 
     if (!prefix.empty())
@@ -179,6 +198,13 @@ void ASTAuthenticationData::formatImpl(const FormatSettings & settings, FormatSt
             child->format(settings);
         }
     }
+
+    if (scheme)
+    {
+        settings.ostr << " SCHEME ";
+        children[1]->format(settings);
+    }
+
 }
 
 bool ASTAuthenticationData::hasSecretParts() const
@@ -190,7 +216,8 @@ bool ASTAuthenticationData::hasSecretParts() const
     auto auth_type = *type;
     if ((auth_type == AuthenticationType::PLAINTEXT_PASSWORD)
         || (auth_type == AuthenticationType::SHA256_PASSWORD)
-        || (auth_type == AuthenticationType::DOUBLE_SHA1_PASSWORD))
+        || (auth_type == AuthenticationType::DOUBLE_SHA1_PASSWORD)
+        || (auth_type == AuthenticationType::BCRYPT_PASSWORD))
         return true;
 
     return childrenHaveSecretParts();

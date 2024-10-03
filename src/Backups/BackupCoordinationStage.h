@@ -15,7 +15,7 @@ namespace BackupCoordinationStage
     /// Finding all tables and databases which we're going to put to the backup and collecting their metadata.
     constexpr const char * GATHERING_METADATA = "gathering metadata";
 
-    String formatGatheringMetadata(size_t pass);
+    String formatGatheringMetadata(int attempt_no);
 
     /// Making temporary hard links and prepare backup entries.
     constexpr const char * EXTRACTING_DATA_FROM_TABLES = "extracting data from tables";
@@ -31,6 +31,9 @@ namespace BackupCoordinationStage
 
     /// Finding databases and tables in the backup which we're going to restore.
     constexpr const char * FINDING_TABLES_IN_BACKUP = "finding tables in backup";
+
+    /// Loading system access tables and then checking if the current user has enough access to restore.
+    constexpr const char * CHECKING_ACCESS_RIGHTS = "checking access rights";
 
     /// Creating databases or finding them and checking their definitions.
     constexpr const char * CREATING_DATABASES = "creating databases";

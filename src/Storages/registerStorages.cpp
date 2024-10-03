@@ -1,5 +1,5 @@
-#include <Storages/registerStorages.h>
 #include <Storages/StorageFactory.h>
+#include <Storages/registerStorages.h>
 
 #include "config.h"
 
@@ -25,15 +25,19 @@ void registerStorageLiveView(StorageFactory & factory);
 void registerStorageGenerateRandom(StorageFactory & factory);
 void registerStorageExecutable(StorageFactory & factory);
 void registerStorageWindowView(StorageFactory & factory);
+void registerStorageLoop(StorageFactory & factory);
+void registerStorageFuzzQuery(StorageFactory & factory);
+void registerStorageTimeSeries(StorageFactory & factory);
 
-// MEILISEARCH
-void registerStorageMeiliSearch(StorageFactory& factory);
+#if USE_RAPIDJSON || USE_SIMDJSON
+void registerStorageFuzzJSON(StorageFactory & factory);
+#endif
 
 #if USE_AWS_S3
 void registerStorageS3(StorageFactory & factory);
-void registerStorageCOS(StorageFactory & factory);
-void registerStorageOSS(StorageFactory & factory);
 void registerStorageHudi(StorageFactory & factory);
+void registerStorageS3Queue(StorageFactory & factory);
+
 #if USE_PARQUET
 void registerStorageDeltaLake(StorageFactory & factory);
 #endif
@@ -42,9 +46,11 @@ void registerStorageIceberg(StorageFactory & factory);
 #endif
 #endif
 
-#if USE_HDFS
-void registerStorageHDFS(StorageFactory & factory);
+#if USE_AZURE_BLOB_STORAGE
+void registerStorageAzureQueue(StorageFactory & factory);
+#endif
 
+#if USE_HDFS
 #if USE_HIVE
 void registerStorageHive(StorageFactory & factory);
 #endif
@@ -58,7 +64,11 @@ void registerStorageJDBC(StorageFactory & factory);
 void registerStorageMySQL(StorageFactory & factory);
 #endif
 
+#if USE_MONGODB
 void registerStorageMongoDB(StorageFactory & factory);
+void registerStorageMongoDBPocoLegacy(StorageFactory & factory);
+#endif
+
 void registerStorageRedis(StorageFactory & factory);
 
 
@@ -97,11 +107,9 @@ void registerStorageSQLite(StorageFactory & factory);
 
 void registerStorageKeeperMap(StorageFactory & factory);
 
-#if USE_AZURE_BLOB_STORAGE
-void registerStorageAzureBlob(StorageFactory & factory);
-#endif
+void registerStorageObjectStorage(StorageFactory & factory);
 
-void registerStorages()
+void registerStorages(bool use_legacy_mongodb_integration [[maybe_unused]])
 {
     auto & factory = StorageFactory::instance();
 
@@ -124,15 +132,21 @@ void registerStorages()
     registerStorageGenerateRandom(factory);
     registerStorageExecutable(factory);
     registerStorageWindowView(factory);
+    registerStorageLoop(factory);
+    registerStorageFuzzQuery(factory);
+    registerStorageTimeSeries(factory);
 
-    // MEILISEARCH
-    registerStorageMeiliSearch(factory);
+#if USE_RAPIDJSON || USE_SIMDJSON
+    registerStorageFuzzJSON(factory);
+#endif
 
-    #if USE_AWS_S3
-    registerStorageS3(factory);
-    registerStorageCOS(factory);
-    registerStorageOSS(factory);
+#if USE_AZURE_BLOB_STORAGE
+    registerStorageAzureQueue(factory);
+#endif
+
+#if USE_AWS_S3
     registerStorageHudi(factory);
+    registerStorageS3Queue(factory);
 
     #if USE_PARQUET
     registerStorageDeltaLake(factory);
@@ -145,12 +159,9 @@ void registerStorages()
     #endif
 
     #if USE_HDFS
-    registerStorageHDFS(factory);
-
     #if USE_HIVE
     registerStorageHive(factory);
     #endif
-
     #endif
 
     registerStorageODBC(factory);
@@ -160,7 +171,13 @@ void registerStorages()
     registerStorageMySQL(factory);
     #endif
 
-    registerStorageMongoDB(factory);
+    #if USE_MONGODB
+    if (use_legacy_mongodb_integration)
+        registerStorageMongoDBPocoLegacy(factory);
+    else
+        registerStorageMongoDB(factory);
+    #endif
+
     registerStorageRedis(factory);
 
     #if USE_RDKAFKA
@@ -198,9 +215,7 @@ void registerStorages()
 
     registerStorageKeeperMap(factory);
 
-    #if USE_AZURE_BLOB_STORAGE
-    registerStorageAzureBlob(factory);
-    #endif
+    registerStorageObjectStorage(factory);
 }
 
 }

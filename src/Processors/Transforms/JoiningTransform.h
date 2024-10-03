@@ -1,6 +1,7 @@
 #pragma once
 #include <Processors/IProcessor.h>
-
+#include <Processors/Chunk.h>
+#include <memory>
 
 namespace DB
 {
@@ -111,16 +112,21 @@ private:
 };
 
 
-class DelayedBlocksTask : public ChunkInfo
+class DelayedBlocksTask : public ChunkInfoCloneable<DelayedBlocksTask>
 {
 public:
 
-    explicit DelayedBlocksTask() : finished(true) {}
-    explicit DelayedBlocksTask(IBlocksStreamPtr delayed_blocks_) : delayed_blocks(std::move(delayed_blocks_)) {}
+    DelayedBlocksTask() = default;
+    DelayedBlocksTask(const DelayedBlocksTask & other) = default;
+    explicit DelayedBlocksTask(IBlocksStreamPtr delayed_blocks_, JoiningTransform::FinishCounterPtr left_delayed_stream_finish_counter_)
+        : delayed_blocks(std::move(delayed_blocks_))
+        , left_delayed_stream_finish_counter(left_delayed_stream_finish_counter_)
+    {
+    }
 
     IBlocksStreamPtr delayed_blocks = nullptr;
+    JoiningTransform::FinishCounterPtr left_delayed_stream_finish_counter = nullptr;
 
-    bool finished = false;
 };
 
 using DelayedBlocksTaskPtr = std::shared_ptr<const DelayedBlocksTask>;
@@ -147,7 +153,10 @@ private:
 class DelayedJoinedBlocksWorkerTransform : public IProcessor
 {
 public:
-    explicit DelayedJoinedBlocksWorkerTransform(Block output_header);
+    using NonJoinedStreamBuilder = std::function<IBlocksStreamPtr()>;
+    explicit DelayedJoinedBlocksWorkerTransform(
+        Block output_header_,
+        NonJoinedStreamBuilder non_joined_stream_builder_);
 
     String getName() const override { return "DelayedJoinedBlocksWorkerTransform"; }
 
@@ -157,8 +166,12 @@ public:
 private:
     DelayedBlocksTaskPtr task;
     Chunk output_chunk;
+    /// For building a block stream to access the non-joined rows.
+    NonJoinedStreamBuilder non_joined_stream_builder;
+    IBlocksStreamPtr non_joined_delayed_stream = nullptr;
 
-    bool finished = false;
+    void resetTask();
+    Block nextNonJoinedBlock();
 };
 
 }

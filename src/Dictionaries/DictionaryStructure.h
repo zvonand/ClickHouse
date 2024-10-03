@@ -34,7 +34,9 @@ enum class AttributeUnderlyingType : TypeIndexUnderlying
     map_item(Decimal32), map_item(Decimal64), map_item(Decimal128), map_item(Decimal256),
     map_item(DateTime64),
 
-    map_item(UUID), map_item(String), map_item(Array)
+    map_item(UUID), map_item(String), map_item(Array),
+
+    map_item(IPv4), map_item(IPv6)
 };
 
 #undef map_item
@@ -87,14 +89,6 @@ constexpr void callOnDictionaryAttributeType(AttributeUnderlyingType type, F && 
     });
 }
 
-struct DictionarySpecialAttribute final
-{
-    const std::string name;
-    const std::string expression;
-
-    DictionarySpecialAttribute(const Poco::Util::AbstractConfiguration & config, const std::string & config_prefix);
-};
-
 struct DictionaryTypedSpecialAttribute final
 {
     const std::string name;
@@ -106,7 +100,7 @@ struct DictionaryTypedSpecialAttribute final
 /// Name of identifier plus list of attributes
 struct DictionaryStructure final
 {
-    std::optional<DictionarySpecialAttribute> id;
+    std::optional<DictionaryTypedSpecialAttribute> id;
     std::optional<std::vector<DictionaryAttribute>> key;
     std::vector<DictionaryAttribute> attributes;
     std::unordered_map<std::string, size_t> attribute_name_to_index;

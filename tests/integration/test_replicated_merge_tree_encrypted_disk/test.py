@@ -1,8 +1,9 @@
-import pytest
-from helpers.cluster import ClickHouseCluster
-from helpers.test_tools import assert_eq_with_retry, TSV
 import os
 
+import pytest
+
+from helpers.cluster import ClickHouseCluster
+from helpers.test_tools import TSV, assert_eq_with_retry
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 cluster = ClickHouseCluster(__file__)
@@ -67,6 +68,8 @@ def optimize_table():
 
 def check_table():
     expected = [[1, "str1"], [2, "str2"]]
+    node1.query("SYSTEM SYNC REPLICA tbl LIGHTWEIGHT")
+    node2.query("SYSTEM SYNC REPLICA tbl LIGHTWEIGHT")
     assert node1.query("SELECT * FROM tbl ORDER BY id") == TSV(expected)
     assert node2.query("SELECT * FROM tbl ORDER BY id") == TSV(expected)
     assert node1.query("CHECK TABLE tbl") == "1\n"

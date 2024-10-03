@@ -770,7 +770,8 @@ class CiOptions:
         res = CiOptions()
         pr_info = PRInfo()
         if (
-            not pr_info.is_pr() and not debug_message
+            (not pr_info.is_pr() and not debug_message)
+            or pr_info.body is None
         ):  # if commit_message is provided it's test/debug scenario - do not return
             # CI options can be configured in PRs only
             return res
@@ -779,8 +780,7 @@ class CiOptions:
         )
 
         pattern = r"(#|- \[x\] +<!---)(\w+)"
-        #NOTE(vnemkov): functionality of selectively skipping builds based on PR description causes issues with our CI/CD
-        matches = []#[match[-1] for match in re.findall(pattern, message)]
+        matches = [match[-1] for match in re.findall(pattern, message)]
         print(f"CI tags from commit message: [{matches}]")
 
         if not debug_message:  # to be skipped if debug/test

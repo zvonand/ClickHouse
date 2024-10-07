@@ -103,6 +103,7 @@ def started_cluster():
         )
         cluster.add_instance(
             "old_instance",
+            user_configs=["configs/users.xml"],
             with_zookeeper=True,
             image="altinity/clickhouse-server",
             tag="23.8.11.29.altinitystable", #TODO: (mtkachenko) verify this substitution is ok. Originally 23.12

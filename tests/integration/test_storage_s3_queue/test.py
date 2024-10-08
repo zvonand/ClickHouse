@@ -103,9 +103,11 @@ def started_cluster():
         )
         cluster.add_instance(
             "old_instance",
+            user_configs=["configs/users_old.xml"],
             with_zookeeper=True,
-            image="altinity/clickhouse-server",
-            tag="23.8.11.29.altinitystable", #TODO: (mtkachenko) verify this substitution is ok. Originally 23.12
+            # NOTE (vnemkov) Can't use altinity/clickhouse here since 23.8 doesn't hve S3Queue (and associated settings yet)
+            image="clickhouse/clickhouse-server",
+            tag="23.12",
             stay_alive=True,
             with_installed_binary=True,
             use_old_analyzer=True,

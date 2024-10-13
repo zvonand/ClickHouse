@@ -167,8 +167,11 @@ def check_invalid_configuration(filename, password):
         setupSsl(node, filename, password)
 
     nodes[0].start_clickhouse(expected_to_fail=True)
+    # NOTE(vnemkov): in 24.3 we still use BoringSSL, which produces a bit different error string.
+    # for OpenSSL-based versions (starting from 24.3), revert that back to what it used to be:
+    # "OpenSSLException: EVPKey::loadKey.*error:0480006C:PEM routines::no start line"
     nodes[0].wait_for_log_line(
-        "OpenSSLException: EVPKey::loadKey.*error:0480006C:PEM routines::no start line",
+        "OpenSSLException: EVPKey::loadKey.*PEM routines:OPENSSL_internal:NO_START_LINE",
     )
 
 

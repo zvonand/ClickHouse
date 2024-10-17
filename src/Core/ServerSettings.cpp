@@ -958,7 +958,7 @@ namespace DB
     <wait_dictionaries_load_at_startup>true</wait_dictionaries_load_at_startup>
     ```
     )", 0) \
-
+    DECLARE(Bool, allow_impersonate_user, true, R"(Enable/disable the IMPERSONATE feature (EXECUTE AS <user>).)", 0) \
 
 // clang-format on
 

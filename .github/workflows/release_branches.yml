@@ -24,12 +24,11 @@ on: # yamllint disable-line rule:truthy
   push:
     branches:
       - 'releases/24.3**'
-  schedule:
-    - cron: "0 0 * * 6"
+  workflow_dispatch:
 
 jobs:
   RunConfig:
-    runs-on: [self-hosted, altinity-on-demand, altinity-type-cax11, altinity-in-hel1, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none]
+    runs-on: [self-hosted, altinity-on-demand, altinity-type-cax11, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none]
     outputs:
       data: ${{ steps.runconfig.outputs.CI_DATA }}
     steps:
@@ -39,19 +38,11 @@ jobs:
           clear-repository: true # to ensure correct digests
           fetch-depth: 0 # to get version
           filter: tree:0
-      # - name: Labels check
-      #   run: |
-      #     cd "$GITHUB_WORKSPACE/tests/ci"
-      #     python3 run_check.py
       - name: Python unit tests
         run: |
           cd "$GITHUB_WORKSPACE/tests/ci"
           echo "Testing the main ci directory"
           python3 -m unittest discover -s . -p 'test_*.py'
-          for dir in *_lambda/; do
-            echo "Testing $dir"
-            python3 -m unittest discover -s "$dir" -p 'test_*.py'
-          done
       - name: PrepareRunConfig
         id: runconfig
         run: |
@@ -83,7 +74,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Compatibility check (amd64)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   CompatibilityCheckAarch64:
     needs: [RunConfig, BuilderDebAarch64]
@@ -92,7 +83,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Compatibility check (aarch64)
-      runner_type: altinity-on-demand, altinity-type-cax41, altinity-in-hel1, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cax41, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
 #########################################################################################
 #################################### ORDINARY BUILDS ####################################
@@ -160,28 +151,6 @@ jobs:
       build_name: package_debug
       data: ${{ needs.RunConfig.outputs.data }}
       force: true
-  BuilderBinDarwin:
-    needs: [RunConfig, BuildDockers]
-    if: ${{ !failure() && !cancelled() }}
-    uses: ./.github/workflows/reusable_build.yml
-    secrets: inherit
-    with:
-      build_name: binary_darwin
-      checkout_depth: 0
-      data: ${{ needs.RunConfig.outputs.data }}
-      # always rebuild on release branches to be able to publish from any commit
-      force: true
-  BuilderBinDarwinAarch64:
-    needs: [RunConfig, BuildDockers]
-    if: ${{ !failure() && !cancelled() }}
-    uses: ./.github/workflows/reusable_build.yml
-    secrets: inherit
-    with:
-      build_name: binary_darwin_aarch64
-      checkout_depth: 0
-      data: ${{ needs.RunConfig.outputs.data }}
-      # always rebuild on release branches to be able to publish from any commit
-      force: true
 ############################################################################################
 ##################################### Docker images  #######################################
 ############################################################################################
@@ -192,7 +161,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Docker server image
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   DockerKeeperImage:
     needs: [RunConfig, BuilderDebRelease, BuilderDebAarch64]
@@ -201,7 +170,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Docker keeper image
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
 ############################################################################################
 ##################################### BUILD REPORTER #######################################
@@ -222,14 +191,14 @@ jobs:
     secrets: inherit
     with:
       test_name: ClickHouse build check
-      runner_type:  altinity-on-demand, altinity-type-cax11, altinity-in-hel1, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
+      runner_type:  altinity-on-demand, altinity-type-cax11, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   MarkReleaseReady:
     if: ${{ !failure() && !cancelled() }}
     needs:
       - BuilderDebRelease
       - BuilderDebAarch64
-    runs-on: [self-hosted, altinity-on-demand, altinity-type-cax11, altinity-in-hel1, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none]
+    runs-on: [self-hosted, altinity-on-demand, altinity-type-cax11, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none]
     steps:
       - name: Debug
         run: |
@@ -263,7 +232,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Install packages (amd64)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
       run_command: |
         python3 install_check.py "$CHECK_NAME"
@@ -274,7 +243,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Install packages (arm64)
-      runner_type: altinity-on-demand, altinity-type-cax41, altinity-in-hel1, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cax41, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
       run_command: |
         python3 install_check.py "$CHECK_NAME"
@@ -297,7 +266,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateless tests (aarch64)
-      runner_type: altinity-on-demand, altinity-type-cax41, altinity-in-hel1, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cax41, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestAsan:
     needs: [RunConfig, BuilderDebAsan]
@@ -306,7 +275,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateless tests (asan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestTsan:
     needs: [RunConfig, BuilderDebTsan]
@@ -315,7 +284,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateless tests (tsan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestMsan:
     needs: [RunConfig, BuilderDebMsan]
@@ -324,7 +293,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateless tests (msan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestUBsan:
     needs: [RunConfig, BuilderDebUBsan]
@@ -333,7 +302,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateless tests (ubsan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestDebug:
     needs: [RunConfig, BuilderDebDebug]
@@ -342,7 +311,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateless tests (debug)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
 ##############################################################################################
 ############################ FUNCTIONAl STATEFUL TESTS #######################################
@@ -354,7 +323,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateful tests (release)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatefulTestAarch64:
     needs: [RunConfig, BuilderDebAarch64]
@@ -363,7 +332,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateful tests (aarch64)
-      runner_type: altinity-on-demand, altinity-type-cax41, altinity-in-hel1, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cax41, altinity-image-arm-snapshot-22.04-arm, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatefulTestAsan:
     needs: [RunConfig, BuilderDebAsan]
@@ -372,7 +341,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateful tests (asan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatefulTestTsan:
     needs: [RunConfig, BuilderDebTsan]
@@ -381,7 +350,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateful tests (tsan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatefulTestMsan:
     needs: [RunConfig, BuilderDebMsan]
@@ -390,7 +359,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateful tests (msan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatefulTestUBsan:
     needs: [RunConfig, BuilderDebUBsan]
@@ -399,7 +368,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateful tests (ubsan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatefulTestDebug:
     needs: [RunConfig, BuilderDebDebug]
@@ -408,7 +377,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stateful tests (debug)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
 ##############################################################################################
 ######################################### STRESS TESTS #######################################
@@ -420,7 +389,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stress test (asan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   StressTestTsan:
     needs: [RunConfig, BuilderDebTsan]
@@ -429,7 +398,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stress test (tsan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   StressTestMsan:
     needs: [RunConfig, BuilderDebMsan]
@@ -438,7 +407,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stress test (msan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   StressTestUBsan:
     needs: [RunConfig, BuilderDebUBsan]
@@ -447,7 +416,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stress test (ubsan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   StressTestDebug:
     needs: [RunConfig, BuilderDebDebug]
@@ -456,7 +425,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Stress test (debug)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
 #############################################################################################
 ############################# INTEGRATION TESTS #############################################
@@ -468,7 +437,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Integration tests (asan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash,altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   IntegrationTestsAnalyzerAsan:
     needs: [RunConfig, BuilderDebAsan]
@@ -477,7 +446,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Integration tests (asan, old analyzer)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   IntegrationTestsTsan:
     needs: [RunConfig, BuilderDebTsan]
@@ -486,7 +455,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Integration tests (tsan)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   IntegrationTestsRelease:
     needs: [RunConfig, BuilderDebRelease]
@@ -495,7 +464,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Integration tests (release)
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
 #############################################################################################
 ##################################### REGRESSION TESTS ######################################
@@ -527,7 +496,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Sign release
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash,altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   SignAarch64:
     needs: [RunConfig, BuilderDebAarch64]
@@ -536,7 +505,7 @@ jobs:
     secrets: inherit
     with:
       test_name: Sign aarch64
-      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-in-ash,altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
+      runner_type: altinity-on-demand, altinity-type-cpx51, altinity-image-x86-snapshot-22.04-amd, altinity-startup-snapshot, altinity-setup-none
       data: ${{ needs.RunConfig.outputs.data }}
   FinishCheck:
     if: ${{ !failure() && !cancelled() }}

@@ -207,7 +207,7 @@ void BackupWriterAzureBlobStorage::copyFile(const String & destination, const St
 
 void BackupWriterAzureBlobStorage::copyDataToFile(const String & path_in_backup, const CreateReadBufferFunction & create_read_buffer, UInt64 start_pos, UInt64 length)
 {
-    copyDataToAzureBlobStorageFile(create_read_buffer, start_pos, length, client, configuration.container, fs::path(configuration.blob_path) / path_in_backup, settings,
+    copyDataToAzureBlobStorageFile(create_read_buffer, start_pos, length, client, configuration.container, path_in_backup, settings,
                      threadPoolCallbackRunnerUnsafe<void>(getBackupsIOThreadPool().get(), "BackupWRAzure"));
 }
 

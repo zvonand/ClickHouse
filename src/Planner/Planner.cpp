@@ -194,6 +194,7 @@ FiltersForTableExpressionMap collectFiltersForAnalysis(const QueryTreeNodePtr & 
     auto & result_query_plan = planner.getQueryPlan();
 
     auto optimization_settings = QueryPlanOptimizationSettings::fromContext(query_context);
+    optimization_settings.build_sets = false; // no need to build sets to collect filters
     result_query_plan.optimize(optimization_settings);
 
     FiltersForTableExpressionMap res;
@@ -490,8 +491,6 @@ void addMergingAggregatedStep(QueryPlan & query_plan,
       */
 
     auto keys = aggregation_analysis_result.aggregation_keys;
-    if (!aggregation_analysis_result.grouping_sets_parameters_list.empty())
-        keys.insert(keys.begin(), "__grouping_set");
 
     Aggregator::Params params(keys,
         aggregation_analysis_result.aggregate_descriptions,
@@ -516,6 +515,7 @@ void addMergingAggregatedStep(QueryPlan & query_plan,
     auto merging_aggregated = std::make_unique<MergingAggregatedStep>(
         query_plan.getCurrentDataStream(),
         params,
+        aggregation_analysis_result.grouping_sets_parameters_list,
         query_analysis_result.aggregate_final,
         /// Grouping sets don't work with distributed_aggregation_memory_efficient enabled (#43989)
         settings.distributed_aggregation_memory_efficient && (is_remote_storage || parallel_replicas_from_merge_tree) && !query_analysis_result.aggregation_with_rollup_or_cube_or_grouping_sets,

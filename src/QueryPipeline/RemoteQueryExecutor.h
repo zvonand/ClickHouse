@@ -212,6 +212,8 @@ public:
 
     void setLogger(LoggerPtr logger) { log = logger; }
 
+    void setRemoteFunction(bool is_remote_function_ = true) { is_remote_function = is_remote_function_; }
+
     const Block & getHeader() const { return header; }
 
     IConnections & getConnections() { return *connections; }
@@ -300,6 +302,8 @@ private:
     bool got_duplicated_part_uuids = false;
 
     bool packet_in_progress = false;
+
+    bool is_remote_function = false;
 
     /// Parts uuids, collected from remote replicas
     std::vector<UUID> duplicated_part_uuids;

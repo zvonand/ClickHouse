@@ -151,6 +151,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         addSettingsChanges(settings_changes_history, "24.11",
             {"object_storage_cluster_function_cluster", "", "", "New setting"},
             {"object_storage_cluster_function_max_hosts", 0, 0, "New setting"},
+            {"object_storage_cluster", "", "", "New setting"},
+            {"object_storage_max_nodes", 0, 0, "New setting"},
         }
     },
     {"24.11",

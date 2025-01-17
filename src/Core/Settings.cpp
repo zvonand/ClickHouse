@@ -6090,10 +6090,10 @@ Trigger processor to spill data into external storage adpatively. grace join is 
     DECLARE(Bool, allow_experimental_ts_to_grid_aggregate_function, false, R"(
 Experimental tsToGrid aggregate function for Prometheus-like timeseries resampling. Cloud only
 )", EXPERIMENTAL) \
-    DECLARE(String, object_storage_cluster_function_cluster, "", R"(
+    DECLARE(String, object_storage_cluster, "", R"(
 Cluster to make distributed requests to object storages with alternative syntax.
 )", EXPERIMENTAL) \
-    DECLARE(UInt64, object_storage_cluster_function_max_hosts, 0, R"(
+    DECLARE(UInt64, object_storage_max_nodes, 0, R"(
 Limit for hosts used for request in object storage cluster table functions - azureBlobStorageCluster, s3Cluster, hdfsCluster, etc.
 Possible values:
 - Positive integer.

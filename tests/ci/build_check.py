@@ -14,6 +14,7 @@ from env_helper import REPO_COPY, S3_BUILDS_BUCKET, TEMP_PATH, S3_ACCESS_KEY_ID,
 from git_helper import Git
 from pr_info import PRInfo, EventType
 from report import FAILURE, SUCCESS, JobReport, StatusType
+from s3_helper import S3Helper
 from stopwatch import Stopwatch
 from tee_popen import TeePopen
 from version_helper import (
@@ -223,8 +224,10 @@ def main():
         f"sudo chown -R ubuntu:ubuntu {build_output_path}", shell=True
     )
     logging.info("Build finished as %s, log path %s", build_status, log_path)
-    
+
+    s3_helper = S3Helper()
     src_path = temp_path / "build_source.src.tar.gz"
+    s3_path_prefix = "/".join((release_or_pr, pr_info.sha, build_name))
     s3_path = s3_path_prefix + "/clickhouse-" + version.string + ".src.tar.gz"
     logging.info("s3_path %s", s3_path)
     if src_path.exists():

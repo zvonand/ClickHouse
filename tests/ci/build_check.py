@@ -223,6 +223,20 @@ def main():
         f"sudo chown -R ubuntu:ubuntu {build_output_path}", shell=True
     )
     logging.info("Build finished as %s, log path %s", build_status, log_path)
+    
+    src_path = temp_path / "build_source.src.tar.gz"
+    s3_path = s3_path_prefix + "/clickhouse-" + version.string + ".src.tar.gz"
+    logging.info("s3_path %s", s3_path)
+    if src_path.exists():
+        src_url = s3_helper.upload_build_file_to_s3(
+            src_path, s3_path
+        )
+        logging.info("Source tar %s", src_url)
+        print(f"::notice ::Source tar URL: {src_url}")
+    else:
+        logging.info("Source tar doesn't exist")
+        print("Source tar doesn't exist")
+    
     if build_status != SUCCESS:
         # We check if docker works, because if it's down, it's infrastructure
         try:

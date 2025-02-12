@@ -226,8 +226,14 @@ def main():
     logging.info("Build finished as %s, log path %s", build_status, log_path)
 
     s3_helper = S3Helper()
+    s3_path_prefix = "/".join(
+        (
+            get_release_or_pr(pr_info, get_version_from_repo())[0],
+            pr_info.sha,
+            build_name,
+        )
+    )    
     src_path = temp_path / "build_source.src.tar.gz"
-    s3_path_prefix = "/".join((release_or_pr, pr_info.sha, build_name))
     s3_path = s3_path_prefix + "/clickhouse-" + version.string + ".src.tar.gz"
     logging.info("s3_path %s", s3_path)
     if src_path.exists():

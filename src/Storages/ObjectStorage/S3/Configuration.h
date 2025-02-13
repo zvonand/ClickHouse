@@ -97,7 +97,7 @@ public:
         ContextPtr context,
         bool with_structure) override;
 
-    void setFunctionArgs(ASTs & args) const override;
+    void getTableFunctionArguments(ASTs & args) const override;
 
 private:
     void fromNamedCollection(const NamedCollection & collection, ContextPtr context) override;

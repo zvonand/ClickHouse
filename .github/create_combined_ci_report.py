@@ -37,6 +37,7 @@ def get_checks_known_fails(client: Client, job_url: str, known_fails: dict):
     """
     Get tests that are known to fail for the given job URL.
     """
+    assert len(known_fails) > 0, "cannot query the database with empty known fails"
     columns = (
         "check_status, check_name, test_status, test_name, report_url as results_link"
     )

@@ -586,7 +586,7 @@ void StorageS3Configuration::addStructureAndFormatToArgsIfNeeded(
     }
 }
 
-void StorageS3Configuration::getTableFunctionArguments(ASTs & args) const
+void StorageS3Configuration::addPathAndAccessKeysToArgs(ASTs & args) const
 {
     if (!args.empty())
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Arguments are not empty");

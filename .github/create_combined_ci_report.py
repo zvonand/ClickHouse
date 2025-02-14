@@ -44,7 +44,7 @@ def get_checks_known_fails(client: Client, job_url: str, known_fails: dict):
                 WHERE task_url='{job_url}'
                 AND test_status='BROKEN'
                 AND test_name IN ({','.join(f"'{test}'" for test in known_fails.keys())})
-                ORDER BY check_name, test_name
+                ORDER BY test_name, check_name
                 """
 
     df = client.query_dataframe(query)

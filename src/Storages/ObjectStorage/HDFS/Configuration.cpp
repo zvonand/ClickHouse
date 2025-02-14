@@ -239,9 +239,7 @@ void StorageHDFSConfiguration::addStructureAndFormatToArgsIfNeeded(
 void StorageHDFSConfiguration::getTableFunctionArguments(ASTs & args) const
 {
     if (!args.empty())
-    { /// Just check
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Arguments are not empty");
-    }
 
     args.push_back(std::make_shared<ASTLiteral>(url + path));
 }

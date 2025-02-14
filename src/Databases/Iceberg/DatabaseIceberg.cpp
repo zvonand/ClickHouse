@@ -234,8 +234,6 @@ StoragePtr DatabaseIceberg::tryGetTable(const String & name, ContextPtr context_
     StorageObjectStorage::Configuration::initialize(*configuration, args, context_, /* with_table_structure */false, storage_settings.get());
 
     auto cluster_name = settings[DatabaseIcebergSetting::object_storage_cluster].value;
-    if (cluster_name.empty())
-        cluster_name = context_->getSettingsRef()[Setting::object_storage_cluster].value;
 
     if (cluster_name.empty())
     {

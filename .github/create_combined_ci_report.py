@@ -235,10 +235,10 @@ def main():
 {'<p style="font-weight: bold;color: #F00;">This is a preview. FinishCheck has not completed.</p>' if args.mark_preview else ""}
 <ul>
     <li><a href="#ci-jobs-status">CI Jobs Status</a></li>
-    <li><a href="#checks-fails">Checks Fails</a> ({len(fail_results['checks_fails'])})</li>
-    <li><a href="#checks-known-fails">Checks Known Fails</a> ({len(fail_results['checks_known_fails'])})</li>
     <li><a href="#checks-errors">Checks Errors</a> ({len(fail_results['checks_errors'])})</li>
-    <li><a href="#regression-fails">Regression Fails</a> ({len(fail_results['regression_fails'])})</li>
+    <li><a href="#regression-fails">Regression New Fails</a> ({len(fail_results['regression_fails'])})</li>
+    <li><a href="#checks-fails">Checks New Fails</a> ({len(fail_results['checks_fails'])})</li>
+    <li><a href="#checks-known-fails">Checks Known Fails</a> ({len(fail_results['checks_known_fails'])})</li>
 </ul>
 
 <h2 id="ci-jobs-status">CI Jobs Status</h2>
@@ -249,17 +249,17 @@ def main():
             "</table>",
             f"""</table>
 
-<h2 id="checks-fails">Checks Fails</h2>
+<h2 id="checks-errors">Checks Errors</h2>
+{format_results_as_html_table(fail_results['checks_errors'])}
+
+<h2 id="regression-fails">Regression New Fails</h2>
+{format_results_as_html_table(fail_results['regression_fails'])}
+
+<h2 id="checks-fails">Checks New Fails</h2>
 {format_results_as_html_table(fail_results['checks_fails'])}
 
 <h2 id="checks-known-fails">Checks Known Fails</h2>
 {format_results_as_html_table(fail_results['checks_known_fails'])}
-
-<h2 id="checks-errors">Checks Errors</h2>
-{format_results_as_html_table(fail_results['checks_errors'])}
-
-<h2 id="regression-fails">Regression Fails</h2>
-{format_results_as_html_table(fail_results['regression_fails'])}
 """,
             1,
         )

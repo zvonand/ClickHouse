@@ -100,16 +100,17 @@ def get_regression_fails(client: Client, job_url: str):
     Get regression tests that did not succeed for the given job URL.
     """
     # If you rename the alias for report_url, also update the formatters in format_results_as_html_table
-    query = f"""SELECT arch, status, test_name, results_link
+    query = f"""SELECT arch, job_name, status, test_name, results_link
             FROM (
                SELECT
                     architecture as arch,
                     test_name,
                     argMax(result, start_time) AS status,
                     job_url,
+                    job_name,
                     report_url as results_link
                FROM `gh-data`.clickhouse_regression_results
-               GROUP BY architecture, test_name, job_url, report_url, start_time
+               GROUP BY architecture, test_name, job_url, job_name, report_url, start_time
                ORDER BY start_time DESC, length(test_name) DESC
             )
             WHERE job_url='{job_url}'
@@ -117,6 +118,7 @@ def get_regression_fails(client: Client, job_url: str):
             """
     df = client.query_dataframe(query)
     df = drop_prefix_rows(df, "test_name")
+    df["job_name"] = df["job_name"].str.title()
     return df
 
 

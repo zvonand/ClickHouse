@@ -97,6 +97,8 @@ StorageObjectStorageCluster::StorageObjectStorageCluster(
 
     setVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(metadata.columns, context_, sample_path));
     setInMemoryMetadata(metadata);
+
+    getPureStorage(context_);
 }
 
 std::string StorageObjectStorageCluster::getName() const

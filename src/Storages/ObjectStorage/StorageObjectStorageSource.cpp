@@ -138,7 +138,7 @@ std::shared_ptr<IObjectIterator> StorageObjectStorageSource::createFileIterator(
 
     const bool is_archive = configuration->isArchive();
 
-    configuration->update(object_storage, local_context);
+    configuration->updateIfRequired(object_storage, local_context);
 
     std::unique_ptr<IObjectIterator> iterator;
 

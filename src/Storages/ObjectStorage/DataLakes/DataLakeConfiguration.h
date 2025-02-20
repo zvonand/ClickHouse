@@ -59,6 +59,8 @@ public:
             if (!supportsFileIterator())
                 BaseStorageConfiguration::setPaths(current_metadata->getDataFiles());
         }
+
+        updated = true;
     }
 
     std::optional<ColumnsDescription> tryGetTableStructureFromMetadata() const override
@@ -144,6 +146,8 @@ public:
 private:
     DataLakeMetadataPtr current_metadata;
     LoggerPtr log = getLogger("DataLakeConfiguration");
+
+    bool updated = false;
 
     ReadFromFormatInfo prepareReadingFromFormat(
         ObjectStoragePtr object_storage,

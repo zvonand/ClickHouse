@@ -40,15 +40,13 @@ public:
 
     void setInMemoryMetadata(const StorageInMemoryMetadata & metadata_) override
     {
-        if (pure_storage)
-            pure_storage->setInMemoryMetadata(metadata_);
+        pure_storage->setInMemoryMetadata(metadata_);
         IStorageCluster::setInMemoryMetadata(metadata_);
     }
 
     void setVirtuals(VirtualColumnsDescription virtuals_) override
     {
-        if (pure_storage)
-            pure_storage->setVirtuals(virtuals_);
+        pure_storage->setVirtuals(virtuals_);
         IStorageCluster::setVirtuals(virtuals_);
     }
 
@@ -84,8 +82,6 @@ private:
         ContextPtr context,
         bool async_insert) override;
 
-    std::shared_ptr<StorageObjectStorage> getPureStorage(ContextPtr context);
-    
     /*
     In case the table was created with `object_storage_cluster` setting,
     modify the AST query object so that it uses the table function implementation
@@ -105,12 +101,8 @@ private:
     const ObjectStoragePtr object_storage;
     bool cluster_name_in_settings;
 
-    std::mutex mutex;
+    /// non-clustered storage to fall back on pure realisation if needed
     std::shared_ptr<StorageObjectStorage> pure_storage;
-    String comment;
-    std::optional<FormatSettings> format_settings;
-    LoadingStrictnessLevel mode;
-    ASTPtr partition_by;
 };
 
 }

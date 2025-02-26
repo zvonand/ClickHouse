@@ -30,6 +30,7 @@ namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int UNKNOWN_FUNCTION;
+    extern const int NOT_IMPLEMENTED;
 }
 
 
@@ -78,10 +79,6 @@ StorageObjectStorageCluster::StorageObjectStorageCluster(
     , configuration{configuration_}
     , object_storage(object_storage_)
     , cluster_name_in_settings(false)
-    , comment(comment_)
-    , format_settings(format_settings_)
-    , mode(mode_)
-    , partition_by(partition_by_)
 {
     ColumnsDescription columns{columns_};
     std::string sample_path;
@@ -98,7 +95,18 @@ StorageObjectStorageCluster::StorageObjectStorageCluster(
     setVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(metadata.columns, context_, sample_path));
     setInMemoryMetadata(metadata);
 
-    getPureStorage(context_);
+    pure_storage = std::make_shared<StorageObjectStorage>(
+        configuration,
+        object_storage,
+        context_,
+        getStorageID(),
+        getInMemoryMetadata().getColumns(),
+        getInMemoryMetadata().getConstraints(),
+        comment_,
+        format_settings_,
+        mode_,
+        /* distributed_processing */false,
+        partition_by_);
 }
 
 std::string StorageObjectStorageCluster::getName() const
@@ -260,34 +268,6 @@ RemoteQueryExecutor::Extension StorageObjectStorageCluster::getTaskIteratorExten
     return RemoteQueryExecutor::Extension{ .task_iterator = std::move(callback) };
 }
 
-std::shared_ptr<StorageObjectStorage> StorageObjectStorageCluster::getPureStorage(ContextPtr context)
-{
-    std::lock_guard lock(mutex);
-    if (!pure_storage)
-    {
-        pure_storage = std::make_shared<StorageObjectStorage>(
-            configuration,
-            object_storage,
-            context,
-            getStorageID(),
-            getInMemoryMetadata().getColumns(),
-            getInMemoryMetadata().getConstraints(),
-            comment,
-            format_settings,
-            mode,
-            /* distributed_processing */false,
-            partition_by);
-
-        auto virtuals_ = getVirtualsPtr();
-        if (virtuals_)
-            pure_storage->setVirtuals(*virtuals_);
-
-        pure_storage->setInMemoryMetadata(getInMemoryMetadata());
-    }
-
-    return pure_storage;
-}
-
 void StorageObjectStorageCluster::readFallBackToPure(
     QueryPlan & query_plan,
     const Names & column_names,
@@ -298,7 +278,7 @@ void StorageObjectStorageCluster::readFallBackToPure(
     size_t max_block_size,
     size_t num_streams)
 {
-    getPureStorage(context)->read(query_plan, column_names, storage_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
+    pure_storage->read(query_plan, column_names, storage_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
 }
 
 SinkToStoragePtr StorageObjectStorageCluster::writeFallBackToPure(
@@ -307,11 +287,15 @@ SinkToStoragePtr StorageObjectStorageCluster::writeFallBackToPure(
     ContextPtr context,
     bool async_insert)
 {
-    return getPureStorage(context)->write(query, metadata_snapshot, context, async_insert);
+    return pure_storage->write(query, metadata_snapshot, context, async_insert);
 }
 
 String StorageObjectStorageCluster::getClusterName(ContextPtr context) const
 {
+    /// We try to get cluster name from query settings.
+    /// If it emtpy, we take default cluster name from table settings.
+    /// When it is not empty, we use this cluster to distibuted requests.
+    /// When both are empty, we must fall back to pure implementatiuon.
     auto cluster_name_ = context->getSettingsRef()[Setting::object_storage_cluster].value;
     if (cluster_name_.empty())
         cluster_name_ = getOriginalClusterName();
@@ -335,7 +319,11 @@ void StorageObjectStorageCluster::truncate(
     ContextPtr local_context,
     TableExclusiveLockHolder & lock_holder)
 {
-    return getPureStorage(local_context)->truncate(query, metadata_snapshot, local_context, lock_holder);
+    /// Full query if fall back to pure storage.
+    if (getClusterName(local_context).empty())
+        return pure_storage->truncate(query, metadata_snapshot, local_context, lock_holder);
+
+    throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Truncate is not supported by storage {}", getName());
 }
 
 void StorageObjectStorageCluster::addInferredEngineArgsToCreateQuery(ASTs & args, const ContextPtr & context) const

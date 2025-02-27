@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
-#  Copyright 2022, Altinity Inc. All Rights Reserved.
-#
-#  All information contained herein is, and remains the property
-#  of Altinity Inc. Any dissemination of this information or
-#  reproduction of this material is strictly forbidden unless
-#  prior written permission is obtained from Altinity Inc.
+import json
 
 from testflows.core import *
-import json
 
 xfails = {}
 

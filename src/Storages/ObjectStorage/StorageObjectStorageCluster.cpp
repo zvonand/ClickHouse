@@ -296,10 +296,10 @@ String StorageObjectStorageCluster::getClusterName(ContextPtr context) const
     /// If it emtpy, we take default cluster name from table settings.
     /// When it is not empty, we use this cluster to distibuted requests.
     /// When both are empty, we must fall back to pure implementatiuon.
-    auto cluster_name_ = context->getSettingsRef()[Setting::object_storage_cluster].value;
-    if (cluster_name_.empty())
-        cluster_name_ = getOriginalClusterName();
-    return cluster_name_;
+    auto cluster_name_from_settings = context->getSettingsRef()[Setting::object_storage_cluster].value;
+    if (cluster_name_from_settings.empty())
+        cluster_name_from_settings = getOriginalClusterName();
+    return cluster_name_from_settings;
 }
 
 QueryProcessingStage::Enum StorageObjectStorageCluster::getQueryProcessingStage(

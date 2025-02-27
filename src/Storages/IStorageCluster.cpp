@@ -81,9 +81,9 @@ void IStorageCluster::read(
     size_t max_block_size,
     size_t num_streams)
 {
-    auto cluster_name_ = getClusterName(context);
+    auto cluster_name_from_settings = getClusterName(context);
 
-    if (cluster_name_.empty())
+    if (cluster_name_from_settings.empty())
     {
         readFallBackToPure(query_plan, column_names, storage_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
         return;
@@ -92,7 +92,7 @@ void IStorageCluster::read(
     storage_snapshot->check(column_names);
 
     updateBeforeRead(context);
-    auto cluster = getClusterImpl(context, cluster_name_);
+    auto cluster = getClusterImpl(context, cluster_name_from_settings);
 
     /// Calculate the header. This is significant, because some columns could be thrown away in some cases like query with count(*)
 
@@ -145,9 +145,9 @@ SinkToStoragePtr IStorageCluster::write(
     ContextPtr context,
     bool async_insert)
 {
-    auto cluster_name_ = getClusterName(context);
+    auto cluster_name_from_settings = getClusterName(context);
 
-    if (cluster_name_.empty())
+    if (cluster_name_from_settings.empty())
         return writeFallBackToPure(query, metadata_snapshot, context, async_insert);
 
     throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Method write is not supported by storage {}", getName());

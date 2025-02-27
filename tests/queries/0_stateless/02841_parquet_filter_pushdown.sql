@@ -1,5 +1,6 @@
 -- Tags: no-fasttest, no-parallel
 
+set input_format_parquet_filter_push_down=true;
 set output_format_parquet_row_group_size = 100;
 
 set input_format_null_as_default = 1;
@@ -135,3 +136,9 @@ select count(), sum(number) from file('02841.parquet', Parquet, 'number UInt64, 
 select count(), sum(number) from file('02841.parquet') where indexHint(string_or_null == ''); -- quirk with infinities
 select count(), sum(number) from file('02841.parquet', Parquet, 'number UInt64, string_or_null String') where indexHint(string_or_null == '');
 select count(), sum(number) from file('02841.parquet', Parquet, 'number UInt64, nEgAtIvE_oR_nUlL Int64') where indexHint(nEgAtIvE_oR_nUlL > -50) settings input_format_parquet_case_insensitive_column_matching = 1;
+
+-- Bad type conversions.
+insert into function file('02841.parquet') select 42 as x;
+select * from file('02841.parquet', Parquet, 'x Nullable(String)') where x not in (1);
+insert into function file('t.parquet', Parquet, 'x String') values ('1'), ('100'), ('2');
+select * from file('t.parquet', Parquet, 'x Int64') where x >= 3;

@@ -475,6 +475,7 @@ jobs:
       commit: 53d73ed32155a8a17ee0d0cdb15aee96c98010a2
       arch: release 
       build_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      timeout_minutes: 300
   RegressionTestsAarch64:
     needs: [BuilderDebAarch64]
     if: ${{ !failure() && !cancelled() }}
@@ -485,6 +486,7 @@ jobs:
       commit: 53d73ed32155a8a17ee0d0cdb15aee96c98010a2
       arch: aarch64
       build_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      timeout_minutes: 300
   SignRelease:
     needs: [RunConfig, BuilderDebRelease]
     if: ${{ !failure() && !cancelled() }}

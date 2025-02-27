@@ -3,7 +3,7 @@
 #include <base/defines.h>
 
 #include <fstream>
-#include <sstream>
+#include <string>
 
 
 bool cgroupsV2Enabled()
@@ -26,7 +26,7 @@ bool cgroupsV2MemoryControllerEnabled()
     /// According to https://docs.kernel.org/admin-guide/cgroup-v2.html, file "cgroup.controllers" defines which controllers are available
     /// for the current + child cgroups. The set of available controllers can be restricted from level to level using file
     /// "cgroups.subtree_control". It is therefore sufficient to check the bottom-most nested "cgroup.controllers" file.
-    auto cgroup_dir = currentCGroupV2Path();
+    auto cgroup_dir = cgroupV2PathOfProcess();
     if (cgroup_dir.empty())
         return false;
     std::ifstream controllers_file(cgroup_dir / "cgroup.controllers");
@@ -42,7 +42,7 @@ bool cgroupsV2MemoryControllerEnabled()
 #endif
 }
 
-std::filesystem::path currentCGroupV2Path()
+std::filesystem::path cgroupV2PathOfProcess()
 {
 #if defined(OS_LINUX)
     chassert(cgroupsV2Enabled());
@@ -58,9 +58,8 @@ std::filesystem::path currentCGroupV2Path()
     static const std::string v2_prefix = "0::/";
     if (!cgroup.starts_with(v2_prefix))
         return {};
-
-    // the 'root' cgroup can have empty path, which is valid
     cgroup = cgroup.substr(v2_prefix.length());
+    /// Note: The 'root' cgroup can have an empty cgroup name, this is valid
     return default_cgroups_mount / cgroup;
 #else
     return {};

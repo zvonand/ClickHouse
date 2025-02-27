@@ -770,7 +770,8 @@ class CiOptions:
         res = CiOptions()
         pr_info = PRInfo()
         if (
-            not pr_info.is_pr() and not debug_message
+            (not pr_info.is_pr() and not debug_message)
+            or pr_info.body is None
         ):  # if commit_message is provided it's test/debug scenario - do not return
             # CI options can be configured in PRs only
             return res
@@ -1875,8 +1876,10 @@ def main() -> int:
             else {}
         )
 
-        if not args.skip_jobs and pr_info.has_changes_in_documentation_only():
-            _update_config_for_docs_only(jobs_data)
+        if pr_info.event_type != "dispatch":
+            # Avoid calling pr_info.has_changes_in_documentation_only() during workflow_dispatch event
+            if not args.skip_jobs and pr_info.has_changes_in_documentation_only():
+                _update_config_for_docs_only(jobs_data)
 
         if not args.skip_jobs:
             ci_cache = CiCache(s3, jobs_data["digests"])
@@ -2100,7 +2103,7 @@ def main() -> int:
                     job_report.check_name or _get_ext_check_name(args.job_name),
                 )
 
-            print(f"Job report url: [{check_url}]")
+            print(f"Job report url: [ {check_url} ]")
             prepared_events = prepare_tests_results_for_clickhouse(
                 pr_info,
                 job_report.test_results,

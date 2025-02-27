@@ -168,6 +168,7 @@ class ClickHouseVersion:
             "githash": self.githash,
             "describe": self.describe,
             "string": self.string,
+            "flavour": self.flavour
         }
 
     def as_tuple(self) -> Tuple[int, int, int, int]:

@@ -292,10 +292,10 @@ SinkToStoragePtr StorageObjectStorageCluster::writeFallBackToPure(
 
 String StorageObjectStorageCluster::getClusterName(ContextPtr context) const
 {
-    /// We try to get cluster name from query settings.
-    /// If it emtpy, we take default cluster name from table settings.
-    /// When it is not empty, we use this cluster to distibuted requests.
-    /// When both are empty, we must fall back to pure implementatiuon.
+    /// StorageObjectStorageCluster is always created for cluster or non-cluster variants.
+    /// User can specify cluster name in table definition or in setting `object_storage_cluster`
+    /// only for several queries. When it specified in both places, priority is given to the query setting.
+    /// When it is empty, non-cluster realization is used.
     auto cluster_name_from_settings = context->getSettingsRef()[Setting::object_storage_cluster].value;
     if (cluster_name_from_settings.empty())
         cluster_name_from_settings = getOriginalClusterName();

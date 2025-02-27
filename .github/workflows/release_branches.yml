@@ -189,24 +189,9 @@ jobs:
       test_name: ClickHouse build check
       runner_type: altinity-style-checker-aarch64
       data: ${{ needs.RunConfig.outputs.data }}
-  BuilderSpecialReport:
-    # run report check for failed builds to indicate the CI error
-    if: ${{ !cancelled() }}
-    needs:
-      - RunConfig
-      - BuilderBinDarwin
-      - BuilderBinDarwinAarch64
-    uses: ./.github/workflows/reusable_test.yml
-    secrets: inherit
-    with:
-      test_name: ClickHouse special build check
-      runner_type: altinity-style-checker-aarch64
-      data: ${{ needs.RunConfig.outputs.data }}
   MarkReleaseReady:
     if: ${{ !failure() && !cancelled() }}
     needs:
-      - BuilderBinDarwin
-      - BuilderBinDarwinAarch64
       - BuilderDebRelease
       - BuilderDebAarch64
     runs-on: [self-hosted, altinity-on-demand, altinity-style-checker-aarch64]
@@ -524,7 +509,6 @@ jobs:
       - DockerServerImage
       - DockerKeeperImage
       - BuilderReport
-      - BuilderSpecialReport
       - MarkReleaseReady
       - FunctionalStatelessTestDebug
       - FunctionalStatelessTestRelease

@@ -175,6 +175,18 @@ jobs:
       test_name: Docker keeper image
       runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
+  GrypeScanServerImage:
+    needs: [DockerServerImage]
+    if: ${{ !failure() && !cancelled() }}
+    uses: ./.github/workflows/grype_scan.yml
+    with:
+      docker_image: "altinityinfra/clickhouse-server"
+  GrypeScanKeeperImage:
+    needs: [DockerKeeperImage]
+    if: ${{ !failure() && !cancelled() }}
+    uses: ./.github/workflows/grype_scan.yml
+    with:
+      docker_image: "altinityinfra/clickhouse-keeper"
 ############################################################################################
 ##################################### BUILD REPORTER #######################################
 ############################################################################################

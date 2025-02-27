@@ -1,0 +1,62 @@
+name: Grype Scan
+run-name: Grype Scan ${{ inputs.docker_image }}
+
+on:
+    workflow_dispatch:
+        inputs:
+            docker_image:
+                description: 'Docker image with tag to scan'
+                required: true
+    workflow_call:
+        inputs:
+            docker_image:
+                description: 'Docker image without tag to scan'
+                required: true
+                type: string
+
+jobs:
+    grype_scan:
+        runs-on: [self-hosted, x86, type-cx42, image-x86-app-docker-ce]
+        steps:
+        - name: Checkout repository
+          uses: actions/checkout@v2
+
+        - name: Set up Docker
+          uses: docker/setup-buildx-action@v3
+
+        - name: Set up Python
+          run: |
+            export TESTFLOWS_VERSION="2.4.19"
+            sudo apt-get install -y python3-pip python3-venv
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install --upgrade requests chardet urllib3
+            pip install testflows==$TESTFLOWS_VERSION
+            echo PATH=$PATH >>$GITHUB_ENV
+
+        - name: Set image tag if called by another workflow
+          if: ${{ github.event_name == 'workflow_call' }}
+          id: set_version
+          run: |
+            python3 ./tests/ci/version_helper.py | tee /tmp/version_info
+            source /tmp/version_info
+            echo "::set-output name=docker_image::${{ github.event.inputs.docker_image }}:${{ github.event.pull_request.number }}-$CLICKHOUSE_VERSION_STRING"
+            echo "::set-output name=commit_sha::$CLICKHOUSE_VERSION_GITHASH
+
+        - name: Run Grype Scan
+          run: |
+            DOCKER_IMAGE=${{ steps.set_version.outputs.docker_image || inputs.docker_image }}
+            ./.github/grype/run_grype_scan.sh $DOCKER_IMAGE
+
+        - name: Parse grype results
+          run: |
+            python3 -u ./.github/grype/parse_vulnerabilities_grype.py -o nice --no-colors --log raw.log --test-to-end
+
+        - name: Transform and Upload Grype Results
+          env:
+            S3_BUCKET: "altinity-build-artifacts"
+            COMMIT_SHA: ${{ steps.set_version.outputs.commit_sha || github.sha }}
+            PR_NUMBER: ${{ github.event.number }}
+            DOCKER_IMAGE: ${{ steps.set_version.outputs.docker_image || inputs.docker_image }}
+          run: |
+            ./.github/grype/transform_and_upload_results_s3.sh

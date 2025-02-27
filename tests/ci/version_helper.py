@@ -29,6 +29,7 @@ SET(VERSION_MAJOR {major})
 SET(VERSION_MINOR {minor})
 SET(VERSION_PATCH {patch})
 SET(VERSION_GITHASH {githash})
+SET(VERSION_FLAVOUR {flavour})
 SET(VERSION_DESCRIBE {describe})
 SET(VERSION_STRING {string})
 # end of autochange
@@ -138,6 +139,10 @@ class ClickHouseVersion:
     @property
     def description(self) -> str:
         return self._description
+
+    @property
+    def flavour(self) -> str:
+        return self._flavour
 
     @property
     def string(self):

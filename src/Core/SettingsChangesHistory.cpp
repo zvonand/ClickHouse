@@ -58,6 +58,11 @@ String ClickHouseVersion::toString() const
 /// Note: please check if the key already exists to prevent duplicate entries.
 static std::initializer_list<std::pair<ClickHouseVersion, SettingsChangesHistory::SettingsChanges>> settings_changes_history_initializer =
 {
+    {"24.12.2.20000",
+        {
+            {"input_format_parquet_use_metadata_cache", false, false, "New setting"}, // https://github.com/Altinity/ClickHouse/pull/586
+        }
+    },
     {"24.12",
         {
             {"allow_experimental_database_iceberg", false, false, "New setting."},

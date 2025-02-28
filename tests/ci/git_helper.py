@@ -9,6 +9,22 @@ from typing import Any, List, Literal, Optional
 
 logger = logging.getLogger(__name__)
 
+class VersionType:
+    LTS = "lts"
+    NEW = "new"
+    PRESTABLE = "altinityedge"
+    STABLE = "altinitystable"
+    TESTING = "altinitytest"
+    ANTALYA = "altinityantalya"
+    HOTFIX = "altinityhotfix"
+
+    VALID = (NEW, TESTING, HOTFIX, PRESTABLE, STABLE, LTS, ANTALYA,
+            # NOTE (vnemkov): we don't use those directly, but it is used in unit-tests
+            "stable",
+            "prestable",
+            "testing",
+    )
+
 # ^ and $ match subline in `multiple\nlines`
 # \A and \Z match only start and end of the whole string
 # NOTE (vnemkov): support both upstream tag style: v22.x.y.z-lts and Altinity tag style: v22.x.y.z.altinitystable
@@ -17,8 +33,9 @@ RELEASE_BRANCH_REGEXP = r"\A\d+[.]\d+\Z"
 TAG_REGEXP = (
     r"\Av\d{2}"  # First two digits of major part
     r"([.][1-9]\d*){3}"  # minor.patch.tweak parts
-    r"-(new|testing|prestable|stable|lts|altinitystable)\Z"  # suffix with a version type
+    fr"[.-]({'|'.join(VersionType.VALID)})\Z"  # suffix with a version type
 )
+
 SHA_REGEXP = re.compile(r"\A([0-9]|[a-f]){40}\Z")
 
 CWD = p.dirname(p.realpath(__file__))
@@ -171,7 +188,7 @@ class Git:
         stderr = subprocess.DEVNULL if suppress_stderr else None
         self.latest_tag = self.run("git describe --tags --abbrev=0", stderr=stderr)
         # Format should be: {latest_tag}-{commits_since_tag}-g{sha_short}
-        self.commits_since_latest = int(
+        self.commits_since_latest = self.commits_since_tag = int(
             self.run(f"git rev-list {self.latest_tag}..HEAD --count")
         )
         if self.latest_tag.endswith("-new"):

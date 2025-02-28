@@ -71,11 +71,9 @@ def get_pr_for_commit(sha, ref):
             if pr["head"]["ref"] in ref:
                 return pr
             our_prs.append(pr)
-        print(
-            f"Cannot find PR with required ref {ref}, sha {sha} - returning first one"
-        )
-        first_pr = our_prs[0]
-        return first_pr
+        logging.warning("Cannot find PR with required ref %s, sha %s", ref, sha)
+        # first_pr = our_prs[0]
+        return None
     except Exception as ex:
         print(f"Cannot fetch PR info from commit {ref}, {sha}", ex)
     return None
@@ -121,6 +119,14 @@ class PRInfo:
         ref = github_event.get("ref", "refs/heads/master")
         if ref and ref.startswith("refs/heads/"):
             ref = ref[11:]
+        self.ref : str = ref # e.g. "refs/pull/509/merge" or "refs/tags/v24.3.12.76.altinitystable"
+
+        # Default values
+        self.base_ref = github_event.get("base_ref","")  # type: str
+        self.base_name = ""  # type: str
+        self.head_ref = ""  # type: str
+        self.head_name = ""  # type: str
+        self.number = 0  # type: int
 
         # workflow completed event, used for PRs only
         if "action" in github_event and github_event["action"] == "completed":
@@ -163,15 +169,11 @@ class PRInfo:
             # master or backport/xx.x/xxxxx - where the PR will be merged
             self.base_ref = github_event["pull_request"]["base"]["ref"]  # type: str
             # ClickHouse/ClickHouse
-            self.base_name = github_event["pull_request"]["base"]["repo"][
-                "full_name"
-            ]  # type: str
+            self.base_name = github_event["pull_request"]["base"]["repo"]["full_name"]  # type: str
             # any_branch-name - the name of working branch name
             self.head_ref = github_event["pull_request"]["head"]["ref"]  # type: str
             # UserName/ClickHouse or ClickHouse/ClickHouse
-            self.head_name = github_event["pull_request"]["head"]["repo"][
-                "full_name"
-            ]  # type: str
+            self.head_name = github_event["pull_request"]["head"]["repo"]["full_name"]  # type: str
             self.body = github_event["pull_request"]["body"]
             self.labels = {
                 label["name"] for label in github_event["pull_request"]["labels"]
@@ -228,7 +230,7 @@ class PRInfo:
             self.commit_html_url = f"{repo_prefix}/commit/{self.sha}"
 
             if pull_request is None or pull_request["state"] == "closed":
-                # it's merged PR to master
+                # it's merged PR to master, or there is no PR (build against specific commit or tag)
                 self.number = 0
                 self.labels = set()
                 self.pr_html_url = f"{repo_prefix}/commits/{ref}"
@@ -236,9 +238,14 @@ class PRInfo:
                 self.base_name = self.repo_full_name
                 self.head_ref = ref
                 self.head_name = self.repo_full_name
-                self.diff_urls.append(
-                    self.compare_url(github_event["before"], self.sha)
-                )
+
+                before_sha = github_event["before"]
+                # in case of just a tag on existing commit, "before_sha" is 0000000000000000000000000000000000000000
+                # Hence it is a special case and basically nothing changed, there is no need to compose a diff url
+                if not all(x == '0' for x in before_sha):
+                    self.diff_urls.append(
+                        self.compare_url(before_sha, self.sha)
+                    )
             else:
                 self.number = pull_request["number"]
                 self.labels = {label["name"] for label in pull_request["labels"]}

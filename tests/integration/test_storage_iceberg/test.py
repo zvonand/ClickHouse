@@ -278,7 +278,7 @@ def get_creation_expression(
                     DROP TABLE IF EXISTS {table_name};
                     CREATE TABLE {table_name}
                     ENGINE=IcebergHDFS(hdfs, filename = 'iceberg_data/default/{table_name}/', format={format}, url = 'hdfs://hdfs1:9000/')"""
-                    + allow_dynamic_metadata_for_datalakes_suffix
+                    + settings_suffix
                 )
 
     elif storage_type == "local":

@@ -92,8 +92,8 @@ StorageObjectStorageCluster::StorageObjectStorageCluster(
     if (sample_path.empty() && context_->getSettingsRef()[Setting::use_hive_partitioning])
         sample_path = getPathSample(metadata, context_);
 
-    setVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(metadata.columns, context_, sample_path));
     setInMemoryMetadata(metadata);
+    setVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(metadata.columns, context_, sample_path));
 
     pure_storage = std::make_shared<StorageObjectStorage>(
         configuration,
@@ -107,6 +107,11 @@ StorageObjectStorageCluster::StorageObjectStorageCluster(
         mode_,
         /* distributed_processing */false,
         partition_by_);
+
+    auto virtuals_ = getVirtualsPtr();
+    if (virtuals_)
+        pure_storage->setVirtuals(*virtuals_);
+    pure_storage->setInMemoryMetadata(getInMemoryMetadata());
 }
 
 std::string StorageObjectStorageCluster::getName() const

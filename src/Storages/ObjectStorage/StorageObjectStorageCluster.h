@@ -40,13 +40,15 @@ public:
 
     void setInMemoryMetadata(const StorageInMemoryMetadata & metadata_) override
     {
-        pure_storage->setInMemoryMetadata(metadata_);
+        if (pure_storage)
+            pure_storage->setInMemoryMetadata(metadata_);
         IStorageCluster::setInMemoryMetadata(metadata_);
     }
 
     void setVirtuals(VirtualColumnsDescription virtuals_) override
     {
-        pure_storage->setVirtuals(virtuals_);
+        if (pure_storage)
+            pure_storage->setVirtuals(virtuals_);
         IStorageCluster::setVirtuals(virtuals_);
     }
 

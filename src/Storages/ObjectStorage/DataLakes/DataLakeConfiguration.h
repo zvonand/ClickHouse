@@ -62,8 +62,6 @@ public:
                 BaseStorageConfiguration::setPartitionColumns(current_metadata->getPartitionColumns());
             }
         }
-
-        updated = true;
     }
 
     std::optional<ColumnsDescription> tryGetTableStructureFromMetadata() const override
@@ -115,8 +113,6 @@ public:
 
 private:
     DataLakeMetadataPtr current_metadata;
-
-    bool updated = false;
 
     ReadFromFormatInfo prepareReadingFromFormat(
         ObjectStoragePtr object_storage,

@@ -152,11 +152,33 @@ void StorageObjectStorageCluster::updateQueryForDistributedEngineIfNeeded(ASTPtr
 
     auto table_alias = table_identifier_typed.tryGetAlias();
 
+    auto storage_engine_name = configuration->getEngineName();
+    if (storage_engine_name == "Iceberg")
+    {
+        switch (configuration->getType())
+        {
+            case ObjectStorageType::S3:
+                storage_engine_name = "IcebergS3";
+                break;
+            case ObjectStorageType::Azure:
+                storage_engine_name = "IcebergAzure";
+                break;
+            case ObjectStorageType::HDFS:
+                storage_engine_name = "IcebergHDFS";
+                break;
+            default:
+                throw Exception(
+                    ErrorCodes::LOGICAL_ERROR,
+                    "Can't find table function for engine {}",
+                    storage_engine_name
+                );
+        }
+    }
+
     static std::unordered_map<std::string, std::string> engine_to_function = {
         {"S3", "s3"},
         {"Azure", "azureBlobStorage"},
         {"HDFS", "hdfs"},
-        {"Iceberg", "icebergS3"},
         {"IcebergS3", "icebergS3"},
         {"IcebergAzure", "icebergAzure"},
         {"IcebergHDFS", "icebergHDFS"},
@@ -164,13 +186,13 @@ void StorageObjectStorageCluster::updateQueryForDistributedEngineIfNeeded(ASTPtr
         {"Hudi", "hudi"}
     };
 
-    auto p = engine_to_function.find(configuration->getEngineName());
+    auto p = engine_to_function.find(storage_engine_name);
     if (p == engine_to_function.end())
     {
         throw Exception(
             ErrorCodes::LOGICAL_ERROR,
             "Can't find table function for engine {}",
-            configuration->getEngineName()
+            storage_engine_name
         );
     }
 

@@ -38,18 +38,22 @@ public:
 
     String getClusterName(ContextPtr context) const override;
 
-    void setInMemoryMetadata(const StorageInMemoryMetadata & metadata_) override
+    bool hasExternalDynamicMetadata() const override
     {
-        if (pure_storage)
-            pure_storage->setInMemoryMetadata(metadata_);
-        IStorageCluster::setInMemoryMetadata(metadata_);
+        return (pure_storage && pure_storage->hasExternalDynamicMetadata())
+            || configuration->hasExternalDynamicMetadata();
     }
 
-    void setVirtuals(VirtualColumnsDescription virtuals_) override
+    void updateExternalDynamicMetadata(ContextPtr context_ptr) override
     {
-        if (pure_storage)
-            pure_storage->setVirtuals(virtuals_);
-        IStorageCluster::setVirtuals(virtuals_);
+        if (pure_storage && pure_storage->hasExternalDynamicMetadata())
+            pure_storage->updateExternalDynamicMetadata(context_ptr);
+        if (configuration->hasExternalDynamicMetadata())
+        {
+            StorageInMemoryMetadata metadata;
+            metadata.setColumns(configuration->updateAndGetCurrentSchema(object_storage, context_ptr));
+            IStorageCluster::setInMemoryMetadata(metadata);
+        }
     }
 
     QueryProcessingStage::Enum getQueryProcessingStage(ContextPtr, QueryProcessingStage::Enum, const StorageSnapshotPtr &, SelectQueryInfo &) const override;

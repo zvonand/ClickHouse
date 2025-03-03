@@ -553,7 +553,7 @@ def count_secondary_subqueries(started_cluster, query_id, expected, comment):
         cluster_secondary_queries = (
             replica.query(
                 f"""
-                SELECT query, type, is_initial_query, read_rows, read_bytes FROM system.query_log
+                SELECT count(*) FROM system.query_log
                 WHERE
                     type = 'QueryFinish'
                     AND NOT is_initial_query
@@ -561,13 +561,12 @@ def count_secondary_subqueries(started_cluster, query_id, expected, comment):
             """
             )
             .strip()
-            .split("\n")
         )
 
         logging.info(
             f"[{node_name}] cluster_secondary_queries {comment}: {cluster_secondary_queries}"
         )
-        assert len(cluster_secondary_queries) == expected
+        assert int(cluster_secondary_queries) == expected
 
 
 @pytest.mark.parametrize("format_version", ["1", "2"])

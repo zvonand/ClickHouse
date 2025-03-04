@@ -266,7 +266,7 @@ void StorageObjectStorageCluster::updateQueryToSendIfNeeded(
     }
 
     ASTPtr object_storage_type_arg;
-    configuration->extractDynamicStorageType(args, &object_storage_type_arg);
+    configuration->extractDynamicStorageType(args, context, &object_storage_type_arg);
     if (cluster_name_in_settings)
     {
         configuration->addStructureAndFormatToArgsIfNeeded(args, structure, configuration->format, context, /*with_structure=*/true);

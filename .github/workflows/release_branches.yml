@@ -506,7 +506,7 @@ jobs:
       runner_type: altinity-style-checker-aarch64
       data: ${{ needs.RunConfig.outputs.data }}
   FinishCheck:
-    if: ${{ !failure() && !cancelled() }}
+    if: ${{ !cancelled() }}
     needs:
       - DockerServerImage
       - DockerKeeperImage

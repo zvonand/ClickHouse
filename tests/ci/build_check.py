@@ -16,12 +16,12 @@ from pr_info import PRInfo, EventType
 from report import FAILURE, SUCCESS, JobReport, StatusType
 from stopwatch import Stopwatch
 from tee_popen import TeePopen
-from tests.ci import version_helper
 from version_helper import (
     ClickHouseVersion,
     VersionType,
     get_version_from_repo,
     update_version_local,
+    get_version_from_tag,
 )
 
 IMAGE_NAME = "altinityinfra/binary-builder"
@@ -180,7 +180,7 @@ def main():
             and pr_info.ref.startswith('refs/tags/'):
         tag_name = pr_info.ref.removeprefix('refs/tags/')
 
-        version_from_tag = version_helper.get_version_from_tag(tag_name)
+        version_from_tag = get_version_from_tag(tag_name)
 
         # tag can override only `tweak` and `flavour`
         assert version_from_tag.major == version.major \

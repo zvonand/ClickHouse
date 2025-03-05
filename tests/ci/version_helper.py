@@ -329,9 +329,9 @@ def get_version_from_repo(
             cmake_version._flavour = version_from_tag._flavour
             cmake_version.tweak = version_from_tag.tweak
         else:
-            # We've had some number of commits since the latest tag.
-            logging.debug(f"Bumping the TWEAK of version from cmake {cmake_version} by {git.commits_since_latest}")
-            cmake_version.tweak = cmake_version.tweak + git.commits_since_latest
+            # We've had some number of commits since the latest (upstream) tag.
+            logging.debug(f"Bumping the TWEAK of version from cmake {cmake_version} by {git.commits_since_upstream}")
+            cmake_version.tweak = cmake_version.tweak + git.commits_since_upstream
 
     return cmake_version
 

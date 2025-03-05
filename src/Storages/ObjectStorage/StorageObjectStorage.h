@@ -262,7 +262,7 @@ protected:
     void assertInitialized() const;
 
     bool initialized = false;
-    bool updated = false;
+    std::atomic<bool> updated = false;
     DataLakePartitionColumns partition_columns;
 
     bool allow_dynamic_metadata_for_data_lakes;

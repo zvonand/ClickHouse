@@ -179,6 +179,7 @@ void StorageObjectStorageCluster::updateQueryForDistributedEngineIfNeeded(ASTPtr
         {"S3", "s3"},
         {"Azure", "azureBlobStorage"},
         {"HDFS", "hdfs"},
+        {"Iceberg", "iceberg"},
         {"IcebergS3", "icebergS3"},
         {"IcebergAzure", "icebergAzure"},
         {"IcebergHDFS", "icebergHDFS"},

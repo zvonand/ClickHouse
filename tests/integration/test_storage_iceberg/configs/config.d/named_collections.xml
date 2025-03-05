@@ -22,6 +22,9 @@
         <account_key>Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==</account_key>
         <storage_type>azure</storage_type>
     </azure_with_type>
+    <hdfs_with_type>
+        <storage_type>hdfs</storage_type>
+    </hdfs_with_type>
     <local_with_type>
         <storage_type>local</storage_type>
     </local_with_type>

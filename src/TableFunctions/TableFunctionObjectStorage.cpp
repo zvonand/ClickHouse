@@ -220,14 +220,6 @@ template class TableFunctionObjectStorage<HudiClusterDefinition, StorageS3HudiCo
 #if USE_AVRO
 void registerTableFunctionIceberg(TableFunctionFactory & factory)
 {
-#if USE_AWS_S3
-    factory.registerFunction<TableFunctionIceberg>(
-        {.documentation
-         = {.description = R"(The table function can be used to read the Iceberg table stored on S3 object store. Alias to icebergS3)",
-            .examples{{"iceberg", "SELECT * FROM iceberg(url, access_key_id, secret_access_key)", ""}},
-            .category{""}},
-         .allow_readonly = false});
-#endif
     factory.registerFunction<TableFunctionIcebergLocal>(
         {.documentation
          = {.description = R"(The table function can be used to read the Iceberg table stored locally.)",

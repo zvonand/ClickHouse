@@ -352,6 +352,11 @@ public:
         getImpl().initialize(engine_args, local_context, with_table_structure, std::move(settings));
     }
 
+    ASTPtr createArgsWithAccessData() const override
+    {
+        return getImpl().createArgsWithAccessData();
+    }
+
 protected:
     void fromNamedCollection(const NamedCollection & collection, ContextPtr context) override
         { return getImpl().fromNamedCollection(collection, context); }

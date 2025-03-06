@@ -297,21 +297,21 @@ def get_version_from_repo(
             f'current commit: {git.sha}\n'
             f'current brach: {git.branch}'
         )
-        if git.commits_since_latest == 0:
+        if git.latest_tag and git.commits_since_latest == 0:
             # Tag has a priority over the version written in CMake.
             # Version must match (except tweak, flavour, description, etc.) to avoid accidental mess.
             if not (version_from_tag.major == cmake_version.major \
-                and version_from_tag.minor == cmake_version.minor \
-                and version_from_tag.patch == cmake_version.patch):
+                    and version_from_tag.minor == cmake_version.minor \
+                    and version_from_tag.patch == cmake_version.patch):
                 raise RuntimeError(f"Version generated from tag ({version_from_tag}) should have same major, minor, and patch values as version generated from cmake ({cmake_version})")
             # Don't need to reset version completely, mostly because revision part is not set in tag, but must be preserved
             logging.debug(f"Resetting TWEAK and FLAVOUR of version from cmake {cmake_version} to values from tag: {version_from_tag.tweak}.{version_from_tag._flavour}")
             cmake_version._flavour = version_from_tag._flavour
             cmake_version.tweak = version_from_tag.tweak
         else:
-            # We've had some number of commits since the latest tag.
-            logging.debug(f"Bumping the TWEAK of version from cmake {cmake_version} by {git.commits_since_latest}")
-            cmake_version.tweak = cmake_version.tweak + git.commits_since_latest
+            # We've had some number of commits since the latest (upstream) tag.
+            logging.debug(f"Bumping the TWEAK of version from cmake {cmake_version} by {git.commits_since_upstream}")
+            cmake_version.tweak = cmake_version.tweak + git.commits_since_upstream
 
 
     return cmake_version

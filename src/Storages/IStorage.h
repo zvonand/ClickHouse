@@ -71,6 +71,9 @@ class RestorerFromBackup;
 
 class ConditionSelectivityEstimator;
 
+class IObjectStorage;
+using ObjectStoragePtr = std::shared_ptr<IObjectStorage>;
+
 struct ColumnSize
 {
     size_t marks = 0;

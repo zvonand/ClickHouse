@@ -3,20 +3,23 @@ run-name: Grype Scan ${{ inputs.docker_image }}
 
 on:
     workflow_dispatch:
+        # Inputs for manual run
         inputs:
             docker_image:
                 description: 'Docker image with tag to scan'
                 required: true
     workflow_call:
+        # Inputs for workflow call
         inputs:
             docker_image:
-                description: 'Docker image without tag to scan'
+                description: 'Docker image without tag to scan. Tag will be determined from the repo state.'
                 required: true
                 type: string
 
 jobs:
     grype_scan:
-        runs-on: [self-hosted, x86, type-cx42, image-x86-app-docker-ce]
+        name: Grype Scan
+        runs-on: [self-hosted, altinity-on-demand, altinity-func-tester]
         steps:
         - name: Checkout repository
           uses: actions/checkout@v4

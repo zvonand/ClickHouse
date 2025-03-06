@@ -1,5 +1,5 @@
 tfs --no-colors transform nice raw.log nice.log.txt
-tfs --no-colors report results -a "https://s3.amazonaws.com/$S3_BUCKET/$PR_NUMBER/$COMMIT_SHA/grype/$DOCKER_IMAGE" raw.log - --copyright "Altinity LTD" --logo | tfs --no-colors document convert > results.html
+tfs --no-colors report results -a "https://s3.amazonaws.com/$S3_BUCKET/$PR_NUMBER/$COMMIT_SHA/grype/$DOCKER_IMAGE" raw.log - --copyright "Altinity LTD" | tfs --no-colors document convert > results.html
 
 S3_PATH="s3://$S3_BUCKET/$PR_NUMBER/$COMMIT_SHA/grype/$DOCKER_IMAGE"
 aws s3 cp --no-progress nice.log.txt $S3_PATH/nice.log.txt --content-type "text/plain; charset=utf-8" || echo "nice log file not found".

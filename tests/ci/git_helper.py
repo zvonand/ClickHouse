@@ -191,7 +191,7 @@ class Git:
 
     def _commits_since(self, ref_name):
         return int(
-            self.run(f"git rev-list {self.latest_tag}..HEAD --count")
+            self.run(f"git rev-list {ref_name}..HEAD --count")
         )
 
     def _update_tags(self, suppress_stderr: bool = False) -> None:

@@ -78,6 +78,7 @@ static std::initializer_list<std::pair<ClickHouseVersion, SettingsChangesHistory
             {"least_greatest_legacy_null_behavior", true, false, "New setting"},
             {"object_storage_cluster", "", "", "New setting"},
             {"object_storage_max_nodes", 0, 0, "New setting"},
+            {"input_format_parquet_use_metadata_cache", 0, 1, "Optimization by default"},
         }
     },
     {"24.11",

@@ -201,7 +201,6 @@ class Git:
 
         latest_upstream_tag = self.run("git describe --tags --abbrev=0 --match='*-*'", stderr=stderr)
         self.commits_since_upstream = self._commits_since(latest_upstream_tag)
-        logger.info('!!!! Got latest upstream tag: %s, commits since it: %s', latest_upstream_tag, self.commits_since_upstream)
 
         if self.latest_tag.endswith("-new"):
             # We won't change the behaviour of the the "latest_tag"
@@ -248,7 +247,6 @@ class Git:
 
     def _tweak(self, tag_type: Literal["latest", "new"]) -> int:
         """Accepts latest or new as a tag_type and returns the tweak number to it"""
-        logger.info(f"!!! Requested to update tweak in reference to {tag_type}")
         if tag_type == "latest":
             commits = self.commits_since_latest
             tag = self.latest_tag

@@ -176,17 +176,17 @@ jobs:
       runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   GrypeScanServerImage:
-    needs: [DockerServerImage]
+    needs: [RunConfig, DockerServerImage]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/grype_scan.yml
     with:
-      docker_image: "altinityinfra/clickhouse-server"
+      docker_image: "altinityinfra/clickhouse-server:${{ github.event.pull_request.number || 0 }}-${{ fromJson(needs.RunConfig.outputs.data).version }}"
   GrypeScanKeeperImage:
-    needs: [DockerKeeperImage]
+    needs: [RunConfig, DockerKeeperImage]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/grype_scan.yml
     with:
-      docker_image: "altinityinfra/clickhouse-keeper"
+      docker_image: "altinityinfra/clickhouse-keeper:${{ github.event.pull_request.number || 0 }}-${{ fromJson(needs.RunConfig.outputs.data).version }}"
 ############################################################################################
 ##################################### BUILD REPORTER #######################################
 ############################################################################################

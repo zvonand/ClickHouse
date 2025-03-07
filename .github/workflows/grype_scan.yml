@@ -6,20 +6,20 @@ on:
         # Inputs for manual run
         inputs:
             docker_image:
-                description: 'Docker image with tag to scan'
+                description: 'Docker image. If no tag, it will be determined by version_helper.py'
                 required: true
     workflow_call:
         # Inputs for workflow call
         inputs:
             docker_image:
-                description: 'Docker image without tag to scan. Tag will be determined from the repo state.'
+                description: 'Docker image. If no tag, it will be determined by version_helper.py'
                 required: true
                 type: string
 
 jobs:
     grype_scan:
         name: Grype Scan
-        runs-on: [self-hosted, altinity-on-demand, altinity-func-tester]
+        runs-on: [self-hosted, altinity-on-demand, altinity-type-cax11, altinity-image-x86-app-docker-ce]
         steps:
         - name: Checkout repository
           uses: actions/checkout@v4
@@ -38,13 +38,13 @@ jobs:
             pip install testflows==$TESTFLOWS_VERSION
             echo PATH=$PATH >>$GITHUB_ENV
 
-        - name: Set image tag if called by another workflow
-          if: ${{ github.event.inputs.docker_image }}
+        - name: Set image tag if not given
+          if: ${{ !contains(inputs.docker_image, ':') }}
           id: set_version
           run: |
             python3 ./tests/ci/version_helper.py | tee /tmp/version_info
             source /tmp/version_info
-            echo "::set-output name=docker_image::${{ github.event.inputs.docker_image }}:${{ github.event.pull_request.number || 0 }}-$CLICKHOUSE_VERSION_STRING"
+            echo "::set-output name=docker_image::${{ inputs.docker_image }}:${{ github.event.pull_request.number || 0 }}-$CLICKHOUSE_VERSION_STRING"
             echo "::set-output name=commit_sha::$CLICKHOUSE_VERSION_GITHASH"
 
         - name: Run Grype Scan
@@ -59,7 +59,7 @@ jobs:
         - name: Transform and Upload Grype Results
           env:
             S3_BUCKET: "altinity-build-artifacts"
-            COMMIT_SHA: ${{ steps.set_version.outputs.commit_sha || github.sha }}
+            COMMIT_SHA: ${{ steps.set_version.outputs.commit_sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
             PR_NUMBER: ${{ github.event.pull_request.number || 0 }}
             DOCKER_IMAGE: ${{ steps.set_version.outputs.docker_image || inputs.docker_image }}
           run: |
@@ -69,7 +69,7 @@ jobs:
           if: always()
           uses: actions/upload-artifact@v4
           with:
-            name: grype-results-${{ github.run_id }}-${{ github.job }}
+            name: grype-results-${{ hashFiles('raw.log') }}
             path: |
               result.json
               nice.log.txt

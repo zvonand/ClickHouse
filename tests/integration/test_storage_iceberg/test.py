@@ -192,16 +192,19 @@ def get_creation_expression(
     table_function=False,
     allow_dynamic_metadata_for_data_lakes=False,
     run_on_cluster=False,
+    explicit_metadata_path="",
     object_storage_cluster=False,
     storage_type_as_arg=False,
     storage_type_in_named_collection=False,
     **kwargs,
 ):
     settings_suffix = ""
-    if allow_dynamic_metadata_for_data_lakes or object_storage_cluster:
+    if allow_dynamic_metadata_for_data_lakes or object_storage_cluster or explicit_metadata_path:
         settings = []
         if allow_dynamic_metadata_for_data_lakes:
             settings.append("allow_dynamic_metadata_for_data_lakes = 1")
+        if explicit_metadata_path:
+            settings.append(f"iceberg_metadata_file_path = '{explicit_metadata_path}'")
         if object_storage_cluster:
             settings.append(f"object_storage_cluster = 'cluster_simple'")
         settings_suffix = " SETTINGS " + ", ".join(settings)
@@ -2875,3 +2878,43 @@ def test_minmax_pruning(started_cluster, storage_type):
         )
         == 1
     )
+
+
+@pytest.mark.parametrize("storage_type", ["s3", "azure", "local"])
+def test_explicit_metadata_file(started_cluster, storage_type):
+    instance = started_cluster.instances["node1"]
+    spark = started_cluster.spark_session
+    TABLE_NAME = (
+        "test_explicit_metadata_file_"
+        + storage_type
+        + "_"
+        + get_uuid_str()
+    )
+
+    spark.sql(
+        f"CREATE TABLE {TABLE_NAME} (id bigint, data string) USING iceberg TBLPROPERTIES ('format-version' = '2', 'write.update.mode'='merge-on-read', 'write.delete.mode'='merge-on-read', 'write.merge.mode'='merge-on-read')"
+    )
+
+    for i in range(50):
+        spark.sql(
+            f"INSERT INTO {TABLE_NAME} select id, char(id + ascii('a')) from range(10)"
+        )
+
+    default_upload_directory(
+        started_cluster,
+        storage_type,
+        f"/iceberg_data/default/{TABLE_NAME}/",
+        f"/iceberg_data/default/{TABLE_NAME}/",
+    )
+
+    create_iceberg_table(storage_type, instance, TABLE_NAME, started_cluster, explicit_metadata_path="")
+
+    assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}")) == 500
+
+    create_iceberg_table(storage_type, instance, TABLE_NAME, started_cluster, explicit_metadata_path="metadata/v31.metadata.json")
+
+    assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}")) == 300
+
+    create_iceberg_table(storage_type, instance, TABLE_NAME, started_cluster, explicit_metadata_path="metadata/v11.metadata.json")
+
+    assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}")) == 100

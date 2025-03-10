@@ -46,12 +46,6 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-namespace StorageObjectStorageSetting
-{
-extern const StorageObjectStorageSettingsBool allow_dynamic_metadata_for_data_lakes;
-extern const StorageObjectStorageSettingsBool allow_experimental_delta_kernel_rs;
-}
-
 String StorageObjectStorage::getPathSample(ContextPtr context)
 {
     auto query_settings = configuration->getQuerySettings(context);
@@ -606,7 +600,7 @@ void StorageObjectStorage::Configuration::initialize(
     ASTs & engine_args,
     ContextPtr local_context,
     bool with_table_structure,
-    StorageObjectStorageSettings * settings)
+    StorageObjectStorageSettingsPtr settings)
 {
     if (auto named_collection = tryGetNamedCollectionWithOverrides(engine_args, local_context))
         fromNamedCollection(*named_collection, local_context);
@@ -630,16 +624,15 @@ void StorageObjectStorage::Configuration::initialize(
     else
         FormatFactory::instance().checkFormatName(format);
 
-    if (settings)
-    {
-        allow_dynamic_metadata_for_data_lakes
-            = (*settings)[StorageObjectStorageSetting::allow_dynamic_metadata_for_data_lakes];
-        allow_experimental_delta_kernel_rs
-            = (*settings)[StorageObjectStorageSetting::allow_experimental_delta_kernel_rs];
-    }
+    storage_settings = settings;
     initialized = true;
 }
 
+const StorageObjectStorageSettings & StorageObjectStorage::Configuration::getSettingsRef() const
+{
+    return *storage_settings;
+}
+ 
 void StorageObjectStorage::Configuration::check(ContextPtr) const
 {
     FormatFactory::instance().checkFormatName(format);

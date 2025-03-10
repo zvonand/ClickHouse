@@ -18,6 +18,8 @@ namespace DB
 class ReadBufferIterator;
 class SchemaCache;
 class NamedCollection;
+struct StorageObjectStorageSettings;
+using StorageObjectStorageSettingsPtr = std::shared_ptr<StorageObjectStorageSettings>;
 
 namespace ErrorCodes
 {
@@ -173,7 +175,7 @@ public:
         ASTs & engine_args,
         ContextPtr local_context,
         bool with_table_structure,
-        StorageObjectStorageSettings * settings);
+        StorageObjectStorageSettingsPtr settings);
 
     /// Storage type: s3, hdfs, azure, local.
     virtual ObjectStorageType getType() const = 0;
@@ -264,6 +266,8 @@ public:
         throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Method createArgsWithAccessData is not supported by storage {}", getEngineName());
     }
 
+    const StorageObjectStorageSettings & getSettingsRef() const;
+
     virtual void fromNamedCollection(const NamedCollection & collection, ContextPtr context) = 0;
     virtual void fromAST(ASTs & args, ContextPtr context, bool with_structure) = 0;
 
@@ -275,8 +279,7 @@ public:
     bool initialized = false;
     std::atomic<bool> updated = false;
 
-    bool allow_dynamic_metadata_for_data_lakes = false;
-    bool allow_experimental_delta_kernel_rs = false;
+    StorageObjectStorageSettingsPtr storage_settings;
 };
 
 }

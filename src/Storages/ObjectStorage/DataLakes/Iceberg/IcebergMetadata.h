@@ -61,8 +61,7 @@ public:
     static DataLakeMetadataPtr create(
         const ObjectStoragePtr & object_storage,
         const ConfigurationObserverPtr & configuration,
-        const ContextPtr & local_context,
-        bool allow_experimental_delta_kernel_rs);
+        const ContextPtr & local_context);
 
     std::shared_ptr<NamesAndTypesList> getInitialSchemaByPath(const String & data_path) const override
     {

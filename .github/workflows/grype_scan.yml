@@ -19,7 +19,7 @@ on:
 jobs:
     grype_scan:
         name: Grype Scan
-        runs-on: [self-hosted, altinity-on-demand, altinity-type-cax11, altinity-image-x86-app-docker-ce]
+        runs-on: [self-hosted, altinity-on-demand, altinity-func-tester-aarch64]
         steps:
         - name: Checkout repository
           uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
             python3 -m venv venv
             source venv/bin/activate
             pip install --upgrade requests chardet urllib3
-            pip install testflows==$TESTFLOWS_VERSION
+            pip install testflows==$TESTFLOWS_VERSION awscli==1.33.28
             echo PATH=$PATH >>$GITHUB_ENV
 
         - name: Set image tag if not given

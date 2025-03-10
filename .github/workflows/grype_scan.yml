@@ -15,6 +15,11 @@ on:
                 description: 'Docker image. If no tag, it will be determined by version_helper.py'
                 required: true
                 type: string
+env:
+  PYTHONUNBUFFERED: 1
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
 jobs:
     grype_scan:

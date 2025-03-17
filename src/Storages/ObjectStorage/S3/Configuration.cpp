@@ -687,12 +687,19 @@ ASTPtr StorageS3Configuration::createArgsWithAccessData() const
             auto extra_creds_ast_function = std::make_shared<ASTFunction>();
             extra_creds_ast_function->name = "extra_credentials";
 
-            auto extra_cred_ast = std::make_shared<ASTFunction>();
-            extra_cred_ast->name = "equals";
-            extra_cred_ast->children.push_back(std::make_shared<ASTLiteral>("role_arn"));
-            extra_cred_ast->children.push_back(std::make_shared<ASTLiteral>(auth_settings[S3AuthSetting::role_arn].value));
+            auto role_arn_ast = std::make_shared<ASTFunction>();
+            role_arn_ast->name = "equals";
+            role_arn_ast->children.push_back(std::make_shared<ASTLiteral>("role_arn"));
+            role_arn_ast->children.push_back(std::make_shared<ASTLiteral>(auth_settings[S3AuthSetting::role_arn].value));
 
-            extra_creds_ast_function->children.push_back(extra_cred_ast);
+            extra_creds_ast_function->children.push_back(role_arn_ast);
+
+            auto role_session_name_ast = std::make_shared<ASTFunction>();
+            role_session_name_ast->name = "equals";
+            role_session_name_ast->children.push_back(std::make_shared<ASTLiteral>("role_session_name"));
+            role_session_name_ast->children.push_back(std::make_shared<ASTLiteral>(auth_settings[S3AuthSetting::role_session_name].value));
+
+            extra_creds_ast_function->children.push_back(role_session_name_ast);
 
             arguments->children.push_back(extra_creds_ast_function);
         }

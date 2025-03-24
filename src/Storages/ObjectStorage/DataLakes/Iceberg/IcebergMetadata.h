@@ -64,7 +64,6 @@ public:
         const ContextPtr & local_context,
         bool allow_experimental_delta_kernel_rs);
 
-
     std::shared_ptr<NamesAndTypesList> getInitialSchemaByPath(const String & data_path) const override
     {
         auto version_if_outdated = getSchemaVersionByFileIfOutdated(data_path);
@@ -91,6 +90,9 @@ public:
     Strings makePartitionPruning(const ActionsDAG & filter_dag) override;
 
     bool supportsPartitionPruning() override { return true; }
+
+    std::optional<size_t> totalRows() const override;
+    std::optional<size_t> totalBytes() const override;
 
 private:
     using ManifestEntryByDataFile = std::unordered_map<String, Iceberg::ManifestFileIterator>;

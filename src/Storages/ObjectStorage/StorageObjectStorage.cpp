@@ -214,6 +214,18 @@ void StorageObjectStorage::updateExternalDynamicMetadata(ContextPtr context_ptr)
     setInMemoryMetadata(metadata);
 }
 
+std::optional<UInt64> StorageObjectStorage::totalRows(ContextPtr query_context) const
+{
+    configuration->update(object_storage, query_context);
+    return configuration->totalRows();
+}
+
+std::optional<UInt64> StorageObjectStorage::totalBytes(ContextPtr query_context) const
+{
+    configuration->update(object_storage, query_context);
+    return configuration->totalBytes();
+}
+
 namespace
 {
 class ReadFromObjectStorageStep : public SourceStepWithFilter
@@ -686,4 +698,5 @@ void StorageObjectStorage::Configuration::assertInitialized() const
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Configuration was not initialized before usage");
     }
 }
+
 }

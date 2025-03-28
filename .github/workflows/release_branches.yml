@@ -179,6 +179,7 @@ jobs:
     needs: [RunConfig, DockerServerImage, DockerKeeperImage]
     if: ${{ !failure() && !cancelled() }}
     strategy:
+      fail-fast: false
       matrix:
         image: [server, keeper]
     uses: ./.github/workflows/grype_scan.yml

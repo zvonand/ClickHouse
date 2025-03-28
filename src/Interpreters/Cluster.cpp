@@ -811,9 +811,6 @@ Cluster::Cluster(Cluster::ReplicasAsShardsTag, const Cluster & from, const Setti
                 info.pool = std::make_shared<ConnectionPoolWithFailover>(ConnectionPoolPtrs{pool}, settings[Setting::load_balancing]);
                 info.per_replica_pools = {std::move(pool)};
 
-                addresses_with_failover.emplace_back(Addresses{address});
-
-                slot_to_shard.insert(std::end(slot_to_shard), info.weight, shards_info.size());
                 shards_info.emplace_back(std::move(info));
             }
         };
@@ -844,6 +841,12 @@ Cluster::Cluster(Cluster::ReplicasAsShardsTag, const Cluster & from, const Setti
         shard_num = 0;
         for (auto & shard_info : shards_info)
             shard_info.shard_num = ++shard_num;
+    }
+
+    for (size_t i = 0; i < shards_info.size(); ++i)
+    {
+        addresses_with_failover.emplace_back(shards_info[i].local_addresses);
+        slot_to_shard.insert(std::end(slot_to_shard), shards_info[i].weight, i);
     }
 
     initMisc();

@@ -70,6 +70,7 @@ jobs:
             DOCKER_IMAGE: ${{ steps.set_version.outputs.docker_image || inputs.docker_image }}
           run: |
             ./.github/grype/transform_and_upload_results_s3.sh
+            echo "::set-output name=https_s3_path::$HTTPS_S3_PATH"
 
         - name: Set commit status
           uses: actions/github-script@v7

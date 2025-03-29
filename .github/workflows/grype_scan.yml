@@ -49,8 +49,8 @@ jobs:
           run: |
             python3 ./tests/ci/version_helper.py | tee /tmp/version_info
             source /tmp/version_info
-            echo "::set-output name=docker_image::${{ inputs.docker_image }}:${{ github.event.pull_request.number || 0 }}-$CLICKHOUSE_VERSION_STRING"
-            echo "::set-output name=commit_sha::$CLICKHOUSE_VERSION_GITHASH"
+            echo "docker_image=${{ inputs.docker_image }}:${{ github.event.pull_request.number || 0 }}-$CLICKHOUSE_VERSION_STRING" >> $GITHUB_OUTPUT
+            echo "commit_sha=$CLICKHOUSE_VERSION_GITHASH" >> $GITHUB_OUTPUT
 
         - name: Run Grype Scan
           run: |
@@ -70,7 +70,7 @@ jobs:
             DOCKER_IMAGE: ${{ steps.set_version.outputs.docker_image || inputs.docker_image }}
           run: |
             ./.github/grype/transform_and_upload_results_s3.sh
-            echo "::set-output name=https_s3_path::$HTTPS_S3_PATH"
+            echo "https_s3_path=$HTTPS_S3_PATH" >> $GITHUB_OUTPUT
 
         - name: Set commit status
           uses: actions/github-script@v7

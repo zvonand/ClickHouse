@@ -2,7 +2,7 @@ DOCKER_IMAGE=$(echo "$DOCKER_IMAGE" | sed 's/[\/:]/_/g')
 
 S3_PATH="s3://$S3_BUCKET/$PR_NUMBER/$COMMIT_SHA/grype/$DOCKER_IMAGE"
 HTTPS_S3_PATH="https://s3.amazonaws.com/$S3_BUCKET/$PR_NUMBER/$COMMIT_SHA/grype/$DOCKER_IMAGE"
-export $HTTPS_S3_PATH
+export HTTPS_S3_PATH
 
 tfs --no-colors transform nice raw.log nice.log.txt
 tfs --no-colors report results -a $HTTPS_S3_PATH raw.log - --copyright "Altinity LTD" | tfs --no-colors document convert > results.html

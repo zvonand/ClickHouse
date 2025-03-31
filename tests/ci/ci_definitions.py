@@ -473,7 +473,7 @@ class CommonJobConfigs:
             include_paths=[
                 "./tests/ci/ci_fuzzer_check.py",
             ],
-            docker=["clickhouse/fuzzer"],
+            docker=["altinityinfra/fuzzer"],
         ),
         run_command="ci_fuzzer_check.py",
         run_always=True,
@@ -485,7 +485,7 @@ class CommonJobConfigs:
             include_paths=[
                 "./tests/ci/ci_fuzzer_check.py",
             ],
-            docker=["clickhouse/fuzzer"],
+            docker=["altinityinfra/fuzzer"],
         ),
         run_command="ci_fuzzer_check.py",
         run_always=True,

@@ -302,7 +302,7 @@ def test_docker_library(test_results: TestResults) -> None:
         tr.name
         for tr in test_results
         if (
-            tr.name.startswith("clickhouse/clickhouse-server")
+            tr.name.startswith("altinityinfra/clickhouse-server")
             and "alpine" not in tr.name
         )
     ]

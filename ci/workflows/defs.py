@@ -65,7 +65,7 @@ SECRETS = [
 
 DOCKERS = [
     Docker.Config(
-        name="clickhouse/binary-builder",
+        name="altinityinfra/binary-builder",
         path="./ci/docker/binary-builder",
         platforms=Docker.Platforms.arm_amd,
         depends_on=["clickhouse/fasttest"],

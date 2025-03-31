@@ -146,31 +146,11 @@ jobs:
     needs: [RunConfig, BuildDockers]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_build.yml
+    secrets: inherit
     with:
       build_name: package_debug
       data: ${{ needs.RunConfig.outputs.data }}
       force: true
-  BuilderBinDarwin:
-    needs: [RunConfig, BuildDockers]
-    if: ${{ !failure() && !cancelled() }}
-    uses: ./.github/workflows/reusable_build.yml
-    with:
-      build_name: binary_darwin
-      checkout_depth: 0
-      data: ${{ needs.RunConfig.outputs.data }}
-      # always rebuild on release branches to be able to publish from any commit
-      force: true
-  BuilderBinDarwinAarch64:
-    needs: [RunConfig, BuildDockers]
-    if: ${{ !failure() && !cancelled() }}
-    uses: ./.github/workflows/reusable_build.yml
-    with:
-      build_name: binary_darwin_aarch64
-      checkout_depth: 0
-      data: ${{ needs.RunConfig.outputs.data }}
-      # always rebuild on release branches to be able to publish from any commit
-      force: true
-      runner_type: builder-aarch64
 ############################################################################################
 ##################################### Docker images  #######################################
 ############################################################################################

@@ -46,6 +46,24 @@ jobs:
             type: rpm
             base: centos:8
             repo_url: https://builds.staging.altinity.cloud/fips-yum-repo
+          # Hotfix packages
+          - env: hotfix
+            type: deb
+            base: ubuntu:22.04
+            repo_url: https://builds.altinity.cloud/hotfix-apt-repo
+          - env: hotfix
+            type: rpm
+            base: centos:8
+            repo_url: https://builds.altinity.cloud/hotfix-yum-repo
+          # Antalya experimental packages
+          - env: antalya
+            type: deb
+            base: ubuntu:22.04
+            repo_url: https://builds.altinity.cloud/antalya-apt-repo
+          - env: antalya
+            type: rpm
+            base: centos:8
+            repo_url: https://builds.altinity.cloud/antalya-yum-repo
 
     steps:
       - name: Run sanity check
@@ -109,4 +127,4 @@ jobs:
             -v $(pwd)/sanity.sh:/sanity.sh \
             -e REPO_URL="${{ matrix.repo_url }}" \
             ${{ matrix.base }} \
-            /sanity.sh 
+            /sanity.sh

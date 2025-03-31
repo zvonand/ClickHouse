@@ -319,7 +319,7 @@ class ClickhouseIntegrationTestsRunner:
 
         cmd = (
             f"cd {self.repo_path}/tests/integration && "
-            f"timeout --signal=KILL 1h ./runner {self._get_runner_opts()} {image_cmd} "
+            f"timeout --signal=KILL 2h ./runner {self._get_runner_opts()} {image_cmd} "
             "--command ' echo Pre Pull finished ' "
         )
 
@@ -480,6 +480,19 @@ class ClickhouseIntegrationTestsRunner:
         with open(skip_list_file_path, "r", encoding="utf-8") as skip_list_file:
             skip_list_tests = yaml.safe_load(skip_list_file)
         return list(sorted(skip_list_tests))
+
+    @staticmethod
+    def _get_broken_tests_list(repo_path: str) -> dict:
+        skip_list_file_path = f"{repo_path}/tests/broken_tests.json"
+        if (
+            not os.path.isfile(skip_list_file_path)
+            or os.path.getsize(skip_list_file_path) == 0
+        ):
+            return {}
+
+        with open(skip_list_file_path, "r", encoding="utf-8") as skip_list_file:
+            skip_list_tests = json.load(skip_list_file)
+        return skip_list_tests
 
     @staticmethod
     def group_test_by_file(tests):
@@ -647,7 +660,8 @@ class ClickhouseIntegrationTestsRunner:
             info_path = os.path.join(self.repo_path, "tests/integration", info_basename)
 
             test_cmd = " ".join([shlex.quote(test) for test in sorted(test_names)])
-            parallel_cmd = f" --parallel {num_workers} " if num_workers > 0 else ""
+            # run in parallel only the first time, re-runs are sequential to give chance to flappy tests to pass.
+            parallel_cmd = f" --parallel {num_workers} " if num_workers > 0 and i == 0 else ""
             # Run flaky tests in a random order to increase chance to catch an error
             repeat_cmd = (
                 f" --count {repeat_count} --random-order " if repeat_count > 0 else ""

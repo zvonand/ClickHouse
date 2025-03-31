@@ -249,7 +249,7 @@ class PRInfo:
             pull_request = get_pr_for_commit(self.sha, github_event["ref"])
 
             if pull_request is None or pull_request["state"] == "closed":
-                # it's merged PR to master
+                # it's merged PR to master, or there is no PR (build against specific commit or tag)
                 self.number = 0
                 if pull_request:
                     self.merged_pr = pull_request["number"]

@@ -61,7 +61,11 @@ from report import (
 from s3_helper import S3Helper
 from stopwatch import Stopwatch
 from tee_popen import TeePopen
-from version_helper import get_version_from_repo
+from version_helper import (
+    get_version_from_repo,
+    get_version_from_string,
+    update_cmake_version,
+)
 
 # pylint: disable=too-many-lines,too-many-branches
 

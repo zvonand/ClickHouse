@@ -530,7 +530,7 @@ class CI:
                     "./tests/clickhouse-test",
                 ],
                 exclude_files=[".md"],
-                docker=["clickhouse/fasttest"],
+                docker=["altinityinfra/fasttest"],
             ),
             run_command="fast_test_check.py",
             timeout=2400,

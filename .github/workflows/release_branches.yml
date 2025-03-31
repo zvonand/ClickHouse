@@ -280,14 +280,16 @@ jobs:
     needs: [RunConfig, BuilderDebRelease]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stateless tests (release)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestAarch64:
     needs: [RunConfig, BuilderDebAarch64]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stateless tests (aarch64)
       runner_type: func-tester-aarch64
@@ -296,41 +298,46 @@ jobs:
     needs: [RunConfig, BuilderDebAsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stateless tests (asan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestTsan:
     needs: [RunConfig, BuilderDebTsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stateless tests (tsan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestMsan:
     needs: [RunConfig, BuilderDebMsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stateless tests (msan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestUBsan:
     needs: [RunConfig, BuilderDebUBsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stateless tests (ubsan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   FunctionalStatelessTestDebug:
     needs: [RunConfig, BuilderDebDebug]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stateless tests (debug)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
 ##############################################################################################
 ######################################### STRESS TESTS #######################################

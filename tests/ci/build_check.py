@@ -12,9 +12,9 @@ from typing import Tuple
 import docker_images_helper
 from ci_config import CI
 from ci_utils import Shell
-from env_helper import REPO_COPY, S3_BUILDS_BUCKET
+from env_helper import REPO_COPY, S3_BUILDS_BUCKET, TEMP_PATH, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY
 from git_helper import Git, checkout_submodules, unshallow
-from pr_info import PRInfo
+from pr_info import PRInfo, EventType
 from report import FAILURE, SUCCESS, JobReport, StatusType
 from s3_helper import S3Helper
 from stopwatch import Stopwatch
@@ -23,9 +23,10 @@ from version_helper import (
     ClickHouseVersion,
     get_version_from_repo,
     update_version_local,
+    get_version_from_tag,
 )
 
-IMAGE_NAME = "clickhouse/binary-builder"
+IMAGE_NAME = "altinityinfra/binary-builder"
 BUILD_LOG_NAME = "build_log.log"
 
 

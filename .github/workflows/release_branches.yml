@@ -181,11 +181,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [server, keeper]
+        include:
+          - image: server
+            suffix: ''
+          - image: server
+            suffix: '-alpine'
+          - image: keeper
+            suffix: ''
     uses: ./.github/workflows/grype_scan.yml
     secrets: inherit
     with:
-      docker_image: altinityinfra/clickhouse-${{ matrix.image }}:${{ github.event.pull_request.number || 0 }}-${{ fromJson(needs.RunConfig.outputs.data).version }}
+      docker_image: altinityinfra/clickhouse-${{ matrix.image }}:${{ github.event.pull_request.number || 0 }}-${{ fromJson(needs.RunConfig.outputs.data).version }}${{ matrix.suffix }}
 ############################################################################################
 ##################################### BUILD REPORTER #######################################
 ############################################################################################

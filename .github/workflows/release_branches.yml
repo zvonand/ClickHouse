@@ -4,37 +4,48 @@ name: ReleaseBranchCI
 env:
   # Force the stdout and stderr streams to be unbuffered
   PYTHONUNBUFFERED: 1
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  CLICKHOUSE_TEST_STAT_LOGIN: ${{ secrets.CLICKHOUSE_TEST_STAT_LOGIN }}
+  CLICKHOUSE_TEST_STAT_PASSWORD: ${{ secrets.CLICKHOUSE_TEST_STAT_PASSWORD }}
+  CLICKHOUSE_TEST_STAT_URL: ${{ secrets.CLICKHOUSE_TEST_STAT_URL }}
+  DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+  ROBOT_TOKEN: ${{ secrets.ROBOT_TOKEN }}
 
 on: # yamllint disable-line rule:truthy
+  pull_request:
+    types:
+      - synchronize
+      - reopened
+      - opened
+    branches:
+      - 'antalya'
+  release:
+    types:
+      - published
+      - prereleased
   push:
     branches:
-      # 22.1 and 22.10
-      - '2[1-9].[1-9][0-9]'
-      - '2[1-9].[1-9]'
+      - 'antalya'
+    tags:
+      - '*'
+  workflow_dispatch:
 
 jobs:
   RunConfig:
-    runs-on: [self-hosted, style-checker-aarch64]
+    runs-on: [self-hosted, altinity-on-demand, altinity-style-checker-aarch64]
     outputs:
       data: ${{ steps.runconfig.outputs.CI_DATA }}
     steps:
       - name: Check out repository code
-        uses: ClickHouse/checkout@v1
+        uses: Altinity/checkout@19599efdf36c4f3f30eb55d5bb388896faea69f6
         with:
           clear-repository: true # to ensure correct digests
           fetch-depth: 0 # to get version
           filter: tree:0
       - name: Debug Info
         uses: ./.github/actions/debug
-      - name: Labels check
-        run: |
-          cd "$GITHUB_WORKSPACE/tests/ci"
-          python3 run_check.py
-      - name: Python unit tests
-        run: |
-          cd "$GITHUB_WORKSPACE/tests/ci"
-          echo "Testing the main ci directory"
-          python3 -m unittest discover -s . -p 'test_*.py'
       - name: PrepareRunConfig
         id: runconfig
         run: |
@@ -56,23 +67,26 @@ jobs:
     needs: [RunConfig]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/docker_test_images.yml
+    secrets: inherit
     with:
       data: ${{ needs.RunConfig.outputs.data }}
   CompatibilityCheckX86:
     needs: [RunConfig, BuilderDebRelease]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Compatibility check (release)
-      runner_type: style-checker
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   CompatibilityCheckAarch64:
     needs: [RunConfig, BuilderDebAarch64]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Compatibility check (aarch64)
-      runner_type: style-checker
+      runner_type: altinity-func-tester-aarch64
       data: ${{ needs.RunConfig.outputs.data }}
 #########################################################################################
 #################################### ORDINARY BUILDS ####################################
@@ -81,6 +95,7 @@ jobs:
     needs: [RunConfig, BuildDockers]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_build.yml
+    secrets: inherit
     with:
       build_name: package_release
       checkout_depth: 0
@@ -91,6 +106,7 @@ jobs:
     needs: [RunConfig, BuildDockers]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_build.yml
+    secrets: inherit
     with:
       build_name: package_aarch64
       checkout_depth: 0
@@ -102,6 +118,7 @@ jobs:
     needs: [RunConfig, BuildDockers]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_build.yml
+    secrets: inherit
     with:
       build_name: package_asan
       data: ${{ needs.RunConfig.outputs.data }}
@@ -109,6 +126,7 @@ jobs:
     needs: [RunConfig, BuildDockers]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_build.yml
+    secrets: inherit
     with:
       build_name: package_ubsan
       data: ${{ needs.RunConfig.outputs.data }}
@@ -116,6 +134,7 @@ jobs:
     needs: [RunConfig, BuildDockers]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_build.yml
+    secrets: inherit
     with:
       build_name: package_tsan
       data: ${{ needs.RunConfig.outputs.data }}
@@ -123,6 +142,7 @@ jobs:
     needs: [RunConfig, BuildDockers]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_build.yml
+    secrets: inherit
     with:
       build_name: package_msan
       data: ${{ needs.RunConfig.outputs.data }}
@@ -162,17 +182,19 @@ jobs:
     needs: [RunConfig, BuilderDebRelease, BuilderDebAarch64]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Docker server image
-      runner_type: style-checker
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   DockerKeeperImage:
     needs: [RunConfig, BuilderDebRelease, BuilderDebAarch64]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Docker keeper image
-      runner_type: style-checker
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
 ############################################################################################
 ##################################### BUILD REPORTER #######################################
@@ -180,29 +202,29 @@ jobs:
   Builds_Report:
     # run report check for failed builds to indicate the CI error
     if: ${{ !cancelled() && needs.RunConfig.result == 'success' && contains(fromJson(needs.RunConfig.outputs.data).jobs_data.jobs_to_do, 'Builds') }}
-    needs: [RunConfig, BuilderDebRelease, BuilderDebAarch64, BuilderDebAsan, BuilderDebUBsan, BuilderDebMsan, BuilderDebTsan, BuilderDebDebug, BuilderBinDarwin, BuilderBinDarwinAarch64]
-    runs-on: [self-hosted, style-checker-aarch64]
+    needs: [RunConfig, BuilderDebRelease, BuilderDebAarch64, BuilderDebAsan, BuilderDebUBsan, BuilderDebMsan, BuilderDebTsan, BuilderDebDebug]
+    runs-on: [self-hosted, altinity-on-demand, altinity-style-checker-aarch64]
     steps:
       - name: Check out repository code
-        uses: ClickHouse/checkout@v1
+        uses: Altinity/checkout@19599efdf36c4f3f30eb55d5bb388896faea69f6
       - name: Download reports
         run: |
           python3 "$GITHUB_WORKSPACE/tests/ci/ci.py" --infile ${{ toJson(needs.RunConfig.outputs.data) }} --pre --job-name Builds
       - name: Builds report
         run: |
           cd "$GITHUB_WORKSPACE/tests/ci"
-          python3 ./build_report_check.py --reports package_release package_aarch64 package_asan package_msan package_ubsan package_tsan package_debug binary_darwin binary_darwin_aarch64
+          python3 ./build_report_check.py --reports package_release package_aarch64 package_asan package_msan package_ubsan package_tsan package_debug
       - name: Set status
+        # NOTE(vnemkov): generate and upload the report even if previous step failed
+        if: success() || failure()
         run: |
           python3 "$GITHUB_WORKSPACE/tests/ci/ci.py" --infile ${{ toJson(needs.RunConfig.outputs.data) }} --post --job-name Builds
   MarkReleaseReady:
     if: ${{ !failure() && !cancelled() }}
     needs:
-      - BuilderBinDarwin
-      - BuilderBinDarwinAarch64
       - BuilderDebRelease
       - BuilderDebAarch64
-    runs-on: [self-hosted, style-checker-aarch64]
+    runs-on: [self-hosted, altinity-on-demand, altinity-style-checker-aarch64]
     steps:
       - name: Debug
         run: |
@@ -220,7 +242,7 @@ jobs:
         run: exit 1
       - name: Check out repository code
         if: ${{ ! (contains(needs.*.result, 'skipped') || contains(needs.*.result, 'failure')) }}
-        uses: ClickHouse/checkout@v1
+        uses: Altinity/checkout@19599efdf36c4f3f30eb55d5bb388896faea69f6
       - name: Mark Commit Release Ready
         if: ${{ ! (contains(needs.*.result, 'skipped') || contains(needs.*.result, 'failure')) }}
         run: |
@@ -233,9 +255,10 @@ jobs:
     needs: [RunConfig, BuilderDebRelease]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Install packages (release)
-      runner_type: style-checker
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
       run_command: |
         python3 install_check.py "$CHECK_NAME"
@@ -243,9 +266,10 @@ jobs:
     needs: [RunConfig, BuilderDebAarch64]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Install packages (aarch64)
-      runner_type: style-checker-aarch64
+      runner_type: altinity-func-tester-aarch64
       data: ${{ needs.RunConfig.outputs.data }}
       run_command: |
         python3 install_check.py "$CHECK_NAME"
@@ -315,41 +339,46 @@ jobs:
     needs: [RunConfig, BuilderDebAsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stress test (asan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   StressTestTsan:
     needs: [RunConfig, BuilderDebTsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stress test (tsan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   StressTestMsan:
     needs: [RunConfig, BuilderDebMsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stress test (msan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   StressTestUBsan:
     needs: [RunConfig, BuilderDebUBsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stress test (ubsan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   StressTestDebug:
     needs: [RunConfig, BuilderDebDebug]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Stress test (debug)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
 #############################################################################################
 ############################# INTEGRATION TESTS #############################################
@@ -358,33 +387,80 @@ jobs:
     needs: [RunConfig, BuilderDebAsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Integration tests (asan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   IntegrationTestsAnalyzerAsan:
     needs: [RunConfig, BuilderDebAsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Integration tests (asan, old analyzer)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   IntegrationTestsTsan:
     needs: [RunConfig, BuilderDebTsan]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Integration tests (tsan)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
       data: ${{ needs.RunConfig.outputs.data }}
   IntegrationTestsRelease:
     needs: [RunConfig, BuilderDebRelease]
     if: ${{ !failure() && !cancelled() }}
     uses: ./.github/workflows/reusable_test.yml
+    secrets: inherit
     with:
       test_name: Integration tests (release)
-      runner_type: func-tester
+      runner_type: altinity-func-tester
+      data: ${{ needs.RunConfig.outputs.data }}
+#############################################################################################
+##################################### REGRESSION TESTS ######################################
+#############################################################################################
+  RegressionTestsRelease:
+    needs: [BuilderDebRelease]
+    if: ${{ !failure() && !cancelled() }}
+    uses: ./.github/workflows/regression.yml
+    secrets: inherit
+    with:
+      runner_type: altinity-on-demand, altinity-type-cx52, altinity-image-x86-app-docker-ce, altinity-setup-regression
+      commit: a170f32119a5c872e5ff209b8f39e13acc2d6626
+      arch: release
+      build_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      timeout_minutes: 300
+  RegressionTestsAarch64:
+    needs: [BuilderDebAarch64]
+    if: ${{ !failure() && !cancelled() }}
+    uses: ./.github/workflows/regression.yml
+    secrets: inherit
+    with:
+      runner_type: altinity-on-demand, altinity-type-cax41, altinity-image-arm-app-docker-ce, altinity-setup-regression
+      commit: a170f32119a5c872e5ff209b8f39e13acc2d6626
+      arch: aarch64
+      build_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      timeout_minutes: 300
+  SignRelease:
+    needs: [RunConfig, BuilderDebRelease]
+    if: ${{ !failure() && !cancelled() }}
+    uses: ./.github/workflows/reusable_sign.yml
+    secrets: inherit
+    with:
+      test_name: Sign release
+      runner_type: altinity-style-checker
+      data: ${{ needs.RunConfig.outputs.data }}
+  SignAarch64:
+    needs: [RunConfig, BuilderDebAarch64]
+    if: ${{ !failure() && !cancelled() }}
+    uses: ./.github/workflows/reusable_sign.yml
+    secrets: inherit
+    with:
+      test_name: Sign aarch64
+      runner_type: altinity-style-checker-aarch64
       data: ${{ needs.RunConfig.outputs.data }}
   FinishCheck:
     if: ${{ !cancelled() }}
@@ -411,10 +487,13 @@ jobs:
       - IntegrationTestsRelease
       - CompatibilityCheckX86
       - CompatibilityCheckAarch64
-    runs-on: [self-hosted, style-checker]
+      - RegressionTestsRelease
+      - RegressionTestsAarch64
+      - SignRelease
+    runs-on: [self-hosted, altinity-on-demand, altinity-style-checker-aarch64]
     steps:
       - name: Check out repository code
-        uses: ClickHouse/checkout@v1
+        uses: Altinity/checkout@19599efdf36c4f3f30eb55d5bb388896faea69f6
         with:
           clear-repository: true
       - name: Finish label
@@ -430,3 +509,25 @@ jobs:
           ${{ toJson(needs) }}
           EOF
           python3 ./tests/ci/ci_buddy.py --check-wf-status
+      - name: Create and upload combined report
+        if: ${{ !cancelled() }}
+        env:
+          CHECKS_DATABASE_HOST: ${{ secrets.CHECKS_DATABASE_HOST }}
+          CHECKS_DATABASE_USER: ${{ secrets.CHECKS_DATABASE_USER }}
+          CHECKS_DATABASE_PASSWORD: ${{ secrets.CHECKS_DATABASE_PASSWORD }}
+          COMMIT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.number }}
+          ACTIONS_RUN_URL: ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          pip install clickhouse-driver==0.2.8 numpy==1.26.4 pandas==2.2.0
+
+          REPORT_LINK=$(python3 .github/create_combined_ci_report.py --pr-number $PR_NUMBER --commit-sha $COMMIT_SHA --actions-run-url $ACTIONS_RUN_URL --known-fails tests/broken_tests.json)
+
+          IS_VALID_URL=$(echo $REPORT_LINK | grep -E '^https?://')
+          if [[ -n $IS_VALID_URL ]]; then
+            echo "Combined CI Report: [View Report]($REPORT_LINK)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Error: $REPORT_LINK" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi

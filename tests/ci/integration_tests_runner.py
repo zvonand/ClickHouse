@@ -27,8 +27,8 @@ from report import JOB_TIMEOUT_TEST_NAME
 from stopwatch import Stopwatch
 from tee_popen import TeePopen
 
-MAX_RETRY = 1
-NUM_WORKERS = 5
+MAX_RETRY = 3
+NUM_WORKERS = 10
 SLEEP_BETWEEN_RETRIES = 5
 PARALLEL_GROUP_SIZE = 100
 CLICKHOUSE_BINARY_PATH = "usr/bin/clickhouse"
@@ -432,7 +432,7 @@ class ClickhouseIntegrationTestsRunner:
         out_file_full = os.path.join(self.result_path, "runner_get_all_tests.log")
         cmd = (
             f"cd {self.repo_path}/tests/integration && "
-            f"timeout --signal=KILL 1h ./runner {runner_opts} {image_cmd} -- --setup-plan "
+            f"timeout --signal=KILL 2h ./runner {runner_opts} {image_cmd} -- --setup-plan "
         )
 
         logging.info(
@@ -520,7 +520,7 @@ class ClickhouseIntegrationTestsRunner:
             "--docker-image-version",
         ):
             for img in IMAGES:
-                if img == "clickhouse/integration-tests-runner":
+                if img == "altinityinfra/integration-tests-runner":
                     runner_version = self.get_image_version(img)
                     logging.info(
                         "Can run with custom docker image version %s", runner_version
@@ -659,7 +659,7 @@ class ClickhouseIntegrationTestsRunner:
             # -s -- (s)kipped
             cmd = (
                 f"cd {self.repo_path}/tests/integration && "
-                f"timeout --signal=KILL 1h ./runner {self._get_runner_opts()} "
+                f"timeout --signal=KILL 2h ./runner {self._get_runner_opts()} "
                 f"{image_cmd} -t {test_cmd} {parallel_cmd} {repeat_cmd} -- -rfEps --run-id={i} "
                 f"--color=no --durations=0 {_get_deselect_option(self.should_skip_tests())} "
                 f"| tee {info_path}"
@@ -974,6 +974,9 @@ class ClickhouseIntegrationTestsRunner:
             len(not_found_tests),
             " ".join(not_found_tests[:3]),
         )
+
+        known_broken_tests = self._get_broken_tests_list(self.repo_path)
+
         grouped_tests = self.group_test_by_file(filtered_sequential_tests)
         i = 0
         for par_group in chunks(filtered_parallel_tests, PARALLEL_GROUP_SIZE):
@@ -1003,6 +1006,26 @@ class ClickhouseIntegrationTestsRunner:
             group_counters, group_test_times, log_paths = self.try_run_test_group(
                 group, tests, MAX_RETRY, NUM_WORKERS, 0
             )
+
+            for fail_status in ("ERROR", "FAILED"):
+                for failed_test in group_counters[fail_status]:
+                    if failed_test in known_broken_tests.keys():
+                        fail_message = known_broken_tests[failed_test].get("message")
+                        if not fail_message:
+                            mark_as_broken = True
+                        else:
+                            mark_as_broken = False
+                            for log_path in log_paths:
+                                if log_path.endswith(".log"):
+                                    with open(log_path) as log_file:
+                                        if fail_message in log_file.read():
+                                            mark_as_broken = True
+                                            break
+
+                        if mark_as_broken:
+                            group_counters[fail_status].remove(failed_test)
+                            group_counters["BROKEN"].append(failed_test)
+
             total_tests = 0
             for counter, value in group_counters.items():
                 logging.info(

@@ -52,8 +52,9 @@ def get_additional_envs(
     check_name: str, run_by_hash_num: int, run_by_hash_total: int
 ) -> List[str]:
     result = []
-    azure_connection_string = get_parameter_from_ssm("azure_connection_string")
-    result.append(f"AZURE_CONNECTION_STRING='{azure_connection_string}'")
+    # TODO(vnemkov): put proper Azure connection string into SSM and re-enable this one
+    # azure_connection_string = get_parameter_from_ssm("azure_connection_string")
+    # result.append(f"AZURE_CONNECTION_STRING='{azure_connection_string}'")
     if "DatabaseReplicated" in check_name:
         result.append("USE_DATABASE_REPLICATED=1")
     if "DatabaseOrdinary" in check_name:
@@ -67,9 +68,6 @@ def get_additional_envs(
         result.append("RANDOMIZE_OBJECT_KEY_TYPE=1")
     if "analyzer" in check_name:
         result.append("USE_OLD_ANALYZER=1")
-    if "azure" in check_name:
-        assert "USE_S3_STORAGE_FOR_MERGE_TREE=1" not in result
-        result.append("USE_AZURE_STORAGE_FOR_MERGE_TREE=1")
 
     if run_by_hash_total != 0:
         result.append(f"RUN_BY_HASH_NUM={run_by_hash_num}")

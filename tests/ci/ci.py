@@ -388,7 +388,7 @@ def _pre_action(s3, job_name, batch, indata, pr_info):
             _get_ext_check_name(job_name),
         )
         ClickHouseHelper().insert_events_into(
-            db="default", table="checks", events=prepared_events
+            db="gh-data", table="checks", events=prepared_events
         )
     print(f"Pre action done. Report files [{reports_files}] have been downloaded")
 
@@ -1308,7 +1308,7 @@ def main() -> int:
                 job_report.check_name or _get_ext_check_name(args.job_name),
             )
             ch_helper.insert_events_into(
-                db="default", table="checks", events=prepared_events
+                db="gh-data", table="checks", events=prepared_events
             )
 
         elif job_report.job_skipped:
@@ -1374,7 +1374,7 @@ def main() -> int:
                 _get_ext_check_name(args.job_name),
             )
             ClickHouseHelper().insert_events_into(
-                db="default", table="checks", events=prepared_events
+                db="gh-data", table="checks", events=prepared_events
             )
     ### POST action: end
 

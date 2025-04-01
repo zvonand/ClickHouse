@@ -68,7 +68,7 @@ DOCKERS = [
         name="altinityinfra/binary-builder",
         path="./ci/docker/binary-builder",
         platforms=Docker.Platforms.arm_amd,
-        # depends_on=["altinityinfra/fasttest"],
+        depends_on=["altinityinfra/fasttest"],
     ),
     # Docker.Config(
     #     name="altinityinfra/cctools",
@@ -106,12 +106,12 @@ DOCKERS = [
     #     platforms=Docker.Platforms.arm_amd,
     #     depends_on=[],
     # ),
-    # Docker.Config(
-    #     name="altinityinfra/fasttest",
-    #     path="./ci/docker/fasttest",
-    #     platforms=Docker.Platforms.arm_amd,
-    #     depends_on=[],
-    # ),
+    Docker.Config(
+        name="altinityinfra/fasttest",
+        path="./ci/docker/fasttest",
+        platforms=Docker.Platforms.arm_amd,
+        depends_on=[],
+    ),
     # Docker.Config(
     #     name="altinityinfra/keeper-jepsen-test",
     #     path="./ci/docker/test/keeper-jepsen",

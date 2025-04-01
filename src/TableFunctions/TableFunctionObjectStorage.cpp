@@ -132,7 +132,8 @@ StoragePtr TableFunctionObjectStorage<Definition, Configuration>::executeImpl(
         /* format_settings */ std::nullopt,
         /* mode */ LoadingStrictnessLevel::CREATE,
         /* distributed_processing */ false,
-        nullptr);
+        /* partition_by */ nullptr,
+        /* is_table_function */ true);
 
     storage->startup();
     return storage;

@@ -64,6 +64,12 @@
         "name": "altinityinfra/integration-tests-runner",
         "dependent": []
     },
+    "docker/test/fasttest": {
+        "name": "altinityinfra/fasttest",
+        "dependent": [
+            "docker/packager/binary-builder"
+        ]
+    },
     "docker/test/style": {
         "name": "altinityinfra/style-test",
         "dependent": []

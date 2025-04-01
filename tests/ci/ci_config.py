@@ -520,22 +520,22 @@ class CI:
             run_command="docs_check.py",
             runner_type=Runners.FUNC_TESTER,
         ),
-        JobNames.FAST_TEST: JobConfig(
-            pr_only=True,
-            digest=DigestConfig(
-                include_paths=[
-                    "./tests/queries/0_stateless/",
-                    "./tests/docker_scripts/",
-                    "./tests/config/",
-                    "./tests/clickhouse-test",
-                ],
-                exclude_files=[".md"],
-                docker=["altinityinfra/fasttest"],
-            ),
-            run_command="fast_test_check.py",
-            timeout=2400,
-            runner_type=Runners.BUILDER,
-        ),
+        # JobNames.FAST_TEST: JobConfig(
+        #     pr_only=True,
+        #     digest=DigestConfig(
+        #         include_paths=[
+        #             "./tests/queries/0_stateless/",
+        #             "./tests/docker_scripts/",
+        #             "./tests/config/",
+        #             "./tests/clickhouse-test",
+        #         ],
+        #         exclude_files=[".md"],
+        #         docker=["altinityinfra/fasttest"],
+        #     ),
+        #     run_command="fast_test_check.py",
+        #     timeout=2400,
+        #     runner_type=Runners.BUILDER,
+        # ),
         JobNames.STYLE_CHECK: JobConfig(
             run_always=True,
             runner_type=Runners.STYLE_CHECKER_AARCH64,

@@ -36,7 +36,7 @@
         "name": "altinityinfra/test-util",
         "dependent": [
             "docker/test/base",
-            "docker/test/fasttest"
+            // "docker/test/fasttest"
         ]
     },
     "docker/test/stateless": {

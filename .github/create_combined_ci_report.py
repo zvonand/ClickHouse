@@ -6,6 +6,7 @@ from itertools import combinations
 import json
 
 import requests
+import pandas as pd
 from clickhouse_driver import Client
 import boto3
 from botocore.exceptions import NoCredentialsError
@@ -123,6 +124,35 @@ def get_regression_fails(client: Client, job_url: str):
     df["job_name"] = df["job_name"].str.title()
     return df
 
+def get_cves(pr_number, commit_sha):
+    s3_client = boto3.client("s3", endpoint_url=os.getenv("S3_URL"))
+    s3_path = f"s3://{S3_BUCKET}/{pr_number}/{commit_sha}/grype/"
+
+    results = []
+
+    response = s3_client.list_objects_v2(Bucket=S3_BUCKET, Prefix=s3_path, Delimiter='/')
+    grype_result_dirs = [content['Prefix'] for content in response.get('CommonPrefixes', [])]
+
+    for path in grype_result_dirs:
+        file_key = f"{path}result.json"
+        file_response = s3_client.get_object(Bucket=S3_BUCKET, Key=file_key)
+        content = file_response["Body"].read().decode("utf-8")
+        results.append(json.loads(content))
+
+    tables = []
+    for scan_result in results:
+        for match in scan_result["matches"]:
+            tables.append(
+                {
+                    "docker_image": scan_result["source"]["target"]["userInput"],
+                    "identifier": match["vulnerability"]["id"],
+                    "severity": match["vulnerability"]["severity"],
+                    "namespace": match["vulnerability"]["namespace"],
+                }
+            )
+
+    return pd.DataFrame(tables)
+
 
 def url_to_html_link(url: str) -> str:
     if not url:
@@ -178,6 +208,9 @@ def parse_args() -> argparse.Namespace:
         "--known-fails", type=str, help="Path to the file with known fails"
     )
     parser.add_argument(
+        "--cves", action="store_true", help="Get CVEs from Grype results"
+    )
+    parser.add_argument(
         "--mark-preview", action="store_true", help="Mark the report as a preview"
     )
     return parser.parse_args()
@@ -216,6 +249,7 @@ def main():
         "checks_known_fails": [],
         "checks_errors": get_checks_errors(db_client, args.actions_run_url),
         "regression_fails": get_regression_fails(db_client, args.actions_run_url),
+        "docker_images_cves": [] if not args.cves else get_cves(args.pr_number, args.commit_sha),
     }
 
     if args.known_fails:
@@ -231,6 +265,10 @@ def main():
                 db_client, args.actions_run_url, known_fails
             )
 
+    high_cve_count = 0
+    if fail_results['docker_images_cves']:
+        high_cve_count = fail_results['docker_images_cves'].value_counts()[['High', 'Critical']].sum()
+
     combined_report = (
         ci_running_report.replace("ClickHouse CI running for", "Combined CI Report for")
         .replace(
@@ -242,6 +280,7 @@ def main():
     <li><a href="#checks-errors">Checks Errors</a> ({len(fail_results['checks_errors'])})</li>
     <li><a href="#checks-fails">Checks New Fails</a> ({len(fail_results['checks_fails'])})</li>
     <li><a href="#regression-fails">Regression New Fails</a> ({len(fail_results['regression_fails'])})</li>
+    <li><a href="#docker-images-cves">Docker Images CVEs</a> ({high_cve_count})</li>
     <li><a href="#checks-known-fails">Checks Known Fails</a> ({len(fail_results['checks_known_fails'])})</li>
 </ul>
 
@@ -262,8 +301,11 @@ def main():
 <h2 id="regression-fails">Regression New Fails</h2>
 {format_results_as_html_table(fail_results['regression_fails'])}
 
+<h2 id="docker-images-cves">Docker Images CVEs</h2>
+{"<p>Not Checked</p>" if not args.cves else format_results_as_html_table(fail_results['docker_images_cves'])}
+
 <h2 id="checks-known-fails">Checks Known Fails</h2>
-{format_results_as_html_table(fail_results['checks_known_fails'])}
+{"<p>Not Checked</p>" if not args.known_fails else format_results_as_html_table(fail_results['checks_known_fails'])}
 """,
             1,
         )
@@ -276,7 +318,7 @@ def main():
         exit(0)
 
     # Upload the report to S3
-    s3_client = boto3.client("s3")
+    s3_client = boto3.client("s3", endpoint_url=os.getenv("S3_URL"))
 
     try:
         s3_client.put_object(

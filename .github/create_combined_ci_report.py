@@ -124,14 +124,19 @@ def get_regression_fails(client: Client, job_url: str):
     df["job_name"] = df["job_name"].str.title()
     return df
 
+
 def get_cves(pr_number, commit_sha):
     s3_client = boto3.client("s3", endpoint_url=os.getenv("S3_URL"))
     s3_path = f"s3://{S3_BUCKET}/{pr_number}/{commit_sha}/grype/"
 
     results = []
 
-    response = s3_client.list_objects_v2(Bucket=S3_BUCKET, Prefix=s3_path, Delimiter='/')
-    grype_result_dirs = [content['Prefix'] for content in response.get('CommonPrefixes', [])]
+    response = s3_client.list_objects_v2(
+        Bucket=S3_BUCKET, Prefix=s3_path, Delimiter="/"
+    )
+    grype_result_dirs = [
+        content["Prefix"] for content in response.get("CommonPrefixes", [])
+    ]
 
     for path in grype_result_dirs:
         file_key = f"{path}result.json"
@@ -139,19 +144,26 @@ def get_cves(pr_number, commit_sha):
         content = file_response["Body"].read().decode("utf-8")
         results.append(json.loads(content))
 
-    tables = []
+    rows = []
     for scan_result in results:
         for match in scan_result["matches"]:
-            tables.append(
+            rows.append(
                 {
                     "docker_image": scan_result["source"]["target"]["userInput"],
-                    "identifier": match["vulnerability"]["id"],
                     "severity": match["vulnerability"]["severity"],
+                    "identifier": match["vulnerability"]["id"],
                     "namespace": match["vulnerability"]["namespace"],
                 }
             )
 
-    return pd.DataFrame(tables)
+    df = pd.DataFrame(rows)
+    df = df.sort_values(
+        by="severity",
+        key=lambda col: col.str.lower().map(
+            {"critical": 1, "high": 2, "medium": 3, "low": 4, "negligible": 5}
+        ),
+    )
+    return df
 
 
 def url_to_html_link(url: str) -> str:
@@ -178,6 +190,9 @@ def format_results_as_html_table(results) -> str:
             formatters={
                 "Results Link": url_to_html_link,
                 "Test Name": format_test_name_for_linewrap,
+                "Identifier": lambda s: url_to_html_link(
+                    "https://nvd.nist.gov/vuln/detail/" + s
+                ),
             },
             escape=False,
         )  # tbody/thead tags interfere with the table sorting script
@@ -249,7 +264,9 @@ def main():
         "checks_known_fails": [],
         "checks_errors": get_checks_errors(db_client, args.actions_run_url),
         "regression_fails": get_regression_fails(db_client, args.actions_run_url),
-        "docker_images_cves": [] if not args.cves else get_cves(args.pr_number, args.commit_sha),
+        "docker_images_cves": (
+            [] if not args.cves else get_cves(args.pr_number, args.commit_sha)
+        ),
     }
 
     if args.known_fails:
@@ -266,8 +283,13 @@ def main():
             )
 
     high_cve_count = 0
-    if len(fail_results['docker_images_cves']) > 0:
-        high_cve_count = fail_results['docker_images_cves'].value_counts()[['High', 'Critical']].sum()
+    if len(fail_results["docker_images_cves"]) > 0:
+        high_cve_count = (
+            fail_results["docker_images_cves"]["severity"]
+            .str.lower()
+            .isin(("high", "critical"))
+            .sum()
+        )
 
     combined_report = (
         ci_running_report.replace("ClickHouse CI running for", "Combined CI Report for")
@@ -280,8 +302,8 @@ def main():
     <li><a href="#checks-errors">Checks Errors</a> ({len(fail_results['checks_errors'])})</li>
     <li><a href="#checks-fails">Checks New Fails</a> ({len(fail_results['checks_fails'])})</li>
     <li><a href="#regression-fails">Regression New Fails</a> ({len(fail_results['regression_fails'])})</li>
-    <li><a href="#docker-images-cves">Docker Images CVEs</a> ({high_cve_count})</li>
-    <li><a href="#checks-known-fails">Checks Known Fails</a> ({len(fail_results['checks_known_fails'])})</li>
+    <li><a href="#docker-images-cves">Docker Images CVEs</a> ({'N/A' if not args.cves else f'{high_cve_count} high/critical)'}</li>
+    <li><a href="#checks-known-fails">Checks Known Fails</a> ({'N/A' if not args.known_fails else len(fail_results['checks_known_fails'])})</li>
 </ul>
 
 <h2 id="ci-jobs-status">CI Jobs Status</h2>

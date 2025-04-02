@@ -95,9 +95,10 @@ jobs:
             echo "total_high_critical=$TOTAL_HIGH_CRITICAL" >> $GITHUB_OUTPUT
 
             if [ $TOTAL_HIGH_CRITICAL -gt 0 ]; then
+                tfs --no-colors show tests raw.log | tee vuln_list.txt
                 echo '## High and Critical vulnerabilities found' >> $GITHUB_STEP_SUMMARY
                 echo '```' >> $GITHUB_STEP_SUMMARY
-                tfs --no-colors show tests raw.log | grep -Pi 'High|Critical' >> $GITHUB_STEP_SUMMARY
+                grep -Pi 'High|Critical' vuln_list.txt >> $GITHUB_STEP_SUMMARY
                 echo '```' >> $GITHUB_STEP_SUMMARY
             fi
 

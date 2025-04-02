@@ -32,6 +32,7 @@ from report import (
 )
 from s3_helper import S3Helper
 from upload_result_helper import upload_results
+from get_robot_token import get_best_robot_token
 
 RETRY = 5
 CommitStatuses = List[CommitStatus]
@@ -156,7 +157,7 @@ def set_status_comment(commit: Commit, pr_info: PRInfo) -> None:
         return
 
     # to reduce number of parameters, the Github is constructed on the fly
-    gh = Github()
+    gh = Github(get_best_robot_token())
     gh.__requester = commit._requester  # type:ignore #pylint:disable=protected-access
     repo = get_repo(gh)
     statuses = sorted(get_commit_filtered_statuses(commit), key=lambda x: x.context)

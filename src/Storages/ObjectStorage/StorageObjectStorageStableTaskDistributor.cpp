@@ -8,9 +8,10 @@ namespace DB
 
 StorageObjectStorageStableTaskDistributor::StorageObjectStorageStableTaskDistributor(
     std::shared_ptr<IObjectIterator> iterator_,
-    size_t number_of_replicas_)
+    std::optional<std::vector<std::string>> ids_of_nodes_)
     : iterator(std::move(iterator_))
-    , connection_to_files(number_of_replicas_)
+    , connection_to_files(ids_of_nodes_.has_value() ? ids_of_nodes_.value().size() : 1)
+    , ids_of_nodes(ids_of_nodes_)
     , iterator_exhausted(false)
 {
 }
@@ -37,7 +38,26 @@ std::optional<String> StorageObjectStorageStableTaskDistributor::getNextTask(siz
 
 size_t StorageObjectStorageStableTaskDistributor::getReplicaForFile(const String & file_path)
 {
-    return ConsistentHashing(sipHash64(file_path), connection_to_files.size());
+    if (!ids_of_nodes.has_value())
+        return 0;
+
+    /// Trivial case
+    if (ids_of_nodes.value().size() < 2)
+        return 0;
+
+    /// Rendezvous hashing
+    size_t best_id = 0;
+    UInt64 best_weight = sipHash64(ids_of_nodes.value()[0] + file_path);
+    for (size_t id = ids_of_nodes.value().size() - 1; id > 0; --id)
+    {
+        UInt64 weight = sipHash64(ids_of_nodes.value()[id] + file_path);
+        if (weight > best_weight)
+        {
+            best_weight = weight;
+            best_id = id;
+        }
+    }
+    return best_id;
 }
 
 std::optional<String> StorageObjectStorageStableTaskDistributor::getPreQueuedFile(size_t number_of_current_replica)

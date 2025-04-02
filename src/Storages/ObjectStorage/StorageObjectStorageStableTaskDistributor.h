@@ -21,7 +21,7 @@ public:
 
     StorageObjectStorageStableTaskDistributor(
         std::shared_ptr<IObjectIterator> iterator_,
-        size_t number_of_replicas_);
+        std::optional<std::vector<std::string>> ids_of_nodes_);
 
     std::optional<String> getNextTask(size_t number_of_current_replica);
 
@@ -35,6 +35,8 @@ private:
 
     std::vector<std::vector<String>> connection_to_files;
     std::unordered_set<String> unprocessed_files;
+
+    std::optional<std::vector<std::string>> ids_of_nodes;
 
     std::mutex mutex;
     bool iterator_exhausted = false;

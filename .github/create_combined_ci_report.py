@@ -266,7 +266,7 @@ def main():
             )
 
     high_cve_count = 0
-    if fail_results['docker_images_cves']:
+    if len(fail_results['docker_images_cves']) > 0:
         high_cve_count = fail_results['docker_images_cves'].value_counts()[['High', 'Critical']].sum()
 
     combined_report = (

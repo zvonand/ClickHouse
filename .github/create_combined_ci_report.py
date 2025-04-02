@@ -127,12 +127,12 @@ def get_regression_fails(client: Client, job_url: str):
 
 def get_cves(pr_number, commit_sha):
     s3_client = boto3.client("s3", endpoint_url=os.getenv("S3_URL"))
-    s3_path = f"s3://{S3_BUCKET}/{pr_number}/{commit_sha}/grype/"
+    s3_prefix = f"{pr_number}/{commit_sha}/grype/"
 
     results = []
 
     response = s3_client.list_objects_v2(
-        Bucket=S3_BUCKET, Prefix=s3_path, Delimiter="/"
+        Bucket=S3_BUCKET, Prefix=s3_prefix, Delimiter="/"
     )
     grype_result_dirs = [
         content["Prefix"] for content in response.get("CommonPrefixes", [])

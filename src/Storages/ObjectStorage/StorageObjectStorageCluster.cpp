@@ -268,6 +268,20 @@ void StorageObjectStorageCluster::updateQueryToSendIfNeeded(
     if (cluster_name_in_settings)
     {
         configuration->addStructureAndFormatToArgsIfNeeded(args, structure, configuration->format, context, /*with_structure=*/true);
+
+        auto * select_query = query->as<ASTSelectQuery>();
+        if (select_query)
+        {
+            auto settings = select_query->settings();
+            if (settings)
+            {
+                auto & settings_ast = settings->as<ASTSetQuery &>();
+                if (settings_ast.changes.removeSetting("object_storage_cluster") && settings_ast.changes.empty())
+                {
+                    select_query->setExpression(ASTSelectQuery::Expression::SETTINGS, {});
+                }
+            }
+        }
     }
     else
     {

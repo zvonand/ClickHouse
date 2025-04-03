@@ -77,17 +77,21 @@ jobs:
           id: create_summary
           run: |
             jq -r '.distro | "**Distro**: \(.name):\(.version)"' result.json >> $GITHUB_STEP_SUMMARY
-            echo "| Severity   | Count |" >> $GITHUB_STEP_SUMMARY
-            echo "|------------|-------|" >> $GITHUB_STEP_SUMMARY
-            jq -r '
-              .matches | 
-              map(.vulnerability.severity) | 
-              group_by(.) | 
-              map({severity: .[0], count: length}) | 
-              sort_by(.severity) | 
-              map("| \(.severity) | \(.count) |") | 
-              .[]
-            ' result.json >> $GITHUB_STEP_SUMMARY
+            if jq -e '.matches | length == 0' result.json > /dev/null; then
+              echo "No results" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Severity   | Count |" >> $GITHUB_STEP_SUMMARY
+              echo "|------------|-------|" >> $GITHUB_STEP_SUMMARY
+              jq -r '
+                .matches | 
+                map(.vulnerability.severity) | 
+                group_by(.) | 
+                map({severity: .[0], count: length}) | 
+                sort_by(.severity) | 
+                map("| \(.severity) | \(.count) |") | 
+                .[]
+              ' result.json >> $GITHUB_STEP_SUMMARY
+            fi
 
             HIGH_COUNT=$(jq -r '.matches | map(.vulnerability.severity) | map(select(. == "High")) | length' result.json)
             CRITICAL_COUNT=$(jq -r '.matches | map(.vulnerability.severity) | map(select(. == "Critical")) | length' result.json)
@@ -95,10 +99,9 @@ jobs:
             echo "total_high_critical=$TOTAL_HIGH_CRITICAL" >> $GITHUB_OUTPUT
 
             if [ $TOTAL_HIGH_CRITICAL -gt 0 ]; then
-                tfs --no-colors show tests raw.log | tee vuln_list.txt
                 echo '## High and Critical vulnerabilities found' >> $GITHUB_STEP_SUMMARY
                 echo '```' >> $GITHUB_STEP_SUMMARY
-                grep -Pi 'High|Critical' vuln_list.txt >> $GITHUB_STEP_SUMMARY
+                cat raw.log | tfs --no-colors show tests | grep -Pi 'High|Critical' >> $GITHUB_STEP_SUMMARY
                 echo '```' >> $GITHUB_STEP_SUMMARY
             fi
 

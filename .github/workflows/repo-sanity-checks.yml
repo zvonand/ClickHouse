@@ -3,9 +3,11 @@ name: Repository Sanity Checks
 on:
   workflow_dispatch:  # Manual trigger only
 
+  workflow_call:
+    
 jobs:
   sanity-checks:
-    runs-on: [self-hosted, x86, type-cx42, image-x86-app-docker-ce]
+    runs-on: [self-hosted, altinity-on-demand, altinity-style-checker]
     strategy:
       fail-fast: false  # Continue with other combinations if one fails
       matrix:
@@ -64,6 +66,24 @@ jobs:
             type: rpm
             base: centos:8
             repo_url: https://builds.altinity.cloud/antalya-yum-repo
+          # Hotfix staging packages
+          - env: hotfix-staging
+            type: deb
+            base: ubuntu:22.04
+            repo_url: https://builds.staging.altinity.cloud/hotfix-apt-repo
+          - env: hotfix-staging
+            type: rpm
+            base: centos:8
+            repo_url: https://builds.staging.altinity.cloud/hotfix-yum-repo
+          # Antalya experimental staging packages
+          - env: antalya-staging
+            type: deb
+            base: ubuntu:22.04
+            repo_url: https://builds.staging.altinity.cloud/antalya-apt-repo
+          - env: antalya-staging
+            type: rpm
+            base: centos:8
+            repo_url: https://builds.staging.altinity.cloud/antalya-yum-repo
 
     steps:
       - name: Run sanity check

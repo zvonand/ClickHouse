@@ -78,7 +78,7 @@ jobs:
           run: |
             jq -r '.distro | "**Distro**: \(.name):\(.version)"' result.json >> $GITHUB_STEP_SUMMARY
             if jq -e '.matches | length == 0' result.json > /dev/null; then
-              echo "No results" >> $GITHUB_STEP_SUMMARY
+              echo "No CVEs" >> $GITHUB_STEP_SUMMARY
             else
               echo "| Severity   | Count |" >> $GITHUB_STEP_SUMMARY
               echo "|------------|-------|" >> $GITHUB_STEP_SUMMARY

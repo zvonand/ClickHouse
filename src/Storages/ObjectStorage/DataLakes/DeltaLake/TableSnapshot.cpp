@@ -13,6 +13,7 @@
 #include <Common/ThreadStatus.h>
 #include <IO/ReadBufferFromString.h>
 #include "getSchemaFromSnapshot.h"
+#include "PartitionPruner.h"
 #include "KernelUtils.h"
 
 namespace fs = std::filesystem;
@@ -21,6 +22,11 @@ namespace DB::ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int NOT_IMPLEMENTED;
+}
+
+namespace ProfileEvents
+{
+    extern const Event DeltaLakePartitionPrunedFiles;
 }
 
 namespace DB
@@ -60,6 +66,7 @@ public:
         const DB::NamesAndTypesList & schema_,
         const DB::Names & partition_columns_,
         DB::ObjectStoragePtr object_storage_,
+        const DB::ActionsDAG * filter_dag_,
         DB::IDataLakeMetadata::FileProgressCallback callback_,
         size_t list_batch_size_,
         LoggerPtr log_)
@@ -79,6 +86,8 @@ public:
             scanDataFunc();
         })
     {
+        if (filter_dag_)
+            pruner.emplace(*filter_dag_, schema_, partition_columns_, DB::Context::getGlobalContextInstance());
     }
 
     ~Iterator() override
@@ -135,36 +144,51 @@ public:
 
     DB::ObjectInfoPtr next(size_t) override
     {
-        DB::ObjectInfoPtr object;
+        while (true)
         {
-            std::unique_lock lock(next_mutex);
-            if (!iterator_finished && data_files.empty())
+            DB::ObjectInfoPtr object;
             {
-                LOG_TEST(log, "Waiting for next data file");
-                schedule_next_batch_cv.notify_one();
-                data_files_cv.wait(lock, [&]() { return !data_files.empty() || iterator_finished; });
+                std::unique_lock lock(next_mutex);
+                if (!iterator_finished && data_files.empty())
+                {
+                    LOG_TEST(log, "Waiting for next data file");
+                    schedule_next_batch_cv.notify_one();
+                    data_files_cv.wait(lock, [&]() { return !data_files.empty() || iterator_finished; });
+                }
+
+                if (data_files.empty())
+                    return nullptr;
+
+                LOG_TEST(log, "Current data files: {}", data_files.size());
+
+                object = data_files.front();
+                data_files.pop_front();
+                if (data_files.empty())
+                    schedule_next_batch_cv.notify_one();
             }
 
-            if (data_files.empty())
-                return nullptr;
+            chassert(object);
+            if (pruner.has_value())
+            {
+                const auto * object_with_partition_info = dynamic_cast<const DB::ObjectInfoWithPartitionColumns *>(object.get());
+                if (object_with_partition_info && pruner->canBePruned(*object_with_partition_info))
+                {
+                    ProfileEvents::increment(ProfileEvents::DeltaLakePartitionPrunedFiles);
 
-            LOG_TEST(log, "Current data files: {}", data_files.size());
+                    LOG_TEST(log, "Skipping file {} according to partition pruning", object->getPath());
+                    continue;
+                }
+            }
 
-            object = data_files.front();
-            data_files.pop_front();
-            if (data_files.empty())
-                schedule_next_batch_cv.notify_one();
+            object->metadata = object_storage->getObjectMetadata(object->getPath());
+
+            if (callback)
+            {
+                chassert(object->metadata);
+                callback(DB::FileProgress(0, object->metadata->size_bytes));
+            }
+            return object;
         }
-
-        chassert(object);
-        object->metadata = object_storage->getObjectMetadata(object->getPath());
-
-        if (callback)
-        {
-            chassert(object->metadata);
-            callback(DB::FileProgress(0, object->metadata->size_bytes));
-        }
-        return object;
     }
 
     static void visitData(
@@ -247,6 +271,7 @@ private:
     const KernelSnapshot & snapshot;
     KernelScan scan;
     KernelScanDataIterator scan_data_iterator;
+    std::optional<PartitionPruner> pruner;
 
     const std::string data_prefix;
     const DB::NamesAndTypesList & schema;
@@ -327,14 +352,17 @@ void TableSnapshot::initSnapshotImpl() const
     LOG_TRACE(log, "Snapshot version: {}", snapshot_version);
 }
 
-ffi::SharedSnapshot * TableSnapshot::getSnapshot()
+ffi::SharedSnapshot * TableSnapshot::getSnapshot() const
 {
     if (!snapshot.get())
         initSnapshot();
     return snapshot.get();
 }
 
-DB::ObjectIterator TableSnapshot::iterate(DB::IDataLakeMetadata::FileProgressCallback callback, size_t list_batch_size)
+DB::ObjectIterator TableSnapshot::iterate(
+    const DB::ActionsDAG * filter_dag,
+    DB::IDataLakeMetadata::FileProgressCallback callback,
+    size_t list_batch_size)
 {
     initSnapshot();
     return std::make_shared<TableSnapshot::Iterator>(
@@ -344,12 +372,13 @@ DB::ObjectIterator TableSnapshot::iterate(DB::IDataLakeMetadata::FileProgressCal
         getTableSchema(),
         getPartitionColumns(),
         object_storage,
+        filter_dag,
         callback,
         list_batch_size,
         log);
 }
 
-const DB::NamesAndTypesList & TableSnapshot::getTableSchema()
+const DB::NamesAndTypesList & TableSnapshot::getTableSchema() const
 {
     if (!table_schema.has_value())
     {
@@ -360,7 +389,7 @@ const DB::NamesAndTypesList & TableSnapshot::getTableSchema()
     return table_schema.value();
 }
 
-const DB::NamesAndTypesList & TableSnapshot::getReadSchema()
+const DB::NamesAndTypesList & TableSnapshot::getReadSchema() const
 {
     if (read_schema_same_as_table_schema)
         return getTableSchema();
@@ -369,14 +398,14 @@ const DB::NamesAndTypesList & TableSnapshot::getReadSchema()
     return read_schema.value();
 }
 
-const DB::Names & TableSnapshot::getPartitionColumns()
+const DB::Names & TableSnapshot::getPartitionColumns() const
 {
     if (!partition_columns.has_value())
         loadReadSchemaAndPartitionColumns();
     return partition_columns.value();
 }
 
-void TableSnapshot::loadReadSchemaAndPartitionColumns()
+void TableSnapshot::loadReadSchemaAndPartitionColumns() const
 {
     auto * current_snapshot = getSnapshot();
     chassert(engine.get());

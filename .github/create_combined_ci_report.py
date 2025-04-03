@@ -156,6 +156,9 @@ def get_cves(pr_number, commit_sha):
                 }
             )
 
+    if len(rows) == 0:
+        return pd.DataFrame()
+
     df = pd.DataFrame(rows).drop_duplicates()
     df = df.sort_values(
         by="severity",

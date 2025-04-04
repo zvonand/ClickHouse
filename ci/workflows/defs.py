@@ -65,116 +65,116 @@ SECRETS = [
 
 DOCKERS = [
     Docker.Config(
-        name="clickhouse/binary-builder",
+        name="altinityinfra/binary-builder",
         path="./ci/docker/binary-builder",
         platforms=Docker.Platforms.arm_amd,
-        depends_on=["clickhouse/fasttest"],
+        depends_on=["altinityinfra/fasttest"],
     ),
     # Docker.Config(
-    #     name="clickhouse/cctools",
+    #     name="altinityinfra/cctools",
     #     path="./ci/docker/packager/cctools",
     #     platforms=Docker.Platforms.arm_amd,
     #     depends_on=[],
     # ),
     Docker.Config(
-        name="clickhouse/test-old-centos",
+        name="altinityinfra/test-old-centos",
         path="./ci/docker/compatibility/centos",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/test-old-ubuntu",
+        name="altinityinfra/test-old-ubuntu",
         path="./ci/docker/compatibility/ubuntu",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     # Docker.Config(
-    #     name="clickhouse/test-util",
+    #     name="altinityinfra/test-util",
     #     path="./ci/docker/test/util",
     #     platforms=Docker.Platforms.arm_amd,
     #     depends_on=[],
     # ),
     # Docker.Config(
-    #     name="clickhouse/fuzzer",
+    #     name="altinityinfra/fuzzer",
     #     path="./ci/docker/test/fuzzer",
     #     platforms=Docker.Platforms.arm_amd,
-    #     depends_on=["clickhouse/test-base"],
+    #     depends_on=["altinityinfra/test-base"],
     # ),
     # Docker.Config(
-    #     name="clickhouse/performance-comparison",
+    #     name="altinityinfra/performance-comparison",
     #     path="./ci/docker/test/performance-comparison",
     #     platforms=Docker.Platforms.arm_amd,
     #     depends_on=[],
     # ),
     Docker.Config(
-        name="clickhouse/fasttest",
+        name="altinityinfra/fasttest",
         path="./ci/docker/fasttest",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     # Docker.Config(
-    #     name="clickhouse/keeper-jepsen-test",
+    #     name="altinityinfra/keeper-jepsen-test",
     #     path="./ci/docker/test/keeper-jepsen",
     #     platforms=Docker.Platforms.arm_amd,
-    #     depends_on=["clickhouse/test-base"],
+    #     depends_on=["altinityinfra/test-base"],
     # ),
     # Docker.Config(
-    #     name="clickhouse/server-jepsen-test",
+    #     name="altinityinfra/server-jepsen-test",
     #     path="./ci/docker/test/server-jepsen",
     #     platforms=Docker.Platforms.arm_amd,
-    #     depends_on=["clickhouse/test-base"],
+    #     depends_on=["altinityinfra/test-base"],
     # ),
     # Docker.Config(
-    #     name="clickhouse/sqllogic-test",
+    #     name="altinityinfra/sqllogic-test",
     #     path="./ci/docker/test/sqllogic",
     #     platforms=Docker.Platforms.arm_amd,
-    #     depends_on=["clickhouse/test-base"],
+    #     depends_on=["altinityinfra/test-base"],
     # ),
     Docker.Config(
-        name="clickhouse/stateless-test",
+        name="altinityinfra/stateless-test",
         path="./ci/docker/stateless-test",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/stateful-test",
+        name="altinityinfra/stateful-test",
         path="./ci/docker/stateful-test",
         platforms=Docker.Platforms.arm_amd,
-        depends_on=["clickhouse/stateless-test"],
+        depends_on=["altinityinfra/stateless-test"],
     ),
     Docker.Config(
-        name="clickhouse/integration-test",
+        name="altinityinfra/integration-test",
         path="./ci/docker/integration/integration-test",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     # TODO: move images into ./ci
     Docker.Config(
-        name="clickhouse/integration-tests-runner",
+        name="altinityinfra/integration-tests-runner",
         path="./docker/test/integration/runner",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/integration-helper",
+        name="altinityinfra/integration-helper",
         path="./docker/test/integration/helper_container",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/kerberos-kdc",
+        name="altinityinfra/kerberos-kdc",
         path="./docker/test/integration/kerberos_kdc",
         platforms=[Docker.Platforms.AMD],
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/mysql-golang-client",
+        name="altinityinfra/mysql-golang-client",
         path="./docker/test/integration/mysql_golang_client",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/mysql-java-client",
+        name="altinityinfra/mysql-java-client",
         path="./docker/test/integration/mysql_java_client",
         # TODO: amd image on arm runner hangs on "RUN javac MySQLJavaClientTest.java"
         #  fix and enable for both platforms
@@ -182,73 +182,73 @@ DOCKERS = [
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/mysql-js-client",
+        name="altinityinfra/mysql-js-client",
         path="./docker/test/integration/mysql_js_client",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/dotnet-client",
+        name="altinityinfra/dotnet-client",
         path="./docker/test/integration/dotnet_client",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/mysql-php-client",
+        name="altinityinfra/mysql-php-client",
         path="./docker/test/integration/mysql_php_client",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/nginx-dav",
+        name="altinityinfra/nginx-dav",
         path="./docker/test/integration/nginx_dav",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/postgresql-java-client",
+        name="altinityinfra/postgresql-java-client",
         path="./docker/test/integration/postgresql_java_client",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/python-bottle",
+        name="altinityinfra/python-bottle",
         path="./docker/test/integration/resolver",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/s3-proxy",
+        name="altinityinfra/s3-proxy",
         path="./docker/test/integration/s3_proxy",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/style-test",
+        name="altinityinfra/style-test",
         path="./ci/docker/style-test",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/docs-builder",
+        name="altinityinfra/docs-builder",
         path="./docker/docs/builder",
         platforms=[Docker.Platforms.AMD],
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/install-deb-test",
+        name="altinityinfra/install-deb-test",
         path="docker/test/install/deb",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/install-rpm-test",
+        name="altinityinfra/install-rpm-test",
         path="docker/test/install/rpm",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/sqlancer-test",
+        name="altinityinfra/sqlancer-test",
         path="./ci/docker/sqlancer-test",
         platforms=Docker.Platforms.arm_amd,
         depends_on=[],
@@ -257,15 +257,15 @@ DOCKERS = [
 
 # TODO:
 # "docker/test/sqlancer": {
-#     "name": "clickhouse/sqlancer-test",
+#     "name": "altinityinfra/sqlancer-test",
 #     "dependent": []
 # },
 # "docker/test/install/deb": {
-#     "name": "clickhouse/install-deb-test",
+#     "name": "altinityinfra/install-deb-test",
 #     "dependent": []
 # },
 # "docker/test/install/rpm": {
-#     "name": "clickhouse/install-rpm-test",
+#     "name": "altinityinfra/install-rpm-test",
 #     "dependent": []
 # },
 
@@ -565,14 +565,14 @@ class Jobs:
         name=JobNames.STYLE_CHECK,
         runs_on=RunnerLabels.STYLE_CHECK_ARM,
         command="python3 ./ci/jobs/check_style.py",
-        run_in_docker="clickhouse/style-test",
+        run_in_docker="altinityinfra/style-test",
     )
 
     fast_test_job = Job.Config(
         name=JobNames.FAST_TEST,
         runs_on=RunnerLabels.BUILDER_AMD,
         command="python3 ./ci/jobs/fast_test.py",
-        run_in_docker="clickhouse/fasttest",
+        run_in_docker="altinityinfra/fasttest",
         digest_config=Job.CacheDigestConfig(
             include_paths=[
                 "./ci/jobs/fast_test.py",
@@ -588,7 +588,7 @@ class Jobs:
         runs_on=["...from params..."],
         requires=[],
         command="python3 ./ci/jobs/build_clickhouse.py --build-type {PARAMETER}",
-        run_in_docker="clickhouse/binary-builder+--network=host",
+        run_in_docker="altinityinfra/binary-builder+--network=host",
         timeout=3600 * 2,
         digest_config=Job.CacheDigestConfig(
             include_paths=[
@@ -734,7 +734,7 @@ class Jobs:
         runs_on=["..params.."],
         command="python3 ./ci/jobs/functional_stateless_tests.py --test-options {PARAMETER}",
         # many tests expect to see "/var/lib/clickhouse" in various output lines - add mount for now, consider creating this dir in docker file
-        run_in_docker="clickhouse/stateless-test+--security-opt seccomp=unconfined",
+        run_in_docker="altinityinfra/stateless-test+--security-opt seccomp=unconfined",
         digest_config=Job.CacheDigestConfig(
             include_paths=[
                 "./ci/jobs/functional_stateless_tests.py",
@@ -771,7 +771,7 @@ class Jobs:
         name=JobNames.STATEFUL,
         runs_on=RunnerLabels.FUNC_TESTER_AMD,
         command="python3 ./ci/jobs/functional_stateful_tests.py --test-options {PARAMETER}",
-        run_in_docker="clickhouse/stateless-test+--security-opt seccomp=unconfined",
+        run_in_docker="altinityinfra/stateless-test+--security-opt seccomp=unconfined",
         digest_config=Job.CacheDigestConfig(
             include_paths=[
                 "./ci/jobs/functional_stateful_tests.py",
@@ -881,7 +881,7 @@ class Jobs:
     #     digest=DigestConfig(
     #         include_paths=["./tests/ci/upgrade_check.py", "./tests/docker_scripts/"],
     #         exclude_files=[".md"],
-    #         docker=["clickhouse/stress-test"],
+    #         docker=["altinityinfra/stress-test"],
     #     ),
     #     run_command="upgrade_check.py",
     #     runner_type=Runners.FUNC_TESTER,
@@ -892,7 +892,7 @@ class Jobs:
         name=JobNames.PERFORMANCE,
         runs_on=["#from param"],
         command="python3 ./ci/jobs/performance_tests.py --test-options {PARAMETER}",
-        run_in_docker="clickhouse/stateless-test",
+        run_in_docker="altinityinfra/stateless-test",
         digest_config=Job.CacheDigestConfig(
             include_paths=[
                 "./tests/performance/",
@@ -925,7 +925,7 @@ class Jobs:
         name=JobNames.PERFORMANCE,
         runs_on=["#from param"],
         command="python3 ./ci/jobs/performance_tests.py --test-options {PARAMETER}",
-        run_in_docker="clickhouse/stateless-test",
+        run_in_docker="altinityinfra/stateless-test",
         digest_config=Job.CacheDigestConfig(
             include_paths=[
                 "./tests/performance/",
@@ -987,7 +987,7 @@ class Jobs:
         digest_config=Job.CacheDigestConfig(
             include_paths=["./ci/jobs/clickbench.py", "./ci/jobs/scripts/clickbench/"],
         ),
-        run_in_docker="clickhouse/stateless-test",
+        run_in_docker="altinityinfra/stateless-test",
         timeout=900,
     ).parametrize(
         parameter=[
@@ -1040,7 +1040,7 @@ class Jobs:
             ],
         ),
         requires=[ArtifactNames.CH_ARM_RELEASE],
-        run_in_docker="clickhouse/stateless-test",
+        run_in_docker="altinityinfra/stateless-test",
         timeout=10800,
     )
     sqlancer_job = Job.Config(
@@ -1050,7 +1050,7 @@ class Jobs:
         digest_config=Job.CacheDigestConfig(
             include_paths=["./ci/jobs/sqlancer_job.sh"],
         ),
-        run_in_docker="clickhouse/sqlancer-test",
+        run_in_docker="altinityinfra/sqlancer-test",
         requires=[ArtifactNames.CH_ARM_RELEASE],
         timeout=3600,
     )
@@ -1082,7 +1082,7 @@ class Jobs:
     #     runs_on=RunnerLabels.FUNC_TESTER_ARM,
     #     command="python3 ./ci/jobs/fuzzers_job.py",
     #     requires=[ArtifactNames.CH_ARM_RELEASE],
-    #     run_in_docker="clickhouse/stateless-test",
+    #     run_in_docker="altinityinfra/stateless-test",
     # )
     # TODO: rewrite to praktika style job (commented above)
     ast_fuzzer_jobs = Job.Config(

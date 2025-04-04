@@ -20,7 +20,7 @@ ENABLE_ARTIFACTS_REPORT = True
 DOCKERHUB_USERNAME = "robotclickhouse"
 DOCKERHUB_SECRET = "dockerhub_robot_password"
 
-CI_DB_DB_NAME = "default"
+CI_DB_DB_NAME = "gh-data"
 CI_DB_TABLE_NAME = "checks"
 SECRET_CI_DB_URL = "clickhouse-test-stat-url"
 SECRET_CI_DB_USER = "clickhouse-test-stat-login"

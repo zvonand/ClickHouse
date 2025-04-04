@@ -64,6 +64,12 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         /// controls new feature and it's 'true' by default, use 'false' as previous_value).
         /// It's used to implement `compatibility` setting (see https://github.com/ClickHouse/ClickHouse/issues/35972)
         /// Note: please check if the key already exists to prevent duplicate entries.
+
+        addSettingsChanges(settings_changes_history, "25.2.antalya",
+        {
+            {"object_storage_cluster", "", "", "New setting"},
+            {"object_storage_max_nodes", 0, 0, "New setting"},
+        });
         addSettingsChanges(settings_changes_history, "25.2",
         {
             {"schema_inference_make_json_columns_nullable", false, false, "Allow to infer Nullable(JSON) during schema inference"},
@@ -149,13 +155,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             /// Release closed. Please use 25.1
         });
         addSettingsChanges(settings_changes_history, "24.11",
-            {"object_storage_cluster_function_cluster", "", "", "New setting"},
-            {"object_storage_cluster_function_max_hosts", 0, 0, "New setting"},
-            {"object_storage_cluster", "", "", "New setting"},
-            {"object_storage_max_nodes", 0, 0, "New setting"},
-        }
-    },
-    {"24.11",
         {
             {"validate_mutation_query", false, true, "New setting to validate mutation queries by default."},
             {"enable_job_stack_trace", false, true, "Enable by default collecting stack traces from job's scheduling."},

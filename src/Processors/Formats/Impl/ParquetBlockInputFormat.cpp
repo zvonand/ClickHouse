@@ -2,6 +2,9 @@
 
 #if USE_PARQUET
 
+#include <Core/Settings.h>
+#include <Core/ServerSettings.h>
+#include <Common/ProfileEvents.h>
 #include <Columns/ColumnNullable.h>
 #include <Core/Settings.h>
 #include <Core/ServerSettings.h>

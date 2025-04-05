@@ -138,7 +138,9 @@ std::shared_ptr<IObjectIterator> StorageObjectStorageSource::createFileIterator(
 
     const bool is_archive = configuration->isArchive();
 
-    std::unique_ptr<IObjectIterator> iterator;
+    configuration->updateIfRequired(object_storage, local_context);
+
+    std::unique_ptr<IIterator> iterator;
     if (configuration->isPathWithGlobs())
     {
         auto path = configuration->getPath();

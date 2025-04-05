@@ -252,7 +252,13 @@ public:
     String structure = "auto";
 
     virtual void update(ObjectStoragePtr object_storage, ContextPtr local_context);
+    void updateIfRequired(ObjectStoragePtr object_storage, ContextPtr local_context);
 
+    /// Create arguments for table function with path and access parameters
+    virtual ASTPtr createArgsWithAccessData() const
+    {
+        throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Method createArgsWithAccessData is not supported by storage {}", getEngineName());
+    }
 
 protected:
     virtual void fromNamedCollection(const NamedCollection & collection, ContextPtr context) = 0;
@@ -261,6 +267,7 @@ protected:
     void assertInitialized() const;
 
     bool initialized = false;
+    std::atomic<bool> updated = false;
 
     bool allow_dynamic_metadata_for_data_lakes = false;
     bool allow_experimental_delta_kernel_rs = false;

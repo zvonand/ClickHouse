@@ -491,6 +491,16 @@ void ASTCreateQuery::formatQueryImpl(WriteBuffer & ostr, const FormatSettings & 
         ostr << (settings.one_line ? ")" : "\n)");
     }
 
+    frame.expression_list_always_start_on_new_line = true;
+
+    if (is_ordinary_view && aliases_list && !as_table_function)
+    {
+        ostr << (settings.one_line ? " (" : "\n(");
+        FormatStateStacked frame_nested = frame;
+        aliases_list->formatImpl(ostr, settings, state, frame_nested);
+        ostr << (settings.one_line ? ")" : "\n)");
+    }
+
     if (dictionary_attributes_list)
     {
         ostr << (settings.one_line ? " (" : "\n(");

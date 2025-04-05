@@ -2210,6 +2210,16 @@ JoinTreeQueryPlan buildJoinTreeQueryPlan(const QueryTreeNodePtr & query_node,
             continue;
         }
 
+        if (table_expression_type == QueryTreeNodeType::JOIN)
+        {
+            ++joins_count;
+            const auto & join_node = table_expression->as<const JoinNode &>();
+            if (join_node.getKind() == JoinKind::Full)
+                is_full_join = true;
+
+            continue;
+        }
+
         prepareBuildQueryPlanForTableExpression(table_expression, planner_context);
     }
 

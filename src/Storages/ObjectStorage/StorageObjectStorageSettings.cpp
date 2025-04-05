@@ -20,6 +20,9 @@ If enabled, indicates that metadata is taken from iceberg specification that is 
     DECLARE(Bool, allow_experimental_delta_kernel_rs, false, R"(
 If enabled, the engine would use delta-kernel-rs for DeltaLake metadata parsing
 )", 0) \
+    DECLARE(String, object_storage_cluster, "", R"(
+Cluster for distributed requests
+)", 0) \
 
 // clang-format on
 

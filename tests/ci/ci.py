@@ -301,6 +301,8 @@ def _pre_action(s3, job_name, batch, indata, pr_info):
         #   testing), otherwise reports won't be found
         if not (pr_info.is_scheduled or pr_info.is_dispatched):
             report_prefix = Utils.normalize_string(pr_info.head_ref)
+    elif pr_info.is_pr:
+        report_prefix = str(pr_info.number)
     print(
         f"Use report prefix [{report_prefix}], pr_num [{pr_info.number}], head_ref [{pr_info.head_ref}]"
     )
@@ -1208,6 +1210,18 @@ def main() -> int:
 
             update_cmake_version(pre_configured_version)
 
+        # NOTE (vnemkov) Job might have not checked out git tags, so it can't properly compute version number.
+        # BUT if there is pre-computed version from `RunConfig` then we can reuse it.
+        pre_configured_version = indata.get('version', None)
+        git = Git(True)
+        if pre_configured_version is not None and git.commits_since_latest == 0:
+            print(f"Updating version in repo files from '{get_version_from_repo()}' to '{pre_configured_version}'")
+
+            pre_configured_version = get_version_from_string(pre_configured_version, git)
+            # need to set description, otherwise subsequent call (perhaps from other script) to get_version_from_repo() fails
+            pre_configured_version.with_description(pre_configured_version.flavour)
+
+            update_cmake_version(pre_configured_version)
 
         if job_report.job_skipped and not args.force:
             print(

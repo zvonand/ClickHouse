@@ -48,7 +48,6 @@ AutoFDO
 AutoML
 Autocompletion
 AvroConfluent
-AvroFormatSettings
 AzureQueue
 Azurite
 BFloat

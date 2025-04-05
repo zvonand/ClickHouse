@@ -183,38 +183,6 @@ void registerTableFunctionObjectStorage(TableFunctionFactory & factory)
         .allow_readonly = false
     });
 #endif
-
-#if USE_AZURE_BLOB_STORAGE
-    factory.registerFunction<TableFunctionObjectStorage<AzureDefinition, StorageAzureConfiguration>>(
-    {
-        .documentation =
-        {
-            .description=R"(The table function can be used to read the data stored on Azure Blob Storage.)",
-            .examples{
-            {
-                "azureBlobStorage",
-                "SELECT * FROM  azureBlobStorage(connection_string|storage_account_url, container_name, blobpath, "
-                "[account_name, account_key, format, compression, structure])", ""
-            }}
-        },
-        .allow_readonly = false
-    });
-#endif
-#if USE_HDFS
-    factory.registerFunction<TableFunctionObjectStorage<HDFSDefinition, StorageHDFSConfiguration>>(
-    {
-        .documentation =
-        {
-            .description=R"(The table function can be used to read the data stored on HDFS virtual filesystem.)",
-            .examples{
-            {
-                "hdfs",
-                "SELECT * FROM  hdfs(url, format, compression, structure])", ""
-            }}
-        },
-        .allow_readonly = false
-    });
-#endif
 }
 
 #if USE_AZURE_BLOB_STORAGE

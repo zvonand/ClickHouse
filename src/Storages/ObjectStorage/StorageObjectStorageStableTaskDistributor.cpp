@@ -39,18 +39,21 @@ std::optional<String> StorageObjectStorageStableTaskDistributor::getNextTask(siz
 size_t StorageObjectStorageStableTaskDistributor::getReplicaForFile(const String & file_path)
 {
     if (!ids_of_nodes.has_value())
-        return 0;
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "No list of nodes inside Task Distributer.");
+
+    const auto & ids_of_nodes_value = ids_of_nodes.value();
+    size_t nodes_count = ids_of_nodes_value.size();
 
     /// Trivial case
-    if (ids_of_nodes.value().size() < 2)
+    if (nodes_count < 2)
         return 0;
 
     /// Rendezvous hashing
     size_t best_id = 0;
-    UInt64 best_weight = sipHash64(ids_of_nodes.value()[0] + file_path);
-    for (size_t id = ids_of_nodes.value().size() - 1; id > 0; --id)
+    UInt64 best_weight = sipHash64(ids_of_nodes_value[0] + file_path);
+    for (size_t id = 1; id < nodes_count; ++id)
     {
-        UInt64 weight = sipHash64(ids_of_nodes.value()[id] + file_path);
+        UInt64 weight = sipHash64(ids_of_nodes_value[id] + file_path);
         if (weight > best_weight)
         {
             best_weight = weight;

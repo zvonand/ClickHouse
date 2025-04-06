@@ -268,6 +268,7 @@ protected:
 
     bool initialized = false;
     std::atomic<bool> updated = false;
+
     bool allow_dynamic_metadata_for_data_lakes = false;
     bool allow_experimental_delta_kernel_rs = false;
 };

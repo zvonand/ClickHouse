@@ -52,6 +52,18 @@ def cluster():
             with_minio=True,
             stay_alive=True,
         )
+        cluster.add_instance(
+            "node_with_query_log_on_s3",
+            main_configs=[
+                "configs/storage_conf.xml",
+                "configs/query_log_conf.xml",
+            ],
+            user_configs=[
+                "configs/setting.xml",
+                "configs/no_s3_retries.xml",
+            ],
+            with_minio=True,
+        )
         logging.info("Starting cluster...")
         cluster.start()
 

@@ -141,7 +141,6 @@ std::shared_ptr<IObjectIterator> StorageObjectStorageSource::createFileIterator(
     configuration->updateIfRequired(object_storage, local_context);
 
     std::unique_ptr<IObjectIterator> iterator;
-
     if (configuration->isPathWithGlobs())
     {
         auto path = configuration->getPath();
@@ -479,6 +478,9 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
 
         if (need_only_count)
             input_format->needOnlyCount();
+
+        if (!object_info->getPath().empty())
+            input_format->setStorageRelatedUniqueKey(context_->getSettingsRef(), object_info->getPath() + ":" + object_info->metadata->etag);
 
         builder.init(Pipe(input_format));
 

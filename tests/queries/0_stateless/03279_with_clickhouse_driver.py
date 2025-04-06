@@ -5,6 +5,7 @@ import logging
 import os
 from clickhouse_driver import Client
 
+from clickhouse_driver import Client
 
 # Suppress https://github.com/regebro/tzlocal/blob/79da66645f8ce15c1b2d84a5cf350775c2ff81b3/tzlocal/unix.py#L142
 class SuppressTimezoneWarning(logging.Filter):

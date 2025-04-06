@@ -21,6 +21,7 @@ from stopwatch import Stopwatch
 from tee_popen import TeePopen
 from version_helper import (
     ClickHouseVersion,
+    VersionType,
     get_version_from_repo,
     update_version_local,
     get_version_from_tag,

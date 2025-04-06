@@ -142,6 +142,7 @@ using TableFunctionIcebergHDFSClusterFallback = TableFunctionObjectStorageCluste
 #endif
 
 #if USE_AWS_S3 && USE_PARQUET && USE_DELTA_KERNEL_RS
+
 using TableFunctionDeltaLakeClusterFallback = TableFunctionObjectStorageClusterFallback<DeltaLakeClusterFallbackDefinition, TableFunctionDeltaLakeCluster>;
 #endif
 
@@ -277,6 +278,7 @@ void registerTableFunctionObjectStorageClusterFallback(TableFunctionFactory & fa
     }
     );
 #endif
+
 
 #if USE_AWS_S3 && USE_PARQUET && USE_DELTA_KERNEL_RS
     factory.registerFunction<TableFunctionDeltaLakeClusterFallback>(

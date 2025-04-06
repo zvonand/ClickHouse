@@ -833,12 +833,12 @@ def test_evolved_schema_simple(
     execute_spark_query(
         f"""
             CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                a int NOT NULL, 
-                b float, 
+                a int NOT NULL,
+                b float,
                 c decimal(9,2) NOT NULL,
                 d array<int>
             )
-            USING iceberg 
+            USING iceberg
             OPTIONS ('format-version'='{format_version}')
         """
     )
@@ -1208,12 +1208,12 @@ def test_not_evolved_schema(started_cluster, format_version, storage_type):
     execute_spark_query(
         f"""
             CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                a int NOT NULL, 
-                b float, 
+                a int NOT NULL,
+                b float,
                 c decimal(9,2) NOT NULL,
                 d array<int>
             )
-            USING iceberg 
+            USING iceberg
             OPTIONS ('format-version'='{format_version}')
         """
     )

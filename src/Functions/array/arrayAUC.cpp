@@ -453,6 +453,8 @@ private:
             return scale_back_area(
                 area, total_positives != 0 ? total_positives : curr_tp, total_negatives != 0 ? total_negatives : curr_fp);
         }
+
+        return area;
     }
 
     static void vector(

@@ -796,6 +796,7 @@ void ParquetBlockInputFormat::initializeIfNeeded()
         return !maybe_exists;
     };
 
+    bool has_row_groups_to_read = false;
     for (int row_group = 0; row_group < num_row_groups; ++row_group)
     {
         if (skip_row_groups.contains(row_group))

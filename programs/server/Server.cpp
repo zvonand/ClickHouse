@@ -313,6 +313,7 @@ namespace ServerSetting
     extern const ServerSettingsUInt64 max_prefixes_deserialization_thread_pool_size;
     extern const ServerSettingsUInt64 max_prefixes_deserialization_thread_pool_free_size;
     extern const ServerSettingsUInt64 prefixes_deserialization_thread_pool_thread_pool_queue_size;
+    extern const ServerSettingsUInt64 input_format_parquet_metadata_cache_max_size;
 }
 
 }
@@ -2310,6 +2311,7 @@ try
         dns_cache_updater->start();
 
     auto replicas_reconnector = ReplicasReconnector::init(global_context);
+    ParquetFileMetaDataCache::instance()->setMaxSizeInBytes(server_settings[ServerSetting::input_format_parquet_metadata_cache_max_size]);
 
     /// Set current database name before loading tables and databases because
     /// system logs may copy global context.

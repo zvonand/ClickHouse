@@ -254,8 +254,6 @@ StorageObjectStorageQueue::StorageObjectStorageQueue(
         (*queue_settings_)[ObjectStorageQueueSetting::cleanup_interval_max_ms],
         getContext()->getServerSettings()[ServerSetting::keeper_multiread_batch_size]);
 
-    files_metadata = ObjectStorageQueueMetadataFactory::instance().getOrCreate(zk_path, std::move(queue_metadata), table_id_);
-
     task = getContext()->getSchedulePool().createTask("ObjectStorageQueueStreamingTask", [this] { threadFunc(); });
 }
 

@@ -64,14 +64,12 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         /// controls new feature and it's 'true' by default, use 'false' as previous_value).
         /// It's used to implement `compatibility` setting (see https://github.com/ClickHouse/ClickHouse/issues/35972)
         /// Note: please check if the key already exists to prevent duplicate entries.
-        addSettingsChanges(settings_changes_history, "25.2",
-    {"24.12.2.20000",
-        // Altinity Antalya modifications
+        addSettingsChanges(settings_changes_history, "24.12.2.20000",
         {
+                // Altinity Antalya modifications
             {"input_format_parquet_use_metadata_cache", true, true, "New setting, turned ON by default"}, // https://github.com/Altinity/ClickHouse/pull/586
-        }
-    },
-    {"24.12",
+        });
+        addSettingsChanges(settings_changes_history, "24.12",
         {
             {"schema_inference_make_json_columns_nullable", false, false, "Allow to infer Nullable(JSON) during schema inference"},
             {"query_plan_use_new_logical_join_step", false, true, "Enable new step"},
@@ -156,40 +154,10 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             /// Release closed. Please use 25.1
         });
         addSettingsChanges(settings_changes_history, "24.11",
+        {
             {"least_greatest_legacy_null_behavior", true, false, "New setting"},
             {"object_storage_cluster", "", "", "New setting"},
             {"object_storage_max_nodes", 0, 0, "New setting"},
-        }
-    },
-    {"24.11",
-        {
-            {"validate_mutation_query", false, true, "New setting to validate mutation queries by default."},
-            {"enable_job_stack_trace", false, true, "Enable by default collecting stack traces from job's scheduling."},
-            {"allow_suspicious_types_in_group_by", true, false, "Don't allow Variant/Dynamic types in GROUP BY by default"},
-            {"allow_suspicious_types_in_order_by", true, false, "Don't allow Variant/Dynamic types in ORDER BY by default"},
-            {"distributed_cache_discard_connection_if_unread_data", true, true, "New setting"},
-            {"filesystem_cache_enable_background_download_for_metadata_files_in_packed_storage", true, true, "New setting"},
-            {"filesystem_cache_enable_background_download_during_fetch", true, true, "New setting"},
-            {"azure_check_objects_after_upload", false, false, "Check each uploaded object in azure blob storage to be sure that upload was successful"},
-            {"backup_restore_keeper_max_retries", 20, 1000, "Should be big enough so the whole operation BACKUP or RESTORE operation won't fail because of a temporary [Zoo]Keeper failure in the middle of it."},
-            {"backup_restore_failure_after_host_disconnected_for_seconds", 0, 3600, "New setting."},
-            {"backup_restore_keeper_max_retries_while_initializing", 0, 20, "New setting."},
-            {"backup_restore_keeper_max_retries_while_handling_error", 0, 20, "New setting."},
-            {"backup_restore_finish_timeout_after_error_sec", 0, 180, "New setting."},
-            {"query_plan_merge_filters", false, true, "Allow to merge filters in the query plan. This is required to properly support filter-push-down with a new analyzer."},
-            {"parallel_replicas_local_plan", false, true, "Use local plan for local replica in a query with parallel replicas"},
-            {"merge_tree_use_v1_object_and_dynamic_serialization", true, false, "Add new serialization V2 version for JSON and Dynamic types"},
-            {"min_joined_block_size_bytes", 524288, 524288, "New setting."},
-            {"allow_experimental_bfloat16_type", false, false, "Add new experimental BFloat16 type"},
-            {"filesystem_cache_skip_download_if_exceeds_per_query_cache_write_limit", 1, 1, "Rename of setting skip_download_if_exceeds_query_cache_limit"},
-            {"filesystem_cache_prefer_bigger_buffer_size", true, true, "New setting"},
-            {"read_in_order_use_virtual_row", false, false, "Use virtual row while reading in order of primary key or its monotonic function fashion. It is useful when searching over multiple parts as only relevant ones are touched."},
-            {"s3_skip_empty_files", false, true, "We hope it will provide better UX"},
-            {"filesystem_cache_boundary_alignment", 0, 0, "New setting"},
-            {"push_external_roles_in_interserver_queries", false, true, "New setting."},
-            {"enable_variant_type", false, false, "Add alias to allow_experimental_variant_type"},
-            {"enable_dynamic_type", false, false, "Add alias to allow_experimental_dynamic_type"},
-            {"enable_json_type", false, false, "Add alias to allow_experimental_json_type"},
         });
         addSettingsChanges(settings_changes_history, "24.10",
         {

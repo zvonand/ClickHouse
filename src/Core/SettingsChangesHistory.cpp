@@ -88,13 +88,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"s3_allow_multipart_copy", true, true, "New setting."},
         });
         addSettingsChanges(settings_changes_history, "25.1",
-    {"24.12.2.20000",
-        // Altinity Antalya modifications
-        {
-            {"input_format_parquet_use_metadata_cache", true, true, "New setting, turned ON by default"}, // https://github.com/Altinity/ClickHouse/pull/586
-        }
-    },
-    {"24.12",
         {
             /// Release closed. Please use 25.2
             {"allow_not_comparable_types_in_order_by", true, false, "Don't allow not comparable types in order by by default"},

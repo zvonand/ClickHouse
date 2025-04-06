@@ -6,9 +6,6 @@
 #include <Core/ServerSettings.h>
 #include <Common/ProfileEvents.h>
 #include <Columns/ColumnNullable.h>
-#include <Core/Settings.h>
-#include <Core/ServerSettings.h>
-#include <Common/ProfileEvents.h>
 #include <Common/logger_useful.h>
 #include <Common/ThreadPool.h>
 #include <Formats/FormatFactory.h>
@@ -770,8 +767,6 @@ void ParquetBlockInputFormat::initializeIfNeeded()
             filtering_columns = getBloomFilterFilteringColumnKeys(key_condition_with_bloom_filter_data->getRPN());
         }
     }
-
-    bool has_row_groups_to_read = false;
 
     auto skip_row_group_based_on_filters = [&](int row_group)
     {

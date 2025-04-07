@@ -75,7 +75,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             // Altinity Antalya modifications atop of 24.12
             {"input_format_parquet_use_metadata_cache", true, true, "New setting, turned ON by default"}, // https://github.com/Altinity/ClickHouse/pull/586
         });
-        addSettingsChanges(settings_changes_history, "24.12",
+        addSettingsChanges(settings_changes_history, "25.2",
         {
             {"schema_inference_make_json_columns_nullable", false, false, "Allow to infer Nullable(JSON) during schema inference"},
             {"query_plan_use_new_logical_join_step", false, true, "Enable new step"},

@@ -33,11 +33,6 @@ bool DeltaLakeMetadataDeltaKernel::update(const ContextPtr &)
     return table_snapshot->update();
 }
 
-Strings DeltaLakeMetadataDeltaKernel::getDataFiles() const
-{
-    throwNotImplemented("getDataFiles()");
-}
-
 ObjectIterator DeltaLakeMetadataDeltaKernel::iterate(
     const ActionsDAG * filter_dag,
     FileProgressCallback callback,

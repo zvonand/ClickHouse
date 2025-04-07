@@ -8,7 +8,7 @@ node3 = cluster.add_instance("node3", main_configs=["configs/config.d/cluster.xm
 
 
 @pytest.fixture(scope="module")
-def start_cluster():
+def started_cluster():
     try:
         cluster.start()
         yield cluster

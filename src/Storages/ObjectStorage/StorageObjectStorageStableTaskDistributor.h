@@ -16,9 +16,6 @@ namespace DB
 class StorageObjectStorageStableTaskDistributor
 {
 public:
-    using IObjectIterator = StorageObjectStorageSource::IIterator;
-    using ObjectInfoPtr = StorageObjectStorage::ObjectInfoPtr;
-
     StorageObjectStorageStableTaskDistributor(
         std::shared_ptr<IObjectIterator> iterator_,
         std::optional<std::vector<std::string>> ids_of_nodes_);

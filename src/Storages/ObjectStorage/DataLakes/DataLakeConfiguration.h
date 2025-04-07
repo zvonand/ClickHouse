@@ -347,10 +347,10 @@ public:
         ASTs & engine_args,
         ContextPtr local_context,
         bool with_table_structure,
-        std::unique_ptr<StorageObjectStorageSettings> settings) override
+        StorageObjectStorageSettings * settings) override
     {
         createDynamicConfiguration(engine_args, local_context);
-        getImpl().initialize(engine_args, local_context, with_table_structure, std::move(settings));
+        getImpl().initialize(engine_args, local_context, with_table_structure, settings);
     }
 
     ASTPtr createArgsWithAccessData() const override

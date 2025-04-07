@@ -130,7 +130,7 @@ void registerTableFunctionIcebergCluster(TableFunctionFactory & factory)
                 {"icebergCluster", "SELECT * FROM icebergCluster(cluster, uri, [format], [structure], [compression_method], storage_type='hdfs')", ""},
 #   endif
             },
-            .categories{"DataLake"}},
+            .category{""}},
          .allow_readonly = false});
 
 #   if USE_AWS_S3

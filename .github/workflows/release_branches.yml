@@ -501,6 +501,7 @@ jobs:
           COMMIT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           PR_NUMBER: ${{ github.event.number }}
           ACTIONS_RUN_URL: ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           pip install clickhouse-driver==0.2.8 numpy==1.26.4 pandas==2.0.3

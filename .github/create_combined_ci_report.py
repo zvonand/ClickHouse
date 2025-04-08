@@ -18,79 +18,170 @@ S3_BUCKET = "altinity-build-artifacts"
 
 
 css = """
-/* Base colors inspired by Altinity */
-:root {
-  --altinity-background: #000D45;
-  --altinity-accent: #189DCF;
-  --altinity-highlight: #FFC600;
-  --altinity-gray: #6c757d;
-  --altinity-light-gray: #f8f9fa;
-  --altinity-white: #ffffff;
-}
+    /* Base colors inspired by Altinity */
+    :root {
+    --altinity-background: #000D45;
+    --altinity-accent: #189DCF;
+    --altinity-highlight: #FFC600;
+    --altinity-gray: #6c757d;
+    --altinity-light-gray: #f8f9fa;
+    --altinity-white: #ffffff;
+    }
 
-/* Body and heading fonts */
-body {
-  font-family: Arimo, "Proxima Nova", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 1rem;
-  background-color: var(--altinity-background);
-  color: var(--altinity-light-gray);
-  padding: 2rem;
-}
+    /* Body and heading fonts */
+    body {
+    font-family: Arimo, "Proxima Nova", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 1rem;
+    background-color: var(--altinity-background);
+    color: var(--altinity-light-gray);
+    padding: 2rem;
+    }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: Figtree, "Proxima Nova", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  color: var(--altinity-white);
-}
+    h1, h2, h3, h4, h5, h6 {
+    font-family: Figtree, "Proxima Nova", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--altinity-white);
+    }
 
-/* General table styling */
-table {
-  min-width: min(900px, 98vw);
-  margin: 1rem 0;
-  border-collapse: collapse;
-  background-color: var(--altinity-white);
-  border-color: var(--altinity-accent);
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
-  color: var(--altinity-background);
-}
+    /* General table styling */
+    table {
+    min-width: min(900px, 98vw);
+    margin: 1rem 0;
+    border-collapse: collapse;
+    background-color: var(--altinity-white);
+    border-color: var(--altinity-accent);
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
+    color: var(--altinity-background);
+    }
 
-/* Table header styling */
-th {
-  background-color: var(--altinity-accent);
-  color: var(--altinity-white);
-  padding: 10px 16px;
-  text-align: left;
-  border-bottom: 2px solid var(--altinity-background);
-  white-space: nowrap;
-}
-th.hth {
+    /* Table header styling */
+    th {
+    background-color: var(--altinity-accent);
+    color: var(--altinity-white);
+    padding: 10px 16px;
+    text-align: left;
+    border-bottom: 2px solid var(--altinity-background);
+    white-space: nowrap;
+    }
+    th.hth {
+        border-bottom: 1px solid var(--altinity-accent);
+        border-right: 2px solid var(--altinity-background);
+    }
+
+    /* Table header sorting styling */
+    th {
+        cursor: pointer;
+    }
+    th.no-sort {
+        pointer-events: none;
+    }
+    th::after, 
+    th::before {
+        transition: color 0.2s ease-in-out;
+        font-size: 1.2em;
+        color: transparent;
+    }
+    th::after {
+        margin-left: 3px;
+        content: '\\025B8';
+    }
+    th:hover::after {
+        color: inherit;
+    }
+    th.dir-d::after {
+        color: inherit;
+        content: '\\025BE';
+    }
+    th.dir-u::after {
+        color: inherit;
+        content: '\\025B4';
+    }
+
+    /* Table body row styling */
+    tr:hover {
+    background-color: var(--altinity-light-gray);
+    }
+
+    /* Table cell styling */
+    td {
+    padding: 8px 8px;
+    border-color: var(--altinity-accent);
     border-bottom: 1px solid var(--altinity-accent);
-    border-right: 2px solid var(--altinity-background);
-}
+    }
 
-/* Table body row styling */
-tr:hover {
-  background-color: var(--altinity-light-gray);
-}
-
-/* Table cell styling */
-td {
-  padding: 8px 8px;
-  border-color: var(--altinity-accent);
-  border-bottom: 1px solid var(--altinity-accent);
-}
-
-/* Link styling */
-a {
-  color: var(--altinity-accent);
-  text-decoration: none;
-}
-a:hover {
-  color: var(--altinity-highlight);
-  text-decoration: underline;
-}
-
+    /* Link styling */
+    a {
+    color: var(--altinity-accent);
+    text-decoration: none;
+    }
+    a:hover {
+    color: var(--altinity-highlight);
+    text-decoration: underline;
+    }
 """
 
+script = """
+<script>
+    document.addEventListener('click', function (e) {
+    try {
+        function findElementRecursive(element, tag) {
+        return element.nodeName === tag ? element : 
+        findElementRecursive(element.parentNode, tag)
+        }
+        var descending_th_class = ' dir-d '
+        var ascending_th_class = ' dir-u '
+        var ascending_table_sort_class = 'asc'
+        var regex_dir = / dir-(u|d) /
+        var alt_sort = e.shiftKey || e.altKey
+        var element = findElementRecursive(e.target, 'TH')
+        var tr = findElementRecursive(element, 'TR')
+        var table = findElementRecursive(tr, 'TABLE')
+        function reClassify(element, dir) {
+        element.className = element.className.replace(regex_dir, '') + dir
+        }
+        function getValue(element) {
+        return (
+            (alt_sort && element.getAttribute('data-sort-alt')) || 
+        element.getAttribute('data-sort') || element.innerText
+        )
+        }
+        if (true) {
+        var column_index
+        var nodes = tr.cells
+        for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i] === element) {
+            column_index = element.getAttribute('data-sort-col') || i
+            } else {
+            reClassify(nodes[i], '')
+            }
+        }
+        var dir = descending_th_class
+        if (
+            element.className.indexOf(descending_th_class) !== -1 ||
+            (table.className.indexOf(ascending_table_sort_class) !== -1 &&
+            element.className.indexOf(ascending_th_class) == -1)
+        ) {
+            dir = ascending_th_class
+        }
+        reClassify(element, dir)
+        var org_tbody = table.tBodies[0]
+        var rows = [].slice.call(org_tbody.rows, 0)
+        var reverse = dir === ascending_th_class
+        rows.sort(function (a, b) {
+            var x = getValue((reverse ? a : b).cells[column_index])
+            var y = getValue((reverse ? b : a).cells[column_index])
+            return isNaN(x - y) ? x.localeCompare(y) : x - y
+        })
+        var clone_tbody = org_tbody.cloneNode()
+        while (rows.length) {
+            clone_tbody.appendChild(rows.splice(0, 1)[0])
+        }
+        table.replaceChild(clone_tbody, org_tbody)
+        }
+    } catch (error) {
+    }
+    });
+</script>
+"""
 
 def get_commit_statuses(sha: str) -> pd.DataFrame:
     """
@@ -358,10 +449,10 @@ def main():
     <h1>{title}</h1>
     <table border="1">
         <tr>
-            <th class='hth'>Task</th><td><a href="{args.actions_run_url}">{args.actions_run_url.split('/')[-1]}</a></td>
+            <th class='hth no-sort'>Task</th><td><a href="{args.actions_run_url}">{args.actions_run_url.split('/')[-1]}</a></td>
         </tr>
         <tr>
-            <th class='hth'>Commit</th><td><a href="https://github.com/Altinity/ClickHouse/commit/{args.commit_sha}">{args.commit_sha}</a></td>
+            <th class='hth no-sort'>Commit</th><td><a href="https://github.com/Altinity/ClickHouse/commit/{args.commit_sha}">{args.commit_sha}</a></td>
         </tr>
     </table>
 
@@ -390,6 +481,7 @@ def main():
 <h2 id="checks-known-fails">Checks Known Fails</h2>
 {format_results_as_html_table(fail_results['checks_known_fails'])}
 
+{script}
 </body>
 </html>
 """

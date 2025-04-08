@@ -788,8 +788,12 @@ def test_distributed_s3_table_engine(started_cluster):
     assert int(hosts_engine_distributed) == 3
 
 
-def test_hive_partitioning(started_cluster):
+@pytest.mark.parametrize("allow_experimental_analyzer", [0, 1])
+def test_hive_partitioning(started_cluster, allow_experimental_analyzer):
     node = started_cluster.instances["s0_0_0"]
+
+    node.query(f"SET allow_experimental_analyzer = {allow_experimental_analyzer}")
+
     for i in range(1, 5):
         exists = node.query(
             f"""
@@ -912,3 +916,5 @@ def test_hive_partitioning(started_cluster):
     )
     cluster_optimized_traffic = int(cluster_optimized_traffic)
     assert cluster_optimized_traffic == optimized_traffic
+
+    node.query("SET allow_experimental_analyzer = DEFAULT")

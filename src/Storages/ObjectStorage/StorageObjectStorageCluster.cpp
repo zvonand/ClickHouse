@@ -183,6 +183,7 @@ void StorageObjectStorageCluster::updateQueryForDistributedEngineIfNeeded(ASTPtr
         {"S3", "s3"},
         {"Azure", "azureBlobStorage"},
         {"HDFS", "hdfs"},
+        {"Iceberg", "iceberg"},
         {"IcebergS3", "icebergS3"},
         {"IcebergAzure", "icebergAzure"},
         {"IcebergHDFS", "icebergHDFS"},
@@ -269,6 +270,8 @@ void StorageObjectStorageCluster::updateQueryToSendIfNeeded(
             configuration->getEngineName());
     }
 
+    ASTPtr object_storage_type_arg;
+    configuration->extractDynamicStorageType(args, context, &object_storage_type_arg);
     if (cluster_name_in_settings)
     {
         configuration->addStructureAndFormatToArgsIfNeeded(args, structure, configuration->format, context, /*with_structure=*/true);
@@ -329,6 +332,8 @@ void StorageObjectStorageCluster::updateQueryToSendIfNeeded(
         configuration->addStructureAndFormatToArgsIfNeeded(args, structure, configuration->format, context, /*with_structure=*/true);
         args.insert(args.begin(), cluster_name_arg);
     }
+    if (object_storage_type_arg)
+        args.insert(args.end(), object_storage_type_arg);
 }
 
 RemoteQueryExecutor::Extension StorageObjectStorageCluster::getTaskIteratorExtension(

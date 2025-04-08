@@ -9,11 +9,112 @@ import requests
 from clickhouse_driver import Client
 import boto3
 from botocore.exceptions import NoCredentialsError
+import pandas as pd
 
 DATABASE_HOST_VAR = "CHECKS_DATABASE_HOST"
 DATABASE_USER_VAR = "CHECKS_DATABASE_USER"
 DATABASE_PASSWORD_VAR = "CHECKS_DATABASE_PASSWORD"
 S3_BUCKET = "altinity-build-artifacts"
+
+
+css = """
+/* Base colors inspired by Altinity */
+:root {
+  --altinity-blue: #007bff;
+  --altinity-dark-blue: #0056b3;
+  --altinity-light-gray: #f8f9fa;
+  --altinity-gray: #6c757d;
+  --altinity-white: #ffffff;
+}
+
+/* Body and heading fonts */
+body {
+  font-family: "DejaVu Sans", "Noto Sans", Arial, sans-serif;
+  font-size: 0.9rem;
+  background-color: var(--altinity-light-gray);
+  color: var(--altinity-gray);
+  padding: 2rem;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--altinity-dark-blue);
+}
+
+/* General table styling */
+table {
+  min-width: min(900px, 98vw);
+  margin: 1rem 0;
+  border-collapse: collapse;
+  background-color: var(--altinity-white);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Table header styling */
+th {
+  background-color: var(--altinity-blue);
+  color: var(--altinity-white);
+  padding: 10px 16px;
+  text-align: left;
+  border-bottom: 2px solid var(--altinity-dark-blue);
+  white-space: nowrap;
+}
+
+/* Table body row styling */
+tr:nth-child(even) {
+  background-color: var(--altinity-light-gray);
+}
+
+tr:hover {
+  background-color: var(--altinity-dark-blue);
+  color: var(--altinity-white);
+}
+
+/* Table cell styling */
+td {
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--altinity-gray);
+}
+
+"""
+
+
+def get_commit_statuses(sha: str) -> pd.DataFrame:
+    """
+    Fetch commit statuses for a given SHA and return as a pandas DataFrame.
+
+    Args:
+        sha (str): Commit SHA to fetch statuses for.
+
+    Returns:
+        pd.DataFrame: DataFrame containing all statuses.
+    """
+    headers = {
+        "Authorization": f"token {os.getenv('GITHUB_TOKEN')}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    url = f"https://api.github.com/repos/Altinity/ClickHouse/commits/{sha}/statuses"
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        raise Exception(
+            f"Failed to fetch statuses: {response.status_code} {response.text}"
+        )
+
+    data = response.json()
+
+    # Parse relevant fields
+    parsed = [
+        {
+            "test_name": item["context"],
+            "test_status": item["state"],
+            # "description": item["description"],
+            "results_link": item["target_url"],
+        }
+        for item in data
+    ]
+
+    return pd.DataFrame(parsed)
 
 
 def get_checks_fails(client: Client, job_url: str):
@@ -137,24 +238,29 @@ def format_test_name_for_linewrap(text: str) -> str:
     return text.replace(".py::", "/")
 
 
+def format_test_status(text: str) -> str:
+    """Format the test status for better readability."""
+    color = (
+        "red"
+        if text.lower().startswith("fail")
+        else "orange" if text.lower() == "error" else "green"
+    )
+    return f'<span style="font-weight: bold; color: {color}">{text}</span>'
+
+
 def format_results_as_html_table(results) -> str:
     if len(results) == 0:
         return "<p>Nothing to report</p>"
     results.columns = [col.replace("_", " ").title() for col in results.columns]
-    html = (
-        results.to_html(
-            index=False,
-            formatters={
-                "Results Link": url_to_html_link,
-                "Test Name": format_test_name_for_linewrap,
-            },
-            escape=False,
-        )  # tbody/thead tags interfere with the table sorting script
-        .replace("<tbody>\n", "")
-        .replace("</tbody>\n", "")
-        .replace("<thead>\n", "")
-        .replace("</thead>\n", "")
-        .replace('<table border="1"', '<table style="min-width: min(900px, 98vw);"')
+    html = results.to_html(
+        index=False,
+        formatters={
+            "Results Link": url_to_html_link,
+            "Test Name": format_test_name_for_linewrap,
+            "Test Status": format_test_status,
+            "Check Status": format_test_status,
+        },
+        escape=False,
     )
     return html
 
@@ -195,22 +301,8 @@ def main():
         settings={"use_numpy": True},
     )
 
-    s3_path = (
-        f"https://s3.amazonaws.com/{S3_BUCKET}/{args.pr_number}/{args.commit_sha}/"
-    )
-    report_destination_url = s3_path + "combined_report.html"
-    ci_running_report_url = s3_path + "ci_running.html"
-
-    response = requests.get(ci_running_report_url)
-    if response.status_code == 200:
-        ci_running_report: str = response.text
-    else:
-        print(
-            f"Failed to download CI running report. Status code: {response.status_code}, Response: {response.text}"
-        )
-        exit(1)
-
     fail_results = {
+        "job_statuses": get_commit_statuses(args.commit_sha),
         "checks_fails": get_checks_fails(db_client, args.actions_run_url),
         "checks_known_fails": [],
         "checks_errors": get_checks_errors(db_client, args.actions_run_url),
@@ -230,27 +322,34 @@ def main():
                 db_client, args.actions_run_url, known_fails
             )
 
-    combined_report = (
-        ci_running_report.replace("ClickHouse CI running for", "Combined CI Report for")
-        .replace(
-            "<table>",
-            f"""<h2>Table of Contents</h2>
+    title = "CI Test Report"
+
+    html_report = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>{css}
+    </style>
+    <title>{title}</title>
+</head>
+<body>
+    <h1>{title}</h1>
+    <p>Generated from <a href="{args.actions_run_url}">GitHub Actions</a></p>
+
+    <h2>Table of Contents</h2>
 {'<p style="font-weight: bold;color: #F00;">This is a preview. FinishCheck has not completed.</p>' if args.mark_preview else ""}
 <ul>
-    <li><a href="#ci-jobs-status">CI Jobs Status</a></li>
+    <li><a href="#ci-jobs-status">CI Jobs Status</a> ({sum(fail_results['job_statuses']['test_status'] != 'success')} fail/error)</li>
     <li><a href="#checks-errors">Checks Errors</a> ({len(fail_results['checks_errors'])})</li>
     <li><a href="#checks-fails">Checks New Fails</a> ({len(fail_results['checks_fails'])})</li>
     <li><a href="#regression-fails">Regression New Fails</a> ({len(fail_results['regression_fails'])})</li>
     <li><a href="#checks-known-fails">Checks Known Fails</a> ({len(fail_results['checks_known_fails'])})</li>
 </ul>
 
-<h2 id="ci-jobs-status">CI Jobs Status</h2>
-<table>""",
-            1,
-        )
-        .replace(
-            "</table>",
-            f"""</table>
+<h2 id="ci-jobs-status">CI Jobs Status</h2> 
+{format_results_as_html_table(fail_results['job_statuses'])}
 
 <h2 id="checks-errors">Checks Errors</h2>
 {format_results_as_html_table(fail_results['checks_errors'])}
@@ -263,16 +362,19 @@ def main():
 
 <h2 id="checks-known-fails">Checks Known Fails</h2>
 {format_results_as_html_table(fail_results['checks_known_fails'])}
-""",
-            1,
-        )
-    )
-    report_path = Path("combined_report.html")
-    report_path.write_text(combined_report, encoding="utf-8")
+
+</body>
+</html>
+"""
+
+    report_path = Path("ci_test_report.html")
+    report_path.write_text(html_report, encoding="utf-8")
 
     if args.no_upload:
         print(f"Report saved to {report_path}")
         exit(0)
+
+    report_destination_key = f"{args.pr_number}/{args.commit_sha}/ci_test_report.html"
 
     # Upload the report to S3
     s3_client = boto3.client("s3")
@@ -280,14 +382,14 @@ def main():
     try:
         s3_client.put_object(
             Bucket=S3_BUCKET,
-            Key=f"{args.pr_number}/{args.commit_sha}/combined_report.html",
-            Body=combined_report,
+            Key=report_destination_key,
+            Body=html_report,
             ContentType="text/html; charset=utf-8",
         )
     except NoCredentialsError:
         print("Credentials not available for S3 upload.")
 
-    print(report_destination_url)
+    print(f"https://s3.amazonaws.com/{S3_BUCKET}/" + report_destination_key)
 
 
 if __name__ == "__main__":

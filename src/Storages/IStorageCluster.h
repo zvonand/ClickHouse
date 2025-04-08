@@ -39,6 +39,7 @@ public:
         bool async_insert) override;
 
     ClusterPtr getCluster(ContextPtr context) const { return getClusterImpl(context, cluster_name); }
+
     /// Query is needed for pruning by virtual columns (_file, _path)
     virtual RemoteQueryExecutor::Extension getTaskIteratorExtension(
         const ActionsDAG::Node * predicate,
@@ -82,7 +83,7 @@ protected:
     }
 
 private:
-    static ClusterPtr getClusterImpl(ContextPtr context, const String & cluster_name_);
+    static ClusterPtr getClusterImpl(ContextPtr context, const String & cluster_name_, size_t max_hosts = 0);
 
     LoggerPtr log;
     String cluster_name;

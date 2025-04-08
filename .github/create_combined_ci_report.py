@@ -58,6 +58,10 @@ th {
   border-bottom: 2px solid var(--altinity-dark-blue);
   white-space: nowrap;
 }
+th.hth {
+    border-bottom: 1px solid var(--altinity-gray);
+    border-right: 2px solid var(--altinity-dark-blue);
+}
 
 /* Table body row styling */
 tr:nth-child(even) {
@@ -108,13 +112,17 @@ def get_commit_statuses(sha: str) -> pd.DataFrame:
         {
             "test_name": item["context"],
             "test_status": item["state"],
-            # "description": item["description"],
+            "message": item["description"],
             "results_link": item["target_url"],
         }
         for item in data
     ]
 
-    return pd.DataFrame(parsed)
+    return (
+        pd.DataFrame(parsed)
+        .sort_values(by=["test_status", "test_name"], ascending=[True, True])
+        .reset_index(drop=True)
+    )
 
 
 def get_checks_fails(client: Client, job_url: str):
@@ -259,6 +267,7 @@ def format_results_as_html_table(results) -> str:
             "Test Name": format_test_name_for_linewrap,
             "Test Status": format_test_status,
             "Check Status": format_test_status,
+            "Message": lambda m: m.replace("\n", " "),
         },
         escape=False,
     )
@@ -336,7 +345,14 @@ def main():
 </head>
 <body>
     <h1>{title}</h1>
-    <p>Generated from <a href="{args.actions_run_url}">GitHub Actions</a></p>
+    <table border="1">
+        <tr>
+            <th class='hth'>Task</th><td><a href="{args.actions_run_url}">{args.actions_run_url.split('/')[-1]}</a></td>
+        </tr>
+        <tr>
+            <th class='hth'>Commit</th><td><a href="https://github.com/Altinity/ClickHouse/commit/{args.commit_sha}">{args.commit_sha}</a></td>
+        </tr>
+    </table>
 
     <h2>Table of Contents</h2>
 {'<p style="font-weight: bold;color: #F00;">This is a preview. FinishCheck has not completed.</p>' if args.mark_preview else ""}

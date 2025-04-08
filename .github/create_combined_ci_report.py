@@ -20,24 +20,26 @@ S3_BUCKET = "altinity-build-artifacts"
 css = """
 /* Base colors inspired by Altinity */
 :root {
-  --altinity-blue: #007bff;
-  --altinity-dark-blue: #0056b3;
-  --altinity-light-gray: #f8f9fa;
+  --altinity-background: #000D45;
+  --altinity-accent: #189DCF;
+  --altinity-highlight: #FFC600;
   --altinity-gray: #6c757d;
+  --altinity-light-gray: #f8f9fa;
   --altinity-white: #ffffff;
 }
 
 /* Body and heading fonts */
 body {
-  font-family: "DejaVu Sans", "Noto Sans", Arial, sans-serif;
-  font-size: 0.9rem;
-  background-color: var(--altinity-light-gray);
-  color: var(--altinity-gray);
+  font-family: Arimo, "Proxima Nova", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 1rem;
+  background-color: var(--altinity-background);
+  color: var(--altinity-light-gray);
   padding: 2rem;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  color: var(--altinity-dark-blue);
+  font-family: Figtree, "Proxima Nova", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: var(--altinity-white);
 }
 
 /* General table styling */
@@ -46,37 +48,45 @@ table {
   margin: 1rem 0;
   border-collapse: collapse;
   background-color: var(--altinity-white);
+  border-color: var(--altinity-accent);
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
+  color: var(--altinity-background);
 }
 
 /* Table header styling */
 th {
-  background-color: var(--altinity-blue);
+  background-color: var(--altinity-accent);
   color: var(--altinity-white);
   padding: 10px 16px;
   text-align: left;
-  border-bottom: 2px solid var(--altinity-dark-blue);
+  border-bottom: 2px solid var(--altinity-background);
   white-space: nowrap;
 }
 th.hth {
-    border-bottom: 1px solid var(--altinity-gray);
-    border-right: 2px solid var(--altinity-dark-blue);
+    border-bottom: 1px solid var(--altinity-accent);
+    border-right: 2px solid var(--altinity-background);
 }
 
 /* Table body row styling */
-tr:nth-child(even) {
-  background-color: var(--altinity-light-gray);
-}
-
 tr:hover {
-  background-color: var(--altinity-dark-blue);
-  color: var(--altinity-white);
+  background-color: var(--altinity-light-gray);
 }
 
 /* Table cell styling */
 td {
   padding: 8px 8px;
-  border-bottom: 1px solid var(--altinity-gray);
+  border-color: var(--altinity-accent);
+  border-bottom: 1px solid var(--altinity-accent);
+}
+
+/* Link styling */
+a {
+  color: var(--altinity-accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--altinity-highlight);
+  text-decoration: underline;
 }
 
 """
@@ -267,6 +277,7 @@ def format_results_as_html_table(results) -> str:
             "Test Name": format_test_name_for_linewrap,
             "Test Status": format_test_status,
             "Check Status": format_test_status,
+            "Status": format_test_status,
             "Message": lambda m: m.replace("\n", " "),
         },
         escape=False,

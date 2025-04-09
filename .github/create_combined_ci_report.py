@@ -4,17 +4,229 @@ import os
 from pathlib import Path
 from itertools import combinations
 import json
+from datetime import datetime
 
 import requests
 import pandas as pd
 from clickhouse_driver import Client
 import boto3
 from botocore.exceptions import NoCredentialsError
+import pandas as pd
 
 DATABASE_HOST_VAR = "CHECKS_DATABASE_HOST"
 DATABASE_USER_VAR = "CHECKS_DATABASE_USER"
 DATABASE_PASSWORD_VAR = "CHECKS_DATABASE_PASSWORD"
 S3_BUCKET = "altinity-build-artifacts"
+
+
+css = """
+    /* Base colors inspired by Altinity */
+    :root {
+        --altinity-background: #000D45;
+        --altinity-accent: #189DCF;
+        --altinity-highlight: #FFC600;
+        --altinity-gray: #6c757d;
+        --altinity-light-gray: #f8f9fa;
+        --altinity-white: #ffffff;
+    }
+
+    /* Body and heading fonts */
+    body {
+        font-family: Arimo, "Proxima Nova", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-size: 1rem;
+        background-color: var(--altinity-background);
+        color: var(--altinity-light-gray);
+        padding: 2rem;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        font-family: Figtree, "Proxima Nova", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: var(--altinity-white);
+    }
+
+    /* General table styling */
+    table {
+        min-width: min(900px, 98vw);
+        margin: 1rem 0;
+        border-collapse: collapse;
+        background-color: var(--altinity-white);
+        border: 1px solid var(--altinity-accent);
+        box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
+        color: var(--altinity-background);
+    }
+
+    /* Table header styling */
+    th {
+        background-color: var(--altinity-accent);
+        color: var(--altinity-white);
+        padding: 10px 16px;
+        text-align: left;
+        border: none;
+        border-bottom: 2px solid var(--altinity-background);
+        white-space: nowrap;
+    }
+    th.hth {
+        border-bottom: 1px solid var(--altinity-accent);
+        border-right: 2px solid var(--altinity-background);
+    }
+
+    /* Table header sorting styling */
+    th {
+        cursor: pointer;
+    }
+    th.no-sort {
+        pointer-events: none;
+    }
+    th::after, 
+    th::before {
+        transition: color 0.2s ease-in-out;
+        font-size: 1.2em;
+        color: transparent;
+    }
+    th::after {
+        margin-left: 3px;
+        content: '\\025B8';
+    }
+    th:hover::after {
+        color: inherit;
+    }
+    th.dir-d::after {
+        color: inherit;
+        content: '\\025BE';
+    }
+    th.dir-u::after {
+        color: inherit;
+        content: '\\025B4';
+    }
+
+    /* Table body row styling */
+    tr:hover {
+        background-color: var(--altinity-light-gray);
+    }
+
+    /* Table cell styling */
+    td {
+        padding: 8px 8px;
+        border: 1px solid var(--altinity-accent);
+    }
+
+    /* Link styling */
+    a {
+        color: var(--altinity-accent);
+        text-decoration: none;
+    }
+    a:hover {
+        color: var(--altinity-highlight);
+        text-decoration: underline;
+    }
+"""
+
+script = """
+<script>
+    document.addEventListener('click', function (e) {
+    try {
+        function findElementRecursive(element, tag) {
+        return element.nodeName === tag ? element : 
+        findElementRecursive(element.parentNode, tag)
+        }
+        var descending_th_class = ' dir-d '
+        var ascending_th_class = ' dir-u '
+        var ascending_table_sort_class = 'asc'
+        var regex_dir = / dir-(u|d) /
+        var alt_sort = e.shiftKey || e.altKey
+        var element = findElementRecursive(e.target, 'TH')
+        var tr = findElementRecursive(element, 'TR')
+        var table = findElementRecursive(tr, 'TABLE')
+        function reClassify(element, dir) {
+        element.className = element.className.replace(regex_dir, '') + dir
+        }
+        function getValue(element) {
+        return (
+            (alt_sort && element.getAttribute('data-sort-alt')) || 
+        element.getAttribute('data-sort') || element.innerText
+        )
+        }
+        if (true) {
+        var column_index
+        var nodes = tr.cells
+        for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i] === element) {
+            column_index = element.getAttribute('data-sort-col') || i
+            } else {
+            reClassify(nodes[i], '')
+            }
+        }
+        var dir = descending_th_class
+        if (
+            element.className.indexOf(descending_th_class) !== -1 ||
+            (table.className.indexOf(ascending_table_sort_class) !== -1 &&
+            element.className.indexOf(ascending_th_class) == -1)
+        ) {
+            dir = ascending_th_class
+        }
+        reClassify(element, dir)
+        var org_tbody = table.tBodies[0]
+        var rows = [].slice.call(org_tbody.rows, 0)
+        var reverse = dir === ascending_th_class
+        rows.sort(function (a, b) {
+            var x = getValue((reverse ? a : b).cells[column_index])
+            var y = getValue((reverse ? b : a).cells[column_index])
+            return isNaN(x - y) ? x.localeCompare(y) : x - y
+        })
+        var clone_tbody = org_tbody.cloneNode()
+        while (rows.length) {
+            clone_tbody.appendChild(rows.splice(0, 1)[0])
+        }
+        table.replaceChild(clone_tbody, org_tbody)
+        }
+    } catch (error) {
+    }
+    });
+</script>
+"""
+
+
+def get_commit_statuses(sha: str) -> pd.DataFrame:
+    """
+    Fetch commit statuses for a given SHA and return as a pandas DataFrame.
+
+    Args:
+        sha (str): Commit SHA to fetch statuses for.
+
+    Returns:
+        pd.DataFrame: DataFrame containing all statuses.
+    """
+    headers = {
+        "Authorization": f"token {os.getenv('GITHUB_TOKEN')}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    url = f"https://api.github.com/repos/Altinity/ClickHouse/commits/{sha}/statuses"
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        raise Exception(
+            f"Failed to fetch statuses: {response.status_code} {response.text}"
+        )
+
+    data = response.json()
+
+    # Parse relevant fields
+    parsed = [
+        {
+            "test_name": item["context"],
+            "test_status": item["state"],
+            "message": item["description"],
+            "results_link": item["target_url"],
+        }
+        for item in data
+    ]
+
+    return (
+        pd.DataFrame(parsed)
+        .sort_values(by=["test_status", "test_name"], ascending=[True, True])
+        .reset_index(drop=True)
+    )
 
 
 def get_checks_fails(client: Client, job_url: str):
@@ -55,7 +267,7 @@ def get_checks_known_fails(client: Client, job_url: str, known_fails: dict):
         len(df.columns) - 1,
         "reason",
         df["test_name"]
-        .cat.remove_unused_categories()
+        .astype(str)
         .apply(
             lambda test_name: known_fails[test_name].get("reason", "No reason given")
         ),
@@ -182,28 +394,32 @@ def format_test_name_for_linewrap(text: str) -> str:
     return text.replace(".py::", "/")
 
 
+def format_test_status(text: str) -> str:
+    """Format the test status for better readability."""
+    color = (
+        "red"
+        if text.lower().startswith("fail")
+        else "orange" if text.lower() == "error" else "green"
+    )
+    return f'<span style="font-weight: bold; color: {color}">{text}</span>'
+
+
 def format_results_as_html_table(results) -> str:
     if len(results) == 0:
         return "<p>Nothing to report</p>"
     results.columns = [col.replace("_", " ").title() for col in results.columns]
-    html = (
-        results.to_html(
-            index=False,
-            formatters={
-                "Results Link": url_to_html_link,
-                "Test Name": format_test_name_for_linewrap,
-                "Identifier": lambda s: url_to_html_link(
-                    "https://nvd.nist.gov/vuln/detail/" + s
-                ),
-            },
-            escape=False,
-        )  # tbody/thead tags interfere with the table sorting script
-        .replace("<tbody>\n", "")
-        .replace("</tbody>\n", "")
-        .replace("<thead>\n", "")
-        .replace("</thead>\n", "")
-        .replace('<table border="1"', '<table style="min-width: min(900px, 98vw);"')
-    )
+    html = results.to_html(
+        index=False,
+        formatters={
+            "Results Link": url_to_html_link,
+            "Test Name": format_test_name_for_linewrap,
+            "Test Status": format_test_status,
+            "Check Status": format_test_status,
+            "Status": format_test_status,
+            "Message": lambda m: m.replace("\n", " "),
+        },
+        escape=False,
+    ).replace(' border="1"', "")
     return html
 
 
@@ -246,22 +462,8 @@ def main():
         settings={"use_numpy": True},
     )
 
-    s3_path = (
-        f"https://s3.amazonaws.com/{S3_BUCKET}/{args.pr_number}/{args.commit_sha}/"
-    )
-    report_destination_url = s3_path + "combined_report.html"
-    ci_running_report_url = s3_path + "ci_running.html"
-
-    response = requests.get(ci_running_report_url)
-    if response.status_code == 200:
-        ci_running_report: str = response.text
-    else:
-        print(
-            f"Failed to download CI running report. Status code: {response.status_code}, Response: {response.text}"
-        )
-        exit(1)
-
     fail_results = {
+        "job_statuses": get_commit_statuses(args.commit_sha),
         "checks_fails": get_checks_fails(db_client, args.actions_run_url),
         "checks_known_fails": [],
         "checks_errors": get_checks_errors(db_client, args.actions_run_url),
@@ -293,15 +495,36 @@ def main():
             .sum()
         )
 
-    combined_report = (
-        ci_running_report.replace("ClickHouse CI running for", "Combined CI Report for")
-        .replace('</style>', "th::before { content: '⇅ '}\n</style>")
-        .replace(
-            "<table>",
-            f"""<h2>Table of Contents</h2>
+    title = "CI Test Report"
+
+    html_report = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>{css}
+    </style>
+    <title>{title}</title>
+</head>
+<body>
+    <h1>{title}</h1>
+    <table>
+        <tr>
+            <th class='hth no-sort'>Task</th><td><a href="{args.actions_run_url}">{args.actions_run_url.split('/')[-1]}</a></td>
+        </tr>
+        <tr>
+            <th class='hth no-sort'>Commit</th><td><a href="https://github.com/Altinity/ClickHouse/commit/{args.commit_sha}">{args.commit_sha}</a></td>
+        </tr>
+        <tr>
+            <th class='hth no-sort'>Date</th><td>{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC</td>
+        </tr>
+    </table>
+
+    <h2>Table of Contents</h2>
 {'<p style="font-weight: bold;color: #F00;">This is a preview. FinishCheck has not completed.</p>' if args.mark_preview else ""}
 <ul>
-    <li><a href="#ci-jobs-status">CI Jobs Status</a></li>
+    <li><a href="#ci-jobs-status">CI Jobs Status</a> ({sum(fail_results['job_statuses']['test_status'] != 'success')} fail/error)</li>
     <li><a href="#checks-errors">Checks Errors</a> ({len(fail_results['checks_errors'])})</li>
     <li><a href="#checks-fails">Checks New Fails</a> ({len(fail_results['checks_fails'])})</li>
     <li><a href="#regression-fails">Regression New Fails</a> ({len(fail_results['regression_fails'])})</li>
@@ -309,13 +532,8 @@ def main():
     <li><a href="#checks-known-fails">Checks Known Fails</a> ({'N/A' if not args.known_fails else len(fail_results['checks_known_fails'])})</li>
 </ul>
 
-<h2 id="ci-jobs-status">CI Jobs Status</h2>
-<table>""",
-            1,
-        )
-        .replace(
-            "</table>",
-            f"""</table>
+<h2 id="ci-jobs-status">CI Jobs Status</h2> 
+{format_results_as_html_table(fail_results['job_statuses'])}
 
 <h2 id="checks-errors">Checks Errors</h2>
 {format_results_as_html_table(fail_results['checks_errors'])}
@@ -331,16 +549,20 @@ def main():
 
 <h2 id="checks-known-fails">Checks Known Fails</h2>
 {"<p>Not Checked</p>" if not args.known_fails else format_results_as_html_table(fail_results['checks_known_fails'])}
-""",
-            1,
-        )
-    )
-    report_path = Path("combined_report.html")
-    report_path.write_text(combined_report, encoding="utf-8")
+
+{script}
+</body>
+</html>
+"""
+
+    report_path = Path("ci_test_report.html")
+    report_path.write_text(html_report, encoding="utf-8")
 
     if args.no_upload:
         print(f"Report saved to {report_path}")
         exit(0)
+
+    report_destination_key = f"{args.pr_number}/{args.commit_sha}/ci_test_report.html"
 
     # Upload the report to S3
     s3_client = boto3.client("s3", endpoint_url=os.getenv("S3_URL"))
@@ -348,14 +570,14 @@ def main():
     try:
         s3_client.put_object(
             Bucket=S3_BUCKET,
-            Key=f"{args.pr_number}/{args.commit_sha}/combined_report.html",
-            Body=combined_report,
+            Key=report_destination_key,
+            Body=html_report,
             ContentType="text/html; charset=utf-8",
         )
     except NoCredentialsError:
         print("Credentials not available for S3 upload.")
 
-    print(report_destination_url)
+    print(f"https://s3.amazonaws.com/{S3_BUCKET}/" + report_destination_key)
 
 
 if __name__ == "__main__":

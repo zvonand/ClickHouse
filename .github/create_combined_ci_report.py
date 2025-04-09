@@ -354,7 +354,7 @@ def format_test_status(text: str) -> str:
     color = (
         "red"
         if text.lower().startswith("fail")
-        else "orange" if text.lower() == "error" else "green"
+        else "orange" if text.lower() in ("error", "broken") else "green"
     )
     return f'<span style="font-weight: bold; color: {color}">{text}</span>'
 

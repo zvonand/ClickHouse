@@ -540,15 +540,15 @@ def main():
 </body>
 </html>
 """
-
-    report_path = Path("ci_test_report.html")
+    report_name = "ci_run_report.html"
+    report_path = Path(report_name)
     report_path.write_text(html_report, encoding="utf-8")
 
     if args.no_upload:
         print(f"Report saved to {report_path}")
         exit(0)
 
-    report_destination_key = f"{args.pr_number}/{args.commit_sha}/ci_test_report.html"
+    report_destination_key = f"{args.pr_number}/{args.commit_sha}/{report_name}"
 
     # Upload the report to S3
     s3_client = boto3.client("s3")

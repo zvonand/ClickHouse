@@ -8,7 +8,8 @@ RUN apt-get update \
         brotli \
         clang-${LLVM_VERSION} \
         clang-tidy-${LLVM_VERSION} \
-        cmake \
+        cmake=3.22.1-1ubuntu1 \
+        cmake-data=3.22.1-1ubuntu1 \
         expect \
         file \
         libclang-${LLVM_VERSION}-dev \

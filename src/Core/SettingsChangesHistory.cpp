@@ -69,21 +69,14 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             // Altinity Antalya modifications atop of 25.2
             {"object_storage_cluster", "", "", "New setting"},
             {"object_storage_max_nodes", 0, 0, "New setting"},
+            {"use_iceberg_metadata_files_cache", true, true, "New setting"},
+            {"iceberg_timestamp_ms", 0, 0, "New setting."},
+            {"iceberg_snapshot_id", 0, 0, "New setting."},
         });
         addSettingsChanges(settings_changes_history, "24.12.2.20000",
         {
             // Altinity Antalya modifications atop of 24.12
             {"input_format_parquet_use_metadata_cache", true, true, "New setting, turned ON by default"}, // https://github.com/Altinity/ClickHouse/pull/586
-            /// Release closed. Please use 25.4
-            {"allow_experimental_database_unity_catalog", false, false, "Allow experimental database engine DataLakeCatalog with catalog_type = 'unity'"},
-            {"allow_experimental_database_glue_catalog", false, false, "Allow experimental database engine DataLakeCatalog with catalog_type = 'glue'"},
-            {"use_page_cache_with_distributed_cache", false, false, "New setting"},
-            {"use_iceberg_metadata_files_cache", true, true, "New setting"},
-            {"use_query_condition_cache", false, false, "New setting."},
-            {"iceberg_timestamp_ms", 0, 0, "New setting."},
-            {"iceberg_snapshot_id", 0, 0, "New setting."},
-            {"parallel_replicas_for_cluster_engines", false, true, "New setting."},
-            /// Release closed. Please use 25.4
         });
         addSettingsChanges(settings_changes_history, "25.2",
         {

@@ -216,9 +216,9 @@ def main():
     )
     cargo_cache.download()
 
-    docker_image = docker_images_helper.get_docker_image(IMAGE_NAME)
-    docker_image.version = "e0a138049b31"
-    docker_image = docker_images_helper.pull_image(docker_image)
+    docker_image = docker_images_helper.pull_image(
+        docker_images_helper.get_docker_image(IMAGE_NAME)
+    )
 
     packager_cmd = get_packager_cmd(
         build_config,

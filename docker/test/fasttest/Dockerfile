@@ -8,8 +8,7 @@ RUN apt-get update \
         brotli \
         clang-${LLVM_VERSION} \
         clang-tidy-${LLVM_VERSION} \
-        cmake=3.22.1-1ubuntu1 \
-        cmake-data=3.22.1-1ubuntu1 \
+        cmake \
         expect \
         file \
         libclang-${LLVM_VERSION}-dev \
@@ -31,9 +30,7 @@ RUN apt-get update \
         zstd \
         --yes --no-install-recommends \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /var/cache/debconf /tmp/* \
-    && groupadd --system --gid 1000 clickhouse \
-    && useradd --system --gid 1000 --uid 1000 -m clickhouse
+    && rm -rf /var/lib/apt/lists/* /var/cache/debconf /tmp/*
 
 RUN pip3 install numpy==1.26.3 scipy==1.12.0 pandas==1.5.3 Jinja2==3.1.3
 

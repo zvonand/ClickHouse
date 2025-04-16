@@ -347,9 +347,6 @@ class PRInfo:
         if self.changed_files_requested:
             return
 
-        if not getattr(self, "diff_urls", False):
-            raise TypeError("The event does not have diff URLs")
-
         for diff_url in self.diff_urls:
             response = get_gh_api(
                 diff_url,

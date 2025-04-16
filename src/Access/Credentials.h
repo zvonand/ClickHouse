@@ -8,6 +8,8 @@
 
 #include "config.h"
 
+#include <set>
+
 namespace DB
 {
 

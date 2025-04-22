@@ -4,7 +4,6 @@
 #include <IO/Progress.h>
 #include <Storages/MergeTree/MergeList.h>
 #include <base/types.h>
-#include <Common/ProfileEvents.h>
 
 
 namespace ProfileEvents
@@ -102,12 +101,6 @@ private:
         watch_prev_elapsed = watch_curr_elapsed;
     }
 
-    void updateProfileEvents(const Progress & value, ProfileEvents::Event rows_event, ProfileEvents::Event bytes_event) const
-    {
-        ProfileEvents::increment(bytes_event, value.read_bytes);
-        if (stage.is_first)
-            ProfileEvents::increment(rows_event, value.read_rows);
-    }
 };
 
 }

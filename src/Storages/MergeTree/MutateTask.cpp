@@ -21,6 +21,7 @@
 #include <Processors/QueryPlan/CreatingSetsStep.h>
 #include <Storages/MergeTree/StorageFromMergeTreeDataPart.h>
 #include <Storages/MergeTree/MergeTreeDataWriter.h>
+#include <Storages/MergeTree/MergeTreeData.h>
 #include <Storages/MutationCommands.h>
 #include <Storages/MergeTree/MergeTreeDataMergerMutator.h>
 #include <Storages/MergeTree/MergeTreeIndexInverted.h>
@@ -57,7 +58,7 @@ static UInt64 getExistingRowsCount(const Block & block)
 
     if (!row_exists_col)
     {
-        LOG_WARNING(&Poco::Logger::get("MutationHelpers::getExistingRowsCount"), "_row_exists column type is not UInt8");
+        LOG_WARNING(&Poco::Logger::get("getExistingRowsCount"), "_row_exists column type is not UInt8");
         return block.rows();
     }
 
@@ -941,8 +942,6 @@ void finalizeMutatedPart(
     new_data_part->default_codec = codec;
 }
 
-}
-
 struct MutationContext
 {
     MergeTreeData * data;
@@ -1288,7 +1287,7 @@ bool PartMergerWriter::mutateOriginalPartAndPrepareProjections()
 
         /// TODO: move this calculation to DELETE FROM mutation
         if (ctx->count_lightweight_deleted_rows)
-            existing_rows_count += MutationHelpers::getExistingRowsCount(cur_block);
+            existing_rows_count += getExistingRowsCount(cur_block);
 
         for (size_t i = 0, size = ctx->projections_to_build.size(); i < size; ++i)
         {
@@ -1934,7 +1933,7 @@ private:
             }
         }
 
-        MutationHelpers::finalizeMutatedPart(ctx->source_part, ctx->new_data_part, ctx->execute_ttl_type, ctx->compression_codec, ctx->context, ctx->metadata_snapshot, ctx->need_sync);
+        finalizeMutatedPart(ctx->source_part, ctx->new_data_part, ctx->execute_ttl_type, ctx->compression_codec, ctx->context, ctx->metadata_snapshot, ctx->need_sync);
     }
 
 
@@ -2169,7 +2168,7 @@ bool MutateTask::prepare()
     context_for_reading->setSetting("max_streams_for_merge_tree_reading", Field(0));
     context_for_reading->setSetting("read_from_filesystem_cache_if_exists_otherwise_bypass_cache", 1);
 
-    MutationHelpers::splitAndModifyMutationCommands(
+    splitAndModifyMutationCommands(
         ctx->source_part, ctx->metadata_snapshot,
         ctx->commands_for_part, ctx->for_interpreter, ctx->for_file_renames, ctx->log);
 
@@ -2220,7 +2219,7 @@ bool MutateTask::prepare()
     /// It shouldn't be changed by mutation.
     ctx->new_data_part->index_granularity_info = ctx->source_part->index_granularity_info;
 
-    auto [new_columns, new_infos] = MutationHelpers::getColumnsForNewDataPart(
+    auto [new_columns, new_infos] = getColumnsForNewDataPart(
         ctx->source_part, ctx->updated_header, ctx->storage_columns,
         ctx->source_part->getSerializationInfos(), ctx->for_interpreter, ctx->for_file_renames);
 
@@ -2235,7 +2234,7 @@ bool MutateTask::prepare()
     ctx->execute_ttl_type = ExecuteTTLType::NONE;
 
     if (ctx->mutating_pipeline_builder.initialized())
-        ctx->execute_ttl_type = MutationHelpers::shouldExecuteTTL(ctx->metadata_snapshot, ctx->interpreter->getColumnDependencies());
+        ctx->execute_ttl_type = shouldExecuteTTL(ctx->metadata_snapshot, ctx->interpreter->getColumnDependencies());
 
     if (ctx->data->getSettings()->exclude_deleted_rows_for_part_size_in_merge && ctx->updated_header.has(RowExistsColumn::name))
     {
@@ -2265,21 +2264,21 @@ bool MutateTask::prepare()
     }
     else /// TODO: check that we modify only non-key columns in this case.
     {
-        ctx->indices_to_recalc = MutationHelpers::getIndicesToRecalculate(
+        ctx->indices_to_recalc = getIndicesToRecalculate(
             ctx->source_part,
             ctx->mutating_pipeline_builder,
             ctx->metadata_snapshot,
             ctx->context,
             ctx->materialized_indices);
 
-        ctx->projections_to_recalc = MutationHelpers::getProjectionsToRecalculate(
+        ctx->projections_to_recalc = getProjectionsToRecalculate(
             ctx->source_part,
             ctx->metadata_snapshot,
             ctx->materialized_projections);
 
-        ctx->stats_to_recalc = MutationHelpers::getStatisticsToRecalculate(ctx->metadata_snapshot, ctx->materialized_statistics);
+        ctx->stats_to_recalc = getStatisticsToRecalculate(ctx->metadata_snapshot, ctx->materialized_statistics);
 
-        ctx->files_to_skip = MutationHelpers::collectFilesToSkip(
+        ctx->files_to_skip = collectFilesToSkip(
             ctx->source_part,
             ctx->new_data_part,
             ctx->updated_header,
@@ -2288,7 +2287,7 @@ bool MutateTask::prepare()
             ctx->projections_to_recalc,
             ctx->stats_to_recalc);
 
-        ctx->files_to_rename = MutationHelpers::collectFilesForRenames(
+        ctx->files_to_rename = collectFilesForRenames(
             ctx->source_part,
             ctx->new_data_part,
             ctx->for_file_renames,

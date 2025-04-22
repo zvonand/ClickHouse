@@ -2181,7 +2181,6 @@ void StorageMergeTree::replacePartitionFrom(const StoragePtr & source_table, con
     else
         src_parts = src_data.getVisibleDataPartsVectorInPartition(local_context, partition_id);
 
-    DataPartsVector src_parts = src_data.getVisibleDataPartsVectorInPartition(local_context, partition_id);
     MutableDataPartsVector dst_parts;
     std::vector<scope_guard> dst_parts_locks;
 

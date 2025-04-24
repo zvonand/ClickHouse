@@ -17,6 +17,7 @@ DATABASE_HOST_VAR = "CHECKS_DATABASE_HOST"
 DATABASE_USER_VAR = "CHECKS_DATABASE_USER"
 DATABASE_PASSWORD_VAR = "CHECKS_DATABASE_PASSWORD"
 S3_BUCKET = "altinity-build-artifacts"
+GITHUB_REPO = "Altinity/ClickHouse"
 
 
 css = """
@@ -274,7 +275,7 @@ def get_pr_info_from_number(pr_number: str) -> dict:
         "Accept": "application/vnd.github.v3+json",
     }
 
-    url = f"https://api.github.com/repos/Altinity/ClickHouse/pulls/{pr_number}"
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/pulls/{pr_number}"
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
@@ -544,7 +545,7 @@ def main():
     else:
         try:
             pr_info = get_pr_info_from_number(args.pr_number)
-            pr_info_html = f"""<a href="https://github.com/Altinity/ClickHouse/pull/{pr_info["number"]}">
+            pr_info_html = f"""<a href="https://github.com/{GITHUB_REPO}/pull/{pr_info["number"]}">
                     #{pr_info.get("number")} ({pr_info.get("base", {}).get('ref')} <- {pr_info.get("head", {}).get('ref')})  {pr_info.get("title")}
                     </a>"""
         except Exception as e:
@@ -582,7 +583,7 @@ def main():
             <th class='hth no-sort'>Workflow Run</th><td><a href="{args.actions_run_url}">{args.actions_run_url.split('/')[-1]}</a></td>
         </tr>
         <tr>
-            <th class='hth no-sort'>Commit</th><td><a href="https://github.com/Altinity/ClickHouse/commit/{args.commit_sha}">{args.commit_sha}</a></td>
+            <th class='hth no-sort'>Commit</th><td><a href="https://github.com/{GITHUB_REPO}/commit/{args.commit_sha}">{args.commit_sha}</a></td>
         </tr>
         <tr>
             <th class='hth no-sort'>Date</th><td>{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC</td>

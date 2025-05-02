@@ -79,7 +79,9 @@ jobs:
             FLAG_LATEST='--set-latest'
             echo "latest tag will be set for resulting manifests"
           fi
+          # NOTE(strtgbb): The --no-reports flag avoids a strange error setting the commit status
           python3 docker_manifests_merge.py --suffix amd64 --suffix aarch64 \
             --image-tags '${{ toJson(fromJson(inputs.data).docker_data.images) }}' \
             --missing-images '${{ toJson(fromJson(inputs.data).docker_data.missing_multi) }}' \
+            --no-reports \
             $FLAG_LATEST

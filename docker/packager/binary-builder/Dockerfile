@@ -1,6 +1,8 @@
 # docker build -t altinityinfra/binary-builder .
 ARG FROM_TAG=latest
 FROM altinityinfra/fasttest:$FROM_TAG
+# NOTE(strtgbb) Not sure where LLVM_VERSION is set, so we set it here
+ENV LLVM_VERSION=19
 ENV CC=clang-${LLVM_VERSION}
 ENV CXX=clang++-${LLVM_VERSION}
 

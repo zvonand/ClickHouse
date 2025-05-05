@@ -1912,58 +1912,7 @@ void MergeTreeData::loadDataParts(bool skip_sanity_checks, std::optional<std::un
     data_parts_loading_finished = true;
 }
 
-<<<<<<< HEAD
-void MergeTreeData::loadUnexpectedDataParts()
-{
-    {
-        std::lock_guard lock(unexpected_data_parts_mutex);
-        if (unexpected_data_parts.empty())
-        {
-            unexpected_data_parts_loading_finished = true;
-            unexpected_data_parts_cv.notify_all();
-            return;
-        }
 
-        LOG_DEBUG(log, "Loading {} unexpected data parts",
-            unexpected_data_parts.size());
-    }
-
-    ThreadFuzzer::maybeInjectSleep();
-    auto runner = threadPoolCallbackRunner<void>(getUnexpectedPartsLoadingThreadPool().get(), "UnexpectedParts");
-    std::vector<std::future<void>> parts_futures;
-
-    for (auto & load_state : unexpected_data_parts)
-    {
-        std::lock_guard lock(unexpected_data_parts_mutex);
-        chassert(!load_state.part);
-        if (unexpected_data_parts_loading_canceled)
-        {
-            waitForAllToFinishAndRethrowFirstError(parts_futures);
-            return;
-        }
-        parts_futures.push_back(runner([&]()
-        {
-            loadUnexpectedDataPart(load_state);
-
-            chassert(load_state.part);
-            if (load_state.is_broken)
-            {
-                load_state.part->renameToDetached("broken-on-start"); /// detached parts must not have '_' in prefixes
-            }
-        }, Priority{}));
-    }
-    waitForAllToFinishAndRethrowFirstError(parts_futures);
-    LOG_DEBUG(log, "Loaded {} unexpected data parts", unexpected_data_parts.size());
-
-    {
-        std::lock_guard lock(unexpected_data_parts_mutex);
-        unexpected_data_parts_loading_finished = true;
-        unexpected_data_parts_cv.notify_all();
-    }
-}
-
-||||||| 7cb5dff8019
-=======
 void MergeTreeData::loadUnexpectedDataParts()
 {
     {
@@ -2012,7 +1961,6 @@ void MergeTreeData::loadUnexpectedDataParts()
     }
 }
 
->>>>>>> altinity/customizations/24.3.14
 void MergeTreeData::loadOutdatedDataParts(bool is_async)
 try
 {

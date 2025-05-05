@@ -54,7 +54,12 @@ from github_helper import GitHub
 from pr_info import PRInfo
 from report import ERROR, SUCCESS, BuildResult, JobReport
 from s3_helper import S3Helper
-from version_helper import get_version_from_repo
+
+from version_helper import (
+    get_version_from_repo,
+    get_version_from_string,
+    update_cmake_version
+)
 
 # pylint: disable=too-many-lines
 
@@ -1919,6 +1924,11 @@ def main() -> int:
         if not args.skip_jobs and pr_info.has_changes_in_documentation_only():
             _update_config_for_docs_only(jobs_data)
 
+        if pr_info.event_type != "dispatch":
+            # Avoid calling pr_info.has_changes_in_documentation_only() during workflow_dispatch event
+            if not args.skip_jobs and pr_info.has_changes_in_documentation_only():
+                _update_config_for_docs_only(jobs_data)
+
         if not args.skip_jobs:
             ci_cache = CiCache(s3, jobs_data["digests"])
 
@@ -1985,6 +1995,20 @@ def main() -> int:
         print(
             f"Check if rerun for name: [{check_name}], extended name [{check_name_with_group}]"
         )
+
+        # NOTE (vnemkov) Job might have not checked out git tags, so it can't properly compute version number.
+        # BUT if there is pre-computed version from `RunConfig` then we can reuse it.
+        pre_configured_version = indata.get('version', None)
+        git = Git(True)
+        if pre_configured_version is not None and git.commits_since_latest == 0:
+            print(f"Updating version in repo files from '{get_version_from_repo()}' to '{pre_configured_version}'")
+
+            pre_configured_version = get_version_from_string(pre_configured_version, git)
+            # need to set description, otherwise subsequent call (perhaps from other script) to get_version_from_repo() fails
+            pre_configured_version.with_description(pre_configured_version.flavour)
+
+            update_cmake_version(pre_configured_version)
+
         previous_status = None
         if CI_CONFIG.is_build_job(check_name):
             # this is a build job - check if build report is present
@@ -2142,7 +2166,7 @@ def main() -> int:
                     job_report.check_name or _get_ext_check_name(args.job_name),
                 )
 
-            print(f"Job report url: [{check_url}]")
+            print(f"Job report url: [ {check_url} ]")
             prepared_events = prepare_tests_results_for_clickhouse(
                 pr_info,
                 job_report.test_results,

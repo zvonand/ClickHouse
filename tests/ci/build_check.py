@@ -12,7 +12,9 @@ from ci_config import CI_CONFIG, BuildConfig
 
 from env_helper import (
     REPO_COPY,
+    S3_ACCESS_KEY_ID,
     S3_BUILDS_BUCKET,
+    S3_SECRET_ACCESS_KEY,
     TEMP_PATH,
 )
 from git_helper import Git
@@ -27,7 +29,7 @@ from version_helper import (
 )
 from stopwatch import Stopwatch
 
-IMAGE_NAME = "clickhouse/binary-builder"
+IMAGE_NAME = "altinityinfra/binary-builder"
 BUILD_LOG_NAME = "build_log.log"
 
 
@@ -69,6 +71,8 @@ def get_packager_cmd(
     cmd += " --cache=sccache"
     cmd += " --s3-rw-access"
     cmd += f" --s3-bucket={S3_BUILDS_BUCKET}"
+    cmd += f" --s3-access-key-id={S3_ACCESS_KEY_ID}"
+    cmd += f" --s3-secret-access-key={S3_SECRET_ACCESS_KEY}"
 
     if build_config.additional_pkgs:
         cmd += " --additional-pkgs"

@@ -206,6 +206,7 @@ def prepare_tests_results_for_clickhouse(
     report_url: str,
     check_name: str,
 ) -> List[dict]:
+
     base_ref = pr_info.base_ref
     base_repo = pr_info.base_name
     head_ref = pr_info.head_ref

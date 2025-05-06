@@ -452,6 +452,7 @@ def main():
     context = {
         "title": "ClickHouse® CI Workflow Run Report",
         "github_repo": GITHUB_REPO,
+        "s3_bucket": S3_BUCKET,
         "pr_info_html": pr_info_html,
         "workflow_id": args.actions_run_url.split("/")[-1],
         "commit_sha": args.commit_sha,

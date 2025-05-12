@@ -111,7 +111,7 @@ class PRInfo:
         self.merged_pr = 0
         self.labels = set()
 
-        repo_prefix = f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}"
+        self.repo_prefix = f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}"
         self.task_url = GITHUB_RUN_URL
         self.repo_full_name = GITHUB_REPOSITORY
 
@@ -141,7 +141,7 @@ class PRInfo:
 
         if "pull_request" in github_event:  # pull request and other similar events
             self.event_type = EventType.PULL_REQUEST
-            self.number = github_event["pull_request"]["number"]  # type: int
+            self.number = github_event["pull_request"]["number"]
             if pr_event_from_api:
                 try:
                     response = get_gh_api(
@@ -163,15 +163,12 @@ class PRInfo:
             else:
                 self.sha = github_event["pull_request"]["head"]["sha"]
 
-            self.commit_html_url = f"{repo_prefix}/commit/{self.sha}"
-            self.pr_html_url = f"{repo_prefix}/pull/{self.number}"
-
             # master or backport/xx.x/xxxxx - where the PR will be merged
-            self.base_ref = github_event["pull_request"]["base"]["ref"]  # type: str
+            self.base_ref = github_event["pull_request"]["base"]["ref"]
             # ClickHouse/ClickHouse
             self.base_name = github_event["pull_request"]["base"]["repo"]["full_name"]  # type: str
             # any_branch-name - the name of working branch name
-            self.head_ref = github_event["pull_request"]["head"]["ref"]  # type: str
+            self.head_ref = github_event["pull_request"]["head"]["ref"]
             # UserName/ClickHouse or ClickHouse/ClickHouse
             self.head_name = github_event["pull_request"]["head"]["repo"]["full_name"]  # type: str
             self.body = github_event["pull_request"]["body"]
@@ -213,7 +210,6 @@ class PRInfo:
                 .replace("{base}", base_sha)
                 .replace("{head}", self.sha)
             )
-            self.commit_html_url = f"{repo_prefix}/commit/{self.sha}"
 
         elif "commits" in github_event:
             self.event_type = EventType.PUSH
@@ -227,13 +223,11 @@ class PRInfo:
                     logging.error("Failed to convert %s to integer", merged_pr)
             self.sha = github_event["after"]
             pull_request = get_pr_for_commit(self.sha, github_event["ref"])
-            self.commit_html_url = f"{repo_prefix}/commit/{self.sha}"
 
             if pull_request is None or pull_request["state"] == "closed":
                 # it's merged PR to master, or there is no PR (build against specific commit or tag)
                 self.number = 0
                 self.labels = set()
-                self.pr_html_url = f"{repo_prefix}/commits/{ref}"
                 self.base_ref = ref
                 self.base_name = self.repo_full_name
                 self.head_ref = ref
@@ -308,6 +302,23 @@ class PRInfo:
 
         if need_changed_files:
             self.fetch_changed_files()
+
+    @property
+    def pr_html_url(self) -> str:
+        if getattr(self, "_pr_html_url", None) is not None:
+            return self._pr_html_url
+
+        if self.number != 0:
+            return f"{self.repo_prefix}/pull/{self.number}"
+        return f"{self.repo_prefix}/commits/{self.base_ref}"
+
+    @pr_html_url.setter
+    def pr_html_url(self, url: str) -> None:
+        self._pr_html_url = url
+
+    @property
+    def commit_html_url(self) -> str:
+        return f"{self.repo_prefix}/commit/{self.sha}"
 
     def is_master(self) -> bool:
         return self.number == 0 and self.head_ref == "master"

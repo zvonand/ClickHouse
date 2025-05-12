@@ -9,7 +9,6 @@ import sys
 import time
 
 from ci_config import CI_CONFIG, BuildConfig
-from cache_utils import CargoCache
 
 from env_helper import (
     GITHUB_RUN_ID,
@@ -22,7 +21,6 @@ from env_helper import (
 from git_helper import Git
 from pr_info import PRInfo, EventType
 from report import FAILURE, JobReport, StatusType, SUCCESS
-from s3_helper import S3Helper
 from tee_popen import TeePopen
 import docker_images_helper
 from version_helper import (
@@ -52,7 +50,6 @@ def get_packager_cmd(
     build_config: BuildConfig,
     packager_path: Path,
     output_path: Path,
-    cargo_cache_dir: Path,
     build_version: str,
     image_version: str,
     official: bool,
@@ -79,7 +76,6 @@ def get_packager_cmd(
     cmd += f" --s3-bucket={S3_BUILDS_BUCKET}"
     cmd += f" --s3-access-key-id={S3_ACCESS_KEY_ID}"
     cmd += f" --s3-secret-access-key={S3_SECRET_ACCESS_KEY}"
-    cmd += f" --cargo-cache-dir={cargo_cache_dir}"
 
     if build_config.additional_pkgs:
         cmd += " --additional-pkgs"
@@ -171,8 +167,6 @@ def main():
 
     logging.info("Repo copy path %s", repo_path)
 
-    s3_helper = S3Helper()
-
     version = get_version_from_repo(git=Git(True))
     logging.info("Got version from repo %s", version.string)
 
@@ -211,10 +205,6 @@ def main():
 
     build_output_path = temp_path / build_name
     build_output_path.mkdir(parents=True, exist_ok=True)
-    cargo_cache = CargoCache(
-        temp_path / "cargo_cache" / "registry", temp_path, s3_helper
-    )
-    cargo_cache.download()
 
     docker_image = docker_images_helper.pull_image(
         docker_images_helper.get_docker_image(IMAGE_NAME)
@@ -224,7 +214,6 @@ def main():
         build_config,
         repo_path / "docker" / "packager",
         build_output_path,
-        cargo_cache.directory,
         version.string,
         docker_image.version,
         official_flag,
@@ -244,9 +233,7 @@ def main():
         f"sudo chown -R ubuntu:ubuntu {build_output_path}", shell=True
     )
     logging.info("Build finished as %s, log path %s", build_status, log_path)
-    if build_status == SUCCESS:
-        cargo_cache.upload()
-    else:
+    if build_status != SUCCESS:
         # We check if docker works, because if it's down, it's infrastructure
         try:
             subprocess.check_call("docker info", shell=True)

@@ -112,7 +112,7 @@ std::pair<Int32, String> PaimonTableClient::getLastestTableSchemaInfo()
         *object_storage,
         *configuration_ptr,
         PAIMON_SCHEMA_DIR,
-        [](const RelativePathWithMetadata & path_with_metadata)
+        [](const PathWithMetadata & path_with_metadata)
         {
             String relative_path = path_with_metadata.relative_path;
             String file_name(relative_path.begin() + relative_path.find_last_of('/') + 1, relative_path.end());
@@ -149,7 +149,7 @@ Poco::JSON::Object::Ptr PaimonTableClient::getTableSchemaJSON(const std::pair<In
 {
     const auto [max_schema_version, max_schema_path] = schema_meta_info;
     /// parse schema json
-    RelativePathWithMetadata object_info(max_schema_path);
+    PathWithMetadata object_info(max_schema_path);
     auto buf = createReadBuffer(object_info, object_storage, getContext(), log);
     String json_str;
     readJSONObjectPossiblyInvalid(json_str, *buf);
@@ -167,9 +167,9 @@ std::pair<Int64, String> PaimonTableClient::getLastestTableSnapshotInfo()
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Configuration is expired.");
     /// read latest hint
     Int64 snapshot_version;
-    RelativePathWithMetadata relative_path_with_metadata(
+    PathWithMetadata path_with_metadata(
         std::filesystem::path(table_location) / PAIMON_SNAPSHOT_DIR / PAIMON_SNAPSHOT_LATEST_HINT);
-    auto buf = createReadBuffer(relative_path_with_metadata, object_storage, getContext(), log);
+    auto buf = createReadBuffer(path_with_metadata, object_storage, getContext(), log);
     String hint_version_string;
     readStringUntilEOF(hint_version_string, *buf);
     {
@@ -193,9 +193,9 @@ std::pair<Int64, String> PaimonTableClient::getLastestTableSnapshotInfo()
             *object_storage,
             *configuration_ptr,
             PAIMON_SNAPSHOT_DIR,
-            [](const RelativePathWithMetadata & path_with_metadata)
+            [](const PathWithMetadata & path_with_metadata_)
             {
-                String relative_path = path_with_metadata.relative_path;
+                String relative_path = path_with_metadata_.relative_path;
                 String file_name(relative_path.begin() + relative_path.find_last_of('/') + 1, relative_path.end());
                 return file_name.starts_with(PAIMON_SNAPSHOT_PRIFIX);
             });
@@ -234,7 +234,7 @@ PaimonSnapshot PaimonTableClient::getSnapshot(const std::pair<Int64, String> & s
     const auto [latest_snapshot_version, latest_snapshot_path] = snapshot_meta_info;
 
     /// read snapshot and parse
-    RelativePathWithMetadata snapshot_object(latest_snapshot_path);
+    PathWithMetadata snapshot_object(latest_snapshot_path);
     auto snapshot_buf = createReadBuffer(snapshot_object, object_storage, getContext(), log);
     String json_str;
     readJSONObjectPossiblyInvalid(json_str, *snapshot_buf);
@@ -248,7 +248,7 @@ std::vector<PaimonManifestFileMeta> PaimonTableClient::getManifestMeta(String ma
 {
     /// read manifest list file
     auto context = getContext();
-    RelativePathWithMetadata relative_path(std::filesystem::path(table_location) / (PAIMON_MANIFEST_DIR) / manifest_list_path);
+    PathWithMetadata relative_path(std::filesystem::path(table_location) / (PAIMON_MANIFEST_DIR) / manifest_list_path);
     auto manifest_list_buf = createReadBuffer(relative_path, object_storage, context, log);
     Iceberg::AvroForIcebergDeserializer manifest_list_deserializer(
         std::move(manifest_list_buf), manifest_list_path, getFormatSettings(getContext()));
@@ -271,7 +271,7 @@ PaimonTableClient::getDataManifest(String manifest_path, const PaimonTableSchema
         return {};
 
     auto context = getContext();
-    RelativePathWithMetadata object_info(std::filesystem::path(table_location) / (PAIMON_MANIFEST_DIR) / manifest_path);
+    PathWithMetadata object_info(std::filesystem::path(table_location) / (PAIMON_MANIFEST_DIR) / manifest_path);
     auto manifest_buf = createReadBuffer(object_info, object_storage, context, log);
     Iceberg::AvroForIcebergDeserializer manifest_deserializer(std::move(manifest_buf), manifest_path, getFormatSettings(getContext()));
 

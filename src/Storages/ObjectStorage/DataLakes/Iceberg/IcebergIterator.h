@@ -26,6 +26,7 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergTableStateSnapshot.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/ManifestFilesPruning.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PositionDeleteTransform.h>
+#include <Storages/ObjectStorage/Utils.h>
 
 namespace DB
 {
@@ -46,7 +47,8 @@ public:
         const ActionsDAG * filter_dag_,
         TableStateSnapshotPtr table_snapshot_,
         IcebergDataSnapshotPtr data_snapshot_,
-        PersistentTableComponents persistent_components);
+        PersistentTableComponents persistent_components,
+        std::shared_ptr<SecondaryStorages> secondary_storages_);
 
     std::optional<DB::Iceberg::ManifestFileEntry> next();
 
@@ -63,7 +65,7 @@ private:
     PersistentTableComponents persistent_components;
     FilesGenerator files_generator;
     LoggerPtr log;
-
+    std::shared_ptr<SecondaryStorages> secondary_storages;
 
     // By Iceberg design it is difficult to avoid storing position deletes in memory.
     size_t manifest_file_index = 0;
@@ -91,7 +93,8 @@ public:
         IDataLakeMetadata::FileProgressCallback callback_,
         Iceberg::TableStateSnapshotPtr table_snapshot_,
         Iceberg::IcebergDataSnapshotPtr data_snapshot_,
-        Iceberg::PersistentTableComponents persistent_components);
+        Iceberg::PersistentTableComponents persistent_components,
+        std::shared_ptr<SecondaryStorages> secondary_storages_);
 
     ObjectInfoPtr next(size_t) override;
 
@@ -112,6 +115,7 @@ private:
     std::vector<Iceberg::ManifestFileEntry> equality_deletes_files;
     std::exception_ptr exception;
     std::mutex exception_mutex;
+    std::shared_ptr<SecondaryStorages> secondary_storages;  // Sometimes data or manifests can be located on another storage
 };
 }
 

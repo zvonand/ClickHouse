@@ -43,6 +43,7 @@ ClusterFunctionReadTaskResponse::ClusterFunctionReadTaskResponse(ObjectInfoPtr o
     const bool send_over_whole_archive = !context->getSettingsRef()[Setting::cluster_function_process_archive_on_multiple_nodes];
     path = send_over_whole_archive ? object->getPathOrPathToArchiveIfArchive() : object->getPath();
     file_bucket_info = object->file_bucket_info;
+    absolute_path = object->getAbsolutePath();
 }
 
 ClusterFunctionReadTaskResponse::ClusterFunctionReadTaskResponse(const std::string & path_)
@@ -60,7 +61,7 @@ ObjectInfoPtr ClusterFunctionReadTaskResponse::getObjectInfo() const
     if (iceberg_info.has_value())
     {
 #if USE_AVRO
-        auto iceberg_object = std::make_shared<IcebergDataObjectInfo>(RelativePathWithMetadata{path});
+        auto iceberg_object = std::make_shared<IcebergDataObjectInfo>(PathWithMetadata{path});
         iceberg_object->info = iceberg_info.value();
         object = iceberg_object;
 #else
@@ -73,6 +74,9 @@ ObjectInfoPtr ClusterFunctionReadTaskResponse::getObjectInfo() const
     }
     object->data_lake_metadata = data_lake_metadata;
     object->file_bucket_info = file_bucket_info;
+
+    if (absolute_path.has_value() && !absolute_path.value().empty())
+        object->path_with_metadata.absolute_path = absolute_path;
 
     return object;
 }

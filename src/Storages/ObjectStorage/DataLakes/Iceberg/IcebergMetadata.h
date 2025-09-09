@@ -28,6 +28,7 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PersistentTableComponents.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/StatelessMetadataFileGetter.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Utils.h>
+#include <Storages/ObjectStorage/Utils.h>
 
 namespace DB
 {
@@ -127,6 +128,12 @@ public:
 
     void drop(ContextPtr context) override;
 
+    ObjectIterator createIcebergKeysIterator(
+        Strings && data_files_,
+        ObjectStoragePtr,
+        IDataLakeMetadata::FileProgressCallback callback_,
+        ContextPtr local_context);
+
 private:
     Iceberg::PersistentTableComponents initializePersistentTableComponents(
         IcebergMetadataFilesCachePtr cache_ptr,
@@ -147,6 +154,8 @@ private:
 
 
     const ObjectStoragePtr object_storage;
+    mutable std::shared_ptr<SecondaryStorages> secondary_storages; // Sometimes data or manifests can be located on another storage
+
     const StorageObjectStorageConfigurationWeakPtr configuration;
     LoggerPtr log;
     DB::Iceberg::PersistentTableComponents persistent_components;

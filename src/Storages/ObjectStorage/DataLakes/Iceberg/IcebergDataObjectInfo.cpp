@@ -1,3 +1,4 @@
+#include <Poco/String.h>
 #include "config.h"
 
 #include <Core/Settings.h>
@@ -41,7 +42,8 @@ extern const SettingsBool use_roaring_bitmap_iceberg_positional_deletes;
 #if USE_AVRO
 
 IcebergDataObjectInfo::IcebergDataObjectInfo(Iceberg::ManifestFileEntry data_manifest_file_entry_, Int32 schema_id_relevant_to_iterator_)
-    : ObjectInfo(RelativePathWithMetadata(data_manifest_file_entry_.file_path))
+: ObjectInfo(PathWithMetadata(data_manifest_file_entry_.file_path, std::nullopt,
+                   data_manifest_file_entry_.file_path_key.empty() ? std::nullopt : std::make_optional(data_manifest_file_entry_.file_path_key)))
     , info{
           data_manifest_file_entry_.file_path_key,
           data_manifest_file_entry_.schema_id,
@@ -53,22 +55,41 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(Iceberg::ManifestFileEntry data_man
 {
 }
 
-IcebergDataObjectInfo::IcebergDataObjectInfo(const RelativePathWithMetadata & path_)
-    : ObjectInfo(path_)
+IcebergDataObjectInfo::IcebergDataObjectInfo(
+    Iceberg::ManifestFileEntry data_manifest_file_entry_,
+    Int32 schema_id_relevant_to_iterator_,
+    ObjectStoragePtr resolved_storage,
+    const String & resolved_key)
+    : ObjectInfo(PathWithMetadata(resolved_key, std::nullopt,
+                       data_manifest_file_entry_.file_path.empty() ? std::nullopt : std::make_optional(data_manifest_file_entry_.file_path),
+                       resolved_storage))
+, info{
+    data_manifest_file_entry_.file_path_key,
+    data_manifest_file_entry_.schema_id,
+    schema_id_relevant_to_iterator_,
+    data_manifest_file_entry_.added_sequence_number,
+    data_manifest_file_entry_.file_format,
+    /* position_deletes_objects */ {},
+    /* equality_deletes_objects */ {}}
 {
 }
+
+IcebergDataObjectInfo::IcebergDataObjectInfo(const PathWithMetadata & path_)
+    : ObjectInfo(path_) {}
 
 std::shared_ptr<ISimpleTransform> IcebergDataObjectInfo::getPositionDeleteTransformer(
     ObjectStoragePtr object_storage,
     const SharedHeader & header,
     const std::optional<FormatSettings> & format_settings,
-    ContextPtr context_)
+    ContextPtr context_,
+    const String & table_location,
+    SecondaryStorages & secondary_storages)
 {
     IcebergDataObjectInfoPtr self = shared_from_this();
     if (!context_->getSettingsRef()[Setting::use_roaring_bitmap_iceberg_positional_deletes].value)
-        return std::make_shared<IcebergStreamingPositionDeleteTransform>(header, self, object_storage, format_settings, context_);
+        return std::make_shared<IcebergStreamingPositionDeleteTransform>(header, self, object_storage, format_settings, context_, table_location, secondary_storages);
     else
-        return std::make_shared<IcebergBitmapPositionDeleteTransform>(header, self, object_storage, format_settings, context_);
+        return std::make_shared<IcebergBitmapPositionDeleteTransform>(header, self, object_storage, format_settings, context_, table_location, secondary_storages);
 }
 
 void IcebergDataObjectInfo::addPositionDeleteObject(Iceberg::ManifestFileEntry position_delete_object)

@@ -9,7 +9,7 @@
 #include <Storages/KeyDescription.h>
 #include <Storages/MergeTree/KeyCondition.h>
 #include <Core/Field.h>
-#include <Disks/ObjectStorages/IObjectStorage_fwd.h>
+#include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage_fwd.h>
 
 #include <cstdint>
 

@@ -21,6 +21,7 @@
 
 #include <IO/ReadHelpers.h>
 #include <IO/WriteHelpers.h>
+#include <Core/ProtocolDefines.h>
 
 namespace DB::ErrorCodes
 {
@@ -46,6 +47,7 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(Iceberg::ManifestFileEntry data_man
                    data_manifest_file_entry_.file_path_key.empty() ? std::nullopt : std::make_optional(data_manifest_file_entry_.file_path_key)))
     , info{
           data_manifest_file_entry_.file_path_key,
+          String{},
           data_manifest_file_entry_.schema_id,
           schema_id_relevant_to_iterator_,
           data_manifest_file_entry_.added_sequence_number,
@@ -53,6 +55,8 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(Iceberg::ManifestFileEntry data_man
           /* position_deletes_objects */ {},
           /* equality_deletes_objects */ {}}
 {
+    if (path_with_metadata.absolute_path.has_value())
+        info.data_object_file_absolute_path = path_with_metadata.absolute_path.value();
 }
 
 IcebergDataObjectInfo::IcebergDataObjectInfo(
@@ -65,6 +69,7 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(
                        resolved_storage))
 , info{
     data_manifest_file_entry_.file_path_key,
+    String{},
     data_manifest_file_entry_.schema_id,
     schema_id_relevant_to_iterator_,
     data_manifest_file_entry_.added_sequence_number,
@@ -72,10 +77,16 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(
     /* position_deletes_objects */ {},
     /* equality_deletes_objects */ {}}
 {
+    if (path_with_metadata.absolute_path.has_value())
+        info.data_object_file_absolute_path = path_with_metadata.absolute_path.value();
 }
 
 IcebergDataObjectInfo::IcebergDataObjectInfo(const PathWithMetadata & path_)
-    : ObjectInfo(path_) {}
+    : ObjectInfo(path_)
+{
+    if (path_with_metadata.absolute_path.has_value())
+        info.data_object_file_absolute_path = path_with_metadata.absolute_path.value();
+}
 
 std::shared_ptr<ISimpleTransform> IcebergDataObjectInfo::getPositionDeleteTransformer(
     ObjectStoragePtr object_storage,
@@ -120,6 +131,10 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
 {
     checkVersion(protocol_version);
     writeStringBinary(data_object_file_path_key, out);
+    if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
+    {
+        writeStringBinary(data_object_file_absolute_path, out);
+    }
     writeVarInt(underlying_format_read_schema_id, out);
     writeVarInt(schema_id_relevant_to_iterator, out);
     writeVarInt(sequence_number, out);
@@ -169,6 +184,10 @@ void IcebergObjectSerializableInfo::deserializeForClusterFunctionProtocol(ReadBu
 {
     checkVersion(protocol_version);
     readStringBinary(data_object_file_path_key, in);
+    if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
+    {
+        readStringBinary(data_object_file_absolute_path, in);
+    }
     readVarInt(underlying_format_read_schema_id, in);
     readVarInt(schema_id_relevant_to_iterator, in);
     readVarInt(sequence_number, in);

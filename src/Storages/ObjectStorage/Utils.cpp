@@ -14,16 +14,16 @@
 #include <Interpreters/evaluateConstantExpression.h>
 #include <Storages/checkAndGetLiteralArgument.h>
 #include <Poco/UUIDGenerator.h>
-#include <Disks/ObjectStorages/ObjectStorageFactory.h>
+#include <Disks/DiskObjectStorage/ObjectStorages/ObjectStorageFactory.h>
 #include <Poco/Util/MapConfiguration.h>
 #include <IO/S3/URI.h>
 #include <filesystem>
 #include <functional>
 #if USE_AWS_S3
-#include <Disks/ObjectStorages/S3/S3ObjectStorage.h>
+#include <Disks/DiskObjectStorage/ObjectStorages/S3/S3ObjectStorage.h>
 #endif
 #if USE_HDFS
-#include <Disks/ObjectStorages/HDFS/HDFSObjectStorage.h>
+#include <Disks/DiskObjectStorage/ObjectStorages/HDFS/HDFSObjectStorage.h>
 #endif
 
 

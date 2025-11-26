@@ -37,6 +37,8 @@ ClusterFunctionReadTaskResponse::ClusterFunctionReadTaskResponse(ObjectInfoPtr o
     if (std::dynamic_pointer_cast<IcebergDataObjectInfo>(object))
     {
         iceberg_info = dynamic_cast<IcebergDataObjectInfo &>(*object).info;
+        if (object->path_with_metadata.absolute_path.has_value())
+            iceberg_info.value().data_object_file_absolute_path = object->path_with_metadata.absolute_path.value();
     }
 #endif
 
@@ -61,8 +63,10 @@ ObjectInfoPtr ClusterFunctionReadTaskResponse::getObjectInfo() const
     if (iceberg_info.has_value())
     {
 #if USE_AVRO
-        auto iceberg_object = std::make_shared<IcebergDataObjectInfo>(PathWithMetadata{path});
+        auto iceberg_object = std::make_shared<IcebergDataObjectInfo>(PathWithMetadata{path, std::nullopt, absolute_path});
         iceberg_object->info = iceberg_info.value();
+        if (!iceberg_info->data_object_file_absolute_path.empty())
+            iceberg_object->path_with_metadata.absolute_path = iceberg_info->data_object_file_absolute_path;
         object = iceberg_object;
 #else
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Iceberg support is disabled");

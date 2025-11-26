@@ -2,7 +2,7 @@
 #include <Storages/ObjectStorage/StorageObjectStorage.h>
 #include <Parsers/IAST_fwd.h>
 
-#include <Disks/ObjectStorages/IObjectStorage_fwd.h>
+#include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage_fwd.h>
 #include <mutex>
 #include <map>
 
@@ -18,7 +18,7 @@ struct SecondaryStorages
     std::map<std::string, ObjectStoragePtr> storages;
 };
 
-// A URI splitted into components
+// A URI split into components
 //  s3://bucket/a/b -> scheme="s3", authority="bucket", path="/a/b"
 //  file:///var/x    -> scheme="file", authority="",     path="/var/x"
 //  /abs/p           -> scheme="",     authority="",     path="/abs/p"

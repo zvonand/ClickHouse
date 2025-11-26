@@ -14,7 +14,7 @@ namespace DB::Iceberg
 struct IcebergObjectSerializableInfo
 {
     String data_object_file_path_key;
-    // String data_object_file_absolute_path;  //TODO: bump protocol and make (de)serialization
+    String data_object_file_absolute_path;
     Int32 underlying_format_read_schema_id;
     Int32 schema_id_relevant_to_iterator;
     Int64 sequence_number;

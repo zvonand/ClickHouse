@@ -510,8 +510,6 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
         }
     } while (query_settings.skip_empty_files && object_info->getObjectMetadata()->size_bytes == 0);
 
-
-
     QueryPipelineBuilder builder;
     std::shared_ptr<ISource> source;
     std::unique_ptr<ReadBuffer> read_buf;

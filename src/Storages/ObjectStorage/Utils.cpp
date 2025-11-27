@@ -603,7 +603,11 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
 
     std::string key_to_use = target_decomposed.key;
     if (target_scheme_normalized == "file")
-        key_to_use = "/" + target_decomposed.key;  // file:///absolute/path/to/file -> key = /absolute/path/to/file (full POSIX path)
+    {
+        /// Only prepend '/' if the key doesn't already start with '/'
+        if (key_to_use.empty() || key_to_use.front() != '/')
+            key_to_use = "/" + key_to_use;
+    }
 
     /// Handle storage types that need new storage creation
     return getOrCreateStorageAndKey(

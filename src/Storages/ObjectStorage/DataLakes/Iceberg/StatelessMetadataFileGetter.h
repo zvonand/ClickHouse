@@ -41,9 +41,9 @@ ManifestFileCacheKeys getManifestList(
     StorageObjectStorageConfigurationWeakPtr configuration,
     const PersistentTableComponents & persistent_table_components,
     ContextPtr local_context,
-    const String & key_in_storage,
     const String & absolute_path,
-    LoggerPtr log);
+    LoggerPtr log,
+    SecondaryStorages & secondary_storages);
 
 }
 

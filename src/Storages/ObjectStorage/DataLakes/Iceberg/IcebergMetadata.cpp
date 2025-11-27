@@ -301,17 +301,15 @@ IcebergDataSnapshotPtr IcebergMetadata::createIcebergDataSnapshotFromSnapshotJSO
 
     auto configuration_ptr = getConfiguration();
 
-    auto [storage_to_use, key_in_storage] = resolveObjectStorageForPath(persistent_components.table_location, manifest_list_file_path, object_storage, *secondary_storages, local_context);
-
     return std::make_shared<IcebergDataSnapshot>(
         getManifestList(
-            storage_to_use,
+            object_storage,
             configuration_ptr,
             persistent_components,
             local_context,
-            key_in_storage,
             makeAbsolutePath(persistent_components.table_location, manifest_list_file_path),
-            log),
+            log,
+            *secondary_storages),
         snapshot_id,
         schema_id,
         total_rows,
@@ -702,7 +700,10 @@ IcebergMetadata::IcebergHistory IcebergMetadata::getHistory(ContextPtr local_con
 
         const auto snapshot = snapshots->getObject(static_cast<UInt32>(i));
         history_record.snapshot_id = snapshot->getValue<Int64>(f_metadata_snapshot_id);
-        history_record.manifest_list_path = snapshot->getValue<String>(f_manifest_list);
+
+        auto manifest_list_path = snapshot->getValue<String>(f_manifest_list);
+        history_record.manifest_list_absolute_path = makeAbsolutePath(persistent_components.table_location, manifest_list_path);
+
         const auto summary = snapshot->getObject(f_summary);
         if (summary->has(f_added_data_files))
             history_record.added_files = summary->getValue<Int32>(f_added_data_files);

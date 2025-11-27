@@ -124,9 +124,9 @@ ManifestFileCacheKeys getManifestList(
     StorageObjectStorageConfigurationWeakPtr configuration,
     const PersistentTableComponents & persistent_table_components,
     ContextPtr local_context,
-    const String & key_in_storage,
     const String & absolute_path,
-    LoggerPtr log)
+    LoggerPtr log,
+    SecondaryStorages & secondary_storages)
 {
     auto configuration_ptr = configuration.lock();
     if (configuration_ptr == nullptr)
@@ -139,19 +139,22 @@ ManifestFileCacheKeys getManifestList(
 
     auto create_fn = [&, use_iceberg_metadata_cache]()
     {
-        PathWithMetadata object_info(key_in_storage, std::nullopt, absolute_path, object_storage);
+        auto [storage_to_use, key_in_storage] = resolveObjectStorageForPath(
+            persistent_table_components.table_location, absolute_path, object_storage, secondary_storages, local_context);
+
+        PathWithMetadata object_info(key_in_storage, std::nullopt, absolute_path, storage_to_use);
 
         auto read_settings = local_context->getReadSettings();
         /// Do not utilize filesystem cache if more precise cache enabled
         if (use_iceberg_metadata_cache)
             read_settings.enable_filesystem_cache = false;
 
-        auto manifest_list_buf = createReadBuffer(object_info, object_storage, local_context, log, read_settings);
+        auto manifest_list_buf = createReadBuffer(object_info, storage_to_use, local_context, log, read_settings);
         AvroForIcebergDeserializer manifest_list_deserializer(std::move(manifest_list_buf), key_in_storage, getFormatSettings(local_context));
 
         ManifestFileCacheKeys manifest_file_cache_keys;
 
-        insertRowToLogTable(
+            insertRowToLogTable(
             local_context,
             manifest_list_deserializer.getMetadataContent(),
             DB::IcebergMetadataLogLevel::ManifestListMetadata,

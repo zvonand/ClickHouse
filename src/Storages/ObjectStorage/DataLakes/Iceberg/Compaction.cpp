@@ -148,10 +148,8 @@ Plan getPlan(
     std::unordered_map<String, std::shared_ptr<ManifestFilePlan>> manifest_files;
     for (const auto & snapshot : snapshots_info)
     {
-        auto [manifest_list_storage, key_in_storage] = resolveObjectStorageForPath(persistent_table_components.table_location, snapshot.manifest_list_path, object_storage, secondary_storages, context);
-
         auto manifest_list
-            = getManifestList(manifest_list_storage, configuration, persistent_table_components, context, key_in_storage, snapshot.manifest_list_path, log);
+            = getManifestList(object_storage, configuration, persistent_table_components, context, snapshot.manifest_list_absolute_path, log, secondary_storages);
 
         for (const auto & manifest_file : manifest_list)
         {
@@ -176,7 +174,7 @@ Plan getPlan(
                 manifest_files[manifest_file.manifest_file_absolute_path] = std::make_shared<ManifestFilePlan>(current_schema);
                 manifest_files[manifest_file.manifest_file_absolute_path]->path = manifest_file.manifest_file_absolute_path;
             }
-            manifest_files[manifest_file.manifest_file_absolute_path]->manifest_lists_path.push_back(snapshot.manifest_list_path);
+            manifest_files[manifest_file.manifest_file_absolute_path]->manifest_lists_path.push_back(snapshot.manifest_list_absolute_path);
             auto data_files = manifest_file_content->getFilesWithoutDeleted(FileContentType::DATA);
             auto positional_delete_files = manifest_file_content->getFilesWithoutDeleted(FileContentType::POSITION_DELETE);
             for (const auto & pos_delete_file : positional_delete_files)
@@ -448,7 +446,7 @@ void writeMetadataFiles(
         if (plan.history[i].added_files == 0)
             continue;
 
-        manifest_list_renamings[plan.history[i].manifest_list_path] = new_snapshots[i].metadata_path;
+        manifest_list_renamings[plan.history[i].manifest_list_absolute_path] = new_snapshots[i].metadata_path;
     }
 
     for (size_t i = 0; i < plan.history.size(); ++i)
@@ -458,7 +456,7 @@ void writeMetadataFiles(
 
         auto initial_manifest_list_name = plan.history[i].manifest_list_absolute_path;
         auto initial_manifest_entries = plan.manifest_list_to_manifest_files[initial_manifest_list_name];
-        auto renamed_manifest_list = manifest_list_renamings[plan.history[i].manifest_list_path];
+        auto renamed_manifest_list = manifest_list_renamings[plan.history[i].manifest_list_absolute_path];
         std::vector<String> renamed_manifest_entries;
         Int32 total_manifest_file_sizes = 0;
         for (const auto & initial_manifest_entry : initial_manifest_entries)

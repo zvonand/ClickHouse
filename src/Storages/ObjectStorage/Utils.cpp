@@ -168,7 +168,6 @@ std::string normalizePathToStorageRoot(const std::string & table_location, const
 
 }
 
-// TODO: handle https://s3.amazonaws.com/bucketname/... properly
 SchemeAuthorityKey::SchemeAuthorityKey(const std::string & uri)
 {
     if (uri.empty())
@@ -192,15 +191,7 @@ SchemeAuthorityKey::SchemeAuthorityKey(const std::string & uri)
         return;
     }
 
-    // if part has no scheme and starts with '/' -- it is an absolute uri for local file: file:///path
-    if (uri.front() == '/')
-    {
-        scheme = "file";
-        key = std::string(uri);
-        return;
-    }
-
-    // Relative path
+    // Relative path (paths starting with '/' without a scheme are now handled by the caller)
     key = std::string(uri);
 }
 
@@ -463,6 +454,9 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
 
     SchemeAuthorityKey table_location_decomposed{table_location};
     SchemeAuthorityKey target_decomposed{path};
+
+    if (target_decomposed.scheme.empty() && target_decomposed.key.starts_with('/'))
+        return {base_storage, normalizePathToStorageRoot(table_location, target_decomposed.key)};
 
     const std::string base_scheme_normalized = normalizeScheme(table_location_decomposed.scheme);
     const std::string target_scheme_normalized = normalizeScheme(target_decomposed.scheme);

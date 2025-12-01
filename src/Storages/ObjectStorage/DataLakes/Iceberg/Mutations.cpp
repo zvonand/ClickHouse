@@ -217,21 +217,21 @@ static std::optional<WriteDataFilesResult> writeDataFiles(
                     col_data_filename.column->get(i, cur_value);
 
                     String original_path = cur_value.safeGet<String>();
-                    String path_without_namespace;
+                    String file_path_key;
 
                     if (original_path.starts_with(configuration->getNamespace()))
-                        path_without_namespace = original_path.substr(configuration->getNamespace().size());
+                        file_path_key = original_path.substr(configuration->getNamespace().size());
                     else
-                        path_without_namespace = original_path;
+                        file_path_key = original_path;
 
-                    if (!path_without_namespace.empty() && !path_without_namespace.starts_with(configuration->getPathForRead().path))
+                    /// The file_path_key in position delete files must match exactly the manifest.
+                    /// The manifest stores the path as written during INSERT, which includes the leading '/'.
+                    if (!file_path_key.empty() && !file_path_key.starts_with('/'))
                     {
-                        if (path_without_namespace.starts_with('/'))
-                            path_without_namespace = path_without_namespace.substr(1);
-                        else if (!path_without_namespace.empty())
-                            path_without_namespace = "/" + path_without_namespace;
+                        file_path_key = "/" + file_path_key;
                     }
-                    col_data_filename_without_namespaces->insert(path_without_namespace);
+
+                    col_data_filename_without_namespaces->insert(file_path_key);
                 }
                 col_data_filename.column = std::move(col_data_filename_without_namespaces);
                 Columns chunk_pos_delete;

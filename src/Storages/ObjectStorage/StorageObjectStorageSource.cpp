@@ -162,6 +162,7 @@ std::shared_ptr<IObjectIterator> StorageObjectStorageSource::createFileIterator(
             local_context->getSettingsRef()[Setting::max_threads],
             /*is_archive_=*/is_archive && !expect_whole_archive,
             object_storage,
+            configuration->getPathForRead().path,
             local_context);
 
         if (is_archive && expect_whole_archive)
@@ -1104,11 +1105,13 @@ StorageObjectStorageSource::ReadTaskIterator::ReadTaskIterator(
     size_t max_threads_count,
     bool is_archive_,
     ObjectStoragePtr object_storage_,
+    const std::string & table_location_,
     ContextPtr context_)
     : WithContext(context_)
     , callback(callback_)
     , is_archive(is_archive_)
     , object_storage(object_storage_)
+    , table_location(table_location_)
 {
     ThreadPool pool(
         CurrentMetrics::StorageObjectStorageThreads,
@@ -1137,7 +1140,7 @@ StorageObjectStorageSource::ReadTaskIterator::ReadTaskIterator(
         {
             if (object->getAbsolutePath().has_value())
             {
-                auto [storage_to_use, key] = resolveObjectStorageForPath("", object->getAbsolutePath().value(), object_storage, secondary_storages, getContext());
+                auto [storage_to_use, key] = resolveObjectStorageForPath(table_location, object->getAbsolutePath().value(), object_storage, secondary_storages, getContext());
                 if (!key.empty())
                 {
                     object->path_with_metadata.object_storage_to_use = storage_to_use;
@@ -1171,7 +1174,7 @@ ObjectInfoPtr StorageObjectStorageSource::ReadTaskIterator::next(size_t)
         if (raw->absolute_path.has_value())
         {
             auto [storage_to_use, key]
-                = resolveObjectStorageForPath("", raw->absolute_path.value(), object_storage, secondary_storages, getContext());
+                = resolveObjectStorageForPath(table_location, raw->absolute_path.value(), object_storage, secondary_storages, getContext());
 
             // Only resolve absolute_path to relative_path if target storage is different (for secondary storages).
             if (!key.empty() && storage_to_use != object_storage)

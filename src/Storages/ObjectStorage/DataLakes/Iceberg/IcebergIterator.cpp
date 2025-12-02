@@ -134,7 +134,6 @@ std::optional<ManifestFileEntry> SingleThreadIcebergKeysIterator::next()
             }
             current_manifest_file_content = Iceberg::getManifestFile(
                 object_storage,
-                configuration.lock(),
                 persistent_components,
                 local_context,
                 log,
@@ -171,7 +170,7 @@ std::optional<ManifestFileEntry> SingleThreadIcebergKeysIterator::next()
                 local_context,
                 "",
                 DB::IcebergMetadataLogLevel::ManifestFileEntry,
-                configuration.lock()->getRawPath().path,
+                persistent_components.table_path,
                 current_manifest_file_content->getPathToManifestFile(),
                 manifest_file_entry.row_number,
                 pruning_status);
@@ -218,7 +217,6 @@ SingleThreadIcebergKeysIterator::SingleThreadIcebergKeysIterator(
     ContextPtr local_context_,
     FilesGenerator files_generator_,
     Iceberg::ManifestFileContentType manifest_file_content_type_,
-    StorageObjectStorageConfigurationWeakPtr configuration_,
     const ActionsDAG * filter_dag_,
     Iceberg::TableStateSnapshotPtr table_snapshot_,
     Iceberg::IcebergDataSnapshotPtr data_snapshot_,
@@ -229,7 +227,6 @@ SingleThreadIcebergKeysIterator::SingleThreadIcebergKeysIterator(
     , local_context(local_context_)
     , table_snapshot(table_snapshot_)
     , data_snapshot(data_snapshot_)
-    , configuration(std::move(configuration_))
     , use_partition_pruning(
           [this]()
           {
@@ -253,7 +250,6 @@ SingleThreadIcebergKeysIterator::SingleThreadIcebergKeysIterator(
 IcebergIterator::IcebergIterator(
     ObjectStoragePtr object_storage_,
     ContextPtr local_context_,
-    StorageObjectStorageConfigurationWeakPtr configuration_,
     const ActionsDAG * filter_dag_,
     IDataLakeMetadata::FileProgressCallback callback_,
     Iceberg::TableStateSnapshotPtr table_snapshot_,
@@ -270,7 +266,6 @@ IcebergIterator::IcebergIterator(
           [](const Iceberg::ManifestFilePtr & manifest_file)
           { return manifest_file->getFilesWithoutDeleted(Iceberg::FileContentType::DATA); },
           Iceberg::ManifestFileContentType::DATA,
-          configuration_,
           filter_dag.get(),
           table_snapshot_,
           data_snapshot_,
@@ -287,7 +282,6 @@ IcebergIterator::IcebergIterator(
               return position_deletes;
           },
           Iceberg::ManifestFileContentType::DELETE,
-          configuration_,
           filter_dag.get(),
           table_snapshot_,
           data_snapshot_,

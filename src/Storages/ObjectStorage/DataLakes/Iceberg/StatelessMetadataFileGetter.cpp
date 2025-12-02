@@ -56,7 +56,6 @@ namespace DB
 namespace ErrorCodes
 {
 extern const int ICEBERG_SPECIFICATION_VIOLATION;
-extern const int LOGICAL_ERROR;
 }
 
 namespace Setting
@@ -68,7 +67,6 @@ namespace Iceberg
 {
 Iceberg::ManifestFilePtr getManifestFile(
     ObjectStoragePtr object_storage,
-    StorageObjectStorageConfigurationPtr configuration,
     const PersistentTableComponents & persistent_table_components,
     ContextPtr local_context,
     LoggerPtr log,
@@ -101,7 +99,7 @@ Iceberg::ManifestFilePtr getManifestFile(
             manifest_file_deserializer,
             resolved_key_in_storage,
             persistent_table_components.format_version,
-            configuration->getPathForRead().path,
+            persistent_table_components.table_path,
             *persistent_table_components.schema_processor,
             inherited_sequence_number,
             inherited_snapshot_id,
@@ -110,10 +108,10 @@ Iceberg::ManifestFilePtr getManifestFile(
             absolute_path);
     };
 
-    if (use_iceberg_metadata_cache)
+    if (use_iceberg_metadata_cache && persistent_table_components.table_uuid.has_value())
     {
         auto manifest_file = persistent_table_components.metadata_cache->getOrSetManifestFile(
-            IcebergMetadataFilesCache::getKey(configuration, absolute_path), create_fn);
+            IcebergMetadataFilesCache::getKey(persistent_table_components.table_uuid.value(), absolute_path), create_fn);
         return manifest_file;
     }
     return create_fn();
@@ -121,17 +119,12 @@ Iceberg::ManifestFilePtr getManifestFile(
 
 ManifestFileCacheKeys getManifestList(
     ObjectStoragePtr object_storage,
-    StorageObjectStorageConfigurationWeakPtr configuration,
     const PersistentTableComponents & persistent_table_components,
     ContextPtr local_context,
     const String & absolute_path,
     LoggerPtr log,
     SecondaryStorages & secondary_storages)
 {
-    auto configuration_ptr = configuration.lock();
-    if (configuration_ptr == nullptr)
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "Configuration is expired");
-
     IcebergMetadataLogLevel log_level = local_context->getSettingsRef()[Setting::iceberg_metadata_log_level].value;
 
     bool use_iceberg_metadata_cache
@@ -158,7 +151,7 @@ ManifestFileCacheKeys getManifestList(
             local_context,
             manifest_list_deserializer.getMetadataContent(),
             DB::IcebergMetadataLogLevel::ManifestListMetadata,
-            configuration_ptr->getRawPath().path,
+            persistent_table_components.table_path,
             key_in_storage,
             std::nullopt,
             std::nullopt);
@@ -193,7 +186,7 @@ ManifestFileCacheKeys getManifestList(
                 local_context,
                 manifest_list_deserializer.getContent(i),
                 DB::IcebergMetadataLogLevel::ManifestListEntry,
-                configuration_ptr->getRawPath().path,
+                persistent_table_components.table_path,
                 key_in_storage,
                 i,
                 std::nullopt);
@@ -205,9 +198,9 @@ ManifestFileCacheKeys getManifestList(
     };
 
     ManifestFileCacheKeys manifest_file_cache_keys;
-    if (use_iceberg_metadata_cache)
+    if (use_iceberg_metadata_cache && persistent_table_components.table_uuid.has_value())
         manifest_file_cache_keys = persistent_table_components.metadata_cache->getOrSetManifestFileCacheKeys(
-            IcebergMetadataFilesCache::getKey(configuration_ptr, absolute_path), create_fn);
+            IcebergMetadataFilesCache::getKey(persistent_table_components.table_uuid.value(), absolute_path), create_fn);
     else
         manifest_file_cache_keys = create_fn();
     return manifest_file_cache_keys;

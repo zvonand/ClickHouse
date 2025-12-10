@@ -187,7 +187,12 @@ SchemeAuthorityKey::SchemeAuthorityKey(const std::string & uri)
             return;
         }
         authority = std::string(rest.substr(0, slash));
-        key = std::string(rest.substr(++slash)); // do not keep leading '/'
+        /// For file:// URIs, the path is absolute, so we need to keep the leading '/'
+        /// e.g. file:///home/user/data -> scheme="file", authority="", key="/home/user/data"
+        if (scheme == "file")
+            key = std::string(rest.substr(slash));
+        else
+            key = std::string(rest.substr(++slash));
         return;
     }
 
@@ -595,18 +600,10 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
     if (type_for_factory.empty())
         throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Unsupported storage scheme '{}' in path '{}'", target_scheme_normalized, path);
 
-    std::string key_to_use = target_decomposed.key;
-    if (target_scheme_normalized == "file")
-    {
-        /// Only prepend '/' if the key doesn't already start with '/'
-        if (key_to_use.empty() || key_to_use.front() != '/')
-            key_to_use = "/" + key_to_use;
-    }
-
     /// Handle storage types that need new storage creation
     return getOrCreateStorageAndKey(
         cache_key,
-        key_to_use,
+        target_decomposed.key,
         type_for_factory,
         secondary_storages,
         context,
@@ -614,7 +611,7 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
         {
             if (target_scheme_normalized == "file")
             {
-                std::filesystem::path fs_path(key_to_use);
+                std::filesystem::path fs_path(target_decomposed.key);
                 std::filesystem::path parent = fs_path.parent_path();
                 std::string dir_path = parent.string();
 

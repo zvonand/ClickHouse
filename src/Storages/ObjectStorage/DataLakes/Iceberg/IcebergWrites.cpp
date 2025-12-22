@@ -575,7 +575,7 @@ void generateManifestList(
                                     throw Exception(
                                         ErrorCodes::ICEBERG_SPECIFICATION_VIOLATION,
                                         "Manifest list {} has null value for field '{}', but it is required",
-                                        relative_path_with_metadata.getPath(),
+                                        path_with_metadata.getPath(),
                                         Iceberg::f_added_snapshot_id);
                                 }
                             }
@@ -586,7 +586,7 @@ void generateManifestList(
                             throw Exception(
                                 ErrorCodes::ICEBERG_SPECIFICATION_VIOLATION,
                                 "Manifest list {} has null value for field '{}', but it is required",
-                                relative_path_with_metadata.getPath(),
+                                path_with_metadata.getPath(),
                                 Iceberg::f_added_snapshot_id);
                         auto add_field_to_datum = [&](const String & field)
                         {

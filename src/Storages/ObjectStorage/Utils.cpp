@@ -128,8 +128,15 @@ std::pair<ObjectStoragePtr, std::string> getOrCreateStorageAndKey(
     return {storage, key_to_use};
 }
 
-/// Normalize a path (relative to table location ot absolute path) to a key that will be looked up in the object storage.
-std::string normalizePathToStorageRoot(const std::string & table_location, const std::string & path)
+/// Convert a path (relative to table location ot absolute path) to a key that will be looked up in the object storage.
+///
+/// - If `table_location` is empty, the path is treated as already relative to storage root.
+/// - If `path` is an absolute path, its key component (without scheme/authority) is returned.
+/// - If `table_location` parses to a URI whose key part is empty, `path` is returned unchanged (exception will be thrown when looking up non-existing object in storage)
+///
+/// - Otherwise, `path` is treated as relative to `table_location`'s key:
+/// leading '/' stripped, concatenated to table_location key, and the result is normalized.
+std::string convertPathToKeyInStorage(const std::string & table_location, const std::string & path)
 {
     if (table_location.empty())
     {
@@ -441,7 +448,7 @@ std::string makeAbsolutePath(const std::string & table_location, const std::stri
 
     auto table_location_decomposed = SchemeAuthorityKey(table_location);
 
-    std::string normalized_key = normalizePathToStorageRoot(table_location, path);
+    std::string normalized_key = convertPathToKeyInStorage(table_location, path);
 
     if (!table_location_decomposed.scheme.empty())
         return table_location_decomposed.scheme + "://" + table_location_decomposed.authority + "/" + normalized_key;
@@ -457,13 +464,13 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
     const DB::ContextPtr & context)
 {
     if (!isAbsolutePath(path))
-        return {base_storage, normalizePathToStorageRoot(table_location, path)}; // Relative path definitely goes to base storage
+        return {base_storage, convertPathToKeyInStorage(table_location, path)}; // Relative path definitely goes to base storage
 
     SchemeAuthorityKey table_location_decomposed{table_location};
     SchemeAuthorityKey target_decomposed{path};
 
     if (target_decomposed.scheme.empty() && target_decomposed.key.starts_with('/'))
-        return {base_storage, normalizePathToStorageRoot(table_location, target_decomposed.key)};
+        return {base_storage, convertPathToKeyInStorage(table_location, target_decomposed.key)};
 
     const std::string base_scheme_normalized = normalizeScheme(table_location_decomposed.scheme);
     const std::string target_scheme_normalized = normalizeScheme(target_decomposed.scheme);

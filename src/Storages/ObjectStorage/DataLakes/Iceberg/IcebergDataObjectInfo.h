@@ -13,7 +13,7 @@ namespace DB::Iceberg
 {
 struct IcebergObjectSerializableInfo
 {
-    String data_object_file_path_key;
+    String data_object_file_path_from_metadata;
     String data_object_file_absolute_path;
     Int32 underlying_format_read_schema_id;
     Int32 schema_id_relevant_to_iterator;

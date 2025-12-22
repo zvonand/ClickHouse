@@ -408,7 +408,7 @@ void writeMetadataFiles(
             manifest_entry->patched_path = plan.generator.generateManifestEntryName();
             manifest_file_renamings[manifest_entry->path] = manifest_entry->patched_path.path_in_metadata;
 
-            std::vector<String> unique_data_filenames(data_filenames.begin(), data_filenames.end());
+            std::vector<String> manifest_data_filenames(data_filenames.begin(), data_filenames.end());
 
             auto buffer_manifest_entry = object_storage->writeObject(
                 StoredObject(manifest_entry->patched_path.path_in_storage),
@@ -427,7 +427,7 @@ void writeMetadataFiles(
                 partition_columns,
                 plan.partition_encoder.getPartitionValue(grouped_by_manifest_files_partitions[manifest_entry]),
                 ChunkPartitioner(fields_from_partition_spec, current_schema, context, sample_block_).getResultTypes(),
-                unique_data_filenames,
+                manifest_data_filenames,
                 manifest_entry->statistics,
                 sample_block_,
                 snapshot,

@@ -157,8 +157,6 @@ def test_table_metadata_in_different_bucket(started_cluster_iceberg):
     
     # Verify download worked
     assert os.path.exists(host_download_path), f"Download path doesn't exist: {host_download_path}"
-    if os.path.exists(host_download_path):
-        downloaded_items = os.listdir(host_download_path)
     
     # Upload only metadata directory to metadata_bucket
     host_metadata_dir = os.path.join(host_download_path, "metadata")

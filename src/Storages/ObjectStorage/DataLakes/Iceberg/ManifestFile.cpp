@@ -286,8 +286,8 @@ ManifestFileContent::ManifestFileContent(
         }
         const auto schema_id = schema_id_opt.has_value() ? schema_id_opt.value() : manifest_schema_id;
 
-        const auto file_path_key = manifest_file_deserializer.getValueFromRowByName(i, c_data_file_file_path, TypeIndex::String).safeGet<String>();
-        const auto file_path = makeAbsolutePath(table_location, file_path_key);
+        const auto file_path_from_metadata = manifest_file_deserializer.getValueFromRowByName(i, c_data_file_file_path, TypeIndex::String).safeGet<String>();
+        const auto file_path = makeAbsolutePath(table_location, file_path_from_metadata);
 
         /// NOTE: This is weird, because in manifest file partition looks like this:
         /// {
@@ -427,7 +427,7 @@ ManifestFileContent::ManifestFileContent(
         {
             case FileContentType::DATA:
                 this->data_files_without_deleted.emplace_back(
-                    file_path_key,
+                    file_path_from_metadata,
                     file_path,
                     i,
                     status,
@@ -455,7 +455,7 @@ ManifestFileContent::ManifestFileContent(
                     }
                 }
                 this->position_deletes_files_without_deleted.emplace_back(
-                    file_path_key,
+                    file_path_from_metadata,
                     file_path,
                     i,
                     status,
@@ -484,7 +484,7 @@ ManifestFileContent::ManifestFileContent(
                             DB::ErrorCodes::ICEBERG_SPECIFICATION_VIOLATION,
                             "Couldn't find field {} in equality delete file entry", c_data_file_equality_ids);
                 this->equality_deletes_files.emplace_back(
-                    file_path_key,
+                    file_path_from_metadata,
                     file_path,
                     i,
                     status,

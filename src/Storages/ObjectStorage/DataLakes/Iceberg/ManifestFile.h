@@ -59,7 +59,7 @@ using PartitionSpecification = std::vector<PartitionSpecsEntry>;
 struct ManifestFileEntry
 {
     // It's the original string in the Iceberg metadata
-    String file_path_key;
+    String file_path_from_metadata;
     // It's a processed file path to be used by Object Storage
     String file_path;
     Int64 row_number;

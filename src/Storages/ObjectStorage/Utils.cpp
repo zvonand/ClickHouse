@@ -182,8 +182,10 @@ SchemeAuthorityKey::SchemeAuthorityKey(const std::string & uri)
         auto slash = rest.find('/');
         if (slash == std::string_view::npos)
         {
+            /// Bad URI: missing path component after authority.
+            /// Exception will be thrown when looking up on-existing object in the storage, so we can just return here.
             authority = std::string(rest);
-            key = "/";   // Path obviously incorrect, but it will be dealt with by caller
+            key = "/";
             return;
         }
         authority = std::string(rest.substr(0, slash));

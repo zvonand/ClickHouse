@@ -44,9 +44,9 @@ extern const SettingsBool use_roaring_bitmap_iceberg_positional_deletes;
 
 IcebergDataObjectInfo::IcebergDataObjectInfo(Iceberg::ManifestFileEntry data_manifest_file_entry_, Int32 schema_id_relevant_to_iterator_)
 : ObjectInfo(PathWithMetadata(data_manifest_file_entry_.file_path, std::nullopt,
-                   data_manifest_file_entry_.file_path_key.empty() ? std::nullopt : std::make_optional(data_manifest_file_entry_.file_path_key)))
+                   data_manifest_file_entry_.file_path_from_metadata.empty() ? std::nullopt : std::make_optional(data_manifest_file_entry_.file_path_from_metadata)))
     , info{
-          data_manifest_file_entry_.file_path_key,
+          data_manifest_file_entry_.file_path_from_metadata,
           String{},
           data_manifest_file_entry_.schema_id,
           schema_id_relevant_to_iterator_,
@@ -68,7 +68,7 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(
                        data_manifest_file_entry_.file_path.empty() ? std::nullopt : std::make_optional(data_manifest_file_entry_.file_path),
                        resolved_storage))
 , info{
-    data_manifest_file_entry_.file_path_key,
+    data_manifest_file_entry_.file_path_from_metadata,
     String{},
     data_manifest_file_entry_.schema_id,
     schema_id_relevant_to_iterator_,
@@ -130,7 +130,7 @@ void IcebergDataObjectInfo::addEqualityDeleteObject(const Iceberg::ManifestFileE
 void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuffer & out, size_t protocol_version) const
 {
     checkVersion(protocol_version);
-    writeStringBinary(data_object_file_path_key, out);
+    writeStringBinary(data_object_file_path_from_metadata, out);
     if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {
         writeStringBinary(data_object_file_absolute_path, out);
@@ -183,7 +183,7 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
 void IcebergObjectSerializableInfo::deserializeForClusterFunctionProtocol(ReadBuffer & in, size_t protocol_version)
 {
     checkVersion(protocol_version);
-    readStringBinary(data_object_file_path_key, in);
+    readStringBinary(data_object_file_path_from_metadata, in);
     if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {
         readStringBinary(data_object_file_absolute_path, in);

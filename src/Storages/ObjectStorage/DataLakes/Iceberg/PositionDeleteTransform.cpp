@@ -59,7 +59,7 @@ Poco::JSON::Array::Ptr IcebergPositionDeleteTransform::getSchemaFields()
 void IcebergPositionDeleteTransform::initializeDeleteSources()
 {
     /// Create filter on the data object to get interested rows
-    auto iceberg_data_path = iceberg_object_info->info.data_object_file_path_key;
+    auto iceberg_data_path = iceberg_object_info->info.data_object_file_path_from_metadata;
     ASTPtr where_ast = makeASTFunction(
         "equals",
         std::make_shared<ASTIdentifier>(IcebergPositionDeleteTransform::data_file_path_column_name),

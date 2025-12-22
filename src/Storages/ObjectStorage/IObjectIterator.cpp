@@ -125,8 +125,6 @@ ObjectInfoPtr ObjectIteratorSplitByBuckets::next(size_t id)
             pending_objects_info.push(std::make_shared<ObjectInfo>(copy_object_info));
         }
     }
-    else
-        return last_object_info;
 
     if (pending_objects_info.empty())
         return last_object_info;

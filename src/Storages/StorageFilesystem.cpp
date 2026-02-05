@@ -1,10 +1,17 @@
 #include <chrono>
 #include <filesystem>
+#include <mutex>
+#include <unordered_set>
 #include <base/types.h>
 #include <Common/ConcurrentBoundedQueue.h>
+#include <Common/filesystemHelpers.h>
 #include <Common/logger_useful.h>
+#include <IO/ReadBufferFromFile.h>
+#include <IO/ReadHelpers.h>
 #include <Interpreters/Context.h>
+#include <Parsers/ASTLiteral.h>
 #include <Processors/ISource.h>
+#include <QueryPipeline/Pipe.h>
 #include <Storages/StorageFilesystem.h>
 #include <Storages/StorageFactory.h>
 #include <Storages/checkAndGetLiteralArgument.h>
@@ -27,22 +34,39 @@ namespace ErrorCodes
 namespace
 {
 
+String fileTypeToString(fs::file_type type)
+{
+    switch (type)
+    {
+        case fs::file_type::regular: return "regular";
+        case fs::file_type::directory: return "directory";
+        case fs::file_type::symlink: return "symlink";
+        case fs::file_type::block: return "block";
+        case fs::file_type::character: return "character";
+        case fs::file_type::fifo: return "fifo";
+        case fs::file_type::socket: return "socket";
+        case fs::file_type::not_found: return "not_found";
+        case fs::file_type::unknown: return "unknown";
+        default: return "none";
+    }
+}
+
 class FilesystemSource final : public ISource
 {
 public:
     struct PathInfo
     {
         ConcurrentBoundedQueue<fs::directory_entry> queue;
+        std::atomic<int64_t> in_flight{0};
+        std::mutex visited_mutex;
+        std::unordered_set<String> visited;
         const String user_files_absolute_path_string;
         const bool need_check;
-        fs::recursive_directory_iterator directory_iterator;
-        std::atomic_uint32_t rows = 1;
 
-        PathInfo(size_t num_streams, String user_files_absolute_path_string_, bool need_check_)
-            : queue(num_streams * 1000000L)
-            , user_files_absolute_path_string(user_files_absolute_path_string_)
+        PathInfo(String user_files_absolute_path_string_, bool need_check_)
+            : queue(10000)
+            , user_files_absolute_path_string(std::move(user_files_absolute_path_string_))
             , need_check(need_check_)
-            , directory_iterator(user_files_absolute_path_string)
         {
         }
     };
@@ -60,67 +84,100 @@ public:
             columns_map[name] = type->createColumn();
         }
 
+        bool need_content = columns_map.contains("content");
+
         fs::directory_entry file;
         while (current_block_size < max_block_size)
         {
-            if (!path_info->queue.tryPop(file))
-            {
-                LOG_TEST(&Poco::Logger::get("StorageFilesystem"), "No data read from queue, stop processing");
+            if (isCancelled())
                 break;
-            }
-            current_block_size++;
-            LOG_TEST(&Poco::Logger::get("StorageFilesystem"), "Processing path {} remaining queue size {}",
-                file.path().string(), path_info->queue.size());
+
+            if (!path_info->queue.pop(file))
+                break;
 
             std::error_code ec;
 
-            if (file.is_directory(ec) && !file.is_symlink(ec) && ec.value() == 0)
+            if (file.is_directory(ec) && ec.value() == 0)
             {
                 for (const auto & child : fs::directory_iterator(file, ec))
                 {
-                    fs::path file_path(child);
-                    /// Do not use fs::canonical or fs::weakly_canonical.
-                    /// Otherwise it will not allow to work with symlinks in `user_files_path` directory.
-                    file_path = fs::absolute(file_path).lexically_normal();
+                    fs::path child_path = fs::absolute(child.path()).lexically_normal();
 
-                    if (path_info->need_check && file_path.string().find(path_info->user_files_absolute_path_string) != 0)
+                    if (path_info->need_check && !fileOrSymlinkPathStartsWith(child_path.string(), path_info->user_files_absolute_path_string))
                     {
                         LOG_DEBUG(&Poco::Logger::get("StorageFilesystem"), "Path {} is not inside user_files {}",
-                            file_path.string(),path_info->user_files_absolute_path_string);
+                            child_path.string(), path_info->user_files_absolute_path_string);
+                        continue;
                     }
+
+                    /// Symlink cycle detection: for directories that are symlinks, check canonical path.
+                    if (child.is_directory(ec) && child.is_symlink(ec))
+                    {
+                        std::error_code canon_ec;
+                        auto canonical = fs::canonical(child_path, canon_ec);
+                        if (!canon_ec)
+                        {
+                            std::lock_guard lock(path_info->visited_mutex);
+                            if (!path_info->visited.emplace(canonical.string()).second)
+                                continue;
+                        }
+                    }
+
+                    path_info->in_flight.fetch_add(1);
                     if (!path_info->queue.push(child))
+                    {
+                        path_info->in_flight.fetch_sub(1);
                         LOG_WARNING(&Poco::Logger::get("StorageFilesystem"), "Too many files to process, skipping some from {}",
                             file.path().string());
+                    }
                 }
+
+                /// Directories themselves are also returned as rows.
             }
-            else
-            {
-                LOG_TEST(&Poco::Logger::get("StorageFilesystem"), "Not looking at children of path {}, is_dir {}, is_sym {}, ec {}",
-                    file.path().string(), file.is_directory(), file.is_symlink(), ec.value());
-            }
-            ec.clear();
+
+            current_block_size++;
 
             if (columns_map.contains("type"))
             {
-                columns_map["type"]->insert(toString(file.status().type()));
+                auto status = file.status(ec);
+                if (ec.value() == 0)
+                    columns_map["type"]->insert(fileTypeToString(status.type()));
+                else
+                {
+                    columns_map["type"]->insertDefault();
+                    ec.clear();
+                }
             }
 
-            if (columns_map.contains("symlink"))
+            if (columns_map.contains("is_symlink"))
             {
-                columns_map["symlink"]->insert(file.is_symlink());
+                columns_map["is_symlink"]->insert(file.is_symlink(ec));
+                ec.clear();
             }
 
             if (columns_map.contains("path"))
             {
                 columns_map["path"]->insert(file.path().string());
             }
+
+            if (columns_map.contains("name"))
+            {
+                columns_map["name"]->insert(file.path().filename().string());
+            }
+
             if (columns_map.contains("size"))
             {
                 auto is_regular_file = file.is_regular_file(ec);
-                auto inserted = is_regular_file ? file.file_size(ec) : 0;
                 if (ec.value() == 0 && is_regular_file)
                 {
-                    columns_map["size"]->insert(std::move(inserted));
+                    auto file_size = file.file_size(ec);
+                    if (ec.value() == 0)
+                        columns_map["size"]->insert(file_size);
+                    else
+                    {
+                        columns_map["size"]->insertDefault();
+                        ec.clear();
+                    }
                 }
                 else
                 {
@@ -131,13 +188,12 @@ public:
 
             if (columns_map.contains("modification_time"))
             {
-                auto file_time = fs::last_write_time(file.path().string(), ec);
-                auto sys_clock_file_time = std::chrono::file_clock::to_sys(file_time);
-                auto sys_clock_in_seconds_duration = std::chrono::time_point_cast<std::chrono::seconds>(sys_clock_file_time);
-                auto file_time_since_epoch = sys_clock_in_seconds_duration.time_since_epoch().count();
-
+                auto file_time = fs::last_write_time(file.path(), ec);
                 if (ec.value() == 0)
                 {
+                    auto sys_clock_file_time = std::chrono::file_clock::to_sys(file_time);
+                    auto sys_clock_in_seconds_duration = std::chrono::time_point_cast<std::chrono::seconds>(sys_clock_file_time);
+                    auto file_time_since_epoch = sys_clock_in_seconds_duration.time_since_epoch().count();
                     columns_map["modification_time"]->insert(file_time_since_epoch);
                 }
                 else
@@ -147,31 +203,58 @@ public:
                 }
             }
 
+            if (need_content)
+            {
+                auto is_regular = file.is_regular_file(ec);
+                if (ec.value() == 0 && is_regular)
+                {
+                    try
+                    {
+                        String content;
+                        ReadBufferFromFile in(file.path().string());
+                        readStringUntilEOF(content, in);
+                        columns_map["content"]->insert(std::move(content));
+                    }
+                    catch (...)
+                    {
+                        columns_map["content"]->insertDefault();
+                    }
+                }
+                else
+                {
+                    columns_map["content"]->insertDefault();
+                    ec.clear();
+                }
+            }
+
             for (const auto & [column_name, perm] : permissions_columns_names)
             {
                 if (!columns_map.contains(column_name))
                     continue;
-                columns_map[column_name]->insert(static_cast<bool>(file.status().permissions() & perm));
+                auto status = file.status(ec);
+                if (ec.value() == 0)
+                    columns_map[column_name]->insert(static_cast<bool>(status.permissions() & perm));
+                else
+                {
+                    columns_map[column_name]->insertDefault();
+                    ec.clear();
+                }
             }
 
-            if (columns_map.contains("name"))
+            /// Decrement in_flight after processing the item.
+            if (path_info->in_flight.fetch_sub(1) == 1)
             {
-                columns_map["name"]->insert(file.path().filename().string());
+                /// We were the last item; signal all streams to stop.
+                path_info->queue.finish();
             }
-
-            LOG_TEST(&Poco::Logger::get("StorageFilesystem"), "Processed path {} columns_map. {} ", file.path().string(),
-                columns_map.empty() ? -1 : columns_map.begin()->second->size());
         }
 
         auto num_rows = columns_map.begin() != columns_map.end() ? columns_map.begin()->second->size() : 0;
 
         if (num_rows == 0)
-        {
             return {};
-        }
 
         Columns columns;
-
         for (const auto & [name, _] : names_and_types_in_use)
         {
             columns.emplace_back(std::move(columns_map[name]));
@@ -182,9 +265,9 @@ public:
 
     FilesystemSource(
         const StorageSnapshotPtr & metadata_snapshot_, UInt64 max_block_size_, PathInfoPtr path_info_, Names column_names)
-        : ISource(metadata_snapshot_->getSampleBlockForColumns(column_names))
+        : ISource(std::make_shared<const Block>(metadata_snapshot_->getSampleBlockForColumns(column_names)))
         , storage_snapshot(metadata_snapshot_)
-        , path_info(path_info_)
+        , path_info(std::move(path_info_))
         , max_block_size(max_block_size_)
         , columns_in_use(std::move(column_names))
     {
@@ -193,11 +276,10 @@ public:
 private:
     StorageSnapshotPtr storage_snapshot;
     PathInfoPtr path_info;
-    ColumnsDescription columns_description;
     UInt64 max_block_size;
     Names columns_in_use;
 
-    const std::vector<std::pair<String, fs::perms>> permissions_columns_names\
+    const std::vector<std::pair<String, fs::perms>> permissions_columns_names
     {
         {"owner_read", fs::perms::owner_read},
         {"owner_write", fs::perms::owner_write},
@@ -226,19 +308,14 @@ Pipe StorageFilesystem::read(
     size_t max_block_size,
     size_t num_streams)
 {
-    auto this_ptr = std::static_pointer_cast<StorageFilesystem>(shared_from_this());
-
-    auto path_info = std::make_shared<FilesystemSource::PathInfo>(num_streams, user_files_absolute_path_string, !local_mode);
+    auto path_info = std::make_shared<FilesystemSource::PathInfo>(user_files_absolute_path_string, !local_mode);
 
     fs::path file_path(path);
     if (file_path.is_relative())
         file_path = fs::path(path_info->user_files_absolute_path_string) / file_path;
-    /// Do not use fs::canonical or fs::weakly_canonical.
-    /// Otherwise it will not allow to work with symlinks in `user_files_path` directory.
     file_path = fs::absolute(file_path).lexically_normal();
 
-
-    if (path_info->need_check && file_path.string().find(path_info->user_files_absolute_path_string) != 0)
+    if (path_info->need_check && !fileOrSymlinkPathStartsWith(file_path.string(), path_info->user_files_absolute_path_string))
         throw Exception(ErrorCodes::DATABASE_ACCESS_DENIED, "Path {} is not inside user_files {}",
             file_path.string(), path_info->user_files_absolute_path_string);
 
@@ -247,6 +324,16 @@ Pipe StorageFilesystem::read(
         throw Exception(ErrorCodes::DIRECTORY_DOESNT_EXIST, "Directory {} doesn't exist", file_path.string());
     }
 
+    /// Register the root directory as visited (by canonical path) to prevent symlink cycles.
+    {
+        std::error_code canon_ec;
+        auto canonical = fs::canonical(file_path, canon_ec);
+        if (!canon_ec)
+            path_info->visited.emplace(canonical.string());
+    }
+
+    /// in_flight starts at 1 for the root entry.
+    path_info->in_flight.store(1);
     if (!path_info->queue.push(fs::directory_entry(file_path)))
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot schedule a file '{}'", file_path.string());
 
@@ -268,7 +355,7 @@ StorageFilesystem::StorageFilesystem(
     String path_,
     String user_files_absolute_path_string_
     )
-    : IStorage(table_id_), local_mode(local_mode_), path(path_), user_files_absolute_path_string(user_files_absolute_path_string_)
+    : IStorage(table_id_), local_mode(local_mode_), path(std::move(path_)), user_files_absolute_path_string(std::move(user_files_absolute_path_string_))
 {
     StorageInMemoryMetadata metadata;
     metadata.setColumns(columns_);
@@ -280,11 +367,6 @@ StorageFilesystem::StorageFilesystem(
 Strings StorageFilesystem::getDataPaths() const
 {
     return {path};
-}
-
-NamesAndTypesList StorageFilesystem::getVirtuals() const
-{
-    return {};
 }
 
 
@@ -315,7 +397,7 @@ void registerStorageFilesystem(StorageFactory & factory)
             user_files_absolute_path_string);
     },
     {
-        .source_access_type = AccessType::FILESYSTEM,
+        .source_access_type = AccessTypeObjects::Source::FILE,
     });
 }
 }

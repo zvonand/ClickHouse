@@ -30,7 +30,7 @@ protected:
     ColumnsDescription getActualTableStructure(ContextPtr /* context */, bool /* is_insert_query */) const override;
 
 private:
-    const char * getStorageTypeName() const override { return "Filesystem"; }
+    const char * getStorageEngineName() const override { return "Filesystem"; }
 
     StoragePtr executeImpl(
         const ASTPtr & /* ast_function */,

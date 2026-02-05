@@ -33,11 +33,6 @@ public:
 
     Strings getDataPaths() const override;
 
-    NamesAndTypesList getVirtuals() const override;
-
-protected:
-    friend class StorageFilesystemSource;
-
 private:
     bool local_mode;
     String path;

@@ -2,7 +2,6 @@
 
 #include <DataTypes/IDataType.h>
 #include <Parsers/IAST_fwd.h>
-#include <Parsers/ASTColumnDeclaration.h>
 
 #include <base/types.h>
 
@@ -57,6 +56,8 @@ struct ColumnStatisticsDescription
     void clear();
 
     ASTPtr getAST() const;
+
+    String getNameForLogs() const;
 
     /// get a vector of <column name, statistics desc> pair
     static std::vector<std::pair<String, ColumnStatisticsDescription>> fromAST(const ASTPtr & definition_ast, const ColumnsDescription & columns);

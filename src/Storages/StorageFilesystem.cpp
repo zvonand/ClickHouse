@@ -34,20 +34,21 @@ namespace ErrorCodes
 namespace
 {
 
-String fileTypeToString(fs::file_type type)
+/// Must match the Enum8 values in TableFunctionFilesystem::getActualTableStructure.
+Int8 fileTypeToEnumValue(fs::file_type type)
 {
     switch (type)
     {
-        case fs::file_type::regular: return "regular";
-        case fs::file_type::directory: return "directory";
-        case fs::file_type::symlink: return "symlink";
-        case fs::file_type::block: return "block";
-        case fs::file_type::character: return "character";
-        case fs::file_type::fifo: return "fifo";
-        case fs::file_type::socket: return "socket";
-        case fs::file_type::not_found: return "not_found";
-        case fs::file_type::unknown: return "unknown";
-        default: return "none";
+        case fs::file_type::none:       return 0;
+        case fs::file_type::not_found:  return 1;
+        case fs::file_type::regular:    return 2;
+        case fs::file_type::directory:  return 3;
+        case fs::file_type::symlink:    return 4;
+        case fs::file_type::block:      return 5;
+        case fs::file_type::character:  return 6;
+        case fs::file_type::fifo:       return 7;
+        case fs::file_type::socket:     return 8;
+        case fs::file_type::unknown:    return 9;
     }
 }
 
@@ -141,10 +142,11 @@ public:
             {
                 auto status = file.status(ec);
                 if (ec.value() == 0)
-                    columns_map["type"]->insert(fileTypeToString(status.type()));
+                    columns_map["type"]->insert(fileTypeToEnumValue(status.type()));
                 else
                 {
-                    columns_map["type"]->insertDefault();
+                    /// 'unknown' on error
+                    columns_map["type"]->insert(Int8(9));
                     ec.clear();
                 }
             }

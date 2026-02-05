@@ -1,6 +1,7 @@
 #pragma once
 
 #include <DataTypes/DataTypeDateTime.h>
+#include <DataTypes/DataTypeEnum.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeString.h>

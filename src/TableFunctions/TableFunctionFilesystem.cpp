@@ -64,12 +64,25 @@ ColumnsDescription TableFunctionFilesystem::getActualTableStructure(ContextPtr /
 {
     auto bool_type = DataTypeFactory::instance().get("Bool");
 
+    auto file_type_enum = std::make_shared<DataTypeEnum8>(DataTypeEnum8::Values{
+        {"none",        0},
+        {"not_found",   1},
+        {"regular",     2},
+        {"directory",   3},
+        {"symlink",     4},
+        {"block",       5},
+        {"character",   6},
+        {"fifo",        7},
+        {"socket",      8},
+        {"unknown",     9},
+    });
+
     ColumnsDescription structure
     {
         {
             {"path", std::make_shared<DataTypeString>()},
             {"name", std::make_shared<DataTypeString>()},
-            {"type", std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>())},
+            {"type", std::move(file_type_enum)},
             {"size", std::make_shared<DataTypeNullable>(std::make_shared<DataTypeUInt64>())},
             {"modification_time", std::make_shared<DataTypeNullable>(std::make_shared<DataTypeDateTime>())},
             {"is_symlink", bool_type},

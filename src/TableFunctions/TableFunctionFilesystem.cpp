@@ -64,7 +64,8 @@ ColumnsDescription TableFunctionFilesystem::getActualTableStructure(ContextPtr /
 {
     auto bool_type = DataTypeFactory::instance().get("Bool");
 
-    auto file_type_enum = std::make_shared<DataTypeEnum8>(DataTypeEnum8::Values{
+    DataTypeEnum8::Values file_type_values
+    {
         {"none",        0},
         {"not_found",   1},
         {"regular",     2},
@@ -75,7 +76,8 @@ ColumnsDescription TableFunctionFilesystem::getActualTableStructure(ContextPtr /
         {"fifo",        7},
         {"socket",      8},
         {"unknown",     9},
-    });
+    };
+    auto file_type_enum = std::make_shared<DataTypeEnum8>(std::move(file_type_values));
 
     ColumnsDescription structure
     {

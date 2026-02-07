@@ -1,4 +1,6 @@
 #include <filesystem>
+#include <Core/NamesAndAliases.h>
+#include <DataTypes/DataTypeDateTime64.h>
 #include <Interpreters/evaluateConstantExpression.h>
 #include <Parsers/ASTLiteral.h>
 #include <Storages/StorageFilesystem.h>
@@ -86,7 +88,8 @@ ColumnsDescription TableFunctionFilesystem::getActualTableStructure(ContextPtr /
             {"name", std::make_shared<DataTypeString>()},
             {"type", std::move(file_type_enum)},
             {"size", std::make_shared<DataTypeNullable>(std::make_shared<DataTypeUInt64>())},
-            {"modification_time", std::make_shared<DataTypeNullable>(std::make_shared<DataTypeDateTime>())},
+            {"depth", std::make_shared<DataTypeUInt16>()},
+            {"modification_time", std::make_shared<DataTypeNullable>(std::make_shared<DataTypeDateTime64>(6))},
             {"is_symlink", bool_type},
             {"content", std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>())},
             {"owner_read", bool_type},
@@ -103,6 +106,10 @@ ColumnsDescription TableFunctionFilesystem::getActualTableStructure(ContextPtr /
             {"sticky_bit", bool_type}
         }
     };
+
+    structure.setAliases(NamesAndAliases{
+        {"file", std::make_shared<DataTypeString>(), "name"},
+    });
 
     return structure;
 }

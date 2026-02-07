@@ -20,12 +20,13 @@ public:
         String path_,
         String user_files_absolute_path_string_);
 
-    Pipe read(
+    void read(
+        QueryPlan & query_plan,
         const Names & column_names,
         const StorageSnapshotPtr & storage_snapshot,
-        SelectQueryInfo & /* queryInfo */,
-        ContextPtr /* context */,
-        QueryProcessingStage::Enum /* processed_stage */,
+        SelectQueryInfo & query_info,
+        ContextPtr context,
+        QueryProcessingStage::Enum processed_stage,
         size_t max_block_size,
         size_t num_streams) override;
 

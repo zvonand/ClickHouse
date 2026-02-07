@@ -37,12 +37,16 @@ def started_cluster():
                 ]
             )
 
+        # Create a controlled directory outside user_files for symlink testing.
+        # Using /var/log/clickhouse-server/ would include an unpredictable number of log files.
+        node.exec_in_container(["mkdir", "-p", "/tmp/link_target"])
+        node.exec_in_container(["touch", "/tmp/link_target/test.log"])
         node.exec_in_container(
             [
                 "ln",
                 "-s",
-                f"/var/log/clickhouse-server/",
-                f"/var/lib/clickhouse/user_files/link",
+                "/tmp/link_target/",
+                "/var/lib/clickhouse/user_files/link",
             ]
         )
 
@@ -53,9 +57,10 @@ def started_cluster():
 
 
 def test_full_path():
+    # Expected: root dir (1) + 9 files + yes dir (1) + 10 files in yes + link symlink (1) + test.log in link (1) = 23
     assert (
         node.query("SELECT count() FROM filesystem('/var/lib/clickhouse/user_files/')")
-        == "22\n"
+        == "23\n"
     )
 
 
@@ -64,7 +69,7 @@ def test_file_path():
 
 
 def test_no_path():
-    assert node.query("SELECT count() FROM filesystem('')") == "22\n"
+    assert node.query("SELECT count() FROM filesystem('')") == "23\n"
     assert (
         node.query(
             "SELECT * FROM filesystem('/var/lib/clickhouse/user_files/') EXCEPT SELECT * FROM filesystem('')"
@@ -82,7 +87,7 @@ def test_relative_path():
 def test_escape_path():
     assert (
         node.query(
-            "SELECT count() FROM filesystem('/var/lib/clickhouse/user_files/link/clickhouse-server.log')"
+            "SELECT count() FROM filesystem('/var/lib/clickhouse/user_files/link/test.log')"
         )
         == "1\n"
     )

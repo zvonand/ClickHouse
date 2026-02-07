@@ -1,7 +1,7 @@
-a.txt	regular	false
-b.txt	regular	false
-c.txt	regular	false
-subdir	directory	false
+a.txt	regular	false	0
+b.txt	regular	false	0
+c.txt	regular	false	1
+subdir	directory	false	0
 a.txt	5
 b.txt	5
 c.txt	6

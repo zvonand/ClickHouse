@@ -164,14 +164,15 @@ public:
 
         /// Collect entries in sub-batches, filter each, and accumulate matching rows.
         /// Small sub-batches ensure we return results promptly even with highly selective filters.
-        static constexpr size_t SUB_BATCH_SIZE = 1024;
+        /// Use a smaller batch when reading file content, as each entry may involve heavy I/O.
+        const size_t sub_batch_size = need_content ? 64 : 1024;
 
         while (total_rows < max_block_size)
         {
             std::vector<QueueEntry> entries;
-            entries.reserve(SUB_BATCH_SIZE);
+            entries.reserve(sub_batch_size);
 
-            while (entries.size() < SUB_BATCH_SIZE)
+            while (entries.size() < sub_batch_size)
             {
                 if (isCancelled())
                     break;
@@ -231,10 +232,22 @@ private:
     ExpressionActionsPtr filter_expression;
     Block filter_sample_block;
 
-    /// Pop an entry from the queue, respecting cancellation.
+    /// Thread-local overflow buffer for entries that couldn't fit in the shared queue.
+    /// Acts as a DFS fallback when the bounded queue is full, preventing entry loss.
+    std::vector<QueueEntry> local_overflow;
+
+    /// Pop an entry: first from local overflow, then from the shared queue.
     /// Uses tryPop with a timeout so that isCancelled() is checked periodically.
     bool popEntry(QueueEntry & queue_entry)
     {
+        /// Drain local overflow first (DFS order).
+        if (!local_overflow.empty())
+        {
+            queue_entry = std::move(local_overflow.back());
+            local_overflow.pop_back();
+            return true;
+        }
+
         while (!path_info->queue.tryPop(queue_entry, /* milliseconds= */ 100))
         {
             if (isCancelled() || path_info->queue.isFinishedAndEmpty())
@@ -243,8 +256,8 @@ private:
         return true;
     }
 
-    /// Expand a directory entry: push its children into the queue.
-    /// Uses non-blocking tryPush to avoid deadlock when the queue is full
+    /// Expand a directory entry: push its children into the shared queue.
+    /// If the queue is full, store in thread-local overflow to avoid deadlock
     /// (a single thread cannot both push and pop simultaneously).
     void expandDirectory(const QueueEntry & queue_entry)
     {
@@ -283,10 +296,8 @@ private:
             path_info->in_flight.fetch_add(1);
             if (!path_info->queue.tryPush(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)}))
             {
-                if (path_info->in_flight.fetch_sub(1) == 1)
-                    path_info->queue.finish();
-                LOG_WARNING(&Poco::Logger::get("StorageFilesystem"), "Too many files to process, skipping some from {}",
-                    file.path().string());
+                /// Queue full — store locally to avoid deadlock.
+                local_overflow.emplace_back(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)});
             }
         }
     }

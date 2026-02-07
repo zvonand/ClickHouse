@@ -155,60 +155,72 @@ public:
     {
         auto names_and_types_in_use = storage_snapshot->getSampleBlockForColumns(columns_in_use).getNamesAndTypesList();
 
-        /// Phase 1: Collect entries from the queue and expand directories.
-        std::vector<QueueEntry> entries;
-        entries.reserve(max_block_size);
-
-        while (entries.size() < max_block_size)
-        {
-            if (isCancelled())
-                break;
-
-            QueueEntry queue_entry;
-            if (!path_info->queue.pop(queue_entry))
-                break;
-
-            expandDirectory(queue_entry);
-
-            /// Decrement in_flight now: this entry has been fully processed
-            /// (children queued if it was a directory). Must happen here, not later,
-            /// because pop() blocks when the queue is empty but in_flight > 0.
-            if (path_info->in_flight.fetch_sub(1) == 1)
-                path_info->queue.finish();
-
-            entries.push_back(std::move(queue_entry));
-        }
-
-        if (entries.empty())
-            return {};
-
-        /// Phase 2: Evaluate filter on cheap columns to get a mask of surviving entries.
-        std::vector<bool> mask = evaluateFilter(entries);
-
-        /// Phase 3: Fill output columns, skipping expensive work for filtered-out entries.
         std::unordered_map<String, MutableColumnPtr> columns_map;
         for (const auto & [name, type] : names_and_types_in_use)
             columns_map[name] = type->createColumn();
 
         bool need_content = columns_map.contains("content");
+        size_t total_rows = 0;
 
-        for (size_t i = 0; i < entries.size(); ++i)
+        /// Collect entries in sub-batches, filter each, and accumulate matching rows.
+        /// Small sub-batches ensure we return results promptly even with highly selective filters.
+        static constexpr size_t SUB_BATCH_SIZE = 1024;
+
+        while (total_rows < max_block_size)
         {
-            if (!mask[i])
-                continue;
+            std::vector<QueueEntry> entries;
+            entries.reserve(SUB_BATCH_SIZE);
 
-            fillEntryColumns(entries[i], columns_map, need_content);
+            while (entries.size() < SUB_BATCH_SIZE)
+            {
+                if (isCancelled())
+                    break;
+
+                QueueEntry queue_entry;
+                if (!popEntry(queue_entry))
+                    break;
+
+                expandDirectory(queue_entry);
+
+                /// Decrement in_flight now: this entry has been fully processed
+                /// (children queued if it was a directory). Must happen here, not later,
+                /// because pop() blocks when the queue is empty but in_flight > 0.
+                if (path_info->in_flight.fetch_sub(1) == 1)
+                    path_info->queue.finish();
+
+                entries.push_back(std::move(queue_entry));
+            }
+
+            if (entries.empty())
+                break;
+
+            /// Filter on cheap columns.
+            std::vector<bool> mask = evaluateFilter(entries);
+
+            /// Fill output columns for matching entries.
+            for (size_t i = 0; i < entries.size(); ++i)
+            {
+                if (!mask[i])
+                    continue;
+
+                fillEntryColumns(entries[i], columns_map, need_content);
+                ++total_rows;
+            }
+
+            /// Return as soon as we have any matching rows.
+            /// This ensures prompt output with selective filters on large directory trees.
+            if (total_rows > 0)
+                break;
         }
 
-        size_t num_rows = columns_map.empty() ? 0 : columns_map.begin()->second->size();
-        if (num_rows == 0)
+        if (total_rows == 0)
             return {};
 
         Columns columns;
         for (const auto & [name, _] : names_and_types_in_use)
             columns.emplace_back(std::move(columns_map[name]));
 
-        return {std::move(columns), num_rows};
+        return {std::move(columns), total_rows};
     }
 
 private:
@@ -219,7 +231,21 @@ private:
     ExpressionActionsPtr filter_expression;
     Block filter_sample_block;
 
+    /// Pop an entry from the queue, respecting cancellation.
+    /// Uses tryPop with a timeout so that isCancelled() is checked periodically.
+    bool popEntry(QueueEntry & queue_entry)
+    {
+        while (!path_info->queue.tryPop(queue_entry, /* milliseconds= */ 100))
+        {
+            if (isCancelled() || path_info->queue.isFinishedAndEmpty())
+                return false;
+        }
+        return true;
+    }
+
     /// Expand a directory entry: push its children into the queue.
+    /// Uses non-blocking tryPush to avoid deadlock when the queue is full
+    /// (a single thread cannot both push and pop simultaneously).
     void expandDirectory(const QueueEntry & queue_entry)
     {
         const auto & file = queue_entry.entry;
@@ -230,6 +256,9 @@ private:
 
         for (const auto & child : fs::directory_iterator(file, ec))
         {
+            if (isCancelled())
+                return;
+
             fs::path child_path = fs::absolute(child.path()).lexically_normal();
 
             if (path_info->need_check && !fileOrSymlinkPathStartsWith(child_path.string(), path_info->user_files_absolute_path_string))
@@ -252,9 +281,10 @@ private:
             }
 
             path_info->in_flight.fetch_add(1);
-            if (!path_info->queue.push(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)}))
+            if (!path_info->queue.tryPush(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)}))
             {
-                path_info->in_flight.fetch_sub(1);
+                if (path_info->in_flight.fetch_sub(1) == 1)
+                    path_info->queue.finish();
                 LOG_WARNING(&Poco::Logger::get("StorageFilesystem"), "Too many files to process, skipping some from {}",
                     file.path().string());
             }

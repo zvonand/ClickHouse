@@ -267,38 +267,48 @@ private:
         if (!file.is_directory(ec) || ec)
             return;
 
-        for (const auto & child : fs::directory_iterator(file, ec))
+        /// Use a try-catch because directory_iterator increment can throw
+        /// on I/O errors, and we must not leak in_flight counts.
+        try
         {
-            if (isCancelled())
-                return;
-
-            fs::path child_path = fs::absolute(child.path()).lexically_normal();
-
-            if (path_info->need_check && !fileOrSymlinkPathStartsWith(child_path.string(), path_info->user_files_absolute_path_string))
+            for (const auto & child : fs::directory_iterator(file, ec))
             {
-                LOG_DEBUG(&Poco::Logger::get("StorageFilesystem"), "Path {} is not inside user_files {}",
-                    child_path.string(), path_info->user_files_absolute_path_string);
-                continue;
-            }
+                if (isCancelled())
+                    return;
 
-            if (child.is_directory(ec) && child.is_symlink(ec))
-            {
-                std::error_code canon_ec;
-                auto canonical = fs::canonical(child_path, canon_ec);
-                if (!canon_ec)
+                fs::path child_path = fs::absolute(child.path()).lexically_normal();
+
+                if (path_info->need_check && !fileOrSymlinkPathStartsWith(child_path.string(), path_info->user_files_absolute_path_string))
                 {
-                    std::lock_guard lock(path_info->visited_mutex);
-                    if (!path_info->visited.emplace(canonical.string()).second)
-                        continue;
+                    LOG_DEBUG(getLogger("StorageFilesystem"), "Path {} is not inside user_files {}",
+                        child_path.string(), path_info->user_files_absolute_path_string);
+                    continue;
+                }
+
+                if (child.is_directory(ec) && child.is_symlink(ec))
+                {
+                    std::error_code canon_ec;
+                    auto canonical = fs::canonical(child_path, canon_ec);
+                    if (!canon_ec)
+                    {
+                        std::lock_guard lock(path_info->visited_mutex);
+                        if (!path_info->visited.emplace(canonical.string()).second)
+                            continue;
+                    }
+                }
+
+                path_info->in_flight.fetch_add(1);
+                if (!path_info->queue.tryPush(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)}))
+                {
+                    /// Queue full — store locally to avoid deadlock.
+                    local_overflow.emplace_back(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)});
                 }
             }
-
-            path_info->in_flight.fetch_add(1);
-            if (!path_info->queue.tryPush(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)}))
-            {
-                /// Queue full — store locally to avoid deadlock.
-                local_overflow.emplace_back(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)});
-            }
+        }
+        catch (const fs::filesystem_error & e)
+        {
+            /// Ignore filesystem errors during directory iteration (e.g. permission denied, removed directory).
+            LOG_DEBUG(getLogger("StorageFilesystem"), "Filesystem error during directory iteration: {}", e.what());
         }
     }
 
@@ -593,7 +603,7 @@ void registerStorageFilesystem(StorageFactory & factory)
 
         if (engine_args.size() > 1)
             throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
-                            "Storage Filesystem requires one argument: path.");
+                            "Storage Filesystem requires at most one argument: path.");
 
         String path;
         if (!engine_args.empty())

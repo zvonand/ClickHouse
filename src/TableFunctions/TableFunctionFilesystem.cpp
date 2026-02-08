@@ -107,7 +107,8 @@ ColumnsDescription TableFunctionFilesystem::getActualTableStructure(ContextPtr /
         }
     };
 
-    structure.setAliases(NamesAndAliases{
+    structure.setAliases(NamesAndAliases
+    {
         {"file", std::make_shared<DataTypeString>(), "name"},
     });
 

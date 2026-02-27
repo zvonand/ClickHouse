@@ -936,7 +936,6 @@ bool IcebergStorageSink::initializeMetadata()
     std::vector<Iceberg::IcebergPathFromMetadata> manifest_entries;
     std::vector<Int64> manifest_entry_sizes;
 
-    /// S3 object key must not have leading slash so it matches the path in s3:// URL (Unity Catalog validates manifest-list location).
     auto object_key = [](const String & path) -> String
     {
         return path.starts_with('/') ? path.substr(1) : path;

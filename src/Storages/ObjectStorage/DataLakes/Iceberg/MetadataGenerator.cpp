@@ -1,6 +1,7 @@
 #include <IO/ReadHelpers.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/MetadataGenerator.h>
 
+#include <climits>
 #include <Poco/JSON/Array.h>
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Stringifier.h>
@@ -10,6 +11,7 @@
 
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Constant.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Utils.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergWrites.h>
 
 #if USE_AVRO
 

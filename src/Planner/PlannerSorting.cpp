@@ -113,7 +113,7 @@ FillColumnDescription extractWithFillDescription(const SortNode & sort_node)
             throw Exception(ErrorCodes::INVALID_WITH_FILL_EXPRESSION,
                 "WITH FILL STEP value cannot be negative for sorting in ascending direction");
 
-        if (accurateLess(fill_column_description.fill_staleness, Field{0}))
+        if (!fill_column_description.fill_staleness.isNull() && accurateLess(fill_column_description.fill_staleness, Field{0}))
             throw Exception(ErrorCodes::INVALID_WITH_FILL_EXPRESSION,
                 "WITH FILL STALENESS value cannot be negative for sorting in ascending direction");
 
@@ -130,7 +130,7 @@ FillColumnDescription extractWithFillDescription(const SortNode & sort_node)
             throw Exception(ErrorCodes::INVALID_WITH_FILL_EXPRESSION,
                 "WITH FILL STEP value cannot be positive for sorting in descending direction");
 
-        if (accurateLess(Field{0}, fill_column_description.fill_staleness))
+        if (!fill_column_description.fill_staleness.isNull() && accurateLess(Field{0}, fill_column_description.fill_staleness))
             throw Exception(ErrorCodes::INVALID_WITH_FILL_EXPRESSION,
                 "WITH FILL STALENESS value cannot be positive for sorting in descending direction");
 

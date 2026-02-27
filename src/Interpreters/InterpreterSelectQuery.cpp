@@ -1373,7 +1373,7 @@ static FillColumnDescription getWithFillDescription(const ASTOrderByElement & or
                             "WITH FILL TO value cannot be less than FROM value for sorting in ascending direction");
         }
 
-        if (accurateLess(descr.fill_staleness, Field{0}))
+        if (!descr.fill_staleness.isNull() && accurateLess(descr.fill_staleness, Field{0}))
             throw Exception(ErrorCodes::INVALID_WITH_FILL_EXPRESSION,
                 "WITH FILL STALENESS value cannot be negative for sorting in ascending direction");
     }
@@ -1389,7 +1389,7 @@ static FillColumnDescription getWithFillDescription(const ASTOrderByElement & or
                             "WITH FILL FROM value cannot be less than TO value for sorting in descending direction");
         }
 
-        if (accurateLess(Field{0}, descr.fill_staleness))
+        if (!descr.fill_staleness.isNull() && accurateLess(Field{0}, descr.fill_staleness))
             throw Exception(ErrorCodes::INVALID_WITH_FILL_EXPRESSION,
                 "WITH FILL STALENESS value cannot be positive for sorting in descending direction");
     }

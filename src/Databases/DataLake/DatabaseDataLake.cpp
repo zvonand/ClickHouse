@@ -15,6 +15,7 @@
 #include <IO/ReadHelpers.h>
 #include <Poco/JSON/Parser.h>
 #include <Poco/JSON/Object.h>
+#include <Poco/URI.h>
 
 
 #if USE_AVRO && USE_PARQUET
@@ -46,6 +47,9 @@
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTFunction.h>
 #include <Parsers/ASTDataType.h>
+#include <DataTypes/DataTypeFactory.h>
+#include <Storages/ColumnDefault.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/Utils.h>
 #include <Common/FailPoint.h>
 
 namespace DB
@@ -92,6 +96,7 @@ namespace Setting
     extern const SettingsBool parallel_replicas_for_cluster_engines;
     extern const SettingsString cluster_for_parallel_replicas;
     extern const SettingsBool database_datalake_require_metadata_access;
+    extern const SettingsBool database_iceberg_purge_on_drop;
 
 }
 
@@ -114,6 +119,55 @@ namespace FailPoints
 {
     extern const char lightweight_show_tables[];
     extern const char datalake_try_get_table_return_nullptr[];
+}
+
+namespace
+{
+
+String getLocationSchemeForTableCreation(const std::shared_ptr<DataLake::ICatalog> & catalog)
+{
+    if (auto storage_type = catalog->getStorageType(); storage_type.has_value())
+    {
+        switch (*storage_type)
+        {
+            case DatabaseDataLakeStorageType::S3:
+                return "s3";
+            case DatabaseDataLakeStorageType::Azure:
+                return "abfss";
+            case DatabaseDataLakeStorageType::Local:
+                return "file";
+            case DatabaseDataLakeStorageType::HDFS:
+                return "hdfs";
+            case DatabaseDataLakeStorageType::Other:
+                throw Exception(
+                    ErrorCodes::BAD_ARGUMENTS,
+                    "Cannot determine storage scheme for CREATE TABLE from storage type {}",
+                    *storage_type);
+        }
+    }
+
+    /// Fallback for catalogs that currently do not expose storage type in config.
+    switch (catalog->getCatalogType())
+    {
+        case DatabaseDataLakeCatalogType::GLUE:
+        case DatabaseDataLakeCatalogType::ICEBERG_HIVE:
+        case DatabaseDataLakeCatalogType::ICEBERG_REST:
+        case DatabaseDataLakeCatalogType::ICEBERG_BIGLAKE:
+            return "s3";
+        case DatabaseDataLakeCatalogType::ICEBERG_ONELAKE:
+            return "abfss";
+        case DatabaseDataLakeCatalogType::PAIMON_REST:
+        case DatabaseDataLakeCatalogType::UNITY:
+        case DatabaseDataLakeCatalogType::NONE:
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "Cannot determine storage scheme for CREATE TABLE for catalog type {}",
+                catalog->getCatalogType());
+    }
+
+    throw Exception(ErrorCodes::LOGICAL_ERROR, "Unexpected catalog type in CREATE TABLE location scheme resolution");
+}
+
 }
 
 DatabaseDataLake::DatabaseDataLake(
@@ -599,9 +653,8 @@ StoragePtr DatabaseDataLake::tryGetTableImpl(const String & name, ContextPtr con
         if (!metadata_location.empty())
         {
             metadata_location = table_metadata.getMetadataLocation(metadata_location);
+            (*storage_settings)[DB::DataLakeStorageSetting::iceberg_metadata_file_path] = metadata_location;
         }
-
-        (*storage_settings)[DB::DataLakeStorageSetting::iceberg_metadata_file_path] = metadata_location;
     }
 
     const auto configuration = getConfiguration(storage_type, storage_settings);
@@ -708,16 +761,86 @@ StoragePtr DatabaseDataLake::tryGetTableImpl(const String & name, ContextPtr con
         /* lazy_init */true);
 }
 
+void DatabaseDataLake::createTable(
+    ContextPtr context_,
+    const String & name,
+    const StoragePtr & /*table*/,
+    const ASTPtr & query)
+{
+    auto catalog = getCatalog();
+    const auto & create = query->as<ASTCreateQuery &>();
+    const auto [namespace_name, table_name] = DataLake::parseTableName(name);
+
+    ColumnsDescription columns;
+    if (create.columns_list && create.columns_list->columns)
+    {
+        for (const auto & child : create.columns_list->columns->children)
+        {
+            const auto * col_decl = child->as<ASTColumnDeclaration>();
+            if (!col_decl || !col_decl->getType())
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "Invalid column declaration in CREATE TABLE");
+
+            if (col_decl->default_specifier == ColumnDefaultSpecifier::Materialized
+                || col_decl->default_specifier == ColumnDefaultSpecifier::Alias
+                || col_decl->default_specifier == ColumnDefaultSpecifier::Ephemeral)
+                continue;
+
+            columns.add(ColumnDescription(col_decl->name, DataTypeFactory::instance().get(col_decl->getType())));
+        }
+    }
+
+    if (columns.empty())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Cannot create table without columns");
+
+    ASTPtr partition_by;
+    ASTPtr order_by;
+    if (create.storage)
+    {
+        if (create.storage->partition_by)
+            partition_by = create.storage->partition_by->clone();
+        if (create.storage->order_by)
+            order_by = create.storage->order_by->clone();
+    }
+
+    String location;
+    auto storage_endpoint = settings[DatabaseDataLakeSetting::storage_endpoint].value;
+    if (!storage_endpoint.empty())
+    {
+        const auto location_scheme = getLocationSchemeForTableCreation(catalog);
+        Poco::URI uri(storage_endpoint);
+        auto path = uri.getPath();
+        while (path.starts_with('/'))
+            path = path.substr(1);
+        while (path.ends_with('/'))
+            path = path.substr(0, path.size() - 1);
+
+        location = fmt::format("{}://{}/{}/{}", location_scheme, path, namespace_name, table_name);
+    }
+
+    auto [metadata_content, metadata_str] = Iceberg::createEmptyMetadataFile(
+        location,
+        columns,
+        partition_by,
+        order_by,
+        context_);
+
+    catalog->createTable(namespace_name, table_name, /* metadata_path */ "", metadata_content);
+
+    LOG_INFO(log, "Created table {}.{}", namespace_name, table_name);
+}
+
 void DatabaseDataLake::dropTable( /// NOLINT
     ContextPtr context_,
     const String & name,
     bool /*sync*/)
 {
-    auto table = tryGetTable(name, context_);
-    if (table)
-        table->drop();
-    else
-        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Cannot drop table {} because it does not exist", name);
+    auto catalog = getCatalog();
+    const auto [namespace_name, table_name] = DataLake::parseTableName(name);
+
+    bool purge = context_->getSettingsRef()[Setting::database_iceberg_purge_on_drop];
+    catalog->dropTable(namespace_name, table_name, purge);
+
+    LOG_TRACE(log, "Dropped table {}.{} (purge={})", namespace_name, table_name, purge);
 }
 
 DatabaseTablesIteratorPtr DatabaseDataLake::getTablesIterator(

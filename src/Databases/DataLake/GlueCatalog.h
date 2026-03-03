@@ -67,7 +67,7 @@ public:
     void createTable(const String & namespace_name, const String & table_name, const String & new_metadata_path, Poco::JSON::Object::Ptr metadata_content) const override;
 
     bool updateMetadata(const String & namespace_name, const String & table_name, const String & new_metadata_path, Poco::JSON::Object::Ptr new_snapshot) const override;
-    void dropTable(const String & namespace_name, const String & table_name) const override;
+    void dropTable(const String & namespace_name, const String & table_name, bool purge) const override;
 
     /// Resolves the precise Iceberg timestamp type for `column_name` by searching the current schema
     /// in the Iceberg `metadata_object`. Falls back to `"timestamp_ns"` when `glue_column_type` is

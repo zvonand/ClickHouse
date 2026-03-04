@@ -3552,6 +3552,9 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
         format_settings.out << prefix << "Granules: " << result.index_stats.back().num_granules_after << '\n';
     }
 
+    if (format_settings.pretty)
+        QueryPlanFormat::formatOutputColumns(format_settings.out, *this, prefix);
+
     if (query_info.prewhere_info || query_info.row_level_filter)
     {
         format_settings.out << prefix << "Prewhere info" << '\n';

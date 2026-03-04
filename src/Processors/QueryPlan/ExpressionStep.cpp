@@ -101,6 +101,14 @@ void ExpressionStep::describeActions(FormatSettings & settings) const
 {
     const String & prefix = settings.other_prefix;
     auto expression = std::make_shared<ExpressionActions>(actions_dag.clone());
+
+    auto description = getStepDescription();
+
+    if (settings.pretty && (description == "Project" || description == "Project names" || description == "(Project names + Projection)"))
+    {
+        QueryPlanFormat::formatOutputColumns(settings.out, *this, prefix);
+    }
+
     if (settings.verbose)
         expression->describeActions(settings.out, prefix);
 }

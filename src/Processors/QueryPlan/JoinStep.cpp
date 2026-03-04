@@ -224,7 +224,7 @@ void JoinStep::describeActions(FormatSettings & settings) const
             settings.out << prefix << join_readable_relation_name << '\n';
 
         settings.out << prefix;
-        for (size_t i = 0; settings.pretty && i < inline_count; ++i)
+        for (size_t i = 0; i < inline_count; ++i)
         {
             if (i > 0)
                 settings.out << " | ";
@@ -236,6 +236,8 @@ void JoinStep::describeActions(FormatSettings & settings) const
         << (result_rows_estimation ? toString(*result_rows_estimation) : "unknown") << '\n';
 
         settings.out << prefix << "Locality: " << toString(locality) << '\n';
+
+        QueryPlanFormat::formatJoinOutputColumns(settings.out, *this, prefix);
     }
 
     for (size_t i = inline_count; i < description.size(); ++i)

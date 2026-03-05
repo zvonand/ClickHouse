@@ -226,8 +226,8 @@ public:
     constexpr static std::string_view allocate_function_name = "clickhouse_create_buffer";
     constexpr static std::string_view deallocate_function_name = "clickhouse_destroy_buffer";
 
-    static WasmFunctionDeclaration allocateFunctionDeclaration() { return {allocate_function_name, {WasmValKind::I32}, WasmValKind::I32}; }
-    static WasmFunctionDeclaration deallocateFunctionDeclaration() { return {deallocate_function_name, {WasmValKind::I32}, std::nullopt}; }
+    static WasmFunctionDeclaration allocateFunctionDeclaration() { return {"", allocate_function_name, {WasmValKind::I32}, WasmValKind::I32}; }
+    static WasmFunctionDeclaration deallocateFunctionDeclaration() { return {"", deallocate_function_name, {WasmValKind::I32}, std::nullopt}; }
 
     explicit WasmMemoryManagerV01(WasmCompartment * compartment_, StopToken stop_token_)
         : compartment(compartment_)
@@ -279,7 +279,7 @@ public:
 
     void checkSignature() const
     {
-        checkFunction(WasmFunctionDeclaration(function_name, {WasmValKind::I32, WasmValKind::I32}, WasmValKind::I32));
+        checkFunction(WasmFunctionDeclaration("", function_name, {WasmValKind::I32, WasmValKind::I32}, WasmValKind::I32));
         checkFunction(WasmMemoryManagerV01::allocateFunctionDeclaration());
         checkFunction(WasmMemoryManagerV01::deallocateFunctionDeclaration());
     }

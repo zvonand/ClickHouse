@@ -109,6 +109,7 @@ WasmHostFunction makeHostFunction(std::string_view function_name, ReturnType (*h
 {
     using FuncPtr = ReturnType (*)(WasmCompartment *, Args...);
     WasmFunctionDeclaration func_decl(
+        "env",
         function_name,
         WasmHostFunctionAdapter<FuncPtr>::getArgumentTypes(),
         WasmHostFunctionAdapter<FuncPtr>::getReturnType());

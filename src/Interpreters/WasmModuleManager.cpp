@@ -202,6 +202,9 @@ void linkHostFunctions(WasmModule & module)
 {
     for (const auto & declaration : module.getImports())
     {
+        if (declaration.getModuleName() != "env")
+            continue;
+
         auto host_func = WebAssembly::getHostFunction(declaration.getName());
         checkFunctionDeclarationMatches(declaration, host_func.getFunctionDeclaration());
         module.linkFunction(std::move(host_func));

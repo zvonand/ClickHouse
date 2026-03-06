@@ -94,6 +94,61 @@ UserDefinedWebAssemblyFunction::UserDefinedWebAssemblyFunction(
 {
 }
 
+/// Maps ClickHouse numeric types to their WASM storage type.
+/// Small integer types (Int8, UInt8, Int16, UInt16) are widened to uint32_t (i32).
+/// All other supported types map 1:1 via NativeToWasmType.
+template <typename T>
+struct WasmStorageType
+{
+    using Type = typename NativeToWasmType<T>::Type;
+};
+
+template <> struct WasmStorageType<Int8>   { using Type = uint32_t; };
+template <> struct WasmStorageType<UInt8>  { using Type = uint32_t; };
+template <> struct WasmStorageType<Int16>  { using Type = uint32_t; };
+template <> struct WasmStorageType<UInt16> { using Type = uint32_t; };
+
+template <typename T>
+constexpr WasmValKind wasmKindFor()
+{
+    return WasmValTypeToKind<typename WasmStorageType<T>::Type>::value;
+}
+
+template <typename Callable, typename... Args>
+static bool tryExecuteForNumericTypes(Callable && callable, Args &&... args)
+{
+    return (
+        callable.template operator()<Int8>(args...)
+        || callable.template operator()<UInt8>(args...)
+        || callable.template operator()<Int16>(args...)
+        || callable.template operator()<UInt16>(args...)
+        || callable.template operator()<Int32>(args...)
+        || callable.template operator()<UInt32>(args...)
+        || callable.template operator()<Int64>(args...)
+        || callable.template operator()<UInt64>(args...)
+        || callable.template operator()<Float32>(args...)
+        || callable.template operator()<Float64>(args...)
+        || callable.template operator()<Int128>(args...)
+        || callable.template operator()<UInt128>(args...)
+    );
+}
+
+static std::optional<WasmValKind> wasmKindForDataType(const IDataType * type)
+{
+    std::optional<WasmValKind> kind;
+    tryExecuteForNumericTypes([type, &kind]<typename T>()
+    {
+        if (typeid_cast<const DataTypeNumber<T> *>(type))
+        {
+            kind = wasmKindFor<T>();
+            return true;
+        }
+        return false;
+    });
+    return kind;
+}
+
+
 class UserDefinedWebAssemblyFunctionSimple : public UserDefinedWebAssemblyFunction
 {
 public:
@@ -137,22 +192,13 @@ public:
     template <typename Callable, typename... Args>
     static bool tryExecuteForColumnTypes(Callable && callable, Args &&... args)
     {
-        return (
-            callable.template operator()<Int32>(args...)
-            || callable.template operator()<UInt32>(args...)
-            || callable.template operator()<Int64>(args...)
-            || callable.template operator()<UInt64>(args...)
-            || callable.template operator()<Float32>(args...)
-            || callable.template operator()<Float64>(args...)
-            || callable.template operator()<Int128>(args...)
-            || callable.template operator()<UInt128>(args...)
-        );
+        return tryExecuteForNumericTypes(std::forward<Callable>(callable), std::forward<Args>(args)...);
     }
 
     static void checkDataTypeWithWasmValKind(const IDataType * type, WasmValKind kind)
     {
         bool is_data_type_compatible = tryExecuteForColumnTypes(
-            [type, kind]<typename T>() { return typeid_cast<const DataTypeNumber<T> *>(type) && WasmValTypeToKind<T>::value == kind; });
+            [type, kind]<typename T>() { return typeid_cast<const DataTypeNumber<T> *>(type) && wasmKindFor<T>() == kind; });
         if (!is_data_type_compatible)
             throw Exception(
                 ErrorCodes::BAD_ARGUMENTS,
@@ -170,7 +216,7 @@ public:
         {
             if (auto * column_typed = checkAndGetColumn<ColumnVector<T>>(column))
             {
-                val = std::bit_cast<typename NativeToWasmType<T>::Type>(column_typed->getElement(row_idx));
+                val = static_cast<typename WasmStorageType<T>::Type>(column_typed->getElement(row_idx));
                 return true;
             }
             return false;
@@ -181,8 +227,8 @@ public:
         {
             if (auto * column_typed = typeid_cast<ColumnVector<T> *>(result_column.get()))
             {
-                auto value = compartment->invoke<typename NativeToWasmType<T>::Type>(function_name, args, stop_token);
-                column_typed->insertValue(std::bit_cast<T>(value));
+                auto value = compartment->invoke<typename WasmStorageType<T>::Type>(function_name, args, stop_token);
+                column_typed->insertValue(static_cast<T>(value));
                 return true;
             }
             return false;
@@ -499,6 +545,14 @@ public:
         for (size_t i = 0; i < arguments.size(); ++i)
         {
             if (arguments[i]->equals(*expected_arguments[i]))
+                continue;
+
+            /// Allow implicit coercion between types that map to the same WASM kind
+            /// (e.g. Int8/UInt8/Int16/UInt16/Int32 all map to i32, so they are interchangeable).
+            /// Pairs with different WASM kinds (e.g. Float64 vs Int32) are rejected.
+            auto actual_kind = wasmKindForDataType(arguments[i].get());
+            auto expected_kind = wasmKindForDataType(expected_arguments[i].get());
+            if (actual_kind && expected_kind && *actual_kind == *expected_kind)
                 continue;
 
             auto get_type_names = std::views::transform([](const auto & arg) { return arg->getName(); });

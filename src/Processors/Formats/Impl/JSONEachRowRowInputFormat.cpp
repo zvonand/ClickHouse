@@ -28,7 +28,8 @@ namespace
 enum
 {
     UNKNOWN_FIELD = size_t(-1),
-    NESTED_FIELD = size_t(-2)
+    NESTED_FIELD = size_t(-2),
+    NOT_INITIALIZED = size_t(-3)
 };
 
 }
@@ -41,13 +42,12 @@ JSONEachRowRowInputFormat::JSONEachRowRowInputFormat(
     const FormatSettings & format_settings_,
     bool yield_strings_)
     : IRowInputFormat(header_, in_, std::move(params_))
-    , prev_positions(header_->columns())
+    , name_map(format_settings_.input_format_with_names_case_insensitive_column_matching, getPort().getHeader())
+    , prev_positions(header_->columns(), {std::string_view{}, NOT_INITIALIZED})
     , yield_strings(yield_strings_)
     , format_settings(format_settings_)
 {
     const auto & header = getPort().getHeader();
-    name_map = ICaseAwareBlockNameMap::construct(format_settings, header.getIndexByName().size());
-    name_map->getNamesToIndexesMap(header);
     if (format_settings_.import_nested_json)
     {
         for (size_t i = 0; i != header.columns(); ++i)
@@ -57,7 +57,7 @@ JSONEachRowRowInputFormat::JSONEachRowRowInputFormat(
             if (!split.second.empty())
             {
                 const std::string_view table_name = column_name.substr(0, split.first.size());
-                name_map->add(table_name, NESTED_FIELD);
+                name_map.add(table_name, NESTED_FIELD);
             }
         }
     }
@@ -68,31 +68,26 @@ const String & JSONEachRowRowInputFormat::columnName(size_t i) const
     return getPort().getHeader().getByPosition(i).name;
 }
 
-inline size_t JSONEachRowRowInputFormat::columnIndex(std::string_view name, size_t )
+inline size_t JSONEachRowRowInputFormat::columnIndex(std::string_view name, size_t key_index)
 {
     /// Optimization by caching the order of fields (which is almost always the same)
     /// and a quick check to match the next expected field, instead of searching the hash table.
+    if (prev_positions.size() > key_index
+        && prev_positions[key_index].second != NOT_INITIALIZED 
+        && name_map.stringCompare(name, prev_positions[key_index].first))
+    {
+        return prev_positions[key_index].second;
+    }
 
-    // TODO: re-enable
-    // if (prev_positions.size() > key_index
-    //     && prev_positions[key_index] != BlockNameMap::const_iterator{}
-    //     && name == prev_positions[key_index]->first)
-    // {
-    //     return prev_positions[key_index]->second;
-    // }
+    auto position = name_map.get(name);
+    if (position != CaseAwareBlockNameMap::SearchResult::NOT_FOUND)
+    {
+        if (key_index < prev_positions.size())
+            prev_positions[key_index] = {name, position};
 
-    auto position = name_map->get(name);
-    return position;
-
-    // const auto it = name_map.find(name);
-    // if (it != name_map.end())
-    // {
-    //     if (key_index < prev_positions.size())
-    //         prev_positions[key_index] = it;
-
-    //     return it->second;
-    // }
-    // return UNKNOWN_FIELD;
+        return prev_positions[key_index].second;
+    }
+    return UNKNOWN_FIELD;
 }
 
 /** Read the field name and convert it to column name

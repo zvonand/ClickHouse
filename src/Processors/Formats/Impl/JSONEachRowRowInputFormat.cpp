@@ -9,6 +9,7 @@
 #include <DataTypes/NestedUtils.h>
 #include <DataTypes/Serializations/SerializationNullable.h>
 #include <DataTypes/getLeastSupertype.h>
+#include "Core/CaseAwareBlockNameMap.h"
 
 namespace DB
 {
@@ -45,7 +46,8 @@ JSONEachRowRowInputFormat::JSONEachRowRowInputFormat(
     , format_settings(format_settings_)
 {
     const auto & header = getPort().getHeader();
-    name_map = getNamesToIndexesMap(header);
+    name_map = ICaseAwareBlockNameMap::construct(format_settings, header.getIndexByName().size());
+    name_map->getNamesToIndexesMap(header);
     if (format_settings_.import_nested_json)
     {
         for (size_t i = 0; i != header.columns(); ++i)
@@ -55,7 +57,7 @@ JSONEachRowRowInputFormat::JSONEachRowRowInputFormat(
             if (!split.second.empty())
             {
                 const std::string_view table_name = column_name.substr(0, split.first.size());
-                name_map[table_name] = NESTED_FIELD;
+                name_map->add(table_name, NESTED_FIELD);
             }
         }
     }
@@ -66,27 +68,31 @@ const String & JSONEachRowRowInputFormat::columnName(size_t i) const
     return getPort().getHeader().getByPosition(i).name;
 }
 
-inline size_t JSONEachRowRowInputFormat::columnIndex(std::string_view name, size_t key_index)
+inline size_t JSONEachRowRowInputFormat::columnIndex(std::string_view name, size_t )
 {
     /// Optimization by caching the order of fields (which is almost always the same)
     /// and a quick check to match the next expected field, instead of searching the hash table.
 
-    if (prev_positions.size() > key_index
-        && prev_positions[key_index] != BlockNameMap::const_iterator{}
-        && name == prev_positions[key_index]->first)
-    {
-        return prev_positions[key_index]->second;
-    }
+    // TODO: re-enable
+    // if (prev_positions.size() > key_index
+    //     && prev_positions[key_index] != BlockNameMap::const_iterator{}
+    //     && name == prev_positions[key_index]->first)
+    // {
+    //     return prev_positions[key_index]->second;
+    // }
 
-    const auto it = name_map.find(name);
-    if (it != name_map.end())
-    {
-        if (key_index < prev_positions.size())
-            prev_positions[key_index] = it;
+    auto position = name_map->get(name);
+    return position;
 
-        return it->second;
-    }
-    return UNKNOWN_FIELD;
+    // const auto it = name_map.find(name);
+    // if (it != name_map.end())
+    // {
+    //     if (key_index < prev_positions.size())
+    //         prev_positions[key_index] = it;
+
+    //     return it->second;
+    // }
+    // return UNKNOWN_FIELD;
 }
 
 /** Read the field name and convert it to column name

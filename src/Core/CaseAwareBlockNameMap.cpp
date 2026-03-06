@@ -45,13 +45,14 @@ std::unique_ptr<ICaseAwareBlockNameMap> ICaseAwareBlockNameMap::construct(const 
 MatchCaseBlockNameMap::MatchCaseBlockNameMap(size_t size)
     : map(size)
 {
+    map.set_empty_key(std::string_view{});
 }
 
-void MatchCaseBlockNameMap::add(const String & key, size_t idx)
+void MatchCaseBlockNameMap::add(const std::string_view & key, size_t idx)
 {
     map[key] = idx;
 }
-size_t MatchCaseBlockNameMap::get(const String & key)
+size_t MatchCaseBlockNameMap::get(const std::string_view & key)
 {
     auto it = map.find(key);
     if (it == map.end())
@@ -64,10 +65,12 @@ size_t MatchCaseBlockNameMap::get(const String & key)
 IgnoreCaseBlockNameMap::IgnoreCaseBlockNameMap(size_t size)
     : map(size)
 {
+    map.set_empty_key(std::string_view{});
 }
 
-void IgnoreCaseBlockNameMap::add(const String & key, size_t idx)
+void IgnoreCaseBlockNameMap::add(const std::string_view & key_view, size_t idx)
 {
+    String key (key_view);
     if (map.find(key) != map.end())
     {
         throw Exception(ErrorCodes::INCORRECT_DATA, "Ambiguous field (`{}` at position {}) when processing data.", key, idx);
@@ -75,7 +78,7 @@ void IgnoreCaseBlockNameMap::add(const String & key, size_t idx)
     map[key] = idx;
 }
 
-size_t IgnoreCaseBlockNameMap::get(const String & key)
+size_t IgnoreCaseBlockNameMap::get(const std::string_view & key)
 {
     auto it = map.find(key);
     if (it == map.end())
@@ -90,9 +93,12 @@ AutoCaseBlockNameMap::AutoCaseBlockNameMap(size_t size)
     , i_map(size)
     , ambiguity(size)
 {
+    map.set_empty_key(std::string_view{});
+    i_map.set_empty_key(std::string_view{});
+    ambiguity.set_empty_key(std::string_view{});
 }
 
-void AutoCaseBlockNameMap::add(const String & key, size_t idx)
+void AutoCaseBlockNameMap::add(const std::string_view & key, size_t idx)
 {
     map[key] = idx;
     i_map[key] = idx;
@@ -108,7 +114,7 @@ void AutoCaseBlockNameMap::add(const String & key, size_t idx)
     }
 }
 
-size_t AutoCaseBlockNameMap::get(const String & key)
+size_t AutoCaseBlockNameMap::get(const std::string_view & key)
 {
     // First check if the key has an exact match
     auto it = map.find(key);
@@ -129,7 +135,7 @@ size_t AutoCaseBlockNameMap::get(const String & key)
     return -1;
 }
 
-void AutoCaseBlockNameMap::AmbiguityCheck(const String & key)
+void AutoCaseBlockNameMap::AmbiguityCheck(const std::string_view & key)
 {
     auto it = ambiguity.find(key);
     if (it == ambiguity.end())

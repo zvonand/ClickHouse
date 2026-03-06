@@ -6,6 +6,7 @@
 #include <Formats/FormatSettings.h>
 #include <Formats/SchemaInferenceUtils.h>
 #include <Common/HashTable/HashMap.h>
+#include "Core/CaseAwareBlockNameMap.h"
 
 
 namespace DB
@@ -74,7 +75,9 @@ private:
     /// for row like {..., "non-nullable column name" : null, ...}
 
     /// Hash table match `field name -> position in the block`. NOTE You can use perfect hash map.
-    BlockNameMap name_map;
+    // BlockNameMap name_map;
+
+    std::unique_ptr<ICaseAwareBlockNameMap> name_map {nullptr};
 
     /// Cached search results for previous row (keyed as index in JSON object) - used as a hint.
     std::vector<BlockNameMap::const_iterator> prev_positions;

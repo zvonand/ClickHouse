@@ -19,22 +19,22 @@ public:
     virtual ~ICaseAwareBlockNameMap() = default;
 
     /// Adds a new pair column_name and position
-    virtual void add(const String& column_name, size_t idx) = 0;
+    virtual void add(const std::string_view& column_name, size_t idx) = 0;
 
     /// Fetches the position of the given column_name
-    virtual size_t get(const String& column_name) = 0;
+    virtual size_t get(const std::string_view& column_name) = 0;
 
     void getNamesToIndexesMap(const Block & block);
 
-    std::unique_ptr<ICaseAwareBlockNameMap> construct(const FormatSettings& settings, size_t expected_size);
+    static std::unique_ptr<ICaseAwareBlockNameMap> construct(const FormatSettings& settings, size_t expected_size);
 };
 
 
 class MatchCaseBlockNameMap : public ICaseAwareBlockNameMap {
 public:
     explicit MatchCaseBlockNameMap(size_t size);
-    void add(const String& key, size_t idx) override;
-    size_t get(const String& key) override;
+    void add(const std::string_view& key, size_t idx) override;
+    size_t get(const std::string_view& key) override;
 
 private:
     ::google::dense_hash_map<std::string_view, size_t, StringViewHash> map;
@@ -44,16 +44,16 @@ class IgnoreCaseBlockNameMap : public ICaseAwareBlockNameMap {
 public:
     explicit IgnoreCaseBlockNameMap(size_t size);
 
-    void add(const String& key, size_t idx) override;
+    void add(const std::string_view& key, size_t idx) override;
 
-    size_t get(const String& key) override;
+    size_t get(const std::string_view& key) override;
 
 protected:
     friend AutoCaseBlockNameMap;
     // TODO: Not a very good hash function, there are other we could use
     struct CaseInsensitiveHash
     {
-        size_t operator()(const String & key) const
+        size_t operator()(const std::string_view & key) const
         {
             size_t h = 0;
             for (const char c : key)
@@ -66,7 +66,7 @@ protected:
 
     struct CaseInsensitiveEquality
     {
-        bool operator()(const String & left, const String & right) const
+        bool operator()(const std::string_view & left, const std::string_view & right) const
         {
             if (left.size() != right.size())
             {
@@ -75,26 +75,26 @@ protected:
             return std::equal(left.begin(), left.end(), right.begin(), [](char a, char b) { return tolower(a) == tolower(b); });
         }
     };
-    ::google::dense_hash_map<String, size_t, CaseInsensitiveHash, CaseInsensitiveEquality> map;
+    ::google::dense_hash_map<std::string_view, size_t, CaseInsensitiveHash, CaseInsensitiveEquality> map;
 };
 
 class AutoCaseBlockNameMap : public ICaseAwareBlockNameMap {
 public:
     explicit AutoCaseBlockNameMap(size_t size);
 
-    void add(const String& key, size_t idx) override;
+    void add(const std::string_view& key, size_t idx) override;
 
-    size_t get(const String& key) override;
+    size_t get(const std::string_view& key) override;
 private:
-    void AmbiguityCheck(const String& key);
+    void AmbiguityCheck(const std::string_view& key);
 
     /// Maps from string to position
     ::google::dense_hash_map<std::string_view, size_t, StringViewHash> map;
     /// Maps from string (ignoring case) to position. Efectivelly, it transforms every string into its lower case representation
-    ::google::dense_hash_map<String, size_t, IgnoreCaseBlockNameMap::CaseInsensitiveHash, IgnoreCaseBlockNameMap::CaseInsensitiveEquality> i_map;
+    ::google::dense_hash_map<std::string_view, size_t, IgnoreCaseBlockNameMap::CaseInsensitiveHash, IgnoreCaseBlockNameMap::CaseInsensitiveEquality> i_map;
     /// Counts the number of keys which when transformed to lower case map to the same string
     /// For example: `Name` and `nAme` both map to `name`
-    ::google::dense_hash_map<String, size_t, IgnoreCaseBlockNameMap::CaseInsensitiveHash, IgnoreCaseBlockNameMap::CaseInsensitiveEquality> ambiguity;
+    ::google::dense_hash_map<std::string_view, size_t, IgnoreCaseBlockNameMap::CaseInsensitiveHash, IgnoreCaseBlockNameMap::CaseInsensitiveEquality> ambiguity;
 };
 
 }

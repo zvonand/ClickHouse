@@ -1563,6 +1563,15 @@ Allow to write information about geo columns in parquet metadata and encode colu
     DECLARE(Bool, into_outfile_create_parent_directories, false, R"(
 Automatically create parent directories when using INTO OUTFILE if they do not already exists.
 )", 0) \
+    DECLARE(InputFormatCaseSensitivity, input_format_with_names_case_insensitive_column_matching, FormatSettings::InputFormatCaseSensitivity::AUTO, R"(
+Defines the case sensitive mode when ingesting data through the various format containing column names (e.g., JSONEachRow).
+Supported modes:
+    - MATCH_CASE case sensitive
+    - IGNORE_CASE case insensitive
+    - AUTO first checks case sensitive, if fails, checks case insensitive.
+
+   default value: AUTO 
+)", 0) \
 
 
 // End of FORMAT_FACTORY_SETTINGS

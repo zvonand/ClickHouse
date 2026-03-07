@@ -49,9 +49,13 @@ DROP TABLE json_test;
 -- Test ignore case ambiguity
 CREATE TABLE json_test (AGE Int, age Int, id Int);
 
-INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10}; -- { clientError 117}
+SET input_format_with_names_case_insensitive_column_matching='ignore_case';
+
+INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10}; -- { clientError 117 }
 
 INSERT INTO json_test FORMAT JSONEachRow {"id": 0};
+
+INSERT INTO json_test FORMAT JSONEachRow {"id": 0, "age": 10}; -- { clientError 117 }
 
 SELECT * FROM json_test;
 

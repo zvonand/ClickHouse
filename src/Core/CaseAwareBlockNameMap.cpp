@@ -3,7 +3,6 @@
 #include <cctype>
 #include <memory>
 #include <string_view>
-#include <unordered_map>
 #include <Core/Block.h>
 #include <Formats/FormatSettings.h>
 #include <base/StringViewHash.h>
@@ -17,10 +16,9 @@ namespace DB
 namespace ErrorCodes
 {
 extern const int INCORRECT_DATA;
-extern const int LOGICAL_ERROR;
 }
 
-// TODO: Not a very good hash function, there are other we could use
+/// TODO: Not a very good hash function, there are others we could use
 struct CaseInsensitiveHash
 {
     size_t operator()(const std::string_view key) const
@@ -50,7 +48,7 @@ struct CaseInsensitiveEquality
     }
 };
 
-
+/// Case aware map
 class CaseAwareBlockNameMap::MatchCaseBlockNameMap
 {
 public:
@@ -82,6 +80,7 @@ private:
     ::google::dense_hash_map<std::string_view, size_t, StringViewHash> map;
 };
 
+/// Case independent map
 class CaseAwareBlockNameMap::IgnoreCaseBlockNameMap
 {
 public:
@@ -97,17 +96,23 @@ public:
     {
         if (map.find(key) != map.end())
         {
-            throw Exception(ErrorCodes::INCORRECT_DATA, "Ambiguous field (`{}` at position {}) when processing data.", key, idx);
+            ambiguous_keys.insert(key);
         }
         map[key] = idx;
     }
 
+    /// Retrieves the position of a given key
+    /// Can throw in the case where `key` is ambiguous
+    /// For example: Name and namE will both map to the same key (name)
     size_t get(const std::string_view key)
     {
         auto it = map.find(key);
         if (it == map.end())
         {
             return NOT_FOUND;
+        }
+        if(ambiguous_keys.contains(key)){
+            throw Exception(ErrorCodes::INCORRECT_DATA, "Ambiguous field (`{}`) when processing data.", key);
         }
         return it->second;
     }
@@ -118,8 +123,11 @@ public:
 
 protected:
     ::google::dense_hash_map<std::string_view, size_t, CaseInsensitiveHash, CaseInsensitiveEquality> map;
+    std::unordered_set<std::string_view, CaseInsensitiveHash, CaseInsensitiveEquality> ambiguous_keys;
 };
 
+/// Auto case map
+/// First tries a case aware search, if it fails then it tries case independent
 class CaseAwareBlockNameMap::AutoCaseBlockNameMap
 {
 public:
@@ -151,6 +159,15 @@ public:
         }
     }
 
+    /** Retrieves the position of a given key
+      * Can throw in the case where `key` is ambiguous
+      * For example:
+      *  map: {Name: 0, namE: 1}
+      *
+      *  map[Name] -> 0
+      *  map[namE] -> 1
+      *  map[name] -> error, ambiguous
+      */
     size_t get(const std::string_view key)
     {
         // First check if the key has an exact match
@@ -193,7 +210,7 @@ private:
 
     /// Maps from string to position
     ::google::dense_hash_map<std::string_view, size_t, StringViewHash> map;
-    /// Maps from string (ignoring case) to position. Efectivelly, it transforms every string into its lower case representation
+    /// Maps from string (ignoring case) to position. Effectively, it transforms every string into its lower case representation
     ::google::dense_hash_map<std::string_view, size_t, CaseInsensitiveHash, CaseInsensitiveEquality> i_map;
     /// Counts the number of keys which when transformed to lower case map to the same string
     /// For example: `Name` and `nAme` both map to `name`

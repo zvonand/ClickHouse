@@ -297,6 +297,30 @@ def test_https_non_ssl_auth():
     # TODO: Add non-flaky tests for:
     # - sending wrong cert
 
+def test_mixed_x509_san_password_support():
+    assert (
+        execute_query_https("SELECT currentUser()", user="trurl", cert_name="client4")
+        == "trurl\n"
+    )
+    assert (
+        execute_query_https("SELECT currentUser()", enable_ssl_auth=False, user="trurl", password="mixed_sha_pass")
+        == "trurl\n"
+    )
+
+    # Verify that system.users shows both auth methods (sha256_password + ssl_certificate)
+    # for user 'trurl'. Sort by auth_type name for a deterministic assertion regardless of
+    # config order. Both columns are extracted from a single sorted zip to keep them aligned.
+    assert (
+        instance.query(
+            "SELECT name, "
+            "arrayMap(x -> toString(x.1), s) AS auth_type, "
+            "arrayMap(x -> x.2, s) AS auth_params "
+            "FROM (SELECT name, arraySort(x -> toString(x.1), arrayZip(auth_type, auth_params)) AS s "
+            "FROM system.users WHERE name='trurl')"
+        )
+        == 'trurl\t[\'sha256_password\',\'ssl_certificate\']\t[\'{}\',\'{"subject_alt_names":["URI:spiffe:\\\\/\\\\/foo.com\\\\/bar"]}\']\n'
+    )
+    
 
 def test_create_user():
     instance.query("DROP USER IF EXISTS emma")

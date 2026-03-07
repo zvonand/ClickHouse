@@ -4,6 +4,7 @@
 #include <Processors/Formats/RowInputFormatWithDiagnosticInfo.h>
 #include <Processors/Formats/ISchemaReader.h>
 #include <Formats/FormatSettings.h>
+#include "Core/CaseAwareBlockNameMap.h"
 
 namespace DB
 {
@@ -71,7 +72,7 @@ protected:
     bool with_types;
 
     std::unique_ptr<FormatReaderImpl> format_reader;
-    BlockNameMap column_indexes_by_names;
+    CaseAwareBlockNameMap column_indexes_by_names;
 
 private:
     bool is_binary;

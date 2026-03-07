@@ -62,7 +62,7 @@ public:
 
     void add(const std::string_view key, size_t idx) { map[key] = idx; }
 
-    size_t get(const std::string_view key)
+    size_t get(const std::string_view key) const
     {
         auto it = map.find(key);
         if (it == map.end())
@@ -72,7 +72,7 @@ public:
         return it->second;
     }
 
-    bool stringCompare(std::string_view left, std::string_view right){
+    bool stringCompare(std::string_view left, std::string_view right) const{
         return left == right;
     }
 
@@ -104,7 +104,7 @@ public:
     /// Retrieves the position of a given key
     /// Can throw in the case where `key` is ambiguous
     /// For example: Name and namE will both map to the same key (name)
-    size_t get(const std::string_view key)
+    size_t get(const std::string_view key) const
     {
         auto it = map.find(key);
         if (it == map.end())
@@ -117,7 +117,7 @@ public:
         return it->second;
     }
 
-    bool stringCompare(std::string_view left, std::string_view right){
+    bool stringCompare(std::string_view left, std::string_view right) const{
         return CaseInsensitiveEquality::compare(left, right);
     }
 
@@ -154,7 +154,7 @@ public:
       *  map[namE] -> 1
       *  map[name] -> error, ambiguous
       */
-    size_t get(const std::string_view key)
+    size_t get(const std::string_view key) const
     {
         // First check if the key has an exact match
         auto idx = map.get(key);
@@ -166,7 +166,7 @@ public:
         return i_map.get(key);
     }
 
-    bool stringCompare(std::string_view left, std::string_view right){
+    bool stringCompare(std::string_view left, std::string_view right) const{
         return map.stringCompare(left, right) || i_map.stringCompare(left, right);
     }
 
@@ -178,7 +178,7 @@ private:
 CaseAwareBlockNameMap::CaseAwareBlockNameMap(FormatSettings::InputFormatCaseSensitivity input_mode, const Block & block)
     : mode(input_mode)
 {
-    auto expected_size = block.getIndexByName().size();
+    expected_size = block.getIndexByName().size();
     switch (mode)
     {
         case FormatSettings::InputFormatCaseSensitivity::MATCH_CASE:
@@ -235,7 +235,7 @@ void CaseAwareBlockNameMap::add(std::string_view column_name, size_t idx){
     }
 }
 
-size_t CaseAwareBlockNameMap::get(std::string_view column_name){
+size_t CaseAwareBlockNameMap::get(std::string_view column_name) const{
     switch (mode) {
         case FormatSettings::InputFormatCaseSensitivity::MATCH_CASE:
         {
@@ -256,7 +256,7 @@ size_t CaseAwareBlockNameMap::get(std::string_view column_name){
 }
 
 
-bool CaseAwareBlockNameMap::stringCompare(std::string_view left, std::string_view right){
+bool CaseAwareBlockNameMap::stringCompare(std::string_view left, std::string_view right) const{
     switch (mode) {
         case FormatSettings::InputFormatCaseSensitivity::MATCH_CASE:
         {

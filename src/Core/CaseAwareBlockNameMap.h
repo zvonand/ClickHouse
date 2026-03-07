@@ -22,10 +22,14 @@ public:
     void add(std::string_view column_name, size_t idx);
     /// Fetches the position of the given column_name
     /// Returns NOT_FOUND in case the column_name is not in the map
-    size_t get(std::string_view column_name);
+    size_t get(std::string_view column_name) const;
+
+    size_t size() const{
+        return expected_size;
+    }
 
     /// Compares two strings, using the same method as the one used internally
-    bool stringCompare(std::string_view left, std::string_view right);
+    bool stringCompare(std::string_view left, std::string_view right) const;
 private:
     /// Constructs the map from the given block
     void getNamesToIndexesMap(const Block & block);
@@ -41,5 +45,7 @@ private:
     std::unique_ptr<MatchCaseBlockNameMap> match_case;
     std::unique_ptr<IgnoreCaseBlockNameMap> ignore_case;
     std::unique_ptr<AutoCaseBlockNameMap> auto_case;
+
+    size_t expected_size;
 };
 }

@@ -1,5 +1,6 @@
 #include <Columns/IColumn.h>
 #include <Common/Exception.h>
+#include "Core/CaseAwareBlockNameMap.h"
 #include <Core/Block.h>
 #include <Formats/ColumnMapping.h>
 #include <Formats/FormatSettings.h>
@@ -19,6 +20,48 @@ void ColumnMapping::setupByHeader(const Block & header)
 
     for (size_t i = 0; i < column_indexes_for_input_fields.size(); ++i)
         column_indexes_for_input_fields[i] = i;
+}
+
+void ColumnMapping::addColumns(
+    const Names & column_names, const CaseAwareBlockNameMap & column_indexes_by_names, const FormatSettings & settings)
+{
+    std::vector<bool> read_columns(column_indexes_by_names.size(), false);
+
+    for (const auto & name : column_names)
+    {
+        names_of_columns.push_back(name);
+
+        auto idx = column_indexes_by_names.get(name);
+        if (idx == CaseAwareBlockNameMap::NOT_FOUND)
+        {
+            if (settings.skip_unknown_fields)
+            {
+                column_indexes_for_input_fields.push_back(std::nullopt);
+                continue;
+            }
+
+            throw Exception(
+                            ErrorCodes::INCORRECT_DATA,
+                            "Unknown field found in format header: "
+                            "'{}' at position {}\nSet the 'input_format_skip_unknown_fields' parameter explicitly "
+                            "to ignore and proceed",
+                            name, column_indexes_for_input_fields.size());
+        }
+
+        const auto column_index = idx;
+
+        if (read_columns[column_index])
+            throw Exception(ErrorCodes::INCORRECT_DATA, "Duplicate field found while parsing format header: {}", name);
+
+        read_columns[column_index] = true;
+        column_indexes_for_input_fields.emplace_back(column_index);
+    }
+
+    for (size_t i = 0; i != read_columns.size(); ++i)
+    {
+        if (!read_columns[i])
+            not_presented_columns.push_back(i);
+    }
 }
 
 void ColumnMapping::addColumns(

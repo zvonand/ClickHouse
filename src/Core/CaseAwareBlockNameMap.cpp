@@ -134,29 +134,15 @@ public:
     explicit AutoCaseBlockNameMap(size_t size)
         : map(size)
         , i_map(size)
-        , ambiguity(size)
     {
-        map.set_empty_key(std::string_view{});
-        i_map.set_empty_key(std::string_view{});
-        ambiguity.set_empty_key(std::string_view{});
     }
 
     ~AutoCaseBlockNameMap() = default;
 
     void add(const std::string_view key, size_t idx)
     {
-        map[key] = idx;
-        i_map[key] = idx;
-
-        auto it = ambiguity.find(key);
-        if (it == ambiguity.end())
-        {
-            ambiguity[key] = 1;
-        }
-        else
-        {
-            it->second++;
-        }
+        map.add(key, idx);
+        i_map.add(key, idx);
     }
 
     /** Retrieves the position of a given key
@@ -171,50 +157,22 @@ public:
     size_t get(const std::string_view key)
     {
         // First check if the key has an exact match
-        auto it = map.find(key);
-        if (it != map.end())
-        {
-            return it->second;
+        auto idx = map.get(key);
+        if(idx != NOT_FOUND){
+            return idx;
         }
-        // Check for ambiguity first
-        AmbiguityCheck(key);
 
         // Check if the key has a match ignoring case
-        auto i_it = i_map.find(key);
-        if (i_it != i_map.end())
-        {
-            return i_it->second;
-        }
-
-        return NOT_FOUND;
+        return i_map.get(key);
     }
 
     bool stringCompare(std::string_view left, std::string_view right){
-        return left == right || CaseInsensitiveEquality::compare(left, right);
+        return map.stringCompare(left, right) || i_map.stringCompare(left, right);
     }
 
 private:
-    void AmbiguityCheck(const std::string_view key)
-    {
-        auto it = ambiguity.find(key);
-        if (it == ambiguity.end())
-        {
-            return;
-        }
-
-        if (it->second > 1)
-        {
-            throw Exception(ErrorCodes::INCORRECT_DATA, "Ambiguous field (`{}`) when processing data.", key);
-        }
-    }
-
-    /// Maps from string to position
-    ::google::dense_hash_map<std::string_view, size_t, StringViewHash> map;
-    /// Maps from string (ignoring case) to position. Effectively, it transforms every string into its lower case representation
-    ::google::dense_hash_map<std::string_view, size_t, CaseInsensitiveHash, CaseInsensitiveEquality> i_map;
-    /// Counts the number of keys which when transformed to lower case map to the same string
-    /// For example: `Name` and `nAme` both map to `name`
-    ::google::dense_hash_map<std::string_view, size_t, CaseInsensitiveHash, CaseInsensitiveEquality> ambiguity;
+    MatchCaseBlockNameMap map;
+    IgnoreCaseBlockNameMap i_map;
 };
 
 CaseAwareBlockNameMap::CaseAwareBlockNameMap(FormatSettings::InputFormatCaseSensitivity input_mode, const Block & block)

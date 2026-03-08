@@ -336,7 +336,7 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
                 info->addOp(slot.request->getOpNum(), microseconds, 1, bytes);
             }
         }
-        catch (...)
+        catch (...) // Ok: handle_request_exception logs and counts the error
         {
             handle_request_exception(slot.request);
         }
@@ -436,7 +436,7 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
             slot.future = std::move(future);
             in_flight.push_back(std::move(slot));
         }
-        catch (...)
+        catch (...) // Ok: handle_request_exception logs and counts the error
         {
             for (const auto & cb : *failure_callbacks)
                 cb();

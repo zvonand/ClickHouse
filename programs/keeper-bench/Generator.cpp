@@ -687,7 +687,10 @@ void MultiRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
 
 void MultiRequestGenerator::setSeedImpl(uint64_t seed)
 {
-    request_getter.setSeed(seed);
+    /// Use a large offset to avoid seed collisions with sibling generators.
+    /// Without this, the inner RequestGetter distributes sub-seeds as seed + i + 1,
+    /// which collides with the outer RequestGetter using the same scheme.
+    request_getter.setSeed(seed + 500009);
     if (size)
         size->setSeed(seed + 100003);
 }

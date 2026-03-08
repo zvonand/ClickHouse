@@ -56,7 +56,7 @@ extern const SettingsBool enable_positional_arguments_for_projections;
 namespace
 {
 
-bool renameIdentifierInAST(const ASTPtr & node, const std::string & from, const std::string & to)
+bool renameIdentifierInAST(ASTPtr & node, const std::string & from, const std::string & to)
 {
     bool renamed = false;
 
@@ -659,13 +659,11 @@ Block ProjectionDescription::calculateByQuery(
     {
         if (!block.has(BlockNumberColumn::name))
         {
-            // Insert path
+            /// Insert path
 
             auto col = BlockNumberColumn::type->createColumn();
             auto & data = assert_cast<ColumnUInt64 &>(*col).getData();
-            data.resize_exact(block.rows());
-            for (size_t i = 0; i < block.rows(); ++i)
-                data[i] = block_number;
+            data.assign(block.rows(), block_number);
 
             source_block.insert({std::move(col), BlockNumberColumn::type, BlockNumberColumn::name});
         }
@@ -680,7 +678,7 @@ Block ProjectionDescription::calculateByQuery(
     {
         if (!block.has(BlockOffsetColumn::name))
         {
-            // Insert path
+            /// Insert path
 
             auto col = BlockOffsetColumn::type->createColumn();
             auto & data = assert_cast<ColumnUInt64 &>(*col).getData();

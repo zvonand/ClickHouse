@@ -1128,6 +1128,12 @@ void MergeTreeData::checkProperties(
                 ErrorCodes::BAD_ARGUMENTS,
                 "Projection {} uses `_block_offset` column, but MergeTree setting `enable_block_offset_column` is disabled",
                 projection.name);
+
+        if (projection.with_block_number + projection.with_block_offset == 1)
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "Projection {} uses only _block_number or _block_offset column. It is required to use both at once.",
+                projection.name);
     }
 
     const auto validate_complex_projection = [&](const std::string & projection_name, const std::vector<std::string> & forbid_columns)
@@ -1136,9 +1142,8 @@ void MergeTreeData::checkProperties(
             if (new_metadata.getColumns().has(forbid))
                 throw Exception(
                     ErrorCodes::BAD_ARGUMENTS,
-                    "Cannot add column `{}` because projection {} references `{}` column. "
-                    "Columns {} are not allowed in this case",
-                    col.name, projection_name, reference_column, forbid_columns);
+                    "Columns {} are not allowed because of projection {}",
+                    forbid_columns, projection_name);
 
     };
 
@@ -1147,8 +1152,11 @@ void MergeTreeData::checkProperties(
         if (projection.with_parent_part_offset)
             validate_complex_projection(projection.name, {"_part_offset", "_part_index", "_parent_part_offset"});
 
-        if (projection.with_block_number || projection.with_block_offset)
+        if (projection.with_block_number)
             validate_complex_projection(projection.name, {"_block_number", "_parent_block_number"});
+
+        if (projection.with_block_offset)
+            validate_complex_projection(projection.name, {"_block_offset", "_parent_block_offset"});
     }
 
     for (const auto & col : new_metadata.columns)

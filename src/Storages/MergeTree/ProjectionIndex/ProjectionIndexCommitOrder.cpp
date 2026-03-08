@@ -1,13 +1,13 @@
 #include <Storages/MergeTree/ProjectionIndex/ProjectionIndexCommitOrder.h>
+#include <Storages/MergeTree/MergeTreeVirtualColumns.h>
+#include <Storages/ProjectionsDescription.h>
 
-#include <Core/Block.h>
-#include <Parsers/ASTAsterisk.h>
 #include <Parsers/ASTExpressionList.h>
 #include <Parsers/ASTFunction.h>
 #include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTProjectionSelectQuery.h>
-#include <Storages/MergeTree/MergeTreeVirtualColumns.h>
-#include <Storages/ProjectionsDescription.h>
+
+#include <Core/Block.h>
 
 namespace DB
 {

@@ -33,7 +33,7 @@ SELECT randomString('abc'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 -- ngrams
 SELECT ngrams('ClickHouse', 3);
-SELECT ngrams(123, 3); -- { serverError BAD_ARGUMENTS }
+SELECT ngrams(123, 3); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 -- dynamicType
 SELECT dynamicType(42); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

@@ -1088,7 +1088,8 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::prepareProjectionsToMergeAndRe
         /// The IGNORE mode is checked here purely for backward compatibility.
         /// However, if the projection contains `_parent_part_offset`, it must still be rebuilt,
         /// since offset correctness cannot be ignored even in IGNORE mode.
-        if (global_ctx->merge_may_reduce_rows && (mode != DeduplicateMergeProjectionMode::IGNORE || projection.with_parent_part_offset))
+        const bool is_special_projection = projection.with_parent_part_offset || projection.with_block_number || projection.with_block_offset;
+        if (global_ctx->merge_may_reduce_rows && (mode != DeduplicateMergeProjectionMode::IGNORE || is_special_projection))
         {
             global_ctx->projections_to_rebuild.push_back(&projection);
             continue;

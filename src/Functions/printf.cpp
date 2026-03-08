@@ -237,8 +237,8 @@ private:
     /// Per-row format string execution: parse and execute format for each row individually.
     ColumnPtr executeDynamicFormat(const ColumnsWithTypeAndName & arguments, size_t input_rows_count) const
     {
-        ColumnPtr format_col = arguments[0].column->convertToFullColumnIfConst();
-        const auto * format_string_col = checkAndGetColumn<ColumnString>(format_col.get());
+        /// No convertToFullColumnIfConst — this path is only reached when the column is already non-const.
+        const auto * format_string_col = checkAndGetColumn<ColumnString>(arguments[0].column.get());
         if (!format_string_col)
             throw Exception(ErrorCodes::ILLEGAL_COLUMN, "First argument of function {} must be a String column", getName());
 
@@ -254,12 +254,11 @@ private:
         size_t curr_offset = 0;
         for (size_t row = 0; row < input_rows_count; ++row)
         {
-            String format = format_string_col->getDataAt(row).toString();
+            std::string_view format = format_string_col->getDataAt(row).toView();
 
             /// Build single-row argument columns for this row.
-            auto fmt_col = ColumnString::create();
-            fmt_col->insert(format);
-            row_args[0] = {ColumnConst::create(std::move(fmt_col), 1), arguments[0].type, arguments[0].name};
+            /// row_args[0] is not used by buildInstructions for data — only for index range checks.
+            row_args[0] = arguments[0];
             for (size_t i = 1; i < arguments.size(); ++i)
             {
                 auto single_val_col = arguments[i].column->cut(row, 1);
@@ -277,11 +276,10 @@ private:
                     concat_args, result_type, 1, false);
 
                 StringRef val = row_result->getDataAt(0);
-                result_chars.resize(curr_offset + val.size + 1);
+                result_chars.resize(curr_offset + val.size);
                 if (val.size)
                     memcpy(&result_chars[curr_offset], val.data, val.size);
-                result_chars[curr_offset + val.size] = '\0';
-                curr_offset += val.size + 1;
+                curr_offset += val.size;
             }
             catch (const fmt::v12::format_error & e)
             {
@@ -301,7 +299,7 @@ private:
     }
 
     std::vector<Instruction>
-    buildInstructions(const String & format, const ColumnsWithTypeAndName & arguments, size_t input_rows_count) const
+    buildInstructions(std::string_view format, const ColumnsWithTypeAndName & arguments, size_t input_rows_count) const
     {
         std::vector<Instruction> instructions;
         instructions.reserve(arguments.size());

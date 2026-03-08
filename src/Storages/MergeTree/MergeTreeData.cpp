@@ -1116,29 +1116,50 @@ void MergeTreeData::checkProperties(
                 "This projection cannot be used in this table",
                 projection.name);
         }
+
+        if (projection.with_block_number && !(*getSettings())[MergeTreeSetting::enable_block_number_column])
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "Projection {} uses `_block_number` column, but MergeTree setting `enable_block_number_column` is disabled",
+                projection.name);
+
+        if (projection.with_block_offset && !(*getSettings())[MergeTreeSetting::enable_block_offset_column])
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "Projection {} uses `_block_offset` column, but MergeTree setting `enable_block_offset_column` is disabled",
+                projection.name);
     }
 
-    String projection_with_parent_part_offset;
+    const auto validate_complex_projection = [&](const std::string & projection_name, const std::string & reference_column, const std::vector<std::string> & forbid_columns)
+    {
+        for (const auto & col : new_metadata.columns)
+            if (std::ranges::contains(forbid_columns, col.name))
+                throw Exception(
+                    ErrorCodes::BAD_ARGUMENTS,
+                    "Cannot add column `{}` because projection {} references `{}` column. "
+                    "Columns {} are not allowed in this case",
+                    col.name, projection_name, reference_column, forbid_columns);
+    };
+
     for (const auto & projection : old_metadata.projections)
     {
         if (projection.with_parent_part_offset)
         {
-            projection_with_parent_part_offset = projection.name;
-            break;
+            validate_complex_projection(projection.name, "_part_offset", {"_part_offset", "_part_index", "_parent_part_offset"});
+            validate_complex_projection(projection.name, "_part_index", {"_part_offset", "_part_index", "_parent_part_offset"});
+            validate_complex_projection(projection.name, "_parent_part_offset", {"_part_offset", "_part_index", "_parent_part_offset"});
         }
-    }
 
-    if (!projection_with_parent_part_offset.empty())
-    {
-        for (const auto & col : new_metadata.columns)
+        if (projection.with_block_number)
         {
-            if (col.name == "_part_offset" || col.name == "_part_index" || col.name == "_parent_part_offset")
-                throw Exception(
-                    ErrorCodes::BAD_ARGUMENTS,
-                    "Cannot add column `{}` because normal projection {} references its parent `_part_offset` column. "
-                    "Columns named `_part_offset`, `_part_index`, or `_parent_part_offset` are not allowed in this case",
-                    col.name,
-                    projection_with_parent_part_offset);
+            validate_complex_projection(projection.name, "_block_number", {"_block_number", "_parent_block_number"});
+            validate_complex_projection(projection.name, "_parent_block_number", {"_block_number", "_parent_block_number"});
+        }
+
+        if (projection.with_block_offset)
+        {
+            validate_complex_projection(projection.name, "_block_offset", {"_block_offset", "_parent_block_offset"});
+            validate_complex_projection(projection.name, "_parent_block_offset", {"_block_offset", "_parent_block_offset"});
         }
     }
 

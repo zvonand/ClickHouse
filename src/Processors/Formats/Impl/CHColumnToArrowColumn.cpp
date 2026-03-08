@@ -286,15 +286,43 @@ namespace DB
         const DataTypeVariant & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
         const String & format_name,
-        [[maybe_unused]] size_t start,
-        [[maybe_unused]] size_t end,
+        size_t start,
+        size_t end,
         const CHColumnToArrowColumn::Settings & settings,
         std::unordered_map<String, MutableColumnPtr> & dictionary_values)
     {
-        /// TODO: utilize slicing (start - end) - it requires some non-trivial reindexation
-        /// and maybe optimization of typed values arrays
-        arrow::ArrayVector children;
+        size_t size = end - start;
+        const auto & column_offsets = column.getOffsets();
+        const auto & discriminators = column.getLocalDiscriminators();
+        arrow::Int8Builder type_ids_builder;
 
+        const auto num_variants = column.getNumVariants();
+        std::vector<size_t> starts(num_variants);
+        std::vector<size_t> sizes(num_variants);
+
+        arrow::Status status;
+        for (size_t idx = 0; idx < discriminators.size() && idx < end; ++idx)
+        {
+            if (idx < start)
+                continue;
+            if (sizes[discriminators[idx]] == 0)
+                starts[discriminators[idx]] = column_offsets[idx];
+            ++sizes[discriminators[idx]];
+
+            if (discriminators[idx] == ColumnVariant::NULL_DISCRIMINATOR || (null_bytemap && (*null_bytemap)[idx]))
+                status = type_ids_builder.Append(static_cast<int8_t>(num_variants));
+            else
+                status = type_ids_builder.Append(discriminators[idx]);
+
+            checkStatus(status, "type_ids", format_name);
+        }
+
+        std::shared_ptr<arrow::Array> type_ids_array;
+        status = type_ids_builder.Finish(&type_ids_array);
+        checkStatus(status, "type_ids", format_name);
+
+
+        arrow::ArrayVector children;
         for (size_t i = 0; i < column.getNumVariants(); ++i)
         {
             auto variant = column.getVariants()[i];
@@ -309,7 +337,7 @@ namespace DB
                 &is_column_nullable);
 
             std::unique_ptr<arrow::ArrayBuilder> variant_array_builder;
-            arrow::Status status = MakeBuilder(arrow::default_memory_pool(), arrow_type, &variant_array_builder);
+            status = MakeBuilder(arrow::default_memory_pool(), arrow_type, &variant_array_builder);
             checkStatus(status, variant->getName(), format_name);
 
             std::shared_ptr<arrow::Array> variant_arrow_array = fillArrowArray(
@@ -319,83 +347,62 @@ namespace DB
                 nullptr,
                 variant_array_builder.get(),
                 format_name,
-                0,
-                variant->size(),
+                starts[i],
+                starts[i] + sizes[i],
                 settings,
                 dictionary_values);
 
             children.push_back(variant_arrow_array);
         }
+        children.push_back(std::make_shared<arrow::NullArray>(1));
 
-        const auto & discriminators = column.getLocalDiscriminators();
-        arrow::Int8Builder type_ids_builder;
-        bool contains_nulls = false;
-
-        auto null_idx = children.size();
-        arrow::Status status;
-        for (size_t idx = 0; idx < discriminators.size(); ++idx)
-        {
-            if (discriminators[idx] == ColumnVariant::NULL_DISCRIMINATOR || (null_bytemap && (*null_bytemap)[idx]))
-            {
-                status = type_ids_builder.Append(static_cast<int8_t>(null_idx));
-                contains_nulls = true;
-            }
-            else
-                status = type_ids_builder.Append(discriminators[idx]);
-
-            checkStatus(status, "type_ids", format_name);
-        }
-
-        std::shared_ptr<arrow::Array> type_ids_array;
-        status = type_ids_builder.Finish(&type_ids_array);
-        checkStatus(status, "type_ids", format_name);
-
-        if (contains_nulls)
-            children.push_back(std::make_shared<arrow::NullArray>(1));
-
-        const auto & column_offsets = column.getOffsets();
         arrow::Int32Builder offsets_builder;
 
         /// column_offsets should be sanitized because NULL_DISCRIMINATOR positions in ColumnVariant
-        /// are not specified and ignored but for arrow format they are meaningful
+        /// makes offsets at these positions irrelevant (and they can have unspecified values),
+        /// but for arrow dence union they are pointing to an actual NULL array
         if (null_bytemap)
         {
-            auto to_arrow_offset = [](const auto & tuple) -> int32_t
+            auto to_arrow_offset = [&](const auto & tuple) -> int32_t
             {
-                if (boost::get<0>(tuple) == ColumnVariant::NULL_DISCRIMINATOR || static_cast<bool>(boost::get<2>(tuple)))
+                const auto & discriminator = boost::get<0>(tuple);
+                const auto & column_offset = boost::get<1>(tuple);
+                if (discriminator == ColumnVariant::NULL_DISCRIMINATOR || static_cast<bool>(boost::get<2>(tuple)))
                     return 0;
-                const auto offset = boost::get<1>(tuple);
+                const auto offset = column_offset - starts[discriminator];
                 if (offset > static_cast<UInt64>(std::numeric_limits<int32_t>::max()))
                     throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot build Arrow DenseUnion: offset {} is out of Int32 range", offset);
                 return static_cast<int32_t>(offset);
             };
 
             auto begin_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(discriminators.begin(), column_offsets.begin(), null_bytemap->begin())),
+                boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start, column_offsets.begin() + start, null_bytemap->begin() + start)),
                 to_arrow_offset);
             auto end_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(discriminators.end(), column_offsets.end(), null_bytemap->end())),
+                boost::make_zip_iterator(boost::make_tuple(discriminators.end() + start + size, column_offsets.end() + start + size, null_bytemap->end() + start + size)),
                 to_arrow_offset);
 
             status = offsets_builder.AppendValues(begin_it, end_it);
         }
         else
         {
-            auto to_arrow_offset = [](const auto & tuple) -> int32_t
+            auto to_arrow_offset = [&](const auto & tuple) -> int32_t
             {
-                if (boost::get<0>(tuple) == ColumnVariant::NULL_DISCRIMINATOR)
+                const auto & discriminator = boost::get<0>(tuple);
+                const auto & column_offset = boost::get<1>(tuple);
+                if (discriminator == ColumnVariant::NULL_DISCRIMINATOR)
                     return 0;
-                const auto offset = boost::get<1>(tuple);
+                const auto offset = column_offset - starts[discriminator];
                 if (offset > static_cast<UInt64>(std::numeric_limits<int32_t>::max()))
                     throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot build Arrow DenseUnion: offset {} is out of Int32 range", offset);
                 return static_cast<int32_t>(offset);
             };
 
             auto begin_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(discriminators.begin(), column_offsets.begin())),
+                boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start, column_offsets.begin() + start)),
                 to_arrow_offset);
             auto end_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(discriminators.end(), column_offsets.end())),
+                boost::make_zip_iterator(boost::make_tuple(discriminators.end() + start + size, column_offsets.end() + start + size)),
                 to_arrow_offset);
 
             status = offsets_builder.AppendValues(begin_it, end_it);
@@ -1113,8 +1120,8 @@ namespace DB
                         column_variant_type,
                         null_bytemap,
                         format_name,
-                        0,
-                        column->size(),
+                        start,
+                        end,
                         settings,
                         dictionary_values);
                 break;
@@ -1389,8 +1396,7 @@ namespace DB
             /// Variant in CH is slightly different than in arrow - it can indicate null value by having ColumnVariant::NULL_DISCRIMINATOR
             /// in discriminators instead of using nullable type - because of this we need to introduce additional
             /// null array (having a single null value) to have these null values to refer to
-            if (column_variant && std::ranges::any_of(column_variant->getLocalDiscriminators(), [](auto idx){ return idx == ColumnVariant::NULL_DISCRIMINATOR; }))
-                fields.push_back(std::make_shared<arrow::Field>("NULL", arrow::null(), false));
+            fields.push_back(std::make_shared<arrow::Field>("NULL", arrow::null(), false));
 
             return arrow::dense_union(fields);
         }

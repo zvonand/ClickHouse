@@ -1,11 +1,11 @@
 -- Test auto case
 DROP TABLE IF EXISTS json_test;
 
-CREATE TABLE json_test (id Int, name String);
+CREATE TABLE json_test (id Int, name String, NaMe String);
 
 SET input_format_with_names_case_insensitive_column_matching='auto';
 
-INSERT INTO json_test FORMAT JSONEachRow {"id": 0, "name": "aa"} {"ID": 1, "NAME": "bb"}
+INSERT INTO json_test FORMAT JSONEachRow {"id": 0, "name": "aa", "NaMe": "bb"}
 
 SELECT * FROM json_test;
 
@@ -25,11 +25,11 @@ SELECT * FROM json_test;
 DROP TABLE json_test;
 
 -- Test match case
-CREATE TABLE json_test (age Int, AGE Int);
+CREATE TABLE json_test (age Int, AGE Int, name String, NaMe String);
 
 SET input_format_with_names_case_insensitive_column_matching='match_case';
 
-INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10} {"AGE": 20, "age": 1};
+INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10, "name": "a", "NaMe": "b"} {"name": "aa", "age": 1, "NaMe": "bb", "AGE": 20};
 
 SELECT * FROM json_test;
 
@@ -40,7 +40,7 @@ CREATE TABLE json_test (id Int, age Int);
 
 SET input_format_with_names_case_insensitive_column_matching='ignore_case';
 
-INSERT INTO json_test FORMAT JSONEachRow {"ID": 0, "AGE": 10};
+INSERT INTO json_test FORMAT JSONEachRow {"ID": 0, "AGE": 10} {"Id": 1, "AgE": 100};
 
 SELECT * FROM json_test;
 
@@ -53,7 +53,7 @@ SET input_format_with_names_case_insensitive_column_matching='ignore_case';
 
 INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10}; -- { clientError 117 }
 
-INSERT INTO json_test FORMAT JSONEachRow {"id": 0};
+INSERT INTO json_test FORMAT JSONEachRow {"id": 1000};
 
 INSERT INTO json_test FORMAT JSONEachRow {"id": 0, "age": 10}; -- { clientError 117 }
 

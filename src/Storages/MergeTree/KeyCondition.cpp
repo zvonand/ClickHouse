@@ -65,15 +65,13 @@ namespace ErrorCodes
 extern const int LOGICAL_ERROR;
 }
 
-/// Returns true if the regex contains an unescaped '|' (alternation operator).
-/// Escaped '\|' is treated as a literal pipe character and returns false.
 static bool hasUnescapedAlternation(const String & regexp)
 {
     for (size_t i = 0; i < regexp.size(); ++i)
     {
         if (regexp[i] == '\\' && i + 1 < regexp.size())
         {
-            ++i; /// skip escaped character
+            ++i;
             continue;
         }
         if (regexp[i] == '|')
@@ -423,19 +421,10 @@ const KeyCondition::AtomMap KeyCondition::atom_map
 
                 const bool has_alternation = hasUnescapedAlternation(expression);
 
-                /// For patterns without alternation, use simple prefix extraction.
-                /// Skip this for patterns with unescaped '|' because
-                /// extractFixedPrefixFromRegularExpression stops at '$' and may
-                /// return a prefix that doesn't cover all alternatives (e.g. "^a$|^b" → "a").
                 String prefix;
                 if (!has_alternation)
                     prefix = extractFixedPrefixFromRegularExpression(expression);
 
-                /// If simple extraction failed or was skipped, use comprehensive regex analysis
-                /// for anchored patterns matching ^(alt1|alt2|...).
-                /// The group must start immediately after ^ (expression[1] == '(') and
-                /// must NOT be a flag group like (?i) (expression[2] != '?'), to ensure
-                /// alternatives represent start-of-string content, not substrings.
                 if (prefix.empty()
                     && has_alternation
                     && expression.size() >= 3
@@ -447,7 +436,6 @@ const KeyCondition::AtomMap KeyCondition::atom_map
 
                     if (!analysis.alternatives.empty())
                     {
-                        /// Find the longest common prefix of all alternatives.
                         prefix = analysis.alternatives[0];
                         for (size_t i = 1; i < analysis.alternatives.size(); ++i)
                         {

@@ -103,8 +103,6 @@ SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE m
 SELECT count() FROM foo WHERE match(path, '^xxx\w+') SETTINGS force_primary_key = 1;
 
 
--- Escaped pipe \| is treated as a literal '|' character — index CAN be used.
--- Unescaped pipe | means alternation — index disabled unless ^(alt1|alt2) form.
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^xxx\\|zzz')) WHERE explain like '%Condition%';
 SELECT count() FROM foo WHERE match(path, '^xxx\\|zzz') SETTINGS force_primary_key = 1;
 

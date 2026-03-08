@@ -200,30 +200,23 @@ TEST(AllocationInterceptors, GetAddrInfoFreeAddrInfoDoesNotCauseNegativeDrift)
     ASSERT_EQ(res, 0) << gai_strerror(res);
     ASSERT_NE(result, nullptr);
 
-    bool allocation_seen = false;
-    Int64 after_thread = before_thread;
-    Int64 after_global = before_global;
-    for (size_t i = 0; i < 1000 && !allocation_seen; ++i)
-    {
-        after_thread = CurrentThread::get().memory_tracker.get();
-        after_global = total_memory_tracker.get();
-        allocation_seen = after_thread > before_thread && after_global > before_global;
-    }
-    ASSERT_TRUE(allocation_seen);
+    /// Flush untracked memory so the tracker counters reflect the getaddrinfo allocation.
+    /// Small allocations stay in the per-thread untracked buffer (4 MB threshold) and
+    /// won't be visible via memory_tracker.get() until flushed.
+    CurrentThread::flushUntrackedMemory();
+
+    const Int64 after_thread = CurrentThread::get().memory_tracker.get();
+    const Int64 after_global = total_memory_tracker.get();
+    ASSERT_GT(after_thread, before_thread);
+    ASSERT_GT(after_global, before_global);
 
     freeaddrinfo(result);
+    CurrentThread::flushUntrackedMemory();
 
-    bool deallocation_ok = false;
-    for (size_t i = 0; i < 1000 && !deallocation_ok; ++i)
-    {
-        const auto thread_after_free = CurrentThread::get().memory_tracker.get();
-        const auto global_after_free = total_memory_tracker.get();
-        bool thread_ok = thread_after_free - before_thread >= -64 * 1024;
-        bool global_ok = global_after_free - before_global >= -64 * 1024;
-        deallocation_ok = thread_ok && global_ok;
-    }
-
-    EXPECT_TRUE(deallocation_ok);
+    const auto thread_after_free = CurrentThread::get().memory_tracker.get();
+    const auto global_after_free = total_memory_tracker.get();
+    EXPECT_GE(thread_after_free - before_thread, -64 * 1024);
+    EXPECT_GE(global_after_free - before_global, -64 * 1024);
 }
 
 #endif

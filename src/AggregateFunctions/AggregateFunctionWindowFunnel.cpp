@@ -321,7 +321,16 @@ private:
             }
             else if (strict_deduplication && events_timestamp[event_idx].has_value())
             {
-                return events_list[i - 1].second;
+                /// A duplicate event was found — return the current max level reached.
+                /// The old code incorrectly returned events_list[i-1].second which is just
+                /// the condition index of the previous event in the sorted list, not the
+                /// actual max funnel level. See #37177.
+                for (size_t event = events_timestamp.size(); event > 0; --event)
+                {
+                    if (events_timestamp[event - 1].has_value())
+                        return static_cast<UInt8>(event);
+                }
+                return 0;
             }
             else if (strict_order && first_event && !events_timestamp[event_idx - 1].has_value())
             {

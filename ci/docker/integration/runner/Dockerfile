@@ -71,9 +71,10 @@ RUN ln -sf /usr/bin/python3.14 /usr/bin/python3 \
 COPY requirements.txt /
 # cassandra-driver uses an ancient ez_setup.py bootstrap that fails on Python 3.14 when
 # pkg_resources is not found in the isolated build env (TarFile.chown() signature changed).
-# Pre-install setuptools so pkg_resources is available, then build without isolation.
+# Install it separately with --no-build-isolation so it uses the pre-installed setuptools.
 RUN python3 -m pip install --no-cache-dir setuptools==78.1.1 \
-    && python3 -m pip install --no-cache-dir --no-build-isolation -r requirements.txt
+    && python3 -m pip install --no-cache-dir --no-build-isolation cassandra-driver==3.29.0 \
+    && python3 -m pip install --no-cache-dir -r requirements.txt
 RUN python3 -m pip install git+https://github.com/ClickHouse/kazoo.git
 
 RUN curl -fsSL -O https://archive.apache.org/dist/spark/spark-3.5.5/spark-3.5.5-bin-hadoop3.tgz \

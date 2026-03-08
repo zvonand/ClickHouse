@@ -2,6 +2,7 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
+#include <span>
 #include <Poco/Util/AbstractConfiguration.h>
 
 #include <Columns/IColumn.h>
@@ -32,6 +33,7 @@
 #include <Common/ZooKeeper/IKeeper.h>
 #include <Common/ZooKeeper/ShuffleHost.h>
 #include <Common/ZooKeeper/ZooKeeperArgs.h>
+#include <Common/ZooKeeper/Types.h>
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/ZooKeeper/ZooKeeperConstants.h>
 #include <Common/OpenTelemetryTraceContext.h>
@@ -1455,17 +1457,31 @@ void removeRecursive(Coordination::ZooKeeper & zookeeper, const std::string & pa
     zookeeper.list(path, Coordination::ListRequestType::ALL, list_callback, {}, false, false);
     future.get();
 
+    /// First, recursively remove all subtrees
     for (const auto & child : children)
         removeRecursive(zookeeper, fs::path(path) / child);
+
+    /// Then batch-remove the direct children in chunks of 1000
+    std::span children_span(children);
+    while (!children_span.empty())
+    {
+        Coordination::Requests ops;
+        size_t batch_size = std::min(children_span.size(), size_t{1000});
+        for (size_t i = 0; i < batch_size; ++i)
+            ops.emplace_back(zkutil::makeRemoveRequest(fs::path(path) / children_span[i], -1));
+
+        auto multi_promise = std::make_shared<std::promise<void>>();
+        auto multi_future = multi_promise->get_future();
+        zookeeper.multi(ops, [multi_promise](const Coordination::MultiResponse &) { multi_promise->set_value(); });
+        multi_future.get();
+
+        children_span = children_span.subspan(batch_size);
+    }
+
+    /// Finally remove the node itself
     auto remove_promise = std::make_shared<std::promise<void>>();
     auto remove_future = remove_promise->get_future();
-
-    auto remove_callback = [remove_promise] (const Coordination::RemoveResponse &)
-    {
-        remove_promise->set_value();
-    };
-
-    zookeeper.remove(path, -1, remove_callback);
+    zookeeper.remove(path, -1, [remove_promise](const Coordination::RemoveResponse &) { remove_promise->set_value(); });
     remove_future.get();
 }
 

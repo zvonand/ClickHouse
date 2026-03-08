@@ -63,6 +63,7 @@ double Stats::StatsCollector::getPercentile(double percent)
 
 void Stats::report(size_t concurrency)
 {
+    std::lock_guard lock(mutex);
     std::cerr << "\n";
 
     const auto & read_requests = read_collector.requests;
@@ -154,6 +155,7 @@ void Stats::report(size_t concurrency)
 
 void Stats::writeJSON(DB::WriteBuffer & out, size_t concurrency, int64_t start_timestamp)
 {
+    std::lock_guard lock(mutex);
     using namespace rapidjson;
     Document results;
     auto & allocator = results.GetAllocator();

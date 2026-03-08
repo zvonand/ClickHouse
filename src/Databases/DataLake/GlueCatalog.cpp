@@ -372,7 +372,7 @@ bool GlueCatalog::tryGetTableMetadata(
                 {
                     if (!result.requiresDataLakeSpecificProperties())
                         setup_specific_properties();
-                    column_type = getActualTimestampType(column.GetName(), result);
+                    column_type = getActualTimestampType(column.GetName(), result, column_type);
                 }
 
                 schema.push_back({column.GetName(), getType(column_type, can_be_nullable)});
@@ -436,7 +436,7 @@ bool GlueCatalog::empty() const
     return true;
 }
 
-String GlueCatalog::getActualTimestampType(const String & column_name, const TableMetadata & table_metadata) const
+String GlueCatalog::getActualTimestampType(const String & column_name, const TableMetadata & table_metadata, const String & glue_column_type) const
 {
     auto table_specific_properties = table_metadata.getDataLakeSpecificProperties();
     if (!table_specific_properties.has_value())
@@ -471,7 +471,7 @@ String GlueCatalog::getActualTimestampType(const String & column_name, const Tab
         }
     }
 
-    return "timestamp";
+    return glue_column_type == "timestamp_nano" ? "timestamp_ns" : "timestamp";
 }
 
 GlueCatalog::ObjectStorageWithPath GlueCatalog::createObjectStorageForEarlyTableAccess(const String & s3_location, const TableMetadata & table_metadata) const

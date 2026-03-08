@@ -85,7 +85,8 @@ private:
 
     /// The Glue catalog does not store detailed information about the types of timestamp columns, such as whether the column is timestamp or timestamptz.
     /// This method allows to clarify the actual type of the timestamp column.
-    String getActualTimestampType(const String & column_name, const TableMetadata & table_metadata) const;
+    /// `glue_column_type` is the raw Glue type (`"timestamp"` or `"timestamp_nano"`) used as a fallback when the column is not found in Iceberg metadata.
+    String getActualTimestampType(const String & column_name, const TableMetadata & table_metadata, const String & glue_column_type) const;
 
     String resolveMetadataPathFromTableLocation(const String & table_location, const TableMetadata & table_metadata) const;
 

@@ -37,7 +37,7 @@ private:
     /// Input mode that will be used by this object
     const FormatSettings::InputFormatCaseSensitivity mode;
 
-    /// PIMP idiom, these classes are only relevant to this specific scenario. So, there is
+    /// PIMPL idiom, these classes are only relevant to this specific scenario. So, there is
     /// no need for it to "leak" outside of this scope
     class MatchCaseBlockNameMap;
     class IgnoreCaseBlockNameMap;

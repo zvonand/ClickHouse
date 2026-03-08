@@ -3080,12 +3080,12 @@ bool KeyCondition::extractAtomFromTree(const RPNBuilderTreeNode & node, const Bu
             {
                 if (const_value.getType() == Field::Types::String)
                 {
-                    /// These functions use the constant as a string pattern or prefix. 
-                    /// For example, if column is `FixedString` type, then in `startsWith(column, 'ab')` 
+                    /// These functions use the constant as a string pattern or prefix.
+                    /// For example, if column is `FixedString` type, then in `startsWith(column, 'ab')`
                     /// and `column LIKE 'ab%'`, `'ab'` is used to build the prefix range `['ab', 'ac')`.
                     //  The literal must not be converted to the column type which is `FixedString`. If we
                     /// first convert it to `FixedString(N)`, it becomes `'ab\0...'`, and the range is built from
-                    /// the padded value instead of from `'ab'`. This can lead to the upper bound being set to the 
+                    /// the padded value instead of from `'ab'`. This can lead to the upper bound being set to the
                     /// next padded value, for example `['ab\0...', 'ab\0...\1')`, instead of to the next prefix
                     /// range `['ab', 'ac')`. The padded range is too small and can miss values such as `'abc...'` that still
                     /// satisfy `startsWith(column, 'ab')` and `column LIKE 'ab%'`.

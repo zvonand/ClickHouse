@@ -132,20 +132,31 @@ std::optional<String> optimizeUseNormalProjections(
     /// If `with_parent_part_offset` is true and the required columns include `_part_offset`,
     /// we need to remap it to `_parent_part_offset`. This ensures that the projection's
     /// ActionsDAG reads from the correct column and generates `_part_offset` in the output.
-    bool with_parent_part_offset = std::any_of(
-        normal_projections.begin(), normal_projections.end(), [](const auto & projection) { return projection->with_parent_part_offset; });
+    /// Same for `_block_number` -> `_parent_block_number` and `_block_offset` -> `_parent_block_offset`.
+    bool with_parent_part_offset = std::any_of(normal_projections.begin(), normal_projections.end(), [](const auto & projection) { return projection->with_parent_part_offset; });
+    bool with_block_number = std::any_of(normal_projections.begin(), normal_projections.end(), [](const auto & projection) { return projection->with_block_number; });
+    bool with_block_offset = std::any_of(normal_projections.begin(), normal_projections.end(), [](const auto & projection) { return projection->with_block_offset; });
+
     bool need_parent_part_offset = false;
-    if (with_parent_part_offset)
+    bool need_parent_block_number = false;
+    bool need_parent_block_offset = false;
+
+    for (auto & name : required_columns)
     {
-        /// required_columns contains unique column names
-        for (auto & name : required_columns)
+        if (with_parent_part_offset && name == "_part_offset")
         {
-            if (name == "_part_offset")
-            {
-                name = "_parent_part_offset";
-                need_parent_part_offset = true;
-                break;
-            }
+            name = "_parent_part_offset";
+            need_parent_part_offset = true;
+        }
+        else if (with_block_number && name == "_block_number")
+        {
+            name = "_parent_block_number";
+            need_parent_block_number = true;
+        }
+        else if (with_block_offset && name == "_block_offset")
+        {
+            name = "_parent_block_offset";
+            need_parent_block_offset = true;
         }
     }
 
@@ -155,18 +166,25 @@ std::optional<String> optimizeUseNormalProjections(
         if (!query.build(*child))
             return {};
 
-        if (need_parent_part_offset)
+        auto add_rename = [&](const String & from, const String & to, DataTypePtr type)
         {
             ActionsDAG rename_dag;
-            const auto * node = &rename_dag.addInput("_parent_part_offset", std::make_shared<DataTypeUInt64>());
-            node = &rename_dag.addAlias(*node, "_part_offset");
-            rename_dag.getOutputs() = {node};
+            const auto * from_node = &rename_dag.addInput(from, type);
+            const auto * to_node = &rename_dag.addAlias(*from_node, to);
+            rename_dag.getOutputs() = {to_node};
 
             if (query.dag)
                 query.dag = ActionsDAG::merge(std::move(rename_dag), *std::move(query.dag));
             else
                 query.dag = std::move(rename_dag);
-        }
+        };
+
+        if (need_parent_part_offset)
+            add_rename("_parent_part_offset", "_part_offset", std::make_shared<DataTypeUInt64>());
+        if (need_parent_block_number)
+            add_rename("_parent_block_number", "_block_number", std::make_shared<DataTypeUInt64>());
+        if (need_parent_block_offset)
+            add_rename("_parent_block_offset", "_block_offset", std::make_shared<DataTypeUInt64>());
 
         if (query.dag)
             query.dag->removeUnusedActions();

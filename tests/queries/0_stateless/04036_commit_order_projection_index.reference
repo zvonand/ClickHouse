@@ -1,0 +1,25 @@
+reading all columns
+Expression ((Project names + Projection))
+  Expression ((WHERE + Change column names to column identifiers))
+    ReadFromMergeTree (default.mt_commit_order_idx)
+    Indexes:
+      PrimaryKey
+        Condition: true
+        Parts: 1/1
+        Granules: 40/40
+      Ranges: 1
+
+reading indexed columns
+Expression ((Project names + Projection))
+  Expression
+    ReadFromMergeTree (commit_order)
+    Indexes:
+      PrimaryKey
+        Keys:
+          _parent_block_number
+          _parent_block_offset
+        Condition: and((_parent_block_offset in [6, 6]), (_parent_block_number in [3, 3]))
+        Parts: 1/1
+        Granules: 2/40
+        Search Algorithm: binary search
+      Ranges: 1

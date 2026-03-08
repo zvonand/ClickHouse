@@ -1,5 +1,4 @@
 -- Tags: no-random-merge-tree-settings
--- Test that _block_number/_block_offset projection is correctly rebuilt after mutations.
 
 DROP TABLE IF EXISTS mt_mutation_test SYNC;
 
@@ -15,7 +14,6 @@ ENGINE = MergeTree
 ORDER BY a
 SETTINGS enable_block_number_column=1, enable_block_offset_column=1;
 
--- 4 parts, 3 rows each, values of `a` in random order across inserts
 INSERT INTO mt_mutation_test VALUES (7, 'a'), (2, 'b'), (11, 'c');
 INSERT INTO mt_mutation_test VALUES (5, 'd'), (14, 'e'), (1, 'f');
 INSERT INTO mt_mutation_test VALUES (9, 'g'), (4, 'h'), (13, 'i');

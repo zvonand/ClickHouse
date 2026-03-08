@@ -137,12 +137,25 @@ void signalHandler(int, siginfo_t * info, void * context)
     /// because pthread_kill does not allow passing data with the signal.
     if (reinterpret_cast<uintptr_t>(pthread_self()) != expected_responding_thread.load(std::memory_order_acquire))
         return;
-    int notification_num = sequence_num.load(std::memory_order_acquire);
 #endif
 
     bool expected = false;
     if (!signal_latch.compare_exchange_strong(expected, true, std::memory_order_acquire))
         return;
+
+#ifdef OS_DARWIN
+    /// Re-verify after acquiring the latch. This closes the race window where
+    /// expected_responding_thread or sequence_num could change between the
+    /// pre-check above and latch acquisition (e.g. if this handler was delayed
+    /// past the wait timeout and the main thread moved on to another thread).
+    if (reinterpret_cast<uintptr_t>(pthread_self()) != expected_responding_thread.load(std::memory_order_acquire))
+    {
+        signal_latch.store(false, std::memory_order_release);
+        errno = saved_errno;
+        return;
+    }
+    int notification_num = sequence_num.load(std::memory_order_acquire);
+#endif
 
     /// All these methods are signal-safe.
     const ucontext_t signal_context = *reinterpret_cast<ucontext_t *>(context);

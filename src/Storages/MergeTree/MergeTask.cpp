@@ -420,6 +420,10 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::extractMergingAndGatheringColu
 
             key_columns.insert(getColumnNameInStorage(column, storage_columns));
         }
+
+        /// Track whether any projection needs _block_number/_block_offset in the horizontal phase.
+        global_ctx->need_block_number_in_merge |= projection->with_block_number;
+        global_ctx->need_block_offset_in_merge |= projection->with_block_offset;
     }
 
     /// TODO: also force "summing" and "aggregating" columns to make Horizontal merge only for such columns
@@ -664,10 +668,20 @@ bool MergeTask::ExecuteAndFinalizeHorizontalPart::prepare() const
     global_ctx->new_data_part->remove_tmp_policy = IMergeTreeDataPart::BlobsRemovalPolicyForTemporaryParts::REMOVE_BLOBS;
 
     if (enabledBlockNumberColumn(global_ctx))
-        addGatheringColumn(global_ctx, BlockNumberColumn::name, BlockNumberColumn::type);
+    {
+        if (global_ctx->need_block_number_in_merge)
+            addMergingColumn(global_ctx, BlockNumberColumn::name, BlockNumberColumn::type);
+        else
+            addGatheringColumn(global_ctx, BlockNumberColumn::name, BlockNumberColumn::type);
+    }
 
     if (enabledBlockOffsetColumn(global_ctx))
-        addGatheringColumn(global_ctx, BlockOffsetColumn::name, BlockOffsetColumn::type);
+    {
+        if (global_ctx->need_block_offset_in_merge)
+            addMergingColumn(global_ctx, BlockOffsetColumn::name, BlockOffsetColumn::type);
+        else
+            addGatheringColumn(global_ctx, BlockOffsetColumn::name, BlockOffsetColumn::type);
+    }
 
     MergeTreeData::IMutationsSnapshot::Params params
     {
@@ -916,6 +930,15 @@ void MergeTask::addGatheringColumn(GlobalRuntimeContextPtr global_ctx, const Str
 
     global_ctx->storage_columns.emplace_back(name, type);
     global_ctx->gathering_columns.emplace_back(name, type);
+}
+
+void MergeTask::addMergingColumn(GlobalRuntimeContextPtr global_ctx, const String & name, const DataTypePtr & type)
+{
+    if (global_ctx->storage_columns.contains(name))
+        return;
+
+    global_ctx->storage_columns.emplace_back(name, type);
+    global_ctx->merging_columns.emplace_back(name, type);
 }
 
 bool MergeTask::hasLightweightDelete(const FutureMergedMutatedPartPtr & future_part)

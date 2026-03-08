@@ -21,7 +21,7 @@ extern const int BAD_ARGUMENTS;
 static ASTPtr wrapInTupleIfNeeded(ASTPtr expr_list)
 {
     const auto * list = expr_list->as<ASTExpressionList>();
-    if (!list || list->children.size() < 1)
+    if (!list || list->children.empty())
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Projection index expression list must not be empty");
 
     /// Single element or not a list — use the first child directly

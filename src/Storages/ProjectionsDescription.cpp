@@ -659,7 +659,7 @@ Block ProjectionDescription::calculateByQuery(
     {
         if (!block.has(BlockNumberColumn::name))
         {
-            // Insert path: constant per part (block_number passed as param)
+            // Insert path
 
             auto col = BlockNumberColumn::type->createColumn();
             auto & data = assert_cast<ColumnUInt64 &>(*col).getData();
@@ -680,7 +680,7 @@ Block ProjectionDescription::calculateByQuery(
     {
         if (!block.has(BlockOffsetColumn::name))
         {
-            // Insert path: constant per part (block_number passed as param)
+            // Insert path
 
             auto col = BlockOffsetColumn::type->createColumn();
             auto & data = assert_cast<ColumnUInt64 &>(*col).getData();

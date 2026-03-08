@@ -23,3 +23,5 @@ explain indexes=1, projections=1 select *, _block_number, _block_offset from mt_
 select '';
 select 'reading indexed columns';
 explain indexes=1, projections=1 select b, _block_number, _block_offset from mt_commit_order_idx where (_block_number, _block_offset) = (3, 6);
+
+drop table if exists mt_commit_order_idx sync;

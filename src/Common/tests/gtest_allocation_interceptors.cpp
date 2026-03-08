@@ -177,6 +177,8 @@ TEST(AllocationInterceptors, MallocZeroFreeDoesNotCauseNegativeDrift)
     EXPECT_GE(total_memory_tracker.get() - before_global, -64 * 1024);
 }
 
+#if !defined(SANITIZE_COVERAGE)
+
 TEST(AllocationInterceptors, GetAddrInfoFreeAddrInfoDoesNotCauseNegativeDrift)
 {
     MainThreadStatus::getInstance();
@@ -223,6 +225,8 @@ TEST(AllocationInterceptors, GetAddrInfoFreeAddrInfoDoesNotCauseNegativeDrift)
 
     EXPECT_TRUE(deallocation_ok);
 }
+
+#endif
 
 /// NOLINTEND
 

@@ -571,7 +571,7 @@ extern "C" int __wrap_getaddrinfo(const char * node, const char * service, const
             std::lock_guard lock(getaddrinfo_tracking.mutex);
             getaddrinfo_tracking.sizes[*result] = tracked_size;
         }
-        catch (...)
+        catch (...) // Ok: rollback tracked allocation if map insertion fails
         {
             auto rollback_trace = CurrentMemoryTracker::free(static_cast<Int64>(tracked_size));
             rollback_trace.onFree(*result, tracked_size);

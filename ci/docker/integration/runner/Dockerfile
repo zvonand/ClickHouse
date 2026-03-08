@@ -63,19 +63,11 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - \
     && apt-get clean \
     && dockerd --version; docker --version
 
-RUN ln -sf /usr/bin/python3.14 /usr/bin/python3 \
-    && ln -sf /usr/local/bin/pip3 /usr/bin/pip3
-
 # kazoo 2.10.0 is broken
 # https://s3.amazonaws.com/clickhouse-test-reports/59337/524625a1d2f4cc608a3f1059e3df2c30f353a649/integration_tests__asan__analyzer__[5_6].html
 COPY requirements.txt /
-# cassandra-driver uses an ancient ez_setup.py bootstrap that fails on Python 3.14 when
-# pkg_resources is not found in the isolated build env (TarFile.chown() signature changed).
-# Install it separately with --no-build-isolation so it uses the pre-installed setuptools.
-RUN python3 -m pip install --no-cache-dir setuptools==78.1.1 \
-    && python3 -m pip install --no-cache-dir --no-build-isolation cassandra-driver==3.29.0 \
-    && python3 -m pip install --no-cache-dir -r requirements.txt
-RUN python3 -m pip install git+https://github.com/ClickHouse/kazoo.git
+RUN python3.13 -m pip install --no-cache-dir -r requirements.txt
+RUN python3.13 -m pip install git+https://github.com/ClickHouse/kazoo.git
 
 RUN curl -fsSL -O https://archive.apache.org/dist/spark/spark-3.5.5/spark-3.5.5-bin-hadoop3.tgz \
     && tar xzvf spark-3.5.5-bin-hadoop3.tgz -C / \

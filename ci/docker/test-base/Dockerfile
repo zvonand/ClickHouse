@@ -132,12 +132,12 @@ RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F23C5A6CF475977595C
     && echo "deb https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/deadsnakes-ppa.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        python3.14 \
-        python3.14-venv \
-        python3.14-dev \
+        python3.13 \
+        python3.13-venv \
+        python3.13-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/debconf /tmp/* \
-    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.14
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
 
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen en_US.UTF-8
 ENV LC_ALL en_US.UTF-8

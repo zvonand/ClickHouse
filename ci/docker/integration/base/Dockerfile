@@ -30,11 +30,8 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/debconf /tmp/*
 
-RUN ln -sf /usr/bin/python3.14 /usr/bin/python3 \
-    && ln -sf /usr/local/bin/pip3 /usr/bin/pip3
-
 COPY requirements.txt /
-RUN python3 -m pip install --no-cache-dir -r requirements.txt && rm -rf /root/.cache/pip
+RUN python3.13 -m pip install --no-cache-dir -r requirements.txt && rm -rf /root/.cache/pip
 
 # Architecture of the image when BuildKit/buildx is used
 ARG TARGETARCH

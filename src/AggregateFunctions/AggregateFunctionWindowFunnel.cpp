@@ -411,7 +411,14 @@ private:
             }
             else if (strict_deduplication && !event_sequences[event_idx].empty())
             {
-                return events_list[i - 1].event_type;
+                /// Same fix as in getEventLevelNonStrictOnce — return actual max level,
+                /// not the previous event's type. See #37177.
+                for (size_t event = event_sequences.size(); event > 0; --event)
+                {
+                    if (!event_sequences[event - 1].empty())
+                        return static_cast<UInt8>(event);
+                }
+                return 0;
             }
             else if (strict_order && has_first_event && event_sequences[event_idx - 1].empty())
             {

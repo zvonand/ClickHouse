@@ -7,6 +7,7 @@
 #include <Interpreters/parseColumnsListForTableFunction.h>
 #include <IO/ReadHelpers.h>
 #include <base/find_symbols.h>
+#include "Core/CaseAwareBlockNameMap.h"
 
 namespace DB
 {
@@ -84,11 +85,11 @@ JSONColumnsBlockInputFormatBase::JSONColumnsBlockInputFormatBase(
     : IInputFormat(header_, &in_)
     , format_settings(format_settings_)
     , fields(header_->getNamesAndTypes())
+    , name_to_index(format_settings_.input_format_with_names_case_insensitive_column_matching, getPort().getHeader())
     , serializations(header_->getSerializations())
     , reader(std::move(reader_))
     , block_missing_values(getPort().getHeader().columns())
 {
-    name_to_index = getNamesToIndexesMap(getPort().getHeader());
 }
 
 size_t JSONColumnsBlockInputFormatBase::readColumn(
@@ -164,7 +165,8 @@ Chunk JSONColumnsBlockInputFormatBase::read()
         {
             /// Check if this name appears in header. If no, skip this column or throw
             /// an exception according to setting input_format_skip_unknown_fields
-            if (name_to_index.find(*column_name) == name_to_index.end())
+            auto idx = name_to_index.get(*column_name);
+            if (idx == CaseAwareBlockNameMap::NOT_FOUND)
             {
                 if (!format_settings.skip_unknown_fields)
                     throw Exception(ErrorCodes::INCORRECT_DATA, "Unknown column found in input data: {}", *column_name);
@@ -172,7 +174,7 @@ Chunk JSONColumnsBlockInputFormatBase::read()
                 reader->skipColumn();
                 continue;
             }
-            column_index = name_to_index[*column_name];
+            column_index = idx;
         }
 
         if (column_index >= columns.size())

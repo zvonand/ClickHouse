@@ -305,14 +305,18 @@ namespace DB
         {
             if (idx < start)
                 continue;
-            if (sizes[discriminators[idx]] == 0)
-                starts[discriminators[idx]] = column_offsets[idx];
-            ++sizes[discriminators[idx]];
+            const auto & discriminator = discriminators[idx];
+            if (discriminator != ColumnVariant::NULL_DISCRIMINATOR && (!null_bytemap || !(*null_bytemap)[idx]))
+            {
+                if (sizes[discriminator] == 0)
+                    starts[discriminator] = column_offsets[idx];
+                ++sizes[discriminator];
+            }
 
-            if (discriminators[idx] == ColumnVariant::NULL_DISCRIMINATOR || (null_bytemap && (*null_bytemap)[idx]))
+            if (discriminator == ColumnVariant::NULL_DISCRIMINATOR || (null_bytemap && (*null_bytemap)[idx]))
                 status = type_ids_builder.Append(static_cast<int8_t>(num_variants));
             else
-                status = type_ids_builder.Append(discriminators[idx]);
+                status = type_ids_builder.Append(discriminator);
 
             checkStatus(status, "type_ids", format_name);
         }
@@ -379,7 +383,7 @@ namespace DB
                 boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start, column_offsets.begin() + start, null_bytemap->begin() + start)),
                 to_arrow_offset);
             auto end_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(discriminators.end() + start + size, column_offsets.end() + start + size, null_bytemap->end() + start + size)),
+                boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start + size, column_offsets.end() + start + size, null_bytemap->end() + start + size)),
                 to_arrow_offset);
 
             status = offsets_builder.AppendValues(begin_it, end_it);
@@ -402,7 +406,7 @@ namespace DB
                 boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start, column_offsets.begin() + start)),
                 to_arrow_offset);
             auto end_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(discriminators.end() + start + size, column_offsets.end() + start + size)),
+                boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start + size, column_offsets.end() + start + size)),
                 to_arrow_offset);
 
             status = offsets_builder.AppendValues(begin_it, end_it);

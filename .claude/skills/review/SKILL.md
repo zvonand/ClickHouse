@@ -192,12 +192,6 @@ SEVERITY MODEL – WHAT DESERVES A COMMENT
 - Missing or unclear comments in complex logic that future maintainers must understand.
 - Compilation time regressions: non-trivial code added to widely-included headers, heavy new transitive includes in high-fan-out headers, or unnecessary template instantiations that significantly increase build times.
 
-**Nits** – only mention if they materially improve robustness or clarity
-- Typos in comments, variable names, string literals, log messages, error messages, and documentation.
-- Unclear or misleading error messages that should be improved.
-- Minor refactors that clearly reduce future bug risk.
-- Small documentation improvements that avoid user confusion.
-
 **Do not report** as nits:
 - Minor naming preferences unrelated to typos.
 - Pure formatting or "style wars".

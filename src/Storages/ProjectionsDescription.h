@@ -72,6 +72,8 @@ struct ProjectionDescription
     std::vector<size_t> partition_value_indices;
 
     bool with_parent_part_offset = false;
+    bool with_block_number = false;
+    bool with_block_offset = false;
 
     ProjectionIndexPtr index;
 
@@ -134,12 +136,11 @@ struct ProjectionDescription
      *
      * @return The resulting block after executing the projection query.
      */
-    Block calculate(const Block & block, UInt64 starting_offset, ContextPtr context, const IColumnPermutation * perm_ptr = nullptr) const;
+    Block calculate(const Block & block, UInt64 starting_offset, UInt64 block_number, ContextPtr context, const IColumnPermutation * perm_ptr = nullptr) const;
 
     /// Same as but ignores additional index-specific metadata or structures.
     /// Only the query AST is used to compute the output block.
-    Block
-    calculateByQuery(const Block & block, UInt64 starting_offset, ContextPtr context, const IColumnPermutation * perm_ptr = nullptr) const;
+    Block calculateByQuery(const Block & block, UInt64 starting_offset, UInt64 block_number, ContextPtr context, const IColumnPermutation * perm_ptr = nullptr) const;
 
     String getDirectoryName() const { return name + ".proj"; }
 };

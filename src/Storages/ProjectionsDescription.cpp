@@ -87,6 +87,8 @@ ProjectionDescription ProjectionDescription::clone() const
     other.primary_key_max_column_name = primary_key_max_column_name;
     other.partition_value_indices = partition_value_indices;
     other.with_parent_part_offset = with_parent_part_offset;
+    other.with_block_number = with_block_number;
+    other.with_block_offset = with_block_offset;
     other.index = index;
     other.index_granularity = index_granularity;
     other.index_granularity_bytes = index_granularity_bytes;
@@ -123,6 +125,8 @@ public:
         setInMemoryMetadata(storage_metadata);
         VirtualColumnsDescription desc;
         desc.addEphemeral("_part_offset", std::make_shared<DataTypeUInt64>(), "");
+        desc.addPersistent(BlockNumberColumn::name, BlockNumberColumn::type, BlockNumberColumn::codec, "");
+        desc.addPersistent(BlockOffsetColumn::name, BlockOffsetColumn::type, BlockOffsetColumn::codec, "");
         setVirtuals(std::move(desc));
     }
 
@@ -343,14 +347,12 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
                 order_expression = function_node;
             }
             auto columns_with_state = ColumnsDescription(result.sample_block.getNamesAndTypesList());
-            metadata.sorting_key = KeyDescription::getSortingKeyFromAST(order_expression, columns_with_state, query_context, {});
-            metadata.primary_key = KeyDescription::getKeyFromAST(order_expression, columns_with_state, query_context);
+            metadata.sorting_key = metadata.primary_key = KeyDescription::getSortingKeyFromAST(order_expression, columns_with_state, query_context, {});
             metadata.primary_key.definition_ast = nullptr;
         }
         else
         {
-            metadata.sorting_key = KeyDescription::buildEmptyKey();
-            metadata.primary_key = KeyDescription::buildEmptyKey();
+            metadata.sorting_key = metadata.primary_key = KeyDescription::buildEmptyKey();
         }
         for (const auto & key : select.getQueryAnalyzer()->aggregationKeys())
             result.sample_block_for_keys.insert({nullptr, key.type, key.name});
@@ -358,8 +360,13 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
     else
     {
         result.type = ProjectionDescription::Type::Normal;
-        metadata.sorting_key = KeyDescription::getSortingKeyFromAST(projection_order_by, columns, query_context, {});
-        metadata.primary_key = KeyDescription::getKeyFromAST(projection_order_by, columns, query_context);
+
+        /// Virtual columns will not be a part of storage columns description but can be used for sorting key of projection
+        auto columns_for_key = columns;
+        for (const auto & [name, type] : storage->getVirtualsPtr()->getNamesAndTypesList(VirtualsKind::Persistent))
+            columns_for_key.add(ColumnDescription(name, type));
+
+        metadata.sorting_key = metadata.primary_key = KeyDescription::getSortingKeyFromAST(projection_order_by, columns_for_key, query_context, {});
         metadata.primary_key.definition_ast = nullptr;
     }
 
@@ -396,6 +403,18 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
         {
             metadata_columns.emplace_back(column_with_type_name.name, column_with_type_name.type);
         }
+    }
+
+    if (block.has(BlockNumberColumn::name))
+    {
+        result.with_block_number = block.has(BlockNumberColumn::name);
+        std::erase_if(result.required_columns, [](const String & s) { return s == BlockNumberColumn::name; });
+    }
+
+    if (block.has(BlockOffsetColumn::name))
+    {
+        result.with_block_offset = block.has(BlockOffsetColumn::name);
+        std::erase_if(result.required_columns, [](const String & s) { return s == BlockOffsetColumn::name; });
     }
 
     metadata.setColumns(ColumnsDescription(metadata_columns));
@@ -511,15 +530,16 @@ void ProjectionDescription::recalculateWithNewColumns(const ColumnsDescription &
 }
 
 Block ProjectionDescription::calculate(
-    const Block & block, UInt64 starting_offset, ContextPtr context, const IColumnPermutation * perm_ptr) const
+    const Block & block, UInt64 starting_offset, UInt64 block_number, ContextPtr context, const IColumnPermutation * perm_ptr) const
 {
     if (index)
-        return index->calculate(*this, block, starting_offset, context, perm_ptr);
-    return calculateByQuery(block, starting_offset, context, perm_ptr);
+        return index->calculate(*this, block, starting_offset, block_number, context, perm_ptr);
+
+    return calculateByQuery(block, starting_offset, block_number, context, perm_ptr);
 }
 
 Block ProjectionDescription::calculateByQuery(
-    const Block & block, UInt64 starting_offset, ContextPtr context, const IColumnPermutation * perm_ptr) const
+    const Block & block, UInt64 starting_offset, UInt64 block_number, ContextPtr context, const IColumnPermutation * perm_ptr) const
 {
     /// Nothing to project from an empty block. This can happen when TTL deletes all rows during merge.
     /// Aggregate projections with constant GROUP BY keys (e.g., GROUP BY 0.674) would produce 1 row
@@ -557,7 +577,7 @@ Block ProjectionDescription::calculateByQuery(
     }
 
     /// Only keep required columns
-    Block source_block = block;
+    Block source_block;
     for (const auto & column : required_columns)
         source_block.insert(block.getByName(column));
 
@@ -584,6 +604,48 @@ Block ProjectionDescription::calculateByQuery(
         }
 
         source_block.insert({std::move(column), std::move(uint64), "_part_offset"});
+    }
+
+    if (with_block_number)
+    {
+        if (!block.has(BlockNumberColumn::name))
+        {
+            // Insert path: constant per part (block_number passed as param)
+
+            auto col = BlockNumberColumn::type->createColumn();
+            auto & data = assert_cast<ColumnUInt64 &>(*col).getData();
+            data.resize_exact(block.rows());
+            for (size_t i = 0; i < block.rows(); ++i)
+                data[i] = block_number;
+
+            source_block.insert({std::move(col), BlockNumberColumn::type, BlockNumberColumn::name});
+        }
+        else
+        {
+            /// Rebuilding path
+            source_block.insert(block.getByName(BlockNumberColumn::name));
+        }
+    }
+
+    if (with_block_offset)
+    {
+        if (!block.has(BlockOffsetColumn::name))
+        {
+            // Insert path: constant per part (block_number passed as param)
+
+            auto col = BlockOffsetColumn::type->createColumn();
+            auto & data = assert_cast<ColumnUInt64 &>(*col).getData();
+            data.resize_exact(block.rows());
+            for (size_t i = 0; i < block.rows(); ++i)
+                data[perm_ptr ? (*perm_ptr)[i] : i] = i;
+
+            source_block.insert({std::move(col), BlockOffsetColumn::type, BlockOffsetColumn::name});
+        }
+        else
+        {
+            /// Rebuilding path
+            source_block.insert(block.getByName(BlockOffsetColumn::name));
+        }
     }
 
     auto builder = InterpreterSelectQuery(

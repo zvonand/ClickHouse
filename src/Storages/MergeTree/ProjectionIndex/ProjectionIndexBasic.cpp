@@ -25,10 +25,11 @@ Block ProjectionIndexBasic::calculate(
     const ProjectionDescription & projection_desc,
     const Block & block,
     UInt64 starting_offset,
+    UInt64 block_number,
     ContextPtr context,
     const IColumnPermutation * perm_ptr) const
 {
-    return projection_desc.calculateByQuery(block, starting_offset, context, perm_ptr);
+    return projection_desc.calculateByQuery(block, starting_offset, block_number, context, perm_ptr);
 }
 
 }

@@ -1,4 +1,4 @@
--- Tags: no-fasttest
+-- Tags: no-fasttest, no-parallel-replicas
 -- Test: bloom_filter skip index support for JSONAllPaths on JSON data type
 --
 -- Data layout: 2 parts x 2 granules each (index_granularity = 1, ORDER BY tuple()).

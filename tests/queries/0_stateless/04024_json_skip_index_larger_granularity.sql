@@ -1,4 +1,4 @@
--- Tags: no-fasttest
+-- Tags: no-fasttest, no-parallel-replicas
 -- Test: JSON skip index with larger granularity and multi-row granules
 --
 -- Data layout: 2 parts x 2 granules each (index_granularity = 3, ORDER BY tuple()).

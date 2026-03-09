@@ -300,7 +300,7 @@ uint64_t calculateDigest(std::string_view path, const Node & node)
     hash.update(node.stats.cversion);
     hash.update(node.stats.aversion);
     hash.update(node.stats.ephemeralOwner());
-    hash.update(node.stats.numChildren());
+    hash.update(node.numChildren());
     hash.update(node.stats.pzxid);
 
     auto digest = hash.get64();
@@ -327,15 +327,14 @@ void NodeStats::copyStats(const Coordination::Stat & stat)
     cversion = stat.cversion;
     aversion = stat.aversion;
 
-    if (stat.ephemeralOwner == 0)
-        setNumChildren(stat.numChildren);
-    else
+    if (stat.ephemeralOwner != 0)
         setEphemeralOwner(stat.ephemeralOwner);
 }
 
 void KeeperRocksNodeInfo::copyStats(const Coordination::Stat & stat)
 {
     stats.copyStats(stat);
+    num_children = stat.numChildren;
 }
 
 void KeeperRocksNode::invalidateDigestCache() const
@@ -389,7 +388,7 @@ void KeeperRocksNode::setResponseStat(Coordination::Stat & response_stat) const
     response_stat.aversion = stats.aversion;
     response_stat.ephemeralOwner = stats.ephemeralOwner();
     response_stat.dataLength = static_cast<int32_t>(stats.data_size);
-    response_stat.numChildren = stats.numChildren();
+    response_stat.numChildren = numChildren();
     response_stat.pzxid = stats.pzxid;
 }
 
@@ -400,6 +399,7 @@ KeeperMemNode & KeeperMemNode::operator=(const KeeperMemNode & other)
 
     stats = other.stats;
     acl_id = other.acl_id;
+    num_children = other.num_children;
 
     if (stats.data_size != 0)
     {
@@ -423,6 +423,7 @@ KeeperMemNode & KeeperMemNode::operator=(KeeperMemNode && other) noexcept
 
     stats = other.stats;
     acl_id = other.acl_id;
+    num_children = other.num_children;
 
     data = std::move(other.data);
 
@@ -447,6 +448,7 @@ bool KeeperMemNode::empty() const
 void KeeperMemNode::copyStats(const Coordination::Stat & stat)
 {
     stats.copyStats(stat);
+    num_children = stat.numChildren;
 }
 
 void KeeperMemNode::setResponseStat(Coordination::Stat & response_stat) const
@@ -460,7 +462,7 @@ void KeeperMemNode::setResponseStat(Coordination::Stat & response_stat) const
     response_stat.aversion = stats.aversion;
     response_stat.ephemeralOwner = stats.ephemeralOwner();
     response_stat.dataLength = static_cast<int32_t>(stats.data_size);
-    response_stat.numChildren = stats.numChildren();
+    response_stat.numChildren = numChildren();
     response_stat.pzxid = stats.pzxid;
 }
 
@@ -506,6 +508,7 @@ void KeeperMemNode::shallowCopy(const KeeperMemNode & other)
 {
     stats = other.stats;
     acl_id = other.acl_id;
+    num_children = other.num_children;
     if (stats.data_size != 0)
     {
         data = std::unique_ptr<char[]>(new char[stats.data_size]);
@@ -545,10 +548,14 @@ struct UpdateNodeStatDelta
     explicit UpdateNodeStatDelta(const Node & node)
         : old_stats(node.stats)
         , new_stats(node.stats)
+        , old_num_children(node.num_children)
+        , new_num_children(node.num_children)
     {}
 
     NodeStats old_stats;
     NodeStats new_stats;
+    int32_t old_num_children;
+    int32_t new_num_children;
     int32_t version{-1};
 };
 
@@ -716,7 +723,7 @@ void KeeperStorage<Container>::initializeSystemNodes()
             "/",
             [](KeeperStorage::Node & node)
             {
-                node.stats.increaseNumChildren();
+                node.increaseNumChildren();
                 if constexpr (!use_rocksdb)
                 {
                     node.addChild(Coordination::getBaseNodeName(keeper_system_path));
@@ -833,6 +840,7 @@ void KeeperStorage<Container>::UncommittedState::applyDelta(const Delta & delta,
                 chassert(node);
                 node->invalidateDigestCache();
                 node->stats = operation.new_stats;
+                node->num_children = operation.new_num_children;
             }
             else if constexpr (std::same_as<DeltaType, UpdateNodeDataDelta>)
             {
@@ -928,6 +936,7 @@ void KeeperStorage<Container>::UncommittedState::rollbackDelta(const Delta & del
                 chassert(node);
                 node->invalidateDigestCache();
                 node->stats = operation.old_stats;
+                node->num_children = operation.old_num_children;
             }
             else if constexpr (std::same_as<DeltaType, UpdateNodeDataDelta>)
             {
@@ -1314,7 +1323,10 @@ Coordination::Error KeeperStorage<Container>::commit(KeeperStorageBase::DeltaRan
                     auto updated_node = container.updateValue(path, [&](auto & node)
                     {
                         if constexpr (std::same_as<DeltaType, UpdateNodeStatDelta>)
+                        {
                             node.stats = operation.new_stats;
+                            node.num_children = operation.new_num_children;
+                        }
                         else
                             node.setData(std::move(operation.new_data));
 
@@ -1425,7 +1437,7 @@ bool KeeperStorage<Container>::createNode(
                 [child_path](KeeperMemNode & parent)
                 {
                     parent.addChild(child_path);
-                    chassert(parent.stats.numChildren() == static_cast<int32_t>(parent.getChildren().size()));
+                    chassert(parent.numChildren() == static_cast<int32_t>(parent.getChildren().size()));
                 }
         );
 
@@ -1758,7 +1770,7 @@ std::list<KeeperStorageBase::Delta> preprocess(
     if (zxid > update_parent_delta.old_stats.pzxid)
         update_parent_delta.new_stats.pzxid = zxid;
 
-    update_parent_delta.new_stats.increaseNumChildren();
+    update_parent_delta.new_num_children++;
 
     new_deltas.emplace_back(std::string{parent_path}, zxid, std::move(update_parent_delta));
 
@@ -2013,7 +2025,7 @@ std::list<KeeperStorageBase::Delta> preprocess(
 
         return {KeeperStorageBase::Delta{zxid, Coordination::Error::ZBADVERSION}};
     }
-    if (node->stats.numChildren() != 0)
+    if (node->numChildren() != 0)
     {
         if (zk_request.try_remove)
             return {};
@@ -2026,7 +2038,7 @@ std::list<KeeperStorageBase::Delta> preprocess(
 
     chassert(update_parent_delta);
     ++update_parent_delta->new_stats.cversion;
-    update_parent_delta->new_stats.decreaseNumChildren();
+    update_parent_delta->new_num_children--;
     add_parent_update_delta();
 
     new_deltas.emplace_back(
@@ -2250,7 +2262,7 @@ private:
 
     bool checkLimits(const Storage::Node & node)
     {
-        nodes_observed += node.stats.numChildren();
+        nodes_observed += node.numChildren();
         return nodes_observed > limit;
     }
 };
@@ -2364,7 +2376,7 @@ std::list<KeeperStorageBase::Delta> preprocess(
 
     chassert(update_parent_delta);
     ++update_parent_delta->new_stats.cversion;
-    update_parent_delta->new_stats.decreaseNumChildren();
+    update_parent_delta->new_num_children--;
     add_parent_update_delta();
 
     auto delete_deltas = collector.extractDeltas();
@@ -2856,12 +2868,12 @@ Coordination::ZooKeeperResponsePtr processImpl(const Coordination::ZooKeeperList
             response->data.reserve(children->size());
 
 #ifdef DEBUG_OR_SANITIZER_BUILD
-        if (!zk_request.path.starts_with(keeper_system_path) && static_cast<size_t>(node_it->value.stats.numChildren()) != children->size())
+        if (!zk_request.path.starts_with(keeper_system_path) && static_cast<size_t>(node_it->value.numChildren()) != children->size())
         {
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,
                 "Difference between numChildren ({}) and actual children size ({}) for '{}'",
-                node_it->value.stats.numChildren(),
+                node_it->value.numChildren(),
                 children->size(),
                 zk_request.path);
         }
@@ -2968,8 +2980,10 @@ bool checkAuth(const Coordination::ZooKeeperCheckRequest & zk_request, Storage &
 namespace
 {
 
-bool checkNodeStat(const NodeStats & verifiable, const Coordination::Stat & validator)
+template <typename Node>
+bool checkNodeStat(const Node & node, const Coordination::Stat & validator)
 {
+    const auto & verifiable = node.stats;
     if (validator.czxid != -1 && validator.czxid != verifiable.czxid)
         return false;
     else if (validator.mzxid != -1 && validator.mzxid != verifiable.mzxid)
@@ -2988,7 +3002,7 @@ bool checkNodeStat(const NodeStats & verifiable, const Coordination::Stat & vali
         return false;
     else if (validator.dataLength != -1 && validator.dataLength != static_cast<int32_t>(verifiable.data_size))
         return false;
-    else if (validator.numChildren != -1 && validator.numChildren != verifiable.numChildren())
+    else if (validator.numChildren != -1 && validator.numChildren != node.numChildren())
         return false;
     else if (validator.pzxid != -1 && validator.pzxid != verifiable.pzxid)
         return false;
@@ -3024,7 +3038,7 @@ std::list<KeeperStorageBase::Delta> preprocess(
         if (zk_request.version != -1 && zk_request.version != node->stats.version)
             return {KeeperStorageBase::Delta{zxid, Coordination::Error::ZBADVERSION}};
 
-        if (zk_request.getOpNum() == Coordination::OpNum::CheckStat && !checkNodeStat(node->stats, zk_request.stat_to_check.value()))
+        if (zk_request.getOpNum() == Coordination::OpNum::CheckStat && !checkNodeStat(*node, zk_request.stat_to_check.value()))
             return {KeeperStorageBase::Delta{zxid, Coordination::Error::ZBADVERSION}};
     }
 
@@ -3069,7 +3083,7 @@ Coordination::ZooKeeperResponsePtr processImpl(const Coordination::ZooKeeperChec
             on_error(Coordination::Error::ZNONODE);
         else if (zk_request.version != -1 && zk_request.version != node_it->value.stats.version)
             on_error(Coordination::Error::ZBADVERSION);
-        else if (zk_request.getOpNum() == Coordination::OpNum::CheckStat && !checkNodeStat(node_it->value.stats, zk_request.stat_to_check.value()))
+        else if (zk_request.getOpNum() == Coordination::OpNum::CheckStat && !checkNodeStat(node_it->value, zk_request.stat_to_check.value()))
             on_error(Coordination::Error::ZBADVERSION);
         else
             response->error = Coordination::Error::ZOK;
@@ -3639,7 +3653,7 @@ KeeperDigest KeeperStorage<Container>::preprocessRequest(
 
                     auto & parent_update_delta = parent_update_it->second;
                     ++parent_update_delta.new_stats.cversion;
-                    parent_update_delta.new_stats.decreaseNumChildren();
+                    parent_update_delta.new_num_children--;
 
                     new_deltas.emplace_back(
                         ephemeral_path,

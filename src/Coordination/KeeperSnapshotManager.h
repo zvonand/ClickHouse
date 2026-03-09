@@ -34,7 +34,7 @@ enum SnapshotVersion : uint8_t
     V4 = 4, /// add Node size to snapshots
     V5 = 5, /// add ZXID and digest to snapshots
     V6 = 6, /// remove is_sequential, per node size, data length
-    V7 = 7, /// acl_id narrowed from uint64_t to uint32_t
+    V7 = 7, /// acl_id narrowed from uint64_t to uint32_t, seq_num widened from int32_t to int64_t
 };
 
 static constexpr auto CURRENT_SNAPSHOT_VERSION = SnapshotVersion::V7;

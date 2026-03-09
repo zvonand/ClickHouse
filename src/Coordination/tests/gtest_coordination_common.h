@@ -127,7 +127,7 @@ void addNode(Storage & storage, const std::string & path, const std::string & da
         [&](auto & parent)
         {
             parent.addChild(child_path);
-            parent.stats.increaseNumChildren();
+            parent.increaseNumChildren();
         });
 }
 

@@ -167,7 +167,7 @@ int64_t deserializeStorageData(Storage & storage, ReadBuffer & in, LoggerPtr log
                 [my_path = itr.key](typename Storage::Node & value)
                 {
                     value.addChild(Coordination::getBaseNodeName(my_path));
-                    value.stats.increaseNumChildren();
+                    value.increaseNumChildren();
                 });
         }
     }

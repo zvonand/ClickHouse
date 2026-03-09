@@ -105,7 +105,7 @@ namespace
         writeBinary(node.stats.ephemeralOwner(), out);
         if (version < SnapshotVersion::V6)
             writeBinary(static_cast<int32_t>(node.stats.data_size), out);
-        writeBinary(node.stats.numChildren(), out);
+        writeBinary(node.numChildren(), out);
         writeBinary(node.stats.pzxid, out);
 
         writeBinary(node.stats.seqNum(), out);
@@ -196,15 +196,24 @@ namespace
         }
         int32_t num_children = 0;
         readBinary(num_children, in);
-        if (ephemeral_owner == 0)
-            node.stats.setNumChildren(num_children);
+        node.setNumChildren(num_children);
 
         readBinary(node.stats.pzxid, in);
 
-        int32_t seq_num = 0;
-        readBinary(seq_num, in);
-        if (ephemeral_owner == 0)
-            node.stats.setSeqNum(seq_num);
+        if (version >= SnapshotVersion::V7)
+        {
+            int64_t seq_num = 0;
+            readBinary(seq_num, in);
+            if (ephemeral_owner == 0)
+                node.stats.setSeqNum(seq_num);
+        }
+        else
+        {
+            int32_t seq_num = 0;
+            readBinary(seq_num, in);
+            if (ephemeral_owner == 0)
+                node.stats.setSeqNum(seq_num);
+        }
 
         if (version >= SnapshotVersion::V4 && version <= SnapshotVersion::V5)
         {
@@ -493,8 +502,8 @@ void KeeperStorageSnapshot<Storage>::deserialize(SnapshotDeserializationResult<S
 
         auto ephemeral_owner = node.stats.ephemeralOwner();
         if constexpr (!use_rocksdb)
-            if (!node.stats.isEphemeral() && node.stats.numChildren() > 0)
-                node.getChildren().reserve(node.stats.numChildren());
+            if (!node.stats.isEphemeral() && node.numChildren() > 0)
+                node.getChildren().reserve(node.numChildren());
 
         if (ephemeral_owner != 0)
         {
@@ -532,7 +541,7 @@ void KeeperStorageSnapshot<Storage>::deserialize(SnapshotDeserializationResult<S
         {
             if (itr.key != "/")
             {
-                if (itr.value.stats.numChildren() != static_cast<int32_t>(itr.value.getChildren().size()))
+                if (itr.value.numChildren() != static_cast<int32_t>(itr.value.getChildren().size()))
                 {
 #ifdef NDEBUG
                     /// TODO (alesapin) remove this, it should be always CORRUPTED_DATA.
@@ -540,7 +549,7 @@ void KeeperStorageSnapshot<Storage>::deserialize(SnapshotDeserializationResult<S
                         getLogger("KeeperSnapshotManager"),
                         "Children counter in stat.numChildren {}"
                         " is different from actual children size {} for node {}",
-                        itr.value.stats.numChildren(),
+                        itr.value.numChildren(),
                         itr.value.getChildren().size(),
                         itr.key);
 #else
@@ -548,7 +557,7 @@ void KeeperStorageSnapshot<Storage>::deserialize(SnapshotDeserializationResult<S
                         ErrorCodes::LOGICAL_ERROR,
                         "Children counter in stat.numChildren {}"
                         " is different from actual children size {} for node {}",
-                        itr.value.stats.numChildren(),
+                        itr.value.numChildren(),
                         itr.value.getChildren().size(),
                         itr.key);
 #endif

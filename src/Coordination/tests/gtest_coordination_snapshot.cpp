@@ -215,6 +215,8 @@ TYPED_TEST(CoordinationTest, TestStorageSnapshotSimple)
 
     addNode(storage, "/hello1", "world", 1, acl_id1);
     addNode(storage, "/hello2", "somedata", 3, acl_id2);
+    const int64_t large_seq_num = static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 100;
+    storage.container.updateValue("/", [&](typename Storage::Node & node) { node.stats.setSeqNum(large_seq_num); });
     storage.session_id_counter = 5;
     TSA_SUPPRESS_WARNING_FOR_WRITE(storage.zxid) = 2;
     storage.committed_ephemerals[3] = {"/hello2"};
@@ -259,6 +261,10 @@ TYPED_TEST(CoordinationTest, TestStorageSnapshotSimple)
     auto restored_acls = restored_storage->acl_map.convertNumber(acl_id2);
     EXPECT_EQ(restored_acls.size(), 1);
     EXPECT_EQ(restored_acls[0].scheme, "digest");
+
+    /// Verify seq_num round-trip (int64_t, value > INT32_MAX)
+    if constexpr (!TestFixture::Storage::use_rocksdb)
+        EXPECT_EQ(restored_storage->container.find("/")->value.stats.seqNum(), large_seq_num);
 }
 
 TYPED_TEST(CoordinationTest, TestStorageSnapshotMoreWrites)

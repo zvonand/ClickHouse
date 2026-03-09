@@ -237,12 +237,12 @@ Int64 IColumn::compareTrackAt(size_t n, size_t m, const IColumn & rhs, int nan_d
 
     if (res < 0)
     {
-        while (n < size() && (compareAt(++n, m, rhs, nan_direction_hint) < 0))
+        while ((++n) < size() && (compareAt(n, m, rhs, nan_direction_hint) < 0))
             --res;
     }
     else if (res > 0)
     {
-        while (m < rhs.size() && (compareAt(n, ++m, rhs, nan_direction_hint) > 0))
+        while ((++m) < rhs.size() && (compareAt(n, m, rhs, nan_direction_hint) > 0))
             ++res;
     }
     return res;

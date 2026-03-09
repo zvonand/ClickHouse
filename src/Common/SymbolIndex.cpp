@@ -633,6 +633,28 @@ void collectSymbolsFromMachOImage(
         object.address_end = reinterpret_cast<const void *>(max_addr);
         object.name = image_name ? image_name : "";
         /// object.elf is null on macOS (no ELF binary)
+        object.slide = static_cast<uintptr_t>(slide);
+
+        /// Look for a dSYM bundle next to the binary.
+        /// Convention: <binary>.dSYM/Contents/Resources/DWARF/<basename>
+        if (!object.name.empty())
+        {
+            try
+            {
+                std::filesystem::path binary_path(object.name);
+                std::string basename = binary_path.filename().string();
+                std::filesystem::path dsym_path = std::filesystem::path(object.name + ".dSYM")
+                    / "Contents" / "Resources" / "DWARF" / basename;
+
+                if (std::filesystem::exists(dsym_path))
+                    object.dsym = std::make_shared<MachO>(dsym_path.string());
+            }
+            catch (...)
+            {
+                /// Ignore errors when looking for dSYM
+            }
+        }
+
         objects.push_back(std::move(object));
     }
 }

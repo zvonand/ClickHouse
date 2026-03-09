@@ -397,24 +397,59 @@ void StackTrace::forEachFrame(
         callback(current_frame);
     }
 #elif defined(OS_DARWIN)
-    UNUSED(fatal);
-
     const DB::SymbolIndex & symbol_index = DB::SymbolIndex::instance();
+    std::unordered_map<std::string, DB::Dwarf> dwarfs;
+
+    using enum DB::Dwarf::LocationInfoMode;
+    const auto mode = fatal ? FULL_WITH_INLINE : FAST;
 
     for (size_t i = offset; i < size; ++i)
     {
         StackTrace::Frame current_frame;
+        std::vector<DB::Dwarf::SymbolizedFrame> inline_frames;
         current_frame.virtual_addr = frame_pointers[i];
-        /// On macOS, SymbolIndex stores absolute virtual addresses,
-        /// so physical_addr is the same as virtual_addr for symbol lookup.
         current_frame.physical_addr = frame_pointers[i];
 
         const auto * object = symbol_index.findObject(current_frame.virtual_addr);
         if (object)
+        {
             current_frame.object = object->name;
+
+            /// If this object has a dSYM, use it for file/line resolution.
+            if (object->dsym)
+            {
+                auto dwarf_it = dwarfs.try_emplace(object->name, object->dsym).first;
+
+                DB::Dwarf::LocationInfo location;
+                /// Convert runtime address to linked (pre-ASLR) address for DWARF lookup.
+                uintptr_t dwarf_addr = uintptr_t(current_frame.virtual_addr) - object->slide;
+                if (i > 0)
+                    dwarf_addr -= 1;
+
+                if (dwarf_it->second.findAddress(dwarf_addr, location, mode, inline_frames))
+                {
+                    current_frame.file = location.file.toString();
+                    current_frame.line = location.line;
+                    current_frame.column = location.column;
+                }
+            }
+        }
 
         if (const auto * symbol = symbol_index.findSymbol(current_frame.virtual_addr))
             current_frame.symbol = demangle(symbol->name);
+
+        for (const auto & frame : inline_frames)
+        {
+            StackTrace::Frame current_inline_frame;
+            const String file_for_inline_frame = frame.location.file.toString();
+
+            current_inline_frame.file = "inlined from " + file_for_inline_frame;
+            current_inline_frame.line = frame.location.line;
+            current_inline_frame.column = frame.location.column;
+            current_inline_frame.symbol = demangle(frame.name);
+
+            callback(current_inline_frame);
+        }
 
         callback(current_frame);
     }

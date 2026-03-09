@@ -1,0 +1,109 @@
+#if defined(OS_DARWIN)
+
+#include <Common/MachO.h>
+#include <Common/Exception.h>
+
+#include <mach-o/loader.h>
+#include <cstring>
+
+
+namespace DB
+{
+
+namespace ErrorCodes
+{
+    extern const int CANNOT_PARSE_ELF;
+}
+
+
+MachO::MachO(const std::string & path_)
+    : path(path_)
+    , in(path_, 0)
+    , file_size(in.buffer().size())
+    , mapped(in.buffer().begin())
+{
+    init();
+}
+
+
+void MachO::init()
+{
+    if (file_size < sizeof(mach_header_64))
+        throw Exception(ErrorCodes::CANNOT_PARSE_ELF,
+            "The size of Mach-O file '{}' is too small", path);
+
+    const auto * header = reinterpret_cast<const mach_header_64 *>(mapped);
+
+    if (header->magic != MH_MAGIC_64)
+        throw Exception(ErrorCodes::CANNOT_PARSE_ELF,
+            "The file '{}' is not a 64-bit Mach-O file", path);
+
+    const char * cmd_ptr = mapped + sizeof(mach_header_64);
+    for (uint32_t i = 0; i < header->ncmds; ++i)
+    {
+        if (cmd_ptr + sizeof(load_command) > mapped + file_size)
+            break;
+
+        const auto * cmd = reinterpret_cast<const load_command *>(cmd_ptr);
+
+        if (cmd->cmd == LC_SEGMENT_64)
+        {
+            const auto * seg = reinterpret_cast<const segment_command_64 *>(cmd_ptr);
+
+            if (strncmp(seg->segname, "__DWARF", 16) == 0)
+            {
+                const auto * sect = reinterpret_cast<const section_64 *>(
+                    cmd_ptr + sizeof(segment_command_64));
+
+                for (uint32_t j = 0; j < seg->nsects; ++j)
+                {
+                    if (sect[j].offset + sect[j].size > file_size)
+                        continue;
+
+                    SectionInfo info;
+                    /// sectname is a fixed 16-byte field, not necessarily null-terminated.
+                    info.name = std::string(sect[j].sectname, strnlen(sect[j].sectname, 16));
+                    info.data = mapped + sect[j].offset;
+                    info.size = sect[j].size;
+                    dwarf_sections.push_back(std::move(info));
+                }
+            }
+        }
+
+        cmd_ptr += cmd->cmdsize;
+    }
+}
+
+
+std::optional<MachO::Section> MachO::findSectionByName(const char * name) const
+{
+    /// Map ELF-style section names to Mach-O names:
+    /// ".debug_info" -> "__debug_info"
+    std::string macho_name;
+    if (name[0] == '.')
+    {
+        macho_name = "__";
+        macho_name += (name + 1);
+    }
+    else
+    {
+        macho_name = name;
+    }
+
+    /// Mach-O section names are limited to 16 characters.
+    /// Truncate for matching.
+    if (macho_name.size() > 16)
+        macho_name.resize(16);
+
+    for (const auto & section : dwarf_sections)
+    {
+        if (section.name == macho_name)
+            return Section{section.data, section.size};
+    }
+
+    return std::nullopt;
+}
+
+}
+
+#endif

@@ -5,6 +5,10 @@
 #include <Common/Elf.h>
 #include <boost/noncopyable.hpp>
 
+#if defined(OS_DARWIN)
+#include <Common/MachO.h>
+#endif
+
 
 namespace DB
 {
@@ -36,6 +40,12 @@ public:
         const void * address_end;
         std::string name;
         std::shared_ptr<Elf> elf;
+#if defined(OS_DARWIN)
+        /// ASLR slide for this image. Subtract from runtime address to get linked (DWARF) address.
+        uintptr_t slide = 0;
+        /// Parsed dSYM bundle, if found next to the binary.
+        std::shared_ptr<MachO> dsym;
+#endif
     };
 
     const Symbol * findSymbol(const void * address) const;

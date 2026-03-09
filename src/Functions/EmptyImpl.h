@@ -37,7 +37,7 @@ struct EmptyImpl
 
         if (!left.isNull() && left.getType() == Field::Types::String)
         {
-            const String & left_str = left.get<String>();
+            const String & left_str = left.safeGet<String>();
             if (!left_str.empty())
             {
                 /// All values in [left, right] are non-empty strings.
@@ -46,7 +46,7 @@ struct EmptyImpl
             }
 
             /// left == ''
-            if (!right.isNull() && right.getType() == Field::Types::String && right.get<String>().empty())
+            if (!right.isNull() && right.getType() == Field::Types::String && right.safeGet<String>().empty())
             {
                 /// Range is exactly ['', ''] → empty(s) = 1 everywhere, constant.
                 return {.is_monotonic = true, .is_positive = true};

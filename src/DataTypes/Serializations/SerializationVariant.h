@@ -76,10 +76,9 @@ private:
 
 public:
     static UInt128 getHash(const String & variant_name_);
-
-    size_t allocatedBytes() const override;
-
     static SerializationPtr create(const DataTypes & variant_types_, const String & variant_name_);
+    size_t allocatedBytes() const override;
+    bool supportsPooling() const override;
 
     void enumerateStreams(
         EnumerateStreamsSettings & settings,

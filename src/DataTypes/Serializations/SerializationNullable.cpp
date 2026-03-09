@@ -947,6 +947,8 @@ void SerializationNullable::serializeNullXML(DB::WriteBuffer & ostr)
 
 SerializationPtr SerializationNullable::create(const SerializationPtr & nested_, bool use_default_null_map_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationNullable(nested_, use_default_null_map_));
     return ISerialization::pooled(getHash(nested_, use_default_null_map_), [&] { return new SerializationNullable(nested_, use_default_null_map_); });
 }
 

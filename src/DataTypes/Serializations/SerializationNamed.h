@@ -19,9 +19,7 @@ private:
 
 public:
     static UInt128 getHash(const SerializationPtr & nested_, const String & name_, SubstreamType substream_type_);
-
     static SerializationPtr create(const SerializationPtr & nested_, const String & name_, SubstreamType substream_type_);
-
     size_t allocatedBytes() const override;
 
     const String & getElementName() const { return name; }

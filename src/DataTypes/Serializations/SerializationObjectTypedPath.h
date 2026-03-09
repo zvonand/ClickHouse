@@ -19,9 +19,7 @@ private:
 
 public:
     static UInt128 getHash(const SerializationPtr & nested_, const String & path_);
-
     static SerializationPtr create(const SerializationPtr & nested_, const String & path_);
-
     size_t allocatedBytes() const override;
 
     void enumerateStreams(

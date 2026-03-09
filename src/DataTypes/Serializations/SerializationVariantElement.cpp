@@ -28,6 +28,8 @@ UInt128 SerializationVariantElement::getHash(const SerializationPtr & nested_, c
 
 SerializationPtr SerializationVariantElement::create(const SerializationPtr & nested_, const String & variant_element_name_, ColumnVariant::Discriminator variant_discriminator_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationVariantElement(nested_, variant_element_name_, variant_discriminator_));
     return ISerialization::pooled(getHash(nested_, variant_element_name_, variant_discriminator_), [&] { return new SerializationVariantElement(nested_, variant_element_name_, variant_discriminator_); });
 }
 

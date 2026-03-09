@@ -26,6 +26,8 @@ UInt128 SerializationObjectTypedPath::getHash(const SerializationPtr & nested_, 
 
 SerializationPtr SerializationObjectTypedPath::create(const SerializationPtr & nested_, const String & path_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationObjectTypedPath(nested_, path_));
     return ISerialization::pooled(getHash(nested_, path_), [&] { return new SerializationObjectTypedPath(nested_, path_); });
 }
 

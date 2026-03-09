@@ -442,6 +442,8 @@ ReturnType deserializeTextQuotedImpl(IColumn & column, ReadBuffer & istr, const 
 
 SerializationPtr SerializationBool::create(const SerializationPtr & nested_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationBool(nested_));
     return ISerialization::pooled(getHash(nested_), [&] { return new SerializationBool(nested_); });
 }
 

@@ -666,6 +666,8 @@ size_t SerializationSparse::allocatedBytes() const
 
 SerializationPtr SerializationSparse::create(const SerializationPtr & nested_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationSparse(nested_));
     return ISerialization::pooled(getHash(nested_), [&] { return new SerializationSparse(nested_); });
 }
 

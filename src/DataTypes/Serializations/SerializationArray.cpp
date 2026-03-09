@@ -40,6 +40,8 @@ UInt128 SerializationArray::getHash(const SerializationPtr & nested_)
 
 SerializationPtr SerializationArray::create(const SerializationPtr & nested_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationArray(nested_));
     return ISerialization::pooled(getHash(nested_), [&] { return new SerializationArray(nested_); });
 }
 

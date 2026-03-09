@@ -45,6 +45,11 @@ UInt128 SerializationSubObject::getHash(const String & paths_prefix_, const std:
 
 SerializationPtr SerializationSubObject::create(const String & paths_prefix_, const std::unordered_map<String, SerializationPtr> & typed_paths_serializations_, const DataTypePtr & dynamic_type)
 {
+    for (const auto & [_, ser] : typed_paths_serializations_)
+    {
+        if (!ser->supportsPooling())
+            return std::shared_ptr<ISerialization>(new SerializationSubObject(paths_prefix_, typed_paths_serializations_, dynamic_type));
+    }
     return ISerialization::pooled(getHash(paths_prefix_, typed_paths_serializations_, dynamic_type), [&] { return new SerializationSubObject(paths_prefix_, typed_paths_serializations_, dynamic_type); });
 }
 

@@ -669,6 +669,11 @@ public:
     /// including sizeof(*this) and any heap allocations (strings, vectors, etc.).
     virtual size_t allocatedBytes() const { return 0; }
 
+    /// Returns true if this serialization supports pooling (caching by hash).
+    /// Returns false if the serialization or any of its nested serializations
+    /// cannot be cached (e.g. SerializationJSON which contains mutable state).
+    virtual bool supportsPooling() const { return true; }
+
     /// Returns the hash that uniquely identifies this serialization object.
     /// Set by pooled() or manually for non-pooled objects.
     /// Throws LOGICAL_ERROR if the hash has not been set.

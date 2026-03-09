@@ -52,6 +52,8 @@ UInt128 SerializationLowCardinality::getHash(const DataTypePtr & dictionary_type
 
 SerializationPtr SerializationLowCardinality::create(const DataTypePtr & dictionary_type_)
 {
+    if (!removeNullable(dictionary_type_)->getDefaultSerialization()->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationLowCardinality(dictionary_type_));
     return ISerialization::pooled(getHash(dictionary_type_), [&] { return new SerializationLowCardinality(dictionary_type_); });
 }
 

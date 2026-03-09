@@ -155,6 +155,11 @@ void SerializationTuple::readElementsSafe(DB::IColumn & column, std::function<vo
 
 SerializationPtr SerializationTuple::create(ElementSerializations elems_, bool has_explicit_names_)
 {
+    for (const auto & elem : elems_)
+    {
+        if (!elem->supportsPooling())
+            return std::shared_ptr<ISerialization>(new SerializationTuple(std::move(elems_), has_explicit_names_));
+    }
     auto hash = getHash(elems_, has_explicit_names_);
     return ISerialization::pooled(hash, [e = std::move(elems_), has_explicit_names_]() mutable { return new SerializationTuple(std::move(e), has_explicit_names_); });
 }
@@ -872,6 +877,14 @@ size_t SerializationTuple::allocatedBytes() const
     size_t bytes = sizeof(*this);
     bytes += elems.capacity() * sizeof(ElementSerializationPtr);
     return bytes;
+}
+
+bool SerializationTuple::supportsPooling() const
+{
+    for (const auto & elem : elems)
+        if (!elem->supportsPooling())
+            return false;
+    return true;
 }
 
 }

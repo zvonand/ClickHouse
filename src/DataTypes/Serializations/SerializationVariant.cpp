@@ -70,6 +70,11 @@ struct DeserializeBinaryBulkStateVariant : public ISerialization::DeserializeBin
 
 SerializationPtr SerializationVariant::create(const DataTypes & variant_types_, const String & variant_name_)
 {
+    for (const auto & variant_type : variant_types_)
+    {
+        if (!variant_type->getDefaultSerialization()->supportsPooling())
+            return std::shared_ptr<ISerialization>(new SerializationVariant(variant_types_, variant_name_));
+    }
     return ISerialization::pooled(getHash(variant_name_), [&] { return new SerializationVariant(variant_types_, variant_name_); });
 }
 
@@ -1352,6 +1357,14 @@ size_t SerializationVariant::allocatedBytes() const
     bytes += deserialize_text_order.capacity() * sizeof(size_t);
     bytes += variant_name.capacity();
     return bytes;
+}
+
+bool SerializationVariant::supportsPooling() const
+{
+    for (const auto & variant : variant_serializations)
+        if (!variant->supportsPooling())
+            return false;
+    return true;
 }
 
 }

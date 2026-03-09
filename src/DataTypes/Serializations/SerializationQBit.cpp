@@ -621,6 +621,8 @@ void SerializationQBit::untransposeBitPlane(const UInt8 * __restrict src, T * __
 
 SerializationPtr SerializationQBit::create(const SerializationPtr & nested_, size_t element_size_, size_t dimension_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationQBit(nested_, element_size_, dimension_));
     return ISerialization::pooled(getHash(nested_, element_size_, dimension_), [&] { return new SerializationQBit(nested_, element_size_, dimension_); });
 }
 

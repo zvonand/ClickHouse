@@ -137,7 +137,6 @@ SerializationPtr DataTypeObject::doGetDefaultSerialization() const
                     paths_to_skip,
                     path_regexps_to_skip,
                     getDynamicType(),
-                    max_dynamic_paths,
                     buildJSONExtractTree<SimdJSONParser>(getPtr(), "JSON serialization"));
 #endif
 
@@ -147,7 +146,6 @@ SerializationPtr DataTypeObject::doGetDefaultSerialization() const
                 paths_to_skip,
                 path_regexps_to_skip,
                 getDynamicType(),
-                max_dynamic_paths,
                 buildJSONExtractTree<RapidJSONParser>(getPtr(), "JSON serialization"));
 #else
             return SerializationJSON<DummyJSONParser>::create(
@@ -155,7 +153,6 @@ SerializationPtr DataTypeObject::doGetDefaultSerialization() const
                 paths_to_skip,
                 path_regexps_to_skip,
                 getDynamicType(),
-                max_dynamic_paths,
                 buildJSONExtractTree<DummyJSONParser>(getPtr(), "JSON serialization"));
 #endif
     }

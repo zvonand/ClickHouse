@@ -29,10 +29,8 @@ private:
 
 public:
     static UInt128 getHash(const SerializationPtr & nested_, const String & variant_element_name_, ColumnVariant::Discriminator variant_discriminator_);
-
-    size_t allocatedBytes() const override;
-
     static SerializationPtr create(const SerializationPtr & nested_, const String & variant_element_name_, ColumnVariant::Discriminator variant_discriminator_);
+    size_t allocatedBytes() const override;
 
     void enumerateStreams(
         EnumerateStreamsSettings & settings,

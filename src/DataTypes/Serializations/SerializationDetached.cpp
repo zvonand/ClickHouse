@@ -99,6 +99,8 @@ void SerializationDetached::deserializeBinaryBulkWithMultipleStreams(
 
 SerializationPtr SerializationDetached::create(const SerializationPtr & nested_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationDetached(nested_));
     return ISerialization::pooled(getHash(nested_), [&] { return new SerializationDetached(nested_); });
 }
 

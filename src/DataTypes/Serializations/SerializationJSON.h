@@ -17,7 +17,6 @@ private:
         const std::unordered_set<String> & paths_to_skip_,
         const std::vector<String> & path_regexps_to_skip_,
         const DataTypePtr & dynamic_type_,
-        size_t max_dynamic_paths_,
         std::unique_ptr<JSONExtractTreeNode<Parser>> json_extract_tree_);
 
 public:
@@ -25,23 +24,24 @@ public:
         const std::unordered_map<String, DataTypePtr> & typed_paths_types_,
         const std::unordered_set<String> & paths_to_skip_,
         const std::vector<String> & path_regexps_to_skip_,
-        const DataTypePtr & dynamic_type_,
-        size_t max_dynamic_paths_);
+        const DataTypePtr & dynamic_type_);
+
+    bool supportsPooling() const override { return false; }
 
     static SerializationPtr create(
         const std::unordered_map<String, DataTypePtr> & typed_paths_types_,
         const std::unordered_set<String> & paths_to_skip_,
         const std::vector<String> & path_regexps_to_skip_,
         const DataTypePtr & dynamic_type_,
-        size_t max_dynamic_paths_,
         std::unique_ptr<JSONExtractTreeNode<Parser>> json_extract_tree_)
     {
-        /// We intentionally do NOT cache SerializationJSON objects. The json_extract_tree
+        /// We intentionally do NOT pool SerializationJSON objects. The json_extract_tree
         /// contains mutable caches (DynamicNode::json_extract_nodes_cache, variants_order_cache)
         /// that accumulate state per-use. Sharing these across queries via the cache leads to
         /// incorrect behaviour (e.g. timezone mismatches in cached DateTimeNode objects).
-        auto * obj = new SerializationJSON(typed_paths_types_, paths_to_skip_, path_regexps_to_skip_, dynamic_type_, max_dynamic_paths_, std::move(json_extract_tree_));
-        obj->cached_hash = getHash(typed_paths_types_, paths_to_skip_, path_regexps_to_skip_, dynamic_type_, max_dynamic_paths_);
+        /// FIXME: Get rid of this mutable state inside the serialization and move it to parser.
+        auto * obj = new SerializationJSON(typed_paths_types_, paths_to_skip_, path_regexps_to_skip_, dynamic_type_, std::move(json_extract_tree_));
+        obj->cached_hash = getHash(typed_paths_types_, paths_to_skip_, path_regexps_to_skip_, dynamic_type_);
         return std::shared_ptr<ISerialization>(obj);
     }
 
@@ -68,7 +68,6 @@ public:
 private:
     void serializeTextImpl(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings & settings, bool pretty = false, size_t indent = 0) const;
 
-    size_t max_dynamic_paths;
     std::unique_ptr<JSONExtractTreeNode<Parser>> json_extract_tree;
     /// Pool of parser objects to make SerializationJSON thread safe.
     mutable SimpleObjectPool<Parser> parsers_pool;

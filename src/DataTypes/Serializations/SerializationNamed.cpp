@@ -34,6 +34,8 @@ UInt128 SerializationNamed::getHash(const SerializationPtr & nested_, const Stri
 
 SerializationPtr SerializationNamed::create(const SerializationPtr & nested_, const String & name_, SubstreamType substream_type_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationNamed(nested_, name_, substream_type_));
     return ISerialization::pooled(getHash(nested_, name_, substream_type_), [&] { return new SerializationNamed(nested_, name_, substream_type_); });
 }
 

@@ -133,6 +133,8 @@ void SerializationMap::readMapSafe(DB::IColumn & column, std::function<void()> &
 
 SerializationPtr SerializationMap::create(const SerializationPtr & key_type_, const SerializationPtr & value_type_, const SerializationPtr & nested_)
 {
+    if (!nested_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationMap(key_type_, value_type_, nested_));
     return ISerialization::pooled(getHash(nested_), [&] { return new SerializationMap(key_type_, value_type_, nested_); });
 }
 

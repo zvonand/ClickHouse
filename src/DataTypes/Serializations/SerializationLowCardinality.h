@@ -18,10 +18,9 @@ private:
 
 public:
     static UInt128 getHash(const DataTypePtr & dictionary_type);
-
     static SerializationPtr create(const DataTypePtr & dictionary_type);
-
     size_t allocatedBytes() const override;
+    bool supportsPooling() const override { return dict_inner_serialization->supportsPooling(); }
 
     void enumerateStreams(
         EnumerateStreamsSettings & settings,

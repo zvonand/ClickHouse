@@ -166,12 +166,17 @@ std::shared_ptr<IObjectIterator> StorageObjectStorageSource::createFileIterator(
     {
         const bool expect_whole_archive = !local_context->getSettingsRef()[Setting::cluster_function_process_archive_on_multiple_nodes];
 
+        /// Use the full table location URI (e.g. `s3a://bucket/prefix/table/`) when available
+        std::string table_location = configuration->getPathForRead().path;
+        if (auto * metadata = configuration->getExternalMetadata())
+            table_location = metadata->getTableLocation();
+
         auto distributed_iterator = std::make_unique<ReadTaskIterator>(
             local_context->getClusterFunctionReadTaskCallback(),
             local_context->getSettingsRef()[Setting::max_threads],
             /*is_archive_=*/is_archive && !expect_whole_archive,
             object_storage,
-            configuration->getPathForRead().path,
+            table_location,
             local_context);
 
         if (is_archive && expect_whole_archive)

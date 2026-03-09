@@ -173,15 +173,22 @@ std::string convertPathToKeyInStorage(const std::string & table_location, const 
     while (!rel_path.empty() && rel_path.front() == '/')
         rel_path = rel_path.substr(1);
 
+    auto reattach_slash = [&](std::string s) -> std::string
+    {
+        if (base.scheme == "file" && !s.empty() && s.front() != '/')
+            return "/" + s;
+        return s;
+    };
+
     if (!base_key_trimmed.empty() && (rel_path == base_key_trimmed || rel_path.starts_with(base_key_trimmed + "/")))
-        return normalizePathString(rel_path);  // Path already includes table location
+        return reattach_slash(normalizePathString(rel_path));  // Path already includes table location
 
     std::string result = base.key;
     if (!result.empty() && result.back() != '/')
         result += '/';
     result += rel_path;
 
-    return normalizePathString(result);
+    return reattach_slash(normalizePathString(result));
 }
 
 }

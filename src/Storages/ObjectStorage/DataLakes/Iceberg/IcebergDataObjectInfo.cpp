@@ -41,7 +41,7 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(
     : ObjectInfo(RelativePathWithMetadata(resolved_key_.empty() ? data_manifest_file_entry_->absolute_file_path : resolved_key_))
     , info{
           data_manifest_file_entry_->parsed_entry->file_path_from_metadata,
-          resolved_storage_ ? data_manifest_file_entry_->absolute_file_path : data_manifest_file_entry_->parsed_entry->file_path_from_metadata,
+          resolved_key_.empty() ? data_manifest_file_entry_->parsed_entry->file_path_from_metadata : data_manifest_file_entry_->absolute_file_path,
           data_manifest_file_entry_->resolved_schema_id,
           schema_id_relevant_to_iterator_,
           data_manifest_file_entry_->sequence_number,
@@ -50,6 +50,9 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(
           /* equality_deletes_objects */ {}}
     , resolved_storage(std::move(resolved_storage_))
 {
+    /// resolved_storage and resolved_key must be provided together or neither must be provided
+    /// (default-constructed, meaning the path has not been resolved yet).
+    chassert(resolved_key_.empty() == (resolved_storage == nullptr));
 }
 
 IcebergDataObjectInfo::IcebergDataObjectInfo(const RelativePathWithMetadata & path_)
@@ -107,7 +110,7 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
     {
         throw Exception(
             ErrorCodes::PROTOCOL_VERSION_MISMATCH,
-            "Iceberg data file '{}' is outside of the table location,  "
+            "Iceberg data file '{}' is outside of the table location, "
             "worker needs to have protocol version >= {}, but has {}. ",
             data_object_file_absolute_path,
             DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH,

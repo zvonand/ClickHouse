@@ -107,6 +107,8 @@ public:
 
     CompressionMethod getCompressionMethod() const { return persistent_components.metadata_compression_method; }
 
+    std::string getTableLocation() const override { return persistent_components.table_location; }
+
     bool optimize(const StorageMetadataPtr & metadata_snapshot, ContextPtr context, const std::optional<FormatSettings> & format_settings) override;
     bool supportsDelete() const override { return true; }
     void mutate(
@@ -133,12 +135,6 @@ public:
         ContextPtr local_context) const override;
 
     void drop(ContextPtr context) override;
-
-    ObjectIterator createIcebergKeysIterator(
-        Strings && data_files_,
-        ObjectStoragePtr,
-        IDataLakeMetadata::FileProgressCallback callback_,
-        ContextPtr local_context);
 
 private:
     Iceberg::PersistentTableComponents initializePersistentTableComponents(

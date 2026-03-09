@@ -74,7 +74,7 @@ FilterResult filterResultForNotMatchedRows(
     bool allow_unknown_function_arguments
 )
 {
-    /// If the filter DAG contains an IN subquery sets that are not yet built - we cannot evaluate the filter result
+    /// If the filter DAG contains IN subquery sets that are not yet built - we cannot evaluate the filter result
     for (const auto & node : filter_dag.getNodes())
     {
         if (node.type == ActionsDAG::ActionType::COLUMN && node.column)

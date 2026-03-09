@@ -1,11 +1,10 @@
 """
-Copilot-based automated PR code review hook.
+Copilot-based automated PR code review job.
 
---pre: review code only (CI not yet complete)
---post: review code and CI results
+--pre: review code only (Code Review job, runs at start of CI)
+--post: review CI failures (CI Results Review job, runs at end of CI)
 
-Failures are non-fatal: copilot errors (rate limits, network issues, etc.)
-are logged as warnings but do not block CI.
+Always succeeds — copilot errors are logged as warnings only.
 
 GH_TOKEN is set to the robot token so copilot can access the Copilot API.
 Before posting any gh CLI comments, copilot switches to the pre-authenticated
@@ -84,5 +83,7 @@ if __name__ == "__main__":
     elif "--post" in sys.argv:
         post()
     else:
-        print("Usage: copilot_review.py --pre | --post")
+        print("Usage: copilot_review_job.py --pre | --post")
         sys.exit(1)
+
+    Result.create_from(results=[]).complete_job()

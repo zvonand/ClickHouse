@@ -3,7 +3,6 @@
 #include <stack>
 
 #include <Common/JSONBuilder.h>
-#include <Common/logger_useful.h>
 
 #include <IO/Operators.h>
 #include <IO/WriteBuffer.h>

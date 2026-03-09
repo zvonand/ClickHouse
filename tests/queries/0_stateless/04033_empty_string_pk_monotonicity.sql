@@ -11,7 +11,10 @@ DROP TABLE IF EXISTS t_empty_pk;
 
 CREATE TABLE t_empty_pk (s String)
 ENGINE = MergeTree ORDER BY s
-SETTINGS index_granularity = 3;
+SETTINGS index_granularity = 3,
+    min_bytes_for_wide_part = 0,
+    min_bytes_for_full_part_storage = 0,
+    max_bytes_to_merge_at_max_space_in_pool = 1;
 
 INSERT INTO t_empty_pk VALUES (''), ('a'), ('b'), ('c'), ('d'), ('e'), ('f'), ('g'), ('h'), ('i');
 
@@ -22,16 +25,16 @@ INSERT INTO t_empty_pk VALUES (''), ('a'), ('b'), ('c'), ('d'), ('e'), ('f'), ('
 
 -- { echo }
 EXPLAIN indexes = 1
-SELECT count() FROM t_empty_pk WHERE empty(s);
+SELECT * FROM t_empty_pk WHERE empty(s);
 
 EXPLAIN indexes = 1
-SELECT count() FROM t_empty_pk WHERE s = '';
+SELECT * FROM t_empty_pk WHERE s = '';
 
 EXPLAIN indexes = 1
-SELECT count() FROM t_empty_pk WHERE notEmpty(s);
+SELECT * FROM t_empty_pk WHERE notEmpty(s);
 
 EXPLAIN indexes = 1
-SELECT count() FROM t_empty_pk WHERE s != '';
+SELECT * FROM t_empty_pk WHERE s != '';
 -- { echoOff }
 
 DROP TABLE t_empty_pk;

@@ -454,6 +454,14 @@ String GlueCatalog::getActualTimestampType(const String & column_name, const Tab
     }
 
     auto metadata_object = *metadata_objects.get(metadata_uri);
+    return resolveTimestampTypeFromMetadata(metadata_object, column_name, glue_column_type);
+}
+
+String GlueCatalog::resolveTimestampTypeFromMetadata(
+    const Poco::JSON::Object::Ptr & metadata_object,
+    const String & column_name,
+    const String & glue_column_type)
+{
     auto current_schema_id = metadata_object->getValue<Int64>("current-schema-id");
     auto schemas = metadata_object->getArray(DB::Iceberg::f_schemas);
     for (size_t i = 0; i < schemas->size(); ++i)

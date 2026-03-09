@@ -42,7 +42,9 @@ cat > "${TEST_DIR}/metadata/v1.metadata.json" << 'EOF'
     "fields": [
       {"id": 1, "name": "ts_nano", "required": false, "type": "timestamp_ns"},
       {"id": 2, "name": "ts_nano_tz", "required": false, "type": "timestamptz_ns"},
-      {"id": 3, "name": "id", "required": false, "type": "int"}
+      {"id": 3, "name": "id", "required": false, "type": "int"},
+      {"id": 4, "name": "ts_micro", "required": false, "type": "timestamp"},
+      {"id": 5, "name": "ts_micro_tz", "required": false, "type": "timestamptz"}
     ]
   },
   "current-schema-id": 0,
@@ -53,7 +55,9 @@ cat > "${TEST_DIR}/metadata/v1.metadata.json" << 'EOF'
       "fields": [
         {"id": 1, "name": "ts_nano", "required": false, "type": "timestamp_ns"},
         {"id": 2, "name": "ts_nano_tz", "required": false, "type": "timestamptz_ns"},
-        {"id": 3, "name": "id", "required": false, "type": "int"}
+        {"id": 3, "name": "id", "required": false, "type": "int"},
+        {"id": 4, "name": "ts_micro", "required": false, "type": "timestamp"},
+        {"id": 5, "name": "ts_micro_tz", "required": false, "type": "timestamptz"}
       ]
     }
   ],
@@ -73,4 +77,4 @@ EOF
 
 # Test 4: DESCRIBE icebergLocal - verify type mappings
 echo "Type mappings (DESCRIBE icebergLocal):"
-$CLICKHOUSE_CLIENT --query "DESCRIBE TABLE icebergLocal('${TEST_DIR}/', 'Parquet')" | cut -f 1,2 | grep -E '^(id|ts_nano)' | sort
+$CLICKHOUSE_CLIENT --query "DESCRIBE TABLE icebergLocal('${TEST_DIR}/', 'Parquet')" | cut -f 1,2 | grep -E '^(id|ts_)' | sort

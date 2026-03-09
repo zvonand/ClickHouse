@@ -247,6 +247,8 @@ NO_SANITIZE_UNDEFINED void convertDecimalsBatch(
             }
             else
             {
+                if constexpr (has_nullmap)
+                    nullmap[i] = false;
                 to[i] = static_cast<ToNativeType>(converted_value);
             }
         }
@@ -280,6 +282,8 @@ NO_SANITIZE_UNDEFINED void convertDecimalsBatch(
             }
             else
             {
+                if constexpr (has_nullmap)
+                    nullmap[i] = false;
                 to[i] = static_cast<ToNativeType>(converted_value);
             }
         }

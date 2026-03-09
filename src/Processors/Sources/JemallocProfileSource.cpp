@@ -64,6 +64,32 @@ std::optional<UInt64> parseHexAddress(std::string_view & src)
     return address;
 }
 
+/// Parse stack addresses from a jemalloc profile line starting with '@'.
+/// Returns empty vector if the line doesn't start with '@'.
+/// The first address is kept as-is; subsequent ones are decremented by 1
+/// (they are return addresses, so we subtract 1 to point inside the call instruction).
+std::vector<UInt64> parseStackAddresses(std::string_view line)
+{
+    std::vector<UInt64> result;
+    if (line.empty() || line[0] != '@')
+        return result;
+
+    std::string_view sv(line.data() + 1, line.size() - 1);
+    bool first = true;
+    while (!sv.empty())
+    {
+        trimLeft(sv);
+        if (sv.empty())
+            break;
+        auto address = parseHexAddress(sv);
+        if (!address.has_value())
+            break;
+        result.push_back(first ? *address : *address - 1);
+        first = false;
+    }
+    return result;
+}
+
 /// Simple LRU cache: evicts the least-recently-used entry when the capacity is exceeded.
 /// Key includes both the address and the symbolize_with_inline flag so that queries
 /// with different inline settings don't silently reuse each other's results.
@@ -324,14 +350,19 @@ Chunk JemallocProfileSource::generateSymbolized()
 
         if (symbolized_phase == SymbolizedPhase::OutputtingHeap)
         {
-            /// Stream heap lines from stored profile
-            while (current_profile_line_index < profile_lines.size() && column->size() < max_block_size)
+            /// Re-read the profile file to stream heap lines (avoids storing all lines in memory)
+            if (!file_input)
+                file_input = std::make_unique<ReadBufferFromFile>(filename);
+
+            while (!file_input->eof() && column->size() < max_block_size)
             {
-                const auto & line = profile_lines[current_profile_line_index++];
+                std::string line;
+                readStringUntilNewlineInto(line, *file_input);
+                file_input->tryIgnore(1);
                 column->insertData(line.data(), line.size());
             }
 
-            if (current_profile_line_index >= profile_lines.size())
+            if (file_input->eof())
             {
                 symbolized_phase = SymbolizedPhase::Done;
                 is_finished = true;
@@ -379,45 +410,24 @@ void JemallocProfileSource::collectAddresses()
         readStringUntilNewlineInto(line, in);
         in.tryIgnore(1);
 
-        profile_lines.push_back(line);
-
-        if (line.empty())
-            continue;
-
-        /// Stack traces start with '@' followed by hex addresses
-        if (line[0] == '@')
-        {
-            std::string_view line_addresses(line.data() + 1, line.size() - 1);
-
-            bool first = true;
-            while (!line_addresses.empty())
-            {
-                trimLeft(line_addresses);
-                if (line_addresses.empty())
-                    break;
-
-                auto address = parseHexAddress(line_addresses);
-                if (!address.has_value())
-                    break;
-
-                unique_addresses.insert(first ? address.value() : address.value() - 1);
-                first = false;
-            }
-        }
+        for (UInt64 addr : parseStackAddresses(line))
+            unique_addresses.insert(addr);
     }
 
-    /// Convert set to vector for iteration
+    /// Convert set to sorted vector for deterministic output
     addresses.assign(unique_addresses.begin(), unique_addresses.end());
+    std::sort(addresses.begin(), addresses.end());
 }
 
 Chunk JemallocProfileSource::generateCollapsed()
 {
-    /// For collapsed mode, we need to aggregate first, so we still use vector approach
-    if (collapsed_lines.empty())
+    /// Aggregate all stacks on the first call
+    if (!collapsed_state)
     {
-        ReadBufferFromFile in(filename);
+        collapsed_state.emplace();
+        auto & state = *collapsed_state;
 
-        std::unordered_map<std::string, UInt64> stack_to_metric;
+        ReadBufferFromFile in(filename);
         std::string line;
         std::vector<UInt64> current_stack;
 
@@ -438,23 +448,7 @@ Chunk JemallocProfileSource::generateCollapsed()
 
             if (line[0] == '@')
             {
-                current_stack.clear();
-                std::string_view line_addresses(line.data() + 1, line.size() - 1);
-
-                bool first = true;
-                while (!line_addresses.empty())
-                {
-                    trimLeft(line_addresses);
-                    if (line_addresses.empty())
-                        break;
-
-                    auto address = parseHexAddress(line_addresses);
-                    if (!address.has_value())
-                        break;
-
-                    current_stack.push_back(first ? address.value() : address.value() - 1);
-                    first = false;
-                }
+                current_stack = parseStackAddresses(line);
             }
             else if (!current_stack.empty() && line.contains(':'))
             {
@@ -497,6 +491,7 @@ Chunk JemallocProfileSource::generateCollapsed()
                         /// and for each address reverse the resolved frames (stored inline-first)
                         /// so that the main frame comes first within each address.
                         std::string stack_str;
+                        WriteBufferFromString out(stack_str);
                         bool first_symbol = true;
                         for (UInt64 address : std::ranges::reverse_view(current_stack))
                         {
@@ -510,14 +505,15 @@ Chunk JemallocProfileSource::generateCollapsed()
                             for (const auto & symbol : std::ranges::reverse_view(*symbols))
                             {
                                 if (!first_symbol)
-                                    stack_str += ';';
+                                    writeChar(';', out);
                                 first_symbol = false;
-                                stack_str += symbol;
+                                writeString(symbol, out);
                             }
                         }
+                        out.finalize();
 
                         /// Aggregate metric for same stack
-                        stack_to_metric[stack_str] += metric;
+                        state.stack_to_metric[stack_str] += metric;
                     }
                 }
 
@@ -525,27 +521,30 @@ Chunk JemallocProfileSource::generateCollapsed()
             }
         }
 
-        /// Store aggregated stacks as lines
-        for (const auto & [stack, metric] : stack_to_metric)
-        {
-            collapsed_lines.push_back(fmt::format("{} {}", stack, metric));
-        }
+        state.aggregated = true;
+        state.iter = state.stack_to_metric.begin();
     }
 
-    /// Stream from collapsed lines
-    if (current_collapsed_line_index >= collapsed_lines.size())
+    auto & state = *collapsed_state;
+
+    /// Stream directly from the aggregated map
+    if (state.iter == state.stack_to_metric.end())
     {
+        collapsed_state.reset();
         is_finished = true;
         return {};
     }
 
     auto column = ColumnString::create();
 
-    for (size_t rows = 0; rows < max_block_size && current_collapsed_line_index < collapsed_lines.size(); ++rows)
+    for (size_t rows = 0; rows < max_block_size && state.iter != state.stack_to_metric.end(); ++rows, ++state.iter)
     {
-        const auto & line = collapsed_lines[current_collapsed_line_index++];
-        column->insertData(line.data(), line.size());
+        auto formatted = fmt::format("{} {}", state.iter->first, state.iter->second);
+        column->insertData(formatted.data(), formatted.size());
     }
+
+    if (state.iter == state.stack_to_metric.end())
+        is_finished = true;
 
     size_t num_rows = column->size();
     Columns columns;

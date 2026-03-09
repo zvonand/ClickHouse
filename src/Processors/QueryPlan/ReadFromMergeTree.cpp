@@ -2047,6 +2047,8 @@ void ReadFromMergeTree::buildIndexes(
                 /// (MinMaxGranuleItem::operator<) which does not respect nulls_direction
                 /// or collation. Only allow types where raw Field ordering matches
                 /// the ORDER BY semantics.
+                /// TODO: generalize MinMaxGranuleItem comparison and getTopKMarks to use
+                /// nulls_direction/collator so this restriction can be lifted.
                 if (top_k_filter_info->data_type->isNullable()
                     || !top_k_filter_info->data_type->isValueRepresentedByNumber())
                     return false;

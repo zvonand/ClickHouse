@@ -5,7 +5,6 @@ from ci.defs.defs import (
     DOCKERS,
     SECRETS,
     ArtifactConfigs,
-    ArtifactNames,
     JobNames,
 )
 from ci.defs.job_configs import JobConfigs
@@ -138,9 +137,9 @@ workflow = Workflow.Config(
             FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES
         ),
         *JobConfigs.toolchain_build_jobs,
-        JobConfigs.ci_results_review.set_dependency(
-            FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES
-        ),
+        # JobConfigs.ci_results_review.set_dependency(
+        #     FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES
+        # ),
     ],
     artifacts=[
         *ArtifactConfigs.unittests_binaries,

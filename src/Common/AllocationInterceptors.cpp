@@ -268,6 +268,8 @@ bool isCAllocationTrackingDisabled()
     return c_allocation_tracking_disabled;
 }
 
+#if !defined(SANITIZER) && !defined(SANITIZE_COVERAGE)
+
 class CAllocationTrackingBlocker
 {
 public:
@@ -285,8 +287,6 @@ public:
 private:
     bool previous_value;
 };
-
-#if !defined(SANITIZER) && !defined(SANITIZE_COVERAGE)
 
 size_t estimateGetAddrInfoSize(const struct addrinfo * result)
 {

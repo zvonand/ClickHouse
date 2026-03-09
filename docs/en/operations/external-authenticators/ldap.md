@@ -66,6 +66,9 @@ Note, that you can define multiple LDAP servers inside the `ldap_servers` sectio
 - `port` — LDAP server port, default is `636` if `enable_tls` is set to `true`, `389` otherwise.
 - `bind_dn` — Template used to construct the DN to bind to.
   - The resulting DN will be constructed by replacing all `{user_name}` substrings of the template with the actual user name during each authentication attempt.
+- `auth_dn_prefix` and `auth_dn_suffix` — Deprecated. Used as an alternative to `bind_dn`.
+  - These two parameters cannot be used together with `bind_dn`. When specified, the bind DN is constructed as `auth_dn_prefix + {user_name} + auth_dn_suffix`.
+  - For example, setting `auth_dn_prefix` to `uid=` and `auth_dn_suffix` to `,ou=users,dc=example,dc=com` is equivalent to setting `bind_dn` to `uid={user_name},ou=users,dc=example,dc=com`.
 - `user_dn_detection` — Section with LDAP search parameters for detecting the actual user DN of the bound user.
   - This is mainly used in search filters for further role mapping when the server is Active Directory. The resulting user DN will be used when replacing `{user_dn}` substrings wherever they are allowed. By default, user DN is set equal to bind DN, but once search is performed, it will be updated with to the actual detected user DN value.
     - `base_dn` — Template used to construct the base DN for the LDAP search.
@@ -93,6 +96,7 @@ Note, that you can define multiple LDAP servers inside the `ldap_servers` sectio
 - `tls_ca_cert_file` — Path to CA certificate file.
 - `tls_ca_cert_dir` — Path to the directory containing CA certificates.
 - `tls_cipher_suite` — Allowed cipher suite (in OpenSSL notation).
+- `search_limit` — Maximum number of entries that can be returned by LDAP search queries performed by this server definition (for user DN detection and role mapping). Default is `256`.
 
 ## LDAP external authenticator {#ldap-external-authenticator}
 

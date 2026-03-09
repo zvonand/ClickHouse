@@ -7,41 +7,50 @@ Copilot-based automated PR code review job.
 Always succeeds — copilot errors are logged as warnings only.
 
 Auth split:
-- GH_TOKEN is set to the robot Copilot account token so the copilot CLI
-  can access the GitHub Copilot API (model inference).
-- Comment posting uses the pre-authenticated clickhouse-gh[bot] app (stored
-  gh credentials via enable_gh_auth=True). Since gh(1) always prefers
-  GH_TOKEN over stored credentials, every gh CLI call must be prefixed with
-  `env -u GH_TOKEN` to bypass the robot token and post as the app.
+- The robot Copilot account token is stored in an isolated GH_CONFIG_DIR
+  temp directory via `gh auth login`. Copilot reads credentials from there
+  for model inference. GH_TOKEN is never set in the environment.
+- Comment posting uses the pre-authenticated clickhouse-gh[bot] app (the
+  default gh config). Since gh(1) prefers GH_CONFIG_DIR over the default
+  config when the env var is set, every gh CLI call that posts must be
+  prefixed with `env -u GH_CONFIG_DIR` to fall back to the app credentials.
 """
 
 import os
 import shlex
+import subprocess
 import sys
+import tempfile
 
 from ci.praktika import Secret
 from ci.praktika.info import Info
 from ci.praktika.result import Result
 
-# All gh CLI invocations that post comments must use this prefix so that
-# gh uses the stored clickhouse-gh[bot] credentials instead of GH_TOKEN.
-_GH = "env -u GH_TOKEN gh"
+# Prefix all gh CLI calls that post comments with this so gh falls back to
+# the default config dir (clickhouse-gh[bot]) instead of the robot token.
+_GH = "env -u GH_CONFIG_DIR gh"
 
 
 def _run(prompt):
-    os.environ["GH_TOKEN"] = Secret.Config(
+    token = Secret.Config(
         name="/ci/robot-ch-test-poll-copilot", type=Secret.Type.AWS_SSM_PARAMETER
     ).get_value()
-    try:
-        Result.from_commands_run(
-            name="copilot review",
-            command=f"copilot -p {shlex.quote(prompt)} --allow-all-tools --model gpt-5.3-codex",
-            with_info=True,
+    with tempfile.TemporaryDirectory() as gh_config_dir:
+        subprocess.run(
+            ["gh", "auth", "login", "--with-token"],
+            input=token, text=True, check=True,
+            env={**os.environ, "GH_CONFIG_DIR": gh_config_dir},
         )
-    except Exception as e:
-        print(f"WARNING: copilot review failed: {e}")
-    finally:
-        os.environ.pop("GH_TOKEN", None)
+        token = None
+        try:
+            Result.from_commands_run(
+                name="copilot review",
+                command=f"GH_CONFIG_DIR={shlex.quote(gh_config_dir)} "
+                        f"copilot -p {shlex.quote(prompt)} --allow-all-tools --model gpt-5.3-codex",
+                with_info=True,
+            )
+        except Exception as e:
+            print(f"WARNING: copilot review failed: {e}")
 
 
 def pre():
@@ -55,7 +64,7 @@ def pre():
         f"Review the PR {info.pr_url}. "
         f"The repo is checked out at PR head. "
         f"IMPORTANT: for every gh CLI call (reading PR data, posting comments, creating reviews) "
-        f"prefix it with `env -u GH_TOKEN` (e.g. `{_GH} pr view ...`, `{_GH} api ...`). "
+        f"prefix it with `env -u GH_CONFIG_DIR` (e.g. `{_GH} pr view ...`, `{_GH} api ...`). "
         f"This ensures comments are posted as the pre-authenticated app, not the Copilot robot account. "
         f"Post inline review comments on specific lines where applicable, and one summary comment. "
         f"Before posting, read existing review comments on this PR and do not duplicate ones already posted."
@@ -80,7 +89,7 @@ def post():
         f"Look at the PR diff to understand what changed, then work backwards from the failures: "
         f"try to match each failure to the code changes and briefly explain why the change likely caused it. "
         f"IMPORTANT: for every gh CLI call (reading PR data, posting comments) "
-        f"prefix it with `env -u GH_TOKEN` (e.g. `{_GH} pr view ...`, `{_GH} api ...`). "
+        f"prefix it with `env -u GH_CONFIG_DIR` (e.g. `{_GH} pr view ...`, `{_GH} api ...`). "
         f"This ensures comments are posted as the pre-authenticated app, not the Copilot robot account. "
         f"Post a single comment on the PR with your findings."
     )

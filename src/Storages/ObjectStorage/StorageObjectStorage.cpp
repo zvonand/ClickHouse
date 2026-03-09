@@ -651,6 +651,14 @@ void StorageObjectStorage::truncate(
             getName(), path.path);
     }
 
+    if (path.hasPartitionWildcard())
+    {
+        throw Exception(
+            ErrorCodes::NOT_IMPLEMENTED,
+            "Truncate is not supported for partitioned tables, the path is '{}'",
+            path.path);
+    }
+
     StoredObjects objects;
     for (const auto & key : configuration->getPaths())
     {

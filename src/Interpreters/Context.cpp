@@ -4929,7 +4929,7 @@ bool Context::tryCheckClientConnectionToMyKeeperCluster() const
         /// Our server doesn't depend on our Keeper cluster
         return true;
     }
-    catch (...)
+    catch (const std::exception &)
     {
         return false;
     }

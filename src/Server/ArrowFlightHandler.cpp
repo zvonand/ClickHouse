@@ -2360,7 +2360,7 @@ arrow::Status ArrowFlightHandler::DoAction(
 
         if (action.type == arrow::flight::ActionType::kCancelFlightInfo.type)
         {
-            auto request = arrow::flight::CancelFlightInfoRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}).ValueOrDie();
+            ARROW_ASSIGN_OR_RAISE(auto request, arrow::flight::CancelFlightInfoRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}))
             auto query_id = calls_data->getQueryIdFromFlightDescriptor(request.info->descriptor().cmd);
             auto result = arrow::flight::CancelFlightInfoResult{arrow::flight::CancelStatus::kNotCancellable};
             if (query_id)
@@ -2379,7 +2379,7 @@ arrow::Status ArrowFlightHandler::DoAction(
         }
         else if (action.type == arrow::flight::ActionType::kSetSessionOptions.type)
         {
-            auto request = arrow::flight::SetSessionOptionsRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}).ValueOrDie();
+            ARROW_ASSIGN_OR_RAISE(auto request, arrow::flight::SetSessionOptionsRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}))
             arrow::flight::SetSessionOptionsResult result;
 
             auto query_context = session->makeQueryContext();
@@ -2453,7 +2453,7 @@ arrow::Status ArrowFlightHandler::DoAction(
         }
         else if (action.type == arrow::flight::ActionType::kGetSessionOptions.type)
         {
-            arrow::flight::GetSessionOptionsRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}).ValueOrDie();
+            ARROW_RETURN_NOT_OK(arrow::flight::GetSessionOptionsRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}));
             arrow::flight::GetSessionOptionsResult result;
 
             auto execute_res = executeSQLtoTable(session, "SHOW SETTINGS LIKE '%'");

@@ -2,6 +2,7 @@
 
 #include <Columns/ColumnSet.h>
 #include <Columns/IColumn.h>
+#include <Functions/FunctionHelpers.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/FilterStep.h>
 
@@ -79,7 +80,11 @@ FilterResult filterResultForNotMatchedRows(
     {
         if (node.type == ActionsDAG::ActionType::COLUMN && node.column)
         {
-            if (const auto * column_set = typeid_cast<const ColumnSet *>(node.column.get()))
+            const ColumnSet * column_set = checkAndGetColumnConstData<const ColumnSet>(node.column.get());
+            if (!column_set)
+                column_set = checkAndGetColumn<const ColumnSet>(node.column.get());
+
+            if (column_set)
             {
                 auto future_set = column_set->getData();
                 if (!future_set || !future_set->get())

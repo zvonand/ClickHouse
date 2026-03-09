@@ -1184,7 +1184,8 @@ void MergeTreeRangeReader::fillVirtualColumns(Columns & columns, ReadResult & re
         else
         {
             result.min_part_offset = result.granule_offsets.front().starting_offset;
-            result.max_part_offset = result.granule_offsets.back().starting_offset + result.rows_per_granule.back() - 1;
+            size_t last_granule_rows = result.rows_per_granule.back();
+            result.max_part_offset = result.granule_offsets.back().starting_offset + (last_granule_rows > 0 ? last_granule_rows - 1 : 0);
         }
     }
 }

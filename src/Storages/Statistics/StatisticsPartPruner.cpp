@@ -74,13 +74,17 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
     bool min_in_positive_overflow = min_value >= StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
     bool max_in_positive_overflow = max_value >= StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
 
-    /// Case 1: max <= -2^53, use (-inf, -2^53]
+    /// Case 1: max <= -2^53, use (-inf, -2^53] or whole universe for nullable
+    /// For nullable columns, we return whole universe because statistics don't track
+    /// whether NULL values exist, and we must not prune parts that might contain NULLs.
     if (max_in_negative_overflow)
     {
+        if (is_nullable)
+            return make_whole_universe();
         auto boundary = StatisticsUtils::tryConvertFromFloat64(-StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER, data_type);
         if (!boundary.has_value())
             return make_whole_universe();
-        return Range::createRightBounded(boundary.value(), true, is_nullable);
+        return Range::createRightBounded(boundary.value(), true, false);
     }
 
     /// Case 2: min >= 2^53, use [2^53, +inf)
@@ -110,7 +114,11 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
     }
     else if (!left_bound.has_value())
     {
-        return Range::createRightBounded(right_bound.value(), true, is_nullable);
+        /// For nullable columns, we must include POSITIVE_INFINITY (NULL) in the range
+        /// because statistics don't track whether NULL values exist in the part.
+        if (is_nullable)
+            return make_whole_universe();
+        return Range::createRightBounded(right_bound.value(), true, false);
     }
     else if (!right_bound.has_value())
     {

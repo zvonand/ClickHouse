@@ -8,7 +8,7 @@ CREATE TABLE test_stats_exceeds (
     val_uint64 UInt64,
     val_decimal128 Decimal128(0),   -- precision = 38 > 15, skips pruning entirely
     val_decimal32 Decimal32(0),      -- precision = 9 <= 15, can prune normally
-    val_decimal32_9 Decimal32(9),      -- precision = 9 <= 15, can prune normally
+    val_decimal32_9 Decimal32(9)      -- precision = 9 <= 15, can prune normally
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(dt)
 ORDER BY tuple()

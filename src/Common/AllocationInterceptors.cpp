@@ -547,8 +547,8 @@ extern "C" char * __wrap_strndup(const char * str, size_t size) // NOLINT
     return res;
 }
 
-extern "C" int __real_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result);
-extern "C" void __real_freeaddrinfo(struct addrinfo * result);
+extern "C" int __real_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result); // NOLINT(bugprone-reserved-identifier)
+extern "C" void __real_freeaddrinfo(struct addrinfo * result); // NOLINT(bugprone-reserved-identifier)
 
 extern "C" int __wrap_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result) // NOLINT
 {

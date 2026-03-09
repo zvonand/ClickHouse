@@ -166,25 +166,31 @@ std::optional<String> optimizeUseNormalProjections(
         if (!query.build(*child))
             return {};
 
-        auto add_rename = [&](const String & from, const String & to, DataTypePtr type)
+        std::vector<std::tuple<std::string, std::string, DataTypePtr>> renames;
+        if (need_parent_part_offset)
+            rename_map.emplace_back("_parent_part_offset", "_part_offset", std::make_shared<DataTypeUInt64>());
+        if (need_parent_block_number)
+            rename_map.emplace_back("_parent_block_number", "_block_number", std::make_shared<DataTypeUInt64>());
+        if (need_parent_block_offset)
+            rename_map.emplace_back("_parent_block_offset", "_block_offset", std::make_shared<DataTypeUInt64>());
+
+        if (!rename_map.empty())
         {
             ActionsDAG rename_dag;
-            const auto * from_node = &rename_dag.addInput(from, type);
-            const auto * to_node = &rename_dag.addAlias(*from_node, to);
-            rename_dag.getOutputs() = {to_node};
+            for (const auto & [from, to, type] : rename_map)
+            {
+                const auto * from_node = &rename_dag.addInput(from, type);
+                const auto * to_node = &rename_dag.addAlias(*from_node, to);
+                rename_dag.addOrReplaceInOutputs(*to_node);
+            }
+
+            chassert(!rename_dag.getOutputs().empty());
 
             if (query.dag)
                 query.dag = ActionsDAG::merge(std::move(rename_dag), *std::move(query.dag));
             else
                 query.dag = std::move(rename_dag);
-        };
-
-        if (need_parent_part_offset)
-            add_rename("_parent_part_offset", "_part_offset", std::make_shared<DataTypeUInt64>());
-        if (need_parent_block_number)
-            add_rename("_parent_block_number", "_block_number", std::make_shared<DataTypeUInt64>());
-        if (need_parent_block_offset)
-            add_rename("_parent_block_offset", "_block_offset", std::make_shared<DataTypeUInt64>());
+        }
 
         if (query.dag)
             query.dag->removeUnusedActions();

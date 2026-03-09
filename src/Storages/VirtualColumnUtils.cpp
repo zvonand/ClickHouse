@@ -396,7 +396,6 @@ void addRequestedFileLikeStorageVirtualsToChunk(
         }
         else if (virtual_column.name == "_row_number")
         {
-#if USE_PARQUET
             auto chunk_info = chunk.getChunkInfos().get<ChunkInfoRowNumbers>();
             if (chunk_info)
             {
@@ -411,7 +410,6 @@ void addRequestedFileLikeStorageVirtualsToChunk(
                 chunk.addColumn(ColumnNullable::create(std::move(column), std::move(null_map)));
                 return;
             }
-#endif
             /// Row numbers not known, _row_number = NULL.
             chunk.addColumn(virtual_column.type->createColumnConstWithDefaultValue(chunk.getNumRows())->convertToFullColumnIfConst());
         }

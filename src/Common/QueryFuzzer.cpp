@@ -18,6 +18,7 @@
 #include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromOStream.h>
 
+#include <Access/Common/SQLSecurityDefs.h>
 #include <Parsers/ASTAlterQuery.h>
 #include <Parsers/ASTAssignment.h>
 #include <Parsers/ASTAsterisk.h>
@@ -25,6 +26,8 @@
 #include <Parsers/ASTColumnsTransformers.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ASTDeleteQuery.h>
+#include <Parsers/ASTDictionary.h>
+#include <Parsers/ASTDictionaryAttributeDeclaration.h>
 #include <Parsers/ASTDropQuery.h>
 #include <Parsers/ASTExpressionList.h>
 #include <Parsers/ASTFunction.h>
@@ -36,6 +39,8 @@
 #include <Parsers/ASTOptimizeQuery.h>
 #include <Parsers/ASTOrderByElement.h>
 #include <Parsers/ASTQueryWithOutput.h>
+#include <Parsers/ASTRefreshStrategy.h>
+#include <Parsers/ASTSQLSecurity.h>
 #include <Parsers/ASTSampleRatio.h>
 #include <Parsers/ASTSelectIntersectExceptQuery.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
@@ -704,37 +709,54 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
 
     if (create.storage && create.storage->engine)
     {
-        /// Replace ReplicatedMergeTree to ordinary MergeTree
-        /// to avoid inconsistency of metadata in zookeeper.
         auto & engine_name = create.storage->engine->name;
-        if (startsWith(engine_name, "Replicated"))
+
+        if (create.database && !create.table)
         {
-            engine_name = engine_name.substr(strlen("Replicated"));
-            if (auto & arguments = create.storage->engine->arguments)
+            /// For database engine fuzzing, only swap between parameter-free engines.
+            /// Avoid touching Replicated (needs ZooKeeper), Lazy (needs arg), or external
+            /// engines (MySQL/PostgreSQL need connection params).
+            static const Strings safe_database_engines = {"Atomic", "Memory"};
+            if ((engine_name == "Atomic" || engine_name == "Memory") && fuzz_rand() % 10 == 0)
             {
-                auto & children = arguments->children;
-                if (children.size() <= 2)
-                    arguments.reset();
-                else
-                    children.erase(children.begin(), children.begin() + 2);
+                engine_name = pickRandomly(fuzz_rand, safe_database_engines);
+                if (auto & arguments = create.storage->engine->arguments)
+                    arguments->children.clear();
             }
         }
-
-        /// Swap between MergeTree variants that require no mandatory extra columns.
-        /// CollapsingMergeTree/VersionedCollapsingMergeTree require a sign column and
-        /// GraphiteMergeTree requires a config name, so those are excluded.
-        if (endsWith(engine_name, "MergeTree") && fuzz_rand() % 20 == 0)
+        else
         {
-            static const Strings safe_mergetree_engines = {
-                "MergeTree",
-                "AggregatingMergeTree",
-                "SummingMergeTree",
-                "ReplacingMergeTree",
-            };
-            engine_name = pickRandomly(fuzz_rand, safe_mergetree_engines);
-            /// Clear engine arguments to avoid arity mismatches with the new engine
-            if (auto & arguments = create.storage->engine->arguments)
-                arguments->children.clear();
+            /// Replace ReplicatedMergeTree to ordinary MergeTree
+            /// to avoid inconsistency of metadata in zookeeper.
+            if (startsWith(engine_name, "Replicated"))
+            {
+                engine_name = engine_name.substr(strlen("Replicated"));
+                if (auto & arguments = create.storage->engine->arguments)
+                {
+                    auto & children = arguments->children;
+                    if (children.size() <= 2)
+                        arguments.reset();
+                    else
+                        children.erase(children.begin(), children.begin() + 2);
+                }
+            }
+
+            /// Swap between MergeTree variants that require no mandatory extra columns.
+            /// CollapsingMergeTree/VersionedCollapsingMergeTree require a sign column and
+            /// GraphiteMergeTree requires a config name, so those are excluded.
+            if (endsWith(engine_name, "MergeTree") && fuzz_rand() % 20 == 0)
+            {
+                static const Strings safe_mergetree_engines = {
+                    "MergeTree",
+                    "AggregatingMergeTree",
+                    "SummingMergeTree",
+                    "ReplacingMergeTree",
+                };
+                engine_name = pickRandomly(fuzz_rand, safe_mergetree_engines);
+                /// Clear engine arguments to avoid arity mismatches with the new engine
+                if (auto & arguments = create.storage->engine->arguments)
+                    arguments->children.clear();
+            }
         }
     }
 
@@ -805,6 +827,97 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
             fuzz_setting("string_serialization_version", String(fuzz_rand() % 2 == 0 ? "single_stream" : "with_size_stream"));
         if (fuzz_rand() % 20 == 0)
             fuzz_setting("vertical_merge_algorithm_min_bytes_to_activate", UInt64(1) << (fuzz_rand() % 14));
+    }
+
+    /// Fuzz CREATE MATERIALIZED VIEW: toggle POPULATE and refresh strategy parameters
+    if (create.is_materialized_view)
+    {
+        if (fuzz_rand() % 20 == 0)
+            create.is_populate = !create.is_populate;
+
+        if (create.refresh_strategy)
+        {
+            /// Fuzz refresh period
+            if (create.refresh_strategy->period && fuzz_rand() % 5 == 0)
+                create.refresh_strategy->period->interval.seconds = static_cast<UInt64>(fuzz_rand() % 3600) + 1;
+
+            /// Fuzz spread (jitter)
+            if (create.refresh_strategy->spread && fuzz_rand() % 5 == 0)
+                create.refresh_strategy->spread->interval.seconds = static_cast<UInt64>(fuzz_rand() % 300);
+
+            /// Toggle APPEND
+            if (fuzz_rand() % 10 == 0)
+                create.refresh_strategy->append = !create.refresh_strategy->append;
+
+            /// Toggle schedule kind between EVERY and AFTER
+            if (create.refresh_strategy->schedule_kind != RefreshScheduleKind::UNKNOWN && fuzz_rand() % 10 == 0)
+            {
+                create.refresh_strategy->schedule_kind = (create.refresh_strategy->schedule_kind == RefreshScheduleKind::EVERY)
+                    ? RefreshScheduleKind::AFTER
+                    : RefreshScheduleKind::EVERY;
+            }
+        }
+    }
+
+    /// Fuzz SQL SECURITY type for ordinary and materialized views
+    if (create.supportSQLSecurity() && create.sql_security && fuzz_rand() % 10 == 0)
+    {
+        auto * sec = create.sql_security->as<ASTSQLSecurity>();
+        if (sec && sec->type)
+        {
+            static constexpr SQLSecurityType security_types[] = {SQLSecurityType::INVOKER, SQLSecurityType::DEFINER, SQLSecurityType::NONE};
+            sec->type = security_types[fuzz_rand() % std::size(security_types)];
+        }
+    }
+
+    /// Fuzz CREATE DICTIONARY: swap layout type and fuzz lifetime
+    if (create.is_dictionary && create.dictionary)
+    {
+        /// Swap layout among parameter-free layout types
+        if (create.dictionary->layout && fuzz_rand() % 5 == 0)
+        {
+            static const Strings simple_layouts = {"flat", "hashed", "sparse_hashed", "direct"};
+            create.dictionary->layout->layout_type = simple_layouts[fuzz_rand() % simple_layouts.size()];
+        }
+
+        /// Fuzz lifetime bounds
+        if (create.dictionary->lifetime && fuzz_rand() % 5 == 0)
+        {
+            const UInt64 new_max = static_cast<UInt64>(fuzz_rand() % 3600) + 1;
+            const UInt64 new_min = fuzz_rand() % (new_max + 1);
+            create.dictionary->lifetime->min_sec = new_min;
+            create.dictionary->lifetime->max_sec = new_max;
+        }
+    }
+
+    /// Fuzz dictionary attribute flags and default values
+    if (create.is_dictionary && create.dictionary_attributes_list)
+    {
+        for (auto & child : create.dictionary_attributes_list->children)
+        {
+            auto * attr = child->as<ASTDictionaryAttributeDeclaration>();
+            if (!attr)
+                continue;
+
+            /// Toggle injective: affects GROUP BY optimization
+            if (fuzz_rand() % 10 == 0)
+                attr->injective = !attr->injective;
+
+            /// Toggle hierarchical: enables dictGetHierarchy / dictIsIn
+            if (fuzz_rand() % 20 == 0)
+                attr->hierarchical = !attr->hierarchical;
+
+            /// Toggle bidirectional (only meaningful with hierarchical)
+            if (attr->hierarchical && fuzz_rand() % 10 == 0)
+                attr->bidirectional = !attr->bidirectional;
+
+            /// Fuzz default value literal
+            if (attr->default_value && fuzz_rand() % 5 == 0)
+            {
+                if (auto * lit = attr->default_value->as<ASTLiteral>())
+                    lit->value = fuzzField(lit->value);
+            }
+        }
     }
 
     /// Toggle CREATE ↔ CREATE OR REPLACE

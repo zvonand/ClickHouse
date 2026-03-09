@@ -1109,17 +1109,20 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
     ProfileEvents::increment(ProfileEvents::ParallelReplicasNumRequests);
     ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::ParallelReplicasHandleAnnouncementMicroseconds);
 
-    fiu_do_on(FailPoints::parallel_replicas_check_read_mode_always, {
-        if (pimpl && announcement.mode != pimpl->getCoordinationMode())
-        {
-            throw Exception(
-                ErrorCodes::LOGICAL_ERROR,
-                "Replica {} decided to read in {} mode, not in {}. This is a bug",
-                announcement.replica_num,
-                magic_enum::enum_name(announcement.mode),
-                magic_enum::enum_name(pimpl->getCoordinationMode()));
-        }
-    });
+    if (pimpl)
+    {
+        fiu_do_on(FailPoints::parallel_replicas_check_read_mode_always, {
+            if (announcement.mode != pimpl->getCoordinationMode())
+            {
+                throw Exception(
+                    ErrorCodes::LOGICAL_ERROR,
+                    "Replica {} decided to read in {} mode, not in {}. This is a bug",
+                    announcement.replica_num,
+                    magic_enum::enum_name(announcement.mode),
+                    magic_enum::enum_name(pimpl->getCoordinationMode()));
+            }
+        });
+    }
 
     if (is_reading_completed)
         return;

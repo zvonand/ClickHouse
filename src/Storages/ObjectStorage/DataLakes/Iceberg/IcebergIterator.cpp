@@ -344,6 +344,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
         IcebergDataObjectInfoPtr object_info = std::make_shared<IcebergDataObjectInfo>(
             manifest_file_entry, table_state_snapshot->schema_id, storage_to_use, resolved_key);
 
+        object_info->info.requires_external_storage = (storage_to_use != object_storage);
+
         for (const auto & position_delete :
              defineDeletesSpan(manifest_file_entry, position_deletes_files, /* is_equality_delete */ false, logger))
         {

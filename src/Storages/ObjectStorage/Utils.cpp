@@ -747,11 +747,31 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
     if (base_scheme_normalized == target_scheme_normalized && table_location_decomposed.authority == target_decomposed.authority)
         return {base_storage, target_decomposed.key};
 
-    const std::string cache_key = target_scheme_normalized + "://" + target_decomposed.authority;
-
     const std::string type_for_factory = factoryTypeForScheme(target_scheme_normalized);
     if (type_for_factory.empty())
         throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Unsupported storage scheme '{}' in path '{}'", target_scheme_normalized, path);
+
+    /// For `file://` URIs the authority is always empty, so using just `"file://"` as the
+    /// cache key would cause every directory to share a single `LocalObjectStorage` instance
+    /// whose root (`key_prefix`) is set to the parent directory of the first file ever seen.
+    /// To avoid this, include the parent directory of the target file in the cache key so that
+    /// each directory gets its own storage instance with the correct root.
+    std::string file_dir_path; // only set for file:// URIs
+    std::string cache_key;
+    if (target_scheme_normalized == "file")
+    {
+        std::filesystem::path fs_path(target_decomposed.key);
+        file_dir_path = fs_path.parent_path().string();
+        if (file_dir_path.empty() || file_dir_path == "/")
+            file_dir_path = "/";
+        else if (file_dir_path.back() != '/')
+            file_dir_path += '/';
+        cache_key = "file://" + file_dir_path;
+    }
+    else
+    {
+        cache_key = target_scheme_normalized + "://" + target_decomposed.authority;
+    }
 
     /// Handle storage types that need new storage creation
     return getOrCreateStorageAndKey(
@@ -764,16 +784,7 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
         {
             if (target_scheme_normalized == "file")
             {
-                std::filesystem::path fs_path(target_decomposed.key);
-                std::filesystem::path parent = fs_path.parent_path();
-                std::string dir_path = parent.string();
-
-                if (dir_path.empty() || dir_path == "/")
-                    dir_path = "/";
-                else if (dir_path.back() != '/')
-                    dir_path += '/';
-
-                cfg.setString(config_prefix + ".path", dir_path);
+                cfg.setString(config_prefix + ".path", file_dir_path);
             }
             else if (target_scheme_normalized == "abfs")
             {

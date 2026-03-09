@@ -103,10 +103,6 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
 
     /// If the absolute path was resolved to a location outside the table location,
     /// so workers using older version will silently try to open the wrong file.
-    const bool requires_external_storage
-        = !data_object_file_absolute_path.empty()
-        && data_object_file_absolute_path != data_object_file_path_from_metadata;
-
     if (requires_external_storage && protocol_version < DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {
         throw Exception(

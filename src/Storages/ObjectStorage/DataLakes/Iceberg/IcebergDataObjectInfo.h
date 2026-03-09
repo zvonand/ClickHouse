@@ -24,6 +24,9 @@ struct IcebergObjectSerializableInfo
     std::vector<Iceberg::PositionDeleteObject> position_deletes_objects;
     std::vector<Iceberg::EqualityDeleteObject> equality_deletes_objects;
 
+    /// Set to true by the coordinator when the file is outside of the table location
+    bool requires_external_storage = false;
+
     void serializeForClusterFunctionProtocol(WriteBuffer & out, size_t protocol_version) const;
     void deserializeForClusterFunctionProtocol(ReadBuffer & in, size_t protocol_version);
 

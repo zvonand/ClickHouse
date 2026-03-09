@@ -36,13 +36,13 @@ def _run(prompt):
         name="/ci/robot-ch-test-poll-copilot", type=Secret.Type.AWS_SSM_PARAMETER
     ).get_value()
     with tempfile.TemporaryDirectory() as gh_config_dir:
-        subprocess.run(
-            ["gh", "auth", "login", "--with-token"],
-            input=token, text=True, check=True,
-            env={**os.environ, "GH_CONFIG_DIR": gh_config_dir},
-        )
-        token = None
         try:
+            subprocess.run(
+                ["gh", "auth", "login", "--with-token"],
+                input=token, text=True, check=True,
+                env={**os.environ, "GH_CONFIG_DIR": gh_config_dir},
+            )
+            token = None
             Result.from_commands_run(
                 name="copilot review",
                 # --allow-all-tools: run non-interactively
@@ -53,7 +53,7 @@ def _run(prompt):
                 with_info=True,
             )
         except Exception as e:
-            print(f"WARNING: copilot review failed: {e}")
+            print(f"WARNING: copilot review skipped: {e}")
 
 
 def pre():

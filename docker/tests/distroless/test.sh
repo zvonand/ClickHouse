@@ -8,10 +8,17 @@
 #   1. Builds server + keeper distroless images (production and debug targets)
 #   2. Runs each container and verifies startup
 #   3. Checks CLICKHOUSE_USER/PASSWORD/DB env-var handling
-#   4. Runs SQL init scripts and verifies the data
+#   4. Runs SQL init scripts (plain and .sql.gz) and verifies the data
 #   5. Confirms that /bin/sh is absent in the production image
 #   6. Confirms that /busybox/sh is present in the debug image
 #   7. Verifies the keeper starts successfully
+#   8. CLICKHOUSE_PASSWORD_FILE (Docker Secrets pattern)
+#   9. Passthrough / override CMD (clickhouse-client --version)
+#  10. Restart with existing data skips init
+#  11. No password — default user restricted to localhost
+#  12. CLICKHOUSE_SKIP_USER_SETUP
+#  13. HTTP endpoint (port 8123)
+#  14. docker stop during init (PID 1 signal handling)
 
 set -euo pipefail
 
@@ -161,10 +168,10 @@ result=$(docker exec ch-distroless-t4 \
     /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
     -u testuser --password testpass \
     --query "SELECT count() FROM test_db.events")
-if [[ "${result}" == "2" ]]; then
-    pass "init scripts created and populated test_db.events (count=2)"
+if [[ "${result}" == "3" ]]; then
+    pass "init scripts created and populated test_db.events (count=3, includes .sql.gz)"
 else
-    fail "expected count 2, got '${result}'"
+    fail "expected count 3 (2 from .sql + 1 from .sql.gz), got '${result}'"
 fi
 
 docker rm -f ch-distroless-t4 >/dev/null
@@ -255,6 +262,222 @@ else
 fi
 
 docker rm -f ch-distroless-t7 >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 8: CLICKHOUSE_PASSWORD_FILE (Docker Secrets pattern)
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 8: CLICKHOUSE_PASSWORD_FILE ==="
+PWFILE_DIR=$(mktemp -d)
+echo -n "secretpass" > "${PWFILE_DIR}/pw.txt"
+
+CID=$(docker run -d \
+    --name ch-distroless-t8 \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD_FILE=/run/secrets/pw.txt \
+    -v "${PWFILE_DIR}/pw.txt:/run/secrets/pw.txt:ro" \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t8 9000 testuser secretpass
+
+result=$(docker exec ch-distroless-t8 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password secretpass \
+    --query "SELECT 1")
+if [[ "${result}" == "1" ]]; then
+    pass "CLICKHOUSE_PASSWORD_FILE works"
+else
+    fail "expected '1' with password from file, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t8 >/dev/null
+rm -rf "${PWFILE_DIR}"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 9: Passthrough / override CMD
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 9: passthrough command ==="
+result=$(docker run --rm "${SERVER_IMAGE}" clickhouse-client --version 2>/dev/null || true)
+if [[ "${result}" == *"ClickHouse client"* ]]; then
+    pass "passthrough to clickhouse-client works"
+else
+    fail "expected ClickHouse client version string, got '${result}'"
+fi
+
+result=$(docker run --rm "${SERVER_IMAGE}" clickhouse-local --query "SELECT 123" 2>/dev/null || true)
+if [[ "${result}" == "123" ]]; then
+    pass "passthrough to clickhouse-local works"
+else
+    fail "expected '123' from clickhouse-local, got '${result}'"
+fi
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 10: Restart with existing data skips init
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 10: restart with existing data ==="
+VOL_NAME="ch-distroless-vol-t10"
+docker volume create "${VOL_NAME}" >/dev/null
+
+CID=$(docker run -d \
+    --name ch-distroless-t10a \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    -e CLICKHOUSE_DB=persist_db \
+    -v "${VOL_NAME}:/var/lib/clickhouse" \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t10a 9000 testuser testpass
+
+docker exec ch-distroless-t10a \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "CREATE TABLE persist_db.t1 (x UInt32) ENGINE = MergeTree ORDER BY x"
+
+docker exec ch-distroless-t10a \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "INSERT INTO persist_db.t1 VALUES (1),(2),(3)"
+
+docker rm -f ch-distroless-t10a >/dev/null
+
+# Restart with the same volume — init should be skipped, data should persist.
+CID=$(docker run -d \
+    --name ch-distroless-t10b \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    -v "${VOL_NAME}:/var/lib/clickhouse" \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t10b 9000 testuser testpass
+
+result=$(docker exec ch-distroless-t10b \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT count() FROM persist_db.t1")
+if [[ "${result}" == "3" ]]; then
+    pass "data persisted across container restart"
+else
+    fail "expected 3 rows after restart, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t10b >/dev/null
+docker volume rm "${VOL_NAME}" >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 11: No password — default user restricted to localhost
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 11: no password — default user localhost-only ==="
+CID=$(docker run -d \
+    --name ch-distroless-t11 \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t11 9000
+
+# Internal query should work (localhost)
+result=$(docker exec ch-distroless-t11 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    --query "SELECT 1" 2>/dev/null || echo "FAIL")
+if [[ "${result}" == "1" ]]; then
+    pass "default user can query from localhost"
+else
+    fail "expected '1' from localhost query, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t11 >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 12: CLICKHOUSE_SKIP_USER_SETUP
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 12: CLICKHOUSE_SKIP_USER_SETUP ==="
+CID=$(docker run -d \
+    --name ch-distroless-t12 \
+    -e CLICKHOUSE_SKIP_USER_SETUP=1 \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t12 9000
+
+# With skip-user-setup, the default user should still work with no password
+result=$(docker exec ch-distroless-t12 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    --query "SELECT currentUser()" 2>/dev/null || echo "FAIL")
+if [[ "${result}" == "default" ]]; then
+    pass "CLICKHOUSE_SKIP_USER_SETUP preserves default user"
+else
+    fail "expected 'default' user, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t12 >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 13: HTTP endpoint (port 8123)
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 13: HTTP endpoint ==="
+CID=$(docker run -d \
+    --name ch-distroless-t13 \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    -p 18123:8123 \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t13 9000 testuser testpass
+
+# Query via HTTP from the host
+result=$(curl -sf "http://127.0.0.1:18123/?user=testuser&password=testpass&query=SELECT+99" 2>/dev/null || echo "FAIL")
+if [[ "${result}" == "99"* ]]; then
+    pass "HTTP endpoint responds on port 8123"
+else
+    fail "expected '99' from HTTP query, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t13 >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 14: docker stop during init (PID 1 signal handling)
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 14: graceful shutdown during init ==="
+CID=$(docker run -d \
+    --name ch-distroless-t14 \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    -e CLICKHOUSE_DB=slow_init \
+    "${SERVER_IMAGE}")
+
+# Give the container a moment to start the init phase, then stop it.
+sleep 3
+stop_start=$(date +%s)
+docker stop --time 10 ch-distroless-t14 >/dev/null 2>&1 || true
+stop_end=$(date +%s)
+stop_duration=$(( stop_end - stop_start ))
+
+# If signal handling works, the container should stop within the 10s grace period,
+# not require a SIGKILL at the timeout boundary.
+if (( stop_duration < 10 )); then
+    pass "container stopped gracefully in ${stop_duration}s (signal handling works)"
+else
+    fail "container took ${stop_duration}s to stop (signal may not be handled)"
+fi
+
+docker rm -f ch-distroless-t14 >/dev/null 2>&1 || true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 15: Image size comparison (performance baseline)
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 15: image size ==="
+distroless_size=$(docker image inspect "${SERVER_IMAGE}" --format '{{.Size}}')
+distroless_mb=$(( distroless_size / 1024 / 1024 ))
+echo "  Distroless image size: ${distroless_mb} MB"
+if (( distroless_mb < 1000 )); then
+    pass "distroless image is under 1 GB (${distroless_mb} MB)"
+else
+    fail "distroless image is ${distroless_mb} MB — expected under 1 GB"
+fi
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Summary

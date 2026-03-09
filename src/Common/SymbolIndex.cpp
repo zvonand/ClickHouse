@@ -593,6 +593,9 @@ void collectSymbolsFromMachOImage(
         if (sym_name[0] == '_')
             sym_name++;
 
+        if (sym_name[0] == '\0')
+            continue;
+
         SymbolIndex::Symbol symbol;
         /// On macOS, store absolute virtual addresses (n_value + slide) to avoid
         /// overlap between symbols from different objects that would have the same

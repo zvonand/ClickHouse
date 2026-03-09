@@ -148,3 +148,8 @@ RUN ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" > /etc/timezo
 
 # Make python3.13 the default python3 so CI scripts run with the right interpreter.
 RUN ln -sf /usr/bin/python3.13 /usr/bin/python3
+
+# Set a default USER so that Python's getpass.getuser() doesn't raise OSError
+# when the container is run with --user uid:gid and the UID is not in /etc/passwd.
+# Python 3.13 changed getpass.getuser() to raise OSError instead of KeyError in that case.
+ENV USER=nobody

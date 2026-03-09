@@ -168,16 +168,16 @@ std::optional<String> optimizeUseNormalProjections(
 
         std::vector<std::tuple<std::string, std::string, DataTypePtr>> renames;
         if (need_parent_part_offset)
-            rename_map.emplace_back("_parent_part_offset", "_part_offset", std::make_shared<DataTypeUInt64>());
+            renames.emplace_back("_parent_part_offset", "_part_offset", std::make_shared<DataTypeUInt64>());
         if (need_parent_block_number)
-            rename_map.emplace_back("_parent_block_number", "_block_number", std::make_shared<DataTypeUInt64>());
+            renames.emplace_back("_parent_block_number", "_block_number", std::make_shared<DataTypeUInt64>());
         if (need_parent_block_offset)
-            rename_map.emplace_back("_parent_block_offset", "_block_offset", std::make_shared<DataTypeUInt64>());
+            renames.emplace_back("_parent_block_offset", "_block_offset", std::make_shared<DataTypeUInt64>());
 
-        if (!rename_map.empty())
+        if (!renames.empty())
         {
             ActionsDAG rename_dag;
-            for (const auto & [from, to, type] : rename_map)
+            for (const auto & [from, to, type] : renames)
             {
                 const auto * from_node = &rename_dag.addInput(from, type);
                 const auto * to_node = &rename_dag.addAlias(*from_node, to);

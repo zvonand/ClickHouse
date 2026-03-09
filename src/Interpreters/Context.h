@@ -1001,6 +1001,7 @@ public:
     void addQueryAccessInfo(const QualifiedProjectionName & qualified_projection_name);
 
     void addSkipIndexAccessInfo(const String & full_table_name, const String & skip_index_name);
+
     /// Supported factories for records in query_log
     enum class QueryLogFactories : uint8_t
     {

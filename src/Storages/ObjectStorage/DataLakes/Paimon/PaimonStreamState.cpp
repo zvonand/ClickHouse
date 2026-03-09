@@ -33,6 +33,12 @@ PaimonStreamState::PaimonStreamState(
         throw Exception(ErrorCodes::LOGICAL_ERROR, "PaimonStreamState requires a valid Keeper instance");
 }
 
+PaimonStreamState::~PaimonStreamState()
+{
+    auto component_guard = Coordination::setCurrentComponent("PaimonStreamState::~PaimonStreamState");
+    replica_is_active_node = nullptr;
+}
+
 bool PaimonStreamState::needsNewKeeper() const
 {
     std::lock_guard lock(mutex);
@@ -41,9 +47,10 @@ bool PaimonStreamState::needsNewKeeper() const
 
 void PaimonStreamState::setKeeper(zkutil::ZooKeeperPtr keeper_)
 {
+    auto component_guard = Coordination::setCurrentComponent("PaimonStreamState::setKeeper");
     std::lock_guard lock(mutex);
-    keeper = std::move(keeper_);
     replica_is_active_node = nullptr;
+    keeper = std::move(keeper_);
     is_active = false;
 }
 
@@ -164,6 +171,7 @@ bool PaimonStreamState::activate()
 
 void PaimonStreamState::deactivate()
 {
+    auto component_guard = Coordination::setCurrentComponent("PaimonStreamState::deactivate");
     std::lock_guard lock(mutex);
 
     replica_is_active_node = nullptr;

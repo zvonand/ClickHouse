@@ -44,6 +44,8 @@ public:
         const String & replica_name_,
         LoggerPtr log_);
 
+    ~PaimonStreamState();
+
     /// Check if Keeper session needs to be refreshed
     bool needsNewKeeper() const;
 

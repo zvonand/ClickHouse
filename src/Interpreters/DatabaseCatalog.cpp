@@ -1760,7 +1760,8 @@ void DatabaseCatalog::updateDependencies(
     const StorageID & table_id,
     const TableNamesSet & new_referential_dependencies,
     const TableNamesSet & new_loading_dependencies,
-    const TableNamesSet & new_view_dependencies)
+    const TableNamesSet & new_view_dependencies,
+    const TableNamesSet & new_plain_view_dependencies)
 {
     std::lock_guard lock{databases_mutex};
     referential_dependencies.removeDependencies(table_id, /* remove_isolated_tables= */ true);
@@ -1782,6 +1783,12 @@ void DatabaseCatalog::updateDependencies(
             view_dependencies.addDependency(StorageID{*new_view_dependencies.begin()}, table_id);
         }
     }
+    /// Remove stale plain_view_dependencies edges where this view is a dependent, then add the new ones.
+    auto old_plain_view_sources = plain_view_dependencies.getDependents(table_id);
+    for (const auto & source_table_id : old_plain_view_sources)
+        plain_view_dependencies.removeDependency(source_table_id, table_id, /* remove_isolated_tables= */ true);
+    for (const auto & source_table : new_plain_view_dependencies)
+        plain_view_dependencies.addDependency(StorageID{source_table}, table_id);
 }
 
 void DatabaseCatalog::checkTableCanBeRemovedOrRenamed(

@@ -231,7 +231,7 @@ public:
     std::vector<StorageID> getReferentialDependents(const StorageID & table_id) const;
     std::vector<StorageID> getLoadingDependencies(const StorageID & table_id) const;
     std::vector<StorageID> getLoadingDependents(const StorageID & table_id) const;
-    void updateDependencies(const StorageID & table_id, const TableNamesSet & new_referential_dependencies, const TableNamesSet & new_loading_dependencies, const TableNamesSet & new_view_dependencies);
+    void updateDependencies(const StorageID & table_id, const TableNamesSet & new_referential_dependencies, const TableNamesSet & new_loading_dependencies, const TableNamesSet & new_view_dependencies, const TableNamesSet & new_plain_view_dependencies = {});
 
     void checkTableCanBeRemovedOrRenamed(const StorageID & table_id, bool check_referential_dependencies, bool check_loading_dependencies, bool is_drop_database = false) const;
 

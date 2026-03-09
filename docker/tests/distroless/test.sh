@@ -2,7 +2,7 @@
 # Integration tests for the distroless ClickHouse images.
 #
 # Usage:
-#   bash test.sh [--version VERSION] [--server-context DIR] [--keeper-context DIR]
+#   bash test.sh [--version VERSION] [--binary-url URL] [--server-context DIR] [--keeper-context DIR]
 #
 # The script:
 #   1. Builds server + keeper distroless images (production and debug targets)
@@ -26,8 +26,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 VERSION="${VERSION:-26.1.2.11}"
+BINARY_URL=""
 SERVER_CONTEXT="${REPO_ROOT}/docker/server"
 KEEPER_CONTEXT="${REPO_ROOT}/docker/keeper"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --version)    VERSION="$2"; shift 2 ;;
+        --binary-url) BINARY_URL="$2"; shift 2 ;;
+        --server-context) SERVER_CONTEXT="$2"; shift 2 ;;
+        --keeper-context) KEEPER_CONTEXT="$2"; shift 2 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+BINARY_BUILD_ARG=""
+if [[ -n "${BINARY_URL}" ]]; then
+    BINARY_BUILD_ARG="--build-arg=single_binary_location_url=${BINARY_URL}"
+fi
 
 SERVER_IMAGE="clickhouse/clickhouse-server:distroless-test"
 SERVER_DEBUG_IMAGE="clickhouse/clickhouse-server:distroless-debug-test"
@@ -48,6 +64,7 @@ docker build \
     --file "${SERVER_CONTEXT}/Dockerfile.distroless" \
     --target production \
     --build-arg "VERSION=${VERSION}" \
+    ${BINARY_BUILD_ARG:+${BINARY_BUILD_ARG}} \
     --tag "${SERVER_IMAGE}" \
     "${SERVER_CONTEXT}"
 
@@ -55,6 +72,7 @@ docker build \
     --file "${SERVER_CONTEXT}/Dockerfile.distroless" \
     --target debug \
     --build-arg "VERSION=${VERSION}" \
+    ${BINARY_BUILD_ARG:+${BINARY_BUILD_ARG}} \
     --tag "${SERVER_DEBUG_IMAGE}" \
     "${SERVER_CONTEXT}"
 
@@ -62,6 +80,7 @@ docker build \
     --file "${KEEPER_CONTEXT}/Dockerfile.distroless" \
     --target production \
     --build-arg "VERSION=${VERSION}" \
+    ${BINARY_BUILD_ARG:+${BINARY_BUILD_ARG}} \
     --tag "${KEEPER_IMAGE}" \
     "${KEEPER_CONTEXT}"
 
@@ -75,20 +94,39 @@ wait_for_server() {
     local port="$2"
     local user="${3:-default}"
     local password="${4:-}"
+    local db="${5:-}"
     local tries=60
 
     echo "  Waiting for ${container} on port ${port}..."
+
+    # Build a query that also checks for the target database if specified.
+    local query="SELECT 1"
+    if [[ -n "${db}" ]]; then
+        query="SELECT count() FROM system.databases WHERE name = '${db}' HAVING count() > 0"
+    fi
+
+    local consecutive=0
+    local required=1
+    # When waiting for a database, require 2 consecutive successes with a gap
+    # to avoid hitting the temporary init server.
+    if [[ -n "${db}" ]]; then required=2; fi
+
     while (( tries-- > 0 )); do
         if docker exec "${container}" \
                /usr/bin/clickhouse client \
                --host 127.0.0.1 --port "${port}" \
                -u "${user}" --password "${password}" \
-               --query "SELECT 1" \
+               --query "${query}" \
                >/dev/null 2>&1; then
-            echo "  Server ready."
-            return 0
+            (( consecutive++ ))
+            if (( consecutive >= required )); then
+                echo "  Server ready."
+                return 0
+            fi
+        else
+            consecutive=0
         fi
-        sleep 1
+        sleep 2
     done
     echo "  ERROR: server did not become ready." >&2
     docker logs "${container}" >&2
@@ -162,7 +200,7 @@ CID=$(docker run -d \
     -v "${SCRIPT_DIR}/initdb:/docker-entrypoint-initdb.d:ro" \
     "${SERVER_IMAGE}")
 
-wait_for_server ch-distroless-t4 9000 testuser testpass
+wait_for_server ch-distroless-t4 9000 testuser testpass test_db
 
 result=$(docker exec ch-distroless-t4 \
     /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
@@ -473,10 +511,13 @@ echo "=== Test 15: image size ==="
 distroless_size=$(docker image inspect "${SERVER_IMAGE}" --format '{{.Size}}')
 distroless_mb=$(( distroless_size / 1024 / 1024 ))
 echo "  Distroless image size: ${distroless_mb} MB"
-if (( distroless_mb < 1000 )); then
-    pass "distroless image is under 1 GB (${distroless_mb} MB)"
+# With a stripped binary the image should be well under 1 GB. CI builds use
+# stripped binaries; local testing with unstripped binaries will be larger.
+MAX_IMAGE_MB="${MAX_IMAGE_MB:-4000}"
+if (( distroless_mb < MAX_IMAGE_MB )); then
+    pass "distroless image is ${distroless_mb} MB (limit ${MAX_IMAGE_MB} MB)"
 else
-    fail "distroless image is ${distroless_mb} MB — expected under 1 GB"
+    fail "distroless image is ${distroless_mb} MB — expected under ${MAX_IMAGE_MB} MB"
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────

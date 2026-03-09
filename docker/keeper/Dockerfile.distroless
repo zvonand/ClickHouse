@@ -150,6 +150,7 @@ EXPOSE 9181 9234
 VOLUME ["/var/lib/clickhouse", "/var/log/clickhouse-keeper"]
 
 USER 101:101
+WORKDIR /var/lib/clickhouse
 
 ENTRYPOINT ["/usr/bin/clickhouse", "docker-init", "--keeper"]
 
@@ -169,5 +170,6 @@ EXPOSE 9181 9234
 VOLUME ["/var/lib/clickhouse", "/var/log/clickhouse-keeper"]
 
 USER 101:101
+WORKDIR /var/lib/clickhouse
 
 ENTRYPOINT ["/usr/bin/clickhouse", "docker-init", "--keeper"]

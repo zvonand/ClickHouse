@@ -126,7 +126,7 @@ RUN mkdir -p \
         ln -sf /usr/bin/clickhouse "/output/usr/bin/${link}" ; \
     done \
     && cp -r /etc/clickhouse-server/. /output/etc/clickhouse-server/ \
-    && cp -r /etc/clickhouse-client/. /output/etc/clickhouse-client/ \
+    && if [ -d /etc/clickhouse-client ]; then cp -r /etc/clickhouse-client/. /output/etc/clickhouse-client/; fi \
     && chown -R clickhouse:clickhouse \
         /output/etc/clickhouse-server \
         /output/var/lib/clickhouse \
@@ -168,6 +168,7 @@ EXPOSE 9000 8123 9009
 VOLUME ["/var/lib/clickhouse", "/var/log/clickhouse-server"]
 
 USER 101:101
+WORKDIR /var/lib/clickhouse
 
 ENTRYPOINT ["/usr/bin/clickhouse", "docker-init"]
 
@@ -189,5 +190,6 @@ EXPOSE 9000 8123 9009
 VOLUME ["/var/lib/clickhouse", "/var/log/clickhouse-server"]
 
 USER 101:101
+WORKDIR /var/lib/clickhouse
 
 ENTRYPOINT ["/usr/bin/clickhouse", "docker-init"]

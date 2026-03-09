@@ -2,7 +2,7 @@
 
 DROP TABLE IF EXISTS test_csv_row_number;
 
-CREATE TABLE test_csv_row_number (a UInt32, b String) ENGINE = File(CSV);
+CREATE TABLE test_csv_row_number (a UInt32, b String) ENGINE = File('CSV', '${CLICKHOUSE_DATABASE}/data.csv');
 INSERT INTO test_csv_row_number VALUES (10, 'x'), (20, 'y'), (30, 'z'), (40, 'w'), (50, 'v');
 
 SELECT a, _row_number FROM test_csv_row_number ORDER BY a SETTINGS input_format_parallel_parsing = 0;

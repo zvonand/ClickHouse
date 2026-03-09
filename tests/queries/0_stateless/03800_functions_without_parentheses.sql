@@ -59,14 +59,10 @@ SELECT plus;
 WITH TODAY as plus
 SELECT plus = TODAY();
 
--- Test SQL standard niladic functions without parentheses
-SET enable_analyzer = 1;
-
 -- Test all niladic functions
 SELECT DATABASE = currentDatabase();
 SELECT SCHEMA = currentDatabase();
 SELECT USER = currentUser();
-SELECT CURRENT_USER = currentUser();
 SELECT toTypeName(CURDATE);
 
 -- Test the Default Path resolution

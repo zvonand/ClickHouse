@@ -18,17 +18,21 @@ namespace ErrorCodes
 extern const int INCORRECT_DATA;
 }
 
-/// TODO: Not a very good hash function, there are others we could use
+/// https://en.wikipedia.org/wiki/Jenkins_hash_function
 struct CaseInsensitiveHash
 {
     size_t operator()(const std::string_view key) const
     {
-        size_t h = 0;
-        for (const char c : key)
-        {
-            h += tolower(c);
+        uint32_t hash = 0;
+        for (const char c : key){
+            hash += tolower(c);
+            hash += hash << 10;
+            hash ^= hash >> 6;
         }
-        return h;
+        hash += hash << 3;
+        hash ^= hash >> 11;
+        hash += hash << 15;
+        return hash;
     }
 };
 

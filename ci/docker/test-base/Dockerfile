@@ -144,3 +144,6 @@ ENV LC_ALL en_US.UTF-8
 
 ENV TZ=Europe/Amsterdam
 RUN ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" > /etc/timezone
+
+# Make python3.13 the default python3 so CI scripts run with the right interpreter.
+RUN ln -sf /usr/bin/python3.13 /usr/bin/python3

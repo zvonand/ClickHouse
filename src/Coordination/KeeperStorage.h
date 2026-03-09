@@ -272,6 +272,11 @@ private:
     ChildrenSet children{};
 };
 
+/// Going to >160 bytes pushes to jemalloc bin #10 (192 bytes).
+#if !defined(ADDRESS_SANITIZER) && !defined(MEMORY_SANITIZER)
+static_assert(sizeof(KeeperMemNode) <= 160);
+#endif
+
 struct KeeperStorageStats
 {
     std::atomic<uint64_t> nodes_count = 0;

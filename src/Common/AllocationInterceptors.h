@@ -48,6 +48,9 @@ extern "C" void * __real_pvalloc(size_t size);
 extern "C" char * __real_strdup(const char * str);
 extern "C" char * __real_strndup(const char * str, size_t size);
 
+extern "C" int __real_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
+extern "C" void __real_freeaddrinfo(struct addrinfo * result); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
+
 #endif
 
 // NOLINTEND

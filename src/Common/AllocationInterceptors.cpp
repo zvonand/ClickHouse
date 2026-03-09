@@ -547,9 +547,6 @@ extern "C" char * __wrap_strndup(const char * str, size_t size) // NOLINT
     return res;
 }
 
-extern "C" int __real_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
-extern "C" void __real_freeaddrinfo(struct addrinfo * result); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
-
 extern "C" int __wrap_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result) // NOLINT
 {
     if (unlikely(isCAllocationTrackingDisabled()))

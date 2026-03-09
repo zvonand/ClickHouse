@@ -557,7 +557,7 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
     if (target_scheme_normalized == "s3" || target_scheme_normalized == "https" || target_scheme_normalized == "http")
     {
         std::string normalized_path = path;
-        if (target_decomposed.scheme == "s3a" || target_decomposed.scheme == "s3n")
+        if (target_decomposed.scheme == "s3a" || target_decomposed.scheme == "s3n" || target_decomposed.scheme == "oss")
         {
             normalized_path = "s3://" + target_decomposed.authority + "/" + target_decomposed.key;
         }
@@ -585,7 +585,7 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
         if (!use_base_storage && (base_scheme_normalized == "s3" || base_scheme_normalized == "https" || base_scheme_normalized == "http"))
         {
             std::string normalized_table_location = table_location;
-            if (table_location_decomposed.scheme == "s3a" || table_location_decomposed.scheme == "s3n")
+            if (table_location_decomposed.scheme == "s3a" || table_location_decomposed.scheme == "s3n" || table_location_decomposed.scheme == "oss")
             {
                 normalized_table_location = "s3://" + table_location_decomposed.authority + "/" + table_location_decomposed.key;
             }

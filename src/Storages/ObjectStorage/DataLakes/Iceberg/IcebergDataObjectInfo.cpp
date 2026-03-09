@@ -20,6 +20,7 @@ namespace DB::ErrorCodes
 {
 extern const int NOT_IMPLEMENTED;
 extern const int UNKNOWN_PROTOCOL;
+extern const int PROTOCOL_VERSION_MISMATCH;
 }
 
 
@@ -99,6 +100,24 @@ void IcebergDataObjectInfo::addEqualityDeleteObject(const Iceberg::ProcessedMani
 void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuffer & out, size_t protocol_version) const
 {
     checkVersion(protocol_version);
+
+    /// If the absolute path was resolved to a location outside the table location,
+    /// so workers using older version will silently try to open the wrong file.
+    const bool requires_external_storage
+        = !data_object_file_absolute_path.empty()
+        && data_object_file_absolute_path != data_object_file_path_from_metadata;
+
+    if (requires_external_storage && protocol_version < DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
+    {
+        throw Exception(
+            ErrorCodes::PROTOCOL_VERSION_MISMATCH,
+            "Iceberg data file '{}' is outside of the table location,  "
+            "worker needs to have protocol version >= {}, but has {}. ",
+            data_object_file_absolute_path,
+            DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH,
+            protocol_version);
+    }
+
     writeStringBinary(data_object_file_path_from_metadata, out);
     if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {

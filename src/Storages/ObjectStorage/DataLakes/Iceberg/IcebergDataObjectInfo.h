@@ -52,7 +52,7 @@ struct IcebergDataObjectInfo : public ObjectInfo, std::enable_shared_from_this<I
     /// If resolved_storage_ and resolved_key_ are provided, the file may be located
     /// outside the table location (possibly in a different storage).
     explicit IcebergDataObjectInfo(
-        const Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_,
+        Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_,
         Int32 schema_id_relevant_to_iterator_,
         ObjectStoragePtr resolved_storage_ = nullptr,
         const String & resolved_key_ = "");

@@ -1298,7 +1298,7 @@ ObjectInfoPtr StorageObjectStorageSource::ReadTaskIterator::next(size_t)
             {
                 auto [storage_to_use, key] = resolveObjectStorageForPath(
                     table_location, *abs_path, object_storage, secondary_storages, getContext());
-                if (!key.empty() && storage_to_use != object_storage)
+                if (!key.empty())
                 {
                     iceberg_info->setResolvedStorage(storage_to_use);
                     iceberg_info->relative_path_with_metadata.relative_path = key;

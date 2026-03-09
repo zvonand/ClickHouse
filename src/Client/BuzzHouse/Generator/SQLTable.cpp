@@ -1506,6 +1506,7 @@ void StatementGenerator::generateEngineDetails(
         const bool smt_disk = (b.isShared() && fc.set_smt_disk);
         SettingValues * svs = te->has_setting_values() ? te->mutable_setting_values() : nullptr;
 
+        /// Use Keeper disk when needed
         if ((b.isMergeTreeFamily() || b.isLogFamily() || smt_disk) && (smt_disk || rg.nextSmallNumber() < 3)
             && (!fc.storage_policies.empty() || !fc.keeper_disks.empty())
             && (!svs
@@ -2952,25 +2953,17 @@ void StatementGenerator::generateNextCreateDatabase(RandomGenerator & rg, Create
     {
         cd->set_comment(nextComment(rg));
     }
+    if (rg.nextSmallNumber() < 4)
+    {
+        /// Add general database settings
+        generateSettingValues(rg, allDatabaseSettings, deng->mutable_setting_values());
+    }
     if (!next.isReplicatedOrSharedDatabase() && !next.isDataLakeCatalogDatabase() && rg.nextSmallNumber() < 4)
     {
         /// Add server settings
         generateSettingValues(rg, formatSettings, deng->mutable_setting_values());
     }
-    if (rg.nextSmallNumber() < 3)
-    {
-        /// Add general database settings
-        generateSettingValues(rg, allDatabaseSettings, deng->mutable_setting_values());
-    }
-    if ((next.isAtomicDatabase() || next.isOrdinaryDatabase()) && !fc.disks.empty() && rg.nextSmallNumber() < 4)
-    {
-        SettingValues * svs = deng->mutable_setting_values();
-        SetValue * sv = svs->has_set_value() ? svs->add_other_values() : svs->mutable_set_value();
-
-        sv->set_property("disk");
-        sv->set_value("'" + rg.pickRandomly(fc.disks) + "'");
-    }
-    else if (!next.random_engine && next.isDataLakeCatalogDatabase())
+    if (!next.random_engine && next.isDataLakeCatalogDatabase())
     {
         connections.createExternalDatabase(rg, next, deng);
     }

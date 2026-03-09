@@ -263,6 +263,17 @@ public:
     }
 };
 
+struct DiskInfo
+{
+    String name;
+    String type; /// DataSourceType enum name: "Local", "ObjectStorage", "RAM"
+    String path;
+    String object_storage_type; /// ObjectStorageType enum name: "S3", "Azure", "Local", "None", ...
+    String metadata_type; /// MetadataStorageType enum name: "Local", "Plain", "Keeper", ...
+    bool is_encrypted = false;
+    bool is_cached = false; /// true when cache_path != '' in system.disks
+};
+
 class FuzzConfig
 {
 private:
@@ -274,8 +285,8 @@ public:
     DB::Strings collations;
     DB::Strings storage_policies;
     DB::Strings timezones;
-    DB::Strings disks;
     DB::Strings keeper_disks;
+    std::vector<DiskInfo> disks;
     DB::Strings clusters;
     DB::Strings caches;
     DB::Strings failpoints;
@@ -382,8 +393,14 @@ public:
     bool processServerQuery(bool outlog, const String & query);
 
 private:
+    template <typename T, typename ParseFunc>
+    void loadServerSettings(std::vector<T> & out, const String & desc, const String & query, ParseFunc parse);
+
     template <typename T>
-    void loadServerSettings(std::vector<T> & out, const String & desc, const String & query);
+    void loadServerSettings(std::vector<T> & out, const String & desc, const String & query)
+    {
+        loadServerSettings(out, desc, query, [](const String & s) -> T { return s; });
+    }
 
 public:
     void loadServerConfigurations();

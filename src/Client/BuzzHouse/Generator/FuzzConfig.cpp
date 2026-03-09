@@ -494,8 +494,8 @@ bool FuzzConfig::processServerQuery(const bool outlog, const String & query)
     return res;
 }
 
-template <typename T>
-void FuzzConfig::loadServerSettings(std::vector<T> & out, const String & desc, const String & query)
+template <typename T, typename ParseFunc>
+void FuzzConfig::loadServerSettings(std::vector<T> & out, const String & desc, const String & query, ParseFunc parse)
 {
     String buf;
     uint64_t found = 0;
@@ -507,7 +507,7 @@ void FuzzConfig::loadServerSettings(std::vector<T> & out, const String & desc, c
         out.clear();
         while (std::getline(infile, buf) && !buf.empty())
         {
-            out.push_back(buf);
+            out.push_back(parse(buf));
             buf.resize(0);
             found++;
         }
@@ -520,9 +520,29 @@ void FuzzConfig::loadServerConfigurations()
     loadServerSettings<String>(this->collations, "collations", R"(SELECT "name" FROM "system"."collations")");
     loadServerSettings<String>(
         this->storage_policies, "storage policies", R"(SELECT DISTINCT "policy_name" FROM "system"."storage_policies")");
-    loadServerSettings<String>(this->disks, "disks", R"(SELECT DISTINCT "name" FROM "system"."disks")");
     loadServerSettings<String>(
         this->keeper_disks, "keeper disks", R"(SELECT DISTINCT "name" FROM "system"."disks" WHERE metadata_type = 'Keeper')");
+    loadServerSettings<DiskInfo>(
+        this->disks,
+        "disks",
+        R"(SELECT "name", "type", "path", "object_storage_type", "metadata_type", "is_encrypted", "cache_path" != '' FROM "system"."disks")",
+        [](const String & buf) -> DiskInfo
+        {
+            const auto tab1 = buf.find('\t');
+            const auto tab2 = buf.find('\t', tab1 + 1);
+            const auto tab3 = buf.find('\t', tab2 + 1);
+            const auto tab4 = buf.find('\t', tab3 + 1);
+            const auto tab5 = buf.find('\t', tab4 + 1);
+            const auto tab6 = buf.find('\t', tab5 + 1);
+            return {
+                buf.substr(0, tab1),
+                buf.substr(tab1 + 1, tab2 - tab1 - 1),
+                buf.substr(tab2 + 1, tab3 - tab2 - 1),
+                buf.substr(tab3 + 1, tab4 - tab3 - 1),
+                buf.substr(tab4 + 1, tab5 - tab4 - 1),
+                buf.substr(tab5 + 1, tab6 - tab5 - 1) == "1",
+                buf.substr(tab6 + 1) == "1"};
+        });
     loadServerSettings<String>(this->timezones, "timezones", R"(SELECT "time_zone" FROM "system"."time_zones")");
     loadServerSettings<String>(this->clusters, "clusters", R"(SELECT DISTINCT "cluster" FROM "system"."clusters")");
     loadServerSettings<String>(this->caches, "caches", "SHOW FILESYSTEM CACHES");

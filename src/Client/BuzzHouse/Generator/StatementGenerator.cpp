@@ -351,7 +351,7 @@ void StatementGenerator::generateStorage(RandomGenerator & rg, Storage * store) 
     std::uniform_int_distribution<uint32_t> storage_range(1, static_cast<uint32_t>(Storage::DataStorage_MAX));
 
     store->set_storage(static_cast<Storage_DataStorage>(storage_range(rg.generator)));
-    store->set_storage_name(rg.pickRandomly(fc.disks));
+    store->set_storage_name(rg.pickRandomly(fc.disks).name);
 }
 
 void StatementGenerator::setClusterClause(
@@ -2805,7 +2805,7 @@ void StatementGenerator::setBackupDestination(RandomGenerator & rg, BackupRestor
     if (out_to_disk && (nopt2 < out_to_disk + 1))
     {
         outf = BackupOut_BackupOutput_Disk;
-        bout->add_out_params()->set_svalue(rg.pickRandomly(fc.disks));
+        bout->add_out_params()->set_svalue(rg.pickRandomly(fc.disks).name);
         bout->add_out_params()->set_svalue(std::move(backup_file));
     }
     else if (out_to_file && (nopt2 < out_to_disk + out_to_file + 1))

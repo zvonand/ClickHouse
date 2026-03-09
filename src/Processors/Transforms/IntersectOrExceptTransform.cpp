@@ -1,5 +1,6 @@
 #include <Processors/Port.h>
 #include <Processors/Transforms/IntersectOrExceptTransform.h>
+#include <Common/SipHash.h>
 
 namespace DB
 {

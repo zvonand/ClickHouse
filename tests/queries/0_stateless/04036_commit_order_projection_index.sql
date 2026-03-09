@@ -1,5 +1,7 @@
 -- Tags: no-random-merge-tree-settings
 
+set enable_analyzer = 1;
+
 drop table if exists mt_commit_order_idx sync;
 
 CREATE TABLE mt_commit_order_idx(

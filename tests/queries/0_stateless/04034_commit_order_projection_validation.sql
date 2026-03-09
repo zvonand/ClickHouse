@@ -1,5 +1,7 @@
 -- Tags: no-random-merge-tree-settings
 
+set enable_analyzer = 1;
+
 -- Missing enable_block_number_column
 CREATE TABLE mt_no_bn(a UInt64,
     PROJECTION p (SELECT *, _block_number, _block_offset ORDER BY _block_number, _block_offset))

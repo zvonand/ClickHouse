@@ -1,5 +1,7 @@
 -- Tags: no-random-merge-tree-settings
 
+set enable_analyzer = 1;
+
 DROP TABLE IF EXISTS mt_replacing_test SYNC;
 
 CREATE TABLE mt_replacing_test(

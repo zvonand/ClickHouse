@@ -16,7 +16,7 @@ CREATE TABLE tab_nullable_idx
 
 INSERT INTO tab_nullable_idx SELECT number, if(number % 100 = 0, NULL, number + 1) from numbers(10000);
 
--- EXPLAIN should NOT show TopK skip-index for nullable column
+SELECT 'EXPLAIN skip-index Nullable(UInt32): should be empty';
 SELECT trimLeft(explain) AS explain FROM (
     EXPLAIN indexes = 1
     SELECT v1
@@ -26,10 +26,16 @@ SELECT trimLeft(explain) AS explain FROM (
     SETTINGS use_skip_indexes_for_top_k = 1, use_skip_indexes_on_data_read = 0)
 WHERE explain LIKE '%TopK%';
 
--- Dynamic filtering still produces correct results
+SELECT 'Nullable(UInt32) ASC dynamic filter';
 SELECT v1 FROM tab_nullable_idx ORDER BY v1 ASC LIMIT 5 SETTINGS use_top_k_dynamic_filtering=1;
+
+SELECT 'Nullable(UInt32) ASC NULLS FIRST dynamic filter';
 SELECT v1 FROM tab_nullable_idx ORDER BY v1 ASC NULLS FIRST LIMIT 5 SETTINGS use_top_k_dynamic_filtering=1;
+
+SELECT 'Nullable(UInt32) DESC dynamic filter';
 SELECT v1 FROM tab_nullable_idx ORDER BY v1 DESC LIMIT 5 SETTINGS use_top_k_dynamic_filtering=1;
+
+SELECT 'Nullable(UInt32) DESC NULLS FIRST dynamic filter';
 SELECT v1 FROM tab_nullable_idx ORDER BY v1 DESC NULLS FIRST LIMIT 5 SETTINGS use_top_k_dynamic_filtering=1;
 
 DROP TABLE tab_nullable_idx;
@@ -45,7 +51,7 @@ CREATE TABLE tab_collate_idx
 
 INSERT INTO tab_collate_idx VALUES (1, 'banana'), (2, 'Apple'), (3, 'cherry'), (4, 'Date'), (5, 'elderberry'), (6, 'Fig'), (7, 'grape'), (8, 'Honeydew'), (9, 'icaco'), (10, 'Jackfruit');
 
--- EXPLAIN should NOT show TopK skip-index for collation query
+SELECT 'EXPLAIN skip-index String COLLATE: should be empty';
 SELECT trimLeft(explain) AS explain FROM (
     EXPLAIN indexes = 1
     SELECT v1
@@ -55,8 +61,10 @@ SELECT trimLeft(explain) AS explain FROM (
     SETTINGS use_skip_indexes_for_top_k = 1, use_skip_indexes_on_data_read = 0)
 WHERE explain LIKE '%TopK%';
 
--- Dynamic filtering produces correct results with collation
+SELECT 'String ASC COLLATE en dynamic filter';
 SELECT v1 FROM tab_collate_idx ORDER BY v1 ASC COLLATE 'en' LIMIT 5 SETTINGS use_top_k_dynamic_filtering=1;
+
+SELECT 'String DESC COLLATE en dynamic filter';
 SELECT v1 FROM tab_collate_idx ORDER BY v1 DESC COLLATE 'en' LIMIT 5 SETTINGS use_top_k_dynamic_filtering=1;
 
 DROP TABLE tab_collate_idx;
@@ -72,7 +80,7 @@ CREATE TABLE tab_nullable_string_collate_idx
 
 INSERT INTO tab_nullable_string_collate_idx VALUES (1, 'banana'), (2, 'Apple'), (3, NULL), (4, 'Date'), (5, 'cherry'), (6, NULL), (7, 'Fig'), (8, 'grape');
 
--- EXPLAIN should NOT show TopK skip-index for Nullable(String) with collation
+SELECT 'EXPLAIN skip-index Nullable(String) COLLATE: should be empty';
 SELECT trimLeft(explain) AS explain FROM (
     EXPLAIN indexes = 1
     SELECT v1
@@ -82,8 +90,10 @@ SELECT trimLeft(explain) AS explain FROM (
     SETTINGS use_skip_indexes_for_top_k = 1, use_skip_indexes_on_data_read = 0)
 WHERE explain LIKE '%TopK%';
 
--- Dynamic filtering produces correct results
+SELECT 'Nullable(String) ASC COLLATE en dynamic filter';
 SELECT v1 FROM tab_nullable_string_collate_idx ORDER BY v1 ASC COLLATE 'en' LIMIT 5 SETTINGS use_top_k_dynamic_filtering=1;
+
+SELECT 'Nullable(String) ASC NULLS FIRST COLLATE en dynamic filter';
 SELECT v1 FROM tab_nullable_string_collate_idx ORDER BY v1 ASC NULLS FIRST COLLATE 'en' LIMIT 5 SETTINGS use_top_k_dynamic_filtering=1;
 
 DROP TABLE tab_nullable_string_collate_idx;
@@ -99,7 +109,7 @@ CREATE TABLE tab_numeric_idx
 
 INSERT INTO tab_numeric_idx SELECT number, number + 1 FROM numbers(10000);
 
--- EXPLAIN should show TopK skip-index for non-nullable numeric column
+SELECT 'EXPLAIN skip-index UInt32: should show TopK';
 SELECT trimLeft(explain) AS explain FROM (
     EXPLAIN indexes = 1
     SELECT v1

@@ -40,9 +40,7 @@ public:
         /// that accumulate state per-use. Sharing these across queries via the cache leads to
         /// incorrect behaviour (e.g. timezone mismatches in cached DateTimeNode objects).
         /// FIXME: Get rid of this mutable state inside the serialization and move it to parser.
-        auto * obj = new SerializationJSON(typed_paths_types_, paths_to_skip_, path_regexps_to_skip_, dynamic_type_, std::move(json_extract_tree_));
-        obj->cached_hash = getHash(typed_paths_types_, paths_to_skip_, path_regexps_to_skip_, dynamic_type_);
-        return std::shared_ptr<ISerialization>(obj);
+        return std::shared_ptr<ISerialization>(new SerializationJSON(typed_paths_types_, paths_to_skip_, path_regexps_to_skip_, dynamic_type_, std::move(json_extract_tree_)));
     }
 
     void serializeTextEscaped(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings & settings) const override;

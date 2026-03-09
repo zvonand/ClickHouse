@@ -24,9 +24,7 @@
 #include <Common/Stopwatch.h>
 #include <Common/ErrnoException.h>
 
-#ifdef OS_LINUX
 #include <Common/SymbolIndex.h>
-#endif
 #include <Core/ColumnsWithTypeAndName.h>
 #include <Core/Settings.h>
 #include <Interpreters/Context.h>
@@ -549,8 +547,8 @@ protected:
                             uintptr_t virtual_offset = object ? uintptr_t(object->address_begin) : 0;
                             uintptr_t physical_addr = uintptr_t(virtual_addr) - virtual_offset;
 #else
-                            /// On macOS, SymbolIndex is not available (uses dl_iterate_phdr).
-                            /// Store virtual addresses directly; they can be resolved with atos or lldb.
+                            /// On macOS, SymbolIndex uses absolute virtual addresses for symbols,
+                            /// so we store virtual addresses directly in the trace column.
                             uintptr_t physical_addr = uintptr_t(virtual_addr);
 #endif
                             arr.emplace_back(physical_addr);

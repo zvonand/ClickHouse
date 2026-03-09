@@ -399,28 +399,23 @@ void StackTrace::forEachFrame(
 #elif defined(OS_DARWIN)
     UNUSED(fatal);
 
-    /// This function returns an array of string in a special (a little bit weird format)
-    /// The frame number, library name, address in hex, mangled symbol name, `+` sign, the offset.
-    char** strs = ::backtrace_symbols(frame_pointers.data(), static_cast<int>(size));
-    SCOPE_EXIT_SAFE({free(strs);});
+    const DB::SymbolIndex & symbol_index = DB::SymbolIndex::instance();
 
     for (size_t i = offset; i < size; ++i)
     {
         StackTrace::Frame current_frame;
-
-        std::vector<std::string> split;
-        boost::split(split, strs[i], isWhitespaceASCII);
-        split.erase(
-            std::remove_if(
-                split.begin(), split.end(),
-                [](const std::string & x) { return x.empty(); }),
-            split.end());
-        assert(split.size() == 6);
-
         current_frame.virtual_addr = frame_pointers[i];
+        /// On macOS, SymbolIndex stores absolute virtual addresses,
+        /// so physical_addr is the same as virtual_addr for symbol lookup.
         current_frame.physical_addr = frame_pointers[i];
-        current_frame.object = split[1];
-        current_frame.symbol = demangle(split[3].c_str());
+
+        const auto * object = symbol_index.findObject(current_frame.virtual_addr);
+        if (object)
+            current_frame.object = object->name;
+
+        if (const auto * symbol = symbol_index.findSymbol(current_frame.virtual_addr))
+            current_frame.symbol = demangle(symbol->name);
+
         callback(current_frame);
     }
 #else

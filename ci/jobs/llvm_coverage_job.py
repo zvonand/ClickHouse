@@ -218,23 +218,30 @@ if __name__ == "__main__":
             print("Coverage did not degrade.")
 
         # Compress and attach the diff HTML report archive + files to the diff result.
-        Utils.compress_gz(
-            f"{TEMP_DIR}/llvm_coverage_diff_html_report",
-            f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz",
-        )
-        diff_res.files.append(f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz")
-        # Copy index.html → index_diff.html so the diff entry-point has a unique
-        # name in S3 links. The original index.html is kept as an asset so that
-        # relative links inside the report continue to work.
-        _diff_index = Path(TEMP_DIR) / "llvm_coverage_diff_html_report" / "index.html"
-        _diff_index_copy = _diff_index.parent / "index_diff.html"
-        if _diff_index.exists():
-            shutil.copy2(_diff_index, _diff_index_copy)
-        _diff_files, _diff_assets = collect_html_report_files(
-            "llvm_coverage_diff_html_report", entry_point="index_diff.html"
-        )
-        diff_res.files.extend(_diff_files)
-        diff_res.assets.extend(_diff_assets)
+        # The directory may not exist when changed files have no coverage data
+        # (e.g. only non-source files like .sh tests were modified).
+        _diff_html_dir = Path(TEMP_DIR) / "llvm_coverage_diff_html_report"
+        _has_diff_report = _diff_html_dir.exists()
+        if _has_diff_report:
+            Utils.compress_gz(
+                str(_diff_html_dir),
+                f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz",
+            )
+            diff_res.files.append(
+                f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz"
+            )
+            # Copy index.html → index_diff.html so the diff entry-point has a unique
+            # name in S3 links. The original index.html is kept as an asset so that
+            # relative links inside the report continue to work.
+            _diff_index = _diff_html_dir / "index.html"
+            _diff_index_copy = _diff_index.parent / "index_diff.html"
+            if _diff_index.exists():
+                shutil.copy2(_diff_index, _diff_index_copy)
+            _diff_files, _diff_assets = collect_html_report_files(
+                "llvm_coverage_diff_html_report", entry_point="index_diff.html"
+            )
+            diff_res.files.extend(_diff_files)
+            diff_res.assets.extend(_diff_assets)
         results.append(diff_res)
 
         # Generate report for changed blocks only
@@ -260,7 +267,11 @@ if __name__ == "__main__":
             _log_name = f"{Utils.normalize_string(print_res.name)}.log"
             uncovered_code_url = f"{_s3_base}/llvm_coverage/{Utils.normalize_string(print_res.name)}/{_log_name}"
 
-            _diff_url = f"{_s3_base}/llvm_coverage/generate_llvm_coverage_diff_report/index_diff.html"
+            _diff_url = (
+                f"{_s3_base}/llvm_coverage/generate_llvm_coverage_diff_report/index_diff.html"
+                if _has_diff_report
+                else ""
+            )
             _pr_changed_lines_info = print_res.ext.get("comment", "")
 
             # Write coverage data for the post-hook to pick up and post as a GitHub comment
@@ -312,14 +323,16 @@ if __name__ == "__main__":
         report_links.append(
             f"{_s3_base}/llvm_coverage/generate_llvm_coverage_report/index.html"
         )
-        if not is_master_branch:
+        _diff_archive = Path(TEMP_DIR) / "llvm_coverage_diff_html_report.tar.gz"
+        if not is_master_branch and _diff_archive.exists():
             report_links.append(
                 f"{_s3_base}/llvm_coverage/generate_llvm_coverage_diff_report/index_diff.html"
             )
 
     archives = [f"{TEMP_DIR}/llvm_coverage_html_report.tar.gz"]
-    if not is_master_branch:
-        archives.append(f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz")
+    _diff_archive = Path(TEMP_DIR) / "llvm_coverage_diff_html_report.tar.gz"
+    if _diff_archive.exists():
+        archives.append(str(_diff_archive))
 
     Result.create_from(
         results=results,

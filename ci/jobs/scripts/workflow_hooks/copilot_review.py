@@ -18,12 +18,14 @@ def _run(prompt):
     os.environ["GH_TOKEN"] = Secret.Config(
         name="/ci/robot-ch-test-poll-copilot", type=Secret.Type.AWS_SSM_PARAMETER
     ).get_value()
-    result = Result.from_commands_run(
-        name="copilot review",
-        command=f"copilot -p {shlex.quote(prompt)} --allow-all-tools --model gpt-5.3-codex",
-        with_info=True,
-    )
-    os.environ.pop("GH_TOKEN", None)
+    try:
+        result = Result.from_commands_run(
+            name="copilot review",
+            command=f"copilot -p {shlex.quote(prompt)} --allow-all-tools --model gpt-5.3-codex",
+            with_info=True,
+        )
+    finally:
+        os.environ.pop("GH_TOKEN", None)
     return result
 
 

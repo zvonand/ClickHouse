@@ -221,7 +221,8 @@ if __name__ == "__main__":
         # The directory may not exist when changed files have no coverage data
         # (e.g. only non-source files like .sh tests were modified).
         _diff_html_dir = Path(TEMP_DIR) / "llvm_coverage_diff_html_report"
-        if _diff_html_dir.exists():
+        _has_diff_report = _diff_html_dir.exists()
+        if _has_diff_report:
             Utils.compress_gz(
                 str(_diff_html_dir),
                 f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz",
@@ -266,7 +267,11 @@ if __name__ == "__main__":
             _log_name = f"{Utils.normalize_string(print_res.name)}.log"
             uncovered_code_url = f"{_s3_base}/llvm_coverage/{Utils.normalize_string(print_res.name)}/{_log_name}"
 
-            _diff_url = f"{_s3_base}/llvm_coverage/generate_llvm_coverage_diff_report/index_diff.html"
+            _diff_url = (
+                f"{_s3_base}/llvm_coverage/generate_llvm_coverage_diff_report/index_diff.html"
+                if _has_diff_report
+                else ""
+            )
             _pr_changed_lines_info = print_res.ext.get("comment", "")
 
             # Write coverage data for the post-hook to pick up and post as a GitHub comment
@@ -318,7 +323,8 @@ if __name__ == "__main__":
         report_links.append(
             f"{_s3_base}/llvm_coverage/generate_llvm_coverage_report/index.html"
         )
-        if not is_master_branch:
+        _diff_archive = Path(TEMP_DIR) / "llvm_coverage_diff_html_report.tar.gz"
+        if not is_master_branch and _diff_archive.exists():
             report_links.append(
                 f"{_s3_base}/llvm_coverage/generate_llvm_coverage_diff_report/index_diff.html"
             )

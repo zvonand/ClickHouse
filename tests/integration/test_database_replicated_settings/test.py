@@ -219,6 +219,7 @@ def test_database_replicated_with_internal_replication(started_cluster, async_in
         "async_insert": async_insert,
         "prefer_localhost_replica": prefer_localhost_replica,
     })
+    node1.query(f"SYSTEM SYNC REPLICA ON CLUSTER default {db_name}.data_table")
 
     response = node1.query(f"SELECT a FROM {db_name}.distributed ORDER BY a")
     assert response == '1\n2\n'

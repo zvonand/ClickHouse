@@ -3,18 +3,17 @@
 #include <Core/Field.h>
 #include <Common/SharedMutex.h>
 
-/// Field + mutex looks a little heavy, but profiling has not showed anything concerning.
-/// It should be possible to use std::atomic<size_t> for the threshold because we only
-/// support numeric equivalent types. But that will require type specific comparison
-/// operators (e.g for Int32, for Date / DateTime, for DecimalXX etc).
-///
-/// Field keeps the door open for using this class for ORDER BY <string> (if needed)
+class Collator;
+
 namespace DB
 {
 
 struct TopKThresholdTracker
 {
-    explicit TopKThresholdTracker(int direction_) : direction(direction_) {}
+    TopKThresholdTracker(int direction_, int nulls_direction_, std::shared_ptr<Collator> collator_ = nullptr)
+        : direction(direction_), nulls_direction(nulls_direction_), collator(std::move(collator_))
+    {
+    }
 
     void testAndSet(const Field & value)
     {
@@ -25,20 +24,11 @@ struct TopKThresholdTracker
             is_set = true;
             return;
         }
-        if (direction == 1) /// ASC
-        {
-            if (value < threshold)
-            {
-                threshold = value;
-            }
-        }
-        else if (direction == -1) /// DESC
-        {
-            if (value > threshold)
-            {
-                threshold = value;
-            }
-        }
+        int cmp = compareFields(value, threshold);
+        if (direction == 1 && cmp < 0)
+            threshold = value;
+        else if (direction == -1 && cmp > 0)
+            threshold = value;
     }
 
     bool isValueInsideThreshold(const Field & value) const
@@ -47,9 +37,10 @@ struct TopKThresholdTracker
             return true;
 
         std::shared_lock lock(mutex);
-        if (direction == 1 && value >= threshold) /// ASC
+        int cmp = compareFields(value, threshold);
+        if (direction == 1 && cmp >= 0)
             return false;
-        else if (direction == -1 && value <= threshold) /// DESC
+        if (direction == -1 && cmp <= 0)
             return false;
 
         return true;
@@ -62,15 +53,23 @@ struct TopKThresholdTracker
         return ret;
     }
 
-    bool isSet() const { return is_set; } /// unlocked read is fine
+    bool isSet() const { return is_set; }
 
     int getDirection() const { return direction; }
+    int getNullsDirection() const { return nulls_direction; }
+    const std::shared_ptr<Collator> & getCollator() const { return collator; }
 
 private:
+    /// Compare two Field values using the same semantics as the ORDER BY clause:
+    /// NULL ordering follows nulls_direction, string comparison uses collator if set.
+    int compareFields(const Field & lhs, const Field & rhs) const;
+
     Field threshold;
     mutable SharedMutex mutex;
     std::atomic<bool> is_set{false};
     int direction{0};
+    int nulls_direction{1};
+    std::shared_ptr<Collator> collator;
 };
 
 using TopKThresholdTrackerPtr = std::shared_ptr<TopKThresholdTracker>;

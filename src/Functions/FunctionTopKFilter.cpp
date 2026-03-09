@@ -7,7 +7,9 @@
 #include <Interpreters/convertFieldToType.h>
 #include <Functions/IFunctionAdaptors.h>
 #include <DataTypes/DataTypesNumber.h>
+#include <DataTypes/DataTypeNullable.h>
 #include <Columns/ColumnsNumber.h>
+#include <Columns/Collator.h>
 
 namespace DB
 {
@@ -29,13 +31,19 @@ public:
         if (!threshold_tracker_)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "FunctionTopKFilter got NULL threshold_tracker");
 
-        String comparator = "less";
-
-        if (threshold_tracker->getDirection() == -1) /// DESC
-            comparator = "greater";
-        auto context = Context::getGlobalContextInstance();
-        compare_function = FunctionFactory::instance().get(comparator, context);
         direction = threshold_tracker_->getDirection();
+        nulls_direction = threshold_tracker_->getNullsDirection();
+        collator = threshold_tracker_->getCollator();
+        use_general_comparison = collator != nullptr;
+
+        if (!use_general_comparison)
+        {
+            String comparator = "less";
+            if (direction == -1)
+                comparator = "greater";
+            auto context = Context::getGlobalContextInstance();
+            compare_function = FunctionFactory::instance().get(comparator, context);
+        }
     }
 
     String getName() const override
@@ -47,8 +55,9 @@ public:
     bool isInjective(const ColumnsWithTypeAndName &) const override { return false; }
     bool isSuitableForConstantFolding() const override { return false; }
     bool isSuitableForShortCircuitArgumentsExecution(const DataTypesWithConstInfo & /*arguments*/) const override { return false; }
-    bool isDeterministic() const override { return false; } /// disable query condition cache
+    bool isDeterministic() const override { return false; }
     bool isDeterministicInScopeOfQuery() const override { return false; }
+    bool useDefaultImplementationForNulls() const override { return false; }
     size_t getNumberOfArguments() const override { return 1; }
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
@@ -70,37 +79,118 @@ public:
 
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const override
     {
-        if (input_rows_count == 0) /// dry run?
+        if (input_rows_count == 0)
             return ColumnUInt8::create();
 
         if (threshold_tracker && threshold_tracker->isSet())
         {
             auto current_threshold = threshold_tracker->getValue();
-
             auto data_type = arguments[0].type;
-            ColumnPtr threshold_column = data_type->createColumnConst(input_rows_count, convertFieldToType(current_threshold, *data_type));
 
-            ColumnsWithTypeAndName args{ arguments[0], {threshold_column, data_type, {}} };
-            auto elem_compare = compare_function->build(args);
-            /// Note that using "greater" / "less" function here is more optimal than using Column::compareColumn()
-            /// because greater/less implementation is AVX specific optimized.
-            return elem_compare->execute(args, elem_compare->getResultType(), input_rows_count, /* dry_run = */ false);
+            if (use_general_comparison)
+                return executeWithColumnCompare(arguments[0], current_threshold, data_type, input_rows_count);
+
+            if (data_type->isNullable())
+                return executeNullable(arguments[0], current_threshold, data_type, input_rows_count);
+
+            return executeVectorized(arguments[0], current_threshold, data_type, input_rows_count);
         }
         else
         {
             return DataTypeUInt8().createColumnConst(input_rows_count, true);
         }
     }
+
 private:
+    /// Fast path: vectorized less/greater for non-nullable, non-collation types.
+    ColumnPtr executeVectorized(
+        const ColumnWithTypeAndName & argument,
+        const Field & current_threshold,
+        const DataTypePtr & data_type,
+        size_t input_rows_count) const
+    {
+        ColumnPtr threshold_column = data_type->createColumnConst(
+            input_rows_count, convertFieldToType(current_threshold, *data_type));
+        ColumnsWithTypeAndName args{argument, {threshold_column, data_type, {}}};
+        auto elem_compare = compare_function->build(args);
+        return elem_compare->execute(args, elem_compare->getResultType(), input_rows_count, false);
+    }
+
+    /// Path for Nullable types: handle NULLs with correct nulls_direction, use vectorized
+    /// comparison for non-null values.
+    ColumnPtr executeNullable(
+        const ColumnWithTypeAndName & argument,
+        const Field & current_threshold,
+        const DataTypePtr & data_type,
+        size_t input_rows_count) const
+    {
+        const auto & col = *argument.column;
+
+        auto threshold_field = convertFieldToType(current_threshold, *data_type);
+        auto threshold_col = data_type->createColumn();
+        threshold_col->insert(threshold_field);
+
+        auto result_col = ColumnUInt8::create(input_rows_count);
+        auto & result_data = result_col->getData();
+
+        for (size_t i = 0; i < input_rows_count; ++i)
+        {
+            int cmp = col.compareAt(i, 0, *threshold_col, nulls_direction);
+            result_data[i] = (direction * cmp) < 0;
+        }
+
+        return result_col;
+    }
+
+    /// General path using per-element compareAt/compareAtWithCollation.
+    /// Handles all types including collation-aware string comparison.
+    ColumnPtr executeWithColumnCompare(
+        const ColumnWithTypeAndName & argument,
+        const Field & current_threshold,
+        const DataTypePtr & data_type,
+        size_t input_rows_count) const
+    {
+        const auto & col = *argument.column;
+
+        auto threshold_field = convertFieldToType(current_threshold, *data_type);
+        auto threshold_col = data_type->createColumn();
+        threshold_col->insert(threshold_field);
+
+        auto result_col = ColumnUInt8::create(input_rows_count);
+        auto & result_data = result_col->getData();
+
+        if (collator)
+        {
+            for (size_t i = 0; i < input_rows_count; ++i)
+            {
+                int cmp = col.compareAtWithCollation(i, 0, *threshold_col, nulls_direction, *collator);
+                result_data[i] = (direction * cmp) < 0;
+            }
+        }
+        else
+        {
+            for (size_t i = 0; i < input_rows_count; ++i)
+            {
+                int cmp = col.compareAt(i, 0, *threshold_col, nulls_direction);
+                result_data[i] = (direction * cmp) < 0;
+            }
+        }
+
+        return result_col;
+    }
+
     TopKThresholdTrackerPtr threshold_tracker;
     FunctionOverloadResolverPtr compare_function;
 
     int direction;
+    int nulls_direction;
+    std::shared_ptr<Collator> collator;
+    bool use_general_comparison;
 };
 
 FunctionOverloadResolverPtr createInternalFunctionTopKFilterResolver(TopKThresholdTrackerPtr threshold_tracker_)
 {
     return std::make_shared<FunctionToOverloadResolverAdaptor>(std::make_shared<FunctionTopKFilter>(threshold_tracker_));
-};
+}
 
 }

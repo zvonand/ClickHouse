@@ -79,8 +79,6 @@ size_t tryOptimizeTopK(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, 
         return 0;
 
     const auto & sort_column = sorting_step->getInputHeaders().front()->getByName(sort_description.front().column_name);
-    if (!sort_column.type->isValueRepresentedByNumber() || sort_column.type->isNullable())
-        return 0;
 
     const bool where_clause = filter_step || read_from_mergetree_step->getPrewhereInfo();
 
@@ -114,13 +112,16 @@ size_t tryOptimizeTopK(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, 
 
     TopKThresholdTrackerPtr threshold_tracker = nullptr;
 
-    int direction = sort_description.front().direction;
+    const auto & sort_col_desc = sort_description.front();
+    int direction = sort_col_desc.direction;
+    int nulls_direction = sort_col_desc.nulls_direction;
+    const auto & collator = sort_col_desc.collator;
 
     if ((settings.use_skip_indexes_for_top_k &&
             read_from_mergetree_step->isSkipIndexAvailableForTopK(sort_column_name) && settings.use_skip_indexes_on_data_read) ||
         (settings.use_top_k_dynamic_filtering && !read_from_mergetree_step->getPrewhereInfo()))
     {
-        threshold_tracker = std::make_shared<TopKThresholdTracker>(direction);
+        threshold_tracker = std::make_shared<TopKThresholdTracker>(direction, nulls_direction, collator);
         sorting_step->setTopKThresholdTracker(threshold_tracker);
     }
 

@@ -335,7 +335,12 @@ void QueryOracle::generateCountDistinctFirstQuery(RandomGenerator & rg, Statemen
     gen.enforceFinal(false);
     gen.setAllowEngineUDF(true);
 
-    finishSettings(sel->mutable_setting_values());
+    SettingValues * svs = sel->mutable_setting_values();
+    /// Use exact count distinct implementation to avoid discrepancies between different implementations (e.g. HyperLogLog gives an approximation)
+    SetValue * sv = svs->mutable_set_value();
+    sv->set_property("count_distinct_implementation");
+    sv->set_value("'uniqExact'");
+    finishSettings(svs);
     ts->set_format(OutFormat::OUT_CSV);
     const auto err = std::filesystem::remove(qcfile);
     UNUSED(err);
@@ -1089,7 +1094,6 @@ void QueryOracle::generateOracleSelectQuery(RandomGenerator & rg, const PeerQuer
     }
     SettingValues * svs = sel->mutable_setting_values();
 
-    finishSettings(svs);
     if (measure_performance)
     {
         /// Add tag to find query later on
@@ -1108,6 +1112,7 @@ void QueryOracle::generateOracleSelectQuery(RandomGenerator & rg, const PeerQuer
         sv3->set_property("use_skip_indexes_on_data_read");
         sv3->set_value("0");
     }
+    finishSettings(svs);
 }
 
 void QueryOracle::iterateQuery(google::protobuf::Message & message, const std::vector<MatchHandler> & rules)

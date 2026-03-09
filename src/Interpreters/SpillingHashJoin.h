@@ -82,6 +82,8 @@ public:
     size_t getTotalByteCount() const override;
     bool alwaysReturnsEmptySet() const override;
 
+    void keepLeftPipelineInOrder() override { keep_left_read_in_order = true; }
+
     bool supportParallelJoin() const override { return concurrent_join != nullptr; }
     bool supportParallelNonJoinedBlocksProcessing() const override;
     bool canProcessNonJoinedBlocksInParallel() const override;
@@ -97,7 +99,10 @@ public:
         size_t num_streams) const override;
 
     IBlocksStreamPtr getDelayedBlocks() override;
-    bool hasDelayedBlocks() const override { return true; }
+    /// When keep_left_read_in_order is set, switching to GraceHashJoin is forbidden (would throw),
+    /// so delayed blocks will never be produced. Returning false avoids adding DelayedPortsProcessor
+    /// to the pipeline, which would break the single-stream read-in-order guarantee.
+    bool hasDelayedBlocks() const override { return !keep_left_read_in_order; }
 
     void onBuildPhaseFinish() override;
 
@@ -124,6 +129,7 @@ private:
     SharedMutex switch_mutex;
     std::atomic<size_t> next_slot_to_convert{0};
     mutable std::mutex totals_mutex;
+    bool keep_left_read_in_order{false};
     bool supports_parallel_non_joined_blocks_processing{false};
 
     std::atomic<State> state{State::COLLECTING};

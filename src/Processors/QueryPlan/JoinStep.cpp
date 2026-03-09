@@ -99,6 +99,8 @@ JoinStep::JoinStep(
     , use_join_disjunctions_push_down(use_join_disjunctions_push_down_)
     , disjunctions_optimization_applied(false)
 {
+    if (keep_left_read_in_order)
+        join->keepLeftPipelineInOrder();
     updateInputHeaders({left_header_, right_header_});
 }
 
@@ -203,6 +205,7 @@ void JoinStep::keepLeftPipelineInOrder(bool disable_squashing)
         min_block_size_bytes = 0;
     }
     keep_left_read_in_order = true;
+    join->keepLeftPipelineInOrder();
 }
 
 void JoinStep::describePipeline(FormatSettings & settings) const
@@ -260,6 +263,8 @@ void JoinStep::setJoin(JoinPtr join_, bool swap_streams_)
     join_algorithm_header.reset();
     swap_streams = swap_streams_;
     join = std::move(join_);
+    if (keep_left_read_in_order)
+        join->keepLeftPipelineInOrder();
     updateOutputHeader();
 }
 

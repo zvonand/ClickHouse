@@ -173,6 +173,10 @@ public:
         return getNonJoinedBlocks(left_sample_block, result_sample_block, max_block_size);
     }
 
+    /// Notify the join that the query plan requires left-side read-in-order preservation.
+    /// SpillingHashJoin overrides this to forbid switching to GraceHashJoin at runtime.
+    virtual void keepLeftPipelineInOrder() {}
+
     /// Called by `FillingRightJoinSideTransform` after all data is inserted in join.
     virtual void onBuildPhaseFinish() { }
 

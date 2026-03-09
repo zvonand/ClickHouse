@@ -32,7 +32,7 @@ Unlike re2's default behavior, `.` matches line breaks. To disable this, prepend
 
 The pattern is not anchored. To match the entire string, anchor the pattern yourself using `^` and `$`.
 
-If you only like to search for substrings, you can use functions [`like`](#like) or [`position`](#position) instead - they work much faster than this function.
+If you just want to search for substrings, you can use functions [`like`](#like) or [`position`](#position) instead, which work much faster than this function.
 
 Alternative operator syntax: `haystack REGEXP pattern`.
     )";

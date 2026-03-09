@@ -1,8 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
 
-# CI: differential coverage analysis skips non-C++ files (cmake, scripts, tests, etc.)
-# changing this line is intentional and harmless.
-
 # Some CMakeLists.txt in contrib/ are not being good citizens and change cmake cache variables
 # globally. This policy prevents such *cache* variable assignments from altering *normal* variables
 # that we've set.

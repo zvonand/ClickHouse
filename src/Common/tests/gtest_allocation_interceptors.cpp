@@ -25,52 +25,34 @@ void checkMemory(auto allocation_callback, auto deallocation_callback)
     MainThreadStatus::getInstance();
     total_memory_tracker.resetCounters();
     CurrentThread::get().memory_tracker.resetCounters();
+    CurrentThread::flushUntrackedMemory();
 
-    auto before_thread = CurrentThread::get().memory_tracker.get();
-    auto before_global = total_memory_tracker.get();
-
-    while (before_thread > 0 || before_global > 0)
-    {
-        before_thread = CurrentThread::get().memory_tracker.get();
-        before_global = total_memory_tracker.get();
-    }
+    const auto before_thread = CurrentThread::get().memory_tracker.get();
+    const auto before_global = total_memory_tracker.get();
 
     auto ptr = allocation_callback();
+    CurrentThread::flushUntrackedMemory();
 
-    /// The MemoryTracker uses atomics with std::memory_order_relaxed
-    /// so we check the condition in a loop to ensure we don't see stale values.
-    bool allocation_ok = false;
-    Int64 after_thread = 0;
-    Int64 after_global = 0;
-    for (size_t i = 0; i < 1000 && !allocation_ok; ++i)
-    {
-        after_thread = CurrentThread::get().memory_tracker.get();
-        after_global = total_memory_tracker.get();
-        /// No double accounting
-        bool thread_ok = (after_thread - before_thread) >= allocation_size &&
-                         static_cast<double>(after_thread - before_thread) <= static_cast<double>(allocation_size) * 1.1;
-        bool global_ok = (after_global - before_global) >= allocation_size &&
-                         static_cast<double>(after_global - before_global) <= static_cast<double>(allocation_size) * 1.1;
-        allocation_ok |= thread_ok & global_ok;
-    }
+    const auto after_thread = CurrentThread::get().memory_tracker.get();
+    const auto after_global = total_memory_tracker.get();
 
-    ASSERT_TRUE(allocation_ok);
+    /// The allocation should be tracked (no under-counting) without double-accounting.
+    ASSERT_GE(after_thread - before_thread, allocation_size);
+    ASSERT_LE(static_cast<double>(after_thread - before_thread), static_cast<double>(allocation_size) * 1.1);
+    ASSERT_GE(after_global - before_global, allocation_size);
+    ASSERT_LE(static_cast<double>(after_global - before_global), static_cast<double>(allocation_size) * 1.1);
 
     deallocation_callback(ptr);
+    CurrentThread::flushUntrackedMemory();
 
-    bool deallocation_ok = false;
-    for (size_t i = 0; i < 1000 && !deallocation_ok; ++i)
-    {
-        /// We might have allocated something else on our way. But this amount should be negligible.
-        /// Also, no double accounting.
-        bool thread_ok
-            = static_cast<double>(after_thread - CurrentThread::get().memory_tracker.get()) >= static_cast<double>(allocation_size) * 0.95
-            && static_cast<double>(after_thread - CurrentThread::get().memory_tracker.get()) <= static_cast<double>(allocation_size) * 1.1;
-        bool global_ok = static_cast<double>(after_global - total_memory_tracker.get()) >= static_cast<double>(allocation_size) * 0.95
-            && static_cast<double>(after_global - total_memory_tracker.get()) <= static_cast<double>(allocation_size) * 1.1;
-        deallocation_ok |= thread_ok & global_ok;
-    }
-    ASSERT_TRUE(deallocation_ok);
+    const auto freed_thread = after_thread - CurrentThread::get().memory_tracker.get();
+    const auto freed_global = after_global - total_memory_tracker.get();
+
+    /// The deallocation should be tracked without double-accounting.
+    ASSERT_GE(static_cast<double>(freed_thread), static_cast<double>(allocation_size) * 0.95);
+    ASSERT_LE(static_cast<double>(freed_thread), static_cast<double>(allocation_size) * 1.1);
+    ASSERT_GE(static_cast<double>(freed_global), static_cast<double>(allocation_size) * 0.95);
+    ASSERT_LE(static_cast<double>(freed_global), static_cast<double>(allocation_size) * 1.1);
 }
 
 TEST(AllocationInterceptors, MallocIncreasesTheMemoryTracker)
@@ -102,6 +84,7 @@ TEST(AllocationInterceptors, FailedReallocPreservesOldAllocationAccounting)
     MainThreadStatus::getInstance();
     total_memory_tracker.resetCounters();
     CurrentThread::get().memory_tracker.resetCounters();
+    CurrentThread::flushUntrackedMemory();
 
     const Int64 before_alloc_thread = CurrentThread::get().memory_tracker.get();
     const Int64 before_alloc_global = total_memory_tracker.get();
@@ -110,51 +93,39 @@ TEST(AllocationInterceptors, FailedReallocPreservesOldAllocationAccounting)
     ASSERT_NE(ptr, nullptr);
     useMisterPointer(ptr);
     *reinterpret_cast<char *>(ptr) = 'a';
+    CurrentThread::flushUntrackedMemory();
 
-    bool allocation_ok = false;
-    Int64 after_alloc_thread = 0;
-    Int64 after_alloc_global = 0;
-    for (size_t i = 0; i < 1000 && !allocation_ok; ++i)
-    {
-        after_alloc_thread = CurrentThread::get().memory_tracker.get();
-        after_alloc_global = total_memory_tracker.get();
-        bool thread_ok = (after_alloc_thread - before_alloc_thread) >= allocation_size
-            && static_cast<double>(after_alloc_thread - before_alloc_thread) <= static_cast<double>(allocation_size) * 1.1;
-        bool global_ok = (after_alloc_global - before_alloc_global) >= allocation_size
-            && static_cast<double>(after_alloc_global - before_alloc_global) <= static_cast<double>(allocation_size) * 1.1;
-        allocation_ok |= thread_ok & global_ok;
-    }
-    ASSERT_TRUE(allocation_ok);
+    const auto after_alloc_thread = CurrentThread::get().memory_tracker.get();
+    const auto after_alloc_global = total_memory_tracker.get();
 
+    ASSERT_GE(after_alloc_thread - before_alloc_thread, allocation_size);
+    ASSERT_LE(static_cast<double>(after_alloc_thread - before_alloc_thread), static_cast<double>(allocation_size) * 1.1);
+    ASSERT_GE(after_alloc_global - before_alloc_global, allocation_size);
+    ASSERT_LE(static_cast<double>(after_alloc_global - before_alloc_global), static_cast<double>(allocation_size) * 1.1);
+
+    /// A failed realloc must not lose the old block's accounting.
     void * failed_realloc = realloc(ptr, std::numeric_limits<size_t>::max());
     ASSERT_EQ(failed_realloc, nullptr);
+    CurrentThread::flushUntrackedMemory();
 
-    bool realloc_ok = false;
-    for (size_t i = 0; i < 1000 && !realloc_ok; ++i)
-    {
-        const auto thread_amount = CurrentThread::get().memory_tracker.get();
-        const auto global_amount = total_memory_tracker.get();
-        bool thread_ok = static_cast<double>(thread_amount) >= static_cast<double>(after_alloc_thread) * 0.95
-            && static_cast<double>(thread_amount) <= static_cast<double>(after_alloc_thread) * 1.1;
-        bool global_ok = static_cast<double>(global_amount) >= static_cast<double>(after_alloc_global) * 0.95
-            && static_cast<double>(global_amount) <= static_cast<double>(after_alloc_global) * 1.1;
-        realloc_ok |= thread_ok & global_ok;
-    }
-    EXPECT_TRUE(realloc_ok);
+    const auto thread_after_realloc = CurrentThread::get().memory_tracker.get();
+    const auto global_after_realloc = total_memory_tracker.get();
+
+    EXPECT_GE(static_cast<double>(thread_after_realloc), static_cast<double>(after_alloc_thread) * 0.95);
+    EXPECT_LE(static_cast<double>(thread_after_realloc), static_cast<double>(after_alloc_thread) * 1.1);
+    EXPECT_GE(static_cast<double>(global_after_realloc), static_cast<double>(after_alloc_global) * 0.95);
+    EXPECT_LE(static_cast<double>(global_after_realloc), static_cast<double>(after_alloc_global) * 1.1);
 
     free(ptr);
+    CurrentThread::flushUntrackedMemory();
 
-    bool deallocation_ok = false;
-    for (size_t i = 0; i < 1000 && !deallocation_ok; ++i)
-    {
-        bool thread_ok
-            = static_cast<double>(after_alloc_thread - CurrentThread::get().memory_tracker.get()) >= static_cast<double>(allocation_size) * 0.95
-            && static_cast<double>(after_alloc_thread - CurrentThread::get().memory_tracker.get()) <= static_cast<double>(allocation_size) * 1.1;
-        bool global_ok = static_cast<double>(after_alloc_global - total_memory_tracker.get()) >= static_cast<double>(allocation_size) * 0.95
-            && static_cast<double>(after_alloc_global - total_memory_tracker.get()) <= static_cast<double>(allocation_size) * 1.1;
-        deallocation_ok |= thread_ok & global_ok;
-    }
-    EXPECT_TRUE(deallocation_ok);
+    const auto freed_thread = after_alloc_thread - CurrentThread::get().memory_tracker.get();
+    const auto freed_global = after_alloc_global - total_memory_tracker.get();
+
+    EXPECT_GE(static_cast<double>(freed_thread), static_cast<double>(allocation_size) * 0.95);
+    EXPECT_LE(static_cast<double>(freed_thread), static_cast<double>(allocation_size) * 1.1);
+    EXPECT_GE(static_cast<double>(freed_global), static_cast<double>(allocation_size) * 0.95);
+    EXPECT_LE(static_cast<double>(freed_global), static_cast<double>(allocation_size) * 1.1);
 }
 
 TEST(AllocationInterceptors, MallocZeroFreeDoesNotCauseNegativeDrift)
@@ -222,7 +193,5 @@ TEST(AllocationInterceptors, GetAddrInfoFreeAddrInfoDoesNotCauseNegativeDrift)
 #endif
 
 /// NOLINTEND
-
-/// Write more tests if needed.
 
 #endif

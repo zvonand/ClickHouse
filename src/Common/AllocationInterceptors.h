@@ -2,7 +2,6 @@
 
 #include <base/defines.h>
 #include <cstddef>
-#include <netdb.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wreserved-identifier"
@@ -46,8 +45,6 @@ extern "C" void   __real_free(void * ptr);
 extern "C" void * __real_pvalloc(size_t size);
 #endif
 
-extern "C" int __real_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result);
-extern "C" void __real_freeaddrinfo(struct addrinfo * result);
 extern "C" char * __real_strdup(const char * str);
 extern "C" char * __real_strndup(const char * str, size_t size);
 

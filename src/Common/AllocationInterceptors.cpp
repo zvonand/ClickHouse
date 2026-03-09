@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstring>
 #include <mutex>
+#include <netdb.h>
 #include <new>
 #include <unordered_map>
 #include "config.h"
@@ -545,6 +546,9 @@ extern "C" char * __wrap_strndup(const char * str, size_t size) // NOLINT
     trace.onAlloc(res, actual_size);
     return res;
 }
+
+extern "C" int __real_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result);
+extern "C" void __real_freeaddrinfo(struct addrinfo * result);
 
 extern "C" int __wrap_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result) // NOLINT
 {

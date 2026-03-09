@@ -2216,6 +2216,8 @@ arrow::Status ArrowFlightHandler::DoPut(
 
         std::string sql;
 
+        bool should_write_flight_sql_metadata = false;
+
         if (
             google::protobuf::Any any_msg;
                 request.type == arrow::flight::FlightDescriptor::CMD
@@ -2229,6 +2231,7 @@ arrow::Status ArrowFlightHandler::DoPut(
                 if (!any_msg.UnpackTo(&command))
                     return arrow::Status::SerializationError("Deserialization of sql::CommandStatementUpdate failed.");
                 sql = command.query();
+                should_write_flight_sql_metadata = true;
             }
             else if (any_msg.Is<arrow::flight::protocol::sql::CommandStatementIngest>())
             {
@@ -2261,6 +2264,7 @@ arrow::Status ArrowFlightHandler::DoPut(
                 }
 
                 sql = "INSERT INTO " + schema_string + backQuoteIfNeed(command.table()) + " FORMAT Arrow";
+                should_write_flight_sql_metadata = true;
             }
         }
 
@@ -2309,13 +2313,16 @@ arrow::Status ArrowFlightHandler::DoPut(
 
         query_finished = true;
 
-        arrow::flight::protocol::sql::DoPutUpdateResult update_result;
-        if (auto element = query_context->getProcessListElement())
-            update_result.set_record_count(element->getInfo().written_rows);
-        else
-            update_result.set_record_count(0);
+        if (should_write_flight_sql_metadata)
+        {
+            arrow::flight::protocol::sql::DoPutUpdateResult update_result;
+            if (auto element = query_context->getProcessListElement())
+                update_result.set_record_count(element->getInfo().written_rows);
+            else
+                update_result.set_record_count(0);
 
-        ARROW_RETURN_NOT_OK(writer->WriteMetadata(*arrow::Buffer::FromString(update_result.SerializeAsString())));
+            ARROW_RETURN_NOT_OK(writer->WriteMetadata(*arrow::Buffer::FromString(update_result.SerializeAsString())));
+        }
 
         LOG_INFO(log, "DoPut succeeded");
 

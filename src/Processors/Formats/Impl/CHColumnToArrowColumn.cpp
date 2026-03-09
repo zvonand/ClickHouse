@@ -301,10 +301,8 @@ namespace DB
         std::vector<size_t> sizes(num_variants);
 
         arrow::Status status;
-        for (size_t idx = 0; idx < discriminators.size() && idx < end; ++idx)
+        for (size_t idx = start; idx < discriminators.size() && idx < end; ++idx)
         {
-            if (idx < start)
-                continue;
             const auto & discriminator = discriminators[idx];
             if (discriminator != ColumnVariant::NULL_DISCRIMINATOR)
             {

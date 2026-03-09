@@ -294,8 +294,8 @@ void QueryOracle::generateRoundtripOracleQueries(RandomGenerator & rg, Statement
     gen.setAllowNotDetermistic(true);
 }
 
-/// COUNT(DISTINCT expr) consistency oracle — first query
-/// SELECT COUNT(DISTINCT expr) FROM <from_clause>
+/// ifNull(COUNT(DISTINCT expr), 0) consistency oracle — first query
+/// SELECT ifNull(COUNT(DISTINCT expr), 0) FROM <from_clause>
 void QueryOracle::generateCountDistinctFirstQuery(RandomGenerator & rg, StatementGenerator & gen, SQLQuery & sq)
 {
     TopSelect * ts = sq.mutable_single_query()->mutable_explain()->mutable_inner_query()->mutable_select();
@@ -314,14 +314,18 @@ void QueryOracle::generateCountDistinctFirstQuery(RandomGenerator & rg, Statemen
     const auto u = gen.generateFromStatement(rg, std::numeric_limits<uint32_t>::max(), ssc->mutable_from());
     UNUSED(u);
 
-    /// Disable aggregates to avoid nested aggregation inside COUNT(DISTINCT <expr>)
+    /// Disable aggregates to avoid nested aggregation inside ifNull(COUNT(DISTINCT <expr>), 0)
     const bool prev_allow_aggregates = gen.levels[gen.current_level].allow_aggregates;
     const bool prev_allow_window_funcs = gen.levels[gen.current_level].allow_window_funcs;
     gen.levels[gen.current_level].allow_aggregates = gen.levels[gen.current_level].allow_window_funcs = false;
-    SQLFuncCall * sfc = ssc->add_result_columns()->mutable_eca()->mutable_expr()->mutable_comp_expr()->mutable_func_call();
-    sfc->mutable_func()->set_catalog_func(FUNCcount);
-    sfc->set_distinct(true);
-    gen.generateExpression(rg, sfc->add_args()->mutable_expr());
+    SQLFuncCall * sfc1 = ssc->add_result_columns()->mutable_eca()->mutable_expr()->mutable_comp_expr()->mutable_func_call();
+    SQLFuncCall * sfc2 = sfc1->add_args()->mutable_expr()->mutable_comp_expr()->mutable_func_call();
+    sfc1->mutable_func()->set_catalog_func(FUNCifNull);
+    sfc1->add_args()->mutable_expr()->mutable_lit_val()->mutable_special_val()->set_val(
+        SpecialVal_SpecialValEnum::SpecialVal_SpecialValEnum_VAL_ZERO);
+    sfc2->mutable_func()->set_catalog_func(FUNCcount);
+    sfc2->set_distinct(true);
+    gen.generateExpression(rg, sfc2->add_args()->mutable_expr());
     gen.levels[gen.current_level].allow_aggregates = prev_allow_aggregates;
     gen.levels[gen.current_level].allow_window_funcs = prev_allow_window_funcs;
 
@@ -339,7 +343,7 @@ void QueryOracle::generateCountDistinctFirstQuery(RandomGenerator & rg, Statemen
     sif->set_step(SelectIntoFile_SelectIntoFileStep::SelectIntoFile_SelectIntoFileStep_TRUNCATE);
 }
 
-/// COUNT(DISTINCT expr) consistency oracle — second query
+/// ifNull(COUNT(DISTINCT expr), 0) consistency oracle — second query
 /// SELECT COUNT(*) FROM (SELECT DISTINCT expr FROM <from_clause>) AS sub
 ///
 /// Moves the FROM clause and expression out of sq1 to build sq2,
@@ -374,12 +378,16 @@ void QueryOracle::generateCountDistinctSecondQuery(SQLQuery & sq1, SQLQuery & sq
                           ->mutable_comp_expr()
                           ->mutable_func_call()
                           ->mutable_args(0)
+                          ->mutable_expr()
+                          ->mutable_comp_expr()
+                          ->mutable_func_call()
+                          ->mutable_args(0)
                           ->release_expr();
     ExprColAlias * eca = inner_ssc->add_result_columns()->mutable_eca();
     eca->set_allocated_expr(arg_expr);
     eca->mutable_col_alias()->set_column("c0");
 
-    /// COUNT(DISTINCT expr) skips NULLs; filter them from the inner DISTINCT subquery
+    /// ifNull(COUNT(DISTINCT expr), 0) skips NULLs; filter them from the inner DISTINCT subquery
     /// to keep COUNT(*) equivalent:  WHERE isNotNull(expr)
     ExprNullTests * null_test = inner_ssc->mutable_where()->mutable_expr()->mutable_expr()->mutable_comp_expr()->mutable_expr_null_tests();
     null_test->mutable_expr()->mutable_comp_expr()->mutable_expr_stc()->mutable_col()->mutable_path()->mutable_col()->set_column("c0");

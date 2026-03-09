@@ -78,6 +78,7 @@ namespace DB
         extern const int LOGICAL_ERROR;
         extern const int DECIMAL_OVERFLOW;
         extern const int ILLEGAL_COLUMN;
+        extern const int UNKNOWN_TYPE;
     }
 
     static const std::initializer_list<std::pair<String, std::shared_ptr<arrow::DataType>>> internal_type_to_arrow_type =
@@ -297,6 +298,14 @@ namespace DB
         arrow::Int8Builder type_ids_builder;
 
         const auto num_variants = column.getNumVariants();
+        if (num_variants > static_cast<size_t>(std::numeric_limits<int8_t>::max()))
+            throw Exception(
+                ErrorCodes::ILLEGAL_COLUMN,
+                "Cannot convert Variant with {} nested types to {} Arrow DenseUnion: maximum supported is {} ",
+                num_variants,
+                format_name,
+                static_cast<int>(std::numeric_limits<int8_t>::max()));
+
         std::vector<size_t> starts(num_variants);
         std::vector<size_t> sizes(num_variants);
 
@@ -1176,6 +1185,8 @@ namespace DB
                 FOR_INTERNAL_NUMERIC_TYPES(DISPATCH)
 #undef DISPATCH
             default:
+                if (!settings.output_unsupported_types_as_binary)
+                    throw Exception(ErrorCodes::UNKNOWN_TYPE, "Internal type '{}' of a column '{}' is not supported for conversion into {} data format.", column_type->getFamilyName(), column_name, format_name);
                 fillArrowArrayWithRawColumnData(column, null_bytemap, format_name, array_builder, start, end);
         }
 
@@ -1375,6 +1386,15 @@ namespace DB
             const auto & column_variant_type = assert_cast<const DataTypeVariant &>(*column_type);
 
             auto size = column_variant_type.getVariants().size();
+            if (size > static_cast<size_t>(std::numeric_limits<int8_t>::max()))
+            {
+                throw Exception(
+                    ErrorCodes::ILLEGAL_COLUMN,
+                    "Cannot convert Variant with {} nested types to {} Arrow DenseUnion: maximum supported is {} ",
+                    size,
+                    format_name,
+                    static_cast<int>(std::numeric_limits<int8_t>::max()));
+            }
 
             arrow::FieldVector fields;
 
@@ -1416,7 +1436,10 @@ namespace DB
             return arrow_type_it->second;
         }
 
-        /// If we have no conversion then assume arrow::BinaryType
+        if (!settings.output_unsupported_types_as_binary)
+            throw Exception(ErrorCodes::UNKNOWN_TYPE,
+                "The type '{}' of a column '{}' is not supported for conversion into {} data format.",
+                column_type->getName(), column_name, format_name);
         return arrow::binary();
     }
 

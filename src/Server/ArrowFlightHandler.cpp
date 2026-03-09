@@ -8,6 +8,7 @@
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnTuple.h>
+#include <Core/Settings.h>
 #include <Core/ColumnWithTypeAndName.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypeFactory.h>
@@ -65,6 +66,11 @@ namespace ErrorCodes
     extern const int CANNOT_PARSE_INPUT_ASSERTION_FAILED;
     extern const int UNKNOWN_SETTING;
     extern const int SYNTAX_ERROR;
+}
+
+namespace Setting
+{
+    extern const SettingsBool output_format_arrow_unsupported_types_as_binary;
 }
 
 namespace
@@ -572,7 +578,7 @@ namespace
             ThreadGroupPtr thread_group_,
             BlockIO && block_io_,
             std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier = nullptr,
-            std::function<void(Block &)> block_modifier_ = nullptr)
+            std::function<void(ContextPtr, Block &)> block_modifier_ = nullptr)
             : query_context(query_context_)
             , thread_group(thread_group_)
             , block_io(std::move(block_io_))
@@ -581,7 +587,11 @@ namespace
             try
             {
                 executor.emplace(block_io.pipeline);
-                schema = CHColumnToArrowColumn::calculateArrowSchema(executor->getHeader().getColumnsWithTypeAndName(), "Arrow", nullptr, {.output_string_as_string = true});
+                schema = CHColumnToArrowColumn::calculateArrowSchema(
+                    executor->getHeader().getColumnsWithTypeAndName(),
+                    "Arrow",
+                    nullptr,
+                    {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]});
 
                 if (schema_modifier)
                 {
@@ -601,6 +611,8 @@ namespace
 
         ~PollSession() = default;
 
+        ContextPtr queryContext() { return query_context; }
+
         ThreadGroupPtr getThreadGroup() const { return thread_group; }
         std::shared_ptr<arrow::Schema> getSchema() const { return schema; }
         bool getNextBlock(Block & block)
@@ -608,7 +620,7 @@ namespace
             if (!executor->pull(block))
                 return false;
             if (block_modifier)
-                block_modifier(block);
+                block_modifier(query_context, block);
             return true;
         }
         void onFinish() { block_io.onFinish(); }
@@ -620,14 +632,15 @@ namespace
         BlockIO block_io;
         std::optional<PullingPipelineExecutor> executor;
         std::shared_ptr<arrow::Schema> schema;
-        std::function<void(Block &)> block_modifier;
+        std::function<void(ContextPtr, Block &)> block_modifier;
     };
 
     /// Creates a converter to convert ClickHouse blocks to the Arrow format.
-    std::shared_ptr<CHColumnToArrowColumn> createCHToArrowConverter(const Block & header)
+    std::shared_ptr<CHColumnToArrowColumn> createCHToArrowConverter(const Block & header, ContextPtr query_context)
     {
         CHColumnToArrowColumn::Settings arrow_settings;
         arrow_settings.output_string_as_string = true;
+        arrow_settings.output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary];
         auto ch_to_arrow_converter = std::make_shared<CHColumnToArrowColumn>(header, "Arrow", arrow_settings);
         ch_to_arrow_converter->initializeArrowSchema();
         return ch_to_arrow_converter;
@@ -1269,7 +1282,7 @@ static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std:
     const std::string & sql,
     bool single_table,
     std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier = nullptr,
-    std::function<void(Block &)> block_modifier = nullptr
+    std::function<void(ContextPtr, Block &)> block_modifier = nullptr
 )
 {
     auto query_context = session->makeQueryContext();
@@ -1282,52 +1295,74 @@ static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std:
     auto [ast, block_io] = executeQuery(sql, query_context, QueryFlags{}, QueryProcessingStage::Complete);
 
     bool query_finished = false;
+    bool handling_exception = false;
     SCOPE_EXIT({
         if (query_finished)
             block_io.onFinish();
-        else
-            block_io.onException();
+        else if (!handling_exception)
+            block_io.onCancelOrConnectionLoss();
     });
 
-    ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
-    ARROW_RETURN_NOT_OK(checkPipelineIsPulling(block_io.pipeline));
-
-    PullingPipelineExecutor executor{block_io.pipeline};
-    schema = CHColumnToArrowColumn::calculateArrowSchema(executor.getHeader().getColumnsWithTypeAndName(), "Arrow", nullptr, {.output_string_as_string = true});
-
-    if (schema_modifier)
+    try
     {
-        auto status = schema_modifier(schema);
-        ARROW_RETURN_NOT_OK(status);
-        schema = status.ValueUnsafe();
-    }
+        ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
+        ARROW_RETURN_NOT_OK(checkPipelineIsPulling(block_io.pipeline));
 
-    std::optional<ColumnsWithTypeAndName> header;
-    std::vector<Chunk> chunks;
-    Block block;
-    while (executor.pull(block))
-    {
-        if (!block.empty())
+        PullingPipelineExecutor executor{block_io.pipeline};
+        schema = CHColumnToArrowColumn::calculateArrowSchema(
+            executor.getHeader().getColumnsWithTypeAndName(),
+            "Arrow",
+            nullptr,
+            {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]});
+
+        if (schema_modifier)
         {
-            if (block_modifier)
-                block_modifier(block);
-            if (!header)
-                header = getHeader(block.getColumnsWithTypeAndName());
-            chunks.emplace_back(Chunk{block.getColumns(), block.rows()});
-            if (!single_table)
+            auto status = schema_modifier(schema);
+            ARROW_RETURN_NOT_OK(status);
+            schema = status.ValueUnsafe();
+        }
+
+        std::optional<ColumnsWithTypeAndName> header;
+        std::vector<Chunk> chunks;
+        Block block;
+        while (executor.pull(block))
+        {
+            if (!block.empty())
             {
-                tables.emplace_back(CHColumnToArrowColumn::chunkToArrowTable(*header, "Arrow", chunks, {.output_string_as_string = true}, header->size(), schema));
-                chunks.clear();
+                if (block_modifier)
+                    block_modifier(query_context, block);
+                if (!header)
+                    header = getHeader(block.getColumnsWithTypeAndName());
+                chunks.emplace_back(Chunk{block.getColumns(), block.rows()});
+                if (!single_table)
+                {
+                    tables.emplace_back(
+                        CHColumnToArrowColumn::chunkToArrowTable(
+                            *header, "Arrow", chunks,
+                            {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]},
+                            header->size(), schema));
+                    chunks.clear();
+                }
             }
         }
+
+        if (!header)
+            tables.emplace_back(getEmptyArrowTable(schema));
+        else if (single_table)
+            tables.emplace_back(
+        CHColumnToArrowColumn::chunkToArrowTable(
+            *header, "Arrow", chunks,
+            {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]},
+            header->size(), schema));
+
+        query_finished = true;
     }
-
-    if (!header)
-        tables.emplace_back(getEmptyArrowTable(schema));
-    else if (single_table)
-        tables.emplace_back(CHColumnToArrowColumn::chunkToArrowTable(*header, "Arrow", chunks, {.output_string_as_string = true}, header->size(), schema));
-
-    query_finished = true;
+    catch (...)
+    {
+        handling_exception = true;
+        block_io.onException();
+        throw;
+    }
 
     return std::tuple{schema, tables};
 }
@@ -1336,7 +1371,7 @@ static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std:
     const std::shared_ptr<Session> & session,
     const std::string & sql,
     std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier = nullptr,
-    std::function<void(Block &)> block_modifier = nullptr
+    std::function<void(ContextPtr, Block &)> block_modifier = nullptr
 )
 {
     return executeSQLtoTables_impl(session, sql, false, schema_modifier, block_modifier);
@@ -1346,7 +1381,7 @@ static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std:
     const std::shared_ptr<Session> & session,
     const std::string & sql,
     std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier = nullptr,
-    std::function<void(Block &)> block_modifier = nullptr
+    std::function<void(ContextPtr, Block &)> block_modifier = nullptr
 )
 {
     auto res = executeSQLtoTables_impl(session, sql, true, schema_modifier, block_modifier);
@@ -1358,7 +1393,7 @@ struct SQLSet
 {
     std::string sql;
     std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
-    std::function<void(Block &)> block_modifier;
+    std::function<void(ContextPtr, Block &)> block_modifier;
 };
 
 struct CommandSelectorResult : private std::variant<SQLSet, arrow::Result<std::shared_ptr<arrow::Table>>>
@@ -1392,7 +1427,7 @@ CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, boo
 {
     std::string sql;
     std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
-    std::function<void(Block &)> block_modifier;
+    std::function<void(ContextPtr, Block &)> block_modifier;
 
     if (any_msg.Is<arrow::flight::protocol::sql::CommandGetSqlInfo>())
     {
@@ -1622,7 +1657,7 @@ CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, boo
                 return table_schema->SetField(4, std::make_shared<arrow::Field>(table_schema_field->name(), arrow::binary(), table_schema_field->nullable()));
             };
 
-            block_modifier = [](Block & block)
+            block_modifier = [](ContextPtr query_context, Block & block)
             {
                 const auto & table_scheme_column = block.getByPosition(4);
                 auto new_column = ColumnString::create();
@@ -1643,7 +1678,9 @@ CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, boo
                         auto data_type = DataTypeFactory::instance().get(String(type));
                         table_columns.emplace_back(nullptr, data_type, String(name));
                     }
-                    auto table_schema = CHColumnToArrowColumn::calculateArrowSchema(table_columns, "Arrow", nullptr, {.output_string_as_string = true});
+                    auto table_schema = CHColumnToArrowColumn::calculateArrowSchema(
+                        table_columns, "Arrow", nullptr,
+                        {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]});
                     auto serialized_buffer = arrow::ipc::SerializeSchema(*table_schema, arrow::default_memory_pool()).ValueOrDie();
                     new_column->insertData(reinterpret_cast<const char *>(serialized_buffer->data()), serialized_buffer->size());
                 }
@@ -1701,7 +1738,7 @@ arrow::Status ArrowFlightHandler::GetFlightInfo(
 
         std::string sql;
         std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
-        std::function<void(Block &)> block_modifier;
+        std::function<void(ContextPtr, Block &)> block_modifier;
         std::shared_ptr<arrow::Table> table;
         std::shared_ptr<arrow::Schema> schema;
 
@@ -1826,7 +1863,7 @@ arrow::Status ArrowFlightHandler::GetSchema(
         {
             std::string sql;
             std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
-            std::function<void(Block &)> block_modifier;
+            std::function<void(ContextPtr, Block &)> block_modifier;
             std::shared_ptr<arrow::Table> table;
 
             if (
@@ -1866,27 +1903,39 @@ arrow::Status ArrowFlightHandler::GetSchema(
                 auto [ast, block_io] = executeQuery(sql, query_context, QueryFlags{}, QueryProcessingStage::Complete);
 
                 bool query_finished = false;
+                bool handling_exception = false;
                 SCOPE_EXIT({
                     if (query_finished)
                         block_io.onFinish();
-                    else
-                        block_io.onException();
+                    else if (!handling_exception)
+                        block_io.onCancelOrConnectionLoss();
                 });
 
-                ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
-                ARROW_RETURN_NOT_OK(checkPipelineIsPulling(block_io.pipeline));
-
-                PullingPipelineExecutor executor{block_io.pipeline};
-
-                schema = CHColumnToArrowColumn::calculateArrowSchema(executor.getHeader().getColumnsWithTypeAndName(), "Arrow", nullptr, {.output_string_as_string = true});
-                if (schema_modifier)
+                try
                 {
-                    auto status = schema_modifier(schema);
-                    ARROW_RETURN_NOT_OK(status);
-                    schema = status.ValueUnsafe();
-                }
+                    ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
+                    ARROW_RETURN_NOT_OK(checkPipelineIsPulling(block_io.pipeline));
 
-                query_finished = true;
+                    PullingPipelineExecutor executor{block_io.pipeline};
+
+                    schema = CHColumnToArrowColumn::calculateArrowSchema(
+                        executor.getHeader().getColumnsWithTypeAndName(), "Arrow", nullptr,
+                        {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]});
+                    if (schema_modifier)
+                    {
+                        auto status = schema_modifier(schema);
+                        ARROW_RETURN_NOT_OK(status);
+                        schema = status.ValueUnsafe();
+                    }
+
+                    query_finished = true;
+                }
+                catch (...)
+                {
+                    handling_exception = true;
+                    block_io.onException();
+                    throw;
+                }
             }
         }
 
@@ -1915,7 +1964,7 @@ arrow::Status ArrowFlightHandler::PollFlightInfo(
 
         std::string sql;
         std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
-        std::function<void(Block &)> block_modifier;
+        std::function<void(ContextPtr, Block &)> block_modifier;
         std::shared_ptr<arrow::Table> table;
 
         std::shared_ptr<const PollDescriptorInfo> poll_info;
@@ -1995,7 +2044,7 @@ arrow::Status ArrowFlightHandler::PollFlightInfo(
             bool block_io_owned_here = true;
             SCOPE_EXIT({
                 if (block_io_owned_here)
-                    block_io.onException();
+                    block_io.onCancelOrConnectionLoss();
             });
 
             ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
@@ -2095,7 +2144,10 @@ arrow::Status ArrowFlightHandler::evaluatePollDescriptor(const String & poll_des
                 bytes = block.bytes();
                 std::vector<Chunk> chunks;
                 chunks.emplace_back(Chunk{std::move(block).getColumns(), rows});
-                std::shared_ptr<arrow::Table> table = CHColumnToArrowColumn::chunkToArrowTable(header, "Arrow", chunks, {.output_string_as_string = true}, header.size(), poll_session->getSchema());
+                std::shared_ptr<arrow::Table> table = CHColumnToArrowColumn::chunkToArrowTable(
+                    header, "Arrow", chunks,
+                    {.output_string_as_string = true, .output_unsupported_types_as_binary = poll_session->queryContext()->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]},
+                    header.size(), poll_session->getSchema());
                 auto ticket_info = calls_data->createTicket(table);
                 ticket = ticket_info->ticket;
             }
@@ -2163,27 +2215,37 @@ arrow::Status ArrowFlightHandler::DoGet(
             auto [ast, block_io] = executeQuery(sql, query_context, QueryFlags{}, QueryProcessingStage::Complete);
 
             bool query_finished = false;
+            bool handling_exception = false;
             SCOPE_EXIT({
                 if (query_finished)
                     block_io.onFinish();
-                else
-                    block_io.onException();
+                else if (!handling_exception)
+                    block_io.onCancelOrConnectionLoss();
             });
 
-            ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
-            ARROW_RETURN_NOT_OK(checkPipelineIsPulling(block_io.pipeline));
+            try
+            {
+                ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
+                ARROW_RETURN_NOT_OK(checkPipelineIsPulling(block_io.pipeline));
 
-            PullingPipelineExecutor executor{block_io.pipeline};
+                PullingPipelineExecutor executor{block_io.pipeline};
 
-            Block block;
-            while (executor.pull(block))
-                chunks.emplace_back(Chunk(block.getColumns(), block.rows()));
+                Block block;
+                while (executor.pull(block))
+                    chunks.emplace_back(Chunk(block.getColumns(), block.rows()));
 
-            auto header = executor.getHeader();
-            auto ch_to_arrow_converter = createCHToArrowConverter(header);
-            ch_to_arrow_converter->chChunkToArrowTable(table, chunks, header.columns());
+                auto header = executor.getHeader();
+                auto ch_to_arrow_converter = createCHToArrowConverter(header, query_context);
+                ch_to_arrow_converter->chChunkToArrowTable(table, chunks, header.columns());
 
-            query_finished = true;
+                query_finished = true;
+            }
+            catch (...)
+            {
+                handling_exception = true;
+                block_io.onException();
+                throw;
+            }
         }
 
         auto stream_res = arrow::RecordBatchReader::MakeFromIterator(
@@ -2216,8 +2278,6 @@ arrow::Status ArrowFlightHandler::DoPut(
 
         std::string sql;
 
-        bool should_write_flight_sql_metadata = false;
-
         if (
             google::protobuf::Any any_msg;
                 request.type == arrow::flight::FlightDescriptor::CMD
@@ -2231,7 +2291,6 @@ arrow::Status ArrowFlightHandler::DoPut(
                 if (!any_msg.UnpackTo(&command))
                     return arrow::Status::SerializationError("Deserialization of sql::CommandStatementUpdate failed.");
                 sql = command.query();
-                should_write_flight_sql_metadata = true;
             }
             else if (any_msg.Is<arrow::flight::protocol::sql::CommandStatementIngest>())
             {
@@ -2263,11 +2322,14 @@ arrow::Status ArrowFlightHandler::DoPut(
                     schema_string = backQuoteIfNeed(command.schema()) + ".";
                 }
 
+                if (!isValidIdentifier(command.table()))
+                    return arrow::Status::Invalid("Invalid table name: ", command.table());
+
                 sql = "INSERT INTO " + schema_string + backQuoteIfNeed(command.table()) + " FORMAT Arrow";
-                should_write_flight_sql_metadata = true;
             }
         }
 
+        bool dont_write_flight_sql_metadata = sql.empty();
         if (sql.empty())
         {
             auto sql_res = convertPutDescriptorToSQL(request);
@@ -2282,38 +2344,48 @@ arrow::Status ArrowFlightHandler::DoPut(
         auto [ast, block_io] = executeQuery(sql, query_context, QueryFlags{}, QueryProcessingStage::Complete);
 
         bool query_finished = false;
+        bool handling_exception = false;
         SCOPE_EXIT({
             if (query_finished)
                 block_io.onFinish();
-            else
-                block_io.onException();
+            else if (!handling_exception)
+                block_io.onCancelOrConnectionLoss();
         });
 
-        ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
-        auto & pipeline = block_io.pipeline;
-
-        if (pipeline.pushing())
+        try
         {
-            Block header = pipeline.getHeader();
-            auto input = std::make_shared<ArrowFlightSource>(std::move(reader), header);
-            pipeline.complete(Pipe(std::move(input)));
+            ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
+            auto & pipeline = block_io.pipeline;
+
+            if (pipeline.pushing())
+            {
+                Block header = pipeline.getHeader();
+                auto input = std::make_shared<ArrowFlightSource>(std::move(reader), header);
+                pipeline.complete(Pipe(std::move(input)));
+            }
+            else if (pipeline.pulling())
+            {
+                Block header = pipeline.getHeader();
+                auto output = std::make_shared<NullSink>(std::make_shared<Block>(header));
+                pipeline.complete(std::move(output));
+            }
+
+            if (pipeline.completed())
+            {
+                CompletedPipelineExecutor executor(pipeline);
+                executor.execute();
+            }
+
+            query_finished = true;
         }
-        else if (pipeline.pulling())
+        catch (...)
         {
-            Block header = pipeline.getHeader();
-            auto output = std::make_shared<NullSink>(std::make_shared<Block>(header));
-            pipeline.complete(std::move(output));
+            handling_exception = true;
+            block_io.onException();
+            throw;
         }
 
-        if (pipeline.completed())
-        {
-            CompletedPipelineExecutor executor(pipeline);
-            executor.execute();
-        }
-
-        query_finished = true;
-
-        if (should_write_flight_sql_metadata)
+        if (!dont_write_flight_sql_metadata)
         {
             arrow::flight::protocol::sql::DoPutUpdateResult update_result;
             if (auto element = query_context->getProcessListElement())

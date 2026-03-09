@@ -33,6 +33,8 @@ public:
         bool use_64_bit_indexes_for_dictionary = false;
         /// Output Date as UInt16 instead of Arrow DATE32 for backward compatibility.
         bool output_date_as_uint16 = false;
+        /// Output types having no conversion as raw binary data. If false - such types would raise UNKNOWN_TYPE exception.
+        bool output_unsupported_types_as_binary = false;
     };
 
     CHColumnToArrowColumn(const Block & header, const std::string & format_name_, const Settings & settings_);

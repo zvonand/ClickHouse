@@ -57,6 +57,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"allow_insert_into_iceberg", false, true, "Insert into iceberg was moved to Beta"},
             {"output_format_arrow_date_as_uint16", true, false, "Write Date as Arrow DATE32 instead of plain UInt16 by default."},
             {"opentelemetry_start_keeper_trace_probability", "auto", "auto", "New setting"},
+            {"output_format_arrow_unsupported_types_as_binary", false, true, "New setting to convert unsupported CH types to arrow binary instead of UNKNOWN_TYPE exception."},
+            {"output_format_parquet_unsupported_types_as_binary", false, false, "New setting to convert unsupported CH types to parquet (arrow) binary instead of UNKNOWN_TYPE exception."},
         });
         addSettingsChanges(settings_changes_history, "26.1",
         {

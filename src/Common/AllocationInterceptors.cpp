@@ -261,8 +261,6 @@ void operator delete[](void * ptr, std::size_t size, std::align_val_t align) noe
 namespace
 {
 
-#if !defined(SANITIZER) && !defined(SANITIZE_COVERAGE)
-
 thread_local bool c_allocation_tracking_disabled = false;
 
 bool isCAllocationTrackingDisabled()
@@ -287,6 +285,8 @@ public:
 private:
     bool previous_value;
 };
+
+#if !defined(SANITIZER) && !defined(SANITIZE_COVERAGE)
 
 size_t estimateGetAddrInfoSize(const struct addrinfo * result)
 {

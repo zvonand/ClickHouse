@@ -130,6 +130,7 @@ RUN wget -q -O /usr/bin/difffolded.pl https://raw.githubusercontent.com/brendang
 
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F23C5A6CF475977595C89F51BA6932366A755776 \
     && echo "deb https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/deadsnakes-ppa.list \
+    && printf 'Package: *\nPin: release o=LP-PPA-deadsnakes\nPin-Priority: 100\n' > /etc/apt/preferences.d/deadsnakes \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         python3.13 \

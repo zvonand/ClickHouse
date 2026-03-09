@@ -964,7 +964,7 @@ bool StatementGenerator::joinedTableOrFunction(
         case QueryOp::LoopUDF: {
             /// Here don't care about the returned result
             this->depth++;
-            const auto u = joinedTableOrFunction(rg, rel_name, allowed_clauses, true, tof->mutable_tfunc()->mutable_loop());
+            const auto u = joinedTableOrFunction(rg, rel_name, allowed_clauses, false, tof->mutable_tfunc()->mutable_loop());
             UNUSED(u);
             this->depth--;
         }

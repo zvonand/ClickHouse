@@ -29,6 +29,8 @@
 
 #define __real_getaddrinfo(node, service, hints, result) ::getaddrinfo(node, service, hints, result)
 #define __real_freeaddrinfo(result) ::freeaddrinfo(result)
+#define __real_strdup(str) ::strdup(str)
+#define __real_strndup(str, size) ::strndup(str, size)
 
 #else
 

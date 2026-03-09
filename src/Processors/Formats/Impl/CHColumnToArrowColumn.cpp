@@ -306,7 +306,7 @@ namespace DB
             if (idx < start)
                 continue;
             const auto & discriminator = discriminators[idx];
-            if (discriminator != ColumnVariant::NULL_DISCRIMINATOR && (!null_bytemap || !(*null_bytemap)[idx]))
+            if (discriminator != ColumnVariant::NULL_DISCRIMINATOR)
             {
                 if (sizes[discriminator] == 0)
                     starts[discriminator] = column_offsets[idx];

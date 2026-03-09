@@ -185,54 +185,104 @@ NO_SANITIZE_UNDEFINED void convertDecimalsBatch(
     static constexpr bool has_nullmap = !std::is_same_v<ReturnType, void>;
     static constexpr bool check_overflow = sizeof(FromFieldType) > sizeof(ToFieldType);
 
-    auto store = [&](size_t i, MaxNativeType converted_value, bool mul_overflow)
-    {
-        bool range_overflow = false;
-        if constexpr (check_overflow)
-            range_overflow = converted_value < std::numeric_limits<ToNativeType>::min()
-                          || converted_value > std::numeric_limits<ToNativeType>::max();
-
-        bool overflow = mul_overflow | range_overflow;
-
-        if constexpr (has_nullmap)
-        {
-            nullmap[i] = overflow;
-            to[i] = overflow ? static_cast<ToNativeType>(0) : static_cast<ToNativeType>(converted_value);
-        }
-        else
-        {
-            if (mul_overflow)
-                throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow while multiplying {} by scale {}",
-                                std::string(ToDataType::family_name), toString(from[i].value), toString(converted_value));
-            if (range_overflow)
-                throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow: {} is not in range ({}, {})",
-                                std::string(ToDataType::family_name), toString(converted_value),
-                                toString(std::numeric_limits<ToNativeType>::min()),
-                                toString(std::numeric_limits<ToNativeType>::max()));
-            to[i] = static_cast<ToNativeType>(converted_value);
-        }
-    };
-
     if (scale_to > scale_from)
     {
         const MaxNativeType multiplier = DecimalUtils::scaleMultiplier<MaxNativeType>(scale_to - scale_from);
         for (size_t i = 0; i < size; ++i)
         {
             MaxNativeType converted_value;
-            bool overflow = common::mulOverflow(static_cast<MaxNativeType>(from[i].value), multiplier, converted_value);
-            store(i, converted_value, overflow);
+            bool mul_overflow = common::mulOverflow(static_cast<MaxNativeType>(from[i].value), multiplier, converted_value);
+
+            bool range_overflow = false;
+            if constexpr (check_overflow)
+                range_overflow = converted_value < std::numeric_limits<ToNativeType>::min()
+                              || converted_value > std::numeric_limits<ToNativeType>::max();
+
+            bool overflow = mul_overflow | range_overflow;
+
+            if constexpr (has_nullmap)
+            {
+                nullmap[i] = overflow;
+                to[i] = overflow ? static_cast<ToNativeType>(0) : static_cast<ToNativeType>(converted_value);
+            }
+            else
+            {
+                if (mul_overflow)
+                    throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow while multiplying {} by scale {}",
+                                    std::string(ToDataType::family_name), toString(from[i].value), toString(converted_value));
+                if (range_overflow)
+                    throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow: {} is not in range ({}, {})",
+                                    std::string(ToDataType::family_name), toString(converted_value),
+                                    toString(std::numeric_limits<ToNativeType>::min()),
+                                    toString(std::numeric_limits<ToNativeType>::max()));
+                to[i] = static_cast<ToNativeType>(converted_value);
+            }
         }
     }
     else if (scale_to == scale_from)
     {
         for (size_t i = 0; i < size; ++i)
-            store(i, static_cast<MaxNativeType>(from[i].value), false);
+        {
+            MaxNativeType converted_value = from[i].value;
+
+            if constexpr (check_overflow)
+            {
+                bool overflow = converted_value < std::numeric_limits<ToNativeType>::min()
+                             || converted_value > std::numeric_limits<ToNativeType>::max();
+
+                if constexpr (has_nullmap)
+                {
+                    nullmap[i] = overflow;
+                    to[i] = overflow ? static_cast<ToNativeType>(0) : static_cast<ToNativeType>(converted_value);
+                }
+                else
+                {
+                    if (overflow)
+                        throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow: {} is not in range ({}, {})",
+                                        std::string(ToDataType::family_name), toString(converted_value),
+                                        toString(std::numeric_limits<ToNativeType>::min()),
+                                        toString(std::numeric_limits<ToNativeType>::max()));
+                    to[i] = static_cast<ToNativeType>(converted_value);
+                }
+            }
+            else
+            {
+                to[i] = static_cast<ToNativeType>(converted_value);
+            }
+        }
     }
     else
     {
         const MaxNativeType divisor = DecimalUtils::scaleMultiplier<MaxNativeType>(scale_from - scale_to);
         for (size_t i = 0; i < size; ++i)
-            store(i, static_cast<MaxNativeType>(from[i].value) / divisor, false);
+        {
+            MaxNativeType converted_value = static_cast<MaxNativeType>(from[i].value) / divisor;
+
+            if constexpr (check_overflow)
+            {
+                bool overflow = converted_value < std::numeric_limits<ToNativeType>::min()
+                             || converted_value > std::numeric_limits<ToNativeType>::max();
+
+                if constexpr (has_nullmap)
+                {
+                    nullmap[i] = overflow;
+                    to[i] = overflow ? static_cast<ToNativeType>(0) : static_cast<ToNativeType>(converted_value);
+                }
+                else
+                {
+                    if (overflow)
+                        throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow: {} is not in range ({}, {})",
+                                        std::string(ToDataType::family_name), toString(converted_value),
+                                        toString(std::numeric_limits<ToNativeType>::min()),
+                                        toString(std::numeric_limits<ToNativeType>::max()));
+                    to[i] = static_cast<ToNativeType>(converted_value);
+                }
+            }
+            else
+            {
+                to[i] = static_cast<ToNativeType>(converted_value);
+            }
+        }
     }
 }
 
@@ -449,30 +499,28 @@ NO_SANITIZE_UNDEFINED void convertToDecimalBatch(
         using WideType = std::conditional_t<(sizeof(FromIntermediate) > sizeof(ToNativeType)),
                                             FromIntermediate, ToNativeType>;
 
-        auto store = [&](size_t i, WideType converted_value, bool overflow)
-        {
-            overflow |= converted_value < std::numeric_limits<ToNativeType>::min()
-                     || converted_value > std::numeric_limits<ToNativeType>::max();
-
-            if constexpr (has_nullmap)
-            {
-                nullmap[i] = overflow;
-                to[i] = overflow ? static_cast<ToNativeType>(0) : static_cast<ToNativeType>(converted_value);
-            }
-            else
-            {
-                if (overflow)
-                    throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow", std::string(ToDataType::family_name));
-                to[i] = static_cast<ToNativeType>(converted_value);
-            }
-        };
-
         if (scale == 0)
         {
             /// Fast path: scale 0 means multiplier is 1, just widen and bounds-check.
             /// This avoids expensive wide multiplication (especially for Int256).
             for (size_t i = 0; i < size; ++i)
-                store(i, static_cast<WideType>(from[i]), false);
+            {
+                WideType converted_value = static_cast<WideType>(from[i]);
+                bool overflow = converted_value < std::numeric_limits<ToNativeType>::min()
+                             || converted_value > std::numeric_limits<ToNativeType>::max();
+
+                if constexpr (has_nullmap)
+                {
+                    nullmap[i] = overflow;
+                    to[i] = overflow ? static_cast<ToNativeType>(0) : static_cast<ToNativeType>(converted_value);
+                }
+                else
+                {
+                    if (overflow)
+                        throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow", std::string(ToDataType::family_name));
+                    to[i] = static_cast<ToNativeType>(converted_value);
+                }
+            }
         }
         else
         {
@@ -481,7 +529,21 @@ NO_SANITIZE_UNDEFINED void convertToDecimalBatch(
             {
                 WideType converted_value;
                 bool overflow = common::mulOverflow(static_cast<WideType>(from[i]), multiplier, converted_value);
-                store(i, converted_value, overflow);
+
+                overflow |= converted_value < std::numeric_limits<ToNativeType>::min()
+                         || converted_value > std::numeric_limits<ToNativeType>::max();
+
+                if constexpr (has_nullmap)
+                {
+                    nullmap[i] = overflow;
+                    to[i] = overflow ? static_cast<ToNativeType>(0) : static_cast<ToNativeType>(converted_value);
+                }
+                else
+                {
+                    if (overflow)
+                        throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow", std::string(ToDataType::family_name));
+                    to[i] = static_cast<ToNativeType>(converted_value);
+                }
             }
         }
     }

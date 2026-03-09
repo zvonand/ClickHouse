@@ -209,7 +209,7 @@ NO_SANITIZE_UNDEFINED void convertDecimalsBatch(
             {
                 if (mul_overflow)
                     throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow while multiplying {} by scale {}",
-                                    std::string(ToDataType::family_name), toString(from[i].value), toString(converted_value));
+                                    std::string(ToDataType::family_name), toString(from[i].value), toString(multiplier));
                 if (range_overflow)
                     throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "{} convert overflow: {} is not in range ({}, {})",
                                     std::string(ToDataType::family_name), toString(converted_value),

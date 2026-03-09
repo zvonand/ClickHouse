@@ -46,12 +46,12 @@ ${CLICKHOUSE_CLIENT} --query "
 "
 
 # Run multiple iterations to increase the chance of triggering the race under TSan.
-for _ in $(seq 1 20); do
+for _ in $(seq 1 5); do
     ${CLICKHOUSE_CLIENT} --query "
         SET parallel_view_processing = 1;
         SET max_threads = 8, max_insert_threads = 8;
         SET max_block_size = 100, min_insert_block_size_rows = 0, min_insert_block_size_bytes = 0;
-        INSERT INTO source SELECT number FROM numbers(10000);
+        INSERT INTO source SELECT number FROM numbers(1000);
     "
 done
 

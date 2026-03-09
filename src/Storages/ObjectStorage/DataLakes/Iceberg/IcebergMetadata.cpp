@@ -41,6 +41,8 @@
 #include <IO/ReadBufferFromFileBase.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
+#include <Parsers/ASTFunction.h>
+#include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTLiteral.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/IcebergMetadataLog.h>
@@ -66,6 +68,7 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/ManifestFile.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/ManifestFilesPruning.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Mutations.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/OrphanFilesRemoval.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PositionDeleteTransform.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Snapshot.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/StatelessMetadataFileGetter.h>
@@ -120,6 +123,8 @@ extern const SettingsBool use_roaring_bitmap_iceberg_positional_deletes;
 extern const SettingsString iceberg_metadata_compression_method;
 extern const SettingsBool allow_insert_into_iceberg;
 extern const SettingsBool allow_experimental_iceberg_compaction;
+extern const SettingsBool allow_iceberg_remove_orphan_files;
+extern const SettingsUInt64 iceberg_orphan_files_older_than_seconds;
 extern const SettingsBool iceberg_delete_data_on_drop;
 }
 
@@ -574,6 +579,131 @@ static Pipe expireSnapshotsResultToPipe(const Iceberg::ExpireSnapshotsResult & r
     return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
 }
 
+static Pipe removeOrphanFilesResultToPipe(const Iceberg::RemoveOrphanFilesResult & result)
+{
+    Block header{
+        ColumnWithTypeAndName(std::make_shared<DataTypeString>(), "metric_name"),
+        ColumnWithTypeAndName(std::make_shared<DataTypeInt64>(), "metric_value"),
+    };
+
+    MutableColumns columns = header.cloneEmptyColumns();
+
+    auto add = [&](const char * name, Int64 value)
+    {
+        columns[0]->insert(String(name));
+        columns[1]->insert(value);
+    };
+
+    add("deleted_data_files_count", result.deleted_data_files_count);
+    add("deleted_position_delete_files_count", result.deleted_position_delete_files_count);
+    add("deleted_equality_delete_files_count", result.deleted_equality_delete_files_count);
+    add("deleted_manifest_files_count", result.deleted_manifest_files_count);
+    add("deleted_manifest_lists_count", result.deleted_manifest_lists_count);
+    add("deleted_metadata_files_count", result.deleted_metadata_files_count);
+    add("deleted_statistics_files_count", result.deleted_statistics_files_count);
+
+    Chunk chunk(std::move(columns), 7);
+    return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
+}
+
+/// Check if an AST node is a named argument of the form `identifier = literal`.
+/// Returns {name, literal_value} or nullopt.
+static std::optional<std::pair<String, Field>> tryExtractNamedArg(const ASTPtr & node)
+{
+    const auto * func = node->as<ASTFunction>();
+    if (!func || func->name != "equals" || !func->arguments || func->arguments->children.size() != 2)
+        return std::nullopt;
+
+    const auto * ident = func->arguments->children[0]->as<ASTIdentifier>();
+    const auto * lit = func->arguments->children[1]->as<ASTLiteral>();
+    if (!ident || !lit)
+        return std::nullopt;
+
+    return std::make_pair(ident->name(), lit->value);
+}
+
+static Iceberg::RemoveOrphanFilesParams parseRemoveOrphanFilesArgs(const ASTPtr & args, ContextPtr context)
+{
+    Iceberg::RemoveOrphanFilesParams params;
+
+    bool seen_named = false;
+    bool older_than_set = false;
+
+    if (args)
+    {
+        for (size_t i = 0; i < args->children.size(); ++i)
+        {
+            auto named = tryExtractNamedArg(args->children[i]);
+            if (named.has_value())
+            {
+                seen_named = true;
+                const auto & [name, value] = *named;
+
+                if (name == "older_than")
+                {
+                    if (value.getType() != Field::Types::String)
+                        throw Exception(ErrorCodes::BAD_ARGUMENTS, "older_than must be a string timestamp like '2026-03-01 00:00:00'");
+                    ReadBufferFromString buf(value.safeGet<String>());
+                    time_t ts;
+                    readDateTimeText(ts, buf);
+                    params.older_than = ts;
+                    older_than_set = true;
+                }
+                else if (name == "location")
+                {
+                    if (value.getType() != Field::Types::String)
+                        throw Exception(ErrorCodes::BAD_ARGUMENTS, "location must be a string");
+                    params.location = value.safeGet<String>();
+                }
+                else if (name == "dry_run")
+                {
+                    params.dry_run = value.safeGet<UInt64>() != 0;
+                }
+                else if (name == "max_concurrent_deletes")
+                {
+                    params.max_concurrent_deletes = value.safeGet<UInt64>();
+                }
+                else
+                {
+                    throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unknown parameter '{}' for remove_orphan_files", name);
+                }
+            }
+            else
+            {
+                if (seen_named)
+                    throw Exception(ErrorCodes::BAD_ARGUMENTS, "Positional arguments must precede named arguments in remove_orphan_files()");
+
+                if (i == 0)
+                {
+                    const auto * literal = args->children[i]->as<ASTLiteral>();
+                    if (!literal || literal->value.getType() != Field::Types::String)
+                        throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                            "First positional argument to remove_orphan_files must be a string timestamp like '2026-03-01 00:00:00'");
+                    ReadBufferFromString buf(literal->value.safeGet<String>());
+                    time_t ts;
+                    readDateTimeText(ts, buf);
+                    params.older_than = ts;
+                    older_than_set = true;
+                }
+                else
+                {
+                    throw Exception(ErrorCodes::BAD_ARGUMENTS, "remove_orphan_files accepts at most one positional argument (older_than)");
+                }
+            }
+        }
+    }
+
+    if (!older_than_set)
+    {
+        UInt64 threshold_seconds = context->getSettingsRef()[Setting::iceberg_orphan_files_older_than_seconds].value;
+        auto now = std::chrono::system_clock::now();
+        auto cutoff = now - std::chrono::seconds(threshold_seconds);
+        params.older_than = std::chrono::system_clock::to_time_t(cutoff);
+    }
+
+    return params;
+}
+
 Pipe IcebergMetadata::executeCommand(
     const String & command_name,
     const ASTPtr & args,
@@ -623,6 +753,27 @@ Pipe IcebergMetadata::executeCommand(
             storage_id.getTableName());
 
         return expireSnapshotsResultToPipe(result);
+    }
+    else if (command_name == "remove_orphan_files")
+    {
+        if (!context->getSettingsRef()[Setting::allow_iceberg_remove_orphan_files].value)
+        {
+            throw Exception(
+                ErrorCodes::SUPPORT_IS_DISABLED,
+                "remove_orphan_files is experimental. "
+                "To allow its usage, enable setting allow_iceberg_remove_orphan_files");
+        }
+
+        auto params = parseRemoveOrphanFilesArgs(args, context);
+
+        auto result = Iceberg::removeOrphanFiles(
+            params,
+            context,
+            object_storage_,
+            data_lake_settings,
+            persistent_components);
+
+        return removeOrphanFilesResultToPipe(result);
     }
     else
     {

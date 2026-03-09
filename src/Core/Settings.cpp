@@ -7557,6 +7557,12 @@ Allow to execute `insert` queries into iceberg.
     DECLARE(Bool, allow_experimental_iceberg_compaction, false, R"(
 Allow to explicitly use 'OPTIMIZE' for iceberg tables.
 )", EXPERIMENTAL) \
+    DECLARE(Bool, allow_iceberg_remove_orphan_files, false, R"(
+Allow to use 'ALTER TABLE ... EXECUTE remove_orphan_files()' for iceberg tables.
+)", EXPERIMENTAL) \
+    DECLARE(UInt64, iceberg_orphan_files_older_than_seconds, 259200, R"(
+Default age threshold in seconds for orphan file removal in Iceberg tables. Files newer than this are not considered orphans. Used when the older_than argument is omitted from the remove_orphan_files() procedure call. Default is 259200 (3 days).
+)", EXPERIMENTAL) \
     DECLARE(Bool, write_full_path_in_iceberg_metadata, false, R"(
 Write full paths (including s3://) into iceberg metadata files.
 )", EXPERIMENTAL) \

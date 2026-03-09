@@ -51,7 +51,7 @@ private:
 public:
     bool isNumeric() const override { return is_arithmetic_v<T>; }
 
-    size_t size() const override final
+    size_t size() const final
     {
         return data.size();
     }
@@ -146,7 +146,7 @@ public:
 
     /// This method implemented in header because it could be possibly devirtualized.
 #if !defined(DEBUG_OR_SANITIZER_BUILD)
-    int compareAt(size_t n, size_t m, const IColumn & rhs_, int nan_direction_hint) const override final
+    int compareAt(size_t n, size_t m, const IColumn & rhs_, int nan_direction_hint) const final
 #else
     int doCompareAt(size_t n, size_t m, const IColumn & rhs_, int nan_direction_hint) const override
 #endif
@@ -154,7 +154,7 @@ public:
         return CompareHelper<T>::compare(data[n], assert_cast<const Self &>(rhs_).data[m], nan_direction_hint);
     }
 
-    [[nodiscard]] Int64 compareTrackAt(size_t n, size_t m, const IColumn & rhs, int nan_direction_hint) const override final
+    [[nodiscard]] Int64 compareTrackAt(size_t n, size_t m, const IColumn & rhs, int nan_direction_hint) const final
     {
         Int64 res = compareAt(n, m, rhs, nan_direction_hint);
 

@@ -261,7 +261,7 @@ void deleteOrphanFiles(
 
     for (const auto & path : orphan_paths)
     {
-        pool.scheduleOrThrowOnError([&object_storage, &path, &log]
+        pool.scheduleOrThrowOnError([&object_storage, path, &log]
         {
             try
             {

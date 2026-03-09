@@ -407,12 +407,14 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
                 order_expression = function_node;
             }
             auto columns_with_state = ColumnsDescription(result.sample_block.getNamesAndTypesList());
-            metadata.sorting_key = metadata.primary_key = KeyDescription::getSortingKeyFromAST(order_expression, columns_with_state, query_context, {});
+            metadata.sorting_key = KeyDescription::getSortingKeyFromAST(order_expression, columns_with_state, query_context, {});
+            metadata.primary_key = KeyDescription::getKeyFromAST(order_expression, columns_with_state, query_context);
             metadata.primary_key.definition_ast = nullptr;
         }
         else
         {
-            metadata.sorting_key = metadata.primary_key = KeyDescription::buildEmptyKey();
+            metadata.sorting_key = KeyDescription::buildEmptyKey();
+            metadata.primary_key = KeyDescription::buildEmptyKey();
         }
         for (const auto & key : select.getQueryAnalyzer()->aggregationKeys())
             result.sample_block_for_keys.insert({nullptr, key.type, key.name});
@@ -441,7 +443,8 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
         if (has_block_offset_in_key && !columns.has("_parent_block_offset"))
             columns_for_key.add(ColumnDescription("_parent_block_offset", BlockOffsetColumn::type));
 
-        metadata.sorting_key = metadata.primary_key = KeyDescription::getSortingKeyFromAST(renamed_order_by, columns_for_key, query_context, {});
+        metadata.sorting_key = KeyDescription::getSortingKeyFromAST(renamed_order_by, columns_for_key, query_context, {});
+        metadata.primary_key = KeyDescription::getKeyFromAST(renamed_order_by, columns_for_key, query_context);
         metadata.primary_key.definition_ast = nullptr;
     }
 

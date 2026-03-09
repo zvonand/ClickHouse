@@ -25,6 +25,8 @@ SET enable_parallel_replicas=0, automatic_parallel_replicas_mode=0;
 
 SYSTEM FLUSH LOGS query_log, text_log;
 
+SET max_rows_to_read = 0;
+
 -- The optimizer logs "The applied formula: {input_bytes} / {max_threads} ? ({input_bytes} / ({max_threads} * {num_replicas}) + ...)"
 -- Extract num_replicas from the formula and verify it equals 3 (cluster size), not 100 (setting).
 SELECT DISTINCT toUInt64(extract(message, '\\(\\d+ \\* (\\d+)\\)')) AS num_replicas_in_formula

@@ -246,7 +246,8 @@ QueryPlanOptimizationSettings::QueryPlanOptimizationSettings(ContextPtr from)
     if (auto cluster_name = from->getSettingsRef()[Setting::cluster_for_parallel_replicas].value; !cluster_name.empty())
     {
         if (auto cluster = from->tryGetCluster(cluster_name))
-            max_parallel_replicas = std::min<size_t>(cluster->getShardsInfo().at(0).getAllNodeCount(), max_parallel_replicas);
+            if (auto nodes = cluster->getAnyShardInfo().getAllNodeCount())
+                max_parallel_replicas = std::min<size_t>(nodes, max_parallel_replicas);
     }
 }
 }

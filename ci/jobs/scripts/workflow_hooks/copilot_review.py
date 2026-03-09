@@ -20,7 +20,7 @@ def _run(prompt):
     ).get_value()
     result = Result.from_commands_run(
         name="copilot review",
-        command=f"copilot -p {shlex.quote(prompt)} --allow-all-tools",
+        command=f"copilot -p {shlex.quote(prompt)} --allow-all-tools --model gpt-5",
         with_info=True,
     )
     os.environ.pop("GH_TOKEN", None)

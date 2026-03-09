@@ -521,7 +521,6 @@ Chunk JemallocProfileSource::generateCollapsed()
             }
         }
 
-        state.aggregated = true;
         state.iter = state.stack_to_metric.begin();
     }
 
@@ -530,8 +529,8 @@ Chunk JemallocProfileSource::generateCollapsed()
     /// Stream directly from the aggregated map
     if (state.iter == state.stack_to_metric.end())
     {
-        collapsed_state.reset();
         is_finished = true;
+        collapsed_state.reset();
         return {};
     }
 
@@ -544,7 +543,10 @@ Chunk JemallocProfileSource::generateCollapsed()
     }
 
     if (state.iter == state.stack_to_metric.end())
+    {
         is_finished = true;
+        collapsed_state.reset();
+    }
 
     size_t num_rows = column->size();
     Columns columns;

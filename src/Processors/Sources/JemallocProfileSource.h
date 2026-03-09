@@ -81,7 +81,12 @@ private:
     {
         std::unordered_map<std::string, UInt64> stack_to_metric;
         std::unordered_map<std::string, UInt64>::const_iterator iter;
-        bool aggregated = false;
+
+        CollapsedState() = default;
+        CollapsedState(const CollapsedState &) = delete;
+        CollapsedState & operator=(const CollapsedState &) = delete;
+        CollapsedState(CollapsedState &&) = delete;
+        CollapsedState & operator=(CollapsedState &&) = delete;
     };
     std::optional<CollapsedState> collapsed_state;
 };

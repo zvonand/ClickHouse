@@ -23,3 +23,7 @@ default.03760_view2
 03760_local_view_of_x
 []
 []
+['db_03760_rename_before.v_join','db_03760_rename_before.v_simple','db_03760_rename_ext.v_xdb']
+['v_join']
+['db_03760_rename_after.v_join','db_03760_rename_after.v_simple','db_03760_rename_ext.v_xdb']
+['v_join']

@@ -101,3 +101,39 @@ SELECT arraySort(dependencies_table) FROM system.tables WHERE database = current
 
 DROP TABLE 03760_src2;
 DROP TABLE 03760_src1;
+
+-- RENAME DATABASE: plain-view dependencies must be migrated to the new database name.
+-- Three cases are exercised:
+--   (a) single-source plain view: v_simple reads from src1 (same DB, renamed together)
+--   (b) multi-source plain view: v_join reads from src1 JOIN src2 (same DB, renamed together)
+--   (c) cross-db plain view: v_xdb lives in an external DB and reads from src1 (source DB renamed)
+DROP DATABASE IF EXISTS db_03760_rename_before;
+DROP DATABASE IF EXISTS db_03760_rename_after;
+DROP DATABASE IF EXISTS db_03760_rename_ext;
+
+CREATE DATABASE db_03760_rename_before ENGINE = Atomic;
+CREATE TABLE db_03760_rename_before.src1 (id UInt64) ENGINE = MergeTree ORDER BY id;
+CREATE TABLE db_03760_rename_before.src2 (id UInt64) ENGINE = MergeTree ORDER BY id;
+CREATE VIEW db_03760_rename_before.v_simple AS SELECT * FROM db_03760_rename_before.src1;
+CREATE VIEW db_03760_rename_before.v_join   AS SELECT a.id FROM db_03760_rename_before.src1 a JOIN db_03760_rename_before.src2 b ON a.id = b.id;
+
+CREATE DATABASE db_03760_rename_ext ENGINE = Atomic;
+CREATE VIEW db_03760_rename_ext.v_xdb AS SELECT * FROM db_03760_rename_before.src1;
+
+-- Before rename: verify all three views appear as dependents.
+SELECT arraySort(arrayMap((x, y) -> concat(x, '.', y), dependencies_database, dependencies_table))
+FROM system.tables WHERE database = 'db_03760_rename_before' AND name = 'src1';
+SELECT arraySort(dependencies_table)
+FROM system.tables WHERE database = 'db_03760_rename_before' AND name = 'src2';
+
+RENAME DATABASE db_03760_rename_before TO db_03760_rename_after;
+
+-- After rename: the same three views must still be reported under the new DB name.
+-- v_simple and v_join have been renamed together with their source; v_xdb stays in its own DB.
+SELECT arraySort(arrayMap((x, y) -> concat(x, '.', y), dependencies_database, dependencies_table))
+FROM system.tables WHERE database = 'db_03760_rename_after' AND name = 'src1';
+SELECT arraySort(dependencies_table)
+FROM system.tables WHERE database = 'db_03760_rename_after' AND name = 'src2';
+
+DROP DATABASE db_03760_rename_after;
+DROP DATABASE db_03760_rename_ext;

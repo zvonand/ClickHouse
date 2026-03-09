@@ -184,9 +184,6 @@ void TablesLoader::buildDependencyGraph()
         for (const auto & source_table : new_ref_dependencies.plain_view_dependencies)
             plain_view_dependencies.addDependency(StorageID{source_table}, StorageID{table_name});
 
-        if (!new_ref_dependencies.plain_view_dependencies.empty())
-            DatabaseCatalog::instance().addPlainViewDependencies(table_name, new_ref_dependencies.plain_view_dependencies);
-
         if (!new_loading_dependencies.empty())
             loading_dependencies.addDependencies(table_name, new_loading_dependencies);
 

@@ -1,6 +1,7 @@
 John\0\0\0\0
 John
 John
+John\0\0\0\0
 abc\0def
 FixedString(8)	8
 8
@@ -10,4 +11,56 @@ FixedString(8)	8
 John\0A
 {"s":"John\u0000\u0000\u0000\u0000"}
 {"s":"John"}
+
+"John"
+"John\0\0\0\0"
+
+('John')
+('John\0\0\0\0')
+
+<?xml version='1.0' encoding='UTF-8' ?>
+<result>
+	<meta>
+		<columns>
+			<column>
+				<name>s</name>
+				<type>FixedString(8)</type>
+			</column>
+		</columns>
+	</meta>
+	<data>
+		<row>
+			<s>John</s>
+		</row>
+	</data>
+	<rows>1</rows>
+</result>
+
+<?xml version='1.0' encoding='UTF-8' ?>
+<result>
+	<meta>
+		<columns>
+			<column>
+				<name>s</name>
+				<type>FixedString(8)</type>
+			</column>
+		</columns>
+	</meta>
+	<data>
+		<row>
+			<s>John\0\0\0\0</s>
+		</row>
+	</data>
+	<rows>1</rows>
+</result>
+
+| s |
+|:-|
+| John |
+
+| s |
+|:-|
+| John\0\0\0\0 |
+
 null
+\0

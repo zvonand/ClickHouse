@@ -26,7 +26,7 @@ namespace ErrorCodes
 
 static constexpr size_t MAX_STRINGS_SIZE = 1ULL << 30;
 
-static inline const char * getEndWithOptionalTrim(const char * pos, size_t n, const FormatSettings & settings)
+static const char * getEndWithOptionalTrim(const char * pos, size_t n, const FormatSettings & settings)
 {
     const char * end = pos + n;
     if (!settings.trim_fixed_string)

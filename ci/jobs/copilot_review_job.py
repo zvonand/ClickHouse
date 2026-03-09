@@ -6,9 +6,13 @@ Copilot-based automated PR code review job.
 
 Always succeeds — copilot errors are logged as warnings only.
 
-GH_TOKEN is set to the robot token so copilot can access the Copilot API.
-Before posting any gh CLI comments, copilot switches to the pre-authenticated
-GitHub App account (clickhouse-gh[bot]) via `env -u GH_TOKEN gh auth switch`.
+Auth split:
+- GH_TOKEN is set to the robot Copilot account token so the copilot CLI
+  can access the GitHub Copilot API (model inference).
+- Comment posting uses the pre-authenticated clickhouse-gh[bot] app (stored
+  gh credentials via enable_gh_auth=True). Since gh(1) always prefers
+  GH_TOKEN over stored credentials, every gh CLI call must be prefixed with
+  `env -u GH_TOKEN` to bypass the robot token and post as the app.
 """
 
 import os
@@ -19,7 +23,9 @@ from ci.praktika import Secret
 from ci.praktika.info import Info
 from ci.praktika.result import Result
 
-_POST_AUTH = "env -u GH_TOKEN gh auth switch -u clickhouse-gh[bot]"
+# All gh CLI invocations that post comments must use this prefix so that
+# gh uses the stored clickhouse-gh[bot] credentials instead of GH_TOKEN.
+_GH = "env -u GH_TOKEN gh"
 
 
 def _run(prompt):
@@ -48,7 +54,9 @@ def pre():
         f"Follow the instructions in .github/copilot-instructions.md. "
         f"Review the PR {info.pr_url}. "
         f"The repo is checked out at PR head. "
-        f"Before posting any comments, switch to the app account by running: `{_POST_AUTH}`. "
+        f"IMPORTANT: for every gh CLI call (reading PR data, posting comments, creating reviews) "
+        f"prefix it with `env -u GH_TOKEN` (e.g. `{_GH} pr view ...`, `{_GH} api ...`). "
+        f"This ensures comments are posted as the pre-authenticated app, not the Copilot robot account. "
         f"Post inline review comments on specific lines where applicable, and one summary comment. "
         f"Before posting, read existing review comments on this PR and do not duplicate ones already posted."
     )
@@ -71,7 +79,9 @@ def post():
         f"If there are failures — the repo is checked out at PR head. "
         f"Look at the PR diff to understand what changed, then work backwards from the failures: "
         f"try to match each failure to the code changes and briefly explain why the change likely caused it. "
-        f"Before posting, switch to the app account by running: `{_POST_AUTH}`. "
+        f"IMPORTANT: for every gh CLI call (reading PR data, posting comments) "
+        f"prefix it with `env -u GH_TOKEN` (e.g. `{_GH} pr view ...`, `{_GH} api ...`). "
+        f"This ensures comments are posted as the pre-authenticated app, not the Copilot robot account. "
         f"Post a single comment on the PR with your findings."
     )
     _run(prompt)

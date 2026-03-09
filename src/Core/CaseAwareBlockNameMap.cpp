@@ -56,9 +56,10 @@ struct CaseInsensitiveEquality
 class CaseAwareBlockNameMap::MatchCaseBlockNameMap
 {
 public:
-    explicit MatchCaseBlockNameMap(size_t size)
-        : map(size)
-    {
+    MatchCaseBlockNameMap() = default; 
+
+    void setSize(size_t size) {
+        map.resize(size);
         map.set_empty_key(std::string_view{});
     }
 
@@ -88,9 +89,10 @@ private:
 class CaseAwareBlockNameMap::IgnoreCaseBlockNameMap
 {
 public:
-    explicit IgnoreCaseBlockNameMap(size_t size)
-        : map(size)
-    {
+    IgnoreCaseBlockNameMap() = default;
+
+    void setSize(size_t size){
+        map.resize(size);
         map.set_empty_key(std::string_view{});
     }
 
@@ -135,10 +137,11 @@ protected:
 class CaseAwareBlockNameMap::AutoCaseBlockNameMap
 {
 public:
-    explicit AutoCaseBlockNameMap(size_t size)
-        : map(size)
-        , i_map(size)
-    {
+    AutoCaseBlockNameMap() = default;
+    
+    void setSize(size_t size){
+        map.setSize(size);
+        i_map.setSize(size);
     }
 
     ~AutoCaseBlockNameMap() = default;
@@ -179,29 +182,27 @@ private:
     IgnoreCaseBlockNameMap i_map;
 };
 
-CaseAwareBlockNameMap::CaseAwareBlockNameMap(FormatSettings::InputFormatCaseSensitivity input_mode, const Block & block)
+CaseAwareBlockNameMap::CaseAwareBlockNameMap(FormatSettings::InputFormatCaseSensitivity input_mode)
     : mode(input_mode)
 {
-    expected_size = block.getIndexByName().size();
     switch (mode)
     {
         case FormatSettings::InputFormatCaseSensitivity::MATCH_CASE:
         {
-            this->match_case = std::make_unique<MatchCaseBlockNameMap>(expected_size);
+            this->match_case = std::make_unique<MatchCaseBlockNameMap>();
             break;
         }
         case FormatSettings::InputFormatCaseSensitivity::IGNORE_CASE:
         {
-            this->ignore_case = std::make_unique<IgnoreCaseBlockNameMap>(expected_size);
+            this->ignore_case = std::make_unique<IgnoreCaseBlockNameMap>();
             break;
         }
         case FormatSettings::InputFormatCaseSensitivity::AUTO:
         {
-            this->auto_case = std::make_unique<AutoCaseBlockNameMap>(expected_size);
+            this->auto_case = std::make_unique<AutoCaseBlockNameMap>();
             break;
         }
     }
-    getNamesToIndexesMap(block);
 }
 
 
@@ -209,6 +210,8 @@ CaseAwareBlockNameMap::~CaseAwareBlockNameMap()= default;
 
 void CaseAwareBlockNameMap::getNamesToIndexesMap(const Block & block)
 {
+    expected_size = block.getIndexByName().size();
+    setSize(expected_size);
     const auto & index_by_name = block.getIndexByName();
     for (const auto & [name, index] : index_by_name)
     {
@@ -276,6 +279,29 @@ bool CaseAwareBlockNameMap::stringCompare(std::string_view left, std::string_vie
         {
             chassert(this->auto_case);
             return this->auto_case->stringCompare(left, right);
+        }
+    }
+}
+
+void CaseAwareBlockNameMap::setSize(size_t size){
+    switch (mode) {
+        case FormatSettings::InputFormatCaseSensitivity::MATCH_CASE:
+        {
+            chassert(this->match_case);
+            this->match_case->setSize(size);
+            break;
+        }
+        case FormatSettings::InputFormatCaseSensitivity::IGNORE_CASE:
+        {
+            chassert(this->ignore_case);
+            this->ignore_case->setSize(size);
+            break;
+        }
+        case FormatSettings::InputFormatCaseSensitivity::AUTO:
+        {
+            chassert(this->auto_case);
+            this->auto_case->setSize(size);
+            break;
         }
     }
 }

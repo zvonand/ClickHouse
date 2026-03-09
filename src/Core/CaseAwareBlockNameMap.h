@@ -16,7 +16,7 @@ public:
     };
 
     /// Constructs a map between column name and position in the block
-    explicit CaseAwareBlockNameMap(FormatSettings::InputFormatCaseSensitivity input_mode, const Block & block);
+    explicit CaseAwareBlockNameMap(FormatSettings::InputFormatCaseSensitivity input_mode);
     ~CaseAwareBlockNameMap();
     /// Adds a new pair column_name and position
     void add(std::string_view column_name, size_t idx);
@@ -28,11 +28,14 @@ public:
         return expected_size;
     }
 
+    void setSize(size_t size);
+
+    /// Constructs the map from the given block
+    void getNamesToIndexesMap(const Block & block);
+
     /// Compares two strings, using the same method as the one used internally
     bool stringCompare(std::string_view left, std::string_view right) const;
 private:
-    /// Constructs the map from the given block
-    void getNamesToIndexesMap(const Block & block);
 
     /// Input mode that will be used by this object
     const FormatSettings::InputFormatCaseSensitivity mode;

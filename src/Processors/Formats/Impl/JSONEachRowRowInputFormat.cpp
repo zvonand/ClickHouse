@@ -42,11 +42,12 @@ JSONEachRowRowInputFormat::JSONEachRowRowInputFormat(
     const FormatSettings & format_settings_,
     bool yield_strings_)
     : IRowInputFormat(header_, in_, std::move(params_))
-    , name_map(format_settings_.input_format_with_names_case_insensitive_column_matching, getPort().getHeader())
+    , name_map(format_settings_.input_format_with_names_case_insensitive_column_matching)
     , prev_positions(header_->columns(), {std::string_view{}, NOT_INITIALIZED})
     , yield_strings(yield_strings_)
     , format_settings(format_settings_)
 {
+    name_map.getNamesToIndexesMap(getPort().getHeader());
     const auto & header = getPort().getHeader();
     if (format_settings_.import_nested_json)
     {

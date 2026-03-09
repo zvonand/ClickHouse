@@ -72,11 +72,12 @@ RowInputFormatWithNamesAndTypes<FormatReaderImpl>::RowInputFormatWithNamesAndTyp
     , with_names(with_names_)
     , with_types(with_types_)
     , format_reader(std::move(format_reader_))
-    , column_indexes_by_names(format_settings_.input_format_with_names_case_insensitive_column_matching, getPort().getHeader())
+    , column_indexes_by_names(format_settings_.input_format_with_names_case_insensitive_column_matching)
     , is_binary(is_binary_)
     , try_detect_header(try_detect_header_)
     , allow_variable_number_of_columns(allow_variable_number_of_columns_)
 {
+    column_indexes_by_names.getNamesToIndexesMap(getPort().getHeader());
 }
 
 template <typename FormatReaderImpl>

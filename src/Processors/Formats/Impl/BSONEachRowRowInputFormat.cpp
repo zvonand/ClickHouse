@@ -58,10 +58,11 @@ BSONEachRowRowInputFormat::BSONEachRowRowInputFormat(
     ReadBuffer & in_, SharedHeader header_, Params params_, const FormatSettings & format_settings_)
     : IRowInputFormat(header_, in_, std::move(params_))
     , format_settings(format_settings_)
-    , name_map(format_settings_.input_format_with_names_case_insensitive_column_matching, getPort().getHeader())
+    , name_map(format_settings_.input_format_with_names_case_insensitive_column_matching)
     , prev_positions(header_->columns(), {std::string_view{}, NOT_INITIALIZED})
     , types(header_->getDataTypes())
 {
+    name_map.getNamesToIndexesMap(getPort().getHeader());
 }
 
 inline size_t BSONEachRowRowInputFormat::columnIndex(std::string_view name, size_t key_index)

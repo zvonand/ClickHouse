@@ -2034,6 +2034,13 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
             fuzz_context->resetInputCallbacks();
             fuzz_context->setSetting("ast_fuzzer_runs", Field(Float64(0)));
             fuzz_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(UInt64(0)));
+
+            /// Limit resources for each fuzzed query to prevent runaway execution.
+            fuzz_context->setSetting("max_execution_time", Field(UInt64(10)));
+            fuzz_context->setSetting("max_memory_usage", Field(UInt64(1024 * 1024 * 1024)));  /// 1 GiB
+            fuzz_context->setSetting("max_result_rows", Field(UInt64(1000)));
+            fuzz_context->setSetting("max_result_bytes", Field(UInt64(10 * 1024 * 1024)));  /// 10 MiB
+
             fuzz_context->setCurrentQueryId("");
 
             auto result = executeQuery(fuzzed_query, fuzz_context, QueryFlags{.internal = true});

@@ -6,7 +6,6 @@
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnsNumber.h>
 #include <DataTypes/DataTypeString.h>
-#include <DataTypes/DataTypesNumber.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
 #include <Functions/IFunction.h>
@@ -51,7 +50,7 @@ struct FoldContext
     const UNormalizer2 * nfc = nullptr;
     const UNormalizer2 * nfd = nullptr;
     const UNormalizer2 * nfkc_cf = nullptr;
-    uint32_t fold_options = U_FOLD_CASE_DEFAULT;
+    uint32_t fold_options = U_FOLD_CASE_DEFAULT; /// From ICU lib
     bool aggressive = true;
 };
 

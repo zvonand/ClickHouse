@@ -210,8 +210,7 @@ CaseAwareBlockNameMap::~CaseAwareBlockNameMap()= default;
 
 void CaseAwareBlockNameMap::getNamesToIndexesMap(const Block & block)
 {
-    expected_size = block.getIndexByName().size();
-    setSize(expected_size);
+    setSize(block.getIndexByName().size());
     const auto & index_by_name = block.getIndexByName();
     for (const auto & [name, index] : index_by_name)
     {
@@ -284,6 +283,7 @@ bool CaseAwareBlockNameMap::stringCompare(std::string_view left, std::string_vie
 }
 
 void CaseAwareBlockNameMap::setSize(size_t size){
+    expected_size = size;
     switch (mode) {
         case FormatSettings::InputFormatCaseSensitivity::MATCH_CASE:
         {

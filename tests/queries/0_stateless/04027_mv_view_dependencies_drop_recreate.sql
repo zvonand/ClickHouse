@@ -1,53 +1,39 @@
 -- Tags: no-replicated-database
--- Test that dropping and recreating a materialized view with the same name
--- does not cause assertion failures due to stale view dependencies.
+-- Test that view dependencies are properly cleaned up in `updateDependencies`
+-- when `new_view_dependencies` is empty, preventing stale edges from accumulating.
+-- Reproduces assertion failure from https://github.com/ClickHouse/ClickHouse/issues/98706
 
-DROP TABLE IF EXISTS src;
-DROP TABLE IF EXISTS dst;
-DROP TABLE IF EXISTS mv;
+DROP DATABASE IF EXISTS test_mv_deps;
+CREATE DATABASE test_mv_deps ENGINE = Memory;
 
-CREATE TABLE src (x UInt64) ENGINE = MergeTree ORDER BY x;
-CREATE TABLE dst (x UInt64) ENGINE = MergeTree ORDER BY x;
-CREATE MATERIALIZED VIEW mv TO dst AS SELECT x FROM src;
+CREATE TABLE test_mv_deps.src1 (c0 Int) ENGINE = Memory;
+CREATE TABLE test_mv_deps.src2 (c0 Int) ENGINE = Memory;
+CREATE TABLE test_mv_deps.target (c0 Int) ENGINE = Memory;
+CREATE MATERIALIZED VIEW test_mv_deps.mv TO test_mv_deps.target AS SELECT c0 FROM test_mv_deps.src1;
 
-INSERT INTO src VALUES (1);
-SELECT x FROM dst ORDER BY x;
+-- BACKUP/RESTORE allows us to re-add the src1->mv edge later
+BACKUP VIEW test_mv_deps.mv TO Memory('04027_backup.zip') SYNC;
 
--- Drop the MV and recreate it with a different source table
-DROP TABLE mv;
+-- Replace source: src1->mv becomes src2->mv
+ALTER TABLE test_mv_deps.mv MODIFY QUERY SELECT c0 FROM test_mv_deps.src2;
 
-CREATE TABLE src2 (x UInt64) ENGINE = MergeTree ORDER BY x;
-CREATE MATERIALIZED VIEW mv TO dst AS SELECT x FROM src2;
+-- This should clean up the src2->mv edge because new_view_dependencies is empty,
+-- but previously it leaked the stale edge due to the removal being inside
+-- `if (!new_view_dependencies.empty())`
+ALTER TABLE test_mv_deps.mv MODIFY QUERY SELECT 1 AS c0;
 
-INSERT INTO src2 VALUES (2);
-SELECT x FROM dst ORDER BY x;
+TRUNCATE DATABASE test_mv_deps;
 
--- Alter the recreated MV to read from the original source
-ALTER TABLE mv MODIFY QUERY SELECT x FROM src;
+-- Restore re-adds src1->mv via addDependencies.
+-- Without the fix, stale src2->mv is still present, giving us {src2, src1}.
+RESTORE VIEW test_mv_deps.mv FROM Memory('04027_backup.zip') SYNC FORMAT Null;
 
-INSERT INTO src VALUES (3);
-SELECT x FROM dst ORDER BY x;
+-- This triggers updateDependencies; with the stale edge it would hit
+-- assert(tables_from.size() == 1) in debug builds.
+ALTER TABLE test_mv_deps.mv MODIFY COMMENT '';
 
--- Test exchange tables with MV
-DROP TABLE IF EXISTS mv2;
-CREATE TABLE dst2 (x UInt64) ENGINE = MergeTree ORDER BY x;
-CREATE MATERIALIZED VIEW mv2 TO dst2 AS SELECT x FROM src2;
+-- Verify the MV still works correctly
+INSERT INTO test_mv_deps.src1 VALUES (1), (2), (3);
+SELECT c0 FROM test_mv_deps.target ORDER BY c0;
 
-INSERT INTO src2 VALUES (4);
-SELECT x FROM dst2 ORDER BY x;
-
--- Exchange MVs
-EXCHANGE TABLES mv AND mv2;
-
-INSERT INTO src VALUES (5);
-SELECT x FROM dst2 ORDER BY x;
-
-INSERT INTO src2 VALUES (6);
-SELECT x FROM dst ORDER BY x;
-
-DROP TABLE mv;
-DROP TABLE mv2;
-DROP TABLE src;
-DROP TABLE src2;
-DROP TABLE dst;
-DROP TABLE dst2;
+DROP DATABASE test_mv_deps;

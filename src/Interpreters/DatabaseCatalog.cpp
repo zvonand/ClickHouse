@@ -1714,12 +1714,14 @@ void DatabaseCatalog::updateDependencies(
         referential_dependencies.addDependencies(table_id, new_referential_dependencies);
     if (!new_loading_dependencies.empty())
         loading_dependencies.addDependencies(table_id, new_loading_dependencies);
-    if (!new_view_dependencies.empty())
     {
-        assert(new_view_dependencies.size() == 1);
         auto tables_from = view_dependencies.getDependents(table_id);
         for (const auto & the_table_from : tables_from)
             view_dependencies.removeDependency(the_table_from, table_id, /* remove_isolated_tables= */ true);
+    }
+    if (!new_view_dependencies.empty())
+    {
+        assert(new_view_dependencies.size() == 1);
         view_dependencies.addDependency(StorageID{*new_view_dependencies.begin()}, table_id);
     }
 }

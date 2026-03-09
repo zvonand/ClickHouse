@@ -86,4 +86,4 @@ if __name__ == "__main__":
         print("Usage: copilot_review_job.py --pre | --post")
         sys.exit(1)
 
-    Result.create_from(results=[]).complete_job()
+    Result.create_from(status=Result.Status.SUCCESS).complete_job()

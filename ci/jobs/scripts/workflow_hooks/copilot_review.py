@@ -5,19 +5,26 @@ Copilot-based automated PR code review hook.
 --post: review code and CI results
 """
 
+import os
 import shlex
 import sys
 
+from ci.praktika import Secret
 from ci.praktika.info import Info
 from ci.praktika.result import Result
 
 
 def _run(prompt):
-    return Result.from_commands_run(
+    os.environ["GH_TOKEN"] = Secret.Config(
+        name="/ci/robot-ch-test-poll-copilot", type=Secret.Type.AWS_SSM_PARAMETER
+    ).get_value()
+    result = Result.from_commands_run(
         name="copilot review",
         command=f"copilot -p {shlex.quote(prompt)} --allow-all-tools",
         with_info=True,
     )
+    os.environ.pop("GH_TOKEN", None)
+    return result
 
 
 def pre():

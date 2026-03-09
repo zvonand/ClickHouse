@@ -31,7 +31,7 @@ public:
 
     H3Validator validator;
 
-    FunctionH3GetFaces(const ContextPtr & context) : validator(context) {}
+    explicit FunctionH3GetFaces(const ContextPtr & context) : validator(context) {}
 
     static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3GetFaces>(context); }
 

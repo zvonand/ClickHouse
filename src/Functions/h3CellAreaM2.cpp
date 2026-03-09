@@ -27,7 +27,7 @@ public:
 
     H3Validator validator;
 
-    FunctionH3CellAreaM2(const ContextPtr & context) : validator(context) {}
+    explicit FunctionH3CellAreaM2(const ContextPtr & context) : validator(context) {}
 
     static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3CellAreaM2>(context); }
 

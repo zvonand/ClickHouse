@@ -33,7 +33,7 @@ public:
 
     H3Validator validator;
 
-    FunctionH3HexRing(const ContextPtr & context) : validator(context) {}
+    explicit FunctionH3HexRing(const ContextPtr & context) : validator(context) {}
 
     static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3HexRing>(context); }
 

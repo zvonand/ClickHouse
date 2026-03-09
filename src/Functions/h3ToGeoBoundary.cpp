@@ -27,7 +27,7 @@ public:
     String getName() const override { return name; }
     H3Validator validator;
 
-    FunctionH3ToGeoBoundary(const ContextPtr & context) : validator(context) {}
+    explicit FunctionH3ToGeoBoundary(const ContextPtr & context) : validator(context) {}
 
     static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3ToGeoBoundary>(context); }
 

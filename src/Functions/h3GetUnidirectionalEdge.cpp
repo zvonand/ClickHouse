@@ -30,7 +30,7 @@ public:
 
     H3Validator validator;
 
-    FunctionH3GetUnidirectionalEdge(const ContextPtr & context) : validator(context) {}
+    explicit FunctionH3GetUnidirectionalEdge(const ContextPtr & context) : validator(context) {}
 
     static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3GetUnidirectionalEdge>(context); }
 

@@ -32,7 +32,7 @@ struct H3Validator
 {
     bool throw_on_error;
 
-    H3Validator(const ContextPtr & context);
+    explicit H3Validator(const ContextPtr & context);
 
     bool validateCell(uint64_t h) const;
 };

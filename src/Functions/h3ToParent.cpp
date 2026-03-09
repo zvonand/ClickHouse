@@ -29,7 +29,7 @@ public:
 
     H3Validator validator;
 
-    FunctionH3ToParent(const ContextPtr & context) : validator(context) {}
+    explicit FunctionH3ToParent(const ContextPtr & context) : validator(context) {}
 
     static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3ToParent>(context); }
 

@@ -32,7 +32,7 @@ public:
 
     H3Validator validator;
 
-    FunctionH3GetUnidirectionalEdgesFromHexagon(const ContextPtr & context) : validator(context) {}
+    explicit FunctionH3GetUnidirectionalEdgesFromHexagon(const ContextPtr & context) : validator(context) {}
 
     static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3GetUnidirectionalEdgesFromHexagon>(context); }
 

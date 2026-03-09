@@ -34,7 +34,7 @@ public:
 
     H3Validator validator;
 
-    FunctionH3ToChildren(const ContextPtr & context) : validator(context) {}
+    explicit FunctionH3ToChildren(const ContextPtr & context) : validator(context) {}
 
     static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3ToChildren>(context); }
 

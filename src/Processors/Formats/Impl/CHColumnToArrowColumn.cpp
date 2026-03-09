@@ -383,7 +383,7 @@ namespace DB
                 boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start, column_offsets.begin() + start, null_bytemap->begin() + start)),
                 to_arrow_offset);
             auto end_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start + size, column_offsets.end() + start + size, null_bytemap->end() + start + size)),
+                boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start + size, column_offsets.begin() + start + size, null_bytemap->begin() + start + size)),
                 to_arrow_offset);
 
             status = offsets_builder.AppendValues(begin_it, end_it);
@@ -406,7 +406,7 @@ namespace DB
                 boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start, column_offsets.begin() + start)),
                 to_arrow_offset);
             auto end_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start + size, column_offsets.end() + start + size)),
+                boost::make_zip_iterator(boost::make_tuple(discriminators.begin() + start + size, column_offsets.begin() + start + size)),
                 to_arrow_offset);
 
             status = offsets_builder.AppendValues(begin_it, end_it);

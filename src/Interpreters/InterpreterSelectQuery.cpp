@@ -550,7 +550,7 @@ InterpreterSelectQuery::InterpreterSelectQuery(
         LOG_DEBUG(
             log,
             "Setting 'enable_parallel_replicas' is enabled but 'automatic_parallel_replicas_mode' is not zero."
-            "To enforce use of parallel replicas, please disable 'automatic_parallel_replicas_mode'.");
+            " To enforce use of parallel replicas, please disable 'automatic_parallel_replicas_mode'.");
         context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));
     }
 

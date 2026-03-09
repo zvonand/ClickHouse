@@ -236,9 +236,7 @@ namespace QueryPlanOptimizations
 void considerEnablingParallelReplicas(
     const QueryPlanOptimizationSettings & optimization_settings, QueryPlan::Node & root, QueryPlan & query_plan)
 {
-    if (!optimization_settings.automatic_parallel_replicas_mode
-        || !optimization_settings.query_plan_with_parallel_replicas_builder
-        || !optimization_settings.parallel_replicas_enabled)
+    if (!optimization_settings.automatic_parallel_replicas_mode || !optimization_settings.query_plan_with_parallel_replicas_builder)
         return;
 
     // Cannot guarantee projection usage with parallel replicas

@@ -23,6 +23,7 @@
 #    include <Common/StringUtils.h>
 #    include <Common/getExecutablePath.h>
 #    include <base/defines.h>
+#    include <Common/SipHash.h>
 
 namespace DB
 {
@@ -64,15 +65,31 @@ std::optional<UInt64> parseHexAddress(std::string_view & src)
 }
 
 /// Simple LRU cache: evicts the least-recently-used entry when the capacity is exceeded.
+/// Key includes both the address and the symbolize_with_inline flag so that queries
+/// with different inline settings don't silently reuse each other's results.
+/// Value is a shared_ptr to avoid copying the symbol vector on every cache hit.
 struct SymbolizationLRUCache
 {
-    using Value = std::vector<std::string>;
-    using List = std::list<std::pair<UInt64, Value>>;
+    using Key = std::pair<UInt64, bool>;
+    using Value = std::shared_ptr<const std::vector<std::string>>;
+
+    struct KeyHash
+    {
+        size_t operator()(const Key & k) const
+        {
+            SipHash hash;
+            hash.update(k.first);
+            hash.update(k.second);
+            return hash.get64();
+        }
+    };
+
+    using List = std::list<std::pair<Key, Value>>;
 
     explicit SymbolizationLRUCache(size_t max_size_) : max_size(max_size_) {}
 
-    /// Returns a copy of the cached value on hit (moves the entry to the front), or nullopt on miss.
-    std::optional<Value> get(UInt64 key)
+    /// Returns the cached value on hit (moves the entry to the front), or nullopt on miss.
+    std::optional<Value> get(const Key & key)
     {
         std::lock_guard lock(mutex);
         auto it = index.find(key);
@@ -82,36 +99,61 @@ struct SymbolizationLRUCache
         return it->second->second;
     }
 
-    void put(UInt64 key, Value value)
+    /// Inserts a new entry (or updates existing) and returns the stored shared_ptr.
+    Value put(const Key & key, std::vector<std::string> value)
     {
         MemoryTrackerSwitcher switcher(&total_memory_tracker);
+        auto shared = std::make_shared<const std::vector<std::string>>(std::move(value));
         std::lock_guard lock(mutex);
         auto it = index.find(key);
         if (it != index.end())
         {
-            it->second->second = std::move(value);
+            it->second->second = shared;
             lru.splice(lru.begin(), lru, it->second);
-            return;
+            return shared;
         }
-        lru.emplace_front(key, std::move(value));
+        lru.emplace_front(key, shared);
         index.emplace(key, lru.begin());
         if (lru.size() > max_size)
         {
             index.erase(lru.back().first);
             lru.pop_back();
         }
+        return shared;
     }
-
 
 private:
     const size_t max_size;
 
     mutable std::mutex mutex;
     List lru TSA_GUARDED_BY(mutex);
-    std::unordered_map<UInt64, List::iterator> index TSA_GUARDED_BY(mutex);
+    std::unordered_map<Key, List::iterator, KeyHash> index TSA_GUARDED_BY(mutex);
 };
 
 SymbolizationLRUCache symbolization_cache(/*max_size=*/ 100'000);
+
+/// Resolve a single address to its symbol names, using the global cache.
+/// Frames are stored in callback order (inline-first when enabled).
+/// Callers reverse at output time as needed.
+SymbolizationLRUCache::Value resolveAddress(UInt64 address, bool symbolize_with_inline)
+{
+    auto key = SymbolizationLRUCache::Key{address, symbolize_with_inline};
+    if (auto cached = symbolization_cache.get(key))
+        return *cached;
+
+    FramePointers fp;
+    fp[0] = reinterpret_cast<void *>(address);
+    std::vector<std::string> frame_symbols;
+    StackTrace::forEachFrame(
+        fp, 0, 1,
+        [&](const StackTrace::Frame & frame)
+        {
+            frame_symbols.push_back(frame.symbol.value_or("??"));
+        },
+        symbolize_with_inline);
+
+    return symbolization_cache.put(key, std::move(frame_symbols));
+}
 
 }
 
@@ -231,31 +273,14 @@ Chunk JemallocProfileSource::generateSymbolized()
 
                 UInt64 address = addresses[current_address_index++];
 
-                std::vector<std::string> symbols;
-                if (auto cached = symbolization_cache.get(address))
-                    symbols = std::move(*cached);
-
-                if (symbols.empty())
-                {
-                    FramePointers fp;
-                    fp[0] = reinterpret_cast<void *>(address);
-
-                    auto symbolize_callback = [&](const StackTrace::Frame & frame)
-                    {
-                        symbols.push_back(frame.symbol.value_or("??"));
-                    };
-
-                    bool resolve_inlines = symbolize_with_inline;
-                    StackTrace::forEachFrame(fp, 0, 1, symbolize_callback, /* fatal= */ resolve_inlines);
-                    symbolization_cache.put(address, symbols);
-                }
+                auto symbols = resolveAddress(address, symbolize_with_inline);
 
                 std::string symbol_line;
                 WriteBufferFromString out(symbol_line);
                 writePointerHex(reinterpret_cast<const void *>(address), out);
 
                 std::string_view separator(" ");
-                for (const auto & symbol : std::ranges::reverse_view(symbols))
+                for (const auto & symbol : std::ranges::reverse_view(*symbols))
                 {
                     writeString(separator, out);
                     writeString(symbol, out);
@@ -431,7 +456,7 @@ Chunk JemallocProfileSource::generateCollapsed()
                     first = false;
                 }
             }
-            else if (!current_stack.empty() && line.find(':') != std::string::npos)
+            else if (!current_stack.empty() && line.contains(':'))
             {
                 /// Each allocation record follows its `@` stack line in the jemalloc heap profile format:
                 ///
@@ -468,10 +493,11 @@ Chunk JemallocProfileSource::generateCollapsed()
 
                     if (metric > 0)
                     {
-                        /// Symbolize stack
-                        std::vector<std::string> all_symbols;
-
-                        /// Reverse stack to get root->leaf order
+                        /// Build collapsed stack string: reverse stack to get root->leaf order,
+                        /// and for each address reverse the resolved frames (stored inline-first)
+                        /// so that the main frame comes first within each address.
+                        std::string stack_str;
+                        bool first_symbol = true;
                         for (UInt64 address : std::ranges::reverse_view(current_stack))
                         {
                             if (isCancelled())
@@ -480,47 +506,14 @@ Chunk JemallocProfileSource::generateCollapsed()
                                 return {};
                             }
 
-                            std::vector<std::string> addr_symbols;
-                            if (auto cached = symbolization_cache.get(address))
-                                addr_symbols = std::move(*cached);
-                            if (!addr_symbols.empty())
+                            auto symbols = resolveAddress(address, symbolize_with_inline);
+                            for (const auto & symbol : std::ranges::reverse_view(*symbols))
                             {
-                                for (const auto & symbol : addr_symbols)
-                                    all_symbols.push_back(symbol);
+                                if (!first_symbol)
+                                    stack_str += ';';
+                                first_symbol = false;
+                                stack_str += symbol;
                             }
-                            else
-                            {
-                                FramePointers fp;
-                                fp[0] = reinterpret_cast<void *>(address);
-
-                                std::vector<std::string> frame_symbols;
-                                auto symbolize_callback = [&](const StackTrace::Frame & frame)
-                                {
-                                    frame_symbols.push_back(frame.symbol.value_or("??"));
-                                };
-
-                                bool resolve_inlines = symbolize_with_inline;
-                                StackTrace::forEachFrame(fp, 0, 1, symbolize_callback, /* fatal= */ resolve_inlines);
-
-                                /// Store in cache (in reverse order for easier reuse)
-                                for (const auto & symbol : std::ranges::reverse_view(frame_symbols))
-                                {
-                                    addr_symbols.push_back(symbol);
-                                    all_symbols.push_back(symbol);
-                                }
-                                symbolization_cache.put(address, addr_symbols);
-                            }
-                        }
-
-                        /// Build collapsed stack string
-                        std::string stack_str;
-                        bool first_symbol = true;
-                        for (const auto & symbol : all_symbols)
-                        {
-                            if (!first_symbol)
-                                stack_str += ';';
-                            first_symbol = false;
-                            stack_str += symbol;
                         }
 
                         /// Aggregate metric for same stack

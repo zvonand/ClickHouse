@@ -89,7 +89,7 @@ public:
     void update(ObjectStoragePtr object_storage, ContextPtr local_context) override
     {
         BaseStorageConfiguration::update(object_storage, local_context);
-        checkLocalCorrectness(object_storage, local_context);
+        assertLocalPathCorrect(object_storage, local_context);
         if (current_metadata && current_metadata->supportsUpdate())
         {
             current_metadata->update(local_context);
@@ -103,7 +103,7 @@ public:
         if (current_metadata != nullptr)
             return;
         BaseStorageConfiguration::update(object_storage, local_context);
-        checkLocalCorrectness(object_storage, local_context);
+        assertLocalPathCorrect(object_storage, local_context);
         current_metadata = DataLakeMetadata::create(object_storage, weak_from_this(), local_context);
     }
 
@@ -119,7 +119,7 @@ public:
     {
         BaseStorageConfiguration::update(object_storage, local_context);
 
-        checkLocalCorrectness(object_storage, local_context);
+        assertLocalPathCorrect(object_storage, local_context);
         DataLakeMetadata::createInitial(
             object_storage, weak_from_this(), local_context, columns, partition_by, order_by, if_not_exists, catalog, table_id_);
     }
@@ -403,7 +403,7 @@ private:
     const DataLakeStorageSettingsPtr settings;
     ObjectStoragePtr ready_object_storage;
 
-    void checkLocalCorrectness(ObjectStoragePtr object_storage, ContextPtr local_context)
+    void assertLocalPathCorrect(ObjectStoragePtr object_storage, ContextPtr local_context)
     {
         if (object_storage->getType() == ObjectStorageType::Local)
         {
@@ -429,7 +429,7 @@ private:
         ContextPtr local_context,
         const PrepareReadingFromFormatHiveParams &) override
     {
-        checkLocalCorrectness(object_storage, local_context);
+        assertLocalPathCorrect(object_storage, local_context);
         if (!current_metadata)
         {
             current_metadata = DataLakeMetadata::create(

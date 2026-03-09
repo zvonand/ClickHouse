@@ -1117,6 +1117,7 @@ void QueryOracle::generateOracleSelectQuery(RandomGenerator & rg, const PeerQuer
 
 void QueryOracle::iterateQuery(google::protobuf::Message & message, const std::vector<MatchHandler> & rules)
 {
+    bool handled = false;
     const google::protobuf::Descriptor * desc = message.GetDescriptor();
     const google::protobuf::Reflection * refl = message.GetReflection();
 
@@ -1126,8 +1127,14 @@ void QueryOracle::iterateQuery(google::protobuf::Message & message, const std::v
         if (rh.predicate(message))
         {
             /// If this message itself is the target type, mutate it.
-            rh.handler(message);
+            /// If the handler returns true, it consumed the node — skip recursion into children
+            /// to avoid double-replacing nested sub-messages created by the handler itself.
+            handled |= rh.handler(message);
         }
+    }
+    if (handled)
+    {
+        return;
     }
     const int field_count = desc->field_count();
     for (int i = 0; i < field_count; ++i)
@@ -1175,8 +1182,7 @@ void QueryOracle::maybeUpdateOracleSelectQuery(RandomGenerator & rg, StatementGe
             MatchHandler{
                 .predicate
                 = [](const google::protobuf::Message & m) { return m.GetDescriptor()->full_name() == "BuzzHouse.TableOrFunction"; },
-                .handler =
-                    [&](google::protobuf::Message & message)
+                .handler = [&](google::protobuf::Message & message) -> bool
                 {
                     TableOrFunction * tf = dynamic_cast<TableOrFunction *>(&message);
 
@@ -1207,9 +1213,13 @@ void QueryOracle::maybeUpdateOracleSelectQuery(RandomGenerator & rg, StatementGe
                                     gen.setTableFunction(rg, TableFunctionUsage::RemoteCall, t, tf->mutable_tfunc());
                                 }
                                 gen.setAllowNotDetermistic(true);
+                                /// Stop recursion: the replacement created a new inner tof->est that
+                                /// would otherwise be visited and replaced again (producing nested remote calls).
+                                return true;
                             }
                         }
                     }
+                    return false;
                 }});
         iterateQuery(nsel, rules);
     }
@@ -1255,8 +1265,7 @@ void QueryOracle::replaceQueryWithTablePeers(
     rules.push_back(
         MatchHandler{
             .predicate = [](const google::protobuf::Message & m) { return m.GetDescriptor()->full_name() == "BuzzHouse.TableOrSubquery"; },
-            .handler =
-                [&](google::protobuf::Message & message)
+            .handler = [&](google::protobuf::Message & message) -> bool
             {
                 TableOrSubquery * tos = dynamic_cast<TableOrSubquery *>(&message);
 
@@ -1298,6 +1307,7 @@ void QueryOracle::replaceQueryWithTablePeers(
                     /// Remove final for MySQL and PostgreSQL calls
                     jtf.set_final(jtf.final() && !res);
                 }
+                return false;
             }});
     iterateQuery(nsel, rules);
 

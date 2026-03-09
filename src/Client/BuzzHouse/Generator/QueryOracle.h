@@ -22,7 +22,8 @@ struct MatchHandler
     /// predicate: returns true if this message should be handled
     std::function<bool(const google::protobuf::Message &)> predicate;
     /// handler: mutates or processes the message
-    std::function<void(google::protobuf::Message &)> handler;
+    /// returns true if the message was consumed and recursion into its children should stop
+    std::function<bool(google::protobuf::Message &)> handler;
 };
 
 class QueryOracle

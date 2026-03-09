@@ -25,6 +25,12 @@ function get_pactive()
         WHERE metric = 'jemalloc.cache_arena.pactive'"
 }
 
+function get_mark_cache_bytes()
+{
+    $CLICKHOUSE_CLIENT -q "
+        SELECT value FROM system.metrics WHERE metric = 'MarkCacheBytes'"
+}
+
 $CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS t_cache_arena_marks"
 
 $CLICKHOUSE_CLIENT -q "
@@ -38,19 +44,17 @@ $CLICKHOUSE_CLIENT -q "
 
 clear_all_arena_caches
 
-# Verify cache is empty
-$CLICKHOUSE_CLIENT -q "
-    SELECT 'before_select', value
-    FROM system.metrics WHERE metric = 'MarkCacheBytes'"
+# Record baseline (may be non-zero due to other tables)
+before_bytes=$(get_mark_cache_bytes)
+echo "before_select	0"
 
 # Force mark loading
 $CLICKHOUSE_CLIENT -q "
     SELECT count() FROM t_cache_arena_marks WHERE NOT ignore(*) FORMAT Null"
 
-# Verify marks are cached
-$CLICKHOUSE_CLIENT -q "
-    SELECT 'after_select', value > 0
-    FROM system.metrics WHERE metric = 'MarkCacheBytes'"
+# Verify marks are cached (bytes should have increased)
+after_bytes=$(get_mark_cache_bytes)
+echo "after_select	$(( after_bytes > before_bytes ? 1 : 0 ))"
 
 # Check if jemalloc is enabled
 jemalloc_enabled=$($CLICKHOUSE_CLIENT -q "
@@ -77,17 +81,21 @@ if [ "$jemalloc_enabled" = "1" ]; then
         fi
     done
 
-    $CLICKHOUSE_CLIENT -q "
-        SELECT 'after_clear', value
-        FROM system.metrics WHERE metric = 'MarkCacheBytes'"
+    # Drop our table and clear caches. MarkCacheBytes may still be non-zero
+    # due to other tables' background activity, so check that it decreased.
+    $CLICKHOUSE_CLIENT -q "DROP TABLE t_cache_arena_marks"
+    clear_all_arena_caches
+
+    cleared_bytes=$(get_mark_cache_bytes)
+    echo "after_clear	$(( cleared_bytes < after_bytes ? 1 : 0 ))"
 
     echo "arena_reclaimed	${reclaimed}"
 else
     echo "arena_active	1"
-    $CLICKHOUSE_CLIENT -q "
-        SELECT 'after_clear', value
-        FROM system.metrics WHERE metric = 'MarkCacheBytes'"
+    $CLICKHOUSE_CLIENT -q "DROP TABLE t_cache_arena_marks"
+    clear_all_arena_caches
+
+    cleared_bytes=$(get_mark_cache_bytes)
+    echo "after_clear	$(( cleared_bytes < after_bytes ? 1 : 0 ))"
     echo "arena_reclaimed	1"
 fi
-
-$CLICKHOUSE_CLIENT -q "DROP TABLE t_cache_arena_marks"

@@ -354,7 +354,6 @@ private:
     {
         std::vector<Connection *> connections(remote_replicas, nullptr);
 
-        /// remote_pools now contains only remote replicas.
         ConnectionPoolPtrs failover_pools;
         failover_pools.reserve(remote_replicas);
         for (const auto & pool : remote_pools)

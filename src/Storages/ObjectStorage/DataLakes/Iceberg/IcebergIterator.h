@@ -11,7 +11,7 @@
 #include <Core/Types.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage.h>
 #include <Interpreters/Context_fwd.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/ManifestFile.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/ManifestFileIterator.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/SchemaProcessor.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Snapshot.h>
 
@@ -36,12 +36,10 @@ namespace Iceberg
 
 class SingleThreadIcebergKeysIterator
 {
-    using FilesGenerator = std::function<std::vector<ManifestFileEntryPtr>(const Iceberg::ManifestFilePtr & manifest_file)>;
 public:
     SingleThreadIcebergKeysIterator(
         ObjectStoragePtr object_storage_,
         ContextPtr local_context_,
-        FilesGenerator files_generator_,
         Iceberg::ManifestFileContentType manifest_file_content_type_,
         const ActionsDAG * filter_dag_,
         TableStateSnapshotPtr table_snapshot_,
@@ -49,9 +47,7 @@ public:
         PersistentTableComponents persistent_components,
         std::shared_ptr<SecondaryStorages> secondary_storages_);
 
-    std::optional<DB::Iceberg::ManifestFileEntryPtr> next();
-
-    ~SingleThreadIcebergKeysIterator();
+    std::optional<DB::Iceberg::ProcessedManifestFileEntryPtr> next();
 
 private:
     ObjectStoragePtr object_storage;
@@ -59,25 +55,15 @@ private:
     ContextPtr local_context;
     Iceberg::TableStateSnapshotPtr table_snapshot;
     Iceberg::IcebergDataSnapshotPtr data_snapshot;
-    bool use_partition_pruning;
     PersistentTableComponents persistent_components;
-    FilesGenerator files_generator;
     LoggerPtr log;
-    std::vector<ManifestFileEntryPtr> files;
 
     std::shared_ptr<SecondaryStorages> secondary_storages;
 
-    // By Iceberg design it is difficult to avoid storing position deletes in memory.
     size_t manifest_file_index = 0;
-    size_t internal_data_index = 0;
-    Iceberg::ManifestFilePtr current_manifest_file_content;
-    Int32 previous_entry_schema = -1;
-    std::optional<Iceberg::ManifestFilesPruner> current_pruner;
+    Iceberg::ManifestIteratorPtr current_manifest_file_iterator;
 
     const Iceberg::ManifestFileContentType manifest_file_content_type;
-
-    size_t min_max_index_pruned_files = 0;
-    size_t partition_pruned_files = 0;
 };
 
 }
@@ -102,18 +88,18 @@ public:
 
 private:
     LoggerPtr logger;
-    std::unique_ptr<ActionsDAG> filter_dag;
+    std::shared_ptr<ActionsDAG> filter_dag;
     ObjectStoragePtr object_storage;
     ContextPtr local_context;
     const Iceberg::TableStateSnapshotPtr table_state_snapshot;
     Iceberg::PersistentTableComponents persistent_components;
     Iceberg::SingleThreadIcebergKeysIterator data_files_iterator;
     Iceberg::SingleThreadIcebergKeysIterator deletes_iterator;
-    ConcurrentBoundedQueue<Iceberg::ManifestFileEntryPtr> blocking_queue;
+    ConcurrentBoundedQueue<Iceberg::ProcessedManifestFileEntryPtr> blocking_queue;
     std::optional<ThreadFromGlobalPool> producer_task;
     IDataLakeMetadata::FileProgressCallback callback;
-    std::vector<Iceberg::ManifestFileEntryPtr> position_deletes_files;
-    std::vector<Iceberg::ManifestFileEntryPtr> equality_deletes_files;
+    std::vector<Iceberg::ProcessedManifestFileEntryPtr> position_deletes_files;
+    std::vector<Iceberg::ProcessedManifestFileEntryPtr> equality_deletes_files;
     std::exception_ptr exception;
     std::mutex exception_mutex;
     std::shared_ptr<SecondaryStorages> secondary_storages;  // Sometimes data or manifests can be located on another storage

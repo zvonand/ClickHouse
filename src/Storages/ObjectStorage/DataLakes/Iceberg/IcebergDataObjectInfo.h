@@ -52,7 +52,7 @@ struct IcebergDataObjectInfo : public ObjectInfo, std::enable_shared_from_this<I
     /// If resolved_storage_ and resolved_key_ are provided, the file may be located
     /// outside the table location (possibly in a different storage).
     explicit IcebergDataObjectInfo(
-        const Iceberg::ManifestFileEntry & data_manifest_file_entry_,
+        const Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_,
         Int32 schema_id_relevant_to_iterator_,
         ObjectStoragePtr resolved_storage_ = nullptr,
         const String & resolved_key_ = "");
@@ -70,9 +70,7 @@ struct IcebergDataObjectInfo : public ObjectInfo, std::enable_shared_from_this<I
 
     std::optional<String> getFileFormat() const override { return info.file_format; }
 
-    void addPositionDeleteObject(Iceberg::ManifestFileEntryPtr position_delete_object);
-
-    void addEqualityDeleteObject(const Iceberg::ManifestFileEntryPtr & equality_delete_object);
+    void addPositionDeleteObject(Iceberg::ProcessedManifestFileEntryPtr position_delete_object);
 
     std::optional<String> getAbsolutePath() const
     {
@@ -85,6 +83,7 @@ struct IcebergDataObjectInfo : public ObjectInfo, std::enable_shared_from_this<I
 
     void setResolvedStorage(ObjectStoragePtr storage) { resolved_storage = std::move(storage); }
 
+    void addEqualityDeleteObject(const Iceberg::ProcessedManifestFileEntryPtr & equality_delete_object);
     Iceberg::IcebergObjectSerializableInfo info;
 
 private:

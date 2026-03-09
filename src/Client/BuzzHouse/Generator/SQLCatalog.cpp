@@ -169,9 +169,9 @@ bool SQLDatabase::isSharedDatabase() const
     return deng == DatabaseEngineValues::DShared;
 }
 
-bool SQLDatabase::isLazyDatabase() const
+bool SQLDatabase::isBackupDatabase() const
 {
-    return deng == DatabaseEngineValues::DLazy;
+    return deng == DatabaseEngineValues::DBackup;
 }
 
 bool SQLDatabase::isOrdinaryDatabase() const
@@ -524,7 +524,7 @@ bool SQLBase::isNotTruncableEngine() const
 {
     return isNullEngine() || isSetEngine() || isMySQLEngine() || isPostgreSQLEngine() || isSQLiteEngine() || isRedisEngine()
         || isMongoDBEngine() || isHudiEngine() || isMergeEngine() || isDistributedEngine() || isDictionaryEngine()
-        || isGenerateRandomEngine() || isMaterializedPostgreSQLEngine() || isExternalDistributedEngine();
+        || isGenerateRandomEngine() || isMaterializedPostgreSQLEngine();
 }
 
 bool SQLBase::isEngineReplaceable() const
@@ -536,7 +536,7 @@ bool SQLBase::isEngineReplaceable() const
 
 bool SQLBase::isAnotherRelationalDatabaseEngine() const
 {
-    return isMySQLEngine() || isPostgreSQLEngine() || isMaterializedPostgreSQLEngine() || isSQLiteEngine() || isExternalDistributedEngine();
+    return isMySQLEngine() || isPostgreSQLEngine() || isMaterializedPostgreSQLEngine() || isSQLiteEngine();
 }
 
 bool SQLBase::hasDatabasePeer() const
@@ -746,7 +746,7 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
     if (isAnyIcebergEngine() && rg.nextMediumNumber() < 91)
     {
         /// Iceberg supports 3 formats
-        static const std::vector<InOutFormat> & formats = {InOutFormat::INOUT_ORC, InOutFormat::INOUT_Avro, InOutFormat::INOUT_Parquet};
+        static const std::vector<InOutFormat> formats = {InOutFormat::INOUT_ORC, InOutFormat::INOUT_Avro, InOutFormat::INOUT_Parquet};
 
         file_format = rg.nextMediumNumber() < 91 ? rg.pickRandomly(formats) : rg.pickRandomly(rg.pickRandomly(inOutFormats));
     }
@@ -780,11 +780,7 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
     {
         storage_class_name = rg.nextBool() ? "STANDARD" : "INTELLIGENT_TIERING";
     }
-    if (isExternalDistributedEngine())
-    {
-        integration = (sub == PostgreSQL) ? IntegrationCall::PostgreSQL : IntegrationCall::MySQL;
-    }
-    else if (isMySQLEngine())
+    if (isMySQLEngine())
     {
         integration = IntegrationCall::MySQL;
     }
@@ -1000,11 +996,13 @@ void SQLFunction::setName(Function * f) const
 
 const String & ColumnPathChain::getBottomName() const
 {
+    chassert(!path.empty());
     return path[path.size() - 1].cname;
 }
 
 SQLType * ColumnPathChain::getBottomType() const
 {
+    chassert(!path.empty());
     return path[path.size() - 1].tp;
 }
 

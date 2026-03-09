@@ -36,20 +36,17 @@ extern const SettingsBool use_roaring_bitmap_iceberg_positional_deletes;
 #if USE_AVRO
 
 IcebergDataObjectInfo::IcebergDataObjectInfo(
-    const Iceberg::ManifestFileEntry & data_manifest_file_entry_,
-    Int32 schema_id_relevant_to_iterator_,
-    ObjectStoragePtr resolved_storage_,
-    const String & resolved_key_)
-    : ObjectInfo(RelativePathWithMetadata(resolved_key_.empty() ? data_manifest_file_entry_.file_path : resolved_key_))
+    Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_, Int32 schema_id_relevant_to_iterator_, ObjectStoragePtr resolved_storage_, const String & resolved_key_)
+    : ObjectInfo(RelativePathWithMetadata(resolved_key_.empty() ? data_manifest_file_entry_->absolute_file_path : resolved_key_))
     , info{
-        data_manifest_file_entry_.file_path_from_metadata,
-        resolved_storage_ ? data_manifest_file_entry_.file_path : data_manifest_file_entry_.file_path_from_metadata,  // absolute path
-        data_manifest_file_entry_.schema_id,
-        schema_id_relevant_to_iterator_,
-        data_manifest_file_entry_.added_sequence_number,
-        data_manifest_file_entry_.file_format,
-        /* position_deletes_objects */ {},
-        /* equality_deletes_objects */ {}}
+          data_manifest_file_entry_->parsed_entry->file_path_from_metadata,
+          resolved_storage_ ? data_manifest_file_entry_->absolute_file_path : data_manifest_file_entry_->parsed_entry->file_path_from_metadata,
+          data_manifest_file_entry_->resolved_schema_id,
+          schema_id_relevant_to_iterator_,
+          data_manifest_file_entry_->sequence_number,
+          data_manifest_file_entry_->parsed_entry->file_format,
+          /* position_deletes_objects */ {},
+          /* equality_deletes_objects */ {}}
     , resolved_storage(std::move(resolved_storage_))
 {
 }
@@ -75,7 +72,7 @@ std::shared_ptr<ISimpleTransform> IcebergDataObjectInfo::getPositionDeleteTransf
         return std::make_shared<IcebergBitmapPositionDeleteTransform>(header, self, object_storage, format_settings, parser_shared_resources, context_, table_location, secondary_storages);
 }
 
-void IcebergDataObjectInfo::addPositionDeleteObject(Iceberg::ManifestFileEntryPtr position_delete_object)
+void IcebergDataObjectInfo::addPositionDeleteObject(Iceberg::ProcessedManifestFileEntryPtr position_delete_object)
 {
     if (Poco::toUpper(info.file_format) != "PARQUET")
     {
@@ -84,16 +81,17 @@ void IcebergDataObjectInfo::addPositionDeleteObject(Iceberg::ManifestFileEntryPt
             "Position deletes are only supported for data files of Parquet format in Iceberg, but got {}",
             info.file_format);
     }
-    info.position_deletes_objects.emplace_back(position_delete_object->file_path, position_delete_object->file_format, std::nullopt);
+    info.position_deletes_objects.emplace_back(
+        position_delete_object->absolute_file_path, position_delete_object->parsed_entry->file_format, std::nullopt);
 }
 
-void IcebergDataObjectInfo::addEqualityDeleteObject(const Iceberg::ManifestFileEntryPtr & equality_delete_object)
+void IcebergDataObjectInfo::addEqualityDeleteObject(const Iceberg::ProcessedManifestFileEntryPtr & equality_delete_object)
 {
     info.equality_deletes_objects.emplace_back(
-        equality_delete_object->file_path,
-        equality_delete_object->file_format,
-        equality_delete_object->equality_ids,
-        equality_delete_object->schema_id);
+        equality_delete_object->absolute_file_path,
+        equality_delete_object->parsed_entry->file_format,
+        equality_delete_object->parsed_entry->equality_ids,
+        equality_delete_object->resolved_schema_id);
 }
 
 #endif

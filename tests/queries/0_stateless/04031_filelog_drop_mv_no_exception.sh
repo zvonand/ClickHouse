@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Tags: no-fasttest, no-parallel
+# Tag no-fasttest: FileLog requires inotify
+# Tag no-parallel: uses a shared USER_FILES_PATH directory
+
+# Regression test for DEPENDENCIES_NOT_FOUND exception thrown when a
+# materialized view is dropped while the FileLog background thread is
+# streaming data.  There is a TOCTOU race between checkDependencies
+# (which sees the MV) and collectAllDependencies inside
+# InsertDependenciesBuilder (which no longer sees it).
+# We loop several times to increase the chance of hitting the race window.
+
+set -eu
+
+CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../shell_config.sh
+. "$CURDIR"/../shell_config.sh
+
+DATA_DIR="${USER_FILES_PATH}/${CLICKHOUSE_TEST_UNIQUE_NAME}"
+mkdir -p "${DATA_DIR}"
+rm -rf "${DATA_DIR:?}"/*
+
+for iteration in {1..20}; do
+    # Prepare a data file for FileLog to consume
+    for i in {1..10}; do
+        echo "${i},${i}"
+    done > "${DATA_DIR}/data.csv"
+
+    ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS ${CLICKHOUSE_DATABASE}.filelog_src SYNC"
+    ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS ${CLICKHOUSE_DATABASE}.filelog_mv SYNC"
+    ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS ${CLICKHOUSE_DATABASE}.filelog_dst SYNC"
+
+    ${CLICKHOUSE_CLIENT} --query "
+        CREATE TABLE ${CLICKHOUSE_DATABASE}.filelog_dst (k UInt64, v UInt64) ENGINE = MergeTree ORDER BY k
+    "
+    ${CLICKHOUSE_CLIENT} --query "
+        CREATE TABLE ${CLICKHOUSE_DATABASE}.filelog_src (k UInt64, v UInt64)
+        ENGINE = FileLog('${DATA_DIR}/', 'CSV')
+    "
+    ${CLICKHOUSE_CLIENT} --query "
+        CREATE MATERIALIZED VIEW ${CLICKHOUSE_DATABASE}.filelog_mv TO ${CLICKHOUSE_DATABASE}.filelog_dst
+        AS SELECT * FROM ${CLICKHOUSE_DATABASE}.filelog_src
+    "
+
+    # Wait until the background thread picks up some data
+    for attempt in {1..30}; do
+        count=$(${CLICKHOUSE_CLIENT} --query "SELECT count() FROM ${CLICKHOUSE_DATABASE}.filelog_dst")
+        [[ "${count}" -ge 10 ]] && break
+        sleep 0.2
+    done
+
+    # Drop the MV while writing new data to trigger the race:
+    # the background thread may have already passed checkDependencies
+    # but not yet built the insert pipeline.
+    for i in {11..20}; do
+        echo "${i},${i}"
+    done >> "${DATA_DIR}/data.csv"
+
+    ${CLICKHOUSE_CLIENT} --query "DROP TABLE ${CLICKHOUSE_DATABASE}.filelog_mv SYNC"
+
+    # Give the background thread time to attempt streaming with no MV
+    sleep 0.5
+
+    # The key check: FileLog table must not have accumulated an exception.
+    # Before the fix, DEPENDENCIES_NOT_FOUND was thrown here.
+    ${CLICKHOUSE_CLIENT} --query "DROP TABLE ${CLICKHOUSE_DATABASE}.filelog_src SYNC"
+    ${CLICKHOUSE_CLIENT} --query "DROP TABLE ${CLICKHOUSE_DATABASE}.filelog_dst SYNC"
+
+    # Clean data files for the next iteration
+    rm -rf "${DATA_DIR:?}"/*
+done
+
+rm -rf "${DATA_DIR:?}"
+
+echo "OK"

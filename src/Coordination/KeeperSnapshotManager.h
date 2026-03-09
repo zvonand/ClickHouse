@@ -3,6 +3,7 @@
 
 #include <Common/CopyableAtomic.h>
 #include <Common/ZooKeeper/IKeeper.h>
+#include <Coordination/ACLMap.h>
 #include <Coordination/KeeperCommon.h>
 #include <Coordination/KeeperStorage_fwd.h>
 #include <libnuraft/nuraft.hxx>
@@ -33,9 +34,10 @@ enum SnapshotVersion : uint8_t
     V4 = 4, /// add Node size to snapshots
     V5 = 5, /// add ZXID and digest to snapshots
     V6 = 6, /// remove is_sequential, per node size, data length
+    V7 = 7, /// acl_id narrowed from uint64_t to uint32_t
 };
 
-static constexpr auto CURRENT_SNAPSHOT_VERSION = SnapshotVersion::V6;
+static constexpr auto CURRENT_SNAPSHOT_VERSION = SnapshotVersion::V7;
 
 /// What is stored in binary snapshot
 template<typename Storage>
@@ -102,7 +104,7 @@ public:
     /// Sessions credentials
     Storage::SessionAndAuth session_and_auth;
     /// ACLs cache for better performance. Without we cannot deserialize storage.
-    std::unordered_map<uint64_t, Coordination::ACLs> acl_map;
+    std::unordered_map<ACLId, Coordination::ACLs> acl_map;
     /// Cluster config from snapshot, can be empty
     ClusterConfigPtr cluster_config;
     /// Last committed ZXID

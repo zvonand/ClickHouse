@@ -146,7 +146,7 @@ private:
 struct KeeperRocksNodeInfo
 {
     NodeStats stats;
-    uint64_t acl_id = 0; /// 0 -- no ACL by default
+    ACLId acl_id = 0; /// 0 -- no ACL by default
 
     /// dummy interface for test
     void addChild(std::string_view) {}
@@ -224,7 +224,7 @@ struct KeeperMemNode
     std::unique_ptr<char[]> data{nullptr};
     mutable uint64_t cached_digest = 0;
 
-    uint64_t acl_id = 0; /// 0 -- no ACL by default
+    ACLId acl_id = 0; /// 0 -- no ACL by default
 
     KeeperMemNode() = default;
 

@@ -1348,7 +1348,7 @@ Coordination::Error KeeperStorage<Container>::commit(KeeperStorageBase::DeltaRan
 
                     acl_map.removeUsage(node_it->value.acl_id);
 
-                    uint64_t acl_id = acl_map.convertACLs(operation.new_acls);
+                    ACLId acl_id = acl_map.convertACLs(operation.new_acls);
                     acl_map.addUsage(acl_id);
 
                     container.updateValue(path, [acl_id](Node & node) { node.acl_id = acl_id; });
@@ -1404,7 +1404,7 @@ bool KeeperStorage<Container>::createNode(
 
     Node created_node;
 
-    uint64_t acl_id = acl_map.convertACLs(node_acls);
+    ACLId acl_id = acl_map.convertACLs(node_acls);
     acl_map.addUsage(acl_id);
 
     created_node.acl_id = acl_id;

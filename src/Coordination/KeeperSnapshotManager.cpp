@@ -124,9 +124,25 @@ namespace
             in.readStrict(node.data.get(), node.stats.data_size);
         }
 
-        if (version >= SnapshotVersion::V1)
+        if (version >= SnapshotVersion::V7)
         {
             readBinary(node.acl_id, in);
+
+            if (cleanup_acl)
+                node.acl_id = 0;
+        }
+        else if (version >= SnapshotVersion::V1)
+        {
+            /// V1-V6 stored acl_id as uint64_t
+            uint64_t acl_id_64;
+            readBinary(acl_id_64, in);
+
+            /// Some strange ACL ID during deserialization from ZooKeeper
+            if (acl_id_64 == std::numeric_limits<uint64_t>::max())
+                acl_id_64 = 0;
+
+            chassert(acl_id_64 <= std::numeric_limits<ACLId>::max());
+            node.acl_id = static_cast<ACLId>(acl_id_64);
 
             if (cleanup_acl)
                 node.acl_id = 0;
@@ -149,10 +165,6 @@ namespace
             if (!cleanup_acl)
                 node.acl_id = acl_map.convertACLs(acls);
         }
-
-        /// Some strange ACLID during deserialization from ZooKeeper
-        if (node.acl_id == std::numeric_limits<uint64_t>::max())
-            node.acl_id = 0;
 
         acl_map.addUsage(node.acl_id);
 
@@ -240,7 +252,7 @@ void KeeperStorageSnapshot<Storage>::serialize(const KeeperStorageSnapshot<Stora
     writeBinary(snapshot.session_id, out);
 
     /// Better to sort before serialization, otherwise snapshots can be different on different replicas
-    std::vector<std::pair<int64_t, Coordination::ACLs>> sorted_acl_map(snapshot.acl_map.begin(), snapshot.acl_map.end());
+    std::vector<std::pair<ACLId, Coordination::ACLs>> sorted_acl_map(snapshot.acl_map.begin(), snapshot.acl_map.end());
     ::sort(sorted_acl_map.begin(), sorted_acl_map.end());
     /// Serialize ACLs map
     writeBinary(sorted_acl_map.size(), out);
@@ -378,8 +390,19 @@ void KeeperStorageSnapshot<Storage>::deserialize(SnapshotDeserializationResult<S
         size_t current_map_size = 0;
         while (current_map_size < acls_map_size)
         {
-            uint64_t acl_id;
-            readBinary(acl_id, in);
+            ACLId acl_id;
+            if (current_version >= SnapshotVersion::V7)
+            {
+                readBinary(acl_id, in);
+            }
+            else
+            {
+                /// V1-V6 stored acl_id as uint64_t (8 bytes)
+                uint64_t acl_id_64;
+                readBinary(acl_id_64, in);
+                chassert(acl_id_64 <= std::numeric_limits<ACLId>::max());
+                acl_id = static_cast<ACLId>(acl_id_64);
+            }
 
             size_t acls_size;
             readBinary(acls_size, in);

@@ -206,8 +206,15 @@ TYPED_TEST(CoordinationTest, TestStorageSnapshotSimple)
     DB::KeeperSnapshotManager<Storage> manager(3, this->keeper_context, this->enable_compression);
 
     Storage storage(500, "", this->keeper_context);
-    addNode(storage, "/hello1", "world", 1);
-    addNode(storage, "/hello2", "somedata", 3);
+
+    /// Set ACLs on nodes to verify acl_id round-trips through V7 snapshots
+    auto acl_id1 = storage.acl_map.convertACLs({{31, "world", "anyone"}});
+    auto acl_id2 = storage.acl_map.convertACLs({{1, "digest", "user1:pwd"}});
+    storage.acl_map.addUsage(acl_id1);
+    storage.acl_map.addUsage(acl_id2);
+
+    addNode(storage, "/hello1", "world", 1, acl_id1);
+    addNode(storage, "/hello2", "somedata", 3, acl_id2);
     storage.session_id_counter = 5;
     TSA_SUPPRESS_WARNING_FOR_WRITE(storage.zxid) = 2;
     storage.committed_ephemerals[3] = {"/hello2"};
@@ -245,6 +252,13 @@ TYPED_TEST(CoordinationTest, TestStorageSnapshotSimple)
     EXPECT_EQ(restored_storage->committed_ephemerals[3].size(), 1);
     EXPECT_EQ(restored_storage->committed_ephemerals[1].size(), 1);
     EXPECT_EQ(restored_storage->session_and_timeout.size(), 2);
+
+    /// Verify ACL round-trip
+    EXPECT_EQ(restored_storage->container.getValue("/hello1").acl_id, acl_id1);
+    EXPECT_EQ(restored_storage->container.getValue("/hello2").acl_id, acl_id2);
+    auto restored_acls = restored_storage->acl_map.convertNumber(acl_id2);
+    EXPECT_EQ(restored_acls.size(), 1);
+    EXPECT_EQ(restored_acls[0].scheme, "digest");
 }
 
 TYPED_TEST(CoordinationTest, TestStorageSnapshotMoreWrites)
@@ -550,7 +564,7 @@ TYPED_TEST(CoordinationTest, TestStorageSnapshotBlockACL)
 
     Storage storage(500, "", this->keeper_context);
     static constexpr std::string_view path = "/hello";
-    static constexpr uint64_t acl_id = 42;
+    static constexpr DB::ACLId acl_id = 42;
     addNode(storage, std::string{path}, "world", /*ephemeral_owner=*/0, acl_id);
     DB::KeeperStorageSnapshot<Storage> snapshot(&storage, 50);
     auto buf = manager.serializeSnapshotToBuffer(snapshot);

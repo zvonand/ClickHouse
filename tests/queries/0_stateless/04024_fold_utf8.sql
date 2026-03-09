@@ -49,7 +49,7 @@ SELECT '-- foldUTF8 conservative';
 SELECT foldUTF8('Café Résumé', 'conservative');
 SELECT foldUTF8('HÉLLO Wörld', 'conservative');
 
--- caseFoldUTF8 with exclude_special_I
+-- caseFoldUTF8 with handle_turkic_i
 SELECT '-- caseFoldUTF8 with special I handling';
 SELECT caseFoldUTF8('İstanbul', 'conservative', 0);
 SELECT caseFoldUTF8('İstanbul', 'conservative', 1);
@@ -93,7 +93,7 @@ SELECT accentFoldUTF8('ạ̈');
 SELECT '-- CJK passthrough';
 SELECT caseFoldUTF8('日本語テスト'), accentFoldUTF8('日本語テスト'), foldUTF8('日本語テスト');
 
--- foldUTF8 with exclude_special_I (plain I becomes dotless ı)
+-- foldUTF8 with handle_turkic_i (plain I becomes dotless ı)
 SELECT '-- foldUTF8 exclude_special_I';
 SELECT foldUTF8('DİYARBAKIR', 'conservative', 0);
 SELECT foldUTF8('DİYARBAKIR', 'conservative', 1);

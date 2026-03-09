@@ -27,26 +27,14 @@ def _run(prompt):
     return result
 
 
-COPILOT_INSTRUCTIONS_FILE = ".github/copilot-instructions.md"
-
-
-def _read_instructions():
-    try:
-        with open(COPILOT_INSTRUCTIONS_FILE) as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return ""
-
-
 def pre():
     info = Info()
     if not info.pr_number:
         print("Not a PR, skipping")
         return True
 
-    instructions = _read_instructions()
     prompt = (
-        f"{instructions}\n\n"
+        f"Follow the instructions in .github/copilot-instructions.md. "
         f"Review the PR {info.pr_url}. "
         f"The repo is checked out at PR head. "
         f"Post inline review comments on specific lines where applicable, and one summary comment. "

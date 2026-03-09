@@ -6,6 +6,10 @@ Copilot-based automated PR code review hook.
 
 Failures are non-fatal: copilot errors (rate limits, network issues, etc.)
 are logged as warnings but do not block CI.
+
+GH_TOKEN is set to the robot token so copilot can access the Copilot API.
+Before posting any gh CLI comments, copilot switches to the pre-authenticated
+GitHub App account (clickhouse-gh[bot]) via `env -u GH_TOKEN gh auth switch`.
 """
 
 import os
@@ -15,6 +19,8 @@ import sys
 from ci.praktika import Secret
 from ci.praktika.info import Info
 from ci.praktika.result import Result
+
+_POST_AUTH = "env -u GH_TOKEN gh auth switch -u clickhouse-gh[bot]"
 
 
 def _run(prompt):
@@ -43,6 +49,7 @@ def pre():
         f"Follow the instructions in .github/copilot-instructions.md. "
         f"Review the PR {info.pr_url}. "
         f"The repo is checked out at PR head. "
+        f"Before posting any comments, switch to the app account by running: `{_POST_AUTH}`. "
         f"Post inline review comments on specific lines where applicable, and one summary comment. "
         f"Before posting, read existing review comments on this PR and do not duplicate ones already posted."
     )
@@ -65,6 +72,7 @@ def post():
         f"If there are failures — the repo is checked out at PR head. "
         f"Look at the PR diff to understand what changed, then work backwards from the failures: "
         f"try to match each failure to the code changes and briefly explain why the change likely caused it. "
+        f"Before posting, switch to the app account by running: `{_POST_AUTH}`. "
         f"Post a single comment on the PR with your findings."
     )
     _run(prompt)

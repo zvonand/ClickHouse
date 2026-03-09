@@ -124,7 +124,7 @@ public:
     void checkAlterIsPossible(const AlterCommands & commands) override;
     void alter(const AlterCommands & params, ContextPtr context) override;
 
-    void executeCommand(
+    Pipe executeCommand(
         const String & command_name,
         const ASTPtr & args,
         ObjectStoragePtr object_storage,

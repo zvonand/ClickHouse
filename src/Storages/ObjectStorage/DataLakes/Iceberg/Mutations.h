@@ -40,7 +40,17 @@ void alter(
     PersistentTableComponents & persistent_table_components,
     const String & write_format);
 
-void expireSnapshots(
+struct ExpireSnapshotsResult
+{
+    Int64 deleted_data_files_count = 0;
+    Int64 deleted_position_delete_files_count = 0;
+    Int64 deleted_equality_delete_files_count = 0;
+    Int64 deleted_manifest_files_count = 0;
+    Int64 deleted_manifest_lists_count = 0;
+    Int64 deleted_statistics_files_count = 0;
+};
+
+ExpireSnapshotsResult expireSnapshots(
     std::optional<Int64> expire_before_ms,
     ContextPtr context,
     ObjectStoragePtr object_storage,

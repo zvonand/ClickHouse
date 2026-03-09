@@ -953,8 +953,18 @@ static void collectRetainedFiles(
     }
 }
 
+struct ExpiredFiles
+{
+    Strings all_paths;
+    Int64 data_files = 0;
+    Int64 position_delete_files = 0;
+    Int64 equality_delete_files = 0;
+    Int64 manifest_files = 0;
+    Int64 manifest_lists = 0;
+};
+
 /// Collect files from expired snapshots that are not referenced by any retained snapshot.
-static Strings collectExpiredFiles(
+static ExpiredFiles collectExpiredFiles(
     const std::vector<String> & expired_manifest_list_paths,
     const std::set<String> & retained_manifest_list_paths,
     const std::set<String> & retained_manifest_paths,
@@ -965,7 +975,7 @@ static Strings collectExpiredFiles(
     LoggerPtr log,
     Int32 current_schema_id)
 {
-    Strings files_to_delete;
+    ExpiredFiles result;
     for (const auto & ml_path : expired_manifest_list_paths)
     {
         if (retained_manifest_list_paths.contains(ml_path))
@@ -999,13 +1009,22 @@ static Strings collectExpiredFiles(
 
                 for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
                     if (!retained_data_file_paths.contains(entry->file_path))
-                        files_to_delete.push_back(entry->file_path);
+                    {
+                        result.all_paths.push_back(entry->file_path);
+                        ++result.data_files;
+                    }
                 for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
                     if (!retained_data_file_paths.contains(entry->file_path))
-                        files_to_delete.push_back(entry->file_path);
+                    {
+                        result.all_paths.push_back(entry->file_path);
+                        ++result.position_delete_files;
+                    }
                 for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
                     if (!retained_data_file_paths.contains(entry->file_path))
-                        files_to_delete.push_back(entry->file_path);
+                    {
+                        result.all_paths.push_back(entry->file_path);
+                        ++result.equality_delete_files;
+                    }
             }
             catch (...)
             {
@@ -1013,12 +1032,14 @@ static Strings collectExpiredFiles(
                 continue;
             }
 
-            files_to_delete.push_back(mf_key.manifest_file_path);
+            result.all_paths.push_back(mf_key.manifest_file_path);
+            ++result.manifest_files;
         }
 
-        files_to_delete.push_back(storage_ml_path);
+        result.all_paths.push_back(storage_ml_path);
+        ++result.manifest_lists;
     }
-    return files_to_delete;
+    return result;
 }
 
 /// Trim snapshot-log to the suffix of entries referencing only retained snapshots.
@@ -1132,7 +1153,7 @@ static void deleteExpiredFiles(
 ///      of retention policy.
 ///   4. Collect files exclusively owned by expired snapshots and delete them.
 ///   5. Write updated metadata with optimistic concurrency (retry on conflict).
-void expireSnapshots(
+ExpireSnapshotsResult expireSnapshots(
     std::optional<Int64> expire_before_ms,
     ContextPtr context,
     ObjectStoragePtr object_storage,
@@ -1174,14 +1195,14 @@ void expireSnapshots(
         if (!metadata->has(Iceberg::f_current_snapshot_id))
         {
             LOG_INFO(log, "No snapshots to expire (table has no current snapshot)");
-            return;
+            return {};
         }
 
         Int64 current_snapshot_id = metadata->getValue<Int64>(Iceberg::f_current_snapshot_id);
         if (current_snapshot_id < 0)
         {
             LOG_INFO(log, "No snapshots to expire (table has no current snapshot)");
-            return;
+            return {};
         }
 
         auto snapshots = metadata->get(Iceberg::f_snapshots).extract<Poco::JSON::Array::Ptr>();
@@ -1195,7 +1216,7 @@ void expireSnapshots(
         if (partition.expired_snapshot_ids.empty())
         {
             LOG_INFO(log, "No snapshots to expire");
-            return;
+            return {};
         }
         LOG_INFO(log, "Expiring {} snapshots", partition.expired_snapshot_ids.size());
 
@@ -1207,7 +1228,7 @@ void expireSnapshots(
         collectRetainedFiles(
             partition.retained_snapshots, object_storage, persistent_table_components, context, log,
             current_schema_id, retained_manifest_paths, retained_data_file_paths, retained_manifest_list_paths);
-        auto files_to_delete = collectExpiredFiles(
+        auto expired_files = collectExpiredFiles(
             partition.expired_manifest_list_paths, retained_manifest_list_paths, retained_manifest_paths, retained_data_file_paths,
             object_storage, persistent_table_components, context, log, current_schema_id);
 
@@ -1248,14 +1269,23 @@ void expireSnapshots(
             }
         }
 
-        LOG_INFO(log, "Deleting {} expired files for {} expired snapshots", files_to_delete.size(), partition.expired_snapshot_ids.size());
-        deleteExpiredFiles(files_to_delete, object_storage, log);
-        LOG_INFO(log, "Expired {} snapshots, deleted {} files", partition.expired_snapshot_ids.size(), files_to_delete.size());
-        return;
+        LOG_INFO(log, "Deleting {} expired files for {} expired snapshots", expired_files.all_paths.size(), partition.expired_snapshot_ids.size());
+        deleteExpiredFiles(expired_files.all_paths, object_storage, log);
+        LOG_INFO(log, "Expired {} snapshots, deleted {} files", partition.expired_snapshot_ids.size(), expired_files.all_paths.size());
+
+        return ExpireSnapshotsResult{
+            .deleted_data_files_count = expired_files.data_files,
+            .deleted_position_delete_files_count = expired_files.position_delete_files,
+            .deleted_equality_delete_files_count = expired_files.equality_delete_files,
+            .deleted_manifest_files_count = expired_files.manifest_files,
+            .deleted_manifest_lists_count = expired_files.manifest_lists,
+        };
     }
 
     if (max_retries == 0)
         throw Exception(ErrorCodes::LIMIT_EXCEEDED, "Too many unsuccessful retries to expire iceberg snapshots");
+
+    UNREACHABLE();
 }
 
 #endif

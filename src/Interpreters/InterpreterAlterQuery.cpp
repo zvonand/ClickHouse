@@ -360,7 +360,9 @@ BlockIO InterpreterAlterQuery::executeToTable(const ASTAlterQuery & alter)
     for (const auto * execute_command : execute_commands)
     {
         ASTPtr args_ast = execute_command->execute_args ? execute_command->execute_args->ptr() : nullptr;
-        table->executeCommand(execute_command->execute_command_name, args_ast, getContext());
+        auto execute_pipe = table->executeCommand(execute_command->execute_command_name, args_ast, getContext());
+        if (!execute_pipe.empty())
+            res.pipeline = QueryPipeline(std::move(execute_pipe));
     }
 
     return res;

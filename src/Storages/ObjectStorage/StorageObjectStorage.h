@@ -156,7 +156,7 @@ public:
     void mutate(const MutationCommands &, ContextPtr) override;
     void checkMutationIsPossible(const MutationCommands & commands, const Settings & /* settings */) const override;
 
-    void executeCommand(const String & command_name, const ASTPtr & args, ContextPtr context) override;
+    Pipe executeCommand(const String & command_name, const ASTPtr & args, ContextPtr context) override;
 
     void alter(const AlterCommands & params, ContextPtr context, AlterLockHolder & alter_lock_holder) override;
 

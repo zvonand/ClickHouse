@@ -556,6 +556,19 @@ ALTER TABLE iceberg_table EXECUTE expire_snapshots('2025-01-01 00:00:00');
 ALTER TABLE iceberg_table EXECUTE expire_snapshots();
 ```
 
+**Output:**
+
+The command returns a table with two columns (`metric_name String`, `metric_value Int64`) containing one row per metric. The metric names follow the [Iceberg spec](https://iceberg.apache.org/docs/latest/spark-procedures/#output):
+
+| metric_name | Description |
+|---|---|
+| `deleted_data_files_count` | Number of data files deleted |
+| `deleted_position_delete_files_count` | Number of position delete files deleted |
+| `deleted_equality_delete_files_count` | Number of equality delete files deleted |
+| `deleted_manifest_files_count` | Number of manifest files deleted |
+| `deleted_manifest_lists_count` | Number of manifest list files deleted |
+| `deleted_statistics_files_count` | Number of statistics files deleted (always 0 currently) |
+
 The command performs the following steps:
 
 1. Evaluates the retention policy (see below) to determine which snapshots must be preserved

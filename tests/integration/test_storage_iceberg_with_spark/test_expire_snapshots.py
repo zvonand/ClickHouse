@@ -103,15 +103,28 @@ def create_and_populate(cluster, instance, storage_type, table_name, n_rows, for
 
 def expire_snapshots(instance, table_name, timestamp=None):
     if timestamp:
-        instance.query(
+        result = instance.query(
             f"ALTER TABLE {table_name} EXECUTE expire_snapshots('{timestamp}');",
             settings=ICEBERG_SETTINGS,
         )
     else:
-        instance.query(
+        result = instance.query(
             f"ALTER TABLE {table_name} EXECUTE expire_snapshots();",
             settings=ICEBERG_SETTINGS,
         )
+    return result
+
+
+def parse_expire_result(result):
+    """Parse the metric_name/metric_value rows from expire_snapshots into a dict."""
+    counts = {}
+    for line in result.strip().split("\n"):
+        if not line:
+            continue
+        parts = line.split("\t")
+        if len(parts) == 2:
+            counts[parts[0]] = int(parts[1])
+    return counts
 
 
 def get_snapshot_ids(instance, table_name):
@@ -171,7 +184,10 @@ def test_expire_snapshots_basic(started_cluster_iceberg_with_spark, storage_type
         f"INSERT INTO {TABLE_NAME} VALUES (4);", settings=ICEBERG_SETTINGS
     )
 
-    expire_snapshots(instance, TABLE_NAME, expire_timestamp)
+    result = expire_snapshots(instance, TABLE_NAME, expire_timestamp)
+    counts = parse_expire_result(result)
+    assert len(counts) == 6, f"Expected 6 metrics, got {counts}"
+    assert all(v >= 0 for v in counts.values()), f"All counts should be non-negative, got {counts}"
     assert_data_intact(instance, TABLE_NAME, 4)
 
 
@@ -184,7 +200,9 @@ def test_expire_snapshots_no_expirable(started_cluster_iceberg_with_spark, stora
     create_and_populate(
         started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 1
     )
-    expire_snapshots(instance, TABLE_NAME, "2020-01-01 00:00:00")
+    result = expire_snapshots(instance, TABLE_NAME, "2020-01-01 00:00:00")
+    counts = parse_expire_result(result)
+    assert all(v == 0 for v in counts.values()), f"Expected all zeros for no-op, got {counts}"
     assert_data_intact(instance, TABLE_NAME, 1)
 
 
@@ -216,7 +234,10 @@ def test_expire_snapshots_preserves_current(started_cluster_iceberg_with_spark, 
     create_and_populate(
         started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 2
     )
-    expire_snapshots(instance, TABLE_NAME, FAR_FUTURE)
+    result = expire_snapshots(instance, TABLE_NAME, FAR_FUTURE)
+    counts = parse_expire_result(result)
+    assert counts["deleted_data_files_count"] >= 0
+    assert counts["deleted_manifest_lists_count"] >= 0
     assert_data_intact(instance, TABLE_NAME, 2)
 
 
@@ -262,7 +283,8 @@ def test_expire_snapshots_files_cleaned(started_cluster_iceberg_with_spark, stor
         started_cluster_iceberg_with_spark, storage_type, table_dir, table_dir,
     )
 
-    expire_snapshots(instance, TABLE_NAME, expire_timestamp)
+    result = expire_snapshots(instance, TABLE_NAME, expire_timestamp)
+    counts = parse_expire_result(result)
 
     files_after = default_download_directory(
         started_cluster_iceberg_with_spark, storage_type, table_dir, table_dir,
@@ -279,6 +301,10 @@ def test_expire_snapshots_files_cleaned(started_cluster_iceberg_with_spark, stor
     if retained_manifest_list:
         assert any(retained_manifest_list in f for f in files_after_set), \
             f"Current snapshot's manifest-list should survive: {retained_manifest_list}"
+
+    assert counts["deleted_manifest_lists_count"] > 0, \
+        f"Expected deleted manifest lists, got {counts}"
+    assert sum(counts.values()) > 0, f"Expected some files to be deleted, got {counts}"
 
     assert_data_intact(instance, TABLE_NAME, 3)
 

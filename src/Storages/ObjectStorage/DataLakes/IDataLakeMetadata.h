@@ -154,7 +154,7 @@ public:
     virtual void checkAlterIsPossible(const AlterCommands & /*commands*/) { throwNotImplemented("alter"); }
     virtual void alter(const AlterCommands & /*params*/, ContextPtr /*context*/) { throwNotImplemented("alter"); }
 
-    virtual void executeCommand(
+    virtual Pipe executeCommand(
         const String & command_name,
         const ASTPtr & /*args*/,
         ObjectStoragePtr /*object_storage*/,

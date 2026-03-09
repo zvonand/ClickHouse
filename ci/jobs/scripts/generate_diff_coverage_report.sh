@@ -65,6 +65,13 @@ lcov --extract base_llvm_coverage.info "${patterns[@]}" \
   --quiet \
   -o baseline.changed.info 2>/dev/null
 
+# If lcov --extract found no coverage data for the changed files (e.g. only
+# non-source files like .sh tests were modified), skip the genhtml step.
+if ! grep -q '^SF:' current.changed.info 2>/dev/null; then
+  echo "No coverage data for changed files, skipping diff report"
+  exit 0
+fi
+
 echo Workspace path: $WORKSPACE_PATH
 
 HEADER_TITLE="differential coverage report"

@@ -1314,7 +1314,7 @@ StoragePtr InterpreterSystemQuery::doRestartReplica(const StorageID & replica, C
             }
             catch (...)
             {
-                tryLogCurrentException(log, "Failed to adjust digest after failed SYSTEM RESTART REPLICA");
+                tryLogCurrentException(log, "Failed to adjust digest after failed SYSTEM RESTART REPLICA for table " + replica_table_id.table_name + "; digest mismatch will persist until server restart or DatabaseReplicated recovery");
             }
         }
         throw;

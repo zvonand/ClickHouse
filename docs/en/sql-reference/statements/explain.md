@@ -463,7 +463,7 @@ EXPLAIN json = 1, actions = 1, description = 0 SELECT 1 FORMAT TSVRaw;
 ]
 ```
 
-With `actions` = 1 and `verbose` = 0, each `Expression` step, `Actions` and `Positions` lines are hidden, leaving only the step descriptions:
+With `verbose = 0`, each `Expression` step is removed. Along with that, if `actions = 1` is set, then `Actions` and `Positions` lines are hidden, leaving only the step descriptions:
 
 ```sql
 EXPLAIN actions = 1, verbose = 0 SELECT sum(number) FROM numbers(10) GROUP BY number % 4 FORMAT Raw;

@@ -852,7 +852,7 @@ void ZooKeeper::sendThread()
                         operations[info.request->xid] = info;
                     }
 
-                    if (requests_queue.isFinished())
+                    if (requests_queue.isFinished() && info.request->xid != close_xid)
                     {
                         break;
                     }

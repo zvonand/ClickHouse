@@ -82,7 +82,7 @@ public:
         const Settings & settings,
         const std::vector<std::vector<DatabaseReplicaInfo>> & infos,
         const ClusterConnectionParameters & params,
-        bool internal_replicationi = false);
+        bool internal_replication = false);
 
     Cluster(const Cluster &)= delete;
     Cluster & operator=(const Cluster &) = delete;

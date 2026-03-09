@@ -1,6 +1,6 @@
 -- Verify skip-index top-k is correctly guarded for nullable/collation types
 -- while dynamic filtering still works for them.
--- Tags: no-parallel-replicas
+-- Tags: no-parallel-replicas, no-fasttest
 
 SET merge_tree_read_split_ranges_into_intersecting_and_non_intersecting_injection_probability = 0;
 

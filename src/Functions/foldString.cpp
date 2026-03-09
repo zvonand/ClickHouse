@@ -43,19 +43,16 @@ constexpr int MAX_CASEFOLD_EXPANSION = 3;
 /// Chars which require 4 UTF-8 bytes also require 2 UTF-16 code units, so the max expansion factor is 3.
 constexpr int MAX_UTF16_TO_UTF8_EXPANSION = 3;
 
-
-/// Normalizer context: holds ICU normalizer instances needed by a pipeline.
 struct FoldContext
 {
     const UNormalizer2 * nfc = nullptr;
     const UNormalizer2 * nfd = nullptr;
     const UNormalizer2 * nfkc_cf = nullptr;
-    uint32_t fold_options = U_FOLD_CASE_DEFAULT; /// From ICU lib
+    uint32_t fold_options = U_FOLD_CASE_DEFAULT;
     bool aggressive = true;
 };
 
-/// Helper: normalize in[0..len) into out, return new length.
-/// in and out must be distinct PODArrays.
+/// Helper: normalize in into out, return new length.
 inline int32_t normalizeBuffer(
     const UNormalizer2 * normalizer,
     PODArray<UChar> & in, int32_t len,
@@ -64,42 +61,50 @@ inline int32_t normalizeBuffer(
 {
     out.resize(len * expansion);
     UErrorCode err = U_ZERO_ERROR;
-    int32_t result = unorm2_normalize(normalizer, in.data(), len, out.data(), static_cast<int32_t>(out.size()), &err);
+    int32_t res_length = unorm2_normalize(normalizer, in.data(), len, out.data(), static_cast<int32_t>(out.size()), &err);
     if (U_FAILURE(err))
         throw Exception(ErrorCodes::CANNOT_NORMALIZE_STRING, "Fold failed ({}): {}", step_name, u_errorName(err));
-    return result;
+    return res_length;
 }
 
 /// Helper: strip combining marks (Mn category) in-place, return new length.
 inline int32_t stripCombiningMarks(UChar * data, int32_t len)
 {
-    int32_t write_pos = 0;
-    for (int32_t j = 0; j < len;)
+    int32_t read_pos = 0;
+
+    while (read_pos < len)
     {
-        UChar32 cp;
-        int32_t prev = j;
-        U16_NEXT(data, j, len, cp); /// advances j to next code point boundary
-        if (u_charType(cp) != U_NON_SPACING_MARK)
+        UChar32 code_point;
+        int32_t prev = read_pos;
+        U16_NEXT(data, read_pos, len, code_point); /// advances read_pos to next code point boundary (can be multiple chars)
+
+        if (u_charType(code_point) == U_NON_SPACING_MARK)
         {
-            for (int32_t k = prev; k < j; ++k)
-                data[write_pos++] = data[k];
+            int32_t write_pos = prev;
+            while (read_pos < len)
+            {
+                prev = read_pos;
+                U16_NEXT(data, read_pos, len, code_point);
+                if (u_charType(code_point) != U_NON_SPACING_MARK)
+                {
+                    for (int32_t i = prev; i < read_pos; ++i)
+                        data[write_pos++] = data[i];
+                }
+            }
+            return write_pos;
         }
     }
-    return write_pos;
+    return len;
 }
 
 struct CaseFoldImpl
 {
     static constexpr auto name = "caseFoldUTF8";
 
-    static void init(FoldContext & ctx, bool aggressive, bool exclude_special_i)
+    static void init(FoldContext & ctx, bool aggressive, bool handle_turkic_i)
     {
         UErrorCode err = U_ZERO_ERROR;
         ctx.aggressive = aggressive;
-
-        ctx.nfc = unorm2_getNFCInstance(&err);
-        if (U_FAILURE(err))
-            throw Exception(ErrorCodes::CANNOT_NORMALIZE_STRING, "Failed to get NFC normalizer: {}", u_errorName(err));
 
         if (aggressive)
         {
@@ -108,20 +113,23 @@ struct CaseFoldImpl
             if (U_FAILURE(err))
                 throw Exception(ErrorCodes::CANNOT_NORMALIZE_STRING, "Failed to get NFKC_Casefold normalizer: {}", u_errorName(err));
         }
+        else
+        {
+            ctx.nfc = unorm2_getNFCInstance(&err);
+            if (U_FAILURE(err))
+                throw Exception(ErrorCodes::CANNOT_NORMALIZE_STRING, "Failed to get NFC normalizer: {}", u_errorName(err));
+        }
 
-        ctx.fold_options = exclude_special_i ? U_FOLD_CASE_EXCLUDE_SPECIAL_I : U_FOLD_CASE_DEFAULT;
+        ctx.fold_options = handle_turkic_i ? U_FOLD_CASE_EXCLUDE_SPECIAL_I : U_FOLD_CASE_DEFAULT;
     }
 
-    /// Result is left in buf1.
     static int32_t transform(const FoldContext & ctx, PODArray<UChar> & buf1, PODArray<UChar> & buf2, int32_t len)
     {
         if (ctx.aggressive)
         {
-            /// NFKC_Casefold → NFC
+            /// NFKC_Casefold
+            /// https://unicode-org.github.io/icu-docs/apidoc/dev/icu4j/com/ibm/icu/text/Normalizer2.html#getNFKCCasefoldInstance()
             len = normalizeBuffer(ctx.nfkc_cf, buf1, len, buf2, MAX_NFKC_CASEFOLD_EXPANSION, "NFKC_Casefold");
-            std::swap(buf1, buf2);
-            len = normalizeBuffer(ctx.nfc, buf1, len, buf2, MAX_NFC_EXPANSION, "NFC");
-            std::swap(buf1, buf2);
         }
         else
         {
@@ -131,14 +139,12 @@ struct CaseFoldImpl
 
             buf2.resize(len * MAX_CASEFOLD_EXPANSION);
             UErrorCode err = U_ZERO_ERROR;
-            len = u_strFoldCase(buf2.data(), static_cast<int32_t>(buf2.size()),
-                buf1.data(), len, ctx.fold_options, &err);
+            len = u_strFoldCase(buf2.data(), static_cast<int32_t>(buf2.size()), buf1.data(), len, ctx.fold_options, &err);
             if (U_FAILURE(err))
                 throw Exception(ErrorCodes::CANNOT_NORMALIZE_STRING, "Fold failed (u_strFoldCase): {}", u_errorName(err));
             std::swap(buf1, buf2);
 
             len = normalizeBuffer(ctx.nfc, buf1, len, buf2, MAX_NFC_EXPANSION, "NFC recompose");
-            std::swap(buf1, buf2);
         }
         return len;
     }
@@ -148,7 +154,7 @@ struct AccentFoldImpl
 {
     static constexpr auto name = "accentFoldUTF8";
 
-    static void init(FoldContext & ctx, bool /* aggressive */, bool /* exclude_special_i */)
+    static void init(FoldContext & ctx, bool /* aggressive */, bool /* handle_turkic_i */)
     {
         UErrorCode err = U_ZERO_ERROR;
 
@@ -162,7 +168,6 @@ struct AccentFoldImpl
             throw Exception(ErrorCodes::CANNOT_NORMALIZE_STRING, "Failed to get NFD normalizer: {}", u_errorName(err));
     }
 
-    /// Result is left in buf1.
     static int32_t transform(const FoldContext & ctx, PODArray<UChar> & buf1, PODArray<UChar> & buf2, int32_t len)
     {
         /// NFD → strip Mn → NFC
@@ -170,7 +175,6 @@ struct AccentFoldImpl
         std::swap(buf1, buf2);
         len = stripCombiningMarks(buf1.data(), len);
         len = normalizeBuffer(ctx.nfc, buf1, len, buf2, MAX_NFC_EXPANSION, "NFC recompose");
-        std::swap(buf1, buf2);
         return len;
     }
 };
@@ -179,7 +183,7 @@ struct FullFoldImpl
 {
     static constexpr auto name = "foldUTF8";
 
-    static void init(FoldContext & ctx, bool aggressive, bool exclude_special_i)
+    static void init(FoldContext & ctx, bool aggressive, bool handle_turkic_i)
     {
         UErrorCode err = U_ZERO_ERROR;
         ctx.aggressive = aggressive;
@@ -201,10 +205,9 @@ struct FullFoldImpl
                 throw Exception(ErrorCodes::CANNOT_NORMALIZE_STRING, "Failed to get NFKC_Casefold normalizer: {}", u_errorName(err));
         }
 
-        ctx.fold_options = exclude_special_i ? U_FOLD_CASE_EXCLUDE_SPECIAL_I : U_FOLD_CASE_DEFAULT;
+        ctx.fold_options = handle_turkic_i ? U_FOLD_CASE_EXCLUDE_SPECIAL_I : U_FOLD_CASE_DEFAULT;
     }
 
-    /// Result is left in buf1.
     static int32_t transform(const FoldContext & ctx, PODArray<UChar> & buf1, PODArray<UChar> & buf2, int32_t len)
     {
         if (ctx.aggressive)
@@ -216,7 +219,6 @@ struct FullFoldImpl
             std::swap(buf1, buf2);
             len = stripCombiningMarks(buf1.data(), len);
             len = normalizeBuffer(ctx.nfc, buf1, len, buf2, MAX_NFC_EXPANSION, "NFC final");
-            std::swap(buf1, buf2);
         }
         else
         {
@@ -236,7 +238,6 @@ struct FullFoldImpl
             std::swap(buf1, buf2);
             len = stripCombiningMarks(buf1.data(), len);
             len = normalizeBuffer(ctx.nfc, buf1, len, buf2, MAX_NFC_EXPANSION, "NFC final");
-            std::swap(buf1, buf2);
         }
         return len;
     }
@@ -253,10 +254,10 @@ struct FoldUTF8Common
         ColumnString::Offsets & res_offsets,
         size_t input_rows_count,
         bool aggressive,
-        bool exclude_special_i)
+        bool handle_turkic_i)
     {
         FoldContext ctx;
-        Impl::init(ctx, aggressive, exclude_special_i);
+        Impl::init(ctx, aggressive, handle_turkic_i);
 
         res_data.reserve(data.size());
         res_offsets.resize(input_rows_count);
@@ -301,7 +302,7 @@ struct FoldUTF8Common
                     reinterpret_cast<char *>(&res_data[current_to_offset]),
                     static_cast<int32_t>(res_data.size() - current_to_offset),
                     &to_size,
-                    buf_in.data(),
+                    buf_out.data(),
                     len,
                     &err);
                 if (U_FAILURE(err))
@@ -318,7 +319,6 @@ struct FoldUTF8Common
     }
 };
 
-/// IFunction wrapper — handles argument parsing and dispatches to FoldUTF8Common.
 template <typename Impl>
 class FunctionFoldUTF8 : public IFunction
 {
@@ -391,7 +391,7 @@ public:
                 "Illegal column {} of first argument of function {}", col->getName(), getName());
 
         bool aggressive = true;
-        bool exclude_special_i = false;
+        bool handle_turkic_i = false;
         size_t arg_idx = 1;
 
         if constexpr (has_method_arg)
@@ -405,18 +405,18 @@ public:
         if constexpr (has_special_i_arg)
         {
             if (arg_idx < arguments.size())
-                exclude_special_i = parseUInt8Argument(arguments[arg_idx]);
+                handle_turkic_i = parseUInt8Argument(arguments[arg_idx]);
         }
 
-        if (aggressive && exclude_special_i)
+        if (aggressive && handle_turkic_i)
             throw Exception(ErrorCodes::BAD_ARGUMENTS,
-                "exclude_special_I is only supported with 'conservative' method in function {}", getName());
+                "handle_turkic_i = 1 is only supported with 'conservative' method in function {}", getName());
 
         auto col_res = ColumnString::create();
         FoldUTF8Common<Impl>::process(
             col_str->getChars(), col_str->getOffsets(),
             col_res->getChars(), col_res->getOffsets(),
-            input_rows_count, aggressive, exclude_special_i);
+            input_rows_count, aggressive, handle_turkic_i);
         return col_res;
     }
 
@@ -442,7 +442,7 @@ private:
         const auto * col_const = checkAndGetColumnConst<ColumnUInt8>(arg.column.get());
         if (!col_const)
             throw Exception(ErrorCodes::BAD_ARGUMENTS,
-                "The 'exclude_special_I' argument of function {} must be a constant UInt8", Impl::name);
+                "The 'handle_turkic_i' argument of function {} must be a constant UInt8", Impl::name);
         return col_const->getValue<UInt8>() != 0;
     }
 };
@@ -461,19 +461,19 @@ REGISTER_FUNCTION(FoldUTF8)
 Applies Unicode case folding to a UTF-8 string, converting it to a lowercase-like normalized form suitable for case-insensitive comparisons.
 
 Two methods are available:
-- 'aggressive' (default): applies NFKC_Casefold normalization, which performs case folding and also resolves Unicode compatibility equivalences — for example, ligatures like `ﬃ` are decomposed to `ffi`, and circled numbers like `①` become `1`. This is faster as it uses a single ICU normalization pass.
-- 'conservative': applies NFC normalization followed by standard Unicode case folding, preserving the visual form of compatibility characters (e.g. ligatures remain intact). This requires an extra final normalization pass.
+- 'aggressive' (default): applies NFKC_Casefold normalization, which performs case folding and also resolves Unicode compatibility equivalences — for example, Roman numerals like `Ⅷ` are decomposed to `viii`, and circled numbers like `①` become `1`. This is faster as it uses a single ICU normalization pass.
+- 'conservative': applies NFC normalization followed by standard Unicode case folding. Preserves compatibility characters that are not affected by case folding (e.g. Roman numerals, circled numbers), but note that some ligatures like `ﬃ` are still decomposed because Unicode case folding itself expands them. This method requires an extra final normalization pass.
 
-"Special I" handling. The parameter `exclude_special_I` (default 0) controls whether to exclude Turkish/Azerbaijani special I from folding.
-It prevents `I` (U+0049) from folding down to `i`, because in Turkish/Azerbaijani the lowercase of `I` is `ı` (dotless i, U+0131) not i.
-When set to 0 (false), `I` folds to `i` which is wrong for these languages. When set to 1 (true), `I` is left alone so it doesn't get incorrectly merged with the dotted-i pair.
+"Special I" handling. The parameter `handle_turkic_i` (default 0) enables Turkish/Azerbaijani-aware folding of `I` (U+0049).
+When set to 1 (true), `I` folds to `ı` (dotless small i, U+0131), which is the correct lowercase in Turkish/Azerbaijani.
+When set to 0 (false), `I` folds to `i` (standard Unicode case folding).
 
 )";
-    FunctionDocumentation::Syntax case_syntax = "caseFoldUTF8(str[, method][, exclude_special_I])";
+    FunctionDocumentation::Syntax case_syntax = "caseFoldUTF8(str[, method][, handle_turkic_i])";
     FunctionDocumentation::Arguments case_args = {
         {"str", "UTF-8 encoded input string.", {"String"}},
         {"method", "Optional. 'aggressive' (default) or 'conservative'.", {"String"}},
-        {"exclude_special_I", "Optional. 1 to exclude Turkish/Azerbaijani special I mapping (U_FOLD_CASE_EXCLUDE_SPECIAL_I). Default 0. Only valid with 'conservative' method.", {"UInt8"}}
+        {"handle_turkic_i", "Optional. 1 to enable Turkish/Azerbaijani-aware folding where `I` folds to `ı` (dotless small i) instead of `i`. Default 0. Only valid with 'conservative' method.", {"UInt8"}}
     };
     FunctionDocumentation::ReturnedValue case_ret = {"Case-folded UTF-8 string.", {"String"}};
     FunctionDocumentation::Examples case_examples = {
@@ -496,10 +496,10 @@ When set to 0 (false), `I` folds to `i` which is wrong for these languages. When
 )"
     },
     {
-        "Turkish I handling with exclude_special_I",
-        "SELECT caseFoldUTF8('İstanbul', 'conservative', 0) AS default_fold, caseFoldUTF8('İstanbul', 'conservative', 1) AS exclude_special_I",
+        "Turkish I handling with handle_turkic_i",
+        "SELECT caseFoldUTF8('İstanbul', 'conservative', 0) AS default_fold, caseFoldUTF8('İstanbul', 'conservative', 1) AS handle_turkic_i",
         R"(
-┌─default_fold─┬─exclude_special_I─┐
+┌─default_fold─┬─handle_turkic_i─┐
 │ i̇stanbul     │ istanbul           │
 └──────────────┴────────────────────┘
 )"
@@ -535,20 +535,20 @@ Applies both case folding and accent (diacritical mark) removal to a UTF-8 strin
 This combines the behavior of `caseFoldUTF8` and `accentFoldUTF8` into a single function.
 
 Two methods are available:
-- 'aggressive' (default): applies NFKC_Casefold (case fold + compatibility decomposition in one pass), then NFD + strip combining marks + NFC. Faster, but decomposes compatibility characters like ligatures.
-- 'conservative': applies NFC, case fold, NFD, strip combining marks, then NFC. Preserves compatibility characters like ligatures while still folding case and removing accents.
+- 'aggressive' (default): applies NFKC_Casefold (case fold + compatibility decomposition in one pass), then NFD + strip combining marks + NFC. Faster, but decomposes compatibility characters like Roman numerals and circled numbers.
+- 'conservative': applies NFC, case fold, NFD, strip combining marks, then NFC. Preserves compatibility characters that are not affected by case folding, while still folding case and removing accents.
 
 See the `caseFoldUTF8` and `accentFoldUTF8` functions for more info on each step. The result of this function will be equivalent
 to `accentFoldUTF8(caseFoldUTF8(input))` however `foldUTF8(input)` will be slightly faster due to avoiding a redundant normalization step.
 
-The `exclude_special_I` parameter works the same as in `caseFoldUTF8`. It is useful for Turkish/Azerbaijani
+The `handle_turkic_i` parameter works the same as in `caseFoldUTF8`. It is useful for Turkish/Azerbaijani
 because the dotless `ı` (U+0131) produced by special I folding is a base character that survives accent stripping.
 )";
-    FunctionDocumentation::Syntax fold_syntax = "foldUTF8(str[, case_fold_method][, exclude_special_I])";
+    FunctionDocumentation::Syntax fold_syntax = "foldUTF8(str[, case_fold_method][, handle_turkic_i])";
     FunctionDocumentation::Arguments fold_args = {
         {"str", "UTF-8 encoded input string.", {"String"}},
         {"case_fold_method", "Optional. 'aggressive' (default) or 'conservative'.", {"String"}},
-        {"exclude_special_I", "Optional. 1 to exclude Turkish/Azerbaijani special I mapping (U_FOLD_CASE_EXCLUDE_SPECIAL_I). Default 0. Only valid with 'conservative' method.", {"UInt8"}}
+        {"handle_turkic_i", "Optional. 1 to enable Turkish/Azerbaijani-aware folding where `I` folds to `ı` (dotless small i) instead of `i`. Default 0. Only valid with 'conservative' method.", {"UInt8"}}
     };
     FunctionDocumentation::ReturnedValue fold_ret = {"Case-folded and accent-stripped UTF-8 string.", {"String"}};
     FunctionDocumentation::Examples fold_examples = {

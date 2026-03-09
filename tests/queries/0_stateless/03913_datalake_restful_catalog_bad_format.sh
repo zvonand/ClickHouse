@@ -9,6 +9,8 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
+# Verify that creating a database with an invalid auth_header (wrong format, no colon) succeeds, and that
+# querying system.tables on such a database does not cause an exception (the error is caught lazily).
 NEW_DB_NAME="${CLICKHOUSE_DATABASE}_03913_DATALAKE"
 
 $CLICKHOUSE_CLIENT -q "DROP DATABASE IF EXISTS ${NEW_DB_NAME};"
@@ -21,13 +23,16 @@ SETTINGS
     auth_header = 'wrong.header',
     storage_endpoint = 'http://minio:9000/lakehouse',
     warehouse = 'demo';
-" 2>&1 | grep -o 'Invalid auth header format'
+"
 
-$CLICKHOUSE_CLIENT -q "SELECT count() FROM system.databases WHERE name = '${NEW_DB_NAME}';"
+$CLICKHOUSE_CLIENT -q "
+SELECT database || '.' || name FROM system.tables WHERE database = '${NEW_DB_NAME}' AND engine = 'MergeTree'
+SETTINGS show_data_lake_catalogs_in_system_tables = 1;
+"
 
 $CLICKHOUSE_CLIENT -q "DROP DATABASE IF EXISTS ${NEW_DB_NAME};"
 
-# Verify that a forbidden header (configured via http_forbid_headers) is rejected at CREATE DATABASE time,
+# Verify that a forbidden header (configured via http_forbid_headers) is rejected at CREATE DATABASE time.
 # The values for exact_header are defined as forbidden in tests/config/config.d/forbidden_headers.xml.
 NEW_DB_FORBIDDEN="${CLICKHOUSE_DATABASE}_03913_FORBIDDEN"
 

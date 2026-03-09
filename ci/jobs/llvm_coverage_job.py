@@ -218,23 +218,29 @@ if __name__ == "__main__":
             print("Coverage did not degrade.")
 
         # Compress and attach the diff HTML report archive + files to the diff result.
-        Utils.compress_gz(
-            f"{TEMP_DIR}/llvm_coverage_diff_html_report",
-            f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz",
-        )
-        diff_res.files.append(f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz")
-        # Copy index.html → index_diff.html so the diff entry-point has a unique
-        # name in S3 links. The original index.html is kept as an asset so that
-        # relative links inside the report continue to work.
-        _diff_index = Path(TEMP_DIR) / "llvm_coverage_diff_html_report" / "index.html"
-        _diff_index_copy = _diff_index.parent / "index_diff.html"
-        if _diff_index.exists():
-            shutil.copy2(_diff_index, _diff_index_copy)
-        _diff_files, _diff_assets = collect_html_report_files(
-            "llvm_coverage_diff_html_report", entry_point="index_diff.html"
-        )
-        diff_res.files.extend(_diff_files)
-        diff_res.assets.extend(_diff_assets)
+        # The directory may not exist when changed files have no coverage data
+        # (e.g. only non-source files like .sh tests were modified).
+        _diff_html_dir = Path(TEMP_DIR) / "llvm_coverage_diff_html_report"
+        if _diff_html_dir.exists():
+            Utils.compress_gz(
+                str(_diff_html_dir),
+                f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz",
+            )
+            diff_res.files.append(
+                f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz"
+            )
+            # Copy index.html → index_diff.html so the diff entry-point has a unique
+            # name in S3 links. The original index.html is kept as an asset so that
+            # relative links inside the report continue to work.
+            _diff_index = _diff_html_dir / "index.html"
+            _diff_index_copy = _diff_index.parent / "index_diff.html"
+            if _diff_index.exists():
+                shutil.copy2(_diff_index, _diff_index_copy)
+            _diff_files, _diff_assets = collect_html_report_files(
+                "llvm_coverage_diff_html_report", entry_point="index_diff.html"
+            )
+            diff_res.files.extend(_diff_files)
+            diff_res.assets.extend(_diff_assets)
         results.append(diff_res)
 
         # Generate report for changed blocks only
@@ -318,8 +324,9 @@ if __name__ == "__main__":
             )
 
     archives = [f"{TEMP_DIR}/llvm_coverage_html_report.tar.gz"]
-    if not is_master_branch:
-        archives.append(f"{TEMP_DIR}/llvm_coverage_diff_html_report.tar.gz")
+    _diff_archive = Path(TEMP_DIR) / "llvm_coverage_diff_html_report.tar.gz"
+    if _diff_archive.exists():
+        archives.append(str(_diff_archive))
 
     Result.create_from(
         results=results,

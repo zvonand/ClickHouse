@@ -2153,12 +2153,11 @@ arrow::Status ArrowFlightHandler::evaluatePollDescriptor(const String & poll_des
             }
         }
         else
-        {
             last = true;
-        }
 
         calls_data->endEvaluation(poll_descriptor, ticket, rows, bytes, last);
-        poll_session->onFinish();
+        if (last)
+            poll_session->onFinish();
     }
     catch (...)
     {

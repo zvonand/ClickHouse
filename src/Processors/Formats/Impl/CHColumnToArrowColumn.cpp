@@ -1070,7 +1070,7 @@ namespace DB
             }
             case TypeIndex::String:
             {
-                if (settings.output_string_as_string && array_builder->type() != arrow::binary())
+                if (settings.output_string_as_string && !array_builder->type()->Equals(arrow::binary()))
                     fillArrowArrayWithStringColumnData<ColumnString, arrow::StringBuilder>(column, null_bytemap, format_name, array_builder, start, end);
                 else
                     fillArrowArrayWithStringColumnData<ColumnString, arrow::BinaryBuilder>(column, null_bytemap, format_name, array_builder, start, end);

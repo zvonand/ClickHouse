@@ -1601,7 +1601,7 @@ CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, boo
                     "database::Nullable(String) AS db_schema_name, "
                     "table AS table_name, "
                     "engine AS table_type, "
-                    "table_schema "
+                    "ifNull(right.table_schema, CAST([], 'Array(Tuple(String, String))')) AS table_schema "
                 "FROM system.tables AS left "
                 "LEFT JOIN "
                 "("

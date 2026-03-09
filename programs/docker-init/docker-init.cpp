@@ -39,6 +39,24 @@ namespace
 /// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 std::string g_clickhouse_binary;
 
+/// Set by the SIGTERM/SIGINT handler during init to request graceful shutdown.
+/// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+volatile sig_atomic_t g_shutdown_requested = 0;
+
+/// PID of the temporary init server, so the signal handler can forward SIGTERM.
+/// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+volatile pid_t g_init_server_pid = 0;
+
+void shutdownHandler(int sig)
+{
+    g_shutdown_requested = 1;
+
+    /// Forward the signal to the temporary server if one is running.
+    pid_t pid = g_init_server_pid;
+    if (pid > 0)
+        kill(pid, sig);
+}
+
 /// Get an environment variable value, returning default_value if not set.
 std::string getEnv(const char * name, const std::string & default_value = "")
 {
@@ -265,8 +283,13 @@ void recursiveChown(const std::string & path_str, uid_t uid, gid_t gid)
 }
 
 /// Create a directory (and all parents) and optionally chown it.
-/// When do_chown is false, we are already running as the target user and create the
-/// directory directly with fs::create_directories (no external binary required).
+///
+/// Three cases:
+///   1. do_chown=true (root, normal mode): create with fs::create_directories, then chown.
+///   2. do_chown=false, running as root (CLICKHOUSE_DO_NOT_CHOWN=1): delegate to
+///      `clickhouse su UID:GID` so the directory is created as the target user.
+///      This handles NFS mounts where root is mapped to nobody.
+///   3. do_chown=false, running as non-root: create directly — we are already the target user.
 bool createDirectoryAndChown(const std::string & dir, uid_t uid, gid_t gid, bool do_chown)
 {
     if (dir.empty())
@@ -290,9 +313,43 @@ bool createDirectoryAndChown(const std::string & dir, uid_t uid, gid_t gid, bool
         return true;
     }
 
+    if (getuid() == 0)
+    {
+        /// Running as root with CLICKHOUSE_DO_NOT_CHOWN or CLICKHOUSE_RUN_AS_ROOT.
+        /// On NFS mounts root may be remapped to nobody, so create the directory as
+        /// the target user. Fork a child that drops privileges before calling
+        /// fs::create_directories — distroless has no mkdir binary.
+        pid_t pid = fork();
+        if (pid < 0)
+        {
+            std::cerr << "docker-init: fork failed for directory creation: " << strerror(errno) << "\n"; // NOLINT(concurrency-mt-unsafe)
+            return false;
+        }
+        if (pid == 0)
+        {
+            if (setgid(gid) < 0 || setuid(uid) < 0)
+                _exit(1);
+            std::error_code ec;
+            fs::create_directories(dir, ec);
+            _exit(ec ? 1 : 0);
+        }
+        int status = 0;
+        while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+        {
+            /// Fallback: try direct creation (works when root is not remapped).
+            std::error_code ec;
+            fs::create_directories(dir, ec);
+            if (ec)
+            {
+                std::cerr << "docker-init: couldn't create directory " << dir << ": " << ec.message() << "\n";
+                return false;
+            }
+        }
+        return true;
+    }
+
     /// Non-root: we are already running as UID:GID, so create the directory directly.
-    /// Do NOT delegate to `clickhouse su mkdir` here: the distroless image has no mkdir
-    /// binary, and since we're already the target user there is no need to switch identity.
     std::error_code ec;
     fs::create_directories(dir, ec);
     if (ec)
@@ -495,6 +552,9 @@ void initClickHouseDB(
     for (const auto & arg : extra_server_args)
         server_args.push_back(arg);
 
+    if (g_shutdown_requested)
+        return;
+
     pid_t server_pid = fork();
     if (server_pid < 0)
     {
@@ -508,6 +568,9 @@ void initClickHouseDB(
         execvp(argv[0], argv.data());
         _exit(127);
     }
+
+    /// Allow the signal handler to forward SIGTERM to the temp server.
+    g_init_server_pid = server_pid;
 
     /// Poll until the server accepts connections.
     /// This is a service-readiness wait, not a race condition workaround.
@@ -526,7 +589,7 @@ void initClickHouseDB(
     }
     bool server_ready = false;
 
-    while (tries > 0 && !server_ready)
+    while (tries > 0 && !server_ready && !g_shutdown_requested)
     {
         pid_t check_pid = fork();
         if (check_pid == 0)
@@ -565,9 +628,13 @@ void initClickHouseDB(
 
     if (!server_ready)
     {
-        std::cerr << "docker-init: ClickHouse init process timed out\n";
+        if (g_shutdown_requested)
+            std::cerr << "docker-init: shutdown requested, stopping init server\n";
+        else
+            std::cerr << "docker-init: ClickHouse init process timed out\n";
         kill(server_pid, SIGTERM);
         while (waitpid(server_pid, nullptr, 0) < 0 && errno == EINTR) {}
+        g_init_server_pid = 0;
         return;
     }
 
@@ -624,10 +691,19 @@ void initClickHouseDB(
             {
                 std::cerr << "docker-init: running " << path << " (decompressing)\n";
                 /// Decompress via clickhouse-local (auto-detects .gz) and pipe to clickhouse-client.
+                /// Escape single quotes in the path to prevent SQL injection via crafted filenames.
+                std::string escaped_path;
+                for (char c : path.string())
+                {
+                    if (c == '\'')
+                        escaped_path += "\\'";
+                    else
+                        escaped_path += c;
+                }
                 runPipeline(
                     {g_clickhouse_binary, "local",
                      "--query",
-                     "SELECT * FROM file('" + path.string() + "', RawBLOB) FORMAT RawBLOB"},
+                     "SELECT * FROM file('" + escaped_path + "', RawBLOB) FORMAT RawBLOB"},
                     client_base
                 );
             }
@@ -647,6 +723,7 @@ void initClickHouseDB(
     kill(server_pid, SIGTERM);
     int server_status = 0;
     while (waitpid(server_pid, &server_status, 0) < 0 && errno == EINTR) {}
+    g_init_server_pid = 0;
     if (!WIFEXITED(server_status) || WEXITSTATUS(server_status) != 0)
         std::cerr << "docker-init: warning: init server did not exit cleanly\n";
 }
@@ -911,9 +988,30 @@ int mainEntryClickHouseDockerInit(int argc, char ** argv)
 
     manageClickHouseUser(config_file, clickhouse_user, clickhouse_password, access_management, skip_user_setup);
 
+    /// Install signal handlers so `docker stop` during init triggers graceful shutdown.
+    /// As PID 1, signals without a handler are silently dropped by the kernel.
+    {
+        struct sigaction sa{};
+        sa.sa_handler = shutdownHandler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_RESTART;
+        sigaction(SIGTERM, &sa, nullptr);
+        sigaction(SIGINT, &sa, nullptr);
+    }
+
     bool always_run_initdb = !getEnv("CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS").empty();
     initClickHouseDB(config_file, data_dir, clickhouse_user, clickhouse_password,
                      run_uid, run_gid, extra_args, always_run_initdb);
+
+    if (g_shutdown_requested)
+    {
+        std::cerr << "docker-init: shutdown requested during initialization, exiting\n";
+        return 1;
+    }
+
+    /// Reset signal handlers before exec — the server handles its own signals.
+    signal(SIGTERM, SIG_DFL); // NOLINT(cert-err33-c)
+    signal(SIGINT, SIG_DFL); // NOLINT(cert-err33-c)
 
     /// Set watchdog env — default to disabled so Ctrl+C works in Docker.
     if (std::getenv("CLICKHOUSE_WATCHDOG_ENABLE") == nullptr) // NOLINT(concurrency-mt-unsafe)

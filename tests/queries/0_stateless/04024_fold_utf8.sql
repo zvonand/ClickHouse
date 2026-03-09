@@ -1,3 +1,6 @@
+-- Tags: no-fasttest
+-- no-fasttest: requires ICU library
+
 -- Negative tests: parameter validation
 SELECT caseFoldUTF8(); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
 SELECT caseFoldUTF8('x', 'aggressive', 1, 'extra'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }

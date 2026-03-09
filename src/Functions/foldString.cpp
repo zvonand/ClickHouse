@@ -462,11 +462,8 @@ REGISTER_FUNCTION(FoldUTF8)
 Applies Unicode case folding to a UTF-8 string, converting it to a lowercase-like normalized form suitable for case-insensitive comparisons.
 
 Two methods are available:
-- 'aggressive' (default): applies NFKC_Casefold normalization, which performs case folding and also resolves
-  Unicode compatibility equivalences — for example, ligatures like `ﬃ` are decomposed to `ffi`, and
-  circled numbers like `①` become `1`. This is faster as it uses a single ICU normalization pass.
-- 'conservative': applies NFC normalization followed by standard Unicode case folding, preserving the
-  visual form of compatibility characters (e.g. ligatures remain intact). This requires an extra final normalization pass.
+- 'aggressive' (default): applies NFKC_Casefold normalization, which performs case folding and also resolves Unicode compatibility equivalences — for example, ligatures like `ﬃ` are decomposed to `ffi`, and circled numbers like `①` become `1`. This is faster as it uses a single ICU normalization pass.
+- 'conservative': applies NFC normalization followed by standard Unicode case folding, preserving the visual form of compatibility characters (e.g. ligatures remain intact). This requires an extra final normalization pass.
 
 "Special I" handling. The parameter `exclude_special_I` (default 0) controls whether to exclude Turkish/Azerbaijani special I from folding.
 It prevents `I` (U+0049) from folding down to `i`, because in Turkish/Azerbaijani the lowercase of `I` is `ı` (dotless i, U+0131) not i.
@@ -539,10 +536,8 @@ Applies both case folding and accent (diacritical mark) removal to a UTF-8 strin
 This combines the behavior of `caseFoldUTF8` and `accentFoldUTF8` into a single function.
 
 Two methods are available:
-- 'aggressive' (default): applies NFKC_Casefold (case fold + compatibility decomposition in one pass),
-  then NFD + strip combining marks + NFC. Faster, but decomposes compatibility characters like ligatures.
-- 'conservative': applies NFC, case fold, NFD, strip combining marks, then NFC.
-  Preserves compatibility characters like ligatures while still folding case and removing accents.
+- 'aggressive' (default): applies NFKC_Casefold (case fold + compatibility decomposition in one pass), then NFD + strip combining marks + NFC. Faster, but decomposes compatibility characters like ligatures.
+- 'conservative': applies NFC, case fold, NFD, strip combining marks, then NFC. Preserves compatibility characters like ligatures while still folding case and removing accents.
 
 See the `caseFoldUTF8` and `accentFoldUTF8` functions for more info on each step. The result of this function will be equivalent
 to `accentFoldUTF8(caseFoldUTF8(input))` however `foldUTF8(input)` will be slightly faster due to avoiding a redundant normalization step.

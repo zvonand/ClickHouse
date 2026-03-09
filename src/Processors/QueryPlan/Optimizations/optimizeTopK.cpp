@@ -117,9 +117,26 @@ size_t tryOptimizeTopK(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, 
     int nulls_direction = sort_col_desc.nulls_direction;
     const auto & collator = sort_col_desc.collator;
 
-    if ((settings.use_skip_indexes_for_top_k &&
-            read_from_mergetree_step->isSkipIndexAvailableForTopK(sort_column_name) && settings.use_skip_indexes_on_data_read) ||
-        (settings.use_top_k_dynamic_filtering && !read_from_mergetree_step->getPrewhereInfo()))
+    /// The skip-index top-k path ranks granules via raw Field comparison
+    /// (MinMaxGranuleItem::operator<) which does not respect nulls_direction
+    /// or collation. Restrict it to types where raw Field ordering matches
+    /// ORDER BY semantics. This check mirrors the guard in
+    /// ReadFromMergeTree::buildIndexes for defense-in-depth.
+    bool skip_index_type_eligible = sort_column.type->isValueRepresentedByNumber()
+        && !sort_column.type->isNullable()
+        && !collator;
+
+    bool use_skip_index = settings.use_skip_indexes_for_top_k
+        && skip_index_type_eligible
+        && read_from_mergetree_step->isSkipIndexAvailableForTopK(sort_column_name);
+
+    bool use_dynamic_filtering = settings.use_top_k_dynamic_filtering
+        && !read_from_mergetree_step->getPrewhereInfo();
+
+    /// The threshold tracker is needed for dynamic mark skipping during reads
+    /// (use_skip_indexes_on_data_read) or for the prewhere dynamic filter.
+    /// Initial top-k mark selection (getTopKMarks) does not require it.
+    if ((use_skip_index && settings.use_skip_indexes_on_data_read) || use_dynamic_filtering)
     {
         threshold_tracker = std::make_shared<TopKThresholdTracker>(direction, nulls_direction, collator);
         sorting_step->setTopKThresholdTracker(threshold_tracker);
@@ -127,8 +144,7 @@ size_t tryOptimizeTopK(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, 
 
     bool added_step = false;
 
-    if  (settings.use_top_k_dynamic_filtering &&
-         !read_from_mergetree_step->getPrewhereInfo())
+    if (use_dynamic_filtering)
     {
         auto new_prewhere_info = std::make_shared<PrewhereInfo>();
         NameAndTypePair sort_column_name_and_type(sort_column_name, sort_column.type);
@@ -174,7 +190,8 @@ size_t tryOptimizeTopK(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, 
     ///                                  \
     ///                                __topKFilter() (Prewhere filtering)
 
-    read_from_mergetree_step->setTopKColumn({sort_column_name, sort_column.type, n, direction, where_clause, threshold_tracker});
+    if (use_skip_index || use_dynamic_filtering)
+        read_from_mergetree_step->setTopKColumn({sort_column_name, sort_column.type, n, direction, where_clause, threshold_tracker});
 
     return added_step ? 1 : 0;
 }

@@ -30,6 +30,7 @@ def extract_access_denied_hint(err: str) -> str:
     return hint
 
 def test_hint_filters_columns_by_show_privilege():
+    assert False, "INTENTIONAL FAILURE FOR COVERAGE COLLECTION TEST"  # TODO: remove
     node.query("DROP TABLE IF EXISTS t_cols")
     node.query(
         "CREATE TABLE t_cols(col_alpha UInt32, col_beta UInt32) ENGINE = Memory"

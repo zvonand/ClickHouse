@@ -213,7 +213,7 @@ void JoinStep::describePipeline(FormatSettings & settings) const
 void JoinStep::describeActions(FormatSettings & settings) const
 {
     const String & prefix = settings.other_prefix;
-    
+
     for (const auto & [name, value] : describeJoinActions(join))
         settings.out << prefix << name << ": " << value << '\n';
     if (swap_streams)

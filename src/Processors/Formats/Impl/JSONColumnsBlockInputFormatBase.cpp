@@ -7,7 +7,6 @@
 #include <Interpreters/parseColumnsListForTableFunction.h>
 #include <IO/ReadHelpers.h>
 #include <base/find_symbols.h>
-#include "Core/CaseAwareBlockNameMap.h"
 
 namespace DB
 {

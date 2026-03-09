@@ -1,7 +1,7 @@
 #include <Columns/IColumn.h>
 #include <Common/Exception.h>
-#include "Core/CaseAwareBlockNameMap.h"
 #include <Core/Block.h>
+#include <Core/CaseAwareBlockNameMap.h>
 #include <Formats/ColumnMapping.h>
 #include <Formats/FormatSettings.h>
 

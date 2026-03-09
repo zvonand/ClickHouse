@@ -7,8 +7,8 @@
 #include <Formats/FormatSettings.h>
 #include <base/StringViewHash.h>
 #include <sparsehash/dense_hash_map>
-#include "Common/Exception.h"
-#include "base/defines.h"
+#include <Common/Exception.h>
+#include <base/defines.h>
 
 namespace DB
 {

@@ -1,4 +1,3 @@
-#include <string_view>
 #include <IO/ReadBufferFromString.h>
 
 #include <Formats/FormatFactory.h>

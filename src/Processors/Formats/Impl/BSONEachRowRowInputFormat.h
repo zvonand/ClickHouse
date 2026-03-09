@@ -1,12 +1,11 @@
 #pragma once
 
-#include <Core/BlockNameMap.h>
+#include <Core/CaseAwareBlockNameMap.h>
 #include <Formats/FormatSettings.h>
 #include <Formats/BSONTypes.h>
 #include <Processors/Formats/IRowInputFormat.h>
 #include <Processors/Formats/ISchemaReader.h>
 #include <Common/HashTable/HashMap.h>
-#include "Core/CaseAwareBlockNameMap.h"
 
 
 namespace DB

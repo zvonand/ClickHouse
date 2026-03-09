@@ -9,7 +9,6 @@
 #include <DataTypes/NestedUtils.h>
 #include <DataTypes/Serializations/SerializationNullable.h>
 #include <DataTypes/getLeastSupertype.h>
-#include "Core/CaseAwareBlockNameMap.h"
 
 namespace DB
 {

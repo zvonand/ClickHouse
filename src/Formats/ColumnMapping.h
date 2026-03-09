@@ -3,12 +3,12 @@
 #include <Columns/IColumn_fwd.h>
 #include <Core/Block_fwd.h>
 #include <Core/BlockNameMap.h>
-#include "Core/CaseAwareBlockNameMap.h"
 
 namespace DB
 {
 
 struct FormatSettings;
+class CaseAwareBlockNameMap;
 using Names = std::vector<std::string>;
 
 /// Used for input text formats with headers/structure to map columns from input

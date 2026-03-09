@@ -2,7 +2,7 @@
 
 #include <cctype>
 #include <string_view>
-#include "Formats/FormatSettings.h"
+#include <Formats/FormatSettings.h>
 
 namespace DB {
 
@@ -15,7 +15,6 @@ public:
         NOT_FOUND = size_t(-1), /// Return value of `get` method whenever the key is not found
     };
 
-    /// Constructs a map between column name and position in the block
     explicit CaseAwareBlockNameMap(FormatSettings::InputFormatCaseSensitivity input_mode);
     ~CaseAwareBlockNameMap();
     /// Adds a new pair column_name and position
@@ -28,6 +27,7 @@ public:
         return expected_size;
     }
 
+    /// Sets the expected size of the map
     void setSize(size_t size);
 
     /// Constructs the map from the given block

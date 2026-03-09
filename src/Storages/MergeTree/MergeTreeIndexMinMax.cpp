@@ -301,8 +301,6 @@ void MergeTreeIndexBulkGranulesMinMax::getTopKMarks(size_t n, std::vector<MinMax
 
     for (const auto & granule : granules)
     {
-        MinMaxGranuleItem item{direction, 0, granule.granule_num, granule.min_or_max_value};
-
         if constexpr (!handle_ties) /// more common case
         {
             if (queue.size() < n)
@@ -391,6 +389,9 @@ void MergeTreeIndexBulkGranulesMinMax::getTopKMarks(int direction,
             }
         }
     }
+
+    if (queue.empty())
+        return;
 
     result.resize(parts.size(), {});
     if constexpr (!handle_ties)

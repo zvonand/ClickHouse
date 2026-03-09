@@ -27,13 +27,26 @@ def _run(prompt):
     return result
 
 
+COPILOT_INSTRUCTIONS_FILE = ".github/copilot-instructions.md"
+
+
+def _read_instructions():
+    try:
+        with open(COPILOT_INSTRUCTIONS_FILE) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+
+
 def pre():
     info = Info()
     if not info.pr_number:
         print("Not a PR, skipping")
         return True
 
+    instructions = _read_instructions()
     prompt = (
+        f"{instructions}\n\n"
         f"Review the PR {info.pr_url}. "
         f"The repo is checked out at PR head. "
         f"Post inline review comments on specific lines where applicable, and one summary comment. "
@@ -51,14 +64,14 @@ def post():
     ci_report_url = info.get_report_url()
 
     prompt = (
-        f"Review the PR {info.pr_url}. "
-        f"The repo is checked out at PR head. "
-        f"Fetch CI results with: node .claude/tools/fetch_ci_report.js '{ci_report_url}' --failed --links "
-        f"(use --all to see all results, --test <name> to filter by test name, "
-        f"--download-logs to get logs.tar.gz for deeper investigation) "
-        f"and include a CI summary in your review. "
-        f"Post inline review comments on specific lines where applicable, and one summary comment. "
-        f"Before posting, read existing review comments on this PR and do not duplicate ones already posted."
+        f"Fetch CI results for PR {info.pr_url} with: "
+        f"node .claude/tools/fetch_ci_report.js '{ci_report_url}' --failed --links "
+        f"(use --all to see all results, --test <name> to filter, --download-logs for deeper investigation). "
+        f"If all checks passed — do nothing and stop. "
+        f"If there are failures — the repo is checked out at PR head. "
+        f"Look at the PR diff to understand what changed, then work backwards from the failures: "
+        f"try to match each failure to the code changes and briefly explain why the change likely caused it. "
+        f"Post a single comment on the PR with your findings."
     )
     return _run(prompt).is_ok()
 

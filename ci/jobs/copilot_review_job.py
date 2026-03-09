@@ -45,8 +45,11 @@ def _run(prompt):
         try:
             Result.from_commands_run(
                 name="copilot review",
+                # --allow-all-tools: run non-interactively
+                # --add-dir .: restrict file access to repo root (default,
+                #   but explicit; do NOT add --allow-all-paths)
                 command=f"GH_CONFIG_DIR={shlex.quote(gh_config_dir)} "
-                        f"copilot -p {shlex.quote(prompt)} --allow-all-tools --model gpt-5.3-codex",
+                        f"copilot -p {shlex.quote(prompt)} --allow-all-tools --add-dir . --model gpt-5.3-codex",
                 with_info=True,
             )
         except Exception as e:

@@ -704,6 +704,7 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
     bool is_final_query = filter_context.query_info.isFinal();
     bool has_projections = filter_context.has_projections;
     auto & result = filter_context.result;
+    const String full_table_name = parts_with_ranges.empty() ? "" : parts_with_ranges[0].data_part->storage.getStorageID().getFullTableName();
 
     const auto original_num_parts = parts_with_ranges.size();
     const Settings & settings = context->getSettingsRef();
@@ -927,11 +928,6 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
                             log);
                     }
 
-                    context->getQueryContext()->addSkipIndexAccessInfo(
-                        ranges.data_part->storage.getStorageID().getFullTableName(),
-                        index_and_condition.index->index.name
-                    );
-
                     stat.granules_dropped.fetch_add(total_granules - ranges.ranges.getNumberOfMarks(), std::memory_order_relaxed);
                     if (ranges.ranges.empty())
                         stat.parts_dropped.fetch_add(1, std::memory_order_relaxed);
@@ -1087,6 +1083,13 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
     }
 
     const auto num_indices = skip_indexes.useful_indices.size();
+
+    if (context->hasQueryContext())
+    {
+        auto query_context = context->getQueryContext();
+        for (const auto & idx : skip_indexes.useful_indices)
+            query_context->addSkipIndexAccessInfo(full_table_name, idx.index->index.name);
+    }
 
     const auto part_stats_granularity = settings[Setting::per_part_index_stats] ? original_num_parts : 1;
     for (size_t part_index = 0; part_index < part_stats_granularity; ++part_index)

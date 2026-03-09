@@ -23,7 +23,7 @@ namespace ErrorCodes
 namespace
 {
 
-std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join)
+std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join, bool pretty = false)
 {
     std::vector<std::pair<String, String>> description;
     const auto & table_join = join->getTableJoin();
@@ -36,7 +36,12 @@ std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join)
         description.emplace_back("ASOF inequality", toString(table_join.getAsofInequality()));
 
     if (!table_join.getClauses().empty())
-        description.emplace_back("Clauses", TableJoin::formatClauses(table_join.getClauses(), true /*short_format*/));
+    {
+        if (pretty)
+            description.emplace_back("Clauses", TableJoin::formatClausesPretty(table_join.getClauses()));
+        else
+            description.emplace_back("Clauses", TableJoin::formatClauses(table_join.getClauses(), true /*short_format*/));
+    }
 
     if (const auto & mixed_expression = table_join.getMixedJoinExpression())
         description.emplace_back("Residual filter", mixed_expression->getSampleBlock().dumpNames());
@@ -215,7 +220,7 @@ void JoinStep::describeActions(FormatSettings & settings) const
 {
     const String & prefix = settings.other_prefix;
 
-    auto description = describeJoinActions(join);
+    auto description = describeJoinActions(join, settings.pretty);
     const size_t inline_count = settings.pretty ? 3 : 0;
 
     if (settings.pretty)
@@ -236,8 +241,6 @@ void JoinStep::describeActions(FormatSettings & settings) const
         << (result_rows_estimation ? toString(*result_rows_estimation) : "unknown") << '\n';
 
         settings.out << prefix << "Locality: " << toString(locality) << '\n';
-
-        QueryPlanFormat::formatJoinOutputColumns(settings.out, *this, prefix);
     }
 
     for (size_t i = inline_count; i < description.size(); ++i)
@@ -263,6 +266,9 @@ void JoinStep::describeActions(FormatSettings & settings) const
 
         settings.out << "]\n";
     }
+
+    if (settings.pretty)
+        QueryPlanFormat::formatJoinOutputColumns(settings.out, *this, prefix);
 }
 
 void JoinStep::describeActions(JSONBuilder::JSONMap & map) const

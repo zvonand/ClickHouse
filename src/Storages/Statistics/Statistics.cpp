@@ -86,7 +86,7 @@ std::optional<Field> StatisticsUtils::tryConvertFromFloat64(Float64 value, const
         /// castColumnAccurate throws on conversion failure (overflow, etc.)
         casted_column = castColumnAccurate(src_column, unwrapped_type);
     }
-    catch (...)
+    catch (const Exception &)
     {
         return std::nullopt;
     }

@@ -652,9 +652,8 @@ void collectSymbolsFromMachOImage(
                 if (std::filesystem::exists(dsym_path))
                     object.dsym = std::make_shared<MachO>(dsym_path.string());
             }
-            catch (...)
+            catch (...) // Ok: dSYM lookup is best-effort, not critical
             {
-                /// Ignore errors when looking for dSYM
             }
         }
 

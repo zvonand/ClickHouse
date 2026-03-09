@@ -1500,9 +1500,9 @@ bool Dwarf::findAddress(
         return false;
     }
 
-    bool has_debug_info = elf_
+    bool has_debug_info = static_cast<bool>(elf_)
 #if defined(OS_DARWIN)
-        || macho_
+        || static_cast<bool>(macho_)
 #endif
         ;
 

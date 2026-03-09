@@ -251,14 +251,6 @@ public:
         remote_replicas = remote_pools.size();
         max_active_replicas = std::min<size_t>(settings[Setting::max_parallel_replicas], total_replicas);
 
-        /// remote_pools now contains only remote replicas.
-        ConnectionPoolPtrs failover_pools;
-        failover_pools.reserve(remote_replicas);
-        for (const auto & pool : remote_pools)
-            failover_pools.push_back(pool.pool);
-        /// LoadBalancing strategy does not matter, since we use replicaIndexPriorityFunc() later for HedgedConnectionsFactory
-        remote_pool = std::make_shared<ConnectionPoolWithFailover>(std::move(failover_pools), LoadBalancing::NEAREST_HOSTNAME);
-
         replica_addresses.resize(remote_replicas);
         for (size_t i = 0; i < remote_replicas; ++i)
             replica_addresses[i] = dynamic_cast<ConnectionPool &>(*remote_pools[i].pool).getAddress();
@@ -361,6 +353,14 @@ private:
     std::vector<Connection *> establishConnectionsAsync(const ConnectionTimeouts & timeouts)
     {
         std::vector<Connection *> connections(remote_replicas, nullptr);
+
+        /// remote_pools now contains only remote replicas.
+        ConnectionPoolPtrs failover_pools;
+        failover_pools.reserve(remote_replicas);
+        for (const auto & pool : remote_pools)
+            failover_pools.push_back(pool.pool);
+        /// LoadBalancing strategy does not matter, since we use replicaIndexPriorityFunc() later for HedgedConnectionsFactory
+        remote_pool = std::make_shared<ConnectionPoolWithFailover>(std::move(failover_pools), LoadBalancing::NEAREST_HOSTNAME);
 
         hedged_factory.emplace(
             remote_pool,

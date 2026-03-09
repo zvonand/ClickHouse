@@ -1,53 +1,29 @@
 -- Tags: no-replicated-database
--- Test that dropping and recreating a materialized view with the same name
--- does not cause assertion failures due to stale view dependencies.
+-- Test that modifying a materialized view's query does not leak stale view dependency edges.
+-- The root cause: in updateDependencies, view dependency removal was inside
+-- if (!new_view_dependencies.empty()), so ALTER TABLE mv MODIFY QUERY SELECT 1 c0
+-- (with no view dependencies) would leak stale edges. Combined with BACKUP/RESTORE
+-- this accumulated multiple dependents, violating the assertion.
 
-DROP TABLE IF EXISTS src;
-DROP TABLE IF EXISTS dst;
-DROP TABLE IF EXISTS mv;
+DROP DATABASE IF EXISTS d0;
+CREATE DATABASE d0 ENGINE = Memory;
+CREATE TABLE d0.src1 (c0 Int) ENGINE = Memory;
+CREATE TABLE d0.src2 (c0 Int) ENGINE = Memory;
+CREATE TABLE d0.target (c0 Int) ENGINE = Memory;
+CREATE MATERIALIZED VIEW d0.mv TO d0.target AS SELECT c0 FROM d0.src1;
 
-CREATE TABLE src (x UInt64) ENGINE = MergeTree ORDER BY x;
-CREATE TABLE dst (x UInt64) ENGINE = MergeTree ORDER BY x;
-CREATE MATERIALIZED VIEW mv TO dst AS SELECT x FROM src;
+BACKUP VIEW d0.mv TO Memory('04027_backup.tgz') SETTINGS id='04027_backup' FORMAT Null;
 
-INSERT INTO src VALUES (1);
-SELECT x FROM dst ORDER BY x;
+ALTER TABLE d0.mv MODIFY QUERY SELECT c0 FROM d0.src2;
+ALTER TABLE d0.mv MODIFY QUERY SELECT 1 c0; -- leaks stale edge without the fix
 
--- Drop the MV and recreate it with a different source table
-DROP TABLE mv;
+TRUNCATE DATABASE d0;
 
-CREATE TABLE src2 (x UInt64) ENGINE = MergeTree ORDER BY x;
-CREATE MATERIALIZED VIEW mv TO dst AS SELECT x FROM src2;
+RESTORE VIEW d0.mv FROM Memory('04027_backup.tgz') SETTINGS id='04027_restore' FORMAT Null;
 
-INSERT INTO src2 VALUES (2);
-SELECT x FROM dst ORDER BY x;
+-- This triggers updateDependencies and would hit assert(tables_from.size() == 1) without the fix
+ALTER TABLE d0.mv MODIFY COMMENT '';
 
--- Alter the recreated MV to read from the original source
-ALTER TABLE mv MODIFY QUERY SELECT x FROM src;
+SELECT 'OK';
 
-INSERT INTO src VALUES (3);
-SELECT x FROM dst ORDER BY x;
-
--- Test exchange tables with MV
-DROP TABLE IF EXISTS mv2;
-CREATE TABLE dst2 (x UInt64) ENGINE = MergeTree ORDER BY x;
-CREATE MATERIALIZED VIEW mv2 TO dst2 AS SELECT x FROM src2;
-
-INSERT INTO src2 VALUES (4);
-SELECT x FROM dst2 ORDER BY x;
-
--- Exchange MVs
-EXCHANGE TABLES mv AND mv2;
-
-INSERT INTO src VALUES (5);
-SELECT x FROM dst2 ORDER BY x;
-
-INSERT INTO src2 VALUES (6);
-SELECT x FROM dst ORDER BY x;
-
-DROP TABLE mv;
-DROP TABLE mv2;
-DROP TABLE src;
-DROP TABLE src2;
-DROP TABLE dst;
-DROP TABLE dst2;
+DROP DATABASE d0;

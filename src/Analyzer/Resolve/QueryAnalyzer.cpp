@@ -4151,22 +4151,26 @@ void QueryAnalyzer::resolveTableFunction(QueryTreeNodePtr & table_function_node,
     }
 
     /// The `parallel_replicas_for_cluster_engines` setting may have been disabled on
-    /// the query node's local context (in resolveQuery, when cluster alternatives are
+    /// a query node's local context (in resolveQuery, when cluster alternatives are
     /// not applicable). We must propagate this override to the execution context.
     /// We cannot set it on the shared query context because that would be a data race
     /// when multiple views are processed in parallel from the same INSERT.
+    /// Walk up all ancestor query scopes because the decision may have been made by
+    /// an outer query (e.g. when a table function is inside a subquery in a JOIN).
+    if (execution_context->getSettingsRef()[Setting::parallel_replicas_for_cluster_engines])
     {
-        auto * nearest_query_scope = scope.getNearestQueryScope();
-        if (nearest_query_scope)
+        const IdentifierResolveScope * scope_to_check = scope.getNearestQueryScope();
+        while (scope_to_check)
         {
-            const auto & qn_context = nearest_query_scope->scope_node->as<QueryNode &>().getMutableContext();
-            if (!qn_context->getSettingsRef()[Setting::parallel_replicas_for_cluster_engines]
-                && execution_context->getSettingsRef()[Setting::parallel_replicas_for_cluster_engines])
+            const auto & qn_context = scope_to_check->scope_node->as<QueryNode &>().getMutableContext();
+            if (!qn_context->getSettingsRef()[Setting::parallel_replicas_for_cluster_engines])
             {
                 auto overridden_context = Context::createCopy(execution_context);
                 overridden_context->setSetting("parallel_replicas_for_cluster_engines", false);
                 execution_context = overridden_context;
+                break;
             }
+            scope_to_check = scope_to_check->parent_scope ? scope_to_check->parent_scope->getNearestQueryScope() : nullptr;
         }
     }
     auto table_function_storage = scope_context->getQueryContext()->executeTableFunction(table_function_ast, table_function_ptr, execution_context);

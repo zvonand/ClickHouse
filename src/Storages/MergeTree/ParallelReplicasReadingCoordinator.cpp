@@ -1109,9 +1109,16 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
     ProfileEvents::increment(ProfileEvents::ParallelReplicasNumRequests);
     ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::ParallelReplicasHandleAnnouncementMicroseconds);
 
-    if (pimpl)
+    const auto is_initialized = [this]() -> bool
+    {
+        std::lock_guard lock(mutex);
+        return pimpl.operator bool();
+    }();
+
+    if (is_initialized)
     {
         fiu_do_on(FailPoints::parallel_replicas_check_read_mode_always, {
+            chassert(pimpl);
             if (announcement.mode != pimpl->getCoordinationMode())
             {
                 throw Exception(

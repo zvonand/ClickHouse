@@ -106,11 +106,11 @@ void IcebergCommandArgumentsParser::parse(const ASTPtr & args, ContextPtr contex
         if (it == named_handlers.end())
         {
             String supported;
-            for (auto jt = named_handlers.begin(); jt != named_handlers.end(); ++jt)
+            for (const auto & [arg_name, _] : named_handlers)
             {
                 if (!supported.empty())
                     supported += ", ";
-                supported += jt->first;
+                supported += arg_name;
             }
             throw Exception(
                 ErrorCodes::BAD_ARGUMENTS,

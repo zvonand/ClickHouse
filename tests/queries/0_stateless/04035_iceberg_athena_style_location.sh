@@ -58,13 +58,6 @@ idx = loc.find(table_path)
 print(loc[:idx] if idx >= 0 else loc)
 ")
 
-MANIFEST_LIST_BASENAME=$(echo "${METADATA}" | python3 -c "
-import json, sys
-m = json.load(sys.stdin)
-for s in m.get('snapshots', []):
-    print(s['manifest-list'].rsplit('/', 1)[-1])
-")
-
 # Copy all .avro files (manifest-lists and manifests) to new UUID's metadata dir.
 # The manifests contain references to data files under UUID_OLD.
 AVRO_FILES=$(${CLICKHOUSE_CLIENT} -q "

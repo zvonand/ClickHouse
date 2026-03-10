@@ -333,7 +333,7 @@ private:
     void readPostingsForRareTokens(MergeTreeIndexReaderStream & stream, MergeTreeIndexDeserializationState & state);
 
     bool is_empty = true;
-    /// Indicates if pattern scan succesfully finished. The optimization can be used.
+    /// Indicates if pattern scan successfully finished. The LIKE optimization can be used.
     bool pattern_scan_finished = false;
     /// If adding significantly large members here make sure to add them to memoryUsageBytes()
     MergeTreeIndexTextParams params;

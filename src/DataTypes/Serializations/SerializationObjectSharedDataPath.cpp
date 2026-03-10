@@ -37,7 +37,7 @@ SerializationObjectSharedDataPath::SerializationObjectSharedDataPath(
 {
 }
 
-UInt128 SerializationObjectSharedDataPath::getHash(const SerializationPtr & nested_, SerializationObjectSharedData::SerializationVersion serialization_version_, const String & path_, const String & path_subcolumn_, const DataTypePtr & dynamic_type_, const DataTypePtr & subcolumn_type_, size_t bucket_)
+UInt128 SerializationObjectSharedDataPath::getHash(const SerializationPtr & nested_, SerializationObjectSharedData::SerializationVersion serialization_version_, const String & path_, const String & path_subcolumn_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_, const DataTypePtr & subcolumn_type_, size_t bucket_)
 {
     SipHash hash;
     hash.update("ObjectSharedDataPath");
@@ -46,6 +46,7 @@ UInt128 SerializationObjectSharedDataPath::getHash(const SerializationPtr & nest
     hash.update(path_);
     hash.update(path_subcolumn_);
     hash.update(dynamic_type_->getName());
+    hash.update(dynamic_serialization_->getHash());
     hash.update(subcolumn_type_->getName());
     hash.update(bucket_);
     return hash.get128();
@@ -53,9 +54,9 @@ UInt128 SerializationObjectSharedDataPath::getHash(const SerializationPtr & nest
 
 SerializationPtr SerializationObjectSharedDataPath::create(const SerializationPtr & nested_, SerializationObjectSharedData::SerializationVersion serialization_version_, const String & path_, const String & path_subcolumn_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_, const DataTypePtr & subcolumn_type_, size_t bucket)
 {
-    if (!nested_->supportsPooling())
+    if (!nested_->supportsPooling() || !dynamic_serialization_->supportsPooling())
         return std::shared_ptr<ISerialization>(new SerializationObjectSharedDataPath(nested_, serialization_version_, path_, path_subcolumn_, dynamic_type_, dynamic_serialization_, subcolumn_type_, bucket));
-    return ISerialization::pooled(getHash(nested_, serialization_version_, path_, path_subcolumn_, dynamic_type_, subcolumn_type_, bucket), [&] { return new SerializationObjectSharedDataPath(nested_, serialization_version_, path_, path_subcolumn_, dynamic_type_, dynamic_serialization_, subcolumn_type_, bucket); });
+    return ISerialization::pooled(getHash(nested_, serialization_version_, path_, path_subcolumn_, dynamic_type_, dynamic_serialization_, subcolumn_type_, bucket), [&] { return new SerializationObjectSharedDataPath(nested_, serialization_version_, path_, path_subcolumn_, dynamic_type_, dynamic_serialization_, subcolumn_type_, bucket); });
 }
 
 struct DeserializeBinaryBulkStateObjectSharedDataPath : public ISerialization::DeserializeBinaryBulkState

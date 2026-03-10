@@ -32,19 +32,22 @@ SerializationObjectSharedData::SerializationObjectSharedData(SerializationVersio
 {
 }
 
-UInt128 SerializationObjectSharedData::getHash(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, size_t buckets_)
+UInt128 SerializationObjectSharedData::getHash(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_, size_t buckets_)
 {
     SipHash hash;
     hash.update("ObjectSharedData");
     hash.update(static_cast<int>(serialization_version_.value));
     hash.update(dynamic_type_->getName());
+    hash.update(dynamic_serialization_->getHash());
     hash.update(buckets_);
     return hash.get128();
 }
 
 SerializationPtr SerializationObjectSharedData::create(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_, size_t buckets_)
 {
-    return ISerialization::pooled(getHash(serialization_version_, dynamic_type_, buckets_), [&] { return new SerializationObjectSharedData(serialization_version_, dynamic_type_, dynamic_serialization_, buckets_); });
+    if (!dynamic_serialization_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationObjectSharedData(serialization_version_, dynamic_type_, dynamic_serialization_, buckets_));
+    return ISerialization::pooled(getHash(serialization_version_, dynamic_type_, dynamic_serialization_, buckets_), [&] { return new SerializationObjectSharedData(serialization_version_, dynamic_type_, dynamic_serialization_, buckets_); });
 }
 
 SerializationObjectSharedData::SerializationVersion::SerializationVersion(UInt64 version) : value(static_cast<Value>(version))

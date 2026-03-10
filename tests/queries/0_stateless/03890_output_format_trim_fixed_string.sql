@@ -1,3 +1,4 @@
+SET output_format_write_statistics = 0;
 SELECT toFixedString('John', 8) FORMAT TabSeparated;
 SELECT toFixedString('John', 8) SETTINGS output_format_trim_fixed_string = 1 FORMAT TabSeparated;
 SELECT toFixedString('John', 8) SETTINGS output_format_trim_fixed_string = 1 FORMAT TabSeparatedRaw;

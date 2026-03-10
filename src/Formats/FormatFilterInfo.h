@@ -69,9 +69,6 @@ struct FormatFilterInfo
     /// all columns of the sample block.
     Block additional_columns;
 
-    /// IInputFormat implementation may put arbitrary state here.
-    std::shared_ptr<void> opaque;
-
     ColumnMapperPtr column_mapper;
 
 private:

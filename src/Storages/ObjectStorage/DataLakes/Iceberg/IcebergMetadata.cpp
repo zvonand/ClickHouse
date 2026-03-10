@@ -41,9 +41,8 @@
 #include <IO/ReadBufferFromFileBase.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
-#include <Parsers/ASTFunction.h>
-#include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTLiteral.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteCommandArgs.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/IcebergMetadataLog.h>
 
@@ -607,102 +606,46 @@ static Pipe removeOrphanFilesResultToPipe(const Iceberg::RemoveOrphanFilesResult
     return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
 }
 
-/// Check if an AST node is a named argument of the form `identifier = literal`.
-/// Returns {name, literal_value} or nullopt.
-static std::optional<std::pair<String, Field>> tryExtractNamedArg(const ASTPtr & node)
+static time_t parseTimestamp(const String & ts_str)
 {
-    const auto * func = node->as<ASTFunction>();
-    if (!func || func->name != "equals" || !func->arguments || func->arguments->children.size() != 2)
-        return std::nullopt;
-
-    const auto * ident = func->arguments->children[0]->as<ASTIdentifier>();
-    const auto * lit = func->arguments->children[1]->as<ASTLiteral>();
-    if (!ident || !lit)
-        return std::nullopt;
-
-    return std::make_pair(ident->name(), lit->value);
+    ReadBufferFromString buf(ts_str);
+    time_t ts;
+    readDateTimeText(ts, buf);
+    return ts;
 }
 
-static Iceberg::RemoveOrphanFilesParams parseRemoveOrphanFilesArgs(const ASTPtr & args, ContextPtr context)
+static ExecuteCommandArgs makeExpireSnapshotsSchema()
 {
-    Iceberg::RemoveOrphanFilesParams params;
+    ExecuteCommandArgs schema("expire_snapshots");
+    schema.addPositional("older_than", Field::Types::String);
+    return schema;
+}
 
-    bool seen_named = false;
-    bool older_than_set = false;
-
-    if (args)
+static ExecuteCommandArgs makeRemoveOrphanFilesSchema(ContextPtr context)
+{
+    ExecuteCommandArgs schema("remove_orphan_files");
+    schema.addPositional("older_than", Field::Types::String);
+    schema.addNamed("location", Field::Types::String);
+    schema.addNamed("dry_run", Field::Types::UInt64);
+    schema.addNamed("max_concurrent_deletes", Field::Types::UInt64);
+    schema.addDefault("dry_run", Field(UInt64(0)));
+    schema.addDefault("max_concurrent_deletes", Field(UInt64(0)));
+    schema.addPostParse([context](ExecuteCommandArgs::Result & result)
     {
-        for (size_t i = 0; i < args->children.size(); ++i)
+        if (!result.has("older_than"))
         {
-            auto named = tryExtractNamedArg(args->children[i]);
-            if (named.has_value())
-            {
-                seen_named = true;
-                const auto & [name, value] = *named;
-
-                if (name == "older_than")
-                {
-                    if (value.getType() != Field::Types::String)
-                        throw Exception(ErrorCodes::BAD_ARGUMENTS, "older_than must be a string timestamp like '2026-03-01 00:00:00'");
-                    ReadBufferFromString buf(value.safeGet<String>());
-                    time_t ts;
-                    readDateTimeText(ts, buf);
-                    params.older_than = ts;
-                    older_than_set = true;
-                }
-                else if (name == "location")
-                {
-                    if (value.getType() != Field::Types::String)
-                        throw Exception(ErrorCodes::BAD_ARGUMENTS, "location must be a string");
-                    params.location = value.safeGet<String>();
-                }
-                else if (name == "dry_run")
-                {
-                    params.dry_run = value.safeGet<UInt64>() != 0;
-                }
-                else if (name == "max_concurrent_deletes")
-                {
-                    params.max_concurrent_deletes = value.safeGet<UInt64>();
-                }
-                else
-                {
-                    throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unknown parameter '{}' for remove_orphan_files", name);
-                }
-            }
-            else
-            {
-                if (seen_named)
-                    throw Exception(ErrorCodes::BAD_ARGUMENTS, "Positional arguments must precede named arguments in remove_orphan_files()");
-
-                if (i == 0)
-                {
-                    const auto * literal = args->children[i]->as<ASTLiteral>();
-                    if (!literal || literal->value.getType() != Field::Types::String)
-                        throw Exception(ErrorCodes::BAD_ARGUMENTS,
-                            "First positional argument to remove_orphan_files must be a string timestamp like '2026-03-01 00:00:00'");
-                    ReadBufferFromString buf(literal->value.safeGet<String>());
-                    time_t ts;
-                    readDateTimeText(ts, buf);
-                    params.older_than = ts;
-                    older_than_set = true;
-                }
-                else
-                {
-                    throw Exception(ErrorCodes::BAD_ARGUMENTS, "remove_orphan_files accepts at most one positional argument (older_than)");
-                }
-            }
+            UInt64 threshold_seconds = context->getSettingsRef()[Setting::iceberg_orphan_files_older_than_seconds].value;
+            auto now = std::chrono::system_clock::now();
+            auto cutoff = now - std::chrono::seconds(threshold_seconds);
+            time_t ts = std::chrono::system_clock::to_time_t(cutoff);
+            char buf[20];
+            struct tm t;
+            gmtime_r(&ts, &t);
+            strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &t);
+            result.set("older_than", String(buf));
         }
-    }
-
-    if (!older_than_set)
-    {
-        UInt64 threshold_seconds = context->getSettingsRef()[Setting::iceberg_orphan_files_older_than_seconds].value;
-        auto now = std::chrono::system_clock::now();
-        auto cutoff = now - std::chrono::seconds(threshold_seconds);
-        params.older_than = std::chrono::system_clock::to_time_t(cutoff);
-    }
-
-    return params;
+    });
+    return schema;
 }
 
 Pipe IcebergMetadata::executeCommand(
@@ -724,22 +667,11 @@ Pipe IcebergMetadata::executeCommand(
 
     if (command_name == "expire_snapshots")
     {
-        if (args && args->children.size() > 1)
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects zero or one argument (timestamp), got {}", args->children.size());
+        auto parsed = makeExpireSnapshotsSchema().parse(args);
 
         std::optional<Int64> expire_before_ms;
-        if (args && args->children.size() == 1)
-        {
-            const auto * literal = args->children[0]->as<ASTLiteral>();
-            if (!literal || literal->value.getType() != Field::Types::String)
-                throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects a string timestamp argument like '2024-06-01 00:00:00'");
-
-            const String & timestamp_str = literal->value.safeGet<String>();
-            ReadBufferFromString buf(timestamp_str);
-            time_t expire_time;
-            readDateTimeText(expire_time, buf);
-            expire_before_ms = static_cast<Int64>(expire_time) * 1000;
-        }
+        if (parsed.has("older_than"))
+            expire_before_ms = static_cast<Int64>(parseTimestamp(parsed.getAs<String>("older_than"))) * 1000;
 
         auto result = Iceberg::expireSnapshots(
             expire_before_ms,
@@ -765,7 +697,14 @@ Pipe IcebergMetadata::executeCommand(
                 "To allow its usage, enable setting allow_iceberg_remove_orphan_files");
         }
 
-        auto params = parseRemoveOrphanFilesArgs(args, context);
+        auto parsed = makeRemoveOrphanFilesSchema(context).parse(args);
+
+        Iceberg::RemoveOrphanFilesParams params;
+        params.older_than = parseTimestamp(parsed.getAs<String>("older_than"));
+        if (parsed.has("location"))
+            params.location = parsed.getAs<String>("location");
+        params.dry_run = parsed.getAs<UInt64>("dry_run") != 0;
+        params.max_concurrent_deletes = parsed.getAs<UInt64>("max_concurrent_deletes");
 
         auto result = Iceberg::removeOrphanFiles(
             params,

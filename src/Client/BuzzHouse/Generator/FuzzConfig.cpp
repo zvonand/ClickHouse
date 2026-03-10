@@ -529,11 +529,17 @@ void FuzzConfig::loadServerConfigurations()
         [](const String & buf) -> DiskInfo
         {
             const auto tab1 = buf.find('\t');
+            chassert(tab1 != String::npos);
             const auto tab2 = buf.find('\t', tab1 + 1);
+            chassert(tab2 != String::npos);
             const auto tab3 = buf.find('\t', tab2 + 1);
+            chassert(tab3 != String::npos);
             const auto tab4 = buf.find('\t', tab3 + 1);
+            chassert(tab4 != String::npos);
             const auto tab5 = buf.find('\t', tab4 + 1);
+            chassert(tab5 != String::npos);
             const auto tab6 = buf.find('\t', tab5 + 1);
+            chassert(tab6 != String::npos);
             return {
                 buf.substr(0, tab1),
                 buf.substr(tab1 + 1, tab2 - tab1 - 1),
@@ -592,8 +598,10 @@ void FuzzConfig::loadSystemTables(std::vector<SystemTable> & tables)
                 buf.pop_back();
             }
             const size_t pos1 = buf.find('\t');
+            chassert(pos1 != String::npos);
             const String nschema = buf.substr(0, pos1);
             const size_t pos2 = buf.find('\t', pos1 + 1);
+            chassert(pos2 != String::npos);
             const String ntable = buf.substr(pos1 + 1, pos2 - pos1 - 1);
             const String ncol = buf.substr(pos2 + 1);
 

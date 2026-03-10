@@ -322,29 +322,6 @@ StatementGenerator::StatementGenerator(
     }
 }
 
-// In a header or utility:
-static void pickWeightedAction(RandomGenerator & rg, const std::vector<std::pair<uint32_t, std::function<void()>>> & options)
-{
-    uint32_t total_weight = 0;
-    for (const auto & [weight, _] : options)
-        total_weight += weight;
-
-    chassert(total_weight > 0);
-    std::uniform_int_distribution<uint32_t> dist(1, total_weight);
-    uint32_t pick = dist(rg.generator);
-
-    uint32_t cumulative = 0;
-    for (const auto & [weight, action] : options)
-    {
-        cumulative += weight;
-        if (weight > 0 && pick <= cumulative)
-        {
-            action();
-            return;
-        }
-    }
-    UNREACHABLE();
-}
 
 void StatementGenerator::generateStorage(RandomGenerator & rg, Storage * store) const
 {
@@ -1679,8 +1656,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
         const bool has_constrs = !t.constrs.empty();
         const bool has_col_settings = !allColumnSettings.at(t.teng).empty();
 
-        using Action = std::function<void()>;
-        std::vector<std::pair<uint32_t, Action>> options = {
+        rg.pickWeighted({
             /// Order by
             {3,
              [&]
@@ -2136,9 +2112,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                      generateNextTablePartition(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, ope->mutable_single_partition()->mutable_partition());
              }},
-        };
-
-        pickWeightedAction(rg, options);
+        });
     }
 
     this->enforce_final = prev_enforce_final;
@@ -2384,8 +2358,7 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
 
     std::optional<String> cluster;
 
-    using Action = std::function<void()>;
-    std::vector<std::pair<uint32_t, Action>> options = {
+    rg.pickWeighted({
         {0, [&] { sc->set_reload_embedded_dictionaries(true); }},
         {0, [&] { sc->set_reload_dictionaries(true); }},
         {0, [&] { sc->set_reload_models(true); }},
@@ -2598,9 +2571,7 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
              chassert(freeze_counter > 0);
              sc->set_unlock_snapshot("f" + std::to_string(rg.randomInt<uint32_t>(0, freeze_counter - 1)));
          }},
-    };
-
-    pickWeightedAction(rg, options);
+    });
     /// Set cluster option when that's the case
     setClusterClause(rg, cluster, sc->mutable_cluster());
 }
@@ -2613,8 +2584,7 @@ void StatementGenerator::generateNextShowStatement(RandomGenerator & rg, ShowSta
     const uint32_t has_dictionary = static_cast<uint32_t>(collectionHas<SQLDictionary>(attached_dictionaries));
     const uint32_t has_database = static_cast<uint32_t>(collectionHas<std::shared_ptr<SQLDatabase>>(attached_databases));
 
-    using Action = std::function<void()>;
-    std::vector<std::pair<uint32_t, Action>> options = {
+    rg.pickWeighted({
         {15 * has_table,
          [&]
          {
@@ -2734,9 +2704,7 @@ void StatementGenerator::generateNextShowStatement(RandomGenerator & rg, ShowSta
         {3, [&] { st->set_engines(rg.nextBool()); }},
         {3, [&] { st->set_functions(rg.nextBool()); }},
         {3, [&] { st->set_merges(rg.nextBool()); }},
-    };
-
-    pickWeightedAction(rg, options);
+    });
 
     if (rg.nextSmallNumber() < 3)
     {

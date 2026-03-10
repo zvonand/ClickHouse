@@ -465,7 +465,6 @@ QueryPipeline InterpreterInsertQuery::addInsertToSelectPipeline(ASTInsertQuery &
         });
     }
 
-
     bool should_squash = shouldAddSquashingForStorage(table, getContext()) && !no_squash;
     if (should_squash)
     {

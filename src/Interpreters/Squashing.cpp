@@ -119,7 +119,7 @@ Chunk Squashing::squash(ChunksWithOffsetsAndLengths && input_data, Chunk::ChunkI
 void Squashing::add(Chunk && input_chunk)
 {
     if (!input_chunk || input_chunk.getNumRows() == 0)
-        return ;
+        return;
     pending.pushBack(std::move(input_chunk));
 }
 
@@ -395,7 +395,7 @@ bool Squashing::allMinReached(size_t rows, size_t bytes) const
 bool Squashing::oneMaxReached(size_t rows, size_t bytes) const
 {
     return (max_block_size_rows && rows >= max_block_size_rows)
-    || (max_block_size_bytes && bytes >= max_block_size_bytes);
+        || (max_block_size_bytes && bytes >= max_block_size_bytes);
 }
 
 bool Squashing::oneMaxReached() const

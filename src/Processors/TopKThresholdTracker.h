@@ -38,9 +38,9 @@ struct TopKThresholdTracker
 
         std::shared_lock lock(mutex);
         int cmp = compareFields(value, threshold);
-        if (direction == 1 && cmp >= 0)
+        if (direction == 1 && cmp > 0)
             return false;
-        if (direction == -1 && cmp <= 0)
+        if (direction == -1 && cmp < 0)
             return false;
 
         return true;

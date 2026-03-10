@@ -38,9 +38,9 @@ public:
 
         if (!use_general_comparison)
         {
-            String comparator = "less";
+            String comparator = "lessOrEquals";
             if (direction == -1)
-                comparator = "greater";
+                comparator = "greaterOrEquals";
             auto context = Context::getGlobalContextInstance();
             compare_function = FunctionFactory::instance().get(comparator, context);
         }
@@ -136,7 +136,7 @@ private:
         for (size_t i = 0; i < input_rows_count; ++i)
         {
             int cmp = col.compareAt(i, 0, *threshold_col, nulls_direction);
-            result_data[i] = (direction * cmp) < 0;
+            result_data[i] = (direction * cmp) <= 0;
         }
 
         return result_col;
@@ -164,7 +164,7 @@ private:
             for (size_t i = 0; i < input_rows_count; ++i)
             {
                 int cmp = col.compareAtWithCollation(i, 0, *threshold_col, nulls_direction, *collator);
-                result_data[i] = (direction * cmp) < 0;
+                result_data[i] = (direction * cmp) <= 0;
             }
         }
         else
@@ -172,7 +172,7 @@ private:
             for (size_t i = 0; i < input_rows_count; ++i)
             {
                 int cmp = col.compareAt(i, 0, *threshold_col, nulls_direction);
-                result_data[i] = (direction * cmp) < 0;
+                result_data[i] = (direction * cmp) <= 0;
             }
         }
 

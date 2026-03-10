@@ -1763,7 +1763,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, mcol->mutable_single_partition()->mutable_partition());
              }},
             /// Drop column
-            {2 * static_cast<uint32_t>(no_oracle && no_peer && !t.cols.empty() && can_merge),
+            {2 * static_cast<uint32_t>(no_oracle && no_peer && !t.cols.empty()),
              [&]
              {
                  flatTableColumnPath(flat_nested, t.cols, [](const SQLColumn &) { return true; });
@@ -1771,7 +1771,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  this->entries.clear();
              }},
             /// Rename column
-            {2 * static_cast<uint32_t>(no_oracle && no_peer && can_merge),
+            {2 * static_cast<uint32_t>(no_oracle && no_peer),
              [&]
              {
                  const uint32_t ncname = t.col_counter++;
@@ -1924,7 +1924,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                      generateNextTablePartition(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, iip->mutable_single_partition()->mutable_partition());
              }},
-            {2 * static_cast<uint32_t>(no_oracle && can_merge && has_idxs),
+            {2 * static_cast<uint32_t>(no_oracle && has_idxs),
              [&] { ati->mutable_drop_index()->set_index(fc.tableGetRandomIndex(rg.nextInFullRange(), dname_idx, tname_idx)); }},
             /// Column properties/settings
             {2,
@@ -1985,7 +1985,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
             /// Projections
             {2 * static_cast<uint32_t>(no_oracle && is_mt && nprojs < 8),
              [&] { addTableProjection(rg, t, ati->mutable_add_projection()); }},
-            {2 * static_cast<uint32_t>(no_oracle && is_mt && has_projs && can_merge),
+            {2 * static_cast<uint32_t>(no_oracle && is_mt && has_projs),
              [&]
              {
                  ati->mutable_remove_projection()->set_projection(fc.tableGetRandomProjection(rg.nextInFullRange(), dname_idx, tname_idx));

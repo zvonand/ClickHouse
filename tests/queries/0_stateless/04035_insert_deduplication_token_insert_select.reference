@@ -1,0 +1,8 @@
+insert_deduplication_token with INSERT SELECT without ORDER BY ALL
+100
+different token should insert new data
+200
+same token again should deduplicate
+200
+insert_deduplication_token with INSERT SELECT with ORDER BY ALL still works
+100

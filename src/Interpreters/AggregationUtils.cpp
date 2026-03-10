@@ -83,28 +83,28 @@ OutputBlockColumns prepareOutputBlockColumns(
     };
 }
 
-Block finalizeBlock(
+Chunk finalizeChunk(
     const Aggregator::Params & params,
-    const DataTypes & key_types,
-    const DataTypes & aggregate_state_types,
     OutputBlockColumns && out_cols,
     bool final)
 {
     auto && [key_columns, raw_key_columns, aggregate_columns, final_aggregate_columns, aggregate_columns_data] = out_cols;
 
-    Block res;
+    Columns columns;
+    columns.reserve(params.keys_size + params.aggregates_size);
 
     for (size_t i = 0; i < params.keys_size; ++i)
-        res.insert({std::move(key_columns[i]), key_types[i], params.keys[i]});
+        columns.emplace_back(std::move(key_columns[i]));
 
     for (size_t i = 0; i < params.aggregates_size; ++i)
     {
         if (final)
-            res.insert({std::move(final_aggregate_columns[i]), params.aggregates[i].function->getResultType(), params.aggregates[i].column_name});
+            columns.emplace_back(std::move(final_aggregate_columns[i]));
         else
-            res.insert({std::move(aggregate_columns[i]), aggregate_state_types[i], params.aggregates[i].column_name});
+            columns.emplace_back(std::move(aggregate_columns[i]));
     }
 
-    return res;
+    size_t rows = columns.empty() ? 0 : columns[0]->size();
+    return Chunk(std::move(columns), rows);
 }
 }

@@ -32,7 +32,7 @@ private:
 
     struct GroupingSet
     {
-        Aggregator::BucketToBlocks bucket_to_blocks;
+        Aggregator::BucketToChunks bucket_to_chunks;
         ExpressionActionsPtr reordering_key_columns_actions;
         ExpressionActionsPtr creating_missing_keys_actions;
         AggregatingTransformParamsPtr params;

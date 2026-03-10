@@ -24,10 +24,8 @@ OutputBlockColumns prepareOutputBlockColumns(
     bool final,
     size_t rows);
 
-Block finalizeBlock(
+Chunk finalizeChunk(
     const Aggregator::Params & params,
-    const DataTypes & key_types,
-    const DataTypes & aggregate_state_types,
     OutputBlockColumns && out_cols,
     bool final);
 }

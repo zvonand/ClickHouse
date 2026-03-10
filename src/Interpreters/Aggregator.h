@@ -267,20 +267,19 @@ public:
 
     ManyAggregatedDataVariants prepareVariantsToMerge(ManyAggregatedDataVariants && data_variants) const;
 
-    using BucketToBlocks = std::map<Int32, BlocksList>;
-    /// Merge partially aggregated blocks separated to buckets into one data structure.
-    void mergeBlocks(BucketToBlocks bucket_to_blocks, AggregatedDataVariants & result, std::atomic<bool> & is_cancelled);
+    using BucketToChunks = std::map<Int32, AggregatedChunks>;
+    /// Merge partially aggregated chunks separated to buckets into one data structure.
+    void mergeBlocks(BucketToChunks bucket_to_chunks, AggregatedDataVariants & result, std::atomic<bool> & is_cancelled);
 
-    /// Merge several partially aggregated blocks into one.
-    /// Precondition: for all blocks block.info.is_overflows flag must be the same.
-    /// (either all blocks are from overflow data or none blocks are).
-    /// The resulting block has the same value of is_overflows flag.
-    Block mergeBlocks(BlocksList & blocks, bool final, std::atomic<bool> & is_cancelled);
+    /// Merge several partially aggregated chunks into one.
+    /// Precondition: for all chunks the is_overflows flag must be the same.
+    /// (either all chunks are from overflow data or none are).
+    AggregatedChunk mergeBlocks(AggregatedChunks & chunks, bool final, std::atomic<bool> & is_cancelled);
 
     /** Split block with partially-aggregated data to many blocks, as if two-level method of aggregation was used.
       * This is needed to simplify merging of that data with other results, that are already two-level.
       */
-    std::vector<Block> convertBlockToTwoLevel(const Block & block) const;
+    std::vector<AggregatedChunk> convertBlockToTwoLevel(const Columns & columns, size_t rows) const;
 
     /// For external aggregation.
     void writeToTemporaryFile(AggregatedDataVariants & data_variants, size_t max_temp_file_size = 0) const;
@@ -291,6 +290,9 @@ public:
 
     /// Part of automatic parallel replicas implementation.
     size_t estimateSizeOfCompressedState(AggregatedDataVariants & result, ssize_t bucket) const;
+
+    const ColumnNumbers & getKeysPositions() const { return keys_positions; }
+    const DataTypes & getKeyTypes() const { return key_types; }
 
 private:
 
@@ -517,12 +519,8 @@ private:
     /// Used for single level merge.
     void resetAggregatorExceptFirst(ManyAggregatedDataVariants & data_variants) const;
 
-    template <bool return_single_block>
-    using ConvertToBlockRes = std::conditional_t<return_single_block, Block, BlocksList>;
-    using ConvertToBlockResVariant = std::variant<Block, BlocksList>;
-
     template <typename Method, typename Table>
-    ConvertToBlockResVariant
+    Chunks
     convertToBlockImpl(Method & method, Table & data, Arena * arena, Arenas & aggregates_pools, bool final, size_t rows, bool return_single_block) const;
 
     template <typename Mapped>
@@ -531,7 +529,7 @@ private:
         MutableColumns & final_aggregate_columns,
         Arena * arena) const;
 
-    Block insertResultsIntoColumns(
+    Chunk insertResultsIntoColumns(
         PaddedPODArray<AggregateDataPtr> & places,
         OutputBlockColumns && out_cols,
         Arena * arena,
@@ -539,7 +537,7 @@ private:
         bool use_compiled_functions) const;
 
     template <typename Method, typename Table>
-    ConvertToBlockResVariant convertToBlockImplFinal(
+    Chunks convertToBlockImplFinal(
         Method & method,
         Table & data,
         Arena * arena,
@@ -548,20 +546,20 @@ private:
         bool return_single_block) const;
 
     template <typename Method, typename Table>
-    ConvertToBlockResVariant
+    Chunks
     convertToBlockImplNotFinal(Method & method, Table & data, Arenas & aggregates_pools, size_t rows, bool return_single_block) const;
 
     template <typename Method>
-    Block convertOneBucketToBlock(
+    AggregatedChunk convertOneBucketToChunk(
         AggregatedDataVariants & data_variants,
         Method & method,
         Arena * arena,
         bool final,
         Int32 bucket) const;
 
-    Block convertOneBucketToBlock(AggregatedDataVariants & variants, Arena * arena, bool final, Int32 bucket) const;
+    AggregatedChunk convertOneBucketToChunk(AggregatedDataVariants & variants, Arena * arena, bool final, Int32 bucket) const;
 
-    Block mergeAndConvertOneBucketToBlock(
+    AggregatedChunk mergeAndConvertOneBucketToChunk(
         ManyAggregatedDataVariants & variants,
         Arena * arena,
         bool final,
@@ -569,14 +567,15 @@ private:
         std::atomic<bool> & is_cancelled,
         RuntimeDataflowStatisticsCacheUpdaterPtr updater) const;
 
-    Block prepareBlockAndFillWithoutKey(AggregatedDataVariants & data_variants, bool final, bool is_overflows) const;
-    BlocksList prepareBlocksAndFillTwoLevel(AggregatedDataVariants & data_variants, bool final) const;
+    AggregatedChunk prepareChunkAndFillWithoutKey(AggregatedDataVariants & data_variants, bool final, bool is_overflows) const;
+    AggregatedChunks prepareChunksAndFillTwoLevel(AggregatedDataVariants & data_variants, bool final) const;
 
     template <bool return_single_block>
-    ConvertToBlockRes<return_single_block> prepareBlockAndFillSingleLevel(AggregatedDataVariants & data_variants, bool final) const;
+    std::conditional_t<return_single_block, AggregatedChunk, AggregatedChunks>
+    prepareChunkAndFillSingleLevel(AggregatedDataVariants & data_variants, bool final) const;
 
     template <typename Method>
-    BlocksList prepareBlocksAndFillTwoLevelImpl(AggregatedDataVariants & data_variants, Method & method, bool final) const;
+    AggregatedChunks prepareChunksAndFillTwoLevelImpl(AggregatedDataVariants & data_variants, Method & method, bool final) const;
 
     template <typename State, typename Table>
     void mergeStreamsImplCase(
@@ -643,8 +642,9 @@ private:
         Method & method,
         Arena * pool,
         ColumnRawPtrs & key_columns,
-        const Block & source,
-        std::vector<Block> & destinations) const;
+        const Columns & source,
+        size_t rows,
+        std::vector<AggregatedChunk> & destinations) const;
 
     template <typename Method, typename Table>
     void destroyImpl(Table & table) const;

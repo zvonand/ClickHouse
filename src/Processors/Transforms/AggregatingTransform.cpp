@@ -45,6 +45,16 @@ Chunk convertToChunk(const Block & block)
     return chunk;
 }
 
+Chunk convertToChunk(Aggregator::AggregatedChunk && agg_chunk)
+{
+    auto info = std::make_shared<AggregatedChunkInfo>();
+    info->bucket_num = agg_chunk.bucket_num;
+    info->is_overflows = agg_chunk.is_overflows;
+
+    agg_chunk.chunk.getChunkInfos().add(std::move(info));
+    return std::move(agg_chunk.chunk);
+}
+
 namespace
 {
     const AggregatedChunkInfo * getInfoFromChunk(const Chunk & chunk)
@@ -182,9 +192,9 @@ protected:
             return {};
         }
 
-        Block block = params->aggregator.mergeAndConvertOneBucketToBlock(
+        auto agg_chunk = params->aggregator.mergeAndConvertOneBucketToChunk(
             *data, arena, params->final, bucket_num, shared_data->is_cancelled, updater);
-        Chunk chunk = convertToChunk(block);
+        Chunk chunk = convertToChunk(std::move(agg_chunk));
 
         shared_data->is_bucket_processed[bucket_num] = true;
 
@@ -218,15 +228,15 @@ protected:
             if (current_bucket_num < NUM_BUCKETS)
             {
                 Arena * arena = variant->aggregates_pool;
-                Block block = params->aggregator.convertOneBucketToBlock(*variant, arena, params->final, current_bucket_num++);
-                return convertToChunk(block);
+                auto agg_chunk = params->aggregator.convertOneBucketToChunk(*variant, arena, params->final, current_bucket_num++);
+                return convertToChunk(std::move(agg_chunk));
             }
         }
         else if (!single_level_converted)
         {
-            Block block = params->aggregator.prepareBlockAndFillSingleLevel<true /* return_single_block */>(*variant, params->final);
+            auto agg_chunk = params->aggregator.prepareChunkAndFillSingleLevel<true /* return_single_block */>(*variant, params->final);
             single_level_converted = true;
-            return convertToChunk(block);
+            return convertToChunk(std::move(agg_chunk));
         }
 
         variant.reset();
@@ -639,13 +649,14 @@ private:
             params->aggregator.mergeWithoutKeyDataImpl(*data, shared_data->is_cancelled);
             if (updater)
                 updater->recordAggregationStateSizes(*first, /*bucket=*/-1);
-            auto block = params->aggregator.prepareBlockAndFillWithoutKey(
+            auto agg_chunk = params->aggregator.prepareChunkAndFillWithoutKey(
                 *first, params->final, first->type != AggregatedDataVariants::Type::without_key);
             if (updater)
-                updater->recordAggregationKeySizes(params->aggregator, block);
+                updater->recordAggregationKeySizes(
+                    agg_chunk.chunk, params->aggregator.getKeysPositions(), params->aggregator.getKeyTypes());
 
-            if (block.rows() > 0)
-                single_level_chunks.emplace_back(convertToChunk(block));
+            if (agg_chunk.chunk.getNumRows() > 0)
+                single_level_chunks.emplace_back(convertToChunk(std::move(agg_chunk)));
         }
     }
 
@@ -685,14 +696,15 @@ private:
                 throw Exception(ErrorCodes::UNKNOWN_AGGREGATED_DATA_VARIANT, "Unknown aggregated data variant.");
         }
 
-        auto blocks = params->aggregator.prepareBlockAndFillSingleLevel</* return_single_block */ false>(*first, params->final);
-        for (auto & block : blocks)
+        auto agg_chunks = params->aggregator.prepareChunkAndFillSingleLevel</* return_single_block */ false>(*first, params->final);
+        for (auto & agg_chunk : agg_chunks)
         {
-            if (block.rows() > 0)
+            if (agg_chunk.chunk.getNumRows() > 0)
             {
                 if (updater)
-                    updater->recordAggregationKeySizes(params->aggregator, block);
-                single_level_chunks.emplace_back(convertToChunk(block));
+                    updater->recordAggregationKeySizes(
+                        agg_chunk.chunk, params->aggregator.getKeysPositions(), params->aggregator.getKeyTypes());
+                single_level_chunks.emplace_back(convertToChunk(std::move(agg_chunk)));
             }
         }
 

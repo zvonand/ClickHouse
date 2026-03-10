@@ -3804,6 +3804,15 @@ Possible values:
     DECLARE(Bool, read_in_order_use_virtual_row, false, R"(
 Use virtual row while reading in order of primary key or its monotonic function fashion. It is useful when searching over multiple parts as only relevant ones are touched.
 )", 0) \
+    DECLARE(Bool, read_in_order_use_deferred_virtual_row, true, R"(
+Allow computing virtual rows from actual data when primary-key values are not directly available from the part index.
+
+When `read_in_order_use_virtual_row` is enabled, virtual rows are normally taken from the part index at no cost. In some cases, however, the index does not contain the needed values — for example, when reading in reverse order of the primary key the last key value in each mark range is unknown. With this setting enabled, the virtual row is computed from the first data granule that each stream produces (a "deferred" virtual row).
+
+Because every stream must read at least one granule before the merging sort can begin skipping, the overhead is roughly `number_of_streams × index_granularity` rows.
+
+Requires `read_in_order_use_virtual_row` to be enabled.
+)", 0) \
     DECLARE(Bool, optimize_aggregation_in_order, false, R"(
 Enables [GROUP BY](/sql-reference/statements/select/group-by) optimization in [SELECT](../../sql-reference/statements/select/index.md) queries for aggregating data in corresponding order in [MergeTree](../../engines/table-engines/mergetree-family/mergetree.md) tables.
 

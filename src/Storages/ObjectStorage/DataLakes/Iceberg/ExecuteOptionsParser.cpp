@@ -6,7 +6,7 @@
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
 #include <Parsers/Prometheus/parseTimeSeriesTypes.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/ExpireSnapshotsOptionsParser.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteOptionsParser.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergCommandArgumentsParser.h>
 #include <Storages/checkAndGetLiteralArgument.h>
 

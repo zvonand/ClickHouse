@@ -58,7 +58,7 @@
 #include <Storages/ObjectStorage/DataLakes/Common/AvroForIcebergDeserializer.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Compaction.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Constant.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/ExpireSnapshotsOptionsParser.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteOptionsParser.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergDataObjectInfo.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergIterator.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergMetadata.h>

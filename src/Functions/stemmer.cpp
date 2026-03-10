@@ -68,7 +68,7 @@ public:
         if (std::any_of(word.begin(), word.end(), isWhitespaceASCII))
             throw Exception(
                 ErrorCodes::BAD_ARGUMENTS,
-                "Function stemmer requires each input to be a single word without spaces, "
+                "Function stemmer requires each input to be a single word without whitespace, "
                 "but got: '{}'",
                 String(word));
 
@@ -253,7 +253,7 @@ REGISTER_FUNCTION(Stemmer)
     FunctionDocumentation::Description description = R"(
 Performs stemming on a word or an array of words using the libstemmer library (Snowball algorithms).
 Each input string must be a single word — strings containing spaces cause an exception.
-The return type matches the input type: String for scalar input, Array(String) for array input.
+Returns String for scalar inputs (including FixedString) and Array(String) for array inputs.
 Nullable and LowCardinality variants of String and FixedString are supported.
 )";
     FunctionDocumentation::Syntax syntax = "stemmer(word, lang)";

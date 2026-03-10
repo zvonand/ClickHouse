@@ -108,16 +108,16 @@ DROP TABLE stem_test_lc;
 
 SELECT 'Negative tests.';
 
-SELECT '- Space in a String input raises BAD_ARGUMENTS.';
+SELECT '- Whitespace in a String input raises BAD_ARGUMENTS.';
 SELECT stemmer('hello world', 'en'); -- { serverError BAD_ARGUMENTS }
 
-SELECT '- Space in an Array element raises BAD_ARGUMENTS.';
+SELECT '- Whitespace in an Array element raises BAD_ARGUMENTS.';
 SELECT stemmer(['hello', 'hello world'], 'en'); -- { serverError BAD_ARGUMENTS }
 
-SELECT '- Space in a FixedString input raises BAD_ARGUMENTS.';
+SELECT '- Whitespace in a FixedString input raises BAD_ARGUMENTS.';
 SELECT stemmer(toFixedString('hello world', 15), 'en'); -- { serverError BAD_ARGUMENTS }
 
-SELECT '- Space inside Array(Nullable(String)) raises BAD_ARGUMENTS.';
+SELECT '- Whitespace inside Array(Nullable(String)) raises BAD_ARGUMENTS.';
 SELECT stemmer([toNullable('hello world')], 'en'); -- { serverError BAD_ARGUMENTS }
 
 SELECT '- Unsupported language raises ILLEGAL_TYPE_OF_ARGUMENT.';

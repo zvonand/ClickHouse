@@ -154,3 +154,28 @@ SELECT trimLeft(explain) AS explain FROM (
 LIMIT 2, 3;
 
 DROP TABLE tab;
+
+SELECT 'Tests fallback when threshold is exceeded for reading large postings';
+
+SET use_text_index_like_optimization = 1;
+
+DROP TABLE IF EXISTS tab;
+
+CREATE TABLE tab
+(
+    id UInt64,
+    message String,
+    INDEX idx(message) TYPE text(tokenizer = splitByNonAlpha)
+)
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO tab SELECT number, concat(char(97 + (number % 26)), char(97 + intDiv(number, 26) % 26)) FROM numbers(100000);
+
+SELECT count() FROM tab WHERE message ILIKE '%A%';
+SELECT count() FROM tab WHERE message ILIKE '%A%' SETTINGS use_skip_indexes = 0;
+
+SELECT count() FROM tab WHERE message NOT ILIKE '%A%';
+SELECT count() FROM tab WHERE message NOT ILIKE '%A%' SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab;

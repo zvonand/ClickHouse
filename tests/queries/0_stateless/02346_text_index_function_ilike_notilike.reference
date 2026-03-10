@@ -57,3 +57,8 @@ Granules: 2048/4096
 Description: text GRANULARITY 100000000
 Parts: 4/4
 Granules: 4096/4096
+Tests fallback when threshold is exceeded for reading large postings
+7547
+7547
+92453
+92453

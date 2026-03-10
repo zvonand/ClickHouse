@@ -390,12 +390,12 @@ void QueryOracle::generateCountDistinctSecondQuery(SQLQuery & sq1, SQLQuery & sq
                           ->release_expr();
     ExprColAlias * eca = inner_ssc->add_result_columns()->mutable_eca();
     eca->set_allocated_expr(arg_expr);
-    eca->mutable_col_alias()->set_column("c0");
+    eca->mutable_col_alias()->set_column("cx");
 
     /// ifNull(COUNT(DISTINCT expr), 0) skips NULLs; filter them from the inner DISTINCT subquery
     /// to keep COUNT(*) equivalent:  WHERE isNotNull(expr)
     ExprNullTests * null_test = inner_ssc->mutable_where()->mutable_expr()->mutable_expr()->mutable_comp_expr()->mutable_expr_null_tests();
-    null_test->mutable_expr()->mutable_comp_expr()->mutable_expr_stc()->mutable_col()->mutable_path()->mutable_col()->set_column("c0");
+    null_test->mutable_expr()->mutable_comp_expr()->mutable_expr_stc()->mutable_col()->mutable_path()->mutable_col()->set_column("cx");
     null_test->set_not_(true);
 
     outer_jtf->mutable_table_alias()->set_table("sub");

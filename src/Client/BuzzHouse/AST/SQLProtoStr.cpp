@@ -5307,15 +5307,19 @@ CONV_FN(SystemCommand, cmd)
             break;
         case CmdType::kJemallocPurge:
             ret += "JEMALLOC PURGE";
+            can_set_cluster = true;
             break;
         case CmdType::kJemallocEnableProfile:
             ret += "JEMALLOC ENABLE PROFILE";
+            can_set_cluster = true;
             break;
         case CmdType::kJemallocDisableProfile:
             ret += "JEMALLOC DISABLE PROFILE";
+            can_set_cluster = true;
             break;
         case CmdType::kJemallocFlushProfile:
             ret += "JEMALLOC FLUSH PROFILE";
+            can_set_cluster = true;
             break;
         case CmdType::kSyncTransactionLog:
             ret += "SYNC TRANSACTION LOG";
@@ -5323,9 +5327,11 @@ CONV_FN(SystemCommand, cmd)
             break;
         case CmdType::kStartThreadFuzzer:
             ret += "START THREAD FUZZER";
+            can_set_cluster = true;
             break;
         case CmdType::kStopThreadFuzzer:
             ret += "STOP THREAD FUZZER";
+            can_set_cluster = true;
             break;
         case CmdType::kDropParquetMetadataCache:
             ret += "DROP PARQUET METADATA CACHE";
@@ -5338,6 +5344,7 @@ CONV_FN(SystemCommand, cmd)
             ret += "RESTART DISK '";
             ret += cmd.restart_disk();
             ret += "'";
+            can_set_cluster = true;
             break;
         case CmdType::kClearDiskMetadataCache:
             ret += "DROP DISK METADATA CACHE";
@@ -5347,6 +5354,7 @@ CONV_FN(SystemCommand, cmd)
                 ret += cmd.clear_disk_metadata_cache();
                 ret += "'";
             }
+            can_set_cluster = true;
             break;
         case CmdType::kUnlockSnapshot:
             ret += "UNLOCK SNAPSHOT '";

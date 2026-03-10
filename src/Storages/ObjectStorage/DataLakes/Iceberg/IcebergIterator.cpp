@@ -188,11 +188,10 @@ std::optional<ProcessedManifestFileEntryPtr> SingleThreadIcebergKeysIterator::ne
                 manifest_file_cacheable_part.deserializer,
                 mle.manifest_file_path,
                 persistent_components.format_version,
-                persistent_components.table_path,
+                persistent_components.path_resolver,
                 *persistent_components.schema_processor,
                 mle.added_sequence_number,
                 mle.added_snapshot_id,
-                persistent_components.table_location,
                 local_context,
                 mle.manifest_file_path,
                 filter_dag,
@@ -338,7 +337,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
             const auto & lower = position_delete->parsed_entry->lower_reference_data_file_path;
             const auto & upper = position_delete->parsed_entry->upper_reference_data_file_path;
             bool can_contain_data_file_deletes
-                = (!lower.has_value() || lower.value() <= data_file_path) && (!upper.has_value() || upper.value() >= data_file_path);
+                = (!lower.has_value() || lower->getRawPath() <= data_file_path)
+                && (!upper.has_value() || upper->getRawPath() >= data_file_path);
             /// Skip position deletes that do not match the data file path.
             if (!can_contain_data_file_deletes)
             {
@@ -350,8 +350,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                     "(lower bound: `{}`, upper bound: `{}`)",
                     position_delete->file_path,
                     data_file_path,
-                    lower.value_or("[no lower bound]"),
-                    upper.value_or("[no upper bound]"));
+                    lower.has_value() ? lower->getRawPath() : "[no lower bound]",
+                    upper.has_value() ? upper->getRawPath() : "[no upper bound]");
             }
             else
             {
@@ -362,8 +362,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                     "(lower bound: `{}`, upper bound: `{}`)",
                     position_delete->file_path,
                     data_file_path,
-                    lower.value_or("[no lower bound]"),
-                    upper.value_or("[no upper bound]"));
+                    lower.has_value() ? lower->getRawPath() : "[no lower bound]",
+                    upper.has_value() ? upper->getRawPath() : "[no upper bound]");
                 object_info->addPositionDeleteObject(position_delete);
             }
         }

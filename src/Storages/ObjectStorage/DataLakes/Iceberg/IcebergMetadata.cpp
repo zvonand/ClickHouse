@@ -173,14 +173,16 @@ Iceberg::PersistentTableComponents IcebergMetadata::initializePersistentTableCom
                 Iceberg::f_table_uuid);
         }
     }
+    auto table_path = configuration->getPathForRead().path;
     return PersistentTableComponents{
         .schema_processor = std::make_shared<IcebergSchemaProcessor>(),
         .metadata_cache = cache_ptr,
         .format_version = format_version,
         .table_location = table_location,
         .metadata_compression_method = compression_method,
-        .table_path = configuration->getPathForRead().path,
+        .table_path = table_path,
         .table_uuid = table_uuid,
+        .path_resolver = IcebergPathResolver(table_location, table_path),
     };
 }
 
@@ -323,8 +325,7 @@ IcebergDataSnapshotPtr IcebergMetadata::createIcebergDataSnapshotFromSnapshotJSO
             object_storage,
             persistent_components,
             local_context,
-            getProperFilePathFromMetadataInfo(
-                manifest_list_file_path, persistent_components.table_path, persistent_components.table_location),
+            persistent_components.path_resolver.resolve(IcebergPathFromMetadata(manifest_list_file_path)),
             log),
         snapshot_id,
         schema_id,

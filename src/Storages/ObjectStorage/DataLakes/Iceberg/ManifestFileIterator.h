@@ -5,6 +5,7 @@
 
 #if USE_AVRO
 
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/ManifestFile.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/SchemaProcessor.h>
 #include <Storages/ObjectStorage/DataLakes/Common/AvroForIcebergDeserializer.h>
@@ -78,11 +79,10 @@ public:
         std::shared_ptr<AvroForIcebergDeserializer> manifest_file_deserializer,
         const String & manifest_file_name,
         Int32 format_version_,
-        const String & common_path,
+        const IcebergPathResolver & path_resolver,
         IcebergSchemaProcessor & schema_processor,
         Int64 inherited_sequence_number,
         Int64 inherited_snapshot_id,
-        const std::string & table_location,
         DB::ContextPtr context,
         const String & path_to_manifest_file_,
         std::shared_ptr<const ActionsDAG> filter_dag_,
@@ -118,8 +118,7 @@ private:
         const String & path_to_manifest_file,
         const String & manifest_file_name,
         Int32 format_version,
-        const String & common_path,
-        const String & table_location,
+        const IcebergPathResolver & path_resolver,
         IcebergSchemaProcessor & schema_processor,
         Int64 inherited_sequence_number,
         Int64 inherited_snapshot_id,
@@ -138,8 +137,7 @@ private:
     const String path_to_manifest_file;
     const String manifest_file_name;
     const Int32 format_version;
-    const String common_path;
-    const String table_location;
+    const IcebergPathResolver path_resolver;
     // always zero in case of format version 1
     const Int64 inherited_sequence_number;
     const Int64 inherited_snapshot_id;

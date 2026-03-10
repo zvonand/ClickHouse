@@ -4,11 +4,6 @@
 
 #if USE_AVRO
 
-namespace DB::ErrorCodes
-{
-    extern const int BAD_ARGUMENTS;
-}
-
 namespace DB
 {
 
@@ -137,13 +132,6 @@ FileNamesGenerator::Result FileNamesGenerator::generatePositionDeleteFile()
         .path_in_metadata = fmt::format("{}{}-deletes.{}", data_dir, uuid_str, format_name),
         .path_in_storage = fmt::format("{}{}-deletes.{}", storage_data_dir, uuid_str, format_name)
     };
-}
-
-String FileNamesGenerator::convertMetadataPathToStoragePath(const String & metadata_path) const
-{
-    if (!metadata_path.starts_with(table_dir))
-        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Paths in Iceberg must use a consistent format — either /your/path or s3://your/path. Use the write_full_path_in_iceberg_metadata setting to control this behavior {} {}", metadata_path, table_dir);
-    return storage_dir + metadata_path.substr(table_dir.size());
 }
 
 }

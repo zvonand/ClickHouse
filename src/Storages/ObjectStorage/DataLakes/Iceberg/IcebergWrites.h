@@ -61,7 +61,7 @@ void generateManifestFile(
     Iceberg::FileContentType content_type);
 
 void generateManifestList(
-    const FileNamesGenerator & filename_generator,
+    const Iceberg::IcebergPathResolver & path_resolver,
     Poco::JSON::Object::Ptr metadata,
     ObjectStoragePtr object_storage,
     ContextPtr context,

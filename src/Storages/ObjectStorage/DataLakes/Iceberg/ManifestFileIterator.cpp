@@ -221,11 +221,10 @@ std::shared_ptr<ManifestFileIterator> ManifestFileIterator::create(
     std::shared_ptr<AvroForIcebergDeserializer> manifest_file_deserializer_,
     const String & manifest_file_name_,
     Int32 format_version_,
-    const String & common_path_,
+    const IcebergPathResolver & path_resolver_,
     IcebergSchemaProcessor & schema_processor,
     Int64 inherited_sequence_number_,
     Int64 inherited_snapshot_id_,
-    const String & table_location_,
     DB::ContextPtr context_,
     const String & path_to_manifest_file_,
     std::shared_ptr<const ActionsDAG> filter_dag_,
@@ -235,7 +234,7 @@ std::shared_ptr<ManifestFileIterator> ManifestFileIterator::create(
         context_,
         manifest_file_deserializer_->getMetadataContent(),
         DB::IcebergMetadataLogLevel::ManifestFileMetadata,
-        common_path_,
+        path_resolver_.getTableRoot(),
         path_to_manifest_file_,
         std::nullopt,
         std::nullopt);
@@ -317,8 +316,7 @@ std::shared_ptr<ManifestFileIterator> ManifestFileIterator::create(
         path_to_manifest_file_,
         manifest_file_name_,
         format_version_,
-        common_path_,
-        table_location_,
+        path_resolver_,
         schema_processor,
         inherited_sequence_number_,
         inherited_snapshot_id_,
@@ -336,8 +334,7 @@ ManifestFileIterator::ManifestFileIterator(
     const String & path_to_manifest_file_,
     const String & manifest_file_name_,
     Int32 format_version_,
-    const String & common_path_,
-    const String & table_location_,
+    const IcebergPathResolver & path_resolver_,
     IcebergSchemaProcessor & schema_processor,
     Int64 inherited_sequence_number_,
     Int64 inherited_snapshot_id_,
@@ -352,8 +349,7 @@ ManifestFileIterator::ManifestFileIterator(
     , path_to_manifest_file(path_to_manifest_file_)
     , manifest_file_name(manifest_file_name_)
     , format_version(format_version_)
-    , common_path(common_path_)
-    , table_location(table_location_)
+    , path_resolver(path_resolver_)
     , inherited_sequence_number(inherited_sequence_number_)
     , inherited_snapshot_id(inherited_snapshot_id_)
     , context(context_)
@@ -387,7 +383,7 @@ ProcessedManifestFileEntryPtr ManifestFileIterator::processRow(size_t row_index)
             context,
             manifest_file_deserializer->getContent(row_index),
             DB::IcebergMetadataLogLevel::ManifestFileEntry,
-            common_path,
+            path_resolver.getTableRoot(),
             path_to_manifest_file,
             row_index,
             std::nullopt);
@@ -395,7 +391,7 @@ ProcessedManifestFileEntryPtr ManifestFileIterator::processRow(size_t row_index)
     }
 
     /// Compute inherited/resolved fields
-    const auto file_path = getProperFilePathFromMetadataInfo(parsed_entry->file_path_key, common_path, table_location);
+    const auto file_path = path_resolver.resolve(parsed_entry->file_path_key);
 
     Int64 resolved_snapshot_id;
     if (parsed_entry->parsed_snapshot_id.has_value())
@@ -502,7 +498,7 @@ ProcessedManifestFileEntryPtr ManifestFileIterator::processRow(size_t row_index)
         context,
         manifest_file_deserializer->getContent(row_index),
         DB::IcebergMetadataLogLevel::ManifestFileEntry,
-        common_path,
+        path_resolver.getTableRoot(),
         path_to_manifest_file,
         row_index,
         pruning_status);

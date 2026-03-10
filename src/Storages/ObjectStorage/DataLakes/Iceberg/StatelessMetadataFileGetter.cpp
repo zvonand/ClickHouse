@@ -122,11 +122,10 @@ Iceberg::ManifestFileIterator::ManifestFileEntriesHandle getManifestFileEntriesH
         cacheable_info.deserializer,
         cache_key.manifest_file_path,
         persistent_table_components.format_version,
-        persistent_table_components.table_path,
+        persistent_table_components.path_resolver,
         *persistent_table_components.schema_processor,
         cache_key.added_sequence_number,
         cache_key.added_snapshot_id,
-        persistent_table_components.table_location,
         local_context,
         cache_key.manifest_file_path,
         nullptr,
@@ -178,8 +177,8 @@ ManifestFileCacheKeys getManifestList(
         {
             const std::string file_path
                 = manifest_list_deserializer.getValueFromRowByName(i, f_manifest_path, TypeIndex::String).safeGet<std::string>();
-            const auto manifest_file_name = getProperFilePathFromMetadataInfo(
-                file_path, persistent_table_components.table_path, persistent_table_components.table_location);
+            const auto manifest_file_name = persistent_table_components.path_resolver.resolve(
+                IcebergPathFromMetadata(file_path));
             Int64 added_sequence_number = 0;
             auto added_snapshot_id = manifest_list_deserializer.getValueFromRowByName(i, f_added_snapshot_id);
             if (added_snapshot_id.isNull())

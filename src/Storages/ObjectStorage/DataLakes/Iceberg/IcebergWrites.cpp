@@ -431,7 +431,7 @@ void generateManifestFile(
 }
 
 void generateManifestList(
-    const FileNamesGenerator & filename_generator,
+    const Iceberg::IcebergPathResolver & path_resolver,
     Poco::JSON::Object::Ptr metadata,
     ObjectStoragePtr object_storage,
     ContextPtr context,
@@ -540,7 +540,8 @@ void generateManifestList(
             {
                 auto manifest_list = snapshots->getObject(static_cast<UInt32>(i))->getValue<String>(Iceberg::f_manifest_list);
 
-                RelativePathWithMetadata relative_path_with_metadata(filename_generator.convertMetadataPathToStoragePath(manifest_list));
+                RelativePathWithMetadata relative_path_with_metadata(
+                    path_resolver.resolve(Iceberg::IcebergPathFromMetadata(manifest_list)));
                 auto manifest_list_buf = createReadBuffer(relative_path_with_metadata, object_storage, context, getLogger("IcebergWrites"));
 
                 auto input_stream = std::make_unique<AvroInputStreamReadBufferAdapter>(*manifest_list_buf);
@@ -654,16 +655,25 @@ IcebergStorageSink::IcebergStorageSink(
         compression_method,
         persistent_table_components.table_uuid);
     metadata_compression_method = compression_method;
+    /// config_path is used for paths written into Iceberg metadata (table_dir).
+    /// It follows the Iceberg convention of starting with '/'.
     auto config_path = persistent_table_components.table_path;
     if (config_path.empty() || config_path.back() != '/')
         config_path += "/";
     if (!config_path.starts_with('/'))
         config_path = '/' + config_path;
 
+    /// storage_path is used for actual object storage operations.
+    /// It should match the blob path convention of the storage backend
+    /// (e.g. no leading '/' for Azure/S3).
+    auto storage_path = persistent_table_components.table_path;
+    if (storage_path.empty() || storage_path.back() != '/')
+        storage_path += "/";
+
     if (!context_->getSettingsRef()[Setting::write_full_path_in_iceberg_metadata])
     {
         filename_generator = FileNamesGenerator(
-            config_path, config_path, (catalog != nullptr && catalog->isTransactional()), metadata_compression_method, write_format);
+            config_path, storage_path, (catalog != nullptr && catalog->isTransactional()), metadata_compression_method, write_format);
     }
     else
     {
@@ -671,7 +681,7 @@ IcebergStorageSink::IcebergStorageSink(
         if (bucket.empty() || bucket.back() != '/')
             bucket += "/";
         filename_generator = FileNamesGenerator(
-            bucket, config_path, (catalog != nullptr && catalog->isTransactional()), metadata_compression_method, write_format);
+            bucket, storage_path, (catalog != nullptr && catalog->isTransactional()), metadata_compression_method, write_format);
     }
 
     filename_generator.setVersion(last_version + 1);
@@ -989,7 +999,7 @@ bool IcebergStorageSink::initializeMetadata()
             try
             {
                 generateManifestList(
-                    filename_generator, metadata, object_storage, context, manifest_entries, new_snapshot, manifest_lengths, *buffer_manifest_list, Iceberg::FileContentType::DATA);
+                    persistent_table_components.path_resolver, metadata, object_storage, context, manifest_entries, new_snapshot, manifest_lengths, *buffer_manifest_list, Iceberg::FileContentType::DATA);
                 buffer_manifest_list->finalize();
             }
             catch (...)

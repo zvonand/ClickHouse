@@ -37,7 +37,7 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(
     Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_, Int32 schema_id_relevant_to_iterator_)
     : ObjectInfo(RelativePathWithMetadata(data_manifest_file_entry_->file_path))
     , info{
-          data_manifest_file_entry_->parsed_entry->file_path_key,
+          data_manifest_file_entry_->parsed_entry->file_path_key.getRawPath(),
           data_manifest_file_entry_->resolved_schema_id,
           schema_id_relevant_to_iterator_,
           data_manifest_file_entry_->sequence_number,

@@ -48,8 +48,6 @@ bool writeMetadataFileAndVersionHint(
     bool try_write_version_hint
 );
 
-std::string getProperFilePathFromMetadataInfo(std::string_view data_path, std::string_view common_path, std::string_view table_location);
-
 struct TransformAndArgument
 {
     String transform_name;

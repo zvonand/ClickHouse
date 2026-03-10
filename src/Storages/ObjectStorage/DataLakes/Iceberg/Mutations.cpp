@@ -323,6 +323,7 @@ static bool writeMetadataFiles(
     ObjectStoragePtr object_storage,
     ContextPtr context,
     FileNamesGenerator & filename_generator,
+    const Iceberg::IcebergPathResolver & path_resolver,
     const DataLakeStorageSettings & data_lake_settings,
     String write_format,
     std::shared_ptr<DataLake::ICatalog> catalog,
@@ -464,7 +465,7 @@ static bool writeMetadataFiles(
             try
             {
                 generateManifestList(
-                    filename_generator,
+                    path_resolver,
                     metadata,
                     object_storage,
                     context,
@@ -618,6 +619,7 @@ void mutate(
                 object_storage,
                 context,
                 filename_generator,
+                persistent_table_components.path_resolver,
                 data_lake_settings,
                 write_format,
                 catalog,
@@ -642,6 +644,7 @@ void mutate(
                     object_storage,
                     context,
                     filename_generator,
+                    persistent_table_components.path_resolver,
                     data_lake_settings,
                     write_format,
                     catalog,
@@ -936,8 +939,8 @@ static void collectRetainedFiles(
         String manifest_list_path = snapshot->getValue<String>(Iceberg::f_manifest_list);
         retained_manifest_list_paths.insert(manifest_list_path);
 
-        String storage_manifest_list_path = getProperFilePathFromMetadataInfo(
-            manifest_list_path, persistent_table_components.table_path, persistent_table_components.table_location);
+        String storage_manifest_list_path = persistent_table_components.path_resolver.resolve(
+            IcebergPathFromMetadata(manifest_list_path));
 
         auto manifest_keys = getManifestList(
             object_storage, persistent_table_components, context, storage_manifest_list_path, log);
@@ -981,8 +984,8 @@ static ExpiredFiles collectExpiredFiles(
         if (retained_manifest_list_paths.contains(ml_path))
             continue;
 
-        String storage_ml_path = getProperFilePathFromMetadataInfo(
-            ml_path, persistent_table_components.table_path, persistent_table_components.table_location);
+        String storage_ml_path = persistent_table_components.path_resolver.resolve(
+            IcebergPathFromMetadata(ml_path));
 
         ManifestFileCacheKeys manifest_keys;
         try

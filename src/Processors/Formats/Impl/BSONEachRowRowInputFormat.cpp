@@ -82,7 +82,7 @@ inline size_t BSONEachRowRowInputFormat::columnIndex(std::string_view name, size
         if (key_index < prev_positions.size())
             prev_positions[key_index] = {name, position};
 
-        return prev_positions[key_index].second;
+        return position;
     }
     return UNKNOWN_FIELD;
 }

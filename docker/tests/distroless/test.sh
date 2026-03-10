@@ -22,6 +22,8 @@
 #  15. Image size comparison
 #  16. Server + Keeper (ReplicatedMergeTree)
 #  17. Mounted config overrides (config.d / users.d)
+#  18. Read-only root filesystem
+#  19. Shell init scripts (.sh) gracefully skipped
 
 set -euo pipefail
 
@@ -729,6 +731,139 @@ fi
 
 docker rm -f ch-distroless-t17 >/dev/null
 rm -r "${CFG_DIR}"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 18: Read-only root filesystem
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 18: read-only root filesystem ==="
+
+# docker-init writes default-user.xml to /etc/clickhouse-server/users.d,
+# so it needs a tmpfs there in addition to the data/log volumes and /tmp.
+CID=$(docker run -d \
+    --name ch-distroless-t18 \
+    --read-only \
+    --tmpfs /tmp:size=64M \
+    --tmpfs /etc/clickhouse-server/users.d:uid=101,gid=101,size=8M \
+    -v ch-distroless-vol-t18-data:/var/lib/clickhouse \
+    -v ch-distroless-vol-t18-log:/var/log/clickhouse-server \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t18 9000 testuser testpass
+
+result=$(docker exec ch-distroless-t18 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT 'read_only_ok'")
+if [[ "${result}" == "read_only_ok" ]]; then
+    pass "server works with read-only root filesystem"
+else
+    fail "expected 'read_only_ok', got '${result}'"
+fi
+
+# Verify data survives a restart on read-only filesystem.
+docker exec ch-distroless-t18 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "CREATE TABLE default.ro_test (x UInt32) ENGINE = MergeTree ORDER BY x"
+
+docker exec ch-distroless-t18 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "INSERT INTO default.ro_test VALUES (1),(2),(3)"
+
+docker rm -f ch-distroless-t18 >/dev/null
+
+# Restart with the same volumes.
+CID=$(docker run -d \
+    --name ch-distroless-t18b \
+    --read-only \
+    --tmpfs /tmp:size=64M \
+    --tmpfs /etc/clickhouse-server/users.d:uid=101,gid=101,size=8M \
+    -v ch-distroless-vol-t18-data:/var/lib/clickhouse \
+    -v ch-distroless-vol-t18-log:/var/log/clickhouse-server \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t18b 9000 testuser testpass
+
+result=$(docker exec ch-distroless-t18b \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT count() FROM default.ro_test")
+if [[ "${result}" == "3" ]]; then
+    pass "data persisted across restart on read-only filesystem"
+else
+    fail "expected 3 rows after read-only restart, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t18b >/dev/null
+docker volume rm ch-distroless-vol-t18-data ch-distroless-vol-t18-log >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 19: Shell init scripts (.sh) gracefully skipped
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 19: .sh init scripts gracefully skipped ==="
+
+# Create a mixed init directory: a .sql file that should run, and a .sh file
+# that should be skipped with a warning (since distroless has no shell).
+T19_INITDB=$(mktemp -d)
+cat > "${T19_INITDB}/01-create.sql" <<'SQL'
+CREATE TABLE IF NOT EXISTS test_db.from_sql (id UInt32) ENGINE = MergeTree ORDER BY id;
+INSERT INTO test_db.from_sql VALUES (10),(20),(30);
+SQL
+cat > "${T19_INITDB}/02-should-skip.sh" <<'SH'
+#!/bin/bash
+# This script should be skipped in distroless (no shell available).
+clickhouse-client --query "INSERT INTO test_db.from_sql VALUES (99)"
+SH
+chmod +x "${T19_INITDB}/02-should-skip.sh"
+
+CID=$(docker run -d \
+    --name ch-distroless-t19 \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    -e CLICKHOUSE_DB=test_db \
+    -v "${T19_INITDB}:/docker-entrypoint-initdb.d:ro" \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t19 9000 testuser testpass test_db
+
+# Verify .sql init script ran.
+result=$(docker exec ch-distroless-t19 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT count() FROM test_db.from_sql")
+if [[ "${result}" == "3" ]]; then
+    pass ".sql init script executed successfully"
+else
+    fail "expected 3 rows from .sql init, got '${result}'"
+fi
+
+# Verify the .sh file was skipped (value 99 was NOT inserted).
+result=$(docker exec ch-distroless-t19 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT count() FROM test_db.from_sql WHERE id = 99")
+if [[ "${result}" == "0" ]]; then
+    pass ".sh init script was skipped (no row with id=99)"
+else
+    fail "expected 0 rows with id=99 (.sh should be skipped), got '${result}'"
+fi
+
+# Verify the warning appears in logs.
+if docker logs ch-distroless-t19 2>&1 | grep -q "WARNING.*shell scripts cannot run"; then
+    pass "warning logged for skipped .sh script"
+else
+    fail "expected warning about .sh script in logs"
+fi
+
+docker rm -f ch-distroless-t19 >/dev/null
+rm -r "${T19_INITDB}"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Summary

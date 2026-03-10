@@ -149,9 +149,7 @@ enum class TableRequirement
 {
     NoRequirement = 0,
     RequireMergeTree = 1,
-    RequireReplaceable = 2,
-    RequireProjection = 3,
-    RequireIndex = 4
+    RequireReplaceable = 2
 };
 
 class StatementGenerator

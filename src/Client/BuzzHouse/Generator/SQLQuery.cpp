@@ -533,11 +533,7 @@ auto StatementGenerator::getQueryTableLambda()
             /* May require MergeTree table */
             && (req != TableRequirement::RequireMergeTree || tt.isMergeTreeFamily())
             /* May by replaced by a table engine */
-            && (req != TableRequirement::RequireReplaceable || tt.isEngineReplaceable())
-            /* May require a projection */
-            && (req != TableRequirement::RequireProjection || fc.tableCountProjections(tt.getDatabaseName(), tt.getTableName()) > 0)
-            /* May require an index */
-            && (req != TableRequirement::RequireIndex || fc.tableCountIndexes(tt.getDatabaseName(), tt.getTableName()) > 0);
+            && (req != TableRequirement::RequireReplaceable || tt.isEngineReplaceable());
     };
 }
 
@@ -679,8 +675,6 @@ bool StatementGenerator::joinedTableOrFunction(
     const auto has_table_lambda = getQueryTableLambda<TableRequirement::NoRequirement>();
     const auto has_mergetree_table_lambda = getQueryTableLambda<TableRequirement::RequireMergeTree>();
     const auto has_replaceable_table_lambda = getQueryTableLambda<TableRequirement::RequireReplaceable>();
-    const auto has_projection_table_lambda = getQueryTableLambda<TableRequirement::RequireProjection>();
-    const auto has_idx_table_lambda = getQueryTableLambda<TableRequirement::RequireIndex>();
     const auto has_view_lambda
         = [&](const SQLView & vv) { return vv.isAttached() && (vv.is_deterministic || this->allow_not_deterministic); };
     const auto has_dictionary_lambda
@@ -689,8 +683,6 @@ bool StatementGenerator::joinedTableOrFunction(
     const bool has_table = collectionHas<SQLTable>(has_table_lambda);
     const bool has_mergetree_table = collectionHas<SQLTable>(has_mergetree_table_lambda);
     const bool has_replaceable_table = collectionHas<SQLTable>(has_replaceable_table_lambda);
-    const bool has_projection_table = collectionHas<SQLTable>(has_projection_table_lambda);
-    const bool has_idx_table = collectionHas<SQLTable>(has_idx_table_lambda);
     const bool has_view = collectionHas<SQLView>(has_view_lambda);
     const bool has_dictionary = collectionHas<SQLDictionary>(has_dictionary_lambda);
     const bool can_recurse = this->depth < this->fc.max_depth && this->width < this->fc.max_width;
@@ -712,8 +704,8 @@ bool StatementGenerator::joinedTableOrFunction(
     queryMask[static_cast<size_t>(QueryOp::TableEngineUDF)] = has_replaceable_table && this->allow_engine_udf;
     queryMask[static_cast<size_t>(QueryOp::RandomTableUDF)] = this->allow_not_deterministic && this->allow_engine_udf;
     queryMask[static_cast<size_t>(QueryOp::MergeIndexUDF)] = has_mergetree_table && this->allow_engine_udf;
-    queryMask[static_cast<size_t>(QueryOp::MergeProjectionUDF)] = has_projection_table && this->allow_engine_udf;
-    queryMask[static_cast<size_t>(QueryOp::MergeTextIndexUDF)] = has_idx_table && this->allow_engine_udf;
+    queryMask[static_cast<size_t>(QueryOp::MergeProjectionUDF)] = has_mergetree_table && this->allow_engine_udf;
+    queryMask[static_cast<size_t>(QueryOp::MergeTextIndexUDF)] = has_mergetree_table && this->allow_engine_udf;
     queryMask[static_cast<size_t>(QueryOp::MergeIndexAnalyzeUDF)] = has_mergetree_table && this->allow_engine_udf;
 
     queryGen.setEnabled(queryMask);
@@ -1152,11 +1144,13 @@ bool StatementGenerator::joinedTableOrFunction(
         case QueryOp::MergeProjectionUDF: {
             std::vector<SQLRelationCol> parents;
             MergeTreeProjectionFunc * mtudf = tof->mutable_tfunc()->mutable_mtproj();
-            const SQLTable & tt = rg.pickRandomly(filterCollection<SQLTable>(has_projection_table_lambda));
+            const SQLTable & tt = rg.pickRandomly(filterCollection<SQLTable>(has_mergetree_table_lambda));
+            const String dname = tt.getDatabaseName();
+            const String tname = tt.getTableName();
 
             tt.setName(mtudf->mutable_est(), true);
             mtudf->mutable_proj()->set_projection(
-                fc.tableGetRandomProjection(rg.nextInFullRange(), tt.getDatabaseName(), tt.getTableName()));
+                fc.tableCountProjections(dname, tname) > 0 ? fc.tableGetRandomProjection(rg.nextInFullRange(), dname, tname) : "p0");
             addTableRelation(rg, true, rel_name, tt);
             SQLRelation & rel = this->levels.at(this->current_level).rels.back();
 
@@ -1173,11 +1167,13 @@ bool StatementGenerator::joinedTableOrFunction(
         case QueryOp::MergeTextIndexUDF: {
             SQLRelation rel(rel_name);
             MergeTreeTextIndexFunc * mtudf = tof->mutable_tfunc()->mutable_mttxtidx();
-            const SQLTable & tt = rg.pickRandomly(filterCollection<SQLTable>(has_idx_table_lambda));
+            const SQLTable & tt = rg.pickRandomly(filterCollection<SQLTable>(has_mergetree_table_lambda));
+            const String dname = tt.getDatabaseName();
+            const String tname = tt.getTableName();
 
             tt.setName(mtudf->mutable_est(), true);
-            mtudf->mutable_idx()->set_index(fc.tableGetRandomIndex(rg.nextInFullRange(), tt.getDatabaseName(), tt.getTableName()));
-
+            mtudf->mutable_idx()->set_index(
+                fc.tableCountIndexes(dname, tname) > 0 ? fc.tableGetRandomIndex(rg.nextInFullRange(), dname, tname) : "i0");
             rel.cols.emplace_back(SQLRelationCol(rel_name, {"part_name"}, string_tp.get()));
             rel.cols.emplace_back(SQLRelationCol(rel_name, {"token"}, string_tp.get()));
             rel.cols.emplace_back(SQLRelationCol(rel_name, {"dictionary_compression"}, string_tp.get()));

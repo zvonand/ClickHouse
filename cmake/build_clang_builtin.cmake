@@ -45,6 +45,14 @@ function (build_clang_builtin target_triple OUT_VARIABLE)
 
     set (BUILTINS_SOURCE_DIR "${ClickHouse_SOURCE_DIR}/contrib/llvm-project/compiler-rt")
     set (BUILTINS_BINARY_DIR "${ClickHouse_BINARY_DIR}/clang-builtins")
+
+    # Convert COMPILER_FLAGS (space-separated) to a CMake list for passing
+    # to the sanitizer runtime build via SANITIZER_COMMON_CFLAGS.
+    # This ensures the runtime's codegen matches the application (e.g. -march,
+    # -mno-vzeroupper) to avoid SSE/AVX transition penalties under sanitizers.
+    string(STRIP "${COMPILER_FLAGS}" COMPILER_FLAGS_STRIPPED)
+    string(REPLACE " " ";" COMPILER_FLAGS_LIST "${COMPILER_FLAGS_STRIPPED}")
+
     set (NEED_BUILTIN_BUILD FALSE)
 
     set (OUT_LIBS "${BUILTINS_BINARY_DIR}/${BUILTINS_TARGET}")
@@ -110,7 +118,11 @@ function (build_clang_builtin target_triple OUT_VARIABLE)
                 "-DCMAKE_TOOLCHAIN_FILE=${BUILTINS_TOOLCHAIN_FILE}"
                 # Trick the build into using libc++ from our clang instead of the sysroot one (which isn't there)
                 # Needed for xray (sanitizers use C headers only)
-                "-DSANITIZER_COMMON_CFLAGS=-isystem;${BUILTINS_SOURCE_DIR}/../libcxx/include"
+                # Match the sanitizer runtime's code generation to the application code.
+                # Without this, the runtime uses default (v1/SSE) encoding while
+                # the application uses VEX, causing SSE/AVX transition penalties
+                # on pre-Ice Lake CPUs — especially costly for TSan.
+                "-DSANITIZER_COMMON_CFLAGS=-isystem;${BUILTINS_SOURCE_DIR}/../libcxx/include;${COMPILER_FLAGS_LIST}"
                 "-S ${BUILTINS_SOURCE_DIR}"
                 "-B ${BUILTINS_BINARY_DIR}"
                 WORKING_DIRECTORY ${BUILTINS_BINARY_DIR}

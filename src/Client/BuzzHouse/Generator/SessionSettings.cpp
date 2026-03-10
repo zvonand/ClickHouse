@@ -381,6 +381,7 @@ std::unordered_map<String, CHSetting> serverSettings = {
     {"allow_experimental_delta_kernel_rs", trueOrFalseSettingNoOracle},
     {"allow_get_client_http_header", trueOrFalseSettingNoOracle},
     {"allow_introspection_functions", trueOrFalseSetting},
+    {"allow_nullable_tuple_in_extracted_subcolumns", trueOrFalseSettingNoOracle},
     {"allow_special_bool_values_inside_variant", trueOrFalseSettingNoOracle},
     {"allow_special_serialization_kinds_in_output_formats", trueOrFalseSetting},
     {"allow_unrestricted_reads_from_keeper", trueOrFalseSettingNoOracle},

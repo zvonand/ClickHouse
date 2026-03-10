@@ -39,6 +39,8 @@
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTOptimizeQuery.h>
 #include <Parsers/ASTOrderByElement.h>
+#include <Parsers/ASTProjectionDeclaration.h>
+#include <Parsers/ASTProjectionSelectQuery.h>
 #include <Parsers/ASTQueryWithOutput.h>
 #include <Parsers/ASTRefreshStrategy.h>
 #include <Parsers/ASTSQLSecurity.h>
@@ -606,107 +608,10 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
 
     if (create.columns_list && create.columns_list->indices)
     {
-        /// No-arg index types: safe to swap to and clear any existing arguments.
-        static const Strings simple_index_types = {"minmax", "set", "bloom_filter"};
-        /// BF index types: require positional arguments — swap name only, keep args.
-        static const std::unordered_set<String> bf_index_types = {"ngrambf_v1", "tokenbf_v1"};
-        /// Simple no-arg tokenizers valid as text index tokenizer values.
-        static const Strings simple_tokenizers = {"splitByNonAlpha", "splitByString", "array"};
-        static const Strings posting_list_codecs = {"none", "bitpacking"};
-
         for (auto & ast : create.columns_list->indices->children)
         {
-            auto * index = ast->as<ASTIndexDeclaration>();
-            if (!index)
-                continue;
-
-            auto index_type = index->getType();
-            if (!index_type)
-                continue;
-
-            /// Fuzz named parameters of text index independently of type swap.
-            if (index_type->name == "text" && index_type->arguments)
-            {
-                for (auto & arg_ast : index_type->arguments->children)
-                {
-                    auto * equals_fn = arg_ast->as<ASTFunction>();
-                    if (!equals_fn || equals_fn->name != "equals" || !equals_fn->arguments || equals_fn->arguments->children.size() != 2)
-                        continue;
-
-                    const auto * param_id = equals_fn->arguments->children[0]->as<ASTIdentifier>();
-                    if (!param_id)
-                        continue;
-
-                    auto & value_ast = equals_fn->arguments->children[1];
-
-                    if (param_id->name() == "tokenizer")
-                    {
-                        if (value_ast->as<ASTLiteral>() && fuzz_rand() % 5 == 0)
-                        {
-                            /// Swap between no-arg string-form tokenizers.
-                            value_ast = make_intrusive<ASTLiteral>(pickRandomly(fuzz_rand, simple_tokenizers));
-                        }
-                        else if (auto * tok_fn = value_ast->as<ASTFunction>())
-                        {
-                            if (tok_fn->name == "ngrams" && tok_fn->arguments && !tok_fn->arguments->children.empty()
-                                && fuzz_rand() % 5 == 0)
-                            {
-                                /// ngram_size >= 1
-                                tok_fn->arguments->children[0] = make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 8 + 1));
-                            }
-                            else if (
-                                tok_fn->name == "sparseGrams" && tok_fn->arguments && tok_fn->arguments->children.size() == 3
-                                && fuzz_rand() % 5 == 0)
-                            {
-                                /// min_length in [3, 100], max_length in [min_length, 100],
-                                /// min_cutoff_length in [min_length, max_length].
-                                auto min_len = UInt64(fuzz_rand() % 8 + 3);
-                                auto max_len = std::min(min_len + UInt64(fuzz_rand() % 20 + 1), UInt64(100));
-                                auto cutoff = min_len + UInt64(fuzz_rand() % (max_len - min_len + 1));
-                                tok_fn->arguments->children[0] = make_intrusive<ASTLiteral>(min_len);
-                                tok_fn->arguments->children[1] = make_intrusive<ASTLiteral>(max_len);
-                                tok_fn->arguments->children[2] = make_intrusive<ASTLiteral>(cutoff);
-                            }
-                        }
-                    }
-                    else if (param_id->name() == "posting_list_codec")
-                    {
-                        if (fuzz_rand() % 5 == 0)
-                            value_ast = make_intrusive<ASTLiteral>(pickRandomly(fuzz_rand, posting_list_codecs));
-                    }
-                    else if (param_id->name() == "dictionary_block_frontcoding_compression")
-                    {
-                        if (fuzz_rand() % 5 == 0)
-                            value_ast = make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 2));
-                    }
-                    else if (param_id->name() == "dictionary_block_size" || param_id->name() == "posting_list_block_size")
-                    {
-                        if (fuzz_rand() % 5 == 0)
-                            value_ast = make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 2048 + 1));
-                    }
-                }
-            }
-
-            /// Fuzz index granularity (1/10 probability).
-            if (fuzz_rand() % 10 == 0)
-                index->granularity = UInt64(1) << (fuzz_rand() % 14); /// 1 to 8192
-
-            /// Randomly swap the index type (1/10 probability).
-            if (fuzz_rand() % 10 == 0)
-            {
-                if (bf_index_types.contains(index_type->name))
-                {
-                    /// Swap between the two BF types, leaving arguments in place.
-                    index_type->name = (index_type->name == "ngrambf_v1") ? "tokenbf_v1" : "ngrambf_v1";
-                }
-                else
-                {
-                    /// For text and other simple types, swap to a no-arg type and clear arguments.
-                    index_type->name = pickRandomly(fuzz_rand, simple_index_types);
-                    if (index_type->arguments)
-                        index_type->arguments->children.clear();
-                }
-            }
+            if (auto * index = ast->as<ASTIndexDeclaration>())
+                fuzzIndexDeclaration(*index);
         }
     }
 
@@ -952,12 +857,16 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
             drop_storage_clause(create.storage->partition_by);
     }
 
-    /// Drop a random projection (exercises projection removal path)
-    if (create.columns_list && create.columns_list->projections && !create.columns_list->projections->children.empty()
-        && fuzz_rand() % 50 == 0)
+    /// Fuzz or drop existing projections
+    if (create.columns_list && create.columns_list->projections)
     {
         auto & projs = create.columns_list->projections->children;
-        projs.erase(projs.begin() + fuzz_rand() % projs.size());
+        for (auto & proj_ast : projs)
+            if (auto * proj = proj_ast->as<ASTProjectionDeclaration>())
+                fuzzProjectionDeclaration(*proj);
+        /// Drop a random projection (exercises projection removal path)
+        if (!projs.empty() && fuzz_rand() % 50 == 0)
+            projs.erase(projs.begin() + fuzz_rand() % projs.size());
     }
 
     /// Drop a random constraint (exercises constraint removal path)
@@ -1065,6 +974,123 @@ void QueryFuzzer::fuzzColumnDeclaration(ASTColumnDeclaration & column)
                 break;
         }
     }
+}
+
+void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
+{
+    auto index_type = index.getType();
+    if (!index_type)
+        return;
+
+    /// No-arg index types: safe to swap to and clear any existing arguments.
+    static const Strings simple_index_types = {"minmax", "set", "bloom_filter"};
+    /// BF index types: require positional arguments — swap name only, keep args.
+    static const std::unordered_set<String> bf_index_types = {"ngrambf_v1", "tokenbf_v1"};
+    /// Simple no-arg tokenizers valid as text index tokenizer values.
+    static const Strings simple_tokenizers = {"splitByNonAlpha", "splitByString", "array"};
+    static const Strings posting_list_codecs = {"none", "bitpacking"};
+
+    /// Fuzz named parameters of text index independently of type swap.
+    if (index_type->name == "text" && index_type->arguments)
+    {
+        for (auto & arg_ast : index_type->arguments->children)
+        {
+            auto * equals_fn = arg_ast->as<ASTFunction>();
+            if (!equals_fn || equals_fn->name != "equals" || !equals_fn->arguments || equals_fn->arguments->children.size() != 2)
+                continue;
+
+            const auto * param_id = equals_fn->arguments->children[0]->as<ASTIdentifier>();
+            if (!param_id)
+                continue;
+
+            auto & value_ast = equals_fn->arguments->children[1];
+
+            if (param_id->name() == "tokenizer")
+            {
+                if (value_ast->as<ASTLiteral>() && fuzz_rand() % 5 == 0)
+                {
+                    /// Swap between no-arg string-form tokenizers.
+                    value_ast = make_intrusive<ASTLiteral>(pickRandomly(fuzz_rand, simple_tokenizers));
+                }
+                else if (auto * tok_fn = value_ast->as<ASTFunction>())
+                {
+                    if (tok_fn->name == "ngrams" && tok_fn->arguments && !tok_fn->arguments->children.empty() && fuzz_rand() % 5 == 0)
+                    {
+                        /// ngram_size >= 1
+                        tok_fn->arguments->children[0] = make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 8 + 1));
+                    }
+                    else if (
+                        tok_fn->name == "sparseGrams" && tok_fn->arguments && tok_fn->arguments->children.size() == 3
+                        && fuzz_rand() % 5 == 0)
+                    {
+                        /// min_length in [3, 100], max_length in [min_length, 100],
+                        /// min_cutoff_length in [min_length, max_length].
+                        auto min_len = UInt64(fuzz_rand() % 8 + 3);
+                        auto max_len = std::min(min_len + UInt64(fuzz_rand() % 20 + 1), UInt64(100));
+                        auto cutoff = min_len + UInt64(fuzz_rand() % (max_len - min_len + 1));
+                        tok_fn->arguments->children[0] = make_intrusive<ASTLiteral>(min_len);
+                        tok_fn->arguments->children[1] = make_intrusive<ASTLiteral>(max_len);
+                        tok_fn->arguments->children[2] = make_intrusive<ASTLiteral>(cutoff);
+                    }
+                }
+            }
+            else if (param_id->name() == "posting_list_codec")
+            {
+                if (fuzz_rand() % 5 == 0)
+                    value_ast = make_intrusive<ASTLiteral>(pickRandomly(fuzz_rand, posting_list_codecs));
+            }
+            else if (param_id->name() == "dictionary_block_frontcoding_compression")
+            {
+                if (fuzz_rand() % 5 == 0)
+                    value_ast = make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 2));
+            }
+            else if (param_id->name() == "dictionary_block_size" || param_id->name() == "posting_list_block_size")
+            {
+                if (fuzz_rand() % 5 == 0)
+                    value_ast = make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 2048 + 1));
+            }
+        }
+    }
+
+    /// Fuzz index granularity (1/10 probability).
+    if (fuzz_rand() % 10 == 0)
+        index.granularity = UInt64(1) << (fuzz_rand() % 14); /// 1 to 8192
+
+    /// Randomly swap the index type (1/10 probability).
+    if (fuzz_rand() % 10 == 0)
+    {
+        if (bf_index_types.contains(index_type->name))
+        {
+            /// Swap between the two BF types, leaving arguments in place.
+            index_type->name = (index_type->name == "ngrambf_v1") ? "tokenbf_v1" : "ngrambf_v1";
+        }
+        else
+        {
+            /// For text and other simple types, swap to a no-arg type and clear arguments.
+            index_type->name = pickRandomly(fuzz_rand, simple_index_types);
+            if (index_type->arguments)
+                index_type->arguments->children.clear();
+        }
+    }
+}
+
+void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projection)
+{
+    auto * query = projection.query ? projection.query->as<ASTProjectionSelectQuery>() : nullptr;
+    if (!query)
+        return;
+
+    /// Toggle GROUP BY presence: removes it to convert an aggregate projection to a normal one
+    /// (or vice versa if re-added externally). This exercises both projection variants.
+    if (query->groupBy() && fuzz_rand() % 10 == 0)
+        query->setExpression(ASTProjectionSelectQuery::Expression::GROUP_BY, {});
+
+    /// Toggle ORDER BY presence: changes sort order stored in the projection data part.
+    if (query->orderBy() && fuzz_rand() % 10 == 0)
+        query->setExpression(ASTProjectionSelectQuery::Expression::ORDER_BY, {});
+
+    /// Fuzz the SELECT expression list and any remaining sub-expressions
+    fuzz(query->children);
 }
 
 DataTypePtr QueryFuzzer::fuzzDataType(DataTypePtr type)
@@ -2961,37 +2987,123 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             case ASTAlterCommand::ADD_COLUMN:
             case ASTAlterCommand::MODIFY_COLUMN:
                 /// fuzzColumnDeclaration is normally only called from fuzzCreateQuery;
-                /// exercise it here too so ALTER MODIFY COLUMN paths get the same coverage
+                /// exercise it here too so ALTER ADD/MODIFY COLUMN paths get the same coverage
                 if (alter_cmd->col_decl)
                     if (auto * col = alter_cmd->col_decl->as<ASTColumnDeclaration>())
                         fuzzColumnDeclaration(*col);
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->first = !alter_cmd->first;
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->if_not_exists = !alter_cmd->if_not_exists;
                 break;
             case ASTAlterCommand::DROP_COLUMN:
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->clear_column = !alter_cmd->clear_column;
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->if_exists = !alter_cmd->if_exists;
+                break;
+            case ASTAlterCommand::ADD_INDEX:
+                /// Apply the same index-specific mutations as fuzzCreateQuery does for CREATE TABLE
+                if (alter_cmd->index_decl)
+                    if (auto * idx = alter_cmd->index_decl->as<ASTIndexDeclaration>())
+                        fuzzIndexDeclaration(*idx);
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->first = !alter_cmd->first;
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->if_not_exists = !alter_cmd->if_not_exists;
                 break;
             case ASTAlterCommand::DROP_INDEX:
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->clear_index = !alter_cmd->clear_index;
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->if_exists = !alter_cmd->if_exists;
+                break;
+            case ASTAlterCommand::ADD_CONSTRAINT:
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->if_not_exists = !alter_cmd->if_not_exists;
+                break;
+            case ASTAlterCommand::ADD_PROJECTION:
+                /// Apply the same projection-specific mutations as fuzzCreateQuery
+                if (alter_cmd->projection_decl)
+                    if (auto * proj = alter_cmd->projection_decl->as<ASTProjectionDeclaration>())
+                        fuzzProjectionDeclaration(*proj);
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->if_not_exists = !alter_cmd->if_not_exists;
                 break;
             case ASTAlterCommand::DROP_PROJECTION:
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->clear_projection = !alter_cmd->clear_projection;
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->if_exists = !alter_cmd->if_exists;
                 break;
+            case ASTAlterCommand::ADD_STATISTICS:
+            case ASTAlterCommand::MODIFY_STATISTICS: {
+                /// Fuzz stat types the same way fuzzColumnDeclaration does
+                static const Strings stat_types = {"tdigest", "countmin", "minmax", "uniq"};
+                if (alter_cmd->statistics_decl)
+                    if (auto * stats = alter_cmd->statistics_decl->as<ASTStatisticsDeclaration>())
+                        if (stats->types)
+                            for (auto & type_ast : stats->types->children)
+                                if (auto * afn = type_ast->as<ASTFunction>(); afn && fuzz_rand() % 5 == 0)
+                                    afn->name = pickRandomly(fuzz_rand, stat_types);
+                break;
+            }
             case ASTAlterCommand::DROP_STATISTICS:
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->clear_statistics = !alter_cmd->clear_statistics;
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->if_exists = !alter_cmd->if_exists;
+                break;
+            case ASTAlterCommand::MODIFY_SETTING:
+            case ASTAlterCommand::MODIFY_DATABASE_SETTING:
+                /// Fuzz individual setting values (same strategy as ASTSetQuery handler)
+                if (alter_cmd->settings_changes)
+                    if (auto * aset = alter_cmd->settings_changes->as<ASTSetQuery>())
+                        for (auto & c : aset->changes)
+                            if (fuzz_rand() % 50 == 0)
+                                c.value = fuzzField(c.value);
+                break;
+            case ASTAlterCommand::RESET_SETTING:
+                /// Occasionally drop a setting name from the reset list
+                if (alter_cmd->settings_resets && alter_cmd->settings_resets->children.size() > 1 && fuzz_rand() % 20 == 0)
+                {
+                    auto & resets = alter_cmd->settings_resets->children;
+                    resets.erase(resets.begin() + fuzz_rand() % resets.size());
+                }
+                break;
+            case ASTAlterCommand::REPLACE_PARTITION:
+                /// Toggle between REPLACE PARTITION FROM and ATTACH PARTITION FROM
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->replace = !alter_cmd->replace;
                 break;
             case ASTAlterCommand::DROP_PARTITION:
             case ASTAlterCommand::ATTACH_PARTITION:
-            case ASTAlterCommand::MOVE_PARTITION:
             case ASTAlterCommand::DROP_DETACHED_PARTITION:
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->detach = !alter_cmd->detach;
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->part = !alter_cmd->part;
+                break;
+            case ASTAlterCommand::MOVE_PARTITION:
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->detach = !alter_cmd->detach;
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->part = !alter_cmd->part;
+                /// Cycle move destination type between DISK, VOLUME, TABLE
+                if (fuzz_rand() % 10 == 0)
+                {
+                    static const DataDestinationType dest_types[] = {
+                        DataDestinationType::DISK,
+                        DataDestinationType::VOLUME,
+                        DataDestinationType::TABLE,
+                    };
+                    alter_cmd->move_destination_type = dest_types[fuzz_rand() % 3];
+                }
+                break;
+            case ASTAlterCommand::DROP_CONSTRAINT:
+            case ASTAlterCommand::COMMENT_COLUMN:
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->if_exists = !alter_cmd->if_exists;
                 break;
             default:
                 break;

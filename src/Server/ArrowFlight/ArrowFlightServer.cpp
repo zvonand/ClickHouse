@@ -1,4 +1,4 @@
-#include <Server/ArrowFlight/ArrowFlightHandler.h>
+#include <Server/ArrowFlight/ArrowFlightServer.h>
 
 #if USE_ARROWFLIGHT
 
@@ -650,7 +650,7 @@ namespace
 
 
 /// Keeps information about calls - e.g. blocks extracted from query pipelines, flight tickets, poll descriptors.
-class ArrowFlightHandler::CallsData
+class ArrowFlightServer::CallsData
 {
 public:
     CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, LoggerPtr log_)
@@ -1118,9 +1118,9 @@ private:
 };
 
 
-ArrowFlightHandler::ArrowFlightHandler(IServer & server_, const Poco::Net::SocketAddress & address_to_listen_)
+ArrowFlightServer::ArrowFlightServer(IServer & server_, const Poco::Net::SocketAddress & address_to_listen_)
     : server(server_)
-    , log(getLogger("ArrowFlightHandler"))
+    , log(getLogger("ArrowFlightServer"))
     , address_to_listen(address_to_listen_)
     , tickets_lifetime_seconds(server.config().getUInt("arrowflight.tickets_lifetime_seconds", 600))
     , cancel_ticket_after_do_get(server.config().getBool("arrowflight.cancel_ticket_after_do_get", false))
@@ -1135,7 +1135,7 @@ ArrowFlightHandler::ArrowFlightHandler(IServer & server_, const Poco::Net::Socke
 {
 }
 
-void ArrowFlightHandler::start()
+void ArrowFlightServer::start()
 {
     chassert(!initialized && !stopped);
 
@@ -1204,9 +1204,9 @@ void ArrowFlightHandler::start()
     }
 }
 
-ArrowFlightHandler::~ArrowFlightHandler() = default;
+ArrowFlightServer::~ArrowFlightServer() = default;
 
-void ArrowFlightHandler::stop()
+void ArrowFlightServer::stop()
 {
     if (!initialized)
         return;
@@ -1242,7 +1242,7 @@ void ArrowFlightHandler::stop()
     }
 }
 
-UInt16 ArrowFlightHandler::portNumber() const
+UInt16 ArrowFlightServer::portNumber() const
 {
     return address_to_listen.port();
 }
@@ -1736,7 +1736,7 @@ CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, boo
     return SQLSet{sql, schema_modifier, block_modifier};
 }
 
-arrow::Status ArrowFlightHandler::GetFlightInfo(
+arrow::Status ArrowFlightServer::GetFlightInfo(
     const arrow::flight::ServerCallContext & context,
     const arrow::flight::FlightDescriptor & request,
     std::unique_ptr<arrow::flight::FlightInfo> * info)
@@ -1848,7 +1848,7 @@ arrow::Status ArrowFlightHandler::GetFlightInfo(
 }
 
 
-arrow::Status ArrowFlightHandler::GetSchema(
+arrow::Status ArrowFlightServer::GetSchema(
     const arrow::flight::ServerCallContext & context,
     const arrow::flight::FlightDescriptor & request,
     std::unique_ptr<arrow::flight::SchemaResult> * schema_result)
@@ -1962,7 +1962,7 @@ arrow::Status ArrowFlightHandler::GetSchema(
 }
 
 
-arrow::Status ArrowFlightHandler::PollFlightInfo(
+arrow::Status ArrowFlightServer::PollFlightInfo(
     const arrow::flight::ServerCallContext & context,
     const arrow::flight::FlightDescriptor & request,
     std::unique_ptr<arrow::flight::PollInfo> * info)
@@ -2121,7 +2121,7 @@ arrow::Status ArrowFlightHandler::PollFlightInfo(
 ///
 /// NOTE: The current implementation doesn't allow to set a timeout to avoid blocking calls as it's suggested in the documentation
 /// for PollFlightInfo (see https://arrow.apache.org/docs/format/Flight.html#downloading-data-by-running-a-heavy-query).
-arrow::Status ArrowFlightHandler::evaluatePollDescriptor(const String & poll_descriptor)
+arrow::Status ArrowFlightServer::evaluatePollDescriptor(const String & poll_descriptor)
 {
     auto poll_session_res = calls_data->startEvaluation(poll_descriptor);
     ARROW_RETURN_NOT_OK(poll_session_res);
@@ -2192,7 +2192,7 @@ arrow::Status ArrowFlightHandler::evaluatePollDescriptor(const String & poll_des
 }
 
 
-arrow::Status ArrowFlightHandler::DoGet(
+arrow::Status ArrowFlightServer::DoGet(
     const arrow::flight::ServerCallContext & context,
     const arrow::flight::Ticket & request,
     std::unique_ptr<arrow::flight::FlightDataStream> * stream)
@@ -2274,7 +2274,7 @@ arrow::Status ArrowFlightHandler::DoGet(
 }
 
 
-arrow::Status ArrowFlightHandler::DoPut(
+arrow::Status ArrowFlightServer::DoPut(
     const arrow::flight::ServerCallContext & context,
     std::unique_ptr<arrow::flight::FlightMessageReader> reader,
     std::unique_ptr<arrow::flight::FlightMetadataWriter> writer)
@@ -2415,7 +2415,7 @@ arrow::Status ArrowFlightHandler::DoPut(
 }
 
 
-arrow::Status ArrowFlightHandler::tryRunAndLogIfError(std::string_view method_name, std::function<arrow::Status()> && func) const
+arrow::Status ArrowFlightServer::tryRunAndLogIfError(std::string_view method_name, std::function<arrow::Status()> && func) const
 {
     DB::setThreadName(ThreadName::ARROW_FLIGHT);
     ThreadStatus thread_status;
@@ -2434,7 +2434,7 @@ arrow::Status ArrowFlightHandler::tryRunAndLogIfError(std::string_view method_na
 }
 
 
-arrow::Status ArrowFlightHandler::DoAction(
+arrow::Status ArrowFlightServer::DoAction(
     const arrow::flight::ServerCallContext & context,
     const arrow::flight::Action & action,
     std::unique_ptr<arrow::flight::ResultStream> * result_stream)

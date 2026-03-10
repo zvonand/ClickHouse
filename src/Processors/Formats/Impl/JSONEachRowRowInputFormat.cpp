@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <IO/ReadHelpers.h>
 #include <IO/ReadBufferFromString.h>
 
@@ -9,6 +10,7 @@
 #include <DataTypes/NestedUtils.h>
 #include <DataTypes/Serializations/SerializationNullable.h>
 #include <DataTypes/getLeastSupertype.h>
+#include "Common/Exception.h"
 
 namespace DB
 {
@@ -47,6 +49,7 @@ JSONEachRowRowInputFormat::JSONEachRowRowInputFormat(
     , format_settings(format_settings_)
 {
     name_map.getNamesToIndexesMap(getPort().getHeader());
+    column_seen_before.resize(name_map.size());
     const auto & header = getPort().getHeader();
     if (format_settings_.import_nested_json)
     {
@@ -85,7 +88,7 @@ inline size_t JSONEachRowRowInputFormat::columnIndex(std::string_view name, size
         if (key_index < prev_positions.size())
             prev_positions[key_index] = {name, position};
 
-        return prev_positions[key_index].second;
+        return position;
     }
     return UNKNOWN_FIELD;
 }
@@ -158,6 +161,9 @@ void JSONEachRowRowInputFormat::readJSONObject(MutableColumns & columns)
 {
     assertChar('{', *in);
 
+    // Reset the seen columns for each new object
+    std::fill(column_seen_before.begin(), column_seen_before.end(), false);
+
     for (size_t key_index = 0; advanceToNextKey(key_index); ++key_index)
     {
         std::string_view name_ref = readColumnName(*in);
@@ -191,6 +197,11 @@ void JSONEachRowRowInputFormat::readJSONObject(MutableColumns & columns)
         }
         else
         {
+            if(column_seen_before[column_index]){
+                throw Exception(ErrorCodes::INCORRECT_DATA, "Repeated field (`{}`) when processing data.", name_ref);
+            }
+
+            column_seen_before[column_index] = true;
             JSONUtils::skipColon(*in);
             readField(column_index, columns);
         }

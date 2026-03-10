@@ -75,6 +75,8 @@ private:
 
     /// Hash table match `field name -> position in the block`. NOTE You can use perfect hash map.
     CaseAwareBlockNameMap name_map;
+    /// Marks columns already seen before for this iteration
+    std::vector<bool> column_seen_before;
 
     /// Cached search results for previous row (keyed as index in JSON object) - used as a hint.
     std::vector<std::pair<std::string_view, size_t>> prev_positions;

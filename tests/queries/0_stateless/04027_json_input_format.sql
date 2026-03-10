@@ -60,3 +60,35 @@ INSERT INTO json_test FORMAT JSONEachRow {"id": 0, "age": 10}; -- { clientError 
 SELECT * FROM json_test;
 
 DROP TABLE json_test;
+
+-- Test ambiguity when two input columns map to the same table column (auto case match)
+CREATE TABLE json_test (id Int);
+
+SET input_format_with_names_case_insensitive_column_matching='auto';
+SET input_format_json_ignore_unnecessary_fields=false;
+
+INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123}; -- { clientError 117 }
+
+SET input_format_json_ignore_unnecessary_fields=true;
+
+INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123};
+
+SELECT * FROM json_test;
+
+DROP TABLE json_test;
+
+-- Test ambiguity when two input columns map to the same table column (ignore case)
+CREATE TABLE json_test (id Int);
+
+SET input_format_with_names_case_insensitive_column_matching='ignore_case';
+SET input_format_json_ignore_unnecessary_fields=false;
+
+INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123}; -- { clientError 117 }
+
+SET input_format_json_ignore_unnecessary_fields=true;
+
+INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123};
+
+SELECT * FROM json_test;
+
+DROP TABLE json_test;

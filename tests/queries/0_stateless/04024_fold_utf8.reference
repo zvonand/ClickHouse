@@ -28,6 +28,9 @@ hello 🌍
 a
 -- CJK passthrough
 日本語テスト	日本語テスト
+-- removeAccentsUTF8 alias
+cafe resume naive
+Angstrom
 -- idempotency
 1
 1

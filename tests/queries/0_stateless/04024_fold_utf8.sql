@@ -57,6 +57,11 @@ SELECT removeDiacriticsUTF8('ạ̈');
 SELECT '-- CJK passthrough';
 SELECT caseFoldUTF8('日本語テスト'), removeDiacriticsUTF8('日本語テスト');
 
+-- removeAccentsUTF8 alias
+SELECT '-- removeAccentsUTF8 alias';
+SELECT removeAccentsUTF8('café résumé naïve');
+SELECT removeAccentsUTF8('Ångström');
+
 -- Idempotency: applying twice gives the same result
 SELECT '-- idempotency';
 SELECT caseFoldUTF8(caseFoldUTF8('Straße')) = caseFoldUTF8('Straße');

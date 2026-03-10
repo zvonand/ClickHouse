@@ -1094,6 +1094,7 @@ void QueryOracle::generateOracleSelectQuery(RandomGenerator & rg, const PeerQuer
     }
     SettingValues * svs = sel->mutable_setting_values();
 
+    finishSettings(svs);
     if (measure_performance)
     {
         /// Add tag to find query later on
@@ -1112,7 +1113,6 @@ void QueryOracle::generateOracleSelectQuery(RandomGenerator & rg, const PeerQuer
         sv3->set_property("use_skip_indexes_on_data_read");
         sv3->set_value("0");
     }
-    finishSettings(svs);
 }
 
 void QueryOracle::iterateQuery(google::protobuf::Message & message, const std::vector<MatchHandler> & rules)

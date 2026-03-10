@@ -75,7 +75,7 @@ CREATE TABLE paimon_table ENGINE=PaimonS3(paimon_conf, filename = 'test_table')
 This engine uses the same settings as the corresponding object storage engines and adds Paimon-specific settings:
 
 - `paimon_incremental_read` — enable incremental read mode.
-- `paimon_metadata_refresh_interval_ms` — refresh metadata in background.
+- `paimon_metadata_refresh_interval_ms` — background metadata refresh interval in milliseconds. When set to a value greater than 0, a background task periodically pulls the latest snapshot and schema from object storage. Default: 0 (disabled).
 - `paimon_keeper_path` — Keeper path for incremental read state. Must be set and unique per table; supports macros such as `{database}`, `{table}`, `{uuid}`.
 - `paimon_replica_name` — Replica name for incremental read state. Must be set and unique per replica; supports macros such as `{replica}`.
 
@@ -99,6 +99,69 @@ SELECT count()
 FROM paimon_inc
 SETTINGS paimon_target_snapshot_id = 1;
 ```
+
+## Paimon to MergeTree via Refreshable Materialized View {#paimon-to-mergetree-via-refresh-mv}
+
+You can build an end-to-end pipeline that continuously syncs data from a Paimon table into a MergeTree table using a refreshable Materialized View in `APPEND` mode. Each refresh cycle reads only new incremental data from Paimon and appends it to the destination table.
+
+**Step 1 — Create the Paimon source table with incremental read and metadata refresh enabled.**
+
+The example below uses `PaimonLocal`. Replace the engine with `PaimonS3`, `PaimonAzure`, `PaimonHDFS`, or the `Paimon` alias as appropriate for your storage backend:
+
+```sql
+-- Local storage
+CREATE TABLE paimon_mv_source
+ENGINE = PaimonLocal('/path/to/paimon/table')
+SETTINGS
+    paimon_incremental_read = 1,
+    paimon_keeper_path = '/clickhouse/tables/{uuid}',
+    paimon_replica_name = '{replica}',
+    paimon_metadata_refresh_interval_ms = 100;
+
+-- S3 storage (Paimon is an alias for PaimonS3)
+CREATE TABLE paimon_mv_source
+ENGINE = Paimon('http://minio:9000/bucket/path/to/table', 'access_key', 'secret_key')
+SETTINGS
+    paimon_incremental_read = 1,
+    paimon_keeper_path = '/clickhouse/tables/{uuid}',
+    paimon_replica_name = '{replica}',
+    paimon_metadata_refresh_interval_ms = 100;
+```
+
+`paimon_metadata_refresh_interval_ms` sets the background metadata refresh interval in milliseconds. When greater than 0, a background task periodically pulls the latest snapshot and schema from object storage, so that the MV refresh cycle can see newly committed data without waiting for a query to trigger the metadata update. Default is 0 (disabled). Use cautiously on many tables to avoid excessive object storage and Keeper I/O.
+
+**Step 2 — Create the MergeTree destination table (schema cloned from the Paimon table):**
+
+```sql
+CREATE TABLE paimon_mv_dest AS paimon_mv_source
+ENGINE = MergeTree()
+ORDER BY tuple();
+```
+
+**Step 3 — Create the refreshable Materialized View:**
+
+```sql
+CREATE MATERIALIZED VIEW paimon_mv
+REFRESH EVERY 10 SECOND
+APPEND
+TO paimon_mv_dest
+AS SELECT * FROM paimon_mv_source;
+```
+
+Every 10 seconds the MV fires a `SELECT * FROM paimon_mv_source`, which returns only the rows added since the last committed snapshot, and appends them to `paimon_mv_dest`.
+
+**Cleanup:**
+
+```sql
+SYSTEM STOP VIEW paimon_mv;
+DROP VIEW IF EXISTS paimon_mv SYNC;
+DROP TABLE IF EXISTS paimon_mv_dest SYNC;
+DROP TABLE IF EXISTS paimon_mv_source SYNC;
+```
+
+:::note
+Stop the MV before dropping it to prevent background refresh from blocking DDL operations.
+:::
 
 ## Limitations {#limitations}
 

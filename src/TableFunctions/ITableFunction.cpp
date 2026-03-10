@@ -47,7 +47,8 @@ void ITableFunction::checkSourceAccess(ContextPtr context, bool is_insert_query)
 
 ColumnsDescription ITableFunction::getActualTableStructureWithAccess(ContextPtr context, bool is_insert_query) const
 {
-    checkSourceAccess(context, is_insert_query);
+    /// Resolving table structure is always a read operation.
+    checkSourceAccess(context, /*is_insert_query*/ false);
     return getActualTableStructure(context, is_insert_query);
 }
 

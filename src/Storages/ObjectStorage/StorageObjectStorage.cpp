@@ -68,7 +68,9 @@ String StorageObjectStorage::getPathSample(ContextPtr context)
     /// we can expand the glob locally and return the first path without making any S3 API calls.
     /// This avoids a redundant HeadObject request that would otherwise be issued by
     /// creating a file iterator just to get a sample path string.
-    if (containsOnlyEnumGlobs(path.path))
+    /// Archives are excluded because they need the file iterator to return paths from inside
+    /// the archive (e.g. archive.zip::file.csv), not the raw archive path.
+    if (!configuration->isArchive() && containsOnlyEnumGlobs(path.path))
     {
         auto expanded = expandSelectionGlob(path.path);
         if (!expanded.empty())

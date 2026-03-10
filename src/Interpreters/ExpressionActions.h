@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <Common/Exception.h>
 #include <Core/Block.h>
 #include <Core/ColumnNumbers.h>
@@ -20,8 +21,6 @@ using JoinPtr = std::shared_ptr<IJoin>;
 
 class ExpressionActions;
 using ExpressionActionsPtr = std::shared_ptr<ExpressionActions>;
-
-using CheckCancelled = std::function<bool()>;
 
 /// Sequence of actions on the block.
 /// Is used to calculate expressions.
@@ -78,16 +77,21 @@ private:
 
     ExpressionActionsSettings settings;
 
+    std::atomic<bool> is_cancelled{false};
+
 public:
     explicit ExpressionActions(ActionsDAG actions_dag_, const ExpressionActionsSettings & settings_ = {}, bool project_inputs_ = false);
-    ExpressionActions(ExpressionActions &&) = default;
-    ExpressionActions & operator=(ExpressionActions &&) = default;
+    ExpressionActions(ExpressionActions && other) noexcept;
+    ExpressionActions & operator=(ExpressionActions && other) noexcept;
 
     const Actions & getActions() const { return actions; }
     const std::list<Node> & getNodes() const { return actions_dag.getNodes(); }
     const ActionsDAG & getActionsDAG() const { return actions_dag; }
     const ColumnNumbers & getResultPositions() const { return result_positions; }
     const ExpressionActionsSettings & getSettings() const { return settings; }
+
+    bool isCancelled() const { return is_cancelled.load(std::memory_order_acquire); }
+    void cancel() noexcept;
 
     /// Get a list of input columns.
     Names getRequiredColumns() const;
@@ -100,16 +104,9 @@ public:
     /// preliminary query filtering (filterBlockWithExpression()), because they just
     /// pass available virtual columns, which cannot be moved in case they are
     /// used multiple times.
-    /// @param check_cancelled - optional callback to check for cancellation after each action.
-    void execute(
-        Block & block,
-        size_t & num_rows,
-        bool dry_run = false,
-        bool allow_duplicates_in_input = false,
-        CheckCancelled check_cancelled = nullptr) const;
+    void execute(Block & block, size_t & num_rows, bool dry_run = false, bool allow_duplicates_in_input = false) const;
     /// The same, but without `num_rows`. If result block is empty, adds `_dummy` column to keep block size.
-    void
-    execute(Block & block, bool dry_run = false, bool allow_duplicates_in_input = false, CheckCancelled check_cancelled = nullptr) const;
+    void execute(Block & block, bool dry_run = false, bool allow_duplicates_in_input = false) const;
 
     bool hasArrayJoin() const;
     void assertDeterministic() const;

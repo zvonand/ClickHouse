@@ -39,12 +39,7 @@ void ExpressionTransform::transform(Chunk & chunk)
 void ExpressionTransform::onCancel() noexcept
 {
     ISimpleTransform::onCancel();
-    const auto & nodes = expression->getNodes();
-    for (const auto & node : nodes)
-    {
-        if (node.type == ActionsDAG::ActionType::FUNCTION && node.function)
-            node.function->cancelExecution();
-    }
+    expression->cancel();
 }
 
 ConvertingTransform::ConvertingTransform(SharedHeader header_, ExpressionActionsPtr expression_)
@@ -58,7 +53,7 @@ void ConvertingTransform::onConsume(Chunk chunk)
     size_t num_rows = chunk.getNumRows();
     auto block = getInputPort().getHeader().cloneWithColumns(chunk.detachColumns());
 
-    expression->execute(block, num_rows, false, false, [this]() { return isCancelled(); });
+    expression->execute(block, num_rows);
 
     chunk.setColumns(block.getColumns(), num_rows);
     cur_chunk = std::move(chunk);

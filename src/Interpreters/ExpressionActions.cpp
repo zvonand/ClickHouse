@@ -71,6 +71,52 @@ ExpressionActions::ExpressionActions(ActionsDAG actions_dag_, const ExpressionAc
                         actions_dag.dumpNames(), settings.max_temporary_columns);
 }
 
+ExpressionActions::ExpressionActions(ExpressionActions && other) noexcept
+    : actions_dag(std::move(other.actions_dag))
+    , actions(std::move(other.actions))
+    , num_columns(other.num_columns)
+    , required_columns(std::move(other.required_columns))
+    , input_positions(std::move(other.input_positions))
+    , result_positions(std::move(other.result_positions))
+    , sample_block(std::move(other.sample_block))
+    , project_inputs(other.project_inputs)
+    , settings(std::move(other.settings))
+    , is_cancelled(other.is_cancelled.load(std::memory_order_relaxed))
+{
+}
+
+ExpressionActions & ExpressionActions::operator=(ExpressionActions && other) noexcept
+{
+    if (this != &other)
+    {
+        actions_dag = std::move(other.actions_dag);
+        actions = std::move(other.actions);
+        num_columns = other.num_columns;
+        required_columns = std::move(other.required_columns);
+        input_positions = std::move(other.input_positions);
+        result_positions = std::move(other.result_positions);
+        sample_block = std::move(other.sample_block);
+        project_inputs = other.project_inputs;
+        settings = std::move(other.settings);
+        is_cancelled.store(other.is_cancelled.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    }
+    return *this;
+}
+
+void ExpressionActions::cancel() noexcept
+{
+    bool already_cancelled = is_cancelled.exchange(true, std::memory_order_acq_rel);
+    if (already_cancelled)
+        return;
+
+    const auto & nodes = getNodes();
+    for (const auto & node : nodes)
+    {
+        if (node.type == ActionsDAG::ActionType::FUNCTION && node.function)
+            node.function->cancelExecution();
+    }
+}
+
 ExpressionActionsPtr ExpressionActions::clone() const
 {
     auto copy = std::make_shared<ExpressionActions>(ExpressionActions());
@@ -798,8 +844,7 @@ static void executeAction(const ExpressionActions::Action & action, ExecutionCon
     }
 }
 
-void ExpressionActions::execute(
-    Block & block, size_t & num_rows, bool dry_run, bool allow_duplicates_in_input, CheckCancelled check_cancelled) const
+void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, bool allow_duplicates_in_input) const
 {
     ExecutionContext execution_context
     {
@@ -842,7 +887,7 @@ void ExpressionActions::execute(
             throw;
         }
 
-        if (check_cancelled && check_cancelled())
+        if (isCancelled())
             break;
     }
 
@@ -878,11 +923,11 @@ void ExpressionActions::execute(
     num_rows = execution_context.num_rows;
 }
 
-void ExpressionActions::execute(Block & block, bool dry_run, bool allow_duplicates_in_input, CheckCancelled check_cancelled) const
+void ExpressionActions::execute(Block & block, bool dry_run, bool allow_duplicates_in_input) const
 {
     size_t num_rows = block.rows();
 
-    execute(block, num_rows, dry_run, allow_duplicates_in_input, std::move(check_cancelled));
+    execute(block, num_rows, dry_run, allow_duplicates_in_input);
 
     if (block.empty())
         block.insert({DataTypeUInt8().createColumnConst(num_rows, 0), std::make_shared<DataTypeUInt8>(), "_dummy"});

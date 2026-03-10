@@ -13,7 +13,7 @@
 #include <Access/User.h>
 #include <Interpreters/Context.h>
 #include <boost/range/algorithm_ext/push_back.hpp>
-
+#include <IO/WriteBufferFromString.h>
 
 namespace DB
 {
@@ -49,6 +49,8 @@ void StorageSystemGrants::fillData(MutableColumns & res_columns, ContextPtr cont
     const auto & access_control = context->getAccessControl();
     if (!access_control.doesSelectFromSystemDatabaseRequireGrant())
         context->checkAccess(AccessType::SHOW_USERS | AccessType::SHOW_ROLES);
+
+    bool is_enabled_read_write_grants = access_control.isEnabledReadWriteGrants();
 
     std::vector<UUID> ids = access_control.findAll<User>();
     boost::range::push_back(ids, access_control.findAll<Role>());
@@ -149,8 +151,12 @@ void StorageSystemGrants::fillData(MutableColumns & res_columns, ContextPtr cont
             const auto * table = element.anyTable() ? nullptr : &element.table;
 
             String access_object = element.parameter;
-            if (element.hasFilter())
-                access_object = access_object + "('" + element.filter + "')";
+            if (element.hasFilter() && is_enabled_read_write_grants)
+            {
+                WriteBufferFromOwnString buf;
+                element.formatFilter(buf);
+                access_object += buf.str();
+            }
 
             if (element.anyColumn())
             {

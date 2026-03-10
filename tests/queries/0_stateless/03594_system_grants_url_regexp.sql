@@ -1,3 +1,4 @@
+-- Tags: no-parallel
 DROP USER IF EXISTS test_regex_grant_user;
 CREATE USER test_regex_grant_user;
 GRANT READ ON URL('http://localhost:912.*') TO test_regex_grant_user;

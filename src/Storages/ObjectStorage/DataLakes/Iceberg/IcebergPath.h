@@ -50,8 +50,6 @@ private:
 class IcebergPathResolver
 {
 public:
-    IcebergPathResolver() = default;
-
     IcebergPathResolver(String table_location_, String table_root_)
         : table_location(std::move(table_location_))
         , table_root(std::move(table_root_))

@@ -214,12 +214,21 @@ bool writeMetadataFileAndVersionHint(
             std::string version_hint_value;
             std::string etag;
             std::string write_if_none_match = "*";
-            if (object_storage->exists(object_info))
+            try
             {
-                auto [object_data, object_metadata] = object_storage->readSmallObjectAndGetObjectMetadata(object_info, context->getReadSettings(), MAX_HINT_FILE_SIZE);
-                version_hint_value = object_data;
-                etag = object_metadata.etag;
-                write_if_none_match.clear();
+                if (object_storage->exists(object_info))
+                {
+                    auto [object_data, object_metadata] = object_storage->readSmallObjectAndGetObjectMetadata(object_info, context->getReadSettings(), MAX_HINT_FILE_SIZE);
+                    version_hint_value = object_data;
+                    etag = object_metadata.etag;
+                    write_if_none_match.clear();
+                }
+            }
+            catch (...)
+            {
+                /// Reading existing version-hint may fail (e.g. on some Azure emulators).
+                /// Proceed with writing a new one.
+                tryLogCurrentException(__PRETTY_FUNCTION__);
             }
 
             auto [old_version, _1, _2] = getMetadataFileAndVersion(version_hint_value);

@@ -2484,7 +2484,7 @@ void StatementGenerator::generateTopSelect(
     {
         static const std::vector<uint32_t> limit_choices = {1, 10, 100, 1000, 10000};
         SelectStatementCore * ssc = ts->mutable_sel()->mutable_select_core();
-        JoinedTableOrFunction * jtf = ssc->mutable_from()->mutable_tos()->add_tos_list()->mutable_joined_table();
+        JoinedTableOrFunction * jtf = ssc->mutable_from()->mutable_tos()->mutable_join_clause()->mutable_tos()->mutable_joined_table();
         ExprSchemaTable * est = jtf->mutable_tof()->mutable_est();
         /// Collect which entity types are available and pick one uniformly
         bool supports_final = false;

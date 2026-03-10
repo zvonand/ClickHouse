@@ -45,3 +45,19 @@ $CLICKHOUSE_CLIENT -q "SET input_format_with_names_case_insensitive_column_match
                        INSERT INTO test FROM INFILE '$CURDIR/data_binary/row_binary_with_names.bin' FORMAT RowBinaryWithNames; -- { clientError 117 }"
 $CLICKHOUSE_CLIENT -q "SELECT * FROM test"
 $CLICKHOUSE_CLIENT -q "DROP TABLE test"
+
+# Test ambiguity when two input columns map to the same table column (auto case match)
+$CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS test"
+$CLICKHOUSE_CLIENT -q "CREATE TABLE test (id Int)"
+$CLICKHOUSE_CLIENT -q "SET input_format_with_names_case_insensitive_column_matching='auto';
+                       INSERT INTO test FROM INFILE '$CURDIR/data_binary/row_binary_with_duplicated_names.bin' FORMAT RowBinaryWithNames; -- { clientError 117 }"
+$CLICKHOUSE_CLIENT -q "SELECT * FROM test"
+$CLICKHOUSE_CLIENT -q "DROP TABLE test"
+
+# Test ambiguity when two input columns map to the same table column (ignore case match)
+$CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS test"
+$CLICKHOUSE_CLIENT -q "CREATE TABLE test (id Int)"
+$CLICKHOUSE_CLIENT -q "SET input_format_with_names_case_insensitive_column_matching='ignore_case';
+                       INSERT INTO test FROM INFILE '$CURDIR/data_binary/row_binary_with_duplicated_names.bin' FORMAT RowBinaryWithNames; -- { clientError 117 }"
+$CLICKHOUSE_CLIENT -q "SELECT * FROM test"
+$CLICKHOUSE_CLIENT -q "DROP TABLE test"

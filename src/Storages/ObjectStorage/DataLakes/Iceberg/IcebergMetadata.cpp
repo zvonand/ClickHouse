@@ -639,7 +639,7 @@ static ExecuteCommandArgs makeRemoveOrphanFilesSchema(ContextPtr context)
             char buf[20];
             struct tm t;
             gmtime_r(&ts, &t);
-            strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &t);
+            (void)strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &t);
             result.set("older_than", String(buf));
         }
     });

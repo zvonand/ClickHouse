@@ -56,6 +56,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"webassembly_udf_max_instances", 32, 32, "New setting to limit the number of parallel WebAssembly UDF instances per function."},
             {"mysql_datatypes_support_level", "", "decimal,datetime64,date2Date32", "Enable modern MySQL type mappings by default."},
             {"allow_experimental_json_lazy_type_hints", false, false, "New experimental setting for lazy JSON type hints"},
+            {"allow_iceberg_remove_orphan_files", false, false, "New setting to gate Iceberg orphan file removal"},
+            {"iceberg_orphan_files_older_than_seconds", 259200, 259200, "New setting for default orphan file age threshold"},
         });
         addSettingsChanges(settings_changes_history, "26.2",
         {

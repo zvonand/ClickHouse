@@ -165,7 +165,8 @@ def test_remove_orphan_files_basic(started_cluster_iceberg_with_spark, storage_t
 
 @pytest.mark.parametrize("storage_type", ["local"])
 def test_remove_orphan_files_no_orphans(started_cluster_iceberg_with_spark, storage_type):
-    """When there are no orphan files, counts should all be zero."""
+    """When there are no user-created orphan files, data/manifest/statistics counts should be zero.
+    Superseded metadata JSON files may legitimately appear as orphans after multiple writes."""
     instance = started_cluster_iceberg_with_spark.instances["node1"]
     TABLE_NAME = make_table_name("test_orphan_no_orphans", storage_type)
 
@@ -178,7 +179,12 @@ def test_remove_orphan_files_no_orphans(started_cluster_iceberg_with_spark, stor
         instance, TABLE_NAME, older_than=time.strftime("%Y-%m-%d %H:%M:%S")
     )
     counts = parse_result(result)
-    assert all(v == 0 for v in counts.values()), f"Expected all zeros, got {counts}"
+    assert counts["deleted_data_files_count"] == 0, f"Unexpected orphan data files: {counts}"
+    assert counts["deleted_position_delete_files_count"] == 0, f"Unexpected orphan position-delete files: {counts}"
+    assert counts["deleted_equality_delete_files_count"] == 0, f"Unexpected orphan equality-delete files: {counts}"
+    assert counts["deleted_manifest_files_count"] == 0, f"Unexpected orphan manifest files: {counts}"
+    assert counts["deleted_manifest_lists_count"] == 0, f"Unexpected orphan manifest lists: {counts}"
+    assert counts["deleted_statistics_files_count"] == 0, f"Unexpected orphan statistics files: {counts}"
     assert_data_intact(instance, TABLE_NAME, 2)
 
 
@@ -260,7 +266,7 @@ def test_remove_orphan_files_location(started_cluster_iceberg_with_spark, storag
     )
 
     create_orphan_file(instance, TABLE_NAME, "data", "orphan-data.parquet")
-    create_orphan_metadata_file(instance, TABLE_NAME, "orphan-meta.metadata.json")
+    create_orphan_metadata_file(instance, TABLE_NAME, "v99.metadata.json")
     time.sleep(2)
 
     now_ts = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -271,13 +277,13 @@ def test_remove_orphan_files_location(started_cluster_iceberg_with_spark, storag
 
     assert not file_exists(instance, TABLE_NAME, "data", "orphan-data.parquet"), \
         "Data orphan in scanned location should be deleted"
-    assert file_exists(instance, TABLE_NAME, "metadata", "orphan-meta.metadata.json"), \
+    assert file_exists(instance, TABLE_NAME, "metadata", "v99.metadata.json"), \
         "Metadata orphan outside scanned location should survive"
 
     result = remove_orphan_files(instance, TABLE_NAME, older_than=now_ts, location="metadata/")
     counts = parse_result(result)
     assert counts["deleted_metadata_files_count"] >= 1
-    assert not file_exists(instance, TABLE_NAME, "metadata", "orphan-meta.metadata.json"), \
+    assert not file_exists(instance, TABLE_NAME, "metadata", "v99.metadata.json"), \
         "Metadata orphan in scanned location should be deleted"
 
     assert_data_intact(instance, TABLE_NAME, 1)

@@ -169,31 +169,38 @@ void QueryOracle::generateRoundtripOracleQueries(RandomGenerator & rg, Statement
     UNUSED(u);
 
     /// Collect all columns from all available relations and pick one for the predicate
+    String val;
     std::vector<const SQLRelationCol *> all_cols;
+
     for (const auto & rel : gen.levels[gen.current_level].rels)
         for (const auto & c : rel.cols)
             all_cols.push_back(&c);
-
-    const SQLRelationCol & rel_col = *rg.pickRandomly(all_cols);
-
-    /// Build a backtick-quoted SQL column reference from the SQLRelationCol
-    String col_ref;
-    if (!rel_col.rel_name.empty())
-        col_ref = fmt::format("`{}`.", rel_col.rel_name);
-    col_ref += "`";
-    for (size_t i = 0; i < rel_col.path.size(); ++i)
+    if (all_cols.empty())
     {
-        if (i > 0)
-            col_ref += ".";
-        col_ref += rel_col.path[i];
+        const SQLRelationCol & rel_col = *rg.pickRandomly(all_cols);
+
+        /// Build a backtick-quoted SQL column reference from the SQLRelationCol
+        String col_ref;
+        if (!rel_col.rel_name.empty())
+            col_ref = fmt::format("`{}`.", rel_col.rel_name);
+        col_ref += "`";
+        for (size_t i = 0; i < rel_col.path.size(); ++i)
+        {
+            if (i > 0)
+                col_ref += ".";
+            col_ref += rel_col.path[i];
+        }
+        col_ref += "`";
+
+        /// For String/FixedString: apply roundtrip directly.
+        /// For all other types (or unknown type): wrap in `toString` so hex/base64 receive a String.
+        const bool is_string = rel_col.tp != nullptr && rel_col.tp->getTypeClass() == SQLTypeClass::STRING;
+        val = is_string ? col_ref : fmt::format("toString({})", col_ref);
     }
-    col_ref += "`";
-
-    /// For String/FixedString: apply roundtrip directly.
-    /// For all other types (or unknown type): wrap in `toString` so hex/base64 receive a String.
-    const bool is_string = rel_col.tp != nullptr && rel_col.tp->getTypeClass() == SQLTypeClass::STRING;
-    const String val = is_string ? col_ref : fmt::format("toString({})", col_ref);
-
+    else
+    {
+        val = "1";
+    }
     gen.levels.clear();
     gen.ctes.clear();
 

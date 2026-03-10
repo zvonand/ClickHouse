@@ -390,6 +390,12 @@ void addPatchPartsColumns(
         required_virtuals.insert(patch_system_columns.begin(), patch_system_columns.end());
 
         Names patch_columns_to_read_names(patch_columns_to_read_set.begin(), patch_columns_to_read_set.end());
+        /// Sort the column names to ensure deterministic column order in patch blocks.
+        /// Without sorting, the iteration order of NameSet (unordered_set) is non-deterministic,
+        /// and different patch parts reading the same columns can produce blocks with different
+        /// column orderings. This causes LOGICAL_ERROR in assertCompatibleHeader when
+        /// getUpdatedHeader compares patch headers positionally.
+        std::sort(patch_columns_to_read_names.begin(), patch_columns_to_read_names.end());
         result.patch_columns[i] = storage_snapshot->getColumnsByNames(options, patch_columns_to_read_names);
     }
 

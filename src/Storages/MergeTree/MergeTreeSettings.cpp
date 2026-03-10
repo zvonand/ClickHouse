@@ -349,7 +349,7 @@ namespace ErrorCodes
     DECLARE(Bool, propagate_types_serialization_versions_to_nested_types, true, R"(
     If true, serialization versions like string_serialization_version will be propagated inside nested types like Array/Map/Nullable/JSON/etc. If disabled, the serialization version will take affect only to top-level columns of this type and Tuple el
     )", 0)\
-    DECLARE(MergeTreeMapSerializationVersion, map_serialization_version, "basic", R"(
+    DECLARE(MergeTreeMapSerializationVersion, map_serialization_version, "with_buckets", R"(
     Controls the serialization method used for `Map` columns.
 
     Possible values:
@@ -359,7 +359,7 @@ namespace ErrorCodes
 
     The number of buckets in `with_buckets` serialization is determined by [max_buckets_in_map](#max_buckets_in_map) and [map_buckets_strategy](#map_buckets_strategy).
     )", 0) \
-    DECLARE(MergeTreeMapSerializationVersion, map_serialization_version_for_zero_level_parts, "basic", R"(
+    DECLARE(MergeTreeMapSerializationVersion, map_serialization_version_for_zero_level_parts, "with_buckets", R"(
     This setting allows to specify a different serialization version of
     `Map` columns for zero level parts that are created during inserts.
     It can be useful to keep `basic` serialization for zero level parts to avoid

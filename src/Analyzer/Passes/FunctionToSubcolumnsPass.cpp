@@ -31,7 +31,6 @@
 #include <stack>
 
 
-
 namespace DB
 {
 
@@ -161,10 +160,13 @@ void optimizeFunctionEmpty(QueryTreeNodePtr &, FunctionNode & function_node, Col
 
 void optimizeFunctionArrayElementForMap(QueryTreeNodePtr & node, FunctionNode & function_node, ColumnContext & ctx)
 {
+    /// Replace `m['key']` (which is internally `arrayElement(m, 'key')`) with the subcolumn `m.key_<serialized_key>`.
+
     auto & function_arguments_nodes = function_node.getArguments().getNodes();
     if (function_arguments_nodes.size() != 2)
         return;
 
+    /// The key must be a compile-time constant — dynamic key lookups cannot be rewritten to a fixed subcolumn.
     const auto * second_argument_constant_node = function_arguments_nodes[1]->as<ConstantNode>();
     if (!second_argument_constant_node)
         return;
@@ -172,14 +174,20 @@ void optimizeFunctionArrayElementForMap(QueryTreeNodePtr & node, FunctionNode & 
     const auto & data_type_map = assert_cast<const DataTypeMap &>(*ctx.column.type);
     const auto & key_type = data_type_map.getKeyType();
     auto tmp_key_column = key_type->createColumn();
+    /// Verify that the constant value is compatible with the map's key type.
     if (!tmp_key_column->tryInsert(second_argument_constant_node->getValue()))
         return;
 
+    /// Serialize the key to its text representation to construct the subcolumn name,
+    /// e.g. the string key "foo" becomes the subcolumn suffix "key_foo".
     WriteBufferFromOwnString buf;
     key_type->getDefaultSerialization()->serializeText(*tmp_key_column, 0, buf, FormatSettings());
     String subcolumn_name = "key_" + buf.str();
 
+    /// The resulting subcolumn has the map's value type, e.g. `m.key_foo : V` for `Map(K, V)`.
     NameAndTypePair column{ctx.column.name + "." + subcolumn_name, data_type_map.getValueType()};
+    /// Use is_regular_subcolumn=false because key subcolumns are not declared as regular subcolumns
+    /// of the table schema — they are dynamic subcolumns.
     if (sourceHasColumn(ctx.column_source, column.name) || !canOptimizeToSubcolumn(ctx.column_source, column.name, false))
         return;
 

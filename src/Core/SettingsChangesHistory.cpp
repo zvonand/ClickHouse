@@ -1086,6 +1086,12 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
             {"shared_merge_tree_replica_set_max_lifetime_seconds", 300, 300, "New setting"},
             {"table_readonly", false, false, "New setting to mark table as read-only, preventing inserts and modifications"},
             {"propagate_types_serialization_versions_to_nested_types", false, true, "Propagate data types serialization version to nested types by default"},
+            {"map_serialization_version", "basic", "basic", "Add a setting to control Map serialization version"},
+            {"map_serialization_version_for_zero_level_parts", "basic", "basic", "Add a setting to control Map serialization version for zero-level parts"},
+            {"max_buckets_in_map", 32, 32, "Add a setting to control the maximum number of buckets for 'with_buckets' Map serialization"},
+            {"map_buckets_strategy", "sqrt", "sqrt", "Add a setting to control the strategy for choosing the number of buckets for 'with_buckets' Map serialization"},
+            {"map_buckets_coefficient", 1.0, 1.0, "Add a setting to control the coefficient used in `sqrt` and `linear` strategy for calculating the number of buckets for 'with_buckets' Map serialization"},
+            {"map_buckets_min_avg_size", 32, 32, "Add a setting to control the minimum average map size (number of keys per row) required to apply `with_buckets` serialization"},
         });
         addSettingsChanges(merge_tree_settings_changes_history, "26.2",
         {

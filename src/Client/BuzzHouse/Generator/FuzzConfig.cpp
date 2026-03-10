@@ -505,8 +505,12 @@ void FuzzConfig::loadServerSettings(std::vector<T> & out, const String & desc, c
     {
         std::ifstream infile(fuzzer_out_file);
         out.clear();
-        while (std::getline(infile, buf) && !buf.empty())
+        while (std::getline(infile, buf))
         {
+            if (!buf.empty() && buf.back() == '\r')
+                buf.pop_back();
+            if (buf.empty())
+                break;
             out.push_back(parse(buf));
             buf.resize(0);
             found++;
@@ -689,6 +693,8 @@ String FuzzConfig::getRandomMutation(const uint64_t rand_val)
     {
         std::ifstream infile(fuzzer_out_file, std::ios::in);
         std::getline(infile, res);
+        if (!res.empty() && res.back() == '\r')
+            res.pop_back();
     }
     return res;
 }
@@ -707,6 +713,8 @@ String FuzzConfig::getRandomIcebergHistoryValue(const String & property)
     {
         std::ifstream infile(fuzzer_out_file, std::ios::in);
         std::getline(infile, res);
+        if (!res.empty() && res.back() == '\r')
+            res.pop_back();
     }
     return res.empty() ? "-1" : res;
 }
@@ -724,6 +732,8 @@ String FuzzConfig::getRandomFileSystemCacheValue()
     {
         std::ifstream infile(fuzzer_out_file, std::ios::in);
         std::getline(infile, res);
+        if (!res.empty() && res.back() == '\r')
+            res.pop_back();
     }
     return res;
 }
@@ -754,6 +764,8 @@ String FuzzConfig::tableGetRandomPartitionOrPart(
     {
         std::ifstream infile(fuzzer_out_file, std::ios::in);
         std::getline(infile, res);
+        if (!res.empty() && res.back() == '\r')
+            res.pop_back();
     }
     return res;
 }
@@ -805,6 +817,8 @@ FuzzConfig::tableGetRandomSystemName(const uint64_t rand_val, const String & sys
     {
         std::ifstream infile(fuzzer_out_file, std::ios::in);
         std::getline(infile, res);
+        if (!res.empty() && res.back() == '\r')
+            res.pop_back();
     }
     return res;
 }

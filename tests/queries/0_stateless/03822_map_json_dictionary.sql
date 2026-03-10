@@ -73,7 +73,8 @@ SELECT
     dictGet('map_test_flat', 'metadata', id) as metadata,
     dictGet('map_test_flat', 'tags', id) as tags,
     dictGet('map_test_flat', 'scores', id) as scores
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 6. Test query - HASHED dictionary
 SELECT '=== Testing HASHED Dictionary ===' as test;
@@ -83,7 +84,8 @@ SELECT
     dictGet('map_test_hashed', 'metadata', id) as metadata,
     dictGet('map_test_hashed', 'tags', id) as tags,
     dictGet('map_test_hashed', 'scores', id) as scores
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 7. Test Map key-value access
 SELECT '=== Testing Map Key Access ===' as test;
@@ -93,7 +95,8 @@ SELECT
     dictGet('map_test_flat', 'metadata', id)['city'] as city,
     dictGet('map_test_flat', 'metadata', id)['age'] as age,
     dictGet('map_test_flat', 'scores', id)['math'] as math_score
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 8. Test nested Map (Map with Array values)
 SELECT '=== Testing Nested Map ===' as test;
@@ -102,7 +105,8 @@ SELECT
     dictGet('map_test_flat', 'name', id) as name,
     dictGet('map_test_flat', 'tags', id)['hobbies'] as hobbies,
     dictGet('map_test_flat', 'tags', id)['skills'] as skills
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 9. Test dictionary getColumn method (batch query)
 SELECT '=== Testing getColumn (Batch Query) ===' as test;
@@ -115,7 +119,8 @@ FROM numbers(1, 3);
 SELECT '=== Dictionary Info ===' as test;
 SELECT name, type, key, attribute.names, attribute.types
 FROM system.dictionaries
-WHERE name LIKE 'map_test%';
+WHERE name LIKE 'map_test%'
+ORDER BY name;
 
 -- ============================================
 -- JSON type dictionary tests
@@ -192,7 +197,8 @@ SELECT
     dictGet('json_test_flat', 'settings', id) as settings,
     dictGet('json_test_flat', 'preferences', id) as preferences,
     dictGet('json_test_flat', 'metadata', id) as metadata
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 16. Test query - HASHED dictionary (JSON type)
 SELECT '=== Testing HASHED Dictionary (JSON/Object) ===' as test;
@@ -203,7 +209,8 @@ SELECT
     dictGet('json_test_hashed', 'settings', id) as settings,
     dictGet('json_test_hashed', 'preferences', id) as preferences,
     dictGet('json_test_hashed', 'metadata', id) as metadata
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 17. Test JSON field access (using JSON sub-column access)
 SELECT '=== Testing JSON Field Access ===' as test;
@@ -215,7 +222,8 @@ SELECT
     dictGet('json_test_flat', 'profile', id).country as country,
     dictGet('json_test_flat', 'settings', id).theme as theme,
     dictGet('json_test_flat', 'metadata', id).status as status
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 18. Test nested JSON access
 SELECT '=== Testing Nested JSON Access ===' as test;
@@ -226,7 +234,8 @@ SELECT
     dictGet('json_test_flat', 'profile', id).skills as skills,
     dictGet('json_test_flat', 'preferences', id).display as display,
     dictGet('json_test_flat', 'preferences', id).privacy as privacy
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 19. Test JSON array access
 SELECT '=== Testing JSON Array Access ===' as test;
@@ -236,7 +245,8 @@ SELECT
     dictGet('json_test_flat', 'profile', id).hobbies as hobbies,
     dictGet('json_test_flat', 'profile', id).hobbies[1] as first_hobby,
     dictGet('json_test_flat', 'profile', id).skills.programming as programming_skills
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 20. Test dictionary getColumn method (batch query JSON)
 SELECT '=== Testing getColumn (Batch Query JSON/Object) ===' as test;
@@ -244,7 +254,8 @@ SELECT
     number as id,
     dictGet('json_test_flat', 'profile', number) as profile,
     dictGet('json_test_flat', 'settings', number) as settings
-FROM numbers(1, 3);
+FROM numbers(1, 3)
+ORDER BY id;
 
 -- 21. Test multiple JSON fields usage
 SELECT '=== Testing Multiple JSON Fields ===' as test;
@@ -255,13 +266,15 @@ SELECT
     dictGet('json_test_flat', 'settings', id) as settings,
     dictGet('json_test_flat', 'preferences', id) as preferences,
     dictGet('json_test_flat', 'metadata', id) as metadata
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 22. Verify JSON dictionary info
 SELECT '=== JSON/Object Dictionary Info ===' as test;
 SELECT name, type, key, attribute.names, attribute.types
 FROM system.dictionaries
-WHERE name LIKE 'json_test%';
+WHERE name LIKE 'json_test%'
+ORDER BY name;
 
 -- 23. Combined test: using both Map and JSON types
 SELECT '=== Combined Test: Map and JSON/Object ===' as test;
@@ -271,7 +284,8 @@ SELECT
     dictGet('map_test_flat', 'metadata', m.id)['city'] as map_city,
     dictGet('json_test_flat', 'name', m.id) as json_name,
     dictGet('json_test_flat', 'profile', m.id).city as json_city
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3) as m;
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3) as m
+ORDER BY id;
 
 -- ============================================
 -- Deep nested JSON type dictionary tests
@@ -356,7 +370,8 @@ SELECT
     dictGet('deep_json_test_flat', 'deep_data', id).a.b.c.d.e.f.value as deep_value_6_alt,
     dictGet('deep_json_test_flat', 'deep_data', id).a.b.c.d.e.f.metadata.tags as deep_tags,
     dictGet('deep_json_test_flat', 'deep_data', id).a.b.c.d.e.f.metadata.nested_obj.key2 as nested_key2
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 29. Test deep nested JSON with arrays and objects
 SELECT '=== Testing Deep Nested JSON with Arrays and Objects ===' as test;
@@ -369,7 +384,8 @@ SELECT
     dictGet('deep_json_test_flat', 'nested_structure', id).company.departments[1].teams[1].members[1].name as member_name,
     dictGet('deep_json_test_flat', 'nested_structure', id).company.departments[1].teams[1].members[1].projects[1].name as project_name,
     dictGet('deep_json_test_flat', 'nested_structure', id).company.departments[1].teams[1].members[1].projects[1].details.start_date as project_start_date
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 30. Test complex hierarchy with multiple nested levels
 SELECT '=== Testing Complex Hierarchy (Multiple Nested Levels) ===' as test;
@@ -383,7 +399,8 @@ SELECT
     dictGet('deep_json_test_flat', 'complex_hierarchy', id).user.profile.personal.address.country.regions[1].states[1].name as state_name,
     dictGet('deep_json_test_flat', 'complex_hierarchy', id).user.profile.personal.address.country.regions[1].states[1].cities[1].name as city_name,
     dictGet('deep_json_test_flat', 'complex_hierarchy', id).user.profile.personal.address.country.regions[1].states[1].cities[1].boroughs[1] as borough_name
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 31. Test nested arrays within nested objects
 SELECT '=== Testing Nested Arrays within Nested Objects ===' as test;
@@ -394,7 +411,8 @@ SELECT
     dictGet('deep_json_test_flat', 'nested_structure', id).organization.divisions.tech.teams.frontend.members[1].skills.frameworks.react.version as react_version,
     dictGet('deep_json_test_flat', 'nested_structure', id).organization.divisions.tech.teams.frontend.members[1].skills.frameworks.react.projects[1].name as project_name,
     dictGet('deep_json_test_flat', 'nested_structure', id).organization.divisions.tech.teams.frontend.members[1].skills.frameworks.react.projects[1].features[1] as feature_name
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 32. Test deeply nested complex hierarchy structures (system config and application modules)
 SELECT '=== Testing Deeply Nested Complex Hierarchy Structures ===' as test;
@@ -414,7 +432,8 @@ SELECT
     dictGet('deep_json_test_flat', 'complex_hierarchy', id).application.modules.auth.providers[1].config.endpoints.userinfo.headers.Authorization as auth_header,
     dictGet('deep_json_test_flat', 'complex_hierarchy', id).application.modules.api.endpoints[1].path as api_path,
     dictGet('deep_json_test_flat', 'complex_hierarchy', id).application.modules.api.endpoints[1].handlers.GET.function as handler_function
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 33. Test HASHED dictionary with deep nested JSON
 SELECT '=== Testing HASHED Dictionary with Deep Nested JSON ===' as test;
@@ -424,7 +443,8 @@ SELECT
     dictGet('deep_json_test_hashed', 'deep_data', id).level1.level2.level3.level4.level5.value as deep_value,
     dictGet('deep_json_test_hashed', 'nested_structure', id).company.departments[1].teams[1].members[1].name as member_name,
     dictGet('deep_json_test_hashed', 'complex_hierarchy', id).user.profile.personal.address.country.name as country_name
-FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3);
+FROM (SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3)
+ORDER BY id;
 
 -- 34. Test batch query with deep nested JSON
 SELECT '=== Testing Batch Query with Deep Nested JSON ===' as test;
@@ -433,10 +453,12 @@ SELECT
     dictGet('deep_json_test_flat', 'name', number) as name,
     dictGet('deep_json_test_flat', 'deep_data', number) as deep_data,
     dictGet('deep_json_test_flat', 'nested_structure', number) as nested_structure
-FROM numbers(1, 3);
+FROM numbers(1, 3)
+ORDER BY id;
 
 -- 35. Verify deep JSON dictionary info
 SELECT '=== Deep JSON Dictionary Info ===' as test;
 SELECT name, type, key, attribute.names, attribute.types
 FROM system.dictionaries
-WHERE name LIKE 'deep_json_test%';
+WHERE name LIKE 'deep_json_test%'
+ORDER BY name;

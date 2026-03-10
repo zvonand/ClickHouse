@@ -437,7 +437,7 @@ void generateManifestList(
     ContextPtr context,
     const Strings & manifest_entry_names,
     Poco::JSON::Object::Ptr new_snapshot,
-    Int64 manifest_length,
+    const std::vector<Int64> & manifest_entry_sizes,
     WriteBuffer & buf,
     Iceberg::FileContentType content_type,
     bool use_previous_snapshots)
@@ -456,13 +456,13 @@ void generateManifestList(
     auto adapter = std::make_unique<OutputStreamWriteBufferAdapter>(buf);
     avro::DataFileWriter<avro::GenericDatum> writer(std::move(adapter), schema);
 
-    for (const auto & manifest_entry_name : manifest_entry_names)
+    for (size_t entry_idx = 0; entry_idx < manifest_entry_names.size(); ++entry_idx)
     {
         avro::GenericDatum entry_datum(schema.root());
         avro::GenericRecord & entry = entry_datum.value<avro::GenericRecord>();
 
-        entry.field(Iceberg::f_manifest_path) = manifest_entry_name;
-        entry.field(Iceberg::f_manifest_length) = manifest_length;
+        entry.field(Iceberg::f_manifest_path) = manifest_entry_names[entry_idx];
+        entry.field(Iceberg::f_manifest_length) = manifest_entry_sizes[entry_idx];
         entry.field(Iceberg::f_partition_spec_id) = metadata->getValue<Int64>(Iceberg::f_default_spec_id);
         if (version > 1)
         {
@@ -655,34 +655,8 @@ IcebergStorageSink::IcebergStorageSink(
         compression_method,
         persistent_table_components.table_uuid);
     metadata_compression_method = compression_method;
-    /// config_path is used for paths written into Iceberg metadata (table_dir).
-    /// It follows the Iceberg convention of starting with '/'.
-    auto config_path = persistent_table_components.table_path;
-    if (config_path.empty() || config_path.back() != '/')
-        config_path += "/";
-    if (!config_path.starts_with('/'))
-        config_path = '/' + config_path;
-
-    /// storage_path is used for actual object storage operations.
-    /// It should match the blob path convention of the storage backend
-    /// (e.g. no leading '/' for Azure/S3).
-    auto storage_path = persistent_table_components.table_path;
-    if (storage_path.empty() || storage_path.back() != '/')
-        storage_path += "/";
-
-    if (!context_->getSettingsRef()[Setting::write_full_path_in_iceberg_metadata])
-    {
-        filename_generator = FileNamesGenerator(
-            config_path, storage_path, (catalog != nullptr && catalog->isTransactional()), metadata_compression_method, write_format);
-    }
-    else
-    {
-        auto bucket = metadata->getValue<String>(Iceberg::f_location);
-        if (bucket.empty() || bucket.back() != '/')
-            bucket += "/";
-        filename_generator = FileNamesGenerator(
-            bucket, storage_path, (catalog != nullptr && catalog->isTransactional()), metadata_compression_method, write_format);
-    }
+    filename_generator = FileNamesGenerator(
+        (catalog != nullptr && catalog->isTransactional()), metadata_compression_method, write_format);
 
     filename_generator.setVersion(last_version + 1);
 
@@ -761,6 +735,7 @@ void IcebergStorageSink::consume(Chunk & chunk)
                 context->getSettingsRef()[Setting::iceberg_insert_max_bytes_in_data_file],
                 current_schema->getArray(Iceberg::f_fields),
                 filename_generator,
+                persistent_table_components.path_resolver,
                 object_storage,
                 context,
                 format_settings,
@@ -874,7 +849,10 @@ void IcebergStorageSink::cancelBuffers()
 
 bool IcebergStorageSink::initializeMetadata()
 {
-    auto [metadata_name, storage_metadata_name] = filename_generator.generateMetadataName();
+    const auto & resolver = persistent_table_components.path_resolver;
+    auto metadata_suffix = filename_generator.generateMetadataName();
+    auto metadata_name = resolver.metadataPath(metadata_suffix);
+    auto storage_metadata_name = resolver.storagePath(metadata_suffix);
 
     Int64 parent_snapshot = -1;
     if (metadata->has(Iceberg::f_current_snapshot_id))
@@ -883,13 +861,14 @@ bool IcebergStorageSink::initializeMetadata()
     Int32 total_data_files = 0;
     for (const auto & [_, writer] : writer_per_partition_key)
         total_data_files += writer.getDataFiles().size();
-    auto [new_snapshot, manifest_list_name, storage_manifest_list_name] = MetadataGenerator(metadata).generateNextMetadata(
-        filename_generator, metadata_name, parent_snapshot, total_data_files, total_rows, total_chunks_size, total_data_files, /* added_delete_files */0, /* num_deleted_rows */0);
+    auto [new_snapshot, manifest_list_suffix] = MetadataGenerator(metadata).generateNextMetadata(
+        filename_generator, resolver, metadata_name, parent_snapshot, total_data_files, total_rows, total_chunks_size, total_data_files, /* added_delete_files */0, /* num_deleted_rows */0);
+    auto storage_manifest_list_name = resolver.storagePath(manifest_list_suffix);
 
 
     Strings manifest_entries_in_storage;
     Strings manifest_entries;
-    Int64 manifest_lengths = 0;
+    std::vector<Int64> manifest_entry_sizes;
 
     auto cleanup = [&] (bool retry_because_of_metadata_conflict)
     {
@@ -961,12 +940,12 @@ bool IcebergStorageSink::initializeMetadata()
     {
         for (const auto & [partition_key, writer] : writer_per_partition_key)
         {
-            auto [manifest_entry_name, storage_manifest_entry_name] = filename_generator.generateManifestEntryName();
-            manifest_entries_in_storage.push_back(storage_manifest_entry_name);
-            manifest_entries.push_back(manifest_entry_name);
+            auto manifest_entry_suffix = filename_generator.generateManifestEntryName();
+            manifest_entries_in_storage.push_back(resolver.storagePath(manifest_entry_suffix));
+            manifest_entries.push_back(resolver.metadataPath(manifest_entry_suffix));
 
             auto buffer_manifest_entry = object_storage->writeObject(
-                StoredObject(storage_manifest_entry_name), WriteMode::Rewrite, std::nullopt, DBMS_DEFAULT_BUFFER_SIZE, context->getWriteSettings());
+                StoredObject(resolver.storagePath(manifest_entry_suffix)), WriteMode::Rewrite, std::nullopt, DBMS_DEFAULT_BUFFER_SIZE, context->getWriteSettings());
             try
             {
                 generateManifestFile(
@@ -984,7 +963,10 @@ bool IcebergStorageSink::initializeMetadata()
                     *buffer_manifest_entry,
                     Iceberg::FileContentType::DATA);
                 buffer_manifest_entry->finalize();
-                manifest_lengths += buffer_manifest_entry->count();
+                auto manifest_storage_path = resolver.storagePath(manifest_entry_suffix);
+                auto manifest_metadata = object_storage->getObjectMetadata(manifest_storage_path, /*with_tags=*/ false);
+                LOG_DEBUG(log, "Manifest file {} size: {} bytes", manifest_storage_path, manifest_metadata.size_bytes);
+                manifest_entry_sizes.push_back(manifest_metadata.size_bytes);
             }
             catch (...)
             {
@@ -999,7 +981,7 @@ bool IcebergStorageSink::initializeMetadata()
             try
             {
                 generateManifestList(
-                    persistent_table_components.path_resolver, metadata, object_storage, context, manifest_entries, new_snapshot, manifest_lengths, *buffer_manifest_list, Iceberg::FileContentType::DATA);
+                    persistent_table_components.path_resolver, metadata, object_storage, context, manifest_entries, new_snapshot, manifest_entry_sizes, *buffer_manifest_list, Iceberg::FileContentType::DATA);
                 buffer_manifest_list->finalize();
             }
             catch (...)
@@ -1020,11 +1002,11 @@ bool IcebergStorageSink::initializeMetadata()
             });
 
             LOG_DEBUG(log, "Writing new metadata file {}", storage_metadata_name);
-            auto hint = filename_generator.generateVersionHint();
+            auto hint_suffix = filename_generator.generateVersionHint();
             if (!writeMetadataFileAndVersionHint(
                     storage_metadata_name,
                     json_representation,
-                    hint.path_in_storage,
+                    resolver.storagePath(hint_suffix),
                     storage_metadata_name,
                     object_storage,
                     context,

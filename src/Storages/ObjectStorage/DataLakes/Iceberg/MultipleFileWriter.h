@@ -2,6 +2,7 @@
 
 #include <Storages/ObjectStorage/StorageObjectStorage.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/FileNamesGenerator.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/DataFileStatistics.h>
 
 namespace DB
@@ -17,6 +18,7 @@ public:
         UInt64 max_data_file_num_bytes_,
         Poco::JSON::Array::Ptr schema,
         FileNamesGenerator & filename_generator_,
+        const Iceberg::IcebergPathResolver & path_resolver_,
         ObjectStoragePtr object_storage_,
         ContextPtr context_,
         const std::optional<FormatSettings> & format_settings_,
@@ -48,10 +50,14 @@ private:
     DataFileStatistics stats;
     std::optional<size_t> current_file_num_rows = std::nullopt;
     std::optional<size_t> current_file_num_bytes = std::nullopt;
+    /// Metadata paths (wasb://... or /path/...) for writing into Iceberg manifests.
     std::vector<String> data_file_names;
+    /// Storage paths for actual object storage operations (cleanup).
+    std::vector<String> data_file_storage_paths;
     std::unique_ptr<WriteBufferFromFileBase> buffer;
     OutputFormatPtr output_format;
     FileNamesGenerator & filename_generator;
+    const Iceberg::IcebergPathResolver & path_resolver;
     ObjectStoragePtr object_storage;
     ContextPtr context;
     std::optional<FormatSettings> format_settings;

@@ -64,9 +64,21 @@ public:
     }
 
     /// Convert a metadata path to an actual storage path.
+    /// Example: "wasb://container@host/iceberg/table/data/x.parquet" → "iceberg/table/data/x.parquet"
     String resolve(const IcebergPathFromMetadata & metadata_path) const;
 
+    /// Convert a relative suffix (e.g. "data/x.parquet") to a full storage path.
+    /// Example: "data/x.parquet" → "iceberg/table/data/x.parquet"
+    String storagePath(const String & relative_suffix) const { return table_root + relative_suffix; }
+
+    /// Convert a relative suffix to the path that should be written into Iceberg metadata.
+    /// Example: "data/x.parquet" → "wasb://container@host/iceberg/table/data/x.parquet"
+    ///   or   : "data/x.parquet" → "/iceberg/table/data/x.parquet"
+    /// depending on the table_location format.
+    String metadataPath(const String & relative_suffix) const { return table_location + "/" + relative_suffix; }
+
     const String & getTableRoot() const { return table_root; }
+    const String & getTableLocation() const { return table_location; }
 
 private:
     String table_location;

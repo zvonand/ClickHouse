@@ -308,6 +308,7 @@ public:
     const TokenToPostingsInfosMap & getPatternTokens() const { return pattern_tokens; }
     const std::vector<std::string_view> & getPatternTokensForTextQuery(const TextSearchQuery & query) const;
     PostingListPtr getPostingsForRareToken(std::string_view token) const;
+    bool isPatternScanFinished() const { return pattern_scan_finished; }
     void setCurrentRange(RowsRange range) { current_range = std::move(range); }
     const String & getIndexIdForCaches() const { return index_id_for_caches; }
 
@@ -332,6 +333,8 @@ private:
     void readPostingsForRareTokens(MergeTreeIndexReaderStream & stream, MergeTreeIndexDeserializationState & state);
 
     bool is_empty = true;
+    /// Indicates if pattern scan succesfully finished. The optimization can be used.
+    bool pattern_scan_finished = false;
     /// If adding significantly large members here make sure to add them to memoryUsageBytes()
     MergeTreeIndexTextParams params;
     /// Tokens that are in the index granule after analysis.

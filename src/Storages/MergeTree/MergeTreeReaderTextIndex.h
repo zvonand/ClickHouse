@@ -51,6 +51,15 @@ private:
     /// Removes blocks with max value less than the given range.
     void cleanupPostingsBlocks(const RowsRange & range);
 
+    /// Fills a virtual column for an abandoned pattern query by evaluating the original LIKE
+    /// predicate directly on the body column. Used when the dictionary scan was cut short.
+    void fillColumnFallback(
+        IColumn & column,
+        const String & column_name,
+        const IColumn & body_column,
+        size_t body_col_offset,
+        size_t num_rows) const;
+
     std::optional<RowsRange> getRowsRangeForMark(size_t mark) const;
     MergeTreeDataPartPtr getDataPart() const;
 
@@ -65,6 +74,13 @@ private:
     MergeTreeIndexWithCondition index;
     MergeTreeIndexGranulePtr granule;
     PostingsBlocksMap postings_blocks;
+
+    /// Fallback reader for the indexed data column. Used when the pattern dictionary scan
+    /// is cut short and we must evaluate the original LIKE predicate on the raw column.
+    MergeTreeReaderPtr fallback_reader;
+    /// Per-virtual-column flag: true if this column's query was abandoned during the scan
+    /// and the LIKE predicate must be evaluated directly via fallback_reader.
+    std::vector<bool> use_fallback;
 
     /// True if the reader is allowed to skip marks.
     /// Otherwise it only fills virtual columns.

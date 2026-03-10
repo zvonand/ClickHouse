@@ -62,6 +62,8 @@ namespace ErrorCodes
 static constexpr UInt64 MAX_CARDINALITY_FOR_RAW_POSTINGS = 12;
 static constexpr UInt64 MAX_CARDINALITY_FOR_EMBEDDED_POSTINGS = 6;
 
+static constexpr UInt64 MAX_POSTINGS_TO_READ = 50;
+
 static_assert(MAX_CARDINALITY_FOR_EMBEDDED_POSTINGS <= MAX_CARDINALITY_FOR_RAW_POSTINGS, "MAX_CARDINALITY_FOR_EMBEDDED_POSTINGS must be less or equal to MAX_CARDINALITY_FOR_RAW_POSTINGS");
 static_assert(PostingListBuilder::max_small_size <= MAX_CARDINALITY_FOR_RAW_POSTINGS, "max_small_size must be less than or equal to MAX_CARDINALITY_FOR_RAW_POSTINGS");
 
@@ -344,6 +346,7 @@ void MergeTreeIndexGranuleText::deserializeBinaryWithMultipleStreams(MergeTreeIn
     remaining_tokens.clear();
     pattern_tokens.clear();
     pattern_tokens_per_query.clear();
+    pattern_scan_finished = false;
 
     analyzeDictionaryForTokens(*index_stream, *dictionary_stream, state);
     analyzeDictionaryForPatterns(*index_stream, *dictionary_stream, state);
@@ -453,12 +456,19 @@ void MergeTreeIndexGranuleText::analyzeDictionaryForPatterns(MergeTreeIndexReade
     const auto & all_search_patterns = condition_text.getAllSearchPatterns();
 
     if (all_search_patterns.empty())
+    {
+        pattern_scan_finished = true;
         return;
+    }
 
     auto sparse_index = loadSparseIndex(header_stream, state);
     if (sparse_index->empty())
+    {
+        pattern_scan_finished = true;
         return;
+    }
 
+    size_t postings_to_read = 0;
     std::vector<size_t> matched_indices;
     for (size_t block_idx = 0; block_idx < sparse_index->size(); ++block_idx)
     {
@@ -498,9 +508,20 @@ void MergeTreeIndexGranuleText::analyzeDictionaryForPatterns(MergeTreeIndexReade
         {
             String token(block_tokens.getDataAt(matched_indices[i]));
             auto token_info = std::make_shared<TokenPostingsInfo>(std::move(token_infos[i]));
+
+            postings_to_read += !(token_info->header & PostingsSerialization::Flags::EmbeddedPostings);
             pattern_tokens.emplace(std::move(token), std::move(token_info));
         }
+
+        if (postings_to_read >= MAX_POSTINGS_TO_READ)
+        {
+            /// Too many large-posting tokens matched.
+            /// Not all dictionary blocks were scanned, so the set of matched pattern tokens is incomplete.
+            return;
+        }
     }
+
+    pattern_scan_finished = true;
 
     for (const auto & [token, _] : pattern_tokens)
     {
@@ -723,6 +744,11 @@ bool MergeTreeIndexGranuleText::hasAnyQueryPatterns(const TextSearchQuery & quer
 {
     if (query.patterns.empty())
         return false;
+
+    /// If the dictionary scan was cut short (too many large-posting tokens), the set of
+    /// matched pattern tokens is incomplete. Conservatively assume the pattern may match.
+    if (!pattern_scan_finished)
+        return true;
 
     const auto & query_tokens = getPatternTokensForTextQuery(query);
 

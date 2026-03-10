@@ -7,6 +7,7 @@
 #include <Storages/MergeTree/TextIndexUtils.h>
 #include <Interpreters/Context.h>
 #include <Common/logger_useful.h>
+#include <Common/OptimizedRegularExpression.h>
 #include <Columns/ColumnsNumber.h>
 #include <Storages/MergeTree/TextIndexCache.h>
 #include <Core/Settings.h>
@@ -89,11 +90,49 @@ MergeTreeReaderTextIndex::MergeTreeReaderTextIndex(
     };
 
     deserialization_state = std::make_unique<MergeTreeIndexDeserializationState>(std::move(state));
+
+    const auto & condition_text = assert_cast<const MergeTreeIndexConditionText &>(*index.condition);
+    if (!condition_text.getAllSearchPatterns().empty())
+    {
+        /// Create a fallback reader for the indexed column. When the dictionary scan is cut
+        /// short and some pattern tokens are missing, we fall back to evaluating the original
+        /// LIKE predicate directly on the indexed column data.
+        const String & indexed_col_name = index.index->index.column_names[0];
+        try
+        {
+            auto col_in_metadata = storage_snapshot->metadata->getColumns().getPhysical(indexed_col_name);
+            NamesAndTypesList fallback_columns{{col_in_metadata.name, col_in_metadata.type}};
+
+            fallback_reader = createMergeTreeReader(
+                main_reader_->data_part_info_for_read,
+                fallback_columns,
+                main_reader_->storage_snapshot,
+                main_reader_->storage_settings,
+                main_reader_->all_mark_ranges,
+                /*virtual_fields=*/ {},
+                main_reader_->uncompressed_cache,
+                main_reader_->mark_cache,
+                /*deserialization_prefixes_cache=*/ nullptr,
+                main_reader_->settings,
+                /*avg_value_size_hints=*/ {},
+                /*profile_callback=*/ {});
+        }
+        catch (...)
+        {
+            /// If we can't create the fallback reader (e.g. the column is a virtual expression
+            /// like mapValues(...)), we simply don't create it. Abandoned pattern queries will
+            /// then fall back to is_always_true (conservative, no false negatives).
+            tryLogCurrentException(__PRETTY_FUNCTION__, "Failed to create fallback reader for pattern queries");
+        }
+    }
 }
 
 void MergeTreeReaderTextIndex::updateAllMarkRanges(const MarkRanges & ranges)
 {
     IMergeTreeReader::updateAllMarkRanges(ranges);
+
+    if (fallback_reader)
+        fallback_reader->updateAllMarkRanges(ranges);
 
     if (granule && !ranges.empty())
     {
@@ -142,8 +181,9 @@ void MergeTreeReaderTextIndex::readGranule()
 void MergeTreeReaderTextIndex::analyzeTokensCardinality()
 {
     is_always_true.resize(columns_to_read.size(), false);
+    use_fallback.resize(columns_to_read.size(), false);
     const auto & condition_text = assert_cast<const MergeTreeIndexConditionText &>(*index.condition);
-    const auto & granule_text = assert_cast<MergeTreeIndexGranuleText &>(*granule);
+    auto & granule_text = assert_cast<MergeTreeIndexGranuleText &>(*granule);
     const auto & remaining_tokens = granule_text.getRemainingTokens();
 
     for (size_t i = 0; i < columns_to_read.size(); ++i)
@@ -158,9 +198,22 @@ void MergeTreeReaderTextIndex::analyzeTokensCardinality()
         }
         else if (!search_query->patterns.empty())
         {
-            const auto & pattern_tokens = granule_text.getPatternTokensForTextQuery(*search_query);
-            for (const auto & token : pattern_tokens)
-                useful_tokens.insert(token);
+            if (!granule_text.isPatternScanFinished())
+            {
+                /// The dictionary scan was cut short: not all tokens matching the pattern
+                /// are in pattern_tokens, so filling from postings would produce false negatives.
+                /// Flag this column for the LIKE fallback evaluation.
+                if (fallback_reader)
+                    use_fallback[i] = true;
+                else
+                    is_always_true[i] = true;
+            }
+            else
+            {
+                const auto & pattern_tokens = granule_text.getPatternTokensForTextQuery(*search_query);
+                for (const auto & token : pattern_tokens)
+                    useful_tokens.insert(token);
+            }
         }
         else if (search_query->direct_read_mode == TextIndexDirectReadMode::Exact)
         {
@@ -290,6 +343,27 @@ size_t MergeTreeReaderTextIndex::readRows(
     createEmptyColumns(res_columns);
     size_t total_marks = data_part_info_for_read->getIndexGranularity().getMarksCountWithoutFinal();
 
+    /// Ensure analyzeTokensCardinality has run (it's called lazily inside canSkipMark)
+    /// so use_fallback is known before we decide whether to pre-read the body column.
+    if (!granule && max_rows_to_read > 0)
+        canSkipMark(from_mark, current_task_last_mark);
+
+    const bool any_use_fallback = !use_fallback.empty()
+        && std::any_of(use_fallback.begin(), use_fallback.end(), [](bool b) { return b; });
+
+    /// If any column needs the fallback evaluation, read the indexed body column upfront.
+    /// We pass the same mark/continue_reading/offset arguments so the fallback reader stays
+    /// in sync with the text-index reader across multiple readRows calls.
+    ColumnPtr fallback_body_column;
+    if (any_use_fallback && fallback_reader && max_rows_to_read > 0)
+    {
+        Columns fallback_cols = {nullptr};
+        fallback_reader->readRows(from_mark, current_task_last_mark, continue_reading, max_rows_to_read, rows_offset, fallback_cols);
+        fallback_body_column = fallback_cols[0];
+    }
+
+    size_t fallback_offset = 0;
+
     while (read_rows < max_rows_to_read && from_mark < total_marks)
     {
         /// When the number of rows in a part is smaller than `index_granularity`,
@@ -325,6 +399,15 @@ size_t MergeTreeReaderTextIndex::readRows(
                     auto & column_data = assert_cast<ColumnUInt8 &>(column_mutable).getData();
                     column_data.resize_fill(column_mutable.size() + rows_to_read, 1);
                 }
+                else if (use_fallback[i] && fallback_body_column)
+                {
+                    fillColumnFallback(
+                        column_mutable,
+                        columns_to_read[i].name,
+                        *fallback_body_column,
+                        fallback_offset,
+                        rows_to_read);
+                }
                 else
                 {
                     fillColumn(column_mutable, columns_to_read[i].name, mark_postings, from_row, rows_to_read);
@@ -335,6 +418,7 @@ size_t MergeTreeReaderTextIndex::readRows(
         ++from_mark;
         from_row += rows_to_read;
         read_rows += rows_to_read;
+        fallback_offset += rows_to_read;
     }
 
     /// Remove blocks that are no longer needed.
@@ -662,6 +746,36 @@ void MergeTreeReaderTextIndex::fillColumn(IColumn & column, const String & colum
     else
     {
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Invalid search mode: {}", search_query->search_mode);
+    }
+}
+
+void MergeTreeReaderTextIndex::fillColumnFallback(
+    IColumn & column,
+    const String & column_name,
+    const IColumn & body_column,
+    size_t body_col_offset,
+    size_t num_rows) const
+{
+    auto & column_data = assert_cast<ColumnUInt8 &>(column).getData();
+    const auto & condition_text = assert_cast<const MergeTreeIndexConditionText &>(*index.condition);
+    auto search_query = condition_text.getSearchQueryForVirtualColumn(column_name);
+    chassert(!search_query->patterns.empty());
+
+    const bool is_negated = (search_query->function_name == "notLike" || search_query->function_name == "notILike");
+
+    const size_t old_size = column_data.size();
+    column_data.resize(old_size + num_rows);
+
+    for (size_t i = 0; i < num_rows; ++i)
+    {
+        auto str = body_column.getDataAt(body_col_offset + i);
+        bool matches = std::ranges::any_of(
+            search_query->patterns,
+            [&](const OptimizedRegularExpression & pattern)
+            {
+                return pattern.match(str.data(), str.size());
+            });
+        column_data[old_size + i] = (matches != is_negated) ? 1 : 0;
     }
 }
 

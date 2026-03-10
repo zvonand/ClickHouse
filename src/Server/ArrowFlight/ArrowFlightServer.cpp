@@ -337,6 +337,7 @@ namespace
         }
         void onFinish() { block_io.onFinish(); }
         void onException() { block_io.onException(); }
+        void onCancelOrConnectionLoss() { block_io.onCancelOrConnectionLoss(); }
 
     private:
         ContextPtr query_context;
@@ -497,6 +498,30 @@ public:
     {
         std::lock_guard lock{mutex};
         eraseFlightDescriptorMapByDescriptorLocked(flight_descriptor);
+    }
+
+    void eraseFlightDescriptorMapEntryLocked(const String & flight_descriptor) TSA_REQUIRES(mutex)
+    {
+        auto it_fd = flight_descriptor_to_query_id.find(flight_descriptor);
+        if (it_fd == flight_descriptor_to_query_id.end())
+            return;
+
+        String query_id = it_fd->second;
+        flight_descriptor_to_query_id.erase(it_fd);
+
+        auto it_q = query_id_to_flight_descriptors.find(query_id);
+        if (it_q == query_id_to_flight_descriptors.end())
+            return;
+
+        it_q->second.erase(flight_descriptor);
+        if (it_q->second.empty())
+            query_id_to_flight_descriptors.erase(it_q);
+    }
+
+    void eraseFlightDescriptorMapEntry(const String & flight_descriptor)
+    {
+        std::lock_guard lock{mutex};
+        eraseFlightDescriptorMapEntryLocked(flight_descriptor);
     }
 
     /// Creates a poll descriptor.
@@ -691,49 +716,92 @@ public:
     /// or after they are used by method PollFlightInfo (if setting "arrowflight.cancel_ticket_after_do_get" is set to true).
     void cancelPollDescriptor(const String & poll_descriptor)
     {
-        std::lock_guard lock{mutex};
-        auto it = poll_descriptors.find(poll_descriptor);
-        if (it != poll_descriptors.end())
+        std::unique_ptr<PollSession> poll_session_to_cancel;
         {
-            LOG_DEBUG(log, "Cancelling poll descriptor {}", poll_descriptor);
-            auto info = it->second;
-            poll_descriptors.erase(it);
-            if (info->expiration_time)
+            std::lock_guard lock{mutex};
+            auto it = poll_descriptors.find(poll_descriptor);
+            if (it != poll_descriptors.end())
             {
-                poll_descriptors_by_expiration_time.erase(std::make_pair(*info->expiration_time, poll_descriptor));
-                updateNextExpirationTime();
+                LOG_DEBUG(log, "Cancelling poll descriptor {}", poll_descriptor);
+                auto info = it->second;
+                poll_descriptors.erase(it);
+                if (info->expiration_time)
+                {
+                    poll_descriptors_by_expiration_time.erase(std::make_pair(*info->expiration_time, poll_descriptor));
+                    updateNextExpirationTime();
+                }
+            }
+            auto it2 = poll_sessions.find(poll_descriptor);
+            if (it2 != poll_sessions.end())
+            {
+                poll_session_to_cancel = std::move(it2->second);
+                poll_sessions.erase(it2);
+            }
+            eraseFlightDescriptorMapEntryLocked(poll_descriptor);
+        }
+
+        if (poll_session_to_cancel)
+        {
+            try
+            {
+                poll_session_to_cancel->onCancelOrConnectionLoss();
+            }
+            catch (...)
+            {
+                tryLogCurrentException(log, "cancelPollDescriptor: block_io.onCancelOrConnectionLoss failed");
             }
         }
-        auto it2 = poll_sessions.find(poll_descriptor);
-        if (it2 != poll_sessions.end())
-            poll_sessions.erase(it2);
     }
 
     /// Cancels tickets and poll descriptors if the current time is greater than their expiration time.
     void cancelExpired()
     {
+        std::vector<std::unique_ptr<PollSession>> poll_sessions_to_cancel;
         auto current_time = now();
-        std::lock_guard lock{mutex};
-        while (!tickets_by_expiration_time.empty())
         {
-            auto it = tickets_by_expiration_time.begin();
-            if (current_time <= it->first)
-                break;
-            LOG_DEBUG(log, "Cancelling expired ticket {}", it->second);
-            tickets.erase(it->second);
-            tickets_by_expiration_time.erase(it);
+            std::lock_guard lock{mutex};
+            while (!tickets_by_expiration_time.empty())
+            {
+                auto it = tickets_by_expiration_time.begin();
+                if (current_time <= it->first)
+                    break;
+                LOG_DEBUG(log, "Cancelling expired ticket {}", it->second);
+                tickets.erase(it->second);
+                tickets_by_expiration_time.erase(it);
+            }
+            while (!poll_descriptors_by_expiration_time.empty())
+            {
+                auto it = poll_descriptors_by_expiration_time.begin();
+                if (current_time <= it->first)
+                    break;
+                LOG_DEBUG(log, "Cancelling expired poll descriptor {}", it->second);
+                poll_descriptors.erase(it->second);
+                auto it2 = poll_sessions.find(it->second);
+                if (it2 != poll_sessions.end())
+                {
+                    poll_sessions_to_cancel.emplace_back(std::move(it2->second));
+                    poll_sessions.erase(it2);
+                }
+                eraseFlightDescriptorMapEntryLocked(it->second);
+                poll_descriptors_by_expiration_time.erase(it);
+            }
+            updateNextExpirationTime();
         }
-        while (!poll_descriptors_by_expiration_time.empty())
+
+        for (auto & session : poll_sessions_to_cancel)
         {
-            auto it = poll_descriptors_by_expiration_time.begin();
-            if (current_time <= it->first)
-                break;
-            LOG_DEBUG(log, "Cancelling expired poll descriptor {}", it->second);
-            poll_descriptors.erase(it->second);
-            poll_sessions.erase(it->second);
-            poll_descriptors_by_expiration_time.erase(it);
+            if (!session)
+                continue;
+
+            try
+            {
+                session->onCancelOrConnectionLoss();
+            }
+            catch (...)
+            {
+                tryLogCurrentException(log, "cancelExpired: block_io.onCancelOrConnectionLoss failed");
+            }
         }
-        updateNextExpirationTime();
     }
 
     /// Waits until maybe it's time to cancel expired tickets or poll descriptors.
@@ -1850,36 +1918,34 @@ arrow::Status ArrowFlightServer::evaluatePollDescriptor(const String & poll_desc
     }
 
     ThreadGroupSwitcher thread_group_switcher{poll_session->getThreadGroup(), ThreadName::ARROW_FLIGHT};
-    bool last = false;
 
+    std::optional<String> ticket;
     try
     {
-        std::optional<String> ticket;
         UInt64 rows = 0;
         UInt64 bytes = 0;
         Block block;
-        if (poll_session->getNextBlock(block))
+        while (poll_session->getNextBlock(block))
         {
-            if (!block.empty())
-            {
-                auto header = getHeader(block.getColumnsWithTypeAndName());
-                rows = block.rows();
-                bytes = block.bytes();
-                std::vector<Chunk> chunks;
-                chunks.emplace_back(Chunk{std::move(block).getColumns(), rows});
-                std::shared_ptr<arrow::Table> table = CHColumnToArrowColumn::chunkToArrowTable(
-                    header, "Arrow", chunks,
-                    {.output_string_as_string = true, .output_unsupported_types_as_binary = poll_session->queryContext()->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]},
-                    header.size(), poll_session->getSchema());
-                auto ticket_info = calls_data->createTicket(table);
-                ticket = ticket_info->ticket;
-            }
-        }
-        else
-            last = true;
+            if (block.empty())
+                continue;
 
-        calls_data->endEvaluation(poll_descriptor, ticket, rows, bytes, last);
-        if (last)
+            auto header = getHeader(block.getColumnsWithTypeAndName());
+            rows = block.rows();
+            bytes = block.bytes();
+            std::vector<Chunk> chunks;
+            chunks.emplace_back(Chunk{std::move(block).getColumns(), rows});
+            std::shared_ptr<arrow::Table> table = CHColumnToArrowColumn::chunkToArrowTable(
+                header, "Arrow", chunks,
+                {.output_string_as_string = true, .output_unsupported_types_as_binary = poll_session->queryContext()->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]},
+                header.size(), poll_session->getSchema());
+            auto ticket_info = calls_data->createTicket(table);
+            ticket = ticket_info->ticket;
+            break;
+        }
+
+        calls_data->endEvaluation(poll_descriptor, ticket, rows, bytes, !ticket);
+        if (!ticket)
             poll_session->onFinish();
     }
     catch (...)
@@ -1894,7 +1960,7 @@ arrow::Status ArrowFlightServer::evaluatePollDescriptor(const String & poll_desc
     auto info_res = calls_data->getPollDescriptorInfo(poll_descriptor);
     ARROW_RETURN_NOT_OK(info_res);
     const auto & info = info_res.ValueOrDie();
-    if (last)
+    if (!ticket)
         calls_data->eraseFlightDescriptorMapByDescriptor(poll_descriptor);
     else
         calls_data->createPollDescriptor(std::move(poll_session), info);

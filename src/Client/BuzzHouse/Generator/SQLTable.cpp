@@ -1288,6 +1288,7 @@ void StatementGenerator::generateEngineDetails(
         const uint32_t dist_view = 5 * static_cast<uint32_t>(has_views);
         const uint32_t dist_dictionary = 5 * static_cast<uint32_t>(has_dictionaries);
         const uint32_t dist_system_table = 3 * static_cast<uint32_t>(!b.is_deterministic && !systemTables.empty());
+        const uint32_t dist_empty = 3;
 
         if (b.isDistributedEngine())
         {
@@ -1327,6 +1328,14 @@ void StatementGenerator::generateEngineDetails(
                   te->add_params()->mutable_database()->set_database(ntable.schema_name);
                   te->add_params()->mutable_table()->set_table(ntable.table_name);
                   /// Something as a placeholder
+                  b.sub = MergeTree;
+              }},
+             {dist_empty,
+              [&]
+              {
+                  /// Empty database/table — no underlying entity
+                  te->add_params()->mutable_database()->set_database("");
+                  te->add_params()->mutable_table()->set_table("");
                   b.sub = MergeTree;
               }}});
 

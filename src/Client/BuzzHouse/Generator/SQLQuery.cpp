@@ -2477,11 +2477,52 @@ void StatementGenerator::generateSelect(
 void StatementGenerator::generateTopSelect(
     RandomGenerator & rg, const bool force_global_agg, const uint32_t allowed_clauses, TopSelect * ts)
 {
-    const uint32_t ncols = std::max(std::min(this->fc.max_width - this->width, rg.randomInt<uint32_t>(1, 5)), UINT32_C(1));
+    /// ~10% of the time emit a plain `SELECT * FROM <entity>` (table, view, or dictionary) to
+    /// exercise full-scan paths without the overhead of the full query generator.
+    const bool has_t = collectionHas<SQLTable>(attached_tables);
+    const bool has_v = collectionHas<SQLView>(attached_views);
+    const bool has_d = collectionHas<SQLDictionary>(attached_dictionaries);
 
-    this->levels[this->current_level] = QueryLevel(this->current_level);
-    generateSelect(rg, true, force_global_agg, ncols, allowed_clauses, std::nullopt, ts->mutable_sel());
-    this->levels.clear();
+    if (!force_global_agg && (has_t || has_v || has_d) && rg.nextSmallNumber() < 2)
+    {
+        static const std::vector<uint32_t> limit_choices = {1, 10, 100, 1000, 10000};
+        SelectStatementCore * ssc = ts->mutable_sel()->mutable_select_core();
+        JoinedTableOrFunction * jtf = ssc->mutable_from()->mutable_tos()->add_tos_list()->mutable_joined_table();
+        ExprSchemaTable * est = jtf->mutable_tof()->mutable_est();
+        /// Collect which entity types are available and pick one uniformly
+        bool supports_final = false;
+        const uint32_t n_choices = static_cast<uint32_t>(has_t) + static_cast<uint32_t>(has_v) + static_cast<uint32_t>(has_d);
+        uint32_t choice = rg.randomInt<uint32_t>(0, n_choices - 1);
+
+        if (has_t && choice-- == 0)
+        {
+            const SQLTable & t = rg.pickRandomly(filterCollection<SQLTable>(attached_tables)).get();
+            t.setName(est, false);
+            supports_final = t.supportsFinal();
+        }
+        else if (has_v && choice-- == 0)
+        {
+            const SQLView & v = rg.pickRandomly(filterCollection<SQLView>(attached_views)).get();
+            v.setName(est, false);
+            supports_final = v.supportsFinal();
+        }
+        else
+        {
+            rg.pickRandomly(filterCollection<SQLDictionary>(attached_dictionaries)).get().setName(est, false);
+        }
+        jtf->set_final(supports_final && rg.nextSmallNumber() < 5);
+
+        /// Add a random LIMIT so we don't drag huge result sets
+        ssc->mutable_limit()->mutable_limit()->mutable_lit_val()->mutable_int_lit()->set_uint_lit(rg.pickRandomly(limit_choices));
+    }
+    else
+    {
+        const uint32_t ncols = std::max(std::min(this->fc.max_width - this->width, rg.randomInt<uint32_t>(1, 5)), UINT32_C(1));
+
+        this->levels[this->current_level] = QueryLevel(this->current_level);
+        generateSelect(rg, true, force_global_agg, ncols, allowed_clauses, std::nullopt, ts->mutable_sel());
+        this->levels.clear();
+    }
     if (fc.truncate_output || rg.nextSmallNumber() < 3)
     {
         SelectIntoFile * sif = ts->mutable_intofile();

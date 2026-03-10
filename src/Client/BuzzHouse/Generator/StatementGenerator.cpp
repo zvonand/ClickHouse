@@ -1670,8 +1670,12 @@ std::optional<String> StatementGenerator::alterSingleTable(
         const bool is_mt = t.isMergeTreeFamily();
         const bool no_peer = !t.hasDatabasePeer();
         const bool can_merge = t.can_run_merges;
-        const bool has_idxs = !t.idxs.empty();
-        const bool has_projs = !t.projs.empty();
+        const String dname_idx = t.getDatabaseName();
+        const String tname_idx = t.getTableName();
+        const uint32_t nidxs = is_mt ? fc.tableCountIndexes(dname_idx, tname_idx) : 0;
+        const uint32_t nprojs = is_mt ? fc.tableCountProjections(dname_idx, tname_idx) : 0;
+        const bool has_idxs = nidxs > 0;
+        const bool has_projs = nprojs > 0;
         const bool has_constrs = !t.constrs.empty();
         const bool has_col_settings = !allColumnSettings.at(t.teng).empty();
 
@@ -1887,16 +1891,17 @@ std::optional<String> StatementGenerator::alterSingleTable(
                      pickUpNextCols(rg, t, ms->mutable_cols());
              }},
             /// Indexes
-            {2 * static_cast<uint32_t>(no_oracle && t.idxs.size() < 3),
+            {2 * static_cast<uint32_t>(no_oracle && nidxs < 8),
              [&]
              {
                  AddIndex * add_index = ati->mutable_add_index();
-                 addTableIndex(rg, t, true, false, add_index->mutable_new_idx());
+                 addTableIndex(rg, t, false, add_index->mutable_new_idx());
                  if (has_idxs)
                  {
                      const uint32_t next_option = rg.nextSmallNumber();
                      if (next_option < 4)
-                         add_index->mutable_add_where()->mutable_idx()->set_index("i" + std::to_string(rg.pickRandomly(t.idxs)));
+                         add_index->mutable_add_where()->mutable_idx()->set_index(
+                             fc.tableGetRandomIndex(rg.nextInFullRange(), dname_idx, tname_idx));
                      else if (next_option < 8)
                          add_index->mutable_add_where()->set_first(true);
                  }
@@ -1905,7 +1910,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
              [&]
              {
                  IdxInPartition * iip = ati->mutable_materialize_index();
-                 iip->mutable_idx()->set_index("i" + std::to_string(rg.pickRandomly(t.idxs)));
+                 iip->mutable_idx()->set_index(fc.tableGetRandomIndex(rg.nextInFullRange(), dname_idx, tname_idx));
                  if (rg.nextBool())
                      generateNextTablePartition(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, iip->mutable_single_partition()->mutable_partition());
@@ -1914,13 +1919,13 @@ std::optional<String> StatementGenerator::alterSingleTable(
              [&]
              {
                  IdxInPartition * iip = ati->mutable_clear_index();
-                 iip->mutable_idx()->set_index("i" + std::to_string(rg.pickRandomly(t.idxs)));
+                 iip->mutable_idx()->set_index(fc.tableGetRandomIndex(rg.nextInFullRange(), dname_idx, tname_idx));
                  if (rg.nextBool())
                      generateNextTablePartition(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, iip->mutable_single_partition()->mutable_partition());
              }},
             {2 * static_cast<uint32_t>(no_oracle && can_merge && has_idxs),
-             [&] { ati->mutable_drop_index()->set_index("i" + std::to_string(rg.pickRandomly(t.idxs))); }},
+             [&] { ati->mutable_drop_index()->set_index(fc.tableGetRandomIndex(rg.nextInFullRange(), dname_idx, tname_idx)); }},
             /// Column properties/settings
             {2,
              [&]
@@ -1978,14 +1983,18 @@ std::optional<String> StatementGenerator::alterSingleTable(
                      generateSettingList(rg, formatSettings, sl);
              }},
             /// Projections
-            {2 * static_cast<uint32_t>(no_oracle && is_mt), [&] { addTableProjection(rg, t, true, ati->mutable_add_projection()); }},
+            {2 * static_cast<uint32_t>(no_oracle && is_mt && nprojs < 8),
+             [&] { addTableProjection(rg, t, ati->mutable_add_projection()); }},
             {2 * static_cast<uint32_t>(no_oracle && is_mt && has_projs && can_merge),
-             [&] { ati->mutable_remove_projection()->set_projection("p" + std::to_string(rg.pickRandomly(t.projs))); }},
+             [&]
+             {
+                 ati->mutable_remove_projection()->set_projection(fc.tableGetRandomProjection(rg.nextInFullRange(), dname_idx, tname_idx));
+             }},
             {2 * static_cast<uint32_t>(is_mt && can_merge && has_projs),
              [&]
              {
                  ProjectionInPartition * pip = ati->mutable_materialize_projection();
-                 pip->mutable_proj()->set_projection("p" + std::to_string(rg.pickRandomly(t.projs)));
+                 pip->mutable_proj()->set_projection(fc.tableGetRandomProjection(rg.nextInFullRange(), dname_idx, tname_idx));
                  if (rg.nextBool())
                      generateNextTablePartition(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, pip->mutable_single_partition()->mutable_partition());
@@ -1994,7 +2003,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
              [&]
              {
                  ProjectionInPartition * pip = ati->mutable_clear_projection();
-                 pip->mutable_proj()->set_projection("p" + std::to_string(rg.pickRandomly(t.projs)));
+                 pip->mutable_proj()->set_projection(fc.tableGetRandomProjection(rg.nextInFullRange(), dname_idx, tname_idx));
                  if (rg.nextBool())
                      generateNextTablePartition(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, pip->mutable_single_partition()->mutable_partition());
@@ -2070,7 +2079,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  ClearIndexInPartition * ccip = ati->mutable_clear_index_partition();
                  generateNextTablePartition(
                      rg, 0, rg.nextSmallNumber() < 3, false, t, ccip->mutable_single_partition()->mutable_partition());
-                 ccip->mutable_idx()->set_index("i" + std::to_string(rg.pickRandomly(t.idxs)));
+                 ccip->mutable_idx()->set_index(fc.tableGetRandomIndex(rg.nextInFullRange(), dname_idx, tname_idx));
              }},
             {5 * static_cast<uint32_t>(no_oracle && is_mt && !fc.disks.empty()),
              [&]
@@ -3820,38 +3829,6 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                     {
                         t.cols.at(cname).dmod = std::nullopt;
                     }
-                }
-                else if (ati.has_add_index())
-                {
-                    const uint32_t iname = getIdentifierFromString(ati.add_index().new_idx().idx().index());
-
-                    if (success && t.staged_idxs.contains(iname))
-                    {
-                        t.idxs[iname] = std::move(t.staged_idxs[iname]);
-                    }
-                    t.staged_idxs.erase(iname);
-                }
-                else if (ati.has_drop_index() && success)
-                {
-                    const uint32_t iname = getIdentifierFromString(ati.drop_index().index());
-
-                    t.idxs.erase(iname);
-                }
-                else if (ati.has_add_projection())
-                {
-                    const uint32_t pname = getIdentifierFromString(ati.add_projection().proj().projection());
-
-                    if (success)
-                    {
-                        t.projs.insert(pname);
-                    }
-                    t.staged_projs.erase(pname);
-                }
-                else if (ati.has_remove_projection() && success)
-                {
-                    const uint32_t pname = getIdentifierFromString(ati.remove_projection().projection());
-
-                    t.projs.erase(pname);
                 }
                 else if (ati.has_add_constraint())
                 {

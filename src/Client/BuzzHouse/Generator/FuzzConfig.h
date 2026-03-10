@@ -402,6 +402,10 @@ private:
         loadServerSettings(out, desc, query, [](const String & s) -> T { return s; });
     }
 
+    uint32_t tableCountSystemRows(const String & system_table, const String & database, const String & table);
+
+    String tableGetRandomSystemName(uint64_t rand_val, const String & system_table, const String & database, const String & table);
+
 public:
     void loadServerConfigurations();
 
@@ -422,6 +426,14 @@ public:
     bool tableHasPartitions(bool detached, const String & database, const String & table);
 
     String tableGetRandomPartitionOrPart(uint64_t rand_val, bool detached, bool partition, const String & database, const String & table);
+
+    uint32_t tableCountIndexes(const String & database, const String & table);
+
+    String tableGetRandomIndex(uint64_t rand_val, const String & database, const String & table);
+
+    uint32_t tableCountProjections(const String & database, const String & table);
+
+    String tableGetRandomProjection(uint64_t rand_val, const String & database, const String & table);
 
     void comparePerformanceResults(const String & oracle_name, PerformanceResult & server, PerformanceResult & peer) const;
 

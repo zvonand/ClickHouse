@@ -535,9 +535,9 @@ auto StatementGenerator::getQueryTableLambda()
             /* May by replaced by a table engine */
             && (req != TableRequirement::RequireReplaceable || tt.isEngineReplaceable())
             /* May require a projection */
-            && (req != TableRequirement::RequireProjection || !tt.projs.empty())
+            && (req != TableRequirement::RequireProjection || fc.tableCountProjections(tt.getDatabaseName(), tt.getTableName()) > 0)
             /* May require an index */
-            && (req != TableRequirement::RequireIndex || !tt.idxs.empty());
+            && (req != TableRequirement::RequireIndex || fc.tableCountIndexes(tt.getDatabaseName(), tt.getTableName()) > 0);
     };
 }
 
@@ -1155,7 +1155,8 @@ bool StatementGenerator::joinedTableOrFunction(
             const SQLTable & tt = rg.pickRandomly(filterCollection<SQLTable>(has_projection_table_lambda));
 
             tt.setName(mtudf->mutable_est(), true);
-            mtudf->mutable_proj()->set_projection("p" + std::to_string(rg.pickRandomly(tt.projs)));
+            mtudf->mutable_proj()->set_projection(
+                fc.tableGetRandomProjection(rg.nextInFullRange(), tt.getDatabaseName(), tt.getTableName()));
             addTableRelation(rg, true, rel_name, tt);
             SQLRelation & rel = this->levels.at(this->current_level).rels.back();
 
@@ -1175,7 +1176,7 @@ bool StatementGenerator::joinedTableOrFunction(
             const SQLTable & tt = rg.pickRandomly(filterCollection<SQLTable>(has_idx_table_lambda));
 
             tt.setName(mtudf->mutable_est(), true);
-            mtudf->mutable_idx()->set_index("i" + std::to_string(rg.pickRandomly(tt.idxs)));
+            mtudf->mutable_idx()->set_index(fc.tableGetRandomIndex(rg.nextInFullRange(), tt.getDatabaseName(), tt.getTableName()));
 
             rel.cols.emplace_back(SQLRelationCol(rel_name, {"part_name"}, string_tp.get()));
             rel.cols.emplace_back(SQLRelationCol(rel_name, {"token"}, string_tp.get()));

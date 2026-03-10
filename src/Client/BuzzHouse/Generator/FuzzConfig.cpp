@@ -750,6 +750,77 @@ String FuzzConfig::tableGetRandomPartitionOrPart(
     return res;
 }
 
+uint32_t FuzzConfig::tableCountSystemRows(const String & system_table, const String & database, const String & table)
+{
+    String buf;
+    const String & db_clause = database.empty() ? "" : (R"("database" = ')" + database + "' AND ");
+
+    if (processServerQuery(
+            false,
+            fmt::format(
+                R"(SELECT count() FROM "system"."{}" WHERE {}"table" = '{}' INTO OUTFILE '{}' TRUNCATE FORMAT TabSeparated;)",
+                system_table,
+                db_clause,
+                table,
+                fuzzer_out_file.generic_string())))
+    {
+        std::ifstream infile(fuzzer_out_file);
+        if (std::getline(infile, buf) && !buf.empty())
+        {
+            return static_cast<uint32_t>(std::stoul(buf));
+        }
+    }
+    return 0;
+}
+
+String
+FuzzConfig::tableGetRandomSystemName(const uint64_t rand_val, const String & system_table, const String & database, const String & table)
+{
+    String res;
+    const String & db_clause = database.empty() ? "" : (R"("database" = ')" + database + "' AND ");
+
+    /// These system tables don't support sampling, so pick a random row with a window function
+    if (processServerQuery(
+            false,
+            fmt::format(
+                "SELECT z.y FROM (SELECT (row_number() OVER () - 1) AS x, \"name\" AS y FROM \"system\".\"{}\" WHERE "
+                "{} \"table\" = '{}') AS z WHERE z.x = (SELECT {} % max2(count(), 1) FROM \"system\".\"{}\" WHERE "
+                "{} \"table\" = '{}') INTO OUTFILE '{}' TRUNCATE FORMAT TabSeparated;",
+                system_table,
+                db_clause,
+                table,
+                rand_val,
+                system_table,
+                db_clause,
+                table,
+                fuzzer_out_file.generic_string())))
+    {
+        std::ifstream infile(fuzzer_out_file, std::ios::in);
+        std::getline(infile, res);
+    }
+    return res;
+}
+
+uint32_t FuzzConfig::tableCountIndexes(const String & database, const String & table)
+{
+    return tableCountSystemRows("data_skipping_indices", database, table);
+}
+
+String FuzzConfig::tableGetRandomIndex(const uint64_t rand_val, const String & database, const String & table)
+{
+    return tableGetRandomSystemName(rand_val, "data_skipping_indices", database, table);
+}
+
+uint32_t FuzzConfig::tableCountProjections(const String & database, const String & table)
+{
+    return tableCountSystemRows("projections", database, table);
+}
+
+String FuzzConfig::tableGetRandomProjection(const uint64_t rand_val, const String & database, const String & table)
+{
+    return tableGetRandomSystemName(rand_val, "projections", database, table);
+}
+
 void FuzzConfig::validateClickHouseHealth()
 {
     if (processServerQuery(

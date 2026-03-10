@@ -1169,13 +1169,6 @@ static void dupTableDef(SQLTable & next, const SQLTable & t)
     {
         next.cols[col.first] = col.second;
     }
-    next.idxs.clear();
-    for (const auto & idx : t.idxs)
-    {
-        next.idxs[idx.first] = idx.second;
-    }
-    next.projs.clear();
-    next.projs.insert(t.projs.begin(), t.projs.end());
     next.constrs.clear();
     next.constrs.insert(t.constrs.begin(), t.constrs.end());
     next.col_counter = t.col_counter;
@@ -1729,7 +1722,7 @@ void StatementGenerator::addTableColumn(
     this->next_type_mask = type_mask_backup;
 }
 
-void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const bool staged, const bool projection, IndexDef * idef)
+void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const bool projection, IndexDef * idef)
 {
     Expr * expr = idef->mutable_expr();
     std::uniform_int_distribution<uint32_t> idx_range(1, static_cast<uint32_t>(IndexType::IDX_text));
@@ -1927,12 +1920,7 @@ void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const
     }
     if (!projection)
     {
-        SQLIndex idx;
-        auto & to_add = staged ? t.staged_idxs : t.idxs;
-        const uint32_t iname = t.idx_counter++;
-
-        idx.iname = iname;
-        idef->mutable_idx()->set_index("i" + std::to_string(iname));
+        idef->mutable_idx()->set_index("i" + std::to_string(t.idx_counter++));
         if (rg.nextSmallNumber() < 7)
         {
             uint32_t granularity = 1;
@@ -1948,16 +1936,12 @@ void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const
             }
             idef->set_granularity(granularity);
         }
-        to_add[iname] = std::move(idx);
     }
 }
 
-void StatementGenerator::addTableProjection(RandomGenerator & rg, SQLTable & t, const bool staged, ProjectionDef * pdef)
+void StatementGenerator::addTableProjection(RandomGenerator & rg, SQLTable & t, ProjectionDef * pdef)
 {
-    const uint32_t pname = t.proj_counter++;
-    auto & to_add = staged ? t.staged_projs : t.projs;
-
-    pdef->mutable_proj()->set_projection("p" + std::to_string(pname));
+    pdef->mutable_proj()->set_projection("p" + std::to_string(t.proj_counter++));
     this->inside_projection = true;
     if (rg.nextBool())
     {
@@ -1997,10 +1981,9 @@ void StatementGenerator::addTableProjection(RandomGenerator & rg, SQLTable & t, 
     }
     else
     {
-        addTableIndex(rg, t, staged, true, pdef->mutable_idx_def());
+        addTableIndex(rg, t, true, pdef->mutable_idx_def());
     }
     this->inside_projection = false;
-    to_add.insert(pname);
 }
 
 void StatementGenerator::addTableConstraint(RandomGenerator & rg, SQLTable & t, const bool staged, ConstraintDef * cdef)
@@ -2394,13 +2377,13 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
                 {{add_idx,
                   [&]
                   {
-                      addTableIndex(rg, next, false, false, ndef->mutable_idx_def());
+                      addTableIndex(rg, next, false, ndef->mutable_idx_def());
                       added_idxs++;
                   }},
                  {add_proj,
                   [&]
                   {
-                      addTableProjection(rg, next, false, ndef->mutable_proj_def());
+                      addTableProjection(rg, next, ndef->mutable_proj_def());
                       added_projs++;
                   }},
                  {add_const,
@@ -2521,7 +2504,7 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
     setClusterClause(rg, next.cluster, ct->mutable_cluster());
     if ((next.isAnyIcebergEngine() && next.integration == IntegrationCall::Dolor && next.getLakeCatalog() == LakeCatalog::None)
         || ((next.isDistributedEngine() || next.isBufferEngine() || next.isAliasEngine()) && rg.nextMediumNumber() < 96)
-        || (next.projs.empty() && next.idxs.empty() && next.constrs.empty() && rg.nextMediumNumber() < 11))
+        || (next.constrs.empty() && rg.nextMediumNumber() < 11))
     {
         /// For Iceberg tables created from Spark, don't give table schema
         ct->clear_table_def();

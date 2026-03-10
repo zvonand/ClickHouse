@@ -7,6 +7,7 @@
 #include <functional>
 #include <limits>
 #include <map>
+#include <optional>
 #include <vector>
 
 #include <Core/Field.h>
@@ -17,43 +18,83 @@
 namespace DB::Iceberg
 {
 
-/// Generic field-level parsers reusable across Iceberg EXECUTE commands.
-Int64 parseInt64Field(const Field & value, std::string_view command_name, std::string_view arg_name);
-bool parseBoolField(const Field & value, std::string_view command_name, std::string_view arg_name);
+/// Supported argument types for declarative registration.
+enum class ArgType
+{
+    Int64,
+    Bool,
+    String,
+    Array,
+    Field,
+};
+
+/// Immutable result returned by IcebergCommandArgumentsParser::parse().
+class ParsedArguments
+{
+public:
+    bool has(const String & name) const;
+
+    Int64 getInt64(const String & name) const;
+    bool getBool(const String & name) const;
+    String getString(const String & name) const;
+    const Array & getArray(const String & name) const;
+    const DB::Field & getField(const String & name) const;
+
+    std::optional<Int64> tryGetInt64(const String & name) const;
+    std::optional<bool> tryGetBool(const String & name) const;
+    std::optional<String> tryGetString(const String & name) const;
+
+    const std::vector<DB::Field> & positional() const { return positional_values; }
+
+private:
+    friend class IcebergCommandArgumentsParser;
+
+    std::map<String, DB::Field> named_values;
+    std::vector<DB::Field> positional_values;
+    String command_name;
+};
 
 /// General-purpose argument parser for Iceberg EXECUTE commands.
 ///
-/// Usage pattern:
+/// Usage pattern (declarative):
 ///   1. Create a parser with the command name.
-///   2. Register positional argument handlers via addPositional().
-///   3. Register named (key = value) argument handlers via addNamedArg().
+///   2. Register positional argument count via addPositional().
+///   3. Register named arguments via addNamedArg(name, type).
 ///   4. Register post-parse constraint validators via addConstraint().
-///   5. Call parse() with the AST arguments node.
+///   5. Call parse() -- returns a ParsedArguments with typed getters.
 ///
-/// The parser handles:
-///   - Splitting positional arguments from key=value arguments.
-///   - Rejecting extra positional arguments beyond registered count.
-///   - Rejecting unknown named arguments with a helpful error.
-///   - Calling constraint validators after all arguments are processed.
+/// For arguments that need custom transformation (e.g. duration strings
+/// to milliseconds), use addNamedArg with ArgType::Field or ArgType::String
+/// and transform after parse().
 class IcebergCommandArgumentsParser
 {
 public:
-    using PositionalHandler = std::function<void(const ASTPtr &)>;
-    using NamedHandler = std::function<void(const Field &)>;
-    using Validator = std::function<void()>;
+    using Validator = std::function<void(const ParsedArguments &)>;
 
     explicit IcebergCommandArgumentsParser(String command_name_);
 
-    void addPositional(PositionalHandler handler);
-    void addNamedArg(const String & name, NamedHandler handler);
+    /// Register that the command accepts a positional argument.
+    /// Positional arguments are returned as raw Fields in ParsedArguments::positional().
+    void addPositional();
+
+    /// Register a named argument with a declared type.
+    /// The parser will validate that the provided value matches the type.
+    void addNamedArg(const String & name, ArgType type);
+
+    /// Register a post-parse constraint that receives the parsed result.
     void addConstraint(Validator validator);
 
-    void parse(const ASTPtr & args, ContextPtr context) const;
+    /// Parse the AST arguments and return a typed result.
+    ParsedArguments parse(const ASTPtr & args, ContextPtr context) const;
+
+    const String & commandName() const { return command_name; }
 
 private:
+    DB::Field convertField(const String & name, ArgType type, const DB::Field & raw) const;
+
     String command_name;
-    std::vector<PositionalHandler> positional_handlers;
-    std::map<String, NamedHandler> named_handlers;
+    size_t positional_count = 0;
+    std::map<String, ArgType> named_args;
     std::vector<Validator> constraints;
 };
 

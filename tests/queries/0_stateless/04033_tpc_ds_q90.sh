@@ -7,16 +7,7 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-SETTINGS=(
-    --data_type_default_nullable=1
-    --format_tsv_null_representation ''
-    --group_by_use_nulls=1
-    --intersect_default_mode=DISTINCT
-    --joined_subquery_requires_alias=0
-    --join_use_nulls=1
-    --union_default_mode=DISTINCT
-    --format=TabSeparatedRaw
-    -m
-)
+# shellcheck source=./04033_tpc_ds.lib
+. "$CURDIR"/04033_tpc_ds.lib
 
 { echo "USE datasets;"; cat "$CURDIR/../../benchmarks/tpc-ds/queries/query_90.sql"; } | $CLICKHOUSE_CLIENT "${SETTINGS[@]}"

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Shared settings for TPC-DS tests, derived from tests/benchmarks/tpc-ds/settings.json.
+
+TPCDS_SETTINGS_JSON="$CURDIR/../../benchmarks/tpc-ds/settings.json"
+
+SETTINGS=(-m)
+readarray -t _tpcds_lines < <(jq -r '
+    "--format", .format,
+    (.settings | to_entries[] | "--\(.key)", (.value | tostring))
+' "$TPCDS_SETTINGS_JSON")
+SETTINGS+=("${_tpcds_lines[@]}")

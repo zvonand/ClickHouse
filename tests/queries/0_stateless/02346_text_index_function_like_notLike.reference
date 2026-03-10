@@ -11,6 +11,12 @@ Test results are same with/without the optimization
 [1,3]
 []
 [2,4]
+[1,3]
+[1]
+[3]
+[1,2,3,4]
+[1]
+[1]
 -- with optimization
 [1,3]
 [2,4]
@@ -23,6 +29,12 @@ Test results are same with/without the optimization
 [1,3]
 []
 [2,4]
+[1,3]
+[1]
+[3]
+[1,2,3,4]
+[1]
+[1]
 Test results are same with/without the optimization with preprocessor
 -- without optimization
 [3]
@@ -38,21 +50,6 @@ Test results are same with/without the optimization with preprocessor
 [1,2,4,5]
 [4]
 [1,2,5]
-Test results are same with/without the optimization combined with hasToken, hasAnyTokens, hasAllTokens
--- without optimization
-[1,3]
-[1]
-[3]
-[1,2,3,4]
-[1]
-[1]
--- with optimization
-[1,3]
-[1]
-[3]
-[1,2,3,4]
-[1]
-[1]
 Text index analysis
 -- Text index for LIKE function should choose none for non-existent token
 Description: text GRANULARITY 100000000

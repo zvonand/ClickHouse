@@ -547,7 +547,7 @@ When no timestamp is provided, only the retention policy governs which snapshots
 
 Additional named arguments:
 
-- `retention_period = '3d'` overrides `history.expire.max-snapshot-age-ms` for this invocation only.
+- `retention_period = '<duration>'` overrides `history.expire.max-snapshot-age-ms` for this invocation only. The value is a duration string consisting of one or more `{number}{unit}` pairs concatenated together. Supported units: `y` (365 days), `w` (7 days), `d` (24 hours), `h` (60 minutes), `m` (60 seconds), `s` (1 second), `ms` (1 millisecond). Units can be combined, e.g. `'3d'`, `'12h'`, `'1d12h30m'`, `'500ms'`.
 - `retain_last = N` overrides `history.expire.min-snapshots-to-keep` for this invocation only.
 - `snapshot_ids = [id1, id2, ...]` expires exactly the listed snapshot IDs (except snapshots referenced by current snapshot, branches, or tags). This mode cannot be combined with `retention_period` or `retain_last`.
 - The positional `timestamp` argument can be combined with `snapshot_ids` and acts as a fuse: listed snapshots at or newer than the timestamp are not expired.

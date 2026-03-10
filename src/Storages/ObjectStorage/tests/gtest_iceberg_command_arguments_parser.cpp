@@ -22,7 +22,6 @@ extern const int BAD_ARGUMENTS;
 namespace
 {
 
-/// Build an ASTFunction representing `key = value` as the parser expects.
 ASTPtr makeKV(const String & key, Field value)
 {
     auto args = make_intrusive<ASTExpressionList>();
@@ -36,7 +35,6 @@ ASTPtr makeKV(const String & key, Field value)
     return func;
 }
 
-/// Build an ASTExpressionList from child ASTs.
 ASTPtr makeArgList(ASTs children)
 {
     auto list = make_intrusive<ASTExpressionList>();
@@ -44,124 +42,90 @@ ASTPtr makeArgList(ASTs children)
     return list;
 }
 
-ContextPtr ctx()
-{
-    return getContext().context;
-}
+ContextPtr ctx() { return getContext().context; }
 
 }
 
-// ---- Basic named argument parsing ----
+/// ----- Parameterized: successful type conversion -----
 
-TEST(IcebergCommandArgumentsParser, NamedInt64)
+struct ParseOKCase
 {
+    String name;
+    ArgType type;
+    Field input;
+    Field expected;
+};
+
+class ParseOK : public ::testing::TestWithParam<ParseOKCase> {};
+
+TEST_P(ParseOK, NamedArgParsesCorrectly)
+{
+    auto [name, type, input, expected] = GetParam();
+
     IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("count", ArgType::Int64);
+    parser.addNamedArg(name, type);
 
-    auto args = makeArgList({makeKV("count", Field(Int64(42)))});
-    auto result = parser.parse(args, ctx());
-
-    ASSERT_TRUE(result.has("count"));
-    ASSERT_EQ(result.getInt64("count"), 42);
+    auto result = parser.parse(makeArgList({makeKV(name, input)}), ctx());
+    ASSERT_TRUE(result.has(name));
+    ASSERT_EQ(result.getField(name), expected);
 }
 
-TEST(IcebergCommandArgumentsParser, NamedUInt64ConvertedToInt64)
+INSTANTIATE_TEST_SUITE_P(IcebergArgs, ParseOK, ::testing::Values(
+    ParseOKCase{"count",  ArgType::Int64,  Field(Int64(42)),   Field(Int64(42))},
+    ParseOKCase{"count",  ArgType::Int64,  Field(UInt64(100)), Field(Int64(100))},
+    ParseOKCase{"flag",   ArgType::Bool,   Field(true),        Field(true)},
+    ParseOKCase{"flag",   ArgType::Bool,   Field("True"),      Field(true)},
+    ParseOKCase{"flag",   ArgType::Bool,   Field("false"),     Field(false)},
+    ParseOKCase{"flag",   ArgType::Bool,   Field(UInt64(0)),   Field(false)},
+    ParseOKCase{"name",   ArgType::String, Field("hello"),     Field("hello")},
+    ParseOKCase{"any",    ArgType::Field,  Field(3.14),        Field(3.14)}
+));
+
+/// ----- Parameterized: type mismatch (should throw) -----
+
+struct TypeMismatchCase
 {
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("count", ArgType::Int64);
+    String name;
+    ArgType type;
+    Field input;
+};
 
-    auto args = makeArgList({makeKV("count", Field(UInt64(100)))});
-    auto result = parser.parse(args, ctx());
+class TypeMismatch : public ::testing::TestWithParam<TypeMismatchCase> {};
 
-    ASSERT_TRUE(result.has("count"));
-    ASSERT_EQ(result.getInt64("count"), 100);
-}
-
-TEST(IcebergCommandArgumentsParser, NamedBoolFromTrue)
+TEST_P(TypeMismatch, Throws)
 {
+    auto [name, type, input] = GetParam();
+
     IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("flag", ArgType::Bool);
+    parser.addNamedArg(name, type);
 
-    auto args = makeArgList({makeKV("flag", Field(true))});
-    auto result = parser.parse(args, ctx());
-
-    ASSERT_TRUE(result.has("flag"));
-    ASSERT_TRUE(result.getBool("flag"));
+    ASSERT_THROW(parser.parse(makeArgList({makeKV(name, input)}), ctx()), Exception);
 }
 
-TEST(IcebergCommandArgumentsParser, NamedBoolFromStringCaseInsensitive)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("flag", ArgType::Bool);
+INSTANTIATE_TEST_SUITE_P(IcebergArgs, TypeMismatch, ::testing::Values(
+    TypeMismatchCase{"count", ArgType::Int64,  Field("not_a_number")},
+    TypeMismatchCase{"name",  ArgType::String, Field(Int64(42))},
+    TypeMismatchCase{"ids",   ArgType::Array,  Field(Int64(1))},
+    TypeMismatchCase{"flag",  ArgType::Bool,   Field("maybe")}
+));
 
-    auto args = makeArgList({makeKV("flag", Field("True"))});
-    auto result = parser.parse(args, ctx());
+/// ----- Non-parameterized tests for structural behavior -----
 
-    ASSERT_TRUE(result.getBool("flag"));
-}
-
-TEST(IcebergCommandArgumentsParser, NamedBoolFromInt)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("flag", ArgType::Bool);
-
-    auto args = makeArgList({makeKV("flag", Field(UInt64(0)))});
-    auto result = parser.parse(args, ctx());
-
-    ASSERT_FALSE(result.getBool("flag"));
-}
-
-TEST(IcebergCommandArgumentsParser, NamedString)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("name", ArgType::String);
-
-    auto args = makeArgList({makeKV("name", Field("hello"))});
-    auto result = parser.parse(args, ctx());
-
-    ASSERT_TRUE(result.has("name"));
-    ASSERT_EQ(result.getString("name"), "hello");
-}
-
-TEST(IcebergCommandArgumentsParser, NamedArray)
+TEST(IcebergCommandArgumentsParser, ArrayArg)
 {
     IcebergCommandArgumentsParser parser("test_cmd");
     parser.addNamedArg("ids", ArgType::Array);
 
     Array arr{Field(Int64(1)), Field(Int64(2)), Field(Int64(3))};
-    auto args = makeArgList({makeKV("ids", Field(arr))});
-    auto result = parser.parse(args, ctx());
+    auto result = parser.parse(makeArgList({makeKV("ids", Field(arr))}), ctx());
 
-    ASSERT_TRUE(result.has("ids"));
     const auto & got = result.getArray("ids");
     ASSERT_EQ(got.size(), 3);
     ASSERT_EQ(got[0].safeGet<Int64>(), 1);
     ASSERT_EQ(got[2].safeGet<Int64>(), 3);
 }
 
-TEST(IcebergCommandArgumentsParser, NamedField)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("anything", ArgType::Field);
-
-    auto args = makeArgList({makeKV("anything", Field(3.14))});
-    auto result = parser.parse(args, ctx());
-
-    ASSERT_TRUE(result.has("anything"));
-}
-
-// ---- Missing arguments ----
-
-TEST(IcebergCommandArgumentsParser, MissingArgReturnsFalseOnHas)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("x", ArgType::Int64);
-
-    auto result = parser.parse(nullptr, ctx());
-    ASSERT_FALSE(result.has("x"));
-}
-
-TEST(IcebergCommandArgumentsParser, TryGetReturnsNulloptWhenMissing)
+TEST(IcebergCommandArgumentsParser, MissingArgAndTryGet)
 {
     IcebergCommandArgumentsParser parser("test_cmd");
     parser.addNamedArg("x", ArgType::Int64);
@@ -169,133 +133,28 @@ TEST(IcebergCommandArgumentsParser, TryGetReturnsNulloptWhenMissing)
     parser.addNamedArg("z", ArgType::String);
 
     auto result = parser.parse(nullptr, ctx());
+    ASSERT_FALSE(result.has("x"));
     ASSERT_FALSE(result.tryGetInt64("x").has_value());
     ASSERT_FALSE(result.tryGetBool("y").has_value());
     ASSERT_FALSE(result.tryGetString("z").has_value());
+    ASSERT_TRUE(result.positional().empty());
 }
 
-// ---- Positional arguments ----
-
-TEST(IcebergCommandArgumentsParser, SinglePositional)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addPositional();
-
-    auto args = makeArgList({make_intrusive<ASTLiteral>(Field("2025-01-01 00:00:00"))});
-    auto result = parser.parse(args, ctx());
-
-    ASSERT_EQ(result.positional().size(), 1);
-    ASSERT_EQ(result.positional()[0].safeGet<String>(), "2025-01-01 00:00:00");
-}
-
-TEST(IcebergCommandArgumentsParser, PositionalAndNamed)
+TEST(IcebergCommandArgumentsParser, Positional)
 {
     IcebergCommandArgumentsParser parser("test_cmd");
     parser.addPositional();
     parser.addNamedArg("dry_run", ArgType::Bool);
 
-    auto args = makeArgList({
+    auto result = parser.parse(makeArgList({
         make_intrusive<ASTLiteral>(Field("2025-01-01 00:00:00")),
         makeKV("dry_run", Field(true)),
-    });
-    auto result = parser.parse(args, ctx());
+    }), ctx());
 
     ASSERT_EQ(result.positional().size(), 1);
+    ASSERT_EQ(result.positional()[0].safeGet<String>(), "2025-01-01 00:00:00");
     ASSERT_TRUE(result.getBool("dry_run"));
 }
-
-// ---- Error cases ----
-
-TEST(IcebergCommandArgumentsParser, UnknownArgThrows)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("x", ArgType::Int64);
-
-    auto args = makeArgList({makeKV("unknown_arg", Field(Int64(1)))});
-    ASSERT_THROW(parser.parse(args, ctx()), Exception);
-}
-
-TEST(IcebergCommandArgumentsParser, TooManyPositionalsThrows)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addPositional();
-
-    auto args = makeArgList({
-        make_intrusive<ASTLiteral>(Field("a")),
-        make_intrusive<ASTLiteral>(Field("b")),
-    });
-    ASSERT_THROW(parser.parse(args, ctx()), Exception);
-}
-
-TEST(IcebergCommandArgumentsParser, TypeMismatchStringForInt64Throws)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("count", ArgType::Int64);
-
-    auto args = makeArgList({makeKV("count", Field("not_a_number"))});
-    ASSERT_THROW(parser.parse(args, ctx()), Exception);
-}
-
-TEST(IcebergCommandArgumentsParser, TypeMismatchIntForStringThrows)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("name", ArgType::String);
-
-    auto args = makeArgList({makeKV("name", Field(Int64(42)))});
-    ASSERT_THROW(parser.parse(args, ctx()), Exception);
-}
-
-TEST(IcebergCommandArgumentsParser, TypeMismatchIntForArrayThrows)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("ids", ArgType::Array);
-
-    auto args = makeArgList({makeKV("ids", Field(Int64(1)))});
-    ASSERT_THROW(parser.parse(args, ctx()), Exception);
-}
-
-TEST(IcebergCommandArgumentsParser, BoolRejectsGarbageString)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("flag", ArgType::Bool);
-
-    auto args = makeArgList({makeKV("flag", Field("maybe"))});
-    ASSERT_THROW(parser.parse(args, ctx()), Exception);
-}
-
-// ---- Constraints ----
-
-TEST(IcebergCommandArgumentsParser, ConstraintPasses)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("a", ArgType::Int64);
-    parser.addNamedArg("b", ArgType::Int64);
-
-    parser.addConstraint([](const ParsedArguments & parsed) {
-        if (parsed.has("a") && parsed.has("b"))
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "a and b are mutually exclusive");
-    });
-
-    auto args = makeArgList({makeKV("a", Field(Int64(1)))});
-    ASSERT_NO_THROW(parser.parse(args, ctx()));
-}
-
-TEST(IcebergCommandArgumentsParser, ConstraintFails)
-{
-    IcebergCommandArgumentsParser parser("test_cmd");
-    parser.addNamedArg("a", ArgType::Int64);
-    parser.addNamedArg("b", ArgType::Int64);
-
-    parser.addConstraint([](const ParsedArguments & parsed) {
-        if (parsed.has("a") && parsed.has("b"))
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "a and b are mutually exclusive");
-    });
-
-    auto args = makeArgList({makeKV("a", Field(Int64(1))), makeKV("b", Field(Int64(2)))});
-    ASSERT_THROW(parser.parse(args, ctx()), Exception);
-}
-
-// ---- Multiple named args ----
 
 TEST(IcebergCommandArgumentsParser, MultipleNamedArgs)
 {
@@ -304,38 +163,56 @@ TEST(IcebergCommandArgumentsParser, MultipleNamedArgs)
     parser.addNamedArg("retain_last", ArgType::Int64);
     parser.addNamedArg("dry_run", ArgType::Bool);
 
-    auto args = makeArgList({
+    auto result = parser.parse(makeArgList({
         makeKV("retention_period", Field("3d")),
         makeKV("retain_last", Field(Int64(5))),
         makeKV("dry_run", Field(true)),
-    });
-    auto result = parser.parse(args, ctx());
+    }), ctx());
 
     ASSERT_EQ(result.getString("retention_period"), "3d");
     ASSERT_EQ(result.getInt64("retain_last"), 5);
     ASSERT_TRUE(result.getBool("dry_run"));
 }
 
-// ---- Empty / null args ----
-
-TEST(IcebergCommandArgumentsParser, NullArgsReturnsEmptyResult)
+TEST(IcebergCommandArgumentsParser, UnknownArgThrows)
 {
     IcebergCommandArgumentsParser parser("test_cmd");
     parser.addNamedArg("x", ArgType::Int64);
-    parser.addPositional();
 
-    auto result = parser.parse(nullptr, ctx());
-    ASSERT_FALSE(result.has("x"));
-    ASSERT_TRUE(result.positional().empty());
+    ASSERT_THROW(parser.parse(makeArgList({makeKV("bad", Field(Int64(1)))}), ctx()), Exception);
 }
 
-TEST(IcebergCommandArgumentsParser, EmptyArgListReturnsEmptyResult)
+TEST(IcebergCommandArgumentsParser, TooManyPositionalsThrows)
+{
+    IcebergCommandArgumentsParser parser("test_cmd");
+    parser.addPositional();
+
+    ASSERT_THROW(parser.parse(makeArgList({
+        make_intrusive<ASTLiteral>(Field("a")),
+        make_intrusive<ASTLiteral>(Field("b")),
+    }), ctx()), Exception);
+}
+
+TEST(IcebergCommandArgumentsParser, ConstraintValidation)
+{
+    IcebergCommandArgumentsParser parser("test_cmd");
+    parser.addNamedArg("a", ArgType::Int64);
+    parser.addNamedArg("b", ArgType::Int64);
+    parser.addConstraint([](const ParsedArguments & p) {
+        if (p.has("a") && p.has("b"))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "a and b are mutually exclusive");
+    });
+
+    ASSERT_NO_THROW(parser.parse(makeArgList({makeKV("a", Field(Int64(1)))}), ctx()));
+    ASSERT_THROW(parser.parse(makeArgList({makeKV("a", Field(Int64(1))), makeKV("b", Field(Int64(2)))}), ctx()), Exception);
+}
+
+TEST(IcebergCommandArgumentsParser, EmptyArgList)
 {
     IcebergCommandArgumentsParser parser("test_cmd");
     parser.addNamedArg("x", ArgType::Int64);
 
-    auto args = makeArgList({});
-    auto result = parser.parse(args, ctx());
+    auto result = parser.parse(makeArgList({}), ctx());
     ASSERT_FALSE(result.has("x"));
 }
 

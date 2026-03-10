@@ -534,7 +534,10 @@ std::string makeAbsolutePath(const std::string & table_location, const std::stri
     std::string normalized_key = convertPathToKeyInStorage(table_location, path);
 
     if (!table_location_decomposed.scheme.empty())
-        return table_location_decomposed.scheme + "://" + table_location_decomposed.authority + "/" + normalized_key;
+    {
+        const std::string sep = (!normalized_key.empty() && normalized_key.front() == '/') ? "" : "/";
+        return table_location_decomposed.scheme + "://" + table_location_decomposed.authority + sep + normalized_key;
+    }
 
     return normalized_key;
 }

@@ -463,23 +463,21 @@ EXPLAIN json = 1, actions = 1, description = 0 SELECT 1 FORMAT TSVRaw;
 ]
 ```
 
-With `actions` = 1 and `verbose` = 0, the `Actions` and `Positions` lines are hidden, leaving only the step descriptions:
+With `verbose = 0`, each `Expression` step is removed. Along with that, if `actions = 1` is set, then `Actions` and `Positions` lines are hidden, leaving only the step descriptions:
 
 ```sql
 EXPLAIN actions = 1, verbose = 0 SELECT sum(number) FROM numbers(10) GROUP BY number % 4 FORMAT Raw;
 ```
 
-```
-Expression ((Project names + Projection))
-  Aggregating
-  Keys: modulo(__table1.number, 4_UInt8)
-  Aggregates:
-      sum(__table1.number)
-        Function: sum(UInt64) → UInt64
-        Arguments: __table1.number
-  Skip merging: 0
-    Expression ((Before GROUP BY + Change column names to column identifiers))
-      ReadFromSystemNumbers
+```text
+Aggregating
+Keys: modulo(__table1.number, 4_UInt8)
+Aggregates:
+    sum(__table1.number)
+      Function: sum(UInt64) → UInt64
+      Arguments: __table1.number
+Skip merging: 0
+  ReadFromSystemNumbers
 ```
 
 With `distributed` = 1, the output includes not only the local query plan but also the query plans that will be executed on remote nodes. This is useful for analyzing and debugging distributed queries.
@@ -532,11 +530,11 @@ With `pretty` = 1, the plan tree is displayed using line-drawing characters inst
 EXPLAIN pretty = 1 SELECT sum(number) FROM numbers(10) GROUP BY number % 4 FORMAT Raw;
 ```
 
-```
-┌Expression (Project names)
-└─┬Aggregating
-  └─┬Expression (Before GROUP BY)
-    └──ReadFromStorage (SystemNumbers)
+```text
+Expression ((Project names + Projection))
+└──Aggregating
+   └──Expression ((Before GROUP BY + Change column names to column identifiers))
+      └──ReadFromSystemNumbers
 ```
 
 ### EXPLAIN PIPELINE {#explain-pipeline}

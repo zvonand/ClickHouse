@@ -56,6 +56,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"webassembly_udf_max_instances", 32, 32, "New setting to limit the number of parallel WebAssembly UDF instances per function."},
             {"mysql_datatypes_support_level", "", "decimal,datetime64,date2Date32", "Enable modern MySQL type mappings by default."},
             {"allow_experimental_json_lazy_type_hints", false, false, "New experimental setting for lazy JSON type hints"},
+            {"allow_experimental_expire_snapshots", false, false, "New setting."},
         });
         addSettingsChanges(settings_changes_history, "26.2",
         {
@@ -358,7 +359,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"output_format_parquet_enum_as_byte_array", false, false, "Write enum using parquet physical type: BYTE_ARRAY and logical type: ENUM"},
             {"distributed_plan_force_shuffle_aggregation", 0, 0, "New experimental setting"},
             {"allow_insert_into_iceberg", false, false, "New setting."},
-            {"allow_experimental_expire_snapshots", false, false, "New setting."},
             /// RELEASE CLOSED
         });
         addSettingsChanges(settings_changes_history, "25.6",

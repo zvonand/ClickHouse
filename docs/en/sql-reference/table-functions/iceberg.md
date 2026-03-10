@@ -549,7 +549,8 @@ Additional named arguments:
 
 - `retention_period = '3d'` overrides `history.expire.max-snapshot-age-ms` for this invocation only.
 - `retain_last = N` overrides `history.expire.min-snapshots-to-keep` for this invocation only.
-- `snapshot_ids = [id1, id2, ...]` expires exactly the listed snapshot IDs (except current snapshot). This mode cannot be combined with `retention_period` or `retain_last`.
+- `snapshot_ids = [id1, id2, ...]` expires exactly the listed snapshot IDs (except snapshots referenced by current snapshot, branches, or tags). This mode cannot be combined with `retention_period` or `retain_last`.
+- The positional `timestamp` argument can be combined with `snapshot_ids` and acts as a fuse: listed snapshots at or newer than the timestamp are not expired.
 - `dry_run = 1` computes what would be expired and returns metrics without writing new metadata or deleting files.
 
 **Example:**

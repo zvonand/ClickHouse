@@ -1142,6 +1142,7 @@ static SnapshotPartition partitionSnapshots(
 }
 
 static SnapshotPartition partitionSnapshotsByIds(
+    const Poco::JSON::Object::Ptr & metadata,
     const Poco::JSON::Array::Ptr & snapshots,
     const std::vector<Int64> & snapshot_ids,
     Int64 current_snapshot_id,
@@ -1149,7 +1150,21 @@ static SnapshotPartition partitionSnapshotsByIds(
 {
     std::unordered_set<Int64> requested_ids(snapshot_ids.begin(), snapshot_ids.end());
     std::unordered_set<Int64> existing_ids;
+    std::unordered_set<Int64> ref_protected_ids;
     SnapshotPartition result;
+
+    if (metadata->has(Iceberg::f_refs))
+    {
+        auto refs = metadata->getObject(Iceberg::f_refs);
+        for (const auto & ref_name : refs->getNames())
+        {
+            auto ref = refs->getObject(ref_name);
+            if (ref->has(Iceberg::f_metadata_snapshot_id))
+                ref_protected_ids.insert(ref->getValue<Int64>(Iceberg::f_metadata_snapshot_id));
+        }
+    }
+
+    ref_protected_ids.insert(current_snapshot_id);
 
     for (UInt32 i = 0; i < snapshots->size(); ++i)
     {
@@ -1161,8 +1176,11 @@ static SnapshotPartition partitionSnapshotsByIds(
         bool requested = requested_ids.contains(snap_id);
         bool is_protected_by_fuse = expire_before_ms.has_value() && (snap_ts >= *expire_before_ms);
 
-        if (requested && snap_id == current_snapshot_id)
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots cannot expire current snapshot {}", snap_id);
+        if (requested && ref_protected_ids.contains(snap_id))
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "expire_snapshots cannot expire snapshot {} because it is referenced by current snapshot, branch, or tag",
+                snap_id);
 
         if (requested && !is_protected_by_fuse)
         {
@@ -1292,7 +1310,7 @@ ExpireSnapshotsResult expireSnapshots(
         SnapshotPartition partition;
         if (options.snapshot_ids.has_value())
         {
-            partition = partitionSnapshotsByIds(snapshots, *options.snapshot_ids, current_snapshot_id, options.expire_before_ms);
+            partition = partitionSnapshotsByIds(metadata, snapshots, *options.snapshot_ids, current_snapshot_id, options.expire_before_ms);
         }
         else
         {
@@ -1303,9 +1321,8 @@ ExpireSnapshotsResult expireSnapshots(
                 policy.max_snapshot_age_ms = *options.retention_period_ms;
 
             SnapshotGraph graph(snapshots);
-            auto retention_result = applyRetentionPolicy(metadata, current_snapshot_id, graph, policy, now_ms);
-            auto & retention_retained_ids = retention_result.first;
-            expired_ref_names = std::move(retention_result.second);
+            auto [retention_retained_ids, retention_expired_ref_names] = applyRetentionPolicy(metadata, current_snapshot_id, graph, policy, now_ms);
+            expired_ref_names = std::move(retention_expired_ref_names);
             partition = partitionSnapshots(snapshots, retention_retained_ids, options.expire_before_ms);
         }
 

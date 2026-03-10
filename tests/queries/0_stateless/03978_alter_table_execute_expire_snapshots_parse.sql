@@ -8,6 +8,7 @@ SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(retention_p
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(retain_last = 100)');
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(snapshot_ids = [1, 2, 3])');
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(dry_run = 1)');
+SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(dry_run = \'True\')');
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(retention_period = \'1h\', dry_run = 1)');
 
 -- Parsing: other command names should parse successfully (generic EXECUTE syntax)

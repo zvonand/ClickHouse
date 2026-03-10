@@ -476,6 +476,82 @@ def test_expire_snapshots_snapshot_ids(started_cluster_iceberg_with_spark, stora
 
 
 @pytest.mark.parametrize("storage_type", ["local"])
+def test_expire_snapshots_snapshot_ids_cannot_expire_current(started_cluster_iceberg_with_spark, storage_type):
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_snapshot_ids_current", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 3
+    )
+    current_id = get_snapshot_ids(instance, TABLE_NAME)[-1]
+
+    error = instance.query_and_get_error(
+        f"ALTER TABLE {TABLE_NAME} EXECUTE expire_snapshots(snapshot_ids = [{current_id}]);",
+        settings=ICEBERG_SETTINGS,
+    )
+    assert "cannot expire snapshot" in error
+
+
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_expire_snapshots_snapshot_ids_rejects_incompatible_args(started_cluster_iceberg_with_spark, storage_type):
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_snapshot_ids_incompatible", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 3
+    )
+    oldest_id = get_snapshot_ids(instance, TABLE_NAME)[0]
+
+    error = instance.query_and_get_error(
+        f"ALTER TABLE {TABLE_NAME} EXECUTE expire_snapshots(snapshot_ids = [{oldest_id}], retain_last = 1);",
+        settings=ICEBERG_SETTINGS,
+    )
+    assert "cannot be combined" in error
+
+
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_expire_snapshots_snapshot_ids_nonexistent_error(started_cluster_iceberg_with_spark, storage_type):
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_snapshot_ids_nonexistent", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 3
+    )
+
+    error = instance.query_and_get_error(
+        f"ALTER TABLE {TABLE_NAME} EXECUTE expire_snapshots(snapshot_ids = [999999999999]);",
+        settings=ICEBERG_SETTINGS,
+    )
+    assert "does not exist" in error
+
+
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_expire_snapshots_snapshot_ids_cannot_expire_ref_head(started_cluster_iceberg_with_spark, storage_type):
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    spark = started_cluster_iceberg_with_spark.spark_session
+    TABLE_NAME = make_table_name("test_expire_snapshot_ids_ref_head", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 4
+    )
+    tagged_id = get_snapshot_ids(instance, TABLE_NAME)[1]
+
+    spark_alter_table(
+        started_cluster_iceberg_with_spark,
+        spark,
+        storage_type,
+        TABLE_NAME,
+        f"CREATE TAG `release_protected` AS OF VERSION {tagged_id}",
+    )
+
+    error = instance.query_and_get_error(
+        f"ALTER TABLE {TABLE_NAME} EXECUTE expire_snapshots(snapshot_ids = [{tagged_id}]);",
+        settings=ICEBERG_SETTINGS,
+    )
+    assert "cannot expire snapshot" in error
+
+
+@pytest.mark.parametrize("storage_type", ["local"])
 def test_expire_snapshots_dry_run(started_cluster_iceberg_with_spark, storage_type):
     """dry_run reports deletions but does not modify metadata or delete files."""
     instance = started_cluster_iceberg_with_spark.instances["node1"]

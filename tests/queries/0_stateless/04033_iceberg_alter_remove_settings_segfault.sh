@@ -17,6 +17,7 @@ ${CLICKHOUSE_CLIENT} --query "
     CREATE TABLE ${TABLE} (c0 Int)
     ENGINE = IcebergLocal('${TABLE_PATH}')
 "
+# To have at least one real snapshot. Otherwise alter can be noop.
 ${CLICKHOUSE_CLIENT} --allow_insert_into_iceberg=1 --query "INSERT INTO ${TABLE} VALUES (1)"
 
 ${CLICKHOUSE_CLIENT} --query "

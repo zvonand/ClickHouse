@@ -536,7 +536,7 @@ void IcebergMetadata::checkAlterIsPossible(const AlterCommands & commands)
         if (command.type == AlterCommand::Type::MODIFY_COLUMN && command.to_remove != AlterCommand::RemoveProperty::NO_PROPERTY)
             throw Exception(
                 ErrorCodes::NOT_IMPLEMENTED,
-                "Removing column properties is not supported by Iceberg storage");
+                "Removing column property '{}' from column '{}' is not supported by Iceberg storage", command.to_remove, command.column_name);
     }
 }
 

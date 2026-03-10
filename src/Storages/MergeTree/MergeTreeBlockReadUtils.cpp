@@ -9,6 +9,7 @@
 #include <DataTypes/NestedUtils.h>
 #include <Core/NamesAndTypes.h>
 #include <Common/checkStackSize.h>
+#include <Common/FailPoint.h>
 #include <Common/typeid_cast.h>
 #include <Storages/MergeTree/MergeTreeVirtualColumns.h>
 #include <Storages/MergeTree/MergeTreeSelectProcessor.h>
@@ -17,6 +18,7 @@
 #include <IO/WriteBufferFromString.h>
 #include <IO/Operators.h>
 #include <Interpreters/ExpressionActions.h>
+
 
 #include <algorithm>
 #include <unordered_set>
@@ -29,6 +31,11 @@ namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int NO_SUCH_COLUMN_IN_TABLE;
+}
+
+namespace FailPoints
+{
+    extern const char patch_parts_reverse_column_order[];
 }
 
 namespace
@@ -397,13 +404,13 @@ void addPatchPartsColumns(
         /// The sort in getUpdatedHeader also normalizes order before cross-patch comparison.
         std::sort(patch_columns_to_read_names.begin(), patch_columns_to_read_names.end());
 
-#ifdef DEBUG_OR_SANITIZER_BUILD
-        /// In debug builds, reverse the order for odd-indexed patches to expose any code
-        /// that incorrectly relies on positional column matching between different patches.
-        /// This ensures getUpdatedHeader (and any future comparison) handles arbitrary ordering.
-        if (i % 2 == 1)
-            std::reverse(patch_columns_to_read_names.begin(), patch_columns_to_read_names.end());
-#endif
+        fiu_do_on(FailPoints::patch_parts_reverse_column_order,
+        {
+            /// Reverse the order for odd-indexed patches to expose any code
+            /// that incorrectly relies on positional column matching between different patches.
+            if (i % 2 == 1)
+                std::reverse(patch_columns_to_read_names.begin(), patch_columns_to_read_names.end());
+        });
 
         result.patch_columns[i] = storage_snapshot->getColumnsByNames(options, patch_columns_to_read_names);
     }

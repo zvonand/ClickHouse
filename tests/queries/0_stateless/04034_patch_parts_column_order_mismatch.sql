@@ -3,11 +3,13 @@
 -- the column ordering in patch blocks must be deterministic to avoid
 -- LOGICAL_ERROR "Block structure mismatch in patch parts stream".
 --
--- In debug builds, addPatchPartsColumns deliberately reverses column order
--- for odd-indexed patches to expose any code relying on positional column
--- matching. Without the sort in getUpdatedHeader, this triggers the bug.
+-- The failpoint reverses column order for odd-indexed patches to expose any
+-- code relying on positional column matching. Without the sort in
+-- getUpdatedHeader, this triggers the bug.
 
 SET enable_lightweight_update = 1;
+
+SYSTEM ENABLE FAILPOINT patch_parts_reverse_column_order;
 
 DROP TABLE IF EXISTS t_patch_order;
 
@@ -35,13 +37,14 @@ OPTIMIZE TABLE t_patch_order FINAL;
 UPDATE t_patch_order SET a_col = 'updated2', b_col = 88, c_col = 8.8, d_col = 888, e_col = 'upd2' WHERE 1;
 
 -- This SELECT must apply both Join-mode and Merge-mode patches simultaneously.
--- In debug builds, patch column order is deliberately reversed for odd-indexed
--- patches. Without the fix, getUpdatedHeader throws LOGICAL_ERROR because it
--- compares patch headers positionally.
+-- The failpoint reverses column order for odd-indexed patches. Without the fix,
+-- getUpdatedHeader throws LOGICAL_ERROR because it compares patch headers positionally.
 SELECT * FROM t_patch_order ORDER BY id;
 
 -- Materialize patches and verify final state.
 ALTER TABLE t_patch_order APPLY PATCHES SETTINGS mutations_sync = 2;
 SELECT * FROM t_patch_order ORDER BY id SETTINGS apply_patch_parts = 0;
+
+SYSTEM DISABLE FAILPOINT patch_parts_reverse_column_order;
 
 DROP TABLE t_patch_order;

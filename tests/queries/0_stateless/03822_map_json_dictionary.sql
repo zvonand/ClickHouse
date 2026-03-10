@@ -38,7 +38,7 @@ SOURCE(CLICKHOUSE(
     PORT tcpPort()
     USER 'default'
     PASSWORD ''
-    DB 'default'
+    DB currentDatabase()
     TABLE 'map_test_source'
 ))
 LAYOUT(FLAT())
@@ -59,7 +59,7 @@ SOURCE(CLICKHOUSE(
     PORT tcpPort()
     USER 'default'
     PASSWORD ''
-    DB 'default'
+    DB currentDatabase()
     TABLE 'map_test_source'
 ))
 LAYOUT(HASHED())
@@ -155,7 +155,7 @@ SOURCE(CLICKHOUSE(
     PORT tcpPort()
     USER 'default'
     PASSWORD ''
-    DB 'default'
+    DB currentDatabase()
     TABLE 'json_test_source'
 ))
 LAYOUT(FLAT())
@@ -177,7 +177,7 @@ SOURCE(CLICKHOUSE(
     PORT tcpPort()
     USER 'default'
     PASSWORD ''
-    DB 'default'
+    DB currentDatabase()
     TABLE 'json_test_source'
 ))
 LAYOUT(HASHED())
@@ -313,7 +313,7 @@ SOURCE(CLICKHOUSE(
     PORT tcpPort()
     USER 'default'
     PASSWORD ''
-    DB 'default'
+    DB currentDatabase()
     TABLE 'deep_json_test_source'
 ))
 LAYOUT(FLAT())
@@ -334,7 +334,7 @@ SOURCE(CLICKHOUSE(
     PORT tcpPort()
     USER 'default'
     PASSWORD ''
-    DB 'default'
+    DB currentDatabase()
     TABLE 'deep_json_test_source'
 ))
 LAYOUT(HASHED())

@@ -132,7 +132,7 @@ String toString(TargetArch arch);
 
 /// Begin target-specific code blocks using arch= for cleaner specification
 #define BEGIN_X86_64_V3_SPECIFIC_CODE \
-_Pragma("clang attribute push(__attribute__((target(\"arch=x86-64-v3\"))),apply_to=function)")
+    _Pragma("clang attribute push(__attribute__((target(\"arch=x86-64-v3\"))),apply_to=function)")
 #define BEGIN_X86_64_V4_SPECIFIC_CODE \
     _Pragma("clang attribute push(__attribute__((target(\"arch=x86-64-v4,no-prefer-256-bit\"))),apply_to=function)")
 #define BEGIN_X86_64_ICELAKE_SPECIFIC_CODE \

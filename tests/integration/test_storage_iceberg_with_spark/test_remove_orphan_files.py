@@ -57,8 +57,6 @@ def remove_orphan_files(instance, table_name, **kwargs):
         args_parts.append(f"location = '{kwargs['location']}'")
     if "dry_run" in kwargs:
         args_parts.append(f"dry_run = {kwargs['dry_run']}")
-    if "max_concurrent_deletes" in kwargs:
-        args_parts.append(f"max_concurrent_deletes = {kwargs['max_concurrent_deletes']}")
     if "positional_ts" in kwargs:
         args_str = f"'{kwargs['positional_ts']}'"
         if args_parts:
@@ -286,8 +284,8 @@ def test_remove_orphan_files_location(started_cluster_iceberg_with_spark, storag
 
 
 @pytest.mark.parametrize("storage_type", ["local"])
-def test_remove_orphan_files_concurrent_deletes(started_cluster_iceberg_with_spark, storage_type):
-    """max_concurrent_deletes > 0 should delete orphans using parallel threads."""
+def test_remove_orphan_files_many_orphans(started_cluster_iceberg_with_spark, storage_type):
+    """remove_orphan_files should delete multiple orphan files in one run."""
     instance = started_cluster_iceberg_with_spark.instances["node1"]
     TABLE_NAME = make_table_name("test_orphan_concurrent", storage_type)
 
@@ -299,11 +297,7 @@ def test_remove_orphan_files_concurrent_deletes(started_cluster_iceberg_with_spa
         create_orphan_file(instance, TABLE_NAME, "data", f"orphan-par-{i:03d}.parquet")
     time.sleep(2)
 
-    result = remove_orphan_files(
-        instance, TABLE_NAME,
-        older_than=time.strftime("%Y-%m-%d %H:%M:%S"),
-        max_concurrent_deletes=4,
-    )
+    result = remove_orphan_files(instance, TABLE_NAME, older_than=time.strftime("%Y-%m-%d %H:%M:%S"))
     counts = parse_result(result)
     assert counts["deleted_data_files_count"] >= 10
 

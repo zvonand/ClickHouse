@@ -27,7 +27,6 @@ struct RemoveOrphanFilesParams
     std::optional<time_t> older_than;
     std::optional<String> location;
     bool dry_run = false;
-    UInt64 max_concurrent_deletes = 0;
 };
 
 RemoveOrphanFilesResult removeOrphanFiles(

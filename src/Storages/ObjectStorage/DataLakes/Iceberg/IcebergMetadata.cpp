@@ -627,9 +627,7 @@ static ExecuteCommandArgs makeRemoveOrphanFilesSchema(ContextPtr context)
     schema.addPositional("older_than", Field::Types::String);
     schema.addNamed("location", Field::Types::String);
     schema.addNamed("dry_run", Field::Types::UInt64);
-    schema.addNamed("max_concurrent_deletes", Field::Types::UInt64);
     schema.addDefault("dry_run", Field(UInt64(0)));
-    schema.addDefault("max_concurrent_deletes", Field(UInt64(0)));
     schema.addPostParse([context](ExecuteCommandArgs::Result & result)
     {
         if (!result.has("older_than"))
@@ -704,7 +702,6 @@ Pipe IcebergMetadata::executeCommand(
         if (parsed.has("location"))
             params.location = parsed.getAs<String>("location");
         params.dry_run = parsed.getAs<UInt64>("dry_run") != 0;
-        params.max_concurrent_deletes = parsed.getAs<UInt64>("max_concurrent_deletes");
 
         auto result = Iceberg::removeOrphanFiles(
             params,

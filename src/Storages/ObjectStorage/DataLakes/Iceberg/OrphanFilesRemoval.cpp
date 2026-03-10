@@ -3,15 +3,12 @@
 #if USE_AVRO
 
 #include <chrono>
-#include <mutex>
 #include <set>
 
 #include <Poco/JSON/Array.h>
 #include <Poco/JSON/Object.h>
 
-#include <Common/CurrentMetrics.h>
 #include <Common/Exception.h>
-#include <Common/ThreadPool.h>
 #include <Common/logger_useful.h>
 
 #include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage.h>
@@ -19,15 +16,9 @@
 
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Constant.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/OrphanFilesRemoval.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/SnapshotFilesTraversal.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/StatelessMetadataFileGetter.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Utils.h>
-
-namespace CurrentMetrics
-{
-extern const Metric MergeTreeBackgroundExecutorThreads;
-extern const Metric MergeTreeBackgroundExecutorThreadsActive;
-extern const Metric MergeTreeBackgroundExecutorThreadsScheduled;
-}
 
 namespace DB::ErrorCodes
 {
@@ -182,37 +173,12 @@ std::set<String> collectReachableFiles(
 
     Int32 current_schema_id = metadata->getValue<Int32>(f_current_schema_id);
 
-    // 1b–1d. For each snapshot: manifest list → manifests → data/delete files
-    for (UInt32 i = 0; i < snapshots->size(); ++i)
-    {
-        auto snapshot = snapshots->getObject(i);
-        if (!snapshot->has(f_manifest_list))
-            continue;
-
-        String manifest_list_path = snapshot->getValue<String>(f_manifest_list);
-        String storage_ml_path = getProperFilePathFromMetadataInfo(
-            manifest_list_path, persistent_table_components.table_path, persistent_table_components.table_location);
-        reachable.insert(storage_ml_path);
-
-        auto manifest_keys = getManifestList(
-            object_storage, persistent_table_components, context, storage_ml_path, log);
-
-        for (const auto & mf_key : manifest_keys)
-        {
-            reachable.insert(mf_key.manifest_file_path);
-
-            auto entries_handle = getManifestFileEntriesHandle(
-                object_storage, persistent_table_components, context, log,
-                mf_key, current_schema_id);
-
-            for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
-                reachable.insert(entry->file_path);
-            for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
-                reachable.insert(entry->file_path);
-            for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
-                reachable.insert(entry->file_path);
-        }
-    }
+    // 1b–1d. For each snapshot: manifest list → manifests → data/delete files.
+    auto referenced_snapshot_files = collectSnapshotReferencedFiles(
+        snapshots, object_storage, persistent_table_components, context, log, current_schema_id);
+    reachable.insert(referenced_snapshot_files.manifest_list_storage_paths.begin(), referenced_snapshot_files.manifest_list_storage_paths.end());
+    reachable.insert(referenced_snapshot_files.manifest_paths.begin(), referenced_snapshot_files.manifest_paths.end());
+    reachable.insert(referenced_snapshot_files.data_file_paths.begin(), referenced_snapshot_files.data_file_paths.end());
 
     LOG_INFO(log, "Collected {} reachable files from metadata graph", reachable.size());
     return reachable;
@@ -222,48 +188,23 @@ std::set<String> collectReachableFiles(
 std::vector<String> deleteOrphanFiles(
     const std::vector<String> & orphan_paths,
     ObjectStoragePtr object_storage,
-    UInt64 max_concurrent_deletes,
     LoggerPtr log)
 {
-    std::mutex deleted_mutex;
     std::vector<String> deleted_paths;
 
-    auto try_delete = [&](const String & path)
+    for (const auto & path : orphan_paths)
     {
         try
         {
             object_storage->removeObjectIfExists(StoredObject(path));
             LOG_DEBUG(log, "Deleted orphan file {}", path);
-            std::lock_guard lock(deleted_mutex);
             deleted_paths.push_back(path);
         }
         catch (...)
         {
             LOG_WARNING(log, "Failed to delete orphan file {}: {}", path, getCurrentExceptionMessage(false));
         }
-    };
-
-    if (max_concurrent_deletes == 0)
-    {
-        for (const auto & path : orphan_paths)
-            try_delete(path);
-        return deleted_paths;
     }
-
-    ThreadPool pool(
-        CurrentMetrics::MergeTreeBackgroundExecutorThreads,
-        CurrentMetrics::MergeTreeBackgroundExecutorThreadsActive,
-        CurrentMetrics::MergeTreeBackgroundExecutorThreadsScheduled,
-        max_concurrent_deletes);
-
-    for (const auto & path : orphan_paths)
-    {
-        pool.scheduleOrThrowOnError([&try_delete, path]
-        {
-            try_delete(path);
-        });
-    }
-    pool.wait();
 
     return deleted_paths;
 }
@@ -379,7 +320,7 @@ RemoveOrphanFilesResult removeOrphanFiles(
         return r;
     }
 
-    auto deleted_paths = deleteOrphanFiles(orphan_paths, object_storage, params.max_concurrent_deletes, log);
+    auto deleted_paths = deleteOrphanFiles(orphan_paths, object_storage, log);
     LOG_INFO(log, "Deleted {}/{} orphan files", deleted_paths.size(), orphan_paths.size());
 
     return tally(deleted_paths);

@@ -633,8 +633,7 @@ ALTER TABLE iceberg_table EXECUTE remove_orphan_files('timestamp')
 ALTER TABLE iceberg_table EXECUTE remove_orphan_files(
     older_than = 'timestamp',
     location = 'path',
-    dry_run = 0|1,
-    max_concurrent_deletes = N
+    dry_run = 0|1
 )
 
 -- No arguments: use all defaults (older_than = 3 days ago)
@@ -648,7 +647,6 @@ ALTER TABLE iceberg_table EXECUTE remove_orphan_files()
 | `older_than` | `String` (timestamp) | 3 days ago (configurable via `iceberg_orphan_files_older_than_seconds`) | Only consider files with a last-modified time older than this timestamp as orphan candidates. Safety guard against deleting files from in-progress writes. |
 | `location` | `String` | Table location | Restrict the scan to a specific subdirectory under the table location (e.g., `'data/'` or `'metadata/'`). |
 | `dry_run` | `UInt8` | `0` | When `1`, identify orphan files and return the result summary without actually deleting anything. |
-| `max_concurrent_deletes` | `UInt64` | `0` (sequential) | Maximum number of concurrent delete operations. Set to a positive value to enable parallel deletion. |
 
 **Examples:**
 
@@ -659,11 +657,10 @@ ALTER TABLE iceberg_table EXECUTE remove_orphan_files('2026-03-01 00:00:00');
 -- Dry run: preview which files would be deleted
 ALTER TABLE iceberg_table EXECUTE remove_orphan_files(dry_run = 1);
 
--- Scan only the data directory with parallel deletion
+-- Scan only the data directory
 ALTER TABLE iceberg_table EXECUTE remove_orphan_files(
     older_than = '2026-03-01 00:00:00',
-    location = 'data/',
-    max_concurrent_deletes = 8
+    location = 'data/'
 );
 
 -- Combine positional older_than with named arguments

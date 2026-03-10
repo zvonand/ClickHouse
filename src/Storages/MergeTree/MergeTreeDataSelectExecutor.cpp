@@ -1084,7 +1084,7 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
 
     const auto num_indices = skip_indexes.useful_indices.size();
 
-    if (context->hasQueryContext())
+    if (!skip_indexes.useful_indices.empty() && context->hasQueryContext())
     {
         auto query_context = context->getQueryContext();
         for (const auto & idx : skip_indexes.useful_indices)

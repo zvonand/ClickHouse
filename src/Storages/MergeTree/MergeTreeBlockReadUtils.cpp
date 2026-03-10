@@ -19,7 +19,6 @@
 #include <IO/Operators.h>
 #include <Interpreters/ExpressionActions.h>
 
-
 #include <algorithm>
 #include <unordered_set>
 

@@ -16,7 +16,7 @@
 FROM ubuntu:22.04 AS ch-builder
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG apt_archive="https://archive.ubuntu.com"
+ARG apt_archive="http://archive.ubuntu.com"
 
 # user/group precreated explicitly with fixed uid/gid on purpose.
 # The same uid/gid (101) is used both for alpine and ubuntu.

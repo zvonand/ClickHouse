@@ -312,8 +312,8 @@ public:
                 auto shared_data = ColumnArray::create(ColumnTuple::create(std::move(paths_and_values)));
 
                 return ColumnObject::create(
-                    std::unordered_map<String, MutableColumnPtr>{},
-                    std::unordered_map<String, MutableColumnPtr>{},
+                    std::unordered_map<String, MutableColumnPtr>{},  // STYLE_CHECK_ALLOW_STD_CONTAINERS
+                    std::unordered_map<String, MutableColumnPtr>{},  // STYLE_CHECK_ALLOW_STD_CONTAINERS
                     std::move(shared_data),
                     object_type->getMaxDynamicPaths(),
                     object_type->getMaxDynamicPaths(),

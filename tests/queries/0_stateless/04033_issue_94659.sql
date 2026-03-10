@@ -2,6 +2,8 @@
 -- Issue: https://github.com/ClickHouse/ClickHouse/issues/94659
 -- ROW POLICY + ALIAS column with dictGet should not cause LOGICAL_ERROR
 
+SET enable_analyzer = 1;
+
 DROP ROW POLICY IF EXISTS pol_94659 ON t1_94659;
 DROP TABLE IF EXISTS t1_94659;
 DROP DICTIONARY IF EXISTS d1_94659;
@@ -43,8 +45,9 @@ SELECT b FROM t1_94659;
 -- Test 5: Verify with old analyzer still works
 SELECT *, b FROM t1_94659 SETTINGS enable_analyzer = 0;
 
--- Cleanup
 DROP ROW POLICY pol_94659 ON t1_94659;
+
+-- Cleanup
 DROP TABLE t1_94659;
 DROP DICTIONARY d1_94659;
 DROP TABLE t2_94659;

@@ -44,8 +44,8 @@ private:
     UInt64 total_input_rows = 0;
     UInt64 total_input_blocks = 0;
 
-    BlocksList blocks;
-    BlocksList::iterator next_block;
+    Aggregator::AggregatedChunks chunks;
+    Aggregator::AggregatedChunks::iterator next_chunk;
 
     bool consume_started = false;
     bool generate_started = false;

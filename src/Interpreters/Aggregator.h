@@ -8,6 +8,7 @@
 #include <AggregateFunctions/IAggregateFunction_fwd.h>
 
 #include <Core/Block.h>
+#include <Processors/Chunk.h>
 #include <Core/Block_fwd.h>
 #include <Core/ColumnNumbers.h>
 #include <Common/Logger.h>
@@ -80,6 +81,15 @@ public:
     using AggregateColumnsData = std::vector<AggregateFunctionContainer *>;
     using AggregateColumnsConstData = std::vector<const AggregateFunctionContainer *>;
     using AggregateFunctionsPlainPtrs = std::vector<const IAggregateFunction *>;
+
+    /// Result of aggregation: columns with metadata, without Block overhead.
+    struct AggregatedChunk
+    {
+        Chunk chunk;
+        Int32 bucket_num = -1;
+        bool is_overflows = false;
+    };
+    using AggregatedChunks = std::list<AggregatedChunk>;
 
     struct Params
     {
@@ -253,7 +263,7 @@ public:
       *  which can then be combined with other states (for distributed query processing).
       * If final = true, then columns with ready values are created as aggregate columns.
       */
-    BlocksList convertToBlocks(AggregatedDataVariants & data_variants, bool final) const;
+    AggregatedChunks convertToChunks(AggregatedDataVariants & data_variants, bool final) const;
 
     ManyAggregatedDataVariants prepareVariantsToMerge(ManyAggregatedDataVariants && data_variants) const;
 

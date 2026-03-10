@@ -2804,9 +2804,9 @@ BlocksList Aggregator::prepareBlocksAndFillTwoLevelImpl(AggregatedDataVariants &
 }
 
 
-BlocksList Aggregator::convertToBlocks(AggregatedDataVariants & data_variants, bool final) const
+Aggregator::AggregatedChunks Aggregator::convertToChunks(AggregatedDataVariants & data_variants, bool final) const
 {
-    LOG_TRACE(log, "Converting aggregated data to blocks");
+    LOG_TRACE(log, "Converting aggregated data to chunks");
 
     Stopwatch watch;
 
@@ -2814,7 +2814,7 @@ BlocksList Aggregator::convertToBlocks(AggregatedDataVariants & data_variants, b
 
     /// In what data structure is the data aggregated?
     if (data_variants.empty())
-        return blocks;
+        return {};
 
     if (data_variants.without_key)
         blocks.emplace_back(prepareBlockAndFillWithoutKey(
@@ -2838,20 +2838,25 @@ BlocksList Aggregator::convertToBlocks(AggregatedDataVariants & data_variants, b
     size_t rows = 0;
     size_t bytes = 0;
 
-    for (const auto & block : blocks)
+    AggregatedChunks chunks;
+    for (auto & block : blocks)
     {
         rows += block.rows();
         bytes += block.bytes();
+        chunks.emplace_back(AggregatedChunk{
+            .chunk = Chunk(block.getColumns(), block.rows()),
+            .bucket_num = block.info.bucket_num,
+            .is_overflows = block.info.is_overflows});
     }
 
     double elapsed_seconds = watch.elapsedSeconds();
     LOG_DEBUG(log,
-        "Converted aggregated data to blocks. {} rows, {} in {} sec. ({:.3f} rows/sec., {}/sec.)",
+        "Converted aggregated data to chunks. {} rows, {} in {} sec. ({:.3f} rows/sec., {}/sec.)",
         rows, ReadableSize(bytes),
         elapsed_seconds, static_cast<double>(rows) / elapsed_seconds,
         ReadableSize(static_cast<double>(bytes) / elapsed_seconds));
 
-    return blocks;
+    return chunks;
 }
 
 

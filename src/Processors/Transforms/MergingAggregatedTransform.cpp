@@ -249,7 +249,7 @@ Chunk MergingAggregatedTransform::generate()
         LOG_DEBUG(log, "Read {} blocks of partially aggregated data, total {} rows.", total_input_blocks, total_input_rows);
 
         /// Exception safety. Make iterator valid in case any method below throws.
-        next_block = blocks.begin();
+        next_chunk = chunks.begin();
 
         for (auto & grouping_set : grouping_sets)
         {
@@ -259,33 +259,36 @@ Chunk MergingAggregatedTransform::generate()
 
             /// TODO: this operation can be made async. Add async for IAccumulatingTransform.
             params->aggregator.mergeBlocks(std::move(bucket_to_blocks), data_variants, is_cancelled);
-            auto merged_blocks = params->aggregator.convertToBlocks(data_variants, params->final);
+            auto merged_chunks = params->aggregator.convertToChunks(data_variants, params->final);
 
             if (grouping_set.creating_missing_keys_actions)
-                for (auto & block : merged_blocks)
+            {
+                auto res_header = params->params.getHeader(params->header, params->final);
+                for (auto & agg_chunk : merged_chunks)
+                {
+                    auto block = res_header.cloneWithColumns(agg_chunk.chunk.detachColumns());
                     grouping_set.creating_missing_keys_actions->execute(block);
+                    agg_chunk.chunk = Chunk(block.getColumns(), block.rows());
+                }
+            }
 
-            blocks.splice(blocks.end(), std::move(merged_blocks));
+            chunks.splice(chunks.end(), std::move(merged_chunks));
         }
 
-        next_block = blocks.begin();
+        next_chunk = chunks.begin();
     }
 
-    if (next_block == blocks.end())
+    if (next_chunk == chunks.end())
         return {};
 
-    auto block = std::move(*next_block);
-    ++next_block;
-
     auto info = std::make_shared<AggregatedChunkInfo>();
-    info->bucket_num = block.info.bucket_num;
-    info->is_overflows = block.info.is_overflows;
-    info->out_of_order_buckets = block.info.out_of_order_buckets;
+    info->bucket_num = next_chunk->bucket_num;
+    info->is_overflows = next_chunk->is_overflows;
 
-    UInt64 num_rows = block.rows();
-    Chunk chunk(block.getColumns(), num_rows);
-
+    Chunk chunk = std::move(next_chunk->chunk);
     chunk.getChunkInfos().add(std::move(info));
+
+    ++next_chunk;
 
     return chunk;
 }

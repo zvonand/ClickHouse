@@ -27,3 +27,5 @@ default.03760_view2
 ['v_join']
 ['db_03760_rename_after.v_join','db_03760_rename_after.v_simple','db_03760_rename_ext.v_xdb']
 ['v_join']
+['03760_stale_view']
+[]

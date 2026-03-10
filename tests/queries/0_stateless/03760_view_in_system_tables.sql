@@ -137,3 +137,23 @@ FROM system.tables WHERE database = 'db_03760_rename_after' AND name = 'src2';
 
 DROP DATABASE db_03760_rename_after;
 DROP DATABASE db_03760_rename_ext;
+
+-- DROP source table must remove plain_view_dependencies edges where it appears as source.
+DROP TABLE IF EXISTS 03760_stale_src;
+DROP VIEW  IF EXISTS 03760_stale_view;
+
+CREATE TABLE 03760_stale_src (id UInt64) ENGINE = MergeTree ORDER BY id;
+CREATE VIEW 03760_stale_view AS SELECT * FROM 03760_stale_src;
+
+SELECT arraySort(dependencies_table) FROM system.tables WHERE database = currentDatabase() AND name = '03760_stale_src';
+
+DROP VIEW 03760_stale_view;
+DROP TABLE 03760_stale_src;
+
+-- Recreate the source table under the same name (no view exists any more).
+CREATE TABLE 03760_stale_src (id UInt64) ENGINE = MergeTree ORDER BY id;
+
+-- The dropped view must not appear as a dependent of the new table.
+SELECT arraySort(dependencies_table) FROM system.tables WHERE database = currentDatabase() AND name = '03760_stale_src';
+
+DROP TABLE 03760_stale_src;

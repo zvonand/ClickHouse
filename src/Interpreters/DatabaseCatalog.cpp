@@ -1749,6 +1749,10 @@ std::tuple<std::vector<StorageID>, std::vector<StorageID>, std::vector<StorageID
         old_plain_view_dependencies.insert(old_plain_view_dependencies.end(), plain_view_sources.begin(), plain_view_sources.end());
     }
 
+    /// When a non-view source table is dropped, remove any plain_view_dependencies edges
+    ///  where it appears as a source.
+    plain_view_dependencies.removeDependencies(table_id, /* remove_isolated_tables= */ true);
+
     return {
         referential_dependencies.removeDependencies(table_id, /* remove_isolated_tables= */ true),
         loading_dependencies.removeDependencies(table_id, /* remove_isolated_tables= */ true),

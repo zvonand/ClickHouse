@@ -4,7 +4,8 @@
 
 TPCDS_SETTINGS_JSON="$CURDIR/../../benchmarks/tpc-ds/settings.json"
 
-SETTINGS=(-m)
+# TPC-DS queries scan large tables, exceeding the default 20M row limit in CI.
+SETTINGS=(-m --max_rows_to_read 50000000)
 readarray -t _tpcds_lines < <(jq -r '
     "--format", .format,
     (.settings | to_entries[] | "--\(.key)", (.value | tostring))

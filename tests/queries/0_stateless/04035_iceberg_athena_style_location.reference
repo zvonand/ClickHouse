@@ -1,0 +1,17 @@
+-- before modification
+test/<base>/<uuid_old>/data/data-<uuid>.parquet
+test/<base>/<uuid_old>/metadata/<uuid>.avro
+test/<base>/<uuid_old>/metadata/snap-<id>-<uuid>.avro
+test/<base>/<uuid_old>/metadata/v1.metadata.json
+test/<base>/<uuid_old>/metadata/v2.metadata.json
+-- after modification
+test/<base>/<uuid_new>/metadata/<uuid>.avro
+test/<base>/<uuid_new>/metadata/snap-<id>-<uuid>.avro
+test/<base>/<uuid_new>/metadata/v1.metadata.json
+test/<base>/<uuid_new>/metadata/v2.metadata.json
+test/<base>/<uuid_old>/data/data-<uuid>.parquet
+test/<base>/<uuid_old>/metadata/<uuid>.avro
+test/<base>/<uuid_old>/metadata/snap-<id>-<uuid>.avro
+test/<base>/<uuid_old>/metadata/v1.metadata.json
+test/<base>/<uuid_old>/metadata/v2.metadata.json
+99

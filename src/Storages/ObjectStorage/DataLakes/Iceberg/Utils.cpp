@@ -326,7 +326,10 @@ std::string getProperFilePathFromMetadataInfo(std::string_view data_path, std::s
     common_path = trim_backward_slash(common_path);
     table_location = trim_backward_slash(table_location);
 
-    if (data_path.starts_with(table_location) && table_location.ends_with(common_path))
+    /// Case 1: data_path starts with table_location (common for Spark-created tables where
+    /// table_location uses a different scheme/bucket than ClickHouse's path).
+    /// Extract the relative suffix and prepend common_path.
+    if (data_path.starts_with(table_location))
     {
         return std::filesystem::path{common_path} / trim_forward_slash(data_path.substr(table_location.size()));
     }
@@ -336,17 +339,42 @@ std::string getProperFilePathFromMetadataInfo(std::string_view data_path, std::s
     /// Valid situation when data and metadata files are stored in different directories.
     if (pos == std::string::npos)
     {
-        /// connection://bucket
-        auto prefix = table_location.substr(0, table_location.size() - common_path.size());
-        return std::string{data_path.substr(prefix.size())};
+        if (table_location.ends_with(common_path) && table_location.size() >= common_path.size())
+        {
+            /// table_location = "scheme://bucket/<common_path>", so strip the "scheme://bucket/" prefix
+            /// from data_path. This handles the dbt-Athena case where data files may reference
+            /// paths under a different subdirectory than common_path.
+            auto prefix_size = table_location.size() - common_path.size();
+            if (prefix_size <= data_path.size())
+                return std::string{data_path.substr(prefix_size)};
+        }
+
+        /// Try to extract a relative path from an absolute data_path by stripping
+        /// the scheme://authority/ prefix (everything up to the third slash).
+        /// This handles cases where table_location doesn't end with common_path
+        /// (e.g. Spark-created tables with a completely different path structure).
+        auto scheme_pos = data_path.find("://");
+        if (scheme_pos != std::string::npos)
+        {
+            auto path_start = data_path.find('/', scheme_pos + 3);
+            if (path_start != std::string::npos)
+                return std::string{trim_forward_slash(data_path.substr(path_start))};
+        }
+
+        throw ::DB::Exception(
+            DB::ErrorCodes::BAD_ARGUMENTS,
+            "Cannot resolve Iceberg file path: common path '{}' not found in data path '{}', "
+            "table location: '{}'",
+            common_path, data_path, table_location);
     }
 
     size_t good_pos = std::string::npos;
     while (pos != std::string::npos)
     {
         auto potential_position = pos + common_path.size();
-        if ((std::string_view(data_path.data() + potential_position, 6) == "/data/")
-            || (std::string_view(data_path.data() + potential_position, 10) == "/metadata/"))
+        auto remaining = data_path.size() - potential_position;
+        if ((remaining >= 6 && data_path.substr(potential_position, 6) == "/data/")
+            || (remaining >= 10 && data_path.substr(potential_position, 10) == "/metadata/"))
         {
             good_pos = pos;
             break;

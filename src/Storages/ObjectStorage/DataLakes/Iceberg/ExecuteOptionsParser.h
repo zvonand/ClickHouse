@@ -6,7 +6,7 @@
 
 #include <Interpreters/Context_fwd.h>
 #include <Parsers/IAST_fwd.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/Mutations.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/ExpireSnapshotsTypes.h>
 
 namespace DB::Iceberg
 {

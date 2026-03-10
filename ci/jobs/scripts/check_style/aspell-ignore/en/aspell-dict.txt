@@ -1132,6 +1132,8 @@ Subcolumns
 Subexpression
 Submodules
 Subqueries
+Subrequest
+Subrequests
 Substrings
 SummingMergeTree
 SuperSet

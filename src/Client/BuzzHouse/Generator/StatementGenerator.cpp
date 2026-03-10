@@ -34,14 +34,14 @@ StatementGenerator::StatementGenerator(
               {0.05, 0.20}, /// CreateTable
               {0.05, 0.25}, /// CreateView
               {0.01, 0.05}, /// Drop
-              {0.10, 0.30}, /// Insert
+              {0.15, 0.35}, /// Insert
               {0.01, 0.08}, /// LightDelete
               {0.01, 0.03}, /// Truncate
               {0.01, 0.08}, /// OptimizeTable
               {0.01, 0.05}, /// CheckTable
               {0.01, 0.03}, /// DescTable
               {0.01, 0.10}, /// Exchange
-              {0.03, 0.30}, /// Alter
+              {0.03, 0.25}, /// Alter
               {0.06, 0.25}, /// SetValues
               {0.03, 0.10}, /// Attach
               {0.01, 0.06}, /// Detach
@@ -105,9 +105,9 @@ StatementGenerator::StatementGenerator(
               {0.01, 0.15}, /// DictExpr
               {0.01, 0.15}, /// JoinExpr
               {0.01, 0.15}, /// StarExpr
-              {0.01, 0.02}, /// LitAggrState
-              {0.01, 0.02}, /// LitReinterpret
-              {0.01, 0.02} /// LitAccurateCast
+              {0.005, 0.005}, /// LitAggrState
+              {0.005, 0.005}, /// LitReinterpret
+              {0.005, 0.005} /// LitAccurateCast
           }},
           "SQL expressions"))
     , predGen(ProbabilityGenerator(

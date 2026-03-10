@@ -175,10 +175,6 @@ public:
 
         Block getHeader(const Block & header_, bool final) const { return getHeader(header_, only_merge, keys, aggregates, final); }
 
-        /// Remember the columns we will work with
-        ColumnRawPtrs makeRawKeyColumns(const Block & block) const;
-        AggregateColumnsConstData makeAggregateColumnsData(const Block & block) const;
-
         /// Returns keys and aggregated for EXPLAIN query
         void explain(WriteBuffer & out, size_t indent) const;
         void explain(JSONBuilder::JSONMap & map) const;
@@ -231,7 +227,7 @@ public:
         AggregateFunctionInstruction * aggregate_instructions) const;
 
     /// Used for aggregate projection.
-    bool mergeOnBlock(Block block,
+    bool mergeOnBlock(Columns columns, size_t rows, bool is_overflows,
         AggregatedDataVariants & result,
         bool & no_more_keys,
         std::atomic<bool> & is_cancelled) const;
@@ -589,7 +585,8 @@ private:
     /// If not provided, aggregates_pool is used instead. Refer to mergeBlocks() for an usage example.
     template <typename Method, typename Table>
     void mergeStreamsImpl(
-        Block block,
+        const Columns & columns,
+        size_t rows,
         Arena * aggregates_pool,
         Method & method,
         Table & data,
@@ -615,7 +612,8 @@ private:
         Arena * arena_for_keys) const;
 
     void mergeBlockWithoutKeyStreamsImpl(
-        Block block,
+        const Columns & columns,
+        size_t rows,
         AggregatedDataVariants & result,
         std::atomic<bool> & is_cancelled) const;
 

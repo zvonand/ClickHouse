@@ -460,37 +460,21 @@ Block Aggregator::Params::getHeader(
     return materializeBlock(res);
 }
 
-ColumnRawPtrs Aggregator::Params::makeRawKeyColumns(const Block & block) const
+/// Extract raw key column pointers from columns with fixed layout (keys at positions 0..keys_size-1).
+ColumnRawPtrs makeRawKeyColumns(const Columns & columns, size_t keys_size)
 {
     ColumnRawPtrs key_columns(keys_size);
-
     for (size_t i = 0; i < keys_size; ++i)
-    {
-        const auto & column = block.safeGetByPosition(i);
-#ifdef DEBUG_OR_SANITIZER_BUILD
-        if (column.name != keys[i])
-        {
-            throw Exception(ErrorCodes::LOGICAL_ERROR,
-                "Wrong key in block [{}] at position {}, expected keys: [{}]",
-                block.dumpStructure(), i, fmt::join(keys, ", "));
-        }
-#endif
-        key_columns[i] = column.column.get();
-    }
-
+        key_columns[i] = columns[i].get();
     return key_columns;
 }
 
-Aggregator::AggregateColumnsConstData Aggregator::Params::makeAggregateColumnsData(const Block & block) const
+/// Extract aggregate column data from columns with fixed layout (aggregates at positions keys_size..keys_size+aggregates_size-1).
+Aggregator::AggregateColumnsConstData makeAggregateColumnsData(const Columns & columns, size_t keys_size, size_t aggregates_size)
 {
-    AggregateColumnsConstData aggregate_columns(aggregates_size);
-
+    Aggregator::AggregateColumnsConstData aggregate_columns(aggregates_size);
     for (size_t i = 0; i < aggregates_size; ++i)
-    {
-        const auto & aggregate_column_name = aggregates[i].column_name;
-        aggregate_columns[i] = &typeid_cast<const ColumnAggregateFunction &>(*block.getByName(aggregate_column_name).column).getData();
-    }
-
+        aggregate_columns[i] = &typeid_cast<const ColumnAggregateFunction &>(*columns[keys_size + i]).getData();
     return aggregate_columns;
 }
 
@@ -3423,7 +3407,8 @@ void NO_INLINE Aggregator::mergeStreamsImplCase(
 
 template <typename Method, typename Table>
 void NO_INLINE Aggregator::mergeStreamsImpl(
-    Block block,
+    const Columns & columns,
+    size_t rows,
     Arena * aggregates_pool,
     Method & method,
     Table & data,
@@ -3433,8 +3418,8 @@ void NO_INLINE Aggregator::mergeStreamsImpl(
     std::atomic<bool> & is_cancelled,
     Arena * arena_for_keys) const
 {
-    const AggregateColumnsConstData & aggregate_columns_data = params.makeAggregateColumnsData(block);
-    ColumnRawPtrs key_columns = params.makeRawKeyColumns(block);
+    const AggregateColumnsConstData & aggregate_columns_data = makeAggregateColumnsData(columns, params.keys_size, params.aggregates_size);
+    ColumnRawPtrs key_columns = makeRawKeyColumns(columns, params.keys_size);
 
     mergeStreamsImpl<Method, Table>(
         aggregates_pool,
@@ -3444,7 +3429,7 @@ void NO_INLINE Aggregator::mergeStreamsImpl(
         consecutive_keys_cache_stats,
         no_more_keys,
         0,
-        block.rows(),
+        rows,
         aggregate_columns_data,
         key_columns,
         is_cancelled,
@@ -3555,12 +3540,13 @@ void NO_INLINE Aggregator::mergeStreamsImpl(
 
 
 void NO_INLINE Aggregator::mergeBlockWithoutKeyStreamsImpl(
-    Block block,
+    const Columns & columns,
+    size_t rows,
     AggregatedDataVariants & result,
     std::atomic<bool> & is_cancelled) const
 {
-    AggregateColumnsConstData aggregate_columns = params.makeAggregateColumnsData(block);
-    mergeWithoutKeyStreamsImpl(result, 0, block.rows(), aggregate_columns, is_cancelled);
+    AggregateColumnsConstData aggregate_columns = makeAggregateColumnsData(columns, params.keys_size, params.aggregates_size);
+    mergeWithoutKeyStreamsImpl(result, 0, rows, aggregate_columns, is_cancelled);
 }
 
 void NO_INLINE Aggregator::mergeWithoutKeyStreamsImpl(
@@ -3612,7 +3598,7 @@ void NO_INLINE Aggregator::mergeWithoutKeyStreamsImpl(
 }
 
 
-bool Aggregator::mergeOnBlock(Block block, AggregatedDataVariants & result, bool & no_more_keys, std::atomic<bool> & is_cancelled) const
+bool Aggregator::mergeOnBlock(Columns columns, size_t rows, bool is_overflows, AggregatedDataVariants & result, bool & no_more_keys, std::atomic<bool> & is_cancelled) const
 {
     /// `result` will destroy the states of aggregate functions in the destructor
     result.aggregator = this;
@@ -3633,11 +3619,12 @@ bool Aggregator::mergeOnBlock(Block block, AggregatedDataVariants & result, bool
         result.without_key = place;
     }
 
-    if (result.type == AggregatedDataVariants::Type::without_key || block.info.is_overflows)
-        mergeBlockWithoutKeyStreamsImpl(std::move(block), result, is_cancelled);
+    if (result.type == AggregatedDataVariants::Type::without_key || is_overflows)
+        mergeBlockWithoutKeyStreamsImpl(columns, rows, result, is_cancelled);
 #define M(NAME, IS_TWO_LEVEL) \
     else if (result.type == AggregatedDataVariants::Type::NAME) mergeStreamsImpl( \
-        std::move(block), \
+        columns, \
+        rows, \
         result.aggregates_pool, \
         *result.NAME, \
         result.NAME->data, \
@@ -3754,9 +3741,11 @@ void Aggregator::mergeBlocks(BucketToBlocks bucket_to_blocks, AggregatedDataVari
                 {
                     /// Copy to avoid race.
                     auto consecutive_keys_cache_stats_copy = result.consecutive_keys_cache_stats;
+                    size_t block_rows = block.rows();
+                    auto block_columns = block.getColumns();
                 #define M(NAME) \
                     else if (result.type == AggregatedDataVariants::Type::NAME) \
-                        mergeStreamsImpl(std::move(block), aggregates_pool, *result.NAME, result.NAME->data.impls[bucket], nullptr, consecutive_keys_cache_stats_copy, false, is_cancelled);
+                        mergeStreamsImpl(block_columns, block_rows, aggregates_pool, *result.NAME, result.NAME->data.impls[bucket], nullptr, consecutive_keys_cache_stats_copy, false, is_cancelled);
 
                     if (false) {} // NOLINT
                         APPLY_FOR_VARIANTS_TWO_LEVEL(M)
@@ -3813,12 +3802,15 @@ void Aggregator::mergeBlocks(BucketToBlocks bucket_to_blocks, AggregatedDataVari
             if (!checkLimits(result.sizeWithoutOverflowRow(), no_more_keys))
                 break;
 
+            size_t block_rows = block.rows();
+            auto block_columns = block.getColumns();
+
             if (result.type == AggregatedDataVariants::Type::without_key || block.info.is_overflows)
-                mergeBlockWithoutKeyStreamsImpl(std::move(block), result, is_cancelled);
+                mergeBlockWithoutKeyStreamsImpl(block_columns, block_rows, result, is_cancelled);
 
         #define M(NAME, IS_TWO_LEVEL) \
             else if (result.type == AggregatedDataVariants::Type::NAME) \
-                mergeStreamsImpl(std::move(block), result.aggregates_pool, *result.NAME, result.NAME->data, result.without_key, result.consecutive_keys_cache_stats, no_more_keys, is_cancelled);
+                mergeStreamsImpl(block_columns, block_rows, result.aggregates_pool, *result.NAME, result.NAME->data, result.without_key, result.consecutive_keys_cache_stats, no_more_keys, is_cancelled);
 
             APPLY_FOR_AGGREGATED_VARIANTS(M)
         #undef M
@@ -3894,12 +3886,15 @@ Block Aggregator::mergeBlocks(BlocksList & blocks, bool final, std::atomic<bool>
         if (bucket_num >= 0 && block.info.bucket_num != bucket_num)
             bucket_num = -1;
 
+        size_t block_rows = block.rows();
+        auto block_columns = block.getColumns();
+
         if (result.type == AggregatedDataVariants::Type::without_key || is_overflows)
-            mergeBlockWithoutKeyStreamsImpl(std::move(block), result, is_cancelled);
+            mergeBlockWithoutKeyStreamsImpl(block_columns, block_rows, result, is_cancelled);
 
 #define M(NAME, IS_TWO_LEVEL) \
     else if (result.type == AggregatedDataVariants::Type::NAME) \
-        mergeStreamsImpl(std::move(block), result.aggregates_pool, *result.NAME, result.NAME->data, nullptr, result.consecutive_keys_cache_stats, false, is_cancelled, arena_for_keys.get());
+        mergeStreamsImpl(block_columns, block_rows, result.aggregates_pool, *result.NAME, result.NAME->data, nullptr, result.consecutive_keys_cache_stats, false, is_cancelled, arena_for_keys.get());
 
         APPLY_FOR_AGGREGATED_VARIANTS(M)
     #undef M
@@ -4034,7 +4029,7 @@ std::vector<Block> Aggregator::convertBlockToTwoLevel(const Block & block) const
 
     AggregatedDataVariants data;
 
-    ColumnRawPtrs key_columns = params.makeRawKeyColumns(block);
+    ColumnRawPtrs key_columns = makeRawKeyColumns(block.getColumns(), params.keys_size);
 
     AggregatedDataVariants::Type type = method_chosen;
     data.keys_size = params.keys_size;

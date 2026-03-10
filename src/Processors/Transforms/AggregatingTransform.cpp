@@ -896,9 +896,10 @@ void AggregatingTransform::consume(Chunk chunk)
 
     if (params->params.only_merge)
     {
-        auto block = getInputs().front().getHeader().cloneWithColumns(chunk.detachColumns());
-        block = materializeBlock(block);
-        if (!params->aggregator.mergeOnBlock(block, variants, no_more_keys, is_cancelled))
+        auto columns = chunk.detachColumns();
+        for (auto & column : columns)
+            column = column->convertToFullColumnIfConst()->convertToFullColumnIfReplicated();
+        if (!params->aggregator.mergeOnBlock(std::move(columns), num_rows, false, variants, no_more_keys, is_cancelled))
             is_consume_finished = true;
     }
     else
@@ -918,7 +919,7 @@ void AggregatingTransform::initGenerate()
     if (variants.empty() && params->params.keys_size == 0 && !params->params.empty_result_for_aggregation_by_empty_set)
     {
         if (params->params.only_merge)
-            params->aggregator.mergeOnBlock(getInputs().front().getHeader(), variants, no_more_keys, is_cancelled);
+            params->aggregator.mergeOnBlock(getInputs().front().getHeader().getColumns(), 0, false, variants, no_more_keys, is_cancelled);
         else
             params->aggregator.executeOnBlock(getInputs().front().getHeader().getColumns(), 0, 0, variants, key_columns, aggregate_columns, no_more_keys);
     }

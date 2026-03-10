@@ -116,16 +116,44 @@ std::pair<QueryPlanPtr, bool> createLocalPlanForParallelReplicas(
     new_context->setSetting("enable_positional_arguments", Field(false));
     new_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));
 
-    /// Clone the query tree and update its context to use new_context.
-    /// This is necessary because the Planner extracts the context from the QueryNode,
-    /// and the original query_tree has a context with parallel replicas enabled.
-    /// Without this, findQueryForParallelReplicas would trigger expensive analysis
-    /// and cause stack overflow due to deep recursion.
+    /// Clone the query tree and disable parallel replicas in ALL QueryNode/UnionNode contexts.
+    /// Each node gets a copy of its own context with parallel replicas disabled.
+    /// This is necessary because the Planner extracts the context from each QueryNode,
+    /// and the original query_tree has contexts with parallel replicas enabled.
+    /// Without updating all nodes, nested subqueries (e.g. in JOINs) would still have
+    /// parallel replicas enabled in their contexts, causing the Planner to create
+    /// additional `ParallelReplicasReadingCoordinator` instances.
     auto local_query_tree = query_tree->clone();
-    if (auto * query_node = local_query_tree->as<QueryNode>())
-        query_node->getMutableContext() = new_context;
-    else if (auto * union_node = local_query_tree->as<UnionNode>())
-        union_node->getMutableContext() = new_context;
+    {
+        std::vector<IQueryTreeNode *> nodes_to_visit;
+        nodes_to_visit.push_back(local_query_tree.get());
+        while (!nodes_to_visit.empty())
+        {
+            auto * current = nodes_to_visit.back();
+            nodes_to_visit.pop_back();
+
+            if (auto * query_node = current->as<QueryNode>())
+            {
+                auto node_context = Context::createCopy(query_node->getContext());
+                node_context->setSetting("enable_positional_arguments", Field(false));
+                node_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));
+                query_node->getMutableContext() = std::move(node_context);
+            }
+            else if (auto * union_node = current->as<UnionNode>())
+            {
+                auto node_context = Context::createCopy(union_node->getContext());
+                node_context->setSetting("enable_positional_arguments", Field(false));
+                node_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));
+                union_node->getMutableContext() = std::move(node_context);
+            }
+
+            for (auto & child : current->getChildren())
+            {
+                if (child)
+                    nodes_to_visit.push_back(child.get());
+            }
+        }
+    }
 
     auto interpreter = InterpreterSelectQueryAnalyzer(local_query_tree, new_context, select_query_options);
     auto query_plan = std::make_unique<QueryPlan>(std::move(interpreter).extractQueryPlan());

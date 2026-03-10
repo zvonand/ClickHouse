@@ -52,51 +52,86 @@ public:
         this->data(place).denominator += static_cast<Denominator>(weights.getData()[row_num]);
     }
 
-    void addBatchSinglePlaceNotNull(
+    void NO_SANITIZE_UNDEFINED addBatchSinglePlace(
+        size_t row_begin,
+        size_t row_end,
+        AggregateDataPtr __restrict place,
+        const IColumn ** columns,
+        Arena *,
+        ssize_t if_argument_pos) const override
+    {
+        const auto * values = static_cast<const ColumnVector<Value> &>(*columns[0]).getData().data();
+        const auto * weights = static_cast<const ColumnVector<Weight> &>(*columns[1]).getData().data();
+
+        Numerator local_numerator{};
+        Denominator local_denominator{};
+
+        if (if_argument_pos >= 0)
+        {
+            const auto & flags = assert_cast<const ColumnUInt8 &>(*columns[if_argument_pos]).getData();
+            for (size_t i = row_begin; i < row_end; ++i)
+            {
+                if (flags[i])
+                {
+                    local_numerator += static_cast<Numerator>(values[i]) * static_cast<Numerator>(weights[i]);
+                    local_denominator += static_cast<Denominator>(weights[i]);
+                }
+            }
+        }
+        else
+        {
+            for (size_t i = row_begin; i < row_end; ++i)
+            {
+                local_numerator += static_cast<Numerator>(values[i]) * static_cast<Numerator>(weights[i]);
+                local_denominator += static_cast<Denominator>(weights[i]);
+            }
+        }
+
+        this->data(place).numerator += local_numerator;
+        this->data(place).denominator += local_denominator;
+    }
+
+    void NO_SANITIZE_UNDEFINED addBatchSinglePlaceNotNull(
         size_t row_begin,
         size_t row_end,
         AggregateDataPtr __restrict place,
         const IColumn ** columns,
         const UInt8 * null_map,
         Arena *,
-        ssize_t if_argument_pos) const final
+        ssize_t if_argument_pos) const override
     {
-        const auto & values = static_cast<const ColumnVector<Value> &>(*columns[0]).getData();
-        const auto & weights = static_cast<const ColumnVector<Weight> &>(*columns[1]).getData();
+        const auto * values = static_cast<const ColumnVector<Value> &>(*columns[0]).getData().data();
+        const auto * weights = static_cast<const ColumnVector<Weight> &>(*columns[1]).getData().data();
 
-        Numerator numerator = this->data(place).numerator;
-        Denominator denominator = this->data(place).denominator;
+        Numerator local_numerator{};
+        Denominator local_denominator{};
 
         if (if_argument_pos >= 0)
         {
             const auto & flags = assert_cast<const ColumnUInt8 &>(*columns[if_argument_pos]).getData();
-#pragma clang loop unroll_count(1)
             for (size_t i = row_begin; i < row_end; ++i)
             {
                 if (!null_map[i] && flags[i])
                 {
-                    const auto weight_num = static_cast<Numerator>(weights[i]);
-                    numerator += static_cast<Numerator>(values[i]) * weight_num;
-                    denominator += static_cast<Denominator>(weights[i]);
+                    local_numerator += static_cast<Numerator>(values[i]) * static_cast<Numerator>(weights[i]);
+                    local_denominator += static_cast<Denominator>(weights[i]);
                 }
             }
         }
         else
         {
-#pragma clang loop unroll_count(1)
             for (size_t i = row_begin; i < row_end; ++i)
             {
                 if (!null_map[i])
                 {
-                    const auto weight_num = static_cast<Numerator>(weights[i]);
-                    numerator += static_cast<Numerator>(values[i]) * weight_num;
-                    denominator += static_cast<Denominator>(weights[i]);
+                    local_numerator += static_cast<Numerator>(values[i]) * static_cast<Numerator>(weights[i]);
+                    local_denominator += static_cast<Denominator>(weights[i]);
                 }
             }
         }
 
-        this->data(place).numerator = numerator;
-        this->data(place).denominator = denominator;
+        this->data(place).numerator += local_numerator;
+        this->data(place).denominator += local_denominator;
     }
 
     String getName() const override { return "avgWeighted"; }

@@ -164,7 +164,10 @@ void InterpreterSetQuery::applySettingsFromQuery(const ASTPtr & ast, ContextMuta
                 : RestoreSettings::fromRestoreQuery(*backup_query).core_settings;
 
             if (!core_settings.empty())
+            {
+                context_->checkSettingsConstraints(core_settings, SettingSource::QUERY);
                 context_->applySettingsChanges(core_settings);
+            }
         }
     }
 }

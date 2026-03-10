@@ -64,8 +64,9 @@ def pre():
         f"Review PR {info.pr_url}. Repo is checked out at PR head. "
         f"Post findings as individual inline comments on specific lines using gh CLI (not a gh review). "
         f"Prefix every gh call with `env -u GH_CONFIG_DIR`. "
-        f"Read existing PR comments first and skip anything already noted. "
-        f"Write a self-contained summary (no inline findings) as plain Markdown to {REVIEW_FILE} — "
+        f"Read inline comments already posted by clickhouse-gh[bot] and skip duplicates. "
+        f"Write a self-contained summary of ALL findings (regardless of previous summaries) "
+        f"as plain Markdown to {REVIEW_FILE} — "
         f"no top-level header; use #### headers for sections only if needed. "
         f"Post it with: env -u GH_CONFIG_DIR python ci/praktika/gh.py post-or-update --tag review --file {REVIEW_FILE}"
     )

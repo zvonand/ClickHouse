@@ -61,8 +61,9 @@ void ReadFromCluster::applyFilters(ActionDAGNodes added_filter_nodes)
     SourceStepWithFilter::applyFilters(std::move(added_filter_nodes));
 
     const ActionsDAG::Node * predicate = nullptr;
-    if (filter_actions_dag)
-        predicate = filter_actions_dag->getOutputs().at(0);
+    const ActionsDAG * filter = filter_actions_dag ? filter_actions_dag.get() : query_info.filter_actions_dag.get();
+    if (filter)
+        predicate = filter->getOutputs().at(0);
 
     createExtension(predicate);
 }

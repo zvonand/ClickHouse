@@ -546,7 +546,7 @@ def test_hive_partitioning(started_cluster, allow_experimental_analyzer, use_par
                 """
             )
 
-    # With use_hive_partitioning=1 and use_hive_partitioning=0 we have no 'key' column
+    # With use_partition_strategy=1 and use_hive_partitioning=0 we have no 'key' column
     if not use_partition_strategy:
         query_id_full = str(uuid.uuid4())
         result = node.query(

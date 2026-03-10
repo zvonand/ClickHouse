@@ -401,6 +401,7 @@ size_t MergeTreeReaderTextIndex::readRows(
                 }
                 else if (use_fallback[i] && fallback_body_column)
                 {
+                    chassert(fallback_offset + rows_to_read <= fallback_body_column->size());
                     fillColumnFallback(
                         column_mutable,
                         columns_to_read[i].name,

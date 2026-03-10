@@ -25,6 +25,7 @@
 #include <Parsers/ASTColumnDeclaration.h>
 #include <Parsers/ASTColumnsTransformers.h>
 #include <Parsers/ASTCreateQuery.h>
+#include <Parsers/ASTCreateSQLFunctionQuery.h>
 #include <Parsers/ASTDeleteQuery.h>
 #include <Parsers/ASTDictionary.h>
 #include <Parsers/ASTDictionaryAttributeDeclaration.h>
@@ -47,6 +48,7 @@
 #include <Parsers/ASTSetQuery.h>
 #include <Parsers/ASTStatisticsDeclaration.h>
 #include <Parsers/ASTSubquery.h>
+#include <Parsers/ASTSystemQuery.h>
 #include <Parsers/ASTTablesInSelectQuery.h>
 #include <Parsers/ASTUpdateQuery.h>
 #include <Parsers/ASTUseQuery.h>
@@ -54,6 +56,7 @@
 #include <Parsers/ASTWithElement.h>
 #include <Parsers/ParserDataType.h>
 #include <Parsers/ParserQuery.h>
+#include <Parsers/SyncReplicaMode.h>
 #include <TableFunctions/TableFunctionFactory.h>
 #include <pcg_random.hpp>
 #include <Common/SipHash.h>
@@ -3080,6 +3083,302 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         if (fuzz_rand() % 50 == 0)
             replace_transformer->is_strict = !replace_transformer->is_strict;
         fuzz(replace_transformer->children);
+    }
+    else if (auto * create_function = typeid_cast<ASTCreateSQLFunctionQuery *>(ast.get()))
+    {
+        /// Toggle OR REPLACE / IF NOT EXISTS flags to exercise all creation paths
+        if (fuzz_rand() % 50 == 0)
+            create_function->or_replace = !create_function->or_replace;
+        if (fuzz_rand() % 50 == 0)
+            create_function->if_not_exists = !create_function->if_not_exists;
+        /// Fuzz the lambda expression body
+        fuzz(create_function->children);
+    }
+    else if (auto * system_query = typeid_cast<ASTSystemQuery *>(ast.get()))
+    {
+        using Type = ASTSystemQuery::Type;
+        /// Toggle paired commands to exercise both code paths with the same operand.
+        /// Includes START/STOP pairs, individual/bulk reload pairs, and ENABLE/DISABLE pairs.
+        if (fuzz_rand() % 20 == 0)
+        {
+            static const std::pair<Type, Type> toggleable_pairs[] = {
+                {Type::STOP_MERGES, Type::START_MERGES},
+                {Type::STOP_TTL_MERGES, Type::START_TTL_MERGES},
+                {Type::STOP_FETCHES, Type::START_FETCHES},
+                {Type::STOP_MOVES, Type::START_MOVES},
+                {Type::STOP_REPLICATED_SENDS, Type::START_REPLICATED_SENDS},
+                {Type::STOP_REPLICATION_QUEUES, Type::START_REPLICATION_QUEUES},
+                {Type::STOP_REPLICATED_DDL_QUERIES, Type::START_REPLICATED_DDL_QUERIES},
+                {Type::STOP_DISTRIBUTED_SENDS, Type::START_DISTRIBUTED_SENDS},
+                {Type::STOP_THREAD_FUZZER, Type::START_THREAD_FUZZER},
+                {Type::STOP_PULLING_REPLICATION_LOG, Type::START_PULLING_REPLICATION_LOG},
+                {Type::STOP_CLEANUP, Type::START_CLEANUP},
+                {Type::STOP_VIEW, Type::START_VIEW},
+                {Type::STOP_VIEWS, Type::START_VIEWS},
+                {Type::STOP_REPLICATED_VIEW, Type::START_REPLICATED_VIEW},
+                {Type::STOP_VIRTUAL_PARTS_UPDATE, Type::START_VIRTUAL_PARTS_UPDATE},
+                {Type::STOP_REDUCE_BLOCKING_PARTS, Type::START_REDUCE_BLOCKING_PARTS},
+                {Type::STOP_LISTEN, Type::START_LISTEN},
+                {Type::LOAD_PRIMARY_KEY, Type::UNLOAD_PRIMARY_KEY},
+                /* These are too slow
+                {Type::RELOAD_FUNCTION, Type::RELOAD_FUNCTIONS},
+                {Type::RELOAD_DICTIONARY, Type::RELOAD_DICTIONARIES},
+                {Type::RELOAD_MODEL, Type::RELOAD_MODELS},*/
+                {Type::JEMALLOC_ENABLE_PROFILE, Type::JEMALLOC_DISABLE_PROFILE},
+                {Type::JEMALLOC_PURGE, Type::JEMALLOC_FLUSH_PROFILE},
+                {Type::FLUSH_LOGS, Type::FLUSH_ASYNC_INSERT_QUEUE},
+                {Type::ALLOCATE_MEMORY, Type::FREE_MEMORY},
+                {Type::RESTART_REPLICA, Type::RESTORE_REPLICA},
+                {Type::RESTART_DISK, Type::CLEAR_DISK_METADATA_CACHE},
+            };
+            for (const auto & [a_type, b_type] : toggleable_pairs)
+            {
+                if (system_query->type == a_type)
+                {
+                    system_query->type = b_type;
+                    break;
+                }
+                else if (system_query->type == b_type)
+                {
+                    system_query->type = a_type;
+                    break;
+                }
+            }
+        }
+        /// Toggle IF EXISTS
+        if (fuzz_rand() % 20 == 0)
+            system_query->if_exists = !system_query->if_exists;
+        /// Cycle through SYNC REPLICA / SYNC DATABASE REPLICA modes
+        if ((system_query->type == Type::SYNC_REPLICA || system_query->type == Type::SYNC_DATABASE_REPLICA) && fuzz_rand() % 5 == 0)
+        {
+            static const SyncReplicaMode sync_modes[] = {
+                SyncReplicaMode::DEFAULT,
+                SyncReplicaMode::STRICT,
+                SyncReplicaMode::LIGHTWEIGHT,
+                SyncReplicaMode::PULL,
+            };
+            system_query->sync_replica_mode = sync_modes[fuzz_rand() % std::size(sync_modes)];
+        }
+        /// Fuzz SUSPEND duration — try zero, boundary, and large values
+        if (system_query->type == Type::SUSPEND && fuzz_rand() % 5 == 0)
+        {
+            static const UInt64 suspend_seconds[] = {0, 1, 2, 5, 10, 3600};
+            system_query->seconds = suspend_seconds[fuzz_rand() % std::size(suspend_seconds)];
+        }
+        /// Rotate among view commands that all take a table argument
+        {
+            static const Type view_cmd_types[] = {
+                Type::REFRESH_VIEW,
+                Type::START_VIEW,
+                Type::START_REPLICATED_VIEW,
+                Type::STOP_VIEW,
+                Type::STOP_REPLICATED_VIEW,
+                Type::CANCEL_VIEW,
+                Type::WAIT_VIEW,
+            };
+            for (const auto & t : view_cmd_types)
+            {
+                if (system_query->type == t && fuzz_rand() % 10 == 0)
+                {
+                    system_query->type = view_cmd_types[fuzz_rand() % std::size(view_cmd_types)];
+                    break;
+                }
+            }
+        }
+        /// Rotate among no-argument SYNC commands
+        {
+            static const Type sync_types[] = {
+                Type::SYNC_TRANSACTION_LOG,
+                Type::SYNC_FILE_CACHE,
+                Type::SYNC_FILESYSTEM_CACHE,
+            };
+            for (const auto & t : sync_types)
+            {
+                if (system_query->type == t && fuzz_rand() % 10 == 0)
+                {
+                    system_query->type = sync_types[fuzz_rand() % std::size(sync_types)];
+                    break;
+                }
+            }
+        }
+        /// Cycle WAIT FAILPOINT action between PAUSE / RESUME / UNSPECIFIED
+        if (system_query->type == Type::WAIT_FAILPOINT && fuzz_rand() % 5 == 0)
+        {
+            static const ASTSystemQuery::FailPointAction fp_actions[] = {
+                ASTSystemQuery::FailPointAction::UNSPECIFIED,
+                ASTSystemQuery::FailPointAction::PAUSE,
+                ASTSystemQuery::FailPointAction::RESUME,
+            };
+            system_query->fail_point_action = fp_actions[fuzz_rand() % std::size(fp_actions)];
+        }
+        /// Rotate among failpoint commands that all take a fail_point_name argument
+        if ((system_query->type == Type::ENABLE_FAILPOINT || system_query->type == Type::DISABLE_FAILPOINT
+             || system_query->type == Type::NOTIFY_FAILPOINT || system_query->type == Type::WAIT_FAILPOINT)
+            && fuzz_rand() % 10 == 0)
+        {
+            static const Type failpoint_types[] = {
+                Type::ENABLE_FAILPOINT,
+                Type::DISABLE_FAILPOINT,
+                Type::NOTIFY_FAILPOINT,
+                Type::WAIT_FAILPOINT,
+            };
+            system_query->type = failpoint_types[fuzz_rand() % std::size(failpoint_types)];
+        }
+        /// Toggle TEST VIEW between SET FAKE TIME and UNSET FAKE TIME
+        if (system_query->type == Type::TEST_VIEW && fuzz_rand() % 5 == 0)
+        {
+            if (system_query->fake_time_for_view.has_value())
+                system_query->fake_time_for_view.reset();
+            else
+                system_query->fake_time_for_view = static_cast<Int64>(fuzz_rand() % 2000000000LL);
+        }
+        /// Toggle CLEAR FILESYSTEM CACHE between clearing all, by name, and by name+key+offset
+        if (system_query->type == Type::CLEAR_FILESYSTEM_CACHE && fuzz_rand() % 5 == 0)
+        {
+            if (system_query->filesystem_cache_name.empty())
+            {
+                system_query->filesystem_cache_name = "default";
+            }
+            else if (system_query->key_to_drop.empty())
+            {
+                system_query->key_to_drop = std::to_string(fuzz_rand());
+            }
+            else if (!system_query->offset_to_drop.has_value())
+            {
+                system_query->offset_to_drop = fuzz_rand() % 1024;
+            }
+            else
+            {
+                /// Reset back to clearing all
+                system_query->filesystem_cache_name.clear();
+                system_query->key_to_drop.clear();
+                system_query->offset_to_drop.reset();
+            }
+        }
+        /// Toggle CLEAR DISTRIBUTED CACHE between drop-connections mode and server-id mode
+        if (system_query->type == Type::CLEAR_DISTRIBUTED_CACHE && fuzz_rand() % 5 == 0)
+        {
+            system_query->distributed_cache_drop_connections = !system_query->distributed_cache_drop_connections;
+            if (!system_query->distributed_cache_drop_connections && system_query->distributed_cache_server_id.empty())
+                system_query->distributed_cache_server_id = "server_" + std::to_string(fuzz_rand() % 4);
+        }
+        /// Toggle CLEAR SCHEMA CACHE optional storage specifier
+        if (system_query->type == Type::CLEAR_SCHEMA_CACHE && fuzz_rand() % 5 == 0)
+        {
+            if (system_query->schema_cache_storage.empty())
+            {
+                static const String storages[] = {"S3", "HDFS", "URL", "File", "AzureBlobStorage"};
+                system_query->schema_cache_storage = storages[fuzz_rand() % std::size(storages)];
+            }
+            else
+                system_query->schema_cache_storage.clear();
+        }
+        /// Toggle CLEAR FORMAT SCHEMA CACHE optional format specifier
+        if (system_query->type == Type::CLEAR_FORMAT_SCHEMA_CACHE && fuzz_rand() % 5 == 0)
+        {
+            if (system_query->schema_cache_format.empty())
+            {
+                static const String formats[] = {"Protobuf", "CapnProto", "FlatBuffers", "MsgPack"};
+                system_query->schema_cache_format = formats[fuzz_rand() % std::size(formats)];
+            }
+            else
+                system_query->schema_cache_format.clear();
+        }
+        /// Fuzz ALLOCATE MEMORY size with boundary and large values
+        if (system_query->type == Type::ALLOCATE_MEMORY && fuzz_rand() % 5 == 0)
+        {
+            static const UInt64 mem_sizes[] = {0, 1, 4096, 1ULL << 20, 1ULL << 30};
+            system_query->untracked_memory_size = mem_sizes[fuzz_rand() % std::size(mem_sizes)];
+        }
+        /// Toggle CLEAR QUERY CACHE between clearing all and clearing by tag
+        if (system_query->type == Type::CLEAR_QUERY_CACHE && fuzz_rand() % 5 == 0)
+        {
+            if (system_query->query_result_cache_tag.has_value())
+                system_query->query_result_cache_tag.reset();
+            else
+                system_query->query_result_cache_tag = "fuzz_tag_" + std::to_string(fuzz_rand() % 4);
+        }
+        /// Rotate among no-argument cache-clear types to exercise different cache subsystems
+        /// with the same surrounding query context
+        {
+            static const Type plain_cache_types[] = {
+                Type::CLEAR_DNS_CACHE,
+                Type::CLEAR_CONNECTIONS_CACHE,
+                Type::CLEAR_MARK_CACHE,
+                Type::CLEAR_PRIMARY_INDEX_CACHE,
+                Type::CLEAR_UNCOMPRESSED_CACHE,
+                Type::CLEAR_INDEX_MARK_CACHE,
+                Type::CLEAR_INDEX_UNCOMPRESSED_CACHE,
+                Type::CLEAR_VECTOR_SIMILARITY_INDEX_CACHE,
+                Type::CLEAR_TEXT_INDEX_TOKENS_CACHE,
+                Type::CLEAR_TEXT_INDEX_HEADER_CACHE,
+                Type::CLEAR_TEXT_INDEX_POSTINGS_CACHE,
+                Type::CLEAR_TEXT_INDEX_CACHES,
+                Type::CLEAR_MMAP_CACHE,
+                Type::CLEAR_QUERY_CONDITION_CACHE,
+                Type::CLEAR_COMPILED_EXPRESSION_CACHE,
+                Type::CLEAR_ICEBERG_METADATA_CACHE,
+                Type::CLEAR_PAGE_CACHE,
+                Type::CLEAR_S3_CLIENT_CACHE,
+            };
+            for (const auto & t : plain_cache_types)
+            {
+                if (system_query->type == t && fuzz_rand() % 10 == 0)
+                {
+                    system_query->type = plain_cache_types[fuzz_rand() % std::size(plain_cache_types)];
+                    break;
+                }
+            }
+        }
+        /// Toggle between the two prewarm cache types (same optional-table structure)
+        if ((system_query->type == Type::PREWARM_MARK_CACHE || system_query->type == Type::PREWARM_PRIMARY_INDEX_CACHE)
+            && fuzz_rand() % 5 == 0)
+        {
+            system_query->type
+                = (system_query->type == Type::PREWARM_MARK_CACHE) ? Type::PREWARM_PRIMARY_INDEX_CACHE : Type::PREWARM_MARK_CACHE;
+        }
+        /// Rotate among no-argument reload commands
+        {
+            static const Type reload_types[] = {
+                Type::RELOAD_CONFIG,
+                Type::RELOAD_USERS,
+                Type::RELOAD_ASYNCHRONOUS_METRICS,
+                Type::RELOAD_EMBEDDED_DICTIONARIES,
+            };
+            for (const auto & t : reload_types)
+            {
+                if (system_query->type == t && fuzz_rand() % 10 == 0)
+                {
+                    system_query->type = reload_types[fuzz_rand() % std::size(reload_types)];
+                    break;
+                }
+            }
+        }
+        /// Fuzz RELOAD DELTA KERNEL TRACING level string
+        if (system_query->type == Type::RELOAD_DELTA_KERNEL_TRACING && fuzz_rand() % 5 == 0)
+        {
+            static const String tracing_levels[] = {"none", "error", "warning", "information", "debug", "trace"};
+            system_query->delta_kernel_tracing_level = tracing_levels[fuzz_rand() % std::size(tracing_levels)];
+        }
+        /// Fuzz DROP REPLICA optional fields: shard, is_drop_whole_replica, with_tables
+        if ((system_query->type == Type::DROP_REPLICA || system_query->type == Type::DROP_DATABASE_REPLICA
+             || system_query->type == Type::DROP_CATALOG_REPLICA)
+            && fuzz_rand() % 5 == 0)
+        {
+            const uint32_t choice = fuzz_rand() % 3;
+            if (choice == 0)
+                system_query->is_drop_whole_replica = !system_query->is_drop_whole_replica;
+            else if (choice == 1)
+                system_query->with_tables = !system_query->with_tables;
+            else
+            {
+                if (system_query->shard.empty())
+                    system_query->shard = "shard_" + std::to_string(fuzz_rand() % 4);
+                else
+                    system_query->shard.clear();
+            }
+        }
+        fuzz(system_query->children);
     }
     else
     {

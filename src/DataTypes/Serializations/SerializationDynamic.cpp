@@ -25,11 +25,14 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-UInt128 SerializationDynamic::getHash(size_t max_dynamic_types_)
+UInt128 SerializationDynamic::getHash(size_t max_dynamic_types_, const SerializationInfoSettings & serialization_info_settings_)
 {
     SipHash hash;
     hash.update("Dynamic");
     hash.update(max_dynamic_types_);
+    hash.update(static_cast<int>(serialization_info_settings_.string_serialization_version));
+    hash.update(static_cast<int>(serialization_info_settings_.nullable_serialization_version));
+    hash.update(serialization_info_settings_.propagate_types_serialization_versions_to_nested_types);
     return hash.get128();
 }
 
@@ -932,7 +935,7 @@ static void serializeTextImpl(
 
 SerializationPtr SerializationDynamic::create(size_t max_dynamic_types_, const SerializationInfoSettings & serialization_info_settings_)
 {
-    return ISerialization::pooled(getHash(max_dynamic_types_), [=] { return new SerializationDynamic(max_dynamic_types_, serialization_info_settings_); });
+    return ISerialization::pooled(getHash(max_dynamic_types_, serialization_info_settings_), [=] { return new SerializationDynamic(max_dynamic_types_, serialization_info_settings_); });
 }
 
 void SerializationDynamic::serializeTextCSV(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings & settings) const

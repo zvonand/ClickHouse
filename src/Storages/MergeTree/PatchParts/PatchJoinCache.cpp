@@ -7,7 +7,6 @@
 
 #include <Common/ThreadPool.h>
 #include <Common/ProfileEvents.h>
-#include <Common/FailPoint.h>
 #include <Columns/ColumnsNumber.h>
 #include <Common/ElapsedTimeProfileEventIncrement.h>
 
@@ -170,6 +169,7 @@ std::vector<std::shared_future<void>> PatchJoinCache::Entry::addRangesAsync(cons
         /// Firstly lookup with read lock, because all needed ranges are likely read already.
         std::shared_lock lock(mutex);
 
+
         for (const auto & range : ranges)
         {
             auto it = ranges_futures.find(range);
@@ -192,7 +192,7 @@ std::vector<std::shared_future<void>> PatchJoinCache::Entry::addRangesAsync(cons
         std::lock_guard lock(mutex);
 
         /// A previous call to addBlock on this entry may have failed, leaving
-        /// hash_map in an inconsistent state. Bail out before doing more work.
+        /// hash_map in an inconsistent state. Rethrow the original error.
         if (error)
             std::rethrow_exception(error);
 
@@ -259,8 +259,8 @@ void PatchJoinCache::Entry::addBlock(Block read_block)
 
     std::lock_guard lock(mutex);
 
-    /// If a previous addBlock call failed with an exception, the hash_map may be in an
-    /// inconsistent state. Refuse to touch it — re-throw the original error instead.
+    /// A previous call to addBlock on this entry may have failed, leaving
+    /// hash_map in an inconsistent state. Rethrow the original error.
     if (error)
         std::rethrow_exception(error);
 

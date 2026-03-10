@@ -2,6 +2,8 @@
 
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PersistentTableComponents.h>
 #include "config.h"
+#include <optional>
+#include <vector>
 
 #if USE_AVRO
 
@@ -48,10 +50,20 @@ struct ExpireSnapshotsResult
     Int64 deleted_manifest_files_count = 0;
     Int64 deleted_manifest_lists_count = 0;
     Int64 deleted_statistics_files_count = 0;
+    bool dry_run = false;
+};
+
+struct ExpireSnapshotsOptions
+{
+    std::optional<Int64> expire_before_ms;
+    std::optional<Int64> retention_period_ms;
+    std::optional<Int32> retain_last;
+    std::optional<std::vector<Int64>> snapshot_ids;
+    bool dry_run = false;
 };
 
 ExpireSnapshotsResult expireSnapshots(
-    std::optional<Int64> expire_before_ms,
+    const ExpireSnapshotsOptions & options,
     ContextPtr context,
     ObjectStoragePtr object_storage,
     const DataLakeStorageSettings & data_lake_settings,

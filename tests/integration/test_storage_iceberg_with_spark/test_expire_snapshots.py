@@ -14,7 +14,7 @@ from helpers.iceberg_utils import (
 )
 
 
-ICEBERG_SETTINGS = {"allow_insert_into_iceberg": 1}
+ICEBERG_SETTINGS = {"allow_insert_into_iceberg": 1, "allow_experimental_expire_snapshots": 1}
 FAR_FUTURE = "2099-12-31 23:59:59"
 AGGRESSIVE_RETENTION = {
     "history.expire.max-snapshot-age-ms": "1",
@@ -101,18 +101,21 @@ def create_and_populate(cluster, instance, storage_type, table_name, n_rows, for
         )
 
 
-def expire_snapshots(instance, table_name, timestamp=None):
+def expire_snapshots(instance, table_name, timestamp=None, args=None, settings=None):
+    query_args = []
     if timestamp:
-        result = instance.query(
-            f"ALTER TABLE {table_name} EXECUTE expire_snapshots('{timestamp}');",
-            settings=ICEBERG_SETTINGS,
-        )
-    else:
-        result = instance.query(
-            f"ALTER TABLE {table_name} EXECUTE expire_snapshots();",
-            settings=ICEBERG_SETTINGS,
-        )
-    return result
+        query_args.append(f"'{timestamp}'")
+    if args:
+        query_args.extend(args)
+
+    settings_to_use = dict(ICEBERG_SETTINGS)
+    if settings:
+        settings_to_use.update(settings)
+
+    return instance.query(
+        f"ALTER TABLE {table_name} EXECUTE expire_snapshots({', '.join(query_args)});",
+        settings=settings_to_use,
+    )
 
 
 def parse_expire_result(result):
@@ -186,7 +189,7 @@ def test_expire_snapshots_basic(started_cluster_iceberg_with_spark, storage_type
 
     result = expire_snapshots(instance, TABLE_NAME, expire_timestamp)
     counts = parse_expire_result(result)
-    assert len(counts) == 6, f"Expected 6 metrics, got {counts}"
+    assert len(counts) == 7, f"Expected 7 metrics, got {counts}"
     assert all(v >= 0 for v in counts.values()), f"All counts should be non-negative, got {counts}"
     assert_data_intact(instance, TABLE_NAME, 4)
 
@@ -399,6 +402,126 @@ def test_expire_snapshots_no_args_with_short_max_age(started_cluster_iceberg_wit
     assert get_history_count(instance, TABLE_NAME) == 1, \
         "With 1ms max-age and min-keep=1, only current snapshot should remain"
     assert_data_intact(instance, TABLE_NAME, 5)
+
+
+@pytest.mark.parametrize("storage_type", ["s3", "local"])
+def test_expire_snapshots_retain_last(started_cluster_iceberg_with_spark, storage_type):
+    """retain_last keeps the most recent N snapshots for this invocation."""
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_retain_last", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 5
+    )
+    time.sleep(2)
+
+    expire_snapshots(
+        instance,
+        TABLE_NAME,
+        FAR_FUTURE,
+        args=["retain_last = 2", "retention_period = '1ms'"],
+    )
+
+    assert get_history_count(instance, TABLE_NAME) == 2
+    assert_data_intact(instance, TABLE_NAME, 5)
+
+
+@pytest.mark.parametrize("storage_type", ["s3", "local"])
+def test_expire_snapshots_retention_period(started_cluster_iceberg_with_spark, storage_type):
+    """retention_period overrides max-snapshot-age-ms for this invocation."""
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_retention_period", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 4
+    )
+    time.sleep(2)
+
+    expire_snapshots(
+        instance,
+        TABLE_NAME,
+        FAR_FUTURE,
+        args=["retention_period = '1ms'"],
+    )
+
+    assert get_history_count(instance, TABLE_NAME) == 1
+    assert_data_intact(instance, TABLE_NAME, 4)
+
+
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_expire_snapshots_snapshot_ids(started_cluster_iceberg_with_spark, storage_type):
+    """snapshot_ids expires only explicitly selected snapshots."""
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_snapshot_ids", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 4
+    )
+
+    snapshot_ids = get_snapshot_ids(instance, TABLE_NAME)
+    current_id = snapshot_ids[-1]
+    to_expire = snapshot_ids[0]
+
+    expire_snapshots(
+        instance,
+        TABLE_NAME,
+        args=[f"snapshot_ids = [{to_expire}]"],
+    )
+
+    retained = get_retained_ids(instance, TABLE_NAME)
+    assert to_expire not in retained
+    assert current_id in retained
+    assert len(retained) == 3
+    assert_data_intact(instance, TABLE_NAME, 4)
+
+
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_expire_snapshots_dry_run(started_cluster_iceberg_with_spark, storage_type):
+    """dry_run reports deletions but does not modify metadata or delete files."""
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_dry_run", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 4
+    )
+    time.sleep(2)
+    history_before = get_history_count(instance, TABLE_NAME)
+    retained_before = get_retained_ids(instance, TABLE_NAME)
+
+    result = expire_snapshots(
+        instance,
+        TABLE_NAME,
+        FAR_FUTURE,
+        args=["retention_period = '1ms'", "retain_last = 1", "dry_run = 1"],
+    )
+    counts = parse_expire_result(result)
+
+    assert counts["dry_run"] == 1
+    assert counts["deleted_manifest_lists_count"] > 0
+    assert get_history_count(instance, TABLE_NAME) == history_before
+    assert get_retained_ids(instance, TABLE_NAME) == retained_before
+    assert_data_intact(instance, TABLE_NAME, 4)
+
+
+@pytest.mark.parametrize("storage_type", ["s3", "local"])
+def test_expire_snapshots_server_default_override(started_cluster_iceberg_with_spark, storage_type):
+    """Session settings override default retention when table properties are absent."""
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_server_defaults", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 4
+    )
+    time.sleep(2)
+
+    expire_snapshots(
+        instance,
+        TABLE_NAME,
+        settings={"iceberg_expire_default_max_snapshot_age_ms": 1},
+    )
+
+    assert get_history_count(instance, TABLE_NAME) == 1
+    assert_data_intact(instance, TABLE_NAME, 4)
 
 
 @pytest.mark.parametrize("storage_type", ["local"])

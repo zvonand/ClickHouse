@@ -2,6 +2,8 @@
 #if USE_AVRO
 
 #include <cstddef>
+#include <cctype>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -28,6 +30,7 @@
 #include <Common/Exception.h>
 
 #include <Interpreters/PreparedSets.h>
+#include <Storages/checkAndGetLiteralArgument.h>
 #include <Storages/ObjectStorage/Utils.h>
 
 #include <Databases/DataLake/Common.h>
@@ -120,6 +123,7 @@ extern const SettingsBool use_roaring_bitmap_iceberg_positional_deletes;
 extern const SettingsString iceberg_metadata_compression_method;
 extern const SettingsBool allow_insert_into_iceberg;
 extern const SettingsBool allow_experimental_iceberg_compaction;
+extern const SettingsBool allow_experimental_expire_snapshots;
 extern const SettingsBool iceberg_delete_data_on_drop;
 }
 
@@ -569,9 +573,190 @@ static Pipe expireSnapshotsResultToPipe(const Iceberg::ExpireSnapshotsResult & r
     add("deleted_manifest_files_count", result.deleted_manifest_files_count);
     add("deleted_manifest_lists_count", result.deleted_manifest_lists_count);
     add("deleted_statistics_files_count", result.deleted_statistics_files_count);
+    add("dry_run", result.dry_run ? 1 : 0);
 
-    Chunk chunk(std::move(columns), 6);
+    const size_t rows = columns[0]->size();
+    Chunk chunk(std::move(columns), rows);
     return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
+}
+
+static Int64 parseInt64Field(const Field & value, std::string_view name)
+{
+    if (value.getType() == Field::Types::Int64)
+        return value.safeGet<Int64>();
+    if (value.getType() == Field::Types::UInt64)
+    {
+        UInt64 value_uint = value.safeGet<UInt64>();
+        if (value_uint > static_cast<UInt64>(std::numeric_limits<Int64>::max()))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots '{}' is too large: {}", name, value_uint);
+        return static_cast<Int64>(value_uint);
+    }
+
+    throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects '{}' to be an integer literal", name);
+}
+
+static bool parseBoolField(const Field & value, std::string_view name)
+{
+    if (value.getType() == Field::Types::Bool)
+        return value.safeGet<bool>();
+    if (value.getType() == Field::Types::UInt64)
+        return value.safeGet<UInt64>() != 0;
+    if (value.getType() == Field::Types::Int64)
+        return value.safeGet<Int64>() != 0;
+    if (value.getType() == Field::Types::String)
+    {
+        const auto & str = value.safeGet<String>();
+        if (str == "true" || str == "TRUE")
+            return true;
+        if (str == "false" || str == "FALSE")
+            return false;
+    }
+
+    throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects '{}' to be a boolean or integer literal", name);
+}
+
+static std::vector<Int64> parseSnapshotIds(const Field & value_ast)
+{
+    std::vector<Int64> snapshot_ids;
+
+    auto append_value = [&](const Field & value)
+    {
+        if (value.getType() == Field::Types::Int64)
+        {
+            snapshot_ids.push_back(value.safeGet<Int64>());
+            return;
+        }
+        if (value.getType() == Field::Types::UInt64)
+        {
+            UInt64 id = value.safeGet<UInt64>();
+            if (id > static_cast<UInt64>(std::numeric_limits<Int64>::max()))
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots snapshot id is too large: {}", id);
+            snapshot_ids.push_back(static_cast<Int64>(id));
+            return;
+        }
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects 'snapshot_ids' to contain integer literals");
+    };
+
+    if (value_ast.getType() != Field::Types::Array)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects 'snapshot_ids' to be an array literal like [1, 2, 3]");
+
+    for (const auto & value : value_ast.safeGet<Array>())
+        append_value(value);
+
+    return snapshot_ids;
+}
+
+static Int64 parseRetentionPeriodToMilliseconds(const Field & value_ast)
+{
+    if (value_ast.getType() != Field::Types::String)
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "expire_snapshots expects 'retention_period' to be a string like '3d', '12h', '30m', '15s' or '250ms'");
+
+    const String & input = value_ast.safeGet<String>();
+    if (input.empty())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots 'retention_period' cannot be empty");
+
+    size_t digits_end = 0;
+    while (digits_end < input.size() && std::isdigit(static_cast<unsigned char>(input[digits_end])))
+        ++digits_end;
+
+    if (digits_end == 0 || digits_end == input.size())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Invalid retention_period '{}'", input);
+
+    UInt64 amount = 0;
+    try
+    {
+        amount = std::stoull(input.substr(0, digits_end));
+    }
+    catch (...)
+    {
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Invalid retention_period '{}'", input);
+    }
+
+    const String unit = input.substr(digits_end);
+    UInt64 multiplier = 0;
+    if (unit == "ms")
+        multiplier = 1;
+    else if (unit == "s")
+        multiplier = 1000;
+    else if (unit == "m")
+        multiplier = 60 * 1000;
+    else if (unit == "h")
+        multiplier = 60 * 60 * 1000;
+    else if (unit == "d")
+        multiplier = 24 * 60 * 60 * 1000;
+    else
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unsupported retention_period unit '{}'", unit);
+
+    if (amount > static_cast<UInt64>(std::numeric_limits<Int64>::max()) / multiplier)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "retention_period '{}' is too large", input);
+
+    return static_cast<Int64>(amount * multiplier);
+}
+
+static Iceberg::ExpireSnapshotsOptions parseExpireSnapshotsOptions(const ASTPtr & args, ContextPtr context)
+{
+    Iceberg::ExpireSnapshotsOptions options;
+    if (!args)
+        return options;
+    ASTs all_args = args->children;
+    auto first_key_value_arg_it = getFirstKeyValueArgument(all_args);
+    size_t positional_count = std::distance(all_args.begin(), first_key_value_arg_it);
+    if (positional_count > 1)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects at most one positional timestamp argument");
+
+    if (positional_count == 1)
+    {
+        auto timestamp = tryGetLiteralArgument<String>(all_args[0], "timestamp");
+        if (!timestamp)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots positional argument must be a single timestamp string");
+
+        ReadBufferFromString buf(*timestamp);
+        time_t expire_time;
+        readDateTimeText(expire_time, buf);
+        options.expire_before_ms = static_cast<Int64>(expire_time) * 1000;
+    }
+
+    ASTs key_value_args(first_key_value_arg_it, all_args.end());
+    auto parsed_key_values = parseKeyValueArguments(key_value_args, context);
+
+    if (auto it = parsed_key_values.find("retention_period"); it != parsed_key_values.end())
+        options.retention_period_ms = parseRetentionPeriodToMilliseconds(it->second);
+
+    if (auto it = parsed_key_values.find("retain_last"); it != parsed_key_values.end())
+    {
+        Int64 retain_last = parseInt64Field(it->second, "retain_last");
+        if (retain_last <= 0)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects 'retain_last' to be positive");
+        if (retain_last > std::numeric_limits<Int32>::max())
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots 'retain_last' is too large: {}", retain_last);
+        options.retain_last = static_cast<Int32>(retain_last);
+    }
+
+    if (auto it = parsed_key_values.find("snapshot_ids"); it != parsed_key_values.end())
+        options.snapshot_ids = parseSnapshotIds(it->second);
+
+    if (auto it = parsed_key_values.find("dry_run"); it != parsed_key_values.end())
+        options.dry_run = parseBoolField(it->second, "dry_run");
+
+    for (const auto & [key, _] : parsed_key_values)
+    {
+        if (key != "retention_period" && key != "retain_last" && key != "snapshot_ids" && key != "dry_run")
+        {
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "Unknown expire_snapshots argument '{}'. Supported: retention_period, retain_last, snapshot_ids, dry_run",
+                key);
+        }
+    }
+
+    if (options.snapshot_ids.has_value() && (options.retention_period_ms.has_value() || options.retain_last.has_value()))
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "expire_snapshots argument 'snapshot_ids' cannot be combined with 'retention_period' or 'retain_last'");
+
+    return options;
 }
 
 Pipe IcebergMetadata::executeCommand(
@@ -593,25 +778,18 @@ Pipe IcebergMetadata::executeCommand(
 
     if (command_name == "expire_snapshots")
     {
-        if (args && args->children.size() > 1)
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects zero or one argument (timestamp), got {}", args->children.size());
-
-        std::optional<Int64> expire_before_ms;
-        if (args && args->children.size() == 1)
+        if (!context->getSettingsRef()[Setting::allow_experimental_expire_snapshots].value)
         {
-            const auto * literal = args->children[0]->as<ASTLiteral>();
-            if (!literal || literal->value.getType() != Field::Types::String)
-                throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects a string timestamp argument like '2024-06-01 00:00:00'");
-
-            const String & timestamp_str = literal->value.safeGet<String>();
-            ReadBufferFromString buf(timestamp_str);
-            time_t expire_time;
-            readDateTimeText(expire_time, buf);
-            expire_before_ms = static_cast<Int64>(expire_time) * 1000;
+            throw Exception(
+                ErrorCodes::SUPPORT_IS_DISABLED,
+                "Iceberg expire_snapshots is experimental. "
+                "To allow its usage, enable setting allow_experimental_expire_snapshots");
         }
 
+        auto options = parseExpireSnapshotsOptions(args, context);
+
         auto result = Iceberg::expireSnapshots(
-            expire_before_ms,
+            options,
             context,
             object_storage_,
             data_lake_settings,

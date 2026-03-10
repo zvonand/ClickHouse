@@ -253,11 +253,16 @@ void Runner::parseHostsFromConfig(const Poco::Util::AbstractConfiguration & conf
 
 void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookeepers)
 {
+    struct RequestResult
+    {
+        size_t response_bytes;
+        uint64_t elapsed_microseconds;
+    };
+
     struct InFlightRequest
     {
-        std::future<size_t> future;
+        std::future<RequestResult> future;
         Coordination::ZooKeeperRequestPtr request;
-        Stopwatch watch;
     };
 
     /// Randomly choosing connection index
@@ -320,20 +325,19 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
     {
         try
         {
-            auto response_size = slot.future.get();
-            auto microseconds = slot.watch.elapsedMicroseconds();
+            auto result = slot.future.get();
 
             if (warmup_complete)
             {
                 std::lock_guard lock(mutex);
-                auto bytes = slot.request->bytesSize() + response_size;
+                auto bytes = slot.request->bytesSize() + result.response_bytes;
 
                 if (slot.request->isReadRequest())
-                    info->addRead(microseconds, 1, bytes);
+                    info->addRead(result.elapsed_microseconds, 1, bytes);
                 else
-                    info->addWrite(microseconds, 1, bytes);
+                    info->addWrite(result.elapsed_microseconds, 1, bytes);
 
-                info->addOp(slot.request->getOpNum(), microseconds, 1, bytes);
+                info->addOp(slot.request->getOpNum(), result.elapsed_microseconds, 1, bytes);
             }
         }
         catch (...) // Ok: handle_request_exception logs and counts the error
@@ -390,22 +394,26 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
         const auto connection_index = distribution(rng);
         auto & zk = zookeepers[connection_index];
 
-        auto promise = std::make_shared<std::promise<size_t>>();
+        auto promise = std::make_shared<std::promise<RequestResult>>();
         auto future = promise->get_future();
 
         auto success_callbacks = std::make_shared<std::vector<std::function<void()>>>(std::move(request_with_callbacks.on_success_callbacks));
         auto failure_callbacks = std::make_shared<std::vector<std::function<void()>>>(std::move(request_with_callbacks.on_failure_callbacks));
 
+        auto watch = std::make_shared<Stopwatch>();
+
         Coordination::ResponseCallback callback =
             [promise,
              success_callbacks,
-             failure_callbacks](const Coordination::Response & response)
+             failure_callbacks,
+             watch](const Coordination::Response & response)
         {
+            auto elapsed = watch->elapsedMicroseconds();
             if (response.error == Coordination::Error::ZOK)
             {
                 for (const auto & cb : *success_callbacks)
                     cb();
-                promise->set_value(response.bytesSize());
+                promise->set_value(RequestResult{response.bytesSize(), elapsed});
             }
             else
             {
@@ -428,7 +436,6 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
 
         InFlightRequest slot;
         slot.request = std::move(request);
-        slot.watch.restart();
 
         try
         {
@@ -477,7 +484,7 @@ bool Runner::tryPushRequestInteractively(ZooKeeperRequestWithCallbacks && reques
             printNumberOfRequestsExecuted(requests_executed);
 
             std::lock_guard lock(mutex);
-            info->report(concurrency);
+            info->report();
             delay_watch.restart();
         }
     }
@@ -1190,9 +1197,9 @@ void Runner::runBenchmarkFromLog()
             dumpStats("Write", stats.write_requests);
             dumpStats("Read", stats.read_requests);
             std::lock_guard lock(mutex);
-            info->report(concurrency);
+            info->report();
             DB::WriteBufferFromOwnString out;
-            info->writeJSON(out, concurrency, 0);
+            info->writeJSON(out, 0);
             writeOutputString(out.str(), 0);
         }
     });
@@ -1320,10 +1327,10 @@ void Runner::runBenchmarkWithGenerator()
     printNumberOfRequestsExecuted(requests_executed);
 
     std::lock_guard lock(mutex);
-    info->report(concurrency);
+    info->report();
 
     DB::WriteBufferFromOwnString out;
-    info->writeJSON(out, concurrency, start_timestamp_ms);
+    info->writeJSON(out, start_timestamp_ms);
     auto output_string = std::move(out.str());
     writeOutputString(output_string, start_timestamp_ms);
 }

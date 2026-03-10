@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <AggregateFunctions/ReservoirSampler.h>
+#include <Common/Stopwatch.h>
 #include <Common/ZooKeeper/ZooKeeperConstants.h>
 
 #include <base/JSON.h>
@@ -20,16 +21,17 @@ struct Stats
     {
         size_t requests = 0;
         uint64_t requests_bytes = 0;
-        uint64_t work_time = 0;
         Sampler sampler;
 
         /// requests/second, bytes/second
-        std::pair<double, double> getThroughput(size_t concurrency) const;
+        std::pair<double, double> getThroughput(double elapsed_seconds) const;
         double getPercentile(double percent);
 
         void add(uint64_t microseconds, size_t requests_inc, size_t bytes_inc);
         void clear();
     };
+
+    Stopwatch elapsed;
 
     StatsCollector read_collector;
     StatsCollector write_collector;
@@ -45,6 +47,6 @@ struct Stats
 
     std::mutex mutex;
 
-    void report(size_t concurrency);
-    void writeJSON(DB::WriteBuffer & out, size_t concurrency, int64_t start_timestamp);
+    void report();
+    void writeJSON(DB::WriteBuffer & out, int64_t start_timestamp);
 };

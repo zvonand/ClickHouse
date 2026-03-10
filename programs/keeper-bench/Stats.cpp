@@ -8,7 +8,6 @@
 
 void Stats::StatsCollector::add(uint64_t microseconds, size_t requests_inc, size_t bytes_inc)
 {
-    work_time += microseconds;
     requests += requests_inc;
     requests_bytes += bytes_inc;
     sampler.insert(static_cast<double>(microseconds));
@@ -35,7 +34,6 @@ void Stats::addOp(Coordination::OpNum op_num, uint64_t microseconds, size_t requ
 void Stats::StatsCollector::clear()
 {
     requests = 0;
-    work_time = 0;
     requests_bytes = 0;
     sampler.clear();
 }
@@ -46,14 +44,13 @@ void Stats::clear()
     write_collector.clear();
     op_collectors.clear();
     errors = 0;
+    elapsed.restart();
 }
 
-std::pair<double, double> Stats::StatsCollector::getThroughput(size_t concurrency) const
+std::pair<double, double> Stats::StatsCollector::getThroughput(double elapsed_seconds) const
 {
     assert(requests != 0);
-    double seconds = static_cast<double>(work_time) / 1'000'000.0 / static_cast<double>(concurrency);
-
-    return {static_cast<double>(requests) / seconds, static_cast<double>(requests_bytes) / seconds};
+    return {static_cast<double>(requests) / elapsed_seconds, static_cast<double>(requests_bytes) / elapsed_seconds};
 }
 
 double Stats::StatsCollector::getPercentile(double percent)
@@ -61,7 +58,7 @@ double Stats::StatsCollector::getPercentile(double percent)
     return sampler.quantileNearest(percent / 100.0) / 1000.0;
 }
 
-void Stats::report(size_t concurrency)
+void Stats::report()
 {
     std::lock_guard lock(mutex);
     std::cerr << "\n";
@@ -73,14 +70,18 @@ void Stats::report(size_t concurrency)
     if (0 == read_requests && 0 == write_requests)
         return;
 
+    double seconds = elapsed.elapsedSeconds();
+    if (seconds == 0)
+        return;
+
     double read_rps = 0;
     double read_bps = 0;
     double write_rps = 0;
     double write_bps = 0;
     if (read_requests != 0)
-        std::tie(read_rps, read_bps) = read_collector.getThroughput(concurrency);
+        std::tie(read_rps, read_bps) = read_collector.getThroughput(seconds);
     if (write_requests != 0)
-        std::tie(write_rps, write_bps) = write_collector.getThroughput(concurrency);
+        std::tie(write_rps, write_bps) = write_collector.getThroughput(seconds);
 
     std::cerr << "read requests " << read_requests << ", write requests " << write_requests << ", ";
     if (errors)
@@ -145,7 +146,7 @@ void Stats::report(size_t concurrency)
                 continue;
 
             auto op_name = Coordination::opNumToString(op_num);
-            auto [rps, bps] = collector.getThroughput(concurrency);
+            auto [rps, bps] = collector.getThroughput(seconds);
             std::cerr << "  " << op_name << ": " << collector.requests << " requests, "
                       << rps << " RPS, p50 " << collector.getPercentile(50) << " ms, "
                       << "p99 " << collector.getPercentile(99) << " ms\n";
@@ -153,13 +154,15 @@ void Stats::report(size_t concurrency)
     }
 }
 
-void Stats::writeJSON(DB::WriteBuffer & out, size_t concurrency, int64_t start_timestamp)
+void Stats::writeJSON(DB::WriteBuffer & out, int64_t start_timestamp)
 {
     std::lock_guard lock(mutex);
     using namespace rapidjson;
     Document results;
     auto & allocator = results.GetAllocator();
     results.SetObject();
+
+    double seconds = elapsed.elapsedSeconds();
 
     results.AddMember("timestamp", Value(start_timestamp), allocator);
     results.AddMember("errors", Value(static_cast<uint64_t>(errors.load())), allocator);
@@ -171,7 +174,7 @@ void Stats::writeJSON(DB::WriteBuffer & out, size_t concurrency, int64_t start_t
 
         specific_results.AddMember("total_requests", Value(static_cast<uint64_t>(collector.requests)), allocator);
 
-        auto [rps, bps] = collector.getThroughput(concurrency);
+        auto [rps, bps] = collector.getThroughput(seconds);
         specific_results.AddMember("requests_per_second", Value(rps), allocator);
         specific_results.AddMember("bytes_per_second", Value(bps), allocator);
 

@@ -12,15 +12,15 @@ int TopKThresholdTracker::compareFields(const Field & lhs, const Field & rhs) co
     if (lhs_null && rhs_null)
         return 0;
     if (lhs_null)
-        return nulls_direction;
+        return sort_desc.nulls_direction;
     if (rhs_null)
-        return -nulls_direction;
+        return -sort_desc.nulls_direction;
 
-    if (collator && lhs.getType() == Field::Types::String)
+    if (sort_desc.collator && lhs.getType() == Field::Types::String)
     {
         const auto & l = lhs.safeGet<String>();
         const auto & r = rhs.safeGet<String>();
-        return collator->compare(l.data(), l.size(), r.data(), r.size());
+        return sort_desc.collator->compare(l.data(), l.size(), r.data(), r.size());
     }
 
     if (lhs < rhs)

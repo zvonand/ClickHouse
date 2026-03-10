@@ -1,17 +1,16 @@
 #pragma once
 #include <shared_mutex>
 #include <Core/Field.h>
+#include <Core/SortDescription.h>
 #include <Common/SharedMutex.h>
-
-class Collator;
 
 namespace DB
 {
 
 struct TopKThresholdTracker
 {
-    TopKThresholdTracker(int direction_, int nulls_direction_, std::shared_ptr<Collator> collator_ = nullptr)
-        : direction(direction_), nulls_direction(nulls_direction_), collator(std::move(collator_))
+    explicit TopKThresholdTracker(const SortColumnDescription & sort_desc_)
+        : sort_desc(sort_desc_)
     {
     }
 
@@ -25,9 +24,9 @@ struct TopKThresholdTracker
             return;
         }
         int cmp = compareFields(value, threshold);
-        if (direction == 1 && cmp < 0)
+        if (sort_desc.direction == 1 && cmp < 0)
             threshold = value;
-        else if (direction == -1 && cmp > 0)
+        else if (sort_desc.direction == -1 && cmp > 0)
             threshold = value;
     }
 
@@ -38,9 +37,9 @@ struct TopKThresholdTracker
 
         std::shared_lock lock(mutex);
         int cmp = compareFields(value, threshold);
-        if (direction == 1 && cmp > 0)
+        if (sort_desc.direction == 1 && cmp > 0)
             return false;
-        if (direction == -1 && cmp < 0)
+        if (sort_desc.direction == -1 && cmp < 0)
             return false;
 
         return true;
@@ -55,21 +54,19 @@ struct TopKThresholdTracker
 
     bool isSet() const { return is_set; }
 
-    int getDirection() const { return direction; }
-    int getNullsDirection() const { return nulls_direction; }
-    const std::shared_ptr<Collator> & getCollator() const { return collator; }
+    int getDirection() const { return sort_desc.direction; }
+    int getNullsDirection() const { return sort_desc.nulls_direction; }
+    const std::shared_ptr<Collator> & getCollator() const { return sort_desc.collator; }
 
 private:
-    /// Compare two Field values using the same semantics as the ORDER BY clause:
-    /// NULL ordering follows nulls_direction, string comparison uses collator if set.
+    /// Compare two Field values respecting NULL ordering and collation
+    /// from the stored SortColumnDescription.
     int compareFields(const Field & lhs, const Field & rhs) const;
 
     Field threshold;
     mutable SharedMutex mutex;
     std::atomic<bool> is_set{false};
-    int direction{0};
-    int nulls_direction{1};
-    std::shared_ptr<Collator> collator;
+    SortColumnDescription sort_desc;
 };
 
 using TopKThresholdTrackerPtr = std::shared_ptr<TopKThresholdTracker>;

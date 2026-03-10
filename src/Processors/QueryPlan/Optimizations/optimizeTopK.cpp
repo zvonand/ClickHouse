@@ -115,9 +115,6 @@ size_t tryOptimizeTopK(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, 
     TopKThresholdTrackerPtr threshold_tracker = nullptr;
 
     const auto & sort_col_desc = sort_description.front();
-    int direction = sort_col_desc.direction;
-    int nulls_direction = sort_col_desc.nulls_direction;
-    const auto & collator = sort_col_desc.collator;
 
     /// The skip-index top-k path ranks granules via raw Field comparison
     /// (MinMaxGranuleItem::operator<) which does not respect nulls_direction
@@ -126,7 +123,7 @@ size_t tryOptimizeTopK(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, 
     /// ReadFromMergeTree::buildIndexes for defense-in-depth.
     bool skip_index_type_eligible = sort_column.type->isValueRepresentedByNumber()
         && !sort_column.type->isNullable()
-        && !collator;
+        && !sort_col_desc.collator;
 
     bool use_skip_index = settings.use_skip_indexes_for_top_k
         && skip_index_type_eligible
@@ -140,7 +137,7 @@ size_t tryOptimizeTopK(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, 
     /// Initial top-k mark selection (getTopKMarks) does not require it.
     if ((use_skip_index && settings.use_skip_indexes_on_data_read) || use_dynamic_filtering)
     {
-        threshold_tracker = std::make_shared<TopKThresholdTracker>(direction, nulls_direction, collator);
+        threshold_tracker = std::make_shared<TopKThresholdTracker>(sort_col_desc);
         sorting_step->setTopKThresholdTracker(threshold_tracker);
     }
 
@@ -193,7 +190,7 @@ size_t tryOptimizeTopK(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, 
     ///                                __topKFilter() (Prewhere filtering)
 
     if (use_skip_index || use_dynamic_filtering)
-        read_from_mergetree_step->setTopKColumn({sort_column_name, sort_column.type, num_sort_columns, n, direction, where_clause, threshold_tracker});
+        read_from_mergetree_step->setTopKColumn({sort_column_name, sort_column.type, num_sort_columns, n, sort_col_desc.direction, where_clause, threshold_tracker});
 
     return added_step ? 1 : 0;
 }

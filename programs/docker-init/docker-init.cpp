@@ -327,7 +327,7 @@ bool createDirectoryAndChown(const std::string & dir, uid_t uid, gid_t gid, bool
         }
         if (pid == 0)
         {
-            if (setgid(gid) < 0 || setuid(uid) < 0)
+            if (setgroups(0, nullptr) < 0 || setgid(gid) < 0 || setuid(uid) < 0)
                 _exit(1);
             std::error_code ec;
             fs::create_directories(dir, ec);
@@ -696,7 +696,7 @@ void initClickHouseDB(
                 for (char c : path.string())
                 {
                     if (c == '\'')
-                        escaped_path += "\\'";
+                        escaped_path += "''";
                     else
                         escaped_path += c;
                 }

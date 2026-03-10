@@ -25,8 +25,7 @@ UInt128 SerializationDynamicElement::getHash(const SerializationPtr & nested_, c
     SipHash hash;
     hash.update("DynamicElement");
     hash.update(nested_->getHash());
-    if (shared_variant_serialization_)
-        hash.update(shared_variant_serialization_->getHash());
+    hash.update(shared_variant_serialization_->getHash());
     hash.update(dynamic_element_name_);
     hash.update(nested_subcolumn_);
     hash.update(is_null_map_subcolumn_);
@@ -35,7 +34,7 @@ UInt128 SerializationDynamicElement::getHash(const SerializationPtr & nested_, c
 
 SerializationPtr SerializationDynamicElement::create(const SerializationPtr & nested_, const SerializationPtr & shared_variant_serialization_, const String & dynamic_element_name_, const String & nested_subcolumn_, bool is_null_map_subcolumn_)
 {
-    if (!nested_->supportsPooling() || (shared_variant_serialization_ && !shared_variant_serialization_->supportsPooling()))
+    if (!nested_->supportsPooling() || !shared_variant_serialization_->supportsPooling())
         return std::shared_ptr<ISerialization>(new SerializationDynamicElement(nested_, shared_variant_serialization_, dynamic_element_name_, nested_subcolumn_, is_null_map_subcolumn_));
     return ISerialization::pooled(getHash(nested_, shared_variant_serialization_, dynamic_element_name_, nested_subcolumn_, is_null_map_subcolumn_), [&] { return new SerializationDynamicElement(nested_, shared_variant_serialization_, dynamic_element_name_, nested_subcolumn_, is_null_map_subcolumn_); });
 }

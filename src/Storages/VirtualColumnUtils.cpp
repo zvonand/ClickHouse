@@ -426,6 +426,14 @@ void addRequestedFileLikeStorageVirtualsToChunk(
     }
 }
 
+bool hasRowDependentVirtualColumns(const NamesAndTypesList & requested_virtual_columns)
+{
+    return std::any_of(
+        requested_virtual_columns.begin(),
+        requested_virtual_columns.end(),
+        [](const auto & col) { return col.name == "_row_number"; });
+}
+
 static bool canEvaluateSubtree(const ActionsDAG::Node * node, const Block * allowed_inputs)
 {
     std::stack<const ActionsDAG::Node *> nodes;

@@ -163,6 +163,8 @@ void Stats::writeJSON(DB::WriteBuffer & out, int64_t start_timestamp)
     results.SetObject();
 
     double seconds = elapsed.elapsedSeconds();
+    if (seconds == 0)
+        return;
 
     results.AddMember("timestamp", Value(start_timestamp), allocator);
     results.AddMember("errors", Value(static_cast<uint64_t>(errors.load())), allocator);

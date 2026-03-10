@@ -1,2 +1,2 @@
-S3(\'s3://foo/*\')
-URL(\'http://localhost:912.*\')
+S3
+URL

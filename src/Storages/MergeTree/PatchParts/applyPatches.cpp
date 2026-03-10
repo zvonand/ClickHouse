@@ -275,7 +275,12 @@ Block getUpdatedHeader(const PatchesToApply & patches, const NameSet & updated_c
                 header.erase(column.name);
         }
 
-        headers.push_back(std::move(header));
+        /// Sort columns by name to ensure deterministic order for cross-patch comparison.
+        /// Different patch parts (e.g., Merge vs Join mode) may read columns in different
+        /// orders due to non-deterministic NameSet iteration in addPatchPartsColumns.
+        /// The downstream consumers (createPatchForColumn, applyPatchesToBlockRaw) use
+        /// name-based lookups, so column order does not affect correctness.
+        headers.push_back(header.sortColumns());
     }
 
     for (size_t i = 1; i < headers.size(); ++i)

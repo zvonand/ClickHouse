@@ -393,9 +393,18 @@ void addPatchPartsColumns(
         /// Sort the column names to ensure deterministic column order in patch blocks.
         /// Without sorting, the iteration order of NameSet (unordered_set) is non-deterministic,
         /// and different patch parts reading the same columns can produce blocks with different
-        /// column orderings. This causes LOGICAL_ERROR in assertCompatibleHeader when
-        /// getUpdatedHeader compares patch headers positionally.
+        /// column orderings, depending on the standard library's hash table implementation.
+        /// The sort in getUpdatedHeader also normalizes order before cross-patch comparison.
         std::sort(patch_columns_to_read_names.begin(), patch_columns_to_read_names.end());
+
+#ifdef DEBUG_OR_SANITIZER_BUILD
+        /// In debug builds, reverse the order for odd-indexed patches to expose any code
+        /// that incorrectly relies on positional column matching between different patches.
+        /// This ensures getUpdatedHeader (and any future comparison) handles arbitrary ordering.
+        if (i % 2 == 1)
+            std::reverse(patch_columns_to_read_names.begin(), patch_columns_to_read_names.end());
+#endif
+
         result.patch_columns[i] = storage_snapshot->getColumnsByNames(options, patch_columns_to_read_names);
     }
 

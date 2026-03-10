@@ -16,11 +16,16 @@ namespace ErrorCodes
 }
 
 SerializationObjectDynamicPath::SerializationObjectDynamicPath(
-    const DB::SerializationPtr & nested_, const String & path_, const String & path_subcolumn_, const DataTypePtr & dynamic_type_, const DataTypePtr & subcolumn_type_)
+    const DB::SerializationPtr & nested_,
+    const String & path_,
+    const String & path_subcolumn_,
+    const DataTypePtr & dynamic_type_,
+    const SerializationPtr & dynamic_serialization_,
+    const DataTypePtr & subcolumn_type_)
     : SerializationWrapper(nested_)
     , path(path_)
     , path_subcolumn(path_subcolumn_)
-    , dynamic_serialization(SerializationDynamic::create())
+    , dynamic_serialization(dynamic_serialization_)
     , dynamic_type(dynamic_type_)
     , subcolumn_type(subcolumn_type_)
 {
@@ -58,11 +63,11 @@ UInt128 SerializationObjectDynamicPath::getHash(const SerializationPtr & nested_
     return hash.get128();
 }
 
-SerializationPtr SerializationObjectDynamicPath::create(const SerializationPtr & nested_, const String & path_, const String & path_subcolumn_, const DataTypePtr & dynamic_type_, const DataTypePtr & subcolumn_type_)
+SerializationPtr SerializationObjectDynamicPath::create(const SerializationPtr & nested_, const String & path_, const String & path_subcolumn_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_, const DataTypePtr & subcolumn_type_)
 {
     if (!nested_->supportsPooling())
-        return std::shared_ptr<ISerialization>(new SerializationObjectDynamicPath(nested_, path_, path_subcolumn_, dynamic_type_, subcolumn_type_));
-    return ISerialization::pooled(getHash(nested_, path_, path_subcolumn_, dynamic_type_, subcolumn_type_), [&] { return new SerializationObjectDynamicPath(nested_, path_, path_subcolumn_, dynamic_type_, subcolumn_type_); });
+        return std::shared_ptr<ISerialization>(new SerializationObjectDynamicPath(nested_, path_, path_subcolumn_, dynamic_type_, dynamic_serialization_, subcolumn_type_));
+    return ISerialization::pooled(getHash(nested_, path_, path_subcolumn_, dynamic_type_, subcolumn_type_), [&] { return new SerializationObjectDynamicPath(nested_, path_, path_subcolumn_, dynamic_type_, dynamic_serialization_, subcolumn_type_); });
 }
 
 void SerializationObjectDynamicPath::enumerateStreams(
@@ -144,6 +149,7 @@ void SerializationObjectDynamicPath::deserializeBinaryBulkStatePrefix(
             path,
             path_subcolumn,
             dynamic_type,
+            dynamic_serialization,
             subcolumn_type,
             getSharedDataPathBucket(path, object_structure_state->shared_data_buckets));
         dynamic_path_state->shared_data_path_serialization->deserializeBinaryBulkStatePrefix(settings, dynamic_path_state->nested_state, cache);

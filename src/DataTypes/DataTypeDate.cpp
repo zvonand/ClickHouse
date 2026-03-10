@@ -10,7 +10,7 @@ bool DataTypeDate::equals(const IDataType & rhs) const
     return typeid(rhs) == typeid(*this);
 }
 
-SerializationPtr DataTypeDate::doGetDefaultSerialization() const
+SerializationPtr DataTypeDate::doGetSerialization(const SerializationInfoSettings &) const
 {
     return SerializationDate::create();
 }

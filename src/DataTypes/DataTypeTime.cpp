@@ -24,7 +24,7 @@ bool DataTypeTime::equals(const IDataType & rhs) const
     return typeid(rhs) == typeid(*this);
 }
 
-SerializationPtr DataTypeTime::doGetDefaultSerialization() const
+SerializationPtr DataTypeTime::doGetSerialization(const SerializationInfoSettings &) const
 {
     return SerializationTime::create(*this);
 }

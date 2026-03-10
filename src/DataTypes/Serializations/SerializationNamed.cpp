@@ -117,4 +117,11 @@ size_t SerializationNamed::allocatedBytes() const
     return sizeof(*this) + name.capacity();
 }
 
+SerializationPtr removeNamedSerialization(const SerializationPtr & serialization)
+{
+    if (const auto * named = typeid_cast<const SerializationNamed *>(serialization.get()))
+        return named->getNested();
+    return serialization;
+}
+
 }

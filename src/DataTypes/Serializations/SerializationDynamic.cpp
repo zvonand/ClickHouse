@@ -94,7 +94,7 @@ void SerializationDynamic::enumerateStreams(
         return;
 
     const auto & variant_type = column_dynamic ? column_dynamic->getVariantInfo().variant_type : checkAndGetState<DeserializeBinaryBulkStateDynamicStructure>(deserialize_state->structure_state)->variant_type;
-    auto variant_serialization = variant_type->getDefaultSerialization();
+    auto variant_serialization = variant_type->getSerialization(serialization_info_settings);
 
     settings.path.push_back(Substream::DynamicData);
     auto variant_data = SubstreamData(variant_serialization)
@@ -311,7 +311,7 @@ void SerializationDynamic::serializeBinaryBulkStatePrefix(
         dynamic_state->recalculate_statistics = true;
     }
 
-    dynamic_state->variant_serialization = dynamic_state->variant_type->getDefaultSerialization();
+    dynamic_state->variant_serialization = dynamic_state->variant_type->getSerialization(serialization_info_settings);
     settings.path.push_back(Substream::DynamicData);
     dynamic_state->variant_serialization->serializeBinaryBulkStatePrefix(variant_column, settings, dynamic_state->variant_state);
     settings.path.pop_back();
@@ -347,7 +347,7 @@ void SerializationDynamic::deserializeBinaryBulkStatePrefix(
         return;
     }
 
-    dynamic_state->variant_serialization = structure_state_typed->variant_type->getDefaultSerialization();
+    dynamic_state->variant_serialization = structure_state_typed->variant_type->getSerialization(serialization_info_settings);
 
     settings.path.push_back(Substream::DynamicData);
 
@@ -930,9 +930,9 @@ static void serializeTextImpl(
     }
 }
 
-SerializationPtr SerializationDynamic::create(size_t max_dynamic_types_)
+SerializationPtr SerializationDynamic::create(size_t max_dynamic_types_, const SerializationInfoSettings & serialization_info_settings_)
 {
-    return ISerialization::pooled(getHash(max_dynamic_types_), [=] { return new SerializationDynamic(max_dynamic_types_); });
+    return ISerialization::pooled(getHash(max_dynamic_types_), [=] { return new SerializationDynamic(max_dynamic_types_, serialization_info_settings_); });
 }
 
 void SerializationDynamic::serializeTextCSV(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings & settings) const
@@ -1186,6 +1186,11 @@ void SerializationDynamic::serializeTextXML(const IColumn & column, size_t row_n
 size_t SerializationDynamic::allocatedBytes() const
 {
     return sizeof(*this);
+}
+
+SerializationPtr SerializationDynamic::createSerializationForType(const DataTypePtr & type) const
+{
+    return type->getSerialization(serialization_info_settings);
 }
 
 }

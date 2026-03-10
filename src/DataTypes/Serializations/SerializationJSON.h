@@ -14,9 +14,11 @@ class SerializationJSON : public SerializationObject
 private:
     SerializationJSON(
         const std::unordered_map<String, DataTypePtr> & typed_paths_types_,
+        const std::unordered_map<String, SerializationPtr> & typed_paths_serializations_,
         const std::unordered_set<String> & paths_to_skip_,
         const std::vector<String> & path_regexps_to_skip_,
         const DataTypePtr & dynamic_type_,
+        const SerializationPtr & dynamic_serialization_,
         std::unique_ptr<JSONExtractTreeNode<Parser>> json_extract_tree_);
 
 public:

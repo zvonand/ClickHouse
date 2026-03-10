@@ -23,10 +23,10 @@ namespace ErrorCodes
     extern const int NOT_IMPLEMENTED;
 }
 
-SerializationObjectSharedData::SerializationObjectSharedData(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, size_t buckets_)
+SerializationObjectSharedData::SerializationObjectSharedData(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_, size_t buckets_)
     : serialization_version(serialization_version_)
     , dynamic_type(dynamic_type_)
-    , dynamic_serialization(dynamic_type_->getDefaultSerialization())
+    , dynamic_serialization(dynamic_serialization_)
     , buckets(buckets_)
     , serialization_map(DataTypeObject::getTypeOfSharedData()->getDefaultSerialization())
 {
@@ -42,9 +42,9 @@ UInt128 SerializationObjectSharedData::getHash(SerializationVersion serializatio
     return hash.get128();
 }
 
-SerializationPtr SerializationObjectSharedData::create(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, size_t buckets_)
+SerializationPtr SerializationObjectSharedData::create(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_, size_t buckets_)
 {
-    return ISerialization::pooled(getHash(serialization_version_, dynamic_type_, buckets_), [&] { return new SerializationObjectSharedData(serialization_version_, dynamic_type_, buckets_); });
+    return ISerialization::pooled(getHash(serialization_version_, dynamic_type_, buckets_), [&] { return new SerializationObjectSharedData(serialization_version_, dynamic_type_, dynamic_serialization_, buckets_); });
 }
 
 SerializationObjectSharedData::SerializationVersion::SerializationVersion(UInt64 version) : value(static_cast<Value>(version))

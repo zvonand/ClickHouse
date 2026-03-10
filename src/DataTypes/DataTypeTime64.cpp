@@ -42,7 +42,7 @@ bool DataTypeTime64::equals(const IDataType & rhs) const
     return false;
 }
 
-SerializationPtr DataTypeTime64::doGetDefaultSerialization() const
+SerializationPtr DataTypeTime64::doGetSerialization(const SerializationInfoSettings &) const
 {
     return SerializationTime64::create(scale, *this);
 }

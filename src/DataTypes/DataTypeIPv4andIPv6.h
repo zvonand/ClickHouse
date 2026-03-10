@@ -48,7 +48,7 @@ public:
     bool isCategorial() const override { return true; }
     bool canBeInsideLowCardinality() const override { return true; }
 
-    SerializationPtr doGetDefaultSerialization() const override { return SerializationIP<IPv4>::create(); }
+    SerializationPtr doGetSerialization(const SerializationInfoSettings &) const override { return SerializationIP<IPv4>::create(); }
 };
 
 class DataTypeIPv6 : public IDataType
@@ -87,7 +87,7 @@ public:
     bool isCategorial() const override { return true; }
     bool canBeInsideLowCardinality() const override { return true; }
 
-    SerializationPtr doGetDefaultSerialization() const override { return SerializationIP<IPv6>::create(); }
+    SerializationPtr doGetSerialization(const SerializationInfoSettings &) const override { return SerializationIP<IPv6>::create(); }
 };
 
 

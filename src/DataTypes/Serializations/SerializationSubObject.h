@@ -17,12 +17,12 @@ namespace ErrorCodes
 class SerializationSubObject final : public SimpleTextSerialization
 {
 private:
-    SerializationSubObject(const String & paths_prefix_, const std::unordered_map<String, SerializationPtr> & typed_paths_serializations_, const DataTypePtr & dynamic_type);
+    SerializationSubObject(const String & paths_prefix_, const std::unordered_map<String, SerializationPtr> & typed_paths_serializations_, const DataTypePtr & dynamic_type, const SerializationPtr & dynamic_serialization);
 
 public:
     static UInt128 getHash(const String & paths_prefix_, const std::unordered_map<String, SerializationPtr> & typed_paths_serializations_, const DataTypePtr & dynamic_type_);
 
-    static SerializationPtr create(const String & paths_prefix_, const std::unordered_map<String, SerializationPtr> & typed_paths_serializations_, const DataTypePtr & dynamic_type);
+    static SerializationPtr create(const String & paths_prefix_, const std::unordered_map<String, SerializationPtr> & typed_paths_serializations_, const DataTypePtr & dynamic_type, const SerializationPtr & dynamic_serialization);
 
     size_t allocatedBytes() const override;
 

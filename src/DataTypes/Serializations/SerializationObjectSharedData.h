@@ -74,12 +74,12 @@ public:
     };
 
 private:
-    SerializationObjectSharedData(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, size_t buckets_);
+    SerializationObjectSharedData(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_, size_t buckets_);
 
 public:
     static UInt128 getHash(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, size_t buckets_);
 
-    static SerializationPtr create(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, size_t buckets_);
+    static SerializationPtr create(SerializationVersion serialization_version_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_, size_t buckets_);
 
     size_t allocatedBytes() const override;
 

@@ -31,11 +31,11 @@ UInt128 SerializationDynamicElement::getHash(const SerializationPtr & nested_, c
     return hash.get128();
 }
 
-SerializationPtr SerializationDynamicElement::create(const SerializationPtr & nested_, const String & dynamic_element_name_, const String & nested_subcolumn_, bool is_null_map_subcolumn_)
+SerializationPtr SerializationDynamicElement::create(const SerializationPtr & nested_, const SerializationPtr & shared_variant_serialization_, const String & dynamic_element_name_, const String & nested_subcolumn_, bool is_null_map_subcolumn_)
 {
     if (!nested_->supportsPooling())
-        return std::shared_ptr<ISerialization>(new SerializationDynamicElement(nested_, dynamic_element_name_, nested_subcolumn_, is_null_map_subcolumn_));
-    return ISerialization::pooled(getHash(nested_, dynamic_element_name_, nested_subcolumn_, is_null_map_subcolumn_), [&] { return new SerializationDynamicElement(nested_, dynamic_element_name_, nested_subcolumn_, is_null_map_subcolumn_); });
+        return std::shared_ptr<ISerialization>(new SerializationDynamicElement(nested_, shared_variant_serialization_, dynamic_element_name_, nested_subcolumn_, is_null_map_subcolumn_));
+    return ISerialization::pooled(getHash(nested_, dynamic_element_name_, nested_subcolumn_, is_null_map_subcolumn_), [&] { return new SerializationDynamicElement(nested_, shared_variant_serialization_, dynamic_element_name_, nested_subcolumn_, is_null_map_subcolumn_); });
 }
 
 struct DeserializeBinaryBulkStateDynamicElement : public ISerialization::DeserializeBinaryBulkState
@@ -79,8 +79,8 @@ void SerializationDynamicElement::enumerateStreams(
 
     settings.path.push_back(Substream::DynamicData);
     auto variant_data = SubstreamData(deserialize_state->variant_serialization)
-                            .withType(data.type)
-                            .withColumn(data.column)
+                            .withType(deserialize_state->read_from_shared_variant ? ColumnDynamic::getSharedVariantDataType() : data.type)
+                            .withColumn(deserialize_state->read_from_shared_variant ? ColumnDynamic::getSharedVariantDataType()->createColumn() : data.column)
                             .withSerializationInfo(data.serialization_info)
                             .withDeserializeState(deserialize_state->variant_element_state);
     settings.path.back().data = variant_data;
@@ -130,7 +130,7 @@ void SerializationDynamicElement::deserializeBinaryBulkStatePrefix(
         chassert(shared_variant_global_discr.has_value());
         settings.path.push_back(Substream::DynamicData);
         dynamic_element_state->variant_serialization = SerializationVariantElement::create(
-            ColumnDynamic::getSharedVariantDataType()->getDefaultSerialization(),
+            shared_variant_serialization,
             ColumnDynamic::getSharedVariantTypeName(),
             *shared_variant_global_discr);
         dynamic_element_state->variant_serialization->deserializeBinaryBulkStatePrefix(settings, dynamic_element_state->variant_element_state, cache);

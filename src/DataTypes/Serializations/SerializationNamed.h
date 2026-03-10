@@ -80,4 +80,6 @@ private:
     void addToPath(SubstreamPath & path) const;
 };
 
+SerializationPtr removeNamedSerialization(const SerializationPtr & serialization);
+
 }

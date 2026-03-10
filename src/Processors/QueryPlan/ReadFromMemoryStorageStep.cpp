@@ -62,8 +62,9 @@ protected:
         {
             if (materialized_cte && !materialized_cte->is_built)
                 throw Exception(ErrorCodes::LOGICAL_ERROR,
-                    "Reading from materialized CTE '{}' before it has been materialized",
-                    materialized_cte->cte_name);
+                    "Reading from materialized CTE '{}' before it has been materialized (materialization was planned: {})",
+                    materialized_cte->cte_name,
+                    materialized_cte->is_planned.load());
 
             initializer_func(data);
             initializer_func = {};

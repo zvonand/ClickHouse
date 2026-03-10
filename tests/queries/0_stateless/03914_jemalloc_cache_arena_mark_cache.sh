@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tags: no-parallel, no-random-settings, no-random-merge-tree-settings
+# Tags: no-parallel, no-random-settings, no-random-merge-tree-settings, use_jemalloc
 
 # Test that mark cache allocations use the dedicated jemalloc cache arena
 # and that SYSTEM DROP MARK CACHE properly reclaims arena pages.
@@ -56,46 +56,31 @@ $CLICKHOUSE_CLIENT -q "
 after_bytes=$(get_mark_cache_bytes)
 echo "after_select	$(( after_bytes > before_bytes ? 1 : 0 ))"
 
-# Check if jemalloc is enabled
-jemalloc_enabled=$($CLICKHOUSE_CLIENT -q "
-    SELECT value IN ('ON', '1')
-    FROM system.build_options WHERE name = 'USE_JEMALLOC'")
+pactive_loaded=$(get_pactive)
 
-if [ "$jemalloc_enabled" = "1" ]; then
-    pactive_loaded=$(get_pactive)
+echo "arena_active	$(( pactive_loaded > 0 ? 1 : 0 ))"
 
-    echo "arena_active	$(( pactive_loaded > 0 ? 1 : 0 ))"
-
-    # Retry loop: clear caches and check that pactive decreased.
-    # Background merges on tables can reload marks into the cache arena
-    # between the clear and the measurement, so we retry a few times.
-    reclaimed=0
-    for _ in $(seq 1 5); do
-        clear_all_arena_caches
-
-        pactive_cleared=$(get_pactive)
-
-        if [ "$pactive_cleared" -lt "$pactive_loaded" ]; then
-            reclaimed=1
-            break
-        fi
-    done
-
-    # Drop our table and clear caches. MarkCacheBytes may still be non-zero
-    # due to other tables' background activity, so check that it decreased.
-    $CLICKHOUSE_CLIENT -q "DROP TABLE t_cache_arena_marks"
+# Retry loop: clear caches and check that pactive decreased.
+# Background merges on tables can reload marks into the cache arena
+# between the clear and the measurement, so we retry a few times.
+reclaimed=0
+for _ in $(seq 1 5); do
     clear_all_arena_caches
 
-    cleared_bytes=$(get_mark_cache_bytes)
-    echo "after_clear	$(( cleared_bytes < after_bytes ? 1 : 0 ))"
+    pactive_cleared=$(get_pactive)
 
-    echo "arena_reclaimed	${reclaimed}"
-else
-    echo "arena_active	1"
-    $CLICKHOUSE_CLIENT -q "DROP TABLE t_cache_arena_marks"
-    clear_all_arena_caches
+    if [ "$pactive_cleared" -lt "$pactive_loaded" ]; then
+        reclaimed=1
+        break
+    fi
+done
 
-    cleared_bytes=$(get_mark_cache_bytes)
-    echo "after_clear	$(( cleared_bytes < after_bytes ? 1 : 0 ))"
-    echo "arena_reclaimed	1"
-fi
+# Drop our table and clear caches. MarkCacheBytes may still be non-zero
+# due to other tables' background activity, so check that it decreased.
+$CLICKHOUSE_CLIENT -q "DROP TABLE t_cache_arena_marks"
+clear_all_arena_caches
+
+cleared_bytes=$(get_mark_cache_bytes)
+echo "after_clear	$(( cleared_bytes < after_bytes ? 1 : 0 ))"
+
+echo "arena_reclaimed	${reclaimed}"

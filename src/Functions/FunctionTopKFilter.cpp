@@ -9,6 +9,7 @@
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <Columns/ColumnsNumber.h>
+#include <Columns/ColumnNullable.h>
 #include <Columns/Collator.h>
 
 namespace DB
@@ -116,29 +117,48 @@ private:
         return elem_compare->execute(args, elem_compare->getResultType(), input_rows_count, false);
     }
 
-    /// Path for Nullable types: handle NULLs with correct nulls_direction, use vectorized
-    /// comparison for non-null values.
+    /// Path for Nullable types: unwrap the nested column and run the vectorized
+    /// lessOrEquals/greaterOrEquals on it, then patch NULL positions with a
+    /// precomputed constant derived from direction and nulls_direction.
     ColumnPtr executeNullable(
         const ColumnWithTypeAndName & argument,
         const Field & current_threshold,
         const DataTypePtr & data_type,
         size_t input_rows_count) const
     {
-        const auto & col = *argument.column;
+        const auto & nullable_col = assert_cast<const ColumnNullable &>(*argument.column);
+        const auto & null_map = nullable_col.getNullMapData();
+        const auto & nested_type = assert_cast<const DataTypeNullable &>(*data_type).getNestedType();
 
-        auto threshold_field = convertFieldToType(current_threshold, *data_type);
-        auto threshold_col = data_type->createColumn();
-        threshold_col->insert(threshold_field);
-
-        auto result_col = ColumnUInt8::create(input_rows_count);
-        auto & result_data = result_col->getData();
-
-        for (size_t i = 0; i < input_rows_count; ++i)
+        if (current_threshold.isNull())
         {
-            int cmp = col.compareAt(i, 0, *threshold_col, nulls_direction);
-            result_data[i] = (direction * cmp) <= 0;
+            /// NULL threshold: NULLs always pass (equal); non-nulls pass iff they
+            /// sort before NULL in the requested order.
+            bool non_null_passes = (direction * nulls_direction) >= 0;
+            auto result_col = ColumnUInt8::create(input_rows_count);
+            auto & result_data = result_col->getData();
+            for (size_t i = 0; i < input_rows_count; ++i)
+                result_data[i] = null_map[i] ? 1 : non_null_passes;
+            return result_col;
         }
 
+        /// Non-null threshold: vectorized comparison on the nested (unwrapped) column.
+        auto threshold_field = convertFieldToType(current_threshold, *nested_type);
+        auto threshold_const = nested_type->createColumnConst(input_rows_count, threshold_field);
+        ColumnsWithTypeAndName args{
+            {nullable_col.getNestedColumnPtr(), nested_type, {}},
+            {std::move(threshold_const), nested_type, {}}};
+        auto elem_compare = compare_function->build(args);
+        auto cmp_result = elem_compare->execute(args, elem_compare->getResultType(), input_rows_count, false);
+        const auto & cmp_data = assert_cast<const ColumnUInt8 &>(*cmp_result).getData();
+
+        /// Patch NULL positions: whether a NULL value passes the filter
+        /// depends only on direction and nulls_direction.
+        bool null_passes = (direction * nulls_direction) <= 0;
+        auto result_col = ColumnUInt8::create(input_rows_count);
+        auto & result_data = result_col->getData();
+        for (size_t i = 0; i < input_rows_count; ++i)
+            result_data[i] = null_map[i] ? null_passes : cmp_data[i];
         return result_col;
     }
 

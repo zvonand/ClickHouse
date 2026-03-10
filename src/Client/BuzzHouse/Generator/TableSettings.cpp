@@ -389,6 +389,7 @@ static std::unordered_map<String, CHSetting> mergeTreeTableSettings = {
     {"primary_key_compress_block_size", highRangeSetting},
     {"primary_key_lazy_load", trueOrFalseSetting},
     {"primary_key_ratio_of_unique_prefix_values_to_skip_suffix_columns", probRangeSetting},
+    {"propagate_types_serialization_versions_to_nested_types", trueOrFalseSetting},
     {"ratio_of_defaults_for_sparse_serialization", CHSetting(probRange, {"0", "0.0001", "0.001", "0.003", "0.005", "0.01", "0.1"}, false)},
     {"refresh_parts_interval",
      CHSetting(

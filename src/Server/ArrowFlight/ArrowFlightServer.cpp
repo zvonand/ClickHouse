@@ -1,9 +1,11 @@
-#include <Server/ArrowFlight/ArrowFlightServer.h>
+#include "ArrowFlightServer.h"
 
 #if USE_ARROWFLIGHT
 
 #include <functional>
 #include <vector>
+
+#include "AuthMiddleware.h"
 
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnString.h>
@@ -86,297 +88,6 @@ namespace
     ///   }, v);
     template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; }; // NOLINT
     template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
-
-    const std::string AUTHORIZATION_HEADER = "authorization";
-    const std::string AUTHORIZATION_MIDDLEWARE_NAME = "authorization_middleware";
-
-    class AuthMiddleware : public arrow::flight::ServerMiddleware
-    {
-    public:
-        explicit AuthMiddleware(std::shared_ptr<Session> session, const std::string & token, const std::string & username,
-                                const std::string & session_id = "", bool session_close = false)
-            : session_(session)
-            , token_(token)
-            , username_(username)
-            , session_id_(session_id)
-            , session_close_(session_close)
-        {
-        }
-
-        static AuthMiddleware & get(const arrow::flight::ServerCallContext & context)
-        {
-            return *static_cast<AuthMiddleware *>(context.GetMiddleware(AUTHORIZATION_MIDDLEWARE_NAME));
-        }
-
-        const std::string & username() const { return username_; }
-        const std::shared_ptr<Session> & session() const { return session_; }
-
-        void SendingHeaders(arrow::flight::AddCallHeaders * outgoing_headers) override
-        {
-            if (!token_.empty())
-                outgoing_headers->AddHeader(AUTHORIZATION_HEADER, "Bearer " + token_);
-        }
-
-        void CallCompleted(const arrow::Status & /*status*/) override
-        {
-            if (!session_)
-                return;
-
-            if (!session_id_.empty())
-            {
-                if (session_close_)
-                    session_->closeSession(session_id_);
-                else
-                    session_->releaseSessionID();
-            }
-        }
-
-        std::string name() const override { return AUTHORIZATION_MIDDLEWARE_NAME; }
-
-    private:
-        std::shared_ptr<Session> session_;
-        std::string token_;
-        std::string username_;
-        const std::string session_id_;
-        const bool session_close_;
-    };
-
-    std::chrono::steady_clock::duration parseSessionTimeout(
-        const Poco::Util::AbstractConfiguration & config,
-        unsigned query_session_timeout)
-    {
-        unsigned session_timeout = config.getInt("default_session_timeout", 60);
-
-        if (query_session_timeout)
-        {
-            session_timeout = query_session_timeout;
-            unsigned max_session_timeout = config.getUInt("max_session_timeout", 3600);
-
-            if (session_timeout > max_session_timeout)
-                throw Exception(ErrorCodes::INVALID_SESSION_TIMEOUT, "Session timeout '{}' is larger than max_session_timeout: {}. "
-                    "Maximum session timeout could be modified in configuration file.",
-                    session_timeout, max_session_timeout);
-        }
-
-        return std::chrono::seconds(session_timeout);
-    }
-
-    /// TokenStorage keeps track of issued tokens, check for expiration and expires them on any access,
-    /// updates expiration time of not expired token on request for credentials (getCredentials)
-    class TokenStorage
-    {
-    public:
-        explicit TokenStorage(Poco::Util::AbstractConfiguration & config_) : config(config_) {}
-
-        /// Generates unique token for given credentials and saves it in storage.
-        String getToken(std::string username, std::string password)
-        {
-            std::lock_guard<std::mutex> lock(token_mutex);
-
-            unsafeCleanupExpiredTokens();
-
-            auto token = toString(UUIDHelpers::generateV4());
-            token_to_credentials[token] = {username, password};
-            auto expiration_time = std::chrono::steady_clock::now() + std::chrono::seconds(config.getInt("default_session_timeout", 60));
-            token_expiration_list_index[token] = token_expiration_list.insert({expiration_time, token});
-
-            return token;
-        }
-
-        /// Returns credential associated with specific token and updates expiration time for this token.
-        /// If the token isn't found (never existed or expired) - returns empty optional.
-        std::optional<std::pair<std::string, std::string>> getCredentials(std::string token)
-        {
-            std::lock_guard<std::mutex> lock(token_mutex);
-
-            unsafeCleanupExpiredTokens();
-
-            auto it = token_to_credentials.find(token);
-            if (it != token_to_credentials.end())
-            {
-                auto expiration_time = std::chrono::steady_clock::now() + std::chrono::seconds(config.getInt("default_session_timeout", 60));
-                token_expiration_list.erase(token_expiration_list_index[token]);
-                token_expiration_list_index[token] = token_expiration_list.insert({expiration_time, token});
-                return it->second;
-            }
-            return std::nullopt;
-        }
-
-    private:
-        void unsafeCleanupExpiredTokens()
-        {
-            auto now = std::chrono::steady_clock::now();
-            for (auto it = token_expiration_list.begin(); it != token_expiration_list.end() && it->first <= now;)
-            {
-                token_to_credentials.erase(it->second);
-                token_expiration_list_index.erase(it->second);
-                it = token_expiration_list.erase(it);
-            }
-        }
-
-        using token_expiration_list_t = std::multimap<std::chrono::steady_clock::time_point, std::string>;
-
-        std::mutex token_mutex;
-        token_expiration_list_t token_expiration_list;
-        std::unordered_map<std::string, token_expiration_list_t::iterator> token_expiration_list_index;
-        std::unordered_map<std::string, std::pair<std::string, std::string>> token_to_credentials;
-
-        Poco::Util::AbstractConfiguration & config;
-    };
-
-    std::optional<std::pair<std::string, std::string>> getCredentialsFromBasicHeader(const arrow::flight::CallHeaders & headers)
-    {
-        auto it = std::ranges::find_if(headers, [](const auto & p) { return Poco::toLower(std::string(p.first)) == "authorization"; });
-        if (it == headers.end())
-            return std::nullopt;
-
-        const std::string basic_prefix = "Basic ";
-        const auto & auth_str = it->second;
-
-        if (!auth_str.starts_with(basic_prefix))
-            return std::nullopt;
-
-        auto credentials = base64Decode(std::string(auth_str.substr(basic_prefix.size())));
-
-        auto pos = credentials.find(':');
-        if (pos == std::string::npos)
-            return {{credentials, ""}};
-
-        return {{credentials.substr(0, pos), credentials.substr(pos+1)}};
-    }
-
-    std::optional<std::string> getTokenFromBearerHeader(const arrow::flight::CallHeaders & headers)
-    {
-        auto it = std::ranges::find_if(headers, [](const auto & p) { return Poco::toLower(std::string(p.first)) == "authorization"; });
-        if (it == headers.end())
-            return std::nullopt;
-
-        const std::string bearer_prefix = "Bearer ";
-        const auto & auth_str = it->second;
-
-        if (!auth_str.starts_with(bearer_prefix))
-            return std::nullopt;
-
-        return std::string(auth_str.substr(bearer_prefix.size()));
-    }
-
-    /// Extracts the client's address from the call context.
-    Poco::Net::SocketAddress getClientAddress(const arrow::flight::ServerCallContext & context)
-    {
-        /// Returns a string like ipv4:127.0.0.1:55930 or ipv6:%5B::1%5D:55930
-        String uri_encoded_peer = context.peer();
-
-        constexpr const std::string_view ipv4_prefix = "ipv4:";
-        constexpr const std::string_view ipv6_prefix = "ipv6:";
-
-        bool ipv4 = uri_encoded_peer.starts_with(ipv4_prefix);
-        bool ipv6 = uri_encoded_peer.starts_with(ipv6_prefix);
-
-        if (!ipv4 && !ipv6)
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "Expected ipv4 or ipv6 protocol in peer address, got {}", uri_encoded_peer);
-
-        auto prefix = ipv4 ? ipv4_prefix : ipv6_prefix;
-        auto family = ipv4 ? Poco::Net::AddressFamily::Family::IPv4 : Poco::Net::AddressFamily::Family::IPv6;
-
-        uri_encoded_peer = uri_encoded_peer.substr(prefix.length());
-
-        String peer;
-        Poco::URI::decode(uri_encoded_peer, peer);
-
-        return Poco::Net::SocketAddress{family, peer};
-    }
-
-    class AuthMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory
-    {
-    public:
-
-        explicit AuthMiddlewareFactory(IServer & server_)
-            : server(server_)
-            , token_storage(server_.config())
-        {}
-
-        arrow::Status StartCall(
-            const arrow::flight::CallInfo & /*info*/,
-            const arrow::flight::ServerCallContext & context,
-            std::shared_ptr<arrow::flight::ServerMiddleware> * middleware) override
-        {
-            const auto & headers = context.incoming_headers();
-
-            std::string username("default");
-            std::string password;
-            std::string token;
-            auto session = std::make_shared<Session>(server.context(), ClientInfo::Interface::ARROW_FLIGHT);
-
-            bool auth = false;
-
-            if (auto credentials = getCredentialsFromBasicHeader(headers); credentials)
-            {
-                auth = true;
-                std::tie(username, password) = *credentials;
-            }
-            else if (auto token_opt = getTokenFromBearerHeader(headers); token_opt && *token_opt != "None")
-            {
-                token = *token_opt;
-                credentials = token_storage.getCredentials(token);
-                if (!credentials)
-                    return arrow::Status::Invalid("Session expired or not authenticated.");
-
-                std::tie(username, password) = *credentials;
-            }
-
-            try
-            {
-                session->authenticate(username, password, getClientAddress(context));
-            }
-            catch (DB::Exception & e)
-            {
-                return arrow::Status::Invalid(e.what());
-            }
-
-            if (auth)
-                token = token_storage.getToken(username, password);
-
-            std::string session_id;
-            auto session_it = headers.find("x-clickhouse-session-id");
-            if (session_it != headers.end())
-                session_id = std::string(session_it->second);
-
-            std::string session_check;
-            session_it = headers.find("x-clickhouse-session-check");
-            if (session_it != headers.end())
-                session_check = std::string(session_it->second);
-
-            std::string session_timeout_str;
-            session_it = headers.find("x-clickhouse-session-timeout");
-            if (session_it != headers.end())
-                session_timeout_str = std::string(session_it->second);
-
-            unsigned session_timeout = 0;
-            if (!session_timeout_str.empty())
-            {
-                ReadBufferFromString buf(session_timeout_str);
-                if (!tryReadIntText(session_timeout, buf) || !buf.eof())
-                    return arrow::Status::Invalid("Invalid session timeout: " + session_timeout_str);
-            }
-
-            std::string session_close;
-            session_it = headers.find("x-clickhouse-session-close");
-            if (session_it != headers.end())
-                session_close = std::string(session_it->second);
-
-            if (session_id.empty())
-                session->makeSessionContext();
-            else
-                session->makeSessionContext(session_id, parseSessionTimeout(server.context()->getConfigRef(), session_timeout), session_check == "1");
-
-            *middleware = std::make_unique<AuthMiddleware>(session, token, username, session_id, session_close == "1" && server.config().getBool("enable_arrow_close_session", true));
-            return arrow::Status::OK();
-        }
-
-        private:
-            IServer & server;
-            TokenStorage token_storage;
-    };
 
     String readFile(const String & filepath)
     {
@@ -1746,7 +1457,7 @@ arrow::Status ArrowFlightServer::GetFlightInfo(
         LOG_INFO(log, "GetFlightInfo is called for descriptor {}", request.ToString());
 
         const auto & auth = AuthMiddleware::get(context);
-        auto session = auth.session();
+        auto session = auth.getSession();
 
         std::string sql;
         std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
@@ -1858,7 +1569,7 @@ arrow::Status ArrowFlightServer::GetSchema(
         LOG_INFO(log, "GetSchema is called for descriptor {}", request.ToString());
 
         const auto & auth = AuthMiddleware::get(context);
-        auto session = auth.session();
+        auto session = auth.getSession();
 
         std::shared_ptr<arrow::Schema> schema;
 
@@ -1972,7 +1683,7 @@ arrow::Status ArrowFlightServer::PollFlightInfo(
         LOG_INFO(log, "PollFlightInfo is called for descriptor {}", request.ToString());
 
         const auto & auth = AuthMiddleware::get(context);
-        auto session = auth.session();
+        auto session = auth.getSession();
 
         std::string sql;
         std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
@@ -2205,7 +1916,7 @@ arrow::Status ArrowFlightServer::DoGet(
         bool should_cancel_ticket = false;
 
         const auto & auth = AuthMiddleware::get(context);
-        auto session = auth.session();
+        auto session = auth.getSession();
 
         if (hasTicketPrefix(request.ticket))
         {
@@ -2285,7 +1996,7 @@ arrow::Status ArrowFlightServer::DoPut(
         LOG_INFO(log, "DoPut is called for descriptor {}", request.ToString());
 
         const auto & auth = AuthMiddleware::get(context);
-        auto session = auth.session();
+        auto session = auth.getSession();
 
         std::string sql;
 
@@ -2444,7 +2155,7 @@ arrow::Status ArrowFlightServer::DoAction(
         LOG_INFO(log, "DoAction is called for action {} {}", action.type, action.ToString());
 
         const auto & auth = AuthMiddleware::get(context);
-        auto session = auth.session();
+        auto session = auth.getSession();
 
         std::vector<arrow::flight::Result> results;
 
@@ -2457,7 +2168,7 @@ arrow::Status ArrowFlightServer::DoAction(
             {
                 calls_data->eraseFlightDescriptorMapByQueryId(*query_id);
                 auto& process_list = server.context()->getProcessList();
-                auto cancel_result = process_list.sendCancelToQuery(*query_id, auth.username());
+                auto cancel_result = process_list.sendCancelToQuery(*query_id, auth.getUsername());
                 if (cancel_result == CancellationCode::CancelSent)
                     result = arrow::flight::CancelFlightInfoResult{arrow::flight::CancelStatus::kCancelled};
             }

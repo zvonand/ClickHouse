@@ -24,6 +24,14 @@
 #  17. Mounted config overrides (config.d / users.d)
 #  18. Read-only root filesystem
 #  19. Shell init scripts (.sh) gracefully skipped
+#  20. CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+#  21. CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS
+#  22. Root mode (--user=0) with privilege drop
+#  23. Mounted users.d profile override preserved
+#  24. Cross-container client (docker-library pattern)
+#  25. CLICKHOUSE_DO_NOT_CHOWN=1 with root
+#  26. Keeper custom CLICKHOUSE_DATA_DIR
+#  27. Internode port 9009 configured
 
 set -euo pipefail
 
@@ -864,6 +872,295 @@ fi
 
 docker rm -f ch-distroless-t19 >/dev/null
 rm -r "${T19_INITDB}"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 20: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 20: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT ==="
+CID=$(docker run -d \
+    --name ch-distroless-t20 \
+    -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
+    -e CLICKHOUSE_USER=admin \
+    -e CLICKHOUSE_PASSWORD=adminpass \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t20 9000 admin adminpass
+
+result=$(docker exec ch-distroless-t20 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u admin --password adminpass \
+    --query "CREATE USER test_am IDENTIFIED BY 'pw'; SELECT name FROM system.users WHERE name='test_am'; DROP USER test_am" 2>/dev/null || echo "FAIL")
+if [[ "${result}" == "test_am" ]]; then
+    pass "access_management=1 allows CREATE USER"
+else
+    fail "expected 'test_am' from CREATE USER, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t20 >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 21: CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 21: CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS ==="
+
+T21_INITDB=$(mktemp -d)
+T21_VOL="ch-distroless-vol-t21"
+docker volume create "${T21_VOL}" >/dev/null
+
+# First run: init script creates table and inserts 3 rows.
+cat > "${T21_INITDB}/01-init.sql" <<'SQL'
+CREATE TABLE IF NOT EXISTS default.always_init (id UInt32) ENGINE = MergeTree ORDER BY id;
+INSERT INTO default.always_init VALUES (1),(2),(3);
+SQL
+
+CID=$(docker run -d \
+    --name ch-distroless-t21a \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    -v "${T21_VOL}:/var/lib/clickhouse" \
+    -v "${T21_INITDB}:/docker-entrypoint-initdb.d:ro" \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t21a 9000 testuser testpass
+docker rm -f ch-distroless-t21a >/dev/null
+
+# Second run: ALWAYS_RUN + script that inserts 2 more rows.
+cat > "${T21_INITDB}/01-init.sql" <<'SQL'
+INSERT INTO default.always_init VALUES (4),(5);
+SQL
+
+CID=$(docker run -d \
+    --name ch-distroless-t21b \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    -e CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS=1 \
+    -v "${T21_VOL}:/var/lib/clickhouse" \
+    -v "${T21_INITDB}:/docker-entrypoint-initdb.d:ro" \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t21b 9000 testuser testpass
+
+result=$(docker exec ch-distroless-t21b \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT count() FROM default.always_init")
+if [[ "${result}" == "5" ]]; then
+    pass "CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS re-ran init (count=5)"
+else
+    fail "expected 5 rows after re-run, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t21b >/dev/null
+docker volume rm "${T21_VOL}" >/dev/null
+rm -r "${T21_INITDB}"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 22: Root mode (--user=0) with privilege drop
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 22: root mode with privilege drop ==="
+CID=$(docker run -d \
+    --name ch-distroless-t22 \
+    --user=0 \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    "${SERVER_DEBUG_IMAGE}")
+
+wait_for_server ch-distroless-t22 9000 testuser testpass
+
+result=$(docker exec ch-distroless-t22 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT 'root_ok'")
+if [[ "${result}" == "root_ok" ]]; then
+    pass "server responds to queries when started as root"
+else
+    fail "expected 'root_ok', got '${result}'"
+fi
+
+# Verify the server process dropped to uid 101 via /proc/1/status.
+server_uid=$(docker exec ch-distroless-t22 \
+    /busybox/sh -c 'cat /proc/1/status' 2>/dev/null | grep '^Uid:' | awk '{print $2}')
+if [[ "${server_uid}" == "101" ]]; then
+    pass "server process dropped to uid 101"
+else
+    fail "expected uid 101, got '${server_uid}'"
+fi
+
+docker rm -f ch-distroless-t22 >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 23: Mounted users.d profile override coexists with default-user.xml
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 23: mounted users.d profile override preserved ==="
+
+# Mount a users.d/ profile override that sets max_threads=7.
+# Even though docker-init writes its own default-user.xml (for user management),
+# the profile override must be preserved — ClickHouse merges all users.d/ files.
+T23_CFG_DIR=$(mktemp -d)
+cat > "${T23_CFG_DIR}/custom_profile.xml" <<'XMLEOF'
+<clickhouse>
+    <profiles>
+        <default>
+            <max_threads>7</max_threads>
+        </default>
+    </profiles>
+</clickhouse>
+XMLEOF
+
+CID=$(docker run -d \
+    --name ch-distroless-t23 \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    -v "${T23_CFG_DIR}/custom_profile.xml:/etc/clickhouse-server/users.d/custom_profile.xml:ro" \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t23 9000 testuser testpass
+
+result=$(docker exec ch-distroless-t23 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT getSetting('max_threads')")
+if [[ "${result}" == "7" ]]; then
+    pass "mounted users.d profile override preserved (max_threads=7)"
+else
+    fail "expected max_threads=7, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t23 >/dev/null
+rm -r "${T23_CFG_DIR}"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 24: Cross-container client (docker-library pattern)
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 24: cross-container client ==="
+
+NETNAME_T24="ch-distroless-net-t24"
+docker network create "${NETNAME_T24}" >/dev/null
+
+CID=$(docker run -d \
+    --name ch-distroless-t24-server \
+    --network "${NETNAME_T24}" \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t24-server 9000 testuser testpass
+
+result=$(docker run --rm \
+    --network "${NETNAME_T24}" \
+    "${SERVER_IMAGE}" \
+    clickhouse-client --host ch-distroless-t24-server \
+    -u testuser --password testpass \
+    --query "SELECT 'cross_ok'" 2>/dev/null || echo "FAIL")
+if [[ "${result}" == "cross_ok" ]]; then
+    pass "cross-container clickhouse-client query succeeded"
+else
+    fail "expected 'cross_ok', got '${result}'"
+fi
+
+docker rm -f ch-distroless-t24-server >/dev/null
+docker network rm "${NETNAME_T24}" >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 25: CLICKHOUSE_DO_NOT_CHOWN=1 with root
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 25: CLICKHOUSE_DO_NOT_CHOWN with root ==="
+CID=$(docker run -d \
+    --name ch-distroless-t25 \
+    --user=0 \
+    -e CLICKHOUSE_DO_NOT_CHOWN=1 \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    "${SERVER_DEBUG_IMAGE}")
+
+wait_for_server ch-distroless-t25 9000 testuser testpass
+
+result=$(docker exec ch-distroless-t25 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT 'nochown_ok'")
+if [[ "${result}" == "nochown_ok" ]]; then
+    pass "CLICKHOUSE_DO_NOT_CHOWN=1 with root works"
+else
+    fail "expected 'nochown_ok', got '${result}'"
+fi
+
+docker rm -f ch-distroless-t25 >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 26: Keeper custom CLICKHOUSE_DATA_DIR
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 26: keeper custom CLICKHOUSE_DATA_DIR ==="
+
+T26_VOL="ch-distroless-vol-t26"
+docker volume create "${T26_VOL}" >/dev/null
+
+# Run as root so docker-init can chown the custom data directory.
+# The keeper process itself drops to uid 101 via `clickhouse su`.
+CID=$(docker run -d \
+    --name ch-distroless-t26 \
+    --user=0 \
+    -e CLICKHOUSE_DATA_DIR=/var/lib/custom-keeper \
+    -v "${T26_VOL}:/var/lib/custom-keeper" \
+    "${KEEPER_IMAGE}")
+
+echo "  Waiting for keeper on port 9181..."
+tries=60
+keeper_ready=false
+while (( tries-- > 0 )); do
+    if docker exec ch-distroless-t26 \
+           /usr/bin/clickhouse keeper-client \
+           --host 127.0.0.1 --port 9181 \
+           -q "ruok" \
+           2>/dev/null | grep -q "imok"; then
+        keeper_ready=true
+        break
+    fi
+    sleep 1
+done
+
+if [[ "${keeper_ready}" == "true" ]]; then
+    pass "keeper with custom CLICKHOUSE_DATA_DIR started"
+else
+    fail "keeper with custom data dir did not start"
+    docker logs ch-distroless-t26 >&2
+fi
+
+docker rm -f ch-distroless-t26 >/dev/null
+docker volume rm "${T26_VOL}" >/dev/null
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 27: Internode port 9009 configured
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 27: internode port 9009 configured ==="
+CID=$(docker run -d \
+    --name ch-distroless-t27 \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t27 9000 testuser testpass
+
+# Verify interserver_http_port is configured (EXPOSE 9009 in Dockerfile).
+result=$(docker exec ch-distroless-t27 \
+    /usr/bin/clickhouse extract-from-config \
+    --config-file /etc/clickhouse-server/config.xml \
+    --key interserver_http_port --try 2>/dev/null)
+if [[ "${result}" == "9009" ]]; then
+    pass "interserver_http_port configured as 9009"
+else
+    fail "expected interserver_http_port=9009, got '${result}'"
+fi
+
+docker rm -f ch-distroless-t27 >/dev/null
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Summary

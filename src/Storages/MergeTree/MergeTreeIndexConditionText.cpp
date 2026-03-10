@@ -25,8 +25,6 @@ namespace ErrorCodes
     extern const int NO_SUCH_COLUMN_IN_TABLE;
 }
 
-static constexpr size_t MIN_LIKE_PATTERN_TOKEN_LENGTH = 4;
-
 namespace Setting
 {
     extern const SettingsBool query_plan_text_index_add_hint;
@@ -35,6 +33,7 @@ namespace Setting
     extern const SettingsBool use_text_index_postings_cache;
     extern const SettingsUInt64 max_memory_usage;
     extern const SettingsBool use_text_index_like_optimization;
+    extern const SettingsUInt64 text_index_like_min_pattern_length;
 }
 
 TextSearchQuery::TextSearchQuery(String function_name_, TextSearchMode search_mode_, TextIndexDirectReadMode direct_read_mode_, std::vector<String> tokens_, std::vector<OptimizedRegularExpression> patterns_)
@@ -558,6 +557,8 @@ std::vector<OptimizedRegularExpression> MergeTreeIndexConditionText::stringLikeT
 
     const auto is_token_char = [](unsigned char c) { return isASCII(c) && isAlphaNumericASCII(static_cast<char>(c)); };
 
+    const size_t min_pattern_length = getContext()->getSettingsRef()[Setting::text_index_like_min_pattern_length];
+
     /// Must start with at least one '%'.
     if (data[pos] != '%')
         return {};
@@ -577,7 +578,7 @@ std::vector<OptimizedRegularExpression> MergeTreeIndexConditionText::stringLikeT
     const size_t end = pos;
 
     /// Reject short needles: it might match too many dictionary tokens.
-    if (end - start < MIN_LIKE_PATTERN_TOKEN_LENGTH)
+    if (end - start < min_pattern_length)
         return {};
 
     /// Trailing '%' must follow immediately after the content.
@@ -635,6 +636,8 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
     auto value_data_type = WhichDataType(value_type);
     if (!value_data_type.isStringOrFixedString() && !value_data_type.isArray())
         return false;
+
+    const auto & settings = getContext()->getSettingsRef();
 
     if (has_map_keys_column || has_map_values_column)
     {
@@ -746,8 +749,8 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
         /// like/notLike optimization is only supported for the SplitByNonAlpha tokenizer.
         /// Requires explicit opt-in via use_text_index_like_optimization because scanning
         /// the index dictionary for pattern-matching tokens has non-trivial overhead.
-        if (tokenizer->getType() == ITokenizer::Type::SplitByNonAlpha
-            && getContext()->getSettingsRef()[Setting::use_text_index_like_optimization] && !has_preprocessor)
+        if (tokenizer->getType() == ITokenizer::Type::SplitByNonAlpha && settings[Setting::use_text_index_like_optimization]
+            && !has_preprocessor)
         {
             /// TODO(ahmadov): Only '%foo%' pattern is eligible for direct read mode. An empty vector means the pattern is too complex.
             /// Add support for multiple patterns later with hint mode:
@@ -776,7 +779,7 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
     }
     /// Currently, only SplitByNonAlpha tokenizer is supported with ilike/notilike functions for the like optimization.
     if ((function_name == "ilike" || function_name == "notILike") && tokenizer->getType() == ITokenizer::Type::SplitByNonAlpha
-        && getContext()->getSettingsRef()[Setting::use_text_index_like_optimization])
+        && settings[Setting::use_text_index_like_optimization])
     {
         auto patterns = stringLikeToPatterns(value_field, true);
         if (patterns.size() == 1)

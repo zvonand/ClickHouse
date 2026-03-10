@@ -7474,6 +7474,13 @@ Maximal selectivity of the filter to use the hint built from the inverted text i
     DECLARE(Bool, use_text_index_like_optimization, false, R"(
 Enable optimization of LIKE/NOT LIKE queries using the inverted text index.
 )", 0) \
+    DECLARE(UInt64, text_index_like_min_pattern_length, 4, R"(
+Minimum length of the alphanumeric needle in a LIKE/ILIKE pattern required to use the text index LIKE optimization.
+Patterns shorter than this threshold match too many dictionary tokens and are skipped to avoid expensive scans.
+)", 0) \
+    DECLARE(UInt64, text_index_like_max_postings_to_read, 50, R"(
+Maximum number of large postings to read when text index like optimization is enabled.
+)", 0) \
     DECLARE(Bool, use_text_index_tokens_cache, false, R"(
 Whether to use a cache of deserialized text index token infos.
 Using the text index tokens cache can significantly reduce latency and increase throughput when working with a large number of text index queries.

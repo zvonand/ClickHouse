@@ -96,6 +96,32 @@ namespace DB::Iceberg
 {
 
 using namespace DB;
+
+FileCatagory getFileCatagory(const String & relative_path)
+{
+    if (relative_path.find("/metadata/") != String::npos || relative_path.starts_with("metadata/"))
+    {
+        if (relative_path.ends_with(".metadata.json") || relative_path.ends_with(".metadata.json.gz"))
+            return FileCatagory::METADATA_JSON;
+        if (relative_path.ends_with(".avro"))
+        {
+            if (relative_path.find("snap-") != String::npos)
+                return FileCatagory::MANIFEST_LIST;
+            return FileCatagory::MANIFEST_FILE;
+        }
+        if (relative_path.ends_with(".puffin") || relative_path.ends_with(".stats"))
+            return FileCatagory::STATISTICS_FILE;
+    }
+
+    if (relative_path.find("-deletes.parquet") != String::npos || relative_path.find("-delete-") != String::npos)
+        return FileCatagory::POSITION_DELETE_FILE;
+
+    if (relative_path.find("-eq-del-") != String::npos)
+        return FileCatagory::EQUALITY_DELETE_FILE;
+
+    return FileCatagory::DATA_FILE;
+}
+
 static CompressionMethod getCompressionMethodFromMetadataFile(const String & path)
 {
     constexpr std::string_view metadata_suffix = ".metadata.json";

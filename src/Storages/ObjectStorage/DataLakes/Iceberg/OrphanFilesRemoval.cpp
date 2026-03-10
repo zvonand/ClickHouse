@@ -31,42 +31,6 @@ namespace DB::Iceberg
 namespace
 {
 
-enum class OrphanFileCategory : uint8_t
-{
-    DATA_FILE,
-    POSITION_DELETE_FILE,
-    EQUALITY_DELETE_FILE,
-    MANIFEST_FILE,
-    MANIFEST_LIST,
-    METADATA_JSON,
-    STATISTICS_FILE,
-};
-
-OrphanFileCategory categorizeFile(const String & relative_path)
-{
-    if (relative_path.find("/metadata/") != String::npos || relative_path.starts_with("metadata/"))
-    {
-        if (relative_path.ends_with(".metadata.json") || relative_path.ends_with(".metadata.json.gz"))
-            return OrphanFileCategory::METADATA_JSON;
-        if (relative_path.ends_with(".avro"))
-        {
-            if (relative_path.find("snap-") != String::npos)
-                return OrphanFileCategory::MANIFEST_LIST;
-            return OrphanFileCategory::MANIFEST_FILE;
-        }
-        if (relative_path.ends_with(".puffin") || relative_path.ends_with(".stats"))
-            return OrphanFileCategory::STATISTICS_FILE;
-    }
-
-    if (relative_path.find("-deletes.parquet") != String::npos || relative_path.find("-delete-") != String::npos)
-        return OrphanFileCategory::POSITION_DELETE_FILE;
-
-    if (relative_path.find("-eq-del-") != String::npos)
-        return OrphanFileCategory::EQUALITY_DELETE_FILE;
-
-    return OrphanFileCategory::DATA_FILE;
-}
-
 /// Collect all files reachable through the metadata graph.
 ///
 /// Traverses: metadata JSON files (from metadata-log), manifest lists (from snapshots),
@@ -295,15 +259,15 @@ RemoveOrphanFilesResult removeOrphanFiles(
         RemoveOrphanFilesResult r;
         for (const auto & path : paths)
         {
-            switch (categorizeFile(path))
+            switch (getFileCatagory(path))
             {
-                case OrphanFileCategory::DATA_FILE:                ++r.deleted_data_files_count; break;
-                case OrphanFileCategory::POSITION_DELETE_FILE:      ++r.deleted_position_delete_files_count; break;
-                case OrphanFileCategory::EQUALITY_DELETE_FILE:      ++r.deleted_equality_delete_files_count; break;
-                case OrphanFileCategory::MANIFEST_FILE:             ++r.deleted_manifest_files_count; break;
-                case OrphanFileCategory::MANIFEST_LIST:             ++r.deleted_manifest_lists_count; break;
-                case OrphanFileCategory::METADATA_JSON:             ++r.deleted_metadata_files_count; break;
-                case OrphanFileCategory::STATISTICS_FILE:           ++r.deleted_statistics_files_count; break;
+                case FileCatagory::DATA_FILE:                ++r.deleted_data_files_count; break;
+                case FileCatagory::POSITION_DELETE_FILE:      ++r.deleted_position_delete_files_count; break;
+                case FileCatagory::EQUALITY_DELETE_FILE:      ++r.deleted_equality_delete_files_count; break;
+                case FileCatagory::MANIFEST_FILE:             ++r.deleted_manifest_files_count; break;
+                case FileCatagory::MANIFEST_LIST:             ++r.deleted_manifest_lists_count; break;
+                case FileCatagory::METADATA_JSON:             ++r.deleted_metadata_files_count; break;
+                case FileCatagory::STATISTICS_FILE:           ++r.deleted_statistics_files_count; break;
             }
         }
         r.skipped_missing_metadata_count = skipped_missing_metadata;

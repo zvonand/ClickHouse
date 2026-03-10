@@ -35,9 +35,8 @@ public:
         direction = threshold_tracker_->getDirection();
         nulls_direction = threshold_tracker_->getNullsDirection();
         collator = threshold_tracker_->getCollator();
-        use_general_comparison = collator != nullptr;
 
-        if (!use_general_comparison)
+        if (!collator)
         {
             String comparator = "lessOrEquals";
             if (direction == -1)
@@ -88,8 +87,8 @@ public:
             auto current_threshold = threshold_tracker->getValue();
             auto data_type = arguments[0].type;
 
-            if (use_general_comparison)
-                return executeWithColumnCompare(arguments[0], current_threshold, data_type, input_rows_count);
+            if (collator)
+                return executeWithCollation(arguments[0], current_threshold, data_type, input_rows_count);
 
             if (data_type->isNullable())
                 return executeNullable(arguments[0], current_threshold, data_type, input_rows_count);
@@ -162,9 +161,9 @@ private:
         return result_col;
     }
 
-    /// General path using per-element compareAt/compareAtWithCollation.
-    /// Handles all types including collation-aware string comparison.
-    ColumnPtr executeWithColumnCompare(
+    /// Collation path: per-element compareAtWithCollation.
+    /// No SIMD alternative exists for ICU collation-aware string comparison.
+    ColumnPtr executeWithCollation(
         const ColumnWithTypeAndName & argument,
         const Field & current_threshold,
         const DataTypePtr & data_type,
@@ -179,21 +178,10 @@ private:
         auto result_col = ColumnUInt8::create(input_rows_count);
         auto & result_data = result_col->getData();
 
-        if (collator)
+        for (size_t i = 0; i < input_rows_count; ++i)
         {
-            for (size_t i = 0; i < input_rows_count; ++i)
-            {
-                int cmp = col.compareAtWithCollation(i, 0, *threshold_col, nulls_direction, *collator);
-                result_data[i] = (direction * cmp) <= 0;
-            }
-        }
-        else
-        {
-            for (size_t i = 0; i < input_rows_count; ++i)
-            {
-                int cmp = col.compareAt(i, 0, *threshold_col, nulls_direction);
-                result_data[i] = (direction * cmp) <= 0;
-            }
+            int cmp = col.compareAtWithCollation(i, 0, *threshold_col, nulls_direction, *collator);
+            result_data[i] = (direction * cmp) <= 0;
         }
 
         return result_col;
@@ -205,7 +193,6 @@ private:
     int direction;
     int nulls_direction;
     std::shared_ptr<Collator> collator;
-    bool use_general_comparison;
 };
 
 FunctionOverloadResolverPtr createInternalFunctionTopKFilterResolver(TopKThresholdTrackerPtr threshold_tracker_)

@@ -120,7 +120,7 @@
 #include <Server/ProxyV1HandlerFactory.h>
 #include <Server/TLSHandlerFactory.h>
 #include <Server/KeeperHTTPHandlerFactory.h>
-#include <Server/ArrowFlightHandler.h>
+#include <Server/ArrowFlight/ArrowFlightHandler.h>
 #include <Interpreters/AsynchronousInsertQueue.h>
 
 #include <filesystem>

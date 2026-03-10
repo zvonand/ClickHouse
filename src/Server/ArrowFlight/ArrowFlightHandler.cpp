@@ -1,4 +1,4 @@
-#include <Server/ArrowFlightHandler.h>
+#include <Server/ArrowFlight/ArrowFlightHandler.h>
 
 #if USE_ARROWFLIGHT
 

@@ -544,7 +544,7 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
 
     auto * first_node = root;
     /// Skip the expression steps if we are not in the verbose mode
-    while (!settings.verbose && first_node->step->getName() == "Expression")
+    while (!settings.verbose && first_node->step->getName() == "Expression" && !first_node->children.empty())
         first_node = first_node->children[0];
 
     stack.push_back(ExplainPlan::Frame{.node = first_node});
@@ -569,7 +569,7 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
             bool is_last = (frame.next_child + 1) == (frame.node->children.size());
             auto * next_node = frame.node->children[frame.next_child];
 
-            while (!settings.verbose && next_node->step->getName() == "Expression")
+            while (!settings.verbose && next_node->step->getName() == "Expression" && !next_node->children.empty())
                 next_node = next_node->children[0];
 
             stack.push_back(ExplainPlan::Frame{next_node,

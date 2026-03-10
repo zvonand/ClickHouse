@@ -33,7 +33,7 @@ void ExpressionTransform::transform(Chunk & chunk)
     chunk.setColumns(block.getColumns(), num_rows);
 
     if (updater)
-        updater->recordOutputChunk(chunk, getOutputPort().getHeader());
+        updater->recordOutputChunk(chunk, block);
 }
 
 void ExpressionTransform::onCancel() noexcept

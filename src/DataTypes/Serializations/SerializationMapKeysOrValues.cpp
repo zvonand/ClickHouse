@@ -5,6 +5,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int NOT_IMPLEMENTED;
+}
+
 SerializationMapKeysOrValues::SerializationMapKeysOrValues(
     const SerializationPtr & keys_or_values_serialization_, MergeTreeMapSerializationVersion serialization_version_)
     : keys_or_values_serialization(keys_or_values_serialization_)

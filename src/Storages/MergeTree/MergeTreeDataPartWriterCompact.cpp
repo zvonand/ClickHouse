@@ -204,7 +204,7 @@ void MergeTreeDataPartWriterCompact::write(const Block & block, const IColumnPer
     /// For some columns the set of streams may depend on the actual column data.
     /// For example: dynamic structure and statistics for JSON, Dynamic and Map (with adaptive number of buckets).
     /// We must ensure that all blocks will be written in the same set of streams, so we have to make some
-    /// prepararions to achive it.
+    /// preparations to achieve it.
     prepareBlockForWriting(result_block);
 
     initColumnsSubstreamsIfNeeded(result_block);

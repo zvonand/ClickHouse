@@ -5,6 +5,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int NOT_IMPLEMENTED;
+}
+
 SerializationMapSize::SerializationMapSize(
     const SerializationPtr & size_serialization_, MergeTreeMapSerializationVersion serialization_version_)
     : size_serialization(size_serialization_)

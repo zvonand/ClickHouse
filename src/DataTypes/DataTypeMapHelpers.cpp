@@ -293,7 +293,10 @@ void extractValuesString(
         dst_null_map->resize(dst_null_map->size() + num_rows);
 
     /// First pass: compute result offsets, total chars size, and fill null map.
-    size_t total_chars_size = 0;
+    /// total_chars_size must start from the existing chars size because
+    /// ColumnString offsets are absolute positions into the chars array.
+    size_t old_chars_size = dst_chars.size();
+    size_t total_chars_size = old_chars_size;
     for (size_t i = 0; i < num_rows; ++i)
     {
         size_t pos = matched_positions[i];
@@ -312,8 +315,7 @@ void extractValuesString(
     }
 
     /// Second pass: resize chars once and copy string data.
-    size_t old_chars_size = dst_chars.size();
-    dst_chars.resize(old_chars_size + total_chars_size);
+    dst_chars.resize(total_chars_size);
     size_t current_offset = old_chars_size;
     for (size_t i = 0; i < num_rows; ++i)
     {
@@ -341,25 +343,26 @@ void extractValuesFixedString(
     auto & dst_chars = result.getChars();
     size_t num_rows = matched_positions.size();
 
-    size_t old_size = dst_chars.size();
-    dst_chars.resize(old_size + num_rows * n);
+    size_t old_chars_size = dst_chars.size();
+    size_t old_num_rows = old_chars_size / n;
+    dst_chars.resize(old_chars_size + num_rows * n);
     if (dst_null_map)
-        dst_null_map->resize(dst_null_map->size() + num_rows);
+        dst_null_map->resize(old_num_rows + num_rows);
 
     for (size_t i = 0; i < num_rows; ++i)
     {
         size_t pos = matched_positions[i];
         if (pos != KEY_NOT_FOUND)
         {
-            memcpy(&dst_chars[old_size + i * n], &src_chars[pos * n], n);
+            memcpy(&dst_chars[old_chars_size + i * n], &src_chars[pos * n], n);
             if (dst_null_map)
-                (*dst_null_map)[old_size + i] = (*src_null_map)[pos];
+                (*dst_null_map)[old_num_rows + i] = (*src_null_map)[pos];
         }
         else
         {
-            memset(&dst_chars[old_size + i * n], 0, n);
+            memset(&dst_chars[old_chars_size + i * n], 0, n);
             if (dst_null_map)
-                (*dst_null_map)[old_size + i] = static_cast<UInt8>(1);
+                (*dst_null_map)[old_num_rows + i] = static_cast<UInt8>(1);
         }
     }
 }

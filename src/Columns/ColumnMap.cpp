@@ -445,6 +445,9 @@ void ColumnMap::Statistics::addBatch(Float64 batch_avg, UInt64 batch_count)
 
 void ColumnMap::Statistics::addBatch(UInt64 batch_total_size, UInt64 batch_count)
 {
+    if (batch_count == 0)
+        return;
+
     addBatch(static_cast<Float64>(batch_total_size) / static_cast<Float64>(batch_count), batch_count);
 }
 

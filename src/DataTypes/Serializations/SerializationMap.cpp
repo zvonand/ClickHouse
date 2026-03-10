@@ -31,6 +31,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int CANNOT_READ_MAP_FROM_TEXT;
+    extern const int LOGICAL_ERROR;
     extern const int TOO_LARGE_ARRAY_SIZE;
     extern const int INCORRECT_DATA;
 }

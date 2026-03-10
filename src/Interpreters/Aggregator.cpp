@@ -148,6 +148,44 @@ DB::ColumnNumbers calculateKeysPositions(const DB::Block & header, const DB::Agg
     return keys_positions;
 }
 
+DB::DataTypes calculateKeyTypes(const DB::Block & header, const DB::Aggregator::Params & params)
+{
+    DB::DataTypes types;
+    types.reserve(params.keys_size);
+    for (const auto & key : params.keys)
+        types.push_back(header.getByName(key).type);
+    return types;
+}
+
+DB::DataTypes calculateAggregateStateTypes(const DB::Block & header, const DB::Aggregator::Params & params)
+{
+    DB::DataTypes types;
+    types.reserve(params.aggregates_size);
+    for (const auto & aggregate : params.aggregates)
+    {
+        DB::DataTypes argument_types;
+        argument_types.reserve(aggregate.argument_names.size());
+        for (const auto & name : aggregate.argument_names)
+            argument_types.push_back(header.getByName(name).type);
+        types.push_back(std::make_shared<DB::DataTypeAggregateFunction>(aggregate.function, argument_types, aggregate.parameters));
+    }
+    return types;
+}
+
+std::vector<DB::ColumnNumbers> calculateAggregatesPositions(const DB::Block & header, const DB::Aggregator::Params & params)
+{
+    std::vector<DB::ColumnNumbers> positions;
+    positions.reserve(params.aggregates_size);
+    for (const auto & aggregate : params.aggregates)
+    {
+        auto & pos = positions.emplace_back();
+        pos.reserve(aggregate.argument_names.size());
+        for (const auto & name : aggregate.argument_names)
+            pos.push_back(header.getPositionByName(name));
+    }
+    return positions;
+}
+
 template <typename HashTable, typename KeyHolder>
 concept HasPrefetchMemberFunc = requires
 {
@@ -261,11 +299,6 @@ size_t Aggregator::estimateSizeOfCompressedState(AggregatedDataVariants & result
 #undef M
 
     UNREACHABLE();
-}
-
-Block Aggregator::getHeader(bool final) const
-{
-    return params.getHeader(header, final);
 }
 
 Aggregator::Params::Params(
@@ -543,8 +576,10 @@ public:
 #endif
 
 Aggregator::Aggregator(const Block & header_, const Params & params_)
-    : header(header_)
-    , keys_positions(calculateKeysPositions(header, params_))
+    : keys_positions(calculateKeysPositions(header_, params_))
+    , aggregates_positions(calculateAggregatesPositions(header_, params_))
+    , key_types(calculateKeyTypes(header_, params_))
+    , aggregate_state_types(calculateAggregateStateTypes(header_, params_))
     , params(params_)
     , tmp_data(params.tmp_data_scope ? params.tmp_data_scope->childScope({
         .current_metric = CurrentMetrics::TemporaryFilesForAggregation,
@@ -606,7 +641,7 @@ Aggregator::Aggregator(const Block & header_, const Params & params_)
             is_simple_count = true;
     }
 
-    method_chosen = chooseAggregationMethod();
+    method_chosen = chooseAggregationMethod(header_);
 
     /// TODO(ab): HashMethodSingleLowCardinalityColumn uses a hardcoded internal cache,
     /// which interferes with inline aggregation (e.g. for COUNT). This needs to be
@@ -714,7 +749,7 @@ void Aggregator::compileAggregateFunctionsIfNeeded()
 
 #endif
 
-AggregatedDataVariants::Type Aggregator::chooseAggregationMethod()
+AggregatedDataVariants::Type Aggregator::chooseAggregationMethod(const Block & header)
 {
     /// If no keys. All aggregating to single row.
     if (params.keys_size == 0)
@@ -1654,7 +1689,7 @@ void Aggregator::prepareAggregateInstructions(
 
         for (size_t j = 0; j < aggregate_columns[i].size(); ++j)
         {
-            const auto pos = header.getPositionByName(params.aggregates[i].argument_names[j]);
+            const auto pos = aggregates_positions[i][j];
             materialized_columns.push_back(columns.at(pos)->convertToFullColumnIfConst()->convertToFullColumnIfReplicated());
             aggregate_columns[i][j] = materialized_columns.back().get();
 
@@ -1705,21 +1740,6 @@ void Aggregator::prepareAggregateInstructions(
 
         aggregate_functions_instructions[i].batch_that = that;
     }
-}
-
-
-bool Aggregator::executeOnBlock(const Block & block,
-    AggregatedDataVariants & result,
-    ColumnRawPtrs & key_columns,
-    AggregateColumns & aggregate_columns,
-    bool & no_more_keys) const
-{
-    return executeOnBlock(block.getColumns(),
-        /* row_begin= */ 0, block.rows(),
-        result,
-        key_columns,
-        aggregate_columns,
-        no_more_keys);
 }
 
 
@@ -1858,7 +1878,12 @@ void Aggregator::writeToTemporaryFile(AggregatedDataVariants & data_variants, si
     auto & out_stream = [this, max_temp_file_size]() -> TemporaryBlockStreamHolder &
     {
         std::lock_guard lk(tmp_files_mutex);
-        return tmp_files.emplace_back(std::make_shared<const Block>(getHeader(false)), tmp_data, max_temp_file_size);
+        Block header;
+        for (size_t i = 0; i < params.keys_size; ++i)
+            header.insert({key_types[i]->createColumn(), key_types[i], params.keys[i]});
+        for (size_t i = 0; i < params.aggregates_size; ++i)
+            header.insert({aggregate_state_types[i]->createColumn(), aggregate_state_types[i], params.aggregates[i].column_name});
+        return tmp_files.emplace_back(std::make_shared<const Block>(std::move(header)), tmp_data, max_temp_file_size);
     }();
 
     LOG_DEBUG(log, "Writing part of aggregation data into temporary file {}", out_stream.getHolder()->describeFilePath());
@@ -2151,8 +2176,8 @@ Aggregator::convertToBlockImpl(Method & method, Table & data, Arena * arena, Are
 {
     if (data.empty())
     {
-        auto && out_cols = prepareOutputBlockColumns(params, aggregate_functions, getHeader(final), aggregates_pools, final, rows);
-        auto finalized_block = finalizeBlock(params, getHeader(final), std::move(out_cols), final, rows);
+        auto && out_cols = prepareOutputBlockColumns(params, aggregate_functions, key_types, aggregate_state_types, aggregates_pools, final, rows);
+        auto finalized_block = finalizeBlock(params, key_types, aggregate_state_types, std::move(out_cols), final);
 
         if (return_single_block)
             return std::move(finalized_block);
@@ -2183,7 +2208,7 @@ Aggregator::convertToBlockImpl(Method & method, Table & data, Arena * arena, Are
 
         auto init_out_cols = [&]()
         {
-            out_cols = prepareOutputBlockColumns(params, aggregate_functions, getHeader(final), aggregates_pools, final, max_block_size);
+            out_cols = prepareOutputBlockColumns(params, aggregate_functions, key_types, aggregate_state_types, aggregates_pools, final, max_block_size);
 
             if (final)
                 out_count_col = assert_cast<ColumnUInt64 *>(out_cols->final_aggregate_columns[0].get());
@@ -2245,7 +2270,7 @@ Aggregator::convertToBlockImpl(Method & method, Table & data, Arena * arena, Are
             ++rows_in_states;
             if (!return_single_block && rows_in_current_block >= max_block_size)
             {
-                blocks.emplace_back(finalizeBlock(params, getHeader(final), std::move(out_cols.value()), final, rows_in_current_block));
+                blocks.emplace_back(finalizeBlock(params, key_types, aggregate_state_types, std::move(out_cols.value()), final));
                 out_cols.reset();
                 rows_in_current_block = 0;
             }
@@ -2257,10 +2282,10 @@ Aggregator::convertToBlockImpl(Method & method, Table & data, Arena * arena, Are
             data.forEachValue([&](const auto & key, auto & mapped) { fill_blocks.template operator()<false>(key, mapped); });
 
         if (return_single_block)
-            return finalizeBlock(params, getHeader(final), std::move(out_cols).value(), final, rows_in_current_block);
+            return finalizeBlock(params, key_types, aggregate_state_types, std::move(out_cols).value(), final);
 
         if (rows_in_current_block)
-            blocks.emplace_back(finalizeBlock(params, getHeader(final), std::move(out_cols).value(), final, rows_in_current_block));
+            blocks.emplace_back(finalizeBlock(params, key_types, aggregate_state_types, std::move(out_cols).value(), final));
 
         return blocks;
     }
@@ -2439,7 +2464,7 @@ Block Aggregator::insertResultsIntoColumns(
     if (exception)
         std::rethrow_exception(exception);
 
-    return finalizeBlock(params, getHeader(/* final */ true), std::move(out_cols), /* final */ true, places.size());
+    return finalizeBlock(params, key_types, aggregate_state_types, std::move(out_cols), /* final */ true);
 }
 
 template <typename Method, typename Table>
@@ -2463,7 +2488,7 @@ Aggregator::ConvertToBlockResVariant Aggregator::convertToBlockImplFinal(
 
     auto init_out_cols = [&]()
     {
-        out_cols = prepareOutputBlockColumns(params, aggregate_functions, getHeader(final), aggregates_pools, final, max_block_size);
+        out_cols = prepareOutputBlockColumns(params, aggregate_functions, key_types, aggregate_state_types, aggregates_pools, final, max_block_size);
 
         if constexpr (Method::low_cardinality_optimization || Method::one_key_nullable_optimization)
         {
@@ -2541,7 +2566,7 @@ Aggregator::convertToBlockImplNotFinal(Method & method, Table & data, Arenas & a
 
     auto init_out_cols = [&]()
     {
-        out_cols = prepareOutputBlockColumns(params, aggregate_functions, getHeader(final), aggregates_pools, final, max_block_size);
+        out_cols = prepareOutputBlockColumns(params, aggregate_functions, key_types, aggregate_state_types, aggregates_pools, final, max_block_size);
 
         if constexpr (Method::low_cardinality_optimization || Method::one_key_nullable_optimization)
         {
@@ -2583,7 +2608,7 @@ Aggregator::convertToBlockImplNotFinal(Method & method, Table & data, Arenas & a
             ++rows_in_current_block;
             if (!return_single_block && rows_in_current_block >= max_block_size)
             {
-                res_blocks.emplace_back(finalizeBlock(params, getHeader(final), std::move(out_cols.value()), final, rows_in_current_block));
+                res_blocks.emplace_back(finalizeBlock(params, key_types, aggregate_state_types, std::move(out_cols.value()), final));
                 out_cols.reset();
                 rows_in_current_block = 0;
             }
@@ -2591,11 +2616,11 @@ Aggregator::convertToBlockImplNotFinal(Method & method, Table & data, Arenas & a
 
     if (return_single_block)
     {
-        return finalizeBlock(params, getHeader(final), std::move(out_cols).value(), final, rows_in_current_block);
+        return finalizeBlock(params, key_types, aggregate_state_types, std::move(out_cols).value(), final);
     }
 
     if (rows_in_current_block)
-        res_blocks.emplace_back(finalizeBlock(params, getHeader(final), std::move(out_cols).value(), final, rows_in_current_block));
+        res_blocks.emplace_back(finalizeBlock(params, key_types, aggregate_state_types, std::move(out_cols).value(), final));
     return res_blocks;
 }
 
@@ -2660,7 +2685,7 @@ Block Aggregator::prepareBlockAndFillWithoutKey(AggregatedDataVariants & data_va
 {
     size_t rows = 1;
     auto && out_cols
-        = prepareOutputBlockColumns(params, aggregate_functions, getHeader(final), data_variants.aggregates_pools, final, rows);
+        = prepareOutputBlockColumns(params, aggregate_functions, key_types, aggregate_state_types, data_variants.aggregates_pools, final, rows);
     auto && [key_columns, raw_key_columns, aggregate_columns, final_aggregate_columns, aggregate_columns_data] = out_cols;
 
     if (data_variants.type == AggregatedDataVariants::Type::without_key || params.overflow_row)
@@ -2687,7 +2712,7 @@ Block Aggregator::prepareBlockAndFillWithoutKey(AggregatedDataVariants & data_va
                 key_columns[i]->insertDefault();
     }
 
-    Block block = finalizeBlock(params, getHeader(final), std::move(out_cols), final, rows);
+    Block block = finalizeBlock(params, key_types, aggregate_state_types, std::move(out_cols), final);
 
     if (is_overflows)
         block.info.is_overflows = true;

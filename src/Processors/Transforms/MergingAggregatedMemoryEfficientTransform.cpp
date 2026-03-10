@@ -350,7 +350,7 @@ void MergingAggregatedBucketTransform::transform(Chunk & chunk)
     if (!chunks_to_merge)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "MergingAggregatedSimpleTransform chunk must have ChunkInfo with type ChunksToMerge.");
 
-    auto header = params->aggregator.getHeader(false);
+    auto header = params->params.getHeader(params->header, false);
 
     BlocksList blocks_list;
     for (auto & cur_chunk : *chunks_to_merge->chunks)

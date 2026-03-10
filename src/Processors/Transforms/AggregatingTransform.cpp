@@ -920,7 +920,7 @@ void AggregatingTransform::initGenerate()
         if (params->params.only_merge)
             params->aggregator.mergeOnBlock(getInputs().front().getHeader(), variants, no_more_keys, is_cancelled);
         else
-            params->aggregator.executeOnBlock(getInputs().front().getHeader(), variants, key_columns, aggregate_columns, no_more_keys);
+            params->aggregator.executeOnBlock(getInputs().front().getHeader().getColumns(), 0, 0, variants, key_columns, aggregate_columns, no_more_keys);
     }
 
     double elapsed_seconds = watch.elapsedSeconds();

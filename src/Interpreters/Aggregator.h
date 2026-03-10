@@ -189,12 +189,6 @@ public:
     const Params & getParams() const { return params; }
 
     /// Process one block. Return false if the processing should be aborted (with group_by_overflow_mode = 'break').
-    bool executeOnBlock(const Block & block,
-        AggregatedDataVariants & result,
-        ColumnRawPtrs & key_columns,
-        AggregateColumns & aggregate_columns, /// Passed to not create them anew for each block
-        bool & no_more_keys) const;
-
     bool executeOnBlock(Columns columns,
         size_t row_begin, size_t row_end,
         AggregatedDataVariants & result,
@@ -289,9 +283,6 @@ public:
 
     std::list<TemporaryBlockStreamHolder> detachTemporaryData();
 
-    /// Get data structure of the result.
-    Block getHeader(bool final) const;
-
     /// Part of automatic parallel replicas implementation.
     size_t estimateSizeOfCompressedState(AggregatedDataVariants & result, ssize_t bucket) const;
 
@@ -304,10 +295,14 @@ private:
     friend class ConvertingAggregatedToChunksWithMergingSourceForFixedHashMap;
     friend class AggregatingInOrderTransform;
 
-    /// Data structure of source blocks.
-    Block header;
     /// Positions of aggregation key columns in the header.
     const ColumnNumbers keys_positions;
+    /// Positions of aggregate function argument columns in the header.
+    const std::vector<ColumnNumbers> aggregates_positions;
+    /// Types of key columns from the input header.
+    const DataTypes key_types;
+    /// Types of aggregate function states (DataTypeAggregateFunction), one per aggregate.
+    const DataTypes aggregate_state_types;
     Params params;
 
     AggregatedDataVariants::Type method_chosen;
@@ -361,7 +356,7 @@ private:
     void compileAggregateFunctionsIfNeeded();
 
     /** Select the aggregation method based on the number and types of keys. */
-    AggregatedDataVariants::Type chooseAggregationMethod();
+    AggregatedDataVariants::Type chooseAggregationMethod(const Block & header);
 
     /** Create states of aggregate functions for one key.
       */

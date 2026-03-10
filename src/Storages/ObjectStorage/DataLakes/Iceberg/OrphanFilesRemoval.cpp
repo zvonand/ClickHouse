@@ -3,6 +3,7 @@
 #if USE_AVRO
 
 #include <chrono>
+#include <mutex>
 #include <set>
 
 #include <Poco/JSON/Array.h>
@@ -134,25 +135,28 @@ std::set<String> collectReachableFiles(
         }
     }
 
-    // 1e. Statistics files
-    if (metadata->has(f_statistics))
+    auto collect_statistics_paths = [&](const char * field_name)
     {
-        auto statistics = metadata->get(f_statistics).extract<Poco::JSON::Array::Ptr>();
-        if (statistics)
+        if (!metadata->has(field_name))
+            return;
+        auto arr = metadata->get(field_name).extract<Poco::JSON::Array::Ptr>();
+        if (!arr)
+            return;
+        for (UInt32 j = 0; j < arr->size(); ++j)
         {
-            for (UInt32 i = 0; i < statistics->size(); ++i)
+            auto entry = arr->getObject(j);
+            if (entry->has(f_statistics_path))
             {
-                auto stat_entry = statistics->getObject(i);
-                if (stat_entry->has("statistics-path"))
-                {
-                    String stat_path = stat_entry->getValue<String>("statistics-path");
-                    String storage_path = getProperFilePathFromMetadataInfo(
-                        stat_path, persistent_table_components.table_path, persistent_table_components.table_location);
-                    reachable.insert(storage_path);
-                }
+                String stat_path = entry->getValue<String>(f_statistics_path);
+                String storage_path = getProperFilePathFromMetadataInfo(
+                    stat_path, persistent_table_components.table_path, persistent_table_components.table_location);
+                reachable.insert(storage_path);
             }
         }
-    }
+    };
+
+    collect_statistics_paths(f_statistics);
+    collect_statistics_paths(f_partition_statistics);
 
     // 1f. Version hint file
     {
@@ -190,39 +194,23 @@ std::set<String> collectReachableFiles(
             manifest_list_path, persistent_table_components.table_path, persistent_table_components.table_location);
         reachable.insert(storage_ml_path);
 
-        ManifestFileCacheKeys manifest_keys;
-        try
-        {
-            manifest_keys = getManifestList(
-                object_storage, persistent_table_components, context, storage_ml_path, log);
-        }
-        catch (...)
-        {
-            LOG_WARNING(log, "Failed to read manifest list {}, skipping: {}", storage_ml_path, getCurrentExceptionMessage(false));
-            continue;
-        }
+        auto manifest_keys = getManifestList(
+            object_storage, persistent_table_components, context, storage_ml_path, log);
 
         for (const auto & mf_key : manifest_keys)
         {
             reachable.insert(mf_key.manifest_file_path);
 
-            try
-            {
-                auto entries_handle = getManifestFileEntriesHandle(
-                    object_storage, persistent_table_components, context, log,
-                    mf_key, current_schema_id);
+            auto entries_handle = getManifestFileEntriesHandle(
+                object_storage, persistent_table_components, context, log,
+                mf_key, current_schema_id);
 
-                for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
-                    reachable.insert(entry->file_path);
-                for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
-                    reachable.insert(entry->file_path);
-                for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
-                    reachable.insert(entry->file_path);
-            }
-            catch (...)
-            {
-                LOG_WARNING(log, "Failed to read manifest file {}, skipping: {}", mf_key.manifest_file_path, getCurrentExceptionMessage(false));
-            }
+            for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
+                reachable.insert(entry->file_path);
+            for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
+                reachable.insert(entry->file_path);
+            for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
+                reachable.insert(entry->file_path);
         }
     }
 
@@ -230,27 +218,36 @@ std::set<String> collectReachableFiles(
     return reachable;
 }
 
-void deleteOrphanFiles(
+/// Returns the subset of orphan_paths that were successfully deleted.
+std::vector<String> deleteOrphanFiles(
     const std::vector<String> & orphan_paths,
     ObjectStoragePtr object_storage,
     UInt64 max_concurrent_deletes,
     LoggerPtr log)
 {
+    std::mutex deleted_mutex;
+    std::vector<String> deleted_paths;
+
+    auto try_delete = [&](const String & path)
+    {
+        try
+        {
+            object_storage->removeObjectIfExists(StoredObject(path));
+            LOG_DEBUG(log, "Deleted orphan file {}", path);
+            std::lock_guard lock(deleted_mutex);
+            deleted_paths.push_back(path);
+        }
+        catch (...)
+        {
+            LOG_WARNING(log, "Failed to delete orphan file {}: {}", path, getCurrentExceptionMessage(false));
+        }
+    };
+
     if (max_concurrent_deletes == 0)
     {
         for (const auto & path : orphan_paths)
-        {
-            try
-            {
-                object_storage->removeObjectIfExists(StoredObject(path));
-                LOG_DEBUG(log, "Deleted orphan file {}", path);
-            }
-            catch (...)
-            {
-                LOG_WARNING(log, "Failed to delete orphan file {}: {}", path, getCurrentExceptionMessage(false));
-            }
-        }
-        return;
+            try_delete(path);
+        return deleted_paths;
     }
 
     ThreadPool pool(
@@ -261,20 +258,14 @@ void deleteOrphanFiles(
 
     for (const auto & path : orphan_paths)
     {
-        pool.scheduleOrThrowOnError([&object_storage, path, &log]
+        pool.scheduleOrThrowOnError([&try_delete, path]
         {
-            try
-            {
-                object_storage->removeObjectIfExists(StoredObject(path));
-                LOG_DEBUG(log, "Deleted orphan file {}", path);
-            }
-            catch (...)
-            {
-                LOG_WARNING(log, "Failed to delete orphan file {}: {}", path, getCurrentExceptionMessage(false));
-            }
+            try_delete(path);
         });
     }
     pool.wait();
+
+    return deleted_paths;
 }
 
 } // anonymous namespace
@@ -325,7 +316,7 @@ RemoveOrphanFilesResult removeOrphanFiles(
     }
 
     std::vector<String> orphan_paths;
-    RemoveOrphanFilesResult result;
+    Int64 skipped_missing_metadata = 0;
 
     for (const auto & file_ptr : actual_files)
     {
@@ -337,54 +328,61 @@ RemoveOrphanFilesResult removeOrphanFiles(
         if (reachable.contains(path))
             continue;
 
-        if (file_ptr->metadata.has_value())
+        if (!file_ptr->metadata.has_value())
         {
-            auto file_modified = file_ptr->metadata->last_modified.epochTime();
-            if (static_cast<time_t>(file_modified) >= older_than_threshold)
-                continue;
+            ++skipped_missing_metadata;
+            LOG_DEBUG(log, "Skipping file without metadata (no last_modified): {}", path);
+            continue;
         }
 
-        auto category = categorizeFile(path);
-        switch (category)
-        {
-            case OrphanFileCategory::DATA_FILE:
-                ++result.deleted_data_files_count;
-                break;
-            case OrphanFileCategory::POSITION_DELETE_FILE:
-                ++result.deleted_position_delete_files_count;
-                break;
-            case OrphanFileCategory::EQUALITY_DELETE_FILE:
-                ++result.deleted_equality_delete_files_count;
-                break;
-            case OrphanFileCategory::MANIFEST_FILE:
-                ++result.deleted_manifest_files_count;
-                break;
-            case OrphanFileCategory::MANIFEST_LIST:
-                ++result.deleted_manifest_lists_count;
-                break;
-            case OrphanFileCategory::METADATA_JSON:
-                ++result.deleted_metadata_files_count;
-                break;
-            case OrphanFileCategory::STATISTICS_FILE:
-                ++result.deleted_statistics_files_count;
-                break;
-        }
+        auto file_modified = file_ptr->metadata->last_modified.epochTime();
+        if (static_cast<time_t>(file_modified) >= older_than_threshold)
+            continue;
 
         LOG_DEBUG(log, "Orphan file: {}", path);
         orphan_paths.push_back(path);
     }
 
-    auto total = orphan_paths.size();
-    LOG_INFO(log, "Found {} orphan files (dry_run={})", total, params.dry_run);
+    if (skipped_missing_metadata > 0)
+        LOG_WARNING(log, "Skipped {} unreferenced file(s) because last_modified metadata was unavailable; "
+            "these files could not be age-checked and were conservatively kept", skipped_missing_metadata);
 
-    // Step 4: Delete (unless dry_run)
-    if (!params.dry_run && !orphan_paths.empty())
+    LOG_INFO(log, "Found {} orphan files (dry_run={})", orphan_paths.size(), params.dry_run);
+
+    auto tally = [skipped_missing_metadata](const std::vector<String> & paths)
     {
-        deleteOrphanFiles(orphan_paths, object_storage, params.max_concurrent_deletes, log);
-        LOG_INFO(log, "Deleted {} orphan files", total);
+        RemoveOrphanFilesResult r;
+        for (const auto & path : paths)
+        {
+            switch (categorizeFile(path))
+            {
+                case OrphanFileCategory::DATA_FILE:                ++r.deleted_data_files_count; break;
+                case OrphanFileCategory::POSITION_DELETE_FILE:      ++r.deleted_position_delete_files_count; break;
+                case OrphanFileCategory::EQUALITY_DELETE_FILE:      ++r.deleted_equality_delete_files_count; break;
+                case OrphanFileCategory::MANIFEST_FILE:             ++r.deleted_manifest_files_count; break;
+                case OrphanFileCategory::MANIFEST_LIST:             ++r.deleted_manifest_lists_count; break;
+                case OrphanFileCategory::METADATA_JSON:             ++r.deleted_metadata_files_count; break;
+                case OrphanFileCategory::STATISTICS_FILE:           ++r.deleted_statistics_files_count; break;
+            }
+        }
+        r.skipped_missing_metadata_count = skipped_missing_metadata;
+        return r;
+    };
+
+    if (params.dry_run)
+        return tally(orphan_paths);
+
+    if (orphan_paths.empty())
+    {
+        RemoveOrphanFilesResult r;
+        r.skipped_missing_metadata_count = skipped_missing_metadata;
+        return r;
     }
 
-    return result;
+    auto deleted_paths = deleteOrphanFiles(orphan_paths, object_storage, params.max_concurrent_deletes, log);
+    LOG_INFO(log, "Deleted {}/{} orphan files", deleted_paths.size(), orphan_paths.size());
+
+    return tally(deleted_paths);
 }
 
 }

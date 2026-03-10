@@ -601,8 +601,9 @@ static Pipe removeOrphanFilesResultToPipe(const Iceberg::RemoveOrphanFilesResult
     add("deleted_manifest_lists_count", result.deleted_manifest_lists_count);
     add("deleted_metadata_files_count", result.deleted_metadata_files_count);
     add("deleted_statistics_files_count", result.deleted_statistics_files_count);
+    add("skipped_missing_metadata_count", result.skipped_missing_metadata_count);
 
-    Chunk chunk(std::move(columns), 7);
+    Chunk chunk(std::move(columns), 8);
     return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
 }
 

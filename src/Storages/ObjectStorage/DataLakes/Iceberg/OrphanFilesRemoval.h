@@ -19,6 +19,7 @@ struct RemoveOrphanFilesResult
     Int64 deleted_manifest_lists_count = 0;
     Int64 deleted_metadata_files_count = 0;
     Int64 deleted_statistics_files_count = 0;
+    Int64 skipped_missing_metadata_count = 0;
 };
 
 struct RemoveOrphanFilesParams

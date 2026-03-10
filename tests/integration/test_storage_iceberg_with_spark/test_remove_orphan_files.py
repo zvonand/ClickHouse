@@ -156,7 +156,7 @@ def test_remove_orphan_files_basic(started_cluster_iceberg_with_spark, storage_t
         instance, TABLE_NAME, older_than=time.strftime("%Y-%m-%d %H:%M:%S")
     )
     counts = parse_result(result)
-    assert len(counts) == 7, f"Expected 7 metrics, got {counts}"
+    assert len(counts) == 8, f"Expected 8 metrics, got {counts}"
     assert counts["deleted_data_files_count"] >= 2, f"Expected at least 2 deleted data files, got {counts}"
 
     assert not file_exists(instance, TABLE_NAME, "data", "orphan-data-001.parquet")
@@ -393,7 +393,7 @@ def test_remove_orphan_files_s3(started_cluster_iceberg_with_spark, storage_type
         instance, TABLE_NAME, older_than=time.strftime("%Y-%m-%d %H:%M:%S")
     )
     counts = parse_result(result)
-    assert len(counts) == 7, f"Expected 7 metrics, got {counts}"
+    assert len(counts) == 8, f"Expected 8 metrics, got {counts}"
     assert all(v >= 0 for v in counts.values())
     assert_data_intact(instance, TABLE_NAME, 2)
 
@@ -413,6 +413,6 @@ def test_remove_orphan_files_azure(started_cluster_iceberg_with_spark, storage_t
         instance, TABLE_NAME, older_than=time.strftime("%Y-%m-%d %H:%M:%S")
     )
     counts = parse_result(result)
-    assert len(counts) == 7, f"Expected 7 metrics, got {counts}"
+    assert len(counts) == 8, f"Expected 8 metrics, got {counts}"
     assert all(v >= 0 for v in counts.values())
     assert_data_intact(instance, TABLE_NAME, 2)

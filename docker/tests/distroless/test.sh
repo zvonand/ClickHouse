@@ -19,6 +19,9 @@
 #  12. CLICKHOUSE_SKIP_USER_SETUP
 #  13. HTTP endpoint (port 8123)
 #  14. docker stop during init (PID 1 signal handling)
+#  15. Image size comparison
+#  16. Server + Keeper (ReplicatedMergeTree)
+#  17. Mounted config overrides (config.d / users.d)
 
 set -euo pipefail
 
@@ -519,6 +522,213 @@ if (( distroless_mb < MAX_IMAGE_MB )); then
 else
     fail "distroless image is ${distroless_mb} MB — expected under ${MAX_IMAGE_MB} MB"
 fi
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 16: Server + Keeper (ReplicatedMergeTree)
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 16: server + keeper (ReplicatedMergeTree) ==="
+
+# Create a Docker network for server-keeper communication.
+NETNAME="ch-distroless-net-t16"
+docker network create "${NETNAME}" >/dev/null
+
+# The keeper's embedded config binds to localhost only and config.d doesn't
+# apply without a real config file on disk. Mount a full keeper config that
+# adds listen_host to accept connections from other containers.
+T16_CFG_DIR=$(mktemp -d)
+cat > "${T16_CFG_DIR}/keeper_config.xml" <<'XMLEOF'
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+    <listen_host>::</listen_host>
+    <listen_try>1</listen_try>
+    <logger>
+        <level>information</level>
+        <log>/var/log/clickhouse-keeper/clickhouse-keeper.log</log>
+        <errorlog>/var/log/clickhouse-keeper/clickhouse-keeper.err.log</errorlog>
+        <size>100M</size>
+        <count>3</count>
+    </logger>
+    <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/logs</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <session_timeout_ms>100000</session_timeout_ms>
+        </coordination_settings>
+        <raft_configuration>
+            <server>
+                <id>1</id>
+                <hostname>localhost</hostname>
+                <port>9234</port>
+            </server>
+        </raft_configuration>
+    </keeper_server>
+</clickhouse>
+XMLEOF
+
+# Start Keeper with the custom config.
+CID=$(docker run -d \
+    --name ch-distroless-t16-keeper \
+    --network "${NETNAME}" \
+    -v "${T16_CFG_DIR}/keeper_config.xml:/etc/clickhouse-keeper/keeper_config.xml:ro" \
+    "${KEEPER_IMAGE}")
+
+# Wait for Keeper to be ready.
+echo "  Waiting for keeper on port 9181..."
+tries=60
+keeper_ready=false
+while (( tries-- > 0 )); do
+    if docker exec ch-distroless-t16-keeper \
+           /usr/bin/clickhouse keeper-client \
+           --host 127.0.0.1 --port 9181 \
+           -q "ruok" \
+           2>/dev/null | grep -q "imok"; then
+        keeper_ready=true
+        break
+    fi
+    sleep 1
+done
+
+if [[ "${keeper_ready}" != "true" ]]; then
+    fail "keeper did not start for replication test"
+    docker logs ch-distroless-t16-keeper >&2
+    docker rm -f ch-distroless-t16-keeper >/dev/null 2>&1 || true
+    docker network rm "${NETNAME}" >/dev/null 2>&1 || true
+    rm -r "${T16_CFG_DIR}"
+else
+    # Server config: point ZooKeeper at the keeper container.
+    cat > "${T16_CFG_DIR}/keeper.xml" <<'XMLEOF'
+<clickhouse>
+    <zookeeper>
+        <node>
+            <host>ch-distroless-t16-keeper</host>
+            <port>9181</port>
+        </node>
+    </zookeeper>
+    <macros>
+        <shard>01</shard>
+        <replica>r1</replica>
+    </macros>
+</clickhouse>
+XMLEOF
+
+    CID=$(docker run -d \
+        --name ch-distroless-t16-server \
+        --network "${NETNAME}" \
+        -e CLICKHOUSE_USER=testuser \
+        -e CLICKHOUSE_PASSWORD=testpass \
+        -v "${T16_CFG_DIR}/keeper.xml:/etc/clickhouse-server/config.d/keeper.xml:ro" \
+        "${SERVER_IMAGE}")
+
+    wait_for_server ch-distroless-t16-server 9000 testuser testpass
+
+    # Create a ReplicatedMergeTree table.
+    docker exec ch-distroless-t16-server \
+        /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+        -u testuser --password testpass \
+        --query "CREATE TABLE default.replicated_t (id UInt64, val String) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/replicated_t', '{replica}') ORDER BY id"
+
+    # Insert data.
+    docker exec ch-distroless-t16-server \
+        /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+        -u testuser --password testpass \
+        --query "INSERT INTO default.replicated_t VALUES (1, 'a'), (2, 'b'), (3, 'c')"
+
+    # Verify data reads back.
+    result=$(docker exec ch-distroless-t16-server \
+        /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+        -u testuser --password testpass \
+        --query "SELECT count() FROM default.replicated_t")
+    if [[ "${result}" == "3" ]]; then
+        pass "ReplicatedMergeTree table created and populated (count=3)"
+    else
+        fail "expected 3 rows in replicated table, got '${result}'"
+    fi
+
+    # Verify ZooKeeper path was created in Keeper.
+    zk_check=$(docker exec ch-distroless-t16-keeper \
+        /usr/bin/clickhouse keeper-client \
+        --host 127.0.0.1 --port 9181 \
+        --query "ls '/clickhouse/tables/01/replicated_t'" 2>/dev/null || echo "FAIL")
+    if [[ "${zk_check}" == *"metadata"* ]]; then
+        pass "replication metadata exists in Keeper"
+    else
+        fail "expected replication metadata in Keeper, got '${zk_check}'"
+    fi
+
+    docker rm -f ch-distroless-t16-server >/dev/null
+    rm -r "${T16_CFG_DIR}"
+fi
+
+docker rm -f ch-distroless-t16-keeper >/dev/null 2>&1 || true
+docker network rm "${NETNAME}" >/dev/null 2>&1 || true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 17: Mounted config overrides (config.d / users.d)
+# ──────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "=== Test 17: mounted config overrides ==="
+
+# Create custom config files.
+CFG_DIR=$(mktemp -d)
+
+# Override: set max_threads to 3 via users.d.
+cat > "${CFG_DIR}/custom_profile.xml" <<'XMLEOF'
+<clickhouse>
+    <profiles>
+        <default>
+            <max_threads>3</max_threads>
+        </default>
+    </profiles>
+</clickhouse>
+XMLEOF
+
+# Override: set a custom server-level macro via config.d.
+cat > "${CFG_DIR}/custom_macros.xml" <<'XMLEOF'
+<clickhouse>
+    <macros>
+        <test_macro>hello_distroless</test_macro>
+    </macros>
+</clickhouse>
+XMLEOF
+
+CID=$(docker run -d \
+    --name ch-distroless-t17 \
+    -e CLICKHOUSE_USER=testuser \
+    -e CLICKHOUSE_PASSWORD=testpass \
+    -v "${CFG_DIR}/custom_profile.xml:/etc/clickhouse-server/users.d/custom_profile.xml:ro" \
+    -v "${CFG_DIR}/custom_macros.xml:/etc/clickhouse-server/config.d/custom_macros.xml:ro" \
+    "${SERVER_IMAGE}")
+
+wait_for_server ch-distroless-t17 9000 testuser testpass
+
+# Verify the users.d override took effect.
+result=$(docker exec ch-distroless-t17 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT getSetting('max_threads')")
+if [[ "${result}" == "3" ]]; then
+    pass "users.d override applied (max_threads=3)"
+else
+    fail "expected max_threads=3, got '${result}'"
+fi
+
+# Verify the config.d macro override took effect.
+result=$(docker exec ch-distroless-t17 \
+    /usr/bin/clickhouse client --host 127.0.0.1 --port 9000 \
+    -u testuser --password testpass \
+    --query "SELECT getMacro('test_macro')")
+if [[ "${result}" == "hello_distroless" ]]; then
+    pass "config.d override applied (macro test_macro=hello_distroless)"
+else
+    fail "expected macro 'hello_distroless', got '${result}'"
+fi
+
+docker rm -f ch-distroless-t17 >/dev/null
+rm -r "${CFG_DIR}"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Summary

@@ -19,7 +19,9 @@ def start_cluster():
                 "configs/config.d/include_from_path.xml",
                 "configs/config.d/include_from.xml",
                 "configs/config.d/remote_servers.xml",
-                "configs/config.d/dynamic_disk_settings.xml",
+            ],
+            user_configs=[
+                "configs/users.d/dynamic_disk_settings.xml",
             ],
             env_variables={
                 "MINIO_SECRET": minio_secret_key,
@@ -35,6 +37,9 @@ def start_cluster():
                 "configs/config.d/storage_configuration.xml",
                 "configs/config.d/remote_servers.xml",
             ],
+            user_configs=[
+                "configs/users.d/dynamic_disk_settings.xml",
+            ],
             metrika_xml="configs/metrika.xml",
             with_zookeeper=True,
             stay_alive=True,
@@ -47,6 +52,15 @@ def start_cluster():
                 "configs/config.d/storage_configuration.xml",
                 "configs/config.d/remote_servers.xml",
                 "configs/config.d/mergetree_settings.xml",
+            ],
+            stay_alive=True,
+            with_minio=True,
+        )
+        # node5: no special disk settings, so from_env/include/from_zk are disabled by default
+        cluster.add_instance(
+            "node5",
+            main_configs=[
+                "configs/config.d/storage_configuration.xml",
             ],
             stay_alive=True,
             with_minio=True,
@@ -585,3 +599,132 @@ def test_merge_tree_custom_encrypted_disk_include(start_cluster, use_node):
 
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data")
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data2")
+
+
+def test_dynamic_disk_security_settings(start_cluster):
+    """Test that settings profiles control access to from_env, include, and from_zk in dynamic disks.
+
+    node5 has two profiles:
+      - default: all three settings disabled
+      - allow_dynamic_disk_access: all three settings enabled
+
+    restricted_user uses the default profile (disabled).
+    privileged_user uses the allow_dynamic_disk_access profile (enabled).
+    """
+    node = cluster.instances["node5"]
+
+    node.query(
+        "CREATE SETTINGS PROFILE IF NOT EXISTS allow_dynamic_disk_access "
+        "SETTINGS dynamic_disk_allow_from_env = true, "
+        "dynamic_disk_allow_include = true, "
+        "dynamic_disk_allow_from_zk = true"
+    )
+    node.query(
+        "CREATE USER IF NOT EXISTS restricted_user SETTINGS PROFILE 'default'"
+    )
+    node.query("GRANT CREATE TABLE ON *.* TO restricted_user")
+    node.query(
+        "CREATE USER IF NOT EXISTS privileged_user SETTINGS PROFILE 'allow_dynamic_disk_access'"
+    )
+    node.query("GRANT CREATE TABLE ON *.* TO privileged_user")
+
+    try:
+        # restricted_user (default profile): from_env is blocked
+        error = node.query_and_get_error(
+            """
+            CREATE TABLE test_security_from_env (a Int32) ENGINE = MergeTree() ORDER BY tuple()
+            SETTINGS disk = disk(
+                type = object_storage,
+                object_storage_type = s3,
+                endpoint = 'from_env HOME',
+                access_key_id = clickhouse,
+                secret_access_key = clickhouse)
+            """,
+            user="restricted_user",
+        )
+        assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_env" in error, error
+
+        # restricted_user (default profile): include is blocked
+        error = node.query_and_get_error(
+            """
+            CREATE TABLE test_security_include (a Int32) ENGINE = MergeTree() ORDER BY tuple()
+            SETTINGS disk = disk(
+                type = object_storage,
+                object_storage_type = s3,
+                include = 'some_include',
+                access_key_id = clickhouse,
+                secret_access_key = clickhouse)
+            """,
+            user="restricted_user",
+        )
+        assert "ACCESS_DENIED" in error and "dynamic_disk_allow_include" in error, error
+
+        # restricted_user (default profile): from_zk is blocked
+        error = node.query_and_get_error(
+            """
+            CREATE TABLE test_security_from_zk (a Int32) ENGINE = MergeTree() ORDER BY tuple()
+            SETTINGS disk = disk(
+                type = object_storage,
+                object_storage_type = s3,
+                endpoint = 'from_zk /some/zk/path',
+                access_key_id = clickhouse,
+                secret_access_key = clickhouse)
+            """,
+            user="restricted_user",
+        )
+        assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_zk" in error, error
+
+        # privileged_user (allow_dynamic_disk_access profile): from_env is allowed (fails for another reason)
+        error = node.query_and_get_error(
+            """
+            CREATE TABLE test_security_from_env_ok (a Int32) ENGINE = MergeTree() ORDER BY tuple()
+            SETTINGS disk = disk(
+                type = object_storage,
+                object_storage_type = s3,
+                endpoint = 'from_env NONEXISTENT_VAR_XYZ_12345',
+                access_key_id = clickhouse,
+                secret_access_key = clickhouse)
+            """,
+            user="privileged_user",
+        )
+        assert (
+            "ACCESS_DENIED" not in error
+        ), f"from_env should be allowed for privileged_user, got: {error}"
+
+        # privileged_user (allow_dynamic_disk_access profile): from_zk is allowed (fails for another reason)
+        error = node.query_and_get_error(
+            """
+            CREATE TABLE test_security_from_zk_ok (a Int32) ENGINE = MergeTree() ORDER BY tuple()
+            SETTINGS disk = disk(
+                type = object_storage,
+                object_storage_type = s3,
+                endpoint = 'from_zk /nonexistent/zk/path/xyz',
+                access_key_id = clickhouse,
+                secret_access_key = clickhouse)
+            """,
+            user="privileged_user",
+        )
+        assert (
+            "ACCESS_DENIED" not in error
+        ), f"from_zk should be allowed for privileged_user, got: {error}"
+
+        # privileged_user (allow_dynamic_disk_access profile): include is allowed (fails for another reason)
+        error = node.query_and_get_error(
+            """
+            CREATE TABLE test_security_include_ok (a Int32) ENGINE = MergeTree() ORDER BY tuple()
+            SETTINGS disk = disk(
+                type = object_storage,
+                object_storage_type = s3,
+                include = 'nonexistent_include_xyz',
+                access_key_id = clickhouse,
+                secret_access_key = clickhouse)
+            """,
+            user="privileged_user",
+        )
+        assert (
+            "ACCESS_DENIED" not in error
+        ), f"include should be allowed for privileged_user, got: {error}"
+    finally:
+        node.query("DROP USER IF EXISTS restricted_user")
+        node.query("DROP USER IF EXISTS privileged_user")
+        node.query("DROP SETTINGS PROFILE IF EXISTS allow_dynamic_disk_access")

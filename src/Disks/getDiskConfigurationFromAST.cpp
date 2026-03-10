@@ -43,7 +43,7 @@ namespace Setting
         message.empty() ? "" : ": " + message);
 }
 
-Poco::AutoPtr<Poco::XML::Document> getDiskConfigurationFromASTImpl(const ASTs & disk_args, ContextPtr context)
+Poco::AutoPtr<Poco::XML::Document> getDiskConfigurationFromASTImpl(const ASTs & disk_args, ContextPtr context, bool is_attach)
 {
     if (disk_args.empty())
         throwBadConfiguration("expected non-empty list of arguments");
@@ -83,7 +83,7 @@ Poco::AutoPtr<Poco::XML::Document> getDiskConfigurationFromASTImpl(const ASTs & 
         auto value_str = convertFieldToString(value->as<ASTLiteral>()->value);
         if (key == "include")
         {
-            if (!settings[Setting::dynamic_disk_allow_include])
+            if (!is_attach && !settings[Setting::dynamic_disk_allow_include])
                 throw Exception(
                     ErrorCodes::ACCESS_DENIED,
                     "Using `include` in dynamic disk configuration is disabled by the setting `dynamic_disk_allow_include`");
@@ -91,7 +91,7 @@ Poco::AutoPtr<Poco::XML::Document> getDiskConfigurationFromASTImpl(const ASTs & 
         }
         else if (startsWith(value_str, "from_env"))
         {
-            if (!settings[Setting::dynamic_disk_allow_from_env])
+            if (!is_attach && !settings[Setting::dynamic_disk_allow_from_env])
                 throw Exception(
                     ErrorCodes::ACCESS_DENIED,
                     "Using `from_env` in dynamic disk configuration is disabled by the setting `dynamic_disk_allow_from_env`");
@@ -101,7 +101,7 @@ Poco::AutoPtr<Poco::XML::Document> getDiskConfigurationFromASTImpl(const ASTs & 
         }
         else if (startsWith(value_str, "from_zk"))
         {
-            if (!settings[Setting::dynamic_disk_allow_from_zk])
+            if (!is_attach && !settings[Setting::dynamic_disk_allow_from_zk])
                 throw Exception(
                     ErrorCodes::ACCESS_DENIED,
                     "Using `from_zk` in dynamic disk configuration is disabled by the setting `dynamic_disk_allow_from_zk`");

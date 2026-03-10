@@ -7471,7 +7471,7 @@ Allow to add hint (additional predicate) for filtering built from the inverted t
     DECLARE(Float, text_index_hint_max_selectivity, 0.2f, R"(
 Maximal selectivity of the filter to use the hint built from the inverted text index.
 )", 0) \
-    DECLARE(Bool, use_text_index_like_optimization, false, R"(
+    DECLARE(Bool, use_text_index_like_optimization, true, R"(
 Enable optimization of LIKE/NOT LIKE queries using the inverted text index.
 )", 0) \
     DECLARE(UInt64, text_index_like_min_pattern_length, 4, R"(

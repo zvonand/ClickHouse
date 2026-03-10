@@ -45,7 +45,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"allow_calculating_subcolumns_sizes_for_merge_tree_reading", false, true, "Allow calculating subcolumns sizes for merge tree reading to improve read tasks splitting"},
             {"allow_nullable_tuple_in_extracted_subcolumns", false, false, "New setting controlling whether extracted Tuple subcolumns can be nullable."},
             {"use_text_index_tokens_cache", false, false, "New setting"},
-            {"use_text_index_like_optimization", false, false, "New setting"},
+            {"use_text_index_like_optimization", true, true, "New setting"},
             {"text_index_like_min_pattern_length", 4, 4, "New setting"},
             {"text_index_like_max_postings_to_read", 50, 50, "New setting"},
             {"delta_lake_reload_schema_for_consistency", false, false, "New setting to control whether DeltaLake reloads schema before each query for consistency."},

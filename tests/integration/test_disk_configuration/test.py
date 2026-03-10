@@ -61,9 +61,13 @@ def start_cluster():
             "node5",
             main_configs=[
                 "configs/config.d/storage_configuration.xml",
+                "configs/config.d/include_from_path.xml",
+                "configs/config.d/include_from.xml",
             ],
+            env_variables={"MINIO_SECRET": minio_secret_key},
             stay_alive=True,
             with_minio=True,
+            with_zookeeper=True,
         )
 
         cluster.start()
@@ -674,57 +678,59 @@ def test_dynamic_disk_security_settings(start_cluster):
         )
         assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_zk" in error, error
 
-        # privileged_user (allow_dynamic_disk_access profile): from_env is allowed (fails for another reason)
-        error = node.query_and_get_error(
+        # privileged_user (allow_dynamic_disk_access profile): from_env is allowed - CREATE TABLE succeeds
+        zk_client = cluster.get_kazoo_client("zoo1")
+        zk_client.create(
+            "/test_security_minio_secret",
+            minio_secret_key.encode(),
+            makepath=True,
+        )
+
+        node.query(
             """
             CREATE TABLE test_security_from_env_ok (a Int32) ENGINE = MergeTree() ORDER BY tuple()
             SETTINGS disk = disk(
-                type = object_storage,
-                object_storage_type = s3,
-                endpoint = 'from_env NONEXISTENT_VAR_XYZ_12345',
-                access_key_id = clickhouse,
-                secret_access_key = clickhouse)
+                type = s3,
+                endpoint = 'http://minio1:9001/root/data/',
+                access_key_id = 'minio',
+                secret_access_key = 'from_env MINIO_SECRET')
             """,
             user="privileged_user",
         )
-        assert (
-            "ACCESS_DENIED" not in error
-        ), f"from_env should be allowed for privileged_user, got: {error}"
 
-        # privileged_user (allow_dynamic_disk_access profile): from_zk is allowed (fails for another reason)
-        error = node.query_and_get_error(
+        # privileged_user (allow_dynamic_disk_access profile): from_zk is allowed - CREATE TABLE succeeds
+        node.query(
             """
             CREATE TABLE test_security_from_zk_ok (a Int32) ENGINE = MergeTree() ORDER BY tuple()
             SETTINGS disk = disk(
-                type = object_storage,
-                object_storage_type = s3,
-                endpoint = 'from_zk /nonexistent/zk/path/xyz',
-                access_key_id = clickhouse,
-                secret_access_key = clickhouse)
+                type = s3,
+                endpoint = 'http://minio1:9001/root/data/',
+                access_key_id = 'minio',
+                secret_access_key = 'from_zk /test_security_minio_secret')
             """,
             user="privileged_user",
         )
-        assert (
-            "ACCESS_DENIED" not in error
-        ), f"from_zk should be allowed for privileged_user, got: {error}"
 
-        # privileged_user (allow_dynamic_disk_access profile): include is allowed (fails for another reason)
-        error = node.query_and_get_error(
-            """
+        # privileged_user (allow_dynamic_disk_access profile): include is allowed - CREATE TABLE succeeds
+        node.query(
+            f"""
             CREATE TABLE test_security_include_ok (a Int32) ENGINE = MergeTree() ORDER BY tuple()
             SETTINGS disk = disk(
-                type = object_storage,
-                object_storage_type = s3,
-                include = 'nonexistent_include_xyz',
-                access_key_id = clickhouse,
-                secret_access_key = clickhouse)
+                type = encrypted,
+                disk = disk(
+                    type = s3,
+                    endpoint = 'http://minio1:9001/root/data/',
+                    access_key_id = 'minio',
+                    secret_access_key = '{minio_secret_key}'),
+                include = 'disk_encrypted_keys',
+                path = '/encrypted_node5/')
             """,
             user="privileged_user",
         )
-        assert (
-            "ACCESS_DENIED" not in error
-        ), f"include should be allowed for privileged_user, got: {error}"
     finally:
+        node.query("DROP TABLE IF EXISTS test_security_from_env_ok")
+        node.query("DROP TABLE IF EXISTS test_security_from_zk_ok")
+        node.query("DROP TABLE IF EXISTS test_security_include_ok")
         node.query("DROP USER IF EXISTS restricted_user")
         node.query("DROP USER IF EXISTS privileged_user")
         node.query("DROP SETTINGS PROFILE IF EXISTS allow_dynamic_disk_access")

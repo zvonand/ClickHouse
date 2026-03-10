@@ -19,6 +19,13 @@ target_include_directories(_simdjson SYSTEM PUBLIC "${SIMDJSON_INCLUDE_DIR}" PRI
 # implementation directly with no dispatch overhead.
 if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_LESS 3)
     target_compile_options(_simdjson PRIVATE -mno-avx -mno-avx2)
+endif()
+
+# Enable the scalar fallback implementation. Binaries may run on CPUs that do
+# not support all compiled-in SIMD paths; without the fallback, simdjson
+# returns UNSUPPORTED_ARCHITECTURE.  For x86-64-v3+ the Haswell (AVX2)
+# implementation is always available, so the fallback is unnecessary.
+if (NOT (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3))
     target_compile_options(_simdjson PRIVATE -DSIMDJSON_IMPLEMENTATION_FALLBACK=1)
 endif()
 

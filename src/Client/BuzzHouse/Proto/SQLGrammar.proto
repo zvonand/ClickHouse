@@ -4035,11 +4035,12 @@ message AlterItem {
         TTLExpr modify_ttl  = 46;
         bool remove_ttl = 47;
         OptionalPartitionExpr rewrite_parts = 48;
+        OptionalPartitionExpr apply_patches = 49;
         /// For views
-        SelectParen modify_query = 49;
-        RefreshableView refresh = 50;
+        SelectParen modify_query = 50;
+        RefreshableView refresh = 51;
         /// For tables, views and databases
-        string comment = 51;
+        string comment = 52;
     }
 }
 

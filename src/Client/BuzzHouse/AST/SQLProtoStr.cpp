@@ -4741,6 +4741,14 @@ CONV_FN(AlterItem, alter)
                 SinglePartitionExprToString(ret, alter.rewrite_parts().single_partition());
             }
             break;
+        case AlterType::kApplyPatches:
+            ret += "APPLY PATCHES";
+            if (alter.apply_patches().has_single_partition())
+            {
+                ret += " IN ";
+                SinglePartitionExprToString(ret, alter.apply_patches().single_partition());
+            }
+            break;
         case AlterType::kModifyQuery:
             ret += "MODIFY QUERY ";
             SelectParenToString(ret, alter.modify_query());

@@ -2119,10 +2119,19 @@ std::optional<String> StatementGenerator::alterSingleTable(
             /// Comment table
             {2, [&] { ati->set_comment(nextComment(rg)); }},
             /// Rewrite parts
-            {2,
+            {3,
              [&]
              {
                  OptionalPartitionExpr * ope = ati->mutable_rewrite_parts();
+                 if (rg.nextBool())
+                     generateNextTablePartition(
+                         rg, 0, rg.nextSmallNumber() < 3, false, t, ope->mutable_single_partition()->mutable_partition());
+             }},
+            /// Apply patches
+            {3,
+             [&]
+             {
+                 OptionalPartitionExpr * ope = ati->mutable_apply_patches();
                  if (rg.nextBool())
                      generateNextTablePartition(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, ope->mutable_single_partition()->mutable_partition());

@@ -1,0 +1,3 @@
+<clickhouse>
+    <dynamic_disk_allow_from_env>true</dynamic_disk_allow_from_env>
+</clickhouse>

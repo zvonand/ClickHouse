@@ -19,6 +19,7 @@ def start_cluster():
                 "configs/config.d/include_from_path.xml",
                 "configs/config.d/include_from.xml",
                 "configs/config.d/remote_servers.xml",
+                "configs/config.d/dynamic_disk_settings.xml",
             ],
             env_variables={
                 "MINIO_SECRET": minio_secret_key,

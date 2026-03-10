@@ -4,6 +4,8 @@
 #include <Common/FieldVisitorToString.h>
 #include <Common/logger_useful.h>
 #include <Disks/DiskFactory.h>
+#include <Core/ServerSettings.h>
+#include <Interpreters/Context.h>
 #include <Interpreters/evaluateConstantExpression.h>
 #include <Parsers/ASTFunction.h>
 #include <Parsers/ASTIdentifier.h>
@@ -23,6 +25,12 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int BAD_ARGUMENTS;
+    extern const int ACCESS_DENIED;
+}
+
+namespace ServerSetting
+{
+    extern const ServerSettingsBool dynamic_disk_allow_from_env;
 }
 
 [[noreturn]] static void throwBadConfiguration(const std::string & message = "")
@@ -75,6 +83,10 @@ Poco::AutoPtr<Poco::XML::Document> getDiskConfigurationFromASTImpl(const ASTs & 
         }
         else if (startsWith(value_str, "from_env"))
         {
+            if (!context->getServerSettings()[ServerSetting::dynamic_disk_allow_from_env])
+                throw Exception(
+                    ErrorCodes::ACCESS_DENIED,
+                    "Using `from_env` in dynamic disk configuration is disabled by the server setting `dynamic_disk_allow_from_env`");
             value_str = value_str.substr(std::strlen("from_env"));
             boost::trim(value_str);
             key_element->setAttribute("from_env", value_str);

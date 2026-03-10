@@ -19,6 +19,7 @@
 #if CLICKHOUSE_CLOUD
 #include <Backups/BackupsHelper.h>
 #endif
+#include <Common/FailPoint.h>
 #include <Interpreters/Cluster.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/BackupLog.h>
@@ -68,6 +69,12 @@ namespace Setting
 namespace ServerSetting
 {
     extern const ServerSettingsBool shutdown_wait_backups_and_restores;
+}
+
+namespace FailPoints
+{
+    extern const char backup_pause_before_main_loop[];
+    extern const char restore_pause_before_main_loop[];
 }
 
 namespace ErrorCodes
@@ -463,6 +470,8 @@ struct BackupsWorker::BackupStarter
 
     void doBackup()
     {
+        FailPointInjection::pauseFailPoint(FailPoints::backup_pause_before_main_loop);
+
         chassert(!backup_coordination);
         if (on_cluster && !is_internal_backup)
         {
@@ -920,6 +929,8 @@ struct BackupsWorker::RestoreStarter
 
     void doRestore()
     {
+        FailPointInjection::pauseFailPoint(FailPoints::restore_pause_before_main_loop);
+
         chassert(!restore_coordination);
         if (on_cluster && !is_internal_restore)
         {

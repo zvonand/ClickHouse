@@ -412,7 +412,6 @@ void Reader::prefilterAndInitRowGroups(const std::optional<std::unordered_set<UI
 
     if (options.format.parquet.page_filter_push_down && format_filter_info->key_condition)
     {
-        std::vector<std::pair<size_t, std::shared_ptr<KeyCondition>>> column_conditions;
         format_filter_info->key_condition->extractSingleColumnConditions(column_conditions, nullptr);
         for (const auto & [idx_in_output_block, key_condition] : column_conditions)
         {

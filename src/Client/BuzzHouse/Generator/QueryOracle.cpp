@@ -170,6 +170,7 @@ void QueryOracle::generateRoundtripOracleQueries(RandomGenerator & rg, Statement
 
     /// Collect all columns from all available relations and pick one for the predicate
     String val;
+    String col_ref;
     std::vector<const SQLRelationCol *> all_cols;
 
     for (const auto & rel : gen.levels[gen.current_level].rels)
@@ -180,7 +181,6 @@ void QueryOracle::generateRoundtripOracleQueries(RandomGenerator & rg, Statement
         const SQLRelationCol & rel_col = *rg.pickRandomly(all_cols);
 
         /// Build a backtick-quoted SQL column reference from the SQLRelationCol
-        String col_ref;
         if (!rel_col.rel_name.empty())
             col_ref = fmt::format("`{}`.", rel_col.rel_name);
         col_ref += "`";
@@ -199,7 +199,7 @@ void QueryOracle::generateRoundtripOracleQueries(RandomGenerator & rg, Statement
     }
     else
     {
-        val = "1";
+        col_ref = val = "1";
     }
     gen.levels.clear();
     gen.ctes.clear();

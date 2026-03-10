@@ -3,6 +3,7 @@
 #include <Common/Exception.h>
 #include <Common/Logger.h>
 #include <Common/logger_useful.h>
+#include <Common/parseGlobs.h>
 #include <Core/LogsLevel.h>
 #include <Core/Settings.h>
 #include <Formats/FormatFactory.h>
@@ -57,6 +58,23 @@ namespace ErrorCodes
 
 String StorageObjectStorage::getPathSample(ContextPtr context)
 {
+    const auto path = configuration->getRawPath();
+
+    /// For non-glob paths, return directly without any S3 API calls.
+    if (!configuration->isArchive() && !path.hasGlobs() && !distributed_processing)
+        return path.path;
+
+    /// For pure brace-expansion globs like {a,b,c}.tsv (no wildcards * or ? involved),
+    /// we can expand the glob locally and return the first path without making any S3 API calls.
+    /// This avoids a redundant HeadObject request that would otherwise be issued by
+    /// creating a file iterator just to get a sample path string.
+    if (containsOnlyEnumGlobs(path.path))
+    {
+        auto expanded = expandSelectionGlob(path.path);
+        if (!expanded.empty())
+            return expanded.front();
+    }
+
     auto query_settings = configuration->getQuerySettings(context);
     /// We don't want to throw an exception if there are no files with specified path.
     query_settings.throw_on_zero_files_match = false;
@@ -80,11 +98,6 @@ String StorageObjectStorage::getPathSample(ContextPtr context)
         nullptr, // read_keys
         {} // file_progress_callback
     );
-
-    const auto path = configuration->getRawPath();
-
-    if (!configuration->isArchive() && !path.hasGlobs() && !local_distributed_processing)
-        return path.path;
 
     if (auto file = file_iterator->next(0))
         return file->getPath();

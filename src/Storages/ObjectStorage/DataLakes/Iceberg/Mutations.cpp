@@ -899,11 +899,11 @@ static void collectAllFilePaths(
     std::set<String> & out)
 {
     for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
-        out.insert(entry->file_path);
+        out.insert(entry->absolute_file_path);
     for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
-        out.insert(entry->file_path);
+        out.insert(entry->absolute_file_path);
     for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
-        out.insert(entry->file_path);
+        out.insert(entry->absolute_file_path);
 }
 
 /// Collect all file paths (manifest lists, manifests, data/delete files)
@@ -939,18 +939,19 @@ static void collectRetainedFiles(
         String manifest_list_path = snapshot->getValue<String>(Iceberg::f_manifest_list);
         retained_manifest_list_paths.insert(manifest_list_path);
 
-        String storage_manifest_list_path = getProperFilePathFromMetadataInfo(
-            manifest_list_path, persistent_table_components.table_path, persistent_table_components.table_location);
+        String storage_manifest_list_path = makeAbsolutePath(
+            persistent_table_components.table_location, manifest_list_path);
 
+        SecondaryStorages secondary_storages;
         auto manifest_keys = getManifestList(
-            object_storage, persistent_table_components, context, storage_manifest_list_path, log);
+            object_storage, persistent_table_components, context, storage_manifest_list_path, log, secondary_storages);
 
         for (const auto & mf_key : manifest_keys)
         {
-            retained_manifest_paths.insert(mf_key.manifest_file_path);
+            retained_manifest_paths.insert(mf_key.manifest_file_absolute_path);
             auto entries_handle = getManifestFileEntriesHandle(
                 object_storage, persistent_table_components, context, log,
-                mf_key, current_schema_id);
+                mf_key, current_schema_id, secondary_storages);
             collectAllFilePaths(entries_handle, retained_data_file_paths);
         }
     }
@@ -984,14 +985,15 @@ static ExpiredFiles collectExpiredFiles(
         if (retained_manifest_list_paths.contains(ml_path))
             continue;
 
-        String storage_ml_path = getProperFilePathFromMetadataInfo(
-            ml_path, persistent_table_components.table_path, persistent_table_components.table_location);
+        String storage_ml_path = makeAbsolutePath(
+            persistent_table_components.table_location, ml_path);
 
+        SecondaryStorages secondary_storages;
         ManifestFileCacheKeys manifest_keys;
         try
         {
             manifest_keys = getManifestList(
-                object_storage, persistent_table_components, context, storage_ml_path, log);
+                object_storage, persistent_table_components, context, storage_ml_path, log, secondary_storages);
         }
         catch (...)
         {
@@ -1001,41 +1003,41 @@ static ExpiredFiles collectExpiredFiles(
 
         for (const auto & mf_key : manifest_keys)
         {
-            if (retained_manifest_paths.contains(mf_key.manifest_file_path))
+            if (retained_manifest_paths.contains(mf_key.manifest_file_absolute_path))
                 continue;
 
             try
             {
                 auto entries_handle = getManifestFileEntriesHandle(
                     object_storage, persistent_table_components, context, log,
-                    mf_key, current_schema_id);
+                    mf_key, current_schema_id, secondary_storages);
 
                 for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
-                    if (!retained_data_file_paths.contains(entry->file_path))
+                    if (!retained_data_file_paths.contains(entry->absolute_file_path))
                     {
-                        result.all_paths.push_back(entry->file_path);
+                        result.all_paths.push_back(entry->absolute_file_path);
                         ++result.data_files;
                     }
                 for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
-                    if (!retained_data_file_paths.contains(entry->file_path))
+                    if (!retained_data_file_paths.contains(entry->absolute_file_path))
                     {
-                        result.all_paths.push_back(entry->file_path);
+                        result.all_paths.push_back(entry->absolute_file_path);
                         ++result.position_delete_files;
                     }
                 for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
-                    if (!retained_data_file_paths.contains(entry->file_path))
+                    if (!retained_data_file_paths.contains(entry->absolute_file_path))
                     {
-                        result.all_paths.push_back(entry->file_path);
+                        result.all_paths.push_back(entry->absolute_file_path);
                         ++result.equality_delete_files;
                     }
             }
             catch (...)
             {
-                LOG_WARNING(log, "Failed to read manifest file {}, skipping", mf_key.manifest_file_path);
+                LOG_WARNING(log, "Failed to read manifest file {}, skipping", mf_key.manifest_file_absolute_path);
                 continue;
             }
 
-            result.all_paths.push_back(mf_key.manifest_file_path);
+            result.all_paths.push_back(mf_key.manifest_file_absolute_path);
             ++result.manifest_files;
         }
 

@@ -73,6 +73,11 @@ rect.zoom-panel {
     stroke-dasharray:0;
 }
 
+.bar {
+    stroke-width: 1px;
+    stroke: rgba(0, 0, 0, 0.3);
+}
+
 .bar-u {
     opacity: 0.2;
 }

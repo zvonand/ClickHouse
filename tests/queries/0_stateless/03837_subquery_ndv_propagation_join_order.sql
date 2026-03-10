@@ -56,10 +56,12 @@ OPTIMIZE TABLE test_product_catalog FINAL;
 
 SET enable_analyzer = 1;
 SET allow_statistic_optimize = 1;
+SET enable_parallel_replicas = 0;
 SET query_plan_optimize_join_order_limit = 10;
 SET query_plan_optimize_join_order_algorithm = 'dpsize,greedy';
 SET query_plan_join_swap_table = 0;
 SET enable_join_runtime_filters = 0;
+
 
 -- This query join order depends on whether statts for product_id (NDV=10K) and region_id (NDV=5) are properly propagated from subquery
 SELECT explain FROM

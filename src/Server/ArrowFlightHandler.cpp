@@ -43,6 +43,7 @@
 #include <Common/scope_guard_safe.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/range/adaptor/transformed.hpp>
 
 #include <arrow/array/builder_base.h>
 #include <arrow/array/builder_binary.h>
@@ -1626,6 +1627,17 @@ CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, boo
             where.push_back("left.database LIKE " + quoteString(command.db_schema_filter_pattern()));
         if (command.has_table_name_filter_pattern())
             where.push_back("left.table LIKE " + quoteString(command.table_name_filter_pattern()));
+        if (command.table_types_size())
+        {
+            where.push_back(
+                "left.table_type IN [" +
+                boost::algorithm::join(
+                    command.table_types()
+                        | boost::adaptors::transformed([](const auto & table_type) { return quoteString(table_type); }),
+                    ", ") +
+                "]"
+            );
+        }
         auto where_expression = where.empty() ? "" : " WHERE " + boost::algorithm::join(where, " AND ");
 
         if (command.include_schema())
@@ -2537,11 +2549,32 @@ arrow::Status ArrowFlightHandler::DoAction(
             auto execute_res = executeSQLtoTable(session, "SHOW SETTINGS LIKE '%'");
             ARROW_RETURN_NOT_OK(execute_res);
             auto [_, table] = execute_res.ValueUnsafe();
-            for (int64_t i = 0; i < table->num_rows(); ++i)
+            const auto & names = table->column(0);
+            const auto & values = table->column(2);
+
+            if (names->num_chunks() != values->num_chunks())
+                return arrow::Status::Invalid("Unexpected chunk layout mismatch for settings columns");
+
+            for (int chunk_idx = 0; chunk_idx < names->num_chunks(); ++chunk_idx)
             {
-                auto name = static_cast<arrow::StringScalar&>(*table->column(0)->GetScalar(i).ValueOrDie()).ToString();
-                auto value = static_cast<arrow::StringScalar&>(*table->column(2)->GetScalar(i).ValueOrDie()).ToString();
-                result.session_options[name] = value;
+                const auto & name_chunk_any = names->chunk(chunk_idx);
+                const auto & value_chunk_any = values->chunk(chunk_idx);
+
+                if (name_chunk_any->type_id() != arrow::Type::STRING || value_chunk_any->type_id() != arrow::Type::STRING)
+                    return arrow::Status::TypeError("Expected STRING chunks in settings result");
+
+                if (name_chunk_any->length() != value_chunk_any->length())
+                    return arrow::Status::Invalid("Mismatched chunk lengths for settings columns");
+
+                const auto & name_chunk = static_cast<const arrow::StringArray &>(*name_chunk_any);
+                const auto & value_chunk = static_cast<const arrow::StringArray &>(*value_chunk_any);
+
+                for (int64_t i = 0; i < name_chunk.length(); ++i)
+                {
+                    if (name_chunk.IsNull(i) || value_chunk.IsNull(i))
+                        continue;
+                    result.session_options[name_chunk.GetString(i)] = value_chunk.GetString(i);
+                }
             }
 
             ARROW_ASSIGN_OR_RAISE(auto serialized, result.SerializeToString())

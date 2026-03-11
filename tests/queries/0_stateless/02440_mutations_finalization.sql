@@ -1,3 +1,7 @@
+-- Tags: no-shared-merge-tree
+-- no-shared-merge-tree -- smt don't assign mutation with stop merges. so last `system sync replica mut` doesn't help.
+-- Actually if we add sleep before last `system sync replica mut` test will pass, but I don't want to rewrite it as a separate test.
+
 create table mut (n int) engine=ReplicatedMergeTree('/test/02440/{database}/mut', '1') order by tuple() settings number_of_free_entries_in_pool_to_execute_mutation=0;
 set insert_keeper_fault_injection_probability=0;
 insert into mut values (1);

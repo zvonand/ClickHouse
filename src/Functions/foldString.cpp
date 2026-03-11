@@ -215,7 +215,7 @@ REGISTER_FUNCTION(FoldUTF8)
     FunctionDocumentation::Description case_desc = R"(
 Applies Unicode case folding to a UTF-8 string, converting it to a lowercase-like normalized form suitable for case-insensitive comparisons.
 
-Applies standard Unicode case folding followed by NFC normalization. Preserves compatibility characters that are not affected by case folding
+Applies standard Unicode case folding. Preserves compatibility characters that are not affected by case folding
 (e.g. Roman numerals, circled numbers), but note that some ligatures like `ﬃ` are still decomposed because Unicode case folding itself expands them.
 )";
     FunctionDocumentation::Syntax case_syntax = "caseFoldUTF8(str)";

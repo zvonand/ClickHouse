@@ -1,5 +1,6 @@
 #include <IO/GCPOAuth.h>
 
+#include <fmt/format.h>
 #include <Poco/JSON/Parser.h>
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
@@ -15,6 +16,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int AUTHENTICATION_FAILED;
+    extern const int BAD_ARGUMENTS;
 }
 
 GCPOAuthToken fetchGCPOAuthToken(
@@ -28,20 +30,21 @@ GCPOAuthToken fetchGCPOAuthToken(
 
     Poco::URI url(GOOGLE_OAUTH2_TOKEN_ENDPOINT);
 
-    /// Build the application/x-www-form-urlencoded body using Poco::URI to ensure
-    /// correct percent-encoding of all parameter values.
-    Poco::URI params_uri;
-    params_uri.addQueryParameter("grant_type", "refresh_token");
-    params_uri.addQueryParameter("client_id", client_id);
-    params_uri.addQueryParameter("client_secret", client_secret);
-    params_uri.addQueryParameter("refresh_token", refresh_token);
-    String body = params_uri.getQuery();
+    std::string encoded_client_id;
+    std::string encoded_client_secret;
+    std::string encoded_refresh_token;
+    Poco::URI::encode(client_id, "", encoded_client_id);
+    Poco::URI::encode(client_secret, "", encoded_client_secret);
+    Poco::URI::encode(refresh_token, "", encoded_refresh_token);
+
+    String body = fmt::format(
+        "grant_type=refresh_token&client_id={}&client_secret={}&refresh_token={}",
+        encoded_client_id, encoded_client_secret, encoded_refresh_token);
 
     auto log = getLogger("GCPOAuth");
     LOG_DEBUG(log, "Requesting GCP bearer token via OAuth2 refresh token flow");
 
     HTTPSessionPtr session;
-    std::exception_ptr last_exception;
     for (size_t i = 0; i < 5; ++i)
     {
         try
@@ -51,12 +54,11 @@ GCPOAuthToken fetchGCPOAuthToken(
         }
         catch (...)
         {
-            last_exception = std::current_exception();
             tryLogCurrentException(log);
         }
     }
     if (!session)
-        std::rethrow_exception(last_exception);
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Failed to create HTTP session for GCP OAuth2 token endpoint");
 
     Poco::Net::HTTPRequest request(
         Poco::Net::HTTPRequest::HTTP_POST,

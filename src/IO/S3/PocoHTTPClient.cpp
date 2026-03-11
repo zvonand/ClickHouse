@@ -879,8 +879,7 @@ PocoHTTPClientGCPOAuth::BearerToken PocoHTTPClientGCPOAuth::requestBearerTokenFr
     return
     {
         .token = std::move(result.access_token),
-        /// Use 90% of the token lifetime to avoid races near expiry.
-        .is_valid_to = std::chrono::system_clock::now() + std::chrono::seconds(result.expires_in * 9 / 10)
+        .is_valid_to = std::chrono::system_clock::now() + std::chrono::seconds(result.expires_in - 300)
     };
 }
 

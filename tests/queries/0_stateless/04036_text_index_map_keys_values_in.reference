@@ -1,0 +1,24 @@
+-- { echoOn }
+SELECT count() FROM tab WHERE map['env'] IN ('prod');
+50000
+Granules: 25/25
+Granules: 13/25
+Granules: 7/13
+-- { echoOn }
+SELECT count() FROM tab WHERE map['service'] IN ('worker') AND map['env'] IN ('prod');
+0
+Granules: 25/25
+Granules: 13/25
+Granules: 1/13
+-- { echoOn }
+SELECT count() FROM tab WHERE map['service'] IN ('web-api', 'frontend');
+100000
+Granules: 25/25
+Granules: 25/25
+Granules: 14/25
+-- { echoOn }
+SELECT count() FROM tab WHERE map['env'] IN ('prod', 'staging');
+100000
+Granules: 25/25
+Granules: 13/25
+Granules: 13/13

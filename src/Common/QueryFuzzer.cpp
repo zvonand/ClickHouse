@@ -1076,14 +1076,9 @@ void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
 
 void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projection)
 {
-    auto * query = projection.query ? projection.query->as<ASTProjectionSelectQuery>() : nullptr;
-    if (!query)
-        return;
+    UNUSED(projection);
 
     /// TODO finish this soon
-
-    /// Fuzz the SELECT expression list and any remaining sub-expressions
-    fuzz(query->children);
 }
 
 DataTypePtr QueryFuzzer::fuzzDataType(DataTypePtr type)

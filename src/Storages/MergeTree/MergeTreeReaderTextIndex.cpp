@@ -94,36 +94,26 @@ MergeTreeReaderTextIndex::MergeTreeReaderTextIndex(
     const auto & condition_text = assert_cast<const MergeTreeIndexConditionText &>(*index.condition);
     if (!condition_text.getAllSearchPatterns().empty())
     {
-        /// Create a fallback reader for the indexed column. When the dictionary scan is cut
-        /// short and some pattern tokens are missing, we fall back to evaluating the original
+        /// Create a fallback reader for the indexed column. When the dictionary scan is incomplete
+        /// and some pattern tokens are missing, we fall back to evaluating the original
         /// LIKE predicate directly on the indexed column data.
         const String & indexed_col_name = index.index->index.column_names[0];
-        try
-        {
-            auto col_in_metadata = storage_snapshot->metadata->getColumns().getPhysical(indexed_col_name);
-            NamesAndTypesList fallback_columns{{col_in_metadata.name, col_in_metadata.type}};
+        auto col_in_metadata = storage_snapshot->metadata->getColumns().getPhysical(indexed_col_name);
+        NamesAndTypesList fallback_columns{{col_in_metadata.name, col_in_metadata.type}};
 
-            fallback_reader = createMergeTreeReader(
-                main_reader_->data_part_info_for_read,
-                fallback_columns,
-                main_reader_->storage_snapshot,
-                main_reader_->storage_settings,
-                main_reader_->all_mark_ranges,
-                /*virtual_fields=*/ {},
-                main_reader_->uncompressed_cache,
-                main_reader_->mark_cache,
-                /*deserialization_prefixes_cache=*/ nullptr,
-                main_reader_->settings,
-                /*avg_value_size_hints=*/ {},
-                /*profile_callback=*/ {});
-        }
-        catch (...)
-        {
-            /// If we can't create the fallback reader (e.g. the column is a virtual expression
-            /// like mapValues(...)), we simply don't create it. Abandoned pattern queries will
-            /// then fall back to is_always_true (conservative, no false negatives).
-            tryLogCurrentException(__PRETTY_FUNCTION__, "Failed to create fallback reader for pattern queries");
-        }
+        fallback_reader = createMergeTreeReader(
+            main_reader_->data_part_info_for_read,
+            fallback_columns,
+            main_reader_->storage_snapshot,
+            main_reader_->storage_settings,
+            main_reader_->all_mark_ranges,
+            /*virtual_fields=*/{},
+            main_reader_->uncompressed_cache,
+            main_reader_->mark_cache,
+            /*deserialization_prefixes_cache=*/nullptr,
+            main_reader_->settings,
+            /*avg_value_size_hints=*/{},
+            /*profile_callback=*/{});
     }
 }
 
@@ -200,13 +190,10 @@ void MergeTreeReaderTextIndex::analyzeTokensCardinality()
         {
             if (!granule_text.isPatternScanFinished())
             {
-                /// The dictionary scan was cut short: not all tokens matching the pattern
-                /// are in pattern_tokens, so filling from postings would produce false negatives.
-                /// Flag this column for the LIKE fallback evaluation.
-                if (fallback_reader)
-                    use_fallback[i] = true;
-                else
-                    is_always_true[i] = true;
+                if (!fallback_reader)
+                    throw Exception(ErrorCodes::LOGICAL_ERROR, "The fallback reader for patterns is not initialized.");
+
+                use_fallback[i] = true;
             }
             else
             {

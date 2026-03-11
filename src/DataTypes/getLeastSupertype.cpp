@@ -814,7 +814,13 @@ DataTypePtr getLeastSupertype(const DataTypes & types)
             if (typeid_cast<const DataTypeDateTime64 *>(types[max_scale_date_time_index].get()))
                 return types[max_scale_date_time_index];
 
-            /// Otherwise max scale came from Time64, create DateTime64 with that scale
+            /// max scale came from Time64, find a DateTime64 to preserve its timezone  
+            for (const auto & type : types)
+            {
+                if (const auto * dt64 = typeid_cast<const DataTypeDateTime64 *>(type.get()))
+                    return std::make_shared<DataTypeDateTime64>(max_scale, *dt64);
+            }
+
             return std::make_shared<DataTypeDateTime64>(max_scale);
         }
     }

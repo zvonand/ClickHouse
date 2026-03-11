@@ -896,7 +896,8 @@ void MutationsInterpreter::prepare(bool dry_run)
                 stages.emplace_back(context);
                 for (const auto & column : columns_desc)
                 {
-                    if (column.default_desc.kind == ColumnDefaultKind::Materialized)
+                    if (column.default_desc.kind == ColumnDefaultKind::Materialized
+                        && affected_materialized.contains(column.name))
                     {
                         auto type_literal = make_intrusive<ASTLiteral>(column.type->getName());
 

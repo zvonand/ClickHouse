@@ -797,10 +797,8 @@ clickhouse-client --query "SELECT count() FROM test.visits"
         ):
             if proc and pid:
                 if force:
-                    # Use --force (SIGKILL) for fast test to avoid waiting for
-                    # graceful shutdown, which can take over a minute.
-                    # Graceful shutdown is not needed here because we already
-                    # flushed system logs above and don't need to preserve data.
+                    # Use clickhouse stop --force when this issue is fixed
+                    # https://github.com/ClickHouse/ClickHouse/issues/99142
                     proc.terminate()
                     try:
                         proc.wait(timeout=10)

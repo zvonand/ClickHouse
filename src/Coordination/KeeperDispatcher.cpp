@@ -203,8 +203,6 @@ void KeeperDispatcher::requestThread()
                 if (shutdown_called)
                     break;
 
-                handle_opentelemetery_spans(request.request, request.session_id);
-
                 /// Skip stale requests for finished sessions.
                 /// Close must pass through RAFT (ephemeral cleanup, watch cleanup, etc.).
                 /// SessionID uses internal IDs (session_id = -1), ignore it just to be safe.
@@ -225,6 +223,8 @@ void KeeperDispatcher::requestThread()
 
                 if (is_stale_session_request(request))
                     continue;
+
+                handle_opentelemetery_spans(request.request, request.session_id);
 
                 Int64 mem_soft_limit = keeper_context->getKeeperMemorySoftLimit();
                 if (configuration_and_settings->standalone_keeper && isExceedingMemorySoftLimit() && checkIfRequestIncreaseMem(request.request))
@@ -571,7 +571,10 @@ bool KeeperDispatcher::putLocalReadRequest(const Coordination::ZooKeeperRequestP
     {
         std::lock_guard lock(finished_sessions_mutex);
         if (finished_sessions.contains(session_id))
+        {
+            ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
             return false;
+        }
     }
 
     {
@@ -620,14 +623,6 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
         snapshot_s3,
         [this](uint64_t /*log_idx*/, const KeeperRequestForSession & request_for_session)
         {
-            /// When Close commits, all prior requests for this session have been processed.
-            /// Remove from finished_sessions to reclaim memory.
-            if (request_for_session.request->getOpNum() == Coordination::OpNum::Close)
-            {
-                std::lock_guard lock(finished_sessions_mutex);
-                finished_sessions.erase(request_for_session.session_id);
-            }
-
             {
                 /// check if we have queue of read requests depending on this request to be committed
                 std::lock_guard lock(read_request_queue_mutex);
@@ -642,7 +637,7 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
                         {
                             /// Skip reads whose session has been finished
                             {
-                                std::lock_guard flock(finished_sessions_mutex);
+                                std::lock_guard finished_lock(finished_sessions_mutex);
                                 if (finished_sessions.contains(read_request.session_id))
                                 {
                                     ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
@@ -673,6 +668,16 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
                         xid_to_request_queue.erase(request_queue_it);
                     }
                 }
+            }
+
+            /// When Close commits, all prior requests for this session have been processed.
+            /// Remove from finished_sessions to reclaim memory.
+            /// Done after the pending-read loop so reads queued for the closing session
+            /// are still filtered by the stale check above.
+            if (request_for_session.request->getOpNum() == Coordination::OpNum::Close)
+            {
+                std::lock_guard lock(finished_sessions_mutex);
+                finished_sessions.erase(request_for_session.session_id);
             }
         });
 

@@ -509,7 +509,7 @@ static void buildTreeOffset(
         settings_format.step_prefix += segment;
         settings_format.other_prefix += segment;
     }
-    
+
     settings_format.step_prefix += current.is_last_child ? "└──" : "├──";
     settings_format.other_prefix += current.is_last_child ? "   " : "│  ";
     settings_format.other_prefix += current.node->children.empty() ? "   " : "│  ";

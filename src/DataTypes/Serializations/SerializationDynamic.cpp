@@ -44,7 +44,7 @@ struct SerializeBinaryBulkStateDynamic : public ISerialization::SerializeBinaryB
     ISerialization::SerializeBinaryBulkStatePtr flattened_indexes_state;
 
     explicit SerializeBinaryBulkStateDynamic(SerializationDynamic::SerializationVersion structure_version_)
-        : structure_version(structure_version_), statistics(ColumnDynamic::Statistics::Type::RECALCULATED)
+        : structure_version(structure_version_)
     {
     }
 };
@@ -224,8 +224,8 @@ void SerializationDynamic::serializeBinaryBulkStatePrefix(
             writeBinary(true, *stream);
 
         /// First, write statistics for usual variants.
-        for (size_t i = 0; i != variant_info.variant_names.size(); ++i)
-            writeVarUInt(statistics->variants_statistics.at(variant_info.variant_names[i]), *stream);
+        for (const auto & variant_name : variant_info.variant_names)
+            writeVarUInt(statistics->variants_statistics.at(variant_name), *stream);
 
         /// Second, write statistics for variants in shared variant.
         writeVarUInt(statistics->shared_variants_statistics.size(), *stream);
@@ -391,7 +391,7 @@ ISerialization::DeserializeBinaryBulkStatePtr SerializationDynamic::deserializeD
                     readBinary(has_statistics, *structure_stream);
                 if (has_statistics)
                 {
-                    ColumnDynamic::Statistics statistics(ColumnDynamic::Statistics::Type::READ);
+                    ColumnDynamic::Statistics statistics;
 
                     /// First, read statistics for usual variants.
                     for (const auto & variant : variant_type->getVariants())

@@ -503,7 +503,7 @@ struct SerializeBinaryBulkStateMapWithBuckets : public ISerialization::Serialize
     /// Per-bucket nested serialization states.
     std::vector<ISerialization::SerializeBinaryBulkStatePtr> bucket_nested_states;
 
-    SerializeBinaryBulkStateMapWithBuckets() : statistics(ColumnMap::Statistics::Type::RECALCULATED) {}
+    SerializeBinaryBulkStateMapWithBuckets() = default;
 };
 
 /// Unified deserialization state for `SerializationMap`, used for both BASIC and WITH_BUCKETS modes.
@@ -780,7 +780,7 @@ SerializationMap::deserializeBucketsInfoStatePrefix(DeserializeBinaryBulkSetting
         readBinary(have_statistics, *stream);
         if (have_statistics)
         {
-            auto mutable_statistics = std::make_shared<ColumnMap::Statistics>(ColumnMap::Statistics::Type::READ);
+            auto mutable_statistics = std::make_shared<ColumnMap::Statistics>();
             readBinaryLittleEndian(mutable_statistics->avg, *stream);
             readBinaryLittleEndian(mutable_statistics->count, *stream);
             statistics = std::move(mutable_statistics);
@@ -850,6 +850,9 @@ namespace
 template <typename KeyColumn>
 size_t getBucketForKeyImpl(const KeyColumn & key_column, size_t row, size_t buckets)
 {
+    if (buckets == 0)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Number of buckets cannot be zero");
+
     SipHash hash;
     key_column.updateHashWithValue(row, hash);
     return hash.get64() % buckets;

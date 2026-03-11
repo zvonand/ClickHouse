@@ -100,6 +100,14 @@ protected:
     /// set of streams.
     void prepareBlockForWriting(Block & block);
 
+    /// Initialize all streams for all columns. Should be called after first prepareBlockForWriting when block sample is initialized.
+    void initStreamsIfNeeded();
+
+    /// Initialize columns_substreams for all columns. Should be called after first prepareBlockForWriting when block sample is initialized.
+    void initColumnsSubstreamsIfNeeded();
+
+    virtual ISerialization::SerializeBinaryBulkSettings getSerializationSettings() const = 0;
+
     const MergeTreeIndices skip_indices;
     const String marks_file_extension;
     const CompressionCodecPtr default_codec;
@@ -133,6 +141,8 @@ protected:
     size_t current_mark = 0;
 
     Block block_sample;
+
+    bool streams_initialized = false;
 
     /// List of substreams for each column in order of serialization.
     ColumnsSubstreams columns_substreams;

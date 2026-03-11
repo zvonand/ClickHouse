@@ -1696,10 +1696,10 @@ bool ColumnObject::dynamicStructureEquals(const IColumn & rhs) const
     return true;
 }
 
-void ColumnObject::takeDynamicStructureFromSourceColumns(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns)
+void ColumnObject::chooseDynamicStructureForMerge(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns)
 {
     if (!empty())
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "takeDynamicStructureFromSourceColumns should be called only on empty Object column");
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "chooseDynamicStructureForMerge should be called only on empty Object column");
 
     /// During serialization of Object column in MergeTree all Object columns
     /// in single part must have the same structure (the same dynamic paths). During merge
@@ -1714,6 +1714,7 @@ void ColumnObject::takeDynamicStructureFromSourceColumns(const Columns & source_
     /// We want to construct resulting set of dynamic paths with paths that have least number of null values in source columns
     /// and insert the rest paths into shared data if we exceed the limit of dynamic paths.
     /// First, collect all dynamic paths from all source columns and calculate total number of non-null values.
+    /// We read source statistics to make path selection decisions, but do not update statistics in the result.
     std::unordered_map<String, size_t> path_to_total_number_of_non_null_values;
     for (const auto & source_column : source_columns)
     {
@@ -1750,7 +1751,6 @@ void ColumnObject::takeDynamicStructureFromSourceColumns(const Columns & source_
     sorted_dynamic_paths.clear();
     /// If max_dynamic_subcolumns is set, use it as max number of paths.
     max_dynamic_paths = max_dynamic_subcolumns ? std::min(*max_dynamic_subcolumns, global_max_dynamic_paths) : global_max_dynamic_paths;
-    Statistics new_statistics(Statistics::Type::RECALCULATED);
 
     /// Check if the number of all dynamic paths exceeds the limit.
     if (path_to_total_number_of_non_null_values.size() > max_dynamic_paths)
@@ -1773,11 +1773,6 @@ void ColumnObject::takeDynamicStructureFromSourceColumns(const Columns & source_
                 dynamic_paths_ptrs.emplace(path, assert_cast<ColumnDynamic *>(it->second.get()));
                 sorted_dynamic_paths.insert(it->first);
             }
-            /// Add all remaining paths into shared data statistics until we reach its max size;
-            else if (new_statistics.shared_data_paths_statistics.size() < Statistics::MAX_SHARED_DATA_STATISTICS_SIZE)
-            {
-                new_statistics.shared_data_paths_statistics.emplace(path, size);
-            }
         }
     }
     /// Use all dynamic paths from all source columns.
@@ -1791,17 +1786,12 @@ void ColumnObject::takeDynamicStructureFromSourceColumns(const Columns & source_
         }
     }
 
-    /// Fill statistics for the merged part.
-    for (const auto & [path, _] : dynamic_paths)
-        new_statistics.dynamic_paths_statistics[path] = path_to_total_number_of_non_null_values[path];
-    statistics = std::make_shared<const Statistics>(std::move(new_statistics));
-
     /// Set max_dynamic_paths to the number of selected dynamic paths.
     /// It's needed to avoid adding new unexpected dynamic paths during inserts into this column during merge.
     max_dynamic_paths = dynamic_paths.size();
 
     /// Now we have the resulting set of dynamic paths that will be used in all merged columns.
-    /// As we use Dynamic column for dynamic paths, we should call takeDynamicStructureFromSourceColumns
+    /// As we use Dynamic column for dynamic paths, we should call `chooseDynamicStructureForMerge`
     /// on all resulting dynamic columns.
     for (auto & [path, column] : dynamic_paths)
     {
@@ -1813,7 +1803,7 @@ void ColumnObject::takeDynamicStructureFromSourceColumns(const Columns & source_
             if (it != source_object.dynamic_paths.end())
                 dynamic_path_source_columns.push_back(it->second);
         }
-        column->takeDynamicStructureFromSourceColumns(dynamic_path_source_columns, max_dynamic_subcolumns);
+        column->chooseDynamicStructureForMerge(dynamic_path_source_columns, max_dynamic_subcolumns);
     }
 
     /// Typed paths also can contain types with dynamic structure.
@@ -1823,19 +1813,19 @@ void ColumnObject::takeDynamicStructureFromSourceColumns(const Columns & source_
         typed_path_source_columns.reserve(source_columns.size());
         for (const auto & source_column : source_columns)
             typed_path_source_columns.push_back(assert_cast<const ColumnObject &>(*source_column).typed_paths.at(path));
-        column->takeDynamicStructureFromSourceColumns(typed_path_source_columns, max_dynamic_subcolumns);
+        column->chooseDynamicStructureForMerge(typed_path_source_columns, max_dynamic_subcolumns);
     }
 }
 
-void ColumnObject::takeDynamicStructureFromColumn(const ColumnPtr & source_column)
+void ColumnObject::takeExactDynamicStructureFrom(const IColumn & source)
 {
     if (!empty())
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "takeDynamicStructureFromColumn should be called only on empty Object column");
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "takeExactDynamicStructureFrom should be called only on empty Object column");
 
-    const auto & source_object = assert_cast<const ColumnObject &>(*source_column);
+    const auto & source_object = assert_cast<const ColumnObject &>(source);
 
     for (auto & [path, column] : typed_paths)
-        column->takeDynamicStructureFromColumn(source_object.typed_paths.at(path));
+        column->takeExactDynamicStructureFrom(*source_object.typed_paths.at(path));
 
     dynamic_paths.clear();
     dynamic_paths_ptrs.clear();
@@ -1843,7 +1833,7 @@ void ColumnObject::takeDynamicStructureFromColumn(const ColumnPtr & source_colum
     for (const auto & [path, column] : source_object.getDynamicPaths())
     {
         auto it = dynamic_paths.emplace(path, ColumnDynamic::create(max_dynamic_types)).first;
-        it->second->takeDynamicStructureFromColumn(column);
+        it->second->takeExactDynamicStructureFrom(*column);
         dynamic_paths_ptrs.emplace(path, assert_cast<ColumnDynamic *>(it->second.get()));
         sorted_dynamic_paths.insert(it->first);
     }
@@ -1851,8 +1841,6 @@ void ColumnObject::takeDynamicStructureFromColumn(const ColumnPtr & source_colum
     /// Set max_dynamic_paths to the number of dynamic paths.
     /// It's needed to avoid adding new unexpected dynamic paths during later inserts into this column.
     max_dynamic_paths = dynamic_paths.size();
-
-    statistics = source_object.getStatistics();
 }
 
 void ColumnObject::fixDynamicStructure()
@@ -1861,14 +1849,15 @@ void ColumnObject::fixDynamicStructure()
     /// It's needed to avoid adding new unexpected dynamic paths during later inserts into this column.
     max_dynamic_paths = dynamic_paths.size();
 }
+
 ColumnObject::StatisticsPtr ColumnObject::getOrCalculateStatistics() const
 {
-    if (statistics && statistics->type == Statistics::Type::RECALCULATED)
+    if (statistics)
         return statistics;
 
-    auto calculated_statistics = std::make_shared<Statistics>(Statistics::Type::RECALCULATED);
+    auto calculated_statistics = std::make_shared<Statistics>();
     for (const auto & [path, column] : dynamic_paths)
-        calculated_statistics->dynamic_paths_statistics[path] = column->size();
+        calculated_statistics->dynamic_paths_statistics[path] = column->size() - column->getNumberOfDefaultRows();
 
     const auto [shared_data_paths, _] = getSharedDataPathsAndValues();
     for (size_t i = 0; i != shared_data_paths->size(); ++i)
@@ -1883,22 +1872,80 @@ ColumnObject::StatisticsPtr ColumnObject::getOrCalculateStatistics() const
     return calculated_statistics;
 }
 
-void ColumnObject::takeOrCalculateStatisticsFrom(const IColumn & source_column)
+void ColumnObject::takeOrCalculateStatisticsFrom(const Columns & source_columns)
 {
-    const auto & source_object = assert_cast<const ColumnObject &>(source_column);
-    statistics = source_object.getOrCalculateStatistics();
-
-    for (const auto & [path, column] : source_object.typed_paths)
-        typed_paths.at(path)->takeOrCalculateStatisticsFrom(*column);
-
-    for (const auto & [path, column] : source_object.dynamic_paths)
+    /// Assumes dynamic structure has already been set by `takeExactDynamicStructureFrom` or `chooseDynamicStructureForMerge`.
+    Statistics new_statistics;
+    /// Collect total sizes for paths that are not in our dynamic_paths (candidates for shared data statistics).
+    std::unordered_map<String, size_t> shared_data_candidates;
+    for (const auto & source_column : source_columns)
     {
-        auto it = dynamic_paths.find(path);
-        if (it != dynamic_paths.end())
-            it->second->takeOrCalculateStatisticsFrom(*column);
+        const auto & source_object = assert_cast<const ColumnObject &>(*source_column);
+        const auto & source_statistics = source_object.getOrCalculateStatistics();
+
+        /// For dynamic paths in source statistics: if the path is in our dynamic structure, add directly;
+        /// otherwise accumulate in shared data candidates.
+        for (const auto & [path, size] : source_statistics->dynamic_paths_statistics)
+        {
+            if (dynamic_paths.contains(path))
+                new_statistics.dynamic_paths_statistics[path] += size;
+            else
+                shared_data_candidates[path] += size;
+        }
+
+        /// For shared data paths in source statistics: if the path got promoted to a dynamic path
+        /// in the merged structure, add to dynamic_paths_statistics; otherwise accumulate in shared data candidates.
+        for (const auto & [path, size] : source_statistics->shared_data_paths_statistics)
+        {
+            if (dynamic_paths.contains(path))
+                new_statistics.dynamic_paths_statistics[path] += size;
+            else
+                shared_data_candidates[path] += size;
+        }
     }
 
-    shared_data->takeOrCalculateStatisticsFrom(*source_object.shared_data);
+    /// Select top MAX_SHARED_DATA_STATISTICS_SIZE paths by total size for shared data statistics.
+    if (shared_data_candidates.size() <= Statistics::MAX_SHARED_DATA_STATISTICS_SIZE)
+    {
+        for (auto & [path, size] : shared_data_candidates)
+            new_statistics.shared_data_paths_statistics.emplace(path, size);
+    }
+    else
+    {
+        std::vector<std::pair<size_t, std::string_view>> candidates_with_sizes;
+        candidates_with_sizes.reserve(shared_data_candidates.size());
+        for (const auto & [path, size] : shared_data_candidates)
+            candidates_with_sizes.emplace_back(size, path);
+        std::sort(candidates_with_sizes.begin(), candidates_with_sizes.end(), std::greater());
+        for (size_t i = 0; i < Statistics::MAX_SHARED_DATA_STATISTICS_SIZE; ++i)
+            new_statistics.shared_data_paths_statistics.emplace(candidates_with_sizes[i].second, candidates_with_sizes[i].first);
+    }
+
+    statistics = std::make_shared<const Statistics>(std::move(new_statistics));
+
+    /// Recursively update statistics for nested dynamic paths.
+    for (auto & [path, column] : dynamic_paths)
+    {
+        Columns dynamic_path_source_columns;
+        for (const auto & source_column : source_columns)
+        {
+            const auto & source_object = assert_cast<const ColumnObject &>(*source_column);
+            auto it = source_object.dynamic_paths.find(path);
+            if (it != source_object.dynamic_paths.end())
+                dynamic_path_source_columns.push_back(it->second);
+        }
+        column->takeOrCalculateStatisticsFrom(dynamic_path_source_columns);
+    }
+
+    /// Recursively update statistics for typed paths.
+    for (auto & [path, column] : typed_paths)
+    {
+        Columns typed_path_source_columns;
+        typed_path_source_columns.reserve(source_columns.size());
+        for (const auto & source_column : source_columns)
+            typed_path_source_columns.push_back(assert_cast<const ColumnObject &>(*source_column).typed_paths.at(path));
+        column->takeOrCalculateStatisticsFrom(typed_path_source_columns);
+    }
 }
 
 size_t ColumnObject::findPathLowerBoundInSharedData(std::string_view path, const ColumnString & shared_data_paths, size_t start, size_t end)

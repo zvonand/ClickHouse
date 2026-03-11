@@ -17,7 +17,7 @@ namespace
 {
 
 /// A sentinel value meaning "key not found in this row".
-static constexpr size_t KEY_NOT_FOUND = std::numeric_limits<size_t>::max();
+constexpr size_t KEY_NOT_FOUND = std::numeric_limits<size_t>::max();
 
 /// ---------------------------------------------------------------------------
 /// Phase 1: Find the position of the requested key in each row.

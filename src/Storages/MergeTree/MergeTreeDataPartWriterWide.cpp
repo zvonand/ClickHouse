@@ -302,7 +302,8 @@ void MergeTreeDataPartWriterWide::write(const Block & block, const IColumnPermut
     /// preparations to achieve it.
     prepareBlockForWriting(block_to_write);
 
-    initColumnsSubstreamsIfNeeded(block_to_write);
+    initStreamsIfNeeded();
+    initColumnsSubstreamsIfNeeded();
 
     /// Fill index granularity for this block
     /// if it's unknown (in case of insert data or horizontal merge,
@@ -531,7 +532,6 @@ void MergeTreeDataPartWriterWide::writeColumn(
     {
         auto serialize_settings = getSerializationSettings();
         serialize_settings.getter = createStreamGetter(name_and_type, offset_substreams);
-        serialize_settings.data_part_type = MergeTreeDataPartType::Wide;
         serialization->serializeBinaryBulkStatePrefix(column, serialize_settings, it->second);
     }
 
@@ -729,6 +729,10 @@ void MergeTreeDataPartWriterWide::validateColumnOfFixedSize(const NameAndTypePai
 
 void MergeTreeDataPartWriterWide::finalizeIndexGranularity()
 {
+    /// If no data was written, streams and columns substreams will be uninitialized, but we need them.
+    initStreamsIfNeeded();
+    initColumnsSubstreamsIfNeeded();
+
     auto serialize_settings = getSerializationSettings();
     if (rows_written_in_last_mark > 0)
     {
@@ -936,32 +940,6 @@ void MergeTreeDataPartWriterWide::adjustLastMarkIfNeedAndFlushToDisk(size_t new_
             /// Without offset
             rows_written_in_last_mark = 0;
         }
-    }
-}
-
-void MergeTreeDataPartWriterWide::initColumnsSubstreamsIfNeeded(const Block & block)
-{
-    if (columns_substreams.getTotalSubstreams())
-        return;
-
-    NullWriteBuffer buf;
-    auto serialize_settings = getSerializationSettings();
-    for (const auto & name_and_type : columns_list)
-    {
-        columns_substreams.addColumn(name_and_type.name);
-        serialize_settings.getter = [&](const ISerialization::SubstreamPath & substream_path)
-        {
-            columns_substreams.addSubstreamToLastColumn(ISerialization::getFileNameForStream(name_and_type, substream_path, ISerialization::StreamFileNameSettings(*storage_settings)));
-            return &buf;
-        };
-        serialize_settings.stream_mark_getter = [&](const ISerialization::SubstreamPath &){ return MarkInCompressedFile(); };
-
-        ISerialization::SerializeBinaryBulkStatePtr state;
-        auto serialization = getSerialization(name_and_type.name);
-        const auto & column = block.getByName(name_and_type.name);
-        serialization->serializeBinaryBulkStatePrefix(*column.column, serialize_settings, state);
-        serialization->serializeBinaryBulkWithMultipleStreams(*column.column, column.column->size(), 0, serialize_settings, state);
-        serialization->serializeBinaryBulkStateSuffix(serialize_settings, state);
     }
 }
 

@@ -145,8 +145,8 @@ void collectMapSizeFromBuckets(const std::vector<ColumnPtr> & size_buckets, ICol
     for (size_t i = 0; i != num_rows; ++i)
     {
         UInt64 total_size = 0;
-        for (size_t bucket = 0; bucket != data_buckets.size(); ++bucket)
-            total_size += (*data_buckets[bucket])[i];
+        for (auto & data_bucket : data_buckets)
+            total_size += (*data_bucket)[i];
         data.push_back(total_size);
     }
 }

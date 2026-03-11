@@ -1818,7 +1818,7 @@ bool ColumnVariant::hasDynamicStructure() const
     return false;
 }
 
-void ColumnVariant::takeDynamicStructureFromSourceColumns(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns)
+void ColumnVariant::chooseDynamicStructureForMerge(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns)
 {
     /// List of source columns for each variant. In global order.
     std::vector<Columns> variants_source_columns;
@@ -1829,21 +1829,23 @@ void ColumnVariant::takeDynamicStructureFromSourceColumns(const Columns & source
 
     for (const auto & source_column : source_columns)
     {
-        const auto & source_variant = assert_cast<const ColumnVariant &>(*source_column);
+        const auto & source_variant_col = assert_cast<const ColumnVariant &>(*source_column);
         for (size_t i = 0; i != num_variants; ++i)
-            variants_source_columns[i].push_back(source_variant.getVariantPtrByGlobalDiscriminator(i));
+            variants_source_columns[i].push_back(source_variant_col.getVariantPtrByGlobalDiscriminator(i));
     }
 
     for (size_t i = 0; i != num_variants; ++i)
-        getVariantByGlobalDiscriminator(i).takeDynamicStructureFromSourceColumns(variants_source_columns[i], max_dynamic_subcolumns);
+        getVariantByGlobalDiscriminator(i).chooseDynamicStructureForMerge(variants_source_columns[i], max_dynamic_subcolumns);
 }
 
-void ColumnVariant::takeDynamicStructureFromColumn(const ColumnPtr & source_column)
+void ColumnVariant::takeExactDynamicStructureFrom(const IColumn & source)
 {
-    const auto & source_variant = assert_cast<const ColumnVariant &>(*source_column);
-    for (size_t i = 0; i != variants.size(); ++i)
-        getVariantByGlobalDiscriminator(i).takeDynamicStructureFromColumn(source_variant.getVariantPtrByGlobalDiscriminator(i));
+    const auto & source_variant = assert_cast<const ColumnVariant &>(source);
+    size_t num_variants = variants.size();
+    for (size_t i = 0; i != num_variants; ++i)
+        getVariantByGlobalDiscriminator(i).takeExactDynamicStructureFrom(source_variant.getVariantByGlobalDiscriminator(i));
 }
+
 
 void ColumnVariant::fixDynamicStructure()
 {
@@ -1892,11 +1894,16 @@ bool ColumnVariant::hasStatistics() const
     return false;
 }
 
-void ColumnVariant::takeOrCalculateStatisticsFrom(const IColumn & source_column)
+void ColumnVariant::takeOrCalculateStatisticsFrom(const Columns & source_columns)
 {
-    const auto & source_variant = assert_cast<const ColumnVariant &>(source_column);
     for (size_t i = 0; i != variants.size(); ++i)
-        getVariantByGlobalDiscriminator(i).takeOrCalculateStatisticsFrom(source_variant.getVariantByGlobalDiscriminator(i));
+    {
+        Columns variant_source_columns;
+        variant_source_columns.reserve(source_columns.size());
+        for (const auto & source_column : source_columns)
+            variant_source_columns.push_back(assert_cast<const ColumnVariant &>(*source_column).getVariantPtrByGlobalDiscriminator(i));
+        variants[i]->takeOrCalculateStatisticsFrom(variant_source_columns);
+    }
 }
 
 

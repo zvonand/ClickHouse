@@ -14,10 +14,10 @@ class ColumnMap final : public COWHelper<IColumnHelper<ColumnMap>, ColumnMap>
 {
 public:
     /// Statistics about the average number of key-value pairs per map row.
-    struct Statistics : StatisticsBase
+    struct Statistics
     {
-        explicit Statistics(Type type_) : StatisticsBase(type_) {}
-        Statistics(Float64 avg_, UInt64 count_, Type type_) : StatisticsBase(type_), avg(avg_), count(count_) {}
+        Statistics() = default;
+        Statistics(Float64 avg_, UInt64 count_) : avg(avg_), count(count_) {}
 
         /// Incrementally updates the running weighted average with a new batch of data.
         void addBatch(Float64 batch_avg, UInt64 batch_count);
@@ -142,10 +142,10 @@ public:
 
     ColumnPtr compress(bool force_compression) const override;
 
-    bool hasDynamicStructure() const override { return true; }
+    bool hasDynamicStructure() const override { return nested->hasDynamicStructure(); }
     bool dynamicStructureEquals(const IColumn & rhs) const override;
-    void takeDynamicStructureFromSourceColumns(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns) override;
-    void takeDynamicStructureFromColumn(const ColumnPtr & source_column) override;
+    void takeExactDynamicStructureFrom(const IColumn & source) override;
+    void chooseDynamicStructureForMerge(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns) override;
     void fixDynamicStructure() override { nested->fixDynamicStructure(); }
 
     const StatisticsPtr & getStatistics() const { return statistics; }
@@ -153,7 +153,7 @@ public:
     void setStatistics(const StatisticsPtr & statistics_) { statistics = statistics_; }
     StatisticsPtr calculateStatisticsForRange(size_t start, size_t end) const;
     bool hasStatistics() const override { return true; }
-    void takeOrCalculateStatisticsFrom(const IColumn & source_column) override;
+    void takeOrCalculateStatisticsFrom(const Columns & source_columns) override;
 };
 
 }

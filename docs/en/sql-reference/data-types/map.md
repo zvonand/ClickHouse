@@ -173,7 +173,7 @@ The bucket count can vary between parts. When parts with different bucket counts
 | `map_buckets_coefficient` | `1.0` | Multiplier for `sqrt` and `linear` strategies. Ignored when strategy is `constant`. |
 | `map_buckets_min_avg_size` | `32` | Minimum average keys per row to enable bucketing. If the average is below this threshold, a single bucket is used regardless of other settings. Set to `0` to disable the threshold. |
 
-### Performance Tradeoffs
+### Performance Trade-offs
 
 The following table summarizes the performance impact of `with_buckets` compared to `basic` serialization at various map sizes (10 to 10,000 keys per row). The bucket count was determined by the `sqrt` strategy capped at 32. The exact numbers depend on key/value types, data distribution, and hardware.
 

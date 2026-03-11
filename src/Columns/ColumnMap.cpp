@@ -451,45 +451,51 @@ void ColumnMap::Statistics::addBatch(UInt64 batch_total_size, UInt64 batch_count
     addBatch(static_cast<Float64>(batch_total_size) / static_cast<Float64>(batch_count), batch_count);
 }
 
-void ColumnMap::takeDynamicStructureFromSourceColumns(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns)
+void ColumnMap::chooseDynamicStructureForMerge(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns)
 {
     Columns nested_source_columns;
     nested_source_columns.reserve(source_columns.size());
-    auto new_statistics = std::make_shared<Statistics>(Statistics::Type::RECALCULATED);
     for (const auto & source_column : source_columns)
     {
         const auto & source_column_map = assert_cast<const ColumnMap &>(*source_column);
         nested_source_columns.push_back(source_column_map.getNestedColumnPtr());
-        new_statistics->merge(*source_column_map.getOrCalculateStatistics());
     }
-    nested->takeDynamicStructureFromSourceColumns(nested_source_columns, max_dynamic_subcolumns);
-    statistics = std::move(new_statistics);
+    nested->chooseDynamicStructureForMerge(nested_source_columns, max_dynamic_subcolumns);
 }
 
-void ColumnMap::takeDynamicStructureFromColumn(const ColumnPtr & source_column)
+void ColumnMap::takeExactDynamicStructureFrom(const IColumn & source)
 {
-    nested->takeDynamicStructureFromColumn(assert_cast<const ColumnMap &>(*source_column).getNestedColumnPtr());
+    const auto & source_map = assert_cast<const ColumnMap &>(source);
+    nested->takeExactDynamicStructureFrom(*source_map.getNestedColumnPtr());
 }
 
 ColumnMap::StatisticsPtr ColumnMap::calculateStatisticsForRange(size_t start, size_t end) const
 {
     const auto & offsets = getNestedColumn().getOffsets();
     size_t total_maps_size = offsets[end - 1] - offsets[start - 1];
-    return std::make_shared<Statistics>(start == end ? 0 : static_cast<Float64>(total_maps_size) / static_cast<Float64>(end - start), end - start, Statistics::Type::RECALCULATED);
+    return std::make_shared<Statistics>(start == end ? 0 : static_cast<Float64>(total_maps_size) / static_cast<Float64>(end - start), end - start);
 }
 
 ColumnMap::StatisticsPtr ColumnMap::getOrCalculateStatistics() const
 {
-    if (statistics && statistics->type == Statistics::Type::RECALCULATED)
+    if (statistics)
         return statistics;
     return calculateStatisticsForRange(0, size());
 }
 
-void ColumnMap::takeOrCalculateStatisticsFrom(const IColumn & source_column)
+void ColumnMap::takeOrCalculateStatisticsFrom(const Columns & source_columns)
 {
-    const auto & source_map = assert_cast<const ColumnMap &>(source_column);
-    statistics = source_map.getOrCalculateStatistics();
-    nested->takeOrCalculateStatisticsFrom(*source_map.nested);
+    auto new_statistics = std::make_shared<Statistics>();
+    Columns nested_source_columns;
+    nested_source_columns.reserve(source_columns.size());
+    for (const auto & source_column : source_columns)
+    {
+        const auto & source_map = assert_cast<const ColumnMap &>(*source_column);
+        new_statistics->merge(*source_map.getOrCalculateStatistics());
+        nested_source_columns.push_back(source_map.getNestedColumnPtr());
+    }
+    statistics = std::move(new_statistics);
+    nested->takeOrCalculateStatisticsFrom(nested_source_columns);
 }
 
 

@@ -114,7 +114,7 @@ struct SerializeBinaryBulkStateObject: public ISerialization::SerializeBinaryBul
     std::vector<std::pair<String, ColumnPtr>> flattened_paths;
 
     explicit SerializeBinaryBulkStateObject(SerializationObject::SerializationVersion serialization_version_)
-        : serialization_version(serialization_version_), statistics(ColumnObject::Statistics::Type::RECALCULATED)
+        : serialization_version(serialization_version_)
     {
     }
 };
@@ -693,7 +693,7 @@ ISerialization::DeserializeBinaryBulkStatePtr SerializationObject::deserializeOb
                     readBinary(has_statistics, *structure_stream);
                 if (has_statistics)
                 {
-                    ColumnObject::Statistics statistics(ColumnObject::Statistics::Type::READ);
+                    ColumnObject::Statistics statistics;
                     statistics.dynamic_paths_statistics.reserve(structure_state->sorted_dynamic_paths->size());
                     /// First, read dynamic paths statistics.
                     for (const auto & path : *structure_state->sorted_dynamic_paths)

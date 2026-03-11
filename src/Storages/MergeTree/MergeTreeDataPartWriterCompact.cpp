@@ -59,15 +59,7 @@ MergeTreeDataPartWriterCompact::MergeTreeDataPartWriterCompact(
     }
 
     if (settings.save_marks_in_cache)
-    {
         cached_marks[MergeTreeDataPartCompact::DATA_FILE_NAME] = std::make_unique<MarksInCompressedFile::PlainArray>();
-    }
-
-    for (const auto & column : columns_list)
-    {
-        auto compression = getCodecDescOrDefault(column.name, default_codec);
-        MergeTreeDataPartWriterCompact::addStreams(column, compression);
-    }
 }
 
 void MergeTreeDataPartWriterCompact::addStreams(const NameAndTypePair & name_and_type, const ASTPtr & effective_codec_desc)
@@ -109,8 +101,7 @@ void MergeTreeDataPartWriterCompact::addStreams(const NameAndTypePair & name_and
     enumerate_settings.map_buckets_min_avg_size = settings.map_buckets_min_avg_size;
     enumerate_settings.data_part_type = MergeTreeDataPartType::Compact;
     auto serialization = getSerialization(name_and_type.name);
-    auto * sample_column = block_sample.findByName(name_and_type.name);
-    auto substream_data = ISerialization::SubstreamData(serialization).withType(name_and_type.type).withColumn(sample_column ? sample_column->column : nullptr);
+    auto substream_data = ISerialization::SubstreamData(serialization).withType(name_and_type.type).withColumn(block_sample.findByName(name_and_type.name)->column);
     getSerialization(name_and_type.name)->enumerateStreams(enumerate_settings, callback, substream_data);
 }
 
@@ -163,13 +154,30 @@ void writeColumnSingleGranule(
     size_t from_row,
     size_t number_of_rows,
     bool is_first_granule,
-    const MergeTreeWriterSettings & settings)
+    ISerialization::SerializeBinaryBulkSettings && serialize_settings)
 {
     ISerialization::SerializeBinaryBulkStatePtr state;
-    ISerialization::SerializeBinaryBulkSettings serialize_settings;
 
     serialize_settings.getter = stream_getter;
     serialize_settings.stream_mark_getter = stream_mark_getter;
+    /// Write object and dynamic statistics only in first granule, it is used
+    /// only during merges and we always get it from the first granule.
+    if (!is_first_granule)
+        serialize_settings.write_statistics = ISerialization::SerializeBinaryBulkSettings::StatisticsMode::PREFIX_EMPTY;
+    serialize_settings.use_specialized_prefixes_and_suffixes_substreams = true;
+    serialize_settings.data_part_type = MergeTreeDataPartType::Compact;
+
+    serialization->serializeBinaryBulkStatePrefix(*column.column, serialize_settings, state);
+    serialization->serializeBinaryBulkWithMultipleStreams(*column.column, from_row, number_of_rows, serialize_settings, state);
+    serialization->serializeBinaryBulkStateSuffix(serialize_settings, state);
+}
+
+}
+
+ISerialization::SerializeBinaryBulkSettings MergeTreeDataPartWriterCompact::getSerializationSettings() const
+{
+    ISerialization::SerializeBinaryBulkSettings serialize_settings;
+
     serialize_settings.position_independent_encoding = true;
     serialize_settings.low_cardinality_max_dictionary_size = 0;
     serialize_settings.use_compact_variant_discriminators_serialization = settings.use_compact_variant_discriminators_serialization;
@@ -181,20 +189,11 @@ void writeColumnSingleGranule(
     serialize_settings.map_buckets_strategy = settings.map_buckets_strategy;
     serialize_settings.map_buckets_coefficient = settings.map_buckets_coefficient;
     serialize_settings.map_buckets_min_avg_size = settings.map_buckets_min_avg_size;
-    /// Write object and dynamic statistics only in first granule, it is used
-    /// only during merges and we always get it from the first granule.
-    if (is_first_granule)
-        serialize_settings.write_statistics = ISerialization::SerializeBinaryBulkSettings::StatisticsMode::PREFIX;
-    else
-        serialize_settings.write_statistics = ISerialization::SerializeBinaryBulkSettings::StatisticsMode::PREFIX_EMPTY;
+    serialize_settings.write_statistics = ISerialization::SerializeBinaryBulkSettings::StatisticsMode::PREFIX;
     serialize_settings.use_specialized_prefixes_and_suffixes_substreams = true;
     serialize_settings.data_part_type = MergeTreeDataPartType::Compact;
 
-    serialization->serializeBinaryBulkStatePrefix(*column.column, serialize_settings, state);
-    serialization->serializeBinaryBulkWithMultipleStreams(*column.column, from_row, number_of_rows, serialize_settings, state);
-    serialization->serializeBinaryBulkStateSuffix(serialize_settings, state);
-}
-
+    return serialize_settings;
 }
 
 void MergeTreeDataPartWriterCompact::write(const Block & block, const IColumnPermutation * permutation)
@@ -207,7 +206,8 @@ void MergeTreeDataPartWriterCompact::write(const Block & block, const IColumnPer
     /// preparations to achieve it.
     prepareBlockForWriting(result_block);
 
-    initColumnsSubstreamsIfNeeded(result_block);
+    initStreamsIfNeeded();
+    initColumnsSubstreamsIfNeeded();
 
     /// Fill index granularity for this block
     /// if it's unknown (in case of insert data or horizontal merge,
@@ -317,7 +317,7 @@ void MergeTreeDataPartWriterCompact::writeDataBlock(const Block & block, const G
 
             writeColumnSingleGranule(
                 block.getByName(name_and_type->name), getSerialization(name_and_type->name),
-                stream_getter, stream_mark_getter, granule.start_row, granule.rows_to_write, !data_written, settings);
+                stream_getter, stream_mark_getter, granule.start_row, granule.rows_to_write, !data_written, getSerializationSettings());
 
             /// Each type always have at least one substream
             prev_stream->hashing_buf.next();
@@ -330,6 +330,10 @@ void MergeTreeDataPartWriterCompact::writeDataBlock(const Block & block, const G
 
 void MergeTreeDataPartWriterCompact::finalizeIndexGranularity()
 {
+    /// If no data was written, streams and columns substreams will be uninitialized, but we need them.
+    initStreamsIfNeeded();
+    initColumnsSubstreamsIfNeeded();
+
     if (columns_buffer.size() != 0)
     {
         auto block = header.cloneWithColumns(columns_buffer.releaseColumns());
@@ -340,15 +344,6 @@ void MergeTreeDataPartWriterCompact::finalizeIndexGranularity()
             index_granularity->adjustLastMark(granules_to_write.back().rows_to_write);
         }
         writeDataBlockPrimaryIndexAndSkipIndices(block, granules_to_write);
-    }
-
-    /// If there was no data written, we still need to initialize columns substreams for marks with substreams.
-    if (index_granularity_info.mark_type.with_substreams && !data_written)
-    {
-        Block sample;
-        for (const auto & [name, type] : columns_list)
-            sample.insert(ColumnWithTypeAndName(type->createColumn(), type, name));
-        initColumnsSubstreamsIfNeeded(sample);
     }
 
 #ifndef NDEBUG
@@ -399,27 +394,6 @@ void MergeTreeDataPartWriterCompact::fillDataChecksums(MergeTreeDataPartChecksum
 
     plain_file->preFinalize();
     marks_file->preFinalize();
-}
-
-void MergeTreeDataPartWriterCompact::initColumnsSubstreamsIfNeeded(const Block & sample)
-{
-    if (!index_granularity_info.mark_type.with_substreams || columns_substreams.getTotalSubstreams())
-        return;
-
-    NullWriteBuffer buf;
-    for (const auto & name_and_type : columns_list)
-    {
-        columns_substreams.addColumn(name_and_type.name);
-        auto buffer_getter = [&](const ISerialization::SubstreamPath & substream_path)
-        {
-            columns_substreams.addSubstreamToLastColumn(ISerialization::getFileNameForStream(name_and_type, substream_path, ISerialization::StreamFileNameSettings(*storage_settings)));
-            return &buf;
-        };
-
-        auto mark_getter = [](const ISerialization::SubstreamPath &) { return MarkInCompressedFile(); };
-        const auto & column = sample.getByName(name_and_type.name);
-        writeColumnSingleGranule(column, getSerialization(name_and_type.name), buffer_getter, mark_getter, column.column->size(), 0, false, settings);
-    }
 }
 
 void MergeTreeDataPartWriterCompact::finishDataSerialization(bool sync)
@@ -554,7 +528,10 @@ void MergeTreeDataPartWriterCompact::fillChecksums(MergeTreeDataPartChecksums & 
 
 void MergeTreeDataPartWriterCompact::finish(bool sync)
 {
-    // If we don't have anything to write, skip finalization.
+    /// If we didn't write any data, streams would be uninitialized.
+    initStreamsIfNeeded();
+
+    /// If we don't have anything to write, skip finalization.
     if (!columns_list.empty())
         finishDataSerialization(sync);
 

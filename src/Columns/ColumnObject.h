@@ -17,10 +17,8 @@ namespace DB
 class ColumnObject final : public COWHelper<IColumnHelper<ColumnObject>, ColumnObject>
 {
 public:
-    struct Statistics : StatisticsBase
+    struct Statistics
     {
-        explicit Statistics(Type type_) : StatisticsBase(type_) {}
-
         /// Statistics for dynamic paths: (path) -> (total number of not-null values).
         std::unordered_map<String, size_t> dynamic_paths_statistics;
         /// Statistics for paths in shared data: (path) -> (total number of not-null values).
@@ -195,8 +193,8 @@ public:
 
     bool hasDynamicStructure() const override { return true; }
     bool dynamicStructureEquals(const IColumn & rhs) const override;
-    void takeDynamicStructureFromSourceColumns(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns) override;
-    void takeDynamicStructureFromColumn(const ColumnPtr & source_column) override;
+    void takeExactDynamicStructureFrom(const IColumn & source) override;
+    void chooseDynamicStructureForMerge(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns) override;
     void fixDynamicStructure() override;
 
     const PathToColumnMap & getTypedPaths() const { return typed_paths; }
@@ -211,7 +209,7 @@ public:
     const StatisticsPtr & getStatistics() const { return statistics; }
     StatisticsPtr getOrCalculateStatistics() const;
     bool hasStatistics() const override { return true; }
-    void takeOrCalculateStatisticsFrom(const IColumn & source_column) override;
+    void takeOrCalculateStatisticsFrom(const Columns & source_columns) override;
 
     const ColumnPtr & getSharedDataPtr() const { return shared_data; }
     ColumnPtr & getSharedDataPtr() { return shared_data; }
@@ -365,7 +363,7 @@ private:
 
     /// Maximum number of dynamic paths. If this limit is reached, all new paths will be inserted into shared data.
     /// This limit can be different for different instances of Object column. For example, we can decrease it
-    /// in takeDynamicStructureFromSourceColumns before merge.
+    /// in `chooseDynamicStructureForMerge` or `takeExactDynamicStructureFrom` before merge.
     size_t max_dynamic_paths;
     /// Global limit on number of dynamic paths for all column instances of this Object type. It's the limit specified
     /// in the type definition (for example 'JSON(max_dynamic_paths=N)'). max_dynamic_paths is always not greater than this limit.

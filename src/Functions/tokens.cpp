@@ -27,6 +27,24 @@ namespace
 constexpr size_t arg_value = 0;
 constexpr size_t arg_tokenizer = 1;
 
+enum class TokensMode : uint8_t
+{
+    Plain,
+    LikePattern
+};
+
+struct PlainTokensTraits
+{
+    static constexpr String name = "tokens";
+    static constexpr TokensMode mode = TokensMode::Plain;
+};
+
+struct LikePatternTokensTraits
+{
+    static constexpr String name = "tokensForLikePattern";
+    static constexpr TokensMode mode = TokensMode::LikePattern;
+};
+
 std::unique_ptr<ITokenizer> createTokenizer(const ColumnsWithTypeAndName & arguments, std::string_view function_name)
 {
     const auto tokenizer_str = arguments.size() < 2 || !arguments[arg_tokenizer].column
@@ -71,11 +89,11 @@ std::unique_ptr<ITokenizer> createTokenizer(const ColumnsWithTypeAndName & argum
     return TokenizerFactory::instance().get(tokenizer_str, params);
 }
 
-template <bool for_like_pattern>
+template <typename TokensTraits>
 class ExecutableFunctionTokens : public IExecutableFunction
 {
 public:
-    static constexpr auto name = for_like_pattern ? "tokensForLikePattern" : "tokens";
+    static constexpr auto name = TokensTraits::name;
 
     explicit ExecutableFunctionTokens(std::shared_ptr<const ITokenizer> tokenizer_)
         : tokenizer(std::move(tokenizer_))
@@ -140,7 +158,7 @@ private:
         {
             std::string_view input = column_input.getDataAt(i);
 
-            if constexpr (for_like_pattern)
+            if constexpr (TokensTraits::mode == TokensMode::LikePattern)
             {
                 size_t cur = 0;
                 const char * data = input.data();
@@ -170,11 +188,11 @@ private:
     std::shared_ptr<const ITokenizer> tokenizer;
 };
 
-template <bool for_like_pattern>
+template <typename TokensTraits>
 class FunctionBaseTokens : public IFunctionBase
 {
 public:
-    static constexpr auto name = for_like_pattern ? "tokensForLikePattern" : "tokens";
+    static constexpr auto name = TokensTraits::name;
 
     FunctionBaseTokens(std::shared_ptr<const ITokenizer> tokenizer_, DataTypes argument_types_, DataTypePtr result_type_)
         : tokenizer(std::move(tokenizer_))
@@ -190,7 +208,7 @@ public:
 
     ExecutableFunctionPtr prepare(const ColumnsWithTypeAndName &) const override
     {
-        return std::make_unique<ExecutableFunctionTokens<for_like_pattern>>(tokenizer);
+        return std::make_unique<ExecutableFunctionTokens<TokensTraits>>(tokenizer);
     }
 
 private:
@@ -199,11 +217,11 @@ private:
     DataTypePtr result_type;
 };
 
-template <bool for_like_pattern>
+template <typename TokensTraits>
 class FunctionTokensOverloadResolver : public IFunctionOverloadResolver
 {
 public:
-    static constexpr auto name = for_like_pattern ? "tokensForLikePattern" : "tokens";
+    static constexpr auto name = TokensTraits::name;
 
     String getName() const override { return name; }
     size_t getNumberOfArguments() const override { return 0; }
@@ -258,7 +276,7 @@ public:
     {
         auto tokenizer = createTokenizer(arguments, getName());
 
-        if constexpr (for_like_pattern)
+        if constexpr (TokensTraits::mode == TokensMode::LikePattern)
         {
             if (!tokenizer->supportsStringLike())
                 throw Exception(
@@ -268,7 +286,7 @@ public:
         }
 
         DataTypes argument_types{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })};
-        return std::make_shared<FunctionBaseTokens<for_like_pattern>>(std::move(tokenizer), std::move(argument_types), return_type);
+        return std::make_shared<FunctionBaseTokens<TokensTraits>>(std::move(tokenizer), std::move(argument_types), return_type);
     }
 };
 
@@ -328,7 +346,7 @@ tokens(value, 'array')
     FunctionDocumentation::Category category = FunctionDocumentation::Category::StringSplitting;
     FunctionDocumentation documentation = {description, syntax, arguments, {}, returned_value, examples, introduced_in, category};
 
-    factory.registerFunction<FunctionTokensOverloadResolver<false>>(documentation);
+    factory.registerFunction<FunctionTokensOverloadResolver<PlainTokensTraits>>(documentation);
 
     {
         FunctionDocumentation::Description description_like = R"(
@@ -359,7 +377,7 @@ and is used internally to analyze tokenization behavior for LIKE patterns.
         FunctionDocumentation::IntroducedIn introduced_in_like = {26, 2};
         FunctionDocumentation documentation_like = {description_like, syntax_like, arguments, {}, returned_value, examples_like, introduced_in_like, category};
 
-        factory.registerFunction<FunctionTokensOverloadResolver<true>>(documentation_like);
+        factory.registerFunction<FunctionTokensOverloadResolver<LikePatternTokensTraits>>(documentation_like);
     }
 }
 }

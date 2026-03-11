@@ -839,6 +839,12 @@ bool MergeTreeIndexConditionText::tryPrepareSetForTextSearch(
     {
         auto ref = set_column.getDataAt(row);
 
+        /// Reject the index usage when there is an empty string in the set.
+        /// The condition with such a predicate will be always true on granule.
+        /// See MergeTreeIndexGranuleText::hasAllQueryTokensOrEmpty.
+        if (ref.empty())
+            return false;
+
         std::vector<String> tokens;
         tokenizer->stringToTokens(ref.data(), ref.size(), tokens);
         out.text_search_queries.emplace_back(std::make_shared<TextSearchQuery>(function_name, TextSearchMode::All, TextIndexDirectReadMode::None, std::move(tokens)));

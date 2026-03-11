@@ -440,3 +440,43 @@ def test_executable_function_python_exception_in_query_log(started_cluster):
 
     for component in required_components:
         assert component in exception_text, f"Missing required component: {component}"
+
+
+def test_executable_function_python_exception_log_last_in_query_log(started_cluster):
+    '''Test that stderr content appears in exception when exit code != 0 under log_last mode'''
+    skip_test_msan(node)
+
+    node.query("SYSTEM FLUSH LOGS")
+
+    query_id = uuid.uuid4().hex
+
+    try:
+        node.query("SELECT test_function_python_exception_log_last(1)", query_id=query_id)
+        assert False, "Exception should have been thrown"
+    except Exception as ex:
+        assert "DB::Exception" in str(ex)
+        # Under log_last mode, exit code exception is enriched with stderr
+        assert "Child process was exited with return code 1" in str(ex)
+
+    node.query("SYSTEM FLUSH LOGS")
+
+    result = node.query(f"""
+        SELECT exception
+        FROM system.query_log
+        WHERE query_id = '{query_id}'
+          AND type IN ('ExceptionBeforeStart', 'ExceptionWhileProcessing')
+        FORMAT TabSeparated
+    """)
+
+    exception_text = TSV(result).lines[0]
+
+    # Verify stderr content is included in the exit code exception
+    required_components = [
+        "Stderr:",
+        "in process_data",
+        "result = int(value) / 0",
+        "ZeroDivisionError: division by zero",
+    ]
+
+    for component in required_components:
+        assert component in exception_text, f"Missing required component: {component}"

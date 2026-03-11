@@ -1643,9 +1643,11 @@ void DatabaseCatalog::addDependencies(
     const std::vector<StorageID> & new_referential_dependencies,
     const std::vector<StorageID> & new_loading_dependencies,
     const std::vector<StorageID> & new_view_dependencies,
-    const std::vector<StorageID> & new_plain_view_dependencies)
+    const std::vector<StorageID> & new_plain_view_dependencies,
+    const std::vector<StorageID> & new_plain_view_dependents)
 {
-    if (new_referential_dependencies.empty() && new_loading_dependencies.empty() && new_view_dependencies.empty() && new_plain_view_dependencies.empty())
+    if (new_referential_dependencies.empty() && new_loading_dependencies.empty() && new_view_dependencies.empty()
+        && new_plain_view_dependencies.empty() && new_plain_view_dependents.empty())
         return;
     std::lock_guard lock{databases_mutex};
     if (!new_referential_dependencies.empty())
@@ -1659,8 +1661,15 @@ void DatabaseCatalog::addDependencies(
     }
     if (!new_plain_view_dependencies.empty())
     {
+        /// table_id is the view; sources feed into it
         for (const auto & source_table_id : new_plain_view_dependencies)
             plain_view_dependencies.addDependency(source_table_id, table_id);
+    }
+    if (!new_plain_view_dependents.empty())
+    {
+        /// table_id is the source; plain views read from it
+        for (const auto & view_id : new_plain_view_dependents)
+            plain_view_dependencies.addDependency(table_id, view_id);
     }
 }
 
@@ -1726,7 +1735,7 @@ std::vector<StorageID> DatabaseCatalog::getLoadingDependents(const StorageID & t
     return loading_dependencies.getDependents(table_id);
 }
 
-std::tuple<std::vector<StorageID>, std::vector<StorageID>, std::vector<StorageID>, std::vector<StorageID>> DatabaseCatalog::removeDependencies(
+std::tuple<std::vector<StorageID>, std::vector<StorageID>, std::vector<StorageID>, std::vector<StorageID>, std::vector<StorageID>> DatabaseCatalog::removeDependencies(
     const StorageID & table_id, bool check_referential_dependencies, bool check_loading_dependencies, bool is_drop_database, bool is_view)
 {
     std::lock_guard lock{databases_mutex};
@@ -1749,15 +1758,17 @@ std::tuple<std::vector<StorageID>, std::vector<StorageID>, std::vector<StorageID
         old_plain_view_dependencies.insert(old_plain_view_dependencies.end(), plain_view_sources.begin(), plain_view_sources.end());
     }
 
-    /// When a non-view source table is dropped, remove any plain_view_dependencies edges
-    ///  where it appears as a source.
-    plain_view_dependencies.removeDependencies(table_id, /* remove_isolated_tables= */ true);
+    /// Remove outgoing plain_view_dependencies edges where table_id appears as a source
+    /// (i.e. plain views that read from table_id). The return value is preserved so that
+    /// a rename can re-add these edges under the new table identity.
+    auto old_plain_view_dependents = plain_view_dependencies.removeDependencies(table_id, /* remove_isolated_tables= */ true);
 
     return {
         referential_dependencies.removeDependencies(table_id, /* remove_isolated_tables= */ true),
         loading_dependencies.removeDependencies(table_id, /* remove_isolated_tables= */ true),
         old_view_dependencies,
-        old_plain_view_dependencies};
+        old_plain_view_dependencies,
+        old_plain_view_dependents};
 }
 
 void DatabaseCatalog::updateDependencies(

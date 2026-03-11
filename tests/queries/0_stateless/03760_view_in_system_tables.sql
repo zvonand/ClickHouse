@@ -157,3 +157,21 @@ CREATE TABLE 03760_stale_src (id UInt64) ENGINE = MergeTree ORDER BY id;
 SELECT arraySort(dependencies_table) FROM system.tables WHERE database = currentDatabase() AND name = '03760_stale_src';
 
 DROP TABLE 03760_stale_src;
+
+-- RENAME TABLE (source): plain_view_dependencies outgoing edges must be re-added under the new name.
+DROP TABLE IF EXISTS 03760_rename_src;
+DROP TABLE IF EXISTS 03760_rename_src2;
+DROP VIEW  IF EXISTS 03760_rename_view;
+
+CREATE TABLE 03760_rename_src (id UInt64) ENGINE = MergeTree ORDER BY id;
+CREATE VIEW 03760_rename_view AS SELECT * FROM 03760_rename_src;
+
+SELECT arraySort(dependencies_table) FROM system.tables WHERE database = currentDatabase() AND name = '03760_rename_src';
+
+RENAME TABLE 03760_rename_src TO 03760_rename_src2;
+
+-- After rename, 03760_rename_src2 must have the same plain view dependency.
+SELECT arraySort(dependencies_table) FROM system.tables WHERE database = currentDatabase() AND name = '03760_rename_src2';
+
+DROP VIEW 03760_rename_view;
+DROP TABLE 03760_rename_src2;

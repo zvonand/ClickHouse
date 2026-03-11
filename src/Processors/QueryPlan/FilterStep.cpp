@@ -199,7 +199,7 @@ void FilterStep::describeActions(FormatSettings & settings) const
     auto cloned_dag = actions_dag.clone();
 
     std::vector<ActionsAndName> and_atoms;
-    if (!actions_dag.hasStatefulFunctions())
+    if (!settings.pretty && !actions_dag.hasStatefulFunctions())
         and_atoms = splitAndChainIntoMultipleFilters(cloned_dag, filter_column_name);
 
     for (auto & and_atom : and_atoms)
@@ -212,9 +212,10 @@ void FilterStep::describeActions(FormatSettings & settings) const
         }
     }
 
-    settings.out << prefix << "Filter column: " << filter_column_name;
+    settings.out << prefix << "Filter column: ";
+    settings.out << (settings.pretty ? QueryPlanFormat::formatNamePrettyIfPossible(actions_dag, filter_column_name) : filter_column_name);
 
-    if (remove_filter_column)
+    if (!settings.pretty && remove_filter_column)
         settings.out << " (removed)";
     settings.out << '\n';
 

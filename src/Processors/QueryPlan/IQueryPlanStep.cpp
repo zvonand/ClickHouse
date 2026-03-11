@@ -1,9 +1,17 @@
+#include <optional>
 #include <string_view>
+#include <Columns/IColumn.h>
+#include <Common/CurrentThread.h>
+#include <Common/FieldVisitorToString.h>
+#include <DataTypes/IDataType.h>
+#include <DataTypes/Serializations/ISerialization.h>
+#include <Functions/IFunction.h>
 #include <IO/Operators.h>
+#include <IO/WriteBufferFromString.h>
+#include <Interpreters/ActionsDAG.h>
 #include <Processors/IProcessor.h>
 #include <Processors/Port.h>
 #include <Processors/QueryPlan/IQueryPlanStep.h>
-#include <Common/CurrentThread.h>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -95,6 +103,187 @@ namespace QueryPlanFormat
             out << trimColumnIdentifier(elem.name);
         }
         out << '\n';
+    }
+
+    namespace
+    {
+        struct OperatorInfo
+        {
+            std::string_view symbol;
+            int precedence;
+        };
+
+        std::optional<OperatorInfo> getOperatorInfo(const std::string & func_name)
+        {
+            if (func_name == "or")                return OperatorInfo{"OR", 3};
+            if (func_name == "and")               return OperatorInfo{"AND", 4};
+            if (func_name == "not")               return OperatorInfo{{}, 5};
+            if (func_name == "isNull")            return OperatorInfo{{}, 6};
+            if (func_name == "isNotNull")         return OperatorInfo{{}, 6};
+            if (func_name == "isNotDistinctFrom") return OperatorInfo{"<=>", 6};
+            if (func_name == "isDistinctFrom")    return OperatorInfo{"IS DISTINCT FROM", 6};
+            if (func_name == "equals")            return OperatorInfo{"=", 9};
+            if (func_name == "notEquals")         return OperatorInfo{"!=", 9};
+            if (func_name == "less")              return OperatorInfo{"<", 9};
+            if (func_name == "greater")           return OperatorInfo{">", 9};
+            if (func_name == "lessOrEquals")      return OperatorInfo{"<=", 9};
+            if (func_name == "greaterOrEquals")   return OperatorInfo{">=", 9};
+            if (func_name == "like")              return OperatorInfo{"LIKE", 9};
+            if (func_name == "notLike")           return OperatorInfo{"NOT LIKE", 9};
+            if (func_name == "ilike")             return OperatorInfo{"ILIKE", 9};
+            if (func_name == "notILike")          return OperatorInfo{"NOT ILIKE", 9};
+            if (func_name == "in" || func_name == "globalIn"
+                || func_name == "nullIn" || func_name == "globalNullIn")
+                                                  return OperatorInfo{"IN", 9};
+            if (func_name == "notIn" || func_name == "globalNotIn"
+                || func_name == "notNullIn" || func_name == "globalNotNullIn")
+                                                  return OperatorInfo{"NOT IN", 9};
+            if (func_name == "match")             return OperatorInfo{"REGEXP", 9};
+            if (func_name == "concat")            return OperatorInfo{"||", 10};
+            if (func_name == "plus")              return OperatorInfo{"+", 11};
+            if (func_name == "minus")             return OperatorInfo{"-", 11};
+            if (func_name == "multiply")          return OperatorInfo{"*", 12};
+            if (func_name == "divide")            return OperatorInfo{"/", 12};
+            if (func_name == "modulo")            return OperatorInfo{"%", 12};
+            if (func_name == "intDiv")            return OperatorInfo{"DIV", 12};
+            if (func_name == "negate")            return OperatorInfo{{}, 13};
+            if (func_name == "tupleElement")      return OperatorInfo{{}, 14};
+            if (func_name == "arrayElement")      return OperatorInfo{{}, 14};
+            return std::nullopt;
+        }
+
+        String formatConstant(const ActionsDAG::Node * node)
+        {
+            if (!node->column || node->column->empty())
+                return node->result_name;
+
+            WhichDataType data_type(node->result_type);
+
+            if (data_type.isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64())
+            {
+                WriteBufferFromOwnString buf;
+                writeChar('\'', buf);
+                node->result_type->getDefaultSerialization()->serializeText(*node->column, 0, buf, {});
+                writeChar('\'', buf);
+                return buf.str();
+            }
+
+            Field value;
+            node->column->get(0, value);
+            return applyVisitor(FieldVisitorToString(), value);
+        }
+    }
+
+    String formatNodePretty(const ActionsDAG::Node * node, int parent_precedence)
+    {
+        using ActionType = ActionsDAG::ActionType;
+
+        switch (node->type)
+        {
+            case ActionType::INPUT:
+                return String(trimColumnIdentifier(node->result_name));
+
+            case ActionType::COLUMN:
+                return formatConstant(node);
+
+            case ActionType::ALIAS:
+                return formatNodePretty(node->children.front(), parent_precedence);
+
+            case ActionType::ARRAY_JOIN:
+                return "arrayJoin(" + formatNodePretty(node->children.front()) + ")";
+
+            case ActionType::FUNCTION:
+            {
+                auto func_name = node->function_base->getName();
+
+                if ((func_name == "_CAST" || func_name == "CAST") && node->children.size() == 2)
+                {
+                    auto inner = formatNodePretty(node->children[0]);
+                    Field type_field;
+                    node->children[1]->column->get(0, type_field);
+                    return "CAST(" + inner + " AS " + type_field.safeGet<String>() + ")";
+                }
+
+                auto op_info = getOperatorInfo(func_name);
+
+                if (func_name == "not" && node->children.size() == 1)
+                {
+                    String result = "NOT " + formatNodePretty(node->children[0], op_info->precedence);
+                    if (op_info->precedence < parent_precedence)
+                        result = "(" + std::move(result) + ")";
+                    return result;
+                }
+
+                if (func_name == "negate" && node->children.size() == 1)
+                {
+                    String result = "-" + formatNodePretty(node->children[0], op_info->precedence);
+                    if (op_info->precedence < parent_precedence)
+                        result = "(" + std::move(result) + ")";
+                    return result;
+                }
+
+                if (func_name == "isNull" && node->children.size() == 1)
+                    return formatNodePretty(node->children[0], op_info->precedence) + " IS NULL";
+
+                if (func_name == "isNotNull" && node->children.size() == 1)
+                    return formatNodePretty(node->children[0], op_info->precedence) + " IS NOT NULL";
+
+                if ((func_name == "and" || func_name == "or") && node->children.size() >= 2)
+                {
+                    String separator = fmt::format(" {} ", op_info->symbol);
+                    std::vector<String> parts;
+                    parts.reserve(node->children.size());
+                    for (const auto * child : node->children)
+                        parts.push_back(formatNodePretty(child, op_info->precedence));
+
+                    String result = fmt::format("{}", fmt::join(parts, separator));
+                    if (op_info->precedence < parent_precedence)
+                        result = "(" + std::move(result) + ")";
+                    return result;
+                }
+
+                if (func_name == "arrayElement" && node->children.size() == 2)
+                {
+                    auto arr = formatNodePretty(node->children[0], op_info->precedence);
+                    auto idx = formatNodePretty(node->children[1]);
+                    return arr + "[" + idx + "]";
+                }
+
+                if (func_name == "tupleElement" && node->children.size() == 2)
+                {
+                    auto tup = formatNodePretty(node->children[0], op_info->precedence);
+                    auto elem = formatNodePretty(node->children[1]);
+                    return tup + "." + elem;
+                }
+
+                if (op_info && !op_info->symbol.empty() && node->children.size() == 2)
+                {
+                    String result = fmt::format("{} {} {}",
+                        formatNodePretty(node->children[0], op_info->precedence),
+                        op_info->symbol,
+                        formatNodePretty(node->children[1], op_info->precedence));
+                    if (op_info->precedence < parent_precedence)
+                        result = "(" + std::move(result) + ")";
+                    return result;
+                }
+
+                std::vector<String> args;
+                args.reserve(node->children.size());
+                for (const auto * child : node->children)
+                    args.push_back(formatNodePretty(child));
+
+                return func_name + "(" + fmt::format("{}", fmt::join(args, ", ")) + ")";
+            }
+
+            default:
+                return node->result_name;
+        }
+    }
+
+    String formatNamePrettyIfPossible(const ActionsDAG & dag, const String & name)
+    {
+        const auto * node = dag.tryFindInOutputs(name);
+        return node ? QueryPlanFormat::formatNodePretty(node) : name;
     }
 }
 

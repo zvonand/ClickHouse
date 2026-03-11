@@ -1,3 +1,4 @@
+#include <Processors/QueryPlan/IQueryPlanStep.h>
 #include <Processors/QueryPlan/SourceStepWithFilter.h>
 
 #include <DataTypes/DataTypeLowCardinality.h>
@@ -103,7 +104,7 @@ void SourceStepWithFilter::describeActions(FormatSettings & format_settings) con
     if (format_settings.pretty)
         QueryPlanFormat::formatOutputColumns(format_settings.out, *this, prefix);
 
-    if (query_info.prewhere_info || query_info.row_level_filter)
+    if (!format_settings.pretty && (query_info.prewhere_info || query_info.row_level_filter))
     {
         format_settings.out << prefix << "Prewhere info" << '\n';
         if (query_info.prewhere_info)
@@ -115,9 +116,16 @@ void SourceStepWithFilter::describeActions(FormatSettings & format_settings) con
 
     if (query_info.prewhere_info)
     {
-        format_settings.out << prefix << "Prewhere filter" << '\n';
-        format_settings.out << prefix << "Prewhere filter column: " << query_info.prewhere_info->prewhere_column_name;
-        if (query_info.prewhere_info->remove_prewhere_column)
+        if (!format_settings.pretty)
+            format_settings.out << prefix << "Prewhere filter" << '\n';
+        format_settings.out << prefix << "Prewhere filter column: ";
+
+        const auto & prewhere_info_actions_dag = query_info.prewhere_info->prewhere_actions;
+        const auto & column_name = query_info.prewhere_info->prewhere_column_name;
+
+        format_settings.out << (format_settings.pretty ? QueryPlanFormat::formatNamePrettyIfPossible(prewhere_info_actions_dag, column_name) : column_name);
+
+        if (!format_settings.pretty && query_info.prewhere_info->remove_prewhere_column)
             format_settings.out << " (removed)";
         format_settings.out << '\n';
 
@@ -128,9 +136,16 @@ void SourceStepWithFilter::describeActions(FormatSettings & format_settings) con
 
     if (query_info.row_level_filter)
     {
-        format_settings.out << prefix << "Row level filter" << '\n';
-        format_settings.out << prefix << "Row level filter column: " << query_info.row_level_filter->column_name;
-        if (query_info.row_level_filter->do_remove_column)
+        if (!format_settings.pretty)
+            format_settings.out << prefix << "Row level filter" << '\n';
+        format_settings.out << prefix << "Row level filter column: ";
+
+        const auto & row_level_filter_dag = query_info.row_level_filter->actions;
+        const auto & column_name = query_info.row_level_filter->column_name;
+
+        format_settings.out << (format_settings.pretty ? QueryPlanFormat::formatNamePrettyIfPossible(row_level_filter_dag, column_name) : column_name);
+
+        if (!format_settings.pretty && query_info.row_level_filter->do_remove_column)
             format_settings.out << " (removed)";
         format_settings.out << '\n';
 

@@ -113,9 +113,14 @@ static String totalsModeToString(TotalsMode totals_mode, double auto_include_thr
 void TotalsHavingStep::describeActions(FormatSettings & settings) const
 {
     const String & prefix = settings.other_prefix;
-    settings.out << prefix << "Filter column: " << filter_column_name;
-    if (remove_filter)
+
+    settings.out << prefix << "Filter column: ";
+
+    settings.out << (settings.pretty && actions_dag ? QueryPlanFormat::formatNamePrettyIfPossible(actions_dag.value(), filter_column_name) : filter_column_name);
+
+    if (!settings.pretty && remove_filter)
         settings.out << " (removed)";
+
     settings.out << '\n';
     settings.out << prefix << "Mode: " << totalsModeToString(totals_mode, auto_include_threshold) << '\n';
 

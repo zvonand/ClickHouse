@@ -3,6 +3,7 @@
 #include <Common/CurrentThread.h>
 #include <Core/Block_fwd.h>
 #include <Core/SortDescription.h>
+#include <Interpreters/ActionsDAG.h>
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
 #include <string_view>
 #include <variant>
@@ -38,6 +39,9 @@ namespace QueryPlanFormat
     std::string_view trimColumnIdentifier(std::string_view name);
     void formatOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
     void formatJoinOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
+
+    String formatNodePretty(const ActionsDAG::Node * node, int parent_precedence = 0);
+    String formatNamePrettyIfPossible(const ActionsDAG & dag, const String & name);
 }
 
 

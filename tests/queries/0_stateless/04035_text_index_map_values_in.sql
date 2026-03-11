@@ -14,7 +14,7 @@ CREATE TABLE tab
 )
 ENGINE = MergeTree
 ORDER BY id
-SETTINGS index_granularity = 1;
+SETTINGS index_granularity = 1, index_granularity_bytes = '10M', min_bytes_for_wide_part = 0;
 
 INSERT INTO tab VALUES (0, 'a', {'service':'web-api'}), (1, 'b', {'service':'backend'}), (2, 'c', {'service':'frontend'});
 

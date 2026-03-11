@@ -32,6 +32,24 @@ namespace ErrorCodes
 namespace QueryPlanOptimizations
 {
 
+/// Build a `tuple(key1, key2, ...)` node in the given DAG, casting each key to the corresponding common type if needed.
+const ActionsDAG::Node & addTupleOfKeys(
+    ActionsDAG & dag,
+    const ColumnsWithTypeAndName & keys,
+    const DataTypes & common_types,
+    const FunctionOverloadResolverPtr & tuple_func)
+{
+    ActionsDAG::NodeRawConstPtrs key_nodes;
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+        const auto * key_node = &dag.findInOutputs(keys[i].name);
+        if (!keys[i].type->equals(*common_types[i]))
+            key_node = &dag.addCast(*key_node, common_types[i], {}, nullptr);
+        key_nodes.push_back(key_node);
+    }
+    return dag.addFunction(tuple_func, key_nodes, {});
+}
+
 const ActionsDAG::Node & createRuntimeFilterCondition(
     ActionsDAG & actions_dag,
     const String & filter_name,
@@ -225,15 +243,7 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
             auto original_build_header = build_filter_node->step->getOutputHeader();
 
             ActionsDAG build_tuple_dag(build_filter_node->step->getOutputHeader()->getColumnsWithTypeAndName(), false);
-            ActionsDAG::NodeRawConstPtrs key_nodes;
-            for (size_t i = 0; i < join_keys_build_side.size(); ++i)
-            {
-                const auto * key_node = &build_tuple_dag.findInOutputs(join_keys_build_side[i].name);
-                if (!join_keys_build_side[i].type->equals(*common_types[i]))
-                    key_node = &build_tuple_dag.addCast(*key_node, common_types[i], {}, nullptr);
-                key_nodes.push_back(key_node);
-            }
-            const auto & tuple_node = build_tuple_dag.addFunction(tuple_func, key_nodes, {});
+            const auto & tuple_node = addTupleOfKeys(build_tuple_dag, join_keys_build_side, common_types, tuple_func);
             build_tuple_dag.addOrReplaceInOutputs(tuple_node);
 
             makeExpressionNodeOnTopOf(*build_filter_node, std::move(build_tuple_dag), nodes, makeDescription("Calculate right join key tuple"));
@@ -265,16 +275,7 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
 
         /// Apply side: compute tuple(key1, key2, ...) and apply the filter
         {
-
-            ActionsDAG::NodeRawConstPtrs key_nodes;
-            for (size_t i = 0; i < join_keys_probe_side.size(); ++i)
-            {
-                const auto * key_node = &filter_dag.findInOutputs(join_keys_probe_side[i].name);
-                if (!join_keys_probe_side[i].type->equals(*common_types[i]))
-                    key_node = &filter_dag.addCast(*key_node, common_types[i], {}, nullptr);
-                key_nodes.push_back(key_node);
-            }
-            const auto & tuple_node = filter_dag.addFunction(tuple_func, key_nodes, {});
+            const auto & tuple_node = addTupleOfKeys(filter_dag, join_keys_probe_side, common_types, tuple_func);
 
             /// Build __applyFilter(filter_name, tuple_node) condition directly,
             /// since the tuple node is freshly created and not yet in the DAG outputs

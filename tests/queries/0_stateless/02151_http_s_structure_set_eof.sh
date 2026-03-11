@@ -8,7 +8,7 @@ tmp_file=$(mktemp "$CURDIR/clickhouse.XXXXXX.csv")
 trap 'rm $tmp_file' EXIT
 
 # NOTE: this file should be huge enough, so that it is impossible to upload it
-# in 0.15s, see timeout command below, this will ensure, that EOF will be
+# in 0.15s, see _timeout command below, this will ensure, that EOF will be
 # received during creating a set from externally uploaded table.
 #
 # Previously code there wasn't ready for EOF, and you will get one of the
@@ -25,8 +25,11 @@ _timeout() {
         ${CLICKHOUSE_CURL} -sS -F "s=@$tmp_file;" "$1" -o /dev/null
         echo Error: completed early
     ) &
+    local pid=$!
     sleep 0.15
-    kill $!
+    kill $pid
+    sleep 0.15
+    kill -- -$pid 2>/dev/null ||:
 }
 
 # NOTE: Just in case check w/ input_format_parallel_parsing and w/o

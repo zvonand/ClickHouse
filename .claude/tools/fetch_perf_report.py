@@ -95,22 +95,27 @@ def resolve_pr(pr_url):
                 "gh", "api", f"repos/{gh_repo}/issues/{pr_number}/comments",
                 "--jq",
                 '[.[] | select(.user.login == "clickhouse-gh[bot]") | {body, created_at}]'
-                " | sort_by(.created_at) | reverse | .[0]",
+                " | sort_by(.created_at) | reverse",
             ],
             text=True,
             stderr=subprocess.PIPE,
         )
-        comment = json.loads(comments_json)
-        if not comment or not comment.get("body"):
+        comments = json.loads(comments_json)
+        if not comments:
             raise RuntimeError("No CI bot comment found")
 
         url_pattern = re.compile(
             r"https://s3\.amazonaws\.com/clickhouse(?:-private)?-test-reports/json\.html\?[^\s)]+"
         )
-        urls = url_pattern.findall(comment["body"])
-        if not urls:
-            raise RuntimeError("No CI report URLs found in bot comment")
-        ci_url = urls[0]
+        ci_url = None
+        for comment in comments:
+            body = comment.get("body", "")
+            urls = url_pattern.findall(body)
+            if urls:
+                ci_url = urls[0]
+                break
+        if not ci_url:
+            raise RuntimeError("No CI report URLs found in bot comments")
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         raise RuntimeError(f"Failed to get CI info for PR #{pr_number}: {e}")
 

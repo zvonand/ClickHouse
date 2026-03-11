@@ -301,25 +301,27 @@ async function getCIReportsFromPR(prUrl) {
 
   // Fetch PR comments to find CI bot comment
   try {
-    const commentsJson = execSync(`gh api repos/ClickHouse/ClickHouse/issues/${prNumber}/comments --jq '[.[] | select(.user.login == "clickhouse-gh[bot]") | {body, created_at}] | sort_by(.created_at) | reverse | .[0]'`, {
+    const commentsJson = execSync(`gh api repos/ClickHouse/ClickHouse/issues/${prNumber}/comments --jq '[.[] | select(.user.login == "clickhouse-gh[bot]") | {body, created_at}] | sort_by(.created_at) | reverse'`, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
-    const comment = JSON.parse(commentsJson);
-    if (!comment || !comment.body) {
+    const comments = JSON.parse(commentsJson);
+    if (!comments || comments.length === 0) {
       throw new Error('No CI bot comment found');
     }
 
-    // Extract CI report URLs from comment
+    // Search through all bot comments for CI report URLs (not just the latest)
     const reportUrlPattern = /https:\/\/s3\.amazonaws\.com\/clickhouse-test-reports\/json\.html\?[^\s)]+/g;
-    const urls = comment.body.match(reportUrlPattern);
-
-    if (!urls || urls.length === 0) {
-      throw new Error('No CI report URLs found in bot comment');
+    for (const comment of comments) {
+      if (!comment.body) continue;
+      const urls = comment.body.match(reportUrlPattern);
+      if (urls && urls.length > 0) {
+        return urls;
+      }
     }
 
-    return urls;
+    throw new Error('No CI report URLs found in bot comments');
   } catch (error) {
     if (error.message.includes('No CI bot comment found') || error.message.includes('No CI report URLs found')) {
       throw error;

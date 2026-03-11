@@ -677,15 +677,51 @@ void MutationsInterpreter::prepare(bool dry_run)
     std::unordered_map<String, Names> column_to_affected_materialized;
     if (!updated_columns.empty())
     {
+        /// Collect ephemeral column names — these are not stored on disk and cannot
+        /// be read during mutations, so MATERIALIZED columns depending on them
+        /// must be skipped (their on-disk value is already correct from INSERT time).
+        std::unordered_set<String> ephemeral_columns;
+        for (const auto & column : columns_desc)
+            if (column.default_desc.kind == ColumnDefaultKind::Ephemeral)
+                ephemeral_columns.insert(column.name);
+
+        /// Include ephemeral columns in the analysis set so TreeRewriter can resolve
+        /// MATERIALIZED expressions that reference them (we need to detect the dependency,
+        /// not actually read the data).
+        NamesAndTypesList all_columns_with_ephemeral = all_columns;
+        if (!ephemeral_columns.empty())
+        {
+            for (const auto & column : columns_desc.getEphemeral())
+                all_columns_with_ephemeral.push_back(column);
+        }
+
         for (const auto & column : columns_desc)
         {
             if (column.default_desc.kind == ColumnDefaultKind::Materialized && available_columns_set.contains(column.name))
             {
                 auto query = column.default_desc.expression->clone();
                 /// Replace all subcolumns to the getSubcolumn() to get only top level columns as required source columns.
-                replaceSubcolumnsToGetSubcolumnFunctionInQuery(query, all_columns);
-                auto syntax_result = TreeRewriter(context).analyze(query, all_columns);
-                for (const auto & dependency : syntax_result->requiredSourceColumns())
+                replaceSubcolumnsToGetSubcolumnFunctionInQuery(query, all_columns_with_ephemeral);
+                auto syntax_result = TreeRewriter(context).analyze(query, all_columns_with_ephemeral);
+                auto required = syntax_result->requiredSourceColumns();
+
+                /// If the MATERIALIZED expression depends on any EPHEMERAL column,
+                /// skip it — EPHEMERAL columns are only available during INSERT
+                /// and cannot be read from disk during mutations.
+                bool depends_on_ephemeral = false;
+                for (const auto & dep : required)
+                {
+                    if (ephemeral_columns.contains(dep))
+                    {
+                        depends_on_ephemeral = true;
+                        break;
+                    }
+                }
+
+                if (depends_on_ephemeral)
+                    continue;
+
+                for (const auto & dependency : required)
                     if (updated_columns.contains(dependency))
                         column_to_affected_materialized[dependency].push_back(column.name);
             }

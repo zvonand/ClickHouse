@@ -1,4 +1,3 @@
--- Tags: no-fasttest
 -- Test: highlight() function
 
 -- Basic functionality
@@ -22,7 +21,7 @@ SELECT highlight('aaaaaa', ['aaaa']);
 
 -- Edge cases
 SELECT '-- Edge cases';
-SELECT highlight('Hello', []::Array(String));
+SELECT highlight('Hello', []::Array(String)); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
 SELECT highlight('', ['hello']);
 SELECT highlight('Hello', ['', 'hello']);
 

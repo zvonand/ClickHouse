@@ -127,6 +127,12 @@ public:
 
         const Array needles_array = col_needles_const->getValue<Array>();
 
+        if (needles_array.empty())
+            throw Exception(
+                ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
+                "Function {} requires at least one needle in the needles array",
+                getName());
+
         if (needles_array.size() > 255)
             throw Exception(
                 ErrorCodes::TOO_MANY_ARGUMENTS_FOR_FUNCTION,

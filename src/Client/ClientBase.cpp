@@ -10,6 +10,7 @@
 #include <Core/SortDescription.h>
 #include <Interpreters/sortBlock.h>
 #include <boost/algorithm/string/predicate.hpp>
+#include <Client/LocalMetaCommands.h>
 
 #if USE_CLIENT_AI
 #include <Client/AI/AISQLGenerator.h>
@@ -1135,8 +1136,11 @@ bool ClientBase::processTextAsSingleQuery(const String & full_query)
 {
     /// Some parts of a query (result output and formatting) are executed
     /// client-side. Thus we need to parse the query.
+
     const char * begin = full_query.data();
-    auto parsed_query = parseQuery(begin, begin + full_query.size(),
+    const char * end = begin + full_query.size();
+
+    auto parsed_query = parseQuery(begin, end,
         client_context->getSettingsRef(),
         /*allow_multi_statements=*/ false);
 
@@ -3824,8 +3828,19 @@ void ClientBase::runNonInteractive()
                     return;
             }
             else
-            {
-                if (!processQueryText(query))
+            {   String query_to_execute = query; // copy for possible modification
+                // First handle incoming commands for clickhouse-local (i.e. ls)
+                if (supportsLocalMetaCommands())
+                {   // only clickhouse-local will be handled here
+                    const auto result = tryHandleLocalMetaCommand(query);
+
+                    if (result.kind == LocalMetaCommandResult::Kind::RewriteQuery)
+                    {   // query has been rewritten into an equivalent command
+                        query_to_execute = result.query;
+                    }
+                }
+                // default case
+                if (!processQueryText(query_to_execute))
                     return;
             }
         }

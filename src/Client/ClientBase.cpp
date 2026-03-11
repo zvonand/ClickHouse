@@ -3740,7 +3740,7 @@ void ClientBase::runInteractive()
 
         try
         {
-            if (!processQueryText(input))
+            if (!processQueryText(rewriteLocalMetaCommandIfNeeded(input)))
                 break;
             last_input = input;
         }
@@ -3788,6 +3788,18 @@ bool ClientBase::processMultiQueryFromFile(const String & file_name)
     return executeMultiQuery(queries_from_file);
 }
 
+String ClientBase::rewriteLocalMetaCommandIfNeeded(const String & query) const
+{
+    if (!supportsLocalMetaCommands())
+        return query;
+
+    const auto result = tryHandleLocalMetaCommand(query);
+
+    if (result.kind == LocalMetaCommandResult::Kind::RewriteQuery)
+        return result.query;
+
+    return query;
+}
 
 void ClientBase::runNonInteractive()
 {
@@ -3818,7 +3830,7 @@ void ClientBase::runNonInteractive()
         if (!buzzHouse())
             return;
     }
-    else if (!buzz_house && !queries.empty())
+    else if (!queries.empty())
     {
         for (const auto & query : queries)
         {
@@ -3828,19 +3840,8 @@ void ClientBase::runNonInteractive()
                     return;
             }
             else
-            {   String query_to_execute = query; // copy for possible modification
-                // First handle incoming commands for clickhouse-local (i.e. ls)
-                if (supportsLocalMetaCommands())
-                {   // only clickhouse-local will be handled here
-                    const auto result = tryHandleLocalMetaCommand(query);
-
-                    if (result.kind == LocalMetaCommandResult::Kind::RewriteQuery)
-                    {   // query has been rewritten into an equivalent command
-                        query_to_execute = result.query;
-                    }
-                }
-                // default case
-                if (!processQueryText(query_to_execute))
+            {
+                if (!processQueryText(rewriteLocalMetaCommandIfNeeded(query)))
                     return;
             }
         }
@@ -3852,6 +3853,9 @@ void ClientBase::runNonInteractive()
         ReadBufferFromFileDescriptor in(stdin_fd);
         String text;
         readStringUntilEOF(text, in);
+
+        text = rewriteLocalMetaCommandIfNeeded(text);
+
         if (query_fuzzer_runs)
             processWithASTFuzzer(text);
         else

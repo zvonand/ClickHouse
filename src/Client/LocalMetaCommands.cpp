@@ -33,9 +33,6 @@ std::optional<String> rewriteLS(std::string_view input)
     return "SELECT _file AS file FROM file('*', 'One') ORDER BY file";
 }
 
-// More commands can be added here like: 
-// std::optional<String> rewritePWD(std::string_view input)
-
 }
 
 /// Dispatcher for all local meta-commands.
@@ -45,9 +42,6 @@ LocalMetaCommandResult tryHandleLocalMetaCommand(std::string_view input)
     {
         return {LocalMetaCommandResult::Kind::RewriteQuery, std::move(*rewritten)};
     }
-    /// This can be extended for new commands
-    /// if (auto rewritten = rewritePWD(input))
-    ///     return {LocalMetaCommandResult::Kind::RewriteQuery, std::move(*rewritten)};
 
     return {};
 }

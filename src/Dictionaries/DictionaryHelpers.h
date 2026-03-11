@@ -276,7 +276,8 @@ public:
     {
         if constexpr (std::is_same_v<DictionaryAttributeType, Array>)
         {
-            if (const auto * array_type = typeid_cast<const DataTypeArray *>(dictionary_attribute.type.get()))
+            auto non_nullable_type = removeNullable(dictionary_attribute.type);
+            if (const auto * array_type = typeid_cast<const DataTypeArray *>(non_nullable_type.get()))
             {
                 auto nested_column = array_type->getNestedType()->createColumn();
                 return ColumnArray::create(std::move(nested_column));
@@ -286,7 +287,8 @@ public:
         }
         if constexpr (std::is_same_v<DictionaryAttributeType, Map>)
         {
-            if (const auto * map_type = typeid_cast<const DataTypeMap *>(dictionary_attribute.type.get()))
+            auto non_nullable_type = removeNullable(dictionary_attribute.type);
+            if (const auto * map_type = typeid_cast<const DataTypeMap *>(non_nullable_type.get()))
             {
                 auto key_column = map_type->getKeyType()->createColumn();
                 auto value_column = map_type->getValueType()->createColumn();
@@ -303,7 +305,8 @@ public:
         }
         if constexpr (std::is_same_v<DictionaryAttributeType, Object>)
         {
-            if (const auto * object_type = typeid_cast<const DataTypeObject *>(dictionary_attribute.type.get()))
+            auto non_nullable_type = removeNullable(dictionary_attribute.type);
+            if (const auto * object_type = typeid_cast<const DataTypeObject *>(non_nullable_type.get()))
             {
                 // Create shared_data: ColumnArray containing ColumnTuple with two ColumnString columns (paths and values)
                 MutableColumns paths_and_values;

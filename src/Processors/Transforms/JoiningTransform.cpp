@@ -3,6 +3,7 @@
 
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/GraceHashJoin.h>
+#include <Interpreters/HashJoin/HashJoin.h>
 #include <Interpreters/JoinUtils.h>
 #include <Processors/Port.h>
 #include <Processors/Merges/Algorithms/MergeTreeReadInfo.h>
@@ -345,8 +346,13 @@ void FillingRightJoinSideTransform::work()
         stop_reading = !join->addBlockToJoin(block, num_rows, true);
     }
 
-    if (input.isFinished() && !join->supportParallelJoin())
-        join->tryRerangeRightTableData();
+    if (input.isFinished())
+    {
+        if (!join->supportParallelJoin())
+            join->tryRerangeRightTableData();
+        if (auto * hash_join = typeid_cast<HashJoin *>(join.get()))
+            hash_join->tryConvertToFixedRangeHashMap();
+    }
 
     set_totals = for_totals;
 }

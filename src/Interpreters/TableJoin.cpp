@@ -78,6 +78,8 @@ namespace Setting
     extern const SettingsString temporary_files_codec;
     extern const SettingsBool allow_dynamic_type_in_join_keys;
     extern const SettingsBool enable_lazy_columns_replication;
+    extern const SettingsBool enable_fixed_range_hash_table;
+    extern const SettingsUInt64 fixed_range_hash_table_max_size;
 }
 
 namespace ErrorCodes
@@ -155,7 +157,8 @@ std::string TableJoin::formatClauses(const TableJoin::Clauses & clauses, bool sh
 }
 
 TableJoin::TableJoin(const Settings & settings, VolumePtr tmp_volume_, TemporaryDataOnDiskScopePtr tmp_data_)
-    : size_limits(SizeLimits{settings[Setting::max_rows_in_join], settings[Setting::max_bytes_in_join], settings[Setting::join_overflow_mode]})
+    : size_limits(
+          SizeLimits{settings[Setting::max_rows_in_join], settings[Setting::max_bytes_in_join], settings[Setting::join_overflow_mode]})
     , default_max_bytes(settings[Setting::default_max_bytes_in_join])
     , join_use_nulls(settings[Setting::join_use_nulls])
     , cross_join_min_rows_to_compress(settings[Setting::cross_join_min_rows_to_compress])
@@ -173,6 +176,8 @@ TableJoin::TableJoin(const Settings & settings, VolumePtr tmp_volume_, Temporary
     , allow_join_sorting(settings[Setting::allow_experimental_join_right_table_sorting])
     , allow_dynamic_type_in_join_keys(settings[Setting::allow_dynamic_type_in_join_keys])
     , enable_lazy_columns_replication(settings[Setting::enable_lazy_columns_replication])
+    , enable_fixed_range_hash_table(settings[Setting::enable_fixed_range_hash_table])
+    , fixed_range_hash_table_max_size(settings[Setting::fixed_range_hash_table_max_size])
     , max_memory_usage(settings[Setting::max_memory_usage])
     , tmp_volume(tmp_volume_)
     , tmp_data(tmp_data_)
@@ -202,6 +207,8 @@ TableJoin::TableJoin(const JoinSettings & settings, bool join_use_nulls_, Volume
     , allow_join_sorting(settings.allow_experimental_join_right_table_sorting)
     , allow_dynamic_type_in_join_keys(settings.allow_dynamic_type_in_join_keys)
     , enable_lazy_columns_replication(settings.enable_lazy_columns_replication)
+    , enable_fixed_range_hash_table(settings.enable_fixed_range_hash_table)
+    , fixed_range_hash_table_max_size(settings.fixed_range_hash_table_max_size)
     , max_memory_usage(settings.max_bytes_in_join)
     , tmp_volume(tmp_volume_)
     , tmp_data(tmp_data_)

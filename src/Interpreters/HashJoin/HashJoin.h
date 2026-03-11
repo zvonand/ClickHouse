@@ -17,6 +17,7 @@
 #include <Storages/TableLockHolder.h>
 #include <Common/Arena.h>
 #include <Common/HashTable/FixedHashMap.h>
+#include <Common/HashTable/FixedRangeHashMap.h>
 #include <Common/HashTable/HashMap.h>
 #include <Common/HashTable/HashTableTraits.h>
 #include <Common/HashTable/TwoLevelHashMap.h>
@@ -203,11 +204,13 @@ public:
     const ColumnWithTypeAndName & rightAsofKeyColumn() const;
 
     /// Different types of keys for maps.
-    #define APPLY_FOR_JOIN_VARIANTS(M) \
+#define APPLY_FOR_JOIN_VARIANTS(M) \
         M(key8)                        \
         M(key16)                       \
         M(key32)                       \
         M(key64)                       \
+        M(range_key32) \
+        M(range_key64) \
         M(key_string)                  \
         M(key_fixed_string)            \
         M(keys128)                     \
@@ -219,18 +222,18 @@ public:
         M(two_level_key_fixed_string)  \
         M(two_level_keys128)           \
         M(two_level_keys256)           \
-        M(two_level_hashed)
+    M(two_level_hashed)
 
-    /// Used for reading from StorageJoin and applying joinGet function
-    #define APPLY_FOR_JOIN_VARIANTS_LIMITED(M) \
+/// Used for reading from StorageJoin and applying joinGet function
+#define APPLY_FOR_JOIN_VARIANTS_LIMITED(M) \
         M(key8)                                \
         M(key16)                               \
         M(key32)                               \
         M(key64)                               \
         M(key_string)                          \
-        M(key_fixed_string)
+    M(key_fixed_string)
 
-    /// Used in ConcurrentHashJoin
+/// Used in ConcurrentHashJoin
     #define APPLY_FOR_TWO_LEVEL_JOIN_VARIANTS(M, ...)           \
         M(two_level_key32 __VA_OPT__(,) __VA_ARGS__)            \
         M(two_level_key64 __VA_OPT__(,) __VA_ARGS__)            \
@@ -276,6 +279,8 @@ public:
         std::shared_ptr<FixedHashMap<UInt16, Mapped>>                         key16;
         std::shared_ptr<HashMap<UInt32, Mapped, HashCRC32<UInt32>>>           key32;
         std::shared_ptr<HashMap<UInt64, Mapped, HashCRC32<UInt64>>>           key64;
+        std::shared_ptr<FixedRangeHashMap<UInt32, Mapped>> range_key32;
+        std::shared_ptr<FixedRangeHashMap<UInt64, Mapped>> range_key64;
         std::shared_ptr<HashMapWithSavedHash<std::string_view, Mapped>>              key_string;
         std::shared_ptr<HashMapWithSavedHash<std::string_view, Mapped>>              key_fixed_string;
         std::shared_ptr<HashMap<UInt128, Mapped, UInt128HashCRC32>>           keys128;
@@ -464,6 +469,8 @@ public:
     void tryRerangeRightTableData() override;
     size_t getAndSetRightTableKeys() const;
 
+    void tryConvertToFixedRangeHashMap();
+
     bool hasNonJoinedRows();
     void updateNonJoinedRowsStatus();
 
@@ -569,6 +576,10 @@ private:
 
     template <JoinKind KIND, typename Map, JoinStrictness STRICTNESS>
     void tryRerangeRightTableDataImpl(Map & map);
+
+    template <bool is_signed, typename Key, typename MapsTemplate>
+    void tryConvertToFixedRangeHashMapImpl(MapsTemplate & maps);
+
     void doDebugAsserts() const;
 };
 }

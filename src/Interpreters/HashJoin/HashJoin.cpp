@@ -9,6 +9,7 @@
 #include <Columns/ColumnSparse.h>
 #include <Columns/ColumnString.h>
 #include <Common/CurrentThread.h>
+#include <Common/ProfileEvents.h>
 #include <Common/StackTrace.h>
 #include <Common/logger_useful.h>
 
@@ -34,6 +35,12 @@
 
 #include <Interpreters/HashJoin/HashJoinMethods.h>
 #include <Interpreters/HashJoin/JoinUsedFlags.h>
+#include <Processors/Transforms/BuildRuntimeFilterTransform.h>
+
+namespace ProfileEvents
+{
+extern const Event BuiltJoinRangeHashMapMicroseconds;
+}
 
 namespace DB
 {
@@ -2020,6 +2027,125 @@ void HashJoin::tryRerangeRightTableData()
         [&](auto kind_, auto strictness_, auto & map_) { tryRerangeRightTableDataImpl<kind_, decltype(map_), strictness_>(map_); });
     chassert(result);
     data->sorted = true;
+}
+
+template <bool is_signed, typename Key, typename MapsTemplate>
+void HashJoin::tryConvertToFixedRangeHashMapImpl(MapsTemplate & maps)
+{
+    using SignedKey = std::make_signed_t<Key>;
+
+    auto max_range = table_join->fixedRangeHashTableMaxSize();
+
+    auto & source_map = [&]() -> auto &
+    {
+        if constexpr (std::is_same_v<Key, UInt32>)
+            return *maps.key32;
+        else
+            return *maps.key64;
+    }();
+
+    if (source_map.empty() || source_map.size() > max_range)
+        return;
+
+    auto it = source_map.begin();
+    Key min_key = it->getKey();
+    Key max_key = it->getKey();
+    ++it;
+
+    /// Keys are stored as unsigned (UInt32/UInt64) in the hash map, but the original column
+    /// may be signed (Int32/Int64). We must compare using signed arithmetic to find the true
+    /// min/max
+    for (; it != source_map.end(); ++it)
+    {
+        Key k = it->getKey();
+        if constexpr (is_signed)
+        {
+            SignedKey sk = static_cast<SignedKey>(k);
+            if (sk < static_cast<SignedKey>(min_key))
+                min_key = k;
+            if (sk > static_cast<SignedKey>(max_key))
+                max_key = k;
+        }
+        else
+        {
+            if (k < min_key)
+                min_key = k;
+            if (k > max_key)
+                max_key = k;
+        }
+
+        if (static_cast<size_t>(max_key - min_key) >= max_range)
+            return;
+    }
+
+    using Mapped = typename std::decay_t<decltype(source_map)>::mapped_type;
+
+    Stopwatch watch;
+
+    auto range_map = std::make_shared<FixedRangeHashMap<Key, Mapped>>(source_map, min_key, max_key);
+    auto range_size = range_map->getBufferSizeInCells();
+    auto key_count = range_map->size();
+
+    ProfileEvents::increment(ProfileEvents::BuiltJoinRangeHashMapMicroseconds, watch.elapsedMicroseconds());
+
+    if constexpr (std::is_same_v<Key, UInt32>)
+    {
+        maps.range_key32 = std::move(range_map);
+        maps.key32.reset();
+        data->type = Type::range_key32;
+    }
+    else
+    {
+        maps.range_key64 = std::move(range_map);
+        maps.key64.reset();
+        data->type = Type::range_key64;
+    }
+
+    LOG_DEBUG(
+        log,
+        "{}Converted join hash map to fixed range hash map (range: {}, keys: {})",
+        instance_log_id,
+        range_size,
+        key_count);
+}
+
+void HashJoin::tryConvertToFixedRangeHashMap()
+{
+    if (!table_join->enableFixedRangeHashTable())
+        return;
+
+    if (data->type != Type::key32 && data->type != Type::key64)
+        return;
+
+    if (data->maps.size() != 1)
+        return;
+
+    if (strictness == JoinStrictness::Asof)
+        return;
+
+    std::visit(
+        [&](auto & map)
+        {
+            using MapType = std::decay_t<decltype(map)>;
+            if constexpr (std::is_same_v<MapType, MapsOne> || std::is_same_v<MapType, MapsAll>)
+            {
+                if (data->type == Type::key32)
+                {
+                    if (right_table_keys.getByPosition(0).type->getTypeId() == TypeIndex::Int32)
+                        tryConvertToFixedRangeHashMapImpl<true, UInt32>(map);
+                    else
+                        tryConvertToFixedRangeHashMapImpl<false, UInt32>(map);
+                }
+                else
+                {
+                    if (right_table_keys.getByPosition(0).type->getTypeId() == TypeIndex::Int64)
+                        tryConvertToFixedRangeHashMapImpl<true, UInt64>(map);
+                    else
+                        tryConvertToFixedRangeHashMapImpl<false, UInt64>(map);
+                }
+            }
+        },
+        data->maps.front());
 }
 
 void HashJoin::onBuildPhaseFinish()

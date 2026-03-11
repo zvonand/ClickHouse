@@ -7666,6 +7666,12 @@ Maximum number of rows passed to a WebAssembly UDF in a single block. Set to 0 t
     DECLARE(UInt64, webassembly_udf_max_instances, 32, R"(
 Maximum number of WebAssembly UDF instances that can run in parallel per function.
 )", EXPERIMENTAL) \
+    DECLARE(Bool, enable_fixed_range_hash_table, true, R"(
+Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range.
+)", EXPERIMENTAL) \
+    DECLARE(UInt64, fixed_range_hash_table_max_size, 100'000, R"(
+Maximum range (max - min + 1) of join key values for the fixed range hash table optimization to apply.
+)", EXPERIMENTAL) \
     \
     /* ####################################################### */ \
     /* ############ END OF EXPERIMENTAL FEATURES ############# */ \

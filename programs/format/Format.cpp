@@ -22,6 +22,7 @@
 
 #include <Interpreters/Context.h>
 #include <Functions/FunctionFactory.h>
+#include <Databases/DatabaseFactory.h>
 #include <Databases/registerDatabases.h>
 #include <Functions/registerFunctions.h>
 #include <AggregateFunctions/AggregateFunctionFactory.h>
@@ -194,6 +195,7 @@ int mainEntryClickHouseFormat(int argc, char ** argv)
             auto all_known_merge_tree_settings = MergeTreeSettings().getAllRegisteredNames();
             auto all_known_index_types = MergeTreeIndexFactory::instance().getAllRegisteredNames();
             auto all_known_codecs = CompressionCodecFactory::instance().getAllRegisteredNames();
+            auto all_known_database_engines = DatabaseFactory::instance().getAllRegisteredNames();
 
             additional_names.insert(all_known_storage_names.begin(), all_known_storage_names.end());
             additional_names.insert(all_known_data_type_names.begin(), all_known_data_type_names.end());
@@ -201,6 +203,7 @@ int mainEntryClickHouseFormat(int argc, char ** argv)
             additional_names.insert(all_known_merge_tree_settings.begin(), all_known_merge_tree_settings.end());
             additional_names.insert(all_known_index_types.begin(), all_known_index_types.end());
             additional_names.insert(all_known_codecs.begin(), all_known_codecs.end());
+            additional_names.insert(all_known_database_engines.begin(), all_known_database_engines.end());
 
             for (auto * it = auto_time_zones; *it; ++it)
             {

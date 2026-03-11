@@ -53,6 +53,16 @@ SerializationPtr SerializationSubObject::create(const String & paths_prefix_, co
     return ISerialization::pooled(getHash(paths_prefix_, typed_paths_serializations_, dynamic_type), [&] { return new SerializationSubObject(paths_prefix_, typed_paths_serializations_, dynamic_type, dynamic_serialization); });
 }
 
+bool SerializationSubObject::supportsPooling() const
+{
+    for (const auto & [_, item] : typed_paths_serializations)
+    {
+        if (!item->supportsPooling())
+            return false;
+    }
+    return true;
+}
+
 struct DeserializeBinaryBulkStateSubObject : public ISerialization::DeserializeBinaryBulkState
 {
     std::unordered_map<String, ISerialization::DeserializeBinaryBulkStatePtr> typed_path_states;

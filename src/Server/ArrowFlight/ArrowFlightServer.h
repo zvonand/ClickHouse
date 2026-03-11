@@ -3,6 +3,7 @@
 #include "config.h"
 
 #if USE_ARROWFLIGHT
+
 #include <Common/ThreadPool.h>
 #include <Server/GRPCServer.h>
 #include <arrow/flight/server.h>

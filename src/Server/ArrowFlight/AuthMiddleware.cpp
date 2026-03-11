@@ -1,5 +1,12 @@
 #include "AuthMiddleware.h"
 
+#include <IO/ReadBufferFromString.h>
+#include <IO/ReadHelpers.h>
+#include <IO/WriteHelpers.h>
+#include <Common/Base64.h>
+#include <Interpreters/Context.h>
+
+#include <Poco/String.h>
 
 namespace DB
 {

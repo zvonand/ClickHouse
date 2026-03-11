@@ -1,16 +1,9 @@
 #pragma once
 
-#include <IO/ReadBufferFromString.h>
-#include <IO/ReadHelpers.h>
 #include <Interpreters/Session.h>
-#include <IO/WriteHelpers.h>
-#include <Common/Base64.h>
 #include <Server/IServer.h>
-#include <Interpreters/Context.h>
 
 #include <Poco/Util/LayeredConfiguration.h>
-#include <Poco/String.h>
-#include <Poco/URI.h>
 
 #include <arrow/flight/server_middleware.h>
 #include <arrow/flight/server.h>

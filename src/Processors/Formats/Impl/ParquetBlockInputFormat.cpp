@@ -691,7 +691,7 @@ void ParquetBlockInputFormat::initializeIfNeeded()
 
     if (format_filter_info)
     {
-        format_filter_info->initOnce([&] { format_filter_info->initKeyCondition(getPort().getHeader()); });
+        format_filter_info->initKeyConditionOnce(getPort().getHeader());
     }
 
     // Create arrow file adapter.

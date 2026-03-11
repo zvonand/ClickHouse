@@ -20,8 +20,16 @@ trap 'rm $tmp_file' EXIT
 #
 $CLICKHOUSE_CLIENT -q "SELECT toString(number) FROM numbers(10e6) FORMAT TSV" > "$tmp_file"
 
+_timeout() {
+    (
+        ${CLICKHOUSE_CURL} -sS -F "s=@$tmp_file;" "$1" -o /dev/null
+        echo Completed
+    ) &
+    sleep 0.15s
+    kill $!
+}
+
 # NOTE: Just in case check w/ input_format_parallel_parsing and w/o
-timeout 0.15s ${CLICKHOUSE_CURL} -sS -F "s=@$tmp_file;" "${CLICKHOUSE_URL}&s_structure=key+Int&query=SELECT+dummy+IN+s&input_format_parallel_parsing=true" -o /dev/null
-echo $?
-timeout 0.15s ${CLICKHOUSE_CURL} -sS -F "s=@$tmp_file;" "${CLICKHOUSE_URL}&s_structure=key+Int&query=SELECT+dummy+IN+s&input_format_parallel_parsing=false" -o /dev/null
-echo $?
+_timeout "${CLICKHOUSE_URL}&s_structure=key+Int&query=SELECT+dummy+IN+s&input_format_parallel_parsing=true"
+_timeout "${CLICKHOUSE_URL}&s_structure=key+Int&query=SELECT+dummy+IN+s&input_format_parallel_parsing=false"
+

@@ -208,6 +208,10 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
     /// Instead, wrap all keys into a single Tuple and build one NOT IN filter on the tuple for exact tuple membership check.
     const bool use_tuple_filter = check_left_does_not_contain && join_keys_build_side.size() > 1;
 
+    /// Filter that will be applied on the probe side
+    ActionsDAG filter_dag(apply_filter_node->step->getOutputHeader()->getColumnsWithTypeAndName(), false);
+    String filter_column_name;
+
     if (use_tuple_filter)
     {
         const String filter_name = filter_name_prefix + "_0";
@@ -261,7 +265,7 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
 
         /// Apply side: compute tuple(key1, key2, ...) and apply the filter
         {
-            ActionsDAG filter_dag(apply_filter_node->step->getOutputHeader()->getColumnsWithTypeAndName(), false);
+
             ActionsDAG::NodeRawConstPtrs key_nodes;
             for (size_t i = 0; i < join_keys_probe_side.size(); ++i)
             {
@@ -283,20 +287,12 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
             const auto & condition = filter_dag.addFunction(filter_function, {&filter_name_node, &tuple_node}, {});
             filter_dag.addOrReplaceInOutputs(condition);
 
-            QueryPlan::Node * new_apply_filter_node = &nodes.emplace_back();
-            new_apply_filter_node->step = std::make_unique<FilterStep>(
-                apply_filter_node->step->getOutputHeader(), std::move(filter_dag), condition.result_name, true);
-            new_apply_filter_node->step->setStepDescription("Apply runtime join filter");
-            new_apply_filter_node->children = {apply_filter_node};
-            apply_filter_node = new_apply_filter_node;
+            filter_column_name = condition.result_name;
         }
     }
     else
     {
         /// Standard per-column runtime filters (for INNER, SEMI, RIGHT, and single-key ANTI joins)
-        ActionsDAG filter_dag(apply_filter_node->step->getOutputHeader()->getColumnsWithTypeAndName(), false);
-
-        String filter_column_name;
         ActionsDAG::NodeRawConstPtrs all_filter_conditions;
         for (size_t i = 0; i < join_keys_build_side.size(); ++i)
         {
@@ -347,14 +343,14 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
             filter_dag.addOrReplaceInOutputs(combined_filter_condition);
             filter_column_name = combined_filter_condition.result_name;
         }
-
-        QueryPlan::Node * new_apply_filter_node = &nodes.emplace_back();
-        new_apply_filter_node->step = std::make_unique<FilterStep>(apply_filter_node->step->getOutputHeader(), std::move(filter_dag), filter_column_name, true);
-        new_apply_filter_node->step->setStepDescription("Apply runtime join filter");
-        new_apply_filter_node->children = {apply_filter_node};
-
-        apply_filter_node = new_apply_filter_node;
     }
+
+    QueryPlan::Node * new_apply_filter_node = &nodes.emplace_back();
+    new_apply_filter_node->step = std::make_unique<FilterStep>(
+        apply_filter_node->step->getOutputHeader(), std::move(filter_dag), filter_column_name, true);
+    new_apply_filter_node->step->setStepDescription("Apply runtime join filter");
+    new_apply_filter_node->children = {apply_filter_node};
+    apply_filter_node = new_apply_filter_node;
 
     node.children = {apply_filter_node, build_filter_node};
 

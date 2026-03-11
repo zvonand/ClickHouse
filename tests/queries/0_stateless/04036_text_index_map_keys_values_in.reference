@@ -1,32 +1,32 @@
 -- { echoOn }
 SELECT count() FROM tab WHERE map['env'] IN ('prod');
 50000
-Granules: 24/24
+Granules: 25/25
 Name: idx_map_keys
-Granules: 12/24
+Granules: 13/25
 Name: idx_map_values
-Granules: 7/12
+Granules: 7/13
 -- { echoOn }
 SELECT count() FROM tab WHERE map['service'] IN ('worker') AND map['env'] IN ('prod');
 0
-Granules: 24/24
+Granules: 25/25
 Name: idx_map_keys
-Granules: 12/24
+Granules: 13/25
 Name: idx_map_values
-Granules: 1/12
+Granules: 1/13
 -- { echoOn }
 SELECT count() FROM tab WHERE map['service'] IN ('web-api', 'frontend');
 100000
-Granules: 24/24
+Granules: 25/25
 Name: idx_map_keys
-Granules: 24/24
+Granules: 25/25
 Name: idx_map_values
-Granules: 14/24
+Granules: 14/25
 -- { echoOn }
 SELECT count() FROM tab WHERE map['env'] IN ('prod', 'staging');
 100000
-Granules: 24/24
+Granules: 25/25
 Name: idx_map_keys
-Granules: 12/24
+Granules: 13/25
 Name: idx_map_values
-Granules: 12/12
+Granules: 13/13

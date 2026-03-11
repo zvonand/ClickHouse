@@ -308,18 +308,19 @@ def main():
         results[-1].set_timing(stopwatch=stop_watch_)
         if not results[-1].is_ok():
             attach_debug = True
-        job_info = results[-1].info
 
+
+    info = results[-1].info
     if attach_debug:
         attach_files += [
             clickhouse_bin_path,
-            *CH.prepare_logs(info=job_info, all=True),
+            *CH.prepare_logs(info=info, all=True),
         ]
 
     CH.terminate()
 
     Result.create_from(
-        results=results, stopwatch=stop_watch, files=attach_files, info=job_info
+        results=results, stopwatch=stop_watch, files=attach_files, info=info
     ).complete_job()
 
 

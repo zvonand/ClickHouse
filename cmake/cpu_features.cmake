@@ -96,16 +96,33 @@ elseif (ARCH_AMD64)
         message (FATAL_ERROR "X86_ARCH_LEVEL must be one of: 1, 2, 3, 4 (got '${X86_ARCH_LEVEL}')")
     endif ()
 
-    # Same best-effort check for x86 as above for ARM.
+    # Best-effort check: verify that the build host supports the requested
+    # microarchitecture level.  Build-time tools (tablegen, code generators)
+    # are compiled with these flags and will crash with SIGILL otherwise.
     if (OS_LINUX AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "amd64|x86_64" AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 2)
-        # Test for flags in the default v2 profile.
+        set (X86_REQUIRED_FLAGS "ssse3|sse4_1|sse4_2")
+        if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
+            set (X86_REQUIRED_FLAGS "${X86_REQUIRED_FLAGS}|avx2|bmi2|fma")
+        endif ()
+        if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 4)
+            set (X86_REQUIRED_FLAGS "${X86_REQUIRED_FLAGS}|avx512f|avx512bw|avx512cd|avx512dq|avx512vl")
+        endif ()
+        # Build a single lookahead regex: (?=.*flag1)(?=.*flag2)...
+        string (REGEX REPLACE "\\|" ";" X86_FLAGS_LIST "${X86_REQUIRED_FLAGS}")
+        set (X86_CPUINFO_RE "^")
+        foreach (flag IN LISTS X86_FLAGS_LIST)
+            string (APPEND X86_CPUINFO_RE "(?=.*${flag})")
+        endforeach ()
         execute_process(
-            COMMAND grep -P "^(?=.*ssse3)(?=.*sse4_1)(?=.*sse4_2)" /proc/cpuinfo
+            COMMAND grep -P "${X86_CPUINFO_RE}" /proc/cpuinfo
             OUTPUT_VARIABLE FLAGS)
         if (NOT FLAGS)
-            MESSAGE(FATAL_ERROR "The build machine does not satisfy the minimum CPU requirements, try to run cmake with -DX86_ARCH_LEVEL=1")
-        endif()
-    endif()
+            message (FATAL_ERROR
+                "The build machine does not support x86-64-v${X86_ARCH_LEVEL} "
+                "(missing one of: ${X86_REQUIRED_FLAGS}).  "
+                "Run cmake with -DX86_ARCH_LEVEL=<level> to lower the requirement.")
+        endif ()
+    endif ()
 
     # ClickHouse can be cross-compiled (e.g. on an ARM host for x86) but it is also possible to build ClickHouse on x86 w/o AVX for x86 w/
     # AVX. We only assume that the compiler can emit certain SIMD instructions, we don't care if the host system is able to run the binary.

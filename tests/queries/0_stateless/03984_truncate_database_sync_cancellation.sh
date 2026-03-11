@@ -65,5 +65,6 @@ $CLICKHOUSE_CLIENT --query "
     SELECT count() FROM system.query_log
     WHERE query_id = '${TRUNCATE_QUERY_ID}'
       AND exception_code = 394
+      AND current_database = currentDatabase()
 "
 echo "TRUNCATE DATABASE LIKE path: kill was successful"

@@ -273,7 +273,7 @@ def main():
         )
         res = results[-1].is_ok()
 
-    CH = ClickHouseProc(fast_test=True,
+    CH = ClickHouseProc(
         ch_config_dir=f"{temp_dir}/etc/clickhouse-server",
         ch_var_lib_dir=f"{temp_dir}/var/lib/clickhouse",
     )

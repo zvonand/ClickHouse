@@ -217,6 +217,24 @@ void KeeperDispatcher::requestThread()
                         if (finished_sessions.contains(req.session_id))
                         {
                             ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
+
+                            /// Finalize the dispatcher_requests_queue span that was initialized
+                            /// when the request was enqueued. Without this the span leaks because
+                            /// handle_opentelemetery_spans (which normally finalizes it) is skipped.
+                            ZooKeeperOpentelemetrySpans::maybeFinalize(
+                                req.request->spans.dispatcher_requests_queue,
+                                [&]
+                                {
+                                    return std::vector<OpenTelemetry::SpanAttribute>{
+                                        {"keeper.operation", Coordination::opNumToString(req.request->getOpNum())},
+                                        {"keeper.session_id", req.session_id},
+                                        {"keeper.xid", req.request->xid},
+                                        {"keeper.stale", true},
+                                    };
+                                },
+                                OpenTelemetry::SpanStatus::ERROR,
+                                "Session finished before request could execute");
+
                             return true;
                         }
                     }
@@ -267,8 +285,6 @@ void KeeperDispatcher::requestThread()
                             CurrentMetrics::sub(CurrentMetrics::KeeperOutstandingRequests);
 
                             /// Skip stale requests for finished sessions during batch assembly.
-                            /// Must be checked before span finalization to avoid leaking spans
-                            /// for requests that will be dropped without a response.
                             if (is_stale_session_request(request))
                                 return true; // consumed, keep draining
 
@@ -409,7 +425,12 @@ void KeeperDispatcher::requestThread()
                     }
                     else
                     {
+                        /// The session became finished after the initial stale check
+                        /// (e.g. a Close was committed in the preceding write batch).
+                        /// The dispatcher_requests_queue span was already finalized
+                        /// at handle_opentelemetery_spans above.
                         ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
+                        LOG_TRACE(log, "Dropping stale read request for finished session {}, xid {}", request.session_id, request.request->xid);
                     }
                 }
             }

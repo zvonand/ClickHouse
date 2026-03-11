@@ -502,7 +502,9 @@ static void buildTreeOffset(
         settings_format.other_prefix += current.node->children.empty() ? "   " : "│  ";
         return;
     }
-
+    [src/Processors/QueryPlan/QueryPlan.cpp:517-519] In buildTreeOffset, the first non-last child is rendered as └┬─ while later siblings use  ├─ /  └─; this produces misleading tree topology for multi-input nodes (e.g. joins), where a non-terminal sibling appears terminal.
+    Suggested fix: use standard sibling glyphs for all child positions (├── for non-last, └── for last), independent of “first child” position.
+    
     for (size_t i = 0; i < frames.size() - 2; ++i)
     {
         const auto & segment = frames[i + 1].is_last_child ? "   " : " │ ";

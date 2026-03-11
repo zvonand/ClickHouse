@@ -234,7 +234,7 @@ CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, boo
         if (command.table_types_size())
         {
             where.push_back(
-                "left.table_type IN [" +
+                "left.engine IN [" +
                 boost::algorithm::join(
                     command.table_types()
                         | boost::adaptors::transformed([](const auto & table_type) { return quoteString(table_type); }),

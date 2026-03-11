@@ -800,7 +800,7 @@ clickhouse-client --query "SELECT count() FROM test.visits"
         ):
             if proc and pid:
                 Shell.check(
-                    f"pid=$(kill -SIGTERM {pid}; sleep 1; kill -SIGKILL {pid}",
+                    f"kill -SIGTERM {pid}; sleep 1; kill -SIGKILL {pid}",
                     verbose=True,
                 )
 

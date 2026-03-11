@@ -505,20 +505,13 @@ static void buildTreeOffset(
 
     for (size_t i = 0; i < frames.size() - 2; ++i)
     {
-        const auto & segment = frames[i + 1].is_last_child ? "   " : " │ ";
+        const auto & segment = frames[i + 1].is_last_child ? "   " : "│  ";
         settings_format.step_prefix += segment;
         settings_format.other_prefix += segment;
     }
 
-    const auto & parent = frames[frames.size() - 2];
-    bool is_first = (parent.next_child == 1);
-
-    if (is_first)
-        settings_format.step_prefix += current.is_last_child ? "└──" : "└┬─";
-    else
-        settings_format.step_prefix += current.is_last_child ? " └─" : " ├─";
-
-    settings_format.other_prefix += current.is_last_child ? "   " : " │ ";
+    settings_format.step_prefix += current.is_last_child ? "└──" : "├──";
+    settings_format.other_prefix += current.is_last_child ? "   " : "│  ";
     settings_format.other_prefix += current.node->children.empty() ? "   " : "│  ";
 }
 

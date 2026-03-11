@@ -645,6 +645,21 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
                                 if (finished_sessions.contains(read_request.session_id))
                                 {
                                     ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
+
+                                    ZooKeeperOpentelemetrySpans::maybeFinalize(
+                                        read_request.request->spans.read_wait_for_write,
+                                        [&]
+                                        {
+                                            return std::vector<OpenTelemetry::SpanAttribute>{
+                                                {"keeper.operation", Coordination::opNumToString(read_request.request->getOpNum())},
+                                                {"keeper.session_id", read_request.session_id},
+                                                {"keeper.xid", read_request.request->xid},
+                                                {"keeper.stale", true},
+                                            };
+                                        },
+                                        OpenTelemetry::SpanStatus::ERROR,
+                                        "Session finished before read could execute");
+
                                     continue;
                                 }
                             }
@@ -946,7 +961,7 @@ void KeeperDispatcher::finishSession(int64_t session_id)
         else
         {
             ProfileEvents::increment(ProfileEvents::KeeperFinishedSessionsCacheFull);
-            LOG_WARNING(log, "Finished sessions cache is full (size {}), session {} will not be tracked for stale request filtering",
+            LOG_WARNING(LogFrequencyLimiter(log, 10), "Finished sessions cache is full (size {}), session {} will not be tracked for stale request filtering",
                 finished_sessions.size(), session_id);
         }
     }

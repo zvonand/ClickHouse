@@ -288,6 +288,9 @@ void KeeperConfigurationAndSettings::dump(WriteBufferFromOwnString & buf) const
     write_bool(coordination_settings[CoordinationSetting::use_xid_64]);
     writeText("check_node_acl_on_remove=", buf);
     write_bool(coordination_settings[CoordinationSetting::check_node_acl_on_remove]);
+
+    writeText("max_finished_sessions_cache_size=", buf);
+    write_int(coordination_settings[CoordinationSetting::max_finished_sessions_cache_size]);
 }
 
 KeeperConfigurationAndSettingsPtr

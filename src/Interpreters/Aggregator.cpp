@@ -142,6 +142,10 @@ void updateStatistics(const DB::ManyAggregatedDataVariants & data_variants, cons
 
 DB::ColumnNumbers calculateKeysPositions(const DB::Block & header, const DB::Aggregator::Params & params)
 {
+    /// Only used in the execute path; in the merge path keys are accessed positionally.
+    if (params.only_merge)
+        return {};
+
     DB::ColumnNumbers keys_positions(params.keys_size);
     for (size_t i = 0; i < params.keys_size; ++i)
         keys_positions[i] = header.getPositionByName(params.keys[i]);
@@ -159,6 +163,16 @@ DB::DataTypes calculateKeyTypes(const DB::Block & header, const DB::Aggregator::
 
 DB::DataTypes calculateAggregateStateTypes(const DB::Block & header, const DB::Aggregator::Params & params)
 {
+    /// In the merge path, aggregate state columns are in the header by `column_name`.
+    if (params.only_merge)
+    {
+        DB::DataTypes types;
+        types.reserve(params.aggregates_size);
+        for (const auto & aggregate : params.aggregates)
+            types.push_back(header.getByName(aggregate.column_name).type);
+        return types;
+    }
+
     DB::DataTypes types;
     types.reserve(params.aggregates_size);
     for (const auto & aggregate : params.aggregates)
@@ -174,6 +188,10 @@ DB::DataTypes calculateAggregateStateTypes(const DB::Block & header, const DB::A
 
 std::vector<DB::ColumnNumbers> calculateAggregatesPositions(const DB::Block & header, const DB::Aggregator::Params & params)
 {
+    /// Only used in the execute path.
+    if (params.only_merge)
+        return {};
+
     std::vector<DB::ColumnNumbers> positions;
     positions.reserve(params.aggregates_size);
     for (const auto & aggregate : params.aggregates)

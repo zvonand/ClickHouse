@@ -192,7 +192,6 @@ namespace Setting
     extern const SettingsBool use_uncompressed_cache;
     extern const SettingsNonZeroUInt64 merge_tree_min_read_task_size;
     extern const SettingsBool read_in_order_use_virtual_row;
-    extern const SettingsBool read_in_order_use_deferred_virtual_row;
     extern const SettingsBool use_skip_indexes_if_final_exact_mode;
     extern const SettingsBool use_skip_indexes_on_data_read;
     extern const SettingsBool use_skip_indexes_for_top_k;
@@ -616,55 +615,6 @@ Pipe ReadFromMergeTree::readFromPool(
     return pipe;
 }
 
-static void tryAddDeferredVirtualRowTransform(Pipe & pipe, const KeyDescription & primary_key, ExpressionActionsPtr virtual_row_conversion, bool use_last_row, const LoggerPtr & log)
-{
-    size_t num_pk_columns_required = virtual_row_conversion->getRequiredColumnsWithTypes().size();
-
-    /// Build pk_header with the PK column names and types (same structure as the non-deferred case).
-    Block pk_header;
-    for (size_t j = 0; j < num_pk_columns_required; ++j)
-        pk_header.insert({nullptr, primary_key.data_types[j], primary_key.column_names[j]});
-
-    const auto & pk_actions_dag = primary_key.expression->getActionsDAG();
-
-
-    ActionsDAG::NodeRawConstPtrs required_outputs;
-    for (const auto & column_name : virtual_row_conversion->getRequiredColumns())
-    {
-        const auto * node = pk_actions_dag.tryFindInOutputs(column_name);
-        if (!node)
-        {
-            LOG_DEBUG(log,
-                "Cannot apply virtual row: column '{}' required by virtual row conversion is missing from PK prefix expression outputs [{}]",
-                column_name, fmt::join(pk_actions_dag.getNames(), ","));
-            return;
-        }
-        required_outputs.push_back(node);
-    }
-
-    auto pk_actions_subdag = pk_actions_dag.cloneSubDAG(required_outputs, false);
-    const auto & current_header = pipe.getHeader();
-    if (!std::ranges::all_of(pk_actions_subdag.getRequiredColumnsNames(), [&current_header](const auto & name) { return current_header.has(name); }))
-    {
-        LOG_DEBUG(log,
-            "Cannot apply virtual row: columns required by PK prefix expression ([{}]) are missing from the pipe header [{}]",
-             fmt::join(pk_actions_subdag.getRequiredColumnsNames(), ", " ), current_header.dumpNames());
-        return;
-    }
-
-    auto pk_prefix_expression = std::make_shared<ExpressionActions>(std::move(pk_actions_subdag), primary_key.expression->getSettings());
-    pipe.addSimpleTransform(
-        [
-            pk_header_ = std::move(pk_header),
-            virtual_row_conversion_ = std::move(virtual_row_conversion),
-            pk_prefix_expression_ = std::move(pk_prefix_expression),
-            use_last_row
-        ](const SharedHeader & header)
-        {
-            return std::make_shared<DeferredVirtualRowTransform>(header, pk_header_, virtual_row_conversion_, pk_prefix_expression_, use_last_row);
-        });
-}
-
 Pipe ReadFromMergeTree::readInOrder(
     RangesInDataParts parts_with_ranges,
     const MergeTreeIndexBuildContextPtr & index_build_context,
@@ -776,17 +726,21 @@ Pipe ReadFromMergeTree::readInOrder(
 
         Pipe pipe(source);
 
-        if (virtual_row_conversion && (read_type == ReadType::InOrder))
+        if (virtual_row_conversion && (read_type == ReadType::InOrder || read_type == ReadType::InReverseOrder))
         {
             const auto & index = part_with_ranges.data_part->getIndex();
             const auto & primary_key = storage_snapshot->metadata->primary_key;
-            size_t mark_range_begin = part_with_ranges.ranges.front().begin;
+
+            bool has_final_mark = part_with_ranges.data_part->index_granularity->hasFinalMark();
+            bool read_in_direct_order = read_type == ReadType::InOrder;
+            size_t mark_range_pos = read_in_direct_order ? part_with_ranges.ranges.front().begin : part_with_ranges.ranges.back().end;
+            bool has_pk_value = (read_in_direct_order || has_final_mark) && std::ranges::all_of(*index, [&](const auto & col) { return col->size() > mark_range_pos; });
 
             /// The index may have fewer columns than the primary key if suffix columns were
             /// removed by optimizeIndexColumns (controlled by primary_key_ratio_of_unique_prefix_values_to_skip_suffix_columns).
             /// In that case, we cannot apply virtual row optimization because we don't have all required columns.
             size_t num_pk_columns_required = virtual_row_conversion->getRequiredColumnsWithTypes().size();
-            if (index->size() >= num_pk_columns_required)
+            if (index->size() >= num_pk_columns_required && has_pk_value)
             {
                 ColumnsWithTypeAndName pk_columns;
                 pk_columns.reserve(num_pk_columns_required);
@@ -794,7 +748,7 @@ Pipe ReadFromMergeTree::readInOrder(
                 for (size_t j = 0; j < num_pk_columns_required; ++j)
                 {
                     auto column = primary_key.data_types[j]->createColumn()->cloneEmpty();
-                    column->insert((*(*index)[j])[mark_range_begin]);
+                    column->insert((*(*index)[j])[mark_range_pos]);
                     pk_columns.push_back({std::move(column), primary_key.data_types[j], primary_key.column_names[j]});
                 }
 
@@ -805,11 +759,6 @@ Pipe ReadFromMergeTree::readInOrder(
                     return std::make_shared<VirtualRowTransform>(header, pk_block, virtual_row_conversion);
                 });
             }
-        }
-        else if (virtual_row_conversion && context->getSettingsRef()[Setting::read_in_order_use_deferred_virtual_row])
-        {
-            bool use_last_row = read_type == ReadType::InReverseOrder;
-            tryAddDeferredVirtualRowTransform(pipe, storage_snapshot->metadata->primary_key, virtual_row_conversion, use_last_row, log);
         }
 
         pipes.emplace_back(std::move(pipe));

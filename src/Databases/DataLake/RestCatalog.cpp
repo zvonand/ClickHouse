@@ -601,9 +601,23 @@ DB::Names RestCatalog::getTables() const
             runner.enqueueAndKeepTrack(
             [=, &tables, &mutex, this]
             {
-                auto tables_in_namespace = getTables(current_namespace);
-                std::lock_guard lock(mutex);
-                std::move(tables_in_namespace.begin(), tables_in_namespace.end(), std::back_inserter(tables));
+                try
+                {
+                    auto tables_in_namespace = getTables(current_namespace);
+                    std::lock_guard lock(mutex);
+                    std::move(tables_in_namespace.begin(), tables_in_namespace.end(), std::back_inserter(tables));
+                }
+                catch (const DB::HTTPException & e)
+                {
+                    /// Some catalog implementations (e.g. BigLake) do not support multi-level
+                    /// namespaces and return HTTP 400 when asked for tables of a namespace
+                    /// path that contains a separator (0x1F). Treat this as "no tables"
+                    /// so that other namespaces are still enumerated.
+                    if (e.getHTTPStatus() == Poco::Net::HTTPResponse::HTTP_BAD_REQUEST)
+                        LOG_WARNING(log, "Failed to list tables in namespace '{}' (HTTP 400), skipping: {}", current_namespace, e.message());
+                    else
+                        throw;
+                }
             });
         };
 
@@ -642,7 +656,21 @@ void RestCatalog::getNamespacesRecursive(
         if (func)
             func(current_namespace);
 
-        getNamespacesRecursive(current_namespace, result, stop_condition, func);
+        try
+        {
+            getNamespacesRecursive(current_namespace, result, stop_condition, func);
+        }
+        catch (const DB::HTTPException & e)
+        {
+            /// Some catalog implementations (e.g. BigLake) do not support multi-level
+            /// namespaces and return HTTP 400 when asked for sub-namespaces of a
+            /// namespace that is itself a child. Treat this as "no further children"
+            /// so that tables in already-enumerated namespaces are still returned.
+            if (e.getHTTPStatus() == Poco::Net::HTTPResponse::HTTP_BAD_REQUEST)
+                LOG_WARNING(log, "Failed to list sub-namespaces of '{}' (HTTP 400), skipping: {}", current_namespace, e.message());
+            else
+                throw;
+        }
     }
 }
 

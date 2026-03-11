@@ -2779,7 +2779,7 @@ BlocksList Aggregator::prepareBlocksAndFillTwoLevelImpl(AggregatedDataVariants &
                 converter(thread_id);
         }
     }
-    catch (...)
+    catch (...) // Ok: wait for parallel tasks to finish before rethrowing
     {
         runner.waitForAllToFinishAndRethrowFirstError();
     }

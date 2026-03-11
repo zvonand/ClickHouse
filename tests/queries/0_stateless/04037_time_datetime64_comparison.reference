@@ -1,0 +1,21 @@
+Time promoted to DateTime64 - epoch date prepended
+1
+0
+0
+1
+Time64 promoted to DateTime64
+1
+0
+DateTime vs Time - Time promoted to DateTime
+1
+0
+1
+DateTime vs Time64
+1
+Time vs Time64 - should work
+1
+DateTime vs DateTime64 - should work
+1
+Filtering via table
+14:45:40
+14:45:40

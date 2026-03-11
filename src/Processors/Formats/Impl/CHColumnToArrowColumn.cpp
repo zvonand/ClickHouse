@@ -431,7 +431,7 @@ namespace DB
                 const auto & column_offset = boost::get<1>(tuple);
                 if (discriminator == ColumnVariant::NULL_DISCRIMINATOR)
                     return 0;
-                const auto offset = column_offset - starts[discriminator];
+                const auto offset = column_offset - starts[column.globalDiscriminatorByLocal(discriminator)];
                 if (offset > static_cast<UInt64>(std::numeric_limits<int32_t>::max()))
                     throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot build Arrow DenseUnion: offset {} is out of Int32 range", offset);
                 return static_cast<int32_t>(offset);

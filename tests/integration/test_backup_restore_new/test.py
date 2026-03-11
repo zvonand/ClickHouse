@@ -2266,15 +2266,15 @@ def test_async_backup_restore_with_max_execution_time_zero():
 
     try:
         # Pause backup before it starts so the 500ms profile-level timeout fires.
-        inst.query("SYSTEM ENABLE FAILPOINT backup_pause_before_main_loop")
+        inst.query("SYSTEM ENABLE FAILPOINT backup_pause_on_start")
         [backup_id, _] = inst.query(
             f"BACKUP TABLE test.table TO {backup_name}"
             " SETTINGS async = 1, max_execution_time = 0",
         ).split("\t")
 
-        inst.query("SYSTEM WAIT FAILPOINT backup_pause_before_main_loop PAUSE")
+        inst.query("SYSTEM WAIT FAILPOINT backup_pause_on_start PAUSE")
         time.sleep(0.7)  # exceed the 500ms profile-level timeout
-        inst.query("SYSTEM NOTIFY FAILPOINT backup_pause_before_main_loop")
+        inst.query("SYSTEM NOTIFY FAILPOINT backup_pause_on_start")
 
         assert_eq_with_retry(
             inst,
@@ -2284,15 +2284,15 @@ def test_async_backup_restore_with_max_execution_time_zero():
 
         # Same for RESTORE.
         inst.query("DROP TABLE test.table")
-        inst.query("SYSTEM ENABLE FAILPOINT restore_pause_before_main_loop")
+        inst.query("SYSTEM ENABLE FAILPOINT restore_pause_on_start")
         [restore_id, _] = inst.query(
             f"RESTORE TABLE test.table FROM {backup_name}"
             " SETTINGS async = 1, max_execution_time = 0",
         ).split("\t")
 
-        inst.query("SYSTEM WAIT FAILPOINT restore_pause_before_main_loop PAUSE")
+        inst.query("SYSTEM WAIT FAILPOINT restore_pause_on_start PAUSE")
         time.sleep(0.7)
-        inst.query("SYSTEM NOTIFY FAILPOINT restore_pause_before_main_loop")
+        inst.query("SYSTEM NOTIFY FAILPOINT restore_pause_on_start")
 
         assert_eq_with_retry(
             inst,
@@ -2302,6 +2302,6 @@ def test_async_backup_restore_with_max_execution_time_zero():
 
         assert inst.query("SELECT count(), sum(x) FROM test.table") == "100\t4950\n"
     finally:
-        inst.query("SYSTEM DISABLE FAILPOINT backup_pause_before_main_loop")
-        inst.query("SYSTEM DISABLE FAILPOINT restore_pause_before_main_loop")
+        inst.query("SYSTEM DISABLE FAILPOINT backup_pause_on_start")
+        inst.query("SYSTEM DISABLE FAILPOINT restore_pause_on_start")
         inst.query("DROP DATABASE IF EXISTS test")

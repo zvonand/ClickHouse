@@ -59,10 +59,7 @@ void ParquetV3BlockInputFormat::initializeIfNeeded()
 {
     if (!reader)
     {
-        format_filter_info->initOnce([&]
-            {
-                format_filter_info->initKeyCondition(getPort().getHeader());
-            });
+        format_filter_info->initKeyConditionOnce(getPort().getHeader());
         parser_shared_resources->initOnce([&]
             {
                 if (format_settings.parquet.enable_row_group_prefetch && parser_shared_resources->max_io_threads > 0)

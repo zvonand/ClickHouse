@@ -16,6 +16,11 @@
 --- Test 6: Single-key LEFT ANTI JOIN ---
 2	20
 2	20
+--- Test 6b: Single-key nullable LEFT ANTI JOIN ---
+\N	20
+3	30
+\N	20
+3	30
 --- Test 7: Multi-key INNER JOIN ---
 0	0
 1	1
@@ -24,3 +29,17 @@
 --- Test 8: Large right side (filter overflow) ---
 0	999
 0	999
+--- Test 9: Nullable multi-key LEFT ANTI JOIN ---
+1	\N
+3	4
+\N	2
+\N	\N
+1	\N
+3	4
+\N	2
+\N	\N
+--- Test 10: Nullable mixed types ---
+3	\N
+\N	5
+3	\N
+\N	5

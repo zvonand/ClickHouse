@@ -153,6 +153,34 @@ DROP TABLE t1;
 DROP TABLE t2;
 
 -- ==========================================================================
+-- Test 6b: Single-key nullable LEFT ANTI JOIN
+-- NULL key rows must survive because NULL = NULL is false in SQL.
+-- ==========================================================================
+
+SELECT '--- Test 6b: Single-key nullable LEFT ANTI JOIN ---';
+
+CREATE TABLE t1 (a Nullable(Int64), b Int64) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE t2 (aa Nullable(Int64)) ENGINE = MergeTree ORDER BY tuple();
+
+INSERT INTO t1 VALUES (1, 10), (NULL, 20), (3, 30);
+INSERT INTO t2 VALUES (1), (NULL);
+
+-- (1) matches -> filtered out
+-- (NULL) from t1: NULL != NULL -> survives
+-- (3) from t1: no match -> survives
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa
+ORDER BY t1.b
+SETTINGS enable_join_runtime_filters = 0;
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa
+ORDER BY t1.b
+SETTINGS enable_join_runtime_filters = 1;
+
+DROP TABLE t1;
+DROP TABLE t2;
+
+-- ==========================================================================
 -- Test 7: Multi-key INNER JOIN still uses per-column path correctly
 -- ==========================================================================
 
@@ -197,6 +225,65 @@ SETTINGS enable_join_runtime_filters = 0;
 SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa AND t1.b = t2.bb
 ORDER BY t1.a, t1.b
 SETTINGS enable_join_runtime_filters = 1, join_runtime_filter_exact_values_limit = 10;
+
+DROP TABLE t1;
+DROP TABLE t2;
+
+-- ==========================================================================
+-- Test 9: Nullable multi-key LEFT ANTI JOIN
+-- NULL handling with tuple-based exclusion is subtle: tuples containing NULL
+-- never match via equality, so rows with any NULL key must always survive.
+-- ==========================================================================
+
+SELECT '--- Test 9: Nullable multi-key LEFT ANTI JOIN ---';
+
+CREATE TABLE t1 (a Nullable(Int64), b Nullable(Int64)) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE t2 (aa Nullable(Int64), bb Nullable(Int64)) ENGINE = MergeTree ORDER BY tuple();
+
+INSERT INTO t1 VALUES (1, 2), (NULL, 2), (1, NULL), (NULL, NULL), (3, 4);
+INSERT INTO t2 VALUES (1, 2), (NULL, 2), (NULL, NULL);
+
+-- (1,2) matches exactly -> filtered out
+-- (NULL,2) from t1: NULL != NULL in equality, so no match -> survives
+-- (1,NULL) from t1: NULL in second key, no match -> survives
+-- (NULL,NULL) from t1: NULL != NULL, no match -> survives
+-- (3,4) from t1: no match in t2 -> survives
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa AND t1.b = t2.bb
+ORDER BY t1.a NULLS LAST, t1.b NULLS LAST
+SETTINGS enable_join_runtime_filters = 0;
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa AND t1.b = t2.bb
+ORDER BY t1.a NULLS LAST, t1.b NULLS LAST
+SETTINGS enable_join_runtime_filters = 1;
+
+DROP TABLE t1;
+DROP TABLE t2;
+
+-- ==========================================================================
+-- Test 10: Nullable multi-key with mixed types (Nullable(Int32) vs Nullable(Int64))
+-- Ensures casting + NULL handling work together in tuple-based exclusion.
+-- ==========================================================================
+
+SELECT '--- Test 10: Nullable mixed types ---';
+
+CREATE TABLE t1 (a Nullable(Int32), b Nullable(Int32)) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE t2 (aa Nullable(Int64), bb Nullable(Int64)) ENGINE = MergeTree ORDER BY tuple();
+
+INSERT INTO t1 VALUES (1, 2), (NULL, 5), (3, NULL);
+INSERT INTO t2 VALUES (1, 2), (NULL, 5);
+
+-- (1,2) matches -> filtered out
+-- (NULL,5): NULL key -> survives
+-- (3,NULL): NULL key -> survives
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa AND t1.b = t2.bb
+ORDER BY t1.a NULLS LAST, t1.b NULLS LAST
+SETTINGS enable_join_runtime_filters = 0;
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa AND t1.b = t2.bb
+ORDER BY t1.a NULLS LAST, t1.b NULLS LAST
+SETTINGS enable_join_runtime_filters = 1;
 
 DROP TABLE t1;
 DROP TABLE t2;

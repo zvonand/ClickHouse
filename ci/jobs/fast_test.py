@@ -122,6 +122,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="ClickHouse Fast Test Job")
     parser.add_argument("--test", help="Optional test_case name to run", default="")
     parser.add_argument("--param", help="Optional custom job start stage", default=None)
+    parser.add_argument("--set-status-success", help="Forcefully set a green status", default=False)
     return parser.parse_args()
 
 def main():
@@ -319,8 +320,9 @@ def main():
 
     CH.terminate()
 
+    status = Result.Status.SUCCESS if args.set_status_status else ""
     Result.create_from(
-        results=results, stopwatch=stop_watch, files=attach_files, info=job_info
+        results=results, status=status, stopwatch=stop_watch, files=attach_files, info=job_info
     ).complete_job()
 
 

@@ -799,24 +799,10 @@ clickhouse-client --query "SELECT count() FROM test.visits"
             (self.proc_2, self.pid_file_replica_2, self.pid_2, self.run_path2),
         ):
             if proc and pid:
-                if self.fast_test:
-                    # Use --force (SIGKILL) for fast test to avoid waiting for
-                    # graceful shutdown, which can take over a minute.
-                    # Graceful shutdown is not needed here because we already
-                    # flushed system logs above and don't need to preserve data.
-                    Shell.check(
-                        f"cd {run_path} && clickhouse stop --pid-path {Path(pid_file).parent} --force >/dev/null",
-                        verbose=True,
-                    )
-                elif not Shell.check(
-                    f"cd {run_path} && clickhouse stop --pid-path {Path(pid_file).parent} --max-tries 300 --do-not-kill >/dev/null",
+                Shell.check(
+                    f"pid=$(kill -SIGTERM {pid}; sleep 1; kill -SIGKILL {pid}",
                     verbose=True,
-                ):
-                    print(
-                        "Failed to stop ClickHouse process gracefully - send ABRT signal to generate core file"
-                    )
-                    Shell.check(f"kill -ABRT {pid}")
-                print("Stopped clickhouse")
+                )
 
         return self
 

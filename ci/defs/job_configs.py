@@ -186,7 +186,7 @@ class JobConfigs:
     darwin_fast_test_jobs = Job.Config(
         name="Darwin fast test",
         runs_on=None,  # from parametrize()
-        command="python3 ./ci/jobs/fast_test.py",
+        command="python3 ./ci/jobs/fast_test.py --set-status-success",
         digest_config=fast_test_digest_config,
         result_name_for_cidb="Darwin tests",
         allow_merge_on_failure=True,

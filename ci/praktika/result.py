@@ -1699,6 +1699,18 @@ class ResultTranslator:
                                         # Be resilient to unexpected shapes
                                         pass
 
+                            # In pytest 8.x, xfail outcomes are not reported via the
+                            # "outcome" field directly. Instead they appear as:
+                            #   xfailed: outcome="skipped" + wasxfail field present
+                            #   xpassed: outcome="passed"  + wasxfail field present
+                            # Normalize those here so the mapping below handles both
+                            # pytest 7.x ("xfailed"/"xpassed") and pytest 8.x.
+                            if entry.get("wasxfail") is not None:
+                                if outcome == "skipped":
+                                    outcome = "xfailed"
+                                elif outcome == "passed":
+                                    outcome = "xpassed"
+
                             # Map pytest outcome to Result status
                             status = {
                                 "passed": Result.StatusExtended.OK,

@@ -6,7 +6,7 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 script_path="${CUR_DIR}/$CLICKHOUSE_TEST_UNIQUE_NAME"
 cat <<EOF >"$script_path"
-#!$(which clickhouse) local --queries-file
+#!$(which clickhouse-local) --queries-file
 
 SELECT 1;
 EOF

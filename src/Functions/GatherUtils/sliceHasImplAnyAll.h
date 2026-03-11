@@ -619,24 +619,21 @@ inline ALWAYS_INLINE bool sliceHasImplAnyAll(const FirstSliceType & first, const
 #if defined(__AVX2__)
     if constexpr (search_type == ArraySearchType::All && std::is_same_v<FirstSliceType, SecondSliceType>)
     {
-        if (isArchSupported(TargetArch::x86_64_v3))
+        if constexpr (std::is_same_v<FirstSliceType, NumericArraySlice<Int8>> || std::is_same_v<FirstSliceType, NumericArraySlice<UInt8>>)
         {
-            if constexpr (std::is_same_v<FirstSliceType, NumericArraySlice<Int8>> || std::is_same_v<FirstSliceType, NumericArraySlice<UInt8>>)
-            {
-                return sliceHasImplAnyAllImplInt8(first, second, first_null_map, second_null_map);
-            }
-            else if constexpr (std::is_same_v<FirstSliceType, NumericArraySlice<Int16>> || std::is_same_v<FirstSliceType, NumericArraySlice<UInt16>>)
-            {
-                return sliceHasImplAnyAllImplInt16(first, second, first_null_map, second_null_map);
-            }
-            else if constexpr (std::is_same_v<FirstSliceType, NumericArraySlice<Int32>> || std::is_same_v<FirstSliceType, NumericArraySlice<UInt32>>)
-            {
-                return sliceHasImplAnyAllImplInt32(first, second, first_null_map, second_null_map);
-            }
-            else if constexpr (std::is_same_v<FirstSliceType, NumericArraySlice<Int64>> || std::is_same_v<FirstSliceType, NumericArraySlice<UInt64>>)
-            {
-                return sliceHasImplAnyAllImplInt64(first, second, first_null_map, second_null_map);
-            }
+            return sliceHasImplAnyAllImplInt8(first, second, first_null_map, second_null_map);
+        }
+        else if constexpr (std::is_same_v<FirstSliceType, NumericArraySlice<Int16>> || std::is_same_v<FirstSliceType, NumericArraySlice<UInt16>>)
+        {
+            return sliceHasImplAnyAllImplInt16(first, second, first_null_map, second_null_map);
+        }
+        else if constexpr (std::is_same_v<FirstSliceType, NumericArraySlice<Int32>> || std::is_same_v<FirstSliceType, NumericArraySlice<UInt32>>)
+        {
+            return sliceHasImplAnyAllImplInt32(first, second, first_null_map, second_null_map);
+        }
+        else if constexpr (std::is_same_v<FirstSliceType, NumericArraySlice<Int64>> || std::is_same_v<FirstSliceType, NumericArraySlice<UInt64>>)
+        {
+            return sliceHasImplAnyAllImplInt64(first, second, first_null_map, second_null_map);
         }
     }
 #endif

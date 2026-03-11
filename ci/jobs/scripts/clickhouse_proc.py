@@ -52,13 +52,11 @@ class ClickHouseProc:
 
     def __init__(
         self,
-        fast_test=False,
         is_db_replicated=False,
         is_shared_catalog=False,
         ch_config_dir="/etc/clickhouse-server",
         ch_var_lib_dir="/var/lib/clickhouse",
     ):
-        self.fast_test = fast_test
         self.is_db_replicated = is_db_replicated
         self.is_shared_catalog = is_shared_catalog
         self.ch_config_dir = ch_config_dir
@@ -118,10 +116,9 @@ class ClickHouseProc:
             "CLICKHOUSE_SCHEMA_FILES", f"{self.ch_var_lib_dir}/format_schemas"
         )
         Utils.set_env("CLICKHOUSE_USER_FILES", f"{self.user_files_path}")
-        self.write_configs()
         Utils.clean_dir(Path(self.log_dir))
 
-    def write_configs(self):
+    def install_configs(self):
         Path(f"{self.ch_config_dir}/config.d").mkdir(parents=True, exist_ok=True)
         with open(f"{self.ch_config_dir}/config.d/backups.xml", "w") as file:
             file.write(f"""
@@ -766,7 +763,7 @@ clickhouse-client --query "SELECT count() FROM test.visits"
             process.wait()
             return process.returncode == 0
 
-    def terminate(self):
+    def terminate(self, force=False):
         if self.minio_proc:
             # remove the webhook so it doesn't spam with errors once we stop ClickHouse
             Shell.check(
@@ -799,10 +796,26 @@ clickhouse-client --query "SELECT count() FROM test.visits"
             (self.proc_2, self.pid_file_replica_2, self.pid_2, self.run_path2),
         ):
             if proc and pid:
-                Shell.check(
-                    f"kill -SIGTERM {pid}; sleep 1; kill -SIGKILL {pid}",
+                if force:
+                    # Use --force (SIGKILL) for fast test to avoid waiting for
+                    # graceful shutdown, which can take over a minute.
+                    # Graceful shutdown is not needed here because we already
+                    # flushed system logs above and don't need to preserve data.
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=10)
+                        continue
+                    except subprocess.TimeoutExpired:
+                        pass
+                elif Shell.check(
+                    f"cd {run_path} && clickhouse stop --pid-path {Path(pid_file).parent} --max-tries 300 --do-not-kill >/dev/null",
                     verbose=True,
+                ):
+                    continue
+                print(
+                    f"Failed to stop ClickHouse process {pid} gracefully - send ABRT signal to generate core file"
                 )
+                proc.send_signal(signal.SIGABRT)
 
         return self
 

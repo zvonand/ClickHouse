@@ -277,6 +277,8 @@ def main():
         ch_config_dir=f"{temp_dir}/etc/clickhouse-server",
         ch_var_lib_dir=f"{temp_dir}/var/lib/clickhouse",
     )
+    CH.install_configs()
+
     attach_debug = False
     if res and JobStages.TEST in stages:
         stop_watch_ = Utils.Stopwatch()
@@ -318,7 +320,7 @@ def main():
             *CH.prepare_logs(info=info, all=True),
         ]
 
-    CH.terminate()
+    CH.terminate(force=True)
 
     status = Result.Status.SUCCESS if args.set_status_success else ""
     Result.create_from(

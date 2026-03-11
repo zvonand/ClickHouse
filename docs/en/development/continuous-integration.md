@@ -93,7 +93,7 @@ python -m ci.praktika run "Style check" --test cpp
 These commands pull the `clickhouse/style-test` Docker image and run the job in a containerized environment.
 No dependencies other than Python 3 and Docker are required.
 
-### Running stateless tests {#running-stateless-tests}
+## Running stateless tests {#running-stateless-tests}
 
 A locally installed ClickHouse with default settings may work for specific test cases, but cannot run all test queries correctly. In CI, each job installs a specific ClickHouse configuration (e.g., S3 storage, Parallel Replicas) which can be cumbersome to reproduce manually. To avoid this, you can reproduce any CI job locally using the same orchestration as CI — no manual configuration needed.
 
@@ -105,7 +105,7 @@ Install Docker on Ubuntu if needed and re-login:
 ```sh
 sudo apt-get update
 sudo apt-get install docker.io
-sudo usermod -aG docker ubuntu
+sudo usermod -aG docker "$USER"
 sudo tee /etc/docker/daemon.json <<'EOF'
 {
   "ipv6": true,

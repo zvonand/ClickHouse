@@ -374,7 +374,7 @@ and is used internally to analyze tokenization behavior for LIKE patterns.
                     )"
             }
         };
-        FunctionDocumentation::IntroducedIn introduced_in_like = {26, 2};
+        FunctionDocumentation::IntroducedIn introduced_in_like = {26, 3};
         FunctionDocumentation documentation_like = {description_like, syntax_like, arguments, {}, returned_value, examples_like, introduced_in_like, category};
 
         factory.registerFunction<FunctionTokensOverloadResolver<LikePatternTokensTraits>>(documentation_like);

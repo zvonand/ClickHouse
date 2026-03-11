@@ -206,7 +206,7 @@ using FunctionRemoveDiacriticsUTF8 = FunctionStringToString<FoldUTF8Impl<RemoveD
 
 }
 
-REGISTER_FUNCTION(FoldUTF82)
+REGISTER_FUNCTION(FoldUTF8)
 {
     FunctionDocumentation::IntroducedIn intro = {26, 3};
     FunctionDocumentation::Category cat = FunctionDocumentation::Category::String;

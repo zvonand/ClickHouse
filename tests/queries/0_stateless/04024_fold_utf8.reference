@@ -41,3 +41,30 @@ HÉLLO	héllo	HELLO
 Straße	strasse	Straße
 café résumé	café résumé	cafe resume
 ﬃ	ffi	ﬃ
+-- text index: caseFoldUTF8 preprocessor
+1
+1
+1
+1
+1
+0
+-- text index: removeDiacriticsUTF8 preprocessor
+1
+1
+1
+1
+1
+1
+0
+-- text index: combined removeDiacriticsUTF8(caseFoldUTF8) preprocessor
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+0

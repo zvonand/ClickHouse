@@ -74,3 +74,74 @@ CREATE TABLE test_fold_utf8 (s String) ENGINE = Memory;
 INSERT INTO test_fold_utf8 VALUES ('Hello World'), ('Straße'), ('HÉLLO'), ('café résumé'), ('ﬃ'), ('');
 SELECT s, caseFoldUTF8(s), removeDiacriticsUTF8(s) FROM test_fold_utf8 ORDER BY s;
 DROP TABLE test_fold_utf8;
+
+-- Text index preprocessor tests
+SELECT '-- text index: caseFoldUTF8 preprocessor';
+DROP TABLE IF EXISTS test_fold_text_index;
+CREATE TABLE test_fold_text_index
+(
+    id UInt64,
+    val String,
+    INDEX idx_case(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = caseFoldUTF8(val))
+)
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO test_fold_text_index VALUES (1, 'Hello World'), (2, 'café résumé'), (3, 'Straße');
+
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'hello');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'HELLO');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'Hello');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'strasse');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'STRASSE');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'missing');
+
+DROP TABLE test_fold_text_index;
+
+SELECT '-- text index: removeDiacriticsUTF8 preprocessor';
+CREATE TABLE test_fold_text_index
+(
+    id UInt64,
+    val String,
+    INDEX idx_accent(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = removeDiacriticsUTF8(val))
+)
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO test_fold_text_index VALUES (1, 'café résumé'), (2, 'piñata fiesta'), (3, 'hello world');
+
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'cafe');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'café'); -- accent is part of the e
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'café'); -- accent is after the e
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'resume');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'pinata');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'hello');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'missing');
+
+DROP TABLE test_fold_text_index;
+
+SELECT '-- text index: combined removeDiacriticsUTF8(caseFoldUTF8) preprocessor';
+CREATE TABLE test_fold_text_index
+(
+    id UInt64,
+    val String,
+    INDEX idx_both(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = removeDiacriticsUTF8(caseFoldUTF8(val)))
+)
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO test_fold_text_index VALUES (1, 'CAFÉ Résumé'), (2, 'Piñata FIESTA'), (3, 'Hello World');
+
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'cafe');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'café'); -- accent is part of the e
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'café'); -- accent is after the e
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'CAFE');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'resume');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'pinata');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'PINATA');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'fiesta');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'FIESTA');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'hello');
+SELECT count() FROM test_fold_text_index WHERE hasToken(val, 'missing');
+
+DROP TABLE test_fold_text_index;

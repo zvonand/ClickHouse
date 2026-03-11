@@ -17,7 +17,7 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # and trigger the race between concurrent ClusterFunctionReadTaskCallback invocations.
 ${CLICKHOUSE_CLIENT} --query "
     SELECT DISTINCT [1]
-    FROM url('${CLICKHOUSE_URL}?query=SELECT+c1,c0+FROM+no_such_db.no_such_table+FORMAT+RawBLOB', 'RawBLOB', 'c1 LowCardinality(Bool), c0 UInt32')
+    FROM url('${CLICKHOUSE_URL}&query=SELECT+c1,c0+FROM+no_such_db.no_such_table+FORMAT+RawBLOB', 'RawBLOB', 'c1 LowCardinality(Bool), c0 UInt32')
     ORDER BY 1 ASC
     FORMAT Null
     SETTINGS

@@ -21,7 +21,7 @@ trap 'rm $tmp_file' EXIT
 $CLICKHOUSE_CLIENT -q "SELECT toString(number) FROM numbers(10e6) FORMAT TSV" > "$tmp_file"
 
 _timeout() {
-    echo Run: ${CLICKHOUSE_CURL} -sS -F "s=@$tmp_file;" "$1"
+    echo Run
     (
         ${CLICKHOUSE_CURL} -sS -F "s=@$tmp_file;" "$1" -o /dev/null
         echo Error: completed early

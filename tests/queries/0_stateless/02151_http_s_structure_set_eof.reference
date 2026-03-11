@@ -1,2 +1,2 @@
-Run: curl -q -s --max-time 120 -sS -F s=@/Users/dataved/ClickHouse/tests/queries/0_stateless/clickhouse.XXXXXX.csv; http://localhost:8123/?database=default&log_comment=02151_http_s_structure_set_eof.sh-default&s_structure=key+Int&query=SELECT+dummy+IN+s&input_format_parallel_parsing=true
-Run: curl -q -s --max-time 120 -sS -F s=@/Users/dataved/ClickHouse/tests/queries/0_stateless/clickhouse.XXXXXX.csv; http://localhost:8123/?database=default&log_comment=02151_http_s_structure_set_eof.sh-default&s_structure=key+Int&query=SELECT+dummy+IN+s&input_format_parallel_parsing=false
+Run
+Run

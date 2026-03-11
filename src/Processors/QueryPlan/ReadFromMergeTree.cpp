@@ -3905,7 +3905,7 @@ void ReadFromMergeTree::describeProjections(FormatSettings & format_settings) co
     const auto & result = getAnalysisResult();
     const auto & projection_stats = result.projection_stats;
 
-    std::string prefix(format_settings.offset, format_settings.indent_char);
+    const std::string & prefix = format_settings.other_prefix;
     if (!projection_stats.empty())
     {
         std::string indent(format_settings.base_indent, format_settings.indent_char);

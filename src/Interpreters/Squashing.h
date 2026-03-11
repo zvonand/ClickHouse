@@ -5,7 +5,7 @@
 #include <Processors/Chunk.h>
 
 #include <vector>
-#include <queue>
+#include <deque>
 
 namespace DB
 {

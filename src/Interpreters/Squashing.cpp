@@ -157,11 +157,11 @@ Chunk Squashing::generateUsingStrictBounds()
         /// Calculate remaining capacity until max limits
         size_t remaining_rows = max_block_size_rows;
         if (remaining_rows)
-            remaining_rows -= accumulated.getRows();
+            remaining_rows = (accumulated.getRows() >= remaining_rows) ? 0 : remaining_rows - accumulated.getRows();
 
         size_t remaining_bytes = max_block_size_bytes;
         if (remaining_bytes)
-            remaining_bytes -= accumulated.getBytes();
+            remaining_bytes = (accumulated.getBytes() >= remaining_bytes) ? 0 : remaining_bytes - accumulated.getBytes();
 
         auto result = pending.consumeUpTo(remaining_rows, remaining_bytes);
 

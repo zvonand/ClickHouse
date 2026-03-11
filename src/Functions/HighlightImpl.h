@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <base/types.h>
+#include <Common/Exception.h>
 #include <Common/Volnitsky.h>
 #include <Columns/ColumnString.h>
 
@@ -11,8 +12,14 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int LIMIT_EXCEEDED;
+}
+
 struct HighlightImpl
 {
+    static constexpr size_t MAX_INTERVALS_PER_ROW = 10000;
     struct Interval
     {
         size_t begin;
@@ -143,6 +150,12 @@ private:
                 const size_t offset = match - haystack;
                 intervals.push_back({offset, offset + needle_size});
                 pos = match + 1;
+
+                if (intervals.size() > MAX_INTERVALS_PER_ROW)
+                    throw Exception(
+                        ErrorCodes::LIMIT_EXCEEDED,
+                        "Too many highlight matches per row: {}, max: {}",
+                        intervals.size(), MAX_INTERVALS_PER_ROW);
             }
         }
     }

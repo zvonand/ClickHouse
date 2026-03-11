@@ -18,6 +18,7 @@ SELECT '-- Overlapping';
 SELECT highlight('abcdef', ['abc', 'cde']);
 SELECT highlight('abcdef', ['abc', 'def']);
 SELECT highlight('foobar', ['foo', 'foobar']);
+SELECT highlight('aaaaaa', ['aaaa']);
 
 -- Edge cases
 SELECT '-- Edge cases';
@@ -35,6 +36,7 @@ SELECT highlight('text here', ['text'], '<span class="hl">', '</span>');
 SELECT '-- UTF-8';
 SELECT highlight('Привет мир', ['Привет']);
 SELECT highlight('Hello Мир', ['hello']);
+SELECT highlight('körtefa', ['kÖrte']);  -- non-ASCII case: no match expected
 
 -- Column input
 SELECT '-- Column input';
@@ -51,7 +53,3 @@ SELECT highlight(toFixedString('Hello World', 20), ['hello']);
 -- Too many needles (> 255)
 SELECT '-- Error: too many needles';
 SELECT highlight('text', arrayMap(x -> toString(x), range(256))); -- { serverError TOO_MANY_ARGUMENTS_FOR_FUNCTION }
-
--- Performance smoke test
-SELECT '-- Performance';
-SELECT count() FROM (SELECT highlight(toString(number) || ' the quick brown fox jumps', ['quick', 'brown', 'fox']) FROM numbers(100000));

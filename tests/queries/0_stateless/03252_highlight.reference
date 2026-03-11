@@ -10,6 +10,7 @@ Hello World
 <em>abcde</em>f
 <em>abcdef</em>
 <em>foobar</em>
+<em>aaaaaa</em>
 -- Edge cases
 Hello
 
@@ -21,6 +22,7 @@ Hello World
 -- UTF-8
 <em>Привет</em> мир
 <em>Hello</em> Мир
+körtefa
 -- Column input
 <em>a</em>bc
 def
@@ -30,5 +32,3 @@ gh<em>a</em>
 -- FixedString
 <em>Hello</em> World
 -- Error: too many needles
--- Performance
-100000

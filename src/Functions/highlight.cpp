@@ -133,16 +133,11 @@ public:
                 "Too many needles for function {} (max 255, got {})",
                 getName(), needles_array.size());
 
-        /// Convert to vector<string_view> — store strings to keep them alive
-        std::vector<String> needle_strings;
-        needle_strings.reserve(needles_array.size());
-        for (const auto & element : needles_array)
-            needle_strings.emplace_back(element.safeGet<String>());
-
+        /// Build string_view vector pointing into the Array's Field storage
         std::vector<std::string_view> needles;
-        needles.reserve(needle_strings.size());
-        for (const auto & s : needle_strings)
-            needles.emplace_back(s);
+        needles.reserve(needles_array.size());
+        for (const auto & element : needles_array)
+            needles.emplace_back(element.safeGet<String>());
 
         /// Extract open_tag and close_tag
         String open_tag = "<em>";
@@ -216,7 +211,7 @@ The function performs ASCII case-insensitive matching. If multiple search terms 
         )"
     }
     };
-    FunctionDocumentation::IntroducedIn introduced_in = {25, 9};
+    FunctionDocumentation::IntroducedIn introduced_in = {26, 3};
     FunctionDocumentation::Category category = FunctionDocumentation::Category::StringSearch;
     FunctionDocumentation documentation = {description, syntax, func_arguments, {}, returned_value, examples, introduced_in, category};
 

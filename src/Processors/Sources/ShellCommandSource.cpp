@@ -304,7 +304,7 @@ public:
 
     /// Get buffered stderr content from circular buffer (for LOG_FIRST/LOG_LAST modes)
     /// Clears the buffer to prevent duplicate logging in destructor
-    String getBufferedStderr()
+    String consumeBufferedStderr()
     {
         if (stderr_result_buf.empty())
             return {};
@@ -607,9 +607,9 @@ namespace
                     catch (Exception & e)
                     {
                         /// Enrich exit code exception with buffered stderr content (LOG_FIRST/LOG_LAST modes)
-                        String stderr_content = timeout_command_out.getBufferedStderr();
+                        String stderr_content = timeout_command_out.consumeBufferedStderr();
                         if (!stderr_content.empty())
-                            e.addMessage(". Stderr: {}", stderr_content);
+                            e.addMessage("Stderr: {}", stderr_content);
                         throw;
                     }
                 }

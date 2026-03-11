@@ -1,14 +1,15 @@
-#include "ArrowFlightServer.h"
+#include <Server/ArrowFlight/ArrowFlightServer.h>
 
 #if USE_ARROWFLIGHT
 
-#include "AuthMiddleware.h"
-#include "commandSelector.h"
+#include <Server/ArrowFlight/AuthMiddleware.h>
+#include <Server/ArrowFlight/commandSelector.h>
 
 #include <Core/Settings.h>
 #include <Common/logger_useful.h>
 #include <Common/setThreadName.h>
 #include <Common/quoteString.h>
+#include <Interpreters/Context.h>
 #include <Interpreters/executeQuery.h>
 #include <Parsers/ASTIdentifier_fwd.h>
 #include <Parsers/ASTInsertQuery.h>
@@ -34,7 +35,6 @@ namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int UNKNOWN_EXCEPTION;
-    extern const int INVALID_SESSION_TIMEOUT;
     extern const int CANNOT_PARSE_INPUT_ASSERTION_FAILED;
     extern const int UNKNOWN_SETTING;
     extern const int SYNTAX_ERROR;

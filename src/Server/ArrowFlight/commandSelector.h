@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Interpreters/Context.h>
+#include <Interpreters/Context_fwd.h>
 
 #include <arrow/type.h>
 #include <google/protobuf/any.pb.h>

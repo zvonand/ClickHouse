@@ -116,6 +116,25 @@ namespace DB
             throw Exception(ErrorCodes::UNKNOWN_EXCEPTION, "Error with a {} column \"{}\": {}.", format_name, column_name, status.ToString());
     }
 
+    static std::shared_ptr<arrow::Buffer> nullBytemapToArrowBitmap(
+        const PaddedPODArray<UInt8> * null_bytemap,
+        size_t start,
+        size_t end)
+    {
+        if (!null_bytemap)
+            return nullptr;
+
+        int64_t length = static_cast<int64_t>(end - start);
+        auto bitmap = arrow::AllocateEmptyBitmap(length).ValueOrDie();
+        auto * data = bitmap->mutable_data();
+        for (size_t i = 0; i < static_cast<size_t>(length); ++i)
+        {
+            if (!(*null_bytemap)[start + i])
+                arrow::bit_util::SetBit(data, static_cast<int64_t>(i));
+        }
+        return bitmap;
+    }
+
     static void fillArrowArrayWithRawColumnData(
         ColumnPtr write_column,
         const PaddedPODArray<UInt8> * null_bytemap,
@@ -351,19 +370,27 @@ namespace DB
             status = MakeBuilder(arrow::default_memory_pool(), arrow_type, &variant_array_builder);
             checkStatus(status, variant->getName(), format_name);
 
-            std::shared_ptr<arrow::Array> variant_arrow_array = fillArrowArray(
-                variant->getName(),
-                variant,
-                column_type.getVariant(i),
-                nullptr,
-                variant_array_builder.get(),
-                format_name,
-                starts[i],
-                starts[i] + sizes[i],
-                settings,
-                dictionary_values);
+            if (sizes[i] == 0)
+            {
+                auto empty_array = arrow::MakeArrayOfNull(arrow_type, 0).ValueOrDie();
+                children.push_back(empty_array);
+            }
+            else
+            {
+                std::shared_ptr<arrow::Array> variant_arrow_array = fillArrowArray(
+                    variant->getName(),
+                    variant,
+                    column_type.getVariant(i),
+                    nullptr,
+                    variant_array_builder.get(),
+                    format_name,
+                    starts[i],
+                    starts[i] + sizes[i],
+                    settings,
+                    dictionary_values);
 
-            children.push_back(variant_arrow_array);
+                children.push_back(variant_arrow_array);
+            }
         }
         children.push_back(std::make_shared<arrow::NullArray>(1));
 
@@ -472,7 +499,8 @@ namespace DB
             children.push_back(nested_arrow_array);
         }
 
-        return std::move(arrow::StructArray::Make(children, builder.type()->fields())).ValueOrDie();
+        auto null_bitmap = nullBytemapToArrowBitmap(null_bytemap, start, end);
+        return std::move(arrow::StructArray::Make(children, builder.type()->fields(), null_bitmap)).ValueOrDie();
     }
 
     template<typename From, typename To>
@@ -593,7 +621,7 @@ namespace DB
         const String & column_name,
         ColumnPtr & column,
         const DataTypePtr & column_type,
-        [[maybe_unused]] const PaddedPODArray<UInt8> * null_bytemap,
+        const PaddedPODArray<UInt8> * null_bytemap,
         arrow::ArrayBuilder * array_builder,
         String format_name,
         size_t start,
@@ -629,7 +657,8 @@ namespace DB
         status = offsets_builder.Finish(&offsets_array);
         checkStatus(status, column_name, format_name);
 
-        return arrow::ListArray::FromArrays(*offsets_array, *data_array).ValueOrDie();
+        auto null_bitmap = nullBytemapToArrowBitmap(null_bytemap, start, end);
+        return arrow::ListArray::FromArrays(*offsets_array, *data_array, arrow::default_memory_pool(), null_bitmap).ValueOrDie();
     }
 
     static std::shared_ptr<arrow::Array> buildArrowMapArrayWithMapColumnData(
@@ -655,7 +684,8 @@ namespace DB
         auto list = buildArrowListArrayWithArrayColumnData(column_name, nested_column, nested_type, null_bytemap, builder.get(), format_name, start, end, settings, dictionary_values);
         auto * list_array = assert_cast<arrow::ListArray *>(list.get());
 
-        return std::make_shared<arrow::MapArray>(map_builder->type(), list_array->length(), list_array->offsets()->data()->buffers[1], list_array->values());
+        auto null_bitmap = nullBytemapToArrowBitmap(null_bytemap, start, end);
+        return std::make_shared<arrow::MapArray>(map_builder->type(), list_array->length(), list_array->offsets()->data()->buffers[1], list_array->values(), null_bitmap);
     }
 
     template<typename ValueType>

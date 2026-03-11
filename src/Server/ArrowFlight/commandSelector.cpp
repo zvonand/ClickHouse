@@ -1,5 +1,6 @@
-#include "commandSelector.h"
+#include <Server/ArrowFlight/commandSelector.h>
 
+#include <Interpreters/Context.h>
 #include <Core/Block.h>
 #include <Core/Settings.h>
 #include <Common/config_version.h>

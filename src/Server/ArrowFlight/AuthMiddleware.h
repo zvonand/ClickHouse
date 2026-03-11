@@ -11,11 +11,6 @@
 namespace DB
 {
 
-namespace ErrorCodes
-{
-    extern const int INVALID_SESSION_TIMEOUT;
-}
-
 inline const std::string AUTHORIZATION_HEADER = "authorization";
 inline const std::string AUTHORIZATION_MIDDLEWARE_NAME = "authorization_middleware";
 

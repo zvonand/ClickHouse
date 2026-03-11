@@ -1,4 +1,4 @@
-#include "AuthMiddleware.h"
+#include <Server/ArrowFlight/AuthMiddleware.h>
 
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
@@ -10,6 +10,12 @@
 
 namespace DB
 {
+
+namespace ErrorCodes
+{
+    extern const int LOGICAL_ERROR;
+    extern const int INVALID_SESSION_TIMEOUT;
+}
 
 void AuthMiddleware::SendingHeaders(arrow::flight::AddCallHeaders * outgoing_headers)
 {

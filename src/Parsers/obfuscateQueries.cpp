@@ -1177,9 +1177,12 @@ void obfuscateQueries(
     bool after_interval = false;
 
     /// Dictionary SOURCE(...) and LAYOUT(...) context tracking.
-    /// Inside these blocks, all bare words are structural parameter names and should be preserved.
+    /// These blocks contain key-value pairs where keys are structural parameter names
+    /// (PORT, HOST, SIZE_IN_CELLS, etc.) that must be preserved, while values may be
+    /// user identifiers that should still be obfuscated.
     bool expect_dict_block_open = false;    /// True after seeing SOURCE or LAYOUT keyword, expecting '('.
     int dict_block_paren_depth = 0;         /// Parenthesis nesting depth inside the block; 0 = not inside.
+    bool dict_expect_key = true;            /// At depth >= 2, alternates between key (preserve) and value (obfuscate).
 
     auto always_false_func = [](std::string_view) { return false; };
 
@@ -1217,6 +1220,7 @@ void obfuscateQueries(
             after_interval = false;
             expect_dict_block_open = false;
             dict_block_paren_depth = 0;
+            dict_expect_key = true;
             result.write(token.begin, token.size());
             continue;
         }
@@ -1338,8 +1342,12 @@ void obfuscateQueries(
         }
 
         /// ---- Dictionary SOURCE/LAYOUT block tracking. ----
-        /// Inside these blocks all bare words are structural parameter names (PORT, PASSWORD, SIZE_IN_CELLS, etc.)
-        /// and must be preserved to produce valid DDL output.
+        /// These blocks use key-value pair grammar: SOURCE(TYPE(KEY1 value1 KEY2 value2 ...)).
+        /// At depth 1: the bare word is the source/layout type name — let it fall through to
+        /// normal keyword/known_identifier processing (factory-registered names handle it).
+        /// At depth >= 2: bare words alternate between structural keys (preserve) and
+        /// user-provided values (obfuscate). Non-BareWord values (literals, numbers) are always
+        /// obfuscated via normal processing.
         if (expect_dict_block_open)
         {
             if (token.type == TokenType::OpeningRoundBracket)
@@ -1355,18 +1363,39 @@ void obfuscateQueries(
         if (dict_block_paren_depth > 0)
         {
             if (token.type == TokenType::OpeningRoundBracket)
-                ++dict_block_paren_depth;
-            else if (token.type == TokenType::ClosingRoundBracket)
-                --dict_block_paren_depth;
-
-            /// Preserve all tokens inside SOURCE/LAYOUT as-is, except string literals
-            /// (which contain user data like hostnames and passwords) and numbers.
-            if (token.type == TokenType::BareWord)
             {
+                ++dict_block_paren_depth;
+                dict_expect_key = true;
                 result.write(token.begin, token.size());
                 continue;
             }
-            /// Numbers and strings still get obfuscated — fall through to normal processing.
+            if (token.type == TokenType::ClosingRoundBracket)
+            {
+                --dict_block_paren_depth;
+                dict_expect_key = true;
+                result.write(token.begin, token.size());
+                continue;
+            }
+
+            if (dict_block_paren_depth >= 2 && token.type == TokenType::BareWord)
+            {
+                if (dict_expect_key)
+                {
+                    /// Structural parameter name — preserve as-is.
+                    result.write(token.begin, token.size());
+                    dict_expect_key = false;
+                    continue;
+                }
+                /// User-provided identifier value — fall through to normal obfuscation.
+                dict_expect_key = true;
+            }
+            else if (dict_block_paren_depth >= 2 && !dict_expect_key
+                     && (token.type == TokenType::Number || token.type == TokenType::StringLiteral))
+            {
+                /// Non-BareWord value consumed — next bare word is a key again.
+                dict_expect_key = true;
+            }
+            /// Fall through to normal processing for type names (depth 1) and values.
         }
 
         /// ---- Normal token processing. ----

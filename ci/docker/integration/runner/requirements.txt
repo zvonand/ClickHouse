@@ -104,4 +104,3 @@ websocket-client==1.9.0
 wheel==0.46.3
 filelock==3.25.0
 kazoo @ git+https://github.com/ClickHouse/kazoo.git
-flightsql-dbapi==0.2.2

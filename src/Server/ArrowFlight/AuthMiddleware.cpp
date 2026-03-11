@@ -184,7 +184,7 @@ arrow::Status AuthMiddlewareFactory::StartCall(
         token = *token_opt;
         credentials = token_storage.getCredentials(token);
         if (!credentials)
-            return arrow::Status::Invalid("Session expired or not authenticated.");
+            return arrow::flight::MakeFlightError(arrow::flight::FlightStatusCode::Unauthenticated, "Session expired or not authenticated.");
 
         std::tie(username, password) = *credentials;
     }
@@ -195,7 +195,7 @@ arrow::Status AuthMiddlewareFactory::StartCall(
     }
     catch (DB::Exception & e)
     {
-        return arrow::Status::Invalid(e.what());
+        return arrow::flight::MakeFlightError(arrow::flight::FlightStatusCode::Unauthenticated, e.what());
     }
 
     if (auth)

@@ -6,8 +6,12 @@ import pyarrow as pa
 import pyarrow.flight as flight
 import random
 import string
-from flightsql import FlightSQLClient, FlightSQLCallOptions, flightsql_pb2
-import flightsql
+from .flight_sql_client import (
+    FlightSQLClient,
+    flight_descriptor,
+    CommandStatementUpdate,
+    DoPutUpdateResult,
+)
 
 
 from helpers.cluster import ClickHouseCluster, get_docker_compose_path
@@ -120,7 +124,7 @@ def test_error_handling():
 
 def test_large_result_set():
     client = get_client()
-    
+
     # Create table with many rows to test streaming
     client.execute_update("CREATE TABLE large_test (id UInt32, value String) ENGINE = Memory")
     client.execute_update("INSERT INTO large_test SELECT number, toString(number) FROM numbers(10000)")
@@ -135,22 +139,22 @@ def test_large_result_set():
 def test_streaming_insert():
     """
     Test bulk data insertion via Arrow Flight SQL.
-    
+
     Note: This test uses a workaround due to Arrow Flight SQL version limitations.
     Arrow Flight SQL v11 lacks bulk ingestion functionality (CommandStatementIngest),
     which was introduced in v12. ClickHouse supports a non-standard approach using
     CommandStatementUpdate, but this is not supported by the flightsql-dbapi module.
-    
-    This implementation uses a mix of the underlying Flight API with undocumented
-    flightsql-dbapi functionality. When upgrading to Arrow Flight SQL v12+, this
-    test should be replaced with the standard CommandStatementIngest approach.
+
+    This implementation uses a mix of the underlying Flight API with the Flight SQL
+    protobuf definitions. When upgrading to Arrow Flight SQL v12+, this test should
+    be replaced with the standard CommandStatementIngest approach.
     """
     client = get_client()
 
     client.execute_update("CREATE TABLE bulk_test (id UInt32, str String) ENGINE = Memory")
 
-    cmd = flightsql_pb2.CommandStatementUpdate(query="INSERT INTO bulk_test FORMAT Arrow")
-    descriptor = flightsql.client.flight_descriptor(cmd)
+    cmd = CommandStatementUpdate(query="INSERT INTO bulk_test FORMAT Arrow")
+    descriptor = flight_descriptor(cmd)
     schema = pa.schema([
         ("id", pa.uint32()),
         ("str", pa.string()),
@@ -170,6 +174,6 @@ def test_streaming_insert():
     result = reader.read()
 
     assert result is not None
-    update_result = flightsql_pb2.DoPutUpdateResult()
+    update_result = DoPutUpdateResult()
     update_result.ParseFromString(result.to_pybytes())
     assert update_result.record_count == 7000

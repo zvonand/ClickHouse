@@ -627,7 +627,7 @@ def test_invalid_user():
         ticket = flight.Ticket(b"SELECT * FROM mytable")
         client.do_get(ticket, options)
         assert False, "Expected authentication failure (login and password are not correct) but succeeded"
-    except flight.FlightServerError as e:
+    except flight.FlightUnauthenticatedError as e:
         assert (
             "Authentication failed: password is incorrect, or there is no user with such name"
             in str(e)

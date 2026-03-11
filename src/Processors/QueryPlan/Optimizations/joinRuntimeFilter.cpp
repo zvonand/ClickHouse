@@ -17,7 +17,6 @@
 #include <Common/logger_useful.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <Functions/tuple.h>
-#include <Functions/isNull.h>
 #include <DataTypes/getLeastSupertype.h>
 #include <fmt/format.h>
 
@@ -43,7 +42,7 @@ const ActionsDAG::Node * addNullBypassForAntiJoin(
     ActionsDAG::NodeRawConstPtrs or_conditions;
     or_conditions.push_back(filter_condition);
 
-    FunctionOverloadResolverPtr is_null_func = std::make_shared<FunctionToOverloadResolverAdaptor>(std::make_shared<FunctionIsNull>(/*use_analyzer=*/true));
+    auto is_null_func = FunctionFactory::instance().get("isNull", Context::getGlobalContextInstance());
     for (const auto & key : keys)
     {
         if (isNullableOrLowCardinalityNullable(key.type))

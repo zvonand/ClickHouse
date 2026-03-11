@@ -2659,8 +2659,6 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             {
                 if (fuzz_rand() % 50 == 0)
                 {
-                    select->having()->children.clear();
-
                     addOrReplacePredicate(select, ASTSelectQuery::Expression::HAVING);
                 }
             }
@@ -2678,7 +2676,6 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         {
             if (fuzz_rand() % 50 == 0)
             {
-                select->where()->children.clear();
                 addOrReplacePredicate(select, ASTSelectQuery::Expression::WHERE);
             }
             else if (!select->prewhere().get())
@@ -2704,7 +2701,6 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         {
             if (fuzz_rand() % 50 == 0)
             {
-                select->prewhere()->children.clear();
                 addOrReplacePredicate(select, ASTSelectQuery::Expression::PREWHERE);
             }
             else if (!select->where().get())
@@ -2730,7 +2726,6 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         {
             if (fuzz_rand() % 50 == 0)
             {
-                select->qualify()->children.clear();
                 addOrReplacePredicate(select, ASTSelectQuery::Expression::QUALIFY);
             }
         }

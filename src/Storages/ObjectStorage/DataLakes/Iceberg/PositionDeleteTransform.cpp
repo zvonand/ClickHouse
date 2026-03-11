@@ -70,7 +70,7 @@ void IcebergPositionDeleteTransform::initializeDeleteSources()
     {
         /// Resolve the position delete file path to get the correct storage and key
         auto [delete_storage_to_use, resolved_key] = resolveObjectStorageForPath(
-            table_location, position_deletes_object.file_path, object_storage, secondary_storages, context);
+            table_location, position_deletes_object.file_path, object_storage, *secondary_storages, context);
 
         auto object_metadata = delete_storage_to_use->getObjectMetadata(resolved_key, /*with_tags=*/ false);
         RelativePathWithMetadata object_info(resolved_key, object_metadata);

@@ -355,7 +355,7 @@ bool IcebergMetadata::optimize(
             snapshots_info,
             persistent_components,
             object_storage,
-            *secondary_storages,
+            secondary_storages,
             data_lake_settings,
             format_settings,
             sample_block,
@@ -622,7 +622,8 @@ Pipe IcebergMetadata::executeCommand(
             catalog_,
             configuration_->getTypeName(),
             configuration_->getNamespace(),
-            storage_id.getTableName());
+            storage_id.getTableName(),
+            *secondary_storages);
 
         return expireSnapshotsResultToPipe(result);
     }
@@ -1028,7 +1029,7 @@ void IcebergMetadata::addDeleteTransformers(
     {
         builder.addSimpleTransform(
             [&](const SharedHeader & header)
-            { return iceberg_object_info->getPositionDeleteTransformer(object_storage, header, format_settings, parser_shared_resources, local_context, persistent_components.table_location, *secondary_storages); });
+            { return iceberg_object_info->getPositionDeleteTransformer(object_storage, header, format_settings, parser_shared_resources, local_context, persistent_components.table_location, secondary_storages); });
     }
     const auto & delete_files = iceberg_object_info->info.equality_deletes_objects;
     LOG_DEBUG(log, "Constructing filter transform for equality delete, there are {} delete files", delete_files.size());

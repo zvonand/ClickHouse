@@ -928,7 +928,8 @@ static void collectRetainedFiles(
     Int32 current_schema_id,
     std::set<String> & retained_manifest_paths,
     std::set<String> & retained_data_file_paths,
-    std::set<String> & retained_manifest_list_paths)
+    std::set<String> & retained_manifest_list_paths,
+    SecondaryStorages & secondary_storages)
 {
     for (UInt32 i = 0; i < retained_snapshots->size(); ++i)
     {
@@ -942,7 +943,6 @@ static void collectRetainedFiles(
         String storage_manifest_list_path = makeAbsolutePath(
             persistent_table_components.table_location, manifest_list_path);
 
-        SecondaryStorages secondary_storages;
         auto manifest_keys = getManifestList(
             object_storage, persistent_table_components, context, storage_manifest_list_path, log, secondary_storages);
 
@@ -977,7 +977,8 @@ static ExpiredFiles collectExpiredFiles(
     PersistentTableComponents & persistent_table_components,
     ContextPtr context,
     LoggerPtr log,
-    Int32 current_schema_id)
+    Int32 current_schema_id,
+    SecondaryStorages & secondary_storages)
 {
     ExpiredFiles result;
     for (const auto & ml_path : expired_manifest_list_paths)
@@ -987,8 +988,6 @@ static ExpiredFiles collectExpiredFiles(
 
         String storage_ml_path = makeAbsolutePath(
             persistent_table_components.table_location, ml_path);
-
-        SecondaryStorages secondary_storages;
         ManifestFileCacheKeys manifest_keys;
         try
         {
@@ -1130,14 +1129,19 @@ static void updateMetadataForExpiration(
 
 static void deleteExpiredFiles(
     const Strings & files_to_delete,
+    const String & table_location,
     ObjectStoragePtr object_storage,
-    LoggerPtr log)
+    ContextPtr context,
+    LoggerPtr log,
+    SecondaryStorages & secondary_storages)
 {
     for (const auto & file_path : files_to_delete)
     {
         try
         {
-            object_storage->removeObjectIfExists(StoredObject(file_path));
+            auto [storage_to_use, key_in_storage] = resolveObjectStorageForPath(
+                table_location, file_path, object_storage, secondary_storages, context);
+            storage_to_use->removeObjectIfExists(StoredObject(key_in_storage));
             LOG_DEBUG(log, "Deleted expired file {}", file_path);
         }
         catch (...)
@@ -1168,7 +1172,8 @@ ExpireSnapshotsResult expireSnapshots(
     std::shared_ptr<DataLake::ICatalog> catalog,
     const String & blob_storage_type_name,
     const String & blob_storage_namespace_name,
-    const String & table_name)
+    const String & table_name,
+    SecondaryStorages & secondary_storages)
 {
     auto common_path = persistent_table_components.table_path;
     if (!common_path.starts_with('/'))
@@ -1232,10 +1237,12 @@ ExpireSnapshotsResult expireSnapshots(
         std::set<String> retained_manifest_list_paths;
         collectRetainedFiles(
             partition.retained_snapshots, object_storage, persistent_table_components, context, log,
-            current_schema_id, retained_manifest_paths, retained_data_file_paths, retained_manifest_list_paths);
+            current_schema_id, retained_manifest_paths, retained_data_file_paths, retained_manifest_list_paths,
+            secondary_storages);
         auto expired_files = collectExpiredFiles(
             partition.expired_manifest_list_paths, retained_manifest_list_paths, retained_manifest_paths, retained_data_file_paths,
-            object_storage, persistent_table_components, context, log, current_schema_id);
+            object_storage, persistent_table_components, context, log, current_schema_id,
+            secondary_storages);
 
         updateMetadataForExpiration(metadata, expired_ref_names, partition.retained_snapshots, partition.expired_snapshot_ids);
 
@@ -1275,7 +1282,7 @@ ExpireSnapshotsResult expireSnapshots(
         }
 
         LOG_INFO(log, "Deleting {} expired files for {} expired snapshots", expired_files.all_paths.size(), partition.expired_snapshot_ids.size());
-        deleteExpiredFiles(expired_files.all_paths, object_storage, log);
+        deleteExpiredFiles(expired_files.all_paths, persistent_table_components.table_location, object_storage, context, log, secondary_storages);
         LOG_INFO(log, "Expired {} snapshots, deleted {} files", partition.expired_snapshot_ids.size(), expired_files.all_paths.size());
 
         return ExpireSnapshotsResult{

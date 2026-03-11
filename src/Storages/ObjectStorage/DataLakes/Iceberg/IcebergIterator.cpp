@@ -407,6 +407,33 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                 object_info->info.data_object_file_path_from_metadata);
         }
 
+        if (!object_info->info.requires_external_storage)
+        {
+            for (const auto & pos_del : object_info->info.position_deletes_objects)
+            {
+                auto [del_storage, del_key] = resolveObjectStorageForPath(
+                    persistent_components.table_location, pos_del.file_path, object_storage, *secondary_storages, local_context);
+                if (del_storage != object_storage)
+                {
+                    object_info->info.requires_external_storage = true;
+                    break;
+                }
+            }
+        }
+        if (!object_info->info.requires_external_storage)
+        {
+            for (const auto & eq_del : object_info->info.equality_deletes_objects)
+            {
+                auto [del_storage, del_key] = resolveObjectStorageForPath(
+                    persistent_components.table_location, eq_del.file_path, object_storage, *secondary_storages, local_context);
+                if (del_storage != object_storage)
+                {
+                    object_info->info.requires_external_storage = true;
+                    break;
+                }
+            }
+        }
+
         ProfileEvents::increment(ProfileEvents::IcebergMetadataReturnedObjectInfos);
         return object_info;
     }

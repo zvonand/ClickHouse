@@ -14,6 +14,7 @@
 #include <Parsers/ASTDropQuery.h>
 #include <Parsers/ASTLiteral.h>
 #include <Storages/ObjectStorage/StorageObjectStorageSource.h>
+#include <Storages/ObjectStorage/Utils.h>
 
 namespace DB::Iceberg
 {
@@ -60,7 +61,8 @@ ExpireSnapshotsResult expireSnapshots(
     std::shared_ptr<DataLake::ICatalog> catalog,
     const String & blob_storage_type_name,
     const String & blob_storage_namespace_name,
-    const String & table_name);
+    const String & table_name,
+    SecondaryStorages & secondary_storages);
 }
 
 #endif

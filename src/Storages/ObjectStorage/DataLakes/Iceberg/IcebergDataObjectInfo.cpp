@@ -67,7 +67,7 @@ std::shared_ptr<ISimpleTransform> IcebergDataObjectInfo::getPositionDeleteTransf
     FormatParserSharedResourcesPtr parser_shared_resources,
     ContextPtr context_,
     const String & table_location,
-    SecondaryStorages & secondary_storages)
+    std::shared_ptr<SecondaryStorages> secondary_storages)
 {
     IcebergDataObjectInfoPtr self = shared_from_this();
     if (!context_->getSettingsRef()[Setting::use_roaring_bitmap_iceberg_positional_deletes].value)

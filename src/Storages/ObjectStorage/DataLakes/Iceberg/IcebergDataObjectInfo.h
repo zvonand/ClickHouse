@@ -69,7 +69,7 @@ struct IcebergDataObjectInfo : public ObjectInfo, std::enable_shared_from_this<I
         FormatParserSharedResourcesPtr parser_shared_resources,
         ContextPtr context_,
         const String & table_location,
-        SecondaryStorages & secondary_storages);
+        std::shared_ptr<SecondaryStorages> secondary_storages);
 
     std::optional<String> getFileFormat() const override { return info.file_format; }
 

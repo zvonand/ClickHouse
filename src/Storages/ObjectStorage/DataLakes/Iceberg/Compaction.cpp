@@ -185,7 +185,7 @@ Plan getPlan(
 
                 IcebergDataObjectInfoPtr data_object_info = std::make_shared<IcebergDataObjectInfo>(data_file, 0, resolved_storage, resolved_key);
                 std::shared_ptr<DataFilePlan> data_file_ptr;
-                std::string path_identifier = resolved_storage->getDescription() + ":" + resolved_storage->getObjectsNamespace() + "|" + resolved_key;
+                std::string path_identifier = resolved_storage->getDescription() + '\0' + resolved_storage->getObjectsNamespace() + '\0' + resolved_key;
                 if (!plan.path_to_data_file.contains(path_identifier))
                 {
                     data_file_ptr = std::make_shared<DataFilePlan>(DataFilePlan{
@@ -231,7 +231,7 @@ static void writeDataFiles(
     const String & write_format,
     CompressionMethod write_compression_method,
     const String & table_location,
-    SecondaryStorages & secondary_storages)
+    std::shared_ptr<SecondaryStorages> secondary_storages)
 {
     for (auto & [_, data_file] : initial_plan.path_to_data_file)
     {
@@ -523,7 +523,7 @@ void compactIcebergTable(
     IcebergHistory snapshots_info,
     const PersistentTableComponents & persistent_table_components,
     ObjectStoragePtr object_storage_,
-    SecondaryStorages & secondary_storages_,
+    std::shared_ptr<SecondaryStorages> secondary_storages_,
     const DataLakeStorageSettings & data_lake_settings,
     const std::optional<FormatSettings> & format_settings_,
     SharedHeader sample_block_,
@@ -535,7 +535,7 @@ void compactIcebergTable(
         data_lake_settings,
         persistent_table_components,
         object_storage_,
-        secondary_storages_,
+        *secondary_storages_,
         write_format,
         context_,
         persistent_table_components.metadata_compression_method);

@@ -16,7 +16,7 @@ void compactIcebergTable(
     IcebergHistory snapshots_info,
     const PersistentTableComponents & persistent_table_components,
     DB::ObjectStoragePtr object_storage_,
-    SecondaryStorages & secondary_storages_,
+    std::shared_ptr<SecondaryStorages> secondary_storages_,
     const DataLakeStorageSettings & data_lake_settings,
     const std::optional<DB::FormatSettings> & format_settings_,
     DB::SharedHeader sample_block_,

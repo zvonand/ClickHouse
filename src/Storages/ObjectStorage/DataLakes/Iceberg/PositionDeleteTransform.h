@@ -30,7 +30,7 @@ public:
         FormatParserSharedResourcesPtr parser_shared_resources_,
         ContextPtr context_,
         const String & table_location_,
-        SecondaryStorages & secondary_storages_)
+        std::shared_ptr<SecondaryStorages> secondary_storages_)
         : ISimpleTransform(header_, header_, false)
         , header(header_)
         , iceberg_object_info(iceberg_object_info_)
@@ -39,7 +39,7 @@ public:
         , context(context_)
         , parser_shared_resources(parser_shared_resources_)
         , table_location(table_location_)
-        , secondary_storages(secondary_storages_)
+        , secondary_storages(std::move(secondary_storages_))
     {
         initializeDeleteSources();
     }
@@ -61,7 +61,7 @@ protected:
     FormatParserSharedResourcesPtr parser_shared_resources;
 
     const String table_location;
-    SecondaryStorages & secondary_storages;
+    std::shared_ptr<SecondaryStorages> secondary_storages;
 
     /// We need to keep the read buffers alive since the delete_sources depends on them.
     std::vector<std::unique_ptr<ReadBuffer>> delete_read_buffers;
@@ -81,8 +81,8 @@ public:
         FormatParserSharedResourcesPtr parser_shared_resources_,
         ContextPtr context_,
         const String & table_location_,
-        SecondaryStorages & secondary_storages_)
-        : IcebergPositionDeleteTransform(header_, iceberg_object_info_, object_storage_, format_settings_, parser_shared_resources_, context_, table_location_, secondary_storages_)
+        std::shared_ptr<SecondaryStorages> secondary_storages_)
+        : IcebergPositionDeleteTransform(header_, iceberg_object_info_, object_storage_, format_settings_, parser_shared_resources_, context_, table_location_, std::move(secondary_storages_))
     {
         initialize();
     }
@@ -109,8 +109,8 @@ public:
         FormatParserSharedResourcesPtr parser_shared_resources_,
         ContextPtr context_,
         const String & table_location_,
-        SecondaryStorages & secondary_storages_)
-        : IcebergPositionDeleteTransform(header_, iceberg_object_info_, object_storage_, format_settings_, parser_shared_resources_, context_, table_location_, secondary_storages_)
+        std::shared_ptr<SecondaryStorages> secondary_storages_)
+        : IcebergPositionDeleteTransform(header_, iceberg_object_info_, object_storage_, format_settings_, parser_shared_resources_, context_, table_location_, std::move(secondary_storages_))
     {
         initialize();
     }

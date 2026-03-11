@@ -53,6 +53,7 @@ namespace ProfileEvents
     extern const Event KeeperBatchMaxTotalSize;
     extern const Event KeeperRequestRejectedDueToSoftMemoryLimitCount;
     extern const Event KeeperStaleRequestsSkipped;
+    extern const Event KeeperFinishedSessionsCacheFull;
 }
 
 namespace HistogramMetrics
@@ -69,6 +70,7 @@ namespace DB
 namespace CoordinationSetting
 {
     extern const CoordinationSettingsMilliseconds dead_session_check_period_ms;
+    extern const CoordinationSettingsUInt64 max_finished_sessions_cache_size;
     extern const CoordinationSettingsUInt64 max_request_queue_size;
     extern const CoordinationSettingsUInt64 max_requests_batch_bytes_size;
     extern const CoordinationSettingsUInt64 max_requests_batch_size;
@@ -930,7 +932,16 @@ void KeeperDispatcher::finishSession(int64_t session_id)
     /// still sitting in the queue for this session.
     {
         std::lock_guard lock(finished_sessions_mutex);
-        finished_sessions.insert(session_id);
+        if (finished_sessions.size() < configuration_and_settings->coordination_settings[CoordinationSetting::max_finished_sessions_cache_size])
+        {
+            finished_sessions.insert(session_id);
+        }
+        else
+        {
+            ProfileEvents::increment(ProfileEvents::KeeperFinishedSessionsCacheFull);
+            LOG_WARNING(log, "Finished sessions cache is full (size {}), session {} will not be tracked for stale request filtering",
+                finished_sessions.size(), session_id);
+        }
     }
 
     /// Notify the callback that session is being closed before removing it

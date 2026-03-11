@@ -9,6 +9,7 @@
 #include <Poco/Net/SocketAddress.h>
 
 #include <map>
+#include <optional>
 #include <string>
 #include <unordered_set>
 
@@ -35,6 +36,7 @@ struct DatabaseReplicaInfo
     String hostname;
     String shard_name;
     String replica_name;
+    std::optional<bool> is_local;
 };
 
 struct ClusterConnectionParameters

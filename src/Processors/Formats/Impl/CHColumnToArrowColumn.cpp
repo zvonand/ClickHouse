@@ -581,7 +581,7 @@ namespace DB
         /// We can use Int32/UInt32/Int64/UInt64 type for indexes.
         const auto * indexes_int32_type = typeid_cast<const arrow::Int32Type *>(dict_indexes_arrow_type.get());
         const auto * indexes_uint32_type = typeid_cast<const arrow::UInt32Type *>(dict_indexes_arrow_type.get());
-        const auto * indexes_int64_type = typeid_cast<const arrow::UInt32Type *>(dict_indexes_arrow_type.get());
+        const auto * indexes_int64_type = typeid_cast<const arrow::Int64Type *>(dict_indexes_arrow_type.get());
         if ((indexes_int32_type && dict_size > INT32_MAX) || (indexes_uint32_type && dict_size > UINT32_MAX) || (indexes_int64_type && dict_size > INT64_MAX))
             throw Exception(
                 ErrorCodes::ILLEGAL_COLUMN,

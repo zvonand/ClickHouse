@@ -1946,11 +1946,11 @@ arrow::Status ArrowFlightServer::DoAction(
             ARROW_RETURN_NOT_OK(arrow::flight::GetSessionOptionsRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}));
             arrow::flight::GetSessionOptionsResult result;
 
-            auto execute_res = executeSQLtoTable(session, "SHOW SETTINGS LIKE '%'");
+            auto execute_res = executeSQLtoTable(session, "SELECT name, value FROM system.settings");
             ARROW_RETURN_NOT_OK(execute_res);
             auto [_, table] = execute_res.ValueUnsafe();
             const auto & names = table->column(0);
-            const auto & values = table->column(2);
+            const auto & values = table->column(1);
 
             if (names->num_chunks() != values->num_chunks())
                 return arrow::Status::Invalid("Unexpected chunk layout mismatch for settings columns");

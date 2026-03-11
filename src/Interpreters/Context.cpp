@@ -41,6 +41,7 @@
 #include <Interpreters/Context_fwd.h>
 #include <Server/ServerType.h>
 #include <Storages/MarkCache.h>
+#include <Common/JemallocCacheArena.h>
 #include <Storages/MergeTree/MergeList.h>
 #include <Storages/MergeTree/MovesList.h>
 #include <Storages/MergeTree/ReplicatedFetchList.h>
@@ -49,6 +50,7 @@
 #include <Storages/MergeTree/PrimaryIndexCache.h>
 #include <Storages/MergeTree/TextIndexCache.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergMetadataFilesCache.h>
+#include <Processors/Formats/Impl/ParquetMetadataCache.h>
 #include <Storages/StreamingStorageRegistry.h>
 #include <Storages/MergeTree/VectorSimilarityIndexCache.h>
 #include <Storages/Distributed/DistributedSettings.h>
@@ -387,6 +389,7 @@ namespace ServerSetting
     extern const ServerSettingsUInt64 max_database_num_to_throw;
     extern const ServerSettingsUInt64 max_named_collection_num_to_throw;
     extern const ServerSettingsBool allow_experimental_webassembly_udf;
+    extern const ServerSettingsString webassembly_udf_engine;
 }
 
 namespace ErrorCodes
@@ -550,6 +553,9 @@ struct ContextSharedPart : boost::noncopyable
     mutable MMappedFileCachePtr mmap_cache TSA_GUARDED_BY(mutex);                     /// Cache of mmapped files to avoid frequent open/map/unmap/close and to reuse from several threads.
 #if USE_AVRO
     mutable IcebergMetadataFilesCachePtr iceberg_metadata_files_cache TSA_GUARDED_BY(mutex);   /// Cache of deserialized iceberg metadata files.
+#endif
+#if USE_PARQUET
+    mutable ParquetMetadataCachePtr parquet_metadata_cache TSA_GUARDED_BY(mutex);   /// Cache of deserialized parquet metadata files.
 #endif
     AsynchronousMetrics * asynchronous_metrics TSA_GUARDED_BY(mutex) = nullptr;       /// Points to asynchronous metrics
     mutable PageCachePtr page_cache TSA_GUARDED_BY(mutex);                            /// Userspace page cache.
@@ -1021,6 +1027,14 @@ struct ContextSharedPart : boost::noncopyable
         if (delete_zookeeper)
             delete_zookeeper->finalize("shutdown");
 
+        std::map<String, zkutil::ZooKeeperPtr> delete_auxiliary_zookeepers;
+        {
+            std::lock_guard lock(auxiliary_zookeepers_mutex);
+            delete_auxiliary_zookeepers = std::move(auxiliary_zookeepers);
+        }
+        for (auto & [name, zk] : delete_auxiliary_zookeepers)
+            zk->finalize("shutdown");
+
         /// Dictionaries may be required:
         /// - for storage shutdown (during final flush of the Buffer engine)
         /// - before storage startup (because of some streaming of, i.e. Kafka, to
@@ -1382,7 +1396,7 @@ String Context::getFilesystemCacheUser() const
     return shared->filesystem_cache_user;
 }
 
-DatabaseAndTable Context::getOrCacheStorage(const StorageID & id, std::function<DatabaseAndTable()> storage_getter, std::optional<Exception> * exception) const
+DatabaseAndTable Context::getOrCacheStorage(const StorageID & id, std::function<DatabaseAndTable()> storage_getter) const
 {
     auto & shard = storage_cache.shards[StorageCache::shardIndex(id)];
     std::lock_guard lock(shard.mutex);
@@ -1390,12 +1404,13 @@ DatabaseAndTable Context::getOrCacheStorage(const StorageID & id, std::function<
     if (auto it = shard.set.find(id); it != shard.set.end())
     {
         DatabaseAndTable storage = DatabaseCatalog::instance().tryGetByUUID(it->uuid);
-        if (exception && !storage.second)
-            exception->emplace(Exception(
-                ErrorCodes::UNKNOWN_TABLE,
-                "Table {} does not exist anymore - maybe it was dropped",
-                id.getNameForLogs()));
-        return storage;
+        if (storage.second)
+            return storage;
+
+        /// The table was cached but no longer exists by its UUID
+        /// (e.g. refreshable materialized view's inner table was dropped and recreated).
+        /// Remove the stale entry and fall through to a fresh lookup by name.
+        shard.set.erase(it);
     }
 
     auto storage = storage_getter();
@@ -3652,9 +3667,7 @@ WasmModuleManager * Context::initWasmModuleManager()
     if (!shared->server_settings[ServerSetting::allow_experimental_webassembly_udf])
         return nullptr;
 
-    const auto & config = shared->getConfigRefWithLock(lock);
-    auto engine_name = config.getString("webassembly_udf_engine", "wasmtime");
-
+    String engine_name = shared->server_settings[ServerSetting::webassembly_udf_engine];
     LOG_DEBUG(shared->log, "Experimental WebAssembly UDF support is enabled, using engine: {}", engine_name);
 
     auto user_scripts_disk = std::make_shared<DiskLocal>("user_scripts", shared->user_scripts_path);
@@ -3725,14 +3738,17 @@ void Context::cancelAllBackupsAndRestores() const
         shared->backups_worker->cancelAll();
 }
 
-BackupsInMemoryHolder & Context::getBackupsInMemory()
+std::shared_ptr<BackupsInMemoryHolder> Context::getBackupsInMemory()
 {
+    std::lock_guard lock(mutex);
+    if (!backups_in_memory)
+        backups_in_memory = std::make_shared<BackupsInMemoryHolder>();
     return backups_in_memory;
 }
 
-const BackupsInMemoryHolder & Context::getBackupsInMemory() const
+std::shared_ptr<const BackupsInMemoryHolder> Context::getBackupsInMemory() const
 {
-    return backups_in_memory;
+    return const_cast<Context *>(this)->getBackupsInMemory();
 }
 
 
@@ -3810,6 +3826,8 @@ void Context::clearUncompressedCache() const
     /// Clear the cache without holding context mutex to avoid blocking context for a long time
     if (cache)
         cache->clear();
+
+    JemallocCacheArena::purge();
 }
 
 void Context::setPageCache(std::chrono::milliseconds history_window,
@@ -3841,6 +3859,8 @@ void Context::clearPageCache() const
     }
     if (cache)
         cache->clear();
+
+    JemallocCacheArena::purge();
 }
 
 void Context::setMarkCache(const String & cache_policy, size_t max_cache_size_in_bytes, double size_ratio)
@@ -3877,6 +3897,8 @@ void Context::clearMarkCache() const
     /// Clear the cache without holding context mutex to avoid blocking context for a long time
     if (cache)
         cache->clear();
+
+    JemallocCacheArena::purge();
 }
 
 ThreadPool & Context::getLoadMarksThreadpool() const
@@ -4017,6 +4039,8 @@ void Context::clearIndexUncompressedCache() const
     /// Clear the cache without holding context mutex to avoid blocking context for a long time
     if (cache)
         cache->clear();
+
+    JemallocCacheArena::purge();
 }
 
 void Context::setIndexMarkCache(const String & cache_policy, size_t max_cache_size_in_bytes, double size_ratio)
@@ -4053,6 +4077,8 @@ void Context::clearIndexMarkCache() const
     /// Clear the cache without holding context mutex to avoid blocking context for a long time
     if (cache)
         cache->clear();
+
+    JemallocCacheArena::purge();
 }
 
 void Context::setVectorSimilarityIndexCache(const String & cache_policy, size_t max_size_in_bytes, size_t max_entries, double size_ratio)
@@ -4275,6 +4301,49 @@ std::shared_ptr<IcebergMetadataFilesCache> Context::getIcebergMetadataFilesCache
 void Context::clearIcebergMetadataFilesCache() const
 {
     auto cache = getIcebergMetadataFilesCache();
+
+    /// Clear the cache without holding context mutex to avoid blocking context for a long time
+    if (cache)
+        cache->clear();
+}
+#endif
+
+#if USE_PARQUET
+void Context::setParquetMetadataCache(const String & cache_policy, size_t max_size_in_bytes, size_t max_entries, double size_ratio)
+{
+    std::lock_guard lock(shared->mutex);
+
+    if (shared->parquet_metadata_cache)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Parquet metadata cache has been already created.");
+
+    shared->parquet_metadata_cache = std::make_shared<ParquetMetadataCache>(cache_policy, max_size_in_bytes, max_entries, size_ratio);
+}
+
+void Context::updateParquetMetadataCacheConfiguration(const Poco::Util::AbstractConfiguration & config)
+{
+    std::lock_guard lock(shared->mutex);
+
+    if (!shared->parquet_metadata_cache)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Parquet metadata cache was not created yet.");
+
+    size_t max_size_in_bytes = config.getUInt64("parquet_metadata_cache_size", DEFAULT_PARQUET_METADATA_CACHE_MAX_SIZE);
+    size_t max_entries = config.getUInt64("parquet_metadata_cache_max_entries", DEFAULT_PARQUET_METADATA_CACHE_MAX_ENTRIES);
+    shared->parquet_metadata_cache->setMaxSizeInBytes(max_size_in_bytes);
+    shared->parquet_metadata_cache->setMaxCount(max_entries);
+}
+
+std::shared_ptr<ParquetMetadataCache> Context::getParquetMetadataCache() const
+{
+    SharedLockGuard lock(shared->mutex);
+
+    if (!shared->parquet_metadata_cache)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Parquet metadata cache was not created yet.");
+    return shared->parquet_metadata_cache;
+}
+
+void Context::clearParquetMetadataCache() const
+{
+    auto cache = getParquetMetadataCache();
 
     /// Clear the cache without holding context mutex to avoid blocking context for a long time
     if (cache)
@@ -4921,7 +4990,7 @@ bool Context::tryCheckClientConnectionToMyKeeperCluster() const
         /// Our server doesn't depend on our Keeper cluster
         return true;
     }
-    catch (...)
+    catch (const std::exception &)
     {
         return false;
     }
@@ -5029,6 +5098,14 @@ void Context::setKeeperDispatcher(std::shared_ptr<KeeperDispatcher> dispatcher) 
     std::atomic_store_explicit(&shared->keeper_dispatcher, dispatcher, std::memory_order_relaxed);
 }
 #endif
+
+void Context::signalKeeperDispatcherShutdown() const
+{
+#if USE_NURAFT
+    if (auto dispatcher = tryGetKeeperDispatcher())
+        dispatcher->signalShutdown();
+#endif
+}
 
 void Context::shutdownKeeperDispatcher() const
 {

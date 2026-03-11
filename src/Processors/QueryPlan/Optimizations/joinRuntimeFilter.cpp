@@ -272,6 +272,7 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
 
             ActionsDAG build_tuple_dag(build_filter_node->step->getOutputHeader()->getColumnsWithTypeAndName(), false);
             const auto & tuple_node = addTupleOfKeys(build_tuple_dag, join_keys_build_side, common_types, tuple_func);
+            const String tuple_column_name = tuple_node.result_name;
             build_tuple_dag.addOrReplaceInOutputs(tuple_node);
 
             makeExpressionNodeOnTopOf(*build_filter_node, std::move(build_tuple_dag), nodes, makeDescription("Calculate right join key tuple"));
@@ -281,7 +282,7 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
             QueryPlan::Node * new_build_filter_node = &nodes.emplace_back();
             new_build_filter_node->step = std::make_unique<BuildRuntimeFilterStep>(
                 build_filter_node->step->getOutputHeader(),
-                tuple_node.result_name,
+                tuple_column_name,
                 tuple_type,
                 filter_name,
                 optimization_settings.join_runtime_filter_exact_values_limit,

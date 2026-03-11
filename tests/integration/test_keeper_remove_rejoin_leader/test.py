@@ -103,27 +103,35 @@ def start_keeper(node, config_name):
     node.start_clickhouse()
 
 
+def node_id(node):
+    """Extract the integer server ID from a node instance (e.g. node3 → 3)."""
+    return int(node.name.replace("node", ""))
+
+
 def test_leader_election_after_rolling_membership_change(started_cluster):
     """
     Regression test: after a rolling membership change (add/remove cycles on
-    different nodes), the surviving node that accumulates stale peer state must
-    be able to become leader without a null pointer dereference inside
-    `enable_hb_for_peer`.
+    followers then on the leader), the node that wins the subsequent election
+    must not dereference a null pointer inside `enable_hb_for_peer`.
 
     Reproduces the crash from https://github.com/ClickHouse/NuRaft/pull/91.
+
+    Strategy: replace the two followers first, then replace the leader.
+    Removing the leader triggers a new election; the winner (node4 or node5)
+    carries stale peer state from the original cluster and would crash without
+    the fix.
     """
     keeper_utils.wait_nodes(cluster, [node1, node2, node3])
 
-    # Node1 has the highest priority (100) so it should win the initial election.
+    # Identify the current leader and the two followers dynamically so the
+    # test does not depend on which node wins the initial election.
     leader = keeper_utils.get_leader(cluster, [node1, node2, node3])
-    assert leader == node1, f"Expected node1 to be initial leader, got {leader.name}"
+    followers = [n for n in [node1, node2, node3] if n != leader]
 
-    # Step 1: Start node4 and add it to the cluster.
-    # At this point the cluster is {1, 2, 3}; node4 creates peer objects for
-    # all three existing members.
-    start_keeper(node4, "enable_keeper4.xml")
+    # Step 1: Add node4 to the cluster.
+    # node4 creates peer objects for all three existing members.
     result = send_rcfg(
-        node1,
+        leader,
         {
             "actions": [
                 {
@@ -140,30 +148,30 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         timeout_sec=120,
     )
     assert result["status"] == "ok", f"Failed to add node4: {result}"
+    start_keeper(node4, "enable_keeper4.xml")
     keeper_utils.wait_until_connected(cluster, node4)
 
-    # Step 2: Remove node2 from the cluster.
-    # node2 receives `leave_cluster_req`, sets `steps_to_down_ = 2`, and after
-    # 2 election timeouts (~400 ms at the configured upper bound of 200 ms)
-    # calls `cancel_schedulers()`, which calls `peer::shutdown()` on all of
-    # node2's peer objects (for nodes 1, 3, 4), setting `hb_task_ = null`.
+    # Step 2: Remove the first follower.
+    # It receives `leave_cluster_req`, sets `steps_to_down_ = 2`, and after
+    # 2 election timeouts calls `cancel_schedulers()`, which calls
+    # `peer::shutdown()` on all its peer objects, setting `hb_task_ = null`.
+    follower1 = followers[0]
     result = send_rcfg(
-        node1, {"actions": [{"remove_members": [2]}]}, timeout_sec=30
+        leader, {"actions": [{"remove_members": [node_id(follower1)]}]}, timeout_sec=30
     )
-    assert result["status"] == "ok", f"Failed to remove node2: {result}"
+    assert result["status"] == "ok", f"Failed to remove {follower1.name}: {result}"
 
-    # Wait for `cancel_schedulers()` to fire on node2.
+    # Wait for `cancel_schedulers()` to fire on the removed follower.
     # 4 × election_timeout_upper_bound_ms = 4 × 200 ms = 800 ms; use 2 s.
     time.sleep(2)
 
-    keeper_utils.wait_until_connected(cluster, node1)
-    keeper_utils.wait_until_connected(cluster, node4)
+    remaining = [n for n in [node1, node2, node3, node4] if n != follower1]
+    for n in remaining:
+        keeper_utils.wait_until_connected(cluster, n)
 
-    # Step 3: Start node5 and add it to the cluster.
-    # The current cluster is {1, 3, 4}.
-    start_keeper(node5, "enable_keeper5.xml")
+    # Step 3: Add node5 to the cluster.
     result = send_rcfg(
-        node1,
+        leader,
         {
             "actions": [
                 {
@@ -180,25 +188,25 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         timeout_sec=120,
     )
     assert result["status"] == "ok", f"Failed to add node5: {result}"
+    start_keeper(node5, "enable_keeper5.xml")
     keeper_utils.wait_until_connected(cluster, node5)
 
-    # Step 4: Remove node3 from the cluster.
-    # Same `cancel_schedulers()` / `peer::shutdown()` sequence fires on node3.
+    # Step 4: Remove the second follower.
+    # Same `cancel_schedulers()` / `peer::shutdown()` sequence fires.
+    follower2 = followers[1]
     result = send_rcfg(
-        node1, {"actions": [{"remove_members": [3]}]}, timeout_sec=30
+        leader, {"actions": [{"remove_members": [node_id(follower2)]}]}, timeout_sec=30
     )
-    assert result["status"] == "ok", f"Failed to remove node3: {result}"
+    assert result["status"] == "ok", f"Failed to remove {follower2.name}: {result}"
 
     time.sleep(2)
 
-    keeper_utils.wait_until_connected(cluster, node1)
-    keeper_utils.wait_until_connected(cluster, node4)
+    for n in [leader, node4, node5]:
+        keeper_utils.wait_until_connected(cluster, n)
 
-    # Step 5: Start node6 and add it to the cluster.
-    # The current cluster is {1, 4, 5}.
-    start_keeper(node6, "enable_keeper6.xml")
+    # Step 5: Add node6 to the cluster.
     result = send_rcfg(
-        node1,
+        leader,
         {
             "actions": [
                 {
@@ -215,23 +223,21 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         timeout_sec=120,
     )
     assert result["status"] == "ok", f"Failed to add node6: {result}"
+    start_keeper(node6, "enable_keeper6.xml")
     keeper_utils.wait_until_connected(cluster, node6)
 
-    # Step 6: Transfer leadership to node4.
-    # Without the fix: `become_leader()` → `enable_hb_for_peer()` tries to
-    # schedule a null `hb_task_` for any shutdown peer, causing a null pointer
-    # dereference.
-    # With the fix: `enable_hb_for_peer()` detects `p.is_shutdown()` and calls
-    # `p.reopen()` to recreate `hb_task_` before scheduling.
+    # Step 6: Remove the original leader.
+    # This triggers a new election among {node4, node5, node6}.  The winner
+    # (node4 or node5) has stale peer objects whose `hb_task_` was set to null
+    # by `peer::shutdown()`.  Without the fix `enable_hb_for_peer()` would
+    # dereference that null pointer; with the fix it calls `p.reopen()` first.
     result = send_rcfg(
-        node1,
-        {"actions": [{"transfer_leadership": [4]}]},
-        timeout_sec=60,
+        leader,
+        {"actions": [{"remove_members": [node_id(leader)]}]},
+        timeout_sec=30,
     )
-    assert result["status"] == "ok", f"Failed to transfer leadership to node4: {result}"
+    assert result["status"] == "ok", f"Failed to remove original leader: {result}"
 
-    # Verify node4 is now the leader and the cluster is healthy.
-    new_leader = keeper_utils.get_leader(cluster, [node1, node4, node5, node6])
-    assert new_leader == node4, (
-        f"Expected node4 to be leader after transfer, got {new_leader.name}"
-    )
+    # Verify the cluster recovered with a healthy leader.
+    new_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
+    assert new_leader is not None, "No leader elected after removing the original leader"

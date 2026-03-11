@@ -60,7 +60,7 @@ wait $TRUNCATE_PID 2>/dev/null ||:
 # Verify via query_log that the query was cancelled (exception_code 394 = QUERY_WAS_CANCELLED).
 # DDL queries like TRUNCATE execute synchronously inside the interpreter, before the pipeline
 # starts, so they are logged as ExceptionBeforeStart rather than ExceptionWhileProcessing.
-$CLICKHOUSE_CLIENT --query "SYSTEM FLUSH LOGS"
+$CLICKHOUSE_CLIENT --query "SYSTEM FLUSH LOGS query_log"
 $CLICKHOUSE_CLIENT --query "
     SELECT count() FROM system.query_log
     WHERE query_id = '${TRUNCATE_QUERY_ID}'

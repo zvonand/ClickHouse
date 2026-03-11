@@ -11,7 +11,13 @@ CREATE TABLE alter_modify_column_ttl_without_type
 ENGINE = MergeTree
 ORDER BY uid;
 
+INSERT INTO alter_modify_column_ttl_without_type VALUES (1, 'expired', '2000-01-01'), (2, 'valid', today());
+
 ALTER TABLE alter_modify_column_ttl_without_type MODIFY COLUMN name TTL age + INTERVAL 1 DAY;
 SHOW CREATE TABLE alter_modify_column_ttl_without_type FORMAT TSVRaw;
+
+OPTIMIZE TABLE alter_modify_column_ttl_without_type FINAL;
+
+SELECT uid, name FROM alter_modify_column_ttl_without_type ORDER BY uid;
 
 DROP TABLE alter_modify_column_ttl_without_type;

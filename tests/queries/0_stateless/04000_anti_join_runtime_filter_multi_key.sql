@@ -287,3 +287,61 @@ SETTINGS enable_join_runtime_filters = 1;
 
 DROP TABLE t1;
 DROP TABLE t2;
+
+-- ==========================================================================
+-- Test 11: LowCardinality(Nullable(...)) single-key
+-- isNullable() returns false for LowCardinality(Nullable(T)), but NULLs
+-- still exist and must bypass the exclusion filter.
+-- ==========================================================================
+
+SELECT '--- Test 11: LowCardinality(Nullable) single-key ---';
+
+CREATE TABLE t1 (a LowCardinality(Nullable(String)), b Int64) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE t2 (aa LowCardinality(Nullable(String))) ENGINE = MergeTree ORDER BY tuple();
+
+INSERT INTO t1 VALUES ('x', 1), (NULL, 2), ('z', 3);
+INSERT INTO t2 VALUES ('x'), (NULL);
+
+-- ('x') matches -> filtered out
+-- (NULL): NULL != NULL -> survives
+-- ('z'): no match -> survives
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa
+ORDER BY t1.b
+SETTINGS enable_join_runtime_filters = 0;
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa
+ORDER BY t1.b
+SETTINGS enable_join_runtime_filters = 1;
+
+DROP TABLE t1;
+DROP TABLE t2;
+
+-- ==========================================================================
+-- Test 12: LowCardinality(Nullable(...)) multi-key
+-- ==========================================================================
+
+SELECT '--- Test 12: LowCardinality(Nullable) multi-key ---';
+
+CREATE TABLE t1 (a LowCardinality(Nullable(String)), b LowCardinality(Nullable(String))) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE t2 (aa LowCardinality(Nullable(String)), bb LowCardinality(Nullable(String))) ENGINE = MergeTree ORDER BY tuple();
+
+INSERT INTO t1 VALUES ('x', 'a'), (NULL, 'a'), ('x', NULL), (NULL, NULL), ('y', 'b');
+INSERT INTO t2 VALUES ('x', 'a'), (NULL, 'a'), (NULL, NULL);
+
+-- ('x','a') matches -> filtered out
+-- (NULL,'a'): NULL key -> survives
+-- ('x',NULL): NULL key -> survives
+-- (NULL,NULL): NULL keys -> survives
+-- ('y','b'): no match -> survives
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa AND t1.b = t2.bb
+ORDER BY t1.a NULLS LAST, t1.b NULLS LAST
+SETTINGS enable_join_runtime_filters = 0;
+
+SELECT t1.a, t1.b FROM t1 LEFT ANTI JOIN t2 ON t1.a = t2.aa AND t1.b = t2.bb
+ORDER BY t1.a NULLS LAST, t1.b NULLS LAST
+SETTINGS enable_join_runtime_filters = 1;
+
+DROP TABLE t1;
+DROP TABLE t2;

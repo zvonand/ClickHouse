@@ -46,7 +46,7 @@ const ActionsDAG::Node & addNullBypassForAntiJoin(
     FunctionOverloadResolverPtr is_null_func = std::make_shared<FunctionToOverloadResolverAdaptor>(std::make_shared<FunctionIsNull>(/*use_analyzer=*/true));
     for (const auto & key : keys)
     {
-        if (key.type->isNullable())
+        if (isNullableOrLowCardinalityNullable(key.type))
         {
             const auto * key_node = &dag.findInOutputs(key.name);
             or_conditions.push_back(&dag.addFunction(is_null_func, {key_node}, {}));

@@ -89,9 +89,29 @@ const std::unordered_set<std::string> & getObfuscateKeywords()
             "LOADING", "ENABLE", "DISABLE", "NOTIFY", "QUERIES", "SIMILARITY", "VECTOR",
             "POSTINGS", "HEADER", "METADATA", "ALLOCATE", "FREE", "LOAD", "UNLOAD", "UNKNOWN",
             "CLIENT", "MODEL",
-            /// Dictionary layout/source keywords
-            "FLAT", "HASHED", "IP_TRIE", "REGEXP_TREE", "DIRECT", "CLICKHOUSE", "EXECUTABLE",
-            "LIBRARY",
+            /// Dictionary source connection/behavior parameters
+            "PORT", "PASSWORD", "DB", "SOCKET", "ENDPOINT", "COMMAND",
+            "CONNECTION_STRING", "SSLMODE", "SSL_CA", "SSL_CERT", "SSL_KEY",
+            "PATH", "URI", "PROXY_URL", "CYPRESS_PATH",
+            "INVALIDATE_QUERY", "UPDATE_FIELD", "UPDATE_LAG",
+            "CONNECT_TIMEOUT", "RW_TIMEOUT", "MYSQL_CONNECT_TIMEOUT", "MYSQL_RW_TIMEOUT",
+            "CLOSE_CONNECTION", "SHARE_CONNECTION", "FAIL_ON_CONNECTION_LOSS",
+            "OPT_RECONNECT", "ENABLE_LOCAL_INFILE", "BACKGROUND_RECONNECT",
+            "EXECUTE_DIRECT", "IMPLICIT_KEY", "CHECK_EXIT_CODE", "STDERR_REACTION",
+            "COMMAND_READ_TIMEOUT", "COMMAND_WRITE_TIMEOUT", "COMMAND_TERMINATION_TIMEOUT",
+            "COMPRESSION_METHOD", "POOL_SIZE", "DB_INDEX", "STORAGE_TYPE",
+            "COLLECTION", "KEYSPACE", "COLUMN_FAMILY", "CONSISTENCY",
+            "ALLOW_FILTERING", "PARTITION_KEY_PREFIX", "PRIORITY",
+            /// Dictionary layout parameters
+            "SIZE_IN_CELLS", "BLOCK_SIZE", "SHARDS", "SHARD_LOAD_QUEUE_BACKLOG",
+            "PREALLOCATE", "MAX_LOAD_FACTOR",
+            "INITIAL_ARRAY_SIZE", "MAX_ARRAY_SIZE",
+            "FILE_SIZE", "READ_BUFFER_SIZE", "WRITE_BUFFER_SIZE", "MAX_PARTITIONS_COUNT",
+            "ALLOW_READ_EXPIRED_KEYS", "STRICT_MAX_LIFETIME_SECONDS",
+            "MAX_THREADS_FOR_UPDATES", "MAX_UPDATE_QUEUE_SIZE",
+            "QUERY_WAIT_TIMEOUT_MILLISECONDS", "UPDATE_QUEUE_PUSH_TIMEOUT_MILLISECONDS",
+            "CONVERT_NULL_RANGE_BOUND_TO_OPEN", "RANGE_LOOKUP_STRATEGY",
+            "STORE_POLYGON_KEY_COLUMN", "REQUIRE_NONEMPTY",
             /// Special SQL functions/types parsed by special rules
             "EXTRACT", "TRIM", "DECIMAL",
             /// Multi-word data type constituents not registered as standalone keywords

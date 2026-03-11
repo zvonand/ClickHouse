@@ -54,6 +54,15 @@ public:
 
     void registerLayout(const std::string & layout_type, LayoutCreateFunction create_layout, bool is_layout_complex, bool has_layout_complex = true);
 
+    std::vector<String> getAllRegisteredNames() const
+    {
+        std::vector<String> result;
+        result.reserve(registered_layouts.size());
+        for (const auto & pair : registered_layouts)
+            result.push_back(pair.first);
+        return result;
+    }
+
 private:
     struct RegisteredLayout
     {

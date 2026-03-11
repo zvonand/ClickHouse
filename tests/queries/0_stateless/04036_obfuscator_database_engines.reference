@@ -1,3 +1,3 @@
-CREATE DATABASE attention ENGINE = Atomic
-CREATE DATABASE attention ENGINE = Memory
-CREATE DATABASE attention ENGINE = MaterializedPostgreSQL('fzfw:6076', 'tfxl', 'user', 'uqjd')
+CREATE DATABASE db ENGINE = Atomic
+CREATE DATABASE db ENGINE = Memory
+CREATE DATABASE db ENGINE = MaterializedPostgreSQL('fzfw:6076', 'tfxl', 'user', 'uqjd')

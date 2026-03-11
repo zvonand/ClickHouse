@@ -44,6 +44,15 @@ public:
 
     void registerSource(const std::string & source_type, Creator create_source);
 
+    std::vector<String> getAllRegisteredNames() const
+    {
+        std::vector<String> result;
+        result.reserve(registered_sources.size());
+        for (const auto & pair : registered_sources)
+            result.push_back(pair.first);
+        return result;
+    }
+
     DictionarySourcePtr create(
         const std::string & name,
         const Poco::Util::AbstractConfiguration & config,

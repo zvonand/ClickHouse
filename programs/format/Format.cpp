@@ -37,6 +37,9 @@
 #include <Formats/registerFormats.h>
 #include <Compression/CompressionFactory.h>
 #include <Storages/MergeTree/MergeTreeIndices.h>
+#include <Dictionaries/DictionaryFactory.h>
+#include <Dictionaries/DictionarySourceFactory.h>
+#include <Dictionaries/registerDictionaries.h>
 #include <Processors/Transforms/getSourceFromASTInsertQuery.h>
 
 #include <boost/algorithm/string/split.hpp>
@@ -186,6 +189,7 @@ int mainEntryClickHouseFormat(int argc, char ** argv)
             registerDatabases();
             registerStorages();
             registerFormats();
+            registerDictionaries();
 
             std::unordered_set<std::string> additional_names;
 
@@ -196,6 +200,8 @@ int mainEntryClickHouseFormat(int argc, char ** argv)
             auto all_known_index_types = MergeTreeIndexFactory::instance().getAllRegisteredNames();
             auto all_known_codecs = CompressionCodecFactory::instance().getAllRegisteredNames();
             auto all_known_database_engines = DatabaseFactory::instance().getAllRegisteredNames();
+            auto all_known_dict_layouts = DictionaryFactory::instance().getAllRegisteredNames();
+            auto all_known_dict_sources = DictionarySourceFactory::instance().getAllRegisteredNames();
 
             additional_names.insert(all_known_storage_names.begin(), all_known_storage_names.end());
             additional_names.insert(all_known_data_type_names.begin(), all_known_data_type_names.end());
@@ -204,6 +210,8 @@ int mainEntryClickHouseFormat(int argc, char ** argv)
             additional_names.insert(all_known_index_types.begin(), all_known_index_types.end());
             additional_names.insert(all_known_codecs.begin(), all_known_codecs.end());
             additional_names.insert(all_known_database_engines.begin(), all_known_database_engines.end());
+            additional_names.insert(all_known_dict_layouts.begin(), all_known_dict_layouts.end());
+            additional_names.insert(all_known_dict_sources.begin(), all_known_dict_sources.end());
 
             for (auto * it = auto_time_zones; *it; ++it)
             {

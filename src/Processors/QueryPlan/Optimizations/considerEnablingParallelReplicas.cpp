@@ -329,15 +329,13 @@ void considerEnablingParallelReplicas(
             const auto local_plan_cost_estimation = stats->input_bytes / std::min<size_t>(max_threads, effective_max_reading_threads);
             const auto replicas_plan_cost_estimation
                 = (stats->input_bytes / std::min<size_t>(max_threads * num_replicas, effective_max_reading_threads)) + stats->output_bytes / num_replicas;
-            // This log message is used in tests to check the number of replicas to be used in heuristics, so be careful when changing it.
             LOG_DEBUG(
                 getLogger("optimizeTree"),
-                "The applied formula: {} / {} ? ({} / ({} * {}) + {} / {}) ≡ {} ? {}",
+                "The applied formula: {} / {} ? ({} / {} + {} / {}) ≡ {} ? {}",
                 stats->input_bytes,
-                max_threads,
+                std::min<size_t>(max_threads, effective_max_reading_threads),
                 stats->input_bytes,
-                max_threads,
-                num_replicas,
+                std::min<size_t>(max_threads * num_replicas, effective_max_reading_threads),
                 stats->output_bytes,
                 num_replicas,
                 local_plan_cost_estimation,

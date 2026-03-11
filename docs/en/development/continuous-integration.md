@@ -19,7 +19,6 @@ If it looks like the check failure is not related to your changes, it may be som
 Push an empty commit to the pull request to restart the CI checks:
 
 ```shell
-git reset
 git commit --allow-empty
 git push
 ```
@@ -149,6 +148,7 @@ python -m ci.praktika run "Stateless tests (amd_debug, parallel)" \
 - `--path PATH` — custom path to the ClickHouse binary. By default, the runner searches in order: `./ci/tmp/clickhouse`, `./build/programs/clickhouse`, `./clickhouse`.
 - `--count N` — repeat each test N times.
 - `--workers N` — override the automatic calculation of parallel workers derived from machine capacity.
+
 ## Build check {#build-check}
 
 Builds ClickHouse in various configurations for use in further steps.

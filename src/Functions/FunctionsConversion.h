@@ -2168,6 +2168,7 @@ struct ConvertImpl
         else if constexpr (std::is_same_v<FromDataType, DataTypeTime64>
                         && std::is_same_v<ToDataType, DataTypeDateTime64>)
         {
+            using ToFieldType = typename ToDataType::FieldType;
             using ColVecFrom = typename FromDataType::ColumnType;
             using ColVecTo = typename ToDataType::ColumnType;
 
@@ -2185,10 +2186,37 @@ struct ConvertImpl
             auto & vec_to = col_to->getData();
             vec_to.resize(input_rows_count);
 
-            for (size_t i = 0; i < input_rows_count; ++i)
-                vec_to[i] = convertDecimals<FromDataType, ToDataType>(vec_from[i], col_from->getScale(), col_to->getScale());
+            ColumnUInt8::MutablePtr col_null_map_to;
+            ColumnUInt8::Container * vec_null_map_to = nullptr;
+            if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
+            {
+                col_null_map_to = ColumnUInt8::create(input_rows_count, false);
+                vec_null_map_to = &col_null_map_to->getData();
+            }
 
-            return col_to;
+            for (size_t i = 0; i < input_rows_count; ++i)
+            {
+                if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
+                {
+                    ToFieldType result;
+                    if (tryConvertDecimals<FromDataType, ToDataType>(vec_from[i], col_from->getScale(), col_to->getScale(), result))
+                        vec_to[i] = result;
+                    else
+                    {
+                        vec_to[i] = static_cast<ToFieldType>(0);
+                        (*vec_null_map_to)[i] = true;
+                    }
+                }
+                else
+                {
+                    vec_to[i] = convertDecimals<FromDataType, ToDataType>(vec_from[i], col_from->getScale(), col_to->getScale());
+                }
+            }
+
+            if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
+                return ColumnNullable::create(std::move(col_to), std::move(col_null_map_to));
+            else
+                return col_to;
         }
         else if constexpr (IsDataTypeDateOrDateTimeOrTime<FromDataType>
             && std::is_same_v<ToDataType, DataTypeString>)

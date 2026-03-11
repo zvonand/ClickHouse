@@ -35,6 +35,24 @@ SELECT toDateTime('2025-01-01 14:45:40') = toDateTime64('2025-01-01 14:45:40', 3
 SELECT 'Date vs Time - should error';
 SELECT toDate('2025-01-01') = CAST('14:45:40', 'Time'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
+SELECT 'Non-UTC timezone';
+SET session_timezone = 'Asia/Istanbul';
+-- Time '14:45:40' promotes to 1970-01-01 14:45:40 UTC, but
+-- DateTime64('1970-01-01 14:45:40', 'Asia/Istanbul') is local Istanbul time, should not match
+SELECT CAST('14:45:40', 'Time') = toDateTime64('1970-01-01 14:45:40', 3, 'Asia/Istanbul');
+SELECT CAST('14:45:40.500', 'Time64(3)') = toDateTime64('1970-01-01 14:45:40.500', 3, 'Asia/Istanbul');
+-- common type must preserve the explicit timezone from DateTime64
+SELECT toTypeName(if(1, toTime64('00:00:00', 6), toDateTime64('2020-01-01 00:00:00', 3, 'Asia/Istanbul')));
+
+SELECT CAST('14:45:40', 'Time') = toDateTime64('1970-01-01 14:45:40', 3, 'UTC');
+
+-- DateTime64('1970-01-01 17:45:40', 'Etc/GMT-3') = 17:45:40 at UTC+3 = 14:45:40 UTC == Time '14:45:40' 
+SELECT CAST('14:45:40', 'Time') = toDateTime64('1970-01-01 17:45:40', 3, 'Etc/GMT-3');
+-- should not match, different time if we consider timezones
+SELECT CAST('14:45:40', 'Time') = toDateTime64('1970-01-01 14:45:40', 3, 'Etc/GMT-3');
+
+SET session_timezone = 'UTC';
+
 SELECT 'Filtering via table';
 DROP TABLE IF EXISTS test_time_cmp;
 CREATE TABLE test_time_cmp (t Time) ENGINE = MergeTree ORDER BY t;

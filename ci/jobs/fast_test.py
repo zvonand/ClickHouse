@@ -170,7 +170,8 @@ def main():
     os.environ["SCCACHE_ERROR_LOG"] = f"{build_dir}/sccache.log"
     os.environ["SCCACHE_LOG"] = "info"
 
-    if Info().is_local_run:
+    info = Info()
+    if info.is_local_run:
         print("NOTE: It's a local run")
         os.environ["SCCACHE_S3_NO_CREDENTIALS"] = "true"
     else:
@@ -308,9 +309,8 @@ def main():
         results[-1].set_timing(stopwatch=stop_watch_)
         if not results[-1].is_ok():
             attach_debug = True
+        job_info = results[-1].info
 
-
-    info = results[-1].info
     if attach_debug:
         attach_files += [
             clickhouse_bin_path,
@@ -320,7 +320,7 @@ def main():
     CH.terminate()
 
     Result.create_from(
-        results=results, stopwatch=stop_watch, files=attach_files, info=info
+        results=results, stopwatch=stop_watch, files=attach_files, info=job_info
     ).complete_job()
 
 

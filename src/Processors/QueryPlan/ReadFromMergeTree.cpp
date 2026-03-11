@@ -3154,9 +3154,85 @@ bool ReadFromMergeTree::supportsSkipIndexesOnDataRead() const
     return true;
 }
 
+
+void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) const
+{
+    auto global_context = Context::getGlobalContextInstance();
+    if (!global_context)
+        return;
+
+    UInt64 sample_rate = global_context->getServerSettings()[ServerSetting::predicate_statistics_sample_rate];
+    if (sample_rate == 0)
+        return;
+
+    auto predicate_stats_log = global_context->getPredicateStatisticsLog();
+    if (!predicate_stats_log)
+        return;
+
+    if (result.index_stats.empty())
+        return;
+
+    auto storage_id = data.getStorageID();
+    if (storage_id.database_name.empty())
+        return;
+
+    time_t now = time(nullptr);
+    UInt16 today = static_cast<UInt16>(DateLUT::instance().toDayNum(now));
+    String query_id(CurrentThread::getQueryId());
+
+    String filter_expr;
+    if (filter_actions_dag)
+        filter_expr = filter_actions_dag->dumpDAG();
+
+    auto index_type_to_string = [](IndexType t) -> String
+    {
+        switch (t)
+        {
+            case IndexType::None: return "None";
+            case IndexType::MinMax: return "MinMax";
+            case IndexType::Partition: return "Partition";
+            case IndexType::PrimaryKey: return "PrimaryKey";
+            case IndexType::Skip: return "Skip";
+            case IndexType::PrimaryKeyExpand: return "PrimaryKeyExpand";
+        }
+        return "Other";
+    };
+
+    /// single row with arrays for the full index pipeline
+    PredicateStatisticsLogElement elem;
+    elem.event_date = today;
+    elem.event_time = now;
+    elem.database = storage_id.database_name;
+    elem.table = storage_id.table_name;
+    elem.query_id = query_id;
+    elem.filter_expression = filter_expr;
+
+    UInt64 prev_granules = 0;
+    for (size_t i = 0; i < result.index_stats.size(); ++i)
+    {
+        const auto & stat = result.index_stats[i];
+
+        UInt64 total = (i == 0) ? stat.num_granules_after : prev_granules;
+        UInt64 after = stat.num_granules_after;
+        Float64 selectivity = total > 0 ? static_cast<Float64>(after) / static_cast<Float64>(total) : 1.0;
+
+        elem.index_names.push_back(stat.name.empty() ? index_type_to_string(stat.type) : stat.name);
+        elem.index_types.push_back(index_type_to_string(stat.type));
+        elem.total_granules.push_back(total);
+        elem.granules_after.push_back(after);
+        elem.index_selectivities.push_back(selectivity);
+
+        prev_granules = after;
+    }
+
+    predicate_stats_log->add(std::move(elem));
+}
+
 void ReadFromMergeTree::initializePipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &)
 {
     auto & result = getAnalysisResult();
+
+    logPredicateStatistics(result);
 
     if (enable_remove_parts_from_snapshot_optimization)
     {

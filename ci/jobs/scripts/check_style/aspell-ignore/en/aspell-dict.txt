@@ -3377,6 +3377,7 @@ tokenizer
 tokenizers
 tokenizes
 tokenizing
+tokensForLikePattern
 toml
 toolchain
 toolset

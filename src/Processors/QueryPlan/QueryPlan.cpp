@@ -43,6 +43,8 @@ SettingsChanges ExplainPlanOptions::toSettingsChanges() const
     changes.emplace_back("distributed", int(distributed));
     changes.emplace_back("input_headers", int(input_headers));
     changes.emplace_back("column_structure", int(column_structure));
+    changes.emplace_back("pretty", int(pretty));
+    changes.emplace_back("verbose", int(verbose));
 
     return changes;
 }

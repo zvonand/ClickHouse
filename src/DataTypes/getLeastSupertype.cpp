@@ -814,7 +814,7 @@ DataTypePtr getLeastSupertype(const DataTypes & types)
             if (typeid_cast<const DataTypeDateTime64 *>(types[max_scale_date_time_index].get()))
                 return types[max_scale_date_time_index];
 
-            /// max scale came from Time64, find a DateTime64 to preserve its timezone  
+            /// max scale came from Time64, find a DateTime64 to preserve its timezone
             for (const auto & type : types)
             {
                 if (const auto * dt64 = typeid_cast<const DataTypeDateTime64 *>(type.get()))

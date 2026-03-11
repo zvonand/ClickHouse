@@ -2,7 +2,7 @@
 
 #include <Common/TargetSpecific.h>
 
-#if defined(__AVX__)
+#if defined(__AVX2__)
 #include <immintrin.h>
 #endif
 
@@ -24,7 +24,7 @@ bool endsWith(const std::string & s, const char * suffix, size_t suffix_size)
 
 bool isAllASCII(const UInt8 * data, size_t size)
 {
-#if defined(__AVX__)
+#if defined(__AVX2__)
     __m256i masks = _mm256_setzero_si256();
 
     size_t i = 0;

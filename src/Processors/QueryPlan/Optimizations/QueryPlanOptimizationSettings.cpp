@@ -227,8 +227,10 @@ QueryPlanOptimizationSettings::QueryPlanOptimizationSettings(
 
     parallel_replicas_enabled = from[Setting::allow_experimental_parallel_reading_from_replicas];
     automatic_parallel_replicas_mode = from[Setting::automatic_parallel_replicas_mode];
-    min_bytes_per_task_for_reading = from[Setting::merge_tree_min_bytes_per_task_for_remote_reading];
     automatic_parallel_replicas_min_bytes_per_replica = from[Setting::automatic_parallel_replicas_min_bytes_per_replica];
+
+    // It doesn't have to be equal to this setting, it just appears to be a better value than hardcoded 2Mi
+    min_bytes_per_task_for_reading = from[Setting::merge_tree_min_bytes_per_task_for_remote_reading];
 
     parallel_replicas_filter_pushdown = from[Setting::parallel_replicas_filter_pushdown];
 }

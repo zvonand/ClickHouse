@@ -17,6 +17,7 @@
 #include <Common/logger_useful.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <Functions/tuple.h>
+#include <Functions/isNull.h>
 #include <DataTypes/getLeastSupertype.h>
 #include <fmt/format.h>
 
@@ -31,6 +32,33 @@ namespace ErrorCodes
 
 namespace QueryPlanOptimizations
 {
+
+/// For ANTI JOIN exclusion filters, rows with any NULL key can never match in the join (since NULL = NULL is false in SQL)
+/// and must always pass the runtime filter. This wraps the filter condition with OR isNull(key1) OR isNull(key2) OR ...
+const ActionsDAG::Node & addNullBypassForAntiJoin(
+    ActionsDAG & dag,
+    const ActionsDAG::Node & filter_condition,
+    const ColumnsWithTypeAndName & keys)
+{
+    ActionsDAG::NodeRawConstPtrs or_conditions;
+    or_conditions.push_back(&filter_condition);
+
+    FunctionOverloadResolverPtr is_null_func = std::make_shared<FunctionToOverloadResolverAdaptor>(std::make_shared<FunctionIsNull>(/*use_analyzer=*/true));
+    for (const auto & key : keys)
+    {
+        if (key.type->isNullable())
+        {
+            const auto * key_node = &dag.findInOutputs(key.name);
+            or_conditions.push_back(&dag.addFunction(is_null_func, {key_node}, {}));
+        }
+    }
+
+    if (or_conditions.size() == 1)
+        return filter_condition;
+
+    FunctionOverloadResolverPtr or_func = std::make_unique<FunctionToOverloadResolverAdaptor>(std::make_shared<FunctionOr>());
+    return dag.addFunction(or_func, std::move(or_conditions), {});
+}
 
 /// Build a `tuple(key1, key2, ...)` node in the given DAG, casting each key to the corresponding common type if needed.
 const ActionsDAG::Node & addTupleOfKeys(
@@ -286,9 +314,11 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
                     filter_name));
             auto filter_function = FunctionFactory::instance().get("__applyFilter", /*query_context*/nullptr);
             const auto & condition = filter_dag.addFunction(filter_function, {&filter_name_node, &tuple_node}, {});
-            filter_dag.addOrReplaceInOutputs(condition);
 
-            filter_column_name = condition.result_name;
+            const auto & final_condition = addNullBypassForAntiJoin(filter_dag, condition, join_keys_probe_side);
+            filter_dag.addOrReplaceInOutputs(final_condition);
+
+            filter_column_name = final_condition.result_name;
         }
     }
     else
@@ -307,7 +337,10 @@ bool tryAddJoinRuntimeFilter(QueryPlan::Node & node, QueryPlan::Nodes & nodes, c
                 filter_name, join_key_build_side.name, join_key_probe_side.name);
 
             /// Add filter lookup to the probe subtree
-            all_filter_conditions.push_back(&createRuntimeFilterCondition(filter_dag, filter_name, join_key_probe_side, common_type));
+            const auto & filter_condition = createRuntimeFilterCondition(filter_dag, filter_name, join_key_probe_side, common_type);
+            all_filter_conditions.push_back(check_left_does_not_contain
+                ? &addNullBypassForAntiJoin(filter_dag, filter_condition, {join_key_probe_side})
+                : &filter_condition);
 
             /// Add building filter to the build subtree of join
             {

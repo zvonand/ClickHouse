@@ -279,7 +279,10 @@ static SQLSet commandGetTables(const arrow::flight::protocol::sql::CommandGetTab
             auto table_schema = CHColumnToArrowColumn::calculateArrowSchema(
                 table_columns, "Arrow", nullptr,
                 {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]});
-            auto serialized_buffer = arrow::ipc::SerializeSchema(*table_schema, arrow::default_memory_pool()).ValueOrDie();
+            auto serialized_res = arrow::ipc::SerializeSchema(*table_schema, arrow::default_memory_pool());
+            if (!serialized_res.ok())
+                throw Exception(ErrorCodes::LOGICAL_ERROR, "Failed to serialize Arrow schema: {}", serialized_res.status().ToString());
+            const auto & serialized_buffer = serialized_res.ValueUnsafe();
             new_column->insertData(reinterpret_cast<const char *>(serialized_buffer->data()), serialized_buffer->size());
         }
 

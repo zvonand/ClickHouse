@@ -6,14 +6,15 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$CURDIR"/../shell_config.sh
 
 # Test that config-defined profiles cannot be applied to SQL-defined users
-# when `allow_config_defined_profiles_for_sql_defined_users` is disabled.
+# when `disallow_config_defined_profiles_for_sql_defined_users` is enabled.
 # The default profile is always exempt from this restriction.
+# Indirect inheritance (SQL profile -> config profile) is also blocked.
 
 user_prefix="${CLICKHOUSE_TEST_UNIQUE_NAME}"
 
 # Cleanup
-${CLICKHOUSE_CLIENT} --query "DROP USER IF EXISTS ${user_prefix}_u1, ${user_prefix}_u2, ${user_prefix}_u3, ${user_prefix}_u4"
-${CLICKHOUSE_CLIENT} --query "DROP SETTINGS PROFILE IF EXISTS ${user_prefix}_sql_profile"
+${CLICKHOUSE_CLIENT} --query "DROP USER IF EXISTS ${user_prefix}_u1, ${user_prefix}_u2, ${user_prefix}_u3, ${user_prefix}_u4, ${user_prefix}_u5"
+${CLICKHOUSE_CLIENT} --query "DROP SETTINGS PROFILE IF EXISTS ${user_prefix}_sql_profile, ${user_prefix}_inheriting_profile"
 ${CLICKHOUSE_CLIENT} --query "DROP ROLE IF EXISTS ${user_prefix}_role_with_config_profile"
 
 # 1. SQL user with no explicit profile — should connect fine (global default profile is exempt)
@@ -39,7 +40,12 @@ ${CLICKHOUSE_CLIENT} --query "GRANT ${user_prefix}_role_with_config_profile TO $
 ${CLICKHOUSE_CLIENT} --query "ALTER USER ${user_prefix}_u1 DEFAULT ROLE ${user_prefix}_role_with_config_profile"
 ${CLICKHOUSE_CLIENT} --user "${user_prefix}_u1" --query "SELECT 'should_not_appear'" 2>&1 | grep -o 'ACCESS_DENIED'
 
+# 6. SQL profile inheriting from config-defined profile — should fail on connect (indirect inheritance)
+${CLICKHOUSE_CLIENT} --query "CREATE SETTINGS PROFILE ${user_prefix}_inheriting_profile SETTINGS PROFILE 'readonly'"
+${CLICKHOUSE_CLIENT} --query "CREATE USER ${user_prefix}_u5 IDENTIFIED WITH no_password SETTINGS PROFILE '${user_prefix}_inheriting_profile'"
+${CLICKHOUSE_CLIENT} --user "${user_prefix}_u5" --query "SELECT 'should_not_appear'" 2>&1 | grep -o 'ACCESS_DENIED'
+
 # Cleanup
-${CLICKHOUSE_CLIENT} --query "DROP USER IF EXISTS ${user_prefix}_u1, ${user_prefix}_u2, ${user_prefix}_u3, ${user_prefix}_u4"
-${CLICKHOUSE_CLIENT} --query "DROP SETTINGS PROFILE IF EXISTS ${user_prefix}_sql_profile"
+${CLICKHOUSE_CLIENT} --query "DROP USER IF EXISTS ${user_prefix}_u1, ${user_prefix}_u2, ${user_prefix}_u3, ${user_prefix}_u4, ${user_prefix}_u5"
+${CLICKHOUSE_CLIENT} --query "DROP SETTINGS PROFILE IF EXISTS ${user_prefix}_sql_profile, ${user_prefix}_inheriting_profile"
 ${CLICKHOUSE_CLIENT} --query "DROP ROLE IF EXISTS ${user_prefix}_role_with_config_profile"

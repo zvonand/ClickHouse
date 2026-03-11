@@ -112,7 +112,16 @@ void SettingsProfilesCache::mergeSettingsAndConstraints()
             i = enabled_settings.erase(i);
         else
         {
-            mergeSettingsAndConstraintsFor(*enabled);
+            try
+            {
+                mergeSettingsAndConstraintsFor(*enabled);
+            }
+            catch (...)
+            {
+                /// If merging fails (e.g. a config-defined profile is now blocked for a SQL user),
+                /// keep the existing settings for this session and continue with other entries.
+                tryLogCurrentException(__PRETTY_FUNCTION__);
+            }
             ++i;
         }
     }
@@ -148,30 +157,45 @@ void SettingsProfilesCache::mergeSettingsAndConstraintsFor(EnabledSettings & ena
 
         if (is_sql_defined_user)
         {
-            auto check_elements = [&](const SettingsProfileElements & elements)
+            /// Recursively check profiles from user and role settings, including
+            /// indirect inheritance (e.g. SQL profile -> config profile).
+            /// Default profile and TO-clause profiles are exempt (admin-configured).
+            boost::container::flat_set<UUID> visited;
+            std::vector<UUID> stack;
+
+            auto collect_profile_ids = [](const SettingsProfileElements & elements, std::vector<UUID> & out)
             {
                 for (const auto & elem : elements)
-                {
-                    if (!elem.parent_profile)
-                        continue;
-                    /// The server's default profile is always allowed.
-                    if (default_profile_id && *elem.parent_profile == *default_profile_id)
-                        continue;
-                    auto profile_storage = access_control.findStorage(*elem.parent_profile);
-                    if (profile_storage
-                        && strcmp(profile_storage->getStorageType(), UsersConfigAccessStorage::STORAGE_TYPE) == 0)
-                    {
-                        auto profile_name = access_control.tryReadName(*elem.parent_profile);
-                        throw Exception(ErrorCodes::ACCESS_DENIED,
-                            "Cannot apply config-defined profile '{}' to SQL-defined user. "
-                            "Server setting `disallow_config_defined_profiles_for_sql_defined_users` is enabled",
-                            profile_name.value_or("unknown"));
-                    }
-                }
+                    if (elem.parent_profile)
+                        out.push_back(*elem.parent_profile);
             };
+            collect_profile_ids(enabled.params.settings_from_user, stack);
+            collect_profile_ids(enabled.params.settings_from_enabled_roles, stack);
 
-            check_elements(enabled.params.settings_from_user);
-            check_elements(enabled.params.settings_from_enabled_roles);
+            while (!stack.empty())
+            {
+                auto profile_id = stack.back();
+                stack.pop_back();
+                if (!visited.insert(profile_id).second)
+                    continue;
+                /// The server's default profile is always allowed.
+                if (default_profile_id && profile_id == *default_profile_id)
+                    continue;
+                auto profile_storage = access_control.findStorage(profile_id);
+                if (profile_storage
+                    && strcmp(profile_storage->getStorageType(), UsersConfigAccessStorage::STORAGE_TYPE) == 0)
+                {
+                    auto profile_name = access_control.tryReadName(profile_id);
+                    throw Exception(ErrorCodes::ACCESS_DENIED,
+                        "Cannot apply config-defined profile '{}' to SQL-defined user. "
+                        "Server setting `disallow_config_defined_profiles_for_sql_defined_users` is enabled",
+                        profile_name.value_or("unknown"));
+                }
+                /// Walk into child profiles.
+                auto it = all_profiles.find(profile_id);
+                if (it != all_profiles.end())
+                    collect_profile_ids(it->second->elements, stack);
+            }
         }
     }
 

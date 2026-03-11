@@ -299,8 +299,21 @@ public:
     /// Check if stderr was accumulated (for THROW mode)
     bool hasStderr() const { return stderr_full_output.has_value(); }
 
-    /// Get accumulated stderr content
+    /// Get accumulated stderr content (for THROW mode)
     const String & getStderr() const { return *stderr_full_output; }
+
+    /// Get buffered stderr content from circular buffer (for LOG_FIRST/LOG_LAST modes)
+    /// Clears the buffer to prevent duplicate logging in destructor
+    String getBufferedStderr()
+    {
+        if (stderr_result_buf.empty())
+            return {};
+        String result;
+        result.reserve(stderr_result_buf.size());
+        result.append(stderr_result_buf.begin(), stderr_result_buf.end());
+        stderr_result_buf.clear();
+        return result;
+    }
 
 private:
     int stdout_fd;
@@ -577,17 +590,28 @@ namespace
 
                 if (check_exit_code)
                 {
-                    if (process_pool)
+                    try
                     {
-                        bool valid_command
-                            = configuration.read_fixed_number_of_rows && current_read_rows >= configuration.number_of_rows_to_read;
+                        if (process_pool)
+                        {
+                            bool valid_command
+                                = configuration.read_fixed_number_of_rows && current_read_rows >= configuration.number_of_rows_to_read;
 
-                        // We can only wait for pooled commands when they are invalid.
-                        if (!valid_command)
+                            // We can only wait for pooled commands when they are invalid.
+                            if (!valid_command)
+                                command->wait();
+                        }
+                        else
                             command->wait();
                     }
-                    else
-                        command->wait();
+                    catch (Exception & e)
+                    {
+                        /// Enrich exit code exception with buffered stderr content (LOG_FIRST/LOG_LAST modes)
+                        String stderr_content = timeout_command_out.getBufferedStderr();
+                        if (!stderr_content.empty())
+                            e.addMessage(". Stderr: {}", stderr_content);
+                        throw;
+                    }
                 }
 
                 rethrowExceptionDuringSendDataIfNeeded();

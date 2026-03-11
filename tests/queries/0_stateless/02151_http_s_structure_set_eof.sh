@@ -23,9 +23,9 @@ $CLICKHOUSE_CLIENT -q "SELECT toString(number) FROM numbers(10e6) FORMAT TSV" > 
 _timeout() {
     (
         ${CLICKHOUSE_CURL} -sS -F "s=@$tmp_file;" "$1" -o /dev/null
-        echo Completed
+        echo Error: completed early
     ) &
-    sleep 0.15s
+    sleep 0.15
     kill $!
 }
 

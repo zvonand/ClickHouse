@@ -1180,9 +1180,16 @@ void obfuscateQueries(
     /// These blocks contain key-value pairs where keys are structural parameter names
     /// (PORT, HOST, SIZE_IN_CELLS, etc.) that must be preserved, while values may be
     /// user identifiers that should still be obfuscated.
+    /// Structure: SOURCE( TYPE( KEY1 value1 KEY2 value2 ... ) )
+    ///   depth 1: type name (fall through to known_identifier check)
+    ///   depth 2+: alternating key-value pairs
+    /// Values can contain sub-expressions like function calls: KEY func(arg1, arg2)
+    /// — everything inside value sub-expressions must be obfuscated.
     bool expect_dict_block_open = false;    /// True after seeing SOURCE or LAYOUT keyword, expecting '('.
     int dict_block_paren_depth = 0;         /// Parenthesis nesting depth inside the block; 0 = not inside.
     bool dict_expect_key = true;            /// At depth >= 2, alternates between key (preserve) and value (obfuscate).
+    bool dict_after_value_bareword = false; /// True right after a value BareWord; if '(' follows, it's a function call.
+    int dict_value_paren_depth = 0;         /// Tracks parens opened inside a value; >0 means inside value sub-expression.
 
     auto always_false_func = [](std::string_view) { return false; };
 
@@ -1221,6 +1228,8 @@ void obfuscateQueries(
             expect_dict_block_open = false;
             dict_block_paren_depth = 0;
             dict_expect_key = true;
+            dict_after_value_bareword = false;
+            dict_value_paren_depth = 0;
             result.write(token.begin, token.size());
             continue;
         }
@@ -1362,22 +1371,68 @@ void obfuscateQueries(
         }
         if (dict_block_paren_depth > 0)
         {
+            /// Resolve deferred value BareWord state: if '(' follows, it's a function call
+            /// and we enter a value sub-expression; otherwise the value is complete.
+            if (dict_after_value_bareword)
+            {
+                dict_after_value_bareword = false;
+                if (token.type == TokenType::OpeningRoundBracket)
+                {
+                    ++dict_block_paren_depth;
+                    dict_value_paren_depth = 1;
+                    result.write(token.begin, token.size());
+                    continue;
+                }
+                else
+                {
+                    dict_expect_key = true;
+                    /// Fall through to process this token normally below.
+                }
+            }
+
             if (token.type == TokenType::OpeningRoundBracket)
             {
                 ++dict_block_paren_depth;
-                dict_expect_key = true;
-                result.write(token.begin, token.size());
-                continue;
+                if (dict_value_paren_depth > 0)
+                {
+                    /// Inside a value sub-expression — track nesting, fall through to obfuscate.
+                    ++dict_value_paren_depth;
+                }
+                else
+                {
+                    /// Structural paren (entering type-name args or key-value block).
+                    dict_expect_key = true;
+                    result.write(token.begin, token.size());
+                    continue;
+                }
             }
-            if (token.type == TokenType::ClosingRoundBracket)
+            else if (token.type == TokenType::ClosingRoundBracket)
             {
                 --dict_block_paren_depth;
-                dict_expect_key = true;
-                result.write(token.begin, token.size());
-                continue;
+                if (dict_value_paren_depth > 0)
+                {
+                    --dict_value_paren_depth;
+                    if (dict_value_paren_depth == 0)
+                    {
+                        /// Exiting value sub-expression — next bare word is a key.
+                        dict_expect_key = true;
+                    }
+                    /// Fall through to normal processing for the closing paren.
+                }
+                else
+                {
+                    dict_expect_key = true;
+                    result.write(token.begin, token.size());
+                    continue;
+                }
             }
 
-            if (dict_block_paren_depth >= 2 && token.type == TokenType::BareWord)
+            /// Inside a value sub-expression — fall through to normal obfuscation for all tokens.
+            if (dict_value_paren_depth > 0)
+            {
+                /// Fall through to normal processing — everything gets obfuscated.
+            }
+            else if (dict_block_paren_depth >= 2 && token.type == TokenType::BareWord)
             {
                 if (dict_expect_key)
                 {
@@ -1386,8 +1441,8 @@ void obfuscateQueries(
                     dict_expect_key = false;
                     continue;
                 }
-                /// User-provided identifier value — fall through to normal obfuscation.
-                dict_expect_key = true;
+                /// User-provided identifier value — defer key reset in case '(' follows (function call).
+                dict_after_value_bareword = true;
             }
             else if (dict_block_paren_depth >= 2 && !dict_expect_key
                      && (token.type == TokenType::Number || token.type == TokenType::StringLiteral))
@@ -1438,8 +1493,8 @@ void obfuscateQueries(
                 after_interval = true;
             }
 
-            /// Track dictionary SOURCE/LAYOUT blocks.
-            if (whole_token_uppercase == "SOURCE" || whole_token_uppercase == "LAYOUT")
+            /// Track dictionary SOURCE/LAYOUT blocks (only at top level, not inside an existing block).
+            if (dict_block_paren_depth == 0 && (whole_token_uppercase == "SOURCE" || whole_token_uppercase == "LAYOUT"))
             {
                 expect_dict_block_open = true;
             }

@@ -14,7 +14,8 @@ echo "CREATE DICTIONARY d (id UInt64, name String) PRIMARY KEY id SOURCE(CLICKHO
 # Corner case: function call as value — arguments must be obfuscated
 echo "CREATE DICTIONARY d (id UInt64, name String) PRIMARY KEY id SOURCE(CLICKHOUSE(HOST func(my_arg, other_arg) PORT 9000 TABLE 't')) LAYOUT(FLAT()) LIFETIME(0)" | $obf
 
-# Corner case: dictionary parameter keywords outside dict context must be obfuscated
+# Corner case: outside dict context, `port` is preserved (it's a registered function in Functions/URL/port.cpp),
+# while `password` and `db` are not registered functions and get obfuscated.
 echo "SELECT port, password, db FROM host" | $obf
 
 # Corner case: nested parentheses in value expressions

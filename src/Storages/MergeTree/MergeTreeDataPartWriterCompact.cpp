@@ -102,7 +102,7 @@ void MergeTreeDataPartWriterCompact::addStreams(const NameAndTypePair & name_and
     enumerate_settings.data_part_type = MergeTreeDataPartType::Compact;
     auto serialization = getSerialization(name_and_type.name);
     auto substream_data = ISerialization::SubstreamData(serialization).withType(name_and_type.type).withColumn(block_sample.findByName(name_and_type.name)->column);
-    getSerialization(name_and_type.name)->enumerateStreams(enumerate_settings, callback, substream_data);
+    serialization->enumerateStreams(enumerate_settings, callback, substream_data);
 }
 
 namespace
@@ -148,6 +148,7 @@ Granules getGranulesToWrite(const MergeTreeIndexGranularity & index_granularity,
 /// Write single granule of one column (rows between 2 marks)
 void writeColumnSingleGranule(
     const ColumnWithTypeAndName & column,
+    const ColumnWithTypeAndName & sample_column,
     const SerializationPtr & serialization,
     ISerialization::OutputStreamGetter stream_getter,
     ISerialization::StreamMarkGetter stream_mark_getter,
@@ -167,7 +168,13 @@ void writeColumnSingleGranule(
     serialize_settings.use_specialized_prefixes_and_suffixes_substreams = true;
     serialize_settings.data_part_type = MergeTreeDataPartType::Compact;
 
-    serialization->serializeBinaryBulkStatePrefix(*column.column, serialize_settings, state);
+    /// Use the sample column (from block_sample) for the state prefix because
+    /// serializeBinaryBulkStatePrefix only reads column structure and statistics
+    /// (not actual row data) to determine things like the number of Map buckets.
+    /// block_sample always has statistics consistent with what was used in
+    /// enumerateStreams (via addStreams), so using it here guarantees that the
+    /// bucket count written to the prefix matches the streams that were created.
+    serialization->serializeBinaryBulkStatePrefix(*sample_column.column, serialize_settings, state);
     serialization->serializeBinaryBulkWithMultipleStreams(*column.column, from_row, number_of_rows, serialize_settings, state);
     serialization->serializeBinaryBulkStateSuffix(serialize_settings, state);
 }
@@ -316,7 +323,8 @@ void MergeTreeDataPartWriterCompact::writeDataBlock(const Block & block, const G
             };
 
             writeColumnSingleGranule(
-                block.getByName(name_and_type->name), getSerialization(name_and_type->name),
+                block.getByName(name_and_type->name), block_sample.getByName(name_and_type->name),
+                getSerialization(name_and_type->name),
                 stream_getter, stream_mark_getter, granule.start_row, granule.rows_to_write, !data_written, getSerializationSettings());
 
             /// Each type always have at least one substream

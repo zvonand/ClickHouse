@@ -19,11 +19,8 @@ public:
         Statistics() = default;
         Statistics(Float64 avg_, UInt64 count_) : avg(avg_), count(count_) {}
 
-        /// Incrementally updates the running weighted average with a new batch of data.
-        void addBatch(Float64 batch_avg, UInt64 batch_count);
-        /// Overload that takes a raw total size instead of a pre-computed average.
-        void addBatch(UInt64 batch_total_size, UInt64 batch_count);
-        void merge(const Statistics & other) { addBatch(other.avg, other.count); }
+        /// Incrementally updates the running weighted average with statistics from another batch.
+        void merge(const Statistics & other);
 
         /// Average number of key-value pairs across all map rows seen so far.
         Float64 avg = 0;

@@ -384,7 +384,7 @@ namespace ErrorCodes
     For `linear` strategy: `round(map_buckets_coefficient * avg_map_size)`.
     Ignored when `map_buckets_strategy` is `constant`.
     )", 0) \
-    DECLARE(UInt64, map_buckets_min_avg_size, 32, R"(
+    DECLARE(UInt64, map_buckets_min_avg_size, 0, R"(
     The minimum average map size (number of keys per row) required to apply `with_buckets` serialization.
     If the average map size is less than this value, a single bucket is used regardless of other bucket settings.
     A value of `0` disables the threshold and always applies the bucketing strategy.

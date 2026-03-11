@@ -1,0 +1,154 @@
+stage	start	0.001	0.001
+stage	parse	0.000	0.001
+stage	before-connect	0.000	0.001
+server	0	localhost	9000	default	no-SSL
+stage	connect	0.000	0.001
+drop	0	0.003470897674560547	DROP TABLE IF EXISTS map_100_keys
+drop	0	0.0007672309875488281	DROP TABLE IF EXISTS map_1000_keys
+drop	0	0.0006880760192871094	DROP TABLE IF EXISTS map_10000_keys
+stage	drop-1	0.005	0.006
+stage	settings	0.003	0.010
+create	0	0.0033631324768066406	\n        CREATE TABLE map_100_keys (id UInt64, m Map(String, UInt64)) ENGINE = MergeTree ORDER BY id\n    
+create	0	0.0018889904022216797	\n        CREATE TABLE map_1000_keys (id UInt64, m Map(String, UInt64)) ENGINE = MergeTree ORDER BY id\n    
+create	0	0.001901388168334961	\n        CREATE TABLE map_10000_keys (id UInt64, m Map(String, UInt64)) ENGINE = MergeTree ORDER BY id\n    
+create	0	1.2135560512542725	\n        INSERT INTO map_100_keys\n        SELECT number AS id, mapFromArrays(arrayMap(i -> 'key' || toString(i), range(100)), arrayMap(i -> number + i, range(100))) AS m\n        FROM numbers(1000000)\n    
+create	0	3.501401424407959	OPTIMIZE TABLE map_100_keys FINAL SETTINGS mutations_sync=1
+create	0	2.213545322418213	\n        INSERT INTO map_1000_keys\n        SELECT number AS id, mapFromArrays(arrayMap(i -> 'key' || toString(i), range(1000)), arrayMap(i -> number + i, range(1000))) AS m\n        FROM numbers(100000)\n    
+create	0	2.0398876667022705	OPTIMIZE TABLE map_1000_keys FINAL SETTINGS mutations_sync=1
+create	0	0.5562055110931396	\n        INSERT INTO map_10000_keys\n        SELECT number AS id, mapFromArrays(arrayMap(i -> 'key' || toString(i), range(10000)), arrayMap(i -> number + i, range(10000))) AS m\n        FROM numbers(1000)\n    
+create	0	0.5707495212554932	OPTIMIZE TABLE map_10000_keys FINAL SETTINGS mutations_sync=1
+stage	create	10.103	10.113
+stage	sync	0.554	10.666
+display-name	0	SELECT m['key0'] FROM map_100_keys FORMAT Null
+purging jemalloc arenas	0	0.04564189910888672
+prewarm	0	map_bucketed_serialization.query0.prewarm0	0	0.10426807403564453
+query	0	map_bucketed_serialization.query0.run0	0	0.10124468803405762
+query	0	map_bucketed_serialization.query0.run1	0	0.10290098190307617
+query	0	map_bucketed_serialization.query0.run2	0	0.0995633602142334
+query	0	map_bucketed_serialization.query0.run3	0	0.09759879112243652
+query	0	map_bucketed_serialization.query0.run4	0	0.09721803665161133
+query	0	map_bucketed_serialization.query0.run5	0	0.09835982322692871
+query	0	map_bucketed_serialization.query0.run6	0	0.0978231430053711
+query	0	map_bucketed_serialization.query0.run7	0	0.0978703498840332
+query	0	map_bucketed_serialization.query0.run8	0	0.0962526798248291
+query	0	map_bucketed_serialization.query0.run9	0	0.09985542297363281
+query	0	map_bucketed_serialization.query0.run10	0	0.10141158103942871
+client-time	0	1.0905372169800103	1.0900988578796387
+median	0	0.09835982322692871
+display-name	1	SELECT m['key0'] FROM map_1000_keys FORMAT Null
+purging jemalloc arenas	0	0.08043360710144043
+prewarm	1	map_bucketed_serialization.query1.prewarm0	0	0.10643243789672852
+query	1	map_bucketed_serialization.query1.run0	0	0.10204100608825684
+query	1	map_bucketed_serialization.query1.run1	0	0.09955811500549316
+query	1	map_bucketed_serialization.query1.run2	0	0.0982968807220459
+query	1	map_bucketed_serialization.query1.run3	0	0.10520100593566895
+query	1	map_bucketed_serialization.query1.run4	0	0.09948515892028809
+query	1	map_bucketed_serialization.query1.run5	0	0.09999275207519531
+query	1	map_bucketed_serialization.query1.run6	0	0.10010814666748047
+query	1	map_bucketed_serialization.query1.run7	0	0.10200190544128418
+query	1	map_bucketed_serialization.query1.run8	0	0.10242295265197754
+query	1	map_bucketed_serialization.query1.run9	0	0.10254120826721191
+client-time	1	1.0120535800233483	1.0116491317749023
+median	1	0.10105502605438232
+display-name	2	SELECT m['key0'] FROM map_10000_keys FORMAT Null
+purging jemalloc arenas	0	0.09022855758666992
+prewarm	2	map_bucketed_serialization.query2.prewarm0	0	0.1775679588317871
+query	2	map_bucketed_serialization.query2.run0	0	0.16859912872314453
+query	2	map_bucketed_serialization.query2.run1	0	0.16765046119689941
+query	2	map_bucketed_serialization.query2.run2	0	0.17551255226135254
+query	2	map_bucketed_serialization.query2.run3	0	0.17806768417358398
+query	2	map_bucketed_serialization.query2.run4	0	0.17455792427062988
+query	2	map_bucketed_serialization.query2.run5	0	0.1794278621673584
+client-time	2	1.0440262518823147	1.0438156127929688
+median	2	0.1750352382659912
+display-name	3	SELECT m['key0'], m['key1'], m['key2'] FROM map_100_keys FORMAT Null
+purging jemalloc arenas	0	0.016214370727539062
+prewarm	3	map_bucketed_serialization.query3.prewarm0	0	0.11338472366333008
+query	3	map_bucketed_serialization.query3.run0	0	0.10422062873840332
+query	3	map_bucketed_serialization.query3.run1	0	0.1055912971496582
+query	3	map_bucketed_serialization.query3.run2	0	0.10613679885864258
+query	3	map_bucketed_serialization.query3.run3	0	0.10274958610534668
+query	3	map_bucketed_serialization.query3.run4	0	0.10584807395935059
+query	3	map_bucketed_serialization.query3.run5	0	0.10850930213928223
+query	3	map_bucketed_serialization.query3.run6	0	0.1065373420715332
+query	3	map_bucketed_serialization.query3.run7	0	0.10559701919555664
+query	3	map_bucketed_serialization.query3.run8	0	0.10675263404846191
+query	3	map_bucketed_serialization.query3.run9	0	0.10300731658935547
+client-time	3	1.0553613482043147	1.0549499988555908
+median	3	0.10572254657745361
+display-name	4	SELECT m['key0'], m['key1'], m['key2'] FROM map_1000_keys FORMAT Null
+purging jemalloc arenas	0	0.11409902572631836
+prewarm	4	map_bucketed_serialization.query4.prewarm0	0	0.10844635963439941
+query	4	map_bucketed_serialization.query4.run0	0	0.1001436710357666
+query	4	map_bucketed_serialization.query4.run1	0	0.09832119941711426
+query	4	map_bucketed_serialization.query4.run2	0	0.10071563720703125
+query	4	map_bucketed_serialization.query4.run3	0	0.10079574584960938
+query	4	map_bucketed_serialization.query4.run4	0	0.1007680892944336
+query	4	map_bucketed_serialization.query4.run5	0	0.10025238990783691
+query	4	map_bucketed_serialization.query4.run6	0	0.1002199649810791
+query	4	map_bucketed_serialization.query4.run7	0	0.09883761405944824
+query	4	map_bucketed_serialization.query4.run8	0	0.09951996803283691
+query	4	map_bucketed_serialization.query4.run9	0	0.09997177124023438
+query	4	map_bucketed_serialization.query4.run10	0	0.10149455070495605
+client-time	4	1.1014644959941506	1.1010406017303467
+median	4	0.1002199649810791
+display-name	5	SELECT m['key0'], m['key1'], m['key2'] FROM map_10000_keys FORMAT Null
+purging jemalloc arenas	0	0.11852622032165527
+prewarm	5	map_bucketed_serialization.query5.prewarm0	0	0.20810198783874512
+query	5	map_bucketed_serialization.query5.run0	0	0.1965947151184082
+query	5	map_bucketed_serialization.query5.run1	0	0.18817734718322754
+query	5	map_bucketed_serialization.query5.run2	0	0.21092605590820312
+query	5	map_bucketed_serialization.query5.run3	0	0.18334126472473145
+query	5	map_bucketed_serialization.query5.run4	0	0.18247437477111816
+query	5	map_bucketed_serialization.query5.run5	0	0.19306373596191406
+client-time	5	1.154793854802847	1.1545774936676025
+median	5	0.1906205415725708
+display-name	6	SELECT * FROM map_100_keys WHERE m['key1'] = 1 FORMAT Null
+purging jemalloc arenas	0	0.029166460037231445
+prewarm	6	map_bucketed_serialization.query6.prewarm0	0	0.11076617240905762
+query	6	map_bucketed_serialization.query6.run0	0	0.10115337371826172
+query	6	map_bucketed_serialization.query6.run1	0	0.09996175765991211
+query	6	map_bucketed_serialization.query6.run2	0	0.09647703170776367
+query	6	map_bucketed_serialization.query6.run3	0	0.09730792045593262
+query	6	map_bucketed_serialization.query6.run4	0	0.09833717346191406
+query	6	map_bucketed_serialization.query6.run5	0	0.09691214561462402
+query	6	map_bucketed_serialization.query6.run6	0	0.09723544120788574
+query	6	map_bucketed_serialization.query6.run7	0	0.10559248924255371
+query	6	map_bucketed_serialization.query6.run8	0	0.10379695892333984
+query	6	map_bucketed_serialization.query6.run9	0	0.09859442710876465
+query	6	map_bucketed_serialization.query6.run10	0	0.10038614273071289
+client-time	6	1.0962220910005271	1.095754861831665
+median	6	0.09859442710876465
+display-name	7	SELECT * FROM map_1000_keys WHERE m['key1'] = 1 FORMAT Null
+purging jemalloc arenas	0	0.07298088073730469
+prewarm	7	map_bucketed_serialization.query7.prewarm0	0	0.1038057804107666
+query	7	map_bucketed_serialization.query7.run0	0	0.10051441192626953
+query	7	map_bucketed_serialization.query7.run1	0	0.09841203689575195
+query	7	map_bucketed_serialization.query7.run2	0	0.09647107124328613
+query	7	map_bucketed_serialization.query7.run3	0	0.09674763679504395
+query	7	map_bucketed_serialization.query7.run4	0	0.09357786178588867
+query	7	map_bucketed_serialization.query7.run5	0	0.10059666633605957
+query	7	map_bucketed_serialization.query7.run6	0	0.09709453582763672
+query	7	map_bucketed_serialization.query7.run7	0	0.09721231460571289
+query	7	map_bucketed_serialization.query7.run8	0	0.10084724426269531
+query	7	map_bucketed_serialization.query7.run9	0	0.10638856887817383
+query	7	map_bucketed_serialization.query7.run10	0	0.10710000991821289
+client-time	7	1.0953932851552963	1.0949623584747314
+median	7	0.09841203689575195
+display-name	8	SELECT * FROM map_10000_keys WHERE m['key1'] = 1 FORMAT Null
+purging jemalloc arenas	0	0.06599211692810059
+prewarm	8	map_bucketed_serialization.query8.prewarm0	0	0.18010592460632324
+query	8	map_bucketed_serialization.query8.run0	0	0.1859593391418457
+query	8	map_bucketed_serialization.query8.run1	0	0.18041729927062988
+query	8	map_bucketed_serialization.query8.run2	0	0.17455458641052246
+query	8	map_bucketed_serialization.query8.run3	0	0.1862645149230957
+query	8	map_bucketed_serialization.query8.run4	0	0.1698596477508545
+query	8	map_bucketed_serialization.query8.run5	0	0.1796255111694336
+client-time	8	1.076855278108269	1.0766808986663818
+median	8	0.18002140522003174
+profile-total	0
+stage	run	11.574	22.240
+drop	0	0.02601146697998047	DROP TABLE IF EXISTS map_100_keys
+drop	0	0.025338411331176758	DROP TABLE IF EXISTS map_1000_keys
+drop	0	0.035515546798706055	DROP TABLE IF EXISTS map_10000_keys
+stage	drop-2	0.087	22.327

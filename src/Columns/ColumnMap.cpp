@@ -434,21 +434,13 @@ ColumnPtr ColumnMap::compress(bool force_compression) const
     });
 }
 
-void ColumnMap::Statistics::addBatch(Float64 batch_avg, UInt64 batch_count)
+void ColumnMap::Statistics::merge(const Statistics & other)
 {
-    if (batch_count == 0)
+    if (other.count == 0)
         return;
 
-    avg = avg + (batch_avg - avg) * static_cast<Float64>(batch_count) / static_cast<Float64>(count + batch_count);
-    count += batch_count;
-}
-
-void ColumnMap::Statistics::addBatch(UInt64 batch_total_size, UInt64 batch_count)
-{
-    if (batch_count == 0)
-        return;
-
-    addBatch(static_cast<Float64>(batch_total_size) / static_cast<Float64>(batch_count), batch_count);
+    avg = avg + (other.avg - avg) * static_cast<Float64>(other.count) / static_cast<Float64>(count + other.count);
+    count += other.count;
 }
 
 void ColumnMap::chooseDynamicStructureForMerge(const Columns & source_columns, std::optional<size_t> max_dynamic_subcolumns)

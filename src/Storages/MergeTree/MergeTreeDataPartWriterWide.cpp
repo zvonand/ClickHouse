@@ -532,7 +532,13 @@ void MergeTreeDataPartWriterWide::writeColumn(
     {
         auto serialize_settings = getSerializationSettings();
         serialize_settings.getter = createStreamGetter(name_and_type, offset_substreams);
-        serialization->serializeBinaryBulkStatePrefix(column, serialize_settings, it->second);
+        /// Use the sample column (from block_sample) for the state prefix because
+        /// serializeBinaryBulkStatePrefix only reads column structure and statistics
+        /// (not actual row data) to determine things like the number of Map buckets.
+        /// block_sample always has statistics consistent with what was used in
+        /// enumerateStreams (via addStreams), so using it here guarantees that the
+        /// bucket count written to the prefix matches the streams that were created.
+        serialization->serializeBinaryBulkStatePrefix(*block_sample.getByName(name).column, serialize_settings, it->second);
     }
 
     auto serialize_settings = getSerializationSettings();

@@ -89,29 +89,6 @@ const std::unordered_set<std::string> & getObfuscateKeywords()
             "LOADING", "ENABLE", "DISABLE", "NOTIFY", "QUERIES", "SIMILARITY", "VECTOR",
             "POSTINGS", "HEADER", "METADATA", "ALLOCATE", "FREE", "LOAD", "UNLOAD", "UNKNOWN",
             "CLIENT", "MODEL",
-            /// Dictionary source connection/behavior parameters
-            "PORT", "PASSWORD", "DB", "SOCKET", "ENDPOINT", "COMMAND",
-            "CONNECTION_STRING", "SSLMODE", "SSL_CA", "SSL_CERT", "SSL_KEY",
-            "PATH", "URI", "PROXY_URL", "CYPRESS_PATH",
-            "INVALIDATE_QUERY", "UPDATE_FIELD", "UPDATE_LAG",
-            "CONNECT_TIMEOUT", "RW_TIMEOUT", "MYSQL_CONNECT_TIMEOUT", "MYSQL_RW_TIMEOUT",
-            "CLOSE_CONNECTION", "SHARE_CONNECTION", "FAIL_ON_CONNECTION_LOSS",
-            "OPT_RECONNECT", "ENABLE_LOCAL_INFILE", "BACKGROUND_RECONNECT",
-            "EXECUTE_DIRECT", "IMPLICIT_KEY", "CHECK_EXIT_CODE", "STDERR_REACTION",
-            "COMMAND_READ_TIMEOUT", "COMMAND_WRITE_TIMEOUT", "COMMAND_TERMINATION_TIMEOUT",
-            "COMPRESSION_METHOD", "POOL_SIZE", "DB_INDEX", "STORAGE_TYPE",
-            "COLLECTION", "KEYSPACE", "COLUMN_FAMILY", "CONSISTENCY",
-            "ALLOW_FILTERING", "PARTITION_KEY_PREFIX", "PRIORITY",
-            /// Dictionary layout parameters
-            "SIZE_IN_CELLS", "BLOCK_SIZE", "SHARDS", "SHARD_LOAD_QUEUE_BACKLOG",
-            "PREALLOCATE", "MAX_LOAD_FACTOR",
-            "INITIAL_ARRAY_SIZE", "MAX_ARRAY_SIZE",
-            "FILE_SIZE", "READ_BUFFER_SIZE", "WRITE_BUFFER_SIZE", "MAX_PARTITIONS_COUNT",
-            "ALLOW_READ_EXPIRED_KEYS", "STRICT_MAX_LIFETIME_SECONDS",
-            "MAX_THREADS_FOR_UPDATES", "MAX_UPDATE_QUEUE_SIZE",
-            "QUERY_WAIT_TIMEOUT_MILLISECONDS", "UPDATE_QUEUE_PUSH_TIMEOUT_MILLISECONDS",
-            "CONVERT_NULL_RANGE_BOUND_TO_OPEN", "RANGE_LOOKUP_STRATEGY",
-            "STORE_POLYGON_KEY_COLUMN", "REQUIRE_NONEMPTY",
             /// Special SQL functions/types parsed by special rules
             "EXTRACT", "TRIM", "DECIMAL",
             /// Multi-word data type constituents not registered as standalone keywords
@@ -1199,6 +1176,11 @@ void obfuscateQueries(
     /// (it contains interval units like '2 years' that must stay valid).
     bool after_interval = false;
 
+    /// Dictionary SOURCE(...) and LAYOUT(...) context tracking.
+    /// Inside these blocks, all bare words are structural parameter names and should be preserved.
+    bool expect_dict_block_open = false;    /// True after seeing SOURCE or LAYOUT keyword, expecting '('.
+    int dict_block_paren_depth = 0;         /// Parenthesis nesting depth inside the block; 0 = not inside.
+
     auto always_false_func = [](std::string_view) { return false; };
 
     Lexer lexer(src.data(), src.data() + src.size());
@@ -1233,6 +1215,8 @@ void obfuscateQueries(
             in_insert_data = false;
             expect_format_name = false;
             after_interval = false;
+            expect_dict_block_open = false;
+            dict_block_paren_depth = 0;
             result.write(token.begin, token.size());
             continue;
         }
@@ -1353,6 +1337,38 @@ void obfuscateQueries(
             }
         }
 
+        /// ---- Dictionary SOURCE/LAYOUT block tracking. ----
+        /// Inside these blocks all bare words are structural parameter names (PORT, PASSWORD, SIZE_IN_CELLS, etc.)
+        /// and must be preserved to produce valid DDL output.
+        if (expect_dict_block_open)
+        {
+            if (token.type == TokenType::OpeningRoundBracket)
+            {
+                dict_block_paren_depth = 1;
+                expect_dict_block_open = false;
+                result.write(token.begin, token.size());
+                continue;
+            }
+            expect_dict_block_open = false;
+            /// Not an opening paren — fall through to normal processing.
+        }
+        if (dict_block_paren_depth > 0)
+        {
+            if (token.type == TokenType::OpeningRoundBracket)
+                ++dict_block_paren_depth;
+            else if (token.type == TokenType::ClosingRoundBracket)
+                --dict_block_paren_depth;
+
+            /// Preserve all tokens inside SOURCE/LAYOUT as-is, except string literals
+            /// (which contain user data like hostnames and passwords) and numbers.
+            if (token.type == TokenType::BareWord)
+            {
+                result.write(token.begin, token.size());
+                continue;
+            }
+            /// Numbers and strings still get obfuscated — fall through to normal processing.
+        }
+
         /// ---- Normal token processing. ----
 
         if (token.type == TokenType::BareWord)
@@ -1391,6 +1407,12 @@ void obfuscateQueries(
             if (whole_token_uppercase == "INTERVAL")
             {
                 after_interval = true;
+            }
+
+            /// Track dictionary SOURCE/LAYOUT blocks.
+            if (whole_token_uppercase == "SOURCE" || whole_token_uppercase == "LAYOUT")
+            {
+                expect_dict_block_open = true;
             }
 
             if (getObfuscateKeywords().contains(whole_token_uppercase) || known_identifier_func(whole_token))

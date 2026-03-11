@@ -20,11 +20,20 @@ SELECT toDateTime('2025-01-01 10:10:10') > CAST('10:10:10', 'Time');
 SELECT 'DateTime vs Time64';
 SELECT toDateTime('1970-01-01 14:45:40') = CAST('14:45:40.000', 'Time64(3)');
 
+SELECT 'Time >24h promoted to DateTime64';
+SELECT CAST('25:00:00', 'Time') = toDateTime('1970-01-02 01:00:00');
+SELECT CAST('48:00:00', 'Time') = toDateTime('1970-01-03 00:00:00');
+SELECT CAST(CAST('25:00:00', 'Time'), 'DateTime64(3)');
+SELECT CAST(CAST('999:59:59', 'Time'), 'DateTime64(0)');
+
 SELECT 'Time vs Time64';
 SELECT CAST('14:45:40', 'Time') = CAST('14:45:40.000', 'Time64(3)');
 
 SELECT 'DateTime vs DateTime64';
 SELECT toDateTime('2025-01-01 14:45:40') = toDateTime64('2025-01-01 14:45:40', 3);
+
+SELECT 'Date vs Time - should error';
+SELECT toDate('2025-01-01') = CAST('14:45:40', 'Time'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 SELECT 'Filtering via table';
 DROP TABLE IF EXISTS test_time_cmp;

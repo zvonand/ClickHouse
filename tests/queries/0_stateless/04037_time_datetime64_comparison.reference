@@ -12,10 +12,16 @@ DateTime vs Time - Time promoted to DateTime
 1
 DateTime vs Time64
 1
+Time >24h promoted to DateTime64
+1
+1
+1970-01-02 01:00:00.000
+1970-02-11 15:59:59
 Time vs Time64 - should work
 1
 DateTime vs DateTime64 - should work
 1
+Date vs Time - should error
 Filtering via table
 14:45:40
 14:45:40

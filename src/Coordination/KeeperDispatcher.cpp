@@ -266,11 +266,13 @@ void KeeperDispatcher::requestThread()
                         {
                             CurrentMetrics::sub(CurrentMetrics::KeeperOutstandingRequests);
 
-                            handle_opentelemetery_spans(request.request, request.session_id);
-
-                            /// Skip stale requests for finished sessions during batch assembly
+                            /// Skip stale requests for finished sessions during batch assembly.
+                            /// Must be checked before span finalization to avoid leaking spans
+                            /// for requests that will be dropped without a response.
                             if (is_stale_session_request(request))
                                 return true; // consumed, keep draining
+
+                            handle_opentelemetery_spans(request.request, request.session_id);
 
                             /// Don't append read request into batch, we have to process them separately
                             if (!coordination_settings[CoordinationSetting::quorum_reads] && request.request->isReadRequest())
@@ -882,12 +884,17 @@ void KeeperDispatcher::sessionCleanerTask()
                         .request = std::move(request),
                         .digest = std::nullopt
                     };
+                    /// Mark session as finished before pushing Close to the queue.
+                    /// This prevents a race where Close commits and erases from
+                    /// `finished_sessions` before `finishSession` inserts it,
+                    /// which would permanently leak the session ID in the set.
+                    /// Close requests are exempt from stale filtering, so the
+                    /// Close will still pass through RAFT for ephemeral cleanup.
+                    finishSession(dead_session);
+
                     if (!requests_queue->push(std::move(request_info)))
                         LOG_INFO(log, "Cannot push close request to queue while cleaning outdated sessions");
                     CurrentMetrics::add(CurrentMetrics::KeeperOutstandingRequests);
-
-                    /// Remove session from registered sessions
-                    finishSession(dead_session);
                     LOG_INFO(log, "Dead session close request pushed");
                 }
             }

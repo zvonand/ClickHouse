@@ -16,8 +16,8 @@ namespace ErrorCodes
     extern const int INVALID_SESSION_TIMEOUT;
 }
 
-const std::string AUTHORIZATION_HEADER = "authorization";
-const std::string AUTHORIZATION_MIDDLEWARE_NAME = "authorization_middleware";
+inline const std::string AUTHORIZATION_HEADER = "authorization";
+inline const std::string AUTHORIZATION_MIDDLEWARE_NAME = "authorization_middleware";
 
 class AuthMiddleware : public arrow::flight::ServerMiddleware
 {

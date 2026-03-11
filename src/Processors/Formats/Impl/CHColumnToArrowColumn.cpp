@@ -334,15 +334,16 @@ namespace DB
             const auto & discriminator = discriminators[idx];
             if (discriminator != ColumnVariant::NULL_DISCRIMINATOR)
             {
-                if (sizes[discriminator] == 0)
-                    starts[discriminator] = column_offsets[idx];
-                ++sizes[discriminator];
+                auto global_discr = column.globalDiscriminatorByLocal(discriminator);
+                if (sizes[global_discr] == 0)
+                    starts[global_discr] = column_offsets[idx];
+                ++sizes[global_discr];
             }
 
             if (discriminator == ColumnVariant::NULL_DISCRIMINATOR || (null_bytemap && (*null_bytemap)[idx]))
                 status = type_ids_builder.Append(static_cast<int8_t>(num_variants));
             else
-                status = type_ids_builder.Append(discriminator);
+                status = type_ids_builder.Append(static_cast<int8_t>(column.globalDiscriminatorByLocal(discriminator)));
 
             checkStatus(status, "type_ids", format_name);
         }
@@ -355,7 +356,7 @@ namespace DB
         arrow::ArrayVector children;
         for (size_t i = 0; i < column.getNumVariants(); ++i)
         {
-            auto variant = column.getVariants()[i];
+            const auto & variant = column.getVariantPtrByGlobalDiscriminator(i);
 
             bool is_column_nullable = false;
             auto arrow_type = getArrowType(
@@ -407,7 +408,7 @@ namespace DB
                 const auto & column_offset = boost::get<1>(tuple);
                 if (discriminator == ColumnVariant::NULL_DISCRIMINATOR || static_cast<bool>(boost::get<2>(tuple)))
                     return 0;
-                const auto offset = column_offset - starts[discriminator];
+                const auto offset = column_offset - starts[column.globalDiscriminatorByLocal(discriminator)];
                 if (offset > static_cast<UInt64>(std::numeric_limits<int32_t>::max()))
                     throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot build Arrow DenseUnion: offset {} is out of Int32 range", offset);
                 return static_cast<int32_t>(offset);
@@ -1430,7 +1431,7 @@ namespace DB
 
             for (size_t i = 0; i < size; ++i)
             {
-                const auto variant = column_variant ? column_variant->getVariants()[i] : nullptr;
+                const auto variant = column_variant ? column_variant->getVariantPtrByGlobalDiscriminator(i) : nullptr;
 
                 bool is_column_nullable = false;
                 auto arrow_type = getArrowType(

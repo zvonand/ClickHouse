@@ -528,9 +528,6 @@ void MergeTreeDataPartWriterCompact::fillChecksums(MergeTreeDataPartChecksums & 
 
 void MergeTreeDataPartWriterCompact::finish(bool sync)
 {
-    /// If we didn't write any data, streams would be uninitialized.
-    initStreamsIfNeeded();
-
     /// If we don't have anything to write, skip finalization.
     if (!columns_list.empty())
         finishDataSerialization(sync);

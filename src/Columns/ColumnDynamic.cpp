@@ -1491,7 +1491,7 @@ void ColumnDynamic::takeOrCalculateStatisticsFrom(const Columns & source_columns
         candidates_with_sizes.reserve(shared_variant_candidates.size());
         for (const auto & [variant_name, size] : shared_variant_candidates)
             candidates_with_sizes.emplace_back(size, variant_name);
-        std::sort(candidates_with_sizes.begin(), candidates_with_sizes.begin(), std::greater());
+        std::sort(candidates_with_sizes.begin(), candidates_with_sizes.end(), std::greater());
         for (size_t i = 0; i < Statistics::MAX_SHARED_VARIANT_STATISTICS_SIZE; ++i)
             new_statistics.shared_variants_statistics.emplace(candidates_with_sizes[i].second, candidates_with_sizes[i].first);
     }

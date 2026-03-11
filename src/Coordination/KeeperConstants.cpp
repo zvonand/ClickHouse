@@ -310,6 +310,7 @@
     M(JemallocFailedDeallocationSampleTracking) \
 \
     M(KeeperRequestRejectedDueToSoftMemoryLimitCount) \
+    M(KeeperStaleRequestsSkipped) \
 
 namespace ProfileEvents
 {

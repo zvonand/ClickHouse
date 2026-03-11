@@ -52,6 +52,7 @@ namespace ProfileEvents
     extern const Event KeeperBatchMaxCount;
     extern const Event KeeperBatchMaxTotalSize;
     extern const Event KeeperRequestRejectedDueToSoftMemoryLimitCount;
+    extern const Event KeeperStaleRequestsSkipped;
 }
 
 namespace HistogramMetrics
@@ -204,6 +205,27 @@ void KeeperDispatcher::requestThread()
 
                 handle_opentelemetery_spans(request.request, request.session_id);
 
+                /// Skip stale requests for finished sessions.
+                /// Close must pass through RAFT (ephemeral cleanup, watch cleanup, etc.).
+                /// SessionID uses internal IDs (session_id = -1), ignore it just to be safe.
+                auto is_stale_session_request = [&](const KeeperRequestForSession & req) -> bool
+                {
+                    if (req.request->getOpNum() != Coordination::OpNum::Close
+                        && req.request->getOpNum() != Coordination::OpNum::SessionID)
+                    {
+                        std::lock_guard lock(finished_sessions_mutex);
+                        if (finished_sessions.contains(req.session_id))
+                        {
+                            ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+
+                if (is_stale_session_request(request))
+                    continue;
+
                 Int64 mem_soft_limit = keeper_context->getKeeperMemorySoftLimit();
                 if (configuration_and_settings->standalone_keeper && isExceedingMemorySoftLimit() && checkIfRequestIncreaseMem(request.request))
                 {
@@ -243,6 +265,10 @@ void KeeperDispatcher::requestThread()
                             CurrentMetrics::sub(CurrentMetrics::KeeperOutstandingRequests);
 
                             handle_opentelemetery_spans(request.request, request.session_id);
+
+                            /// Skip stale requests for finished sessions during batch assembly
+                            if (is_stale_session_request(request))
+                                return true; // consumed, keep draining
 
                             /// Don't append read request into batch, we have to process them separately
                             if (!coordination_settings[CoordinationSetting::quorum_reads] && request.request->isReadRequest())
@@ -365,10 +391,22 @@ void KeeperDispatcher::requestThread()
                 /// Read request always goes after write batch (last request)
                 if (has_read_request)
                 {
-                    if (server->isLeaderAlive())
-                        server->putLocalReadRequest({request});
+                    bool finished;
+                    {
+                        std::lock_guard lock(finished_sessions_mutex);
+                        finished = finished_sessions.contains(request.session_id);
+                    }
+                    if (!finished)
+                    {
+                        if (server->isLeaderAlive())
+                            server->putLocalReadRequest({request});
+                        else
+                            addErrorResponses({request}, Coordination::Error::ZCONNECTIONLOSS);
+                    }
                     else
-                        addErrorResponses({request}, Coordination::Error::ZCONNECTIONLOSS);
+                    {
+                        ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
+                    }
                 }
             }
         }
@@ -531,6 +569,12 @@ bool KeeperDispatcher::putRequest(const Coordination::ZooKeeperRequestPtr & requ
 bool KeeperDispatcher::putLocalReadRequest(const Coordination::ZooKeeperRequestPtr & request, int64_t session_id)
 {
     {
+        std::lock_guard lock(finished_sessions_mutex);
+        if (finished_sessions.contains(session_id))
+            return false;
+    }
+
+    {
         /// If session was already disconnected than we will ignore requests
         std::lock_guard lock(session_to_response_callback_mutex);
         if (!session_to_response_callback.contains(session_id))
@@ -576,6 +620,14 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
         snapshot_s3,
         [this](uint64_t /*log_idx*/, const KeeperRequestForSession & request_for_session)
         {
+            /// When Close commits, all prior requests for this session have been processed.
+            /// Remove from finished_sessions to reclaim memory.
+            if (request_for_session.request->getOpNum() == Coordination::OpNum::Close)
+            {
+                std::lock_guard lock(finished_sessions_mutex);
+                finished_sessions.erase(request_for_session.session_id);
+            }
+
             {
                 /// check if we have queue of read requests depending on this request to be committed
                 std::lock_guard lock(read_request_queue_mutex);
@@ -588,6 +640,16 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
                     {
                         for (const auto & read_request : request_queue_it->second)
                         {
+                            /// Skip reads whose session has been finished
+                            {
+                                std::lock_guard flock(finished_sessions_mutex);
+                                if (finished_sessions.contains(read_request.session_id))
+                                {
+                                    ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
+                                    continue;
+                                }
+                            }
+
                             if (!server->isLeaderAlive())
                             {
                                 addErrorResponses({read_request}, Coordination::Error::ZCONNECTIONLOSS);
@@ -838,6 +900,13 @@ void KeeperDispatcher::finishSession(int64_t session_id)
     /// shutdown() method will cleanup sessions if needed
     if (keeper_context->isShutdownCalled())
         return;
+
+    /// Mark session as finished FIRST to maximize the window where
+    /// requestThread can skip stale requests for this session.
+    {
+        std::lock_guard lock(finished_sessions_mutex);
+        finished_sessions.insert(session_id);
+    }
 
     ZooKeeperResponseCallback callback;
     {

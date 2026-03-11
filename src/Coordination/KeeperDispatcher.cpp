@@ -901,13 +901,6 @@ void KeeperDispatcher::finishSession(int64_t session_id)
     if (keeper_context->isShutdownCalled())
         return;
 
-    /// Mark session as finished FIRST to maximize the window where
-    /// requestThread can skip stale requests for this session.
-    {
-        std::lock_guard lock(finished_sessions_mutex);
-        finished_sessions.insert(session_id);
-    }
-
     ZooKeeperResponseCallback callback;
     {
         std::lock_guard lock(session_to_response_callback_mutex);
@@ -918,6 +911,21 @@ void KeeperDispatcher::finishSession(int64_t session_id)
             session_to_response_callback.erase(session_it);
             CurrentMetrics::sub(CurrentMetrics::KeeperAliveConnections);
         }
+        else
+        {
+            /// Session was already finished by another path (e.g. `sessionCleanerTask`
+            /// raced with `KeeperTCPHandler`). The `Close` request may have already
+            /// committed and erased `finished_sessions`, so inserting now would leak
+            /// the session ID with no one to clean it up.
+            return;
+        }
+    }
+
+    /// Mark session as finished so `requestThread` can skip stale requests
+    /// still sitting in the queue for this session.
+    {
+        std::lock_guard lock(finished_sessions_mutex);
+        finished_sessions.insert(session_id);
     }
 
     /// Notify the callback that session is being closed before removing it

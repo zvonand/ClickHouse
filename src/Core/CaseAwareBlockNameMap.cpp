@@ -7,8 +7,10 @@
 #include <Formats/FormatSettings.h>
 #include <base/StringViewHash.h>
 #include <sparsehash/dense_hash_map>
+#include "Common/SipHash.h"
 #include <Common/Exception.h>
 #include <base/defines.h>
+#include <Poco/String.h>
 
 namespace DB
 {
@@ -18,36 +20,26 @@ namespace ErrorCodes
 extern const int INCORRECT_DATA;
 }
 
-/// https://en.wikipedia.org/wiki/Jenkins_hash_function
 struct CaseInsensitiveHash
 {
     size_t operator()(const std::string_view key) const
     {
-        uint32_t hash = 0;
-        for (const char c : key){
-            hash += tolower(c);
-            hash += hash << 10;
-            hash ^= hash >> 6;
-        }
-        hash += hash << 3;
-        hash ^= hash >> 11;
-        hash += hash << 15;
-        return hash;
+        std::string key_s {key};
+        Poco::toLowerInPlace(key_s);
+        return sipHash64(key_s);
     }
 };
 
 struct CaseInsensitiveEquality
 {
     bool operator()(const std::string_view left, const std::string_view right) const{
-        return CaseInsensitiveEquality::compare(left, right);
+        return CaseInsensitiveEquality::equal(left, right);
     }
 
-    static bool compare(const std::string_view left, const std::string_view right)
+    static bool equal(const std::string_view left, const std::string_view right)
     {
         if (left.size() != right.size())
-        {
             return false;
-        }
         return std::equal(left.begin(), left.end(), right.begin(), [](char a, char b) { return tolower(a) == tolower(b); });
     }
 };
@@ -124,7 +116,7 @@ public:
     }
 
     bool stringCompare(std::string_view left, std::string_view right) const{
-        return CaseInsensitiveEquality::compare(left, right);
+        return CaseInsensitiveEquality::equal(left, right);
     }
 
 protected:

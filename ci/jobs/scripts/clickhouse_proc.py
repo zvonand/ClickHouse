@@ -120,7 +120,7 @@ class ClickHouseProc:
 
     def install_configs(self):
         Path(f"{self.ch_config_dir}/config.d").mkdir(parents=True, exist_ok=True)
-        with open(f"{self.ch_config_dir}/config.d/backups.xml", "w") as file:
+        with open(f"{self.ch_config_dir}/config.d/storage_conf_backups.xml", "w") as file:
             file.write(f"""
 <clickhouse>
     <storage_configuration>

@@ -190,13 +190,7 @@ class JobConfigs:
         digest_config=fast_test_digest_config,
         result_name_for_cidb="Darwin tests",
         allow_merge_on_failure=True,
-#        timeout=3600,
     ).parametrize(
-#        Job.ParamSet(
-#            parameter=BuildTypes.ARM_DARWIN,
-#            runs_on=RunnerLabels.MACOS_ARM_SMALL,
-#            requires=[ArtifactNames.CH_ARM_DARWIN_BIN],
-#        ),
         Job.ParamSet(
             parameter=BuildTypes.AMD_DARWIN,
             runs_on=RunnerLabels.MACOS_AMD_SMALL,

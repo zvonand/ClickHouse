@@ -15,8 +15,11 @@ INCREMENTAL_WRITER_REMOTE_DIR = "/root/paimon-incremental-data"
 INCREMENTAL_WRITER_JAR = (
     "/root/paimon-incremental-data/target/paimon-incremental-writer-1.1.1.jar"
 )
-PAIMON_WAREHOUSE_URI = "file:///tmp/warehouse/"
-PAIMON_TABLE_PATH = "/tmp/warehouse/test.db/test_table"
+path_to_userfiles_from_defaut_config = "user_files"
+CLICKHOUSE_WORKDIR = "/var/lib/clickhouse"
+USER_FILES_PATH = f"{CLICKHOUSE_WORKDIR}/{path_to_userfiles_from_defaut_config}"
+PAIMON_WAREHOUSE_URI = f"file://{USER_FILES_PATH}/warehouse/"
+PAIMON_TABLE_PATH = f"{USER_FILES_PATH}/warehouse/test.db/test_table"
 CH_TABLE_NAME = "paimon_inc_read"
 CH_TABLE_NAME_WITH_LIMIT = "paimon_inc_read_with_limit"
 CH_MV_PAIMON_TABLE = "paimon_mv_source"
@@ -28,7 +31,7 @@ node = cluster.add_instance(
     "node",
     stay_alive=True,
     with_zookeeper=True,
-    main_configs=["configs/zookeeper.xml"],
+    main_configs=["configs/zookeeper.xml", "configs/config.xml"],
     macros={"shard": "s1", "replica": "r1"},
 )
 
@@ -146,8 +149,8 @@ def test_paimon_incremental_read_via_paimon_table_engine(started_cluster):
     # Clean warehouse for idempotent re-runs.
     run_and_check(
         [
-            "docker exec {cont_id} bash -lc \"rm -rf /tmp/warehouse\"".format(
-                cont_id=instance_id
+            "docker exec {cont_id} bash -lc \"rm -rf {warehouse}\"".format(
+                cont_id=instance_id, warehouse=f"{USER_FILES_PATH}/warehouse"
             )
         ],
         shell=True,
@@ -212,8 +215,8 @@ def test_paimon_incremental_read_via_paimon_table_engine(started_cluster):
     node.query(f"DROP TABLE IF EXISTS {CH_TABLE_NAME} SYNC;")
     run_and_check(
         [
-            "docker exec {cont_id} bash -lc \"rm -rf /tmp/warehouse\"".format(
-                cont_id=instance_id
+            "docker exec {cont_id} bash -lc \"rm -rf {warehouse}\"".format(
+                cont_id=instance_id, warehouse=f"{USER_FILES_PATH}/warehouse"
             )
         ],
         shell=True,
@@ -280,8 +283,8 @@ def test_paimon_to_mergetree_via_refresh_mv(started_cluster):
     # Clean warehouse for idempotent re-runs.
     run_and_check(
         [
-            "docker exec {cont_id} bash -lc \"rm -rf /tmp/warehouse\"".format(
-                cont_id=instance_id
+            "docker exec {cont_id} bash -lc \"rm -rf {warehouse}\"".format(
+                cont_id=instance_id, warehouse=f"{USER_FILES_PATH}/warehouse"
             )
         ],
         shell=True,

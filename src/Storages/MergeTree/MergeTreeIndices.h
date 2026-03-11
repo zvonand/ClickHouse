@@ -330,6 +330,15 @@ public:
     void registerCreator(const std::string & index_type, Creator creator);
     void registerValidator(const std::string & index_type, Validator validator);
 
+    std::vector<String> getAllRegisteredNames() const
+    {
+        std::vector<String> result;
+        result.reserve(creators.size());
+        for (const auto & pair : creators)
+            result.push_back(pair.first);
+        return result;
+    }
+
 protected:
     MergeTreeIndexFactory();
 

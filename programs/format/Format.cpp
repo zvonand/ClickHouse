@@ -34,6 +34,8 @@
 #include <DataTypes/DataTypeFactory.h>
 #include <Formats/FormatFactory.h>
 #include <Formats/registerFormats.h>
+#include <Compression/CompressionFactory.h>
+#include <Storages/MergeTree/MergeTreeIndices.h>
 #include <Processors/Transforms/getSourceFromASTInsertQuery.h>
 
 #include <boost/algorithm/string/split.hpp>
@@ -190,11 +192,15 @@ int mainEntryClickHouseFormat(int argc, char ** argv)
             auto all_known_data_type_names = DataTypeFactory::instance().getAllRegisteredNames();
             auto all_known_settings = Settings().getAllRegisteredNames();
             auto all_known_merge_tree_settings = MergeTreeSettings().getAllRegisteredNames();
+            auto all_known_index_types = MergeTreeIndexFactory::instance().getAllRegisteredNames();
+            auto all_known_codecs = CompressionCodecFactory::instance().getAllRegisteredNames();
 
             additional_names.insert(all_known_storage_names.begin(), all_known_storage_names.end());
             additional_names.insert(all_known_data_type_names.begin(), all_known_data_type_names.end());
             additional_names.insert(all_known_settings.begin(), all_known_settings.end());
             additional_names.insert(all_known_merge_tree_settings.begin(), all_known_merge_tree_settings.end());
+            additional_names.insert(all_known_index_types.begin(), all_known_index_types.end());
+            additional_names.insert(all_known_codecs.begin(), all_known_codecs.end());
 
             for (auto * it = auto_time_zones; *it; ++it)
             {

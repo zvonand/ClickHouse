@@ -1,4 +1,4 @@
-personal_ws-1.1 en 3588 
+personal_ws-1.1 en 3590
 AArch
 ABIs
 ACLs
@@ -1605,6 +1605,7 @@ capnproto
 cardinalities
 cardinality
 cartesian
+caseFoldUTF
 caseWithExpression
 cashflow
 cashflows
@@ -2936,6 +2937,7 @@ reinterpretAsString
 reinterpretAsUInt
 reinterpretAsUUID
 remerge
+removeDiacriticsUTF
 remoteSecure
 repivot
 replaceAll

@@ -2534,7 +2534,14 @@ ReadFromMergeTree::AnalysisResultPtr ReadFromMergeTree::selectRangesToRead(
                 return filterPartsNamesByPrimaryKeyAndSkipIndexes(filter_context, parts_ranges_map, parts_to_analyze);
             };
 
-            DistributedIndexAnalysisPartsRanges distributed_index_analysis = distributedIndexAnalysisOnReplicas(data.getStorageID(), query_info_.filter_actions_dag.get(), indexes_column_names, res_parts, vector_search_parameters, local_index_analysis_callback, context_);
+            DistributedIndexAnalysisPartsRanges distributed_index_analysis = distributedIndexAnalysisOnReplicas(data.getStorageID(),
+                query_info_.filter_actions_dag.get(),
+                result.sampling.filter_function,
+                indexes_column_names,
+                res_parts,
+                vector_search_parameters,
+                local_index_analysis_callback,
+                context_);
             IndexAnalysisPartsRanges analyzed_parts_ranges;
 
             /// Index stats
@@ -2798,10 +2805,14 @@ bool ReadFromMergeTree::requestReadingInOrder(size_t prefix_size, int direction,
 
     updateSortDescription();
 
-    /// Re-calculate analysis result to have correct read_type
+    /// Set correct read_type
     /// For some reason for projection it breaks aggregation in order, so skip it
     if (analyzed_result_ptr && !analyzed_result_ptr->readFromProjection())
-        selectRangesToRead();
+    {
+        analyzed_result_ptr->read_type = (query_info.input_order_info->direction > 0)
+            ? ReadType::InOrder
+            : ReadType::InReverseOrder;
+    }
 
     return true;
 }

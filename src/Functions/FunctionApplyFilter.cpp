@@ -32,9 +32,7 @@ class FunctionApplyFilter : public IFunction
 {
 public:
     static constexpr auto name = "__applyFilter";
-    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionApplyFilter>(std::move(context)); }
-
-    explicit FunctionApplyFilter(ContextPtr query_context_) : query_context(std::move(query_context_)) {}
+    static FunctionPtr create(ContextPtr) { return std::make_shared<FunctionApplyFilter>(); }
 
     String getName() const override { return name; }
 
@@ -88,10 +86,10 @@ public:
                     "First argument of function '{}' must be a String filter name",
                     getName());
 
-        auto context = query_context ? query_context : CurrentThread::tryGetQueryContext();
-        if (!context)
+        auto query_context = CurrentThread::tryGetQueryContext();
+        if (!query_context)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "Query context is not available for {}", getName());
-        auto filter_lookup = context->getRuntimeFilterLookup();
+        auto filter_lookup = query_context->getRuntimeFilterLookup();
         if (!filter_lookup)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "Runtime filter lookup was not initialized");
         auto filter = filter_lookup->find(filter_name);
@@ -104,9 +102,6 @@ public:
 
         return filter->find(data_column);
     }
-
-private:
-    ContextPtr query_context;
 };
 
 REGISTER_FUNCTION(FilterContains)

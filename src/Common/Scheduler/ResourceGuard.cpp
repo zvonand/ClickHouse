@@ -4,6 +4,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int RESOURCE_ACCESS_DENIED;
+}
+
 void ResourceGuard::Request::wait()
 {
     CurrentMetrics::Increment scheduled(metrics->scheduled_count);

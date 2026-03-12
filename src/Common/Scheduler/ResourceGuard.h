@@ -34,11 +34,6 @@ namespace CurrentMetrics
 namespace DB
 {
 
-namespace ErrorCodes
-{
-    extern const int RESOURCE_ACCESS_DENIED;
-}
-
 /*
  * Scoped resource guard.
  * Waits for resource to be available in constructor and releases resource in destructor

@@ -11,13 +11,6 @@
 #include <Common/setThreadName.h>
 
 
-namespace CurrentMetrics
-{
-    extern const Metric DestroyAggregatesThreads;
-    extern const Metric DestroyAggregatesThreadsActive;
-    extern const Metric DestroyAggregatesThreadsScheduled;
-}
-
 namespace DB
 {
 

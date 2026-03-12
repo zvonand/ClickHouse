@@ -17,6 +17,13 @@
 #include <algorithm>
 #include <atomic>
 
+namespace CurrentMetrics
+{
+    extern const Metric DestroyAggregatesThreads;
+    extern const Metric DestroyAggregatesThreadsActive;
+    extern const Metric DestroyAggregatesThreadsScheduled;
+}
+
 namespace ProfileEvents
 {
     extern const Event ExternalAggregationMerge;

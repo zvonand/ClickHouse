@@ -49,7 +49,7 @@ ClickHouse supports the ability to copy the schema and data of an existing table
 For replicating the schema of an existing table:
 
 ```sql
-CREATE TABLE [IF NOT EXISTS] db.table AS db2.new_table [ENGINE = engine]
+CREATE TABLE [IF NOT EXISTS] [db.]table AS [db2.]new_table [ENGINE = engine]
 ```
 
 This creates a table with the same structure as another table. 
@@ -57,22 +57,22 @@ This creates a table with the same structure as another table.
 
 For replicating the schema and data of an existing table:
 ```sql
-CREATE TABLE [IF NOT EXISTS] db2.table_clone CLONE AS db.table [ENGINE = engine]
+CREATE TABLE [IF NOT EXISTS] [db2.]table_clone CLONE AS [db.]table [ENGINE = engine]
 ```
 
-This creates a table with the same schema and data as an existing table.  After the new table is created, all partitions from `db.table` are attached to it. In other words, the data of `db.table` is cloned into `db2.table_clone` upon creation. This query is equivalent to the following:
+This creates a table with the same schema and data as an existing table.  After the new table is created, all partitions from `db.table` are attached to it. In other words, the data of `[db.]table` is cloned into `[db2.]table_clone` upon creation. This query is equivalent to the following:
 
 ```sql
-CREATE TABLE [IF NOT EXISTS] db.table AS db2.table_clone [ENGINE = engine];
-ALTER TABLE db2.table_clone ATTACH PARTITION ALL FROM db.table;
+CREATE TABLE [IF NOT EXISTS] [db.]table AS [db2.]table_clone [ENGINE = engine];
+ALTER TABLE [db2.]table_clone ATTACH PARTITION ALL FROM [db.]table;
 ```
 
-For both features, you can specify a different engine for the table. If the engine is not specified, the same engine will be used as for the original table (`db.table`).
+For both features, you can specify a different engine for the table. If the engine is not specified, the same engine will be used as for the original table (`[db.]table`).
 
 ### From a Table Function {#from-a-table-function}
 
 ```sql
-CREATE TABLE [IF NOT EXISTS] db.table_name AS table_function()
+CREATE TABLE [IF NOT EXISTS] [db.]table_name AS table_function()
 ```
 
 Creates a table with the same result as that of the [table function](/sql-reference/table-functions) specified. The created table will also work in the same way as the corresponding table function that was specified.

@@ -216,7 +216,7 @@ class Result(MetaClasses.Serializable):
         )
 
     def is_success(self):
-        return self.status in (Result.Status.SUCCESS, Result.StatusExtended.OK)
+        return self.status in (Result.Status.SUCCESS, Result.StatusExtended.OK, Result.StatusExtended.XFAIL)
 
     def is_failure(self):
         return self.status in (Result.Status.FAILED, Result.StatusExtended.FAIL, Result.StatusExtended.XPASS)

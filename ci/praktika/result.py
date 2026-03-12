@@ -69,6 +69,7 @@ class Result(MetaClasses.Serializable):
         FAIL = "FAIL"
         SKIPPED = "SKIPPED"
         ERROR = "ERROR"
+        UNKNOWN = "UNKNOWN"
 
     class Label:
         OK_ON_RETRY = "retry_ok"

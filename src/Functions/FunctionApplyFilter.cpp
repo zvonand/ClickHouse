@@ -10,7 +10,6 @@
 #include <Interpreters/BloomFilter.h>
 #include <Processors/QueryPlan/RuntimeFilterLookup.h>
 #include <IO/WriteHelpers.h>
-#include <Common/CurrentThread.h>
 #include <Common/FunctionDocumentation.h>
 
 namespace DB
@@ -32,7 +31,9 @@ class FunctionApplyFilter : public IFunction
 {
 public:
     static constexpr auto name = "__applyFilter";
-    static FunctionPtr create(ContextPtr) { return std::make_shared<FunctionApplyFilter>(); }
+    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionApplyFilter>(std::move(context)); }
+
+    explicit FunctionApplyFilter(ContextPtr query_context_) : query_context(std::move(query_context_)) {}
 
     String getName() const override { return name; }
 
@@ -86,8 +87,6 @@ public:
                     "First argument of function '{}' must be a String filter name",
                     getName());
 
-        /// Query context contains filter lookup where per-query filters are stored
-        auto query_context = CurrentThread::get().tryGetQueryContext();
         auto filter_lookup = query_context->getRuntimeFilterLookup();
         if (!filter_lookup)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "Runtime filter lookup was not initialized");
@@ -101,6 +100,9 @@ public:
 
         return filter->find(data_column);
     }
+
+private:
+    ContextPtr query_context;
 };
 
 REGISTER_FUNCTION(FilterContains)

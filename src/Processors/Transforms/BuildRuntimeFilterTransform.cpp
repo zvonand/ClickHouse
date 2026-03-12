@@ -2,7 +2,6 @@
 #include <Processors/Chunk.h>
 #include <Columns/IColumn.h>
 #include <Interpreters/Context.h>
-#include <Common/CurrentThread.h>
 #include <Functions/CastOverloadResolver.h>
 #include <Functions/IFunction.h>
 
@@ -22,13 +21,15 @@ BuildRuntimeFilterTransform::BuildRuntimeFilterTransform(
     Float64 pass_ratio_threshold_for_disabling_,
     UInt64 blocks_to_skip_before_reenabling_,
     Float64 max_ratio_of_set_bits_in_bloom_filter_,
-    bool allow_to_use_not_exact_filter_)
+    bool allow_to_use_not_exact_filter_,
+    ContextPtr query_context_)
     : ISimpleTransform(header_, header_, true)
     , filter_column_name(filter_column_name_)
     , filter_column_position(header_->getPositionByName(filter_column_name))
     , filter_column_original_type(header_->getByPosition(filter_column_position).type)
     , filter_column_target_type(filter_column_type_)
     , filter_name(filter_name_)
+    , query_context(std::move(query_context_))
 {
     const auto & filter_column = header_->getByPosition(filter_column_position);
     if (!filter_column_target_type->equals(*filter_column_original_type))
@@ -99,8 +100,6 @@ void BuildRuntimeFilterTransform::transform(Chunk & chunk)
 
 void BuildRuntimeFilterTransform::finish()
 {
-    /// Query context contains filter lookup where per-query filters are stored
-    auto query_context = CurrentThread::get().tryGetQueryContext();
     auto filter_lookup = query_context->getRuntimeFilterLookup();
     filter_lookup->add(filter_name, std::move(built_filter));
 }

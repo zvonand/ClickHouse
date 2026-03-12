@@ -64,7 +64,7 @@ AsynchronousBoundedReadBuffer::AsynchronousBoundedReadBuffer(
     /// That is ok, it's not used for anything important.
     , file_name(impl->getFileName())
     , reader(reader_)
-    , query_id(CurrentThread::isInitialized() && CurrentThread::get().getQueryContext() != nullptr ? CurrentThread::getQueryId() : "")
+    , query_id(CurrentThread::isInitialized() && CurrentThread::get().tryGetQueryContext() != nullptr ? CurrentThread::getQueryId() : "")
     , current_reader_id(getRandomASCIIString(8))
     , log(getLogger("AsynchronousBoundedReadBuffer"))
     , async_read_counters(async_read_counters_)

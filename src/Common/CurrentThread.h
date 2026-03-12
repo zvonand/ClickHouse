@@ -86,8 +86,8 @@ public:
 
     /// Returns a non-empty string if the thread is attached to a query
 
-    /// Returns attached query context
-    static ContextPtr getQueryContext();
+    /// Returns attached query context or nullptr if there is no query context
+    static ContextPtr tryGetQueryContext();
 
     static std::string_view getQueryId();
 

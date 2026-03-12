@@ -100,7 +100,7 @@ void BuildRuntimeFilterTransform::transform(Chunk & chunk)
 void BuildRuntimeFilterTransform::finish()
 {
     /// Query context contains filter lookup where per-query filters are stored
-    auto query_context = CurrentThread::get().getQueryContext();
+    auto query_context = CurrentThread::get().tryGetQueryContext();
     auto filter_lookup = query_context->getRuntimeFilterLookup();
     filter_lookup->add(filter_name, std::move(built_filter));
 }

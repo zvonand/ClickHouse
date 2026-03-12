@@ -103,7 +103,7 @@ public:
 
     Names getAllRegisteredNames() const override
     {
-        auto context = CurrentThread::getQueryContext();
+        auto context = CurrentThread::tryGetQueryContext();
         if (!context)
             return {};
 

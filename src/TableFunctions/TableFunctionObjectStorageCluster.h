@@ -52,7 +52,7 @@ protected:
 private:
     static ContextPtr getQueryOrGlobalContext()
     {
-        if (auto query_context = CurrentThread::getQueryContext(); query_context != nullptr)
+        if (auto query_context = CurrentThread::tryGetQueryContext(); query_context != nullptr)
             return query_context;
         return Context::getGlobalContextInstance();
     }

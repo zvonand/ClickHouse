@@ -730,13 +730,20 @@ public:
                 tickets.erase(it->second);
                 tickets_by_expiration_time.erase(it);
             }
-            while (!poll_descriptors_by_expiration_time.empty())
+            for (auto it = poll_descriptors_by_expiration_time.begin(); it != poll_descriptors_by_expiration_time.end(); )
             {
-                auto it = poll_descriptors_by_expiration_time.begin();
                 if (current_time <= it->first)
                     break;
+
+                auto pd_it = poll_descriptors.find(it->second);
+                if (pd_it->second->evaluating)
+                {
+                    ++it;
+                    continue;
+                }
+
                 LOG_DEBUG(log, "Cancelling expired poll descriptor {}", it->second);
-                poll_descriptors.erase(it->second);
+                poll_descriptors.erase(pd_it);
                 auto it2 = poll_sessions.find(it->second);
                 if (it2 != poll_sessions.end())
                 {
@@ -744,7 +751,7 @@ public:
                     poll_sessions.erase(it2);
                 }
                 eraseFlightDescriptorMapEntryLocked(it->second);
-                poll_descriptors_by_expiration_time.erase(it);
+                it = poll_descriptors_by_expiration_time.erase(it);
             }
             updateNextExpirationTime();
         }
@@ -1573,7 +1580,12 @@ arrow::Status ArrowFlightServer::evaluatePollDescriptor(const String & poll_desc
     }
 
     auto info_res = calls_data->getPollDescriptorInfo(poll_descriptor);
-    ARROW_RETURN_NOT_OK(info_res);
+    if (!info_res.ok())
+    {
+        if (ticket)
+            poll_session->onCancelOrConnectionLoss();
+        return info_res.status();
+    }
     const auto & info = info_res.ValueOrDie();
     if (!ticket)
         calls_data->eraseFlightDescriptorMapByDescriptor(poll_descriptor);

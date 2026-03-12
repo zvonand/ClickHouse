@@ -345,7 +345,7 @@ namespace DB
                         ErrorCodes::ILLEGAL_COLUMN,
                         "Cannot convert Variant to {} Arrow DenseUnion: "
                         "variant offsets are not monotonic for discriminator {}",
-                        format_name, global_discr);
+                        format_name, std::to_string(global_discr));
                 ends[global_discr] = column_offsets[idx] + 1;
             }
 

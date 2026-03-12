@@ -1,4 +1,3 @@
-ALTER EXECUTE	ALTER TABLE
 ALTER TABLE t (EXECUTE cmd1( )), (EXECUTE cmd2( ))
 ALTER TABLE t (EXECUTE cmd( 1 + 2))
 AlterQuery  t (children 2)

@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+
 # Creates TPC-DS SF1 tables in datasets database by transforming tests/benchmarks/tpc-ds/init.sql to use S3 web disk.
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

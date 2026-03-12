@@ -1,3 +1,4 @@
+#include <Storages/ColumnSize.h>
 #include <Storages/MergeTree/IMergeTreeDataPart.h>
 #include <Storages/MergeTree/IDataPartStorage.h>
 #include <Storages/MergeTree/DataPartStorageOnDiskBase.h>
@@ -402,6 +403,7 @@ IMergeTreeDataPart::IMergeTreeDataPart(
     , name(mutable_name)
     , info(info_)
     , index_granularity_info(storage_, storage_settings, part_type_)
+    , columns_sizes(std::make_unique<ColumnSizeByName>())
     , part_type(part_type_)
     , parent_part(parent_part_)
     , parent_part_name(parent_part ? parent_part->name : "")
@@ -2654,7 +2656,9 @@ void IMergeTreeDataPart::calculateColumnsSizesOnDisk() const
     if (getColumns().empty() || checksums.empty())
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot calculate columns sizes when columns or checksums are not initialized");
 
-    calculateEachColumnSizes(columns_sizes, total_columns_size);
+    auto new_column_sizes_ptr = std::make_unique<ColumnSizeByName>();
+    calculateEachColumnSizes(*new_column_sizes_ptr, total_columns_size);
+    columns_sizes.set(std::move(new_column_sizes_ptr));
 }
 
 void IMergeTreeDataPart::calculateSecondaryIndicesSizesOnDisk() const
@@ -2715,20 +2719,24 @@ ColumnSize IMergeTreeDataPart::getColumnSize(const String & column_name) const
     if (!are_columns_and_secondary_indices_sizes_calculated && areChecksumsLoaded())
         calculateColumnsAndSecondaryIndicesSizesOnDiskUnlocked();
 
+    lock.unlock();
+
+    auto sizes = columns_sizes.get();
+
     /// For some types of parts columns_size maybe not calculated
-    auto it = columns_sizes.find(column_name);
-    if (it != columns_sizes.end())
+    auto it = sizes->find(column_name);
+    if (it != sizes->end())
         return it->second;
 
     return ColumnSize{};
 }
 
-IMergeTreeDataPart::ColumnSizeByName IMergeTreeDataPart::getColumnSizes() const
+IMergeTreeDataPart::ColumnSizeByNameConstPtr IMergeTreeDataPart::getColumnSizes() const
 {
     UniqueLock lock(columns_and_secondary_indices_sizes_mutex);
     if (!are_columns_and_secondary_indices_sizes_calculated && areChecksumsLoaded())
         calculateColumnsAndSecondaryIndicesSizesOnDiskUnlocked();
-    return columns_sizes;
+    return columns_sizes.get();
 }
 
 ColumnSize IMergeTreeDataPart::getSubcolumnSize(const String & subcolumn_name) const
@@ -2787,7 +2795,11 @@ void IMergeTreeDataPart::accumulateColumnSizes(ColumnToSize & column_to_size) co
     UniqueLock lock(columns_and_secondary_indices_sizes_mutex);
     if (!are_columns_and_secondary_indices_sizes_calculated && areChecksumsLoaded())
         calculateColumnsAndSecondaryIndicesSizesOnDiskUnlocked();
-    for (const auto & [column_name, size] : columns_sizes)
+
+    lock.unlock();
+
+    auto sizes = columns_sizes.get();
+    for (const auto & [column_name, size] : *sizes)
         column_to_size[column_name] = size.data_compressed;
 }
 

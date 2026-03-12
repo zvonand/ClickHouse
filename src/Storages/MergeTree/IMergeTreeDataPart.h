@@ -28,6 +28,7 @@
 #include <Interpreters/TransactionVersionMetadata.h>
 #include <DataTypes/Serializations/SerializationInfo.h>
 #include <Poco/LRUCache.h>
+#include <Common/MultiVersion.h>
 
 
 namespace zkutil
@@ -84,6 +85,7 @@ public:
     using Checksum = MergeTreeDataPartChecksums::Checksum;
 
     using ColumnSizeByName = std::unordered_map<std::string, ColumnSize>;
+    using ColumnSizeByNameConstPtr = std::shared_ptr<const ColumnSizeByName>;
     using NameToNumber = std::unordered_map<std::string, size_t>;
 
     using Index = Columns;
@@ -108,7 +110,7 @@ public:
     /// NOTE: Returns zeros if column files are not found in checksums.
     /// Otherwise return information about column size on disk.
     ColumnSize getColumnSize(const String & column_name) const;
-    ColumnSizeByName getColumnSizes() const;
+    ColumnSizeByNameConstPtr getColumnSizes() const;
     /// Return the size of all files required to read the specified subcolumn.
     ColumnSize getSubcolumnSize(const String & /*subcolumn_name*/) const;
 
@@ -675,7 +677,7 @@ private:
     /// Total size of all columns, calculated once in calcuateColumnSizesOnDisk
     mutable ColumnSize total_columns_size TSA_GUARDED_BY(columns_and_secondary_indices_sizes_mutex);
     /// Size for each column, calculated once in calcuateColumnSizesOnDisk
-    mutable ColumnSizeByName columns_sizes TSA_GUARDED_BY(columns_and_secondary_indices_sizes_mutex);
+    mutable MultiVersion<ColumnSizeByName> columns_sizes;
     mutable ColumnSize total_secondary_indices_size TSA_GUARDED_BY(columns_and_secondary_indices_sizes_mutex);
 
     mutable IndexSizeByName secondary_index_sizes TSA_GUARDED_BY(columns_and_secondary_indices_sizes_mutex);

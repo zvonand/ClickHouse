@@ -11,7 +11,7 @@ Sources:
 1. Go to the submodule directory
 
 ```Bash
-cd `contrib/libstemmer_c/`
+cd contrib/libstemmer_c/
 ```
 
 1. Create a new branch for the new version:

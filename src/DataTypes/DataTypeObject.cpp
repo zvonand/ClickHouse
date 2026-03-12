@@ -9,6 +9,7 @@
 #include <DataTypes/Serializations/SerializationSubObject.h>
 #include <DataTypes/Serializations/SerializationObjectDistinctPaths.h>
 #include <DataTypes/Serializations/SerializationObjectCombinedPath.h>
+#include <DataTypes/Serializations/SerializationNamed.h>
 #include <Columns/ColumnObject.h>
 #include <Columns/ColumnDynamic.h>
 #include <Interpreters/castColumn.h>
@@ -125,8 +126,17 @@ bool DataTypeObject::equals(const IDataType & rhs) const
     return false;
 }
 
-SerializationPtr DataTypeObject::doGetDefaultSerialization() const
+SerializationPtr DataTypeObject::doGetSerialization(const SerializationInfoSettings & settings) const
 {
+    std::unordered_map<String, SerializationPtr> typed_paths_serializations;
+    typed_paths_serializations.reserve(typed_paths.size());
+    for (const auto & [path, type] : typed_paths)
+        typed_paths_serializations[path] = settings.propagate_types_serialization_versions_to_nested_types ? type->getSerialization(settings) : type->getDefaultSerialization();
+
+    SerializationPtr dynamic_serialization = settings.propagate_types_serialization_versions_to_nested_types
+        ? getDynamicType()->getSerialization(settings)
+        : getDynamicType()->getDefaultSerialization();
+
     switch (schema_format)
     {
         case SchemaFormat::JSON:
@@ -137,25 +147,31 @@ SerializationPtr DataTypeObject::doGetDefaultSerialization() const
             if (context->getSettingsRef()[Setting::allow_simdjson])
                 return std::make_shared<SerializationJSON<SimdJSONParser>>(
                     typed_paths,
+                    typed_paths_serializations,
                     paths_to_skip,
                     path_regexps_to_skip,
                     getDynamicType(),
+                    dynamic_serialization,
                     buildJSONExtractTree<SimdJSONParser>(getPtr(), "JSON serialization"));
 #endif
 
 #if USE_RAPIDJSON
             return std::make_shared<SerializationJSON<RapidJSONParser>>(
                 typed_paths,
+                typed_paths_serializations,
                 paths_to_skip,
                 path_regexps_to_skip,
                 getDynamicType(),
+                dynamic_serialization,
                 buildJSONExtractTree<RapidJSONParser>(getPtr(), "JSON serialization"));
 #else
             return std::make_shared<SerializationJSON<DummyJSONParser>>(
                 typed_paths,
+                typed_paths_serializations,
                 paths_to_skip,
                 path_regexps_to_skip,
                 getDynamicType(),
+                dynamic_serialization,
                 buildJSONExtractTree<DummyJSONParser>(getPtr(), "JSON serialization"));
 #endif
     }
@@ -441,27 +457,29 @@ ColumnPtr extractCombinedColumn(
 std::pair<DataTypePtr, SerializationPtr> buildSubObjectTypeAndSerialization(
     const String & prefix,
     const std::unordered_map<String, DataTypePtr> & typed_paths,
+    const std::unordered_map<String, SerializationPtr> & all_typed_paths_serializations,
     const DataTypeObject::SchemaFormat & schema_format,
     const std::unordered_set<String> & paths_to_skip,
     const std::vector<String> & path_regexps_to_skip,
     size_t max_dynamic_paths,
     size_t max_dynamic_types,
-    const DataTypePtr & dynamic_type)
+    const DataTypePtr & dynamic_type,
+    const SerializationPtr & dynamic_serialization)
 {
     std::unordered_map<String, DataTypePtr> typed_sub_paths;
-    std::unordered_map<String, SerializationPtr> typed_paths_serializations;
+    std::unordered_map<String, SerializationPtr> typed_sub_paths_serializations;
     for (const auto & [path, type] : typed_paths)
     {
         if (path.starts_with(prefix))
         {
             typed_sub_paths[path.substr(prefix.size())] = type;
-            typed_paths_serializations[path] = type->getDefaultSerialization();
+            typed_sub_paths_serializations[path] = all_typed_paths_serializations.at(path);
         }
     }
     auto sub_object_type = std::make_shared<DataTypeObject>(
         schema_format, typed_sub_paths, paths_to_skip, path_regexps_to_skip, max_dynamic_paths, max_dynamic_types);
     auto sub_object_serialization = std::make_shared<SerializationSubObject>(
-        prefix, typed_paths_serializations, dynamic_type);
+        prefix, typed_sub_paths_serializations, dynamic_type, dynamic_serialization);
     return {std::move(sub_object_type), std::move(sub_object_serialization)};
 }
 
@@ -476,6 +494,7 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
         typed_path_names.reserve(typed_paths.size());
         for (const auto & [path, _] : typed_paths)
             typed_path_names.push_back(path);
+
 
         std::unique_ptr<SubstreamData> res = std::make_unique<SubstreamData>(std::make_shared<SerializationObjectDistinctPaths>(typed_path_names));
         res->type = std::make_shared<DataTypeArray>(std::make_shared<DataTypeString>());
@@ -503,6 +522,10 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
         return res;
     }
 
+    const auto & object_serialization = dynamic_cast<const SerializationObject &>(*removeNamedSerialization(data.serialization));
+    const auto & typed_paths_serializations = object_serialization.getTypedPathsSerializations();
+    const auto & dynamic_path_serialization = object_serialization.getDynamicPathSerialization();
+
     /// Check if it's sub-object subcolumn.
     /// In this case we should return JSON column with all paths that are inside specified object prefix.
     /// For example, if we have {"a" : {"b" : {"c" : {"d" : 10, "e" : "Hello"}, "f" : [1, 2, 3]}}} and subcolumn ^a.b
@@ -511,7 +534,8 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
     {
         const String prefix = *sub_object_subcolumn + ".";
         auto [sub_object_type, sub_object_serialization] = buildSubObjectTypeAndSerialization(
-            prefix, typed_paths, schema_format, paths_to_skip, path_regexps_to_skip, max_dynamic_paths, max_dynamic_types, getDynamicType());
+            prefix, typed_paths, typed_paths_serializations, schema_format, paths_to_skip, path_regexps_to_skip,
+            max_dynamic_paths, max_dynamic_types, getDynamicType(), dynamic_path_serialization);
 
         std::unique_ptr<SubstreamData> res = std::make_unique<SubstreamData>(sub_object_serialization);
         res->type = sub_object_type;
@@ -536,7 +560,7 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
         /// For typed paths, return literal value only (typed paths are always considered present).
         if (auto it = typed_paths.find(combined_path); it != typed_paths.end())
         {
-            auto res = std::make_unique<SubstreamData>(it->second->getDefaultSerialization());
+            auto res = std::make_unique<SubstreamData>(typed_paths_serializations.at(combined_path));
             res->type = it->second;
             if (data.column)
             {
@@ -551,10 +575,10 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
         const String prefix = combined_path + ".";
         auto dynamic_result_type = getDynamicType();
         auto [sub_object_type, sub_object_serialization] = buildSubObjectTypeAndSerialization(
-            prefix, typed_paths, schema_format, paths_to_skip, path_regexps_to_skip, max_dynamic_paths, max_dynamic_types, dynamic_result_type);
+            prefix, typed_paths, typed_paths_serializations, schema_format, paths_to_skip, path_regexps_to_skip,
+            max_dynamic_paths, max_dynamic_types, dynamic_result_type, dynamic_path_serialization);
 
-        auto literal_serialization = std::make_shared<SerializationObjectDynamicPath>(
-            std::make_shared<SerializationDynamic>(), combined_path, /*path_subcolumn=*/"", dynamic_result_type, dynamic_result_type);
+        auto literal_serialization = std::make_shared<SerializationObjectDynamicPath>(dynamic_path_serialization, combined_path, /*path_subcolumn=*/"", dynamic_result_type, dynamic_path_serialization, dynamic_result_type);
 
         auto res = std::make_unique<SubstreamData>(std::make_shared<SerializationObjectCombinedPath>(
             literal_serialization, sub_object_serialization, dynamic_result_type, sub_object_type));
@@ -574,12 +598,12 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
     std::unique_ptr<SubstreamData> res;
     if (auto it = typed_paths.find(path); it != typed_paths.end())
     {
-        res = std::make_unique<SubstreamData>(it->second->getDefaultSerialization());
+        res = std::make_unique<SubstreamData>(typed_paths_serializations.at(path));
         res->type = it->second;
     }
     else
     {
-        res = std::make_unique<SubstreamData>(std::make_shared<SerializationDynamic>());
+        res = std::make_unique<SubstreamData>(dynamic_path_serialization);
         res->type = std::make_shared<DataTypeDynamic>(max_dynamic_types);
     }
 
@@ -600,7 +624,7 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
     if (typed_paths.contains(path))
         res->serialization = std::make_shared<SerializationObjectTypedPath>(res->serialization, path);
     else
-        res->serialization = std::make_shared<SerializationObjectDynamicPath>(res->serialization, path, path_subcolumn, getDynamicType(), res->type);
+        res->serialization = std::make_shared<SerializationObjectDynamicPath>(res->serialization, path, path_subcolumn, getDynamicType(), dynamic_path_serialization, res->type);
 
     return res;
 }

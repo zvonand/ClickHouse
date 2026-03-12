@@ -106,6 +106,7 @@ class PageCache;
 class MMappedFileCache;
 class UncompressedCache;
 class IcebergMetadataFilesCache;
+class ParquetMetadataCache;
 class VectorSimilarityIndexCache;
 class TextIndexTokensCache;
 class TextIndexHeaderCache;
@@ -438,6 +439,7 @@ public:
             partitions = rhs.partitions;
             projections = rhs.projections;
             views = rhs.views;
+            skip_indices = rhs.skip_indices;
         }
 
         QueryAccessInfo(QueryAccessInfo && rhs) = delete;
@@ -458,6 +460,7 @@ public:
             std::swap(partitions, rhs.partitions);
             std::swap(projections, rhs.projections);
             std::swap(views, rhs.views);
+            std::swap(skip_indices, rhs.skip_indices);
         }
 
         /// To prevent a race between copy-constructor and other uses of this structure.
@@ -468,6 +471,7 @@ public:
         std::set<std::string> partitions TSA_GUARDED_BY(mutex){};
         std::set<std::string> projections TSA_GUARDED_BY(mutex){};
         std::set<std::string> views TSA_GUARDED_BY(mutex){};
+        std::set<std::string> skip_indices TSA_GUARDED_BY(mutex){};
     };
     using QueryAccessInfoPtr = std::shared_ptr<QueryAccessInfo>;
 
@@ -668,7 +672,7 @@ protected:
                                                         /// It's shared with all children contexts.
     MergeTreeTransactionHolder merge_tree_transaction_holder;   /// It will rollback or commit transaction on Context destruction.
 
-    BackupsInMemoryHolder backups_in_memory; /// Backups stored in memory (see "BACKUP ... TO Memory()" statement)
+    std::shared_ptr<BackupsInMemoryHolder> backups_in_memory; /// Backups stored in memory (see "BACKUP ... TO Memory()" statement)
 
     /// Use copy constructor or createGlobal() instead
     ContextData();
@@ -725,7 +729,7 @@ public:
     String getFilesystemCachesPath() const;
     String getFilesystemCacheUser() const;
 
-    DatabaseAndTable getOrCacheStorage(const StorageID & id, std::function<DatabaseAndTable()> storage_getter, std::optional<Exception> * exception) const;
+    DatabaseAndTable getOrCacheStorage(const StorageID & id, std::function<DatabaseAndTable()> storage_getter) const;
 
     // Get the disk used by databases to store metadata files.
     std::shared_ptr<IDisk> getDatabaseDisk() const;
@@ -997,6 +1001,8 @@ public:
 
     void addQueryAccessInfo(const QualifiedProjectionName & qualified_projection_name);
 
+    void addSkipIndexAccessInfo(const String & full_table_name, const String & skip_index_name);
+
     /// Supported factories for records in query_log
     enum class QueryLogFactories : uint8_t
     {
@@ -1134,8 +1140,8 @@ public:
     BackupsWorker & getBackupsWorker() const;
     void waitAllBackupsAndRestores() const;
     void cancelAllBackupsAndRestores() const;
-    BackupsInMemoryHolder & getBackupsInMemory();
-    const BackupsInMemoryHolder & getBackupsInMemory() const;
+    std::shared_ptr<BackupsInMemoryHolder> getBackupsInMemory();
+    std::shared_ptr<const BackupsInMemoryHolder> getBackupsInMemory() const;
 
     /// I/O formats.
     InputFormatPtr getInputFormat(
@@ -1315,6 +1321,7 @@ public:
     std::shared_ptr<KeeperDispatcher> tryGetKeeperDispatcher() const;
 #endif
     void initializeKeeperDispatcher(bool start_async) const;
+    void signalKeeperDispatcherShutdown() const;
     void shutdownKeeperDispatcher() const;
     void updateKeeperConfiguration(const Poco::Util::AbstractConfiguration & config) const;
 
@@ -1409,6 +1416,13 @@ public:
     void updateIcebergMetadataFilesCacheConfiguration(const Poco::Util::AbstractConfiguration & config);
     std::shared_ptr<IcebergMetadataFilesCache> getIcebergMetadataFilesCache() const;
     void clearIcebergMetadataFilesCache() const;
+#endif
+
+#if USE_PARQUET
+    void setParquetMetadataCache(const String & cache_policy, size_t max_size_in_bytes, size_t max_entries, double size_ratio);
+    void updateParquetMetadataCacheConfiguration(const Poco::Util::AbstractConfiguration & config);
+    std::shared_ptr<ParquetMetadataCache> getParquetMetadataCache() const;
+    void clearParquetMetadataCache() const;
 #endif
 
     void setAllowedDisksForTableEngines(std::unordered_set<String> && allowed_disks_) { allowed_disks = std::move(allowed_disks_); }

@@ -32,7 +32,7 @@ ORDER BY lhs.a;
 ALTER TABLE mt_mutation_test UPDATE b = ' ' WHERE a % 3 = 0 SETTINGS mutations_sync = 2;
 
 SELECT 'after UPDATE';
-SELECT lhs.a, lhs.b, lhs._block_number, lhs._block_offset, rhs._block_number, rhs._block_offset, (lhs._block_number, lhs._block_offset) = (rhs._block_number, rhs._block_offset)
+SELECT lhs.a, lhs.b, lhs.b = rhs.b, lhs._block_number, lhs._block_offset, rhs._block_number, rhs._block_offset, (lhs._block_number, lhs._block_offset) = (rhs._block_number, rhs._block_offset)
 FROM mt_mutation_test AS lhs
 JOIN mergeTreeProjection(currentDatabase(), 'mt_mutation_test', '_commit_order') AS rhs USING (a)
 ORDER BY lhs.a;
@@ -41,7 +41,7 @@ ORDER BY lhs.a;
 ALTER TABLE mt_mutation_test DELETE WHERE a > 12 SETTINGS mutations_sync = 2;
 
 SELECT 'after DELETE';
-SELECT lhs.a, lhs.b, lhs._block_number, lhs._block_offset, rhs._block_number, rhs._block_offset, (lhs._block_number, lhs._block_offset) = (rhs._block_number, rhs._block_offset)
+SELECT lhs.a, lhs.b, lhs.b = rhs.b, lhs._block_number, lhs._block_offset, rhs._block_number, rhs._block_offset, (lhs._block_number, lhs._block_offset) = (rhs._block_number, rhs._block_offset)
 FROM mt_mutation_test AS lhs
 JOIN mergeTreeProjection(currentDatabase(), 'mt_mutation_test', '_commit_order') AS rhs USING (a)
 ORDER BY lhs.a;

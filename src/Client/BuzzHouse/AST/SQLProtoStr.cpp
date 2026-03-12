@@ -4501,6 +4501,30 @@ CONV_FN(RemoveColumnSetting, rcp)
     SettingListToString(ret, rcp.setting_values());
 }
 
+static void RowPolicyClausesToString(
+    String & ret,
+    const bool has_is_restrictive,
+    const bool is_restrictive,
+    const bool for_select,
+    const bool has_filter_expr,
+    const Expr & filter_expr)
+{
+    if (has_is_restrictive)
+    {
+        ret += " AS ";
+        ret += is_restrictive ? "RESTRICTIVE" : "PERMISSIVE";
+    }
+    if (for_select)
+    {
+        ret += " FOR SELECT";
+    }
+    if (has_filter_expr)
+    {
+        ret += " USING ";
+        ExprToString(ret, filter_expr);
+    }
+}
+
 CONV_FN(AlterItem, alter)
 {
     ret += alter.paren() ? "(" : "";
@@ -4789,6 +4813,19 @@ CONV_FN(AlterItem, alter)
             ret += "MODIFY ";
             RefreshableViewToString(ret, alter.refresh());
             break;
+        case AlterType::kAlterRowPolicy: {
+            const AlterRowPolicyContent & arpc = alter.alter_row_policy();
+            ret += "ON ";
+            ExprSchemaTableToString(ret, arpc.target());
+            if (arpc.has_rename_to())
+            {
+                ret += " RENAME TO ";
+                RowPolicyToString(ret, arpc.rename_to());
+            }
+            RowPolicyClausesToString(
+                ret, arpc.has_is_restrictive(), arpc.is_restrictive(), arpc.for_select(), arpc.has_filter_expr(), arpc.filter_expr());
+            break;
+        }
         default:
             ret += "DELETE WHERE TRUE";
     }
@@ -5744,20 +5781,8 @@ CONV_FN(CreateRowPolicy, crp)
     }
     ret += " ON ";
     ExprSchemaTableToString(ret, crp.target());
-    if (crp.has_is_restrictive())
-    {
-        ret += " AS ";
-        ret += crp.is_restrictive() ? "RESTRICTIVE" : "PERMISSIVE";
-    }
-    if (crp.for_select())
-    {
-        ret += " FOR SELECT";
-    }
-    if (crp.has_filter_expr())
-    {
-        ret += " USING ";
-        ExprToString(ret, crp.filter_expr());
-    }
+    RowPolicyClausesToString(
+        ret, crp.has_is_restrictive(), crp.is_restrictive(), crp.for_select(), crp.has_filter_expr(), crp.filter_expr());
 }
 
 CONV_FN(SQLQueryInner, query)

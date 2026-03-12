@@ -2146,6 +2146,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
     const uint32_t alter_view = 5 * static_cast<uint32_t>(collectionHas<SQLView>(attached_views));
     const uint32_t alter_table = 25 * static_cast<uint32_t>(collectionHas<SQLTable>(attached_tables));
     const uint32_t alter_database = 2 * static_cast<uint32_t>(collectionHas<std::shared_ptr<SQLDatabase>>(attached_databases));
+    const uint32_t alter_row_policy = 2 * static_cast<uint32_t>(!in_parallel && !row_policies.empty());
     std::optional<String> cluster;
     const uint32_t nalters = rg.randomInt<uint32_t>(1, fc.max_number_alters);
 
@@ -2222,6 +2223,45 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
                   ati->set_paren(rg.nextSmallNumber() < 9);
                   ati->set_comment(nextComment(rg));
               }
+          }},
+         {alter_row_policy,
+          [&]
+          {
+              AlterRowPolicyContent * arpc = at->mutable_alter()->mutable_alter_row_policy();
+              const SQLRowPolicy & rp = rg.pickValueRandomlyFromMap(this->row_policies);
+
+              cluster = rp.getCluster();
+              at->set_sobject(SQLObject::ROW_POLICY);
+              rp.setName(at->mutable_object()->mutable_row_policy()->mutable_policy());
+              /// Reconstruct the target table ExprSchemaTable from the stored table id
+              if (this->tables.contains(rp.table_id))
+              {
+                  const auto & t = this->tables.at(rp.table_id);
+
+                  t.setName(arpc->mutable_target(), true);
+                  if (rg.nextSmallNumber() < 8)
+                  {
+                      generateUptDelWhere(rg, t, arpc->mutable_filter_expr());
+                  }
+              }
+              else
+              {
+                  /// Try something default
+                  arpc->mutable_target()->mutable_table()->set_table("t" + std::to_string(rp.table_id));
+              }
+              if (rg.nextSmallNumber() < 3)
+              {
+                  SQLRowPolicy renamed(rp);
+
+                  renamed.policy_id = this->row_policy_counter++;
+                  renamed.setName(arpc->mutable_rename_to());
+                  this->staged_row_policies[renamed.policy_id] = std::move(renamed);
+              }
+              if (rg.nextSmallNumber() < 3)
+              {
+                  arpc->set_is_restrictive(rg.nextBool());
+              }
+              arpc->set_for_select(rg.nextSmallNumber() < 3);
           }}});
     setClusterClause(rg, cluster, at->mutable_cluster());
     if (rg.nextSmallNumber() < 3)
@@ -3898,6 +3938,18 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 {
                     t.frozen_partitions.erase(ati.unfreeze_partition().fname());
                 }
+            }
+        }
+        else if (at.alter().has_alter_row_policy() && at.alter().alter_row_policy().has_rename_to() && success)
+        {
+            const uint32_t old_id = getIdentifierFromString(at.object().row_policy().policy().policy());
+            const uint32_t new_id = getIdentifierFromString(at.alter().alter_row_policy().rename_to().policy());
+
+            if (this->row_policies.contains(old_id) && this->staged_row_policies.contains(new_id))
+            {
+                this->row_policies.erase(old_id);
+                this->row_policies[new_id] = std::move(this->staged_row_policies[new_id]);
+                this->staged_row_policies.erase(new_id);
             }
         }
     }

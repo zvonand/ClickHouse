@@ -478,6 +478,15 @@ public:
     uint32_t policy_id = 0;
     uint32_t table_id = 0;
 
+    SQLRowPolicy() = default;
+    SQLRowPolicy(const SQLRowPolicy & other)
+        : WithCluster(other)
+    {
+        this->policy_id = other.policy_id;
+        this->table_id = other.table_id;
+    }
+    SQLRowPolicy & operator=(const SQLRowPolicy & other) = default;
+
     void setName(RowPolicy * f) const;
 };
 

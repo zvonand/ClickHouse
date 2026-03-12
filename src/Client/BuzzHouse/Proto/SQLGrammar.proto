@@ -3995,6 +3995,14 @@ message MovePartition {
     required Storage storage = 2;
 }
 
+message AlterRowPolicyContent {
+    required ExprSchemaTable target = 1;
+    optional bool is_restrictive = 2;
+    optional bool for_select = 3;
+    optional Expr filter_expr = 4;
+    optional RowPolicy rename_to = 5;
+}
+
 message AlterItem {
     optional bool paren = 1;
     oneof alter_oneof {
@@ -4052,6 +4060,8 @@ message AlterItem {
         RefreshableView refresh = 51;
         /// For tables, views and databases
         string comment = 52;
+        /// For row policies
+        AlterRowPolicyContent alter_row_policy = 53;
     }
 }
 

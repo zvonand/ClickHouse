@@ -269,7 +269,9 @@ protected:
             }
         }
 
-        chassert(provided == block_size);
+        if (!isCancelled())
+            chassert(provided == block_size);
+
         progress(column->size(), column->byteSize());
 
         return {Columns{std::move(column)}, block_size};

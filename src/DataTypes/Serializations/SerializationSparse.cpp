@@ -83,6 +83,9 @@ size_t deserializeOffsets(
     skipped_values_rows = 0;
     size_t max_rows_to_read = offset + limit;
 
+    if (max_rows_to_read == 0)
+        return 0;
+
     if (max_rows_to_read && state.num_trailing_defaults >= max_rows_to_read)
     {
         state.num_trailing_defaults -= max_rows_to_read;

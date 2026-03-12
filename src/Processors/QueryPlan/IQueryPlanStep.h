@@ -88,7 +88,7 @@ public:
         const size_t base_indent = 2;
         const char indent_char = ' ';
         const bool write_header = false;
-        bool compact = true;
+        bool compact = false;
         bool pretty = false;
     };
 

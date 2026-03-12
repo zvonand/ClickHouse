@@ -543,10 +543,8 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
 
     std::deque<ExplainPlan::Frame> stack;
 
-    auto * first_node = skip_expressions(root);
     /// Skip the expression steps if we are in the compact mode
-    while (settings.compact && first_node->step->getName() == "Expression" && !first_node->children.empty())
-        first_node = first_node->children[0];
+    auto * first_node = skip_expressions(root);
 
     stack.push_back(ExplainPlan::Frame{.node = first_node});
 
@@ -568,6 +566,7 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
         if (frame.next_child < frame.node->children.size())
         {
             bool is_last = (frame.next_child + 1) == (frame.node->children.size());
+            /// Skip the expression steps if we are in the compact mode
             auto * next_node = skip_expressions(frame.node->children[frame.next_child]);
 
             stack.push_back(ExplainPlan::Frame{next_node,

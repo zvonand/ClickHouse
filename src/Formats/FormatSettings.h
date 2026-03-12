@@ -121,14 +121,14 @@ struct FormatSettings
     UInt64 input_allow_errors_num = 0;
     Float32 input_allow_errors_ratio = 0;
 
-    enum class InputFormatCaseSensitivity : uint8_t
+    enum class InputFormatColumnMatchingCaseSensitivity : uint8_t
     {
-        MATCH_CASE, // Case Sensitive
-        IGNORE_CASE, // Case Insensitive
-        AUTO, // First checks with case sensitive, if fail, checks with case insensitive
+        MATCH_CASE, /// Matches case-sensitively
+        IGNORE_CASE, /// Matches case-insensitively
+        AUTO, /// First tries to match case-sensitively, if fails, tries to match case-insensitively
     };
 
-    InputFormatCaseSensitivity input_format_with_names_case_insensitive_column_matching = InputFormatCaseSensitivity::AUTO;
+    InputFormatColumnMatchingCaseSensitivity input_format_column_matching_case_sensitivity = InputFormatColumnMatchingCaseSensitivity::AUTO;
 
     UInt64 client_protocol_version = 0;
 

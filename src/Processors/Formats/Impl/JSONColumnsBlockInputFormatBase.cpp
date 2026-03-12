@@ -84,7 +84,7 @@ JSONColumnsBlockInputFormatBase::JSONColumnsBlockInputFormatBase(
     : IInputFormat(header_, &in_)
     , format_settings(format_settings_)
     , fields(header_->getNamesAndTypes())
-    , name_to_index(format_settings_.input_format_with_names_case_insensitive_column_matching)
+    , name_to_index(format_settings_.input_format_column_matching_case_sensitivity)
     , serializations(header_->getSerializations())
     , reader(std::move(reader_))
     , block_missing_values(getPort().getHeader().columns())

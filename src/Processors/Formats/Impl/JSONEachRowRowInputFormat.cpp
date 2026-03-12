@@ -43,7 +43,7 @@ JSONEachRowRowInputFormat::JSONEachRowRowInputFormat(
     const FormatSettings & format_settings_,
     bool yield_strings_)
     : IRowInputFormat(header_, in_, std::move(params_))
-    , name_map(format_settings_.input_format_with_names_case_insensitive_column_matching)
+    , name_map(format_settings_.input_format_column_matching_case_sensitivity)
     , prev_positions(header_->columns(), {std::string_view{}, NOT_INITIALIZED})
     , yield_strings(yield_strings_)
     , format_settings(format_settings_)
@@ -77,7 +77,7 @@ inline size_t JSONEachRowRowInputFormat::columnIndex(std::string_view name, size
     /// and a quick check to match the next expected field, instead of searching the hash table.
     if (prev_positions.size() > key_index
         && prev_positions[key_index].second != NOT_INITIALIZED 
-        && name_map.stringCompare(name, prev_positions[key_index].first))
+        && name_map.equal(name, prev_positions[key_index].first))
     {
         return prev_positions[key_index].second;
     }

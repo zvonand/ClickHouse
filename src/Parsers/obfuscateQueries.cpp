@@ -1359,14 +1359,13 @@ void obfuscateQueries(
         /// obfuscated via normal processing.
         if (expect_dict_block_open)
         {
+            expect_dict_block_open = false;
             if (token.type == TokenType::OpeningRoundBracket)
             {
                 dict_block_paren_depth = 1;
-                expect_dict_block_open = false;
                 result.write(token.begin, token.size());
                 continue;
             }
-            expect_dict_block_open = false;
             /// Not an opening paren — fall through to normal processing.
         }
         if (dict_block_paren_depth > 0)

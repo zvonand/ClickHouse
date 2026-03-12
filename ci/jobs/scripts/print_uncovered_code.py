@@ -12,7 +12,6 @@ temp_dir = f"{repo_root}/ci/tmp/"
 # they represent code paths that are intentionally never executed in normal runs
 # (error paths, logical impossibilities, unreachable markers).
 _NOISE_PATTERNS = [
-    re.compile(r"\bthrow\b"),               # any throw statement
     re.compile(r"\bLOGICAL_ERROR\b"),        # ErrorCodes::LOGICAL_ERROR (impossible conditions)
     re.compile(r"\bUNREACHABLE\s*\("),       # UNREACHABLE() macro
     re.compile(r"__builtin_unreachable\s*\("),

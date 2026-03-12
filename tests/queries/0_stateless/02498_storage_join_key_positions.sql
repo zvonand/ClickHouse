@@ -28,7 +28,6 @@ SELECT * FROM t1 ALL INNER JOIN tj ON t1.key3 = tj.key3 AND t1.key2 = tj.key2 AN
 SELECT * FROM t1 ALL INNER JOIN tj ON t1.key2 = tj.key2 AND t1.key3 = tj.key3 AND t1.key1 = tj.key1 ORDER BY t1.key1;
 SELECT * FROM t1 ALL INNER JOIN tj ON t1.key3 = tj.key3 AND t1.key1 = tj.key1 AND t1.key2 = tj.key2 ORDER BY t1.key1;
 SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1 AND t1.key3 = tj.key3 AND t1.key2 = tj.key2 ORDER BY t1.key1;
-SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1 AND t1.key2 = tj.key2 AND t1.key3 = tj.key3 AND t1.key1 = tj.key1 ORDER BY t1.key1;
 
 SELECT '--- on different name ---';
 SELECT * FROM (SELECT key3 AS c, key1 AS a, key2 AS b FROM t1) AS t1 ALL INNER JOIN tj ON t1.a = tj.key1 AND t1.c = tj.key3 AND t1.b = tj.key2 ORDER BY t1.a;
@@ -59,6 +58,9 @@ SELECT * FROM t1 ALL INNER JOIN tj USING (key2, key3); -- { serverError INCOMPAT
 SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.attr; -- { serverError INCOMPATIBLE_TYPE_OF_JOIN }
 SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1; -- { serverError INCOMPATIBLE_TYPE_OF_JOIN }
 SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1 AND t1.key2 = tj.key2 AND t1.key3 = tj.attr; -- { serverError INCOMPATIBLE_TYPE_OF_JOIN }
+SELECT '--- duplicate key dedup ---';
+SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1 AND t1.key2 = tj.key2 AND t1.key3 = tj.key3 AND t1.key1 = tj.key1 SETTINGS enable_analyzer = 0; -- { serverError INCOMPATIBLE_TYPE_OF_JOIN }
+SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1 AND t1.key2 = tj.key2 AND t1.key3 = tj.key3 AND t1.key1 = tj.key1 ORDER BY t1.key1 SETTINGS enable_analyzer = 1; -- Whith analyzer duplicate predicates are removed
 
 SELECT '--- reuse column from left ---';
 SELECT * FROM t1 ALL INNER JOIN tjj ON t1.key1 = tjj.key1 AND t1.key1 = tjj.key2 AND t1.key1 = tjj.key3 ORDER BY t1.key1;

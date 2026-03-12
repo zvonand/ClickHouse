@@ -185,7 +185,7 @@ public:
         if (!buf)
             return end();
 
-        return const_iterator(this, buf);
+        return const_iterator(this, firstPopulatedCell());
     }
 
     const_iterator cbegin() const { return begin(); }
@@ -195,7 +195,7 @@ public:
         if (!buf)
             return end();
 
-        return iterator(this, buf);
+        return iterator(this, firstPopulatedCell());
     }
 
     const_iterator end() const { return const_iterator(this, buf ? buf + num_cells : buf); }
@@ -270,6 +270,15 @@ public:
         if (hash_value >= num_cells)
             return false;
         return !buf[hash_value].isZero(*this);
+    }
+
+    const Cell * ALWAYS_INLINE firstPopulatedCell() const
+    {
+        const Cell * ptr = buf;
+        while (ptr < buf + num_cells && ptr->isZero(*this))
+            ++ptr;
+
+        return ptr;
     }
 
     size_t size() const { return m_size.load(); }

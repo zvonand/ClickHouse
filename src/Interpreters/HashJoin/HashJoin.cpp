@@ -35,7 +35,6 @@
 
 #include <Interpreters/HashJoin/HashJoinMethods.h>
 #include <Interpreters/HashJoin/JoinUsedFlags.h>
-#include <Processors/Transforms/BuildRuntimeFilterTransform.h>
 
 namespace ProfileEvents
 {

@@ -39,6 +39,7 @@ select count() from system.projection_parts
 select 'projection data';
 select a, b, _block_number, _block_offset
 from mergeTreeProjection(currentDatabase(), 'mt_materialize', '_commit_order')
+where _part = 'all_2_2_0_3'
 settings max_threads=1;
 
 -- Mutation on merged part (level > 0) should correctly rebuild the projection
@@ -47,6 +48,7 @@ alter table mt_materialize update b = b + 1 where a = 1 settings mutations_sync=
 select 'after mutation on merged part';
 select a, b, _block_number, _block_offset
 from mergeTreeProjection(currentDatabase(), 'mt_materialize', '_commit_order')
+where _part = 'all_1_1_0_4'
 settings max_threads=1;
 
 drop table mt_materialize sync;

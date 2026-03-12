@@ -1080,7 +1080,7 @@ IdentifierResolveResult QueryAnalyzer::tryResolveIdentifierFromAliases(const Ide
     }
     else if (node_type == QueryTreeNodeType::FUNCTION)
     {
-        resolveExpressionNode(alias_node, *scope_to_resolve_alias_expression, false /*allow_lambda_expression*/, false /*allow_table_expression*/, identifier_resolve_context.allow_to_resolve_niladic_functions);
+        resolveExpressionNode(alias_node, *scope_to_resolve_alias_expression, false /*allow_lambda_expression*/, false /*allow_table_expression*/, false /*ignore_alias*/, identifier_resolve_context.allow_to_resolve_niladic_functions);
     }
     else if (node_type == QueryTreeNodeType::QUERY || node_type == QueryTreeNodeType::UNION)
     {
@@ -3991,7 +3991,8 @@ void QueryAnalyzer::resolveTableFunction(QueryTreeNodePtr & table_function_node,
     uint64_t use_structure_from_insertion_table_in_table_functions
         = scope_context->getSettingsRef()[Setting::use_structure_from_insertion_table_in_table_functions];
     if (!nested_table_function && !scope.subquery_depth && use_structure_from_insertion_table_in_table_functions && scope_context->hasInsertionTableColumnsDescription()
-        && table_function_ptr->needStructureHint())
+        && table_function_ptr->needStructureHint()
+        && scope.scope_node->getNodeType() == QueryTreeNodeType::QUERY)
     {
         const auto & insert_columns = *scope_context->getInsertionTableColumnsDescription();
         const auto & insert_column_names = scope_context->hasInsertionTableColumnNames() ? *scope_context->getInsertionTableColumnNames() : insert_columns.getOrdinary().getNames();

@@ -424,18 +424,8 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
     }
 
     /// Track whether projection stores _block_number/_block_offset from the parent table.
-    /// These are synthesized (not read from parent), so remove from required_columns.
-    if (result.sample_block.has(BlockNumberColumn::name))
-    {
-        result.with_block_number = true;
-        std::erase_if(result.required_columns, [](const String & s) { return s == BlockNumberColumn::name; });
-    }
-
-    if (result.sample_block.has(BlockOffsetColumn::name))
-    {
-        result.with_block_offset = true;
-        std::erase_if(result.required_columns, [](const String & s) { return s == BlockOffsetColumn::name; });
-    }
+    result.with_block_number = result.sample_block.has(BlockNumberColumn::name);
+    result.with_block_offset = result.sample_block.has(BlockOffsetColumn::name);
 
     NamesAndTypesList metadata_columns;
     for (const auto & column_with_type_name : result.sample_block)
@@ -649,14 +639,6 @@ Block ProjectionDescription::calculateByQuery(
 
         source_block.insert({std::move(column), std::move(uint64), "_part_offset"});
     }
-
-    /// Commit-order projections are only built during merge/mutation (skipped during insert),
-    /// so _block_number/_block_offset are always present in the input block.
-    if (with_block_number)
-        source_block.insert(block.getByName(BlockNumberColumn::name));
-
-    if (with_block_offset)
-        source_block.insert(block.getByName(BlockOffsetColumn::name));
 
     auto builder = InterpreterSelectQuery(
                        query_ast_copy ? query_ast_copy : query_ast,

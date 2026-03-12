@@ -1,5 +1,6 @@
 #include <Storages/MergeTree/IDataPartStorage.h>
 #include <Storages/MergeTree/MergeTreeDataPartWriterWide.h>
+#include <Storages/MergeTree/MergeTreeVirtualColumns.h>
 #include <Storages/Statistics/Statistics.h>
 #include <Storages/MergeTree/MergeTask.h>
 #include <Storages/MergeTree/MergedPartOffsets.h>
@@ -417,6 +418,12 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::extractMergingAndGatheringColu
         for (const auto & column : projection->getRequiredColumns())
         {
             if (projection->with_parent_part_offset && column == "_part_offset")
+                continue;
+
+            if (projection->with_block_number && column == BlockNumberColumn::name)
+                continue;
+
+            if (projection->with_block_offset && column == BlockOffsetColumn::name)
                 continue;
 
             key_columns.insert(getColumnNameInStorage(column, storage_columns));

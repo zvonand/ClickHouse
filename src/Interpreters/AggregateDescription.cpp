@@ -18,7 +18,7 @@ namespace ErrorCodes
 
 void AggregateDescription::explain(WriteBuffer & out, const std::string & prefix, size_t additonal_indent) const
 {
-    std::string prefix_new = prefix;
+    std::string prefix_with_indent = prefix;
     prefix_new.append(additonal_indent, ' ');
 
     out << prefix_new << column_name << '\n';

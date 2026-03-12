@@ -130,9 +130,12 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
 
     # Step 1: Add node4 to the cluster.
     # node4 creates peer objects for all three existing members.
-    # Start Keeper on node4 first so NuRaft can connect immediately when it
-    # processes the rcfg command; otherwise the synchronous rcfg call blocks
-    # for ~120 s retrying against a non-listening port and times out.
+    # node4's config omits use_cluster=false so ClickHouse can connect to the
+    # existing Keeper cluster (node1/2/3) during startup, enabling async Keeper
+    # initialisation and allowing start_clickhouse() to return before node4
+    # reaches quorum.  The rcfg command then adds node4, the leader starts
+    # sending heartbeats, and node4's Keeper completes initialisation in the
+    # background.
     start_keeper(node4, "enable_keeper4.xml")
     result = send_rcfg(
         leader,
@@ -172,7 +175,8 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     for n in remaining:
         keeper_utils.wait_until_connected(cluster, n)
 
-    # Step 3: Add node5 to the cluster.
+    # Step 3: Add node5 to the cluster.  node1/3/4 are active at this point,
+    # so node5 can connect to them during startup (async Keeper init).
     start_keeper(node5, "enable_keeper5.xml")
     result = send_rcfg(
         leader,
@@ -207,7 +211,8 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     for n in [leader, node4, node5]:
         keeper_utils.wait_until_connected(cluster, n)
 
-    # Step 5: Add node6 to the cluster.
+    # Step 5: Add node6 to the cluster.  node1/4/5 are active at this point,
+    # so node6 can connect to them during startup (async Keeper init).
     start_keeper(node6, "enable_keeper6.xml")
     result = send_rcfg(
         leader,

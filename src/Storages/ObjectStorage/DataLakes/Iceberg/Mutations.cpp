@@ -976,6 +976,7 @@ static ExpiredFiles collectExpiredFiles(
     Int32 current_schema_id)
 {
     ExpiredFiles result;
+    std::set<String> seen_expired_manifest_paths;
     for (const auto & ml_path : expired_manifest_list_paths)
     {
         if (retained_manifest_list_paths.contains(ml_path))
@@ -999,6 +1000,9 @@ static ExpiredFiles collectExpiredFiles(
         for (const auto & mf_key : manifest_keys)
         {
             if (retained_manifest_paths.contains(mf_key.manifest_file_path))
+                continue;
+
+            if (!seen_expired_manifest_paths.insert(mf_key.manifest_file_path).second)
                 continue;
 
             try

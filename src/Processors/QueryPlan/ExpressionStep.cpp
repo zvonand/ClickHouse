@@ -99,9 +99,9 @@ void ExpressionStep::transformPipeline(QueryPipelineBuilder & pipeline, const Bu
 
 void ExpressionStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
     auto expression = std::make_shared<ExpressionActions>(actions_dag.clone());
-    if (settings.verbose)
+    if (!settings.compact)
         expression->describeActions(settings.out, prefix);
 }
 

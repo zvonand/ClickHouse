@@ -3617,7 +3617,7 @@ static const char * readTypeToString(ReadFromMergeTree::ReadType type)
 void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
 {
     const auto & result = getAnalysisResult();
-    std::string prefix = format_settings.other_prefix;
+    std::string prefix = format_settings.detail_prefix;
     format_settings.out << prefix << "ReadType: " << readTypeToString(result.read_type) << '\n';
 
     if (!result.index_stats.empty())
@@ -3645,7 +3645,7 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
         format_settings.out << '\n';
 
         auto expression = std::make_shared<ExpressionActions>(query_info.prewhere_info->prewhere_actions.clone());
-        if (format_settings.verbose)
+        if (!format_settings.compact)
             expression->describeActions(format_settings.out, prefix);
     }
 
@@ -3658,7 +3658,7 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
         format_settings.out << '\n';
 
         auto expression = std::make_shared<ExpressionActions>(query_info.row_level_filter->actions.clone());
-        if (format_settings.verbose)
+        if (!format_settings.compact)
             expression->describeActions(format_settings.out, prefix);
     }
 
@@ -3674,7 +3674,7 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
     if (virtual_row_conversion)
     {
         format_settings.out << prefix << "Virtual row conversions" << '\n';
-        if (format_settings.verbose)
+        if (!format_settings.compact)
             virtual_row_conversion->describeActions(format_settings.out, prefix);
     }
 }
@@ -3755,7 +3755,7 @@ void ReadFromMergeTree::describeIndexes(FormatSettings & format_settings) const
     const auto & result = getAnalysisResult();
     const auto & index_stats = result.index_stats;
 
-    const std::string & prefix = format_settings.other_prefix;
+    const std::string & prefix = format_settings.detail_prefix;
     if (!index_stats.empty())
     {
         /// Do not print anything if no indexes is applied.
@@ -3905,7 +3905,7 @@ void ReadFromMergeTree::describeProjections(FormatSettings & format_settings) co
     const auto & result = getAnalysisResult();
     const auto & projection_stats = result.projection_stats;
 
-    const std::string & prefix = format_settings.other_prefix;
+    const std::string & prefix = format_settings.detail_prefix;
     if (!projection_stats.empty())
     {
         std::string indent(format_settings.base_indent, format_settings.indent_char);

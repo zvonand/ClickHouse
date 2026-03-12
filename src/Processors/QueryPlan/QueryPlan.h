@@ -65,8 +65,8 @@ struct ExplainPlanOptions
     bool input_headers = false;
     /// Print structure of columns instead of just their names and types.
     bool column_structure = false;
-    /// Print actions of every expression
-    bool verbose = true;
+    /// Hide expression steps and detailed action info
+    bool compact = false;
     /// Print query plan with pretty formatting
     bool pretty = false;
 

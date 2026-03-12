@@ -727,7 +727,7 @@ void ReadFromEmbeddedRocksDB::applyFilters(ActionDAGNodes added_filter_nodes)
 
 void ReadFromEmbeddedRocksDB::describeActions(FormatSettings & format_settings) const
 {
-    const std::string & prefix = format_settings.other_prefix;
+    const std::string & prefix = format_settings.detail_prefix;
     if (!all_scan)
     {
         format_settings.out << prefix << "ReadType: GetKeys\n";

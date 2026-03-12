@@ -1,41 +1,32 @@
 #include <DataTypes/dataTypeToAST.h>
 
-#include <DataTypes/DataTypeNullable.h>
-#include <DataTypes/DataTypeArray.h>
-#include <DataTypes/DataTypeDateTime64.h>
-#include <DataTypes/DataTypesDecimal.h>
 #include <DataTypes/IDataType.h>
-#include <Common/DateLUTImpl.h>
-#include <Common/typeid_cast.h>
+#include <Core/Defines.h>
 #include <Parsers/ASTDataType.h>
-#include <Parsers/ASTLiteral.h>
+#include <Parsers/ParserDataType.h>
+#include <Parsers/parseQuery.h>
 
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int LOGICAL_ERROR;
+}
+
 boost::intrusive_ptr<ASTDataType> dataTypeToAST(const DataTypePtr & data_type)
 {
-    WhichDataType which(data_type);
+    ParserDataType parser;
+    auto ast = parseQuery(parser, data_type->getName(), 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS);
 
-    if (which.isNullable())
-        return makeASTDataType("Nullable", dataTypeToAST(typeid_cast<const DataTypeNullable *>(data_type.get())->getNestedType()));
+    /// The dynamic cast is required here because ParserDataType can return
+    /// instance of a derived class, for example ASTTupleDataType.
+    auto ast_data_type = boost::dynamic_pointer_cast<ASTDataType>(ast);
+    if (!ast_data_type)
+        throw Exception(ErrorCodes::LOGICAL_ERROR,
+            "dataTypeToAST: unexpected AST node type for '{}'", data_type->getName());
 
-    if (which.isArray())
-        return makeASTDataType("Array", dataTypeToAST(typeid_cast<const DataTypeArray *>(data_type.get())->getNestedType()));
-
-    if (which.isDateTime64())
-    {
-        const auto * dt64 = typeid_cast<const DataTypeDateTime64 *>(data_type.get());
-        auto scale = make_intrusive<ASTLiteral>(dt64->getScale());
-        if (dt64->hasExplicitTimeZone())
-            return makeASTDataType("DateTime64", scale, make_intrusive<ASTLiteral>(dt64->getTimeZone().getTimeZone()));
-        return makeASTDataType("DateTime64", scale);
-    }
-
-    if (which.isDecimal())
-        return makeASTDataType("Decimal", make_intrusive<ASTLiteral>(getDecimalPrecision(*data_type)), make_intrusive<ASTLiteral>(getDecimalScale(*data_type)));
-
-    return makeASTDataType(data_type->getName());
+    return ast_data_type;
 }
 
 }

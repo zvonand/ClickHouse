@@ -710,11 +710,16 @@ def test_expire_snapshots_shared_manifest_no_double_count(started_cluster_iceber
     )
     deleted_avro = avro_before - avro_after
 
-    # Reported manifest_files count must not exceed actual deleted .avro files.
-    # Double-counting would inflate deleted_manifest_files_count beyond the real number.
-    assert counts["deleted_manifest_files_count"] <= len(deleted_avro), (
-        f"Double-counting detected: reported {counts['deleted_manifest_files_count']} "
-        f"deleted manifests but only {len(deleted_avro)} .avro files were actually removed"
+    # Both manifest files and manifest lists are .avro files.
+    # The sum of reported counts must exactly match actual deleted .avro files.
+    # Double-counting would inflate deleted_manifest_files_count, causing the sum to exceed
+    # the real number of deleted files.
+    reported_avro_total = counts["deleted_manifest_files_count"] + counts["deleted_manifest_lists_count"]
+    assert reported_avro_total == len(deleted_avro), (
+        f"Double-counting detected: reported {reported_avro_total} total .avro deletions "
+        f"(manifest_files={counts['deleted_manifest_files_count']}, "
+        f"manifest_lists={counts['deleted_manifest_lists_count']}) "
+        f"but only {len(deleted_avro)} .avro files were actually removed"
     )
     assert counts["deleted_manifest_files_count"] >= 1, \
         "Expected at least one manifest file deleted (S1's manifest M1)"

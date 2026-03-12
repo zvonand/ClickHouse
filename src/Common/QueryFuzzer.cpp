@@ -1139,7 +1139,7 @@ void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projectio
     {
         select->setExpression(ASTProjectionSelectQuery::Expression::GROUP_BY, getRandomExpressionList(select->select()->children.size()));
     }
-    if (select->orderBy())
+    if (select->orderBy().get())
     {
         if (fuzz_rand() % 50 == 0)
         {

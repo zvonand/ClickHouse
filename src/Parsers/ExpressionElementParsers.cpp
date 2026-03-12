@@ -1,7 +1,8 @@
 #include <cerrno>
-#include <cstdlib>
-#include <Poco/String.h>
 #include <cmath>
+#include <cstdlib>
+#include <limits>
+#include <Poco/String.h>
 
 #include <IO/ReadBufferFromMemory.h>
 #include <IO/ReadHelpers.h>
@@ -13,6 +14,7 @@
 #include <Common/typeid_cast.h>
 
 #include <Parsers/ASTAssignment.h>
+#include <Parsers/LiteralTokenInfo.h>
 #include <Parsers/CommonParsers.h>
 #include <Parsers/DumpASTNode.h>
 #include <Parsers/ASTAsterisk.h>
@@ -126,12 +128,17 @@ static ASTPtr buildSelectFromTableFunction(const boost::intrusive_ptr<ASTFunctio
 
 bool ParserSubquery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 {
-    ParserSelectWithUnionQuery select;
+    starts_with_valid_select_or_explain = false;
+
+    ParserWithOptionalAlias select(std::make_unique<ParserSelectWithUnionQuery>(), false);
     ParserExplainQuery explain;
 
     if (pos->type != TokenType::OpeningRoundBracket)
         return false;
     ++pos;
+
+    /// Lookahead for inner subquery
+    const bool possible_inner_subquery = pos->type == TokenType::OpeningRoundBracket;
 
     ASTPtr result_node = nullptr;
 
@@ -188,6 +195,9 @@ bool ParserSubquery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     {
         return false;
     }
+
+    /// Inner subquery should be handled separately
+    starts_with_valid_select_or_explain = !possible_inner_subquery && result_node != nullptr;
 
     if (pos->type != TokenType::ClosingRoundBracket)
         return false;
@@ -1092,6 +1102,12 @@ bool ParserNumber::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 
             if (negative)
                 float_value = -float_value;
+
+            /// Canonicalize NaN to a single representation, because negative NaN has
+            /// a different bit pattern but formats identically to positive NaN ("nan"),
+            /// breaking the AST formatting roundtrip consistency check.
+            if (std::isnan(float_value))
+                float_value = std::numeric_limits<Float64>::quiet_NaN();
 
             res = float_value;
 

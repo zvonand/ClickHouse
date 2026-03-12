@@ -8,6 +8,16 @@
 #include <Storages/ObjectStorage/DataLakes/DeltaLake/KernelUtils.h>
 #include <Common/logger_useful.h>
 
+#if USE_AZURE_BLOB_STORAGE
+#include <Storages/ObjectStorage/Azure/Configuration.h>
+#include <Disks/DiskObjectStorage/ObjectStorages/AzureBlobStorage/AzureBlobStorageCommon.h>
+#include <azure/storage/common/storage_credential.hpp>
+#include <azure/identity/client_secret_credential.hpp>
+#include <azure/identity/workload_identity_credential.hpp>
+#include <azure/identity/managed_identity_credential.hpp>
+#endif
+
+
 namespace DB::ErrorCodes
 {
     extern const int NOT_IMPLEMENTED;
@@ -117,34 +127,25 @@ private:
     }
 };
 
-/// A helper class to manage Azure storage types.
+#if USE_AZURE_BLOB_STORAGE
+/// A helper class to manage Azure Blob Storage.
 class AzureKernelHelper final : public IKernelHelper
 {
 public:
     AzureKernelHelper(
-        const std::string & url_,
-        const std::string & container_,
-        const std::string & blob_path_,
-        const std::string & storage_account_name_,
-        const std::string & storage_account_key_,
-        const std::string & storage_sas_key_)
-        : url(url_)
-        , container(container_)
-        , blob_path(blob_path_)
-        , storage_account_name(storage_account_name_)
-        , storage_account_key(storage_account_key_)
-        , storage_sas_key(storage_sas_key_)
-        , table_location(url_)
+        const DB::AzureBlobStorage::ConnectionParams & connection_params_,
+        const std::string & blob_path_)
+        : connection_params(connection_params_)
+        , table_location(buildTableLocation(connection_params_, blob_path_))
+        , data_path(blob_path_)
     {}
 
     const std::string & getTableLocation() const override { return table_location; }
 
-    const std::string & getDataPath() const override { return blob_path; }
+    const std::string & getDataPath() const override { return data_path; }
 
     ffi::EngineBuilder * createBuilder() const override
     {
-        LOG_TEST(log,"Using delta kernel for azure");
-
         ffi::EngineBuilder * builder = KernelUtils::unwrapResult(
             ffi::get_engine_builder(
                 KernelUtils::toDeltaString(table_location),
@@ -156,31 +157,79 @@ public:
             ffi::set_builder_option(builder, KernelUtils::toDeltaString(name), KernelUtils::toDeltaString(value));
         };
 
-        /// Supported options
-        /// https://github.com/apache/arrow-rs-object-store/blob/main/src/azure/builder.rs#L390
-        if (!storage_account_name.empty())
-            set_option("azure_storage_account_name", storage_account_name);
-        if (!storage_account_key.empty())
-            set_option("azure_storage_account_key", storage_account_key);
-        if (!storage_sas_key.empty())
-            set_option("azure_storage_sas_key", storage_sas_key);
+        const auto & endpoint = connection_params.endpoint;
 
-        set_option("azure_storage_endpoint", url);
-        set_option("azure_container_name",container);
+        set_option("azure_container_name", endpoint.container_name);
+
+        std::visit([&](const auto & auth)
+        {
+            using T = std::decay_t<decltype(auth)>;
+            if constexpr (std::is_same_v<T, DB::AzureBlobStorage::ConnectionString>)
+            {
+                set_option("azure_storage_connection_string", auth.toUnderType());
+            }
+            else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Storage::StorageSharedKeyCredential>>)
+            {
+                set_option("azure_storage_account_name", auth->AccountName);
+                if (connection_params.raw_account_key.has_value())
+                    set_option("azure_storage_account_key", *connection_params.raw_account_key);
+            }
+            else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::ClientSecretCredential>>)
+            {
+                if (connection_params.raw_client_id.has_value())
+                    set_option("azure_client_id", *connection_params.raw_client_id);
+                if (connection_params.raw_client_secret.has_value())
+                    set_option("azure_client_secret", *connection_params.raw_client_secret);
+                if (connection_params.raw_tenant_id.has_value())
+                    set_option("azure_tenant_id", *connection_params.raw_tenant_id);
+            }
+            else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::WorkloadIdentityCredential>>)
+            {
+                set_option("azure_use_workload_identity", "true");
+                if (!endpoint.account_name.empty())
+                    set_option("azure_storage_account_name", endpoint.account_name);
+            }
+            else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::ManagedIdentityCredential>>)
+            {
+                if (!endpoint.account_name.empty())
+                    set_option("azure_storage_account_name", endpoint.account_name);
+            }
+            // StaticCredential and other variants are not supported by delta-kernel-rs;
+            // no options are set and the builder will use default credential discovery.
+        }, connection_params.auth_method);
+
+        if (!endpoint.sas_auth.empty())
+            set_option("azure_storage_sas_key", endpoint.sas_auth);
+
+        /// For non-standard endpoints (e.g., Azurite emulator), set the endpoint explicitly.
+        if (!endpoint.storage_account_url.empty() && endpoint.storage_account_url.starts_with("http://"))
+            set_option("azure_endpoint", endpoint.storage_account_url);
+
+        LOG_TRACE(
+            log,
+            "Using storage_account_url: {}, container: {}, data_path: {}",
+            endpoint.storage_account_url, endpoint.container_name, data_path);
 
         return builder;
     }
 
 private:
-    const std::string url; /// endpoint without container & blob_path
-    const std::string container;
-    const std::string blob_path;
-    const std::string storage_account_name;
-    const std::string storage_account_key;
-    const std::string storage_sas_key;
+    const DB::AzureBlobStorage::ConnectionParams connection_params;
     const std::string table_location;
+    const std::string data_path;
     const LoggerPtr log = getLogger("AzureKernelHelper");
+
+    static std::string buildTableLocation(
+        const DB::AzureBlobStorage::ConnectionParams & params,
+        const std::string & blob_path)
+    {
+        auto path = blob_path;
+        if (!path.empty() && path.front() == '/')
+            path = path.substr(1);
+        return "az://" + params.endpoint.container_name + "/" + path;
+    }
 };
+#endif
 
 /// A helper class to manage local fs storage.
 class LocalKernelHelper final : public IKernelHelper
@@ -238,20 +287,14 @@ DeltaLake::KernelHelperPtr getKernelHelper(
                 object_storage->getS3StorageClient(),
                 s3_conf->getAuthSettings());
         }
+#if USE_AZURE_BLOB_STORAGE
         case DB::ObjectStorageType::Azure:
         {
-            const auto * azure_conf = dynamic_cast<const DB::StorageAzureConfiguration *>(configuration.get());
-
-            const auto & endpoint = azure_conf->getEndpoint();
-            const auto & container = azure_conf->getContainer();
-            const auto & path = azure_conf->getRawURI();
-            const auto & account_name = azure_conf->getAccountName();
-            const auto & account_key = azure_conf->getAccountKey();
-            const auto & sas_key = azure_conf->getSasKey();
-
-            LOG_INFO(getLogger("getKernelHelper"), "Creating azure kernel helper {}, '{}'", endpoint, account_name);
-            return std::make_shared<DeltaLake::AzureKernelHelper>(endpoint, container, path, account_name, account_key, sas_key);
+            return std::make_shared<DeltaLake::AzureKernelHelper>(
+                object_storage->getAzureBlobStorageConnectionParams(),
+                configuration->getRawPath().path);
         }
+#endif
         case DB::ObjectStorageType::Local:
         {
             const auto * local_conf = dynamic_cast<const DB::StorageLocalConfiguration *>(configuration.get());

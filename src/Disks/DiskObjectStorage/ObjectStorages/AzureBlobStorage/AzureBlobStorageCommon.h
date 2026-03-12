@@ -145,6 +145,13 @@ struct ConnectionParams
     AuthMethod auth_method;
     BlobClientOptions client_options;
 
+    /// Raw credentials stored for use by external systems (e.g., delta-kernel-rs)
+    /// that cannot retrieve credentials from Azure SDK auth objects after construction.
+    std::optional<String> raw_account_key = std::nullopt;
+    std::optional<String> raw_client_id = std::nullopt;
+    std::optional<String> raw_client_secret = std::nullopt;
+    std::optional<String> raw_tenant_id = std::nullopt;
+
     String getContainer() const { return endpoint.container_name; }
     String getConnectionURL() const;
 

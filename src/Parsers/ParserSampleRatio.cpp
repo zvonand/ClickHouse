@@ -1,17 +1,24 @@
 #include <IO/ReadHelpers.h>
 #include <Parsers/ASTSampleRatio.h>
 #include <Parsers/ParserSampleRatio.h>
-#include <Common/intExp10.h>
 
 
 namespace DB
 {
 
 
+static ASTSampleRatio::BigNum bigIntExp10(int x)
+{
+    ASTSampleRatio::BigNum result = 1;
+    for (int i = 0; i < x; ++i)
+        result *= 10;
+    return result;
+}
+
 static bool parseDecimal(const char * pos, const char * end, ASTSampleRatio::Rational & res)
 {
-    UInt64 num_before = 0;
-    UInt64 num_after = 0;
+    ASTSampleRatio::BigNum num_before = 0;
+    ASTSampleRatio::BigNum num_after = 0;
     Int32 exponent = 0;
 
     const char * pos_after_first_num = tryReadIntText(num_before, pos, end);
@@ -46,13 +53,13 @@ static bool parseDecimal(const char * pos, const char * end, ASTSampleRatio::Rat
             return false;
     }
 
-    res.numerator = num_before * intExp10(number_of_digits_after_point) + num_after;
-    res.denominator = intExp10(number_of_digits_after_point);
+    res.numerator = num_before * bigIntExp10(number_of_digits_after_point) + num_after;
+    res.denominator = bigIntExp10(number_of_digits_after_point);
 
     if (exponent > 0)
-        res.numerator *= intExp10(exponent);
+        res.numerator *= bigIntExp10(exponent);
     if (exponent < 0)
-        res.denominator *= intExp10(-exponent);
+        res.denominator *= bigIntExp10(-exponent);
 
     /// NOTE You do not need to remove the common power of ten from the numerator and denominator.
     return true;

@@ -28,8 +28,8 @@ The fix (NuRaft PR #91) adds an `is_shutdown_` flag to `peer` and a check in
 
 import json
 import os
-import shutil
 import time
+import uuid
 
 import pytest
 
@@ -38,37 +38,65 @@ from helpers.cluster import ClickHouseCluster
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "configs")
 
+# Generate a unique suffix per test run to avoid container name conflicts when
+# tests run in parallel or are retried.
+SUFFIX = uuid.uuid4().hex[:8]
+
+# Map node index → container hostname for this run.
+NODE_NAMES = {i: f"node{i}_{SUFFIX}" for i in range(1, 7)}
+
+
+def _from_template(template_name: str) -> str:
+    """Read a config template, substitute {nodeN} placeholders with the actual
+    hostnames for this run, write the result next to the template, and return
+    the relative path expected by main_configs / copy_file_to_container."""
+    output_name = template_name.replace(".xml", f"_{SUFFIX}.xml")
+    with open(os.path.join(CONFIG_DIR, template_name)) as f:
+        content = f.read().format(**{f"node{i}": name for i, name in NODE_NAMES.items()})
+    with open(os.path.join(CONFIG_DIR, output_name), "w") as f:
+        f.write(content)
+    return output_name
+
+
+# Pre-generate all config files at module load time (before cluster.start()).
+_CFG1 = _from_template("enable_keeper1.xml")
+_CFG2 = _from_template("enable_keeper2.xml")
+_CFG3 = _from_template("enable_keeper3.xml")
+_CFG4 = _from_template("enable_keeper4.xml")
+_CFG5 = _from_template("enable_keeper5.xml")
+_CFG6 = _from_template("enable_keeper6.xml")
+
 cluster = ClickHouseCluster(__file__)
 node1 = cluster.add_instance(
-    "node1",
-    main_configs=["configs/enable_keeper1.xml"],
+    NODE_NAMES[1],
+    main_configs=[f"configs/{_CFG1}"],
     stay_alive=True,
     with_remote_database_disk=False,
 )
 node2 = cluster.add_instance(
-    "node2",
-    main_configs=["configs/enable_keeper2.xml"],
+    NODE_NAMES[2],
+    main_configs=[f"configs/{_CFG2}"],
     stay_alive=True,
     with_remote_database_disk=False,
 )
 node3 = cluster.add_instance(
-    "node3",
-    main_configs=["configs/enable_keeper3.xml"],
+    NODE_NAMES[3],
+    main_configs=[f"configs/{_CFG3}"],
     stay_alive=True,
     with_remote_database_disk=False,
 )
 node4 = cluster.add_instance(
-    "node4",
+    NODE_NAMES[4],
     stay_alive=True,
     with_remote_database_disk=False,
 )
 node5 = cluster.add_instance(
-    "node5",
+    NODE_NAMES[5],
     stay_alive=True,
     with_remote_database_disk=False,
 )
 node6 = cluster.add_instance(
-    "node6",
+    NODE_NAMES[6],
     stay_alive=True,
     with_remote_database_disk=False,
 )
@@ -81,8 +109,6 @@ def started_cluster():
         yield cluster
     finally:
         cluster.shutdown()
-        if os.path.exists(cluster.instances_dir):
-            shutil.rmtree(cluster.instances_dir)
 
 
 def send_rcfg(node, command, timeout_sec=60):
@@ -107,8 +133,8 @@ def start_keeper(node, config_name):
 
 
 def node_id(node):
-    """Extract the integer server ID from a node instance (e.g. node3 → 3)."""
-    return int(node.name.replace("node", ""))
+    """Extract the integer server ID from a node instance (e.g. node3_ab12cd34 → 3)."""
+    return int(node.name.split("_")[0].replace("node", ""))
 
 
 def test_leader_election_after_rolling_membership_change(started_cluster):
@@ -140,7 +166,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     # reaches quorum.  The rcfg command then adds node4, the leader starts
     # sending heartbeats, and node4's Keeper completes initialisation in the
     # background.
-    start_keeper(node4, "enable_keeper4.xml")
+    start_keeper(node4, _CFG4)
     result = send_rcfg(
         leader,
         {
@@ -149,7 +175,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
                     "add_members": [
                         {
                             "id": 4,
-                            "endpoint": "node4:9234",
+                            "endpoint": f"{NODE_NAMES[4]}:9234",
                             "priority": 1,
                         }
                     ]
@@ -158,7 +184,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         },
         timeout_sec=120,
     )
-    assert result["status"] == "ok", f"Failed to add node4: {result}"
+    assert result["status"] == "ok", f"Failed to add {NODE_NAMES[4]}: {result}"
     keeper_utils.wait_until_connected(cluster, node4, timeout=60.0)
 
     # Step 2: Remove the first follower.
@@ -181,7 +207,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
 
     # Step 3: Add node5 to the cluster.  node1/3/4 are active at this point,
     # so node5 can connect to them during startup (async Keeper init).
-    start_keeper(node5, "enable_keeper5.xml")
+    start_keeper(node5, _CFG5)
     result = send_rcfg(
         leader,
         {
@@ -190,7 +216,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
                     "add_members": [
                         {
                             "id": 5,
-                            "endpoint": "node5:9234",
+                            "endpoint": f"{NODE_NAMES[5]}:9234",
                             "priority": 1,
                         }
                     ]
@@ -199,7 +225,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         },
         timeout_sec=120,
     )
-    assert result["status"] == "ok", f"Failed to add node5: {result}"
+    assert result["status"] == "ok", f"Failed to add {NODE_NAMES[5]}: {result}"
     keeper_utils.wait_until_connected(cluster, node5, timeout=60.0)
 
     # Step 4: Remove the second follower.
@@ -217,7 +243,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
 
     # Step 5: Add node6 to the cluster.  node1/4/5 are active at this point,
     # so node6 can connect to them during startup (async Keeper init).
-    start_keeper(node6, "enable_keeper6.xml")
+    start_keeper(node6, _CFG6)
     result = send_rcfg(
         leader,
         {
@@ -226,7 +252,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
                     "add_members": [
                         {
                             "id": 6,
-                            "endpoint": "node6:9234",
+                            "endpoint": f"{NODE_NAMES[6]}:9234",
                             "priority": 1,
                         }
                     ]
@@ -235,7 +261,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         },
         timeout_sec=120,
     )
-    assert result["status"] == "ok", f"Failed to add node6: {result}"
+    assert result["status"] == "ok", f"Failed to add {NODE_NAMES[6]}: {result}"
     keeper_utils.wait_until_connected(cluster, node6, timeout=60.0)
 
     # Step 6: Replace the original leader.

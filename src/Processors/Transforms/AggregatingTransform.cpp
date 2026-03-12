@@ -908,10 +908,8 @@ void AggregatingTransform::consume(Chunk chunk)
 
     if (params->params.only_merge)
     {
-        auto columns = chunk.detachColumns();
-        for (auto & column : columns)
-            column = column->convertToFullColumnIfConst()->convertToFullColumnIfReplicated();
-        if (!params->aggregator.mergeOnBlock(std::move(columns), num_rows, false, variants, no_more_keys, is_cancelled))
+        materializeChunk(chunk);
+        if (!params->aggregator.mergeOnBlock(chunk.detachColumns(), num_rows, false, variants, no_more_keys, is_cancelled))
             is_consume_finished = true;
     }
     else

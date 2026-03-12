@@ -133,7 +133,6 @@ IProcessor::Status TotalsHavingTransform::prepare()
     if (!total_prepared)
         return Status::Ready;
 
-    totals.getChunkInfos().add(std::make_shared<TotalsChunkInfo>());
     totals_output.push(std::move(totals));
     totals_output.finish();
     return Status::Finished;

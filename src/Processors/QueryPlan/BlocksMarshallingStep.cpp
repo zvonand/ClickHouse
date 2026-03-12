@@ -3,7 +3,6 @@
 #include <Processors/ISimpleTransform.h>
 #include <Processors/QueryPlan/Serialization.h>
 #include <Processors/Transforms/SortChunksBySequenceNumber.h>
-#include <Processors/Transforms/TotalsHavingTransform.h>
 #include <QueryPipeline/QueryPipelineBuilder.h>
 
 namespace DB
@@ -37,9 +36,6 @@ public:
 
     void transform(Chunk & chunk) override
     {
-        if (chunk.getChunkInfos().get<TotalsChunkInfo>())
-            return;
-
         const size_t num_rows = chunk.getNumRows();
         auto block = getInputPort().getHeader().cloneWithColumns(chunk.detachColumns());
         block = callback(block);
@@ -63,8 +59,14 @@ void BlocksMarshallingStep::transformPipeline(QueryPipelineBuilder & pipeline, c
         pipeline.addTransform(std::make_shared<AddSequenceNumber>(pipeline.getSharedHeader()));
     const size_t num_threads = pipeline.getNumThreads();
     pipeline.resize(num_threads);
-    pipeline.addSimpleTransform([&](const SharedHeader & header)
-                                { return std::make_shared<MarshallBlocksTransform>(header, settings.block_marshalling_callback); });
+    pipeline.addSimpleTransform([&](const SharedHeader & header, Pipe::StreamType stream_type) -> ProcessorPtr
+    {
+        /// Skip marshalling for totals and extremes streams because `IOutputFormat::prepareTotals`
+        /// may call `cut` on columns, which `ColumnBLOB` does not support.
+        if (stream_type != Pipe::StreamType::Main)
+            return nullptr;
+        return std::make_shared<MarshallBlocksTransform>(header, settings.block_marshalling_callback);
+    });
     if (single_stream)
         pipeline.addTransform(std::make_shared<SortChunksBySequenceNumber>(pipeline.getHeader(), num_threads));
 }

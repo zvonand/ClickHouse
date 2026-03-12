@@ -3,7 +3,7 @@
 #include "config.h"
 
 #include <IO/CompressionMethod.h>
-#include <base/types.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
 
 #include <Poco/UUIDGenerator.h>
 
@@ -12,17 +12,18 @@ namespace DB
 
 #if USE_AVRO
 
-/// Generates relative file name suffixes for Iceberg table files.
-/// The suffixes are relative to the table root, e.g. "data/data-uuid.parquet",
-/// "metadata/snap-xxx.avro", "metadata/v3.metadata.json".
+/// Generates Iceberg metadata paths (IcebergPathFromMetadata) for new files.
 ///
-/// The caller is responsible for prepending the appropriate prefix
-/// (via IcebergPathResolver) to get either storage paths or metadata paths.
+/// All generated paths use table_location as prefix, ensuring they are
+/// always in the correct format for writing into Iceberg metadata files.
+/// To get the actual storage path for I/O, pass the result through
+/// IcebergPathResolver::resolve().
 class FileNamesGenerator
 {
 public:
     FileNamesGenerator() = default;
     explicit FileNamesGenerator(
+        const String & table_location_,
         bool use_uuid_in_metadata_,
         CompressionMethod compression_method_,
         const String & format_name_);
@@ -30,21 +31,22 @@ public:
     FileNamesGenerator(const FileNamesGenerator & other);
     FileNamesGenerator & operator=(const FileNamesGenerator & other);
 
-    /// All generate* methods return a relative suffix like "data/xxx.parquet"
-    /// or "metadata/snap-xxx.avro". Use IcebergPathResolver::storagePath()
-    /// or IcebergPathResolver::metadataPath() to get full paths.
-    String generateDataFileName();
-    String generateManifestEntryName();
-    String generateManifestListName(Int64 snapshot_id, Int32 format_version);
-    String generateMetadataName();
-    String generateVersionHint();
-    String generatePositionDeleteFile();
+    /// All generate* methods return IcebergPathFromMetadata.
+    /// These paths are ready to be written into Iceberg metadata files.
+    /// To get a storage path for actual I/O, use IcebergPathResolver::resolve().
+    Iceberg::IcebergPathFromMetadata generateDataFileName();
+    Iceberg::IcebergPathFromMetadata generateManifestEntryName();
+    Iceberg::IcebergPathFromMetadata generateManifestListName(Int64 snapshot_id, Int32 format_version);
+    Iceberg::IcebergPathFromMetadata generateMetadataName();
+    Iceberg::IcebergPathFromMetadata generateVersionHint();
+    Iceberg::IcebergPathFromMetadata generatePositionDeleteFile();
 
     void setVersion(Int32 initial_version_) { initial_version = initial_version_; }
     void setCompressionMethod(CompressionMethod compression_method_) { compression_method = compression_method_; }
 
 private:
     Poco::UUIDGenerator uuid_generator;
+    String table_location;
     bool use_uuid_in_metadata = false;
     CompressionMethod compression_method = CompressionMethod::None;
     String format_name;

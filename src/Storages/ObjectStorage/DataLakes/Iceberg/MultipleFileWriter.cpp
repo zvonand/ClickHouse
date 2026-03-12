@@ -41,11 +41,11 @@ void MultipleFileWriter::startNewFile()
 
     current_file_num_rows = 0;
     current_file_num_bytes = 0;
-    auto suffix = filename_generator.generateDataFileName();
-    auto storage_path = path_resolver.storagePath(suffix);
+    auto metadata_path = filename_generator.generateDataFileName();
+    auto storage_path = path_resolver.resolve(metadata_path);
 
     /// Store the metadata path (used in Iceberg manifest files for other engines to read).
-    data_file_names.push_back(path_resolver.metadataPath(suffix));
+    data_file_names.push_back(metadata_path.getRawPath());
     /// Also track storage paths for cleanup.
     data_file_storage_paths.push_back(storage_path);
     /// Write to the actual storage path.

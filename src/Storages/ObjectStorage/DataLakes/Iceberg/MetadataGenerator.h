@@ -22,14 +22,14 @@ public:
     struct NextMetadataResult
     {
         Poco::JSON::Object::Ptr snapshot = nullptr;
-        /// Relative suffix for the manifest list file (e.g. "metadata/snap-xxx.avro").
-        /// Use IcebergPathResolver to get storage/metadata full paths.
-        String manifest_list_suffix;
+        /// Metadata path for the manifest list file (e.g. "wasb://container@account/table/metadata/snap-xxx.avro").
+        /// Use IcebergPathResolver::resolve to get storage path for I/O.
+        /// Use .getRawPath() to get the path for writing into Iceberg metadata.
+        Iceberg::IcebergPathFromMetadata manifest_list_path;
     };
 
     NextMetadataResult generateNextMetadata(
         FileNamesGenerator & generator,
-        const Iceberg::IcebergPathResolver & path_resolver,
         const String & metadata_filename,
         Int64 parent_snapshot_id,
         Int64 added_files,

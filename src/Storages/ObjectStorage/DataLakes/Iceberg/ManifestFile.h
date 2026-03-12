@@ -98,7 +98,7 @@ struct ParsedManifestFileEntry : boost::noncopyable
         std::optional<Int64> written_sequence_number_,
         std::optional<Int64> written_snapshot_id_,
         DB::Row partition_key_value_,
-        std::unordered_map<Int32, ColumnInfo> columns_infos_,
+        std::unordered_map<Int32, ColumnInfo> columns_infos_, 
         std::unordered_map<Int32, std::pair<Field, Field>> value_bounds_,
         String file_format_,
         std::optional<IcebergPathFromMetadata> lower_reference_data_file_path_,
@@ -127,9 +127,6 @@ struct ProcessedManifestFileEntry
 {
     std::shared_ptr<const ParsedManifestFileEntry> parsed_entry;
     std::shared_ptr<const PartitionSpecification> common_partition_specification;
-
-    /// Computed file path for Object Storage (resolved from parsed_entry->file_path_key)
-    String file_path;
 
     // Always zero in case of format version 1
     Int64 sequence_number;

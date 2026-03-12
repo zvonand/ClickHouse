@@ -147,6 +147,7 @@ static NamesAndTypesList getCommonVirtualsForFileLikeStorage()
         {"_tags", std::make_shared<DataTypeMap>(std::make_shared<DataTypeString>(), std::make_shared<DataTypeString>())},
         {"_data_lake_snapshot_version", makeNullable(std::make_shared<DataTypeUInt64>())},
         {"_row_number", makeNullable(std::make_shared<DataTypeInt64>())},
+        {"_iceberg_metadata_file_path", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>())},
     };
 }
 
@@ -417,6 +418,13 @@ void addRequestedFileLikeStorageVirtualsToChunk(
 #endif
             /// Row numbers not known, _row_number = NULL.
             chunk.addColumn(virtual_column.type->createColumnConstWithDefaultValue(chunk.getNumRows())->convertToFullColumnIfConst());
+        }
+        else if (virtual_column.name == "_iceberg_metadata_file_path")
+        {
+            if (virtual_values.iceberg_metadata_file_path)
+                chunk.addColumn(virtual_column.type->createColumnConst(chunk.getNumRows(), *virtual_values.iceberg_metadata_file_path)->convertToFullColumnIfConst());
+            else
+                chunk.addColumn(virtual_column.type->createColumnConstWithDefaultValue(chunk.getNumRows())->convertToFullColumnIfConst());
         }
         else if (auto it = hive_map.find(virtual_column.getNameInStorage()); it != hive_map.end())
         {

@@ -665,6 +665,8 @@ void IcebergMetadata::createInitial(
     }
 
     String location_path = configuration_ptr->getRawPath().path;
+    if (location_path.find("://") == String::npos && !location_path.starts_with('/'))
+        location_path = "/" + location_path;
     if (local_context->getSettingsRef()[Setting::write_full_path_in_iceberg_metadata].value)
         location_path
             = configuration_ptr->getTypeName() + "://" + configuration_ptr->getNamespace() + "/" + configuration_ptr->getRawPath().path;
@@ -697,7 +699,7 @@ void IcebergMetadata::createInitial(
     if (configuration_ptr->getDataLakeSettings()[DataLakeStorageSetting::iceberg_use_version_hint].value)
     {
         auto filename_version_hint = configuration_ptr->getRawPath().path + "metadata/version-hint.text";
-        writeMessageToFile(filename, filename_version_hint, object_storage, local_context, "*", "");
+        writeMessageToFile("1", filename_version_hint, object_storage, local_context, "*", "");
     }
 
     if (catalog)

@@ -48,7 +48,7 @@ struct ManifestFilePlan
     std::vector<String> manifest_lists_path;
     DataFileStatistics statistics;
 
-    String patched_path_suffix;
+    Iceberg::IcebergPathFromMetadata patched_path;
 };
 
 struct DataFilePlan
@@ -56,7 +56,7 @@ struct DataFilePlan
     IcebergDataObjectInfoPtr data_object_info;
     std::shared_ptr<ManifestFilePlan> manifest_list;
 
-    String patched_path_suffix;
+    Iceberg::IcebergPathFromMetadata patched_path;
     UInt64 new_records_count = 0;
 };
 
@@ -120,7 +120,7 @@ Plan getPlan(
     LoggerPtr log = getLogger("IcebergCompaction::getPlan");
 
     Plan plan;
-    plan.generator = FileNamesGenerator(false, compression_method, write_format);
+    plan.generator = FileNamesGenerator(persistent_table_components.path_resolver.getTableLocation(), false, compression_method, write_format);
 
     const auto [metadata_version, metadata_file_path, _] = getLatestOrExplicitMetadataFileAndVersion(
         object_storage,
@@ -154,7 +154,9 @@ Plan getPlan(
     std::unordered_map<String, std::shared_ptr<ManifestFilePlan>> manifest_files;
     for (const auto & snapshot : snapshots_info)
     {
-        auto manifest_list = getManifestList(object_storage, persistent_table_components, context, snapshot.manifest_list_path, log);
+        auto resolved_manifest_list_path = persistent_table_components.path_resolver.resolve(
+            Iceberg::IcebergPathFromMetadata(snapshot.manifest_list_path));
+        auto manifest_list = getManifestList(object_storage, persistent_table_components, context, resolved_manifest_list_path, log);
         for (const auto & manifest_file : manifest_list)
         {
             plan.manifest_list_to_manifest_files[snapshot.manifest_list_path].push_back(manifest_file.manifest_file_path);
@@ -178,14 +180,15 @@ Plan getPlan(
                 if (plan.partitions.size() <= partition_index)
                     plan.partitions.push_back({});
 
-                IcebergDataObjectInfoPtr data_object_info = std::make_shared<IcebergDataObjectInfo>(data_file, 0);
+                IcebergDataObjectInfoPtr data_object_info = std::make_shared<IcebergDataObjectInfo>(
+                    data_file, persistent_table_components.path_resolver.resolve(data_file->parsed_entry->file_path_key), 0);
                 std::shared_ptr<DataFilePlan> data_file_ptr;
                 if (!plan.path_to_data_file.contains(manifest_file.manifest_file_path))
                 {
                     data_file_ptr = std::make_shared<DataFilePlan>(DataFilePlan{
                         .data_object_info = data_object_info,
                         .manifest_list = manifest_files[manifest_file.manifest_file_path],
-                        .patched_path_suffix = plan.generator.generateDataFileName()});
+                        .patched_path = plan.generator.generateDataFileName()});
                     plan.path_to_data_file[manifest_file.manifest_file_path] = data_file_ptr;
                 }
                 else
@@ -208,7 +211,8 @@ Plan getPlan(
         for (auto & data_file : plan.partitions[partition_index])
         {
             if (data_file->data_object_info->info.sequence_number <= delete_file->sequence_number)
-                data_file->data_object_info->addPositionDeleteObject(delete_file);
+                data_file->data_object_info->addPositionDeleteObject(
+                    delete_file, persistent_table_components.path_resolver.resolve(delete_file->parsed_entry->file_path_key));
         }
     }
     plan.history = std::move(snapshots_info);
@@ -259,7 +263,7 @@ static void writeDataFiles(
             false);
 
         auto write_buffer = object_storage->writeObject(
-            StoredObject(path_resolver.storagePath(data_file->patched_path_suffix)),
+            StoredObject(path_resolver.resolve(data_file->patched_path)),
             WriteMode::Rewrite,
             std::nullopt,
             DBMS_DEFAULT_BUFFER_SIZE,
@@ -314,7 +318,7 @@ void writeMetadataFiles(
 
     MetadataGenerator metadata_generator(metadata_object);
     std::vector<MetadataGenerator::NextMetadataResult> new_snapshots;
-    auto generated_metadata_suffix = plan.generator.generateMetadataName();
+    auto generated_metadata_path = plan.generator.generateMetadataName();
     std::unordered_map<Int64, Poco::JSON::Object::Ptr> snapshot_id_to_snapshot;
 
     std::unordered_map<Int64, UInt64> snapshot_id_to_records_count;
@@ -332,8 +336,7 @@ void writeMetadataFiles(
 
         auto new_snapshot = metadata_generator.generateNextMetadata(
             plan.generator,
-            path_resolver,
-            path_resolver.metadataPath(generated_metadata_suffix),
+            generated_metadata_path.getRawPath(),
             history_record.parent_id,
             history_record.added_files,
             total_records_count,
@@ -363,7 +366,7 @@ void writeMetadataFiles(
             for (const auto & data_file : partition)
             {
                 grouped_by_manifest_files_partitions[data_file->manifest_list] = i;
-                grouped_by_manifest_files_result[data_file->manifest_list].insert(path_resolver.metadataPath(data_file->patched_path_suffix));
+                grouped_by_manifest_files_result[data_file->manifest_list].insert(data_file->patched_path.getRawPath());
                 partition_values[data_file->manifest_list] = i;
             }
         }
@@ -391,10 +394,10 @@ void writeMetadataFiles(
 
         for (auto & [manifest_entry, data_filenames] : grouped_by_manifest_files_result)
         {
-            manifest_entry->patched_path_suffix = plan.generator.generateManifestEntryName();
-            manifest_file_renamings[manifest_entry->path] = path_resolver.metadataPath(manifest_entry->patched_path_suffix);
+            manifest_entry->patched_path = plan.generator.generateManifestEntryName();
+            manifest_file_renamings[manifest_entry->path] = manifest_entry->patched_path.getRawPath();
             auto buffer_manifest_entry = object_storage->writeObject(
-                StoredObject(path_resolver.storagePath(manifest_entry->patched_path_suffix)),
+                StoredObject(path_resolver.resolve(manifest_entry->patched_path)),
                 WriteMode::Rewrite,
                 std::nullopt,
                 DBMS_DEFAULT_BUFFER_SIZE,
@@ -420,8 +423,15 @@ void writeMetadataFiles(
                 *buffer_manifest_entry,
                 Iceberg::FileContentType::DATA);
 
-            manifest_file_sizes[path_resolver.metadataPath(manifest_entry->patched_path_suffix)] += buffer_manifest_entry->count();
             buffer_manifest_entry->finalize();
+            auto manifest_bytes = buffer_manifest_entry->count();
+            if (manifest_bytes == 0)
+            {
+                auto file_metadata = object_storage->getObjectMetadata(
+                    path_resolver.resolve(manifest_entry->patched_path), /*with_tags=*/ false);
+                manifest_bytes = file_metadata.size_bytes;
+            }
+            manifest_file_sizes[manifest_entry->patched_path.getRawPath()] += manifest_bytes;
         }
     }
 
@@ -431,7 +441,7 @@ void writeMetadataFiles(
         if (plan.history[i].added_files == 0)
             continue;
 
-        manifest_list_renamings[plan.history[i].manifest_list_path] = path_resolver.metadataPath(new_snapshots[i].manifest_list_suffix);
+        manifest_list_renamings[plan.history[i].manifest_list_path] = new_snapshots[i].manifest_list_path.getRawPath();
     }
 
     for (size_t i = 0; i < plan.history.size(); ++i)
@@ -455,7 +465,7 @@ void writeMetadataFiles(
         for (const auto & entry : renamed_manifest_entries)
             per_manifest_sizes.push_back(manifest_file_sizes[entry]);
         auto buffer_manifest_list = object_storage->writeObject(
-            StoredObject(renamed_manifest_list), WriteMode::Rewrite, std::nullopt, DBMS_DEFAULT_BUFFER_SIZE, context->getWriteSettings());
+            StoredObject(path_resolver.resolve(Iceberg::IcebergPathFromMetadata(renamed_manifest_list))), WriteMode::Rewrite, std::nullopt, DBMS_DEFAULT_BUFFER_SIZE, context->getWriteSettings());
         generateManifestList(
             path_resolver,
             metadata_object,
@@ -476,7 +486,7 @@ void writeMetadataFiles(
         std::string json_representation = removeEscapedSlashes(oss.str());
 
         auto buffer_metadata = object_storage->writeObject(
-            StoredObject(path_resolver.storagePath(generated_metadata_suffix)),
+            StoredObject(path_resolver.resolve(generated_metadata_path)),
             WriteMode::Rewrite,
             std::nullopt,
             DBMS_DEFAULT_BUFFER_SIZE,

@@ -52,14 +52,14 @@ namespace DB::Iceberg
 
 #if USE_AVRO
 
-static constexpr const char * block_datafile_path = "_path";
+static constexpr const char * block_datafile_path = "_iceberg_metadata_file_path";
 static constexpr const char * block_row_number = "_row_number";
 static constexpr auto MAX_TRANSACTION_RETRIES = 100;
 
 struct DeleteFileWriteResult
 {
-    /// Relative suffix like "data/uuid-deletes.parquet"
-    String path_suffix;
+    /// Metadata path (e.g. "wasb://container@account/table/data/uuid-deletes.parquet")
+    Iceberg::IcebergPathFromMetadata path;
     Int32 total_rows;
     Int32 total_bytes;
 };
@@ -128,8 +128,7 @@ static std::optional<WriteDataFilesResult> writeDataFiles(
     const Iceberg::IcebergPathResolver & path_resolver,
     const std::optional<FormatSettings> & format_settings,
     std::optional<ChunkPartitioner> & chunk_partitioner,
-    Poco::JSON::Object::Ptr data_schema,
-    const String& blob_storage_namespace_name)
+    Poco::JSON::Object::Ptr data_schema)
 {
     chassert(commands.size() == 1);
 
@@ -180,11 +179,11 @@ static std::optional<WriteDataFilesResult> writeDataFiles(
 
                 if (!delete_data_writers.contains(partition_key))
                 {
-                    auto delete_file_suffix = generator.generatePositionDeleteFile();
+                    auto delete_file_path = generator.generatePositionDeleteFile();
 
-                    delete_data_result[partition_key].path_suffix = delete_file_suffix;
+                    delete_data_result[partition_key].path = delete_file_path;
                     auto write_buffer = object_storage->writeObject(
-                        StoredObject(path_resolver.storagePath(delete_file_suffix)),
+                        StoredObject(path_resolver.resolve(delete_file_path)),
                         WriteMode::Rewrite,
                         std::nullopt,
                         DBMS_DEFAULT_BUFFER_SIZE,
@@ -215,21 +214,9 @@ static std::optional<WriteDataFilesResult> writeDataFiles(
                     col_position.column = nullable->getNestedColumnPtr();
                 }
 
-                auto col_data_filename_without_namespaces = ColumnString::create();
-                for (size_t i = 0; i < col_data_filename.column->size(); ++i)
-                {
-                    Field cur_value;
-                    col_data_filename.column->get(i, cur_value);
-
-                    String path_without_namespace;
-                    if (cur_value.safeGet<String>().starts_with(blob_storage_namespace_name))
-                        path_without_namespace = cur_value.safeGet<String>().substr(blob_storage_namespace_name.size());
-
-                    if (!path_without_namespace.starts_with('/'))
-                        path_without_namespace = "/" + path_without_namespace;
-                    col_data_filename_without_namespaces->insert(path_without_namespace);
-                }
-                col_data_filename.column = std::move(col_data_filename_without_namespaces);
+                /// _iceberg_metadata_file_path already contains the correct metadata path format
+                /// (e.g. wasb://container@host/.../data/xxx.parquet or /iceberg/.../data/xxx.parquet)
+                /// so no transformation is needed.
                 Columns chunk_pos_delete;
                 chunk_pos_delete.push_back(col_data_filename.column);
                 chunk_pos_delete.push_back(col_position.column);
@@ -250,7 +237,13 @@ static std::optional<WriteDataFilesResult> writeDataFiles(
             delete_data_writers[partition_key]->flush();
             delete_data_writers[partition_key]->finalize();
             delete_data_write_buffers[partition_key]->finalize();
-            delete_data_result[partition_key].total_bytes = static_cast<Int32>(delete_data_write_buffers[partition_key]->count());
+            {
+                auto delete_bytes = delete_data_write_buffers[partition_key]->count();
+                if (delete_bytes == 0)
+                    delete_bytes = object_storage->getObjectMetadata(
+                        path_resolver.resolve(delete_data_result[partition_key].path), /*with_tags=*/ false).size_bytes;
+                delete_data_result[partition_key].total_bytes = static_cast<Int32>(delete_bytes);
+            }
         }
     }
 
@@ -281,10 +274,10 @@ static std::optional<WriteDataFilesResult> writeDataFiles(
                 auto it = update_data_writers.find(partition_key);
                 if (it == update_data_writers.end())
                 {
-                    auto data_file_suffix = generator.generateDataFileName();
-                    update_data_result[partition_key].path_suffix = data_file_suffix;
+                    auto data_file_path = generator.generateDataFileName();
+                    update_data_result[partition_key].path = data_file_path;
                     auto data_write_buffer = object_storage->writeObject(
-                        StoredObject(path_resolver.storagePath(data_file_suffix)),
+                        StoredObject(path_resolver.resolve(data_file_path)),
                         WriteMode::Rewrite,
                         std::nullopt,
                         DBMS_DEFAULT_BUFFER_SIZE,
@@ -308,7 +301,13 @@ static std::optional<WriteDataFilesResult> writeDataFiles(
             update_data_writers[partition_key]->flush();
             update_data_writers[partition_key]->finalize();
             update_data_write_buffers[partition_key]->finalize();
-            update_data_result[partition_key].total_bytes = static_cast<Int32>(update_data_write_buffers[partition_key]->count());
+            {
+                auto update_bytes = update_data_write_buffers[partition_key]->count();
+                if (update_bytes == 0)
+                    update_bytes = object_storage->getObjectMetadata(
+                        path_resolver.resolve(update_data_result[partition_key].path), /*with_tags=*/ false).size_bytes;
+                update_data_result[partition_key].total_bytes = static_cast<Int32>(update_bytes);
+            }
         }
     }
 
@@ -341,9 +340,9 @@ static bool writeMetadataFiles(
     const String& blob_storage_type_name,
     const String& blob_storage_namespace_name)
 {
-    auto metadata_suffix = filename_generator.generateMetadataName();
-    auto metadata_name = path_resolver.metadataPath(metadata_suffix);
-    auto storage_metadata_name = path_resolver.storagePath(metadata_suffix);
+    auto metadata_path = filename_generator.generateMetadataName();
+    auto metadata_name = metadata_path.getRawPath();
+    auto storage_metadata_name = path_resolver.resolve(metadata_path);
     Int64 parent_snapshot = -1;
     if (metadata->has(Iceberg::f_current_snapshot_id))
         parent_snapshot = metadata->getValue<Int64>(Iceberg::f_current_snapshot_id);
@@ -365,7 +364,6 @@ static bool writeMetadataFiles(
         auto result = MetadataGenerator(metadata)
             .generateNextMetadata(
                 filename_generator,
-                path_resolver,
                 metadata_name,
                 parent_snapshot,
                 /* added_files */0,
@@ -375,14 +373,13 @@ static bool writeMetadataFiles(
                 /* added_delete_files */total_files,
                 total_rows);
         new_snapshot = result.snapshot;
-        storage_manifest_list_name = path_resolver.storagePath(result.manifest_list_suffix);
+        storage_manifest_list_name = path_resolver.resolve(result.manifest_list_path);
     }
     else
     {
         auto result = MetadataGenerator(metadata)
             .generateNextMetadata(
                 filename_generator,
-                path_resolver,
                 metadata_name,
                 parent_snapshot,
                 /* added_files */total_files,
@@ -392,7 +389,7 @@ static bool writeMetadataFiles(
                 /* added_delete_files */0,
                 /*num_deleted_rows*/0);
         new_snapshot = result.snapshot;
-        storage_manifest_list_name = path_resolver.storagePath(result.manifest_list_suffix);
+        storage_manifest_list_name = path_resolver.resolve(result.manifest_list_path);
     }
     auto manifest_entries_in_storage = std::make_shared<Strings>();
     Strings manifest_entries;
@@ -403,7 +400,7 @@ static bool writeMetadataFiles(
         try
         {
             for (const auto & [_, data_file] : delete_filenames.delete_file)
-                object_storage->removeObjectIfExists(StoredObject(path_resolver.storagePath(data_file.path_suffix)));
+                object_storage->removeObjectIfExists(StoredObject(path_resolver.resolve(data_file.path)));
 
             for (const auto & manifest_filename_in_storage : *manifest_entries_in_storage)
                 object_storage->removeObjectIfExists(StoredObject(manifest_filename_in_storage));
@@ -420,12 +417,12 @@ static bool writeMetadataFiles(
     {
         for (const auto & [partition_key, delete_filename] : delete_filenames.delete_file)
         {
-            auto manifest_entry_suffix = filename_generator.generateManifestEntryName();
-            manifest_entries_in_storage->push_back(path_resolver.storagePath(manifest_entry_suffix));
-            manifest_entries.push_back(path_resolver.metadataPath(manifest_entry_suffix));
+            auto manifest_entry_path = filename_generator.generateManifestEntryName();
+            manifest_entries_in_storage->push_back(path_resolver.resolve(manifest_entry_path));
+            manifest_entries.push_back(manifest_entry_path.getRawPath());
 
             auto buffer_manifest_entry = object_storage->writeObject(
-                StoredObject(path_resolver.storagePath(manifest_entry_suffix)),
+                StoredObject(path_resolver.resolve(manifest_entry_path)),
                 WriteMode::Rewrite,
                 std::nullopt,
                 DBMS_DEFAULT_BUFFER_SIZE,
@@ -437,7 +434,7 @@ static bool writeMetadataFiles(
                     chunk_partitioner ? chunk_partitioner->getColumns() : std::vector<String>{},
                     partition_key,
                     chunk_partitioner ? chunk_partitioner->getResultTypes() : std::vector<DataTypePtr>{},
-                    {path_resolver.metadataPath(delete_filename.path_suffix)},
+                    {delete_filename.path.getRawPath()},
                     delete_filenames.delete_statistic.at(partition_key),
                     sample_block,
                     new_snapshot,
@@ -496,11 +493,11 @@ static bool writeMetadataFiles(
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "Failpoint for cleanup enabled");
             });
 
-            auto hint_suffix = filename_generator.generateVersionHint();
+            auto hint_path = filename_generator.generateVersionHint();
             if (!writeMetadataFileAndVersionHint(
                     storage_metadata_name,
                     json_representation,
-                    path_resolver.storagePath(hint_suffix),
+                    path_resolver.resolve(hint_path),
                     storage_metadata_name,
                     object_storage,
                     context,
@@ -555,7 +552,6 @@ void mutate(
     int max_retries = MAX_TRANSACTION_RETRIES;
     while (--max_retries > 0)
     {
-        FileNamesGenerator filename_generator(false, CompressionMethod::None, write_format);
         auto log = getLogger("IcebergMutations");
         auto [last_version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
             object_storage,
@@ -566,6 +562,7 @@ void mutate(
             log.get(),
             persistent_table_components.table_uuid);
 
+        FileNamesGenerator filename_generator(persistent_table_components.path_resolver.getTableLocation(), false, CompressionMethod::None, write_format);
         filename_generator.setVersion(last_version + 1);
         filename_generator.setCompressionMethod(compression_method);
 
@@ -612,8 +609,7 @@ void mutate(
             persistent_table_components.path_resolver,
             format_settings,
             chunk_partitioner,
-            current_schema,
-            blob_storage_namespace_name);
+            current_schema);
 
         if (mutation_files)
         {
@@ -689,7 +685,6 @@ void alter(
     size_t i = 0;
     while (i++ < MAX_TRANSACTION_RETRIES)
     {
-        FileNamesGenerator filename_generator(false, CompressionMethod::None, write_format);
         auto log = getLogger("IcebergMutations");
         auto [last_version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
             object_storage,
@@ -700,6 +695,7 @@ void alter(
             log.get(),
             persistent_table_components.table_uuid);
 
+        FileNamesGenerator filename_generator(persistent_table_components.path_resolver.getTableLocation(), false, CompressionMethod::None, write_format);
         filename_generator.setVersion(last_version + 1);
         filename_generator.setCompressionMethod(compression_method);
 
@@ -731,14 +727,14 @@ void alter(
         Poco::JSON::Stringifier::stringify(metadata, oss, 4);
         std::string json_representation = removeEscapedSlashes(oss.str());
 
-        auto md_suffix = filename_generator.generateMetadataName();
-        auto storage_metadata_name = persistent_table_components.path_resolver.storagePath(md_suffix);
+        auto md_path = filename_generator.generateMetadataName();
+        auto storage_metadata_name = persistent_table_components.path_resolver.resolve(md_path);
 
-        auto hint_suffix = filename_generator.generateVersionHint();
+        auto hint_path = filename_generator.generateVersionHint();
         if (writeMetadataFileAndVersionHint(
                 storage_metadata_name,
                 json_representation,
-                persistent_table_components.path_resolver.storagePath(hint_suffix),
+                persistent_table_components.path_resolver.resolve(hint_path),
                 storage_metadata_name,
                 object_storage,
                 context,
@@ -899,14 +895,14 @@ static std::pair<std::set<Int64>, Strings> applyRetentionPolicy(
 
 static void collectAllFilePaths(
     const Iceberg::ManifestFileIterator::ManifestFileEntriesHandle & entries_handle,
-    std::set<String> & out)
+    std::set<Iceberg::IcebergPathFromMetadata> & out)
 {
     for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
-        out.insert(entry->file_path);
+        out.insert(entry->parsed_entry->file_path_key);
     for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
-        out.insert(entry->file_path);
+        out.insert(entry->parsed_entry->file_path_key);
     for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
-        out.insert(entry->file_path);
+        out.insert(entry->parsed_entry->file_path_key);
 }
 
 /// Collect all file paths (manifest lists, manifests, data/delete files)
@@ -930,7 +926,7 @@ static void collectRetainedFiles(
     LoggerPtr log,
     Int32 current_schema_id,
     std::set<String> & retained_manifest_paths,
-    std::set<String> & retained_data_file_paths,
+    std::set<Iceberg::IcebergPathFromMetadata> & retained_data_file_paths,
     std::set<String> & retained_manifest_list_paths)
 {
     for (UInt32 i = 0; i < retained_snapshots->size(); ++i)
@@ -974,7 +970,7 @@ static ExpiredFiles collectExpiredFiles(
     const std::vector<String> & expired_manifest_list_paths,
     const std::set<String> & retained_manifest_list_paths,
     const std::set<String> & retained_manifest_paths,
-    const std::set<String> & retained_data_file_paths,
+    const std::set<Iceberg::IcebergPathFromMetadata> & retained_data_file_paths,
     ObjectStoragePtr object_storage,
     PersistentTableComponents & persistent_table_components,
     ContextPtr context,
@@ -1014,21 +1010,21 @@ static ExpiredFiles collectExpiredFiles(
                     mf_key, current_schema_id);
 
                 for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
-                    if (!retained_data_file_paths.contains(entry->file_path))
+                    if (!retained_data_file_paths.contains(entry->parsed_entry->file_path_key))
                     {
-                        result.all_paths.push_back(entry->file_path);
+                        result.all_paths.push_back(persistent_table_components.path_resolver.resolve(entry->parsed_entry->file_path_key));
                         ++result.data_files;
                     }
                 for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
-                    if (!retained_data_file_paths.contains(entry->file_path))
+                    if (!retained_data_file_paths.contains(entry->parsed_entry->file_path_key))
                     {
-                        result.all_paths.push_back(entry->file_path);
+                        result.all_paths.push_back(persistent_table_components.path_resolver.resolve(entry->parsed_entry->file_path_key));
                         ++result.position_delete_files;
                     }
                 for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
-                    if (!retained_data_file_paths.contains(entry->file_path))
+                    if (!retained_data_file_paths.contains(entry->parsed_entry->file_path_key))
                     {
-                        result.all_paths.push_back(entry->file_path);
+                        result.all_paths.push_back(persistent_table_components.path_resolver.resolve(entry->parsed_entry->file_path_key));
                         ++result.equality_delete_files;
                     }
             }
@@ -1178,7 +1174,7 @@ ExpireSnapshotsResult expireSnapshots(
     int max_retries = MAX_TRANSACTION_RETRIES;
     while (--max_retries > 0)
     {
-        FileNamesGenerator filename_generator(false, CompressionMethod::None, write_format);
+        FileNamesGenerator filename_generator(persistent_table_components.path_resolver.getTableLocation(), false, CompressionMethod::None, write_format);
         auto log = getLogger("IcebergExpireSnapshots");
         auto [last_version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
             object_storage,
@@ -1229,7 +1225,7 @@ ExpireSnapshotsResult expireSnapshots(
         Int32 current_schema_id = metadata->getValue<Int32>(Iceberg::f_current_schema_id);
 
         std::set<String> retained_manifest_paths;
-        std::set<String> retained_data_file_paths;
+        std::set<Iceberg::IcebergPathFromMetadata> retained_data_file_paths;
         std::set<String> retained_manifest_list_paths;
         collectRetainedFiles(
             partition.retained_snapshots, object_storage, persistent_table_components, context, log,
@@ -1243,13 +1239,13 @@ ExpireSnapshotsResult expireSnapshots(
         std::ostringstream oss; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
         Poco::JSON::Stringifier::stringify(metadata, oss, 4);
         std::string json_representation = removeEscapedSlashes(oss.str());
-        auto md_suffix = filename_generator.generateMetadataName();
-        auto storage_metadata_name = persistent_table_components.path_resolver.storagePath(md_suffix);
-        auto hint_suffix = filename_generator.generateVersionHint();
+        auto md_path = filename_generator.generateMetadataName();
+        auto storage_metadata_name = persistent_table_components.path_resolver.resolve(md_path);
+        auto hint_path = filename_generator.generateVersionHint();
         if (!writeMetadataFileAndVersionHint(
                 storage_metadata_name,
                 json_representation,
-                persistent_table_components.path_resolver.storagePath(hint_suffix),
+                persistent_table_components.path_resolver.resolve(hint_path),
                 storage_metadata_name,
                 object_storage,
                 context,
@@ -1262,7 +1258,7 @@ ExpireSnapshotsResult expireSnapshots(
 
         if (catalog)
         {
-            auto metadata_name = persistent_table_components.path_resolver.metadataPath(md_suffix);
+            auto metadata_name = md_path.getRawPath();
             String catalog_filename = metadata_name;
             if (!catalog_filename.starts_with(blob_storage_type_name))
                 catalog_filename = blob_storage_type_name + "://" + blob_storage_namespace_name + "/" + metadata_name;

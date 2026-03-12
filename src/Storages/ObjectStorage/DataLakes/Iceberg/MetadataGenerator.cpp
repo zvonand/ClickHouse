@@ -105,7 +105,6 @@ Poco::JSON::Object::Ptr MetadataGenerator::getParentSnapshot(Int64 parent_snapsh
 
 MetadataGenerator::NextMetadataResult MetadataGenerator::generateNextMetadata(
     FileNamesGenerator & generator,
-    const Iceberg::IcebergPathResolver & path_resolver,
     const String & metadata_filename,
     Int64 parent_snapshot_id,
     Int64 added_files,
@@ -172,7 +171,7 @@ MetadataGenerator::NextMetadataResult MetadataGenerator::generateNextMetadata(
     new_snapshot->set(Iceberg::f_summary, summary);
 
     new_snapshot->set(Iceberg::f_schema_id, metadata_object->getValue<Int32>(Iceberg::f_current_schema_id));
-    new_snapshot->set(Iceberg::f_manifest_list, path_resolver.metadataPath(manifest_list_suffix));
+    new_snapshot->set(Iceberg::f_manifest_list, manifest_list_suffix.getRawPath());
 
     metadata_object->getArray(Iceberg::f_snapshots)->add(new_snapshot);
     metadata_object->set(Iceberg::f_current_snapshot_id, snapshot_id);

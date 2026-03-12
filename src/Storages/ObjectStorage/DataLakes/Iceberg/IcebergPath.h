@@ -6,13 +6,15 @@
 namespace DB::Iceberg
 {
 
-/// Strong type for paths read from Iceberg metadata files (Avro/JSON).
+/// Strong type for paths stored in Iceberg metadata files (Avro/JSON).
 /// These paths may use various URI schemes (wasb://, s3://, abfss://, hdfs://, etc.)
-/// or may be relative paths (/table/data/xxx.parquet).
+/// or may be absolute paths (/table/data/xxx.parquet).
 ///
-/// Paths from metadata MUST be resolved through `IcebergPathResolver` before
-/// use in storage operations. This type prevents accidental use of raw metadata
-/// paths as storage paths by not being implicitly convertible to String.
+/// All paths written into Iceberg metadata MUST be of this type.
+/// To get the actual storage path for I/O, pass through IcebergPathResolver::resolve().
+///
+/// This type is intentionally NOT implicitly convertible to String
+/// to prevent accidental use of metadata paths as storage paths.
 class IcebergPathFromMetadata
 {
 public:
@@ -20,8 +22,8 @@ public:
     explicit IcebergPathFromMetadata(String path_) : raw_path(std::move(path_)) {}
 
     /// Access the raw path as stored in Iceberg metadata.
-    /// Use only for logging, comparison with other metadata paths,
-    /// or passing to IcebergPathResolver.
+    /// Use only for: logging, comparison with other metadata paths,
+    /// writing into Iceberg metadata files, or passing to IcebergPathResolver::resolve().
     const String & getRawPath() const { return raw_path; }
 
     bool empty() const { return raw_path.empty(); }
@@ -35,18 +37,18 @@ private:
     String raw_path;
 };
 
-/// Resolves paths read from Iceberg metadata to actual object storage paths.
+/// Converts Iceberg metadata paths to actual object storage paths.
 ///
-/// Iceberg metadata may store paths in different formats:
-///   - Full URIs: wasb://container@account/iceberg_data/table/data/xxx.parquet
-///   - Relative paths: /iceberg_data/table/data/xxx.parquet
+/// This is the ONLY way to go from a metadata path to a storage path.
+/// The reverse direction is handled by FileNamesGenerator which always
+/// produces metadata paths (IcebergPathFromMetadata).
 ///
 /// The key invariant: path_from_metadata is always a continuation of table_location.
 /// For example:
 ///   table_location = "wasb://container@account/iceberg_data/table"
 ///   path_from_metadata = "wasb://container@account/iceberg_data/table/data/xxx.parquet"
 ///   → relative suffix = "data/xxx.parquet"
-///   → resolved storage path = "iceberg_data/table/data/xxx.parquet" (using table_root)
+///   → resolved storage path = "iceberg_data/table/data/xxx.parquet"
 class IcebergPathResolver
 {
 public:
@@ -58,27 +60,23 @@ public:
         while (!table_location.empty() && table_location.back() == '/')
             table_location.pop_back();
 
+        /// Normalize: non-URI table_location should start with '/'
+        /// (Iceberg spec expects absolute paths in metadata)
+        if (!table_location.empty() && table_location.find("://") == String::npos && table_location[0] != '/')
+            table_location = "/" + table_location;
+
         /// Normalize: ensure table_root ends with '/'
         if (!table_root.empty() && table_root.back() != '/')
             table_root += '/';
     }
 
-    /// Convert a metadata path to an actual storage path.
-    /// Example: "wasb://container@host/iceberg/table/data/x.parquet" → "iceberg/table/data/x.parquet"
+    /// Convert a metadata path to an actual storage path for I/O operations.
     String resolve(const IcebergPathFromMetadata & metadata_path) const;
 
-    /// Convert a relative suffix (e.g. "data/x.parquet") to a full storage path.
-    /// Example: "data/x.parquet" → "iceberg/table/data/x.parquet"
-    String storagePath(const String & relative_suffix) const { return table_root + relative_suffix; }
-
-    /// Convert a relative suffix to the path that should be written into Iceberg metadata.
-    /// Example: "data/x.parquet" → "wasb://container@host/iceberg/table/data/x.parquet"
-    ///   or   : "data/x.parquet" → "/iceberg/table/data/x.parquet"
-    /// depending on the table_location format.
-    String metadataPath(const String & relative_suffix) const { return table_location + "/" + relative_suffix; }
-
-    const String & getTableRoot() const { return table_root; }
+    /// Accessors for table_location (needed by FileNamesGenerator to construct metadata paths)
+    /// and table_root (needed for logging / iceberg_metadata_log).
     const String & getTableLocation() const { return table_location; }
+    const String & getTableRoot() const { return table_root; }
 
 private:
     String table_location;

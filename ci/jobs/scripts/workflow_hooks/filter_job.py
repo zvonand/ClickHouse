@@ -214,8 +214,9 @@ def should_skip_job(job_name):
 
     # skip ARM perf tests for non-performance update
     if (
-        "- Performance Improvement" not in _info_cache.pr_body
+        " Performance Improvement" not in _info_cache.pr_body
         and Labels.CI_PERFORMANCE not in _info_cache.pr_labels
+        and Labels.PR_PERFORMANCE not in _info_cache.pr_labels
         and JobNames.PERFORMANCE in job_name
         and "arm" in job_name
         and _info_cache.pr_number  # run all performance jobs on master

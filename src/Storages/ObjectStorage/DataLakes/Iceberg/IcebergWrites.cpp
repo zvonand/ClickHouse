@@ -267,13 +267,10 @@ void generateManifestFile(
     if (root_schema->type() != avro::AVRO_RECORD)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Iceberg manifest file schema must be record");
 
-    int current_schema_id = metadata->getValue<Int32>(Iceberg::f_current_schema_id);
-    auto schema_obj = metadata->getArray(Iceberg::f_schemas)->getObject(current_schema_id);
-    if (!schema_obj->has("identifier-field-ids"))
-        schema_obj->set("identifier-field-ids", Poco::JSON::Array::Ptr(new Poco::JSON::Array));
-
     std::ostringstream oss; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    Poco::JSON::Stringifier::stringify(schema_obj, oss);
+    int current_schema_id = metadata->getValue<Int32>(Iceberg::f_current_schema_id);
+    Poco::JSON::Stringifier::stringify(metadata->getArray(Iceberg::f_schemas)->getObject(current_schema_id), oss, 4);
+
     std::string json_representation = removeEscapedSlashes(oss.str());
 
     auto adapter = std::make_unique<OutputStreamWriteBufferAdapter>(buf);
@@ -281,11 +278,9 @@ void generateManifestFile(
     writer.setMetadata(Iceberg::f_schema, json_representation);
 
     std::ostringstream oss_partition_spec; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    Poco::JSON::Stringifier::stringify(partition_spec->getArray(Iceberg::f_fields), oss_partition_spec);
+    Poco::JSON::Stringifier::stringify(partition_spec->getArray(Iceberg::f_fields), oss_partition_spec, 4);
     writer.setMetadata(Iceberg::f_partition_spec, oss_partition_spec.str());
-    writer.setMetadata("partition-spec-id", std::to_string(partition_spec_id));
-    writer.setMetadata(Iceberg::f_format_version, std::to_string(version));
-    writer.setMetadata("content", content_type == Iceberg::FileContentType::DATA ? "data" : "deletes");
+    writer.setMetadata(Iceberg::f_partition_spec_id, std::to_string(partition_spec_id));
     for (const auto & data_file_name : data_file_names)
     {
         avro::GenericDatum manifest_datum(root_schema);
@@ -318,19 +313,10 @@ void generateManifestFile(
 
         if (version > 1)
         {
-            auto set_null_union = [&](const String & field_name)
-            {
-                size_t field_index;
-                if (schema.root()->nameIndex(field_name, field_index))
-                {
-                    const avro::NodePtr & union_schema = schema.root()->leafAt(static_cast<UInt32>(field_index));
-                    avro::GenericUnion null_union(union_schema);
-                    null_union.selectBranch(0);
-                    manifest.field(field_name) = avro::GenericDatum(union_schema, null_union);
-                }
-            };
-            set_null_union(Iceberg::f_sequence_number);
-            set_null_union(Iceberg::f_file_sequence_number);
+            Int64 sequence_number = new_snapshot->getValue<Int64>(Iceberg::f_metadata_sequence_number);
+
+            set_versioned_field(sequence_number, Iceberg::f_sequence_number);
+            set_versioned_field(sequence_number, Iceberg::f_file_sequence_number);
         }
         avro::GenericRecord & data_file = manifest.field(Iceberg::f_data_file).value<avro::GenericRecord>();
         if (version > 1)
@@ -517,8 +503,8 @@ void generateManifestList(
         else
         {
             entry.field(Iceberg::f_added_files_count) = 1;
-            // This manifest only contains the new file(s); no existing files in this manifest (PyIceberg/Unity use 0).
-            entry.field(Iceberg::f_existing_files_count) = 0;
+            entry.field(Iceberg::f_existing_files_count)
+                = summary->getValue<Int32>(Iceberg::f_total_data_files);
             entry.field(Iceberg::f_deleted_files_count) = 0;
 
             if (summary->has(Iceberg::f_added_position_deletes))
@@ -619,16 +605,7 @@ void generateManifestList(
                     }
                     else
                     {
-                        const avro::GenericRecord & old_entry = datum.value<avro::GenericRecord>();
-                        avro::GenericDatum new_datum(schema.root());
-                        avro::GenericRecord & new_entry = new_datum.value<avro::GenericRecord>();
-                        for (int fi = 0; fi < static_cast<int>(schema.root()->leaves()); ++fi)
-                        {
-                            const std::string & name = schema.root()->nameAt(fi);
-                            if (old_entry.hasField(name))
-                                new_entry.field(name) = old_entry.field(name);
-                        }
-                        writer.write(new_datum);
+                        writer.write(datum);
                     }
                 }
                 break;

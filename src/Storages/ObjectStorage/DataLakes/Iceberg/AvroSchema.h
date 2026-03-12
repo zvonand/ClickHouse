@@ -361,7 +361,7 @@ static constexpr const char * manifest_entry_v1_schema = R"(
                     },
                     {
                         "name": "split_offsets",
-                        "type": ["null", {"type": "array", "items": "int", "element-id": 133}],
+                        "type": ["null", {"type": "array", "items": "long", "element-id": 133}],
                         "doc": "Splittable offsets",
                         "field-id": 132
                     },
@@ -556,7 +556,7 @@ static constexpr const char * manifest_entry_v2_schema = R"(
                     },
                     {
                         "name": "equality_ids",
-                        "type": ["null", {"type": "array", "items": "long", "element-id": 136}],
+                        "type": ["null", {"type": "array", "items": "int", "element-id": 136}],
                         "doc": "Field ids used to determine row equality for delete files",
                         "field-id": 135
                     },

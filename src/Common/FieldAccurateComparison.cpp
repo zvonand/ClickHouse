@@ -57,7 +57,18 @@ public:
             }
 
             if constexpr (is_arithmetic_v<T> && is_arithmetic_v<U>)
+            {
+                /// NaN is not equal to any non-NaN value in cross-type comparisons.
+                if constexpr (std::is_floating_point_v<T>)
+                {
+                    if (isNaN(l)) return false;
+                }
+                if constexpr (std::is_floating_point_v<U>)
+                {
+                    if (isNaN(r)) return false;
+                }
                 return accurate::equalsOp(l, r);
+            }
 
             /// TODO This is wrong (does not respect scale).
             if constexpr (is_decimal_field<T> && is_decimal_field<U>)
@@ -134,7 +145,19 @@ public:
             }
 
             if constexpr (is_arithmetic_v<T> && is_arithmetic_v<U>)
+            {
+                /// For cross-type comparisons involving NaN, treat NaN as greater than all values
+                /// (consistent with ClickHouse sort order, nan_direction_hint = 1).
+                if constexpr (std::is_floating_point_v<T>)
+                {
+                    if (isNaN(l)) return false; /// NaN is not less than anything
+                }
+                if constexpr (std::is_floating_point_v<U>)
+                {
+                    if (isNaN(r)) return true; /// everything is less than NaN
+                }
                 return accurate::lessOp(l, r);
+            }
 
             /// TODO This is wrong (does not respect scale).
             if constexpr (is_decimal_field<T> && is_decimal_field<U>)

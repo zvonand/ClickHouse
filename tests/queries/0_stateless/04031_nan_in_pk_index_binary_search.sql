@@ -30,5 +30,23 @@ SELECT count() FROM t_nan_pk2 WHERE col < 0;
 SELECT count() FROM t_nan_pk2 WHERE col < isNull(nan);
 SELECT DISTINCT count() FROM t_nan_pk2 PREWHERE col < isNull(nan) WHERE col < isNull(nan);
 
+-- AST fuzzer found: cross-type comparison (UInt8 from isNull vs Float with NaN in index)
+-- with LowCardinality(Nullable(Float32)) column type.
+DROP TABLE IF EXISTS t_nan_pk3;
+
+SET allow_suspicious_low_cardinality_types = 1;
+
+CREATE TABLE t_nan_pk3 (col LowCardinality(Nullable(Float32)))
+ENGINE = MergeTree ORDER BY col
+SETTINGS allow_nullable_key = 1, index_granularity = 1;
+
+INSERT INTO t_nan_pk3 SELECT arrayJoin([NULL, inf, 2.0, -inf, 3.0, nan, nan, NULL])::Nullable(Float32);
+
+SELECT count() FROM t_nan_pk3 WHERE isNull(nan) < col;
+SELECT count() FROM t_nan_pk3 WHERE col < isNull(nan);
+SELECT count() FROM t_nan_pk3 WHERE isNull(nan) > col;
+SELECT count() FROM t_nan_pk3 WHERE col > isNull(nan);
+
 DROP TABLE t_nan_pk;
 DROP TABLE t_nan_pk2;
+DROP TABLE t_nan_pk3;

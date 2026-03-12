@@ -31,7 +31,7 @@ protected:
 
     using Self = FixedRangeHashTable;
 
-    Cell * buf; /// A piece of memory for all elements.
+    Cell * buf = nullptr; /// A piece of memory for all elements.
     std::atomic<size_t> m_size = 0;
 
     void alloc() { buf = reinterpret_cast<Cell *>(Allocator::alloc(num_cells * sizeof(Cell))); }
@@ -126,7 +126,7 @@ public:
 
     size_t hash(const Key & x) const { return static_cast<size_t>(x - min_key); }
 
-    FixedRangeHashTable() = default;
+    FixedRangeHashTable();
 
     FixedRangeHashTable(Key min_key_, Key max_key_)
         : min_key(min_key_)

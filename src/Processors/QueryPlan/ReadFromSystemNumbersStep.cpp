@@ -213,7 +213,7 @@ private:
 protected:
     Chunk generate() override
     {
-        if (ranges.empty())
+        if (ranges.empty() || isCancelled())
             return {};
 
         /// Find the data range.
@@ -269,12 +269,13 @@ protected:
             }
         }
 
-        if (!isCancelled())
+        if (isCancelled())
+            column->popBack(block_size - provided);
+        else
             chassert(provided == block_size);
 
         progress(column->size(), column->byteSize());
-
-        return {Columns{std::move(column)}, block_size};
+        return {Columns{std::move(column)}, provided};
     }
 
 private:

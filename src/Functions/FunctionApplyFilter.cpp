@@ -10,6 +10,7 @@
 #include <Interpreters/BloomFilter.h>
 #include <Processors/QueryPlan/RuntimeFilterLookup.h>
 #include <IO/WriteHelpers.h>
+#include <Common/CurrentThread.h>
 #include <Common/FunctionDocumentation.h>
 
 namespace DB
@@ -87,7 +88,10 @@ public:
                     "First argument of function '{}' must be a String filter name",
                     getName());
 
-        auto filter_lookup = query_context->getRuntimeFilterLookup();
+        auto context = query_context ? query_context : CurrentThread::tryGetQueryContext();
+        if (!context)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Query context is not available for {}", getName());
+        auto filter_lookup = context->getRuntimeFilterLookup();
         if (!filter_lookup)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "Runtime filter lookup was not initialized");
         auto filter = filter_lookup->find(filter_name);

@@ -30,7 +30,7 @@ select a, _block_number, _block_offset, _part from mergeTreeProjection(currentDa
 
 select '';
 select 'check block number / offset mapping';
-select a, lhs._block_number = rhs._parent_block_number as block_number_match, lhs._block_offset = rhs._parent_block_offset as block_offset_match from mt_with_commit_order as lhs join mergeTreeProjection(currentDatabase(), 'mt_with_commit_order', '_commit_order') as rhs using a order by a;
+select a, lhs._block_number = rhs._block_number as block_number_match, lhs._block_offset = rhs._block_offset as block_offset_match from mt_with_commit_order as lhs join mergeTreeProjection(currentDatabase(), 'mt_with_commit_order', '_commit_order') as rhs using a order by a;
 
 select '';
 select 'index lookup';

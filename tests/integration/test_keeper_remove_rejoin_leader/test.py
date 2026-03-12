@@ -73,7 +73,7 @@ node6 = cluster.add_instance(
 )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def started_cluster():
     try:
         cluster.start()

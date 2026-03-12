@@ -254,7 +254,7 @@ public:
             /// Use combined `$` subcolumn that merges literal value and sub-object.
             /// For typed paths it returns only the literal value. For non-typed paths it returns a Dynamic
             /// column: literal if present, sub-object as JSON if not, NULL otherwise.
-            String combined_name = "$`" + path + "`";
+            String combined_name = String(1, DataTypeObject::COMBINED_SUBCOLUMN_PREFIX) + "`" + path + "`";
             auto merged_type = data_type_object.getSubcolumnType(combined_name);
             auto merged = data_type_object.getSubcolumn(combined_name, object_column);
 

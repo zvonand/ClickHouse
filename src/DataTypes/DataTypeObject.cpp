@@ -316,28 +316,13 @@ std::pair<String, String> splitPathAndDynamicTypeSubcolumn(std::string_view subc
     return {String(subcolumn_name.substr(0, pos)), dynamic_subcolumn};
 }
 
-/// Sub-object subcolumn in JSON path always looks like "^`some`.path.path".
-/// We back quote first path element after `^` so we can distinguish sub-object subcolumn and path element "^path".
-std::optional<String> tryGetSubObjectSubcolumn(std::string_view subcolumn_name)
+/// Prefixed subcolumn in JSON path always looks like "<prefix>`some`.path.path"
+/// (e.g. "^`some`.path" for sub-object, "$`some`.path" for combined).
+/// We back-quote the first path element after the prefix so we can distinguish
+/// prefixed subcolumns from regular path elements like "^path" or "$path".
+std::optional<String> tryGetPrefixedSubcolumn(std::string_view subcolumn_name, char prefix)
 {
-    if (!subcolumn_name.starts_with("^`"))
-        return std::nullopt;
-
-    ReadBufferFromMemory buf(subcolumn_name.substr(1));
-    String path;
-    /// Try to read back-quoted first path element.
-    if (!tryReadBackQuotedString(path, buf))
-        return std::nullopt;
-
-    /// Add remaining path elements if any.
-    return path + String(buf.position(), buf.available());
-}
-
-/// Combined subcolumn in JSON path always looks like "$`some`.path.path".
-/// We back quote first path element after `$` so we can distinguish combined subcolumn and path element "$path".
-std::optional<String> tryGetCombinedSubcolumn(std::string_view subcolumn_name)
-{
-    if (!subcolumn_name.starts_with("$`"))
+    if (subcolumn_name.size() < 2 || subcolumn_name[0] != prefix || subcolumn_name[1] != '`')
         return std::nullopt;
 
     ReadBufferFromMemory buf(subcolumn_name.substr(1));
@@ -530,7 +515,7 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
     /// In this case we should return JSON column with all paths that are inside specified object prefix.
     /// For example, if we have {"a" : {"b" : {"c" : {"d" : 10, "e" : "Hello"}, "f" : [1, 2, 3]}}} and subcolumn ^a.b
     /// we should return JSON column with data {"c" : {"d" : 10, "e" : Hello}, "f" : [1, 2, 3]}
-    if (auto sub_object_subcolumn = tryGetSubObjectSubcolumn(subcolumn_name))
+    if (auto sub_object_subcolumn = tryGetPrefixedSubcolumn(subcolumn_name, SUB_OBJECT_SUBCOLUMN_PREFIX))
     {
         const String prefix = *sub_object_subcolumn + ".";
         auto [sub_object_type, sub_object_serialization] = buildSubObjectTypeAndSerialization(
@@ -553,7 +538,7 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
     /// - literal value if the path has one
     /// - sub-object as JSON if the path has a non-empty sub-object but no literal
     /// - NULL if literal is null and sub-object is empty
-    if (auto combined_subcolumn = tryGetCombinedSubcolumn(subcolumn_name))
+    if (auto combined_subcolumn = tryGetPrefixedSubcolumn(subcolumn_name, COMBINED_SUBCOLUMN_PREFIX))
     {
         const String & combined_path = *combined_subcolumn;
 

@@ -105,6 +105,13 @@ static constexpr const char * manifest_list_v1_schema = R"(
             "doc": "Deleted rows count",
             "field-id": 514,
             "default": null
+        },
+        {
+            "name": "key_metadata",
+            "type": ["null", "bytes"],
+            "doc": "Implementation-specific key metadata for encryption",
+            "field-id": 519,
+            "default": null
         }
     ]
 }

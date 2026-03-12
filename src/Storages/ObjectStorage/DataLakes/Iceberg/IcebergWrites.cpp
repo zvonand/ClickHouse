@@ -845,7 +845,7 @@ void IcebergStorageSink::finalizeBuffers()
         ++i;
     }
     if (!successed_write)
-        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Write into iceberg was not successfull");
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Write into iceberg was not successful");
 }
 
 void IcebergStorageSink::releaseBuffers()

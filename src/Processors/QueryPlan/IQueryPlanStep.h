@@ -34,16 +34,6 @@ struct ExplainPlanOptions;
 class IQueryPlanStep;
 using QueryPlanStepPtr = std::unique_ptr<IQueryPlanStep>;
 
-namespace QueryPlanFormat
-{
-    std::string_view trimColumnIdentifier(std::string_view name);
-    void formatOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
-    void formatJoinOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
-
-    String formatNodePretty(const ActionsDAG::Node * node, int parent_precedence = 0);
-    String formatNamePrettyIfPossible(const ActionsDAG & dag, const String & name);
-}
-
 
 /// Single step of query plan.
 class IQueryPlanStep
@@ -102,6 +92,7 @@ public:
         const bool write_header = false;
         bool verbose = false;
         bool pretty = false;
+        std::vector<const ActionsDAG *> input_dags;
     };
 
     /// Get detailed description of step actions. This is shown in EXPLAIN query with options `actions = 1`.
@@ -186,4 +177,14 @@ private:
     size_t step_index = 0;
 };
 
+namespace QueryPlanFormat
+{
+    std::string_view trimColumnIdentifier(std::string_view name);
+    void formatOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
+    void formatJoinOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
+
+    String formatNodePretty(const ActionsDAG::Node * node, int parent_precedence = 0);
+    String formatNamePrettyIfPossible(const ActionsDAG & dag, const String & name);
+    String formatColumnForExplain(const String & column_name, const IQueryPlanStep::FormatSettings & settings);
+}
 }

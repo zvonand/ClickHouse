@@ -9,6 +9,7 @@
 
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
+#include <Processors/QueryPlan/FilterStep.h>
 #include <Processors/QueryPlan/Optimizations/Optimizations.h>
 #include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
 #include <Processors/QueryPlan/QueryPlan.h>
@@ -462,7 +463,7 @@ std::string debugExplainStep(IQueryPlanStep & step)
 {
     WriteBufferFromOwnString out;
     ExplainPlanOptions options{.actions = true};
-    IQueryPlanStep::FormatSettings settings{.out = out, .step_prefix = "", .other_prefix = ""};
+    IQueryPlanStep::FormatSettings settings{.out = out, .step_prefix = "", .other_prefix = "", .input_dags = {}};
     explainStep(step, settings, options, 0);
     return out.str();
 }
@@ -502,8 +503,6 @@ static void buildTreeOffset(
         settings_format.other_prefix += current.node->children.empty() ? "   " : "│  ";
         return;
     }
-    [src/Processors/QueryPlan/QueryPlan.cpp:517-519] In buildTreeOffset, the first non-last child is rendered as └┬─ while later siblings use  ├─ /  └─; this produces misleading tree topology for multi-input nodes (e.g. joins), where a non-terminal sibling appears terminal.
-    Suggested fix: use standard sibling glyphs for all child positions (├── for non-last, └── for last), independent of “first child” position.
     
     for (size_t i = 0; i < frames.size() - 2; ++i)
     {
@@ -534,7 +533,8 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
         .other_prefix = "",
         .write_header = options.header,
         .verbose = options.verbose,
-        .pretty = options.pretty
+        .pretty = options.pretty,
+        .input_dags = {}
     };
 
     std::deque<ExplainPlan::Frame> stack;
@@ -556,6 +556,19 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
                 buildTreeOffset(stack, frame, settings);
             else
                 buildIndentOffset(stack, settings, offset);
+
+            settings.input_dags.clear();
+            if (settings.pretty)
+            {
+                for (const auto * child : frame.node->children)
+                {
+                    const auto & name = child->step->getName();
+                    if (name == "Expression")
+                        settings.input_dags.push_back(&static_cast<const ExpressionStep *>(child->step.get())->getExpression());
+                    else if (name == "Filter")
+                        settings.input_dags.push_back(&static_cast<const FilterStep *>(child->step.get())->getExpression());
+                }
+            }
 
             explainStep(*frame.node->step, settings, options, max_description_length);
             frame.is_description_printed = true;
@@ -602,7 +615,7 @@ void QueryPlan::explainPipeline(WriteBuffer & buffer, const ExplainPipelineOptio
 {
     checkInitialized();
 
-    IQueryPlanStep::FormatSettings settings{.out = buffer, .step_prefix = "", .other_prefix = "", .write_header = options.header};
+    IQueryPlanStep::FormatSettings settings{.out = buffer, .step_prefix = "", .other_prefix = "", .write_header = options.header, .input_dags = {}};
 
     struct Frame
     {

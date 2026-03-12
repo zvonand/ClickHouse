@@ -163,7 +163,8 @@ namespace QueryPlanFormat
             {
                 WriteBufferFromOwnString buf;
                 writeChar('\'', buf);
-                node->result_type->getDefaultSerialization()->serializeText(*node->column, 0, buf, {});
+                const auto & col = node->column->convertToFullColumnIfConst();
+                node->result_type->getDefaultSerialization()->serializeText(*col, 0, buf, {});
                 writeChar('\'', buf);
                 return buf.str();
             }
@@ -284,6 +285,20 @@ namespace QueryPlanFormat
     {
         const auto * node = dag.tryFindInOutputs(name);
         return node ? QueryPlanFormat::formatNodePretty(node) : name;
+    }
+
+    String formatColumnForExplain(const String & column_name, const IQueryPlanStep::FormatSettings & settings)
+    {
+        if (settings.pretty)
+        {
+            for (const auto * dag : settings.input_dags)
+            {
+                if (const auto * node = dag->tryFindInOutputs(column_name))
+                    return formatNodePretty(node);
+            }
+            return String(trimColumnIdentifier(column_name));
+        }
+        return column_name;
     }
 }
 

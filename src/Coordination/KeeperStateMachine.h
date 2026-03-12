@@ -85,6 +85,8 @@ public:
     int read_logical_snp_obj(
         nuraft::snapshot & s, void *& user_snp_ctx, uint64_t obj_id, nuraft::ptr<nuraft::buffer> & data_out, bool & is_last_obj) override;
 
+    void free_user_snp_ctx(void *& user_snp_ctx) override;
+
     virtual void shutdownStorage() = 0;
 
     ClusterConfigPtr getClusterConfig() const;
@@ -128,6 +130,25 @@ protected:
     SnapshotMetadataPtr latest_snapshot_meta TSA_GUARDED_BY(snapshots_lock) = nullptr;
     std::shared_ptr<SnapshotFileInfo> latest_snapshot_info TSA_GUARDED_BY(snapshots_lock);
     nuraft::ptr<nuraft::buffer> latest_snapshot_buf TSA_GUARDED_BY(snapshots_lock) = nullptr;
+
+    /// In-progress chunked snapshot receive state (follower side). Non-null between is_first_obj and is_last_obj.
+    struct SnapshotReceiveCtx
+    {
+        std::unique_ptr<WriteBuffer> write_buf;
+        uint64_t log_idx = 0;
+        DiskPtr disk;
+        std::string tmp_path;
+
+        SnapshotReceiveCtx() = default;
+        SnapshotReceiveCtx(SnapshotReceiveCtx &&) = default;
+        SnapshotReceiveCtx & operator=(SnapshotReceiveCtx &&) = default;
+
+        /// On destruction, close the write buffer and remove the partial temp file.
+        /// If the transfer completed normally, finalizeSnapshotReceive already renamed
+        /// the file away, so removeFileIfExists becomes a safe no-op.
+        ~SnapshotReceiveCtx();
+    };
+    std::unique_ptr<SnapshotReceiveCtx> snapshot_receive_ctx TSA_GUARDED_BY(snapshots_lock);
 
     CoordinationSettingsPtr coordination_settings;
 

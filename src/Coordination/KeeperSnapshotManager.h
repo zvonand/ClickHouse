@@ -47,7 +47,7 @@ struct SnapshotDeserializationResult
     SnapshotMetadataPtr snapshot_meta;
     /// Cluster config
     ClusterConfigPtr cluster_config;
-    /// container with all the paths stored in snapshot
+    /// Container with all the paths stored in snapshot
     /// used if we don't want to load entire storage from snapshot
     /// which can be useful for analyzing snapshot files
     std::vector<std::string> paths;
@@ -55,12 +55,12 @@ struct SnapshotDeserializationResult
 
 /// In memory keeper snapshot. Keeper Storage based on a hash map which can be
 /// turned into snapshot mode. This operation is fast and KeeperStorageSnapshot
-/// class do it in constructor. It also copies iterators from storage hash table
-/// up to some log index with lock. In destructor this class turn off snapshot
+/// class does it in constructor. It also copies iterators from storage hash table
+/// up to some log index with lock. In destructor this class turns off snapshot
 /// mode for KeeperStorage.
 ///
-/// This representation of snapshot have to be serialized into NuRaft
-/// buffer and send over network or saved to file.
+/// This representation of snapshot has to be serialized into NuRaft
+/// buffer and sent over network or saved to file.
 template<typename Storage>
 struct KeeperStorageSnapshot
 {
@@ -153,6 +153,20 @@ public:
     /// Serialize already compressed snapshot to disk (return path)
     SnapshotFileInfoPtr serializeSnapshotBufferToDisk(nuraft::buffer & buffer, uint64_t up_to_log_idx);
 
+    struct SnapshotReceiveInfo
+    {
+        std::unique_ptr<WriteBuffer> write_buf;
+        DiskPtr disk;
+        std::string tmp_path;
+    };
+
+    /// Chunked snapshot receive: open a temp file for writing and return write buffer + location.
+    /// The caller appends chunks and calls finalizeSnapshotReceive when done.
+    SnapshotReceiveInfo beginSnapshotReceive(uint64_t up_to_log_idx);
+
+    /// Finalize chunked receive: sync, rename temp → final, register snapshot.
+    SnapshotFileInfoPtr finalizeSnapshotReceive(uint64_t up_to_log_idx);
+
     /// Serialize snapshot directly to disk
     SnapshotFileInfoPtr serializeSnapshotToDisk(const KeeperStorageSnapshot<Storage> & snapshot);
 
@@ -202,10 +216,10 @@ private:
     LoggerPtr log = getLogger("KeeperSnapshotManager");
 };
 
-/// Keeper create snapshots in background thread. KeeperStateMachine just create
-/// in-memory snapshot from storage and push task for it serialization into
-/// special tasks queue. Background thread check this queue and after snapshot
-/// successfully serialized notify state machine.
+/// Keeper creates snapshots in background thread. KeeperStateMachine just creates
+/// in-memory snapshot from storage and pushes task for its serialization into
+/// special tasks queue. Background thread checks this queue and after snapshot
+/// successfully serialized notifies state machine.
 struct CreateSnapshotTask
 {
     KeeperStorageSnapshotPtr snapshot;

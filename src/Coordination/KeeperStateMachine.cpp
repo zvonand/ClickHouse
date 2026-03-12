@@ -15,6 +15,7 @@
 #include <Coordination/WriteBufferFromNuraftBuffer.h>
 #include <Disks/DiskLocal.h>
 #include <IO/ReadHelpers.h>
+#include <IO/copyData.h>
 #include <base/defines.h>
 #include <base/errnoToString.h>
 #include <base/move_extend.h>
@@ -57,12 +58,30 @@ namespace CoordinationSetting
     extern const CoordinationSettingsMilliseconds dead_session_check_period_ms;
     extern const CoordinationSettingsUInt64 min_request_size_for_cache;
     extern const CoordinationSettingsUInt64 snapshots_to_keep;
+    extern const CoordinationSettingsUInt64 snapshot_transfer_chunk_size;
 }
 
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int CORRUPTED_DATA;
+}
+
+IKeeperStateMachine::SnapshotReceiveCtx::~SnapshotReceiveCtx()
+{
+    /// Close the write buffer before removing the file so that the file handle is released.
+    write_buf.reset();
+    if (disk && !tmp_path.empty())
+    {
+        try
+        {
+            disk->removeFileIfExists(tmp_path);
+        }
+        catch (...)
+        {
+            tryLogCurrentException(__PRETTY_FUNCTION__);
+        }
+    }
 }
 
 IKeeperStateMachine::IKeeperStateMachine(
@@ -922,7 +941,7 @@ void KeeperStateMachine<Storage>::create_snapshot(nuraft::snapshot & s, nuraft::
 
 template<typename Storage>
 void KeeperStateMachine<Storage>::save_logical_snp_obj(
-    nuraft::snapshot & s, uint64_t & obj_id, nuraft::buffer & data, bool /*is_first_obj*/, bool /*is_last_obj*/)
+    nuraft::snapshot & s, uint64_t & obj_id, nuraft::buffer & data, bool is_first_obj, bool is_last_obj)
 {
     LOG_DEBUG(log, "Saving snapshot {} obj_id {}", s.get_last_log_idx(), obj_id);
 
@@ -930,64 +949,98 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
     nuraft::ptr<nuraft::buffer> snp_buf = s.serialize();
     nuraft::ptr<nuraft::snapshot> cloned_meta = nuraft::snapshot::deserialize(*snp_buf);
 
-    nuraft::ptr<nuraft::buffer> cloned_buffer;
-
     /// we rely on the fact that the snapshot disk cannot be changed during runtime
-    if (!isLocalDisk(*keeper_context->getSnapshotDisk()))
-        cloned_buffer = nuraft::buffer::clone(data);
+    const bool is_local_disk = isLocalDisk(*keeper_context->getSnapshotDisk());
 
     try
     {
         std::lock_guard lock(snapshots_lock);
-        /// Serialize snapshot to disk
-        latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(data, s.get_last_log_idx());
-        latest_snapshot_meta = cloned_meta;
-        latest_snapshot_buf = std::move(cloned_buffer);
-        LOG_DEBUG(log, "Saved snapshot {} to path {}", s.get_last_log_idx(), latest_snapshot_info->path);
+
+        if (is_first_obj && is_last_obj)
+        {
+            /// Single-chunk transfer (old leader or non-local disk): write the whole buffer at once.
+            nuraft::ptr<nuraft::buffer> cloned_buffer;
+            if (!is_local_disk)
+                cloned_buffer = nuraft::buffer::clone(data);
+
+            latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(data, s.get_last_log_idx());
+            latest_snapshot_meta = cloned_meta;
+            latest_snapshot_buf = std::move(cloned_buffer);
+        }
+        else
+        {
+            /// Chunked transfer: accumulate chunks into a temp file.
+            if (is_first_obj)
+            {
+                /// Reset any leftover state from a previous incomplete receive.
+                snapshot_receive_ctx.reset();
+                auto recv_info = snapshot_manager.beginSnapshotReceive(s.get_last_log_idx());
+                snapshot_receive_ctx = std::make_unique<SnapshotReceiveCtx>();
+                snapshot_receive_ctx->write_buf = std::move(recv_info.write_buf);
+                snapshot_receive_ctx->log_idx = s.get_last_log_idx();
+                snapshot_receive_ctx->disk = std::move(recv_info.disk);
+                snapshot_receive_ctx->tmp_path = std::move(recv_info.tmp_path);
+            }
+
+            if (!snapshot_receive_ctx)
+                throw Exception(ErrorCodes::LOGICAL_ERROR, "Snapshot receive context is null for obj_id {}", obj_id);
+
+            if (snapshot_receive_ctx->log_idx != s.get_last_log_idx())
+                throw Exception(
+                    ErrorCodes::LOGICAL_ERROR,
+                    "Snapshot receive context log_idx {} does not match snapshot log_idx {} for obj_id {}",
+                    snapshot_receive_ctx->log_idx,
+                    s.get_last_log_idx(),
+                    obj_id);
+
+            /// Append this chunk to the temp file.
+            ReadBufferFromNuraftBuffer reader(data);
+            copyData(reader, *snapshot_receive_ctx->write_buf);
+
+            if (is_last_obj)
+            {
+                /// Flush, sync and rename temp → final.
+                snapshot_receive_ctx->write_buf->sync();
+                snapshot_receive_ctx->write_buf->finalize();
+                snapshot_receive_ctx->write_buf.reset();
+
+                latest_snapshot_info = snapshot_manager.finalizeSnapshotReceive(s.get_last_log_idx());
+                latest_snapshot_meta = cloned_meta;
+                /// Non-local disk not supported for chunked transfer (leader sends single chunk for those).
+                latest_snapshot_buf = nullptr;
+                snapshot_receive_ctx.reset();
+            }
+        }
+
+        if (is_last_obj)
+            LOG_DEBUG(log, "Saved snapshot {} to path {}", s.get_last_log_idx(), latest_snapshot_info->path);
+
         obj_id++;
         ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshot);
     }
     catch (...)
     {
+        snapshot_receive_ctx.reset();
         tryLogCurrentException(log);
     }
 }
 
-static int bufferFromFile(LoggerPtr log, const std::string & path, nuraft::ptr<nuraft::buffer> & data_out)
+namespace
 {
-    if (path.empty() || !std::filesystem::exists(path))
-    {
-        LOG_WARNING(log, "Snapshot file {} does not exist", path);
-        return -1;
-    }
 
-    int fd = ::open(path.c_str(), O_RDONLY);
-    LOG_INFO(log, "Opening file {} for read_logical_snp_obj", path);
-    if (fd < 0)
-    {
-        LOG_WARNING(log, "Error opening {}, error: {}, errno: {}", path, errnoToString(), errno);
-        return errno;
-    }
-    auto file_size = ::lseek(fd, 0, SEEK_END);
-    ::lseek(fd, 0, SEEK_SET);
-    auto * chunk = reinterpret_cast<nuraft::byte *>(::mmap(nullptr, file_size, PROT_READ, MAP_FILE | MAP_SHARED, fd, 0));
-    if (chunk == MAP_FAILED)
-    {
-        LOG_WARNING(log, "Error mmapping {}, error: {}, errno: {}", path, errnoToString(), errno);
-        [[maybe_unused]] int err = ::close(fd);
-        chassert(!err || errno == EINTR);
-        return errno;
-    }
-    data_out = nuraft::buffer::alloc(file_size);
-    data_out->put_raw(chunk, file_size);
-    ::munmap(chunk, file_size);
-    [[maybe_unused]] int err = ::close(fd);
-    chassert(!err || errno == EINTR);
-    return 0;
+/// Per-peer context kept alive across chunked snapshot transfer calls on the leader.
+struct SnapshotTransferCtx
+{
+    int fd = -1;
+    nuraft::byte * mmap_ptr = nullptr;
+    uint64_t file_size = 0;
+    uint64_t chunk_size = 0;
+};
+
 }
 
 int IKeeperStateMachine::read_logical_snp_obj(
-    nuraft::snapshot & s, void *& /*user_snp_ctx*/, uint64_t obj_id, nuraft::ptr<nuraft::buffer> & data_out, bool & is_last_obj)
+    nuraft::snapshot & s, void *& user_snp_ctx, uint64_t obj_id, nuraft::ptr<nuraft::buffer> & data_out, bool & is_last_obj)
 {
     LOG_DEBUG(log, "Reading snapshot {} obj_id {}", s.get_last_log_idx(), obj_id);
 
@@ -1005,25 +1058,133 @@ int IKeeperStateMachine::read_logical_snp_obj(
     }
 
     const auto & [path, disk, size] = *latest_snapshot_info;
-    if (isLocalDisk(*disk))
+
+    if (!isLocalDisk(*disk))
     {
-        auto full_path = fs::path(disk->getPath()) / path;
-        if (bufferFromFile(log, full_path, data_out))
-        {
-            LOG_WARNING(log, "Error reading snapshot {} from {}", s.get_last_log_idx(), full_path);
-            return -1;
-        }
-    }
-    else
-    {
+        /// Non-local disk: fall back to sending the whole buffer at once.
         chassert(latest_snapshot_buf);
         data_out = nuraft::buffer::clone(*latest_snapshot_buf);
+        is_last_obj = true;
+        ProfileEvents::increment(ProfileEvents::KeeperReadSnapshot);
+        return 1;
     }
 
-    is_last_obj = true;
-    ProfileEvents::increment(ProfileEvents::KeeperReadSnapshot);
+    /// Local disk: use mmap + chunked transfer via user_snp_ctx.
+    if (obj_id == 0)
+    {
+        /// Free any leftover context from a previous incomplete transfer. This can happen when
+        /// a joining server retries from obj_id=0 without NuRaft calling free_user_snp_ctx first.
+        if (user_snp_ctx != nullptr)
+            free_user_snp_ctx(user_snp_ctx);
 
+        /// First chunk: open and mmap the file, allocate transfer context.
+        auto full_path = fs::path(disk->getPath()) / path;
+        if (full_path.empty() || !std::filesystem::exists(full_path))
+        {
+            LOG_WARNING(log, "Snapshot file {} does not exist", full_path);
+            return -1;
+        }
+
+        int fd = ::open(full_path.string().c_str(), O_RDONLY);
+        LOG_INFO(log, "Opening snapshot file {} for chunked transfer", full_path);
+        if (fd < 0)
+        {
+            LOG_WARNING(log, "Error opening {}, error: {}, errno: {}", full_path, errnoToString(), errno);
+            return -1;
+        }
+
+        auto raw_file_size = ::lseek(fd, 0, SEEK_END);
+        if (raw_file_size < 0)
+        {
+            LOG_WARNING(log, "Error getting size of {}, error: {}, errno: {}", full_path, errnoToString(), errno);
+            [[maybe_unused]] int err = ::close(fd);
+            chassert(!err || errno == EINTR);
+            return -1;
+        }
+        auto file_size = static_cast<uint64_t>(raw_file_size);
+
+        if (file_size == 0)
+        {
+            LOG_WARNING(log, "Snapshot file {} is empty", full_path);
+            [[maybe_unused]] int err = ::close(fd);
+            chassert(!err || errno == EINTR);
+            return -1;
+        }
+
+        auto * mmap_ptr = reinterpret_cast<nuraft::byte *>(::mmap(nullptr, file_size, PROT_READ, MAP_FILE | MAP_SHARED, fd, 0));
+        if (mmap_ptr == MAP_FAILED)
+        {
+            LOG_WARNING(log, "Error mmapping {}, error: {}, errno: {}", full_path, errnoToString(), errno);
+            [[maybe_unused]] int err = ::close(fd);
+            chassert(!err || errno == EINTR);
+            return -1;
+        }
+
+        const uint64_t configured_chunk_size = keeper_context->getCoordinationSettings()[CoordinationSetting::snapshot_transfer_chunk_size];
+        /// chunk_size == 0 means disabled: send the whole file in one object (backward-compatible behavior).
+        const uint64_t effective_chunk_size = configured_chunk_size == 0 ? file_size : configured_chunk_size;
+
+        try
+        {
+            user_snp_ctx = new SnapshotTransferCtx{fd, mmap_ptr, file_size, effective_chunk_size};
+        }
+        catch (...)
+        {
+            /// Allocation failed before user_snp_ctx was set, so free_user_snp_ctx will not be called
+            /// by NuRaft — clean up fd and mmap manually before propagating.
+            ::munmap(mmap_ptr, file_size);
+            [[maybe_unused]] int err = ::close(fd);
+            chassert(!err || errno == EINTR);
+            throw;
+        }
+    }
+
+    auto * ctx = reinterpret_cast<SnapshotTransferCtx *>(user_snp_ctx);
+    if (!ctx)
+    {
+        LOG_WARNING(log, "Snapshot transfer context is null for obj_id {}", obj_id);
+        chassert(false); /// This should not happen, catch in CI.
+        return -1;
+    }
+
+    try
+    {
+        const uint64_t offset = obj_id * ctx->chunk_size;
+        if (offset >= ctx->file_size)
+        {
+            LOG_WARNING(log, "Snapshot obj_id {} is out of range (file_size={})", obj_id, ctx->file_size);
+            chassert(false); /// This should not happen, catch in CI.
+            return -1;
+        }
+
+        const uint64_t chunk_size = std::min(ctx->chunk_size, ctx->file_size - offset);
+        data_out = nuraft::buffer::alloc(chunk_size);
+        data_out->put_raw(ctx->mmap_ptr + offset, chunk_size);
+
+        chassert(offset + chunk_size <= ctx->file_size);
+        is_last_obj = (offset + chunk_size == ctx->file_size);
+    }
+    catch (...)
+    {
+        tryLogCurrentException(log);
+        return -1;
+    }
+
+    ProfileEvents::increment(ProfileEvents::KeeperReadSnapshot);
     return 1;
+}
+
+void IKeeperStateMachine::free_user_snp_ctx(void *& user_snp_ctx)
+{
+    if (!user_snp_ctx)
+        return;
+
+    auto * ctx = reinterpret_cast<SnapshotTransferCtx *>(user_snp_ctx);
+    ::munmap(ctx->mmap_ptr, ctx->file_size);
+    [[maybe_unused]] int err = ::close(ctx->fd);
+    chassert(!err || errno == EINTR);
+    delete ctx;
+    user_snp_ctx = nullptr;
 }
 
 template<typename Storage>

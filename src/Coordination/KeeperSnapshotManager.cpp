@@ -754,6 +754,31 @@ SnapshotFileInfoPtr KeeperSnapshotManager<Storage>::serializeSnapshotBufferToDis
 }
 
 template<typename Storage>
+KeeperSnapshotManager<Storage>::SnapshotReceiveInfo KeeperSnapshotManager<Storage>::beginSnapshotReceive(uint64_t up_to_log_idx)
+{
+    auto disk = getLatestSnapshotDisk();
+    auto tmp_path = "tmp_" + getSnapshotFileName(up_to_log_idx, compress_snapshots_zstd);
+    return {disk->writeFile(tmp_path), disk, tmp_path};
+}
+
+template<typename Storage>
+SnapshotFileInfoPtr KeeperSnapshotManager<Storage>::finalizeSnapshotReceive(uint64_t up_to_log_idx)
+{
+    auto disk = getLatestSnapshotDisk();
+    auto snapshot_file_name = getSnapshotFileName(up_to_log_idx, compress_snapshots_zstd);
+    auto tmp_path = "tmp_" + snapshot_file_name;
+
+    disk->moveFile(tmp_path, snapshot_file_name);
+
+    auto snapshot_file_info = std::make_shared<SnapshotFileInfo>(snapshot_file_name, disk);
+    existing_snapshots.emplace(up_to_log_idx, snapshot_file_info);
+    removeOutdatedSnapshotsIfNeeded();
+    moveSnapshotsIfNeeded();
+
+    return snapshot_file_info;
+}
+
+template<typename Storage>
 nuraft::ptr<nuraft::buffer> KeeperSnapshotManager<Storage>::deserializeLatestSnapshotBufferFromDisk()
 {
     while (!existing_snapshots.empty())

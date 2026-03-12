@@ -204,43 +204,51 @@ arrow::Status AuthMiddlewareFactory::StartCall(
         return arrow::flight::MakeFlightError(arrow::flight::FlightStatusCode::Unauthenticated, e.what());
     }
 
-    if (auth)
-        token = token_storage.getToken(username, password);
-
-    std::string session_id;
-    auto session_it = headers.find("x-clickhouse-session-id");
-    if (session_it != headers.end())
-        session_id = std::string(session_it->second);
-
-    std::string session_check;
-    session_it = headers.find("x-clickhouse-session-check");
-    if (session_it != headers.end())
-        session_check = std::string(session_it->second);
-
-    std::string session_timeout_str;
-    session_it = headers.find("x-clickhouse-session-timeout");
-    if (session_it != headers.end())
-        session_timeout_str = std::string(session_it->second);
-
-    unsigned session_timeout = 0;
-    if (!session_timeout_str.empty())
+    try
     {
-        ReadBufferFromString buf(session_timeout_str);
-        if (!tryReadIntText(session_timeout, buf) || !buf.eof())
-            return arrow::Status::Invalid("Invalid session timeout: " + session_timeout_str);
+        std::string session_id;
+        auto session_it = headers.find("x-clickhouse-session-id");
+        if (session_it != headers.end())
+            session_id = std::string(session_it->second);
+
+        std::string session_check;
+        session_it = headers.find("x-clickhouse-session-check");
+        if (session_it != headers.end())
+            session_check = std::string(session_it->second);
+
+        std::string session_timeout_str;
+        session_it = headers.find("x-clickhouse-session-timeout");
+        if (session_it != headers.end())
+            session_timeout_str = std::string(session_it->second);
+
+        unsigned session_timeout = 0;
+        if (!session_timeout_str.empty())
+        {
+            ReadBufferFromString buf(session_timeout_str);
+            if (!tryReadIntText(session_timeout, buf) || !buf.eof())
+                return arrow::Status::Invalid("Invalid session timeout: " + session_timeout_str);
+        }
+
+        std::string session_close;
+        session_it = headers.find("x-clickhouse-session-close");
+        if (session_it != headers.end())
+            session_close = std::string(session_it->second);
+
+        if (session_id.empty())
+            session->makeSessionContext();
+        else
+            session->makeSessionContext(session_id, parseSessionTimeout(server.context()->getConfigRef(), session_timeout), session_check == "1");
+
+        if (auth)
+            token = token_storage.getToken(username, password);
+
+        *middleware = std::make_unique<AuthMiddleware>(session, token, username, session_id, session_close == "1" && server.config().getBool("enable_arrow_close_session", true));
+    }
+    catch (DB::Exception & e)
+    {
+        return arrow::Status::Invalid(e.what());
     }
 
-    std::string session_close;
-    session_it = headers.find("x-clickhouse-session-close");
-    if (session_it != headers.end())
-        session_close = std::string(session_it->second);
-
-    if (session_id.empty())
-        session->makeSessionContext();
-    else
-        session->makeSessionContext(session_id, parseSessionTimeout(server.context()->getConfigRef(), session_timeout), session_check == "1");
-
-    *middleware = std::make_unique<AuthMiddleware>(session, token, username, session_id, session_close == "1" && server.config().getBool("enable_arrow_close_session", true));
     return arrow::Status::OK();
 }
 

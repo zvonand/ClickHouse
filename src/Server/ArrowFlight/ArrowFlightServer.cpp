@@ -278,7 +278,7 @@ namespace
                 {
                     auto result = schema_modifier(schema);
                     if (!result.ok())
-                        throw Exception(ErrorCodes::UNKNOWN_EXCEPTION, "Failed to convert Arrow schema {}", schema->ToString());
+                        throw Exception(ErrorCodes::UNKNOWN_EXCEPTION, "Failed to convert Arrow schema: {} (schema: {})", result.status().ToString(), schema->ToString());
                     schema = result.ValueUnsafe();
                 }
             }
@@ -432,14 +432,6 @@ public:
         query_id_to_flight_descriptors[query_id].insert(flight_descriptor);
     }
 
-    std::optional<String> getQueryIdFromFlightDescriptor(const String & flight_descriptor)
-    {
-        std::lock_guard lock{mutex};
-        if (flight_descriptor_to_query_id.contains(flight_descriptor))
-            return flight_descriptor_to_query_id[flight_descriptor];
-        return std::nullopt;
-    }
-
     void eraseFlightDescriptorMapByQueryIdLocked(const String & query_id) TSA_REQUIRES(mutex)
     {
         auto it = query_id_to_flight_descriptors.find(query_id);
@@ -506,7 +498,7 @@ public:
             if (!previous_info->next_poll_descriptor)
                 throw Exception(ErrorCodes::LOGICAL_ERROR, "Adding a poll descriptor while the previous poll descriptor is final");
             poll_descriptor = *previous_info->next_poll_descriptor;
-            query_id =  getQueryIdFromFlightDescriptor(previous_info->poll_descriptor);
+            query_id =  getQueryIdByFlightDescriptor(previous_info->poll_descriptor);
         }
         else
         {
@@ -1851,7 +1843,7 @@ arrow::Status ArrowFlightServer::DoAction(
         if (action.type == arrow::flight::ActionType::kCancelFlightInfo.type)
         {
             ARROW_ASSIGN_OR_RAISE(auto request, arrow::flight::CancelFlightInfoRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}))
-            auto query_id = calls_data->getQueryIdFromFlightDescriptor(request.info->descriptor().cmd);
+            auto query_id = calls_data->getQueryIdByFlightDescriptor(request.info->descriptor().cmd);
             auto result = arrow::flight::CancelFlightInfoResult{arrow::flight::CancelStatus::kNotCancellable};
             if (query_id)
             {

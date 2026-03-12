@@ -326,18 +326,27 @@ namespace DB
                 static_cast<int>(std::numeric_limits<int8_t>::max()));
 
         std::vector<size_t> starts(num_variants);
-        std::vector<size_t> sizes(num_variants);
-
+        std::vector<size_t> ends(num_variants);
         arrow::Status status;
+        /// Here we are doing slicing - there is no clear specification on ColumnVariant having
+        /// offsets being monotonic and contiguous (though from current code it seems they are),
+        /// Arrow DenseUnion explicitly requires monotonicity, so we are going to tolerate non-contiguous
+        /// offsets, but raise an exception for violation of monotonicity.
         for (size_t idx = start; idx < discriminators.size() && idx < end; ++idx)
         {
             const auto & discriminator = discriminators[idx];
             if (discriminator != ColumnVariant::NULL_DISCRIMINATOR)
             {
                 auto global_discr = column.globalDiscriminatorByLocal(discriminator);
-                if (sizes[global_discr] == 0)
+                if (ends[global_discr] == 0)
                     starts[global_discr] = column_offsets[idx];
-                ++sizes[global_discr];
+                else if (column_offsets[idx] < ends[global_discr])
+                    throw Exception(
+                        ErrorCodes::ILLEGAL_COLUMN,
+                        "Cannot convert Variant to {} Arrow DenseUnion: "
+                        "variant offsets are not monotonic for discriminator {}",
+                        format_name, global_discr);
+                ends[global_discr] = column_offsets[idx] + 1;
             }
 
             if (discriminator == ColumnVariant::NULL_DISCRIMINATOR || (null_bytemap && (*null_bytemap)[idx]))
@@ -371,7 +380,7 @@ namespace DB
             status = MakeBuilder(arrow::default_memory_pool(), arrow_type, &variant_array_builder);
             checkStatus(status, variant->getName(), format_name);
 
-            if (sizes[i] == 0)
+            if (ends[i] == 0)
             {
                 auto empty_array = arrow::MakeArrayOfNull(arrow_type, 0).ValueOrDie();
                 children.push_back(empty_array);
@@ -386,7 +395,7 @@ namespace DB
                     variant_array_builder.get(),
                     format_name,
                     starts[i],
-                    starts[i] + sizes[i],
+                    ends[i],
                     settings,
                     dictionary_values);
 

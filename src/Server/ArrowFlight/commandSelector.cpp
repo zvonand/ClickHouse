@@ -24,6 +24,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int LOGICAL_ERROR;
+}
+
 namespace Setting
 {
     extern const SettingsBool output_format_arrow_unsupported_types_as_binary;

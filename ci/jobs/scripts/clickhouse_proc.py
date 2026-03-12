@@ -817,6 +817,10 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                     f"Failed to stop ClickHouse process {pid} gracefully - send TRAP signal to generate core file"
                 )
                 proc.send_signal(signal.SIGTRAP)
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
 
         return self
 

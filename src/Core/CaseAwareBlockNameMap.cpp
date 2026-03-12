@@ -67,7 +67,7 @@ public:
         auto it = map.find(key);
         if (it == map.end())
         {
-            return NOT_FOUND;
+            return CaseAwareBlockNameMap::NOT_FOUND;
         }
         return it->second;
     }
@@ -113,7 +113,7 @@ public:
         auto it = map.find(key);
         if (it == map.end())
         {
-            return NOT_FOUND;
+            return CaseAwareBlockNameMap::NOT_FOUND;
         }
         if(ambiguous_keys.contains(key)){
             throw Exception(ErrorCodes::INCORRECT_DATA, "Ambiguous field (`{}`) when processing data.", key);
@@ -163,7 +163,7 @@ public:
     {
         // First check if the key has an exact match
         auto idx = map.get(key);
-        if(idx != NOT_FOUND){
+        if(idx != CaseAwareBlockNameMap::NOT_FOUND){
             return idx;
         }
 

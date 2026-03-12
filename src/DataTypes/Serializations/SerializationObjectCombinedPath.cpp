@@ -88,6 +88,11 @@ void SerializationObjectCombinedPath::serializeBinaryBulkWithMultipleStreams(con
     throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Method serializeBinaryBulkWithMultipleStreams is not implemented for SerializationObjectCombinedPath");
 }
 
+void SerializationObjectCombinedPath::throwNoSerialization()
+{
+    throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Text/binary serialization is not implemented for object combined path subcolumn");
+}
+
 void SerializationObjectCombinedPath::deserializeBinaryBulkWithMultipleStreams(
     ColumnPtr & result_column,
     size_t rows_offset,

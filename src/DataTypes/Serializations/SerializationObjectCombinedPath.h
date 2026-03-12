@@ -7,11 +7,6 @@
 namespace DB
 {
 
-namespace ErrorCodes
-{
-    extern const int NOT_IMPLEMENTED;
-}
-
 /// Serialization of combined literal+sub-object Object subcolumns (the `$` subcolumn).
 /// For example, if we have type JSON and data {"a" : {"b" : {"c" : 42, "d" : "Hello"}}, "c" : [1, 2, 3]}
 /// this class will be responsible for reading combined path 'a' and will return a Dynamic column
@@ -69,10 +64,7 @@ public:
     bool tryDeserializeText(IColumn &, ReadBuffer &, const FormatSettings &, bool) const override { throwNoSerialization(); }
 
 private:
-    [[noreturn]] static void throwNoSerialization()
-    {
-        throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Text/binary serialization is not implemented for object combined path subcolumn");
-    }
+    [[noreturn]] static void throwNoSerialization();
 
     SerializationPtr literal_serialization;
     SerializationPtr sub_object_serialization;

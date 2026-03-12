@@ -51,7 +51,7 @@ def started_cluster():
         cluster.shutdown()
 
 
-def test_ddl_worker_bypasses_settings_constraints():
+def test_ddl_worker_clamps_settings_constraints():
     """
     Verify that the DDL worker on node2 clamps settings constraints
     when replaying a DDL entry from node1 that carries a setting
@@ -85,8 +85,7 @@ def test_ddl_worker_bypasses_settings_constraints():
     # Wait for the DDL worker's query to appear in query_log on node2.
     assert_eq_with_retry(
         node2,
-        f"SELECT count() FROM system.query_log WHERE query LIKE '%CREATE TABLE%{table_name}%'"
-        "AND type = 'QueryFinish' AND is_initial_query = 0",
+        f"SELECT count() FROM system.query_log WHERE query LIKE '%CREATE TABLE%{table_name}%' AND type = 'QueryFinish' AND is_initial_query = 0",
         "1\n",
         retry_count=30,
         sleep_time=1,

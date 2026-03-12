@@ -37,7 +37,7 @@ public:
 
     void transform(Chunk & chunk) override
     {
-        if (chunk.getChunkInfos().get<TotalsHavingChunkInfo>())
+        if (chunk.getChunkInfos().get<TotalsChunkInfo>())
             return;
 
         const size_t num_rows = chunk.getNumRows();

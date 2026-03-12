@@ -12,7 +12,7 @@ namespace DB
 /// This unfortunate crutch is needed, because for totals, `IOutputFormat::prepareTotals`
 /// may call the `cut` method on a column after the chunk already passed `MarshallBlocksTransform`.
 /// Since `ColumnBLOB` doesn't support `cut`, we need to skip marshalling for totals.
-class TotalsHavingChunkInfo final : public ChunkInfoCloneable<TotalsHavingChunkInfo>
+class TotalsChunkInfo final : public ChunkInfoCloneable<TotalsChunkInfo>
 {
 };
 

@@ -126,7 +126,7 @@ public:
 
     size_t hash(const Key & x) const { return static_cast<size_t>(x - min_key); }
 
-    FixedRangeHashTable();
+    FixedRangeHashTable() = default;
 
     FixedRangeHashTable(Key min_key_, Key max_key_)
         : min_key(min_key_)

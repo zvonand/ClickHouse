@@ -195,7 +195,7 @@ public:
         if (!buf)
             return end();
 
-        return iterator(this, firstPopulatedCell());
+        return iterator(this, const_cast<Cell *>(firstPopulatedCell()));
     }
 
     const_iterator end() const { return const_iterator(this, buf ? buf + num_cells : buf); }

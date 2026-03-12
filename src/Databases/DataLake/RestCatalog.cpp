@@ -891,7 +891,7 @@ bool RestCatalog::getTableMetadataImpl(
         }
         else
         {
-            result.setTableIsNotReadable(fmt::format("Cannot read table {}, because no 'metadata-location' in response", table_name));
+            result.setTableIsNotReadable(fmt::format("Cannot read table {}, because no 'location' in response", table_name));
         }
     }
 

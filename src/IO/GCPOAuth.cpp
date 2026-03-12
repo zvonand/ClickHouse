@@ -16,7 +16,6 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int AUTHENTICATION_FAILED;
-    extern const int BAD_ARGUMENTS;
 }
 
 GCPOAuthToken fetchGCPOAuthToken(

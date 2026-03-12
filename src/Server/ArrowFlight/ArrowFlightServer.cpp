@@ -730,7 +730,8 @@ public:
                 tickets.erase(it->second);
                 tickets_by_expiration_time.erase(it);
             }
-            for (auto it = poll_descriptors_by_expiration_time.begin(); it != poll_descriptors_by_expiration_time.end(); )
+
+            for (auto it = poll_descriptors_by_expiration_time.begin(); it != poll_descriptors_by_expiration_time.end();)
             {
                 if (current_time <= it->first)
                     break;

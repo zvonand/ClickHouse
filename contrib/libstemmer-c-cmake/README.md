@@ -60,6 +60,15 @@ git push --set-upstream origin Clickhouse/release/vX.X.X
 SOURCES=$(find ../libstemmer_c -name "*.c" -not -path "*/examples/*" | sort | sed 's|../libstemmer_c/|    ${LIBRARY_DIR}/|')
 
 cat > contrib/libstemmer-c-cmake/CMakeLists.txt << EOF
+
+option(ENABLE_LIBSTEMMER "Enable base64" \${ENABLE_LIBRARIES})
+
+if (NOT ENABLE_LIBSTEMMER)
+    message(STATUS "Not using libstemmer (snowball)")
+    return()
+endif()
+
+
 set(LIBRARY_DIR "\${ClickHouse_SOURCE_DIR}/contrib/libstemmer_c")
 
 add_library(_stemmer

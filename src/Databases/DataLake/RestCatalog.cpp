@@ -343,7 +343,9 @@ AccessToken RestCatalog::retrieveAccessToken() const
     if (object->has("expires_in"))
     {
         Int64 expires_in = object->getValue<Int64>("expires_in");
-        token.expires_at = std::chrono::system_clock::now() + std::chrono::seconds(expires_in - 300); /// 5 minutes buffer
+        /// Use 90% of the token lifetime as the validity window so that short-lived tokens
+        /// (e.g. expires_in=300) still get a sensible buffer instead of going non-positive.
+        token.expires_at = std::chrono::system_clock::now() + std::chrono::seconds(expires_in * 9 / 10);
     }
 
     return token;
@@ -424,7 +426,7 @@ AccessToken BigLakeCatalog::retrieveGoogleCloudAccessTokenFromRefreshToken() con
 
     AccessToken token;
     token.token = std::move(result.access_token);
-    token.expires_at = std::chrono::system_clock::now() + std::chrono::seconds(result.expires_in - 300);
+    token.expires_at = std::chrono::system_clock::now() + std::chrono::seconds(result.expires_in * 9 / 10);
     return token;
 }
 
@@ -503,12 +505,10 @@ AccessToken BigLakeCatalog::retrieveGoogleCloudAccessToken() const
     AccessToken token;
     token.token = object->getValue<String>("access_token");
 
-    /// For refresh token flow, tokens typically expire in 1 hour
-    /// We'll cache for 55 minutes to be safe
     if (object->has("expires_in"))
     {
         Int64 expires_in = object->getValue<Int64>("expires_in");
-        token.expires_at = std::chrono::system_clock::now() + std::chrono::seconds(expires_in - 300);
+        token.expires_at = std::chrono::system_clock::now() + std::chrono::seconds(expires_in * 9 / 10);
     }
 
     return token;
@@ -600,20 +600,9 @@ DB::Names RestCatalog::getTables() const
             runner.enqueueAndKeepTrack(
             [=, &tables, &mutex, this]
             {
-                try
-                {
-                    auto tables_in_namespace = getTables(current_namespace);
-                    std::lock_guard lock(mutex);
-                    std::move(tables_in_namespace.begin(), tables_in_namespace.end(), std::back_inserter(tables));
-                }
-                catch (const DB::Exception & e)
-                {
-                    /// Some catalog implementations (e.g. BigLake) do not support multi-level
-                    /// namespaces and return HTTP 400 when asked for tables of a namespace
-                    /// path that contains a separator (0x1F). Treat this as "no tables"
-                    /// so that other namespaces are still enumerated.
-                    LOG_WARNING(log, "Failed to list tables in namespace '{}', skipping: {}", current_namespace, e.message());
-                }
+                auto tables_in_namespace = getTables(current_namespace);
+                std::lock_guard lock(mutex);
+                std::move(tables_in_namespace.begin(), tables_in_namespace.end(), std::back_inserter(tables));
             });
         };
 
@@ -652,18 +641,7 @@ void RestCatalog::getNamespacesRecursive(
         if (func)
             func(current_namespace);
 
-        try
-        {
-            getNamespacesRecursive(current_namespace, result, stop_condition, func);
-        }
-        catch (const DB::Exception & e)
-        {
-            /// Some catalog implementations (e.g. BigLake) do not support multi-level
-            /// namespaces and return HTTP 400 when asked for sub-namespaces of a
-            /// namespace that is itself a child. Treat this as "no further children"
-            /// so that tables in already-enumerated namespaces are still returned.
-            LOG_WARNING(log, "Failed to list sub-namespaces of '{}', skipping: {}", current_namespace, e.message());
-        }
+        getNamespacesRecursive(current_namespace, result, stop_condition, func);
     }
 }
 

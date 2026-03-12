@@ -45,6 +45,7 @@ GCPOAuthToken fetchGCPOAuthToken(
     LOG_DEBUG(log, "Requesting GCP bearer token via OAuth2 refresh token flow");
 
     HTTPSessionPtr session;
+    std::exception_ptr last_exception;
     for (size_t i = 0; i < 5; ++i)
     {
         try
@@ -54,11 +55,12 @@ GCPOAuthToken fetchGCPOAuthToken(
         }
         catch (...)
         {
+            last_exception = std::current_exception();
             tryLogCurrentException(log);
         }
     }
     if (!session)
-        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Failed to create HTTP session for GCP OAuth2 token endpoint");
+        std::rethrow_exception(last_exception);
 
     Poco::Net::HTTPRequest request(
         Poco::Net::HTTPRequest::HTTP_POST,

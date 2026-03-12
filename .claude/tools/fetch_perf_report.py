@@ -93,14 +93,15 @@ def resolve_pr(pr_url):
         comments_json = subprocess.check_output(
             [
                 "gh", "api", f"repos/{gh_repo}/issues/{pr_number}/comments",
+                "--paginate",
                 "--jq",
-                '[.[] | select(.user.login == "clickhouse-gh[bot]") | {body, created_at}]'
-                " | sort_by(.created_at) | reverse",
+                '.[] | select(.user.login == "clickhouse-gh[bot]") | {body, created_at}',
             ],
             text=True,
             stderr=subprocess.PIPE,
         )
-        comments = json.loads(comments_json)
+        comments = [json.loads(line) for line in comments_json.strip().splitlines() if line.strip()]
+        comments.sort(key=lambda c: c.get("created_at", ""), reverse=True)
         if not comments:
             raise RuntimeError("No CI bot comment found")
 

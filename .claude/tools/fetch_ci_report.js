@@ -301,12 +301,13 @@ async function getCIReportsFromPR(prUrl) {
 
   // Fetch PR comments to find CI bot comment
   try {
-    const commentsJson = execSync(`gh api repos/ClickHouse/ClickHouse/issues/${prNumber}/comments --jq '[.[] | select(.user.login == "clickhouse-gh[bot]") | {body, created_at}] | sort_by(.created_at) | reverse'`, {
+    const commentsJson = execSync(`gh api repos/ClickHouse/ClickHouse/issues/${prNumber}/comments --paginate --jq '.[] | select(.user.login == "clickhouse-gh[bot]") | {body, created_at}'`, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
-    const comments = JSON.parse(commentsJson);
+    const comments = commentsJson.trim().split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
+    comments.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     if (!comments || comments.length === 0) {
       throw new Error('No CI bot comment found');
     }

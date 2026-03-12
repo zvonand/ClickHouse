@@ -3827,7 +3827,7 @@ void ClientBase::runNonInteractive()
         if (!buzzHouse())
             return;
     }
-    else if (!buzzHouse() && !queries.empty())
+    else if (!buzz_house && !queries.empty())
     {
         for (const auto & query : queries)
         {

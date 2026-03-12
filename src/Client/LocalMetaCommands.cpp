@@ -8,7 +8,8 @@ namespace DB
 namespace
 {
 
-    // Helper function to normalize the input and avoid issues
+// Helper function to normalize the input and avoid issues
+// Accepts formats with and without ';'
 String normalizeMetaCommand(std::string_view input)
 {
     String s(input);
@@ -23,6 +24,7 @@ String normalizeMetaCommand(std::string_view input)
     return s;
 }
 
+// Rewrites command LS into a query that produces the list of all files of the current directory
 std::optional<String> rewriteLS(std::string_view input)
 {
     const String normalized = normalizeMetaCommand(input);

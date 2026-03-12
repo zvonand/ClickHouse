@@ -34,11 +34,13 @@ namespace ErrorCodes
 }
 
 
-UInt128 SerializationVariant::getHash(const String & variant_name_)
+UInt128 SerializationVariant::getHash(const VariantSerializations & variant_serializations_, const String & variant_name_)
 {
     SipHash hash;
     hash.update("Variant");
     hash.update(variant_name_);
+    for (const auto & serialization : variant_serializations_)
+        hash.update(serialization->getHash());
     return hash.get128();
 }
 
@@ -75,7 +77,7 @@ SerializationPtr SerializationVariant::create(const DataTypes & variant_types_, 
         if (!serialization->supportsPooling())
             return std::shared_ptr<ISerialization>(new SerializationVariant(variant_types_, variant_serializations_, variant_names_, variant_name_));
     }
-    return ISerialization::pooled(getHash(variant_name_), [&] { return new SerializationVariant(variant_types_, variant_serializations_, variant_names_, variant_name_); });
+    return ISerialization::pooled(getHash(variant_serializations_, variant_name_), [&] { return new SerializationVariant(variant_types_, variant_serializations_, variant_names_, variant_name_); });
 }
 
 SerializationVariant::SerializationVariant(

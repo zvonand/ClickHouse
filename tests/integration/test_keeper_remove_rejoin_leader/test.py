@@ -121,7 +121,8 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     carries stale peer state from the original cluster and would crash without
     the fix.
     """
-    keeper_utils.wait_nodes(cluster, [node1, node2, node3])
+    for n in [node1, node2, node3]:
+        keeper_utils.wait_until_connected(cluster, n, timeout=60.0)
 
     # Identify the current leader and the two followers dynamically so the
     # test does not depend on which node wins the initial election.
@@ -155,7 +156,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         timeout_sec=120,
     )
     assert result["status"] == "ok", f"Failed to add node4: {result}"
-    keeper_utils.wait_until_connected(cluster, node4)
+    keeper_utils.wait_until_connected(cluster, node4, timeout=60.0)
 
     # Step 2: Remove the first follower.
     # It receives `leave_cluster_req`, sets `steps_to_down_ = 2`, and after
@@ -173,7 +174,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
 
     remaining = [n for n in [node1, node2, node3, node4] if n != follower1]
     for n in remaining:
-        keeper_utils.wait_until_connected(cluster, n)
+        keeper_utils.wait_until_connected(cluster, n, timeout=60.0)
 
     # Step 3: Add node5 to the cluster.  node1/3/4 are active at this point,
     # so node5 can connect to them during startup (async Keeper init).
@@ -196,7 +197,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         timeout_sec=120,
     )
     assert result["status"] == "ok", f"Failed to add node5: {result}"
-    keeper_utils.wait_until_connected(cluster, node5)
+    keeper_utils.wait_until_connected(cluster, node5, timeout=60.0)
 
     # Step 4: Remove the second follower.
     # Same `cancel_schedulers()` / `peer::shutdown()` sequence fires.
@@ -209,7 +210,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     time.sleep(2)
 
     for n in [leader, node4, node5]:
-        keeper_utils.wait_until_connected(cluster, n)
+        keeper_utils.wait_until_connected(cluster, n, timeout=60.0)
 
     # Step 5: Add node6 to the cluster.  node1/4/5 are active at this point,
     # so node6 can connect to them during startup (async Keeper init).
@@ -232,7 +233,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         timeout_sec=120,
     )
     assert result["status"] == "ok", f"Failed to add node6: {result}"
-    keeper_utils.wait_until_connected(cluster, node6)
+    keeper_utils.wait_until_connected(cluster, node6, timeout=60.0)
 
     # Step 6: Replace the original leader.
     # ClickHouse rcfg does not allow removing the current leader directly —

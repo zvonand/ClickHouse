@@ -905,10 +905,15 @@ MergeTreeTemporaryPartPtr MergeTreeDataWriter::writeTempPartImpl(
 
     for (const auto & projection : metadata_snapshot->getProjections())
     {
+        /// Commit-order projections use `_block_number` which is only finalized at commit time.
+        /// Skip during insert; they will be built correctly during the first merge.
+        if (projection.with_block_number)
+            continue;
+
         Block projection_block;
         {
             ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::MergeTreeDataWriterProjectionsCalculationMicroseconds);
-            projection_block = projection.calculate(block, 0, block_number, context, perm_ptr);
+            projection_block = projection.calculate(block, 0, context, perm_ptr);
             LOG_DEBUG(
                 log, "Spent {} ms calculating projection {} for the part {}", watch.elapsed() / 1000, projection.name, new_data_part->name);
         }

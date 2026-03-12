@@ -38,7 +38,6 @@ public:
         const ProjectionDescription & projection_desc,
         const Block & block,
         UInt64 starting_offset,
-        UInt64 block_number,
         ContextPtr context,
         const IColumnPermutation * perm_ptr) const override;
 };

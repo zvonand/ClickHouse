@@ -1553,7 +1553,7 @@ bool PartMergerWriter::mutateOriginalPartAndPrepareProjections()
 
             {
                 ProfileEventTimeIncrement<Microseconds> projection_watch(ProfileEvents::MutateTaskProjectionsCalculationMicroseconds);
-                Block block_to_squash = ctx->projections_to_build[i]->calculate(cur_block, starting_offset, ctx->new_data_part->info.min_block, ctx->context);
+                Block block_to_squash = ctx->projections_to_build[i]->calculate(cur_block, starting_offset, ctx->context);
 
                 /// Everything is deleted by lighweight delete
                 if (block_to_squash.rows() == 0)

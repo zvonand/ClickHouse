@@ -58,29 +58,6 @@ extern const SettingsBool enable_positional_arguments_for_projections;
 
 }
 
-namespace
-{
-
-bool renameIdentifierInAST(ASTPtr & node, const std::string & from, const std::string & to)
-{
-    bool renamed = false;
-
-    if (auto * id = node->as<ASTIdentifier>())
-    {
-        if (id->name() == from)
-        {
-            id->setShortName(to);
-            renamed = true;
-        }
-    }
-
-    for (auto & child : node->children)
-        renamed |= renameIdentifierInAST(child, from, to);
-
-    return renamed;
-}
-
-}
 
 bool ProjectionDescription::isPrimaryKeyColumnPossiblyWrappedInFunctions(const ASTPtr & node) const
 {
@@ -423,28 +400,15 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
     {
         result.type = ProjectionDescription::Type::Normal;
 
-        /// Rename _block_number/_block_offset to _parent_block_number/_parent_block_offset in the ORDER BY AST
-        /// so the sorting key references the renamed physical columns, avoiding conflict with the projection
-        /// part's own virtual columns of the same name.
-        ASTPtr renamed_order_by = projection_order_by ? projection_order_by->clone() : nullptr;
-        bool has_block_number_in_key = false;
-        bool has_block_offset_in_key = false;
-
-        if (renamed_order_by)
-        {
-            has_block_number_in_key = renameIdentifierInAST(renamed_order_by, BlockNumberColumn::name, "_parent_block_number");
-            has_block_offset_in_key = renameIdentifierInAST(renamed_order_by, BlockOffsetColumn::name, "_parent_block_offset");
-        }
-
-        /// Build sorting key with renamed column names
+        /// Build sorting key — add virtual column types so KeyDescription can resolve them.
         auto columns_for_key = columns;
-        if (has_block_number_in_key && !columns.has("_parent_block_number"))
-            columns_for_key.add(ColumnDescription("_parent_block_number", BlockNumberColumn::type));
-        if (has_block_offset_in_key && !columns.has("_parent_block_offset"))
-            columns_for_key.add(ColumnDescription("_parent_block_offset", BlockOffsetColumn::type));
+        if (!columns.has(BlockNumberColumn::name))
+            columns_for_key.add(ColumnDescription(BlockNumberColumn::name, BlockNumberColumn::type));
+        if (!columns.has(BlockOffsetColumn::name))
+            columns_for_key.add(ColumnDescription(BlockOffsetColumn::name, BlockOffsetColumn::type));
 
-        metadata.sorting_key = KeyDescription::getSortingKeyFromAST(renamed_order_by, columns_for_key, query_context, {});
-        metadata.primary_key = KeyDescription::getKeyFromAST(renamed_order_by, columns_for_key, query_context);
+        metadata.sorting_key = KeyDescription::getSortingKeyFromAST(projection_order_by, columns_for_key, query_context, {});
+        metadata.primary_key = KeyDescription::getKeyFromAST(projection_order_by, columns_for_key, query_context);
         metadata.primary_key.definition_ast = nullptr;
     }
 
@@ -459,24 +423,16 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
         std::erase_if(result.required_columns, [](const String & s) { return s.contains("_part_offset"); });
     }
 
-    /// Rename parent _block_number to _parent_block_number column
+    /// Track whether projection stores _block_number/_block_offset from the parent table.
+    /// These are synthesized (not read from parent), so remove from required_columns.
     if (result.sample_block.has(BlockNumberColumn::name))
     {
-        auto new_column = result.sample_block.getByName(BlockNumberColumn::name);
-        new_column.name = "_parent_block_number";
-        result.sample_block.erase(BlockNumberColumn::name);
-        result.sample_block.insert(std::move(new_column));
         result.with_block_number = true;
         std::erase_if(result.required_columns, [](const String & s) { return s == BlockNumberColumn::name; });
     }
 
-    /// Rename parent _block_offset to _parent_block_offset column
     if (result.sample_block.has(BlockOffsetColumn::name))
     {
-        auto new_column = result.sample_block.getByName(BlockOffsetColumn::name);
-        new_column.name = "_parent_block_offset";
-        result.sample_block.erase(BlockOffsetColumn::name);
-        result.sample_block.insert(std::move(new_column));
         result.with_block_offset = true;
         std::erase_if(result.required_columns, [](const String & s) { return s == BlockOffsetColumn::name; });
     }
@@ -615,16 +571,16 @@ void ProjectionDescription::recalculateWithNewColumns(const ColumnsDescription &
 }
 
 Block ProjectionDescription::calculate(
-    const Block & block, UInt64 starting_offset, UInt64 block_number, ContextPtr context, const IColumnPermutation * perm_ptr) const
+    const Block & block, UInt64 starting_offset, ContextPtr context, const IColumnPermutation * perm_ptr) const
 {
     if (index)
-        return index->calculate(*this, block, starting_offset, block_number, context, perm_ptr);
+        return index->calculate(*this, block, starting_offset, context, perm_ptr);
 
-    return calculateByQuery(block, starting_offset, block_number, context, perm_ptr);
+    return calculateByQuery(block, starting_offset, context, perm_ptr);
 }
 
 Block ProjectionDescription::calculateByQuery(
-    const Block & block, UInt64 starting_offset, UInt64 block_number, ContextPtr context, const IColumnPermutation * perm_ptr) const
+    const Block & block, UInt64 starting_offset, ContextPtr context, const IColumnPermutation * perm_ptr) const
 {
     /// Nothing to project from an empty block. This can happen when TTL deletes all rows during merge.
     /// Aggregate projections with constant GROUP BY keys (e.g., GROUP BY 0.674) would produce 1 row
@@ -694,47 +650,13 @@ Block ProjectionDescription::calculateByQuery(
         source_block.insert({std::move(column), std::move(uint64), "_part_offset"});
     }
 
-    /// Create "_block_number" column when needed for commit order projection
+    /// Commit-order projections are only built during merge/mutation (skipped during insert),
+    /// so _block_number/_block_offset are always present in the input block.
     if (with_block_number)
-    {
-        if (!block.has(BlockNumberColumn::name))
-        {
-            /// Insert path
+        source_block.insert(block.getByName(BlockNumberColumn::name));
 
-            auto col = BlockNumberColumn::type->createColumn();
-            auto & data = assert_cast<ColumnUInt64 &>(*col).getData();
-            data.assign(block.rows(), block_number);
-
-            source_block.insert({std::move(col), BlockNumberColumn::type, BlockNumberColumn::name});
-        }
-        else
-        {
-            /// Rebuilding path
-            source_block.insert(block.getByName(BlockNumberColumn::name));
-        }
-    }
-
-    /// Create "_block_offset" column when needed for commit order projection
     if (with_block_offset)
-    {
-        if (!block.has(BlockOffsetColumn::name))
-        {
-            /// Insert path
-
-            auto col = BlockOffsetColumn::type->createColumn();
-            auto & data = assert_cast<ColumnUInt64 &>(*col).getData();
-            data.resize_exact(block.rows());
-            for (size_t i = 0; i < block.rows(); ++i)
-                data[perm_ptr ? (*perm_ptr)[i] : i] = i;
-
-            source_block.insert({std::move(col), BlockOffsetColumn::type, BlockOffsetColumn::name});
-        }
-        else
-        {
-            /// Rebuilding path
-            source_block.insert(block.getByName(BlockOffsetColumn::name));
-        }
-    }
+        source_block.insert(block.getByName(BlockOffsetColumn::name));
 
     auto builder = InterpreterSelectQuery(
                        query_ast_copy ? query_ast_copy : query_ast,
@@ -768,30 +690,6 @@ Block ProjectionDescription::calculateByQuery(
         auto new_column = projection_block.getByName("_part_offset");
         new_column.name = "_parent_part_offset";
         projection_block.erase("_part_offset");
-        projection_block.insert(std::move(new_column));
-    }
-
-    /// Rename parent _block_number to _parent_block_number column
-    if (with_block_number)
-    {
-        chassert(projection_block.has(BlockNumberColumn::name));
-        chassert(!projection_block.has("_parent_block_number"));
-
-        auto new_column = projection_block.getByName(BlockNumberColumn::name);
-        new_column.name = "_parent_block_number";
-        projection_block.erase(BlockNumberColumn::name);
-        projection_block.insert(std::move(new_column));
-    }
-
-    /// Rename parent _block_offset to _parent_block_offset column
-    if (with_block_offset)
-    {
-        chassert(projection_block.has(BlockOffsetColumn::name));
-        chassert(!projection_block.has("_parent_block_offset"));
-
-        auto new_column = projection_block.getByName(BlockOffsetColumn::name);
-        new_column.name = "_parent_block_offset";
-        projection_block.erase(BlockOffsetColumn::name);
         projection_block.insert(std::move(new_column));
     }
 

@@ -1109,10 +1109,20 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::prepareProjectionsToMergeAndRe
             if (it != part->getProjectionParts().end() && !it->second->is_broken)
                 projection_parts.push_back(it->second);
         }
+
         if (projection_parts.size() == global_ctx->future_part->parts.size())
         {
             global_ctx->projections_to_merge.push_back(&projection);
             global_ctx->projections_to_merge_parts[projection.name].assign(projection_parts.begin(), projection_parts.end());
+        }
+        else if (projection.with_block_number)
+        {
+            /// Commit-order projections are not written during insert (block number is not yet finalized).
+            /// When some source parts don't have the projection, rebuild it during the horizontal phase
+            /// where the correct `_block_number` values are available.
+            chassert(projection_parts.size() < global_ctx->future_part->parts.size());
+            LOG_DEBUG(ctx->log, "Projection {} will be rebuilt because some parts don't have it (commit-order projection)", projection.name);
+            global_ctx->projections_to_rebuild.push_back(&projection);
         }
         else
         {
@@ -1135,7 +1145,7 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::calculateProjections(const Blo
     for (size_t i = 0, size = global_ctx->projections_to_rebuild.size(); i < size; ++i)
     {
         const auto & projection = *global_ctx->projections_to_rebuild[i];
-        Block block_to_squash = projection.calculate(block, starting_offset, global_ctx->new_data_part->info.min_block, global_ctx->context);
+        Block block_to_squash = projection.calculate(block, starting_offset, global_ctx->context);
         /// Avoid replacing the projection squash header if nothing was generated (it used to return an empty block)
         if (block_to_squash.rows() == 0)
             continue;

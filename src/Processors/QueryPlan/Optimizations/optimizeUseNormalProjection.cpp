@@ -132,14 +132,9 @@ std::optional<String> optimizeUseNormalProjections(
     /// If `with_parent_part_offset` is true and the required columns include `_part_offset`,
     /// we need to remap it to `_parent_part_offset`. This ensures that the projection's
     /// ActionsDAG reads from the correct column and generates `_part_offset` in the output.
-    /// Same for `_block_number` -> `_parent_block_number` and `_block_offset` -> `_parent_block_offset`.
     bool with_parent_part_offset = std::any_of(normal_projections.begin(), normal_projections.end(), [](const auto & projection) { return projection->with_parent_part_offset; });
-    bool with_block_number = std::any_of(normal_projections.begin(), normal_projections.end(), [](const auto & projection) { return projection->with_block_number; });
-    bool with_block_offset = std::any_of(normal_projections.begin(), normal_projections.end(), [](const auto & projection) { return projection->with_block_offset; });
 
     bool need_parent_part_offset = false;
-    bool need_parent_block_number = false;
-    bool need_parent_block_offset = false;
 
     for (auto & name : required_columns)
     {
@@ -147,16 +142,6 @@ std::optional<String> optimizeUseNormalProjections(
         {
             name = "_parent_part_offset";
             need_parent_part_offset = true;
-        }
-        else if (with_block_number && name == "_block_number")
-        {
-            name = "_parent_block_number";
-            need_parent_block_number = true;
-        }
-        else if (with_block_offset && name == "_block_offset")
-        {
-            name = "_parent_block_offset";
-            need_parent_block_offset = true;
         }
     }
 
@@ -166,25 +151,12 @@ std::optional<String> optimizeUseNormalProjections(
         if (!query.build(*child))
             return {};
 
-        std::vector<std::tuple<std::string, std::string, DataTypePtr>> renames;
         if (need_parent_part_offset)
-            renames.emplace_back("_parent_part_offset", "_part_offset", std::make_shared<DataTypeUInt64>());
-        if (need_parent_block_number)
-            renames.emplace_back("_parent_block_number", "_block_number", std::make_shared<DataTypeUInt64>());
-        if (need_parent_block_offset)
-            renames.emplace_back("_parent_block_offset", "_block_offset", std::make_shared<DataTypeUInt64>());
-
-        if (!renames.empty())
         {
             ActionsDAG rename_dag;
-            for (const auto & [from, to, type] : renames)
-            {
-                const auto * from_node = &rename_dag.addInput(from, type);
-                const auto * to_node = &rename_dag.addAlias(*from_node, to);
-                rename_dag.addOrReplaceInOutputs(*to_node);
-            }
-
-            chassert(!rename_dag.getOutputs().empty());
+            const auto * from_node = &rename_dag.addInput("_parent_part_offset", std::make_shared<DataTypeUInt64>());
+            const auto * to_node = &rename_dag.addAlias(*from_node, "_part_offset");
+            rename_dag.addOrReplaceInOutputs(*to_node);
 
             if (query.dag)
                 query.dag = ActionsDAG::merge(std::move(rename_dag), *std::move(query.dag));

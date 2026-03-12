@@ -35,7 +35,7 @@ optimize table mt_merge_levels;
 optimize table mt_merge_levels;
 
 -- Check part_log ProfileEvents to verify rebuild vs merge behavior
-system flush logs;
+system flush logs part_log;
 
 select 'part_log: rebuild merges';
 select part_name, ProfileEvents['RebuiltProjections'] as rebuilt, ProfileEvents['MergedProjections'] as merged

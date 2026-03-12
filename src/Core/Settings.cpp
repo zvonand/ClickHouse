@@ -7394,6 +7394,12 @@ Always ignore ON CLUSTER clause for DDL queries with replicated databases.
 )", 0) \
     DECLARE(UInt64, archive_adaptive_buffer_max_size_bytes, 8 * DBMS_DEFAULT_BUFFER_SIZE, R"(
 Limits the maximum size of the adaptive buffer used when writing to archive files (for example, tar archives)", 0) \
+    DECLARE(Bool, enable_fixed_range_hash_table, true, R"(
+Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range.
+)", 0) \
+    DECLARE(UInt64, fixed_range_hash_table_max_size, 100'000, R"(
+Maximum range (max - min + 1) of join key values for the fixed range hash table optimization to apply.
+)", 0) \
     \
     /* ####################################################### */ \
     /* ########### START OF EXPERIMENTAL FEATURES ############ */ \
@@ -7665,12 +7671,6 @@ Maximum number of rows passed to a WebAssembly UDF in a single block. Set to 0 t
 )", EXPERIMENTAL) \
     DECLARE(UInt64, webassembly_udf_max_instances, 32, R"(
 Maximum number of WebAssembly UDF instances that can run in parallel per function.
-)", EXPERIMENTAL) \
-    DECLARE(Bool, enable_fixed_range_hash_table, true, R"(
-Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range.
-)", EXPERIMENTAL) \
-    DECLARE(UInt64, fixed_range_hash_table_max_size, 100'000, R"(
-Maximum range (max - min + 1) of join key values for the fixed range hash table optimization to apply.
 )", EXPERIMENTAL) \
     \
     /* ####################################################### */ \

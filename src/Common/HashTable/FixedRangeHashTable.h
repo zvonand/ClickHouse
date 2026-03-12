@@ -11,13 +11,13 @@ extern const int LOGICAL_ERROR;
 }
 
 /** Similar to FixedHashTable, but covers an arbitrary [min_key, max_key] subrange
-* instead of the full key type range. Allocates a flat array of `max_key - min_key + 1`                                                                                                                                                    
-* cells and indexes by `key - min_key`, requiring no hashing, no collision chains,
-* and no key comparison. Keys are not stored in cells but inferred from the array                                                                                                                                                          
-* index inside iterators.                                                                                                                                                                                                                  
-*
-* Used as an optimization for hash join when the key range is small enough to fit in memory.
-*/
+  *  instead of the full key type range. Allocates a flat array of `max_key - min_key + 1`
+  *  cells and indexes by `key - min_key`, requiring no hashing, no collision chains,
+  *  and no key comparison. Keys are not stored in cells but inferred from the array
+  *  index inside iterators.
+  *
+  * Used as an optimization for hash join when the key range is small enough to fit in memory.
+  */
 template <typename Key, typename Cell, typename Allocator>
 class FixedRangeHashTable : private boost::noncopyable, protected Allocator, protected Cell::State
 {

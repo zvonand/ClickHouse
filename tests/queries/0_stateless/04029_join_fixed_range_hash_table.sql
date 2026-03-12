@@ -22,28 +22,37 @@ SET enable_fixed_range_hash_table = 1;
 SELECT '-- trigger check Int32';
 SELECT count(*) FROM t_left JOIN t_right_i32 ON t_left.id = t_right_i32.id FORMAT NULL SETTINGS log_comment = '04029_range_hash_trigger_i32';
 
-SYSTEM FLUSH LOGS query_log;
-SELECT has(ProfileEvents.Names, 'BuiltJoinRangeHashMapMicroseconds') AS triggered
-FROM system.query_log
-WHERE log_comment = '04029_range_hash_trigger_i32' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() AND event_time >= NOW() - INTERVAL '10 MINUTE';
+SYSTEM FLUSH LOGS query_log, text_log;
+
+SELECT count() > 0 AS triggered
+FROM system.text_log
+WHERE event_date >= yesterday() AND event_time >= now() - 600
+      AND query_id IN ( SELECT query_id FROM system.query_log WHERE log_comment = '04029_range_hash_trigger_i32' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() )
+      AND message LIKE '%Converted join hash map to fixed range hash map%';
 
 -- Verify conversion for Int64
 SELECT '-- trigger check Int64';
 SELECT count(*) FROM t_left JOIN t_right_i64 ON t_left.id = t_right_i64.id FORMAT NULL SETTINGS log_comment = '04029_range_hash_trigger_i64';
 
-SYSTEM FLUSH LOGS query_log;
-SELECT has(ProfileEvents.Names, 'BuiltJoinRangeHashMapMicroseconds') AS triggered
-FROM system.query_log
-WHERE log_comment = '04029_range_hash_trigger_i64' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() AND event_time >= NOW() - INTERVAL '10 MINUTE';
+SYSTEM FLUSH LOGS query_log, text_log;
+
+SELECT count() > 0 AS triggered
+FROM system.text_log
+WHERE event_date >= yesterday() AND event_time >= now() - 600
+      AND query_id IN ( SELECT query_id FROM system.query_log WHERE log_comment = '04029_range_hash_trigger_i64' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() )
+      AND message LIKE '%Converted join hash map to fixed range hash map%';
 
 -- Verify conversion for negative range
 SELECT '-- trigger check negative';
 SELECT count(*) FROM t_left JOIN t_right_neg ON t_left.id = t_right_neg.id FORMAT NULL SETTINGS log_comment = '04029_range_hash_trigger_neg';
 
-SYSTEM FLUSH LOGS query_log;
-SELECT has(ProfileEvents.Names, 'BuiltJoinRangeHashMapMicroseconds') AS triggered
-FROM system.query_log
-WHERE log_comment = '04029_range_hash_trigger_neg' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() AND event_time >= NOW() - INTERVAL '10 MINUTE';
+SYSTEM FLUSH LOGS query_log, text_log;
+
+SELECT count() > 0 AS triggered
+FROM system.text_log
+WHERE event_date >= yesterday() AND event_time >= now() - 600
+      AND query_id IN ( SELECT query_id FROM system.query_log WHERE log_comment = '04029_range_hash_trigger_neg' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() )
+      AND message LIKE '%Converted join hash map to fixed range hash map%';
 
 -- Verify results
 -- ALL INNER JOIN

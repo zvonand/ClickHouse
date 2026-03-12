@@ -1,4 +1,5 @@
 -- Tags: no-fasttest
+-- no-fasttest: requires enable_lightweight_update (enable_block_number_column) not available in fasttest
 
 SET mutations_sync = 1;
 
@@ -56,8 +57,8 @@ DROP TABLE IF EXISTS t_mixed_dep;
 CREATE TABLE t_mixed_dep
 (
     c1 String EPHEMERAL,
-    c2 String MATERIALIZED concat(tryBase64Decode(c1), '-', c3),
-    c3 String
+    c3 String,
+    c2 String MATERIALIZED concat(tryBase64Decode(c1), '-', c3)
 )
 ENGINE = MergeTree
 ORDER BY tuple();
@@ -71,24 +72,24 @@ SELECT c2, c3 FROM t_mixed_dep;
 
 DROP TABLE t_mixed_dep;
 
--- Case 4: Lightweight delete path
-DROP TABLE IF EXISTS t_ephemeral_lightweight;
+-- Case 4: Lightweight UPDATE path — the actual scenario from issue #84981
+DROP TABLE IF EXISTS t_ephemeral_lwu;
 
-CREATE TABLE t_ephemeral_lightweight
+CREATE TABLE t_ephemeral_lwu
 (
     c1 String EPHEMERAL,
     c2 String MATERIALIZED tryBase64Decode(c1),
-    c3 UInt64
+    c3 Bool
 )
 ENGINE = MergeTree
-ORDER BY tuple();
+ORDER BY tuple()
+SETTINGS enable_block_number_column = 1, enable_block_offset_column = 1;
 
-INSERT INTO t_ephemeral_lightweight (c1, c3) VALUES ('SGVsbG8gV29ybGQh', 1);
-INSERT INTO t_ephemeral_lightweight (c1, c3) VALUES ('SGVsbG8gV29ybGQh', 2);
+INSERT INTO t_ephemeral_lwu (c1, c3) VALUES ('SGVsbG8gV29ybGQh', true);
 
-SELECT c2, c3 FROM t_ephemeral_lightweight ORDER BY c3;
+SET enable_lightweight_update = 1;
+UPDATE t_ephemeral_lwu SET c3 = false WHERE c2 = 'Hello World!';
 
-DELETE FROM t_ephemeral_lightweight WHERE c3 = 1;
-SELECT c2, c3 FROM t_ephemeral_lightweight ORDER BY c3;
+SELECT c2, c3 FROM t_ephemeral_lwu;
 
-DROP TABLE t_ephemeral_lightweight;
+DROP TABLE t_ephemeral_lwu;

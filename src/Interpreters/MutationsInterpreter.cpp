@@ -694,42 +694,28 @@ void MutationsInterpreter::prepare(bool dry_run)
                 auto query = column.default_desc.expression->clone();
                 replaceSubcolumnsToGetSubcolumnFunctionInQuery(query, all_columns_with_ephemeral);
                 auto syntax_result = TreeRewriter(context).analyze(query, all_columns_with_ephemeral);
-                auto required = syntax_result->requiredSourceColumns();
+                auto required_columns = syntax_result->requiredSourceColumns();
 
                 /// If the MATERIALIZED expression depends on any EPHEMERAL column,
                 /// skip it — EPHEMERAL columns are only available during INSERT
                 /// and cannot be read from disk during mutations.
-                bool depends_on_ephemeral = false;
-                for (const auto & dep : required)
-                {
-                    if (ephemeral_columns.contains(dep))
-                    {
-                        depends_on_ephemeral = true;
-                        break;
-                    }
-                }
-
-                if (depends_on_ephemeral)
+                if (std::ranges::any_of(required_columns,
+                    [&](const auto & dep) { return ephemeral_columns.contains(dep); }))
                 {
                     /// Warn if the mutation also updates a non-ephemeral dependency
                     /// of this MATERIALIZED column — the on-disk value will become stale.
-                    for (const auto & dep : required)
-                    {
-                        if (!ephemeral_columns.contains(dep) && updated_columns.contains(dep))
-                        {
-                            LOG_WARNING(logger,
-                                "MATERIALIZED column '{}' depends on both EPHEMERAL and regular "
-                                "columns that are being updated. Its value will NOT be recalculated "
-                                "during this mutation — the on-disk value may become inconsistent. "
-                                "To fix this, re-INSERT the affected rows.",
-                                column.name);
-                            break;
-                        }
-                    }
+                    if (std::ranges::any_of(required_columns, [&](const auto & dep)
+                        { return !ephemeral_columns.contains(dep) && updated_columns.contains(dep); }))
+                        LOG_WARNING(logger,
+                            "MATERIALIZED column '{}' depends on both EPHEMERAL and regular "
+                            "columns that are being updated. Its value will NOT be recalculated "
+                            "during this mutation — the on-disk value may become inconsistent. "
+                            "To fix this, re-INSERT the affected rows.",
+                            column.name);
                     continue;
                 }
 
-                for (const auto & dependency : required)
+                for (const auto & dependency : required_columns)
                     if (updated_columns.contains(dependency))
                         column_to_affected_materialized[dependency].push_back(column.name);
             }

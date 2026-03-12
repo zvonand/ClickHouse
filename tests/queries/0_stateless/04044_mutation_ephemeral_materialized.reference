@@ -5,6 +5,4 @@ Hello World!	hello	HELLO
 Hello World!	world	WORLD
 Hello World!-hello	hello
 Hello World!-hello	world
-Hello World!	1
-Hello World!	2
-Hello World!	2
+Hello World!	false

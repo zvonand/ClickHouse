@@ -138,7 +138,7 @@ ContextMutablePtr buildContext(const ContextPtr & context, const SelectQueryOpti
                 getLogger("InterpreterSelectQueryAnalyzer"),
                 "Setting 'enable_parallel_replicas' is enabled but 'automatic_parallel_replicas_mode' is not zero."
                 " To enforce use of parallel replicas, please disable 'automatic_parallel_replicas_mode'.");
-            result_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));
+            result_context->setSetting("enable_parallel_replicas", Field(0));
         }
         else
         {
@@ -157,7 +157,7 @@ QueryPlanPtr buildQueryPlanForAutomaticParallelReplicas(
     {
         LOG_TRACE(
             logger,
-            "Setting 'allow_experimental_parallel_reading_from_replicas' is disabled. Skipping building query plan with parallel "
+            "Setting 'enable_parallel_replicas' is disabled. Skipping building query plan with parallel "
             "replicas.");
         return QueryPlanPtr{};
     }

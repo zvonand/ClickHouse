@@ -1121,7 +1121,7 @@ void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projectio
         }
         else
         {
-            fuzzOrderByList(select->orderBy().get(), select->select()->children.size());
+            fuzz(select->orderBy()->children);
         }
     }
 }
@@ -2793,7 +2793,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             addOrReplacePredicate(select, ASTSelectQuery::Expression::QUALIFY);
         }
 
-        if (select->orderBy())
+        if (select->orderBy().get())
         {
             if (fuzz_rand() % 50 == 0)
             {
@@ -2803,12 +2803,12 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             }
             else
             {
+                if (fuzz_rand() % 50 == 0)
+                {
+                    select->order_by_all = !select->order_by_all;
+                }
                 fuzzOrderByList(select->orderBy().get(), select->select()->children.size());
             }
-        }
-        if (select->orderBy().get() && fuzz_rand() % 50 == 0)
-        {
-            select->order_by_all = !select->order_by_all;
         }
         if (select->limitLength())
         {

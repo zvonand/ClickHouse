@@ -583,6 +583,7 @@ class Result(MetaClasses.Serializable):
                 self.Status.FAILED,
                 self.Status.DROPPED,
                 self.StatusExtended.FAIL,
+                self.StatusExtended.UNKNOWN,
             ):
                 has_failed = True
         if has_running:

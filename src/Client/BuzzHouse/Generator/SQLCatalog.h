@@ -489,7 +489,7 @@ public:
     }
     SQLPolicy & operator=(const SQLPolicy & other) = default;
 
-    void setName(RowPolicy * f) const;
+    void setName(Policy * f) const;
 };
 
 struct ColumnPathChainEntry

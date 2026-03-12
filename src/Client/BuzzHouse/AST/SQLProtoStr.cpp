@@ -89,7 +89,7 @@ CONV_FN(Function, func)
     ret += func.function();
 }
 
-CONV_FN(RowPolicy, rowp)
+CONV_FN(Policy, rowp)
 {
     ret += rowp.policy();
 }
@@ -3626,12 +3626,12 @@ CONV_FN(SQLObjectName, son)
         case SQLObjectNameType::kFunction:
             FunctionToString(ret, son.function());
             break;
-        case SQLObjectNameType::kRowPolicy:
-            RowPolicyToString(ret, son.row_policy().policy());
-            if (son.row_policy().has_target())
+        case SQLObjectNameType::kPolicy:
+            PolicyToString(ret, son.policy().policy());
+            if (son.policy().has_target())
             {
                 ret += " ON ";
-                ExprSchemaTableToString(ret, son.row_policy().target());
+                ExprSchemaTableToString(ret, son.policy().target());
             }
             break;
         default:
@@ -3647,7 +3647,6 @@ static const String SQLObjectToString(const SQLObject obj)
         return "MASKING POLICY";
     return SQLObject_Name(obj);
 }
-
 
 CONV_FN(Drop, dt)
 {
@@ -3676,7 +3675,7 @@ CONV_FN(Drop, dt)
         ret += ", ";
         if (dt.sobject() == SQLObject::ROW_POLICY || dt.sobject() == SQLObject::MASKING_POLICY)
         {
-            RowPolicyToString(ret, other_object.row_policy().policy());
+            PolicyToString(ret, other_object.policy().policy());
         }
         else
         {
@@ -4531,6 +4530,35 @@ static void RowPolicyClausesToString(
     }
 }
 
+static void MaskingPolicyClausesToString(
+    String & ret, const CreateMaskingPolicy & cmp, const bool has_where_expr, const WhereStatement & where_expr, const bool to_all)
+{
+    if (cmp.has_first_update())
+    {
+        ret += " UPDATE ";
+        UpdateSetToString(ret, cmp.first_update());
+        for (int i = 0; i < cmp.other_updates_size(); i++)
+        {
+            ret += ", ";
+            UpdateSetToString(ret, cmp.other_updates(i));
+        }
+    }
+    if (has_where_expr)
+    {
+        ret += " WHERE ";
+        WhereStatementToString(ret, where_expr);
+    }
+    if (to_all)
+    {
+        ret += " TO ALL";
+    }
+    if (cmp.has_priority())
+    {
+        ret += " PRIORITY ";
+        ret += std::to_string(cmp.priority());
+    }
+}
+
 CONV_FN(AlterItem, alter)
 {
     ret += alter.paren() ? "(" : "";
@@ -4819,19 +4847,29 @@ CONV_FN(AlterItem, alter)
             ret += "MODIFY ";
             RefreshableViewToString(ret, alter.refresh());
             break;
-        case AlterType::kAlterRowPolicy: {
-            const AlterRowPolicyContent & arpc = alter.alter_row_policy();
+        case AlterType::kAlterPolicy: {
+            const AlterPolicyContent & apc = alter.alter_policy();
+
             ret += "ON ";
-            ExprSchemaTableToString(ret, arpc.target());
-            if (arpc.has_rename_to())
+            ExprSchemaTableToString(ret, apc.target());
+            if (apc.has_rename_to())
             {
                 ret += " RENAME TO ";
-                RowPolicyToString(ret, arpc.rename_to());
+                PolicyToString(ret, apc.rename_to());
             }
-            RowPolicyClausesToString(
-                ret, arpc.has_is_restrictive(), arpc.is_restrictive(), arpc.for_select(), arpc.has_where_expr(), arpc.where_expr());
-            break;
+            if (apc.has_masking())
+            {
+                MaskingPolicyClausesToString(ret, apc.masking(), apc.has_where_expr(), apc.where_expr(), false);
+            }
+            else
+            {
+                const CreateRowPolicy & crp = apc.row();
+
+                RowPolicyClausesToString(
+                    ret, crp.has_is_restrictive(), crp.is_restrictive(), crp.for_select(), apc.has_where_expr(), apc.where_expr());
+            }
         }
+        break;
         default:
             ret += "DELETE WHERE TRUE";
     }
@@ -5787,7 +5825,7 @@ CONV_FN(CreatePolicy, cp)
     {
         ret += "OR REPLACE ";
     }
-    RowPolicyToString(ret, cp.policy());
+    PolicyToString(ret, cp.policy());
     if (cp.has_cluster())
     {
         ClusterToString(ret, true, cp.cluster());
@@ -5796,28 +5834,9 @@ CONV_FN(CreatePolicy, cp)
     ExprSchemaTableToString(ret, cp.target());
     if (is_masking)
     {
-        const CreateMaskingPolicy & cmp = cp.masking();
-
-        ret += " UPDATE ";
-        UpdateSetToString(ret, cmp.first_update());
-        for (int i = 0; i < cmp.other_updates_size(); i++)
-        {
-            ret += ", ";
-            UpdateSetToString(ret, cmp.other_updates(i));
-        }
-        if (cp.has_where_expr())
-        {
-            ret += " WHERE ";
-            WhereStatementToString(ret, cp.where_expr());
-        }
-        ret += " TO ALL";
-        if (cmp.has_priority())
-        {
-            ret += " PRIORITY ";
-            ret += std::to_string(cmp.priority());
-        }
+        MaskingPolicyClausesToString(ret, cp.masking(), cp.has_where_expr(), cp.where_expr(), true);
     }
-    else
+    else if (cp.has_row())
     {
         const CreateRowPolicy & crp = cp.row();
 

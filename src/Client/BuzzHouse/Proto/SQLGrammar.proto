@@ -1786,7 +1786,7 @@ message Function {
     required string function = 1;
 }
 
-message RowPolicy {
+message Policy {
     required string policy = 1;
 }
 
@@ -3568,8 +3568,8 @@ enum SQLObject {
     MASKING_POLICY = 7;
 }
 
-message RowPolicyName {
-    required RowPolicy policy = 1;
+message PolicyName {
+    required Policy policy = 1;
     optional ExprSchemaTable target = 2;
 }
 
@@ -3578,7 +3578,7 @@ message SQLObjectName {
         ExprSchemaTable est = 1;
         Database database = 2;
         Function function = 3;
-        RowPolicyName row_policy = 4;
+        PolicyName policy = 4;
     }
 }
 
@@ -3996,12 +3996,25 @@ message MovePartition {
     required Storage storage = 2;
 }
 
-message AlterRowPolicyContent {
+message CreateRowPolicy {
+    optional bool is_restrictive = 1;
+    optional bool for_select = 2;
+}
+
+message CreateMaskingPolicy {
+    optional UpdateSet first_update = 1;
+    repeated UpdateSet other_updates = 2;
+    optional int32 priority = 3;
+}
+
+message AlterPolicyContent {
     required ExprSchemaTable target = 1;
-    optional bool is_restrictive = 2;
-    optional bool for_select = 3;
-    optional WhereStatement where_expr = 4;
-    optional RowPolicy rename_to = 5;
+    optional WhereStatement where_expr = 2;
+    oneof create_policy_oneof {
+        CreateRowPolicy row = 3;
+        CreateMaskingPolicy masking = 4;
+    }
+    optional Policy rename_to = 5;
 }
 
 message AlterItem {
@@ -4061,8 +4074,8 @@ message AlterItem {
         RefreshableView refresh = 51;
         /// For tables, views and databases
         string comment = 52;
-        /// For row policies
-        AlterRowPolicyContent alter_row_policy = 53;
+        /// For policies
+        AlterPolicyContent alter_policy = 53;
     }
 }
 
@@ -4371,21 +4384,10 @@ message ShowStatement {
     optional SettingValues setting_values = 24;
 }
 
-message CreateRowPolicy {
-    optional bool is_restrictive = 1;
-    optional bool for_select = 2;
-}
-
-message CreateMaskingPolicy {
-    optional UpdateSet first_update = 1;
-    repeated UpdateSet other_updates = 2;
-    optional int32 priority = 3;
-}
-
 message CreatePolicy {
     required CreateReplaceOption create_opt = 1;
     optional bool if_not_exists = 2;
-    required RowPolicy policy = 3;
+    required Policy policy = 3;
     required ExprSchemaTable target = 4;
     optional Cluster cluster = 5;
     optional WhereStatement where_expr = 6;

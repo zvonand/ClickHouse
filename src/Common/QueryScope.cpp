@@ -36,7 +36,23 @@ QueryScope & QueryScope::operator=(QueryScope && other) noexcept
 {
     if (this == &other)
         return *this;
+
+    if (initialized)
+    {
+        try
+        {
+            if (log_peak_memory_usage_in_destructor)
+                logPeakMemoryUsage();
+            CurrentThread::detachFromGroupIfNotDetached();
+        }
+        catch (...)
+        {
+            tryLogCurrentException("QueryScope", __PRETTY_FUNCTION__);
+        }
+    }
+
     initialized = other.initialized;
+    log_peak_memory_usage_in_destructor = other.log_peak_memory_usage_in_destructor;
     other.initialized = false;
     return *this;
 }

@@ -18,7 +18,7 @@ SET input_format_with_names_case_insensitive_column_matching='auto';
 
 INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10};
 
-INSERT INTO json_test FORMAT JSONEachRow {"AgE": 1, "aGe": 20}; -- { clientError INCORRECT_DATA }
+INSERT INTO json_test FORMAT JSONEachRow {"AgE": 1, "aGe": 20}; -- { serverError 117 }
 
 SELECT * FROM json_test;
 
@@ -51,11 +51,11 @@ CREATE TABLE json_test (AGE Int, age Int, id Int);
 
 SET input_format_with_names_case_insensitive_column_matching='ignore_case';
 
-INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10}; -- { clientError 117 }
+INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10}; -- { serverError 117 }
 
 INSERT INTO json_test FORMAT JSONEachRow {"id": 1000};
 
-INSERT INTO json_test FORMAT JSONEachRow {"id": 0, "age": 10}; -- { clientError 117 }
+INSERT INTO json_test FORMAT JSONEachRow {"id": 0, "age": 10}; -- { serverError 117 }
 
 SELECT * FROM json_test;
 
@@ -67,7 +67,7 @@ CREATE TABLE json_test (id Int);
 SET input_format_with_names_case_insensitive_column_matching='auto';
 SET input_format_json_ignore_unnecessary_fields=false;
 
-INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123}; -- { clientError 117 }
+INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123}; -- { serverError 117 }
 
 SET input_format_json_ignore_unnecessary_fields=true;
 
@@ -83,7 +83,7 @@ CREATE TABLE json_test (id Int);
 SET input_format_with_names_case_insensitive_column_matching='ignore_case';
 SET input_format_json_ignore_unnecessary_fields=false;
 
-INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123}; -- { clientError 117 }
+INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123}; -- { serverError 117 }
 
 SET input_format_json_ignore_unnecessary_fields=true;
 

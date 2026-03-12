@@ -80,7 +80,7 @@ inline size_t BSONEachRowRowInputFormat::columnIndex(std::string_view name, size
     if (position != CaseAwareBlockNameMap::SearchResult::NOT_FOUND)
     {
         if (key_index < prev_positions.size())
-            prev_positions[key_index] = {name, position};
+            prev_positions[key_index] = {getPort().getHeader().getByPosition(position).name, position};
 
         return position;
     }

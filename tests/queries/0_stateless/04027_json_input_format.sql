@@ -24,6 +24,19 @@ SELECT * FROM json_test;
 
 DROP TABLE json_test;
 
+-- Test auto case -- corner case
+CREATE TABLE json_test (age Int, AGE Int);
+
+SET input_format_with_names_case_insensitive_column_matching='auto';
+
+INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10};
+
+INSERT INTO json_test FORMAT JSONEachRow {"AGE": 10, "age": 0};
+
+SELECT * FROM json_test;
+
+DROP TABLE json_test;
+
 -- Test match case
 CREATE TABLE json_test (age Int, AGE Int, name String, NaMe String);
 

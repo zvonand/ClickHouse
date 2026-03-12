@@ -170,8 +170,7 @@ JoinSettings::JoinSettings(const Settings & query_settings)
     use_hash_table_stats_for_join_reordering = query_settings[Setting::use_hash_table_stats_for_join_reordering];
 
     enable_fixed_range_hash_table = query_settings[Setting::enable_fixed_range_hash_table];
-    /// Prevent FixedRangeHashTable from allocating more than 100MB.
-    fixed_range_hash_table_max_size = std::min<UInt64>(query_settings[Setting::fixed_range_hash_table_max_size], 3'000'000);
+    fixed_range_hash_table_max_size = query_settings[Setting::fixed_range_hash_table_max_size];
 }
 
 JoinSettings::JoinSettings(const QueryPlanSerializationSettings & settings)

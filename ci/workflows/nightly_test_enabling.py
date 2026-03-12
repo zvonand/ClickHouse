@@ -2,11 +2,20 @@ import copy
 
 from praktika import Workflow, Job
 
-from ci.defs.defs import BASE_BRANCH, DOCKERS, SECRETS, ArtifactConfigs, ArtifactNames, BuildTypes, JobNames, RunnerLabels
+from ci.defs.defs import (
+    BASE_BRANCH,
+    DOCKERS,
+    SECRETS,
+    ArtifactConfigs,
+    ArtifactNames,
+    BuildTypes,
+    JobNames,
+    RunnerLabels,
+)
 from ci.defs.job_configs import JobConfigs, common_build_job_config
 
 w_schedule = Workflow.Config(
-    name="NightlyCoverage",
+    name="NightlyEnabling",
     event=Workflow.Event.SCHEDULE,
     branches=[BASE_BRANCH],
     jobs=[
@@ -35,11 +44,8 @@ w_schedule = Workflow.Config(
     cron_schedules=["13 2 * * *"],
 )
 w_dispatch = copy.copy(w_schedule)
-w_dispatch.event = Workflow.Event.PULL_REQUEST # Workflow.Event.DISPATCH REMOVEME
+w_dispatch.event = Workflow.Event.PULL_REQUEST  # Workflow.Event.DISPATCH REMOVEME
 w_dispatch.branches = []
 w_dispatch.base_branches = [BASE_BRANCH]
 
-WORKFLOWS = [
-    w_schedule,
-    w_dispatch
-]
+WORKFLOWS = [w_schedule, w_dispatch]

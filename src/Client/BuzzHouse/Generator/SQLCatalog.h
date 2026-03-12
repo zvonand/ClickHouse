@@ -145,7 +145,15 @@ public:
     String getColumnName() const;
 };
 
-struct SQLDatabase
+struct WithCluster
+{
+public:
+    std::optional<String> cluster;
+
+    const std::optional<String> & getCluster() const { return cluster; }
+};
+
+struct SQLDatabase : WithCluster
 {
 public:
     bool random_engine = false;
@@ -157,7 +165,6 @@ public:
     uint32_t shard_counter = 0;
     uint32_t backup_number = 0;
     DatabaseEngineValues deng;
-    std::optional<String> cluster;
     DetachStatus attached = DetachStatus::ATTACHED;
     IntegrationCall integration = IntegrationCall::None;
     /// For DataLakeCatalog
@@ -185,8 +192,6 @@ public:
 
     bool isReplicatedOrSharedDatabase() const;
 
-    const std::optional<String> & getCluster() const;
-
     bool isAttached() const;
 
     bool isDettached() const;
@@ -202,7 +207,7 @@ public:
     void finishDatabaseSpecification(DatabaseEngine * de);
 };
 
-struct SQLBase
+struct SQLBase : WithCluster
 {
 public:
     String prefix;
@@ -217,7 +222,6 @@ public:
     uint32_t replica_counter = 0;
     uint32_t shard_counter = 0;
     std::shared_ptr<SQLDatabase> db = nullptr;
-    std::optional<String> cluster;
     std::optional<String> file_comp;
     std::optional<String> partition_strategy;
     std::optional<String> partition_columns_in_data_file;
@@ -366,8 +370,6 @@ public:
 
     bool hasClickHousePeer() const;
 
-    const std::optional<String> & getCluster() const;
-
     bool isAttached() const;
 
     bool isDettached() const;
@@ -433,7 +435,9 @@ public:
 struct SQLView : SQLBase
 {
 public:
-    bool is_materialized = false, is_refreshable = false, has_with_cols = false;
+    bool is_materialized = false;
+    bool is_refreshable = false;
+    bool has_with_cols = false;
     uint32_t staged_ncols = 0;
     std::unordered_set<uint32_t> cols;
 
@@ -458,26 +462,21 @@ public:
     bool supportsFinal() const;
 };
 
-struct SQLFunction
+struct SQLFunction : WithCluster
 {
 public:
     bool is_deterministic = false;
-    uint32_t fname = 0, nargs = 0;
-    std::optional<String> cluster;
-
-    const std::optional<String> & getCluster() const;
+    uint32_t fname = 0;
+    uint32_t nargs = 0;
 
     void setName(Function * f) const;
 };
 
-struct SQLRowPolicy
+struct SQLRowPolicy : WithCluster
 {
 public:
     uint32_t policy_id = 0;
     uint32_t table_id = 0;
-    std::optional<String> cluster;
-
-    const std::optional<String> & getCluster() const;
 
     void setName(RowPolicy * f) const;
 };

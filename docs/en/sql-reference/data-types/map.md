@@ -122,7 +122,7 @@ For maps with many distinct keys this becomes a bottleneck.
 Bucketed serialization (`with_buckets`) splits the key-value pairs into multiple independent substreams (buckets) by hashing the key.
 When a query accesses `m['key']`, only the bucket that contains that key is read from disk, skipping all other buckets.
 
-### Enabling Bucketed Serialization
+### Enabling Bucketed Serialization {#enabling-bucketed-serialization}
 
 ```sql
 CREATE TABLE tab (id UInt64, m Map(String, UInt64))
@@ -145,7 +145,7 @@ SETTINGS
     map_buckets_strategy = 'sqrt';
 ```
 
-### How It Works
+### How It Works {#how-it-works}
 
 When a data part is written with `with_buckets` serialization:
 
@@ -173,7 +173,7 @@ The bucket count can vary between parts. When parts with different bucket counts
 | `map_buckets_coefficient` | `1.0` | Multiplier for `sqrt` and `linear` strategies. Ignored when strategy is `constant`. |
 | `map_buckets_min_avg_size` | `32` | Minimum average keys per row to enable bucketing. If the average is below this threshold, a single bucket is used regardless of other settings. Set to `0` to disable the threshold. |
 
-### Performance Trade-offs
+### Performance Trade-offs {#performance-trade-offs}
 
 The following table summarizes the performance impact of `with_buckets` compared to `basic` serialization at various map sizes (10 to 10,000 keys per row). The bucket count was determined by the `sqrt` strategy capped at 32. The exact numbers depend on key/value types, data distribution, and hardware.
 
@@ -185,7 +185,7 @@ The following table summarizes the performance impact of `with_buckets` compared
 | **Full map scan** (`SELECT m`) | ~2x slower | ~2x slower | ~2x slower | ~2x slower | Must read and reassemble all buckets. |
 | **INSERT** | 1.5–2.5x slower | 1.5–2.5x slower | 1.5–2.5x slower | 1.5–2.5x slower | Overhead of hashing keys and writing to multiple substreams. |
 
-### Recommendations
+### Recommendations {#recommendations}
 
 - **Small maps (< 32 keys on average):** Keep `basic` serialization. The overhead of bucketing is not justified for small maps. The default `map_buckets_min_avg_size = 32` enforces this automatically.
 - **Medium maps (32–100 keys):** Use `with_buckets` with `sqrt` strategy if queries frequently access individual keys. The speedup is 4–8x for single-key lookups.
@@ -197,7 +197,7 @@ The following table summarizes the performance impact of `with_buckets` compared
 
 If bucketed `Map` serialization does not fit your use case, there are two alternative approaches for improving key-level access performance:
 
-#### Using the JSON Data Type
+#### Using the JSON Data Type {#using-the-json-data-type}
 
 The [JSON](/sql-reference/data-types/newjson) data type stores each frequent path as a separate dynamic subcolumn. Paths that exceed the `max_dynamic_paths` limit go into a [shared data structure](/sql-reference/data-types/newjson#shared-data-structure), which can use `advanced` serialization for optimized single-path reads. See the [blog post](https://clickhouse.com/blog/json-data-type-gets-even-better) for a detailed overview of the `advanced` serialization.
 
@@ -212,7 +212,7 @@ The [JSON](/sql-reference/data-types/newjson) data type stores each frequent pat
 
 Use `JSON` when different keys need different value types, when the set of keys varies significantly across rows, or when frequently accessed keys are known in advance and can be declared as typed paths for direct subcolumn access.
 
-#### Manual Sharding into Multiple Map Columns
+#### Manual Sharding into Multiple Map Columns {#manual-sharding-into-multiple-map-columns}
 
 You can manually split a single `Map` into multiple columns by key hash at the application level:
 

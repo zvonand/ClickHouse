@@ -1515,7 +1515,10 @@ void ColumnDynamic::takeOrCalculateStatisticsFrom(const Columns & source_columns
 
     auto & variant_col = getVariantColumn();
     for (size_t i = 0; i != variant_info.variant_names.size(); ++i)
-        variant_col.getVariantByGlobalDiscriminator(i).takeOrCalculateStatisticsFrom(variants_source_columns[i]);
+    {
+        if (!variants_source_columns[i].empty())
+            variant_col.getVariantByGlobalDiscriminator(i).takeOrCalculateStatisticsFrom(variants_source_columns[i]);
+    }
 }
 
 void ColumnDynamic::applyNullMap(const ColumnVector<UInt8>::Container & null_map)

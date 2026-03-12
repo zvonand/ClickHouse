@@ -1934,7 +1934,8 @@ void ColumnObject::takeOrCalculateStatisticsFrom(const Columns & source_columns)
             if (it != source_object.dynamic_paths.end())
                 dynamic_path_source_columns.push_back(it->second);
         }
-        column->takeOrCalculateStatisticsFrom(dynamic_path_source_columns);
+        if (!dynamic_path_source_columns.empty())
+            column->takeOrCalculateStatisticsFrom(dynamic_path_source_columns);
     }
 
     /// Recursively update statistics for typed paths.

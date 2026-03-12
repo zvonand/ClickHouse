@@ -14,7 +14,7 @@ CREATE TABLE mt_replacing_test(
 )
 ENGINE = ReplacingMergeTree(ver)
 ORDER BY a
-SETTINGS enable_block_number_column=1, enable_block_offset_column=1, deduplicate_merge_projection_mode='rebuild';
+SETTINGS enable_block_number_column=1, enable_block_offset_column=1, allow_commit_order_projection=1, deduplicate_merge_projection_mode='rebuild';
 
 INSERT INTO mt_replacing_test VALUES (1, 1), (2, 1), (3, 1);
 INSERT INTO mt_replacing_test VALUES (2, 2), (3, 2);  -- newer versions for a=2, a=3

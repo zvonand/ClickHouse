@@ -11,7 +11,7 @@ CREATE TABLE mt_commit_order_idx(
 )
 ENGINE = MergeTree
 ORDER BY a
-settings enable_block_number_column=1, enable_block_offset_column=1, index_granularity=1;
+settings enable_block_number_column=1, enable_block_offset_column=1, allow_commit_order_projection=1, index_granularity=1;
 
 insert into mt_commit_order_idx select rand(), rand() from numbers(10);
 insert into mt_commit_order_idx select rand(), rand() from numbers(10);

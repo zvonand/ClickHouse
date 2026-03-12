@@ -18,7 +18,7 @@ CREATE TABLE mt_materialize(
 )
 ENGINE = MergeTree
 ORDER BY a
-settings enable_block_number_column=1, enable_block_offset_column=1;
+settings enable_block_number_column=1, enable_block_offset_column=1, allow_commit_order_projection=1;
 
 insert into mt_materialize values (3, 30) (1, 10) (2, 20);
 insert into mt_materialize values (6, 60) (4, 40) (5, 50);

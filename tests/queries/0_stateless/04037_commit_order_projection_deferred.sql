@@ -16,7 +16,7 @@ CREATE TABLE mt_deferred(
 )
 ENGINE = MergeTree
 ORDER BY a
-settings enable_block_number_column=1, enable_block_offset_column=1;
+settings enable_block_number_column=1, enable_block_offset_column=1, allow_commit_order_projection=1;
 
 -- Insert several parts
 insert into mt_deferred(a) values (3) (1) (2);

@@ -14,7 +14,7 @@ CREATE TABLE mt_mutation_test(
 )
 ENGINE = MergeTree
 ORDER BY a
-SETTINGS enable_block_number_column=1, enable_block_offset_column=1;
+SETTINGS enable_block_number_column=1, enable_block_offset_column=1, allow_commit_order_projection=1;
 
 INSERT INTO mt_mutation_test VALUES (7, 'a'), (2, 'b'), (11, 'c');
 INSERT INTO mt_mutation_test VALUES (5, 'd'), (14, 'e'), (1, 'f');

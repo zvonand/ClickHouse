@@ -16,7 +16,7 @@ CREATE TABLE rmt_commit_order(
 )
 ENGINE = ReplicatedMergeTree('/clickhouse/tables/{database}/rmt_commit_order', '1')
 ORDER BY a
-settings enable_block_number_column=1, enable_block_offset_column=1;
+settings enable_block_number_column=1, enable_block_offset_column=1, allow_commit_order_projection=1;
 
 insert into rmt_commit_order(a) values (8) (5) (2);
 insert into rmt_commit_order(a) values (10) (7) (9);

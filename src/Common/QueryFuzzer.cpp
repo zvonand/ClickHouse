@@ -509,6 +509,33 @@ NullsAction QueryFuzzer::fuzzNullsAction(NullsAction action)
     return action;
 }
 
+void QueryFuzzer::fuzzWindowDefinition(ASTWindowDefinition & def)
+{
+    auto removeChild = [](ASTWindowDefinition & wdef, ASTPtr & member)
+    {
+        auto & ch = wdef.children;
+        member->children.clear();
+        ch.erase(std::remove(ch.begin(), ch.end(), member), ch.end());
+        member = nullptr;
+    };
+
+    if (def.partition_by)
+    {
+        if (fuzz_rand() % 50 == 0)
+            removeChild(def, def.partition_by);
+        else
+            fuzzColumnLikeExpressionList(def.partition_by.get());
+    }
+    if (def.order_by)
+    {
+        if (fuzz_rand() % 50 == 0)
+            removeChild(def, def.order_by);
+        else
+            fuzzOrderByList(def.order_by.get(), 0);
+    }
+    fuzzWindowFrame(def);
+}
+
 void QueryFuzzer::fuzzWindowFrame(ASTWindowDefinition & def)
 {
     checkIterationLimit();
@@ -2562,35 +2589,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         if (fn->isWindowFunction() && fn->window_definition)
         {
             auto & def = fn->window_definition->as<ASTWindowDefinition &>();
-            if (def.partition_by)
-            {
-                if (fuzz_rand() % 50 == 0)
-                {
-                    auto & ch = def.children;
-                    def.partition_by->children.clear();
-                    ch.erase(std::remove(ch.begin(), ch.end(), def.partition_by), ch.end());
-                    def.partition_by = nullptr;
-                }
-                else
-                {
-                    fuzzColumnLikeExpressionList(def.partition_by.get());
-                }
-            }
-            if (def.order_by)
-            {
-                if (fuzz_rand() % 50 == 0)
-                {
-                    auto & ch = def.children;
-                    def.order_by->children.clear();
-                    ch.erase(std::remove(ch.begin(), ch.end(), def.order_by), ch.end());
-                    def.order_by = nullptr;
-                }
-                else
-                {
-                    fuzzOrderByList(def.order_by.get(), 0);
-                }
-            }
-            fuzzWindowFrame(def);
+            fuzzWindowDefinition(def);
         }
 
         fuzz(fn->children);
@@ -3212,35 +3211,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
     }
     else if (auto * wdef = typeid_cast<ASTWindowDefinition *>(ast.get()))
     {
-        if (wdef->partition_by)
-        {
-            if (fuzz_rand() % 50 == 0)
-            {
-                auto & ch = wdef->children;
-                wdef->partition_by->children.clear();
-                ch.erase(std::remove(ch.begin(), ch.end(), wdef->partition_by), ch.end());
-                wdef->partition_by = nullptr;
-            }
-            else
-            {
-                fuzzColumnLikeExpressionList(wdef->partition_by.get());
-            }
-        }
-        if (wdef->order_by)
-        {
-            if (fuzz_rand() % 50 == 0)
-            {
-                auto & ch = wdef->children;
-                wdef->order_by->children.clear();
-                ch.erase(std::remove(ch.begin(), ch.end(), wdef->order_by), ch.end());
-                wdef->order_by = nullptr;
-            }
-            else
-            {
-                fuzzOrderByList(wdef->order_by.get(), 0);
-            }
-        }
-        fuzzWindowFrame(*wdef);
+        fuzzWindowDefinition(*wdef);
         fuzz(wdef->children);
     }
     else if (auto * with_elem = typeid_cast<ASTWithElement *>(ast.get()))

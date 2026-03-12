@@ -28,6 +28,7 @@ The fix (NuRaft PR #91) adds an `is_shutdown_` flag to `peer` and a check in
 
 import json
 import os
+import shutil
 import time
 
 import pytest
@@ -80,6 +81,8 @@ def started_cluster():
         yield cluster
     finally:
         cluster.shutdown()
+        if os.path.exists(cluster.instances_dir):
+            shutil.rmtree(cluster.instances_dir)
 
 
 def send_rcfg(node, command, timeout_sec=60):

@@ -499,20 +499,20 @@ static void buildTreeOffset(
 
     if (frames.size() == 1)
     {
-        settings_format.detail_prefix += current.node->children.empty() ? "    " : "│   ";
+        settings_format.detail_prefix += current.node->children.empty() ? "   " : "│  ";
         return;
     }
 
     for (size_t i = 0; i < frames.size() - 2; ++i)
     {
-        const auto & segment = frames[i + 1].is_last_child ? "    " : "│   ";
+        const auto & segment = frames[i + 1].is_last_child ? "   " : "│  ";
         settings_format.header_prefix += segment;
         settings_format.detail_prefix += segment;
     }
 
-    settings_format.header_prefix += current.is_last_child ? "└── " : "├── ";
-    settings_format.detail_prefix += current.is_last_child ? "    " : "│   ";
-    settings_format.detail_prefix += current.node->children.empty() ? "    " : "│   ";
+    settings_format.header_prefix += current.is_last_child ? "└──" : "├──";
+    settings_format.detail_prefix += current.is_last_child ? "   " : "│  ";
+    settings_format.detail_prefix += current.node->children.empty() ? "   " : "│  ";
 }
 
 static void buildIndentOffset(const std::deque<ExplainPlan::Frame> & frames, IQueryPlanStep::FormatSettings & settings_format, size_t indent_offset)

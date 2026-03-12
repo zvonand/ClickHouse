@@ -42,6 +42,7 @@ TEST_CONFIGS = [
     TC("test_storage_iceberg_no_spark/", True, "no idea why i'm sequential"),
     TC("test_storage_iceberg_with_spark_cache/", True, "no idea why i'm sequential"),
     TC("test_storage_iceberg_concurrent/", True, "no idea why i'm sequential"),
+    TC("test_keeper_remove_rejoin_leader/", True, "no idea why i'm sequential"),
 ]
 
 IMAGES_ENV = {

@@ -1,4 +1,5 @@
 #include <Processors/QueryPlan/Optimizations/joinOrder.h>
+#include <Common/CurrentThread.h>
 
 #include <algorithm>
 #include <deque>

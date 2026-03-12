@@ -1,4 +1,5 @@
 #include <Disks/DiskObjectStorage/DiskObjectStorage.h>
+#include <Common/CurrentThread.h>
 
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadBufferFromEmptyFile.h>

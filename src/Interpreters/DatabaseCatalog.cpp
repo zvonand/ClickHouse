@@ -1,4 +1,5 @@
 #include <Interpreters/DatabaseCatalog.h>
+#include <Common/CurrentThread.h>
 
 #include <Access/ContextAccess.h>
 

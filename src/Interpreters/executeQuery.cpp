@@ -1,4 +1,5 @@
 #include <Common/DateLUTImpl.h>
+#include <Common/CurrentThread.h>
 #include <Common/Logger.h>
 #include <Common/logger_useful.h>
 #include <Common/Exception.h>

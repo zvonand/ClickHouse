@@ -1,4 +1,5 @@
 #include <Disks/IO/AsynchronousBoundedReadBuffer.h>
+#include <Common/CurrentThread.h>
 
 #include <Common/Stopwatch.h>
 #include <Common/logger_useful.h>

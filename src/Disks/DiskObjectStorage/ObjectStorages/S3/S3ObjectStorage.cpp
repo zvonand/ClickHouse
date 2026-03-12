@@ -1,4 +1,5 @@
 #include <Disks/DiskObjectStorage/ObjectStorages/S3/S3ObjectStorage.h>
+#include <Common/CurrentThread.h>
 #include <Common/setThreadName.h>
 #include <Common/ObjectStorageKey.h>
 

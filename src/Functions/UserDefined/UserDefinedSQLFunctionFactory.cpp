@@ -1,4 +1,5 @@
 #include <Functions/UserDefined/UserDefinedSQLFunctionFactory.h>
+#include <Common/CurrentThread.h>
 
 #include <AggregateFunctions/AggregateFunctionFactory.h>
 #include <Backups/RestorerFromBackup.h>

@@ -154,6 +154,7 @@ class Result(MetaClasses.Serializable):
                 elif result.status in (
                     Result.Status.FAILED,
                     Result.StatusExtended.FAIL,
+                    Result.StatusExtended.UNKNOWN,
                 ):
                     result_status = Result.Status.FAILED
                 else:

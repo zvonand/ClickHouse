@@ -4,40 +4,24 @@
 #include <Core/Block_fwd.h>
 #include <Processors/Chunk.h>
 
-#include <vector>
 #include <deque>
 
 namespace DB
 {
 
-struct ChunkWithOffsetAndLength
-{
-    explicit ChunkWithOffsetAndLength(Chunk chunk_, size_t offset_, size_t length_)
-        : chunk(std::move(chunk_))
-        , offset(offset_)
-        , length(length_)
-        {}
-
-    Chunk chunk;
-    size_t offset = 0;
-    size_t length = 0;
-};
-
-using ChunksWithOffsetsAndLengths = std::vector<ChunkWithOffsetAndLength>;
 
 class ChunksToSquash : public ChunkInfoCloneable<ChunksToSquash>
 {
-
 public:
     ChunksToSquash() = default;
     ChunksToSquash(const ChunksToSquash & other)
     {
-        data.reserve(other.data.size());
-        for (const auto & elem: other.data)
-           data.emplace_back(elem.chunk.clone(), elem.offset, elem.length);
+        chunks.reserve(other.chunks.size());
+        for (const auto & chunk: other.chunks)
+           chunks.push_back(chunk.clone());
     }
 
-    ChunksWithOffsetsAndLengths data = {};
+    std::vector<Chunk> chunks = {};
 };
 
 /** Merging consecutive passed blocks to specified minimum size.
@@ -80,13 +64,13 @@ private:
         size_t getRows() const { return rows; }
         size_t getBytes() const { return bytes; }
         void append(Chunk && chunk);
-        void append(Chunk && chunk, size_t rows_to_add, size_t bytes_to_add, size_t offset);
+        void append(Chunk && chunk, size_t rows_to_add, size_t bytes_to_add);
 
-        ChunksWithOffsetsAndLengths extract();
+        Chunks extract();
 
     private:
 
-        ChunksWithOffsetsAndLengths data;
+        Chunks data;
         size_t rows = 0;
         size_t bytes = 0;
     };
@@ -98,7 +82,6 @@ private:
             Chunk chunk;
             size_t rows;
             size_t bytes;
-            size_t offset;
         };
 
     public:
@@ -111,7 +94,7 @@ private:
         void pushBack(Chunk && chunk);
         size_t getOffset() const { return offset_first; }
         bool empty() const { return chunks.empty(); }
-        std::pair<size_t, size_t> calculateConsumable(size_t max_rows, size_t max_bytes) const;
+        size_t calculateConsumable(size_t max_rows, size_t max_bytes) const;
         ConsumeResult consumeUpTo(size_t max_rows, size_t max_bytes);
 
     private:
@@ -143,9 +126,8 @@ private:
     bool oneMaxReached() const;
     bool oneMaxReached(size_t rows, size_t bytes) const;
 
-    static Chunk squash(ChunksWithOffsetsAndLengths && input_data, Chunk::ChunkInfoCollection && infos, SharedHeader header);
-    static Chunk squash(Chunks &&input_chunks);
-    static Chunk squash(ChunksWithOffsetsAndLengths && input_data);
+    static Chunk squash(Chunks && input_chunks, Chunk::ChunkInfoCollection && infos, SharedHeader header);
+    static Chunk squash(Chunks && input_chunks);
 
     Chunk convertToChunk();
 

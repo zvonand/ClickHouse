@@ -89,6 +89,8 @@ namespace ProfileEvents
     extern const Event MergeTextIndexStageExecuteMilliseconds;
     extern const Event MergeProjectionStageExecuteMilliseconds;
     extern const Event MergeTreeDataWriterStatisticsCalculationMicroseconds;
+    extern const Event MergedProjections;
+    extern const Event RebuiltProjections;
 }
 
 namespace CurrentMetrics
@@ -1138,6 +1140,9 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::prepareProjectionsToMergeAndRe
             continue;
         }
     }
+
+    ProfileEvents::increment(ProfileEvents::MergedProjections, global_ctx->projections_to_merge.size());
+    ProfileEvents::increment(ProfileEvents::RebuiltProjections, global_ctx->projections_to_rebuild.size());
 
     const auto & settings = global_ctx->context->getSettingsRef();
 

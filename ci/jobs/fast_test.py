@@ -300,7 +300,7 @@ def main():
 
         test_results = FTResultsProcessor(wd=Settings.OUTPUT_DIR).run()
         if not res:
-            test_results.append(
+            test_results.results.append(
                 Result.create_from(
                     name="clickhouse-test",
                     status=Result.StatusExtended.FAIL,

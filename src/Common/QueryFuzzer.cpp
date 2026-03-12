@@ -2566,7 +2566,9 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             {
                 if (fuzz_rand() % 50 == 0)
                 {
+                    auto & ch = def.children;
                     def.partition_by->children.clear();
+                    ch.erase(std::remove(ch.begin(), ch.end(), def.partition_by), ch.end());
                     def.partition_by = nullptr;
                 }
                 else
@@ -2578,7 +2580,9 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             {
                 if (fuzz_rand() % 50 == 0)
                 {
+                    auto & ch = def.children;
                     def.order_by->children.clear();
+                    ch.erase(std::remove(ch.begin(), ch.end(), def.order_by), ch.end());
                     def.order_by = nullptr;
                 }
                 else
@@ -2795,6 +2799,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             {
                 select->orderBy()->children.clear();
                 select->setExpression(ASTSelectQuery::Expression::ORDER_BY, {});
+                select->order_by_all = false;
             }
             else
             {
@@ -3211,7 +3216,9 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         {
             if (fuzz_rand() % 50 == 0)
             {
+                auto & ch = wdef->children;
                 wdef->partition_by->children.clear();
+                ch.erase(std::remove(ch.begin(), ch.end(), wdef->partition_by), ch.end());
                 wdef->partition_by = nullptr;
             }
             else
@@ -3223,7 +3230,9 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         {
             if (fuzz_rand() % 50 == 0)
             {
+                auto & ch = wdef->children;
                 wdef->order_by->children.clear();
+                ch.erase(std::remove(ch.begin(), ch.end(), wdef->order_by), ch.end());
                 wdef->order_by = nullptr;
             }
             else

@@ -763,7 +763,7 @@ struct RetentionPolicy
     Int64 max_ref_age_ms = Iceberg::default_max_ref_age_ms;
 };
 
-static RetentionPolicy readRetentionPolicy(const Poco::JSON::Object::Ptr & metadata, ContextPtr context)
+static RetentionPolicy readRetentionPolicy(const Poco::JSON::Object::Ptr & metadata, ContextPtr context, const ExpireSnapshotsOptions & options)
 {
     RetentionPolicy policy;
     const auto & settings = context->getSettingsRef();
@@ -792,16 +792,23 @@ static RetentionPolicy readRetentionPolicy(const Poco::JSON::Object::Ptr & metad
     policy.max_snapshot_age_ms = max_snapshot_age_from_settings;
     policy.max_ref_age_ms = max_ref_age_from_settings;
 
-    if (!metadata->has(Iceberg::f_properties))
-        return policy;
+    if (metadata->has(Iceberg::f_properties))
+    {
+        auto props = metadata->getObject(Iceberg::f_properties);
+        if (props->has(Iceberg::f_min_snapshots_to_keep))
+            policy.min_snapshots_to_keep = std::stoi(props->getValue<String>(Iceberg::f_min_snapshots_to_keep));
+        if (props->has(Iceberg::f_max_snapshot_age_ms))
+            policy.max_snapshot_age_ms = std::stoll(props->getValue<String>(Iceberg::f_max_snapshot_age_ms));
+        if (props->has(Iceberg::f_max_ref_age_ms))
+            policy.max_ref_age_ms = std::stoll(props->getValue<String>(Iceberg::f_max_ref_age_ms));
+    }
 
-    auto props = metadata->getObject(Iceberg::f_properties);
-    if (props->has(Iceberg::f_min_snapshots_to_keep))
-        policy.min_snapshots_to_keep = std::stoi(props->getValue<String>(Iceberg::f_min_snapshots_to_keep));
-    if (props->has(Iceberg::f_max_snapshot_age_ms))
-        policy.max_snapshot_age_ms = std::stoll(props->getValue<String>(Iceberg::f_max_snapshot_age_ms));
-    if (props->has(Iceberg::f_max_ref_age_ms))
-        policy.max_ref_age_ms = std::stoll(props->getValue<String>(Iceberg::f_max_ref_age_ms));
+    /// Per-invocation overrides (only affect table-level defaults, not per-ref overrides).
+    if (options.retain_last.has_value())
+        policy.min_snapshots_to_keep = *options.retain_last;
+    if (options.retention_period_ms.has_value())
+        policy.max_snapshot_age_ms = *options.retention_period_ms;
+
     return policy;
 }
 
@@ -1314,12 +1321,7 @@ ExpireSnapshotsResult expireSnapshots(
         }
         else
         {
-            auto policy = readRetentionPolicy(metadata, context);
-            if (options.retain_last.has_value())
-                policy.min_snapshots_to_keep = *options.retain_last;
-            if (options.retention_period_ms.has_value())
-                policy.max_snapshot_age_ms = *options.retention_period_ms;
-
+            auto policy = readRetentionPolicy(metadata, context, options);
             SnapshotGraph graph(snapshots);
             auto [retention_retained_ids, retention_expired_ref_names] = applyRetentionPolicy(metadata, current_snapshot_id, graph, policy, now_ms);
             expired_ref_names = std::move(retention_expired_ref_names);

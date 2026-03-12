@@ -104,7 +104,7 @@ def create_and_populate(cluster, instance, storage_type, table_name, n_rows, for
 def expire_snapshots(instance, table_name, timestamp=None, args=None, settings=None):
     query_args = []
     if timestamp:
-        query_args.append(f"'{timestamp}'")
+        query_args.append(f"expire_before = '{timestamp}'")
     if args:
         query_args.extend(args)
 
@@ -221,7 +221,7 @@ def test_expire_snapshots_format_v1_error(started_cluster_iceberg_with_spark, st
     )
 
     error = instance.query_and_get_error(
-        f"ALTER TABLE {TABLE_NAME} EXECUTE expire_snapshots('2020-01-01 00:00:00');",
+        f"ALTER TABLE {TABLE_NAME} EXECUTE expire_snapshots(expire_before = '2020-01-01 00:00:00');",
         settings=ICEBERG_SETTINGS,
     )
     assert "BAD_ARGUMENTS" in error, f"Expected BAD_ARGUMENTS error for v1, got: {error}"

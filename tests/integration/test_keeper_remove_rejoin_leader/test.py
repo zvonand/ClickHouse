@@ -117,7 +117,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     Reproduces the crash from https://github.com/ClickHouse/NuRaft/pull/91.
 
     Strategy: replace the two followers first, then replace the leader.
-    Removing the leader triggers a new election; the winner (node4 or node5)
+    Transferring leadership to node4 or node5 triggers become_leader(), which
     carries stale peer state from the original cluster and would crash without
     the fix.
     """
@@ -234,18 +234,41 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     assert result["status"] == "ok", f"Failed to add node6: {result}"
     keeper_utils.wait_until_connected(cluster, node6)
 
-    # Step 6: Remove the original leader.
-    # This triggers a new election among {node4, node5, node6}.  The winner
-    # (node4 or node5) has stale peer objects whose `hb_task_` was set to null
-    # by `peer::shutdown()`.  Without the fix `enable_hb_for_peer()` would
-    # dereference that null pointer; with the fix it calls `p.reopen()` first.
+    # Step 6: Replace the original leader.
+    # ClickHouse rcfg does not allow removing the current leader directly —
+    # transfer_leadership must happen first.  Transferring leadership to node4,
+    # node5, or node6 is also exactly what triggers the bug: become_leader()
+    # calls enable_hb_for_peer() for every peer, and without the fix the stale
+    # hb_task_ = null left by peer::shutdown() causes a null pointer dereference.
     result = send_rcfg(
         leader,
+        {
+            "actions": [
+                {
+                    "transfer_leadership": [
+                        node_id(node4),
+                        node_id(node5),
+                        node_id(node6),
+                    ]
+                }
+            ]
+        },
+        timeout_sec=60,
+    )
+    assert result["status"] == "ok", f"Failed to transfer leadership: {result}"
+
+    # Find the new leader among the replacement nodes.
+    new_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
+    assert new_leader is not None, "No leader elected after leadership transfer"
+
+    # Remove the original leader (now a follower) from the cluster.
+    result = send_rcfg(
+        new_leader,
         {"actions": [{"remove_members": [node_id(leader)]}]},
         timeout_sec=30,
     )
     assert result["status"] == "ok", f"Failed to remove original leader: {result}"
 
-    # Verify the cluster recovered with a healthy leader.
-    new_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
-    assert new_leader is not None, "No leader elected after removing the original leader"
+    # Verify the cluster is healthy with a leader from the replacement nodes.
+    final_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
+    assert final_leader is not None, "No leader in final cluster after removing original leader"

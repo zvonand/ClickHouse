@@ -472,20 +472,22 @@ public:
     void setName(Function * f) const;
 };
 
-struct SQLRowPolicy : WithCluster
+struct SQLPolicy : WithCluster
 {
 public:
+    bool is_row = true;
     uint32_t policy_id = 0;
     uint32_t table_id = 0;
 
-    SQLRowPolicy() = default;
-    SQLRowPolicy(const SQLRowPolicy & other)
+    SQLPolicy() = default;
+    SQLPolicy(const SQLPolicy & other)
         : WithCluster(other)
     {
+        this->is_row = other.is_row;
         this->policy_id = other.policy_id;
         this->table_id = other.table_id;
     }
-    SQLRowPolicy & operator=(const SQLRowPolicy & other) = default;
+    SQLPolicy & operator=(const SQLPolicy & other) = default;
 
     void setName(RowPolicy * f) const;
 };

@@ -3565,6 +3565,7 @@ enum SQLObject {
     TABLE = 4;
     VIEW = 5;
     ROW_POLICY = 6;
+    MASKING_POLICY = 7;
 }
 
 message RowPolicyName {
@@ -3999,7 +4000,7 @@ message AlterRowPolicyContent {
     required ExprSchemaTable target = 1;
     optional bool is_restrictive = 2;
     optional bool for_select = 3;
-    optional Expr filter_expr = 4;
+    optional WhereStatement where_expr = 4;
     optional RowPolicy rename_to = 5;
 }
 
@@ -4371,14 +4372,27 @@ message ShowStatement {
 }
 
 message CreateRowPolicy {
+    optional bool is_restrictive = 1;
+    optional bool for_select = 2;
+}
+
+message CreateMaskingPolicy {
+    optional UpdateSet first_update = 1;
+    repeated UpdateSet other_updates = 2;
+    optional int32 priority = 3;
+}
+
+message CreatePolicy {
     required CreateReplaceOption create_opt = 1;
     optional bool if_not_exists = 2;
     required RowPolicy policy = 3;
     required ExprSchemaTable target = 4;
     optional Cluster cluster = 5;
-    optional bool is_restrictive = 6;
-    optional bool for_select = 7;
-    optional Expr filter_expr = 8;
+    optional WhereStatement where_expr = 6;
+    oneof create_policy_oneof {
+        CreateRowPolicy row = 7;
+        CreateMaskingPolicy masking = 8;
+    }
 }
 
 message SQLQueryInner {
@@ -4407,7 +4421,7 @@ message SQLQueryInner {
         Rename rename = 22;
         Kill kill = 23;
         ShowStatement show = 24;
-        CreateRowPolicy create_row_policy = 25;
+        CreatePolicy create_policy = 25;
     }
 }
 

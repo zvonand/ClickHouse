@@ -2967,20 +2967,22 @@ void StatementGenerator::generateNextCreateDatabase(RandomGenerator & rg, Create
     this->staged_databases[dname] = std::make_shared<SQLDatabase>(std::move(next));
 }
 
-void StatementGenerator::generateNextCreateRowPolicy(RandomGenerator & rg, CreateRowPolicy * crp)
+void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bool row, CreatePolicy * crp)
 {
-    SQLRowPolicy next;
+    SQLPolicy next;
     const SQLTable & t = rg.pickRandomly(filterCollection<SQLTable>(attached_tables));
-    const bool replace = !row_policies.empty() && rg.nextMediumNumber() < 16;
+    const bool replace = !policies.empty() && rg.nextMediumNumber() < 16;
 
+    next.is_row = row;
     if (replace)
     {
-        const SQLRowPolicy & existing = rg.pickValueRandomlyFromMap(this->row_policies);
+        /// Let it mix row policies with masking policies
+        const SQLPolicy & existing = rg.pickValueRandomlyFromMap(this->policies);
         next.policy_id = existing.policy_id;
     }
     else
     {
-        next.policy_id = this->row_policy_counter++;
+        next.policy_id = this->policy_counter++;
     }
     next.table_id = t.tname;
 
@@ -2997,17 +2999,34 @@ void StatementGenerator::generateNextCreateRowPolicy(RandomGenerator & rg, Creat
         next.cluster = rg.pickRandomly(fc.clusters);
         setClusterClause(rg, next.cluster, crp->mutable_cluster());
     }
-    if (rg.nextSmallNumber() < 3)
+    if (row)
     {
-        crp->set_is_restrictive(true);
+        CreateRowPolicy * r = crp->mutable_row();
+
+        if (rg.nextSmallNumber() < 3)
+        {
+            r->set_is_restrictive(true);
+        }
+        r->set_for_select(rg.nextSmallNumber() < 3);
     }
-    crp->set_for_select(rg.nextSmallNumber() < 3);
+    else
+    {
+        CreateMaskingPolicy * m = crp->mutable_masking();
+
+        /// UPDATE clause
+        generateUpdateSets(rg, t, m->mutable_first_update(), [&]() { return m->add_other_updates(); });
+        /// PRIORITY ~40% of the time
+        if (rg.nextSmallNumber() < 4)
+        {
+            m->set_priority(static_cast<int32_t>(rg.randomInt<uint32_t>(0, 100)));
+        }
+    }
     /// USING filter: present ~70% of the time; absent means allow/deny all rows
     if (rg.nextSmallNumber() < 8)
     {
-        generateUptDelWhere(rg, t, crp->mutable_filter_expr());
+        generateUptDelWhere(rg, t, crp->mutable_where_expr()->mutable_expr()->mutable_expr());
     }
-    this->staged_row_policies[next.policy_id] = std::move(next);
+    this->staged_policies[next.policy_id] = std::move(next);
 }
 
 }

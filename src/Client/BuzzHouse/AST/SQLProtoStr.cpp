@@ -3641,14 +3641,17 @@ CONV_FN(SQLObjectName, son)
 
 static const String SQLObjectToString(const SQLObject obj)
 {
-    return (obj == SQLObject::ROW_POLICY) ? "ROW POLICY" : SQLObject_Name(obj);
+    if (obj == SQLObject::ROW_POLICY)
+        return "ROW POLICY";
+    if (obj == SQLObject::MASKING_POLICY)
+        return "MASKING POLICY";
+    return SQLObject_Name(obj);
 }
 
 
 CONV_FN(Drop, dt)
 {
     const bool is_table = dt.sobject() == SQLObject::TABLE;
-    const bool is_row_policy = dt.sobject() == SQLObject::ROW_POLICY;
 
     ret += "DROP ";
     if ((is_table || dt.sobject() == SQLObject::VIEW) && dt.is_temp())
@@ -3671,7 +3674,7 @@ CONV_FN(Drop, dt)
         const SQLObjectName & other_object = dt.other_objects(i);
 
         ret += ", ";
-        if (is_row_policy)
+        if (dt.sobject() == SQLObject::ROW_POLICY || dt.sobject() == SQLObject::MASKING_POLICY)
         {
             RowPolicyToString(ret, other_object.row_policy().policy());
         }
@@ -4067,6 +4070,9 @@ CONV_FN(Exchange, et)
             break;
         case SQLObject::ROW_POLICY:
             ret += "ROW POLICIES";
+            break;
+        case SQLObject::MASKING_POLICY:
+            ret += "MASKING POLICIES";
             break;
     }
     ret += " ";
@@ -4506,8 +4512,8 @@ static void RowPolicyClausesToString(
     const bool has_is_restrictive,
     const bool is_restrictive,
     const bool for_select,
-    const bool has_filter_expr,
-    const Expr & filter_expr)
+    const bool has_where_expr,
+    const WhereStatement & where_expr)
 {
     if (has_is_restrictive)
     {
@@ -4518,10 +4524,10 @@ static void RowPolicyClausesToString(
     {
         ret += " FOR SELECT";
     }
-    if (has_filter_expr)
+    if (has_where_expr)
     {
         ret += " USING ";
-        ExprToString(ret, filter_expr);
+        WhereStatementToString(ret, where_expr);
     }
 }
 
@@ -4823,7 +4829,7 @@ CONV_FN(AlterItem, alter)
                 RowPolicyToString(ret, arpc.rename_to());
             }
             RowPolicyClausesToString(
-                ret, arpc.has_is_restrictive(), arpc.is_restrictive(), arpc.for_select(), arpc.has_filter_expr(), arpc.filter_expr());
+                ret, arpc.has_is_restrictive(), arpc.is_restrictive(), arpc.for_select(), arpc.has_where_expr(), arpc.where_expr());
             break;
         }
         default:
@@ -5766,23 +5772,58 @@ CONV_FN(ShowStatement, sh)
     }
 }
 
-CONV_FN(CreateRowPolicy, crp)
+CONV_FN(CreatePolicy, cp)
 {
-    CreateOrReplaceToString(ret, crp.create_opt());
-    ret += " ROW POLICY ";
-    if (crp.if_not_exists())
+    const bool is_masking = cp.has_masking();
+
+    ret += "CREATE ";
+    ret += is_masking ? "MASKING" : "ROW";
+    ret += " POLICY ";
+    if (cp.create_opt() == CreateReplaceOption::Create && cp.if_not_exists())
     {
         ret += "IF NOT EXISTS ";
     }
-    RowPolicyToString(ret, crp.policy());
-    if (crp.has_cluster())
+    else if (cp.create_opt() != CreateReplaceOption::Create)
     {
-        ClusterToString(ret, true, crp.cluster());
+        ret += "OR REPLACE ";
+    }
+    RowPolicyToString(ret, cp.policy());
+    if (cp.has_cluster())
+    {
+        ClusterToString(ret, true, cp.cluster());
     }
     ret += " ON ";
-    ExprSchemaTableToString(ret, crp.target());
-    RowPolicyClausesToString(
-        ret, crp.has_is_restrictive(), crp.is_restrictive(), crp.for_select(), crp.has_filter_expr(), crp.filter_expr());
+    ExprSchemaTableToString(ret, cp.target());
+    if (is_masking)
+    {
+        const CreateMaskingPolicy & cmp = cp.masking();
+
+        ret += " UPDATE ";
+        UpdateSetToString(ret, cmp.first_update());
+        for (int i = 0; i < cmp.other_updates_size(); i++)
+        {
+            ret += ", ";
+            UpdateSetToString(ret, cmp.other_updates(i));
+        }
+        if (cp.has_where_expr())
+        {
+            ret += " WHERE ";
+            WhereStatementToString(ret, cp.where_expr());
+        }
+        ret += " TO ALL";
+        if (cmp.has_priority())
+        {
+            ret += " PRIORITY ";
+            ret += std::to_string(cmp.priority());
+        }
+    }
+    else
+    {
+        const CreateRowPolicy & crp = cp.row();
+
+        RowPolicyClausesToString(
+            ret, crp.has_is_restrictive(), crp.is_restrictive(), crp.for_select(), cp.has_where_expr(), cp.where_expr());
+    }
 }
 
 CONV_FN(SQLQueryInner, query)
@@ -5863,8 +5904,8 @@ CONV_FN(SQLQueryInner, query)
         case QueryType::kShow:
             ShowStatementToString(ret, query.show());
             break;
-        case QueryType::kCreateRowPolicy:
-            CreateRowPolicyToString(ret, query.create_row_policy());
+        case QueryType::kCreatePolicy:
+            CreatePolicyToString(ret, query.create_policy());
             break;
         default:
             ret += "SELECT 1";

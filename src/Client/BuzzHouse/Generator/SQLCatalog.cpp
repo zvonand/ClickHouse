@@ -965,7 +965,7 @@ void SQLFunction::setName(Function * f) const
     f->set_function("f" + std::to_string(fname));
 }
 
-void SQLRowPolicy::setName(RowPolicy * f) const
+void SQLPolicy::setName(RowPolicy * f) const
 {
     f->set_policy("p" + std::to_string(policy_id));
 }

@@ -55,7 +55,7 @@ StatementGenerator::StatementGenerator(
               {0.30, 0.90}, /// SelectQuery
               {0.01, 0.10}, /// Kill
               {0.01, 0.08}, /// ShowStatement
-              {0.02, 0.08} /// CreateRowPolicy
+              {0.02, 0.08} /// CreatePolicy
           }},
           "SQL statements"))
     , litGen(ProbabilityGenerator(
@@ -153,7 +153,7 @@ StatementGenerator::StatementGenerator(
               {0.01, 0.05} /// MergeIndexAnalyzeUDF
           }},
           "SQL queries"))
-    , SQLMask(static_cast<size_t>(SQLOp::CreateRowPolicy) + 1, true)
+    , SQLMask(static_cast<size_t>(SQLOp::CreatePolicy) + 1, true)
     , litMask(static_cast<size_t>(LitOp::LitFraction) + 1, true)
     , expMask(static_cast<size_t>(ExpOp::LitAccurateCast) + 1, true)
     , predMask(static_cast<size_t>(PredOp::OtherExpr) + 1, true)
@@ -735,7 +735,7 @@ void StatementGenerator::generateNextDrop(RandomGenerator & rg, Drop * dp)
     const uint32_t drop_dictionary = 10 * static_cast<uint32_t>(collectionCount<SQLDictionary>(attached_dictionaries) > 3);
     const uint32_t drop_database = 2 * static_cast<uint32_t>(collectionCount<std::shared_ptr<SQLDatabase>>(attached_databases) > 3);
     const uint32_t drop_function = 1 * static_cast<uint32_t>(functions.size() > 3);
-    const uint32_t drop_row_policy = 1 * static_cast<uint32_t>(row_policies.size() > 3);
+    const uint32_t drop_policy = 1 * static_cast<uint32_t>(policies.size() > 3);
     std::optional<String> cluster;
 
     rg.pickWeighted(
@@ -787,14 +787,14 @@ void StatementGenerator::generateNextDrop(RandomGenerator & rg, Drop * dp)
               dp->set_sobject(SQLObject::FUNCTION);
               f.setName(sot->mutable_function());
           }},
-         {drop_row_policy,
+         {drop_policy,
           [&]
           {
-              const SQLRowPolicy & rp = rg.pickValueRandomlyFromMap(this->row_policies);
+              const SQLPolicy & rp = rg.pickValueRandomlyFromMap(this->policies);
               RowPolicyName * rpn = sot->mutable_row_policy();
 
               cluster = rp.getCluster();
-              dp->set_sobject(SQLObject::ROW_POLICY);
+              dp->set_sobject(rp.is_row ? SQLObject::ROW_POLICY : SQLObject::MASKING_POLICY);
               rp.setName(rpn->mutable_policy());
               /// Reconstruct the target table ExprSchemaTable from the stored table id
               if (this->tables.contains(rp.table_id))
@@ -807,7 +807,7 @@ void StatementGenerator::generateNextDrop(RandomGenerator & rg, Drop * dp)
               }
           }}});
     setClusterClause(rg, cluster, dp->mutable_cluster());
-    if (dp->sobject() != SQLObject::FUNCTION && dp->sobject() != SQLObject::ROW_POLICY)
+    if (dp->sobject() != SQLObject::FUNCTION && dp->sobject() != SQLObject::ROW_POLICY && dp->sobject() != SQLObject::MASKING_POLICY)
     {
         dp->set_sync(rg.nextSmallNumber() < 3);
         if (rg.nextSmallNumber() < 3)
@@ -1407,19 +1407,14 @@ void StatementGenerator::generateUptDelWhere(RandomGenerator & rg, const SQLTabl
     }
 }
 
-void StatementGenerator::generateNextUpdate(RandomGenerator & rg, const SQLTable & t, Update * upt)
+void StatementGenerator::generateUpdateSets(
+    RandomGenerator & rg, const SQLTable & t, UpdateSet * first, std::function<UpdateSet *()> add_next)
 {
-    if (rg.nextBool())
-    {
-        generateNextTablePartition(rg, 0, rg.nextSmallNumber() < 3, false, t, upt->mutable_single_partition()->mutable_partition());
-    }
     flatTableColumnPath(flat_tuple | flat_nested, t.cols, [](const SQLColumn &) { return true; });
     if (this->entries.empty())
     {
-        UpdateSet * upset = upt->mutable_update();
-
-        upset->mutable_col()->mutable_col()->set_column("c0");
-        upset->mutable_expr()->mutable_lit_val()->mutable_int_lit()->set_int_lit(0);
+        first->mutable_col()->mutable_col()->set_column("c0");
+        first->mutable_expr()->mutable_lit_val()->mutable_int_lit()->set_int_lit(0);
     }
     else
     {
@@ -1429,13 +1424,11 @@ void StatementGenerator::generateNextUpdate(RandomGenerator & rg, const SQLTable
         std::shuffle(this->entries.begin(), this->entries.end(), rg.generator);
         for (uint32_t j = 0; j < nupdates; j++)
         {
-            columnPathRef(this->entries[j], j == 0 ? upt->mutable_update()->mutable_col() : upt->add_other_updates()->mutable_col());
-        }
-        for (uint32_t j = 0; j < nupdates; j++)
-        {
             const ColumnPathChain & entry = this->entries[j];
-            UpdateSet & uset = *(j == 0 ? upt->mutable_update() : upt->mutable_other_updates(j - 1));
-            Expr * expr = uset.mutable_expr();
+            UpdateSet * uset = j == 0 ? first : add_next();
+
+            columnPathRef(entry, uset->mutable_col());
+            Expr * expr = uset->mutable_expr();
 
             if (rg.nextBool())
             {
@@ -1471,7 +1464,15 @@ void StatementGenerator::generateNextUpdate(RandomGenerator & rg, const SQLTable
         }
         this->entries.clear();
     }
+}
 
+void StatementGenerator::generateNextUpdate(RandomGenerator & rg, const SQLTable & t, Update * upt)
+{
+    if (rg.nextBool())
+    {
+        generateNextTablePartition(rg, 0, rg.nextSmallNumber() < 3, false, t, upt->mutable_single_partition()->mutable_partition());
+    }
+    generateUpdateSets(rg, t, upt->mutable_update(), [&]() { return upt->add_other_updates(); });
     generateUptDelWhere(rg, t, upt->mutable_where()->mutable_expr()->mutable_expr());
 }
 
@@ -2146,7 +2147,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
     const uint32_t alter_view = 5 * static_cast<uint32_t>(collectionHas<SQLView>(attached_views));
     const uint32_t alter_table = 25 * static_cast<uint32_t>(collectionHas<SQLTable>(attached_tables));
     const uint32_t alter_database = 2 * static_cast<uint32_t>(collectionHas<std::shared_ptr<SQLDatabase>>(attached_databases));
-    const uint32_t alter_row_policy = 2 * static_cast<uint32_t>(!in_parallel && !row_policies.empty());
+    const uint32_t alter_policy = 2 * static_cast<uint32_t>(!in_parallel && !policies.empty());
     std::optional<String> cluster;
     const uint32_t nalters = rg.randomInt<uint32_t>(1, fc.max_number_alters);
 
@@ -2224,11 +2225,11 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
                   ati->set_comment(nextComment(rg));
               }
           }},
-         {alter_row_policy,
+         {alter_policy,
           [&]
           {
               AlterRowPolicyContent * arpc = at->mutable_alter()->mutable_alter_row_policy();
-              const SQLRowPolicy & rp = rg.pickValueRandomlyFromMap(this->row_policies);
+              const SQLPolicy & rp = rg.pickValueRandomlyFromMap(this->policies);
 
               cluster = rp.getCluster();
               at->set_sobject(SQLObject::ROW_POLICY);
@@ -2241,7 +2242,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
                   t.setName(arpc->mutable_target(), true);
                   if (rg.nextSmallNumber() < 8)
                   {
-                      generateUptDelWhere(rg, t, arpc->mutable_filter_expr());
+                      generateUptDelWhere(rg, t, arpc->mutable_where_expr()->mutable_expr()->mutable_expr());
                   }
               }
               else
@@ -2251,11 +2252,11 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
               }
               if (rg.nextSmallNumber() < 3)
               {
-                  SQLRowPolicy renamed(rp);
+                  SQLPolicy renamed(rp);
 
-                  renamed.policy_id = this->row_policy_counter++;
+                  renamed.policy_id = this->policy_counter++;
                   renamed.setName(arpc->mutable_rename_to());
-                  this->staged_row_policies[renamed.policy_id] = std::move(renamed);
+                  this->staged_policies[renamed.policy_id] = std::move(renamed);
               }
               if (rg.nextSmallNumber() < 3)
               {
@@ -3189,8 +3190,8 @@ void StatementGenerator::generateNextQuery(RandomGenerator & rg, const bool in_p
     SQLMask[static_cast<size_t>(SQLOp::SelectQuery)] = !in_parallel;
     /// SQLMask[static_cast<size_t>(SQLOp::Kill)] = true;
     SQLMask[static_cast<size_t>(SQLOp::ShowStatement)] = !in_parallel;
-    SQLMask[static_cast<size_t>(SQLOp::CreateRowPolicy)] = !in_parallel
-        && static_cast<uint32_t>(row_policies.size()) < this->fc.max_row_policies && collectionHas<SQLTable>(attached_tables);
+    SQLMask[static_cast<size_t>(SQLOp::CreatePolicy)]
+        = !in_parallel && static_cast<uint32_t>(policies.size()) < this->fc.max_policies && collectionHas<SQLTable>(attached_tables);
     SQLGen.setEnabled(SQLMask);
 
     switch (static_cast<SQLOp>(SQLGen.nextOp())) /// drifts over time
@@ -3267,8 +3268,8 @@ void StatementGenerator::generateNextQuery(RandomGenerator & rg, const bool in_p
         case SQLOp::ShowStatement:
             generateNextShowStatement(rg, sq->mutable_show());
             break;
-        case SQLOp::CreateRowPolicy:
-            generateNextCreateRowPolicy(rg, sq->mutable_create_row_policy());
+        case SQLOp::CreatePolicy:
+            generateNextCreatePolicy(rg, !supports_cloud_features || rg.nextBool(), sq->mutable_create_policy());
             break;
     }
 }
@@ -3649,9 +3650,9 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         {
             this->functions.erase(getIdentifierFromString(drp.object().function().function()));
         }
-        else if (drp.sobject() == SQLObject::ROW_POLICY)
+        else if (drp.sobject() == SQLObject::ROW_POLICY || drp.sobject() == SQLObject::MASKING_POLICY)
         {
-            this->row_policies.erase(getIdentifierFromString(drp.object().row_policy().policy().policy()));
+            this->policies.erase(getIdentifierFromString(drp.object().row_policy().policy().policy()));
         }
         else
         {
@@ -3945,11 +3946,11 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
             const uint32_t old_id = getIdentifierFromString(at.object().row_policy().policy().policy());
             const uint32_t new_id = getIdentifierFromString(at.alter().alter_row_policy().rename_to().policy());
 
-            if (this->row_policies.contains(old_id) && this->staged_row_policies.contains(new_id))
+            if (this->policies.contains(old_id) && this->staged_policies.contains(new_id))
             {
-                this->row_policies.erase(old_id);
-                this->row_policies[new_id] = std::move(this->staged_row_policies[new_id]);
-                this->staged_row_policies.erase(new_id);
+                this->policies.erase(old_id);
+                this->policies[new_id] = std::move(this->staged_policies[new_id]);
+                this->staged_policies.erase(new_id);
             }
         }
     }
@@ -4050,19 +4051,19 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         }
         this->staged_functions.erase(fname);
     }
-    else if (ssq.has_explain() && query.has_create_row_policy())
+    else if (ssq.has_explain() && query.has_create_policy())
     {
-        const uint32_t policy_id = getIdentifierFromString(query.create_row_policy().policy().policy());
+        const uint32_t policy_id = getIdentifierFromString(query.create_policy().policy().policy());
 
         if (!ssq.explain().is_explain() && success)
         {
-            if (query.create_row_policy().create_opt() != CreateReplaceOption::Create)
+            if (query.create_policy().create_opt() != CreateReplaceOption::Create)
             {
-                this->row_policies.erase(policy_id);
+                this->policies.erase(policy_id);
             }
-            this->row_policies[policy_id] = std::move(this->staged_row_policies[policy_id]);
+            this->policies[policy_id] = std::move(this->staged_policies[policy_id]);
         }
-        this->staged_row_policies.erase(policy_id);
+        this->staged_policies.erase(policy_id);
     }
     else if (ssq.has_explain() && !ssq.explain().is_explain() && success && query.has_trunc() && query.trunc().has_database())
     {

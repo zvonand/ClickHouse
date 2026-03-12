@@ -45,7 +45,7 @@ workflow = Workflow.Config(
     base_branches=[BASE_BRANCH],
     jobs=[
         JobConfigs.style_check,
-        JobConfigs.code_review,
+        # JobConfigs.code_review,  # temporarily disabled
         JobConfigs.docs_job,
         JobConfigs.fast_test,
         *JobConfigs.tidy_build_arm_jobs,

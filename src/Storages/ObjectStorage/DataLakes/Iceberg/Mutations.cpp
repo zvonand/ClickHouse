@@ -1002,7 +1002,7 @@ static ExpiredFiles collectExpiredFiles(
             if (retained_manifest_paths.contains(mf_key.manifest_file_path))
                 continue;
 
-            if (!seen_expired_manifest_paths.insert(mf_key.manifest_file_path).second)
+            if (seen_expired_manifest_paths.contains(mf_key.manifest_file_path))
                 continue;
 
             try
@@ -1036,6 +1036,7 @@ static ExpiredFiles collectExpiredFiles(
                 continue;
             }
 
+            seen_expired_manifest_paths.insert(mf_key.manifest_file_path);
             result.all_paths.push_back(mf_key.manifest_file_path);
             ++result.manifest_files;
         }

@@ -175,7 +175,7 @@ ManifestFileCacheKeys getManifestList(
 
         ManifestFileCacheKeys manifest_file_cache_keys;
 
-            insertRowToLogTable(
+        insertRowToLogTable(
             local_context,
             manifest_list_deserializer.getMetadataContent(),
             DB::IcebergMetadataLogLevel::ManifestListMetadata,

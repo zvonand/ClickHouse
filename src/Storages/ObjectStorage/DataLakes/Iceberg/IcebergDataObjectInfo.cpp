@@ -10,6 +10,7 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PositionDeleteTransform.h>
 
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergDataObjectInfo.h>
+#include <Storages/ObjectStorage/Utils.h>
 #include <Common/Exception.h>
 
 #include <IO/ReadHelpers.h>
@@ -41,7 +42,7 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(
     : ObjectInfo(RelativePathWithMetadata(resolved_key_.empty() ? data_manifest_file_entry_->absolute_file_path : resolved_key_))
     , info{
           data_manifest_file_entry_->parsed_entry->file_path_from_metadata,
-          resolved_key_.empty() ? data_manifest_file_entry_->parsed_entry->file_path_from_metadata : data_manifest_file_entry_->absolute_file_path,
+          data_manifest_file_entry_->absolute_file_path,
           data_manifest_file_entry_->resolved_schema_id,
           schema_id_relevant_to_iterator_,
           data_manifest_file_entry_->sequence_number,
@@ -117,6 +118,14 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
             protocol_version);
     }
 
+    /// Transform paths for old workers to just contain a key in storage: strip the scheme and authority, leave a key in storage.
+    auto path_for_protocol = [&](const String & path) -> String
+    {
+        if (protocol_version < DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
+            return SchemeAuthorityKey(path).key;
+        return path;
+    };
+
     writeStringBinary(data_object_file_path_from_metadata, out);
     if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {
@@ -130,12 +139,12 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
         writeVarUInt(position_deletes_objects.size(), out);
         for (const auto & pos_delete_obj : position_deletes_objects)
         {
-            writeStringBinary(pos_delete_obj.file_path, out);
+            writeStringBinary(path_for_protocol(pos_delete_obj.file_path), out);
             writeStringBinary(pos_delete_obj.file_format, out);
             if (pos_delete_obj.reference_data_file_path.has_value())
             {
                 writeVarUInt(1, out);
-                writeStringBinary(pos_delete_obj.reference_data_file_path.value(), out);
+                writeStringBinary(path_for_protocol(pos_delete_obj.reference_data_file_path.value()), out);
             }
             else
             {
@@ -147,7 +156,7 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
         writeVarUInt(equality_deletes_objects.size(), out);
         for (const auto & eq_delete_obj : equality_deletes_objects)
         {
-            writeStringBinary(eq_delete_obj.file_path, out);
+            writeStringBinary(path_for_protocol(eq_delete_obj.file_path), out);
             writeStringBinary(eq_delete_obj.file_format, out);
             writeVarInt(eq_delete_obj.schema_id, out);
             if (eq_delete_obj.equality_ids.has_value())

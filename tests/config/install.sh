@@ -73,7 +73,6 @@ function is_fast_build()
 
 echo "Going to install test configs from $SRC_PATH into $DEST_SERVER_PATH"
 
-mkdir -p $DEST_SERVER_PATH/config.d/
 mkdir -p $DEST_SERVER_PATH/users.d/
 mkdir -p $DEST_CLIENT_PATH
 
@@ -81,7 +80,11 @@ mkdir -p $DEST_CLIENT_PATH
 # you should check clickhouse version so that you won't
 # break validations using previous ClickHouse version (like bugfix validation).
 
-rm -f $DEST_SERVER_PATH/config.d/*.xml
+# Patching configs which are symbolic links can affect source files,
+# need to delete links created by previous script versions
+# Also this is generally good (least astonishment principle) not to retain any old configs
+rm -rf $DEST_SERVER_PATH/config.d
+mkdir -p $DEST_SERVER_PATH/config.d/
 
 ln -sf $SRC_PATH/config.d/tmp.xml $DEST_SERVER_PATH/config.d/
 ln -sf $SRC_PATH/config.d/zookeeper_write.xml $DEST_SERVER_PATH/config.d/

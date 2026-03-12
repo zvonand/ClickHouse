@@ -297,18 +297,19 @@ def main():
         step_name = "Tests"
         print(step_name)
         res = CH.run_fast_test(test=args.test or "")
+
+        test_results = FTResultsProcessor(wd=Settings.OUTPUT_DIR).run()
         if not res:
-            results.append(
+            test_results.append(
                 Result.create_from(
-                    name=step_name,
-                    status=Result.Status.ERROR,
-                    stopwatch=stop_watch_,
+                    name="clickhouse-test",
+                    status=Result.StatusExtended.FAIL,
                     info="clickhouse-test error",
                 )
             )
             attach_debug = True
 
-        results.append(FTResultsProcessor(wd=Settings.OUTPUT_DIR).run())
+        results.append(test_results)
         results[-1].set_timing(stopwatch=stop_watch_)
         if not results[-1].is_ok():
             attach_debug = True

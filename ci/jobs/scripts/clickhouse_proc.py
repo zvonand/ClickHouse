@@ -118,6 +118,8 @@ class ClickHouseProc:
         Utils.set_env("CLICKHOUSE_USER_FILES", f"{self.user_files_path}")
         Utils.clean_dir(Path(self.log_dir))
 
+    # there should be one install and one start method instead of many for each job
+    # job specifics should be a part of the job
     def install_configs(self):
         Path(f"{self.ch_config_dir}/config.d").mkdir(parents=True, exist_ok=True)
         with open(f"{self.ch_config_dir}/config.d/storage_conf_backups.xml", "w") as file:
@@ -756,6 +758,7 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                 errors="ignore",
             )
             for line in process.stdout:
+                # we generally want timestamps for any test, not just a fast test
                 ts_line = f"{datetime.now():%Y-%m-%d %H:%M:%S} {line}"
                 print(ts_line, end="")
                 f.write(ts_line)
@@ -811,9 +814,9 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                 ):
                     continue
                 print(
-                    f"Failed to stop ClickHouse process {pid} gracefully - send ABRT signal to generate core file"
+                    f"Failed to stop ClickHouse process {pid} gracefully - send TRAP signal to generate core file"
                 )
-                proc.send_signal(signal.SIGABRT)
+                proc.send_signal(signal.SIGTRAP)
 
         return self
 

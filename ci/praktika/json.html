@@ -547,8 +547,10 @@
     function getStatusPriority(status) {
         const statusLower = (status || '').toLowerCase();
         // Priority order: errors/failures first, then warnings, then success, then others
+        if (statusLower === 'xpass') return 0;  // unexpected pass: treat as failure
         if (statusLower.includes('error') || statusLower.includes('fail') || statusLower.includes('dropped')) return 0;
         if (statusLower.includes('pending') || statusLower.includes('running')) return 1;
+        if (statusLower === 'xfail') return 2;  // expected failure: treat as success
         if (statusLower.includes('success') || statusLower === 'ok') return 2;
         return 3; // other statuses
     }

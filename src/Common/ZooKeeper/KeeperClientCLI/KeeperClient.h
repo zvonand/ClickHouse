@@ -21,6 +21,13 @@ static const NameSet four_letter_word_commands
         "jmdp",
     };
 
+/// Format a ZooKeeper node name for display and round-tripping through the parser.
+/// Returns the name bare when it contains no special characters, or wrapped in
+/// single quotes with \' and \\ escaping otherwise. The result is always parseable
+/// by parseKeeperArg (either as a bare token or as an inline quoted segment).
+/// Used by both `ls` output and tab completion.
+String formatKeeperNodeName(const String & name);
+
 class KeeperClientBase
 {
 public:

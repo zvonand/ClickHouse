@@ -19,9 +19,9 @@ namespace ErrorCodes
 void AggregateDescription::explain(WriteBuffer & out, const std::string & prefix, size_t additonal_indent) const
 {
     std::string prefix_with_indent = prefix;
-    prefix_new.append(additonal_indent, ' ');
+    prefix_with_indent.append(additonal_indent, ' ');
 
-    out << prefix_new << column_name << '\n';
+    out << prefix_with_indent << column_name << '\n';
 
     auto dump_params = [&](const Array & arr)
     {
@@ -40,7 +40,7 @@ void AggregateDescription::explain(WriteBuffer & out, const std::string & prefix
     if (function)
     {
         /// Double whitespace is intentional.
-        out << prefix_new << "  Function: " << function->getName();
+        out << prefix_with_indent << "  Function: " << function->getName();
 
         const auto & params = function->getParameters();
         if (!params.empty())
@@ -65,16 +65,16 @@ void AggregateDescription::explain(WriteBuffer & out, const std::string & prefix
         out << ") → " << function->getResultType()->getName() << "\n";
     }
     else
-        out << prefix_new << "  Function: nullptr\n";
+        out << prefix_with_indent << "  Function: nullptr\n";
 
     if (!parameters.empty())
     {
-        out << prefix_new << "  Parameters: ";
+        out << prefix_with_indent << "  Parameters: ";
         dump_params(parameters);
         out << '\n';
     }
 
-    out << prefix_new << "  Arguments: ";
+    out << prefix_with_indent << "  Arguments: ";
 
     if (argument_names.empty())
         out << "none\n";

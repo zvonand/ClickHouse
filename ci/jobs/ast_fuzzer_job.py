@@ -82,7 +82,7 @@ def _collect_targeted_queries(workspace_path: Path, info: Info) -> tuple[list[st
     targeted_queries: list[str] = []
     seen_queries = set()
     for test in tests:
-        base_name = Path(test).stem
+        base_name = Path(test).stem.rstrip(".")
         matches = available_queries.get(base_name, [])
         if matches:
             logging.debug("  %s -> %s", test, matches)

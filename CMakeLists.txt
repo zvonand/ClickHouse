@@ -530,14 +530,18 @@ macro (clickhouse_add_executable target)
                 "LINKER:--wrap=valloc"
                 "LINKER:--wrap=memalign"
                 "LINKER:--wrap=reallocarray"
-                "LINKER:--wrap=strdup"
-                "LINKER:--wrap=strndup"
-                "LINKER:--wrap=getaddrinfo"
-                "LINKER:--wrap=freeaddrinfo"
             )
             if (NOT USE_MUSL)
+                # On musl (static libc), internal malloc/free calls from strdup,
+                # strndup, getaddrinfo, and freeaddrinfo are intercepted by
+                # __wrap_malloc/__wrap_free, so wrapping them would double-count.
+                # pvalloc is also absent from musl.
                 target_link_options(${target} PRIVATE
                     "LINKER:--wrap=pvalloc"
+                    "LINKER:--wrap=strdup"
+                    "LINKER:--wrap=strndup"
+                    "LINKER:--wrap=getaddrinfo"
+                    "LINKER:--wrap=freeaddrinfo"
                 )
             endif()
         endif()

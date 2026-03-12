@@ -1,9 +1,7 @@
 #include <cassert>
 #include <cstring>
-#include <mutex>
 #include <netdb.h>
 #include <new>
-#include <unordered_map>
 #include "config.h"
 
 #include <Common/memory.h>
@@ -262,32 +260,7 @@ void operator delete[](void * ptr, std::size_t size, std::align_val_t align) noe
 namespace
 {
 
-thread_local bool c_allocation_tracking_disabled = false;
-
-bool isCAllocationTrackingDisabled()
-{
-    return c_allocation_tracking_disabled;
-}
-
-#if !defined(SANITIZER) && !defined(SANITIZE_COVERAGE)
-
-class CAllocationTrackingBlocker
-{
-public:
-    CAllocationTrackingBlocker()
-        : previous_value(c_allocation_tracking_disabled)
-    {
-        c_allocation_tracking_disabled = true;
-    }
-
-    ~CAllocationTrackingBlocker()
-    {
-        c_allocation_tracking_disabled = previous_value;
-    }
-
-private:
-    bool previous_value;
-};
+#if !defined(SANITIZER) && !defined(SANITIZE_COVERAGE) && !defined(USE_MUSL)
 
 size_t estimateGetAddrInfoSize(const struct addrinfo * result)
 {
@@ -306,29 +279,12 @@ size_t estimateGetAddrInfoSize(const struct addrinfo * result)
     return total_size;
 }
 
-/// Declared before the tracking objects so it is destroyed after them,
-/// allowing safe shutdown-time checks against static destruction order issues.
-std::atomic_bool getaddrinfo_tracking_initialized{false};
-
-struct GetaddrInfoTracking
-{
-    std::mutex mutex;
-    std::unordered_map<const struct addrinfo *, size_t> sizes;
-
-    GetaddrInfoTracking() { getaddrinfo_tracking_initialized.store(true, std::memory_order_release); }
-    ~GetaddrInfoTracking() { getaddrinfo_tracking_initialized.store(false, std::memory_order_release); }
-};
-
-GetaddrInfoTracking getaddrinfo_tracking;
 #endif
 
 }
 
 extern "C" void * __wrap_malloc(size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_malloc(size);
-
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemoryFromC(size, trace);
     void * ptr = __real_malloc(size);
@@ -343,9 +299,6 @@ extern "C" void * __wrap_malloc(size_t size) // NOLINT
 
 extern "C" void * __wrap_calloc(size_t number_of_members, size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_calloc(number_of_members, size);
-
     size_t real_size = 0;
     if (__builtin_mul_overflow(number_of_members, size, &real_size))
         return nullptr;
@@ -364,9 +317,6 @@ extern "C" void * __wrap_calloc(size_t number_of_members, size_t size) // NOLINT
 
 extern "C" void * __wrap_realloc(void * ptr, size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_realloc(ptr, size);
-
     AllocationTrace old_trace;
     size_t old_actual_size = 0;
     if (ptr)
@@ -394,9 +344,6 @@ extern "C" void * __wrap_realloc(void * ptr, size_t size) // NOLINT
 
 extern "C" int __wrap_posix_memalign(void ** memptr, size_t alignment, size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_posix_memalign(memptr, alignment, size);
-
     AllocationTrace trace;
     size_t actual_size = Memory::trackMemoryFromC(size, trace, static_cast<std::align_val_t>(alignment));
     int res = __real_posix_memalign(memptr, alignment, size);
@@ -411,9 +358,6 @@ extern "C" int __wrap_posix_memalign(void ** memptr, size_t alignment, size_t si
 
 extern "C" void * __wrap_aligned_alloc(size_t alignment, size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_aligned_alloc(alignment, size);
-
     AllocationTrace trace;
     size_t actual_size = Memory::trackMemoryFromC(size, trace, static_cast<std::align_val_t>(alignment));
     void * res = __real_aligned_alloc(alignment, size);
@@ -429,9 +373,6 @@ extern "C" void * __wrap_aligned_alloc(size_t alignment, size_t size) // NOLINT
 #if !defined(OS_FREEBSD)
 extern "C" void * __wrap_valloc(size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_valloc(size);
-
     AllocationTrace trace;
     size_t actual_size = Memory::trackMemoryFromC(size, trace);
     void * res = __real_valloc(size);
@@ -447,14 +388,6 @@ extern "C" void * __wrap_valloc(size_t size) // NOLINT
 
 extern "C" void * __wrap_reallocarray(void * ptr, size_t number_of_members, size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-    {
-        size_t real_size = 0;
-        if (__builtin_mul_overflow(number_of_members, size, &real_size))
-            return nullptr;
-        return __real_realloc(ptr, real_size);
-    }
-
     size_t real_size = 0;
     if (__builtin_mul_overflow(number_of_members, size, &real_size))
         return nullptr;
@@ -464,12 +397,6 @@ extern "C" void * __wrap_reallocarray(void * ptr, size_t number_of_members, size
 
 extern "C" void __wrap_free(void * ptr) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-    {
-        __real_free(ptr);
-        return;
-    }
-
     AllocationTrace trace;
     size_t actual_size = Memory::untrackMemory(ptr, trace);
     trace.onFree(ptr, actual_size);
@@ -479,9 +406,6 @@ extern "C" void __wrap_free(void * ptr) // NOLINT
 #if !defined(OS_DARWIN) && !defined(OS_FREEBSD)
 extern "C" void * __wrap_memalign(size_t alignment, size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_memalign(alignment, size);
-
     AllocationTrace trace;
     size_t actual_size = Memory::trackMemoryFromC(size, trace, static_cast<std::align_val_t>(alignment));
     void * res = __real_memalign(alignment, size);
@@ -498,9 +422,6 @@ extern "C" void * __wrap_memalign(size_t alignment, size_t size) // NOLINT
 #if !defined(USE_MUSL) && defined(OS_LINUX)
 extern "C" void * __wrap_pvalloc(size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_pvalloc(size);
-
     AllocationTrace trace;
     size_t actual_size = Memory::trackMemoryFromC(size, trace);
     void * res = __real_pvalloc(size);
@@ -515,110 +436,78 @@ extern "C" void * __wrap_pvalloc(size_t size) // NOLINT
 #endif
 
 #if !defined(SANITIZER) && !defined(SANITIZE_COVERAGE)
+
+/// On musl (static libc), internal malloc/free calls from strdup, strndup,
+/// getaddrinfo, and freeaddrinfo are intercepted by `__wrap_malloc`/`__wrap_free`,
+/// so manual tracking here would double-count.
+#if !defined(USE_MUSL)
 extern "C" char * __wrap_strdup(const char * str) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_strdup(str);
-
-    CAllocationTrackingBlocker blocker;
     char * res = __real_strdup(str);
     if (unlikely(!res))
         return nullptr;
 
-    AllocationTrace trace;
-    size_t actual_size = Memory::trackMemoryFromC(std::strlen(str) + 1, trace);
+    [[maybe_unused]] MemoryTrackerDebugBlockerInThread blocker;
+#if USE_JEMALLOC
+    size_t actual_size = sallocx(res, 0);
+#elif defined(_GNU_SOURCE)
+    size_t actual_size = malloc_usable_size(res);
+#else
+    size_t actual_size = strlen(res) + 1;
+#endif
+    AllocationTrace trace = CurrentMemoryTracker::allocNoThrow(actual_size);
     trace.onAlloc(res, actual_size);
     return res;
 }
 
 extern "C" char * __wrap_strndup(const char * str, size_t size) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_strndup(str, size);
-
-    CAllocationTrackingBlocker blocker;
     char * res = __real_strndup(str, size);
     if (unlikely(!res))
         return nullptr;
 
-    AllocationTrace trace;
-    size_t actual_size = Memory::trackMemoryFromC(::strnlen(str, size) + 1, trace);
+    [[maybe_unused]] MemoryTrackerDebugBlockerInThread blocker;
+#if USE_JEMALLOC
+    size_t actual_size = sallocx(res, 0);
+#elif defined(_GNU_SOURCE)
+    size_t actual_size = malloc_usable_size(res);
+#else
+    size_t actual_size = strnlen(res, size) + 1;
+#endif
+    AllocationTrace trace = CurrentMemoryTracker::allocNoThrow(actual_size);
     trace.onAlloc(res, actual_size);
     return res;
 }
 
 extern "C" int __wrap_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-        return __real_getaddrinfo(node, service, hints, result);
-
-    int res = 0;
-    {
-        CAllocationTrackingBlocker blocker;
-        res = __real_getaddrinfo(node, service, hints, result);
-    }
+    int res = __real_getaddrinfo(node, service, hints, result);
 
     if (res != 0 || !result || !*result)
         return res;
 
-    if (likely(getaddrinfo_tracking_initialized.load(std::memory_order_acquire)))
-    {
-        size_t tracked_size = estimateGetAddrInfoSize(*result);
-        AllocationTrace trace = CurrentMemoryTracker::allocNoThrow(static_cast<Int64>(tracked_size));
-        trace.onAlloc(*result, tracked_size);
-
-        try
-        {
-            std::lock_guard lock(getaddrinfo_tracking.mutex);
-            getaddrinfo_tracking.sizes[*result] = tracked_size;
-        }
-        catch (...) // Ok: rollback tracked allocation if map insertion fails
-        {
-            auto rollback_trace = CurrentMemoryTracker::free(static_cast<Int64>(tracked_size));
-            rollback_trace.onFree(*result, tracked_size);
-        }
-    }
+    size_t tracked_size = estimateGetAddrInfoSize(*result);
+    AllocationTrace trace = CurrentMemoryTracker::allocNoThrow(static_cast<Int64>(tracked_size));
+    trace.onAlloc(*result, tracked_size);
 
     return res;
 }
 
 extern "C" void __wrap_freeaddrinfo(struct addrinfo * result) // NOLINT
 {
-    if (unlikely(isCAllocationTrackingDisabled()))
-    {
-        __real_freeaddrinfo(result);
-        return;
-    }
-
     size_t tracked_size = 0;
-    if (result && likely(getaddrinfo_tracking_initialized.load(std::memory_order_acquire)))
-    {
-        try
-        {
-            std::lock_guard lock(getaddrinfo_tracking.mutex);
-            auto it = getaddrinfo_tracking.sizes.find(result);
-            if (it != getaddrinfo_tracking.sizes.end())
-            {
-                tracked_size = it->second;
-                getaddrinfo_tracking.sizes.erase(it);
-            }
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) - cannot throw from C callback
-        {
-        }
-    }
-
-    {
-        CAllocationTrackingBlocker blocker;
-        __real_freeaddrinfo(result);
-    }
+    if (result)
+        tracked_size = estimateGetAddrInfoSize(result);
 
     if (tracked_size)
     {
         auto trace = CurrentMemoryTracker::free(static_cast<Int64>(tracked_size));
         trace.onFree(result, tracked_size);
     }
+
+    __real_freeaddrinfo(result);
 }
+#endif // !defined(USE_MUSL)
 #endif // !defined(SANITIZER) && !defined(SANITIZE_COVERAGE)
 
 #pragma clang diagnostic pop

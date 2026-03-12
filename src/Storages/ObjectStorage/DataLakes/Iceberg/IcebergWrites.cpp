@@ -540,32 +540,6 @@ void generateManifestList(
             Iceberg::f_existing_rows_count);
         set_versioned_field(0, Iceberg::f_deleted_rows_count);
 
-        if (version > 1)
-        {
-            auto set_null_union_field = [&](const String & field_name)
-            {
-                size_t field_index;
-                if (schema.root()->nameIndex(field_name, field_index))
-                {
-                    const avro::NodePtr & union_schema = schema.root()->leafAt(static_cast<UInt32>(field_index));
-                    avro::GenericUnion null_union(union_schema);
-                    null_union.selectBranch(0); // null
-                    entry.field(field_name) = avro::GenericDatum(union_schema, null_union);
-                }
-            };
-            {
-                size_t field_index;
-                if (schema.root()->nameIndex(Iceberg::f_partitions, field_index))
-                {
-                    const avro::NodePtr & union_schema = schema.root()->leafAt(static_cast<UInt32>(field_index));
-                    avro::GenericUnion partitions_union(union_schema);
-                    partitions_union.selectBranch(1); // array branch — empty list
-                    entry.field(Iceberg::f_partitions) = avro::GenericDatum(union_schema, partitions_union);
-                }
-            }
-            set_null_union_field(Iceberg::f_key_metadata);
-        }
-
         writer.write(entry_datum);
     }
 
@@ -883,12 +857,18 @@ void IcebergStorageSink::finalizeBuffers()
 
     /// TODO: there's a chance that initializeMetadata() doesn't succeed within MAX_TRANSACTION_RETRIES without throwing, perhaps we should fail in this case
     size_t i = 0;
+    bool successed_write = false;
     while (i < MAX_TRANSACTION_RETRIES)
     {
         if (initializeMetadata())
+        {
+            successed_write = true;
             break;
+        }
         ++i;
     }
+    if (!successed_write)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Write into iceberg was not successfull");
 }
 
 void IcebergStorageSink::releaseBuffers()
@@ -936,11 +916,6 @@ bool IcebergStorageSink::initializeMetadata()
     std::vector<Iceberg::IcebergPathFromMetadata> manifest_entries;
     std::vector<Int64> manifest_entry_sizes;
 
-    auto object_key = [](const String & path) -> String
-    {
-        return path.starts_with('/') ? path.substr(1) : path;
-    };
-
     auto cleanup = [&] (bool retry_because_of_metadata_conflict)
     {
         if (!retry_because_of_metadata_conflict)
@@ -950,9 +925,9 @@ bool IcebergStorageSink::initializeMetadata()
         }
 
         for (const auto & manifest_filename_in_storage : manifest_entries_in_storage)
-            object_storage->removeObjectIfExists(StoredObject(object_key(manifest_filename_in_storage)));
+            object_storage->removeObjectIfExists(StoredObject(manifest_filename_in_storage));
 
-        object_storage->removeObjectIfExists(StoredObject(object_key(storage_manifest_list_name)));
+        object_storage->removeObjectIfExists(StoredObject(storage_manifest_list_name));
 
         if (retry_because_of_metadata_conflict)
         {
@@ -1051,7 +1026,7 @@ bool IcebergStorageSink::initializeMetadata()
         }
         {
             auto buffer_manifest_list = object_storage->writeObject(
-                StoredObject(object_key(storage_manifest_list_name)), WriteMode::Rewrite, std::nullopt, DBMS_DEFAULT_BUFFER_SIZE, context->getWriteSettings());
+                StoredObject(storage_manifest_list_name), WriteMode::Rewrite, std::nullopt, DBMS_DEFAULT_BUFFER_SIZE, context->getWriteSettings());
 
             try
             {

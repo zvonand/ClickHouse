@@ -980,6 +980,16 @@ void SQLFunction::setName(Function * f) const
     f->set_function("f" + std::to_string(fname));
 }
 
+const std::optional<String> & SQLRowPolicy::getCluster() const
+{
+    return cluster;
+}
+
+void SQLRowPolicy::setName(RowPolicy * f) const
+{
+    f->set_policy("p" + std::to_string(policy_id));
+}
+
 const String & ColumnPathChain::getBottomName() const
 {
     chassert(!path.empty());

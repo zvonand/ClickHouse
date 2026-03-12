@@ -89,6 +89,11 @@ CONV_FN(Function, func)
     ret += func.function();
 }
 
+CONV_FN(RowPolicy, rowp)
+{
+    ret += rowp.policy();
+}
+
 void ClusterToString(String & ret, const bool clause, const Cluster & cl)
 {
     if (cl.has_cluster())
@@ -3621,21 +3626,36 @@ CONV_FN(SQLObjectName, son)
         case SQLObjectNameType::kFunction:
             FunctionToString(ret, son.function());
             break;
+        case SQLObjectNameType::kRowPolicy:
+            RowPolicyToString(ret, son.row_policy().policy());
+            if (son.row_policy().has_target())
+            {
+                ret += " ON ";
+                ExprSchemaTableToString(ret, son.row_policy().target());
+            }
+            break;
         default:
             ret += "t0";
     }
 }
 
+static const String SQLObjectToString(const SQLObject obj)
+{
+    return (obj == SQLObject::ROW_POLICY) ? "ROW POLICY" : SQLObject_Name(obj);
+}
+
+
 CONV_FN(Drop, dt)
 {
     const bool is_table = dt.sobject() == SQLObject::TABLE;
+    const bool is_row_policy = dt.sobject() == SQLObject::ROW_POLICY;
 
     ret += "DROP ";
     if ((is_table || dt.sobject() == SQLObject::VIEW) && dt.is_temp())
     {
         ret += "TEMPORARY ";
     }
-    ret += SQLObject_Name(dt.sobject());
+    ret += SQLObjectToString(dt.sobject());
     if (dt.if_exists())
     {
         ret += " IF EXISTS";
@@ -3648,8 +3668,17 @@ CONV_FN(Drop, dt)
     SQLObjectNameToString(ret, dt.object());
     for (int i = 0; i < dt.other_objects_size(); i++)
     {
+        const SQLObjectName & other_object = dt.other_objects(i);
+
         ret += ", ";
-        SQLObjectNameToString(ret, dt.other_objects(i));
+        if (is_row_policy)
+        {
+            RowPolicyToString(ret, other_object.row_policy().policy());
+        }
+        else
+        {
+            SQLObjectNameToString(ret, other_object);
+        }
     }
     if (dt.has_cluster())
     {
@@ -4035,6 +4064,9 @@ CONV_FN(Exchange, et)
             break;
         case SQLObject::FUNCTION:
             ret += "FUNCTIONS";
+            break;
+        case SQLObject::ROW_POLICY:
+            ret += "ROW POLICIES";
             break;
     }
     ret += " ";
@@ -4770,7 +4802,7 @@ CONV_FN(Alter, alter)
     {
         ret += "TEMPORARY ";
     }
-    ret += SQLObject_Name(alter.sobject());
+    ret += SQLObjectToString(alter.sobject());
     ret += " ";
     SQLObjectNameToString(ret, alter.object());
     if (alter.has_cluster())
@@ -4794,7 +4826,7 @@ CONV_FN(Alter, alter)
 CONV_FN(Attach, at)
 {
     ret += "ATTACH ";
-    ret += SQLObject_Name(at.sobject());
+    ret += SQLObjectToString(at.sobject());
     ret += " ";
     SQLObjectNameToString(ret, at.object());
     if (at.has_cluster())
@@ -4817,7 +4849,7 @@ CONV_FN(Attach, at)
 CONV_FN(Detach, dt)
 {
     ret += "DETACH ";
-    ret += SQLObject_Name(dt.sobject());
+    ret += SQLObjectToString(dt.sobject());
     ret += " ";
     SQLObjectNameToString(ret, dt.object());
     if (dt.has_cluster())
@@ -5378,7 +5410,7 @@ CONV_FN(BackupRestoreObject, bobject)
     {
         ret += "TEMPORARY ";
     }
-    ret += SQLObject_Name(bobject.sobject());
+    ret += SQLObjectToString(bobject.sobject());
     ret += " ";
     SQLObjectNameToString(ret, bobject.object());
     if (bobject.has_alias())
@@ -5473,7 +5505,7 @@ CONV_FN(BackupRestore, backup)
 CONV_FN(Rename, ren)
 {
     ret += "RENAME ";
-    ret += SQLObject_Name(ren.sobject());
+    ret += SQLObjectToString(ren.sobject());
     ret += " ";
     SQLObjectNameToString(ret, ren.old_object());
     ret += " TO ";
@@ -5531,7 +5563,7 @@ CONV_FN(ShowObject, sh)
     {
         ret += "TEMPORARY ";
     }
-    ret += SQLObject_Name(sh.sobject());
+    ret += SQLObjectToString(sh.sobject());
     ret += " ";
     SQLObjectNameToString(ret, sh.object());
 }
@@ -5697,6 +5729,37 @@ CONV_FN(ShowStatement, sh)
     }
 }
 
+CONV_FN(CreateRowPolicy, crp)
+{
+    CreateOrReplaceToString(ret, crp.create_opt());
+    ret += " ROW POLICY ";
+    if (crp.if_not_exists())
+    {
+        ret += "IF NOT EXISTS ";
+    }
+    RowPolicyToString(ret, crp.policy());
+    if (crp.has_cluster())
+    {
+        ClusterToString(ret, true, crp.cluster());
+    }
+    ret += " ON ";
+    ExprSchemaTableToString(ret, crp.target());
+    if (crp.has_is_restrictive())
+    {
+        ret += " AS ";
+        ret += crp.is_restrictive() ? "RESTRICTIVE" : "PERMISSIVE";
+    }
+    if (crp.for_select())
+    {
+        ret += " FOR SELECT";
+    }
+    if (crp.has_filter_expr())
+    {
+        ret += " USING ";
+        ExprToString(ret, crp.filter_expr());
+    }
+}
+
 CONV_FN(SQLQueryInner, query)
 {
     using QueryType = SQLQueryInner::QueryInnerOneofCase;
@@ -5774,6 +5837,9 @@ CONV_FN(SQLQueryInner, query)
             break;
         case QueryType::kShow:
             ShowStatementToString(ret, query.show());
+            break;
+        case QueryType::kCreateRowPolicy:
+            CreateRowPolicyToString(ret, query.create_row_policy());
             break;
         default:
             ret += "SELECT 1";

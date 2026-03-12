@@ -54,7 +54,8 @@ StatementGenerator::StatementGenerator(
               {0.01, 0.10}, /// LightUpdate
               {0.30, 0.90}, /// SelectQuery
               {0.01, 0.10}, /// Kill
-              {0.01, 0.08} /// ShowStatement
+              {0.01, 0.08}, /// ShowStatement
+              {0.02, 0.08} /// CreateRowPolicy
           }},
           "SQL statements"))
     , litGen(ProbabilityGenerator(
@@ -152,7 +153,7 @@ StatementGenerator::StatementGenerator(
               {0.01, 0.05} /// MergeIndexAnalyzeUDF
           }},
           "SQL queries"))
-    , SQLMask(static_cast<size_t>(SQLOp::ShowStatement) + 1, true)
+    , SQLMask(static_cast<size_t>(SQLOp::CreateRowPolicy) + 1, true)
     , litMask(static_cast<size_t>(LitOp::LitFraction) + 1, true)
     , expMask(static_cast<size_t>(ExpOp::LitAccurateCast) + 1, true)
     , predMask(static_cast<size_t>(PredOp::OtherExpr) + 1, true)
@@ -734,6 +735,7 @@ void StatementGenerator::generateNextDrop(RandomGenerator & rg, Drop * dp)
     const uint32_t drop_dictionary = 10 * static_cast<uint32_t>(collectionCount<SQLDictionary>(attached_dictionaries) > 3);
     const uint32_t drop_database = 2 * static_cast<uint32_t>(collectionCount<std::shared_ptr<SQLDatabase>>(attached_databases) > 3);
     const uint32_t drop_function = 1 * static_cast<uint32_t>(functions.size() > 3);
+    const uint32_t drop_row_policy = 1 * static_cast<uint32_t>(row_policies.size() > 3);
     std::optional<String> cluster;
 
     rg.pickWeighted(
@@ -784,9 +786,28 @@ void StatementGenerator::generateNextDrop(RandomGenerator & rg, Drop * dp)
               cluster = f.getCluster();
               dp->set_sobject(SQLObject::FUNCTION);
               f.setName(sot->mutable_function());
+          }},
+         {drop_row_policy,
+          [&]
+          {
+              const SQLRowPolicy & rp = rg.pickValueRandomlyFromMap(this->row_policies);
+              RowPolicyName * rpn = sot->mutable_row_policy();
+
+              cluster = rp.getCluster();
+              dp->set_sobject(SQLObject::ROW_POLICY);
+              rp.setName(rpn->mutable_policy());
+              /// Reconstruct the target table ExprSchemaTable from the stored table id
+              if (this->tables.contains(rp.table_id))
+              {
+                  this->tables.at(rp.table_id).setName(rpn->mutable_target(), true);
+              }
+              else
+              {
+                  rpn->mutable_target()->mutable_table()->set_table("t" + std::to_string(rp.table_id));
+              }
           }}});
     setClusterClause(rg, cluster, dp->mutable_cluster());
-    if (dp->sobject() != SQLObject::FUNCTION)
+    if (dp->sobject() != SQLObject::FUNCTION && dp->sobject() != SQLObject::ROW_POLICY)
     {
         dp->set_sync(rg.nextSmallNumber() < 3);
         if (rg.nextSmallNumber() < 3)
@@ -3128,6 +3149,8 @@ void StatementGenerator::generateNextQuery(RandomGenerator & rg, const bool in_p
     SQLMask[static_cast<size_t>(SQLOp::SelectQuery)] = !in_parallel;
     /// SQLMask[static_cast<size_t>(SQLOp::Kill)] = true;
     SQLMask[static_cast<size_t>(SQLOp::ShowStatement)] = !in_parallel;
+    SQLMask[static_cast<size_t>(SQLOp::CreateRowPolicy)] = !in_parallel
+        && static_cast<uint32_t>(row_policies.size()) < this->fc.max_row_policies && collectionHas<SQLTable>(attached_tables);
     SQLGen.setEnabled(SQLMask);
 
     switch (static_cast<SQLOp>(SQLGen.nextOp())) /// drifts over time
@@ -3203,6 +3226,9 @@ void StatementGenerator::generateNextQuery(RandomGenerator & rg, const bool in_p
             break;
         case SQLOp::ShowStatement:
             generateNextShowStatement(rg, sq->mutable_show());
+            break;
+        case SQLOp::CreateRowPolicy:
+            generateNextCreateRowPolicy(rg, sq->mutable_create_row_policy());
             break;
     }
 }
@@ -3582,6 +3608,10 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         else if (drp.sobject() == SQLObject::FUNCTION)
         {
             this->functions.erase(getIdentifierFromString(drp.object().function().function()));
+        }
+        else if (drp.sobject() == SQLObject::ROW_POLICY)
+        {
+            this->row_policies.erase(getIdentifierFromString(drp.object().row_policy().policy().policy()));
         }
         else
         {
@@ -3967,6 +3997,20 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
             this->functions[fname] = std::move(this->staged_functions[fname]);
         }
         this->staged_functions.erase(fname);
+    }
+    else if (ssq.has_explain() && query.has_create_row_policy())
+    {
+        const uint32_t policy_id = getIdentifierFromString(query.create_row_policy().policy().policy());
+
+        if (!ssq.explain().is_explain() && success)
+        {
+            if (query.create_row_policy().create_opt() != CreateReplaceOption::Create)
+            {
+                this->row_policies.erase(policy_id);
+            }
+            this->row_policies[policy_id] = std::move(this->staged_row_policies[policy_id]);
+        }
+        this->staged_row_policies.erase(policy_id);
     }
     else if (ssq.has_explain() && !ssq.explain().is_explain() && success && query.has_trunc() && query.trunc().has_database())
     {

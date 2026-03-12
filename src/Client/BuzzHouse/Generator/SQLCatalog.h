@@ -470,6 +470,18 @@ public:
     void setName(Function * f) const;
 };
 
+struct SQLRowPolicy
+{
+public:
+    uint32_t policy_id = 0;
+    uint32_t table_id = 0;
+    std::optional<String> cluster;
+
+    const std::optional<String> & getCluster() const;
+
+    void setName(RowPolicy * f) const;
+};
+
 struct ColumnPathChainEntry
 {
 public:

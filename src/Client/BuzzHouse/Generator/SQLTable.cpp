@@ -2967,4 +2967,47 @@ void StatementGenerator::generateNextCreateDatabase(RandomGenerator & rg, Create
     this->staged_databases[dname] = std::make_shared<SQLDatabase>(std::move(next));
 }
 
+void StatementGenerator::generateNextCreateRowPolicy(RandomGenerator & rg, CreateRowPolicy * crp)
+{
+    SQLRowPolicy next;
+    const SQLTable & t = rg.pickRandomly(filterCollection<SQLTable>(attached_tables));
+    const bool replace = !row_policies.empty() && rg.nextMediumNumber() < 16;
+
+    if (replace)
+    {
+        const SQLRowPolicy & existing = rg.pickValueRandomlyFromMap(this->row_policies);
+        next.policy_id = existing.policy_id;
+    }
+    else
+    {
+        next.policy_id = this->row_policy_counter++;
+    }
+    next.table_id = t.tname;
+
+    crp->set_create_opt(
+        replace ? (rg.nextBool() ? CreateReplaceOption::CreateOrReplace : CreateReplaceOption::Replace) : CreateReplaceOption::Create);
+    if (!replace && rg.nextSmallNumber() < 3)
+    {
+        crp->set_if_not_exists(true);
+    }
+    next.setName(crp->mutable_policy());
+    t.setName(crp->mutable_target(), true);
+    if (!fc.clusters.empty() && rg.nextSmallNumber() < 4)
+    {
+        next.cluster = rg.pickRandomly(fc.clusters);
+        setClusterClause(rg, next.cluster, crp->mutable_cluster());
+    }
+    if (rg.nextSmallNumber() < 3)
+    {
+        crp->set_is_restrictive(true);
+    }
+    crp->set_for_select(rg.nextSmallNumber() < 3);
+    /// USING filter: present ~70% of the time; absent means allow/deny all rows
+    if (rg.nextSmallNumber() < 8)
+    {
+        generateUptDelWhere(rg, t, crp->mutable_filter_expr());
+    }
+    this->staged_row_policies[next.policy_id] = std::move(next);
+}
+
 }

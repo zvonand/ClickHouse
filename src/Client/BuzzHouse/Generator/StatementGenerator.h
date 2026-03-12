@@ -188,6 +188,7 @@ private:
     uint32_t current_level = 0;
     uint32_t backup_counter = 0;
     uint32_t cache_counter = 0;
+    uint32_t row_policy_counter = 0;
     uint32_t aliases_counter = 0;
     uint32_t id_counter = 0;
     uint32_t freeze_counter = 0;
@@ -203,6 +204,8 @@ private:
     std::unordered_map<uint32_t, SQLFunction> staged_functions;
     std::unordered_map<uint32_t, SQLFunction> functions;
     std::unordered_map<uint32_t, CatalogBackup> backups;
+    std::unordered_map<uint32_t, SQLRowPolicy> staged_row_policies;
+    std::unordered_map<uint32_t, SQLRowPolicy> row_policies;
 
     DB::Strings enum_values
         = {"'-1'",    "'0'",       "'1'",    "'10'",   "'1000'", "'is'",     "'was'",      "'are'",  "'be'",       "'have'", "'had'",
@@ -268,7 +271,8 @@ private:
         LightUpdate,
         SelectQuery,
         Kill,
-        ShowStatement
+        ShowStatement,
+        CreateRowPolicy
     };
 
     enum class LitOp
@@ -534,6 +538,7 @@ private:
     void generateNextRefreshableView(RandomGenerator & rg, RefreshableView * rv);
     void generateNextCreateView(RandomGenerator & rg, CreateView * cv);
     void generateNextCreateDictionary(RandomGenerator & rg, CreateDictionary * cd);
+    void generateNextCreateRowPolicy(RandomGenerator & rg, CreateRowPolicy * crp);
     void generateNextDrop(RandomGenerator & rg, Drop * dp);
     void generateInsertToTable(RandomGenerator & rg, const SQLTable & t, bool in_parallel, std::optional<uint64_t> rows, Insert * ins);
     void generateNextInsert(RandomGenerator & rg, bool in_parallel, Insert * ins);

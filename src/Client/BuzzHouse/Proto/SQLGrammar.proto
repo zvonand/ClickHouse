@@ -1786,6 +1786,10 @@ message Function {
     required string function = 1;
 }
 
+message RowPolicy {
+    required string policy = 1;
+}
+
 message Cluster {
     optional string cluster = 1;
 }
@@ -3560,6 +3564,12 @@ enum SQLObject {
     FUNCTION = 3;
     TABLE = 4;
     VIEW = 5;
+    ROW_POLICY = 6;
+}
+
+message RowPolicyName {
+    required RowPolicy policy = 1;
+    optional ExprSchemaTable target = 2;
 }
 
 message SQLObjectName {
@@ -3567,6 +3577,7 @@ message SQLObjectName {
         ExprSchemaTable est = 1;
         Database database = 2;
         Function function = 3;
+        RowPolicyName row_policy = 4;
     }
 }
 
@@ -4349,6 +4360,17 @@ message ShowStatement {
     optional SettingValues setting_values = 24;
 }
 
+message CreateRowPolicy {
+    required CreateReplaceOption create_opt = 1;
+    optional bool if_not_exists = 2;
+    required RowPolicy policy = 3;
+    required ExprSchemaTable target = 4;
+    optional Cluster cluster = 5;
+    optional bool is_restrictive = 6;
+    optional bool for_select = 7;
+    optional Expr filter_expr = 8;
+}
+
 message SQLQueryInner {
     oneof query_inner_oneof {
         TopSelect select = 1;
@@ -4375,6 +4397,7 @@ message SQLQueryInner {
         Rename rename = 22;
         Kill kill = 23;
         ShowStatement show = 24;
+        CreateRowPolicy create_row_policy = 25;
     }
 }
 

@@ -277,6 +277,7 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsUInt64 min_bytes_to_prewarm_caches;
     extern const MergeTreeSettingsBool enable_block_number_column;
     extern const MergeTreeSettingsBool enable_block_offset_column;
+    extern const MergeTreeSettingsBool allow_commit_order_projection;
     extern const MergeTreeSettingsBool columns_and_secondary_indices_sizes_lazy_calculation;
     extern const MergeTreeSettingsSeconds refresh_parts_interval;
     extern const MergeTreeSettingsSeconds refresh_statistics_interval;
@@ -1118,17 +1119,35 @@ void MergeTreeData::checkProperties(
                 projection.name);
         }
 
-        if (projection.with_block_number && !(*getSettings())[MergeTreeSetting::enable_block_number_column])
-            throw Exception(
-                ErrorCodes::BAD_ARGUMENTS,
-                "Projection {} uses `_block_number` column, but MergeTree setting `enable_block_number_column` is disabled",
-                projection.name);
+        if (projection.with_block_number)
+        {
+            if (!(*getSettings())[MergeTreeSetting::allow_commit_order_projection])
+                throw Exception(
+                    ErrorCodes::BAD_ARGUMENTS,
+                    "Projection {} uses `_block_number` column, but MergeTree setting `allow_commit_order_projection` is disabled",
+                    projection.name);
 
-        if (projection.with_block_offset && !(*getSettings())[MergeTreeSetting::enable_block_offset_column])
-            throw Exception(
-                ErrorCodes::BAD_ARGUMENTS,
-                "Projection {} uses `_block_offset` column, but MergeTree setting `enable_block_offset_column` is disabled",
-                projection.name);
+            if (!(*getSettings())[MergeTreeSetting::enable_block_number_column])
+                throw Exception(
+                    ErrorCodes::BAD_ARGUMENTS,
+                    "Projection {} uses `_block_number` column, but MergeTree setting `enable_block_number_column` is disabled",
+                    projection.name);
+        }
+
+        if (projection.with_block_offset)
+        {
+            if (!(*getSettings())[MergeTreeSetting::allow_commit_order_projection])
+                throw Exception(
+                    ErrorCodes::BAD_ARGUMENTS,
+                    "Projection {} uses `_block_offset` column, but MergeTree setting `allow_commit_order_projection` is disabled",
+                    projection.name);
+
+            if (!(*getSettings())[MergeTreeSetting::enable_block_offset_column])
+                throw Exception(
+                    ErrorCodes::BAD_ARGUMENTS,
+                    "Projection {} uses `_block_offset` column, but MergeTree setting `enable_block_offset_column` is disabled",
+                    projection.name);
+        }
 
         if (projection.with_block_number + projection.with_block_offset == 1)
             throw Exception(

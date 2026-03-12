@@ -6,6 +6,7 @@
 #include <Interpreters/Cluster.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/ExpressionAnalyzer.h>
+#include <Interpreters/PredicateStatisticsLog.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Interpreters/InterpreterSelectQuery.h>
 #include <Interpreters/TreeRewriter.h>
@@ -3161,7 +3162,7 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
     if (!global_context)
         return;
 
-    UInt64 sample_rate = global_context->getServerSettings()[ServerSetting::predicate_statistics_sample_rate];
+    UInt64 sample_rate = global_context->getServerSettings()[ServerSettings::predicate_statistics_sample_rate];
     if (sample_rate == 0)
         return;
 

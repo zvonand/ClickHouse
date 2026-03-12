@@ -686,7 +686,7 @@ namespace DB
         auto * list_array = assert_cast<arrow::ListArray *>(list.get());
 
         auto null_bitmap = nullBytemapToArrowBitmap(null_bytemap, start, end);
-        return std::make_shared<arrow::MapArray>(map_builder->type(), list_array->length(), list_array->offsets()->data()->buffers[1], list_array->values(), null_bitmap);
+        return std::make_shared<arrow::MapArray>(map_builder->type(), list_array->length(), list_array->value_offsets(), list_array->values(), null_bitmap);
     }
 
     template<typename ValueType>

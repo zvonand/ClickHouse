@@ -116,11 +116,17 @@ void SettingsProfilesCache::mergeSettingsAndConstraints()
             {
                 mergeSettingsAndConstraintsFor(*enabled);
             }
-            catch (...)
+            catch (const Exception & e)
             {
-                /// If merging fails (e.g. a config-defined profile is now blocked for a SQL user),
-                /// keep the existing settings for this session and continue with other entries.
-                tryLogCurrentException(__PRETTY_FUNCTION__);
+                if (e.code() == ErrorCodes::ACCESS_DENIED)
+                {
+                    /// A config-defined profile is now blocked for this SQL user
+                    /// (disallow_config_defined_profiles_for_sql_defined_users was enabled).
+                    /// Keep the existing settings for this session and continue with other entries.
+                    tryLogCurrentException(__PRETTY_FUNCTION__);
+                }
+                else
+                    throw;
             }
             ++i;
         }

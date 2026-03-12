@@ -142,9 +142,14 @@ void updateStatistics(const DB::ManyAggregatedDataVariants & data_variants, cons
 
 DB::ColumnNumbers calculateKeysPositions(const DB::Block & header, const DB::Aggregator::Params & params)
 {
-    /// Only used in the execute path; in the merge path keys are accessed positionally.
+    /// In the merge path, keys are already at positions 0..keys_size-1.
     if (params.only_merge)
-        return {};
+    {
+        DB::ColumnNumbers keys_positions(params.keys_size);
+        for (size_t i = 0; i < params.keys_size; ++i)
+            keys_positions[i] = i;
+        return keys_positions;
+    }
 
     DB::ColumnNumbers keys_positions(params.keys_size);
     for (size_t i = 0; i < params.keys_size; ++i)

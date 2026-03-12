@@ -7,6 +7,15 @@
 namespace DB
 {
 
+/// Chunk info attached to every chunk output by TotalsHavingTransform.
+/// Used by MarshallBlocksTransform to skip marshalling for these chunks.
+/// This unfortunate crutch is needed, because for totals, `IOutputFormat::prepareTotals`
+/// may call the `cut` method on a column after the chunk already passed `MarshallBlocksTransform`.
+/// Since `ColumnBLOB` doesn't support `cut`, we need to skip marshalling for totals.
+class TotalsHavingChunkInfo final : public ChunkInfoCloneable<TotalsHavingChunkInfo>
+{
+};
+
 class ExpressionActions;
 using ExpressionActionsPtr = std::shared_ptr<ExpressionActions>;
 using IColumnFilter = PaddedPODArray<UInt8>;

@@ -133,6 +133,7 @@ IProcessor::Status TotalsHavingTransform::prepare()
     if (!total_prepared)
         return Status::Ready;
 
+    totals.getChunkInfos().add(std::make_shared<TotalsHavingChunkInfo>());
     totals_output.push(std::move(totals));
     totals_output.finish();
     return Status::Finished;
@@ -201,6 +202,7 @@ void TotalsHavingTransform::transform(Chunk & chunk)
         {
             addToTotals(chunk, nullptr);
             chunk.setColumns(std::move(columns), num_rows);
+            chunk.getChunkInfos().add(std::make_shared<TotalsHavingChunkInfo>());
             return;
         }
 
@@ -236,6 +238,7 @@ void TotalsHavingTransform::transform(Chunk & chunk)
         chunk.setColumns(std::move(columns), num_rows);
     }
 
+    chunk.getChunkInfos().add(std::make_shared<TotalsHavingChunkInfo>());
     passed_keys += chunk.getNumRows();
 }
 

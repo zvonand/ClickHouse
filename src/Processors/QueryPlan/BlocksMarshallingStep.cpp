@@ -3,6 +3,7 @@
 #include <Processors/ISimpleTransform.h>
 #include <Processors/QueryPlan/Serialization.h>
 #include <Processors/Transforms/SortChunksBySequenceNumber.h>
+#include <Processors/Transforms/TotalsHavingTransform.h>
 #include <QueryPipeline/QueryPipelineBuilder.h>
 
 namespace DB
@@ -36,6 +37,9 @@ public:
 
     void transform(Chunk & chunk) override
     {
+        if (chunk.getChunkInfos().get<TotalsHavingChunkInfo>())
+            return;
+
         const size_t num_rows = chunk.getNumRows();
         auto block = getInputPort().getHeader().cloneWithColumns(chunk.detachColumns());
         block = callback(block);

@@ -891,7 +891,7 @@ bool RestCatalog::getTableMetadataImpl(
         }
         else
         {
-            result.setTableIsNotReadable(fmt::format("Cannot read table {}, because no 'location' in response", table_name));
+            result.setTableIsNotReadable(fmt::format("Cannot read table {}, because no 'metadata-location' in response", table_name));
         }
     }
 
@@ -1221,7 +1221,7 @@ ICatalog::CredentialsRefreshCallback RestCatalog::getCredentialsConfigurationCal
         }
         else
         {
-            throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Cannot read table {}, because no 'location' in response", table_name);
+            throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Cannot read table {}, because no 'metadata-location' in response", table_name);
         }
 
         auto [new_credentials, _] = getCredentialsAndEndpoint(config_object, location);

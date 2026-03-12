@@ -158,9 +158,9 @@ std::optional<String> optimizeUseNormalProjections(
         if (need_parent_part_offset)
         {
             ActionsDAG rename_dag;
-            const auto * from_node = &rename_dag.addInput("_parent_part_offset", std::make_shared<DataTypeUInt64>());
-            const auto * to_node = &rename_dag.addAlias(*from_node, "_part_offset");
-            rename_dag.addOrReplaceInOutputs(*to_node);
+            const auto * node = &rename_dag.addInput("_parent_part_offset", std::make_shared<DataTypeUInt64>());
+            node = &rename_dag.addAlias(*node, "_part_offset");
+            rename_dag.getOutputs() = {node};
 
             if (query.dag)
                 query.dag = ActionsDAG::merge(std::move(rename_dag), *std::move(query.dag));

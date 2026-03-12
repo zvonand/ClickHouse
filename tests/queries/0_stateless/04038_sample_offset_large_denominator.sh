@@ -93,8 +93,6 @@ check_roundtrip "SELECT * FROM numbers(1) JOIN (SELECT number FROM numbers(1) SA
 check_roundtrip "SELECT 1 FROM numbers(1) SAMPLE 1e-2000000000"
 
 # Combined large fractional part + large negative exponent: denominator must not wrap to 1.
-# Before the fix, the denominator overflowed and wrapped to a small value.
-# The forbidden pattern uses a newline-terminated match via grep -x to avoid matching "SAMPLE 1 / <big>".
 check_not_contains "SELECT 1 FROM numbers(1) SAMPLE 0.000000000000000000000000000000000000001e-39" "SAMPLE 1 / 1"
 
 # Large integer.fraction where the multiply saturates but num_after > 0; must not wrap to small value.

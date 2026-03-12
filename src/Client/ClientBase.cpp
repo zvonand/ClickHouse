@@ -1136,11 +1136,8 @@ bool ClientBase::processTextAsSingleQuery(const String & full_query)
 {
     /// Some parts of a query (result output and formatting) are executed
     /// client-side. Thus we need to parse the query.
-
     const char * begin = full_query.data();
-    const char * end = begin + full_query.size();
-
-    auto parsed_query = parseQuery(begin, end,
+    auto parsed_query = parseQuery(begin, begin + full_query.size(),
         client_context->getSettingsRef(),
         /*allow_multi_statements=*/ false);
 
@@ -3830,7 +3827,7 @@ void ClientBase::runNonInteractive()
         if (!buzzHouse())
             return;
     }
-    else if (!queries.empty())
+    else if (!buzzHouse() && !queries.empty())
     {
         for (const auto & query : queries)
         {

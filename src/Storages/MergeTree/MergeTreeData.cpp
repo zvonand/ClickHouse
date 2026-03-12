@@ -1173,10 +1173,10 @@ void MergeTreeData::checkProperties(
             validate_complex_projection(projection.name, {"_part_offset", "_part_index", "_parent_part_offset"});
 
         if (projection.with_block_number)
-            validate_complex_projection(projection.name, {"_block_number", "_parent_block_number"});
+            validate_complex_projection(projection.name, {"_block_number"});
 
         if (projection.with_block_offset)
-            validate_complex_projection(projection.name, {"_block_offset", "_parent_block_offset"});
+            validate_complex_projection(projection.name, {"_block_offset"});
     }
 
     for (const auto & col : new_metadata.columns)

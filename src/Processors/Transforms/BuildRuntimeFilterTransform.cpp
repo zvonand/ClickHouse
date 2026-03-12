@@ -9,6 +9,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int LOGICAL_ERROR;
+}
+
 BuildRuntimeFilterTransform::BuildRuntimeFilterTransform(
     SharedHeader header_,
     String filter_column_name_,
@@ -100,6 +105,8 @@ void BuildRuntimeFilterTransform::transform(Chunk & chunk)
 
 void BuildRuntimeFilterTransform::finish()
 {
+    if (!query_context)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Query context is not available for BuildRuntimeFilterTransform");
     auto filter_lookup = query_context->getRuntimeFilterLookup();
     filter_lookup->add(filter_name, std::move(built_filter));
 }

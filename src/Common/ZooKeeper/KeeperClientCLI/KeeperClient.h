@@ -16,6 +16,9 @@ static const NameSet four_letter_word_commands
         "ruok", "mntr", "srvr", "stat", "srst", "conf",
         "cons", "crst", "envi", "dirs", "isro", "wchs",
         "wchc", "wchp", "dump", "csnp", "lgif", "rqld",
+        "rclc", "clrs", "ftfl", "ydld", "pfev", "lgrq",
+        "rcfg", "rcvr", "apiv", "jmst", "jmfp", "jmep",
+        "jmdp",
     };
 
 class KeeperClientBase

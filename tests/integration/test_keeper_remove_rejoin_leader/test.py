@@ -130,6 +130,10 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
 
     # Step 1: Add node4 to the cluster.
     # node4 creates peer objects for all three existing members.
+    # Start Keeper on node4 first so NuRaft can connect immediately when it
+    # processes the rcfg command; otherwise the synchronous rcfg call blocks
+    # for ~120 s retrying against a non-listening port and times out.
+    start_keeper(node4, "enable_keeper4.xml")
     result = send_rcfg(
         leader,
         {
@@ -148,7 +152,6 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         timeout_sec=120,
     )
     assert result["status"] == "ok", f"Failed to add node4: {result}"
-    start_keeper(node4, "enable_keeper4.xml")
     keeper_utils.wait_until_connected(cluster, node4)
 
     # Step 2: Remove the first follower.
@@ -170,6 +173,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         keeper_utils.wait_until_connected(cluster, n)
 
     # Step 3: Add node5 to the cluster.
+    start_keeper(node5, "enable_keeper5.xml")
     result = send_rcfg(
         leader,
         {
@@ -188,7 +192,6 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         timeout_sec=120,
     )
     assert result["status"] == "ok", f"Failed to add node5: {result}"
-    start_keeper(node5, "enable_keeper5.xml")
     keeper_utils.wait_until_connected(cluster, node5)
 
     # Step 4: Remove the second follower.
@@ -205,6 +208,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         keeper_utils.wait_until_connected(cluster, n)
 
     # Step 5: Add node6 to the cluster.
+    start_keeper(node6, "enable_keeper6.xml")
     result = send_rcfg(
         leader,
         {
@@ -223,7 +227,6 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
         timeout_sec=120,
     )
     assert result["status"] == "ok", f"Failed to add node6: {result}"
-    start_keeper(node6, "enable_keeper6.xml")
     keeper_utils.wait_until_connected(cluster, node6)
 
     # Step 6: Remove the original leader.

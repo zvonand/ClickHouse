@@ -37,8 +37,7 @@ static void finishSettings(SettingValues * svs)
 
 /// Correctness query oracle
 /// SELECT COUNT(*) FROM <FROM_CLAUSE> WHERE <PRED>;
-/// or
-/// SELECT COUNT(*) FROM <FROM_CLAUSE> WHERE <PRED1> GROUP BY <GROUP_BY CLAUSE> HAVING <PRED2>;
+/// (GROUP BY / HAVING variant is TODO — see `combination` below)
 void QueryOracle::generateCorrectnessTestFirstQuery(RandomGenerator & rg, StatementGenerator & gen, SQLQuery & sq1)
 {
     TopSelect * ts = sq1.mutable_single_query()->mutable_explain()->mutable_inner_query()->mutable_select();
@@ -94,8 +93,8 @@ void QueryOracle::generateCorrectnessTestFirstQuery(RandomGenerator & rg, Statem
 }
 
 /// SELECT ifNull(SUM(PRED),0) FROM <FROM_CLAUSE>;
-/// or
-/// SELECT ifNull(SUM(PRED2),0) FROM <FROM_CLAUSE> WHERE <PRED1> GROUP BY <GROUP_BY CLAUSE>;
+/// (or ifNull(SUM(PRED2),0) FROM <FROM_CLAUSE> WHERE <PRED1> GROUP BY … when sq1 has a GROUP BY,
+///  but that path is currently unreachable because combination=0 in generateCorrectnessTestFirstQuery)
 void QueryOracle::generateCorrectnessTestSecondQuery(SQLQuery & sq1, SQLQuery & sq2)
 {
     TopSelect * ts = sq2.mutable_single_query()->mutable_explain()->mutable_inner_query()->mutable_select();
@@ -356,8 +355,10 @@ void QueryOracle::generateCountDistinctFirstQuery(RandomGenerator & rg, Statemen
 }
 
 /// ifNull(COUNT(DISTINCT expr), 0) consistency oracle — second query
-/// SELECT COUNT(*) FROM (SELECT DISTINCT expr FROM <from_clause>) AS sub
+/// SELECT COUNT(*) FROM (SELECT DISTINCT expr FROM <from_clause> WHERE isNotNull(expr)) AS sub
 ///
+/// COUNT(DISTINCT expr) skips NULLs, so the inner DISTINCT subquery filters them out
+/// with WHERE isNotNull(expr) to keep the outer COUNT(*) equivalent.
 /// Moves the FROM clause and expression out of sq1 to build sq2,
 /// mirroring the pattern used by `generateCorrectnessTestSecondQuery`.
 void QueryOracle::generateCountDistinctSecondQuery(SQLQuery & sq1, SQLQuery & sq2)

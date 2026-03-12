@@ -156,6 +156,8 @@ public:
         destroyElements();
         free();
 
+        std::swap(num_cells, rhs.num_cells);
+        std::swap(min_key, rhs.min_key);
         std::swap(buf, rhs.buf);
         setSize(rhs.size());
 

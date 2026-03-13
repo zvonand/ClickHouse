@@ -28,7 +28,6 @@
 #include <Interpreters/TransactionVersionMetadata.h>
 #include <DataTypes/Serializations/SerializationInfo.h>
 #include <Poco/LRUCache.h>
-#include <Common/MultiVersion.h>
 
 
 namespace zkutil
@@ -677,7 +676,7 @@ private:
     /// Total size of all columns, calculated once in calcuateColumnSizesOnDisk
     mutable ColumnSize total_columns_size TSA_GUARDED_BY(columns_and_secondary_indices_sizes_mutex);
     /// Size for each column, calculated once in calcuateColumnSizesOnDisk
-    mutable MultiVersion<ColumnSizeByName> columns_sizes;
+    mutable ColumnSizeByNameConstPtr columns_sizes TSA_GUARDED_BY(columns_and_secondary_indices_sizes_mutex);
     mutable ColumnSize total_secondary_indices_size TSA_GUARDED_BY(columns_and_secondary_indices_sizes_mutex);
 
     mutable IndexSizeByName secondary_index_sizes TSA_GUARDED_BY(columns_and_secondary_indices_sizes_mutex);

@@ -98,9 +98,6 @@ class ClickHouseProc:
         self.proc_2 = None
         self.pid = 0
         nproc = int(Utils.cpu_count() / 2)
-        # Fast test runs lightweight SQL tests that are not CPU-bound,
-        # so we can use more parallelism than the default cpu_count/2.
-        nproc_fast = max(1, int(Utils.cpu_count() * 3 / 4))
         self.minio_proc = None
         self.azurite_proc = None
         self.kafka_proc = None

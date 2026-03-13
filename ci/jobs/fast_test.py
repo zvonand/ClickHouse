@@ -296,6 +296,11 @@ def main():
         stop_watch_ = Utils.Stopwatch()
         step_name = "Tests"
         print(step_name)
+
+        # Fast test runs lightweight SQL tests that are not CPU-bound,
+        # so we can use more parallelism than the default cpu_count/2.
+        nproc_fast = max(1, int(Utils.cpu_count() * 3 / 4))
+
         fast_test_command = f"cd {temp_dir} && clickhouse-test --hung-check --trace --capture-client-stacktrace --no-random-settings --no-random-merge-tree-settings --no-long --testname --shard --check-zookeeper-session --order random --report-logs-stats --fast-tests-only --no-stateful --jobs {nproc_fast}"
         if args.test:
             fast_test_command += f" -- '{args.test}'"

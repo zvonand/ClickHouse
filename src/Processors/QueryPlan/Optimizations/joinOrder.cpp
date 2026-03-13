@@ -370,19 +370,31 @@ double JoinOrderOptimizer::computeSelectivity(
         if (!equiv_class || !visited.insert(equiv_class).second)
             continue;
 
-        for (const auto & other : *equiv_class)
+        /// Find the maximum NDV across all members of this class that belong
+        /// to either side of the join. This is equivalent to evaluating all
+        /// (left_member, right_member) pairs and taking the minimum selectivity,
+        /// since min(1/max(l,r)) = 1/max(all l's and r's).
+        size_t max_ndv = 0;
+        bool has_left = false;
+        bool has_right = false;
+        for (const auto & equiv_member : *equiv_class)
         {
-            auto other_rel = other.getSourceRelations().getSingleBit();
-            if (!other_rel || !right.test(*other_rel))
+            auto relation = equiv_member.getSourceRelations().getSingleBit();
+            if (!relation)
                 continue;
-
-            UInt64 lhs_ndv = getColumnStats(member.getSourceRelations(), member.getColumnName());
-            UInt64 rhs_ndv = getColumnStats(other.getSourceRelations(), other.getColumnName());
-            UInt64 max_ndv = std::max(lhs_ndv, rhs_ndv);
-            if (max_ndv > 0)
-                selectivity = std::min(selectivity, 1.0 / static_cast<double>(max_ndv));
-            break;
+            if (left.test(*relation))
+            {
+                has_left = true;
+                max_ndv = std::max(max_ndv, getColumnStats(equiv_member.getSourceRelations(), equiv_member.getColumnName()));
+            }
+            else if (right.test(*relation))
+            {
+                has_right = true;
+                max_ndv = std::max(max_ndv, getColumnStats(equiv_member.getSourceRelations(), equiv_member.getColumnName()));
+            }
         }
+        if (has_left && has_right && max_ndv > 0)
+            selectivity = std::min(selectivity, 1.0 / static_cast<double>(max_ndv));
     }
 
     return selectivity;

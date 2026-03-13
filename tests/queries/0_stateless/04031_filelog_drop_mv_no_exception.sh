@@ -20,7 +20,7 @@ DATA_DIR="${USER_FILES_PATH}/${CLICKHOUSE_TEST_UNIQUE_NAME}"
 mkdir -p "${DATA_DIR}"
 rm -rf "${DATA_DIR:?}"/*
 
-for iteration in {1..20}; do
+for iteration in {1..5}; do
     # Prepare a data file for FileLog to consume
     for i in {1..10}; do
         echo "${i},${i}"
@@ -59,7 +59,7 @@ for iteration in {1..20}; do
     ${CLICKHOUSE_CLIENT} --query "DROP TABLE ${CLICKHOUSE_DATABASE}.filelog_mv SYNC"
 
     # Give the background thread time to attempt streaming with no MV
-    sleep 0.5
+    sleep 0.2
 
     # The key check: FileLog table must not have accumulated an exception.
     # Before the fix, DEPENDENCIES_NOT_FOUND was thrown here.

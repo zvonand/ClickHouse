@@ -182,7 +182,7 @@ This can generally be done by passing the separator strings in order of descendi
 If the separator strings happen to form a [prefix code](https://en.wikipedia.org/wiki/Prefix_code), they can be passed in arbitrary order.
 :::
 
-To understand how a tokenizer split the input string, you can use the [tokens](/sql-reference/functions/splitting-merging-functions.md/#tokens) function:
+To understand how a tokenizer split the input string, you can use the [tokens](/sql-reference/functions/splitting-merging-functions.md/#tokens) and [tokensForLikePattern](/sql-reference/functions/splitting-merging-functions.md/#tokensForLikePattern) functions:
 
 Example:
 

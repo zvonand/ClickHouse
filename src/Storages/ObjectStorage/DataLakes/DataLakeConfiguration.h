@@ -32,6 +32,7 @@
 #include <Common/filesystemHelpers.h>
 #include <Disks/DiskType.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage.h>
+#include <Storages/ObjectStorage/IObjectIterator.h>
 #include <Databases/DataLake/RestCatalog.h>
 #include <Databases/DataLake/GlueCatalog.h>
 #include <Storages/ObjectStorage/StorageObjectStorageConfiguration.h>
@@ -71,6 +72,40 @@ namespace DataLakeStorageSetting
     extern DataLakeStorageSettingsString storage_oauth_server_uri;
     extern DataLakeStorageSettingsBool storage_oauth_server_use_request_body;
 }
+
+/// Wraps a DataLake object iterator to validate that each file path
+/// stays within the allowed directory (e.g. user_files for local storage).
+/// Prevents path traversal attacks via crafted manifest entries.
+class LocalPathValidatingIterator : public IObjectIterator
+{
+public:
+    LocalPathValidatingIterator(ObjectIterator inner_, String allowed_path_)
+        : inner(std::move(inner_)), allowed_path(std::move(allowed_path_))
+    {
+    }
+
+    ObjectInfoPtr next(size_t processor) override
+    {
+        auto info = inner->next(processor);
+        if (info)
+        {
+            if (!fileOrSymlinkPathStartsWith(info->getPath(), allowed_path))
+                throw Exception(
+                    ErrorCodes::PATH_ACCESS_DENIED,
+                    "Data file path {} is not inside {}",
+                    info->getPath(),
+                    allowed_path);
+        }
+        return info;
+    }
+
+    size_t estimatedKeysCount() override { return inner->estimatedKeysCount(); }
+    std::optional<UInt64> getSnapshotVersion() const override { return inner->getSnapshotVersion(); }
+
+private:
+    ObjectIterator inner;
+    String allowed_path;
+};
 
 template <typename T>
 concept StorageConfiguration = std::derived_from<T, StorageObjectStorageConfiguration>;
@@ -273,7 +308,10 @@ public:
         ContextPtr context) override
     {
         assertInitialized();
-        return current_metadata->iterate(filter_dag, callback, list_batch_size, storage_metadata, context);
+        auto iter = current_metadata->iterate(filter_dag, callback, list_batch_size, storage_metadata, context);
+        if (BaseStorageConfiguration::getType() == ObjectStorageType::Local && !ready_object_storage)
+            iter = std::make_shared<LocalPathValidatingIterator>(std::move(iter), context->getUserFilesPath());
+        return iter;
     }
 
 #if USE_PARQUET

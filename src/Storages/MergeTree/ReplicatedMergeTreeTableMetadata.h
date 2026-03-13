@@ -45,7 +45,11 @@ struct ReplicatedMergeTreeTableMetadata
     explicit ReplicatedMergeTreeTableMetadata(const MergeTreeData & data, const StorageMetadataPtr & metadata_snapshot);
 
     void read(ReadBuffer & in);
-    static ReplicatedMergeTreeTableMetadata parse(const String & s);
+    /// Pure deserialization without any backward-compatibility normalization.
+    static ReplicatedMergeTreeTableMetadata parseRaw(const String & s);
+    /// Parse and normalize: removes implicit indices from `skip_indices` for backward
+    /// compatibility with older replicas (before 25.12) that stored them in Keeper.
+    static ReplicatedMergeTreeTableMetadata parseAndNormalize(const String & s, const StorageInMemoryMetadata & metadata, ContextPtr context);
 
     void write(WriteBuffer & out) const;
     String toString() const;

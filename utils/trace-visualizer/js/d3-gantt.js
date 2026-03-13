@@ -310,6 +310,7 @@
     // Whether tooltip is pinned (click to keep visible)
     var tipPinned = false;
     var tipPinnedRect = null;
+    var docClickHandler = null;
 
     var filterMatch = function(d) {
         return filter == '' || d.text.toLowerCase().includes(filter);
@@ -403,7 +404,7 @@
             }
         });
         // Click anywhere outside a rect or tooltip dismisses pinned tooltip
-        document.addEventListener("click", function(evt) {
+        docClickHandler = function(evt) {
             if (tipPinned) {
                 // Don't dismiss if click is inside the tooltip
                 var tipNode = document.querySelector(".d3-tip");
@@ -414,7 +415,8 @@
                     tipShown = null;
                 }
             }
-        });
+        };
+        document.addEventListener("click", docClickHandler);
     }
 
     var updateFilter = function() {
@@ -620,6 +622,10 @@
     }
 
     gantt.destroy = function() {
+        if (docClickHandler) {
+            document.removeEventListener("click", docClickHandler);
+            docClickHandler = null;
+        }
         tip.destroy();
         d3.select(selector).selectAll("svg").remove();
     }

@@ -372,7 +372,7 @@ struct BlockMyersEditDistance
 
         const Word * operator[](UInt32 c) const
         {
-            auto it = offset_map.find(c);
+            const auto * it = offset_map.find(c);
             return (it == offset_map.end()) ? nullptr : arena.data() + it->getMapped();
         }
     };
@@ -411,10 +411,14 @@ struct BlockMyersEditDistance
         // Covers needles up to 128*64 = 8192 chars
         constexpr size_t stack_limit = 128;
 
-        std::vector<Word> hp_heap, hn_heap, d0_heap;
+        std::vector<Word> hp_heap;
+        std::vector<Word> hn_heap;
+        std::vector<Word> d0_heap;
         if (num_blocks > stack_limit)
         {
-            hp_heap.resize(num_blocks); hn_heap.resize(num_blocks); d0_heap.resize(num_blocks);
+            hp_heap.resize(num_blocks);
+            hn_heap.resize(num_blocks);
+            d0_heap.resize(num_blocks);
         }
 
         for (UInt32 col = 0; col < haystack_len; ++col)
@@ -430,13 +434,19 @@ struct BlockMyersEditDistance
             // Store HP and HN in temporary arrays for now.
             // We cannot overwrite VP/VN yet because we still need their old values.
             // Small needle - use stack scratch:
-            Word hp_scratch[stack_limit], hn_scratch[stack_limit], d0_scratch[stack_limit]; // max 128 x block_size needle
+            Word hp_scratch[stack_limit]; // max 128 x block_size needle
+            Word hn_scratch[stack_limit];
+            Word d0_scratch[stack_limit];
             // Large needle - use vector if needed
 
-            Word *hp_arr = hp_scratch, *hn_arr = hn_scratch, *d0_arr = d0_scratch;
+            Word * hp_arr = hp_scratch;
+            Word * hn_arr = hn_scratch;
+            Word * d0_arr = d0_scratch;
             if (num_blocks > stack_limit)
             {
-                hp_arr = hp_heap.data(); hn_arr = hn_heap.data(); d0_arr = d0_heap.data();
+                hp_arr = hp_heap.data();
+                hn_arr = hn_heap.data();
+                d0_arr = d0_heap.data();
             }
 
             for (UInt32 k = 0; k < num_blocks; ++k)

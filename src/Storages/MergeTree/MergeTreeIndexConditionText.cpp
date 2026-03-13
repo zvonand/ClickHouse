@@ -7,7 +7,6 @@
 #include <Interpreters/ITokenizer.h>
 #include <Interpreters/PreparedSets.h>
 #include <Interpreters/Set.h>
-#include <Interpreters/misc.h>
 #include <Storages/MergeTree/MergeTreeIndexText.h>
 #include <Storages/MergeTree/MergeTreeIndexTextPreprocessor.h>
 #include <Storages/MergeTree/TextIndexCache.h>
@@ -421,16 +420,10 @@ bool MergeTreeIndexConditionText::traverseAtomNode(const RPNBuilderTreeNode & no
         auto lhs_argument = function.getArgumentAt(0);
         auto rhs_argument = function.getArgumentAt(1);
 
-        if (functionIsInOrGlobalInOperator(function_name))
+        if (function_name == "in" && tryPrepareSetForTextSearch(lhs_argument, rhs_argument, function_name, out))
         {
-            if (tryPrepareSetForTextSearch(lhs_argument, rhs_argument, function_name, out))
-            {
-                if (function_name == "in")
-                {
-                    out.function = RPNElement::FUNCTION_IN;
-                    return true;
-                }
-            }
+            out.function = RPNElement::FUNCTION_IN;
+            return true;
         }
         else if (isSupportedFunction(function_name))
         {

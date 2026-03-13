@@ -1649,6 +1649,15 @@ void QueryFuzzer::fuzzExpressionList(ASTExpressionList & expr_list)
             /// Return a '*' literal
             child = make_intrusive<ASTAsterisk>();
         }
+        else if (fuzz_rand() % 1500 == 0 && current_ast_depth < 80)
+        {
+            /// Wrap child in a scalar subquery (SELECT child)
+            auto sel_list = make_intrusive<ASTExpressionList>();
+            sel_list->children.push_back(child->clone());
+            auto select_query = make_intrusive<ASTSelectQuery>();
+            select_query->setExpression(ASTSelectQuery::Expression::SELECT, std::move(sel_list));
+            child = make_intrusive<ASTSubquery>(std::move(select_query));
+        }
         else
         {
             auto new_child = reverseLiteralFuzzing(child);
@@ -1767,7 +1776,7 @@ ASTPtr QueryFuzzer::generatePredicate()
             for (int i = 0; i < nconditions; i++)
             {
                 ASTPtr next_condition = nullptr;
-                const int nprob = fuzz_rand() % 10;
+                const int nprob = fuzz_rand() % 12;
 
                 /// Pick a random identifier
                 auto rand_col1 = colids.begin();
@@ -1779,7 +1788,43 @@ ASTPtr QueryFuzzer::generatePredicate()
                 {
                     next_condition = makeASTFunction(fuzz_rand() % 2 == 0 ? "isNull" : "isNotNull", expression_1);
                 }
-                else
+                else if (nprob == 1 && !table_like.empty() && current_ast_depth < 80)
+                {
+                    /// col IN/NOT IN/globalIn/globalNotIn (subquery), or EXISTS (subquery)
+                    static const Strings subquery_variants = {"in", "notIn", "globalIn", "globalNotIn", "exists"};
+                    for (size_t att = 0; att < 10; ++att)
+                    {
+                        const auto & entry = table_like[fuzz_rand() % table_like.size()];
+                        if (typeid_cast<ASTSubquery *>(entry.second.get()))
+                        {
+                            const String & variant = subquery_variants[fuzz_rand() % subquery_variants.size()];
+                            if (variant == "exists")
+                                next_condition = makeASTFunction(variant, entry.second->clone());
+                            else
+                                next_condition = makeASTFunction(variant, expression_1, entry.second->clone());
+                            break;
+                        }
+                    }
+                }
+                else if (nprob == 2)
+                {
+                    /// col IN (expr1, expr2, ...) or col NOT IN (...) with a literal tuple
+                    static const Strings in_tuple_variants = {"in", "notIn", "globalIn", "globalNotIn"};
+                    auto tuple_func = make_intrusive<ASTFunction>();
+                    tuple_func->name = "tuple";
+                    tuple_func->arguments = make_intrusive<ASTExpressionList>();
+                    tuple_func->children.push_back(tuple_func->arguments);
+                    const size_t n_items = (fuzz_rand() % 4) + 1;
+                    for (size_t j = 0; j < n_items; j++)
+                    {
+                        auto rand_col = column_like.begin();
+                        std::advance(rand_col, fuzz_rand() % column_like.size());
+                        tuple_func->arguments->children.push_back(rand_col->second->clone());
+                    }
+                    next_condition = makeASTFunction(in_tuple_variants[fuzz_rand() % in_tuple_variants.size()], expression_1, tuple_func);
+                }
+                /// Fall back to a column comparison if no subquery was available (case 1) or for nprob >= 3
+                if (!next_condition)
                 {
                     /// Pick any other column reference
                     auto rand_col2 = column_like.begin();

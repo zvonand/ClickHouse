@@ -13,8 +13,8 @@ SELECT 'CAST(val, String) on non-Nullable scalar types';
 SELECT '-- String';
 CREATE TABLE tab (id UInt64, val String, INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = CAST(val, 'String'))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'foo'), (2, 'bar'), (3, 'baz');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- FixedString';
@@ -27,8 +27,8 @@ DROP TABLE tab;
 SELECT '-- LowCardinality(String)';
 CREATE TABLE tab (id UInt64, val LowCardinality(String), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = CAST(val, 'String'))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'foo'), (2, 'bar'), (3, 'baz');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- LowCardinality(FixedString)';
@@ -69,8 +69,8 @@ SELECT 'CAST on Nullable types';
 SELECT '-- Nullable(String) + CAST to String (non-NULL data)';
 CREATE TABLE tab (id UInt64, val Nullable(String), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = CAST(val, 'String'))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'foo'), (2, 'bar'), (3, 'baz');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- Nullable(FixedString) + CAST to Nullable(String)';
@@ -83,8 +83,8 @@ DROP TABLE tab;
 SELECT '-- LowCardinality(Nullable(String)) + CAST to String (non-NULL data)';
 CREATE TABLE tab (id UInt64, val LowCardinality(Nullable(String)), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = CAST(val, 'String'))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'foo'), (2, 'bar'), (3, 'baz');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- Array(Nullable(String)) + CAST to Nullable(String)';
@@ -106,29 +106,29 @@ DROP TABLE tab;
 SELECT '-- String + CAST to LowCardinality(String)';
 CREATE TABLE tab (id UInt64, val String, INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = CAST(val, 'LowCardinality(String)'))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'foo'), (2, 'bar'), (3, 'baz');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- String + CAST to Nullable(String)';
 CREATE TABLE tab (id UInt64, val String, INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = CAST(val, 'Nullable(String)'))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'foo'), (2, 'bar'), (3, 'baz');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- String + CAST to LowCardinality(Nullable(FixedString))';
 CREATE TABLE tab (id UInt64, val String, INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = CAST(val, 'LowCardinality(Nullable(FixedString(3)))'))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'foo'), (2, 'bar'), (3, 'baz');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- LowCardinality(String) + CAST to Nullable(FixedString)';
 CREATE TABLE tab (id UInt64, val LowCardinality(String), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = CAST(val, 'Nullable(FixedString(3))'))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'foo'), (2, 'bar'), (3, 'baz');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT 'Type-preserving preprocessor (lower)';
@@ -136,22 +136,22 @@ SELECT 'Type-preserving preprocessor (lower)';
 SELECT '-- Nullable(String) + lower';
 CREATE TABLE tab (id UInt64, val Nullable(String), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = lower(val))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'FOO'), (2, NULL), (3, 'BAR');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- LowCardinality(String) + lower';
 CREATE TABLE tab (id UInt64, val LowCardinality(String), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = lower(val))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'FOO'), (2, 'BAR'), (3, 'BAZ');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- LowCardinality(Nullable(String)) + lower';
 CREATE TABLE tab (id UInt64, val LowCardinality(Nullable(String)), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = lower(val))) ENGINE = MergeTree ORDER BY id;
 INSERT INTO tab VALUES (1, 'FOO'), (2, NULL), (3, 'BAR');
-SELECT count() FROM tab WHERE hasToken(val, 'foo');
-SELECT count() FROM tab WHERE hasToken(val, 'xyz');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'foo');
+SELECT count() FROM tab WHERE hasAllTokens(val, 'xyz');
 DROP TABLE tab;
 
 SELECT '-- Array(String) + lower';

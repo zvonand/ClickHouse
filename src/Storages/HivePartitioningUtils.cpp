@@ -129,7 +129,9 @@ void addPartitionColumnsToChunk(
                 path);
         }
 
-        auto chunk_column = column.type->createColumnConst(chunk.getNumRows(), convertFieldToType(Field(it->second), *column.type))->convertToFullColumnIfConst();
+        FormatSettings hive_format_settings;
+        hive_format_settings.allow_number_leading_zeros = true;
+        auto chunk_column = column.type->createColumnConst(chunk.getNumRows(), convertFieldToType(Field(String(it->second)), *column.type, nullptr, hive_format_settings))->convertToFullColumnIfConst();
         chunk.addColumn(std::move(chunk_column));
     }
 }

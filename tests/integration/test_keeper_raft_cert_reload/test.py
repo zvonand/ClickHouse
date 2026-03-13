@@ -187,8 +187,16 @@ def test_cert_reload_on_reconnect(started_cluster):
     print(f"New certificate serial (from file): {new_serial}")
     assert initial_serial != new_serial, "Certificate serial should have changed"
 
-    # Give time for reload to process
-    time.sleep(2)
+    # Wait for certificate reload to complete by polling the Raft port
+    # New connections should use the updated certificate
+    def wait_for_cert_reload(node, target_host, expected_serial, timeout=30):
+        start = time.time()
+        while time.time() - start < timeout:
+            served = get_cert_serial_from_raft_port(node, target_host)
+            if served == expected_serial:
+                return True
+            time.sleep(0.5)
+        return False
 
     # Note: Existing connections keep their old cert - that's expected.
     # The new cert is only used for NEW connections.
@@ -207,9 +215,8 @@ def test_cert_reload_on_reconnect(started_cluster):
 
     # Now verify the Raft port is serving the NEW certificate
     # Node3 just restarted, so its connections to node1 are fresh
-    served_serial = get_cert_serial_from_raft_port(node3, "node1")
-    print(f"Certificate serial from Raft port after restart: {served_serial}")
-    assert served_serial == new_serial, (
-        f"Raft port should serve new cert after reload. Expected {new_serial}, got {served_serial}"
+    # Use polling to handle async certificate reload
+    assert wait_for_cert_reload(node3, "node1", new_serial, timeout=30), (
+        f"Raft port should serve new cert after reload. Expected {new_serial}"
     )
     print("Verified: Raft SSL port is serving the updated certificate!")

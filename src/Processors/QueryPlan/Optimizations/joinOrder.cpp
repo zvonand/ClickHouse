@@ -797,7 +797,8 @@ DPJoinEntryPtr optimizeJoinOrder(QueryGraph query_graph, const QueryPlanOptimiza
     if (!best_plan)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Failed to find a valid join order");
 
-    cleanupJoinPredicates(best_plan, column_equivalences);
+    if (optimization_settings.enable_join_transitive_predicates)
+        cleanupJoinPredicates(best_plan, column_equivalences);
     return best_plan;
 }
 

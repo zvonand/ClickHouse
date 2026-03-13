@@ -104,6 +104,10 @@ void QueryGraph::buildColumnEquivalences()
             continue;
 
         column_equivalences.add(*lhs_resolved, *rhs_resolved);
+
+        LOG_TRACE(&Poco::Logger::get("JoinOrderOptimizer"),
+            "Column equivalence: relation {} `{}` = relation {} `{}`",
+            *lhs_rel, lhs_resolved->getColumnName(), *rhs_rel, rhs_resolved->getColumnName());
     }
 }
 
@@ -156,7 +160,6 @@ static void cleanupJoinPredicates(
 
         /// Phase 1: Remove redundant predicates.
         auto & expressions = entry->join_operator.expression;
-        size_t removed = 0;
         bool is_inner = isInner(entry->join_operator.kind);
 
         std::erase_if(expressions, [&](const JoinActionRef & predicate)
@@ -174,7 +177,12 @@ static void cleanupJoinPredicates(
             auto rhs_class = equiv.getClass(*rhs_resolved);
             if (lhs_class && rhs_class && lhs_class == rhs_class)
             {
-                ++removed;
+                auto lhs_rel = lhs_resolved->getSourceRelations().getSingleBit();
+                auto rhs_rel = rhs_resolved->getSourceRelations().getSingleBit();
+                LOG_TRACE(&Poco::Logger::get("JoinOrderOptimizer"),
+                    "Removed redundant join predicate: relation {} `{}` = relation {} `{}`",
+                    lhs_rel ? *lhs_rel : 0, lhs_resolved->getColumnName(),
+                    rhs_rel ? *rhs_rel : 0, rhs_resolved->getColumnName());
                 return true;
             }
 
@@ -185,10 +193,6 @@ static void cleanupJoinPredicates(
                 equiv.add(*lhs_resolved, *rhs_resolved);
             return false;
         });
-
-        if (removed > 0)
-            LOG_DEBUG(&Poco::Logger::get("JoinOrderOptimizer"),
-                "Removed {} redundant join predicate(s)", removed);
 
         /// Phase 2: Synthesize predicates for transitive-only joins.
         if (expressions.empty() && isInner(entry->join_operator.kind))
@@ -220,7 +224,7 @@ static void cleanupJoinPredicates(
                         JoinActionRef::AddFunction(JoinConditionOperator::Equals)));
                     equiv.add(member, other);
 
-                    LOG_DEBUG(&Poco::Logger::get("JoinOrderOptimizer"),
+                    LOG_TRACE(&Poco::Logger::get("JoinOrderOptimizer"),
                         "Synthesized transitive predicate: relation {} `{}` = relation {} `{}`",
                         *member_rel, member.getColumnName(), *other_rel, other.getColumnName());
                     /// One predicate per equivalence class is enough for connectivity.

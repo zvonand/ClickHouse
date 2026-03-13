@@ -86,7 +86,7 @@ size_t deserializeOffsets(
     if (max_rows_to_read == 0)
         return 0;
 
-    if (max_rows_to_read && state.num_trailing_defaults >= max_rows_to_read)
+    if (state.num_trailing_defaults >= max_rows_to_read)
     {
         state.num_trailing_defaults -= max_rows_to_read;
         return limit;
@@ -129,7 +129,7 @@ size_t deserializeOffsets(
         size_t next_total_rows = total_rows + group_size;
         group_size += state.num_trailing_defaults;
 
-        if (max_rows_to_read && next_total_rows >= max_rows_to_read)
+        if (next_total_rows >= max_rows_to_read)
         {
             /// If it was not last group in granule,
             /// we have to add current non-default value at further reads.

@@ -59,14 +59,14 @@ void FillingStep::transformPipeline(QueryPipelineBuilder & pipeline, const Build
 
 void FillingStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
     settings.out << prefix;
     dumpSortDescription(sort_description, settings.out);
     settings.out << '\n';
     if (interpolate_description)
     {
         auto expression = std::make_shared<ExpressionActions>(interpolate_description->actions.clone());
-        if (settings.verbose)
+        if (!settings.compact)
             expression->describeActions(settings.out, prefix);
     }
 }

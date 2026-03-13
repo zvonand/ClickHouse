@@ -144,7 +144,7 @@ void DistinctStep::transformPipeline(QueryPipelineBuilder & pipeline, const Buil
 
 void DistinctStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
     settings.out << prefix << "Columns: ";
 
     if (columns.empty())

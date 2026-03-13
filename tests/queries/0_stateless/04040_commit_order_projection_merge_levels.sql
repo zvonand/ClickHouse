@@ -40,11 +40,13 @@ system flush logs part_log;
 select 'part_log: rebuild merges';
 select part_name, ProfileEvents['RebuiltProjections'] as rebuilt, ProfileEvents['MergedProjections'] as merged
 from system.part_log
-where database = currentDatabase() and table = 'mt_merge_levels' and event_type = 'MergeParts' and part_name in ('all_1_2_1', 'all_3_4_1');
+where database = currentDatabase() and table = 'mt_merge_levels' and event_type = 'MergeParts' and part_name in ('all_1_2_1', 'all_3_4_1')
+order by part_name;
 
 select 'part_log: projection merges';
 select part_name, ProfileEvents['RebuiltProjections'] as rebuilt, ProfileEvents['MergedProjections'] as merged
 from system.part_log
-where database = currentDatabase() and table = 'mt_merge_levels' and event_type = 'MergeParts' and part_name = 'all_1_4_2';
+where database = currentDatabase() and table = 'mt_merge_levels' and event_type = 'MergeParts' and part_name = 'all_1_4_2'
+order by part_name;
 
 drop table mt_merge_levels sync;

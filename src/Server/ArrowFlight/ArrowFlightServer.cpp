@@ -1163,6 +1163,8 @@ arrow::Status ArrowFlightServer::GetFlightInfo(
         }
         else
         {
+            if (request.cmd.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
+                return arrow::Status::Invalid("Command payload is too large");
             if (
                 google::protobuf::Any any_msg;
                     request.type == arrow::flight::FlightDescriptor::CMD
@@ -1281,6 +1283,8 @@ arrow::Status ArrowFlightServer::GetSchema(
             std::function<void(ContextPtr, Block &)> block_modifier;
             std::shared_ptr<arrow::Table> table;
 
+            if (request.cmd.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
+                return arrow::Status::Invalid("Command payload is too large");
             if (
                 google::protobuf::Any any_msg;
                     request.type == arrow::flight::FlightDescriptor::CMD
@@ -1402,6 +1406,8 @@ arrow::Status ArrowFlightServer::PollFlightInfo(
         }
         else
         {
+            if (request.cmd.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
+                return arrow::Status::Invalid("Command payload is too large");
             if (
                 google::protobuf::Any any_msg;
                     request.type == arrow::flight::FlightDescriptor::CMD
@@ -1568,9 +1574,9 @@ arrow::Status ArrowFlightServer::evaluatePollDescriptor(const String & poll_desc
             break;
         }
 
-        calls_data->endEvaluation(poll_descriptor, ticket, rows, bytes, !ticket);
         if (!ticket)
             poll_session->onFinish();
+        calls_data->endEvaluation(poll_descriptor, ticket, rows, bytes, !ticket);
     }
     catch (...)
     {
@@ -1694,7 +1700,8 @@ arrow::Status ArrowFlightServer::DoPut(
         auto session = auth.getSession();
 
         std::string sql;
-
+        if (request.cmd.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
+            return arrow::Status::Invalid("Command payload is too large");
         if (
             google::protobuf::Any any_msg;
                 request.type == arrow::flight::FlightDescriptor::CMD

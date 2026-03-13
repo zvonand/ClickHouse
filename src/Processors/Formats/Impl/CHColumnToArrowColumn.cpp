@@ -467,7 +467,7 @@ namespace DB
 
     static std::shared_ptr<arrow::Array> buildArrowStructArrayWithTupleColumnData(
         const String & column_name,
-        ColumnPtr & column,
+        const ColumnPtr & column,
         const DataTypePtr & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
         arrow::ArrayBuilder * array_builder,
@@ -629,7 +629,7 @@ namespace DB
 
     static std::shared_ptr<arrow::Array> buildArrowListArrayWithArrayColumnData(
         const String & column_name,
-        ColumnPtr & column,
+        const ColumnPtr & column,
         const DataTypePtr & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
         arrow::ArrayBuilder * array_builder,
@@ -639,7 +639,7 @@ namespace DB
         const CHColumnToArrowColumn::Settings & settings,
         std::unordered_map<String, MutableColumnPtr> & dictionary_values)
     {
-        auto * column_array = assert_cast<ColumnArray *>(&column->assumeMutableRef());
+        const auto * column_array = assert_cast<const ColumnArray *>(column.get());
         const auto * type_array = assert_cast<const DataTypeArray *>(column_type.get());
 
         const auto column_offsets = assert_cast<const ColumnArray::ColumnOffsets &>(column_array->getOffsetsColumn()).getPtr();
@@ -673,7 +673,7 @@ namespace DB
 
     static std::shared_ptr<arrow::Array> buildArrowMapArrayWithMapColumnData(
         const String & column_name,
-        ColumnPtr & column,
+        const ColumnPtr & column,
         const DataTypePtr & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
         arrow::ArrayBuilder * array_builder,
@@ -683,7 +683,7 @@ namespace DB
         const CHColumnToArrowColumn::Settings & settings,
         std::unordered_map<String, MutableColumnPtr> & dictionary_values)
     {
-        auto * column_map = assert_cast<ColumnMap *>(&column->assumeMutableRef());
+        const auto * column_map = assert_cast<const ColumnMap *>(column.get());
         auto nested_column = column_map->getNestedColumnPtr();
         const auto * type_map = assert_cast<const DataTypeMap *>(column_type.get());
         const DataTypePtr & nested_type = type_map->getNestedType();
@@ -701,7 +701,7 @@ namespace DB
     template<typename ValueType>
     static void fillArrowArrayWithLowCardinalityColumnDataImpl(
         const String & column_name,
-        ColumnPtr & column,
+        const ColumnPtr & column,
         const DataTypePtr & column_type,
         const PaddedPODArray<UInt8> *,
         arrow::ArrayBuilder * array_builder,
@@ -780,7 +780,7 @@ namespace DB
 
     static void fillArrowArrayWithLowCardinalityColumnData(
         const String & column_name,
-        ColumnPtr & column,
+        const ColumnPtr & column,
         const DataTypePtr & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
         arrow::ArrayBuilder * array_builder,

@@ -67,7 +67,7 @@ struct KeyMatcherString
 
     bool match(size_t keys_row) const
     {
-        size_t offset = string_offsets[keys_row - 1];
+        size_t offset = string_offsets[ssize_t(keys_row) - 1];
         size_t size = string_offsets[keys_row] - offset;
         if (size != key_size)
             return false;
@@ -110,7 +110,7 @@ void findKeyPositions(
     for (size_t i = start; i < end; ++i)
     {
         size_t positions_row_idx = i - start;
-        size_t offset_start = offsets[i - 1];
+        size_t offset_start = offsets[ssize_t(i) - 1];
         size_t offset_end = offsets[i];
 
         /// Try the predicted position first.
@@ -302,7 +302,7 @@ void extractValuesString(
         size_t pos = matched_positions[i];
         if (pos != KEY_NOT_FOUND)
         {
-            total_chars_size += src_offsets[pos] - src_offsets[pos - 1];
+            total_chars_size += src_offsets[pos] - src_offsets[ssize_t(pos) - 1];
             if (dst_null_map)
                 (*dst_null_map)[old_offsets_size + i] = (*src_null_map)[pos];
         }
@@ -322,7 +322,7 @@ void extractValuesString(
         size_t pos = matched_positions[i];
         if (pos != KEY_NOT_FOUND)
         {
-            size_t src_offset = src_offsets[pos - 1];
+            size_t src_offset = src_offsets[ssize_t(pos) - 1];
             size_t src_size = src_offsets[pos] - src_offset;
             memcpy(&dst_chars[current_offset], &src_chars[src_offset], src_size);
             current_offset += src_size;

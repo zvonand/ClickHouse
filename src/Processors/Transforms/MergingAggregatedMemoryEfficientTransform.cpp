@@ -387,7 +387,7 @@ void MergingAggregatedBucketTransform::transform(Chunk & chunk)
 
     auto agg_chunk = params->aggregator.mergeBlocks(chunks_list, params->final, is_cancelled);
 
-    if (!required_sort_description.empty())
+    if (!required_sort_description.empty() && agg_chunk.chunk)
     {
         auto header = params->params.getHeader(params->header, params->final);
         auto block = header.cloneWithColumns(agg_chunk.chunk.detachColumns());

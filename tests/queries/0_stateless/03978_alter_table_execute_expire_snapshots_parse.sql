@@ -24,6 +24,9 @@ ALTER TABLE test_execute_03978 EXECUTE expire_snapshots(expire_before = '2024-06
 ALTER TABLE test_execute_03978 EXECUTE expire_snapshots(); -- { serverError NOT_IMPLEMENTED }
 ALTER TABLE test_execute_03978 EXECUTE compact(); -- { serverError NOT_IMPLEMENTED }
 ALTER TABLE test_execute_03978 EXECUTE unknown_command(); -- { serverError NOT_IMPLEMENTED }
+-- MergeTree raises NOT_IMPLEMENTED before BAD_ARGUMENTS, so positional-arg error shows as NOT_IMPLEMENTED here.
+-- Against a real Iceberg table, expire_snapshots('timestamp') would raise BAD_ARGUMENTS.
+ALTER TABLE test_execute_03978 EXECUTE expire_snapshots('2024-06-01 00:00:00'); -- { serverError NOT_IMPLEMENTED }
 DROP TABLE test_execute_03978;
 
 -- Privilege hierarchy is verified by 01271_show_privileges (ALTER EXECUTE listed under ALTER TABLE)

@@ -29,7 +29,18 @@ ExpireSnapshotsOptions parseExpireSnapshotsOptions(const ASTPtr & args, ContextP
     if (!args)
         return options;
 
-    auto parsed_kv = parseKeyValueArguments(args->children, context);
+    const auto & all_args = args->children;
+    ASTs mutable_args(all_args);
+    auto first_kv_it = getFirstKeyValueArgument(mutable_args);
+    size_t pos_count = static_cast<size_t>(std::distance(mutable_args.begin(), first_kv_it));
+    if (pos_count > 0)
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "expire_snapshots does not accept positional arguments. "
+            "Use named argument expire_before = '<datetime>' instead of a bare timestamp string. "
+            "Example: expire_snapshots(expire_before = '2025-01-01 00:00:00')");
+
+    auto parsed_kv = parseKeyValueArguments(all_args, context);
 
     for (const auto & [key, value] : parsed_kv)
     {

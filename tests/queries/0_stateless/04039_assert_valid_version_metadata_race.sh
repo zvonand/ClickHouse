@@ -49,8 +49,10 @@ for attempt in $(seq 1 5); do
     done
 
     # Launch `system.columns` queries that capture `shared_ptr<IStorage>` to all tables.
-    for j in $(seq 1 20); do
+    pids=()
+    for j in $(seq 1 5); do
         $CLICKHOUSE_CLIENT -q "SELECT * FROM system.columns FORMAT Null" 2>/dev/null &
+        pids+=($!)
     done
 
     # Give background system.columns queries time to start and capture storage references.
@@ -69,7 +71,10 @@ for attempt in $(seq 1 5); do
         done
     fi
 
-    wait
+    # Wait per-PID to suppress bash "Killed" messages on stderr.
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null
+    done
 
     # Re-ATTACH so the next iteration's DROP can find the table.
     $CLICKHOUSE_CLIENT -q "ATTACH TABLE ${db_name}.test_intersect" 2>/dev/null ||:

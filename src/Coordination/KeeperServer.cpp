@@ -151,9 +151,9 @@ auto getSslContextProvider(const Poco::Util::AbstractConfiguration & config, std
 
         if (!CertificateReloader::instance().registerAdditionalContext(ssl_ctx, config_prefix))
         {
-            LOG_WARNING(getLogger("KeeperServer"),
+            throw Exception(ErrorCodes::RAFT_ERROR,
                 "Failed to register NuRaft SSL context with CertificateReloader for prefix '{}'. "
-                "Certificate hot-reload may not work for Raft connections.", config_prefix);
+                "Ensure CertificateReloader::tryLoad() is called before initializing Keeper.", config_prefix);
         }
 
         return context.takeSslContext();

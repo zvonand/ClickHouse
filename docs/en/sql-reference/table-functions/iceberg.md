@@ -540,7 +540,7 @@ ALTER TABLE iceberg_table EXECUTE expire_snapshots(
 );
 ```
 
-Which snapshots to keep is determined by the [retention policy](#iceberg-snapshot-retention-policy) (table properties `min-snapshots-to-keep`, `max-snapshot-age-ms`, and per-ref overrides). The retention policy is always evaluated regardless of other arguments.
+By default, which snapshots to keep is determined by the [retention policy](#iceberg-snapshot-retention-policy) (table properties `min-snapshots-to-keep`, `max-snapshot-age-ms`, and per-ref overrides). When `snapshot_ids` is specified, the retention policy is bypassed and only the listed snapshots are considered for expiration.
 
 **Arguments:**
 

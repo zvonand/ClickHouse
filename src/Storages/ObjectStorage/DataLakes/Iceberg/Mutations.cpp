@@ -925,7 +925,7 @@ static void collectRetainedFiles(
     ContextPtr context,
     LoggerPtr log,
     Int32 current_schema_id,
-    std::set<String> & retained_manifest_paths,
+    std::set<Iceberg::IcebergPathFromMetadata> & retained_manifest_paths,
     std::set<Iceberg::IcebergPathFromMetadata> & retained_data_file_paths,
     std::set<String> & retained_manifest_list_paths)
 {
@@ -957,7 +957,7 @@ static void collectRetainedFiles(
 
 struct ExpiredFiles
 {
-    Strings all_paths;
+    std::vector<Iceberg::IcebergPathFromMetadata> all_paths;
     Int64 data_files = 0;
     Int64 position_delete_files = 0;
     Int64 equality_delete_files = 0;
@@ -1038,7 +1038,7 @@ static ExpiredFiles collectExpiredFiles(
             ++result.manifest_files;
         }
 
-        result.all_paths.push_back(storage_ml_path);
+        result.all_paths.push_back(IcebergPathFromMetadata(ml_path));
         ++result.manifest_lists;
     }
     return result;
@@ -1126,7 +1126,8 @@ static void updateMetadataForExpiration(
 }
 
 static void deleteExpiredFiles(
-    const Strings & files_to_delete,
+    const std::vector<Iceberg::IcebergPathFromMetadata> & files_to_delete,
+    const Iceberg::IcebergPathResolver & path_resolver,
     ObjectStoragePtr object_storage,
     LoggerPtr log)
 {
@@ -1134,12 +1135,12 @@ static void deleteExpiredFiles(
     {
         try
         {
-            object_storage->removeObjectIfExists(StoredObject(file_path));
-            LOG_DEBUG(log, "Deleted expired file {}", file_path);
+            object_storage->removeObjectIfExists(StoredObject(path_resolver.resolve(file_path)));
+            LOG_DEBUG(log, "Deleted expired file {}", file_path.getRawPath());
         }
         catch (...)
         {
-            LOG_WARNING(log, "Failed to delete file {}: {}", file_path, getCurrentExceptionMessage(false));
+            LOG_WARNING(log, "Failed to delete file {}: {}", file_path.getRawPath(), getCurrentExceptionMessage(false));
         }
     }
 }
@@ -1224,7 +1225,7 @@ ExpireSnapshotsResult expireSnapshots(
 
         Int32 current_schema_id = metadata->getValue<Int32>(Iceberg::f_current_schema_id);
 
-        std::set<String> retained_manifest_paths;
+        std::set<Iceberg::IcebergPathFromMetadata> retained_manifest_paths;
         std::set<Iceberg::IcebergPathFromMetadata> retained_data_file_paths;
         std::set<String> retained_manifest_list_paths;
         collectRetainedFiles(
@@ -1274,7 +1275,7 @@ ExpireSnapshotsResult expireSnapshots(
         }
 
         LOG_INFO(log, "Deleting {} expired files for {} expired snapshots", expired_files.all_paths.size(), partition.expired_snapshot_ids.size());
-        deleteExpiredFiles(expired_files.all_paths, object_storage, log);
+        deleteExpiredFiles(expired_files.all_paths, persistent_table_components.path_resolver, object_storage, log);
         LOG_INFO(log, "Expired {} snapshots, deleted {} files", partition.expired_snapshot_ids.size(), expired_files.all_paths.size());
 
         return ExpireSnapshotsResult{

@@ -31,7 +31,7 @@ namespace DB
 /// And we can get `ManifestFileContent` from cache by ManifestFileEntry.
 struct ManifestFileCacheKey
 {
-    String manifest_file_path;
+    Iceberg::IcebergPathFromMetadata manifest_file_path;
     size_t manifest_file_byte_size;
     Int64 added_sequence_number;
     Int64 added_snapshot_id;
@@ -74,7 +74,7 @@ private:
          size_t total_size = 0;
          for (const auto & entry: manifest_file_cache_keys)
          {
-             total_size += sizeof(ManifestFileCacheKey) + entry.manifest_file_path.capacity();
+             total_size += sizeof(ManifestFileCacheKey) + entry.manifest_file_path.getRawPath().capacity();
          }
          return total_size;
     }

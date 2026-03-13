@@ -193,7 +193,6 @@ std::optional<ProcessedManifestFileEntryPtr> SingleThreadIcebergKeysIterator::ne
                 mle.added_sequence_number,
                 mle.added_snapshot_id,
                 local_context,
-                mle.manifest_file_path,
                 filter_dag,
                 table_snapshot->schema_id);
             break;

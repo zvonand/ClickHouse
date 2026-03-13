@@ -44,7 +44,7 @@ struct ManifestFilePlan
     {
     }
 
-    String path;
+    Iceberg::IcebergPathFromMetadata path;
     std::vector<String> manifest_lists_path;
     DataFileStatistics statistics;
 
@@ -68,10 +68,10 @@ struct Plan
     using PartitionPlan = std::vector<std::shared_ptr<DataFilePlan>>;
     std::vector<PartitionPlan> partitions;
     IcebergHistory history;
-    std::unordered_map<String, Int64> manifest_file_to_first_snapshot;
-    std::unordered_map<String, std::vector<String>> manifest_list_to_manifest_files;
+    std::unordered_map<Iceberg::IcebergPathFromMetadata, Int64> manifest_file_to_first_snapshot;
+    std::unordered_map<String, std::vector<Iceberg::IcebergPathFromMetadata>> manifest_list_to_manifest_files;
     std::unordered_map<Int64, std::vector<std::shared_ptr<DataFilePlan>>> snapshot_id_to_data_files;
-    std::unordered_map<String, std::shared_ptr<DataFilePlan>> path_to_data_file;
+    std::unordered_map<Iceberg::IcebergPathFromMetadata, std::shared_ptr<DataFilePlan>> path_to_data_file;
     FileNamesGenerator generator;
     Poco::JSON::Object::Ptr initial_metadata_object;
 
@@ -151,7 +151,7 @@ Plan getPlan(
     plan.initial_metadata_object = initial_metadata_object;
 
     std::vector<ProcessedManifestFileEntryPtr> all_positional_delete_files;
-    std::unordered_map<String, std::shared_ptr<ManifestFilePlan>> manifest_files;
+    std::unordered_map<Iceberg::IcebergPathFromMetadata, std::shared_ptr<ManifestFilePlan>> manifest_files;
     for (const auto & snapshot : snapshots_info)
     {
         auto resolved_manifest_list_path = persistent_table_components.path_resolver.resolve(
@@ -352,8 +352,8 @@ void writeMetadataFiles(
     }
 
     Poco::JSON::Object::Ptr initial_metadata_object = plan.initial_metadata_object;
-    std::unordered_map<String, String> manifest_file_renamings;
-    std::unordered_map<String, Int64> manifest_file_sizes;
+    std::unordered_map<Iceberg::IcebergPathFromMetadata, Iceberg::IcebergPathFromMetadata> manifest_file_renamings;
+    std::unordered_map<Iceberg::IcebergPathFromMetadata, Int64> manifest_file_sizes;
 
     {
         std::unordered_map<std::shared_ptr<ManifestFilePlan>, std::unordered_set<String>> grouped_by_manifest_files_result;
@@ -395,7 +395,7 @@ void writeMetadataFiles(
         for (auto & [manifest_entry, data_filenames] : grouped_by_manifest_files_result)
         {
             manifest_entry->patched_path = plan.generator.generateManifestEntryName();
-            manifest_file_renamings[manifest_entry->path] = manifest_entry->patched_path.getRawPath();
+            manifest_file_renamings[manifest_entry->path] = manifest_entry->patched_path;
             auto buffer_manifest_entry = object_storage->writeObject(
                 StoredObject(path_resolver.resolve(manifest_entry->patched_path)),
                 WriteMode::Rewrite,
@@ -431,17 +431,17 @@ void writeMetadataFiles(
                     path_resolver.resolve(manifest_entry->patched_path), /*with_tags=*/ false);
                 manifest_bytes = file_metadata.size_bytes;
             }
-            manifest_file_sizes[manifest_entry->patched_path.getRawPath()] += manifest_bytes;
+            manifest_file_sizes[manifest_entry->patched_path] += manifest_bytes;
         }
     }
 
-    std::unordered_map<String, String> manifest_list_renamings;
+    std::unordered_map<String, Iceberg::IcebergPathFromMetadata> manifest_list_renamings;
     for (size_t i = 0; i < plan.history.size(); ++i)
     {
         if (plan.history[i].added_files == 0)
             continue;
 
-        manifest_list_renamings[plan.history[i].manifest_list_path] = new_snapshots[i].manifest_list_path.getRawPath();
+        manifest_list_renamings[plan.history[i].manifest_list_path] = new_snapshots[i].manifest_list_path;
     }
 
     for (size_t i = 0; i < plan.history.size(); ++i)
@@ -452,7 +452,7 @@ void writeMetadataFiles(
         auto initial_manifest_list_name = plan.history[i].manifest_list_path;
         auto initial_manifest_entries = plan.manifest_list_to_manifest_files[initial_manifest_list_name];
         auto renamed_manifest_list = manifest_list_renamings[initial_manifest_list_name];
-        std::vector<String> renamed_manifest_entries;
+        std::vector<Iceberg::IcebergPathFromMetadata> renamed_manifest_entries;
         for (const auto & initial_manifest_entry : initial_manifest_entries)
         {
             auto renamed_manifest_entry = manifest_file_renamings[initial_manifest_entry];

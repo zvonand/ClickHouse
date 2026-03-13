@@ -85,6 +85,16 @@ private:
 
 }
 
+/// Make IcebergPathFromMetadata hashable for use in unordered containers.
+template <>
+struct std::hash<DB::Iceberg::IcebergPathFromMetadata>
+{
+    size_t operator()(const DB::Iceberg::IcebergPathFromMetadata & p) const noexcept
+    {
+        return std::hash<String>{}(p.getRawPath());
+    }
+};
+
 /// Make IcebergPathFromMetadata formattable with fmt for logging.
 template <>
 struct fmt::formatter<DB::Iceberg::IcebergPathFromMetadata> : fmt::formatter<std::string>

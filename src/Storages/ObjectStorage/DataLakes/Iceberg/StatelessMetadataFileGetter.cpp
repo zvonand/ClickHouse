@@ -69,7 +69,7 @@ Iceberg::ManifestFileCacheableInfo getManifestFile(
     const PersistentTableComponents & persistent_table_components,
     ContextPtr local_context,
     LoggerPtr log,
-    const String & filename,
+    const IcebergPathFromMetadata & filename,
     size_t bytes_size)
 {
     auto log_level = local_context->getSettingsRef()[Setting::iceberg_metadata_log_level].value;
@@ -79,7 +79,7 @@ Iceberg::ManifestFileCacheableInfo getManifestFile(
 
     auto create_fn = [&, use_iceberg_metadata_cache]()
     {
-        RelativePathWithMetadata manifest_object_info(filename);
+        RelativePathWithMetadata manifest_object_info(persistent_table_components.path_resolver.resolve(filename));
 
         auto read_settings = local_context->getReadSettings();
         /// Do not utilize filesystem cache if more precise cache enabled
@@ -88,7 +88,7 @@ Iceberg::ManifestFileCacheableInfo getManifestFile(
 
         auto buffer = createReadBuffer(manifest_object_info, object_storage, local_context, log, read_settings);
         auto manifest_file_deserializer = std::make_unique<Iceberg::AvroForIcebergDeserializer>(
-            std::move(buffer), filename, getFormatSettings(local_context));
+            std::move(buffer), filename.getRawPath(), getFormatSettings(local_context));
 
         return Iceberg::ManifestFileCacheableInfo{std::move(manifest_file_deserializer), bytes_size};
     };
@@ -96,7 +96,7 @@ Iceberg::ManifestFileCacheableInfo getManifestFile(
     if (use_iceberg_metadata_cache && persistent_table_components.table_uuid.has_value())
     {
         auto manifest_file = persistent_table_components.metadata_cache->getOrSetManifestFile(
-            IcebergMetadataFilesCache::getKey(persistent_table_components.table_uuid.value(), filename), create_fn);
+            IcebergMetadataFilesCache::getKey(persistent_table_components.table_uuid.value(), filename.getRawPath()), create_fn);
         return manifest_file;
     }
     return create_fn();
@@ -127,7 +127,6 @@ Iceberg::ManifestFileIterator::ManifestFileEntriesHandle getManifestFileEntriesH
         cache_key.added_sequence_number,
         cache_key.added_snapshot_id,
         local_context,
-        cache_key.manifest_file_path,
         nullptr,
         table_snapshot_schema_id);
 
@@ -227,7 +226,7 @@ ManifestFileCacheKeys getManifestList(
     ManifestFileCacheKeys manifest_file_cache_keys;
     if (use_iceberg_metadata_cache && persistent_table_components.table_uuid.has_value())
         manifest_file_cache_keys = persistent_table_components.metadata_cache->getOrSetManifestFileCacheKeys(
-            IcebergMetadataFilesCache::getKey(persistent_table_components.table_uuid.value(), filename), create_fn);
+            IcebergMetadataFilesCache::getKey(persistent_table_components.table_uuid.value(), filename.getRawPath()), create_fn);
     else
         manifest_file_cache_keys = create_fn();
     return manifest_file_cache_keys;

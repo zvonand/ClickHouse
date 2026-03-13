@@ -30,4 +30,5 @@ gh<em>a</em>
 <em>cat</em> and <em>cat</em> and <em>cat</em>
 -- FixedString
 <em>Hello</em> World
+<em>abc</em>
 -- Error: too many needles

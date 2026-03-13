@@ -3,16 +3,23 @@
 #include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnString.h>
 #include <Common/FunctionDocumentation.h>
+#include <Core/Settings.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeString.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
 #include <Functions/HighlightImpl.h>
 #include <Functions/IFunction.h>
+#include <Interpreters/Context.h>
 
 
 namespace DB
 {
+
+namespace Setting
+{
+    extern const SettingsUInt64 highlight_max_matches_per_row;
+}
 
 namespace ErrorCodes
 {
@@ -24,9 +31,17 @@ namespace ErrorCodes
 
 class FunctionHighlight : public IFunction
 {
+    const UInt64 max_matches_per_row;
+
 public:
     static constexpr auto name = "highlight";
-    static FunctionPtr create(ContextPtr) { return std::make_shared<FunctionHighlight>(); }
+
+    explicit FunctionHighlight(ContextPtr context)
+        : max_matches_per_row(context->getSettingsRef()[Setting::highlight_max_matches_per_row].value)
+    {
+    }
+
+    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionHighlight>(context); }
 
     String getName() const override { return name; }
     bool isVariadic() const override { return true; }
@@ -99,9 +114,11 @@ public:
 
                 for (size_t i = 0; i < input_rows_count; ++i)
                 {
-                    const char * str = reinterpret_cast<const char *>(&fixed_chars[i * fixed_n]);
-                    size_t len = strnlen(str, fixed_n);
-                    str_chars.insert(str, str + len);
+                    const UInt8 * begin = &fixed_chars[i * fixed_n];
+                    size_t len = fixed_n;
+                    while (len > 0 && begin[len - 1] == 0)
+                        --len;
+                    str_chars.insert(begin, begin + len);
                     str_offsets[i] = str_chars.size();
                 }
 
@@ -174,7 +191,8 @@ public:
             close_tag,
             col_res->getChars(),
             col_res->getOffsets(),
-            input_rows_count);
+            input_rows_count,
+            max_matches_per_row);
 
         return col_res;
     }

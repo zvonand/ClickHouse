@@ -19,7 +19,7 @@ namespace ErrorCodes
 
 struct HighlightImpl
 {
-    static constexpr size_t MAX_INTERVALS_PER_ROW = 10000;
+    static constexpr size_t DEFAULT_MAX_MATCHES_PER_ROW = 10000;
     struct Interval
     {
         size_t begin;
@@ -63,7 +63,8 @@ struct HighlightImpl
         const String & close_tag,
         ColumnString::Chars & res_data,
         ColumnString::Offsets & res_offsets,
-        size_t input_rows_count)
+        size_t input_rows_count,
+        UInt64 max_matches_per_row = DEFAULT_MAX_MATCHES_PER_ROW)
     {
         /// Pre-allocate output buffers — conservative estimate to avoid over-allocation
         /// with many needles: at most one tag pair per row on average.
@@ -104,7 +105,7 @@ struct HighlightImpl
             {
                 /// Phase 1: find all matches
                 intervals.clear();
-                findAllMatches(cur_data, cur_size, searchers, intervals);
+                findAllMatches(cur_data, cur_size, searchers, intervals, max_matches_per_row);
 
                 if (intervals.empty())
                 {
@@ -134,7 +135,8 @@ private:
         const UInt8 * haystack,
         size_t haystack_size,
         const std::vector<NeedleSearcher> & searchers,
-        std::vector<Interval> & intervals)
+        std::vector<Interval> & intervals,
+        UInt64 max_matches_per_row)
     {
         const UInt8 * haystack_end = haystack + haystack_size;
 
@@ -151,11 +153,12 @@ private:
                 intervals.push_back({offset, offset + needle_size});
                 pos = match + 1;
 
-                if (intervals.size() > MAX_INTERVALS_PER_ROW)
+                if (intervals.size() > max_matches_per_row)
                     throw Exception(
                         ErrorCodes::LIMIT_EXCEEDED,
-                        "Too many highlight matches per row: {}, max: {}",
-                        intervals.size(), MAX_INTERVALS_PER_ROW);
+                        "Too many highlight matches per row: {}, max: {}. "
+                        "You can increase this limit with the `highlight_max_matches_per_row` setting",
+                        intervals.size(), max_matches_per_row);
             }
         }
     }

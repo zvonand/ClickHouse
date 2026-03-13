@@ -48,6 +48,7 @@ SELECT highlight('cat and cat and cat', ['cat']);
 -- FixedString input
 SELECT '-- FixedString';
 SELECT highlight(toFixedString('Hello World', 20), ['hello']);
+SELECT highlight(toFixedString('abc', 5), ['abc']);  -- trailing padding stripped
 
 -- Too many needles (> 255)
 SELECT '-- Error: too many needles';

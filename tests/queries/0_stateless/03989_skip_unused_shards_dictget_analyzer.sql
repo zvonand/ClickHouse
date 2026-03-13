@@ -1,4 +1,4 @@
--- Tags: shard, no-parallel
+-- Tags: shard
 
 -- force_optimize_skip_unused_shards used to fail with UNABLE_TO_SKIP_UNUSED_SHARDS
 -- when the query contained GLOBAL IN with a subquery on another distributed table,

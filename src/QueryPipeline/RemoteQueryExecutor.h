@@ -5,7 +5,6 @@
 #include <Client/ConnectionPoolWithFailover.h>
 #include <Common/UniqueLock.h>
 #include <Interpreters/ClientInfo.h>
-#include <QueryPipeline/UnavailableShardTracker.h>
 #include <Storages/IStorage_fwd.h>
 #include <Interpreters/StorageID.h>
 #include <sys/types.h>
@@ -15,6 +14,9 @@ namespace DB
 {
 
 class Context;
+
+struct UnavailableShardTracker;
+using UnavailableShardTrackerPtr = std::shared_ptr<UnavailableShardTracker>;
 
 class IThrottler;
 using ThrottlerPtr = std::shared_ptr<IThrottler>;

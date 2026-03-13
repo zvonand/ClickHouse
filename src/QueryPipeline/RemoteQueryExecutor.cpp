@@ -1,6 +1,7 @@
 #include <Common/ConcurrentBoundedQueue.h>
 #include <QueryPipeline/RemoteQueryExecutor.h>
 #include <QueryPipeline/RemoteQueryExecutorReadContext.h>
+#include <QueryPipeline/UnavailableShardTracker.h>
 
 #include <Columns/ColumnConst.h>
 #include <Common/CurrentThread.h>

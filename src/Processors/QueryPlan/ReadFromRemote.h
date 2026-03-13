@@ -4,7 +4,6 @@
 #include <Core/QueryProcessingStage.h>
 #include <Client/IConnections.h>
 #include <Common/GetPriorityForLoadBalancing.h>
-#include <QueryPipeline/UnavailableShardTracker.h>
 #include <Storages/IStorage_fwd.h>
 #include <Interpreters/StorageID.h>
 #include <Interpreters/ClusterProxy/SelectStreamFactory.h>
@@ -14,6 +13,9 @@ namespace DB
 {
 class IThrottler;
 using ThrottlerPtr = std::shared_ptr<IThrottler>;
+
+struct UnavailableShardTracker;
+using UnavailableShardTrackerPtr = std::shared_ptr<UnavailableShardTracker>;
 
 class ParallelReplicasReadingCoordinator;
 using ParallelReplicasReadingCoordinatorPtr = std::shared_ptr<ParallelReplicasReadingCoordinator>;

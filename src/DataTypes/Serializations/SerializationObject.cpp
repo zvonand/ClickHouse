@@ -157,33 +157,29 @@ void SerializationObject::enumerateStreams(EnumerateStreamsSettings & settings, 
     const auto * deserialize_state = data.deserialize_state ? checkAndGetState<DeserializeBinaryBulkStateObject>(data.deserialize_state) : nullptr;
     const auto * structure_state = deserialize_state ? checkAndGetState<DeserializeBinaryBulkStateObjectStructure>(deserialize_state->structure_state) : nullptr;
 
-    /// Enumerate typed paths, dynamic paths, and shared data only when enumerate_dynamic_streams is set.
-    /// Typed paths are included here (rather than unconditionally) so that IDataType::getSubcolumnData
-    /// (which calls enumerateStreams with enumerate_dynamic_streams=false) does not find them as static
-    /// subcolumns. This ensures that JSON subcolumn requests always go through DataTypeObject::getDynamicSubcolumnData,
-    /// where redundant type hints on typed paths can be detected and stripped.
+    settings.path.push_back(Substream::ObjectData);
+
+    /// First, iterate over typed paths in sorted order, we will always serialize them.
+    for (const auto & path : sorted_typed_paths)
+    {
+        settings.path.back().creator = std::make_shared<TypedPathSubcolumnCreator>(path);
+        settings.path.push_back(Substream::ObjectTypedPath);
+        settings.path.back().object_path_name = path;
+        const auto & serialization = typed_paths_serializations.at(path);
+        auto path_data = SubstreamData(serialization)
+                                .withType(type_object ? type_object->getTypedPaths().at(path) : nullptr)
+                                .withColumn(column_object ? column_object->getTypedPaths().at(path) : nullptr)
+                                .withSerializationInfo(data.serialization_info)
+                                .withDeserializeState(deserialize_state ? deserialize_state->typed_path_states.at(path) : nullptr);
+        settings.path.back().data = path_data;
+        serialization->enumerateStreams(settings, callback, path_data);
+        settings.path.pop_back();
+        settings.path.back().creator.reset();
+    }
+
+    /// If column or deserialization state was provided, iterate over dynamic paths,
     if (settings.enumerate_dynamic_streams && (column_object || structure_state))
     {
-        settings.path.push_back(Substream::ObjectData);
-
-        /// First, iterate over typed paths in sorted order.
-        for (const auto & path : sorted_typed_paths)
-        {
-            settings.path.back().creator = std::make_shared<TypedPathSubcolumnCreator>(path);
-            settings.path.push_back(Substream::ObjectTypedPath);
-            settings.path.back().object_path_name = path;
-            const auto & serialization = typed_paths_serializations.at(path);
-            auto path_data = SubstreamData(serialization)
-                                    .withType(type_object ? type_object->getTypedPaths().at(path) : nullptr)
-                                    .withColumn(column_object ? column_object->getTypedPaths().at(path) : nullptr)
-                                    .withSerializationInfo(data.serialization_info)
-                                    .withDeserializeState(deserialize_state ? deserialize_state->typed_path_states.at(path) : nullptr);
-            settings.path.back().data = path_data;
-            serialization->enumerateStreams(settings, callback, path_data);
-            settings.path.pop_back();
-            settings.path.back().creator.reset();
-        }
-
         /// Enumerate dynamic paths in sorted order for consistency.
         const auto * dynamic_paths = column_object ? &column_object->getDynamicPaths() : nullptr;
         std::shared_ptr<std::vector<String>> sorted_dynamic_paths;
@@ -247,8 +243,9 @@ void SerializationObject::enumerateStreams(EnumerateStreamsSettings & settings, 
                                               .withDeserializeState(deserialize_state ? deserialize_state->shared_data_state : nullptr);
         shared_data_serialization->enumerateStreams(settings, callback, shared_data_substream_data);
         settings.path.pop_back();
-        settings.path.pop_back();
     }
+
+    settings.path.pop_back();
 }
 
 void SerializationObject::serializeBinaryBulkStatePrefix(

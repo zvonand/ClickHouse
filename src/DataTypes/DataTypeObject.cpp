@@ -339,13 +339,10 @@ struct PathAndSubcolumn
 {
     String path;
     String type_hint;
-    /// Remaining subcolumn after the path (and type hint, if present).
-    /// Preserves the original syntax including any .:`Type` markers,
-    /// so it can be passed to recursive subcolumn resolution as-is.
+    /// Remaining subcolumn after the type hint, without a leading dot separator.
     String remaining;
 
-    /// Reconstruct the full subcolumn for Dynamic type resolution (type_hint + "." + remaining).
-    /// Only meaningful when type_hint is non-empty (i.e. a .:`Type` marker was parsed).
+    /// Reconstruct the full subcolumn (type_hint + "." + remaining).
     String fullSubcolumn() const
     {
         if (type_hint.empty())
@@ -356,55 +353,14 @@ struct PathAndSubcolumn
     }
 };
 
-/// Split a subcolumn name into a JSON path and a remaining subcolumn.
-///
-/// Resolution order:
-/// 1. If any typed path is a prefix of the path component (before any .:`Type` marker),
-///    split at the longest matching typed path. The remaining subcolumn preserves the
-///    original syntax (including any .:`Type` markers) for recursive resolution.
-///    E.g. with typed path "a.b": "a.b.c.:`Array(JSON)`.d" -> {path="a.b", type_hint="", remaining="c.:`Array(JSON)`.d"}
-///
-/// 2. Otherwise, fall back to parsing the .:`Type` marker.
-///    E.g. "a.b.c.:`Array(JSON)`.d" -> {path="a.b.c", type_hint="Array(JSON)", remaining="d"}
-///
-/// 3. If neither applies, the entire subcolumn name is the path.
-///    E.g. "a.b.c" -> {path="a.b.c", type_hint="", remaining=""}
-PathAndSubcolumn splitPathAndSubcolumn(
-    std::string_view subcolumn_name,
-    const String & nested_json_type_name,
-    const std::unordered_map<String, DataTypePtr> & typed_paths)
+PathAndSubcolumn splitPathAndDynamicTypeSubcolumn(std::string_view subcolumn_name, const String & nested_json_type_name)
 {
-    /// Determine the path portion (everything before the first .:`Type` marker, if any).
-    auto type_hint_pos = subcolumn_name.find(".:`");
-    std::string_view path_part = (type_hint_pos != std::string_view::npos)
-        ? subcolumn_name.substr(0, type_hint_pos)
-        : subcolumn_name;
-
-    /// Try to find the longest typed path that is a prefix of path_part.
-    /// Skip prefix matching when path_part itself is a typed path — the exact match
-    /// should take priority and will be found in getDynamicSubcolumnData.
-    std::string_view best_prefix;
-    if (!typed_paths.contains(String(path_part)))
-    {
-        for (const auto & [typed_path, _] : typed_paths)
-        {
-            if (path_part.starts_with(typed_path + ".") && typed_path.size() > best_prefix.size())
-                best_prefix = typed_path;
-        }
-    }
-
-    if (!best_prefix.empty())
-    {
-        /// Typed path prefix match. The remaining subcolumn is everything after "typed_path."
-        /// in the original subcolumn_name, preserving the full syntax.
-        return {String(best_prefix), {}, String(subcolumn_name.substr(best_prefix.size() + 1))};
-    }
-
-    /// No typed path prefix match — fall back to .:`Type` marker parsing.
-    if (type_hint_pos == std::string_view::npos)
+    /// Try to find dynamic type subcolumn in a form .:`Type`.
+    auto pos = subcolumn_name.find(".:`");
+    if (pos == std::string_view::npos)
         return {String(subcolumn_name), {}, {}};
 
-    ReadBufferFromMemory buf(subcolumn_name.substr(type_hint_pos + 2));
+    ReadBufferFromMemory buf(subcolumn_name.substr(pos + 2));
     String type_hint;
     /// Try to read back quoted type name.
     if (!tryReadBackQuotedString(type_hint, buf))
@@ -422,7 +378,7 @@ PathAndSubcolumn splitPathAndSubcolumn(
             remaining = remaining.substr(1);
     }
 
-    return {String(subcolumn_name.substr(0, type_hint_pos)), std::move(type_hint), std::move(remaining)};
+    return {String(subcolumn_name.substr(0, pos)), std::move(type_hint), std::move(remaining)};
 }
 
 /// Sub-object subcolumn in JSON path always looks like "^`some`.path.path".
@@ -562,31 +518,29 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
         return res;
     }
 
+    /// If the subcolumn starts with a type hint (.:`Type`), it means this getDynamicSubcolumnData
+    /// was reached from IDataType::getSubcolumnData after a typed path prefix match in enumerateStreams.
+    /// E.g. for json.a.:`Array(JSON)`.x where a is a typed Array(JSON) path, enumerateStreams found "a"
+    /// as a static subcolumn, then tried to resolve the remaining ":`Array(JSON)`.x" via the typed path's
+    /// type chain, which eventually called this method. We return nullptr here so that the resolution falls
+    /// through to the outer DataTypeObject::getDynamicSubcolumnData with the full subcolumn name, where
+    /// the type hint can be properly detected and stripped.
+    if (subcolumn_name.starts_with(":`"))
+        return nullptr;
+
     /// Split requested subcolumn to the JSON path, type hint, and remaining subcolumn.
-    /// The split function is aware of typed paths: if a typed path is a prefix of the
-    /// requested path, it splits there (with empty type_hint and the rest in remaining).
-    auto split = splitPathAndSubcolumn(subcolumn_name, getTypeOfNestedObjects()->getName(), typed_paths);
+    auto split = splitPathAndDynamicTypeSubcolumn(subcolumn_name, getTypeOfNestedObjects()->getName());
     const auto & path = split.path;
     String path_subcolumn;
     std::unique_ptr<SubstreamData> res;
     if (auto it = typed_paths.find(path); it != typed_paths.end())
     {
-        if (!split.type_hint.empty())
-        {
-            /// There is a type hint subcolumn (.:`Type`). If it matches the typed path's type
-            /// (after normalizing JSON parameters), the hint is redundant — strip it and use
-            /// only the remaining part after the type hint.
-            if (removeJSONTypeParameters(split.type_hint) == removeJSONTypeParameters(it->second->getName()))
-                path_subcolumn = split.remaining;
-            else
-                path_subcolumn = split.fullSubcolumn();
-        }
-        else
-        {
-            /// No type hint — remaining is the nested subcolumn from typed path prefix matching
-            /// (preserves original syntax including any downstream .:`Type` markers).
+        /// If there is a type hint subcolumn and it matches the typed path's type
+        /// (after normalizing JSON parameters), the hint is redundant — strip it.
+        if (!split.type_hint.empty() && removeJSONTypeParameters(split.type_hint) == removeJSONTypeParameters(it->second->getName()))
             path_subcolumn = split.remaining;
-        }
+        else
+            path_subcolumn = split.fullSubcolumn();
 
         res = std::make_unique<SubstreamData>(typed_paths_serializations.at(path));
         res->type = it->second;
@@ -622,8 +576,7 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
         }
     }
 
-    /// Resolve nested subcolumn if needed (e.g. a type hint on a Dynamic path,
-    /// or a nested path within a typed path like Array(JSON)).
+    /// Get subcolumn for Dynamic type if needed.
     if (!path_subcolumn.empty())
     {
         res = DB::IDataType::getSubcolumnData(path_subcolumn, *res, initial_array_level, throw_if_null);

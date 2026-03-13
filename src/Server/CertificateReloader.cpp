@@ -250,6 +250,14 @@ bool CertificateReloader::registerAdditionalContext(SSL_CTX * ctx, const std::st
 
     MultiData * pdata = &*(it->second);
 
+    /// Verify that certificate data was actually loaded, not just the entry created
+    if (!pdata->data.get())
+    {
+        throw Exception(ErrorCodes::INVALID_CONFIG_PARAMETER,
+            "Cannot register additional SSL context for prefix '{}': certificate data not loaded. "
+            "Check that certificateFile and privateKeyFile are correctly configured.", prefix);
+    }
+
     SSL_CTX_set_cert_cb(ctx, callSetCertificate, reinterpret_cast<void *>(pdata));
 
     LOG_DEBUG(log, "Registered additional SSL context for prefix '{}'", prefix);

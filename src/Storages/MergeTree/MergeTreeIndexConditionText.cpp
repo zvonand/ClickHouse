@@ -420,7 +420,8 @@ bool MergeTreeIndexConditionText::traverseAtomNode(const RPNBuilderTreeNode & no
         auto lhs_argument = function.getArgumentAt(0);
         auto rhs_argument = function.getArgumentAt(1);
 
-        if (function_name == "in" && tryPrepareSetForTextSearch(lhs_argument, rhs_argument, function_name, out))
+        if ((function_name == "in" || function_name == "globalIn")
+            && tryPrepareSetForTextSearch(lhs_argument, rhs_argument, function_name, out))
         {
             out.function = RPNElement::FUNCTION_IN;
             return true;

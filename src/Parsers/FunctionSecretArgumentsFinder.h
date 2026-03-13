@@ -252,10 +252,24 @@ protected:
         if (isNamedCollectionName(0))
         {
             /// jdbc(named_collection, ..., datasource = 'DSN', ...)
-            /// odbc(named_collection, ..., datasource = 'DSN', ...)
+            /// odbc(named_collection, ..., connection_settings = 'DSN', ...)
+            /// `datasource` and `connection_settings` are mutually exclusive aliases.
             /// If the value is a URI, mask only the password; otherwise hide the whole value.
-            maskXDBCSecretNamedArgument("datasource", 1);
-            maskXDBCSecretNamedArgument("connection_settings", 1);
+            /// If somehow both are present (invalid query), hide all named arguments.
+            ssize_t ds_idx = findNamedArgument(nullptr, "datasource", 1);
+            ssize_t cs_idx = findNamedArgument(nullptr, "connection_settings", 1);
+
+            if (ds_idx >= 0 && cs_idx >= 0)
+            {
+                /// Both present — hide all named arguments starting from index 1.
+                result.start = 1;
+                result.count = function->arguments->size() - 1;
+                result.are_named = true;
+            }
+            else if (ds_idx >= 0)
+                maskXDBCSecretNamedArgument("datasource", 1);
+            else if (cs_idx >= 0)
+                maskXDBCSecretNamedArgument("connection_settings", 1);
         }
         else
         {
@@ -281,7 +295,7 @@ protected:
         }
     }
 
-    /// Similar to findSecretNamedArgument, but if the value is a URI with credentials,
+    /// Similar to `findSecretNamedArgument`, but if the value is a URI with credentials,
     /// masks only the password part instead of hiding the entire value.
     void maskXDBCSecretNamedArgument(std::string_view key, size_t start)
     {

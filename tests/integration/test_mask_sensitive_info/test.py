@@ -309,6 +309,8 @@ def test_create_table():
         f"ODBC(named_collection_1, connection_settings = 'DSN=mydb;Uid=user;Pwd={password}', external_database = 'mydb', external_table = 'mytable')",
         f"JDBC(named_collection_1, datasource = 'jdbc://user:{password}@localhost:5432/mydb', external_database = 'mydb', external_table = 'mytable')",
         f"ODBC(named_collection_1, connection_settings = 'odbc://user:{password}@localhost:5432/mydb', external_database = 'mydb', external_table = 'mytable')",
+        (f"JDBC(named_collection_1, datasource = 'DSN=mydb;Uid=user;Pwd={password}', connection_settings = 'DSN=mydb2;Uid=user2;Pwd={password}', external_database = 'mydb', external_table = 'mytable')", "ARGUMENTS"),
+        (f"JDBC(named_collection_1, connection_settings = 'jdbc://user2:{password}@localhost:5432/mydb2', external_database = 'mydb', datasource = 'jdbc://user:{password}@localhost:5432/mydb', external_table = 'mytable')", "ARGUMENTS"),
         (f"NATS() SETTINGS nats_url = 'localhost:4222', nats_subjects = 'subject', nats_format = 'JSONEachRow', nats_token = '{password}'", "CANNOT_CONNECT_NATS"),
     ]
 
@@ -411,6 +413,8 @@ def test_create_table():
             generate_create_table_numbered("(`x` int) ENGINE = ODBC(named_collection_1, connection_settings = '[HIDDEN]', external_database = 'mydb', external_table = 'mytable')"),
             generate_create_table_numbered("(`x` int) ENGINE = JDBC(named_collection_1, datasource = 'jdbc://user:[HIDDEN]@localhost:5432/mydb', external_database = 'mydb', external_table = 'mytable')"),
             generate_create_table_numbered("(`x` int) ENGINE = ODBC(named_collection_1, connection_settings = 'odbc://user:[HIDDEN]@localhost:5432/mydb', external_database = 'mydb', external_table = 'mytable')"),
+            generate_create_table_numbered("(`x` int) ENGINE = JDBC(named_collection_1, datasource = '[HIDDEN]', connection_settings = '[HIDDEN]', external_database = '[HIDDEN]', external_table = '[HIDDEN]')"),
+            generate_create_table_numbered("(`x` int) ENGINE = JDBC(named_collection_1, connection_settings = '[HIDDEN]', external_database = '[HIDDEN]', datasource = '[HIDDEN]', external_table = '[HIDDEN]')"),
             generate_create_table_numbered("(`x` int) ENGINE = NATS SETTINGS nats_url = 'localhost:4222', nats_subjects = 'subject', nats_format = 'JSONEachRow', nats_token = '[HIDDEN]'"),
         ],
         must_not_contain=[password],
@@ -550,6 +554,8 @@ def test_table_functions():
         f"odbc(named_collection_1, connection_settings = 'DSN=mydb;Uid=user;Pwd={password}')",
         f"jdbc(named_collection_1, datasource = 'jdbc://user:{password}@localhost:5432/mydb')",
         f"odbc(named_collection_1, connection_settings = 'odbc://user:{password}@localhost:5432/mydb')",
+        (f"jdbc(named_collection_1, datasource = 'DSN=mydb;Uid=user;Pwd={password}', connection_settings = 'DSN=mydb2;Uid=user2;Pwd={password}')", "ARGUMENTS"),
+        (f"jdbc(named_collection_1, connection_settings = 'jdbc://user2:{password}@localhost:5432/mydb2', external_database = 'mydb', datasource = 'jdbc://user:{password}@localhost:5432/mydb')", "ARGUMENTS"),
     ]
 
     def make_test_case(i):
@@ -651,6 +657,8 @@ def test_table_functions():
             "CREATE TABLE tablefunc55 (`x` int) AS odbc(named_collection_1, connection_settings = '[HIDDEN]')",
             "CREATE TABLE tablefunc56 (`x` int) AS jdbc(named_collection_1, datasource = 'jdbc://user:[HIDDEN]@localhost:5432/mydb')",
             "CREATE TABLE tablefunc57 (`x` int) AS odbc(named_collection_1, connection_settings = 'odbc://user:[HIDDEN]@localhost:5432/mydb')",
+            "CREATE TABLE tablefunc58 (`x` int) AS jdbc(named_collection_1, datasource = '[HIDDEN]', connection_settings = '[HIDDEN]')",
+            "CREATE TABLE tablefunc59 (`x` int) AS jdbc(named_collection_1, connection_settings = '[HIDDEN]', external_database = '[HIDDEN]', datasource = '[HIDDEN]')",
         ],
         must_not_contain=[password],
     )

@@ -1532,7 +1532,8 @@ IdentifierResolveResult IdentifierResolver::tryResolveIdentifierFromJoinTreeNode
         default:
         {
             throw Exception(ErrorCodes::LOGICAL_ERROR,
-                "Scope FROM section expected table, table function, query, union, join or array join. Actual {}. In scope {}",
+                "Scope FROM section expected table, table function, query, union, join or array join. Actual {}: {}. In scope {}",
+                join_tree_node->getNodeTypeName(),
                 join_tree_node->formatASTForErrorMessage(),
                 scope.scope_node->formatASTForErrorMessage());
         }

@@ -7,7 +7,9 @@
 #include <Interpreters/MaterializedCTE.h>
 #include <Parsers/ASTIdentifier.h>
 
+#include <DataTypes/DataTypesNumber.h>
 #include <Storages/IStorage.h>
+#include <Storages/StorageDummy.h>
 #include <Storages/StorageMemory.h>
 
 #include <Interpreters/Context.h>
@@ -57,6 +59,28 @@ TableNode::TableNode(
     typeid_cast<StorageMemory *>(storage.get())->setMaterializedCTE(materialized_cte);
 
     children[materialized_cte_subquery_index] = std::move(materialized_cte_subquery_);
+}
+
+TableNode::TableNode(
+    const std::string & cte_name_,
+    QueryTreeNodePtr materialized_cte_subquery_,
+    const ContextPtr & context_)
+    : TableNode(
+        std::make_shared<StorageDummy>(
+            StorageID{"_dummy", "_materialized_cte_" + cte_name_},
+            ColumnsDescription{NamesAndTypesList{{"_dummy", std::make_shared<DataTypeUInt8>()}}}),
+        context_)
+{
+    materialized_cte = std::make_shared<MaterializedCTE>(nullptr, cte_name_);
+    children[materialized_cte_subquery_index] = std::move(materialized_cte_subquery_);
+}
+
+void TableNode::finalizeMaterializedCTE(const TemporaryTableHolder & temporary_table_holder_, const ContextPtr & context_)
+{
+    auto real_storage = temporary_table_holder_.getTable();
+    materialized_cte->storage = real_storage;
+    typeid_cast<StorageMemory *>(real_storage.get())->setMaterializedCTE(materialized_cte);
+    updateStorage(std::move(real_storage), context_);
 }
 
 void TableNode::updateStorage(StoragePtr storage_value, const ContextPtr & context)

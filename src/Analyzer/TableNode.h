@@ -48,6 +48,16 @@ public:
         QueryTreeNodePtr materialized_cte_subquery_,
         const ContextPtr & context_);
 
+    /// Construct table node for deferred MATERIALIZED CTE (subquery not yet resolved).
+    /// Creates StorageDummy as a placeholder; call finalizeMaterializedCTE after resolving the subquery.
+    explicit TableNode(
+        const std::string & cte_name_,
+        QueryTreeNodePtr materialized_cte_subquery_,
+        const ContextPtr & context_);
+
+    /// Replace the placeholder storage with the real StorageMemory from the temporary table holder.
+    void finalizeMaterializedCTE(const TemporaryTableHolder & temporary_table_holder_, const ContextPtr & context_);
+
     /** Update table node storage.
       * After this call storage, storage_id, storage_lock, storage_snapshot will be updated using new storage.
       */

@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
 
 #include <Common/Exception.h>
@@ -10,41 +11,67 @@ extern const int BAD_ARGUMENTS;
 namespace DB::Iceberg
 {
 
+// This function is used to get the file path inside the directory which corresponds to iceberg table from the full blob path which is written in manifest and metadata files.
+// For example, if the full blob path is s3://bucket/table_name/data/00000-1-1234567890.avro, the function will return table_name/data/00000-1-1234567890.avro
+// Common path should end with "<table_name>" or "<table_name>/".
 String IcebergPathResolver::resolve(const IcebergPathFromMetadata & metadata_path) const
 {
-    const auto & raw = metadata_path.getRawPath();
-
-    /// The path from metadata is always a continuation of table_location.
-    /// Strip the table_location prefix to get the relative suffix,
-    /// then prepend table_root.
-    if (raw.starts_with(table_location))
+    auto trim_forward_slash = [](std::string_view str) -> std::string_view
     {
-        auto suffix = raw.substr(table_location.size());
-        /// Strip leading '/' from suffix if present
-        if (!suffix.empty() && suffix[0] == '/')
-            suffix = suffix.substr(1);
-        return table_root + suffix;
+        if (str.starts_with('/'))
+        {
+            return str.substr(1);
+        }
+        return str;
+    };
+
+    auto raw_path = metadata_path.getRawPath();
+
+    if (raw_path.starts_with(table_location) && table_location.ends_with(table_root))
+    {
+        return std::filesystem::path{table_root} / trim_forward_slash(raw_path.substr(table_location.size()));
     }
 
-    /// Fallback: table_location may be stored differently in metadata
-    /// (e.g. with or without trailing slash, different URI scheme).
-    /// Try to find the table_root path as a substring in the raw path.
-    /// For example, raw = "wasb://container@host/iceberg_data/table/data/x.parquet"
-    /// and table_root = "iceberg_data/table/" — we can find this in the raw path.
-    if (!table_root.empty())
+
+    auto pos = raw_path.find(table_root);
+    /// Valid situation when data and metadata files are stored in different directories.
+    if (pos == std::string::npos)
     {
-        auto pos = raw.find(table_root);
-        if (pos != String::npos)
-            return String(raw.substr(pos));
+        /// connection://bucket
+        auto prefix = table_location.substr(0, table_location.size() - table_root.size());
+        return std::string{raw_path.substr(prefix.size())};
     }
 
-    throw Exception(
-        ErrorCodes::BAD_ARGUMENTS,
-        "Cannot resolve Iceberg metadata path '{}': it does not start with table_location '{}' "
-        "and does not contain table_root '{}'",
-        raw,
-        table_location,
-        table_root);
+    size_t good_pos = std::string::npos;
+    while (pos != std::string::npos)
+    {
+        auto potential_position = pos + table_root.size();
+        if ((std::string_view(raw_path.data() + potential_position, 6) == "/data/")
+            || (std::string_view(raw_path.data() + potential_position, 10) == "/metadata/"))
+        {
+            good_pos = pos;
+            break;
+        }
+        size_t new_pos = raw_path.find(table_root, pos + 1);
+        if (new_pos == std::string::npos)
+        {
+            break;
+        }
+        pos = new_pos;
+    }
+
+
+    if (good_pos != std::string::npos)
+    {
+        return std::string{raw_path.substr(good_pos)};
+    }
+    else if (pos != std::string::npos)
+    {
+        return std::string{raw_path.substr(pos)};
+    }
+    else
+    {
+        throw ::DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Expected to find '{}' in data path: '{}'", table_root, raw_path);
+    }
 }
-
 }

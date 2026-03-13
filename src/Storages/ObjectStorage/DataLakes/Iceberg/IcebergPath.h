@@ -58,6 +58,16 @@ public:
         , blob_storage_type_name(std::move(blob_storage_type_name_))
         , blob_storage_namespace_name(std::move(blob_storage_namespace_name_))
     {
+        auto trim_backward_slash = [](std::string_view str) -> std::string_view
+        {
+            if (str.ends_with('/'))
+            {
+                return str.substr(0, str.size() - 1);
+            }
+            return str;
+        };
+        table_root = trim_backward_slash(table_root);
+        table_location = trim_backward_slash(table_location);
         /// Normalize: ensure table_location does not end with '/'
         while (!table_location.empty() && table_location.back() == '/')
             table_location.pop_back();

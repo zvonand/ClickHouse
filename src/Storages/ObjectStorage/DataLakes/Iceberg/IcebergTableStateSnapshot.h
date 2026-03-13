@@ -1,6 +1,7 @@
 #pragma once
 #include "config.h"
 
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
 #include <Storages/StorageSnapshot.h>
 
 namespace DB
@@ -11,7 +12,7 @@ namespace Iceberg
 
 struct TableStateSnapshot
 {
-    String metadata_file_path;
+    Iceberg::IcebergPathFromMetadata metadata_file_path;
     Int32 metadata_version;
     Int32 schema_id;
     std::optional<Int64> snapshot_id;

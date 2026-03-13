@@ -21,7 +21,7 @@ using namespace Iceberg;
 
 void TableStateSnapshot::serialize(WriteBuffer & out) const
 {
-    writeStringBinary(metadata_file_path, out);
+    writeStringBinary(metadata_file_path.getRawPath(), out);
     writeVarInt(metadata_version, out);
     writeVarInt(schema_id, out);
     writeChar(snapshot_id.has_value() ? 1 : 0, out);
@@ -40,7 +40,11 @@ TableStateSnapshot TableStateSnapshot::deserialize(ReadBuffer & in, const int da
     if (datalake_state_protocol_version == 1)
     {
         TableStateSnapshot state;
-        readStringBinary(state.metadata_file_path, in);
+        {
+            String raw_path;
+            readStringBinary(raw_path, in);
+            state.metadata_file_path = IcebergPathFromMetadata(std::move(raw_path));
+        }
         readVarInt(state.metadata_version, in);
         readVarInt(state.schema_id, in);
         char snapshot_has_value;

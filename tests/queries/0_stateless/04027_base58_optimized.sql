@@ -68,7 +68,31 @@ SELECT 'tryBase58Decode';
 SELECT tryBase58Decode('invalid!chars') = '';
 SELECT tryBase58Decode('') = '';
 
+SELECT 'size hint 32';
+SELECT base58Decode(base58Encode(unhex('0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20')), 32) = unhex('0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20');
+SELECT base58Decode('11111111111111111111111111111111', 32) = unhex('0000000000000000000000000000000000000000000000000000000000000000');
+
+SELECT 'size hint 64';
+SELECT base58Decode(base58Encode(unhex('0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40')), 64) = unhex('0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40');
+SELECT base58Decode('1111111111111111111111111111111111111111111111111111111111111111', 64) = unhex('00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000');
+
+SELECT 'size hint overflow';
+SELECT base58Decode(repeat('z', 44), 32); -- { serverError INCORRECT_DATA }
+SELECT base58Decode(repeat('z', 88), 64); -- { serverError INCORRECT_DATA }
+
+SELECT 'tryBase58Decode with size hint';
+SELECT tryBase58Decode(repeat('z', 44), 32) = '';
+SELECT tryBase58Decode(repeat('z', 88), 64) = '';
+SELECT tryBase58Decode('invalid!chars', 32) = '';
+
+SELECT 'size hint fallback to generic';
+SELECT base58Decode(base58Encode('Hello world!'), 99) = 'Hello world!';
+
 SELECT 'bulk round-trip';
 SELECT sum(base58Decode(base58Encode(randomString(32))) = randomString(32)) == 100 FROM numbers(100);
 SELECT count() FROM (SELECT base58Decode(base58Encode(rs)) AS dec, rs FROM (SELECT unhex(hex(randomFixedString(32))) AS rs FROM numbers(100)) WHERE dec = rs);
 SELECT count() FROM (SELECT base58Decode(base58Encode(rs)) AS dec, rs FROM (SELECT unhex(hex(randomFixedString(64))) AS rs FROM numbers(100)) WHERE dec = rs);
+
+SELECT 'bulk round-trip with size hint';
+SELECT count() FROM (SELECT base58Decode(base58Encode(rs), 32) AS dec, rs FROM (SELECT unhex(hex(randomFixedString(32))) AS rs FROM numbers(100)) WHERE dec = rs);
+SELECT count() FROM (SELECT base58Decode(base58Encode(rs), 64) AS dec, rs FROM (SELECT unhex(hex(randomFixedString(64))) AS rs FROM numbers(100)) WHERE dec = rs);

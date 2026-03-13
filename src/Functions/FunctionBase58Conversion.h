@@ -31,6 +31,8 @@ struct Base58EncodeTraits
 
 struct Base58DecodeTraits
 {
+    static constexpr bool has_size_optimization = true;
+
     template <typename Col>
     static size_t getBufferSize(Col const & src_column)
     {
@@ -46,17 +48,15 @@ struct Base58DecodeTraits
 
     static std::optional<size_t> perform(std::string_view src, UInt8 * dst)
     {
-        /// Try the fixed-size decoders first for inputs whose encoded length is
-        /// compatible, but fall back to the generic decoder if they reject the
-        /// value (e.g. a 33-char string that decodes to 24 bytes, not 32).
-        if (src.size() >= 32 && src.size() <= BASE58_ENCODED_32_LEN)
-        {
-            if (auto res = decodeBase58_32(reinterpret_cast<const UInt8 *>(src.data()), src.size(), dst))
-                return res;
-        }
-        else if (src.size() >= 64 && src.size() <= BASE58_ENCODED_64_LEN)
-            if (auto res = decodeBase58_64(reinterpret_cast<const UInt8 *>(src.data()), src.size(), dst))
-                return res;
+        return decodeBase58(reinterpret_cast<const UInt8 *>(src.data()), src.size(), dst);
+    }
+
+    static std::optional<size_t> performWithSizeHint(std::string_view src, UInt8 * dst, size_t expected_size)
+    {
+        if (expected_size == 32)
+            return decodeBase58_32(reinterpret_cast<const UInt8 *>(src.data()), src.size(), dst);
+        if (expected_size == 64)
+            return decodeBase58_64(reinterpret_cast<const UInt8 *>(src.data()), src.size(), dst);
         return decodeBase58(reinterpret_cast<const UInt8 *>(src.data()), src.size(), dst);
     }
 };

@@ -47,7 +47,23 @@ generic path
 tryBase58Decode
 1
 1
+size hint 32
+1
+1
+size hint 64
+1
+1
+size hint overflow
+tryBase58Decode with size hint
+1
+1
+1
+size hint fallback to generic
+1
 bulk round-trip
 1
+100
+100
+bulk round-trip with size hint
 100
 100

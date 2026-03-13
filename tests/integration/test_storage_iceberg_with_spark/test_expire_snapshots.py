@@ -195,6 +195,33 @@ def test_expire_snapshots_basic(started_cluster_iceberg_with_spark, storage_type
 
 
 @pytest.mark.parametrize("storage_type", ["s3", "azure", "local"])
+def test_expire_snapshots_positional_timestamp(started_cluster_iceberg_with_spark, storage_type):
+    """Legacy positional timestamp syntax works at runtime (backward compat)."""
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_positional", storage_type)
+
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 3
+    )
+
+    time.sleep(2)
+    expire_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    instance.query(
+        f"INSERT INTO {TABLE_NAME} VALUES (4);", settings=ICEBERG_SETTINGS
+    )
+
+    result = instance.query(
+        f"ALTER TABLE {TABLE_NAME} EXECUTE expire_snapshots('{expire_timestamp}');",
+        settings=ICEBERG_SETTINGS,
+    )
+    counts = parse_expire_result(result)
+    assert len(counts) == 7, f"Expected 7 metrics, got {counts}"
+    assert all(v >= 0 for v in counts.values()), f"All counts should be non-negative, got {counts}"
+    assert_data_intact(instance, TABLE_NAME, 4)
+
+
+@pytest.mark.parametrize("storage_type", ["s3", "azure", "local"])
 def test_expire_snapshots_no_expirable(started_cluster_iceberg_with_spark, storage_type):
     """No-op when no snapshots match the criteria."""
     instance = started_cluster_iceberg_with_spark.instances["node1"]

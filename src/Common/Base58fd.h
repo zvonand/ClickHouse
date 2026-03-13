@@ -374,8 +374,8 @@ static std::optional<size_t> decodeBase58_64(const uint8_t * src, size_t src_len
         __m128i o0 = _mm_or_si128(lo0, _mm_slli_si128(hi0, 10)); \
         __m128i o1 = _mm_or_si128(_mm_or_si128(_mm_srli_si128(hi0, 6), _mm_slli_si128(lo1, 4)), _mm_slli_si128(hi1, 14)); \
         __m128i o2 = _mm_or_si128(_mm_srli_si128(hi1, 2), _mm_slli_si128(lo2, 8)); \
-        out0 = _mm256_set_m128i(o1, o0); \
-        out1 = _mm256_set_m128i(_mm_setzero_si128(), o2); \
+        (out0) = _mm256_set_m128i(o1, o0); \
+        (out1) = _mm256_set_m128i(_mm_setzero_si128(), o2); \
     } while (0)
 
 #define B58_TEN_PER_SLOT_DOWN_64(in0, in1, in2, in3, in4, out0, out1, out2) \
@@ -395,9 +395,9 @@ static std::optional<size_t> decodeBase58_64(const uint8_t * src, size_t src_len
         __m128i o2 = _mm_or_si128(_mm_srli_si128(hi1, 2), _mm_slli_si128(lo2, 8)); \
         __m128i o3 = _mm_or_si128(_mm_or_si128(_mm_srli_si128(lo2, 8), _mm_slli_si128(hi2, 2)), _mm_slli_si128(lo3, 12)); \
         __m128i o4 = _mm_or_si128(_mm_srli_si128(lo3, 4), _mm_slli_si128(hi3, 6)); \
-        out0 = _mm256_set_m128i(o1, o0); \
-        out1 = _mm256_set_m128i(o3, o2); \
-        out2 = _mm256_set_m128i(lo4, o4); \
+        (out0) = _mm256_set_m128i(o1, o0); \
+        (out1) = _mm256_set_m128i(o3, o2); \
+        (out2) = _mm256_set_m128i(lo4, o4); \
     } while (0)
 
 
@@ -524,7 +524,8 @@ static size_t encodeBase58_32(const uint8_t * src, uint8_t * dst)
     __m256i raw1 = b58_intermediate_to_raw(interm1);
     __m256i raw2 = b58_intermediate_to_raw(interm2);
 
-    __m256i compact0, compact1;
+    __m256i compact0;
+    __m256i compact1;
     B58_TEN_PER_SLOT_DOWN_32(raw0, raw1, raw2, compact0, compact1);
 
     uint64_t raw_leading_0s = b58_count_leading_zeros_45(compact0, compact1);
@@ -595,7 +596,9 @@ static size_t encodeBase58_64(const uint8_t * src, uint8_t * dst)
     __m256i raw3 = b58_intermediate_to_raw(_mm256_load_si256(reinterpret_cast<const __m256i *>(intermediate + 12)));
     __m256i raw4 = b58_intermediate_to_raw(_mm256_load_si256(reinterpret_cast<const __m256i *>(intermediate + 16)));
 
-    __m256i compact0, compact1, compact2;
+    __m256i compact0;
+    __m256i compact1;
+    __m256i compact2;
     B58_TEN_PER_SLOT_DOWN_64(raw0, raw1, raw2, raw3, raw4, compact0, compact1, compact2);
 
     uint64_t raw_leading_0s_part1 = b58_count_leading_zeros_64(compact0, compact1);

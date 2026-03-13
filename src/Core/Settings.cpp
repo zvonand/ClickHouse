@@ -7465,9 +7465,6 @@ Allows using statistics to optimize queries
     DECLARE_WITH_ALIAS(Bool, allow_statistics, true, R"(
 Allows defining columns with [statistics](../../engines/table-engines/mergetree-family/mergetree.md/#table_engine-mergetree-creating-a-table) and [manipulate statistics](../../engines/table-engines/mergetree-family/mergetree.md/#column-statistics).
 )", 0, allow_experimental_statistics) \
-    DECLARE_WITH_ALIAS(Bool, allow_experimental_statistics, true, R"(
-Allows defining columns with [statistics](../../engines/table-engines/mergetree-family/mergetree.md/#table_engine-mergetree-creating-a-table) and [manipulate statistics](../../engines/table-engines/mergetree-family/mergetree.md/#column-statistics).
-)", 0, allow_experimental_statistic) \
     DECLARE(Bool, use_statistics_cache, true, R"(Use statistics cache in a query to avoid the overhead of loading statistics of every parts)", 0) \
     \
     DECLARE_WITH_ALIAS(Bool, enable_full_text_index, true, R"(

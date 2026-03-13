@@ -22,7 +22,7 @@ By default, tables are created only on the current server. Distributed DDL queri
 ### With Explicit Schema {#with-explicit-schema}
 
 ```sql
-CREATE TABLE [IF NOT EXISTS] db.table_name [ON CLUSTER cluster]
+CREATE TABLE [IF NOT EXISTS] [db.]table_name [ON CLUSTER cluster]
 (
     name1 [type1] [NULL|NOT NULL] [DEFAULT|MATERIALIZED|EPHEMERAL|ALIAS expr1] [COMMENT 'comment for column'] [compression_codec] [TTL expr1],
     name2 [type2] [NULL|NOT NULL] [DEFAULT|MATERIALIZED|EPHEMERAL|ALIAS expr2] [COMMENT 'comment for column'] [compression_codec] [TTL expr2],
@@ -60,14 +60,14 @@ For replicating the schema and data of an existing table:
 CREATE TABLE [IF NOT EXISTS] [db2.]table_clone CLONE AS [db.]table [ENGINE = engine]
 ```
 
-This creates a table with the same schema and data as an existing table.  After the new table is created, all partitions from `db.table` are attached to it. In other words, the data of `[db.]table` is cloned into `[db2.]table_clone` upon creation. This query is equivalent to the following:
+This creates a table with the same schema and data as an existing table.  After the new table is created, all partitions from `db.table` are attached to it. In other words, the data of `db.table` is cloned into `db2.table_clone` upon creation. This query is equivalent to the following:
 
 ```sql
 CREATE TABLE [IF NOT EXISTS] [db.]table AS [db2.]table_clone [ENGINE = engine];
 ALTER TABLE [db2.]table_clone ATTACH PARTITION ALL FROM [db.]table;
 ```
 
-For both features, you can specify a different engine for the table. If the engine is not specified, the same engine will be used as for the original table (`[db.]table`).
+For both features, you can specify a different engine for the table. If the engine is not specified, the same engine will be used as for the original table (`db.table`).
 
 ### From a Table Function {#from-a-table-function}
 
@@ -80,7 +80,7 @@ Creates a table with the same result as that of the [table function](/sql-refere
 ### From SELECT query {#from-select-query}
 
 ```sql
-CREATE TABLE [IF NOT EXISTS] db.table_name[(name1 [type1], name2 [type2], ...)] ENGINE = engine AS SELECT ...
+CREATE TABLE [IF NOT EXISTS] [db.]table_name[(name1 [type1], name2 [type2], ...)] ENGINE = engine AS SELECT ...
 ```
 
 Creates a table with a structure like the result of the `SELECT` query, with the `engine` engine, and fills it with data from `SELECT`. Also you can explicitly specify columns description.
@@ -270,7 +270,7 @@ You can define a [primary key](../../../engines/table-engines/mergetree-family/m
 - Inside the column list
 
 ```sql
-CREATE TABLE db.table_name
+CREATE TABLE [db.]table_name
 (
     name1 type1, name2 type2, ...,
     PRIMARY KEY(expr1[, expr2,...])
@@ -281,7 +281,7 @@ ENGINE = engine;
 - Outside the column list
 
 ```sql
-CREATE TABLE db.table_name
+CREATE TABLE [db.]table_name
 (
     name1 type1, name2 type2, ...
 )
@@ -300,7 +300,7 @@ Along with columns descriptions constraints could be defined:
 ### CONSTRAINT {#constraint}
 
 ```sql
-CREATE TABLE [IF NOT EXISTS] db.table_name [ON CLUSTER cluster]
+CREATE TABLE [IF NOT EXISTS] [db.]table_name [ON CLUSTER cluster]
 (
     name1 [type1] [DEFAULT|MATERIALIZED|ALIAS expr1] [compression_codec] [TTL expr1],
     ...
@@ -581,7 +581,7 @@ WHERE CounterID <12345;
 ### Syntax {#syntax}
 
 ```sql
-{CREATE [OR REPLACE] | REPLACE} TABLE db.table_name
+{CREATE [OR REPLACE] | REPLACE} TABLE [db.]table_name
 ```
 
 :::note
@@ -715,7 +715,7 @@ You can add a comment to the table when creating it.
 **Syntax**
 
 ```sql
-CREATE TABLE db.table_name
+CREATE TABLE [db.]table_name
 (
     name1 type1, name2 type2, ...
 )

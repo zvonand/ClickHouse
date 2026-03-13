@@ -17,6 +17,7 @@
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ExpressionListParsers.h>
 #include <Storages/IndicesDescription.h>
+#include <Storages/MergeTree/MergeTreeIndexText.h>
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/TreeRewriter.h>
 
@@ -108,7 +109,6 @@ ASTPtr convertASTForConstant(const IndexDescription & index, const ASTPtr & expr
 ActionsDAG createActionsDAGForPreprocessor(
     const NamesAndTypesList & source_columns,
     const String & source_name,
-    const DataTypePtr & source_type,
     ASTPtr expression_ast)
 {
     if (expression_ast == nullptr)
@@ -132,8 +132,11 @@ ActionsDAG createActionsDAGForPreprocessor(
     if (outputs.front()->result_name == source_name)
         throw Exception(ErrorCodes::INCORRECT_QUERY, "The preprocessor must have at least one expression on top of the source column. Got '{}'", outputs.front()->result_name);
 
-    if (!outputs.front()->result_type->equals(*source_type))
-        throw Exception(ErrorCodes::INCORRECT_QUERY, "The preprocessor expression should return the same type as the source column. Got '{}', expected '{}'", outputs.front()->result_type->getName(), source_type->getName());
+    auto nested_type = MergeTreeIndexText::getNestedDataType(outputs.front()->result_type);
+    WhichDataType which_data_type(nested_type);
+
+    if (!which_data_type.isString() && !which_data_type.isFixedString())
+        throw Exception(ErrorCodes::INCORRECT_QUERY, "The preprocessor expression should return a column of type with base type of String or FixedString, got: {}", outputs.front()->result_type->getName());
 
     if (actions_dag.hasNonDeterministic())
         throw Exception(ErrorCodes::INCORRECT_QUERY, "The preprocessor expression must not contain non-deterministic functions");
@@ -152,19 +155,16 @@ MergeTreeIndexTextPreprocessor::MergeTreeIndexTextPreprocessor(ASTPtr expression
     , original_actions(createActionsDAGForPreprocessor(
         index_description.expression->getRequiredColumnsWithTypes(),
         index_description.column_names.front(),
-        index_column_type,
         convertASTForIndexColumn(index_description, expression_ast, false)))
     /// Assume that index expression is already executed and use a placeholder column to execute preprocessor expression.
     , actions_for_index_column(createActionsDAGForPreprocessor(
         {{preprocessor_column_name, index_column_type}},
         preprocessor_column_name,
-        index_column_type,
         convertASTForIndexColumn(index_description, expression_ast, true)))
     /// Take constant string and execute preprocessor expression.
     , actions_for_constant(createActionsDAGForPreprocessor(
         {{preprocessor_column_name, std::make_shared<DataTypeString>()}},
         preprocessor_column_name,
-        std::make_shared<DataTypeString>(),
         convertASTForConstant(index_description, expression_ast)))
 {
 }

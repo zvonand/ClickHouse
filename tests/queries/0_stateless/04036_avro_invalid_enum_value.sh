@@ -23,7 +23,8 @@ ${CLICKHOUSE_CLIENT} -q "SELECT * FROM ${CLICKHOUSE_DATABASE}.enum_wide FORMAT R
     ${CLICKHOUSE_CLIENT} -q "INSERT INTO ${CLICKHOUSE_DATABASE}.enum_narrow FORMAT RowBinary"
 
 # Avro output must produce BAD_ARGUMENTS, not a logical error (std::out_of_range)
-${CLICKHOUSE_CLIENT} -q "SELECT * FROM ${CLICKHOUSE_DATABASE}.enum_narrow FORMAT Avro" 2>&1 | grep -o 'BAD_ARGUMENTS'
+# Redirect stdout to /dev/null so binary Avro header bytes don't corrupt grep
+${CLICKHOUSE_CLIENT} -q "SELECT * FROM ${CLICKHOUSE_DATABASE}.enum_narrow FORMAT Avro" 2>&1 >/dev/null | grep -o 'BAD_ARGUMENTS'
 
 # Same test for Enum16
 ${CLICKHOUSE_CLIENT} -q "CREATE TABLE ${CLICKHOUSE_DATABASE}.enum16_wide (e Enum16('a' = 1, 'b' = 2, 'c' = 3)) ENGINE = Memory"
@@ -34,7 +35,7 @@ ${CLICKHOUSE_CLIENT} -q "CREATE TABLE ${CLICKHOUSE_DATABASE}.enum16_narrow (e En
 ${CLICKHOUSE_CLIENT} -q "SELECT * FROM ${CLICKHOUSE_DATABASE}.enum16_wide FORMAT RowBinary" | \
     ${CLICKHOUSE_CLIENT} -q "INSERT INTO ${CLICKHOUSE_DATABASE}.enum16_narrow FORMAT RowBinary"
 
-${CLICKHOUSE_CLIENT} -q "SELECT * FROM ${CLICKHOUSE_DATABASE}.enum16_narrow FORMAT Avro" 2>&1 | grep -o 'BAD_ARGUMENTS'
+${CLICKHOUSE_CLIENT} -q "SELECT * FROM ${CLICKHOUSE_DATABASE}.enum16_narrow FORMAT Avro" 2>&1 >/dev/null | grep -o 'BAD_ARGUMENTS'
 
 ${CLICKHOUSE_CLIENT} -q "DROP TABLE ${CLICKHOUSE_DATABASE}.enum_wide"
 ${CLICKHOUSE_CLIENT} -q "DROP TABLE ${CLICKHOUSE_DATABASE}.enum_narrow"

@@ -38,7 +38,7 @@ namespace ErrorCodes
 
 DPJoinEntry::DPJoinEntry(size_t id, std::optional<UInt64> rows)
     : relations()
-    , cost(0.0)
+    , cost(static_cast<double>(rows.value_or(0)))
     , estimated_rows(rows)
     , relation_id(static_cast<int>(id))
 {

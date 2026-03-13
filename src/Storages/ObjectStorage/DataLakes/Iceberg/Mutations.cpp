@@ -1,9 +1,11 @@
+#include <complex.h>
 #include <Columns/ColumnNullable.h>
 #include <Columns/ColumnString.h>
 #include <Core/ColumnsWithTypeAndName.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Databases/DataLake/Common.h>
+#include <Disks/DiskObjectStorage/ObjectStorages/StoredObject.h>
 #include <Formats/FormatFactory.h>
 #include <IO/CompressionMethod.h>
 #include <Interpreters/Context.h>
@@ -26,7 +28,6 @@
 #include <Storages/VirtualColumnUtils.h>
 #include <Poco/JSON/Array.h>
 #include <Poco/JSON/Object.h>
-#include <Disks/DiskObjectStorage/ObjectStorages/StoredObject.h>
 #include <Common/Exception.h>
 #include <Common/FailPoint.h>
 
@@ -429,7 +430,7 @@ static bool writeMetadataFiles(
                     chunk_partitioner ? chunk_partitioner->getColumns() : std::vector<String>{},
                     partition_key,
                     chunk_partitioner ? chunk_partitioner->getResultTypes() : std::vector<DataTypePtr>{},
-                    {delete_filename.path.getRawPath()},
+                    {delete_filename.path},
                     delete_filenames.delete_statistic.at(partition_key),
                     sample_block,
                     new_snapshot,
@@ -913,7 +914,7 @@ static void collectRetainedFiles(
     Int32 current_schema_id,
     std::set<Iceberg::IcebergPathFromMetadata> & retained_manifest_paths,
     std::set<Iceberg::IcebergPathFromMetadata> & retained_data_file_paths,
-    std::set<String> & retained_manifest_list_paths)
+    std::set<Iceberg::IcebergPathFromMetadata> & retained_manifest_list_paths)
 {
     for (UInt32 i = 0; i < retained_snapshots->size(); ++i)
     {
@@ -921,14 +922,10 @@ static void collectRetainedFiles(
         if (!snapshot->has(Iceberg::f_manifest_list))
             continue;
 
-        String manifest_list_path = snapshot->getValue<String>(Iceberg::f_manifest_list);
+        auto manifest_list_path = IcebergPathFromMetadata{snapshot->getValue<String>(Iceberg::f_manifest_list)};
         retained_manifest_list_paths.insert(manifest_list_path);
 
-        String storage_manifest_list_path = persistent_table_components.path_resolver.resolve(
-            IcebergPathFromMetadata(manifest_list_path));
-
-        auto manifest_keys = getManifestList(
-            object_storage, persistent_table_components, context, storage_manifest_list_path, log);
+        auto manifest_keys = getManifestList(object_storage, persistent_table_components, context, manifest_list_path, log);
 
         for (const auto & mf_key : manifest_keys)
         {
@@ -953,8 +950,8 @@ struct ExpiredFiles
 
 /// Collect files from expired snapshots that are not referenced by any retained snapshot.
 static ExpiredFiles collectExpiredFiles(
-    const std::vector<String> & expired_manifest_list_paths,
-    const std::set<String> & retained_manifest_list_paths,
+    const std::vector<Iceberg::IcebergPathFromMetadata> & expired_manifest_list_paths,
+    const std::set<Iceberg::IcebergPathFromMetadata> & retained_manifest_list_paths,
     const std::set<Iceberg::IcebergPathFromMetadata> & retained_manifest_paths,
     const std::set<Iceberg::IcebergPathFromMetadata> & retained_data_file_paths,
     ObjectStoragePtr object_storage,
@@ -969,18 +966,15 @@ static ExpiredFiles collectExpiredFiles(
         if (retained_manifest_list_paths.contains(ml_path))
             continue;
 
-        String storage_ml_path = persistent_table_components.path_resolver.resolve(
-            IcebergPathFromMetadata(ml_path));
-
         ManifestFileCacheKeys manifest_keys;
         try
         {
             manifest_keys = getManifestList(
-                object_storage, persistent_table_components, context, storage_ml_path, log);
+                object_storage, persistent_table_components, context, IcebergPathFromMetadata(ml_path), log);
         }
         catch (...)
         {
-            LOG_WARNING(log, "Failed to read manifest list {}, skipping", storage_ml_path);
+            LOG_WARNING(log, "Failed to read manifest list {}, skipping", ml_path);
             continue;
         }
 
@@ -1058,7 +1052,7 @@ struct SnapshotPartition
 {
     Poco::JSON::Array::Ptr retained_snapshots = new Poco::JSON::Array;
     std::set<Int64> expired_snapshot_ids;
-    std::vector<String> expired_manifest_list_paths;
+    std::vector<Iceberg::IcebergPathFromMetadata> expired_manifest_list_paths;
 };
 
 /// Split snapshots into retained and expired.
@@ -1087,7 +1081,8 @@ static SnapshotPartition partitionSnapshots(
         {
             result.expired_snapshot_ids.insert(snap_id);
             if (snapshot->has(Iceberg::f_manifest_list))
-                result.expired_manifest_list_paths.push_back(snapshot->getValue<String>(Iceberg::f_manifest_list));
+                result.expired_manifest_list_paths.push_back(
+                    Iceberg::IcebergPathFromMetadata(snapshot->getValue<String>(Iceberg::f_manifest_list)));
         }
     }
     return result;
@@ -1122,11 +1117,11 @@ static void deleteExpiredFiles(
         try
         {
             object_storage->removeObjectIfExists(StoredObject(path_resolver.resolve(file_path)));
-            LOG_DEBUG(log, "Deleted expired file {}", file_path.getRawPath());
+            LOG_DEBUG(log, "Deleted expired file {}", file_path);
         }
         catch (...)
         {
-            LOG_WARNING(log, "Failed to delete file {}: {}", file_path.getRawPath(), getCurrentExceptionMessage(false));
+            LOG_WARNING(log, "Failed to delete file {}: {}", file_path, getCurrentExceptionMessage(false));
         }
     }
 }
@@ -1211,7 +1206,7 @@ ExpireSnapshotsResult expireSnapshots(
 
         std::set<Iceberg::IcebergPathFromMetadata> retained_manifest_paths;
         std::set<Iceberg::IcebergPathFromMetadata> retained_data_file_paths;
-        std::set<String> retained_manifest_list_paths;
+        std::set<Iceberg::IcebergPathFromMetadata> retained_manifest_list_paths;
         collectRetainedFiles(
             partition.retained_snapshots, object_storage, persistent_table_components, context, log,
             current_schema_id, retained_manifest_paths, retained_data_file_paths, retained_manifest_list_paths);

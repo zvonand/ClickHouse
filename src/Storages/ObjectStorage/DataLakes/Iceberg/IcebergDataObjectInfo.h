@@ -9,13 +9,14 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PositionDeleteObject.h>
 
 #include <Formats/FormatParserSharedResources.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
 
 
 namespace DB::Iceberg
 {
 struct IcebergObjectSerializableInfo
 {
-    String data_object_file_path_key;
+    IcebergPathFromMetadata data_object_file_path_key;
     Int32 underlying_format_read_schema_id;
     Int32 schema_id_relevant_to_iterator;
     Int64 sequence_number;

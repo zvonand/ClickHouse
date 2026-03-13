@@ -47,7 +47,7 @@ ManifestFileCacheKeys getManifestList(
     ObjectStoragePtr object_storage,
     const PersistentTableComponents & persistent_table_components,
     ContextPtr local_context,
-    const String & filename,
+    const IcebergPathFromMetadata & filename,
     LoggerPtr log);
 
 }

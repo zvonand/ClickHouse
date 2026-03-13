@@ -45,7 +45,7 @@ struct ManifestFilePlan
     }
 
     Iceberg::IcebergPathFromMetadata path;
-    std::vector<String> manifest_lists_path;
+    std::vector<Iceberg::IcebergPathFromMetadata> manifest_lists_path;
     DataFileStatistics statistics;
 
     Iceberg::IcebergPathFromMetadata patched_path;
@@ -69,7 +69,7 @@ struct Plan
     std::vector<PartitionPlan> partitions;
     IcebergHistory history;
     std::unordered_map<Iceberg::IcebergPathFromMetadata, Int64> manifest_file_to_first_snapshot;
-    std::unordered_map<String, std::vector<Iceberg::IcebergPathFromMetadata>> manifest_list_to_manifest_files;
+    std::unordered_map<Iceberg::IcebergPathFromMetadata, std::vector<Iceberg::IcebergPathFromMetadata>> manifest_list_to_manifest_files;
     std::unordered_map<Int64, std::vector<std::shared_ptr<DataFilePlan>>> snapshot_id_to_data_files;
     std::unordered_map<Iceberg::IcebergPathFromMetadata, std::shared_ptr<DataFilePlan>> path_to_data_file;
     FileNamesGenerator generator;
@@ -154,9 +154,7 @@ Plan getPlan(
     std::unordered_map<Iceberg::IcebergPathFromMetadata, std::shared_ptr<ManifestFilePlan>> manifest_files;
     for (const auto & snapshot : snapshots_info)
     {
-        auto resolved_manifest_list_path = persistent_table_components.path_resolver.resolve(
-            Iceberg::IcebergPathFromMetadata(snapshot.manifest_list_path));
-        auto manifest_list = getManifestList(object_storage, persistent_table_components, context, resolved_manifest_list_path, log);
+        auto manifest_list = getManifestList(object_storage, persistent_table_components, context, snapshot.manifest_list_path, log);
         for (const auto & manifest_file : manifest_list)
         {
             plan.manifest_list_to_manifest_files[snapshot.manifest_list_path].push_back(manifest_file.manifest_file_path);
@@ -356,7 +354,7 @@ void writeMetadataFiles(
     std::unordered_map<Iceberg::IcebergPathFromMetadata, Int64> manifest_file_sizes;
 
     {
-        std::unordered_map<std::shared_ptr<ManifestFilePlan>, std::unordered_set<String>> grouped_by_manifest_files_result;
+        std::unordered_map<std::shared_ptr<ManifestFilePlan>, std::unordered_set<Iceberg::IcebergPathFromMetadata>> grouped_by_manifest_files_result;
         std::unordered_map<std::shared_ptr<ManifestFilePlan>, size_t> grouped_by_manifest_files_partitions;
         std::unordered_map<std::shared_ptr<ManifestFilePlan>, size_t> partition_values;
 
@@ -366,7 +364,7 @@ void writeMetadataFiles(
             for (const auto & data_file : partition)
             {
                 grouped_by_manifest_files_partitions[data_file->manifest_list] = i;
-                grouped_by_manifest_files_result[data_file->manifest_list].insert(data_file->patched_path.getRawPath());
+                grouped_by_manifest_files_result[data_file->manifest_list].insert(data_file->patched_path);
                 partition_values[data_file->manifest_list] = i;
             }
         }
@@ -435,7 +433,7 @@ void writeMetadataFiles(
         }
     }
 
-    std::unordered_map<String, Iceberg::IcebergPathFromMetadata> manifest_list_renamings;
+    std::unordered_map<Iceberg::IcebergPathFromMetadata, Iceberg::IcebergPathFromMetadata> manifest_list_renamings;
     for (size_t i = 0; i < plan.history.size(); ++i)
     {
         if (plan.history[i].added_files == 0)

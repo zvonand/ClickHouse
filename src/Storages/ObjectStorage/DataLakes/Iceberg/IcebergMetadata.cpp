@@ -295,7 +295,7 @@ IcebergDataSnapshotPtr IcebergMetadata::createIcebergDataSnapshotFromSnapshotJSO
             ErrorCodes::ICEBERG_SPECIFICATION_VIOLATION,
             "Snapshot object doesn't contain a manifest list path for snapshot with id `{}`",
             snapshot_id);
-    String manifest_list_file_path = snapshot_object->getValue<String>(f_manifest_list);
+    IcebergPathFromMetadata manifest_list_file_path = IcebergPathFromMetadata(snapshot_object->getValue<String>(f_manifest_list));
     std::optional<size_t> total_rows;
     std::optional<size_t> total_bytes;
     std::optional<size_t> total_position_deletes;
@@ -321,12 +321,7 @@ IcebergDataSnapshotPtr IcebergMetadata::createIcebergDataSnapshotFromSnapshotJSO
 
 
     return std::make_shared<IcebergDataSnapshot>(
-        getManifestList(
-            object_storage,
-            persistent_components,
-            local_context,
-            persistent_components.path_resolver.resolve(IcebergPathFromMetadata(manifest_list_file_path)),
-            log),
+        getManifestList(object_storage, persistent_components, local_context, manifest_list_file_path, log),
         snapshot_id,
         schema_id,
         total_rows,
@@ -450,7 +445,7 @@ IcebergMetadata::getState(const ContextPtr & local_context, const String & metad
         dumpMetadataObjectToString(metadata_object),
         DB::IcebergMetadataLogLevel::Metadata,
         persistent_components.table_path,
-        metadata_path,
+        Iceberg::IcebergPathFromMetadata(metadata_path),
         std::nullopt,
         std::nullopt);
 
@@ -801,7 +796,7 @@ IcebergMetadata::IcebergHistory IcebergMetadata::getHistory(ContextPtr local_con
 
         const auto snapshot = snapshots->getObject(static_cast<UInt32>(i));
         history_record.snapshot_id = snapshot->getValue<Int64>(f_metadata_snapshot_id);
-        history_record.manifest_list_path = snapshot->getValue<String>(f_manifest_list);
+        history_record.manifest_list_path = IcebergPathFromMetadata(snapshot->getValue<String>(f_manifest_list));
         const auto summary = snapshot->getObject(f_summary);
         if (summary->has(f_added_data_files))
             history_record.added_files = summary->getValue<Int32>(f_added_data_files);

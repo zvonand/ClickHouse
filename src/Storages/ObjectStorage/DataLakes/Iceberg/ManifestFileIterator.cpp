@@ -234,7 +234,7 @@ std::shared_ptr<ManifestFileIterator> ManifestFileIterator::create(
         manifest_file_deserializer_->getMetadataContent(),
         DB::IcebergMetadataLogLevel::ManifestFileMetadata,
         path_resolver_.getTableRoot(),
-        path_to_manifest_file_.getRawPath(),
+        path_to_manifest_file_,
         std::nullopt,
         std::nullopt);
 
@@ -269,7 +269,7 @@ std::shared_ptr<ManifestFileIterator> ManifestFileIterator::create(
         throw Exception(
             ErrorCodes::BAD_ARGUMENTS,
             "Cannot read Iceberg table: manifest file '{}' doesn't have field '{}' in its metadata",
-            path_to_manifest_file_.getRawPath(),
+            path_to_manifest_file_,
             f_schema);
 
     Poco::Dynamic::Var json = parser.parse(*schema_json_string);
@@ -380,7 +380,7 @@ ProcessedManifestFileEntryPtr ManifestFileIterator::processRow(size_t row_index)
             manifest_file_deserializer->getContent(row_index),
             DB::IcebergMetadataLogLevel::ManifestFileEntry,
             path_resolver.getTableRoot(),
-            path_to_manifest_file.getRawPath(),
+            path_to_manifest_file,
             row_index,
             std::nullopt);
         return nullptr;
@@ -398,7 +398,7 @@ ProcessedManifestFileEntryPtr ManifestFileIterator::processRow(size_t row_index)
         throw Exception(
             ErrorCodes::ICEBERG_SPECIFICATION_VIOLATION,
             "Cannot read Iceberg table: manifest file '{}' has entry with snapshot_id '{}' for which write file schema is unknown",
-            path_to_manifest_file.getRawPath(),
+            path_to_manifest_file,
             resolved_snapshot_id);
     }
     else
@@ -416,7 +416,7 @@ ProcessedManifestFileEntryPtr ManifestFileIterator::processRow(size_t row_index)
             throw Exception(
                 ErrorCodes::ICEBERG_SPECIFICATION_VIOLATION,
                 "Cannot read Iceberg table: manifest file '{}' has entry with snapshot_id '{}' for which write file schema is unknown",
-                path_to_manifest_file.getRawPath(),
+                path_to_manifest_file,
                 resolved_snapshot_id);
         }
         catch (const Exception &)
@@ -494,7 +494,7 @@ ProcessedManifestFileEntryPtr ManifestFileIterator::processRow(size_t row_index)
         manifest_file_deserializer->getContent(row_index),
         DB::IcebergMetadataLogLevel::ManifestFileEntry,
         path_resolver.getTableRoot(),
-        path_to_manifest_file.getRawPath(),
+        path_to_manifest_file,
         row_index,
         pruning_status);
     switch (pruning_status)

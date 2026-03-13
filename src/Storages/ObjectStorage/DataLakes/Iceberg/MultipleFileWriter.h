@@ -34,7 +34,7 @@ public:
 
     UInt64 getResultBytes() const;
 
-    const std::vector<String> & getDataFiles() const
+    const std::vector<Iceberg::IcebergPathFromMetadata> & getDataFiles() const
     {
         return data_file_names;
     }
@@ -51,7 +51,7 @@ private:
     std::optional<size_t> current_file_num_rows = std::nullopt;
     std::optional<size_t> current_file_num_bytes = std::nullopt;
     /// Metadata paths (wasb://... or /path/...) for writing into Iceberg manifests.
-    std::vector<String> data_file_names;
+    std::vector<Iceberg::IcebergPathFromMetadata> data_file_names;
     /// Storage paths for actual object storage operations (cleanup).
     std::vector<String> data_file_storage_paths;
     std::unique_ptr<WriteBufferFromFileBase> buffer;

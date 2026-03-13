@@ -29,7 +29,9 @@ namespace DB::Iceberg
 using namespace DB;
 
 AvroForIcebergDeserializer::AvroForIcebergDeserializer(
-    std::unique_ptr<ReadBufferFromFileBase> buffer_, const std::string & manifest_file_path_, const DB::FormatSettings & format_settings)
+    std::unique_ptr<ReadBufferFromFileBase> buffer_,
+    const IcebergPathFromMetadata & manifest_file_path_,
+    const DB::FormatSettings & format_settings)
 try
     : buffer(std::move(buffer_))
     , manifest_file_path(manifest_file_path_)

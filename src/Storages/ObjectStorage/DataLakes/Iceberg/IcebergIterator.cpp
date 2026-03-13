@@ -130,7 +130,7 @@ std::span<const ProcessedManifestFileEntryPtr> defineDeletesSpan(
             "delete object info is {}",
             std::distance(beg_it, end_it),
             is_equality_delete ? "equality" : "position",
-            data_object_->parsed_entry->file_path_key.getRawPath(),
+            data_object_->parsed_entry->file_path_key,
             data_object_->dumpDeletesMatchingInfo(),
             (*beg_it)->dumpDeletesMatchingInfo(),
             (*previous_it)->dumpDeletesMatchingInfo());
@@ -141,7 +141,7 @@ std::span<const ProcessedManifestFileEntryPtr> defineDeletesSpan(
             logger,
             "No {} delete elements for data file {}, taken data file object info: {}",
             is_equality_delete ? "equality" : "position",
-            data_object_->parsed_entry->file_path_key.getRawPath(),
+            data_object_->parsed_entry->file_path_key,
             data_object_->dumpDeletesMatchingInfo());
     }
     return {beg_it, end_it};
@@ -339,8 +339,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
             const auto & lower = position_delete->parsed_entry->lower_reference_data_file_path;
             const auto & upper = position_delete->parsed_entry->upper_reference_data_file_path;
             bool can_contain_data_file_deletes
-                = (!lower.has_value() || lower->getRawPath() <= data_file_path)
-                && (!upper.has_value() || upper->getRawPath() >= data_file_path);
+                = (!lower.has_value() || *lower <= data_file_path)
+                && (!upper.has_value() || *upper >= data_file_path);
             /// Skip position deletes that do not match the data file path.
             if (!can_contain_data_file_deletes)
             {
@@ -350,7 +350,7 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                     "Skipping position delete file `{}` for data file `{}` because position delete has out of bounds reference data file "
                     "bounds: "
                     "(lower bound: `{}`, upper bound: `{}`)",
-                    position_delete->parsed_entry->file_path_key.getRawPath(),
+                    position_delete->parsed_entry->file_path_key,
                     data_file_path,
                     lower.has_value() ? lower->getRawPath() : "[no lower bound]",
                     upper.has_value() ? upper->getRawPath() : "[no upper bound]");
@@ -362,7 +362,7 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                     logger,
                     "Processing position delete file `{}` for data file `{}` with reference data file bounds: "
                     "(lower bound: `{}`, upper bound: `{}`)",
-                    position_delete->parsed_entry->file_path_key.getRawPath(),
+                    position_delete->parsed_entry->file_path_key,
                     data_file_path,
                     lower.has_value() ? lower->getRawPath() : "[no lower bound]",
                     upper.has_value() ? upper->getRawPath() : "[no upper bound]");

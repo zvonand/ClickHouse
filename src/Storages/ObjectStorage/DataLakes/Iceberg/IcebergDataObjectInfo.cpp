@@ -37,7 +37,7 @@ IcebergDataObjectInfo::IcebergDataObjectInfo(
     Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_, const String & resolved_storage_path_, Int32 schema_id_relevant_to_iterator_)
     : ObjectInfo(RelativePathWithMetadata(resolved_storage_path_))
     , info{
-          data_manifest_file_entry_->parsed_entry->file_path_key.getRawPath(),
+          data_manifest_file_entry_->parsed_entry->file_path_key,
           data_manifest_file_entry_->resolved_schema_id,
           schema_id_relevant_to_iterator_,
           data_manifest_file_entry_->sequence_number,
@@ -93,7 +93,7 @@ void IcebergDataObjectInfo::addEqualityDeleteObject(const Iceberg::ProcessedMani
 void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuffer & out, size_t protocol_version) const
 {
     checkVersion(protocol_version);
-    writeStringBinary(data_object_file_path_key, out);
+    writeStringBinary(data_object_file_path_key.getRawPath(), out);
     writeVarInt(underlying_format_read_schema_id, out);
     writeVarInt(schema_id_relevant_to_iterator, out);
     writeVarInt(sequence_number, out);
@@ -142,7 +142,11 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
 void IcebergObjectSerializableInfo::deserializeForClusterFunctionProtocol(ReadBuffer & in, size_t protocol_version)
 {
     checkVersion(protocol_version);
-    readStringBinary(data_object_file_path_key, in);
+    {
+        String raw_path;
+        readStringBinary(raw_path, in);
+        data_object_file_path_key = IcebergPathFromMetadata{std::move(raw_path)};
+    }
     readVarInt(underlying_format_read_schema_id, in);
     readVarInt(schema_id_relevant_to_iterator, in);
     readVarInt(sequence_number, in);

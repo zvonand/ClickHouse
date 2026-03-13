@@ -45,7 +45,7 @@ void MultipleFileWriter::startNewFile()
     auto storage_path = path_resolver.resolve(metadata_path);
 
     /// Store the metadata path (used in Iceberg manifest files for other engines to read).
-    data_file_names.push_back(metadata_path.getRawPath());
+    data_file_names.push_back(metadata_path);
     /// Also track storage paths for cleanup.
     data_file_storage_paths.push_back(storage_path);
     /// Write to the actual storage path.

@@ -1,10 +1,3 @@
-option (ENABLE_LIBSTEMMER "Enable base64" ${ENABLE_LIBRARIES})
-
-if (NOT ENABLE_LIBSTEMMER)
-    message(STATUS "Not using libstemmer (snowball)")
-    return()
-endif()
-
 set(LIBRARY_DIR "${ClickHouse_SOURCE_DIR}/contrib/libstemmer_c")
 
 add_library(_stemmer

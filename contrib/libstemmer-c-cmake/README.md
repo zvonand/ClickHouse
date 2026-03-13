@@ -39,7 +39,7 @@ make dist_libstemmer_c
 3. Uncompress and override
 
 ```Bash
-tar -xvzf --overwrite libstemmer_c-X.X.X.tar.gz -C /path/to/this/repo/clone
+tar --overwrite -xvzf libstemmer_c-X.X.X.tar.gz -C /path/to/this/repo/clone
 cd /path/to/this/repo/clone
 ```
 
@@ -53,21 +53,14 @@ git push --set-upstream origin Clickhouse/release/vX.X.X
 
 5. Regenerate the `CMakeLists.txt` in THIS directory:
 
-(suggested steps)
+(suggested steps, run from the repository root)
 
 ```Bash
+cd /path/to/this/repo/clone
 
-SOURCES=$(find ../libstemmer_c -name "*.c" -not -path "*/examples/*" | sort | sed 's|../libstemmer_c/|    ${LIBRARY_DIR}/|')
+SOURCES=$(find contrib/libstemmer_c -name "*.c" -not -path "*/examples/*" | sort | sed 's|contrib/libstemmer_c/|    ${LIBRARY_DIR}/|')
 
 cat > contrib/libstemmer-c-cmake/CMakeLists.txt << EOF
-
-option(ENABLE_LIBSTEMMER "Enable base64" \${ENABLE_LIBRARIES})
-
-if (NOT ENABLE_LIBSTEMMER)
-    message(STATUS "Not using libstemmer (snowball)")
-    return()
-endif()
-
 
 set(LIBRARY_DIR "\${ClickHouse_SOURCE_DIR}/contrib/libstemmer_c")
 

@@ -346,6 +346,9 @@ namespace ErrorCodes
     - `v2`
     - `v3`
     )", 0) \
+    DECLARE(Bool, propagate_types_serialization_versions_to_nested_types, true, R"(
+    If true, serialization versions like string_serialization_version will be propagated inside nested types like Array/Map/Nullable/JSON/etc. If disabled, the serialization version will take affect only to top-level columns of this type and Tuple elements.
+    )", 0)\
     DECLARE(Bool, write_marks_for_substreams_in_compact_parts, true, R"(
     Enables writing marks per each substream instead of per each column in Compact parts.
     It allows to read individual subcolumns from the data part efficiently.
@@ -1353,6 +1356,9 @@ namespace ErrorCodes
     Stop merges assignment for shared merge tree. Only available in ClickHouse
     Cloud
     )", 0) \
+    DECLARE(Bool, shared_merge_tree_use_zookeeper_connection_pool, false, R"(
+    If enabled, SharedMergeTree uses one of server-level pooled ZooKeeper sessions.
+    )", 0) \
     DECLARE(Bool, shared_merge_tree_enable_outdated_parts_check, true, R"(
     Enable outdated parts check. Only available in ClickHouse Cloud
     )", 0) \
@@ -1520,6 +1526,10 @@ namespace ErrorCodes
     )", 0) \
     DECLARE(Bool, vertical_merge_optimize_lightweight_delete, true, R"(
     If true, lightweight delete is optimized on vertical merge.
+    )", 0) \
+    DECLARE(Bool, vertical_merge_optimize_ttl_delete, true, R"(
+    If true, rows TTL delete is optimized on vertical merge. Instead of forcing horizontal merge,
+    the TTL filter is evaluated and passed to the merging algorithm which sets skip flags in row sources.
     )", 0) \
     DECLARE(UInt64, max_postpone_time_for_failed_mutations_ms, 5ULL * 60 * 1000, R"(
     The maximum postpone time for failed mutations.

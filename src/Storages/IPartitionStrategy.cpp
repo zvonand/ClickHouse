@@ -389,7 +389,6 @@ ColumnPtr HiveStylePartitionStrategy::computePartitionKey(const Chunk & chunk) c
         cached_result,
         *this,
         [&] { return buildHivePartitionAST(partition_key_description.definition_ast, getPartitionColumns()); });
-    cacheDeterministicActions(cached_result, actions_with_column);
 
     Block block_with_partition_by_expr = sample_block.cloneWithoutColumns();
     block_with_partition_by_expr.setColumns(chunk.getColumns());

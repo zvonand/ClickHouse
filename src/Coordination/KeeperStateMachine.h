@@ -131,22 +131,38 @@ protected:
     std::shared_ptr<SnapshotFileInfo> latest_snapshot_info TSA_GUARDED_BY(snapshots_lock);
     nuraft::ptr<nuraft::buffer> latest_snapshot_buf TSA_GUARDED_BY(snapshots_lock) = nullptr;
 
-    /// In-progress chunked snapshot receive state (follower side). Non-null between is_first_obj and is_last_obj.
+    /// In-progress chunked snapshot receive state.
     struct SnapshotReceiveCtx
     {
+        const uint64_t log_idx = 0;
         std::unique_ptr<WriteBuffer> write_buf;
-        uint64_t log_idx = 0;
-        DiskPtr disk;
-        std::string tmp_path;
 
-        SnapshotReceiveCtx() = default;
-        SnapshotReceiveCtx(SnapshotReceiveCtx &&) = default;
-        SnapshotReceiveCtx & operator=(SnapshotReceiveCtx &&) = default;
+        /// Constructor for local disk: write to a temp file, clean it up on destruction.
+        template <typename ReceiveInfo>
+            requires requires(ReceiveInfo r) { r.write_buf; r.tmp_path; r.disk; }
+        SnapshotReceiveCtx(ReceiveInfo recv_info, uint64_t log_idx_)
+            : log_idx(log_idx_)
+            , write_buf(std::move(recv_info.write_buf))
+            , tmp_path(std::move(recv_info.tmp_path))
+            , disk(std::move(recv_info.disk))
+        {
+        }
+
+        /// Constructor for non-local disk: accumulate in memory via WriteBufferFromNuraftBuffer.
+        SnapshotReceiveCtx(std::unique_ptr<WriteBuffer> write_buf_, uint64_t log_idx_)
+            : log_idx(log_idx_)
+            , write_buf(std::move(write_buf_))
+        {
+        }
 
         /// On destruction, close the write buffer and remove the partial temp file.
         /// If the transfer completed normally, finalizeSnapshotReceive already renamed
         /// the file away, so removeFileIfExists becomes a safe no-op.
         ~SnapshotReceiveCtx();
+
+    private:
+        const std::string tmp_path;
+        const DiskPtr disk;
     };
     std::unique_ptr<SnapshotReceiveCtx> snapshot_receive_ctx TSA_GUARDED_BY(snapshots_lock);
 

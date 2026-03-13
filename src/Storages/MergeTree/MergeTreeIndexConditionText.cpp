@@ -793,15 +793,24 @@ bool MergeTreeIndexConditionText::traverseMapElementKeyNode(const RPNBuilderFunc
 
 bool MergeTreeIndexConditionText::hasIndexForMapElementValue(const RPNBuilderTreeNode & node) const
 {
-    if (!node.isFunction())
+    /// Handle `arrayElement(map_col, 'key')` form (i.e., `map['key']`).
+    if (node.isFunction())
+    {
+        const auto function = node.toFunctionNode();
+        if (function.getArgumentsSize() == 2 && function.getFunctionName() == "arrayElement")
+        {
+            const auto column_name = function.getArgumentAt(0).getColumnName();
+            return header.has(fmt::format("mapValues({})", column_name));
+        }
         return false;
+    }
 
-    const auto function = node.toFunctionNode();
-    if (function.getArgumentsSize() != 2 || function.getFunctionName() != "arrayElement")
+    /// Handle `map.key_<serialized_key>` subcolumn form.
+    auto parsed = tryParseMapSubcolumnName(node.getColumnName());
+    if (!parsed)
         return false;
-
-    const auto column_name = function.getArgumentAt(0).getColumnName();
-    return header.has(fmt::format("mapValues({})", column_name));
+    auto & [map_column_name, serialized_key] = *parsed;
+    return header.has(fmt::format("mapValues({})", map_column_name));
 }
 
 bool MergeTreeIndexConditionText::traverseMapElementValueNode(const RPNBuilderTreeNode & index_column_node, const Field & const_value) const

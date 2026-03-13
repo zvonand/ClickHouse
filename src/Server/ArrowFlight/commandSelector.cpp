@@ -304,9 +304,11 @@ static SQLSet commandGetTableTypes()
     return {"SELECT name AS table_type FROM system.table_engines", {}, {}};
 }
 
-static SQLSet commandStatementQuery(const arrow::flight::protocol::sql::CommandStatementQuery & command)
+static CommandSelectorResult commandStatementQuery(const arrow::flight::protocol::sql::CommandStatementQuery & command)
 {
-    return {command.query(), {}, {}};
+    if (command.query().empty())
+        return arrow::Status::Invalid("CommandStatementQuery: query must not be empty");
+    return SQLSet{command.query(), {}, {}};
 }
 
 CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, bool schema_only)

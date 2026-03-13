@@ -1714,6 +1714,8 @@ arrow::Status ArrowFlightServer::DoPut(
                 arrow::flight::protocol::sql::CommandStatementUpdate command;
                 if (!any_msg.UnpackTo(&command))
                     return arrow::Status::SerializationError("Deserialization of sql::CommandStatementUpdate failed.");
+                if (command.query().empty())
+                    return arrow::Status::Invalid("CommandStatementUpdate has an empty query");
                 sql = command.query();
             }
             else if (any_msg.Is<arrow::flight::protocol::sql::CommandStatementIngest>())
@@ -1863,6 +1865,8 @@ arrow::Status ArrowFlightServer::DoAction(
 
         if (action.type == arrow::flight::ActionType::kCancelFlightInfo.type)
         {
+            if (!action.body)
+                return arrow::Status::Invalid("Invalid empty CancelFlightInfo action.");
             ARROW_ASSIGN_OR_RAISE(auto request, arrow::flight::CancelFlightInfoRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}))
             auto query_id = calls_data->getQueryIdByFlightDescriptor(request.info->descriptor().cmd);
             auto result = arrow::flight::CancelFlightInfoResult{arrow::flight::CancelStatus::kNotCancellable};
@@ -1882,6 +1886,8 @@ arrow::Status ArrowFlightServer::DoAction(
         }
         else if (action.type == arrow::flight::ActionType::kSetSessionOptions.type)
         {
+            if (!action.body)
+                return arrow::Status::Invalid("Invalid empty SetSessionOptions action.");
             ARROW_ASSIGN_OR_RAISE(auto request, arrow::flight::SetSessionOptionsRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}))
             arrow::flight::SetSessionOptionsResult result;
 
@@ -1956,7 +1962,10 @@ arrow::Status ArrowFlightServer::DoAction(
         }
         else if (action.type == arrow::flight::ActionType::kGetSessionOptions.type)
         {
-            ARROW_RETURN_NOT_OK(arrow::flight::GetSessionOptionsRequest::Deserialize({action.body->data_as<char>(), static_cast<size_t>(action.body->size())}));
+            std::string_view body_view = action.body
+                ? std::string_view{action.body->data_as<char>(), static_cast<size_t>(action.body->size())}
+                : std::string_view{};
+            ARROW_RETURN_NOT_OK(arrow::flight::GetSessionOptionsRequest::Deserialize(body_view));
             arrow::flight::GetSessionOptionsResult result;
 
             auto execute_res = executeSQLtoTable(session, "SELECT name, value FROM system.settings");

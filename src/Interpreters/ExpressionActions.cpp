@@ -888,7 +888,10 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
         }
 
         if (isCancelled())
-            break;
+        {
+            num_rows = execution_context.num_rows;
+            return;
+        }
     }
 
     if (project_inputs)

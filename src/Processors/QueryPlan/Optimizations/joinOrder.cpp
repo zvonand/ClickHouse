@@ -152,17 +152,7 @@ static void cleanupJoinPredicates(
 
         /// Merge equivalence classes from both children.
         auto equiv = process(entry->left);
-        auto right_equiv = process(entry->right);
-        for (const auto & [member, _] : right_equiv.getMemberToClassMap())
-        {
-            auto other_class = right_equiv.getClass(member);
-            if (other_class && other_class->size() >= 2)
-            {
-                auto first = other_class->front();
-                for (auto it = std::next(other_class->begin()); it != other_class->end(); ++it)
-                    equiv.add(first, *it);
-            }
-        }
+        equiv.merge(process(entry->right));
 
         /// Phase 1: Remove redundant predicates.
         auto & expressions = entry->join_operator.expression;

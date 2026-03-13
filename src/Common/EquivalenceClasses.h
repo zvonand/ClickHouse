@@ -74,6 +74,20 @@ struct EquivalenceClasses
         return it->second;
     }
 
+    /// Merge all equivalence classes from another instance into this one.
+    void merge(const EquivalenceClasses & other)
+    {
+        for (const auto & [member, class_ptr] : other.member_to_class)
+        {
+            if (class_ptr && class_ptr->size() >= 2)
+            {
+                auto first = class_ptr->front();
+                for (auto it = std::next(class_ptr->begin()); it != class_ptr->end(); ++it)
+                    add(first, *it);
+            }
+        }
+    }
+
     const std::unordered_map<T, ClassPtr, Hash> & getMemberToClassMap() const
     {
         return member_to_class;

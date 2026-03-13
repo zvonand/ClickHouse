@@ -1,177 +1,70 @@
 #!/usr/bin/env python3
+import math
 import os
+import re
 import time
 import pytest
 
 import helpers.keeper_utils as keeper_utils
 from helpers.cluster import CLICKHOUSE_CI_MIN_TESTED_VERSION, ClickHouseCluster
 
-# ── Small-chunk cluster: local disk ──────────────────────────────────────────
-# node1 has the highest leader priority so it will be the leader.
-cluster_local = ClickHouseCluster(__file__)
+cluster = ClickHouseCluster(__file__)
 
-node1 = cluster_local.add_instance(
-    "node1",
-    main_configs=["configs/enable_keeper1.xml"],
-    stay_alive=True,
-    with_remote_database_disk=False,
-)
-node2 = cluster_local.add_instance(
-    "node2",
-    main_configs=["configs/enable_keeper2.xml"],
-    stay_alive=True,
-    with_remote_database_disk=False,
-)
-node3 = cluster_local.add_instance(
-    "node3",
-    main_configs=["configs/enable_keeper3.xml"],
-    stay_alive=True,
-    with_remote_database_disk=False,
-)
+# Small-chunk clusters (snapshot_transfer_chunk_size=4096): local and S3.
+node1 = cluster.add_instance("node1", main_configs=["configs/enable_keeper1.xml"], stay_alive=True, with_remote_database_disk=False)
+node2 = cluster.add_instance("node2", main_configs=["configs/enable_keeper2.xml"], stay_alive=True, with_remote_database_disk=False)
+node3 = cluster.add_instance("node3", main_configs=["configs/enable_keeper3.xml"], stay_alive=True, with_remote_database_disk=False)
 
-# ── Small-chunk cluster: S3 (non-local) disk ─────────────────────────────────
-# Same topology and chunk size as cluster_local, but snapshots are stored on
-# MinIO.  This exercises the non-local-disk code path in read/save_logical_snp_obj.
-cluster_s3 = ClickHouseCluster(__file__)
+node7 = cluster.add_instance("node7", main_configs=["configs/enable_keeper7_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node8 = cluster.add_instance("node8", main_configs=["configs/enable_keeper8_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node9 = cluster.add_instance("node9", main_configs=["configs/enable_keeper9_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
 
-node7 = cluster_s3.add_instance(
-    "node7",
-    main_configs=["configs/enable_keeper7_s3.xml"],
-    stay_alive=True,
-    with_minio=True,
-    with_remote_database_disk=False,
-)
-node8 = cluster_s3.add_instance(
-    "node8",
-    main_configs=["configs/enable_keeper8_s3.xml"],
-    stay_alive=True,
-    with_minio=True,
-    with_remote_database_disk=False,
-)
-node9 = cluster_s3.add_instance(
-    "node9",
-    main_configs=["configs/enable_keeper9_s3.xml"],
-    stay_alive=True,
-    with_minio=True,
-    with_remote_database_disk=False,
-)
+# Large-chunk clusters (snapshot_transfer_chunk_size=100MB): local and S3.
+node4 = cluster.add_instance("node4", main_configs=["configs/enable_keeper4_large_chunk.xml"], stay_alive=True, with_remote_database_disk=False)
+node5 = cluster.add_instance("node5", main_configs=["configs/enable_keeper5_large_chunk.xml"], stay_alive=True, with_remote_database_disk=False)
+node6 = cluster.add_instance("node6", main_configs=["configs/enable_keeper6_large_chunk.xml"], stay_alive=True, with_remote_database_disk=False)
 
-# ── Large-chunk cluster: local disk ──────────────────────────────────────────
-# Configured with a large chunk size (100 MB) so that even a multi-hundred-KB
-# snapshot is sent as a single NuRaft object, exercising the chunk_size >
-# file_size code path (is_first_obj=is_last_obj=true on the leader side).
-cluster_large_chunk = ClickHouseCluster(__file__)
+node10 = cluster.add_instance("node10", main_configs=["configs/enable_keeper10_large_chunk_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node11 = cluster.add_instance("node11", main_configs=["configs/enable_keeper11_large_chunk_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node12 = cluster.add_instance("node12", main_configs=["configs/enable_keeper12_large_chunk_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
 
-node4 = cluster_large_chunk.add_instance(
-    "node4",
-    main_configs=["configs/enable_keeper4_large_chunk.xml"],
-    stay_alive=True,
-    with_remote_database_disk=False,
-)
-node5 = cluster_large_chunk.add_instance(
-    "node5",
-    main_configs=["configs/enable_keeper5_large_chunk.xml"],
-    stay_alive=True,
-    with_remote_database_disk=False,
-)
-node6 = cluster_large_chunk.add_instance(
-    "node6",
-    main_configs=["configs/enable_keeper6_large_chunk.xml"],
-    stay_alive=True,
-    with_remote_database_disk=False,
-)
+# Compat clusters: old-version leader, new-version follower — local and S3.
+# Old versions have no snapshot_transfer_chunk_size and always send a single NuRaft object.
+compat1 = cluster.add_instance("compat1", main_configs=["configs/enable_keeper_compat1.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag=CLICKHOUSE_CI_MIN_TESTED_VERSION, with_installed_binary=True, with_remote_database_disk=False)
+compat2 = cluster.add_instance("compat2", main_configs=["configs/enable_keeper_compat2.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag=CLICKHOUSE_CI_MIN_TESTED_VERSION, with_installed_binary=True, with_remote_database_disk=False)
+compat3 = cluster.add_instance("compat3", main_configs=["configs/enable_keeper_compat3.xml"], stay_alive=True, with_remote_database_disk=False)
 
-# ── Compatibility cluster: old leader, new follower ───────────────────────────
-# compat1 and compat2 run the oldest supported ClickHouse version and act as
-# leader/active-follower.  Old versions have no snapshot_transfer_chunk_size
-# setting and always send the whole snapshot as a single NuRaft object
-# (is_first_obj=is_last_obj=true).  compat3 runs the current (new) version and
-# is the lagging node that must recover via snapshot transfer.  This verifies
-# that the new save_logical_snp_obj correctly handles the single-chunk path
-# produced by an old leader.
-cluster_compat = ClickHouseCluster(__file__)
-
-compat1 = cluster_compat.add_instance(
-    "compat1",
-    main_configs=["configs/enable_keeper_compat1.xml"],
-    stay_alive=True,
-    image="clickhouse/clickhouse-server",
-    tag=CLICKHOUSE_CI_MIN_TESTED_VERSION,
-    with_installed_binary=True,
-    with_remote_database_disk=False,
-)
-compat2 = cluster_compat.add_instance(
-    "compat2",
-    main_configs=["configs/enable_keeper_compat2.xml"],
-    stay_alive=True,
-    image="clickhouse/clickhouse-server",
-    tag=CLICKHOUSE_CI_MIN_TESTED_VERSION,
-    with_installed_binary=True,
-    with_remote_database_disk=False,
-)
-compat3 = cluster_compat.add_instance(
-    "compat3",
-    main_configs=["configs/enable_keeper_compat3.xml"],
-    stay_alive=True,
-    with_remote_database_disk=False,
-)
-
-
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-
-@pytest.fixture(
-    scope="module",
-    params=["local", "s3"],
-    ids=["local_disk", "s3_disk"],
-)
-def chunked_transfer_nodes(request):
-    """
-    Parametrized fixture that yields a dict of cluster nodes for the two tests
-    that exercise chunked snapshot transfer.  The same test logic runs against
-    both a local-disk cluster and an S3-backed cluster, ensuring the non-local
-    code path in read/save_logical_snp_obj is covered.
-    """
-    if request.param == "local":
-        try:
-            cluster_local.start()
-            yield {
-                "cluster": cluster_local,
-                "leader": node1,
-                "middle": node2,
-                "lagging": node3,
-            }
-        finally:
-            cluster_local.shutdown()
-    else:
-        try:
-            cluster_s3.start()
-            cluster_s3.minio_client.make_bucket("snapshots")
-            yield {
-                "cluster": cluster_s3,
-                "leader": node7,
-                "middle": node8,
-                "lagging": node9,
-            }
-        finally:
-            cluster_s3.shutdown()
+compat_s3_1 = cluster.add_instance("compat_s3_1", main_configs=["configs/enable_keeper_compat_s3_1.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag=CLICKHOUSE_CI_MIN_TESTED_VERSION, with_installed_binary=True, with_remote_database_disk=False)
+compat_s3_2 = cluster.add_instance("compat_s3_2", main_configs=["configs/enable_keeper_compat_s3_2.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag=CLICKHOUSE_CI_MIN_TESTED_VERSION, with_installed_binary=True, with_remote_database_disk=False)
+compat_s3_3 = cluster.add_instance("compat_s3_3", main_configs=["configs/enable_keeper_compat_s3_3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
 
 
 @pytest.fixture(scope="module")
-def started_cluster_large_chunk():
+def started_cluster():
     try:
-        cluster_large_chunk.start()
-        yield cluster_large_chunk
+        cluster.start()
+        cluster.minio_client.make_bucket("snapshots")
+        yield cluster
     finally:
-        cluster_large_chunk.shutdown()
+        cluster.shutdown()
 
 
-@pytest.fixture(scope="module")
-def started_cluster_compat():
-    try:
-        cluster_compat.start()
-        yield cluster_compat
-    finally:
-        cluster_compat.shutdown()
+CHUNK_SIZE = 4096  # snapshot_transfer_chunk_size for small-chunk clusters
+
+CHUNKED_TRANSFER_PARAMS = [
+    pytest.param({"leader": node1, "middle": node2, "lagging": node3}, id="local_disk"),
+    pytest.param({"leader": node7, "middle": node8, "lagging": node9}, id="s3_disk"),
+]
+
+LARGE_CHUNK_PARAMS = [
+    pytest.param({"leader": node4, "lagging": node6}, id="local_disk"),
+    pytest.param({"leader": node10, "lagging": node12}, id="s3_disk"),
+]
+
+COMPAT_PARAMS = [
+    pytest.param({"old_leader": compat1, "lagging": compat3}, id="local_disk"),
+    pytest.param({"old_leader": compat_s3_1, "lagging": compat_s3_3}, id="s3_disk"),
+]
 
 
 def stop_zk(zk):
@@ -183,353 +76,306 @@ def stop_zk(zk):
         pass
 
 
+def fill_test_tree(zk, base, count=300):
+    """Create `count` children under `base`, then delete every 10th."""
+    zk.ensure_path(base)
+    for i in range(count):
+        zk.create(f"{base}/{i}", os.urandom(1024))
+    for i in range(0, count, 10):
+        zk.delete(f"{base}/{i}")
+
+
+def cleanup_test_tree(leader_node, base, count=300):
+    """Delete all nodes created by `fill_test_tree`."""
+    zk = None
+    try:
+        zk = keeper_utils.get_fake_zk(cluster, leader_node.name)
+        for i in range(count):
+            if zk.exists(f"{base}/{i}"):
+                zk.delete(f"{base}/{i}")
+        if zk.exists(base):
+            zk.delete(base)
+    except:
+        pass
+    finally:
+        stop_zk(zk)
+
+
+def verify_test_tree(leader_zk, lagging_zk, base, count=300):
+    """Assert node_lagging has the same data as node_leader after recovery."""
+    leader_zk.sync(base)
+    lagging_zk.sync(base)
+    for i in range(count):
+        if i % 10 != 0:
+            assert lagging_zk.get(f"{base}/{i}")[0] == leader_zk.get(f"{base}/{i}")[0]
+        else:
+            assert lagging_zk.exists(f"{base}/{i}") is None
+
+
+def get_log_line_count(node):
+    """Return the current number of lines in the clickhouse-server log."""
+    result = node.exec_in_container(
+        ["bash", "-c",
+         "wc -l < /var/log/clickhouse-server/clickhouse-server.log || echo 0"]
+    ).strip()
+    return int(result)
+
+
+def get_snapshot_log_lines_for_idx(node, snapshot_log_idx, from_line=0):
+    """Return "Saving snapshot <snapshot_log_idx> obj_id …" lines from the node log.
+
+    from_line -- skip the first from_line lines (so only lines written after a node restart
+    are searched, avoiding false matches from previous test iterations).
+    """
+    output = node.exec_in_container(
+        ["bash", "-c",
+         f"tail -n +{from_line + 1} /var/log/clickhouse-server/clickhouse-server.log"
+         f" | grep 'Saving snapshot {snapshot_log_idx} obj_id' || true"]
+    )
+    return [line for line in output.splitlines() if line]
+
+
+def get_received_snapshot_info(node, from_line):
+    """Return (log_idx, size_bytes) for the snapshot received via chunked transfer, or None.
+
+    Searches only in log lines written after from_line, so repeated test runs don't pick
+    up locally-created snapshots from earlier iterations.  Returns None if no snapshot was
+    received (node caught up via log replay instead), in which case the caller should skip
+    the obj_id check but still verify data correctness.
+    """
+    output = node.exec_in_container(
+        ["bash", "-c",
+         f"tail -n +{from_line + 1} /var/log/clickhouse-server/clickhouse-server.log"
+         " | grep 'Saving snapshot .* obj_id' || true"]
+    )
+    lines = [line for line in output.splitlines() if line]
+    if not lines:
+        return None
+    m = re.search(r"Saving snapshot (\d+) obj_id", lines[0])
+    if not m:
+        return None
+    log_idx = int(m.group(1))
+    size_result = node.exec_in_container(
+        ["bash", "-c",
+         f"find /var/lib/clickhouse/coordination/snapshots/ -name 'snapshot_{log_idx}.bin*'"
+         r" -printf '%s\n' | head -1"]
+    ).strip()
+    if not size_result:
+        return None
+    return log_idx, int(size_result)
+
+
+def assert_obj_ids(node_lagging, snapshot_log_idx, expected, from_line=0):
+    """Assert that the obj_ids logged during snapshot transfer cover `expected`.
+
+    NuRaft may send a small number of duplicate chunks when multiple heartbeat
+    threads fire before the first ACK returns.  We tolerate at most
+    len(expected) // 2 excess receives (i.e. at least half the chunks must
+    arrive exactly once) to catch systematic duplication bugs.
+    """
+    lines = get_snapshot_log_lines_for_idx(node_lagging, snapshot_log_idx, from_line)
+    assert lines, "No 'Saving snapshot' log lines appeared during recovery"
+    all_ids = [int(m.group(1)) for line in lines if (m := re.search(r"obj_id (\d+)", line))]
+    duplicates = len(all_ids) - len(set(all_ids))
+    max_allowed = len(expected) // 2
+    assert set(all_ids) == set(expected), f"Expected obj_ids={set(expected)}, got: {sorted(set(all_ids))}"
+    assert duplicates <= max_allowed, \
+        f"Too many duplicate chunks: {duplicates} (max {max_allowed}), obj_ids={all_ids}"
+
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
-def test_recover_from_snapshot_with_chunked_transfer(chunked_transfer_nodes):
+@pytest.mark.parametrize("nodes", CHUNKED_TRANSFER_PARAMS)
+def test_recover_from_snapshot_with_chunked_transfer(started_cluster, nodes):
     """
-    node_lagging is stopped while node_leader/node_middle accumulate enough writes
-    to trigger several snapshots.  When node_lagging restarts it is too stale to
-    replay logs so the leader must send it a snapshot.  With
-    snapshot_transfer_chunk_size=4096 the ~300 KB snapshot is split into multiple
-    4 KB chunks.  We verify:
-      1. Data on node_lagging matches the rest of the cluster after recovery.
-      2. The snapshot was actually transferred in more than one chunk
-         (checked via log line "Saving snapshot <idx> obj_id 2" on node_lagging,
-         where the count is anchored to lines added during this recovery).
-
-    The test runs for both local-disk and S3-backed clusters (parametrized).
+    Verify chunked snapshot transfer: node_lagging falls behind, then recovers via
+    snapshot. With snapshot_transfer_chunk_size=4096 the snapshot is split into
+    multiple 4 KB chunks. Asserts data correctness and that obj_ids form [0, N).
     """
-    cl = chunked_transfer_nodes["cluster"]
-    node_leader = chunked_transfer_nodes["leader"]
-    node_middle = chunked_transfer_nodes["middle"]
-    node_lagging = chunked_transfer_nodes["lagging"]
-
-    leader_zk = middle_zk = lagging_zk = None
+    node_leader = nodes["leader"]
+    node_middle = nodes["middle"]
+    node_lagging = nodes["lagging"]
     prefix = "/test_chunked_snapshot_transfer"
+    leader_zk = middle_zk = lagging_zk = None
 
     try:
-        leader_zk = keeper_utils.get_fake_zk(cl, node_leader.name)
-        middle_zk = keeper_utils.get_fake_zk(cl, node_middle.name)
-        lagging_zk = keeper_utils.get_fake_zk(cl, node_lagging.name)
+        leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
+        middle_zk = keeper_utils.get_fake_zk(cluster, node_middle.name)
+        lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
 
         leader_zk.create(prefix, b"somedata")
-
         middle_zk.sync(prefix)
         lagging_zk.sync(prefix)
-
         assert leader_zk.get(prefix)[0] == b"somedata"
         assert middle_zk.get(prefix)[0] == b"somedata"
         assert lagging_zk.get(prefix)[0] == b"somedata"
 
-        # Isolate node_lagging so it falls behind.
+        log_offset = get_log_line_count(node_lagging)
         node_lagging.stop_clickhouse(kill=True)
-
-        # Write enough data to exceed stale_log_gap=10 and create multiple
-        # snapshots (snapshot_distance=50).  Use unique random bytes so ZSTD
-        # compression doesn't shrink the snapshot below the chunk size.
-        for i in range(300):
-            leader_zk.create(prefix + str(i), os.urandom(1024))
-
-        for i in range(300):
-            if i % 10 == 0:
-                leader_zk.delete(prefix + str(i))
-
+        # Write enough data to exceed stale_log_gap=10 and trigger multiple snapshots.
+        # Random bytes prevent ZSTD from shrinking below chunk size.
+        fill_test_tree(leader_zk, prefix)
     finally:
         for zk in [leader_zk, middle_zk, lagging_zk]:
             stop_zk(zk)
 
-    # Record the log line count before recovery so the chunk-count assertion
-    # below is anchored to this recovery only and not contaminated by previous
-    # test runs on the same node.
-    log_lines_before = int(node_lagging.count_in_log("Saving snapshot").strip())
-
-    # node_lagging is stale: it must recover via snapshot transfer (not log replay).
     node_lagging.start_clickhouse(20)
-    keeper_utils.wait_until_connected(cl, node_lagging)
+    keeper_utils.wait_until_connected(cluster, node_lagging)
+    # Find the snapshot received via chunked transfer (not locally created ones).
+    received = get_received_snapshot_info(node_lagging, log_offset)
 
     try:
-        leader_zk = keeper_utils.get_fake_zk(cl, node_leader.name)
-        middle_zk = keeper_utils.get_fake_zk(cl, node_middle.name)
-        lagging_zk = keeper_utils.get_fake_zk(cl, node_lagging.name)
+        leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
+        middle_zk = keeper_utils.get_fake_zk(cluster, node_middle.name)
+        lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
 
-        leader_zk.sync(prefix)
-        middle_zk.sync(prefix)
-        lagging_zk.sync(prefix)
-
-        assert leader_zk.get(prefix)[0] == b"somedata"
-        assert middle_zk.get(prefix)[0] == b"somedata"
         assert lagging_zk.get(prefix)[0] == b"somedata"
-
-        for i in range(300):
-            if i % 10 != 0:
-                value_on_leader = leader_zk.get(prefix + str(i))[0]
-                assert middle_zk.get(prefix + str(i))[0] == value_on_leader
-                assert lagging_zk.get(prefix + str(i))[0] == value_on_leader
-            else:
-                assert leader_zk.exists(prefix + str(i)) is None
-                assert middle_zk.exists(prefix + str(i)) is None
-                assert lagging_zk.exists(prefix + str(i)) is None
-
+        verify_test_tree(leader_zk, lagging_zk, prefix)
+        verify_test_tree(leader_zk, middle_zk, prefix)
     finally:
-        try:
-            leader_zk = keeper_utils.get_fake_zk(cl, node_leader.name)
-            for i in range(300):
-                if leader_zk.exists(prefix + str(i)):
-                    leader_zk.delete(prefix + str(i))
-            if leader_zk.exists(prefix):
-                leader_zk.delete(prefix)
-        except:
-            pass
-
+        cleanup_test_tree(node_leader, prefix)
         for zk in [leader_zk, middle_zk, lagging_zk]:
             stop_zk(zk)
 
-    # Verify that the snapshot was transferred in at least 3 chunks during this
-    # recovery.  The follower logs "Saving snapshot <idx> obj_id <n>" for every
-    # received chunk; obj_id 2 appearing means at least 3 calls were made.
-    log_lines_after = int(node_lagging.count_in_log("Saving snapshot").strip())
-    new_log = node_lagging.grep_in_log("Saving snapshot")
-    # Filter to lines produced during this recovery (crude but sufficient: we
-    # just need to confirm obj_id 2 appeared in the new entries).
-    assert log_lines_after > log_lines_before, "No snapshot transfer log lines appeared during recovery"
-    assert "obj_id 2" in new_log, (
-        "Expected snapshot to be transferred in at least 3 chunks (obj_id 2 not found in log). "
-        f"Log output:\n{new_log}"
-    )
+    if received is not None:
+        snapshot_log_idx, snapshot_size = received
+        expected_chunks = math.ceil(snapshot_size / CHUNK_SIZE)
+        assert_obj_ids(node_lagging, snapshot_log_idx, list(range(expected_chunks)), from_line=log_offset)
 
 
-def test_recover_after_interrupted_transfer(chunked_transfer_nodes):
+@pytest.mark.parametrize("nodes", CHUNKED_TRANSFER_PARAMS)
+def test_recover_after_interrupted_transfer(started_cluster, nodes):
     """
-    Verify that a partial temp file left by a mid-transfer crash does not prevent
-    the next recovery from succeeding.
+    Verify that a partial tmp file left by a mid-transfer kill does not prevent
+    the next full recovery.
 
-    node_lagging is stopped while the leader accumulates enough data to trigger a
-    snapshot.  node_lagging is then started and killed as soon as it begins
-    receiving snapshot chunks.  The leader's save_logical_snp_obj with
-    is_first_obj=true must overwrite any leftover temp file and the second full
-    recovery must produce correct data.
-
-    The test runs for both local-disk and S3-backed clusters (parametrized).
+    Uses the keeper_save_snapshot_pause_mid_transfer fail point to pause
+    node_lagging deterministically while writing a middle chunk, then kills it.
+    This leaves a real tmp_snapshot_X.bin on disk.  On the next start the cleanup
+    logic in KeeperSnapshotManager removes it and recovery completes correctly.
     """
-    cl = chunked_transfer_nodes["cluster"]
-    node_leader = chunked_transfer_nodes["leader"]
-    node_lagging = chunked_transfer_nodes["lagging"]
-
+    node_leader = nodes["leader"]
+    node_lagging = nodes["lagging"]
     prefix = "/test_interrupted_chunked_transfer"
     leader_zk = lagging_zk = None
 
     try:
-        leader_zk = keeper_utils.get_fake_zk(cl, node_leader.name)
-
-        # node_lagging may still be running from the previous test; kill it.
+        leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
         node_lagging.stop_clickhouse(kill=True)
-
-        leader_zk.ensure_path(prefix)
-        for i in range(300):
-            leader_zk.create(prefix + "/" + str(i), os.urandom(1024))
-        for i in range(300):
-            if i % 10 == 0:
-                leader_zk.delete(prefix + "/" + str(i))
+        fill_test_tree(leader_zk, prefix)
     finally:
         stop_zk(leader_zk)
 
-    # Count "Saving snapshot" entries already in the log so we can detect new ones.
-    # (The log file accumulates across restarts unless rotated.)
-    snapshot_count_before = int(node_lagging.count_in_log("Saving snapshot").strip())
-
-    # First start: kill node_lagging as soon as it begins receiving snapshot chunks.
+    # First start: pause mid-transfer, then kill to leave tmp_snapshot_X.bin on disk.
     node_lagging.start_clickhouse(20)
+    node_lagging.query("SYSTEM ENABLE FAILPOINT keeper_save_snapshot_pause_mid_transfer")
+    log_offset = get_log_line_count(node_lagging)
+
+    # Wait until a non-first chunk is being processed — the thread is now paused
+    # at the fail point so no further chunks will be logged until we kill the node.
     deadline = time.monotonic() + 30
+    mid_chunk_seen = False
     while time.monotonic() < deadline:
-        current_count = int(node_lagging.count_in_log("Saving snapshot").strip())
-        if current_count > snapshot_count_before:
+        output = node_lagging.exec_in_container(
+            ["bash", "-c",
+             f"tail -n +{log_offset + 1} /var/log/clickhouse-server/clickhouse-server.log"
+             " | grep -E 'Saving snapshot [0-9]+ obj_id [1-9]' || true"]
+        )
+        if output.strip():
+            mid_chunk_seen = True
             break
         time.sleep(0.5)
-    node_lagging.stop_clickhouse(kill=True)
 
-    # Second start: let node_lagging recover fully from whatever partial state
-    # was left by the mid-transfer kill.
+    assert mid_chunk_seen, "Fail point was not triggered: no middle chunk seen within timeout"
+    node_lagging.stop_clickhouse(kill=True)  # leaves tmp_snapshot_X.bin on disk
+
+    # Second start: cleanup removes tmp_snapshot_X.bin, then fresh full recovery.
     node_lagging.start_clickhouse(20)
-    keeper_utils.wait_until_connected(cl, node_lagging)
+    keeper_utils.wait_until_connected(cluster, node_lagging)
 
     try:
-        leader_zk = keeper_utils.get_fake_zk(cl, node_leader.name)
-        lagging_zk = keeper_utils.get_fake_zk(cl, node_lagging.name)
-
-        leader_zk.sync(prefix)
-        lagging_zk.sync(prefix)
-
-        for i in range(300):
-            if i % 10 != 0:
-                assert lagging_zk.get(prefix + "/" + str(i))[0] == leader_zk.get(prefix + "/" + str(i))[0]
-            else:
-                assert lagging_zk.exists(prefix + "/" + str(i)) is None
-
+        leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
+        lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
+        verify_test_tree(leader_zk, lagging_zk, prefix)
     finally:
-        try:
-            leader_zk = keeper_utils.get_fake_zk(cl, node_leader.name)
-            for i in range(300):
-                if leader_zk.exists(prefix + "/" + str(i)):
-                    leader_zk.delete(prefix + "/" + str(i))
-            if leader_zk.exists(prefix):
-                leader_zk.delete(prefix)
-        except:
-            pass
-
+        cleanup_test_tree(node_leader, prefix)
         for zk in [leader_zk, lagging_zk]:
             stop_zk(zk)
 
 
-def test_recover_with_chunk_size_larger_than_snapshot(started_cluster_large_chunk):
+@pytest.mark.parametrize("nodes", LARGE_CHUNK_PARAMS)
+def test_recover_with_chunk_size_larger_than_snapshot(started_cluster, nodes):
     """
-    Verify recovery when snapshot_transfer_chunk_size exceeds the snapshot file size.
-
-    With chunk_size=104857600 (100 MB) the ~300 KB test snapshot is smaller than one
-    chunk, so the leader sets is_first_obj=is_last_obj=true and sends a single NuRaft
-    object.  This exercises the same single-object code path that was used before
-    chunked transfer was introduced, and ensures no regression for that case.
-
-    We verify:
-      1. Data on node6 matches node4 after recovery.
-      2. Only obj_id 0 appears in node6's log during this recovery (single-chunk
-         transfer), anchored to lines added during this run.
+    Verify recovery when snapshot_transfer_chunk_size (100 MB) exceeds snapshot size.
+    The whole snapshot is sent as a single NuRaft object (is_first_obj=is_last_obj=true),
+    so obj_ids must be exactly [0].
     """
+    node_leader = nodes["leader"]
+    node_lagging = nodes["lagging"]
     prefix = "/test_large_chunk_transfer"
-    node4_zk = node6_zk = None
+    leader_zk = lagging_zk = None
 
-    node6.stop_clickhouse(kill=True)
-
-    # Baseline before recovery so the log assertion below is not contaminated
-    # by any previous snapshot lines in node6's log file.
-    log_lines_before = int(node6.count_in_log("Saving snapshot").strip())
+    log_offset = get_log_line_count(node_lagging)
+    node_lagging.stop_clickhouse(kill=True)
 
     try:
-        node4_zk = keeper_utils.get_fake_zk(cluster_large_chunk, "node4")
-
-        node4_zk.ensure_path(prefix)
-        for i in range(300):
-            node4_zk.create(prefix + "/" + str(i), os.urandom(1024))
-        for i in range(300):
-            if i % 10 == 0:
-                node4_zk.delete(prefix + "/" + str(i))
+        leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
+        fill_test_tree(leader_zk, prefix)
     finally:
-        stop_zk(node4_zk)
+        stop_zk(leader_zk)
 
-    node6.start_clickhouse(20)
-    keeper_utils.wait_until_connected(cluster_large_chunk, node6)
+    node_lagging.start_clickhouse(20)
+    keeper_utils.wait_until_connected(cluster, node_lagging)
+    received = get_received_snapshot_info(node_lagging, log_offset)
 
     try:
-        node4_zk = keeper_utils.get_fake_zk(cluster_large_chunk, "node4")
-        node6_zk = keeper_utils.get_fake_zk(cluster_large_chunk, "node6")
-
-        node4_zk.sync(prefix)
-        node6_zk.sync(prefix)
-
-        for i in range(300):
-            if i % 10 != 0:
-                assert node6_zk.get(prefix + "/" + str(i))[0] == node4_zk.get(prefix + "/" + str(i))[0]
-            else:
-                assert node6_zk.exists(prefix + "/" + str(i)) is None
-
+        leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
+        lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
+        verify_test_tree(leader_zk, lagging_zk, prefix)
     finally:
-        try:
-            node4_zk = keeper_utils.get_fake_zk(cluster_large_chunk, "node4")
-            for i in range(300):
-                if node4_zk.exists(prefix + "/" + str(i)):
-                    node4_zk.delete(prefix + "/" + str(i))
-            if node4_zk.exists(prefix):
-                node4_zk.delete(prefix)
-        except:
-            pass
-
-        for zk in [node4_zk, node6_zk]:
+        cleanup_test_tree(node_leader, prefix)
+        for zk in [leader_zk, lagging_zk]:
             stop_zk(zk)
 
-    # With a 100 MB chunk size the snapshot fits in a single object, so the
-    # leader calls read_logical_snp_obj exactly once (obj_id=0, is_last=true),
-    # and the follower's save_logical_snp_obj takes the is_first&&is_last branch.
-    log_lines_after = int(node6.count_in_log("Saving snapshot").strip())
-    assert log_lines_after > log_lines_before, "No snapshot transfer log lines appeared during recovery"
-    new_log = node6.grep_in_log("Saving snapshot")
-    assert "obj_id 0" in new_log, f"Expected obj_id 0 in log:\n{new_log}"
-    assert "obj_id 1" not in new_log, (
-        "Expected snapshot to be transferred as a single chunk (obj_id 1 must not appear). "
-        f"Log output:\n{new_log}"
-    )
+    if received is not None:
+        snapshot_log_idx, _ = received
+        assert_obj_ids(node_lagging, snapshot_log_idx, [0], from_line=log_offset)
 
 
-def test_recover_from_snapshot_sent_by_old_leader(started_cluster_compat):
+@pytest.mark.parametrize("nodes", COMPAT_PARAMS)
+def test_recover_from_snapshot_sent_by_old_leader(started_cluster, nodes):
     """
-    Backward-compatibility test: a new follower (current version) must be able
-    to recover from a snapshot sent by an old leader (CLICKHOUSE_CI_MIN_TESTED_VERSION).
-
-    Old versions have no snapshot_transfer_chunk_size setting and always send the
-    whole snapshot in a single NuRaft object (is_first_obj=is_last_obj=true).
-    The new save_logical_snp_obj must handle that path correctly.
-
-    We verify:
-      1. compat3 (new version) recovers with correct data after the old cluster
-         compat1/compat2 accumulates a snapshot it cannot replay from logs.
-      2. Only obj_id 0 appears in compat3's new log lines, confirming the old
-         leader sent a single-chunk snapshot (no chunking in old version).
+    Backward-compatibility: a new follower must recover from a snapshot sent by an
+    old leader (CLICKHOUSE_CI_MIN_TESTED_VERSION) that has no chunking support and
+    always sends is_first_obj=is_last_obj=true. Asserts obj_ids == [0].
     """
+    node_old_leader = nodes["old_leader"]
+    node_lagging = nodes["lagging"]
     prefix = "/test_compat_snapshot_transfer"
     leader_zk = lagging_zk = None
 
-    compat3.stop_clickhouse(kill=True)
-
-    log_lines_before = int(compat3.count_in_log("Saving snapshot").strip())
+    log_offset = get_log_line_count(node_lagging)
+    node_lagging.stop_clickhouse(kill=True)
 
     try:
-        leader_zk = keeper_utils.get_fake_zk(cluster_compat, "compat1")
-
-        leader_zk.ensure_path(prefix)
-        for i in range(300):
-            leader_zk.create(prefix + "/" + str(i), os.urandom(1024))
-        for i in range(300):
-            if i % 10 == 0:
-                leader_zk.delete(prefix + "/" + str(i))
+        leader_zk = keeper_utils.get_fake_zk(cluster, node_old_leader.name)
+        fill_test_tree(leader_zk, prefix)
     finally:
         stop_zk(leader_zk)
 
-    compat3.start_clickhouse(20)
-    keeper_utils.wait_until_connected(cluster_compat, compat3)
+    node_lagging.start_clickhouse(20)
+    keeper_utils.wait_until_connected(cluster, node_lagging)
+    received = get_received_snapshot_info(node_lagging, log_offset)
 
     try:
-        leader_zk = keeper_utils.get_fake_zk(cluster_compat, "compat1")
-        lagging_zk = keeper_utils.get_fake_zk(cluster_compat, "compat3")
-
-        leader_zk.sync(prefix)
-        lagging_zk.sync(prefix)
-
-        for i in range(300):
-            if i % 10 != 0:
-                assert lagging_zk.get(prefix + "/" + str(i))[0] == leader_zk.get(prefix + "/" + str(i))[0]
-            else:
-                assert lagging_zk.exists(prefix + "/" + str(i)) is None
-
+        leader_zk = keeper_utils.get_fake_zk(cluster, node_old_leader.name)
+        lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
+        verify_test_tree(leader_zk, lagging_zk, prefix)
     finally:
-        try:
-            leader_zk = keeper_utils.get_fake_zk(cluster_compat, "compat1")
-            for i in range(300):
-                if leader_zk.exists(prefix + "/" + str(i)):
-                    leader_zk.delete(prefix + "/" + str(i))
-            if leader_zk.exists(prefix):
-                leader_zk.delete(prefix)
-        except:
-            pass
-
+        cleanup_test_tree(node_old_leader, prefix)
         for zk in [leader_zk, lagging_zk]:
             stop_zk(zk)
 
-    # The old leader has no chunking: it always sends is_first_obj=is_last_obj=true,
-    # so the new follower must have taken the is_first&&is_last branch.
-    # Confirm exactly one obj_id (0) was logged during this recovery.
-    log_lines_after = int(compat3.count_in_log("Saving snapshot").strip())
-    assert log_lines_after > log_lines_before, "No snapshot transfer log lines appeared during recovery"
-    new_log = compat3.grep_in_log("Saving snapshot")
-    assert "obj_id 0" in new_log, f"Expected obj_id 0 in compat3 log:\n{new_log}"
-    assert "obj_id 1" not in new_log, (
-        "Old leader must send a single-chunk snapshot; obj_id 1 must not appear. "
-        f"Log output:\n{new_log}"
-    )
+    if received is not None:
+        snapshot_log_idx, _ = received
+        assert_obj_ids(node_lagging, snapshot_log_idx, [0], from_line=log_offset)

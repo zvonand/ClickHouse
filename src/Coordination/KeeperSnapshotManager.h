@@ -6,6 +6,7 @@
 #include <Coordination/KeeperCommon.h>
 #include <Coordination/KeeperStorage_fwd.h>
 #include <libnuraft/nuraft.hxx>
+#include <IO/WriteBuffer.h>
 
 namespace DB
 {
@@ -15,7 +16,6 @@ using SnapshotMetadataPtr = std::shared_ptr<SnapshotMetadata>;
 using ClusterConfig = nuraft::cluster_config;
 using ClusterConfigPtr = nuraft::ptr<ClusterConfig>;
 
-class WriteBuffer;
 class ReadBuffer;
 
 class KeeperContext;
@@ -131,6 +131,40 @@ using KeeperStorageSnapshotPtr = std::variant<std::shared_ptr<KeeperStorageSnaps
 #endif
 using CreateSnapshotCallback = std::function<SnapshotFileInfoPtr(KeeperStorageSnapshotPtr &&, bool)>;
 
+/// In-progress chunked snapshot receive state on the follower side.
+/// Holds the write buffer for writing chunks directly to disk and the tmp_
+/// marker path used to detect incomplete writes on restart.
+struct SnapshotReceiveCtx
+{
+    const uint64_t log_idx = 0;
+    /// The obj_id of the next chunk we expect to receive. Starts at 0, incremented after
+    /// each chunk is written. Used to detect duplicate or out-of-order chunks.
+    uint64_t expected_obj_id = 0;
+    const std::string snapshot_file_name;
+    const DiskPtr disk;
+    std::unique_ptr<WriteBuffer> write_buf;
+
+    SnapshotReceiveCtx(
+        std::unique_ptr<WriteBuffer> write_buf_,
+        DiskPtr disk_,
+        std::string snapshot_file_name_,
+        uint64_t log_idx_)
+        : log_idx(log_idx_)
+        , snapshot_file_name(std::move(snapshot_file_name_))
+        , disk(std::move(disk_))
+        , write_buf(std::move(write_buf_))
+    {
+    }
+
+    /// Cancel write buffer if not finalized.
+    ~SnapshotReceiveCtx()
+    {
+        if (write_buf && !write_buf->isFinalized())
+            write_buf->cancel();
+    }
+
+};
+
 /// Class responsible for snapshots serialization and deserialization. Each snapshot
 /// has it's path on disk and log index.
 template<typename Storage>
@@ -153,19 +187,12 @@ public:
     /// Serialize already compressed snapshot to disk (return path)
     SnapshotFileInfoPtr serializeSnapshotBufferToDisk(nuraft::buffer & buffer, uint64_t up_to_log_idx);
 
-    struct SnapshotReceiveInfo
-    {
-        std::unique_ptr<WriteBuffer> write_buf;
-        DiskPtr disk;
-        std::string tmp_path;
-    };
+    /// Chunked snapshot receive: open the snapshot file for writing and return a receive context.
+    /// The caller appends chunks and calls finalizeSnapshotReceiveToDisk when done.
+    std::unique_ptr<SnapshotReceiveCtx> beginSnapshotReceiveToDisk(uint64_t up_to_log_idx);
 
-    /// Chunked snapshot receive: open a temp file for writing and return write buffer + location.
-    /// The caller appends chunks and calls finalizeSnapshotReceive when done.
-    SnapshotReceiveInfo beginSnapshotReceive(uint64_t up_to_log_idx);
-
-    /// Finalize chunked receive: sync, rename temp → final, register snapshot.
-    SnapshotFileInfoPtr finalizeSnapshotReceive(uint64_t up_to_log_idx);
+    /// Finalize chunked receive: sync, finalize write buffer, remove tmp marker, register snapshot.
+    SnapshotFileInfoPtr finalizeSnapshotReceiveToDisk(SnapshotReceiveCtx & ctx);
 
     /// Serialize snapshot directly to disk
     SnapshotFileInfoPtr serializeSnapshotToDisk(const KeeperStorageSnapshot<Storage> & snapshot);

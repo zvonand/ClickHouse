@@ -26,6 +26,7 @@
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/ZooKeeper/ZooKeeperConstants.h>
 #include <Common/ZooKeeper/ZooKeeperIO.h>
+#include <Common/FailPoint.h>
 #include <Common/logger_useful.h>
 #include <Interpreters/Context.h>
 
@@ -41,6 +42,7 @@ namespace ProfileEvents
     extern const Event KeeperSnapshotApplysFailed;
     extern const Event KeeperReadSnapshot;
     extern const Event KeeperSaveSnapshot;
+    extern const Event KeeperSnapshotLoadedFromDisk;
     extern const Event KeeperStorageLockWaitMicroseconds;
 }
 
@@ -51,6 +53,11 @@ namespace CurrentMetrics
 
 namespace DB
 {
+
+namespace FailPoints
+{
+    extern const char keeper_save_snapshot_pause_mid_transfer[];
+}
 
 namespace CoordinationSetting
 {
@@ -142,9 +149,9 @@ void KeeperStateMachine<Storage>::init()
             auto snapshot_deserialization_result = snapshot_manager.deserializeSnapshotFromBuffer(latest_snapshot_buf);
             latest_snapshot_info = snapshot_manager.getLatestSnapshotInfo();
             chassert(latest_snapshot_info);
-
-            if (isLocalDisk(*latest_snapshot_info->disk))
-                latest_snapshot_buf = nullptr;
+            /// When this node becomes a leader and needs to send the snapshot, it is loaded on demand
+            /// (see read_logical_snp_obj and loadSnapshotBufFromDisk).
+            latest_snapshot_buf = nullptr;
 
             storage = std::move(snapshot_deserialization_result.storage);
             latest_snapshot_meta = snapshot_deserialization_result.snapshot_meta;
@@ -865,7 +872,7 @@ void KeeperStateMachine<Storage>::create_snapshot(nuraft::snapshot & s, nuraft::
                             auto snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(
                                 *snapshot_buf, snapshot->snapshot_meta->get_last_log_idx());
                             latest_snapshot_info = std::move(snapshot_info);
-                            latest_snapshot_buf = std::move(snapshot_buf);
+                            latest_snapshot_buf = nullptr;
                         }
 
                         ProfileEvents::increment(ProfileEvents::KeeperSnapshotCreations);
@@ -928,118 +935,114 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
 {
     LOG_DEBUG(log, "Saving snapshot {} obj_id {}", s.get_last_log_idx(), obj_id);
 
-    /// we rely on the fact that the snapshot disk cannot be changed during runtime
-    const bool is_local_disk = isLocalDisk(*keeper_context->getSnapshotDisk());
-
     try
     {
         std::lock_guard lock(snapshots_lock);
 
         if (is_first_obj && is_last_obj)
         {
-            /// Single-chunk transfer (old leader or chunking disabled): write the whole buffer at once.
-            nuraft::ptr<nuraft::buffer> cloned_buffer;
-            if (!is_local_disk)
-                cloned_buffer = nuraft::buffer::clone(data);
-
-            /// Copy snapshot meta into memory
+            /// If there is non-finalized state from previous call - clean it up.
+            cancelIfHasUnfinishedReceive();
+            /// Single-chunk transfer.
             nuraft::ptr<nuraft::buffer> snp_buf = s.serialize();
             nuraft::ptr<nuraft::snapshot> cloned_meta = nuraft::snapshot::deserialize(*snp_buf);
 
             latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(data, s.get_last_log_idx());
             latest_snapshot_meta = cloned_meta;
-            latest_snapshot_buf = std::move(cloned_buffer);
+            /// Snapshot is on disk; loaded on demand if this node becomes a leader (see read_logical_snp_obj).
+            latest_snapshot_buf = nullptr;
+            ++obj_id;
         }
         else
         {
             if (is_first_obj)
             {
-                snapshot_receive_ctx.reset();
-                if (is_local_disk)
-                    snapshot_receive_ctx = std::make_unique<SnapshotReceiveCtx>(
-                        snapshot_manager.beginSnapshotReceive(s.get_last_log_idx()), s.get_last_log_idx());
-                else
-                    /// Accumulate chunks in a growing nuraft::buffer
-                    /// (doubles on overflow, trimmed to exact size on finalize).
-                    /// getBuffer() hands ownership without an extra copy.
-                    snapshot_receive_ctx = std::make_unique<SnapshotReceiveCtx>(
-                        std::make_unique<WriteBufferFromNuraftBuffer>(), s.get_last_log_idx());
+                /// If there is non-finalized state from previous call - clean it up.
+                cancelIfHasUnfinishedReceive();
+                snapshot_receive_ctx = snapshot_manager.beginSnapshotReceiveToDisk(s.get_last_log_idx());
             }
 
-            if (!snapshot_receive_ctx)
-                throw Exception(ErrorCodes::LOGICAL_ERROR, "Snapshot receive context is null for obj_id {}", obj_id);
-
-            if (snapshot_receive_ctx->log_idx != s.get_last_log_idx())
-                throw Exception(
-                    ErrorCodes::LOGICAL_ERROR,
-                    "Snapshot receive context log_idx {} does not match snapshot log_idx {} for obj_id {}",
-                    snapshot_receive_ctx->log_idx,
+            if (!snapshot_receive_ctx || snapshot_receive_ctx->log_idx != s.get_last_log_idx())
+            {
+                /// Stale context — ask leader to restart.
+                LOG_WARNING(
+                    log,
+                    "Snapshot receive context is missing or stale for snapshot {} obj_id {} "
+                    "(context log_idx: {}). Resetting to obj_id=0 to restart transfer.",
                     s.get_last_log_idx(),
-                    obj_id);
+                    obj_id,
+                    snapshot_receive_ctx ? snapshot_receive_ctx->log_idx : 0);
+                cancelIfHasUnfinishedReceive();
+                obj_id = 0;
+                return;
+            }
 
-            /// Append this chunk to the accumulation buffer (file or memory depending on disk type).
+            if (!is_first_obj && obj_id != snapshot_receive_ctx->expected_obj_id)
+            {
+                if (obj_id < snapshot_receive_ctx->expected_obj_id)
+                {
+                    /// Duplicate — skip, advance leader.
+                    LOG_WARNING(
+                        log,
+                        "Snapshot {} received duplicate chunk {} (expected {}), skipping.",
+                        s.get_last_log_idx(),
+                        obj_id,
+                        snapshot_receive_ctx->expected_obj_id);
+                    obj_id = snapshot_receive_ctx->expected_obj_id;
+                }
+                else
+                {
+                    /// Gap — restart.
+                    LOG_WARNING(
+                        log,
+                        "Snapshot {} received out-of-order chunk {} (expected {}), restarting.",
+                        s.get_last_log_idx(),
+                        obj_id,
+                        snapshot_receive_ctx->expected_obj_id);
+                    cancelIfHasUnfinishedReceive();
+                    obj_id = 0;
+                }
+                return;
+            }
+
             ReadBufferFromNuraftBuffer reader(data);
             copyData(reader, *snapshot_receive_ctx->write_buf);
+            /// Advance obj_id to the next chunk we want; NuRaft forwards it to the leader as the next offset.
+            obj_id = ++snapshot_receive_ctx->expected_obj_id;
+
+            if (!is_first_obj && !is_last_obj)
+                FailPointInjection::pauseFailPoint(FailPoints::keeper_save_snapshot_pause_mid_transfer);
 
             if (is_last_obj)
             {
-                /// Copy snapshot meta into memory — only needed when finalizing
                 nuraft::ptr<nuraft::buffer> snp_buf = s.serialize();
                 nuraft::ptr<nuraft::snapshot> cloned_meta = nuraft::snapshot::deserialize(*snp_buf);
 
-                if (is_local_disk)
-                {
-                    snapshot_receive_ctx->write_buf->sync();
-                    snapshot_receive_ctx->write_buf->finalize();
-                    latest_snapshot_info = snapshot_manager.finalizeSnapshotReceive(snapshot_receive_ctx->log_idx);
-                    latest_snapshot_meta = cloned_meta;
-                    latest_snapshot_buf = nullptr;
-                }
-                else
-                {
-                    /// Retrieve the assembled nuraft buffer — no copy, just a pointer transfer.
-                    /// getBuffer() internally calls finalize(), which trims the buffer to exact written size.
-                    auto * nuraft_wb = static_cast<WriteBufferFromNuraftBuffer *>(snapshot_receive_ctx->write_buf.get());
-                    auto assembled_buf = nuraft_wb->getBuffer();
-                    latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(*assembled_buf, s.get_last_log_idx());
-                    latest_snapshot_meta = cloned_meta;
-                    latest_snapshot_buf = std::move(assembled_buf);
-                }
+                latest_snapshot_info = snapshot_manager.finalizeSnapshotReceiveToDisk(*snapshot_receive_ctx);
+                latest_snapshot_meta = cloned_meta;
+                /// Chunks were written directly to disk; no in-memory copy is kept.
+                /// If this node becomes a leader, the snapshot is loaded from disk on demand (see read_logical_snp_obj).
+                latest_snapshot_buf = nullptr;
+
                 snapshot_receive_ctx.reset();
             }
         }
 
         if (is_last_obj)
+        {
             LOG_DEBUG(
-                log, "Saved snapshot {} to path {} (last obj_id: {})",
+                log, "Saved snapshot {} to path {} ({} chunks)",
                 s.get_last_log_idx(), latest_snapshot_info->path, obj_id);
-
-        obj_id++;
-        ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshot);
+            ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshot);
+        }
     }
     catch (...)
     {
-        snapshot_receive_ctx.reset();
+        cancelIfHasUnfinishedReceive();
         tryLogCurrentException(log);
     }
 }
 
-IKeeperStateMachine::SnapshotReceiveCtx::~SnapshotReceiveCtx()
-{
-    /// Close the write buffer before removing the file so that the file handle is released.
-    write_buf.reset();
-    if (disk && !tmp_path.empty())
-    {
-        try
-        {
-            disk->removeFileIfExists(tmp_path);
-        }
-        catch (...)
-        {
-            tryLogCurrentException(__PRETTY_FUNCTION__);
-        }
-    }
-}
 
 namespace
 {
@@ -1053,7 +1056,7 @@ struct SnapshotTransferCtx
     /// Cached at obj_id=0 so subsequent calls don't re-derive it from latest_snapshot_info.
     bool is_local_disk = false;
 
-    /// Local disk: mmap-based access (fd == -1 means non-local).
+    /// Local disk: mmap-based access.
     int fd = -1;
     nuraft::byte * mmap_ptr = nullptr;
 
@@ -1086,8 +1089,7 @@ int IKeeperStateMachine::read_logical_snp_obj(
 
     if (obj_id == 0)
     {
-        /// Free any leftover context from a previous incomplete transfer. This can happen when
-        /// a joining server retries from obj_id=0 without NuRaft calling free_user_snp_ctx first.
+        /// Free leftover context if NuRaft retries from obj_id=0 without calling free_user_snp_ctx.
         if (user_snp_ctx)
             free_user_snp_ctx(user_snp_ctx);
 
@@ -1150,8 +1152,22 @@ int IKeeperStateMachine::read_logical_snp_obj(
         {
             if (!latest_snapshot_buf)
             {
-                LOG_WARNING(log, "Snapshot buffer is null for log index {}", s.get_last_log_idx());
-                return -1;
+                /// For non-local disks, mmap is unavailable; load into memory on demand.
+                LOG_DEBUG(log, "Loading snapshot {} from disk into memory for transfer", s.get_last_log_idx());
+                try
+                {
+                    latest_snapshot_buf = loadSnapshotBufFromDisk(s.get_last_log_idx());
+                }
+                catch (...)
+                {
+                    tryLogCurrentException(log, "Failed to load snapshot from disk");
+                    return -1;
+                }
+                if (!latest_snapshot_buf)
+                {
+                    LOG_WARNING(log, "Failed to load snapshot {} from disk", s.get_last_log_idx());
+                    return -1;
+                }
             }
             const uint64_t buf_size = latest_snapshot_buf->size();
             if (buf_size == 0)
@@ -1409,6 +1425,35 @@ void KeeperStateMachine<Storage>::recalculateStorageStats()
     LOG_INFO(log, "Recalculating storage stats");
     storage->recalculateStats();
     LOG_INFO(log, "Done recalculating storage stats");
+}
+
+template<typename Storage>
+nuraft::ptr<nuraft::buffer> KeeperStateMachine<Storage>::loadSnapshotBufFromDisk(uint64_t log_idx)
+{
+    ProfileEvents::increment(ProfileEvents::KeeperSnapshotLoadedFromDisk);
+    return snapshot_manager.deserializeSnapshotBufferFromDisk(log_idx);
+}
+
+template<typename Storage>
+void KeeperStateMachine<Storage>::cancelIfHasUnfinishedReceive()
+{
+    if (!snapshot_receive_ctx)
+        return;
+
+    /// Cancel the write buffer before removing the file.
+    const auto disk = snapshot_receive_ctx->disk;
+    const auto snapshot_file_name = snapshot_receive_ctx->snapshot_file_name;
+    snapshot_receive_ctx.reset();
+
+    try
+    {
+        disk->removeFileIfExists(snapshot_file_name);
+        disk->removeFileIfExists("tmp_" + snapshot_file_name);
+    }
+    catch (...)
+    {
+        tryLogCurrentException(log, "Failed to remove partial snapshot files");
+    }
 }
 
 template class KeeperStateMachine<KeeperMemoryStorage>;

@@ -123,6 +123,9 @@ public:
 
     virtual void reconfigure(const KeeperRequestForSession& request_for_session) = 0;
 
+    /// Load snapshot into memory from disk; used by read_logical_snp_obj for non-local disks.
+    virtual nuraft::ptr<nuraft::buffer> loadSnapshotBufFromDisk(uint64_t log_idx) = 0;
+
 protected:
     CommitCallback commit_callback;
     /// In our state machine we always have a single snapshot which is stored
@@ -131,39 +134,6 @@ protected:
     std::shared_ptr<SnapshotFileInfo> latest_snapshot_info TSA_GUARDED_BY(snapshots_lock);
     nuraft::ptr<nuraft::buffer> latest_snapshot_buf TSA_GUARDED_BY(snapshots_lock) = nullptr;
 
-    /// In-progress chunked snapshot receive state.
-    struct SnapshotReceiveCtx
-    {
-        const uint64_t log_idx = 0;
-        std::unique_ptr<WriteBuffer> write_buf;
-
-        /// Constructor for local disk: write to a temp file, clean it up on destruction.
-        template <typename ReceiveInfo>
-            requires requires(ReceiveInfo r) { r.write_buf; r.tmp_path; r.disk; }
-        SnapshotReceiveCtx(ReceiveInfo recv_info, uint64_t log_idx_)
-            : log_idx(log_idx_)
-            , write_buf(std::move(recv_info.write_buf))
-            , tmp_path(std::move(recv_info.tmp_path))
-            , disk(std::move(recv_info.disk))
-        {
-        }
-
-        /// Constructor for non-local disk: accumulate in memory via WriteBufferFromNuraftBuffer.
-        SnapshotReceiveCtx(std::unique_ptr<WriteBuffer> write_buf_, uint64_t log_idx_)
-            : log_idx(log_idx_)
-            , write_buf(std::move(write_buf_))
-        {
-        }
-
-        /// On destruction, close the write buffer and remove the partial temp file.
-        /// If the transfer completed normally, finalizeSnapshotReceive already renamed
-        /// the file away, so removeFileIfExists becomes a safe no-op.
-        ~SnapshotReceiveCtx();
-
-    private:
-        const std::string tmp_path;
-        const DiskPtr disk;
-    };
     std::unique_ptr<SnapshotReceiveCtx> snapshot_receive_ctx TSA_GUARDED_BY(snapshots_lock);
 
     CoordinationSettingsPtr coordination_settings;
@@ -295,6 +265,11 @@ public:
     void recalculateStorageStats() override;
 
     void reconfigure(const KeeperRequestForSession& request_for_session) override;
+
+    nuraft::ptr<nuraft::buffer> loadSnapshotBufFromDisk(uint64_t log_idx) override;
+
+    /// Cancel an in-progress snapshot receive: remove partial files and reset the context.
+    void cancelIfHasUnfinishedReceive() TSA_REQUIRES(snapshots_lock);
 
 private:
     /// Main state machine logic

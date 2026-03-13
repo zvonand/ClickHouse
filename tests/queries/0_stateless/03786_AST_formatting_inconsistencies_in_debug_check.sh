@@ -67,3 +67,6 @@ format_query "(SELECT 1) UNION ALL (SELECT 2) SETTINGS max_threads = 1"
 
 # SETTINGS on SelectWithUnionQuery inside EXPLAIN AST
 format_query "EXPLAIN AST (SELECT 1) UNION ALL (SELECT 2) SETTINGS max_threads = 1 INTO OUTFILE '/dev/null' FORMAT Null"
+
+# Alias in ROW POLICY USING clause
+format_query "CREATE ROW POLICY p0 ON t0 USING (1 AS a)"

@@ -43,6 +43,7 @@
 #include <Common/OpenTelemetryTraceContext.h>
 #include <Common/CurrentMetrics.h>
 #include <Common/CurrentThread.h>
+#include <Common/QueryScope.h>
 #include <Common/DateLUTImpl.h>
 #include <Common/Exception.h>
 #include <Common/NetException.h>
@@ -515,7 +516,7 @@ void TCPHandler::runImpl()
 
         OpenTelemetry::TracingContextHolderPtr thread_trace_context;
         /// Initialized later. It has to be destroyed after query_state is destroyed.
-        std::optional<CurrentThread::QueryScope> query_scope;
+        std::optional<QueryScope> query_scope;
         /// QueryState should be cleared before QueryScope, since otherwise
         /// the MemoryTracker will be wrong for possible deallocations.
         /// (i.e. deallocations from the Aggregator with two-level aggregation)
@@ -557,7 +558,7 @@ void TCPHandler::runImpl()
             /// Fatal error callback can be called at any time, including when we already destroyed TCPHandler object that created the callback.
             /// To avoid accessing invalid memory, we capture all needed fields by value.
             /// If TCPHandler object is already destroyed, we don't need to send logs so we capture shared_ptrs as weak_ptrs.
-            query_scope = CurrentThread::QueryScope::create(
+            query_scope = QueryScope::create(
                 query_state->query_context,
                 /* fatal_error_callback */
                 [tcp_protocol_version = this->client_tcp_protocol_version,
@@ -769,7 +770,7 @@ void TCPHandler::runImpl()
                 {
                     std::lock_guard lock(*callback_mutex);
 
-                    if (!query_state->need_receive_data_for_input)
+                    if (!query_state->need_receive_data_for_input && !query_state->need_receive_data_for_insert)
                         receivePacketsExpectCancel(*query_state);
 
                     if (query_state->stop_read_return_partial_result)
@@ -824,8 +825,11 @@ void TCPHandler::runImpl()
                 /// NOTE: we cannot send Progress for regular INSERT (with VALUES)
                 /// without breaking protocol compatibility, but it can be done
                 /// by increasing revision.
-                sendProgress(*query_state);
-                sendSelectProfileEvents(*query_state);
+                {
+                    std::lock_guard lock(*callback_mutex);
+                    sendProgress(*query_state);
+                    sendSelectProfileEvents(*query_state);
+                }
             }
             else
             {
@@ -836,6 +840,7 @@ void TCPHandler::runImpl()
                 if (auto * create_query = query_state->parsed_query->as<ASTCreateQuery>();
                     create_query && create_query->isCreateQueryWithImmediateInsertSelect())
                 {
+                    std::lock_guard lock(*callback_mutex);
                     sendProgress(*query_state);
                     sendSelectProfileEvents(*query_state);
                 }
@@ -844,8 +849,11 @@ void TCPHandler::runImpl()
             /// Do it before sending end of stream, to have a chance to show log message in client.
             query_scope->logPeakMemoryUsage();
 
-            sendLogs(*query_state);
-            sendEndOfStream(*query_state);
+            {
+                std::lock_guard lock(*callback_mutex);
+                sendLogs(*query_state);
+                sendEndOfStream(*query_state);
+            }
 
             query_state->finalizeOut(out);
         }
@@ -890,7 +898,7 @@ void TCPHandler::runImpl()
             {
                 exception->rethrow();
             }
-            catch (...)
+            catch (const Exception &)
             {
                 query_state->io.onException(exception_code != ErrorCodes::QUERY_WAS_CANCELLED_BY_CLIENT);
             }
@@ -1239,8 +1247,11 @@ AsynchronousInsertQueue::PushResult TCPHandler::processAsyncInsertQuery(QuerySta
             squashing.add({state.block_for_insert.getColumns(), state.block_for_insert.rows()}, /*flush_if_enough_size*/ true),
             squashing.getHeader());
 
-        sendLogs(state);
-        sendInsertProfileEvents(state);
+        {
+            std::lock_guard lock(*callback_mutex);
+            sendLogs(state);
+            sendInsertProfileEvents(state);
+        }
 
         if (result_chunk)
         {
@@ -1288,6 +1299,7 @@ void TCPHandler::processInsertQuery(QueryState & state)
             {
                 executor.push(std::move(state.block_for_insert));
 
+                std::lock_guard lock(*callback_mutex);
                 sendLogs(state);
                 sendInsertProfileEvents(state);
             }
@@ -1333,6 +1345,7 @@ void TCPHandler::processInsertQuery(QueryState & state)
                 result.future.get();
             }
 
+            std::lock_guard lock(*callback_mutex);
             sendInsertProfileEvents(state);
             return;
         }
@@ -1354,6 +1367,7 @@ void TCPHandler::processInsertQuery(QueryState & state)
         run_executor(executor, std::move(processed_block));
     }
 
+    std::lock_guard lock(*callback_mutex);
     sendInsertProfileEvents(state);
 }
 
@@ -1840,6 +1854,10 @@ void TCPHandler::receiveHello()
 
     if (user.empty())
         throw Exception(ErrorCodes::UNEXPECTED_PACKET_FROM_CLIENT, "Unexpected packet from client (no user in Hello package)");
+
+    auto users_to_ignore_early_memory_limit_check = server.context()->getUsersToIgnoreEarlyMemoryLimitCheck();
+    if (!(users_to_ignore_early_memory_limit_check && users_to_ignore_early_memory_limit_check->contains(user)))
+        CurrentMemoryTracker::check();
 
     LOG_DEBUG(log, "Connected {} version {}.{}.{}, revision: {}{}{}.",
         client_name,
@@ -2466,7 +2484,7 @@ bool TCPHandler::processData(QueryState & state, bool scalar)
         else
         {
             NamesAndTypesList columns = block.getNamesAndTypesList();
-            auto temporary_table = TemporaryTableHolder(state.query_context, ColumnsDescription(columns, /*with_subcolumns=*/false), {});
+            auto temporary_table = TemporaryTableHolder(state.query_context, ColumnsDescription(columns), {});
             storage = temporary_table.getTable();
             state.query_context->addExternalTable(temporary_id.table_name, std::move(temporary_table));
         }
@@ -2674,20 +2692,34 @@ void TCPHandler::receivePacketsExpectCancel(QueryState & state)
     /// During request execution the only packet that can come from the client is stopping the query.
     if (in->poll(0))
     {
-        if (in->isCanceled() || in->eof())
-            throw NetException(ErrorCodes::ABORTED, "Client has dropped the connection, cancel the query.");
-
-        UInt64 packet_type = 0;
-        readVarUInt(packet_type, *in);
-
-        switch (packet_type)
+        try
         {
-            case Protocol::Client::Cancel:
-                processCancel(state);
-                break;
+            if (in->isCanceled() || in->eof())
+                throw NetException(ErrorCodes::ABORTED, "Client has dropped the connection, cancel the query.");
 
-            default:
-                throw NetException(ErrorCodes::UNKNOWN_PACKET_FROM_CLIENT, "Unknown packet from client {}", toString(packet_type));
+            UInt64 packet_type = 0;
+            readVarUInt(packet_type, *in);
+
+            switch (packet_type)
+            {
+                case Protocol::Client::Cancel:
+                    processCancel(state);
+                    break;
+
+                default:
+                    throw NetException(ErrorCodes::UNKNOWN_PACKET_FROM_CLIENT, "Unknown packet from client {}", toString(packet_type));
+            }
+        }
+        catch (...)
+        {
+            /// Mark the query as stopped so that other callbacks (e.g. ClusterFunctionReadTaskCallback)
+            /// that are waiting on callback_mutex will see the cancellation via checkIfQueryCanceled()
+            /// before attempting to read from the now-broken connection.
+            /// Without this, a race condition exists: when this function throws while holding callback_mutex,
+            /// the mutex is released during stack unwinding, and a pipeline worker thread can acquire it
+            /// and attempt to read from the canceled ReadBuffer before the executor is canceled.
+            state.stop_query = true;
+            throw;
         }
     }
 }

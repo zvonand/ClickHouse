@@ -154,6 +154,11 @@ if (OS_LINUX)
     # - The main clickhouse binary does not use dlopen,
     #   and whatever is poisoning it by LD_PRELOAD should not link to our symbols.
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--no-export-dynamic -Wl,--gc-sections")
+
+    if (LINKER_NAME MATCHES "lld")
+        # Fold identical code and data sections to reduce binary size.
+        set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--icf=all")
+    endif ()
 endif ()
 
 if (OS_DARWIN)
@@ -278,6 +283,12 @@ set (CMAKE_C_STANDARD_REQUIRED ON)
 
 # falign-functions=64 prevents from random performance regressions with the code change. Thus, providing more stable benchmarks.
 set(COMPILER_FLAGS "${COMPILER_FLAGS} -falign-functions=64")
+
+# Put each function and data item into its own section so that the linker can
+# remove unused ones (--gc-sections) and fold identical ones (--icf).
+# -faddrsig emits an address-significance table that lets the linker's ICF
+# distinguish address-taken symbols from non-address-taken ones.
+set(COMPILER_FLAGS "${COMPILER_FLAGS} -ffunction-sections -fdata-sections -faddrsig")
 
 if (ARCH_AMD64)
     # align branches within a 32-Byte boundary to avoid the potential performance loss when code layout change,

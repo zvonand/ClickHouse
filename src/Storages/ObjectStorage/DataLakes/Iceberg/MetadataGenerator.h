@@ -30,7 +30,7 @@ public:
 
     NextMetadataResult generateNextMetadata(
         FileNamesGenerator & generator,
-        const String & metadata_filename,
+        const Iceberg::IcebergPathFromMetadata & metadata_file_path,
         Int64 parent_snapshot_id,
         Int64 added_files,
         Int64 added_records,

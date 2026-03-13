@@ -413,7 +413,6 @@ void addRequestedFileLikeStorageVirtualsToChunk(
                         column->insertValue(i + row_num_offset);
                 auto null_map = ColumnUInt8::create(chunk.getNumRows(), static_cast<UInt8>(0));
                 chunk.addColumn(ColumnNullable::create(std::move(column), std::move(null_map)));
-                return;
             }
 #endif
             /// Row numbers not known, _row_number = NULL.

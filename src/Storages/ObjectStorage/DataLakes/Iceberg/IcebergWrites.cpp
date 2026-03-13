@@ -435,7 +435,7 @@ void generateManifestList(
     Poco::JSON::Object::Ptr metadata,
     ObjectStoragePtr object_storage,
     ContextPtr context,
-    const Strings & manifest_entry_names,
+    const std::vector<Iceberg::IcebergPathFromMetadata> & manifest_entry_names,
     Poco::JSON::Object::Ptr new_snapshot,
     const std::vector<Int64> & manifest_entry_sizes,
     WriteBuffer & buf,
@@ -461,7 +461,7 @@ void generateManifestList(
         avro::GenericDatum entry_datum(schema.root());
         avro::GenericRecord & entry = entry_datum.value<avro::GenericRecord>();
 
-        entry.field(Iceberg::f_manifest_path) = manifest_entry_names[entry_idx];
+        entry.field(Iceberg::f_manifest_path) = manifest_entry_names[entry_idx].getRawPath();
         entry.field(Iceberg::f_manifest_length) = manifest_entry_sizes[entry_idx];
         entry.field(Iceberg::f_partition_spec_id) = metadata->getValue<Int64>(Iceberg::f_default_spec_id);
         if (version > 1)
@@ -634,8 +634,6 @@ IcebergStorageSink::IcebergStorageSink(
     , persistent_table_components(persistent_table_components_)
     , data_lake_settings(configuration_->getDataLakeSettings())
     , write_format(configuration_->format)
-    , blob_storage_type_name(configuration_->getTypeName())
-    , blob_storage_namespace_name(configuration_->getNamespace())
 {
     auto [last_version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
         object_storage,
@@ -852,7 +850,6 @@ bool IcebergStorageSink::initializeMetadata()
 {
     const auto & resolver = persistent_table_components.path_resolver;
     auto metadata_md_path = filename_generator.generateMetadataName();
-    auto metadata_name = metadata_md_path.getRawPath();
     auto storage_metadata_name = resolver.resolve(metadata_md_path);
 
     Int64 parent_snapshot = -1;
@@ -863,12 +860,20 @@ bool IcebergStorageSink::initializeMetadata()
     for (const auto & [_, writer] : writer_per_partition_key)
         total_data_files += writer.getDataFiles().size();
     auto [new_snapshot, manifest_list_path] = MetadataGenerator(metadata).generateNextMetadata(
-        filename_generator, metadata_name, parent_snapshot, total_data_files, total_rows, total_chunks_size, total_data_files, /* added_delete_files */0, /* num_deleted_rows */0);
+        filename_generator,
+        metadata_md_path,
+        parent_snapshot,
+        total_data_files,
+        total_rows,
+        total_chunks_size,
+        total_data_files,
+        /* added_delete_files */ 0,
+        /* num_deleted_rows */ 0);
     auto storage_manifest_list_name = resolver.resolve(manifest_list_path);
 
 
     Strings manifest_entries_in_storage;
-    Strings manifest_entries;
+    std::vector<Iceberg::IcebergPathFromMetadata> manifest_entries;
     std::vector<Int64> manifest_entry_sizes;
 
     auto cleanup = [&] (bool retry_because_of_metadata_conflict)
@@ -943,7 +948,7 @@ bool IcebergStorageSink::initializeMetadata()
         {
             auto manifest_entry_path = filename_generator.generateManifestEntryName();
             manifest_entries_in_storage.push_back(resolver.resolve(manifest_entry_path));
-            manifest_entries.push_back(manifest_entry_path.getRawPath());
+            manifest_entries.push_back(manifest_entry_path);
 
             auto buffer_manifest_entry = object_storage->writeObject(
                 StoredObject(resolver.resolve(manifest_entry_path)), WriteMode::Rewrite, std::nullopt, DBMS_DEFAULT_BUFFER_SIZE, context->getWriteSettings());
@@ -1025,9 +1030,7 @@ bool IcebergStorageSink::initializeMetadata()
 
             if (catalog)
             {
-                String catalog_filename = metadata_name;
-                if (!catalog_filename.starts_with(blob_storage_type_name))
-                    catalog_filename = blob_storage_type_name + "://" + blob_storage_namespace_name + "/" + metadata_name;
+                auto catalog_filename = resolver.resolveForCatalog(metadata_md_path);
 
                 const auto & [namespace_name, table_name] = DataLake::parseTableName(table_id.getTableName());
                 if (!catalog->updateMetadata(namespace_name, table_name, catalog_filename, new_snapshot))

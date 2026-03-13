@@ -65,7 +65,7 @@ void generateManifestList(
     Poco::JSON::Object::Ptr metadata,
     ObjectStoragePtr object_storage,
     ContextPtr context,
-    const Strings & manifest_entry_names,
+    const std::vector<Iceberg::IcebergPathFromMetadata> & manifest_entry_names,
     Poco::JSON::Object::Ptr new_snapshot,
     const std::vector<Int64> & manifest_entry_sizes,
     WriteBuffer & buf,
@@ -126,8 +126,6 @@ private:
     Iceberg::PersistentTableComponents persistent_table_components;
     const DataLakeStorageSettings & data_lake_settings;
     const String write_format;
-    const String blob_storage_type_name;
-    const String blob_storage_namespace_name;
 
 };
 

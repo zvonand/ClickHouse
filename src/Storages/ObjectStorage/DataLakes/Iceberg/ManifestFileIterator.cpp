@@ -494,7 +494,7 @@ ProcessedManifestFileEntryPtr ManifestFileIterator::processRow(size_t row_index)
         manifest_file_deserializer->getContent(row_index),
         DB::IcebergMetadataLogLevel::ManifestFileEntry,
         path_resolver.getTableRoot(),
-        path_to_manifest_file,
+        path_to_manifest_file.getRawPath(),
         row_index,
         pruning_status);
     switch (pruning_status)

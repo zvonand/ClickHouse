@@ -52,9 +52,11 @@ private:
 class IcebergPathResolver
 {
 public:
-    IcebergPathResolver(String table_location_, String table_root_)
+    IcebergPathResolver(String table_location_, String table_root_, String blob_storage_type_name_ = {}, String blob_storage_namespace_name_ = {})
         : table_location(std::move(table_location_))
         , table_root(std::move(table_root_))
+        , blob_storage_type_name(std::move(blob_storage_type_name_))
+        , blob_storage_namespace_name(std::move(blob_storage_namespace_name_))
     {
         /// Normalize: ensure table_location does not end with '/'
         while (!table_location.empty() && table_location.back() == '/')
@@ -73,6 +75,16 @@ public:
     /// Convert a metadata path to an actual storage path for I/O operations.
     String resolve(const IcebergPathFromMetadata & metadata_path) const;
 
+    /// Convert a metadata path to a catalog-compatible path.
+    /// Ensures the path starts with the storage type scheme (e.g. s3://, azure://).
+    String resolveForCatalog(const IcebergPathFromMetadata & metadata_path) const
+    {
+        String catalog_filename = metadata_path.getRawPath();
+        if (!catalog_filename.starts_with(blob_storage_type_name))
+            catalog_filename = blob_storage_type_name + "://" + blob_storage_namespace_name + "/" + catalog_filename;
+        return catalog_filename;
+    }
+
     /// Accessors for table_location (needed by FileNamesGenerator to construct metadata paths)
     /// and table_root (needed for logging / iceberg_metadata_log).
     const String & getTableLocation() const { return table_location; }
@@ -81,6 +93,8 @@ public:
 private:
     String table_location;
     String table_root;
+    String blob_storage_type_name;
+    String blob_storage_namespace_name;
 };
 
 }

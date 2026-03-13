@@ -206,7 +206,7 @@ ManifestFileCacheKeys getManifestList(
                     manifest_list_deserializer.getValueFromRowByName(i, f_content, TypeIndex::Int32).safeGet<Int32>());
             }
             manifest_file_cache_keys.emplace_back(
-                manifest_file_name, manifest_length, added_sequence_number, added_snapshot_id.safeGet<Int64>(), content_type);
+                IcebergPathFromMetadata(manifest_file_name), manifest_length, added_sequence_number, added_snapshot_id.safeGet<Int64>(), content_type);
 
             insertRowToLogTable(
                 local_context,
@@ -226,7 +226,7 @@ ManifestFileCacheKeys getManifestList(
     ManifestFileCacheKeys manifest_file_cache_keys;
     if (use_iceberg_metadata_cache && persistent_table_components.table_uuid.has_value())
         manifest_file_cache_keys = persistent_table_components.metadata_cache->getOrSetManifestFileCacheKeys(
-            IcebergMetadataFilesCache::getKey(persistent_table_components.table_uuid.value(), filename.getRawPath()), create_fn);
+            IcebergMetadataFilesCache::getKey(persistent_table_components.table_uuid.value(), filename), create_fn);
     else
         manifest_file_cache_keys = create_fn();
     return manifest_file_cache_keys;

@@ -182,7 +182,7 @@ Iceberg::PersistentTableComponents IcebergMetadata::initializePersistentTableCom
         .metadata_compression_method = compression_method,
         .table_path = table_path,
         .table_uuid = table_uuid,
-        .path_resolver = IcebergPathResolver(table_location, table_path),
+        .path_resolver = IcebergPathResolver(table_location, table_path, configuration->getTypeName(), configuration->getNamespace()),
     };
 }
 
@@ -488,7 +488,7 @@ std::shared_ptr<const ActionsDAG> IcebergMetadata::getSchemaTransformer(ContextP
 
 void IcebergMetadata::mutate(
     const MutationCommands & commands,
-    StorageObjectStorageConfigurationPtr configuration,
+    StorageObjectStorageConfigurationPtr /*configuration*/,
     ContextPtr context,
     const StorageID & storage_id,
     StorageMetadataPtr metadata_snapshot,
@@ -513,10 +513,7 @@ void IcebergMetadata::mutate(
         persistent_components,
         write_format,
         format_settings,
-        catalog,
-        configuration->getTypeName(),
-        configuration->getNamespace()
-    );
+        catalog);
 }
 
 void IcebergMetadata::checkMutationIsPossible(const MutationCommands & commands)
@@ -579,7 +576,7 @@ Pipe IcebergMetadata::executeCommand(
     const String & command_name,
     const ASTPtr & args,
     ObjectStoragePtr object_storage_,
-    StorageObjectStorageConfigurationPtr configuration_,
+    StorageObjectStorageConfigurationPtr /*configuration*/,
     std::shared_ptr<DataLake::ICatalog> catalog_,
     ContextPtr context,
     const StorageID & storage_id)
@@ -619,8 +616,6 @@ Pipe IcebergMetadata::executeCommand(
             persistent_components,
             write_format,
             catalog_,
-            configuration_->getTypeName(),
-            configuration_->getNamespace(),
             storage_id.getTableName());
 
         return expireSnapshotsResultToPipe(result);

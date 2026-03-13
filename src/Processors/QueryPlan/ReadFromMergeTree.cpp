@@ -216,6 +216,11 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsUInt64 distributed_index_analysis_min_indexes_bytes_to_activate;
 }
 
+namespace ServerSetting
+{
+    extern const ServerSettingsUInt64 predicate_statistics_sample_rate;
+}
+
 namespace ErrorCodes
 {
     extern const int INDEX_NOT_USED;

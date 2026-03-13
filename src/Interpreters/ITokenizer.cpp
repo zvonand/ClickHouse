@@ -409,4 +409,318 @@ void forEachTokenToBloomFilter(const ITokenizer & tokenizer, const char * data, 
         });
 }
 
+bool UnicodeWordTokenizer::nextInString(
+    const char * data, size_t length, size_t & __restrict pos, size_t & __restrict token_start, size_t & __restrict token_length) const
+{
+    token_length = 0;
+    while (pos < length)
+    {
+        token_start = pos;
+        char c = data[pos];
+
+        /// 1. ASCII fast path
+
+        if (isAlphaNumericASCII(c) || c == '_')
+        {
+            size_t token_alnum_count = 0;
+            token_length = 0;
+
+            while (pos < length)
+            {
+                char cur = data[pos];
+
+                /// 1a. ASCII letter or digit
+                if (isAlphaNumericASCII(cur))
+                {
+                    ++pos;
+                    ++token_length;
+                    ++token_alnum_count;
+                    continue;
+                }
+
+                /// 1b. Underscore
+                if (cur == '_')
+                {
+                    ++pos;
+                    ++token_length;
+                    continue;
+                }
+
+                /// Check if next character exists
+                if (pos + 1 >= length)
+                    break;
+
+                char next_c = data[pos + 1];
+                char prev_c = pos > 0 ? data[pos - 1] : '\0';
+
+                /// 1c. Colon: connects letters only
+                if (cur == ':' && isAlphaASCII(prev_c) && isAlphaASCII(next_c))
+                {
+                    ++pos;
+                    ++token_length;
+                    continue;
+                }
+
+                /// 1d. Dot or single quote: connects letter-letter or digit-digit
+                if ((cur == '.' || cur == '\'') &&
+                    ((isAlphaASCII(prev_c) && isAlphaASCII(next_c)) ||
+                     (isNumericASCII(prev_c) && isNumericASCII(next_c))))
+                {
+                    ++pos;
+                    ++token_length;
+                    continue;
+                }
+
+                /// Token ends
+                break;
+            }
+
+            /// Token must contain at least one alphanumeric character
+            if (token_alnum_count > 0)
+            {
+                /// Check if token is a stop word
+                std::string_view token_view(data + token_start, token_length);
+                if (stop_words.contains(token_view))
+                {
+                    token_length = 0;
+                    continue;
+                }
+                return true;
+            }
+
+            /// Invalid token (underscore only), continue searching
+            token_length = 0;
+            continue;
+        }
+
+        /// 2. ASCII non-alphanumeric: skip
+
+        if (isASCII(c))
+        {
+            ++pos;
+            continue;
+        }
+
+        /// 3. Unicode character handling
+
+        size_t char_len = UTF8::seqLength(static_cast<UInt8>(c));
+
+        /// Truncated UTF-8 sequence at end of buffer
+        if (pos + char_len > length)
+        {
+            pos = length;
+            return false;
+        }
+
+        std::string_view utf8_char(data + pos, char_len);
+
+        /// 3a. Stop words: skip
+        if (stop_words.contains(utf8_char))
+        {
+            pos += char_len;
+            continue;
+        }
+
+        token_start = pos;
+        token_length = char_len;
+        pos += char_len;
+
+        return true;
+    }
+
+    return false;
+}
+
+bool UnicodeWordTokenizer::nextInStringLike(const char * data, size_t length, size_t & __restrict pos, String & token) const
+{
+    token.clear();
+    size_t token_start;
+    std::optional<size_t> last_glob_pos;
+    bool escaped = false; /// Whether current char is an escaped char
+    while (pos < length)
+    {
+        token_start = pos;
+        char c = data[pos];
+
+        if (c == '\\' && !escaped)
+        {
+            if (pos + 1 >= length)
+                break;
+            ++pos;
+            c = data[pos];
+            escaped = true;
+        }
+
+        /// ASCII alphanumeric or escaped underscore
+        if (isAlphaNumericASCII(c) || (c == '_' && escaped))
+        {
+            size_t token_alnum_count = 0;
+            token.clear();
+
+            while (pos < length)
+            {
+                char cur = data[pos];
+                if (cur == '\\' && !escaped)
+                {
+                    if (pos + 1 >= length)
+                        break;
+                    ++pos;
+                    cur = data[pos];
+                    escaped = true;
+                }
+
+                /// 1a. ASCII letter or digit
+                if (isAlphaNumericASCII(cur))
+                {
+                    ++pos;
+                    escaped = false;
+                    token.push_back(cur);
+                    ++token_alnum_count;
+                    continue;
+                }
+
+                /// 1b. Underscore
+                if (cur == '_' && escaped)
+                {
+                    ++pos;
+                    escaped = false;
+                    token.push_back(cur);
+                    continue;
+                }
+
+                /// Wildcard
+                if (cur == '_' || (cur == '%' && !escaped))
+                {
+                    last_glob_pos = pos;
+                    ++pos;
+                    break;
+                }
+
+                /// Check if next character exists
+                if (pos + 1 >= length)
+                    break;
+
+                char next_c = data[pos + 1];
+                if (next_c == '\\')
+                {
+                    if (pos + 2 >= length)
+                        break;
+                    next_c = data[pos + 2];
+                }
+                char prev_c = token.empty() ? '\0' : token.back();
+
+                /// 1c. Colon: connects letters only
+                if (cur == ':' && isAlphaASCII(prev_c) && isAlphaASCII(next_c))
+                {
+                    ++pos;
+                    escaped = false;
+                    token.push_back(cur);
+                    continue;
+                }
+
+                /// 1d. Dot or single quote: connects letter-letter or digit-digit
+                if ((cur == '.' || cur == '\'') &&
+                    ((isAlphaASCII(prev_c) && isAlphaASCII(next_c)) ||
+                     (isNumericASCII(prev_c) && isNumericASCII(next_c))))
+                {
+                    ++pos;
+                    escaped = false;
+                    token.push_back(cur);
+                    continue;
+                }
+
+                /// Token ends
+                break;
+            }
+
+            /// Token must contain at least one alphanumeric character. Tokens adjacent to unescaped wildcards are
+            /// discarded, since their boundaries are ambiguous.
+            if (token_alnum_count > 0 && (!last_glob_pos || (*last_glob_pos + 1 != pos && *last_glob_pos + 1 != token_start)))
+            {
+                /// Check if token is a stop word
+                if (stop_words.contains(token))
+                    continue;
+
+                /// If we consumed a backslash but the escaped char didn't continue the token, back up so the next call
+                /// re-parses `\X` with proper escape context.
+                if (escaped)
+                    --pos;
+                return true;
+            }
+
+            /// Invalid token, continue searching
+            continue;
+        }
+
+        /// Skip ASCII non-alphanumeric
+        if (isASCII(c))
+        {
+            if (!escaped && (c == '_' || c == '%'))
+                last_glob_pos = pos;
+
+            ++pos;
+            escaped = false;
+            continue;
+        }
+
+        /// Unicode character
+        size_t char_len = UTF8::seqLength(static_cast<UInt8>(c));
+
+        /// Prevent out-of-bounds
+        if (pos + char_len > length)
+        {
+            pos += char_len;
+            escaped = false;
+            continue;
+        }
+
+        token = {data + pos, char_len};
+
+        /// 3a. Stop words: skip
+        if (stop_words.contains(token))
+        {
+            pos += char_len;
+            escaped = false;
+            continue;
+        }
+
+        pos += char_len;
+        return true;
+    }
+
+    return false;
+}
+
+void UnicodeWordTokenizer::substringToBloomFilter(
+    const char * data, size_t length, BloomFilter & bloom_filter, bool is_prefix, bool is_suffix) const
+{
+    size_t cur = 0;
+    size_t token_start = 0;
+    size_t token_len = 0;
+
+    while (cur < length && nextInString(data, length, cur, token_start, token_len))
+        /// In order to avoid filter updates with incomplete tokens,
+        /// first token is ignored, unless substring is prefix and
+        /// last token is ignored, unless substring is suffix
+        if ((token_start > 0 || is_prefix) && (token_start + token_len < length || is_suffix))
+            bloom_filter.add(data + token_start, token_len);
+}
+
+void UnicodeWordTokenizer::substringToTokens(
+    const char * data, size_t length, std::vector<String> & tokens, bool is_prefix, bool is_suffix) const
+{
+    size_t cur = 0;
+    size_t token_start = 0;
+    size_t token_len = 0;
+
+    while (cur < length && nextInString(data, length, cur, token_start, token_len))
+    {
+        /// In order to avoid filter updates with incomplete tokens,
+        /// first token is ignored, unless substring is prefix and
+        /// last token is ignored, unless substring is suffix
+        if ((token_start > 0 || is_prefix) && (token_start + token_len < length || is_suffix))
+            tokens.push_back({data + token_start, token_len});
+    }
+}
+
 }

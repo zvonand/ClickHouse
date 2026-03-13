@@ -126,7 +126,7 @@ struct DecorrelationContext
     QueryPlan query_plan; // LHS plan
     QueryPlan correlated_query_plan;
     CorrelatedPlanStepMap correlated_plan_steps;
-    /// Equivalence classes stack for subqeiries. Equivalence classes should not be propagated
+    /// Equivalence classes stack for subqueries. Equivalence classes should not be propagated
     /// to the subqueries of the JOIN or UNION steps.
     std::vector<EquivalenceClasses<String>> equivalence_class_stack;
     /// Whether the input subplan is referenced during decorrelation.

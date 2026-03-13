@@ -160,6 +160,20 @@ class JobConfigs:
         allow_merge_on_failure=True,
         enable_gh_auth=True,
     )
+    code_review = Job.Config(
+        name=JobNames.CODE_REVIEW,
+        runs_on=RunnerLabels.STYLE_CHECK_ARM,
+        command="python3 ./ci/jobs/copilot_review_job.py --pre",
+        allow_merge_on_failure=True,
+        enable_gh_auth=True,
+    )
+    ci_results_review = Job.Config(
+        name=JobNames.CI_RESULTS_REVIEW,
+        runs_on=RunnerLabels.STYLE_CHECK_ARM,
+        command="python3 ./ci/jobs/copilot_review_job.py --post",
+        allow_merge_on_failure=True,
+        enable_gh_auth=True,
+    )
     fast_test = Job.Config(
         name=JobNames.FAST_TEST,
         runs_on=RunnerLabels.AMD_LARGE,
@@ -976,6 +990,35 @@ class JobConfigs:
             runs_on=RunnerLabels.FUNC_TESTER_AMD,
             requires=[ArtifactNames.CH_AMD_UBSAN],
         ),
+    )
+    ast_fuzzer_targeted_pr_jobs = Job.Config(
+        name=JobNames.ASTFUZZER,
+        runs_on=[],  # from parametrize()
+        command="python3 ./ci/jobs/ast_fuzzer_job.py",
+        digest_config=Job.CacheDigestConfig(
+            include_paths=[
+                "./ci/docker/fuzzer",
+                "./ci/jobs/ast_fuzzer_job.py",
+                "./ci/jobs/scripts/find_symbols.py",
+                "./ci/jobs/scripts/find_tests.py",
+                "./ci/jobs/scripts/log_parser.py",
+                "./ci/jobs/scripts/functional_tests/setup_log_cluster.sh",
+                "./ci/jobs/scripts/fuzzer/",
+                "./ci/docker/fuzzer",
+            ],
+        ),
+    ).parametrize(
+        Job.ParamSet(
+            parameter="amd_debug, targeted",
+            runs_on=RunnerLabels.FUNC_TESTER_AMD,
+            requires=[ArtifactNames.CH_AMD_DEBUG],
+        ),
+        Job.ParamSet(
+            parameter="amd_debug, targeted, old_compatibility",
+            runs_on=RunnerLabels.FUNC_TESTER_AMD,
+            requires=[ArtifactNames.CH_AMD_DEBUG],
+        ),
+
     )
     buzz_fuzzer_jobs = Job.Config(
         name=JobNames.BUZZHOUSE,

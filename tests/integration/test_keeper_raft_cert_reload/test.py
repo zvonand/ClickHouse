@@ -2,9 +2,10 @@
 """
 Test for TLS certificate hot-reload on Keeper Raft connections.
 
-This test verifies that when TLS certificates are replaced on disk,
-new Raft connections between Keeper nodes pick up the new certificates
-without requiring a restart.
+This test verifies that when TLS certificates are replaced on disk and
+config is reloaded, new Raft connections between Keeper nodes use the
+updated certificates. A node restart is used to trigger new connections,
+which then validate against the reloaded certificate material.
 """
 
 import os

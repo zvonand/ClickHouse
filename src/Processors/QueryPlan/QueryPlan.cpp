@@ -44,7 +44,7 @@ SettingsChanges ExplainPlanOptions::toSettingsChanges() const
     changes.emplace_back("input_headers", int(input_headers));
     changes.emplace_back("column_structure", int(column_structure));
     changes.emplace_back("pretty", int(pretty));
-    changes.emplace_back("verbose", int(verbose));
+    changes.emplace_back("compact", int(compact));
 
     return changes;
 }
@@ -351,8 +351,8 @@ static void explainStep(
     size_t max_description_length)
 {
 
-    settings.out << settings.step_prefix << step.getName();
-    const auto & prefix = settings.other_prefix;
+    settings.out << settings.header_prefix << step.getName();
+    const auto & prefix = settings.detail_prefix;
 
     auto description = step.getStepDescription();
     if (max_description_length)
@@ -462,7 +462,7 @@ std::string debugExplainStep(IQueryPlanStep & step)
 {
     WriteBufferFromOwnString out;
     ExplainPlanOptions options{.actions = true};
-    IQueryPlanStep::FormatSettings settings{.out = out, .step_prefix = "", .other_prefix = ""};
+    IQueryPlanStep::FormatSettings settings{.out = out, .header_prefix = "", .detail_prefix = ""};
     explainStep(step, settings, options, 0);
     return out.str();
 }
@@ -494,32 +494,32 @@ static void buildTreeOffset(
     if (frames.empty())
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Frames stack for building tree offset cannot be empty");
 
-    settings_format.step_prefix.clear();
-    settings_format.other_prefix.clear();
+    settings_format.header_prefix.clear();
+    settings_format.detail_prefix.clear();
 
     if (frames.size() == 1)
     {
-        settings_format.other_prefix += current.node->children.empty() ? "   " : "│  ";
+        settings_format.detail_prefix += current.node->children.empty() ? "   " : "│  ";
         return;
     }
 
     for (size_t i = 0; i < frames.size() - 2; ++i)
     {
         const auto & segment = frames[i + 1].is_last_child ? "   " : "│  ";
-        settings_format.step_prefix += segment;
-        settings_format.other_prefix += segment;
+        settings_format.header_prefix += segment;
+        settings_format.detail_prefix += segment;
     }
 
-    settings_format.step_prefix += current.is_last_child ? "└──" : "├──";
-    settings_format.other_prefix += current.is_last_child ? "   " : "│  ";
-    settings_format.other_prefix += current.node->children.empty() ? "   " : "│  ";
+    settings_format.header_prefix += current.is_last_child ? "└──" : "├──";
+    settings_format.detail_prefix += current.is_last_child ? "   " : "│  ";
+    settings_format.detail_prefix += current.node->children.empty() ? "   " : "│  ";
 }
 
 static void buildIndentOffset(const std::deque<ExplainPlan::Frame> & frames, IQueryPlanStep::FormatSettings & settings_format, size_t indent_offset)
 {
     settings_format.offset = (frames.size() - 1 + indent_offset) * settings_format.base_indent;
-    settings_format.step_prefix = std::string(settings_format.offset, settings_format.indent_char);
-    settings_format.other_prefix = settings_format.step_prefix;
+    settings_format.header_prefix = std::string(settings_format.offset, settings_format.indent_char);
+    settings_format.detail_prefix = settings_format.header_prefix;
 }
 
 void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & options, size_t offset, size_t max_description_length) const
@@ -528,19 +528,23 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
 
     IQueryPlanStep::FormatSettings settings{
         .out = buffer,
-        .step_prefix = "",
-        .other_prefix = "",
+        .header_prefix = "",
+        .detail_prefix = "",
         .write_header = options.header,
-        .verbose = options.verbose,
+        .compact = options.compact,
         .pretty = options.pretty
+    };
+
+    auto skip_expressions = [&](Node * node) -> Node * {
+        while (settings.compact && node->step->getName() == "Expression" && !node->children.empty())
+            node = node->children[0];
+        return node;
     };
 
     std::deque<ExplainPlan::Frame> stack;
 
-    auto * first_node = root;
-    /// Skip the expression steps if we are not in the verbose mode
-    while (!settings.verbose && first_node->step->getName() == "Expression" && !first_node->children.empty())
-        first_node = first_node->children[0];
+    /// Skip the expression steps if we are in the compact mode
+    auto * first_node = skip_expressions(root);
 
     stack.push_back(ExplainPlan::Frame{.node = first_node});
 
@@ -562,10 +566,8 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
         if (frame.next_child < frame.node->children.size())
         {
             bool is_last = (frame.next_child + 1) == (frame.node->children.size());
-            auto * next_node = frame.node->children[frame.next_child];
-
-            while (!settings.verbose && next_node->step->getName() == "Expression" && !next_node->children.empty())
-                next_node = next_node->children[0];
+            /// Skip the expression steps if we are in the compact mode
+            auto * next_node = skip_expressions(frame.node->children[frame.next_child]);
 
             stack.push_back(ExplainPlan::Frame{next_node,
                 0,
@@ -600,7 +602,7 @@ void QueryPlan::explainPipeline(WriteBuffer & buffer, const ExplainPipelineOptio
 {
     checkInitialized();
 
-    IQueryPlanStep::FormatSettings settings{.out = buffer, .step_prefix = "", .other_prefix = "", .write_header = options.header};
+    IQueryPlanStep::FormatSettings settings{.out = buffer, .header_prefix = "", .detail_prefix = "", .write_header = options.header};
 
     struct Frame
     {

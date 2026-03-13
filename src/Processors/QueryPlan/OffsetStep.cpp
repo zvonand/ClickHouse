@@ -41,7 +41,7 @@ void OffsetStep::transformPipeline(QueryPipelineBuilder & pipeline, const BuildQ
 
 void OffsetStep::describeActions(FormatSettings & settings) const
 {
-    const auto & prefix = settings.other_prefix;
+    const auto & prefix = settings.detail_prefix;
     settings.out << prefix << "Offset " << offset << '\n';
 }
 

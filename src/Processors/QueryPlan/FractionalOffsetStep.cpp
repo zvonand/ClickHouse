@@ -44,7 +44,7 @@ void FractionalOffsetStep::transformPipeline(QueryPipelineBuilder & pipeline, co
 
 void FractionalOffsetStep::describeActions(FormatSettings & settings) const
 {
-    const auto & prefix = settings.other_prefix;
+    const auto & prefix = settings.detail_prefix;
     settings.out << prefix << "Fractional Offset " << fractional_offset << '\n';
 }
 

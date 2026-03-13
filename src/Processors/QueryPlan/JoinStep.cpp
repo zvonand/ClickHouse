@@ -213,7 +213,7 @@ void JoinStep::describePipeline(FormatSettings & settings) const
 
 void JoinStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
 
     auto description = describeJoinActions(join);
     const size_t inline_count = settings.pretty ? 3 : 0;
@@ -375,7 +375,7 @@ void FilledJoinStep::updateOutputHeader()
 
 void FilledJoinStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
 
     for (const auto & [name, value] : describeJoinActions(join))
         settings.out << prefix << name << ": " << value << '\n';

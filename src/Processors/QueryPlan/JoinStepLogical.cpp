@@ -308,12 +308,12 @@ std::vector<std::pair<String, String>> JoinStepLogical::describeJoinProperties()
 
 void JoinStepLogical::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
 
     for (const auto & [name, value] : describeJoinProperties())
         settings.out << prefix << name << ": " << value << '\n';
 
-    if (settings.verbose)
+    if (!settings.compact)
     {
         settings.out << prefix << "Expression:\n";
 

@@ -10,6 +10,7 @@ which then validate against the reloaded certificate material.
 
 import os
 import time
+import uuid
 
 import pytest
 
@@ -167,7 +168,8 @@ def test_cert_reload_on_reconnect(started_cluster):
     assert initial_serial == initial_served, "Raft port should serve initial cert"
 
     # Verify initial cluster works
-    verify_cluster_works("/test_initial", all_nodes)
+    test_id = uuid.uuid4().hex[:8]
+    verify_cluster_works(f"/test_initial_{test_id}", all_nodes)
     print("Initial cluster working with first certificates")
 
     # Replace certificate files on ALL nodes
@@ -200,7 +202,7 @@ def test_cert_reload_on_reconnect(started_cluster):
     print("Node3 restarted and reconnected")
 
     # Verify cluster works - proves new connections use updated certs
-    verify_cluster_works("/test_after_restart", all_nodes)
+    verify_cluster_works(f"/test_after_restart_{test_id}", all_nodes)
     print("Cluster working after restart - new Raft connections use updated certs!")
 
     # Now verify the Raft port is serving the NEW certificate

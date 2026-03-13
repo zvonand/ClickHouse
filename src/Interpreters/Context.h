@@ -593,7 +593,7 @@ protected:
 
         static size_t shardIndex(const StorageID & id)
         {
-            return StorageID::DatabaseAndTableNameHash{}(id) & (NumShards - 1);
+            return StorageID::DatabaseAndTableNameHash{}(id) % NumShards;
         }
     };
 

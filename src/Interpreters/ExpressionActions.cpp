@@ -110,6 +110,7 @@ ExpressionActionsPtr ExpressionActions::clone() const
 
     copy->project_inputs = project_inputs;
     copy->settings = settings;
+    copy->is_cancelled = std::make_unique<std::atomic<bool>>(false);
 
     return copy;
 }

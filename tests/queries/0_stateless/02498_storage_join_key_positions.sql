@@ -60,7 +60,7 @@ SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1; -- { serverError INCOMP
 SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1 AND t1.key2 = tj.key2 AND t1.key3 = tj.attr; -- { serverError INCOMPATIBLE_TYPE_OF_JOIN }
 SELECT '--- duplicate key dedup ---';
 SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1 AND t1.key2 = tj.key2 AND t1.key3 = tj.key3 AND t1.key1 = tj.key1 SETTINGS enable_analyzer = 0; -- { serverError INCOMPATIBLE_TYPE_OF_JOIN }
-SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1 AND t1.key2 = tj.key2 AND t1.key3 = tj.key3 AND t1.key1 = tj.key1 ORDER BY t1.key1 SETTINGS enable_analyzer = 1; -- Whith analyzer duplicate predicates are removed
+SELECT * FROM t1 ALL INNER JOIN tj ON t1.key1 = tj.key1 AND t1.key2 = tj.key2 AND t1.key3 = tj.key3 AND t1.key1 = tj.key1 ORDER BY t1.key1 SETTINGS enable_analyzer = 1; -- With analyzer duplicate predicates are removed
 
 SELECT '--- reuse column from left ---';
 SELECT * FROM t1 ALL INNER JOIN tjj ON t1.key1 = tjj.key1 AND t1.key1 = tjj.key2 AND t1.key1 = tjj.key3 ORDER BY t1.key1;

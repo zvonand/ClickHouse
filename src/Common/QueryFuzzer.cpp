@@ -1658,6 +1658,61 @@ void QueryFuzzer::fuzzExpressionList(ASTExpressionList & expr_list)
             select_query->setExpression(ASTSelectQuery::Expression::SELECT, std::move(sel_list));
             child = make_intrusive<ASTSubquery>(std::move(select_query));
         }
+        else if (fuzz_rand() % 1000 == 0)
+        {
+            /// Wrap child in arithmetic: child op other (or other op child)
+            static const Strings arith_ops = {"plus", "minus", "multiply", "divide", "intDiv", "modulo"};
+            auto other = getRandomColumnLike();
+            if (other)
+            {
+                const String & op = arith_ops[fuzz_rand() % arith_ops.size()];
+                if (fuzz_rand() % 2 == 0)
+                    child = makeASTFunction(op, child, other);
+                else
+                    child = makeASTFunction(op, other, child);
+            }
+        }
+        else if (fuzz_rand() % 1000 == 0 && current_ast_depth < 80)
+        {
+            /// Wrap child in if(cond, child, other) or if(cond, other, child)
+            ASTPtr cond = generatePredicate();
+            auto other = getRandomColumnLike();
+            if (cond && other)
+            {
+                if (fuzz_rand() % 2 == 0)
+                    child = makeASTFunction("if", cond, child, other);
+                else
+                    child = makeASTFunction("if", cond, other, child);
+            }
+        }
+        else if (fuzz_rand() % 800 == 0 && current_ast_depth < 80)
+        {
+            /// Build multiIf(cond1, e1[, cond2, e2], else): a CASE WHEN expression
+            auto multiif_func = make_intrusive<ASTFunction>();
+            multiif_func->name = "multiIf";
+            multiif_func->arguments = make_intrusive<ASTExpressionList>();
+            multiif_func->children.push_back(multiif_func->arguments);
+            const int nclauses = (fuzz_rand() % 2) + 1;
+            bool ok = true;
+            for (int ci = 0; ci < nclauses && ok; ci++)
+            {
+                ASTPtr cond = generatePredicate();
+                auto val = getRandomColumnLike();
+                if (cond && val)
+                {
+                    multiif_func->arguments->children.push_back(cond);
+                    multiif_func->arguments->children.push_back(val);
+                }
+                else
+                    ok = false;
+            }
+            auto else_val = getRandomColumnLike();
+            if (ok && else_val)
+            {
+                multiif_func->arguments->children.push_back(else_val);
+                child = multiif_func;
+            }
+        }
         else
         {
             auto new_child = reverseLiteralFuzzing(child);

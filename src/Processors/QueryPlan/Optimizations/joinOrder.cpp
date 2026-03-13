@@ -223,6 +223,7 @@ static void cleanupJoinPredicates(
                     LOG_DEBUG(&Poco::Logger::get("JoinOrderOptimizer"),
                         "Synthesized transitive predicate: relation {} `{}` = relation {} `{}`",
                         *member_rel, member.getColumnName(), *other_rel, other.getColumnName());
+                    /// One predicate per equivalence class is enough for connectivity.
                     break;
                 }
             }

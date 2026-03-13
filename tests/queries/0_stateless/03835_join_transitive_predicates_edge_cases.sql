@@ -89,6 +89,25 @@ WHERE a.key = b.key AND b.key = c.key
 ORDER BY a.key
 SETTINGS enable_join_transitive_predicates = 0;
 
+-- ==========================================================================
+-- Case 12: Join reordering disabled
+-- Dedup and synthesis must still work when the join order optimizer
+-- keeps the original plan unchanged (query_plan_optimize_join_order_limit = 0).
+-- ==========================================================================
+
+SELECT '-- Case 12: reordering disabled';
+SELECT e1.key, e2.key, e3.key
+FROM e1, e2, e3
+WHERE e1.key = e2.key AND e2.key = e3.key
+ORDER BY e1.key LIMIT 5
+SETTINGS query_plan_optimize_join_order_limit = 0;
+
+SELECT e1.key, e2.key, e3.key
+FROM e1, e2, e3
+WHERE e1.key = e2.key AND e2.key = e3.key
+ORDER BY e1.key LIMIT 5
+SETTINGS query_plan_optimize_join_order_limit = 0, enable_join_transitive_predicates = 0;
+
 DROP TABLE e1;
 DROP TABLE e2;
 DROP TABLE e3;

@@ -37,24 +37,13 @@ Plain description. No prefix conventions.
 - Bad: `fix(udf): Change default stderr_reaction to log_last` -- conventional commits = instant AI tell
 - Bad: `Improve error handling and enrich exit code exceptions with stderr context` -- too polished
 
-Keep it under 80 chars. Lowercase after first word is fine. Typos are more human than perfection.
+Keep it under 80 chars. Lowercase after first word is fine.
 
 ## Body
 
-**Only the official template. Nothing else above or below unless you have a genuine reason.**
+**Only the official template from `.github/PULL_REQUEST_TEMPLATE.md`. Nothing else above or below unless you have a genuine reason.**
 
-```
-### Changelog category (leave one):
-- <one category>
-
-### Changelog entry (a user-readable short description of the changes that goes into CHANGELOG.md):
-
-<1-3 sentences for the user. Present tense. Say what changed and why it matters.>
-
-### Documentation entry for user-facing changes
-
-- [ ] Documentation is written (mandatory for new features)
-```
+Read `.github/PULL_REQUEST_TEMPLATE.md` for the exact template. Fill in the changelog category (delete the rest), write the changelog entry, and keep the documentation checkbox.
 
 **If context is needed** (complex bug fix, behavioral change), add 1-3 paragraphs of plain text ABOVE the template. Free-form, no headers, no formatting. Like explaining to a colleague:
 
@@ -74,20 +63,6 @@ Fixes #XXXXX.
 ### Documentation entry for user-facing changes
 - [ ] Documentation is written (mandatory for new features)
 ```
-
-## Changelog categories (pick one, delete the rest)
-
-- New Feature
-- Experimental Feature
-- Improvement
-- Performance Improvement
-- Backward Incompatible Change
-- Build/Testing/Packaging Improvement
-- Documentation (changelog entry is not required)
-- Critical Bug Fix (crash, data loss, RBAC)
-- Bug Fix (user-visible misbehavior in an official stable release)
-- CI Fix or Improvement (changelog entry is not required)
-- Not for changelog (changelog entry is not required)
 
 ## Changelog entry guidelines
 
@@ -115,7 +90,7 @@ These patterns are **never allowed** in ClickHouse PRs:
 | Bullet lists of file-by-file changes | Implementation details don't belong here |
 | `## Motivation` as a header | If needed, just write it as plain text |
 | Emojis in any form | No |
-| `Co-Authored-By: Claude/Cursor/...` | Remove AI attribution from commits |
+| `Co-Authored-By: Claude/Cursor/...` in PR descriptions | AI attribution in PR body is noise; commit trailers are a separate policy |
 | Perfectly parallel sentence structures | Vary your phrasing |
 | Words: "enhance", "streamline", "leverage", "robust", "comprehensive" | Classic AI vocabulary |
 

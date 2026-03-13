@@ -10,13 +10,14 @@ SET force_optimize_skip_unused_shards = 2;
 SET check_table_dependencies = 0;
 SET enable_analyzer = 1;
 
-DROP DATABASE IF EXISTS db_03989;
+DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE:Identifier};
 DROP TABLE IF EXISTS logs_03989;
 DROP TABLE IF EXISTS server_logs_03989;
 DROP TABLE IF EXISTS dist_logs_03989;
 DROP TABLE IF EXISTS dist_server_logs_03989;
 
-CREATE DATABASE db_03989;
+CREATE DATABASE {CLICKHOUSE_DATABASE:Identifier};
+USE {CLICKHOUSE_DATABASE:Identifier};
 
 CREATE TABLE logs_03989 (
     Timestamp DateTime,
@@ -43,22 +44,22 @@ INSERT INTO server_logs_03989 VALUES
     ('2024-01-01 00:00:00', 'host1', 'app', 'ns-test', 'us-east-1'),
     ('2024-01-01 00:00:01', 'host2', 'app', 'ns-test', 'eu-west-1');
 
-CREATE TABLE db_03989.region_to_shard (Region String, shardID UInt64) ENGINE = Memory;
-INSERT INTO db_03989.region_to_shard VALUES ('us-east-1', 0), ('eu-west-1', 1);
+CREATE TABLE {CLICKHOUSE_DATABASE:Identifier}.region_to_shard (Region String, shardID UInt64) ENGINE = Memory;
+INSERT INTO {CLICKHOUSE_DATABASE:Identifier}.region_to_shard VALUES ('us-east-1', 0), ('eu-west-1', 1);
 
-CREATE DICTIONARY db_03989.regionToShard (Region String, shardID UInt64)
+CREATE DICTIONARY {CLICKHOUSE_DATABASE:Identifier}.regionToShard (Region String, shardID UInt64)
 PRIMARY KEY Region
-SOURCE(CLICKHOUSE(HOST '127.0.0.1' PORT tcpPort() TABLE 'region_to_shard' DB 'db_03989' USER 'default' PASSWORD ''))
+SOURCE(CLICKHOUSE(HOST '127.0.0.1' PORT tcpPort() TABLE 'region_to_shard' DB currentDatabase() USER 'default' PASSWORD ''))
 LIFETIME(0)
 LAYOUT(COMPLEX_KEY_HASHED());
 
-SYSTEM RELOAD DICTIONARY db_03989.regionToShard;
+SYSTEM RELOAD DICTIONARY {CLICKHOUSE_DATABASE:Identifier}.regionToShard;
 
 CREATE TABLE dist_logs_03989 AS logs_03989
-ENGINE = Distributed('test_cluster_two_shards', currentDatabase(), logs_03989, dictGetUInt64('db_03989.regionToShard', 'shardID', Region));
+ENGINE = Distributed('test_cluster_two_shards', currentDatabase(), logs_03989, dictGetUInt64({CLICKHOUSE_DATABASE:String} || '.regionToShard', 'shardID', Region));
 
 CREATE TABLE dist_server_logs_03989 AS server_logs_03989
-ENGINE = Distributed('test_cluster_two_shards', currentDatabase(), server_logs_03989, dictGetUInt64('db_03989.regionToShard', 'shardID', Region));
+ENGINE = Distributed('test_cluster_two_shards', currentDatabase(), server_logs_03989, dictGetUInt64({CLICKHOUSE_DATABASE:String} || '.regionToShard', 'shardID', Region));
 
 -- Simple WHERE on sharding key column
 SELECT Body FROM dist_logs_03989 WHERE Region = 'us-east-1' ORDER BY Body;
@@ -85,6 +86,6 @@ DROP TABLE dist_server_logs_03989;
 DROP TABLE dist_logs_03989;
 DROP TABLE server_logs_03989;
 DROP TABLE logs_03989;
-DROP TABLE db_03989.region_to_shard;
-DROP DICTIONARY db_03989.regionToShard;
-DROP DATABASE db_03989;
+DROP TABLE {CLICKHOUSE_DATABASE:Identifier}.region_to_shard;
+DROP DICTIONARY {CLICKHOUSE_DATABASE:Identifier}.regionToShard;
+DROP DATABASE {CLICKHOUSE_DATABASE:Identifier};

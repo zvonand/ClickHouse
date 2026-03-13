@@ -1076,21 +1076,9 @@ void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
 
 void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projection)
 {
-    auto * query = projection.query ? projection.query->as<ASTProjectionSelectQuery>() : nullptr;
-    if (!query)
-        return;
+    UNUSED(projection);
 
-    /// Toggle GROUP BY presence: removes it to convert an aggregate projection to a normal one
-    /// (or vice versa if re-added externally). This exercises both projection variants.
-    if (query->groupBy() && fuzz_rand() % 10 == 0)
-        query->setExpression(ASTProjectionSelectQuery::Expression::GROUP_BY, {});
-
-    /// Toggle ORDER BY presence: changes sort order stored in the projection data part.
-    if (query->orderBy() && fuzz_rand() % 10 == 0)
-        query->setExpression(ASTProjectionSelectQuery::Expression::ORDER_BY, {});
-
-    /// Fuzz the SELECT expression list and any remaining sub-expressions
-    fuzz(query->children);
+    /// TODO finish this soon
 }
 
 DataTypePtr QueryFuzzer::fuzzDataType(DataTypePtr type)

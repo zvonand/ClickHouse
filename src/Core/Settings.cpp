@@ -7750,6 +7750,7 @@ Maximum number of WebAssembly UDF instances that can run in parallel per functio
     MAKE_OBSOLETE(M, Bool, allow_experimental_bfloat16_type, true) \
     MAKE_OBSOLETE(M, Bool, allow_experimental_inverted_index, false) \
     MAKE_OBSOLETE(M, Bool, allow_experimental_vector_similarity_index, true) \
+    MAKE_OBSOLETE(M, Bool, allow_experimental_statistic, false) \
     MAKE_OBSOLETE(M, Bool, enable_vector_similarity_index, true) \
     MAKE_OBSOLETE(M, Bool, allow_experimental_qbit_type, true) \
     MAKE_OBSOLETE(M, Bool, enable_qbit_type, true) \

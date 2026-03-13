@@ -1078,7 +1078,7 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
             {"shared_merge_tree_replica_set_max_lifetime_seconds", 300, 300, "New setting"},
             {"table_readonly", false, false, "New setting to mark table as read-only, preventing inserts and modifications"},
             {"replicated_fetches_min_part_level", 0, 0, "New setting"},
-            {"replicated_fetches_min_part_level_timeout_sec", 300, 300, "New setting"},
+            {"replicated_fetches_min_part_level_timeout_seconds", 300, 300, "New setting"},
         });
         addSettingsChanges(merge_tree_settings_changes_history, "26.2",
         {

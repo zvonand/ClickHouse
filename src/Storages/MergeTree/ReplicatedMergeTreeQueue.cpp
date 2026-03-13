@@ -36,7 +36,7 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsUInt64 max_postpone_time_for_failed_replicated_merges_ms;
     extern const MergeTreeSettingsUInt64 max_postpone_time_for_failed_replicated_tasks_ms;
     extern const MergeTreeSettingsUInt64 replicated_fetches_min_part_level;
-    extern const MergeTreeSettingsUInt64 replicated_fetches_min_part_level_timeout_sec;
+    extern const MergeTreeSettingsUInt64 replicated_fetches_min_part_level_timeout_seconds;
 }
 
 namespace ErrorCodes
@@ -1687,7 +1687,7 @@ bool ReplicatedMergeTreeQueue::shouldExecuteLogEntry(
             const auto part_info = MergeTreePartInfo::fromPartName(entry.new_part_name, format_version);
             if (part_info.level < min_level)
             {
-                const auto timeout_sec = (*settings)[MergeTreeSetting::replicated_fetches_min_part_level_timeout_sec];
+                const auto timeout_sec = (*settings)[MergeTreeSetting::replicated_fetches_min_part_level_timeout_seconds];
 
                 /// timeout_sec == 0 means permanent block (no timeout override)
                 if (timeout_sec == 0)

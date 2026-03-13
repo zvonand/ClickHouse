@@ -73,7 +73,7 @@ def test_level0_parts_not_fetched(started_cluster):
         ORDER BY x
         SETTINGS
             replicated_fetches_min_part_level = 1,
-            replicated_fetches_min_part_level_timeout_sec = 0
+            replicated_fetches_min_part_level_timeout_seconds = 0
         """
     )
 
@@ -121,9 +121,7 @@ def test_merged_parts_are_fetched(started_cluster):
         ORDER BY x
         SETTINGS
             replicated_fetches_min_part_level = 1,
-            replicated_fetches_min_part_level_timeout_sec = 0,
-            prefer_fetch_merged_part_time_threshold = 0,
-            prefer_fetch_merged_part_size_threshold = 0
+            replicated_fetches_min_part_level_timeout_seconds = 0
         """
     )
 
@@ -228,7 +226,7 @@ def test_level0_parts_fetched_after_timeout(started_cluster):
         ORDER BY x
         SETTINGS
             replicated_fetches_min_part_level = 1,
-            replicated_fetches_min_part_level_timeout_sec = 5
+            replicated_fetches_min_part_level_timeout_seconds = 5
         """
     )
 
@@ -266,7 +264,7 @@ def test_level0_parts_fetched_after_timeout(started_cluster):
 
 def test_permanent_skip_with_zero_timeout(started_cluster):
     """
-    When replicated_fetches_min_part_level_timeout_sec = 0,
+    When replicated_fetches_min_part_level_timeout_seconds = 0,
     level-0 parts are skipped permanently (no timeout override).
     """
     node1.query(
@@ -283,7 +281,7 @@ def test_permanent_skip_with_zero_timeout(started_cluster):
         ORDER BY x
         SETTINGS
             replicated_fetches_min_part_level = 1,
-            replicated_fetches_min_part_level_timeout_sec = 0
+            replicated_fetches_min_part_level_timeout_seconds = 0
         """
     )
 

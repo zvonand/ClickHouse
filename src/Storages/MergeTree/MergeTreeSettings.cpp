@@ -541,7 +541,7 @@ namespace ErrorCodes
     Use 1 to skip fetching level-0 (unmerged) parts, reducing replication overhead during heavy ingestion.
     Default: 0 (fetch all parts regardless of level).
     )", 0) \
-    DECLARE(UInt64, replicated_fetches_min_part_level_timeout_sec, 300, R"(
+    DECLARE(UInt64, replicated_fetches_min_part_level_timeout_seconds, 300, R"(
     Timeout in seconds after which a part below replicated_fetches_min_part_level will be fetched anyway.
     Use 0 to disable the timeout (parts below the minimum level are postponed indefinitely until merged).
     Default: 300 (force fetch after 5 minutes).

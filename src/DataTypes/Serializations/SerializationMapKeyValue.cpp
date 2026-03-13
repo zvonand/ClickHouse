@@ -15,8 +15,13 @@ namespace ErrorCodes
 }
 
 SerializationMapKeyValue::SerializationMapKeyValue(
-    const SerializationPtr & nested_serialization_, MergeTreeMapSerializationVersion serialization_version_, ColumnPtr key_, const DataTypePtr & nested_type_)
-    : SerializationWrapper(nested_serialization_)
+    const SerializationPtr & value_serialization_,
+    const SerializationPtr & map_nested_serialization_,
+    MergeTreeMapSerializationVersion serialization_version_,
+    ColumnPtr key_,
+    const DataTypePtr & nested_type_)
+    : SerializationWrapper(value_serialization_)
+    , map_nested_serialization(map_nested_serialization_)
     , serialization_version(serialization_version_)
     , key(key_)
     , nested_type(nested_type_)
@@ -54,7 +59,7 @@ void SerializationMapKeyValue::enumerateStreams(
 {
     const auto * map_key_value_state = data.deserialize_state ? checkAndGetState<DeserializeBinaryBulkStateMapKeyValue>(data.deserialize_state) : nullptr;
 
-    auto next_data = SubstreamData(nested_serialization)
+    auto next_data = SubstreamData(map_nested_serialization)
         .withType(data.type ? nested_type : nullptr)
         .withColumn(data.column ? nested_type->createColumn() : nullptr)
         .withSerializationInfo(data.serialization_info)
@@ -63,7 +68,7 @@ void SerializationMapKeyValue::enumerateStreams(
     /// BASIC format has no bucketing, delegate directly.
     if (serialization_version == MergeTreeMapSerializationVersion::BASIC)
     {
-        nested_serialization->enumerateStreams(settings, callback, next_data);
+        map_nested_serialization->enumerateStreams(settings, callback, next_data);
         return;
     }
 
@@ -79,7 +84,7 @@ void SerializationMapKeyValue::enumerateStreams(
     /// Only enumerate the single bucket that contains the requested key.
     settings.path.push_back(SubstreamType::Bucket);
     settings.path.back().bucket = map_key_value_state->bucket;
-    nested_serialization->enumerateStreams(settings, callback, next_data);
+    map_nested_serialization->enumerateStreams(settings, callback, next_data);
     settings.path.pop_back();
 }
 
@@ -116,7 +121,7 @@ void SerializationMapKeyValue::deserializeBinaryBulkStatePrefix(
     /// BASIC format has no bucketing, delegate directly.
     if (serialization_version == MergeTreeMapSerializationVersion::BASIC)
     {
-        nested_serialization->deserializeBinaryBulkStatePrefix(settings, map_key_value_state->nested_state, cache);
+        map_nested_serialization->deserializeBinaryBulkStatePrefix(settings, map_key_value_state->nested_state, cache);
         state = std::move(map_key_value_state);
         return;
     }
@@ -130,7 +135,7 @@ void SerializationMapKeyValue::deserializeBinaryBulkStatePrefix(
     /// Only initialize the nested state for the single bucket containing our key.
     settings.path.push_back(SubstreamType::Bucket);
     settings.path.back().bucket = map_key_value_state->bucket;
-    nested_serialization->deserializeBinaryBulkStatePrefix(settings, map_key_value_state->nested_state, cache);
+    map_nested_serialization->deserializeBinaryBulkStatePrefix(settings, map_key_value_state->nested_state, cache);
     settings.path.pop_back();
 
     state = std::move(map_key_value_state);
@@ -182,7 +187,7 @@ void SerializationMapKeyValue::deserializeBinaryBulkWithMultipleStreams(
             /// get wrong size for nested_column (substreams cache works per block, not per granule).
             if (settings.data_part_type == MergeTreeDataPartType::Compact)
                 settings_copy.insert_only_rows_in_current_range_from_substreams_cache = true;
-            nested_serialization->deserializeBinaryBulkWithMultipleStreams(map_key_value_state->nested_column, rows_offset, limit, settings_copy, map_key_value_state->nested_state, cache);
+            map_nested_serialization->deserializeBinaryBulkWithMultipleStreams(map_key_value_state->nested_column, rows_offset, limit, settings_copy, map_key_value_state->nested_state, cache);
             num_read_rows = map_key_value_state->nested_column->size() - prev_size;
             addColumnWithNumReadRowsToSubstreamsCache(cache, settings.path, map_key_value_state->nested_column, num_read_rows);
             nested_column = map_key_value_state->nested_column;
@@ -199,7 +204,7 @@ void SerializationMapKeyValue::deserializeBinaryBulkWithMultipleStreams(
             /// get wrong size for nested_column (substreams cache works per block, not per granule).
             if (settings.data_part_type == MergeTreeDataPartType::Compact)
                 settings_copy.insert_only_rows_in_current_range_from_substreams_cache = true;
-            nested_serialization->deserializeBinaryBulkWithMultipleStreams(nested_column, rows_offset, limit, settings_copy, map_key_value_state->nested_state, cache);
+            map_nested_serialization->deserializeBinaryBulkWithMultipleStreams(nested_column, rows_offset, limit, settings_copy, map_key_value_state->nested_state, cache);
             num_read_rows = nested_column->size();
         }
     }
@@ -209,7 +214,7 @@ void SerializationMapKeyValue::deserializeBinaryBulkWithMultipleStreams(
     else
     {
         nested_column = nested_type->createColumn();
-        nested_serialization->deserializeBinaryBulkWithMultipleStreams(nested_column, rows_offset, limit, settings, map_key_value_state->nested_state, cache);
+        map_nested_serialization->deserializeBinaryBulkWithMultipleStreams(nested_column, rows_offset, limit, settings, map_key_value_state->nested_state, cache);
         num_read_rows = nested_column->size();
     }
 

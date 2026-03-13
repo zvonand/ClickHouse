@@ -224,8 +224,14 @@ void SerializationDynamic::serializeBinaryBulkStatePrefix(
             writeBinary(true, *stream);
 
         /// First, write statistics for usual variants.
+        /// Statistics should always have entries for all variants, but just in case
+        /// use `find` instead of `at` to avoid exceptions in release builds.
         for (const auto & variant_name : variant_info.variant_names)
-            writeVarUInt(statistics->variants_statistics.at(variant_name), *stream);
+        {
+            auto it = statistics->variants_statistics.find(variant_name);
+            chassert(it != statistics->variants_statistics.end());
+            writeVarUInt(it != statistics->variants_statistics.end() ? it->second : 0, *stream);
+        }
 
         /// Second, write statistics for variants in shared variant.
         writeVarUInt(statistics->shared_variants_statistics.size(), *stream);

@@ -91,6 +91,7 @@ public:
     static void readMapSafe(DB::IColumn & column, std::function<void()> && read_func);
 
     SerializationPtr getNestedSerialization() const { return nested_serialization; }
+    SerializationPtr getValueSerialization() const { return value_serialization; }
     MergeTreeMapSerializationVersion getMapSerializationVersion() const { return serialization_version; }
     static size_t getBucketForKey(const ColumnPtr & key_column, size_t row, size_t buckets);
     static size_t calculateNumberOfBuckets(const ColumnMap::StatisticsPtr & statistics, size_t max_buckets, MergeTreeMapBucketsStrategy strategy, double coefficient, size_t min_avg_size = 0);

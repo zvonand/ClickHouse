@@ -360,8 +360,14 @@ void SerializationObject::serializeBinaryBulkStatePrefix(
         if (serialization_version.value == SerializationVersion::V3)
             writeBinary(true, *stream);
 
+        /// Statistics should always have entries for all dynamic paths, but just in case
+        /// use `find` instead of `at` to avoid exceptions in release builds.
         for (const auto & path : object_state->sorted_dynamic_paths)
-            writeVarUInt(statistics->dynamic_paths_statistics.at(path), *stream);
+        {
+            auto it = statistics->dynamic_paths_statistics.find(path);
+            chassert(it != statistics->dynamic_paths_statistics.end());
+            writeVarUInt(it != statistics->dynamic_paths_statistics.end() ? it->second : 0, *stream);
+        }
 
         /// Second, write statistics for paths in shared data.
         writeVarUInt(statistics->shared_data_paths_statistics.size(), *stream);

@@ -16,7 +16,8 @@ class SerializationMapKeyValue final : public SerializationWrapper
 {
 public:
     SerializationMapKeyValue(
-        const SerializationPtr & nested_serialization,
+        const SerializationPtr & value_serialization_,
+        const SerializationPtr & map_nested_serialization_,
         MergeTreeMapSerializationVersion serialization_version_,
         ColumnPtr key_,
         const DataTypePtr & nested_type_);
@@ -56,6 +57,9 @@ public:
         SubstreamsCache * cache) const override;
 
 private:
+    /// The serialization of the full nested Map structure: Array(Tuple(key_type, value_type)).
+    /// Used internally for reading Map data from disk.
+    SerializationPtr map_nested_serialization;
     MergeTreeMapSerializationVersion serialization_version;
     /// The key value to look up (e.g. the literal from `map['key']`).
     ColumnPtr key;

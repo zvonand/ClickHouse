@@ -394,6 +394,8 @@ ColumnDynamic * ColumnObject::tryToAddNewDynamicPath(std::string_view path)
     auto it = dynamic_paths.emplace(path, std::move(new_dynamic_column)).first;
     auto it_ptr = dynamic_paths_ptrs.emplace(path, assert_cast<ColumnDynamic *>(it->second.get())).first;
     sorted_dynamic_paths.insert(it->first);
+    /// Invalidate statistics because they refer to the old set of dynamic paths.
+    statistics.reset();
     return it_ptr->second;
 }
 
@@ -460,6 +462,10 @@ void ColumnObject::setDynamicPaths(const std::vector<std::pair<String, ColumnPtr
         dynamic_paths_ptrs[path] = assert_cast<ColumnDynamic *>(it->second.get());
         sorted_dynamic_paths.insert(it->first);
     }
+
+    /// Invalidate statistics because they refer to the old set of dynamic paths.
+    if (!paths.empty())
+        statistics.reset();
 }
 
 void ColumnObject::insert(const Field & x)
@@ -2288,6 +2294,8 @@ void ColumnObject::repairDuplicatesInDynamicPathsAndSharedData(size_t offset)
     if (new_shared_data->size() != size)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Unexpected size of new shared data: {} != {}", new_shared_data->size(), size);
     shared_data = std::move(new_shared_data);
+    /// Invalidate statistics because dynamic paths content changed.
+    statistics.reset();
 }
 
 void ColumnObject::validateDynamicPathsSizes() const

@@ -9,7 +9,6 @@
 #include <DataTypes/Serializations/SerializationNamed.h>
 #include <DataTypes/Serializations/SerializationNullable.h>
 
-#include <Common/SipHash.h>
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnMap.h>
@@ -18,11 +17,13 @@
 #include <Core/Field.h>
 #include <Formats/FormatSettings.h>
 #include <Formats/JSONUtils.h>
-#include <Common/assert_cast.h>
-#include <IO/WriteHelpers.h>
+#include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteBufferFromString.h>
-#include <IO/ReadBufferFromString.h>
+#include <IO/WriteHelpers.h>
+#include <llvm/AsmParser/LLToken.h>
+#include <Common/SipHash.h>
+#include <Common/assert_cast.h>
 
 
 namespace DB
@@ -1045,6 +1046,9 @@ std::vector<ColumnPtr> SerializationMap::splitMapToBuckets(const IColumn & map_c
 /// on-disk representation.
 void SerializationMap::collectMapFromBuckets(const std::vector<ColumnPtr> & map_buckets, IColumn & map_column) const
 {
+    if (map_buckets.empty())
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Empty list of buckets provided");
+
     std::vector<ColumnPtr> map_keys_buckets(map_buckets.size());
     std::vector<ColumnPtr> map_values_buckets(map_buckets.size());
     std::vector<const ColumnArray::Offsets *> map_offsets_buckets(map_buckets.size());

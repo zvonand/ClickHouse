@@ -47,6 +47,22 @@ SELECT count() FROM t_nan_pk3 WHERE col < isNull(nan);
 SELECT count() FROM t_nan_pk3 WHERE isNull(nan) > col;
 SELECT count() FROM t_nan_pk3 WHERE col > isNull(nan);
 
+-- AST fuzzer found: LowCardinality(Float32) with identical PREWHERE and WHERE triggers
+-- the binary search path with exact range verification, which failed for NaN.
+DROP TABLE IF EXISTS t_nan_pk4;
+
+CREATE TABLE t_nan_pk4 (col LowCardinality(Float32))
+ENGINE = MergeTree ORDER BY col
+SETTINGS index_granularity = 1;
+
+INSERT INTO t_nan_pk4 SELECT arrayJoin([inf, 2.0, -inf, 3.0, nan, nan])::Float32;
+
+SELECT count() FROM t_nan_pk4 WHERE 0 < col;
+SELECT DISTINCT count() FROM t_nan_pk4 PREWHERE 0 < col WHERE 0 < col;
+SELECT count() FROM t_nan_pk4 WHERE col > 0;
+SELECT count() FROM t_nan_pk4 WHERE col < 0;
+
 DROP TABLE t_nan_pk;
 DROP TABLE t_nan_pk2;
 DROP TABLE t_nan_pk3;
+DROP TABLE t_nan_pk4;

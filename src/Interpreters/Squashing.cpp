@@ -38,9 +38,7 @@ Chunk Squashing::flush()
     /// In non-strict mode, chunks are never partially consumed, so we skip directly to pulling.
     if (squash_with_strict_limits && !pending.empty() && pending.peekFront())
     {
-        size_t rows = pending.peekFront().getNumRows();
-        size_t bytes = pending.peekFront().bytes();
-        auto result = pending.consumeUpTo(rows, bytes);
+        auto result = pending.consumeUpTo(0, 0);
         accumulated.append(std::move(result.chunk), result.rows, result.bytes);
     }
 
@@ -410,6 +408,17 @@ void Squashing::PendingQueue::pushBack(Chunk && chunk)
     chunks.push_back(std::move(chunk));
     total_rows += rows;
     total_bytes += bytes;
+}
+
+void Squashing::PendingQueue::dropFront()
+{
+    auto & front = chunks.front();
+    size_t rows = front.getNumRows();
+    size_t bytes = front.bytes();
+    total_rows -= rows;
+    total_bytes -= bytes;
+    offset_first = 0;
+    chunks.pop_front();
 }
 
 Chunk Squashing::PendingQueue::pullFront()

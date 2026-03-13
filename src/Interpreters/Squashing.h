@@ -90,7 +90,7 @@ private:
         size_t getBytes() const { return total_bytes; }
         const Chunk & peekFront() const { return chunks.front(); }
         Chunk pullFront();
-        void dropFront() { chunks.pop_front(); }
+        void dropFront();
         void pushBack(Chunk && chunk);
         size_t getOffset() const { return offset_first; }
         bool empty() const { return chunks.empty(); }

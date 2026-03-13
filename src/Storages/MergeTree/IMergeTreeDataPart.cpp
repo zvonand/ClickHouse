@@ -2218,7 +2218,14 @@ bool IMergeTreeDataPart::assertHasValidVersionMetadata() const
         read_settings.local_fs_method = LocalFSReadMethod::pread;
         auto buf = getDataPartStorage().readFileIfExists(TXN_VERSION_METADATA_FILE_NAME, read_settings, small_file_size);
         if (!buf)
+        {
+            /// The part directory may have been removed externally (e.g., between
+            /// DETACH and ATTACH in an Ordinary database). If the directory is gone,
+            /// there is nothing to validate.
+            if (!getDataPartStorage().exists())
+                return true;
             return false;
+        }
 
         readStringUntilEOF(content, *buf);
         ReadBufferFromString str_buf{content};

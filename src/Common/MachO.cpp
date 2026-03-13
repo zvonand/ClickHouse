@@ -48,6 +48,9 @@ void MachO::init()
 
         if (cmd->cmd == LC_SEGMENT_64)
         {
+            if (cmd_ptr + sizeof(segment_command_64) > mapped + file_size)
+                break;
+
             const auto * seg = reinterpret_cast<const segment_command_64 *>(cmd_ptr);
 
             if (strncmp(seg->segname, "__DWARF", 16) == 0)
@@ -57,6 +60,9 @@ void MachO::init()
 
                 for (uint32_t j = 0; j < seg->nsects; ++j)
                 {
+                    if (reinterpret_cast<const char *>(&sect[j + 1]) > mapped + file_size)
+                        break;
+
                     if (sect[j].offset + sect[j].size > file_size)
                         continue;
 

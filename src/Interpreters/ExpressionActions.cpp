@@ -54,6 +54,7 @@ ExpressionActions::ExpressionActions(ActionsDAG actions_dag_, const ExpressionAc
     : actions_dag(std::move(actions_dag_))
     , project_inputs(project_inputs_)
     , settings(settings_)
+    , is_cancelled(std::make_unique<std::atomic<bool>>(false))
 {
     /// It's important to determine lazy executed nodes before compiling expressions.
     std::unordered_set<const ActionsDAG::Node *> lazy_executed_nodes = processShortCircuitFunctions(actions_dag, settings.short_circuit_function_evaluation);
@@ -71,41 +72,12 @@ ExpressionActions::ExpressionActions(ActionsDAG actions_dag_, const ExpressionAc
                         actions_dag.dumpNames(), settings.max_temporary_columns);
 }
 
-ExpressionActions::ExpressionActions(ExpressionActions && other) noexcept
-    : actions_dag(std::move(other.actions_dag))
-    , actions(std::move(other.actions))
-    , num_columns(other.num_columns)
-    , required_columns(std::move(other.required_columns))
-    , input_positions(std::move(other.input_positions))
-    , result_positions(std::move(other.result_positions))
-    , sample_block(std::move(other.sample_block))
-    , project_inputs(other.project_inputs)
-    , settings(std::move(other.settings))
-    , is_cancelled(other.is_cancelled.load(std::memory_order_relaxed))
-{
-}
-
-ExpressionActions & ExpressionActions::operator=(ExpressionActions && other) noexcept
-{
-    if (this != &other)
-    {
-        actions_dag = std::move(other.actions_dag);
-        actions = std::move(other.actions);
-        num_columns = other.num_columns;
-        required_columns = std::move(other.required_columns);
-        input_positions = std::move(other.input_positions);
-        result_positions = std::move(other.result_positions);
-        sample_block = std::move(other.sample_block);
-        project_inputs = other.project_inputs;
-        settings = std::move(other.settings);
-        is_cancelled.store(other.is_cancelled.load(std::memory_order_relaxed), std::memory_order_relaxed);
-    }
-    return *this;
-}
-
 void ExpressionActions::cancel() noexcept
 {
-    bool already_cancelled = is_cancelled.exchange(true, std::memory_order_acq_rel);
+    if (!is_cancelled)
+        return;
+
+    bool already_cancelled = is_cancelled->exchange(true, std::memory_order_acq_rel);
     if (already_cancelled)
         return;
 

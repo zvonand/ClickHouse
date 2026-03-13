@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 #include <Common/Exception.h>
 #include <Core/Block.h>
 #include <Core/ColumnNumbers.h>
@@ -77,12 +78,12 @@ private:
 
     ExpressionActionsSettings settings;
 
-    std::atomic<bool> is_cancelled{false};
+    std::unique_ptr<std::atomic<bool>> is_cancelled;
 
 public:
     explicit ExpressionActions(ActionsDAG actions_dag_, const ExpressionActionsSettings & settings_ = {}, bool project_inputs_ = false);
-    ExpressionActions(ExpressionActions && other) noexcept;
-    ExpressionActions & operator=(ExpressionActions && other) noexcept;
+    ExpressionActions(ExpressionActions &&) = default;
+    ExpressionActions & operator=(ExpressionActions &&) = default;
 
     const Actions & getActions() const { return actions; }
     const std::list<Node> & getNodes() const { return actions_dag.getNodes(); }
@@ -90,7 +91,7 @@ public:
     const ColumnNumbers & getResultPositions() const { return result_positions; }
     const ExpressionActionsSettings & getSettings() const { return settings; }
 
-    bool isCancelled() const { return is_cancelled.load(std::memory_order_acquire); }
+    bool isCancelled() const { return is_cancelled && is_cancelled->load(std::memory_order_acquire); }
     void cancel() noexcept;
 
     /// Get a list of input columns.

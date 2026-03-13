@@ -63,6 +63,18 @@ DPJoinEntry::DPJoinEntry(DPJoinEntryPtr lhs,
 
 bool DPJoinEntry::isLeaf() const { return !left && !right; }
 
+/// Resolve a JoinActionRef to an INPUT node suitable for equivalence tracking.
+/// Returns nullopt if the ref is not a simple single-relation INPUT column.
+static std::optional<JoinActionRef> resolveInput(const JoinActionRef & ref)
+{
+    auto resolved = ref.resolveAliases();
+    if (resolved.getNode()->type != ActionsDAG::ActionType::INPUT)
+        return std::nullopt;
+    if (!resolved.getSourceRelations().getSingleBit())
+        return std::nullopt;
+    return resolved;
+}
+
 void QueryGraph::buildColumnEquivalences()
 {
     for (const auto & edge : edges)
@@ -115,6 +127,121 @@ bool QueryGraph::areTransitivelyConnected(const BitSet & left, const BitSet & ri
         }
     }
     return false;
+}
+
+/// Post-process the join tree to remove redundant predicates and synthesize missing ones.
+///
+/// Walks bottom-up building equivalence classes from each join step's predicates.
+/// At each step:
+///   1. Remove predicates whose endpoints are already equivalent from child joins.
+///      Non-redundant predicates are added to the equivalence classes immediately,
+///      so later predicates at the same step can also be detected as redundant.
+///   2. If no predicates remain (transitive-only join), synthesize one per equivalence
+///      class spanning the left and right subtrees.
+static void cleanupJoinPredicates(
+    const DPJoinEntryPtr & root,
+    const EquivalenceClasses<JoinActionRef> & column_equivalences)
+{
+    using EquivClasses = EquivalenceClasses<JoinActionRef>;
+
+    std::function<EquivClasses(const DPJoinEntryPtr &)> process =
+        [&](const DPJoinEntryPtr & entry) -> EquivClasses
+    {
+        if (entry->isLeaf())
+            return {};
+
+        /// Merge equivalence classes from both children.
+        auto equiv = process(entry->left);
+        auto right_equiv = process(entry->right);
+        for (const auto & [member, _] : right_equiv.getMemberToClassMap())
+        {
+            auto other_class = right_equiv.getClass(member);
+            if (other_class && other_class->size() >= 2)
+            {
+                auto first = other_class->front();
+                for (auto it = std::next(other_class->begin()); it != other_class->end(); ++it)
+                    equiv.add(first, *it);
+            }
+        }
+
+        /// Phase 1: Remove redundant predicates.
+        auto & expressions = entry->join_operator.expression;
+        size_t removed = 0;
+        bool is_inner = isInner(entry->join_operator.kind);
+
+        std::erase_if(expressions, [&](const JoinActionRef & predicate)
+        {
+            auto [op, lhs, rhs] = predicate.asBinaryPredicate();
+            if (op != JoinConditionOperator::Equals)
+                return false;
+
+            auto lhs_resolved = resolveInput(lhs);
+            auto rhs_resolved = resolveInput(rhs);
+            if (!lhs_resolved || !rhs_resolved)
+                return false;
+
+            auto lhs_class = equiv.getClass(*lhs_resolved);
+            auto rhs_class = equiv.getClass(*rhs_resolved);
+            if (lhs_class && rhs_class && lhs_class == rhs_class)
+            {
+                ++removed;
+                return true;
+            }
+
+            /// Only propagate equivalences from inner joins to the parent;
+            /// outer join equality holds only for matching rows
+            /// and would be invalid for NULL-padded non-matching rows.
+            if (is_inner)
+                equiv.add(*lhs_resolved, *rhs_resolved);
+            return false;
+        });
+
+        if (removed > 0)
+            LOG_DEBUG(&Poco::Logger::get("JoinOrderOptimizer"),
+                "Removed {} redundant join predicate(s)", removed);
+
+        /// Phase 2: Synthesize predicates for transitive-only joins.
+        if (expressions.empty() && isInner(entry->join_operator.kind))
+        {
+            const auto & left_rels = entry->left->relations;
+            const auto & right_rels = entry->right->relations;
+
+            using ConstClassPtr = EquivClasses::ConstClassPtr;
+            std::unordered_set<ConstClassPtr> visited;
+
+            for (const auto & [member, _] : column_equivalences.getMemberToClassMap())
+            {
+                auto member_rel = member.getSourceRelations().getSingleBit();
+                if (!member_rel || !left_rels.test(*member_rel))
+                    continue;
+
+                auto equiv_class = column_equivalences.getClass(member);
+                if (!equiv_class || !visited.insert(equiv_class).second)
+                    continue;
+
+                for (const auto & other : *equiv_class)
+                {
+                    auto other_rel = other.getSourceRelations().getSingleBit();
+                    if (!other_rel || !right_rels.test(*other_rel))
+                        continue;
+
+                    expressions.push_back(JoinActionRef::transform(
+                        {member, other},
+                        JoinActionRef::AddFunction(JoinConditionOperator::Equals)));
+                    equiv.add(member, other);
+
+                    LOG_DEBUG(&Poco::Logger::get("JoinOrderOptimizer"),
+                        "Synthesized transitive predicate: relation {} `{}` = relation {} `{}`",
+                        *member_rel, member.getColumnName(), *other_rel, other.getColumnName());
+                    break;
+                }
+            }
+        }
+
+        return equiv;
+    };
+
+    process(root);
 }
 
 String DPJoinEntry::dump() const
@@ -236,7 +363,7 @@ double JoinOrderOptimizer::computeSelectivity(
 
     /// Also account for transitively-equivalent columns spanning both sides.
     using ConstClassPtr = EquivalenceClasses<JoinActionRef>::ConstClassPtr;
-    std::set<ConstClassPtr> visited;
+    std::unordered_set<ConstClassPtr> visited;
 
     for (const auto & [member, _] : query_graph.column_equivalences.getMemberToClassMap())
     {
@@ -667,11 +794,19 @@ DPJoinEntryPtr optimizeJoinOrder(QueryGraph query_graph, const QueryPlanOptimiza
     if (query_graph.relation_stats.size() <= 1)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "JoinOrderOptimizer: number of relations must be greater than 1");
 
+    EquivalenceClasses<JoinActionRef> column_equivalences;
+    if (optimization_settings.enable_join_transitive_predicates)
+    {
+        query_graph.buildColumnEquivalences();
+        column_equivalences = query_graph.column_equivalences;
+    }
+
     JoinOrderOptimizer reorderer(std::move(query_graph), optimization_settings.query_plan_optimize_join_order_algorithm);
     auto best_plan = reorderer.solve();
     if (!best_plan)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Failed to find a valid join order");
 
+    cleanupJoinPredicates(best_plan, column_equivalences);
     return best_plan;
 }
 

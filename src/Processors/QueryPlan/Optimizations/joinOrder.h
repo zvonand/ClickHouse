@@ -84,18 +84,6 @@ struct QueryGraph
     bool areTransitivelyConnected(const BitSet & left, const BitSet & right) const;
 };
 
-/// Resolve a JoinActionRef to an INPUT node suitable for equivalence tracking.
-/// Returns nullopt if the ref is not a simple single-relation INPUT column.
-inline std::optional<JoinActionRef> resolveInput(const JoinActionRef & ref)
-{
-    auto resolved = ref.resolveAliases();
-    if (resolved.getNode()->type != ActionsDAG::ActionType::INPUT)
-        return std::nullopt;
-    if (!resolved.getSourceRelations().getSingleBit())
-        return std::nullopt;
-    return resolved;
-}
-
 struct QueryPlanOptimizationSettings;
 
 DPJoinEntryPtr optimizeJoinOrder(QueryGraph query_graph, const QueryPlanOptimizationSettings & optimization_settings);

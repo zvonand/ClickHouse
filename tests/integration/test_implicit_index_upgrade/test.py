@@ -40,7 +40,7 @@ def wait_for_active_replica(node, table, timeout=30):
 def test_implicit_index_upgrade_numeric(started_cluster):
     node = started_cluster.instances["node"]
 
-    node.query("DROP TABLE IF EXISTS test_numeric;")
+    node.query("DROP TABLE IF EXISTS test_numeric SYNC;")
     node.query(
         """
         CREATE TABLE test_numeric (
@@ -76,14 +76,14 @@ def test_implicit_index_upgrade_numeric(started_cluster):
     node.query("INSERT INTO test_numeric VALUES (99999, 1, 1.0, 'x');")
     assert node.query("SELECT count() FROM test_numeric;").strip() == "10001"
 
-    node.query("DROP TABLE test_numeric;")
+    node.query("DROP TABLE test_numeric SYNC;")
     node.restart_with_original_version()
 
 
 def test_implicit_index_upgrade_string(started_cluster):
     node = started_cluster.instances["node"]
 
-    node.query("DROP TABLE IF EXISTS test_string;")
+    node.query("DROP TABLE IF EXISTS test_string SYNC;")
     node.query(
         """
         CREATE TABLE test_string (
@@ -117,14 +117,14 @@ def test_implicit_index_upgrade_string(started_cluster):
     node.query("INSERT INTO test_string VALUES (99999, 'x', 'y');")
     assert node.query("SELECT count() FROM test_string;").strip() == "10001"
 
-    node.query("DROP TABLE test_string;")
+    node.query("DROP TABLE test_string SYNC;")
     node.restart_with_original_version()
 
 
 def test_implicit_index_upgrade_mixed(started_cluster):
     node = started_cluster.instances["node"]
 
-    node.query("DROP TABLE IF EXISTS test_mixed;")
+    node.query("DROP TABLE IF EXISTS test_mixed SYNC;")
     node.query(
         """
         CREATE TABLE test_mixed (
@@ -159,5 +159,5 @@ def test_implicit_index_upgrade_mixed(started_cluster):
     node.query("INSERT INTO test_mixed VALUES (99999, 1, 'x', 'y');")
     assert node.query("SELECT count() FROM test_mixed;").strip() == "10001"
 
-    node.query("DROP TABLE test_mixed;")
+    node.query("DROP TABLE test_mixed SYNC;")
     node.restart_with_original_version()

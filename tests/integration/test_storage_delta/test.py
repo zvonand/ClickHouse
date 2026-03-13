@@ -361,7 +361,7 @@ def create_delta_table(
             f"""
             DROP TABLE IF EXISTS {table_name};
             CREATE TABLE {table_name}
-            ENGINE=DeltaLakeAzure(azure, container = {cluster.azure_container_name}, storage_account_url = '{cluster.env_variables["AZURITE_STORAGE_ACCOUNT_URL"]}', blob_path = '/{table_name}', format={format})
+            ENGINE=DeltaLakeAzure(azure, container = {cluster.azure_container_name}, storage_account_url = '{cluster.env_variables["AZURITE_STORAGE_ACCOUNT_URL"]}', blob_path = '{table_name}', format={format})
             """
         )
     elif storage_type == "local":
@@ -390,9 +390,16 @@ def default_upload_directory(
             local_path, remote_path, **kwargs
         )
     elif storage_type == "azure":
-        return started_cluster.default_azure_uploader.upload_directory(
-            local_path, remote_path, **kwargs
+        # Azure blob storage preserves leading slashes in blob names, unlike S3/MinIO which strips
+        # them. Use relative-path mode with a stripped remote prefix so that blob names match what
+        # delta-kernel-rs expects (no leading slash in the az:// table location path component).
+        effective_remote = remote_path.lstrip("/") if remote_path else local_path.lstrip("/")
+        azure_uploader = AzureUploader(
+            started_cluster.blob_service_client,
+            started_cluster.azure_container_name,
+            use_relpath=True,
         )
+        return azure_uploader.upload_directory(local_path, effective_remote, **kwargs)
     elif storage_type == "local":
         return started_cluster.local_uploader.upload_directory(
             local_path, remote_path, **kwargs

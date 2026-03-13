@@ -202,8 +202,13 @@ public:
             set_option("azure_storage_sas_key", endpoint.sas_auth);
 
         /// For non-standard endpoints (e.g., Azurite emulator), set the endpoint explicitly.
+        /// Also allow plain HTTP connections when the endpoint uses http://, since the object-store
+        /// Azure builder defaults to https_only=true and would reject plain HTTP requests.
         if (!endpoint.storage_account_url.empty() && endpoint.storage_account_url.starts_with("http://"))
+        {
             set_option("azure_endpoint", endpoint.storage_account_url);
+            set_option("azure_allow_http", "true");
+        }
 
         LOG_TRACE(
             log,

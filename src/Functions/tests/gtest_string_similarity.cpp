@@ -97,7 +97,7 @@ class EditDistanceParamTest : public ::testing::TestWithParam<size_t>
 {
 };
 
-TEST_P(EditDistanceParamTest, EditDistanceMultiBlock_ASCII)
+TEST_P(EditDistanceParamTest, EditDistanceMultiBlockAscii)
 {
     const size_t b_len = GetParam();
     const size_t a_len = b_len + 30;
@@ -181,7 +181,7 @@ TEST_P(EditDistanceParamTest, EditDistanceMultiBlock_ASCII)
     }
 }
 
-TEST_P(EditDistanceParamTest, EditDistanceMultiBlock_UTF8)
+TEST_P(EditDistanceParamTest, EditDistanceMultiBlockUtf8)
 {
     const size_t b_len = GetParam();
     const size_t a_len = b_len + 30;
@@ -305,7 +305,7 @@ std::string toHex(const UInt32 * data, size_t size)
     return oss.str();
 }
 
-TEST(StringSimilarity, EditDistanceStress_ASCII)
+TEST(StringSimilarity, EditDistanceStressAscii)
 {
     std::random_device rd;
     std::mt19937_64 rng(rd());
@@ -341,7 +341,7 @@ TEST(StringSimilarity, EditDistanceStress_ASCII)
     }
 }
 
-TEST(StringSimilarity, EditDistanceStress_UTF8)
+TEST(StringSimilarity, EditDistanceStressUtf8)
 {
     std::random_device rd;
     std::mt19937_64 rng(rd());
@@ -350,7 +350,7 @@ TEST(StringSimilarity, EditDistanceStress_UTF8)
 
     constexpr size_t iterations = 200;
 
-    auto randomCodePoint = [&](void)
+    auto randomCodePoint = [&]
     {
         while (true)
         {

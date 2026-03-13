@@ -90,11 +90,13 @@ def normalize_category(cat: str) -> str:
     return result.strip().casefold()
 
 
-CATEGORIES_FOLD = [
-    normalize_category(c)
+NORMALIZED_CATEGORY_TO_LABEL = {
+    normalize_category(c): lb
     for lb, categories in LABEL_CATEGORIES.items()
     for c in categories
-]
+}
+
+CATEGORIES_FOLD = list(NORMALIZED_CATEGORY_TO_LABEL.keys())
 
 
 def get_category(pr_body: str) -> Tuple[str, str]:
@@ -139,8 +141,10 @@ def check_labels(category, info):
     pr_labels_to_add = []
     pr_labels_to_remove = []
     labels = info.pr_labels
-    if category in CATEGORY_TO_LABEL and CATEGORY_TO_LABEL[category] not in labels:
-        pr_labels_to_add.append(CATEGORY_TO_LABEL[category])
+    normalized = normalize_category(category)
+    label_for_category = NORMALIZED_CATEGORY_TO_LABEL.get(normalized)
+    if label_for_category and label_for_category not in labels:
+        pr_labels_to_add.append(label_for_category)
 
     # Labels that should not be auto-removed even if they don't match the current
     # category, because they serve additional purposes (e.g., enabling performance
@@ -150,8 +154,8 @@ def check_labels(category, info):
     for label in labels:
         if (
             label in CATEGORY_TO_LABEL.values()
-            and category in CATEGORY_TO_LABEL
-            and label != CATEGORY_TO_LABEL[category]
+            and label_for_category
+            and label != label_for_category
             and label not in protected_labels
         ):
             pr_labels_to_remove.append(label)

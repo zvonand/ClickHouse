@@ -3242,7 +3242,7 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
     if (!global_context)
         return;
 
-    UInt64 sample_rate = global_context->getServerSettings()[ServerSettings::predicate_statistics_sample_rate];
+    UInt64 sample_rate = global_context->getServerSettings()[ServerSetting::predicate_statistics_sample_rate];
     if (sample_rate == 0)
         return;
 

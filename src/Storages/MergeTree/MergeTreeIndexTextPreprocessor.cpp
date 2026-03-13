@@ -109,6 +109,7 @@ ASTPtr convertASTForConstant(const IndexDescription & index, const ASTPtr & expr
 ActionsDAG createActionsDAGForPreprocessor(
     const NamesAndTypesList & source_columns,
     const String & source_name,
+    const DataTypePtr & source_type,
     ASTPtr expression_ast)
 {
     if (expression_ast == nullptr)
@@ -132,11 +133,22 @@ ActionsDAG createActionsDAGForPreprocessor(
     if (outputs.front()->result_name == source_name)
         throw Exception(ErrorCodes::INCORRECT_QUERY, "The preprocessor must have at least one expression on top of the source column. Got '{}'", outputs.front()->result_name);
 
-    auto nested_type = MergeTreeIndexText::getNestedDataType(outputs.front()->result_type);
+    auto output_type = outputs.front()->result_type;
+    auto nested_type = MergeTreeIndexText::getNestedDataType(output_type);
     WhichDataType which_data_type(nested_type);
 
     if (!which_data_type.isString() && !which_data_type.isFixedString())
-        throw Exception(ErrorCodes::INCORRECT_QUERY, "The preprocessor expression should return a column of type with base type of String or FixedString, got: {}", outputs.front()->result_type->getName());
+        throw Exception(ErrorCodes::INCORRECT_QUERY, "The preprocessor expression should return a column of type with base type of String or FixedString, got: {}", output_type->getName());
+
+    auto get_array_dimensions = [](const DataTypePtr & type) -> size_t
+    {
+        if (const auto * array_type = typeid_cast<const DataTypeArray *>(type.get()))
+            return array_type->getNumberOfDimensions();
+        return 0;
+    };
+
+    if (get_array_dimensions(source_type) != get_array_dimensions(output_type))
+        throw Exception(ErrorCodes::INCORRECT_QUERY, "The preprocessor expression must not change the array dimensions of the source column. Source type: '{}', preprocessor result type: '{}'", source_type->getName(), output_type->getName());
 
     if (actions_dag.hasNonDeterministic())
         throw Exception(ErrorCodes::INCORRECT_QUERY, "The preprocessor expression must not contain non-deterministic functions");
@@ -155,16 +167,19 @@ MergeTreeIndexTextPreprocessor::MergeTreeIndexTextPreprocessor(ASTPtr expression
     , original_actions(createActionsDAGForPreprocessor(
         index_description.expression->getRequiredColumnsWithTypes(),
         index_description.column_names.front(),
+        index_column_type,
         convertASTForIndexColumn(index_description, expression_ast, false)))
     /// Assume that index expression is already executed and use a placeholder column to execute preprocessor expression.
     , actions_for_index_column(createActionsDAGForPreprocessor(
         {{preprocessor_column_name, index_column_type}},
         preprocessor_column_name,
+        index_column_type,
         convertASTForIndexColumn(index_description, expression_ast, true)))
     /// Take constant string and execute preprocessor expression.
     , actions_for_constant(createActionsDAGForPreprocessor(
         {{preprocessor_column_name, std::make_shared<DataTypeString>()}},
         preprocessor_column_name,
+        std::make_shared<DataTypeString>(),
         convertASTForConstant(index_description, expression_ast)))
 {
 }

@@ -182,3 +182,12 @@ CREATE TABLE tab (id UInt64, val String, INDEX idx(val) TYPE text(tokenizer = 's
 
 SELECT '-- Preprocessor returning Array(UInt64) should fail';
 CREATE TABLE tab (id UInt64, val Array(String), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = length(val))) ENGINE = MergeTree ORDER BY id; -- { serverError INCORRECT_QUERY }
+
+SELECT '-- Preprocessor wrapping scalar String in Array should fail';
+CREATE TABLE tab (id UInt64, val String, INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = array(val))) ENGINE = MergeTree ORDER BY id; -- { serverError INCORRECT_QUERY }
+
+SELECT '-- Preprocessor wrapping scalar LowCardinality(String) in Array should fail';
+CREATE TABLE tab (id UInt64, val LowCardinality(String), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = array(val))) ENGINE = MergeTree ORDER BY id; -- { serverError INCORRECT_QUERY }
+
+SELECT '-- Preprocessor adding extra array dimension to Array(String) should fail';
+CREATE TABLE tab (id UInt64, val Array(String), INDEX idx(val) TYPE text(tokenizer = 'splitByNonAlpha', preprocessor = array(val))) ENGINE = MergeTree ORDER BY id; -- { serverError INCORRECT_QUERY }

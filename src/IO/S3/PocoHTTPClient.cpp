@@ -788,6 +788,18 @@ PocoHTTPClientGCPOAuth::PocoHTTPClientGCPOAuth(const PocoHTTPClientConfiguration
     , google_adc_client_secret(client_configuration.google_adc_client_secret)
     , google_adc_refresh_token(client_configuration.google_adc_refresh_token)
 {
+    const bool has_client_id = !google_adc_client_id.empty();
+    const bool has_client_secret = !google_adc_client_secret.empty();
+    const bool has_refresh_token = !google_adc_refresh_token.empty();
+    if (has_client_id || has_client_secret || has_refresh_token)
+    {
+        if (!has_client_id || !has_client_secret || !has_refresh_token)
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "GCP OAuth ADC credentials must be specified together: "
+                "google_adc_client_id, google_adc_client_secret, and google_adc_refresh_token "
+                "must all be set or all be empty");
+    }
 }
 
 void PocoHTTPClientGCPOAuth::makeRequestInternal(

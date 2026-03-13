@@ -108,6 +108,167 @@ WHERE e1.key = e2.key AND e2.key = e3.key
 ORDER BY e1.key LIMIT 5
 SETTINGS query_plan_optimize_join_order_limit = 0, enable_join_transitive_predicates = 0;
 
+-- ==========================================================================
+-- Case 13: Mixed column types
+-- When types differ, implicit casts produce non-INPUT nodes that
+-- resolveInput skips. Transitivity gracefully degrades; results stay correct.
+-- ==========================================================================
+
+DROP TABLE IF EXISTS t_u32;
+DROP TABLE IF EXISTS t_u64;
+DROP TABLE IF EXISTS t_i32;
+DROP TABLE IF EXISTS t_str;
+DROP TABLE IF EXISTS t_str2;
+DROP TABLE IF EXISTS t_str3;
+
+CREATE TABLE t_u32  (x UInt32) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE t_u64  (x UInt64) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE t_i32  (x Int32)  ENGINE = MergeTree ORDER BY x;
+CREATE TABLE t_str  (x String) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE t_str2 (x String) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE t_str3 (x String) ENGINE = MergeTree ORDER BY x;
+
+INSERT INTO t_u32  SELECT number FROM numbers(5);
+INSERT INTO t_u64  SELECT number FROM numbers(5);
+INSERT INTO t_i32  SELECT number FROM numbers(5);
+INSERT INTO t_str  SELECT toString(number) FROM numbers(5);
+INSERT INTO t_str2 SELECT toString(number) FROM numbers(5);
+INSERT INTO t_str3 SELECT toString(number) FROM numbers(5);
+
+-- 13a: mixed integer widths — casts prevent equivalences, no transitive synthesis
+SELECT '-- Case 13a: mixed integer widths';
+SELECT t_u32.x, t_u64.x, t_i32.x
+FROM t_u32, t_u64, t_i32
+WHERE t_u32.x = t_u64.x AND t_u64.x = t_i32.x
+ORDER BY t_u32.x;
+
+SELECT t_u32.x, t_u64.x, t_i32.x
+FROM t_u32, t_u64, t_i32
+WHERE t_u32.x = t_u64.x AND t_u64.x = t_i32.x
+ORDER BY t_u32.x
+SETTINGS enable_join_transitive_predicates = 0;
+
+-- Plan: clauses contain _CAST, no transitive predicate synthesized
+SELECT '-- Case 13a: plan';
+SELECT explain FROM (
+    EXPLAIN actions = 1
+    SELECT count() FROM t_u32, t_u64, t_i32
+    WHERE t_u32.x = t_u64.x AND t_u64.x = t_i32.x
+) WHERE explain LIKE '%Clauses%';
+
+-- 13b: same-type Strings — transitivity works, each step has a clause
+SELECT '-- Case 13b: same-type Strings';
+SELECT t_str.x, t_str2.x, t_str3.x
+FROM t_str, t_str2, t_str3
+WHERE t_str.x = t_str2.x AND t_str2.x = t_str3.x
+ORDER BY t_str.x;
+
+SELECT t_str.x, t_str2.x, t_str3.x
+FROM t_str, t_str2, t_str3
+WHERE t_str.x = t_str2.x AND t_str2.x = t_str3.x
+ORDER BY t_str.x
+SETTINGS enable_join_transitive_predicates = 0;
+
+SELECT '-- Case 13b: plan';
+SELECT explain FROM (
+    EXPLAIN actions = 1
+    SELECT count() FROM t_str, t_str2, t_str3
+    WHERE t_str.x = t_str2.x AND t_str2.x = t_str3.x
+) WHERE explain LIKE '%Clauses%';
+
+DROP TABLE t_u32;
+DROP TABLE t_u64;
+DROP TABLE t_i32;
+DROP TABLE t_str;
+DROP TABLE t_str2;
+DROP TABLE t_str3;
+
+-- ==========================================================================
+-- Case 14: Nullable and LowCardinality types
+-- ==========================================================================
+
+DROP TABLE IF EXISTS n1;
+DROP TABLE IF EXISTS n2;
+DROP TABLE IF EXISTS n3;
+DROP TABLE IF EXISTS lc1;
+DROP TABLE IF EXISTS lc2;
+DROP TABLE IF EXISTS lc3;
+DROP TABLE IF EXISTS nlc1;
+DROP TABLE IF EXISTS nu2;
+DROP TABLE IF EXISTS nlc3;
+
+-- 14a: Nullable(UInt32) all same — transitivity works
+CREATE TABLE n1 (x Nullable(UInt32)) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE n2 (x Nullable(UInt32)) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE n3 (x Nullable(UInt32)) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO n1 SELECT if(number % 3 = 0, NULL, number) FROM numbers(6);
+INSERT INTO n2 SELECT if(number % 4 = 0, NULL, number) FROM numbers(6);
+INSERT INTO n3 SELECT number FROM numbers(6);
+
+SELECT '-- Case 14a: Nullable same type';
+SELECT n1.x, n2.x, n3.x FROM n1, n2, n3
+WHERE n1.x = n2.x AND n2.x = n3.x ORDER BY n1.x;
+
+SELECT n1.x, n2.x, n3.x FROM n1, n2, n3
+WHERE n1.x = n2.x AND n2.x = n3.x ORDER BY n1.x
+SETTINGS enable_join_transitive_predicates = 0;
+
+SELECT '-- Case 14a: plan';
+SELECT explain FROM (
+    EXPLAIN actions = 1
+    SELECT count() FROM n1, n2, n3 WHERE n1.x = n2.x AND n2.x = n3.x
+) WHERE explain LIKE '%Clauses%';
+
+DROP TABLE n1; DROP TABLE n2; DROP TABLE n3;
+
+-- 14b: Nullable vs non-Nullable — casts prevent equivalences
+CREATE TABLE nlc1 (x Nullable(UInt32)) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE nu2  (x UInt32)           ENGINE = MergeTree ORDER BY x;
+CREATE TABLE nlc3 (x Nullable(UInt32)) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO nlc1 SELECT number FROM numbers(5);
+INSERT INTO nu2  SELECT number FROM numbers(5);
+INSERT INTO nlc3 SELECT number FROM numbers(5);
+
+SELECT '-- Case 14b: Nullable vs non-Nullable';
+SELECT nlc1.x, nu2.x, nlc3.x FROM nlc1, nu2, nlc3
+WHERE nlc1.x = nu2.x AND nu2.x = nlc3.x ORDER BY nlc1.x;
+
+SELECT nlc1.x, nu2.x, nlc3.x FROM nlc1, nu2, nlc3
+WHERE nlc1.x = nu2.x AND nu2.x = nlc3.x ORDER BY nlc1.x
+SETTINGS enable_join_transitive_predicates = 0;
+
+SELECT '-- Case 14b: plan';
+SELECT explain FROM (
+    EXPLAIN actions = 1
+    SELECT count() FROM nlc1, nu2, nlc3 WHERE nlc1.x = nu2.x AND nu2.x = nlc3.x
+) WHERE explain LIKE '%Clauses%';
+
+DROP TABLE nlc1; DROP TABLE nu2; DROP TABLE nlc3;
+
+-- 14c: LowCardinality(String) all same — transitivity works
+CREATE TABLE lc1 (x LowCardinality(String)) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE lc2 (x LowCardinality(String)) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE lc3 (x LowCardinality(String)) ENGINE = MergeTree ORDER BY x;
+INSERT INTO lc1 SELECT toString(number) FROM numbers(5);
+INSERT INTO lc2 SELECT toString(number) FROM numbers(5);
+INSERT INTO lc3 SELECT toString(number) FROM numbers(5);
+
+SELECT '-- Case 14c: LowCardinality same type';
+SELECT lc1.x, lc2.x, lc3.x FROM lc1, lc2, lc3
+WHERE lc1.x = lc2.x AND lc2.x = lc3.x ORDER BY lc1.x;
+
+SELECT lc1.x, lc2.x, lc3.x FROM lc1, lc2, lc3
+WHERE lc1.x = lc2.x AND lc2.x = lc3.x ORDER BY lc1.x
+SETTINGS enable_join_transitive_predicates = 0;
+
+SELECT '-- Case 14c: plan';
+SELECT explain FROM (
+    EXPLAIN actions = 1
+    SELECT count() FROM lc1, lc2, lc3 WHERE lc1.x = lc2.x AND lc2.x = lc3.x
+) WHERE explain LIKE '%Clauses%';
+
+DROP TABLE lc1; DROP TABLE lc2; DROP TABLE lc3;
+
 DROP TABLE e1;
 DROP TABLE e2;
 DROP TABLE e3;

@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+import threading
 import traceback
 import uuid
 from collections import defaultdict
@@ -100,7 +101,6 @@ class ClickHouseProc:
         # Fast test runs lightweight SQL tests that are not CPU-bound,
         # so we can use more parallelism than the default cpu_count/2.
         nproc_fast = max(1, int(Utils.cpu_count() * 3 / 4))
-        self.fast_test_command = f"cd {temp_dir} && clickhouse-test --hung-check --trace --capture-client-stacktrace --no-random-settings --no-random-merge-tree-settings --no-long --testname --shard --check-zookeeper-session --order random --report-logs-stats --fast-tests-only --no-stateful --jobs {nproc_fast} -- '{{TEST}}'"
         self.minio_proc = None
         self.azurite_proc = None
         self.kafka_proc = None
@@ -744,8 +744,7 @@ clickhouse-client --query "SELECT count() FROM test.visits"
         else:
             return False
 
-    def run_fast_test(self, test=""):
-        cmd = self.fast_test_command.format(TEST=test)
+    def run_test(self, cmd, timeout=7200):
         print(f"Run test: [{cmd}]")
         with open(self.test_output_file, "w") as f:
             process = subprocess.Popen(
@@ -756,14 +755,29 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                 shell=True,
                 text=True,
                 errors="ignore",
+                start_new_session=True,
             )
-            for line in process.stdout:
-                # we generally want timestamps for any test, not just a fast test
-                ts_line = f"{datetime.now():%Y-%m-%d %H:%M:%S} {line}"
-                print(ts_line, end="")
-                f.write(ts_line)
 
-            process.wait()
+            def _reader():
+                for line in process.stdout:
+                    # we generally want timestamps for any test, not just a fast test
+                    ts_line = f"{datetime.now():%Y-%m-%d %H:%M:%S} {line}"
+                    print(ts_line, end="")
+                    f.write(ts_line)
+
+            reader_thread = threading.Thread(target=_reader)
+            reader_thread.start()
+
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                print(f"ERROR: fast test timed out after {timeout}s, killing process group")
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                process.wait()
+                reader_thread.join()
+                return False
+
+            reader_thread.join()
             return process.returncode == 0
 
     def terminate(self, force=False):

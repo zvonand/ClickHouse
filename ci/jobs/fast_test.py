@@ -296,7 +296,11 @@ def main():
         stop_watch_ = Utils.Stopwatch()
         step_name = "Tests"
         print(step_name)
-        res = CH.run_fast_test(test=args.test or "")
+        fast_test_command = f"cd {temp_dir} && clickhouse-test --hung-check --trace --capture-client-stacktrace --no-random-settings --no-random-merge-tree-settings --no-long --testname --shard --check-zookeeper-session --order random --report-logs-stats --fast-tests-only --no-stateful --jobs {nproc_fast}"
+        if args.test:
+            fast_test_command += f" -- '{args.test}'"
+
+        res = CH.run_test(fast_test_command)
 
         test_results = FTResultsProcessor(wd=Settings.OUTPUT_DIR).run()
         if not res:

@@ -29,4 +29,4 @@ ${CLICKHOUSE_CLIENT} --query "
         allow_suspicious_low_cardinality_types = 1,
         table_function_remote_max_addresses = 33,
         partial_result_on_first_cancel = 1
-" 2>&1 | grep -qv "Logical error" && echo "OK" || echo "FAIL"
+" 2>&1 | tr '\n' ' ' | grep -q -v -F "Logical error" && echo "OK" || echo "FAIL"

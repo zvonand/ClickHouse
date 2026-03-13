@@ -204,13 +204,13 @@ public:
     const ColumnWithTypeAndName & rightAsofKeyColumn() const;
 
     /// Different types of keys for maps.
-#define APPLY_FOR_JOIN_VARIANTS(M) \
+    #define APPLY_FOR_JOIN_VARIANTS(M) \
         M(key8)                        \
         M(key16)                       \
         M(key32)                       \
         M(key64)                       \
-        M(range_key32) \
-        M(range_key64) \
+        M(range_key32)                 \
+        M(range_key64)                 \
         M(key_string)                  \
         M(key_fixed_string)            \
         M(keys128)                     \
@@ -222,18 +222,18 @@ public:
         M(two_level_key_fixed_string)  \
         M(two_level_keys128)           \
         M(two_level_keys256)           \
-    M(two_level_hashed)
+        M(two_level_hashed)
 
-/// Used for reading from StorageJoin and applying joinGet function
-#define APPLY_FOR_JOIN_VARIANTS_LIMITED(M) \
+    /// Used for reading from StorageJoin and applying joinGet function
+    #define APPLY_FOR_JOIN_VARIANTS_LIMITED(M) \
         M(key8)                                \
         M(key16)                               \
         M(key32)                               \
         M(key64)                               \
         M(key_string)                          \
-    M(key_fixed_string)
+        M(key_fixed_string)
 
-/// Used in ConcurrentHashJoin
+    /// Used in ConcurrentHashJoin
     #define APPLY_FOR_TWO_LEVEL_JOIN_VARIANTS(M, ...)           \
         M(two_level_key32 __VA_OPT__(,) __VA_ARGS__)            \
         M(two_level_key64 __VA_OPT__(,) __VA_ARGS__)            \

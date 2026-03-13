@@ -2222,9 +2222,7 @@ bool IMergeTreeDataPart::assertHasValidVersionMetadata() const
             /// The part directory may have been removed externally (e.g., between
             /// DETACH and ATTACH in an Ordinary database). If the directory is gone,
             /// there is nothing to validate.
-            if (!getDataPartStorage().exists())
-                return true;
-            return false;
+            return !getDataPartStorage().exists();
         }
 
         readStringUntilEOF(content, *buf);

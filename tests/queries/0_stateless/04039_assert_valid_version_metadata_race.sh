@@ -76,5 +76,3 @@ for attempt in $(seq 1 5); do
 done
 
 $CLICKHOUSE_CLIENT --allow_deprecated_database_ordinary=1 -q "DROP DATABASE IF EXISTS ${db_name}"
-
-echo "OK"

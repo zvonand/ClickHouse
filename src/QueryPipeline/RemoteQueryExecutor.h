@@ -5,6 +5,7 @@
 #include <Client/ConnectionPoolWithFailover.h>
 #include <Common/UniqueLock.h>
 #include <Interpreters/ClientInfo.h>
+#include <QueryPipeline/UnavailableShardTracker.h>
 #include <Storages/IStorage_fwd.h>
 #include <Interpreters/StorageID.h>
 #include <sys/types.h>
@@ -210,12 +211,14 @@ public:
 
     void setLogger(LoggerPtr logger) { log = logger; }
 
+    void setUnavailableShardTracker(UnavailableShardTrackerPtr tracker) { unavailable_shard_tracker = std::move(tracker); }
+
     const Block & getHeader() const { return *header; }
     const SharedHeader & getSharedHeader() const { return header; }
 
     IConnections & getConnections() { return *connections; }
 
-    bool needToSkipUnavailableShard() const;
+    bool needToSkipUnavailableShard();
 
     bool isReplicaUnavailable() const { return extension && extension->parallel_reading_coordinator && connections->size() == 0; }
 
@@ -313,6 +316,9 @@ private:
     StorageID main_table = StorageID::createEmpty();
 
     LoggerPtr log = nullptr;
+
+    UnavailableShardTrackerPtr unavailable_shard_tracker;
+    bool shard_skip_reported = false;
 
     GetPriorityForLoadBalancing::Func priority_func;
 

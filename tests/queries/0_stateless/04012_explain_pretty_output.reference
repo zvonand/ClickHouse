@@ -1,141 +1,120 @@
-┌Expression ((Project names + (Projection + Change column names to column identifiers)))
-└──ReadFromMergeTree (default.t1)
-       ReadType: Default
-       Parts: 1
-       Granules: 1
-       Output: a, b
+Output: a, b
+
+ReadFromMergeTree (default.t1)
+   ReadType: Default
+   Parts: 1
+   Granules: 1
+   Output: a, b
 --- Projection with expressions ---
-┌Expression ((Project names + (Projection + Change column names to column identifiers)))
-└──ReadFromMergeTree (default.t1)
-       ReadType: Default
-       Parts: 1
-       Granules: 1
-       Output: a, b
+Output: a_plus, b_lower
+
+ReadFromMergeTree (default.t1)
+   ReadType: Default
+   Parts: 1
+   Granules: 1
+   Output: a, b
 --- ReadFromMergeTree output ---
-┌Expression ((Project names + (Projection + Change column names to column identifiers)))
-└──ReadFromMergeTree (default.t1)
-       ReadType: Default
-       Parts: 1
-       Granules: 1
-       Output: a, b, c
+Output: a, b, c
+
+ReadFromMergeTree (default.t1)
+   ReadType: Default
+   Parts: 1
+   Granules: 1
+   Output: a, b, c
 --- ReadFromMergeTree with subset of columns ---
-┌Expression ((Project names + (Projection + Change column names to column identifiers)))
-└──ReadFromMergeTree (default.t1)
-       ReadType: Default
-       Parts: 1
-       Granules: 1
-       Output: a
+Output: a
+
+ReadFromMergeTree (default.t1)
+   ReadType: Default
+   Parts: 1
+   Granules: 1
+   Output: a
 --- Join output with left and right columns ---
-┌Expression ((Project names + Projection))
-│    Output: a, b, y
-└─┬Expression (Post Join Actions)
-  └─┬Join (JOIN FillRightFirst)
-    │    t1[100] ⋈ t2[100]
-    │    Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
-    │    ResultRows: 100
-    │    Locality: UNSPECIFIED
-    │    Output:
-    │      Left:  a, b
-    │      Right: y
-    │    Clauses: [(__table1.a) = (__table2.x)]
-    ├─┬Expression (Left Pre Join Actions)
-    │ └─┬Expression (Change column names to column identifiers)
-    │   └──ReadFromMergeTree (default.t1)
-    │          ReadType: Default
-    │          Parts: 1
-    │          Granules: 1
-    │          Output: a, b
-    └─┬Expression (Right Pre Join Actions)
-      └─┬Expression (Change column names to column identifiers)
-        └──ReadFromMergeTree (default.t2)
-               ReadType: Default
-               Parts: 1
-               Granules: 1
-               Output: y, x
+Output: a, b, y
+
+Join (JOIN FillRightFirst)
+│  t1[100] ⋈ t2[100]
+│  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
+│  ResultRows: 100
+│  Output:
+│    Left:  a, b
+│    Right: y
+│  Clauses: [(__table1.a) = (__table2.x)]
+├──ReadFromMergeTree (default.t1)
+│     ReadType: Default
+│     Parts: 1
+│     Granules: 1
+│     Output: a, b
+└──ReadFromMergeTree (default.t2)
+      ReadType: Default
+      Parts: 1
+      Granules: 1
+      Output: y, x
 --- Join output select star ---
-┌Expression ((Project names + Projection))
-│    Output: a, b, c, x, y
-└─┬Expression (Post Join Actions)
-  └─┬Join (JOIN FillRightFirst)
-    │    t1[100] ⋈ t2[100]
-    │    Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
-    │    ResultRows: 100
-    │    Locality: UNSPECIFIED
-    │    Output:
-    │      Left:  a, b, c
-    │      Right: x, y
-    │    Clauses: [(__table1.a) = (__table2.x)]
-    ├─┬Expression (Left Pre Join Actions)
-    │ └─┬Expression (Change column names to column identifiers)
-    │   └──ReadFromMergeTree (default.t1)
-    │          ReadType: Default
-    │          Parts: 1
-    │          Granules: 1
-    │          Output: a, b, c
-    └─┬Expression (Right Pre Join Actions)
-      └─┬Expression (Change column names to column identifiers)
-        └──ReadFromMergeTree (default.t2)
-               ReadType: Default
-               Parts: 1
-               Granules: 1
-               Output: x, y
+Output: a, b, c, x, y
+
+Join (JOIN FillRightFirst)
+│  t1[100] ⋈ t2[100]
+│  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
+│  ResultRows: 100
+│  Output:
+│    Left:  a, b, c
+│    Right: x, y
+│  Clauses: [(__table1.a) = (__table2.x)]
+├──ReadFromMergeTree (default.t1)
+│     ReadType: Default
+│     Parts: 1
+│     Granules: 1
+│     Output: a, b, c
+└──ReadFromMergeTree (default.t2)
+      ReadType: Default
+      Parts: 1
+      Granules: 1
+      Output: x, y
 --- Join with only left columns selected ---
-┌Expression ((Project names + Projection))
-│    Output: a, b
-└─┬Expression (Post Join Actions)
-  └─┬Join (JOIN FillRightFirst)
-    │    t1[100] ⋈ t2[100]
-    │    Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
-    │    ResultRows: 100
-    │    Locality: UNSPECIFIED
-    │    Output:
-    │      Left:  a, b
-    │      Right: Empty
-    │    Clauses: [(__table1.a) = (__table2.x)]
-    ├─┬Expression (Left Pre Join Actions)
-    │ └─┬Expression (Change column names to column identifiers)
-    │   └──ReadFromMergeTree (default.t1)
-    │          ReadType: Default
-    │          Parts: 1
-    │          Granules: 1
-    │          Output: a, b
-    └─┬Expression (Right Pre Join Actions)
-      └─┬Expression (Change column names to column identifiers)
-        └──ReadFromMergeTree (default.t2)
-               ReadType: Default
-               Parts: 1
-               Granules: 1
-               Output: x
+Output: a, b
+
+Join (JOIN FillRightFirst)
+│  t1[100] ⋈ t2[100]
+│  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
+│  ResultRows: 100
+│  Output:
+│    Left:  a, b
+│    Right: Empty
+│  Clauses: [(__table1.a) = (__table2.x)]
+├──ReadFromMergeTree (default.t1)
+│     ReadType: Default
+│     Parts: 1
+│     Granules: 1
+│     Output: a, b
+└──ReadFromMergeTree (default.t2)
+      ReadType: Default
+      Parts: 1
+      Granules: 1
+      Output: x
 --- Join with only right columns selected ---
-┌Expression ((Project names + Projection))
-│    Output: x, y
-└─┬Expression (Post Join Actions)
-  └─┬Join (JOIN FillRightFirst)
-    │    t1[100] ⋈ t2[100]
-    │    Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
-    │    ResultRows: 100
-    │    Locality: UNSPECIFIED
-    │    Output:
-    │      Left:  Empty
-    │      Right: x, y
-    │    Clauses: [(__table1.a) = (__table2.x)]
-    ├─┬Expression (Left Pre Join Actions)
-    │ └─┬Expression (Change column names to column identifiers)
-    │   └──ReadFromMergeTree (default.t1)
-    │          ReadType: Default
-    │          Parts: 1
-    │          Granules: 1
-    │          Output: a
-    └─┬Expression (Right Pre Join Actions)
-      └─┬Expression (Change column names to column identifiers)
-        └──ReadFromMergeTree (default.t2)
-               ReadType: Default
-               Parts: 1
-               Granules: 1
-               Output: x, y
+Output: x, y
+
+Join (JOIN FillRightFirst)
+│  t1[100] ⋈ t2[100]
+│  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
+│  ResultRows: 100
+│  Output:
+│    Left:  Empty
+│    Right: x, y
+│  Clauses: [(__table1.a) = (__table2.x)]
+├──ReadFromMergeTree (default.t1)
+│     ReadType: Default
+│     Parts: 1
+│     Granules: 1
+│     Output: a
+└──ReadFromMergeTree (default.t2)
+      ReadType: Default
+      Parts: 1
+      Granules: 1
+      Output: x, y
 --- No output lines without pretty ---
-Expression ((Project names + (Projection + Change column names to column identifiers)))
-  ReadFromMergeTree (default.t1)
-  ReadType: Default
-  Parts: 1
-  Granules: 1
+ReadFromMergeTree (default.t1)
+ReadType: Default
+Parts: 1
+Granules: 1

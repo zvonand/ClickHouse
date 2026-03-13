@@ -531,7 +531,8 @@ Iceberg tables accumulate snapshots with each INSERT, DELETE, or UPDATE operatio
 
 ```sql
 ALTER TABLE iceberg_table EXECUTE expire_snapshots(
-    [expire_before = 'timestamp']
+    ['timestamp']
+    [, expire_before = 'timestamp']
     [, retention_period = '3d']
     [, retain_last = 100]
     [, snapshot_ids = [1, 2, 3, 4]]
@@ -541,9 +542,9 @@ ALTER TABLE iceberg_table EXECUTE expire_snapshots(
 
 Which snapshots to keep is determined by the [retention policy](#iceberg-snapshot-retention-policy) (table properties `min-snapshots-to-keep`, `max-snapshot-age-ms`, and per-ref overrides). The retention policy is always evaluated regardless of other arguments.
 
-**Named arguments:**
+**Arguments:**
 
-- `expire_before = 'timestamp'` — a datetime string (e.g., `'2024-06-01 00:00:00'`) interpreted in the **server's timezone**. Acts as a safety fuse: snapshots whose `timestamp-ms` is at or after this value are protected from expiration, even if the retention policy would otherwise expire them. Can be combined with `snapshot_ids`, in which case listed snapshots at or newer than the timestamp are not expired.
+- `'timestamp'` (positional) or `expire_before = 'timestamp'` — a datetime string (e.g., `'2024-06-01 00:00:00'`) interpreted in the **server's timezone**. Acts as a safety fuse: snapshots whose `timestamp-ms` is at or after this value are protected from expiration, even if the retention policy would otherwise expire them. Can be combined with `snapshot_ids`, in which case listed snapshots at or newer than the timestamp are not expired.
 - `retention_period = '<duration>'` — overrides the table-level `history.expire.max-snapshot-age-ms` for this invocation only. Snapshots older than this duration (measured from now) become candidates for expiration. The value is a duration string consisting of one or more `{number}{unit}` pairs concatenated together. Supported units: `y` (365 days), `w` (7 days), `d` (24 hours), `h` (60 minutes), `m` (60 seconds), `s` (1 second), `ms` (1 millisecond). Units can be combined, e.g. `'3d'`, `'12h'`, `'1d12h30m'`, `'500ms'`.
 - `retain_last = N` — overrides the table-level `history.expire.min-snapshots-to-keep` for this invocation only. At least `N` snapshots are always retained regardless of age.
 - `snapshot_ids = [id1, id2, ...]` — expires exactly the listed snapshot IDs (except snapshots referenced by current snapshot, branches, or tags). This mode bypasses the retention policy entirely and cannot be combined with `retention_period` or `retain_last`.
@@ -566,7 +567,10 @@ INSERT INTO iceberg_table VALUES (3);
 -- Expire using retention policy only
 ALTER TABLE iceberg_table EXECUTE expire_snapshots();
 
--- Expire with a safety fuse: protect snapshots newer than the timestamp
+-- Expire with a safety fuse: protect snapshots newer than the timestamp (positional syntax)
+ALTER TABLE iceberg_table EXECUTE expire_snapshots('2025-01-01 00:00:00');
+
+-- Same using the named argument form
 ALTER TABLE iceberg_table EXECUTE expire_snapshots(expire_before = '2025-01-01 00:00:00');
 
 -- Override retention parameters for one execution

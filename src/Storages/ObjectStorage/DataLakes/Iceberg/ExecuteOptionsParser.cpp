@@ -6,6 +6,7 @@
 #include <Common/Exception.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
+#include <Parsers/ASTLiteral.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteOptionsParser.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergFieldParseHelpers.h>
 #include <Storages/ObjectStorage/Utils.h>
@@ -29,23 +30,34 @@ ExpireSnapshotsOptions parseExpireSnapshotsOptions(const ASTPtr & args, ContextP
     if (!args)
         return options;
 
-    const auto & all_args = args->children;
-    ASTs mutable_args(all_args);
-    auto first_kv_it = getFirstKeyValueArgument(mutable_args);
-    size_t pos_count = static_cast<size_t>(std::distance(mutable_args.begin(), first_kv_it));
-    if (pos_count > 0)
-        throw Exception(
-            ErrorCodes::BAD_ARGUMENTS,
-            "expire_snapshots does not accept positional arguments. "
-            "Use named argument expire_before = '<datetime>' instead of a bare timestamp string. "
-            "Example: expire_snapshots(expire_before = '2025-01-01 00:00:00')");
+    ASTs all_args = args->children;
+    auto first_kv_it = getFirstKeyValueArgument(all_args);
+    size_t pos_count = static_cast<size_t>(std::distance(all_args.begin(), first_kv_it));
 
-    auto parsed_kv = parseKeyValueArguments(all_args, context);
+    if (pos_count > 1)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects at most 1 positional argument, got {}", pos_count);
+
+    if (pos_count == 1)
+    {
+        auto * lit = all_args[0]->as<ASTLiteral>();
+        String timestamp = lit ? lit->value.safeGet<String>() : all_args[0]->getColumnName();
+        ReadBufferFromString buf(timestamp);
+        time_t expire_time;
+        readDateTimeText(expire_time, buf);
+        options.expire_before_ms = static_cast<Int64>(expire_time) * 1000;
+    }
+
+    ASTs kv_args(first_kv_it, all_args.end());
+    auto parsed_kv = parseKeyValueArguments(kv_args, context);
 
     for (const auto & [key, value] : parsed_kv)
     {
         if (key == "expire_before")
         {
+            if (options.expire_before_ms.has_value())
+                throw Exception(
+                    ErrorCodes::BAD_ARGUMENTS,
+                    "expire_snapshots: 'expire_before' specified both as positional argument and named argument");
             if (value.getType() != Field::Types::String)
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects 'expire_before' to be a datetime string");
             String timestamp = value.safeGet<String>();

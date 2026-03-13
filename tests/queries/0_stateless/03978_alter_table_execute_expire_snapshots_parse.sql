@@ -1,6 +1,9 @@
--- Parsing: expire_snapshots with expire_before
+-- Parsing: expire_snapshots with positional timestamp (legacy syntax)
+SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(\'2024-06-01 00:00:00\')');
+SELECT formatQuerySingleLine('ALTER TABLE db.t EXECUTE expire_snapshots(\'2024-06-01 00:00:00\')');
+
+-- Parsing: expire_snapshots with named expire_before
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(expire_before = \'2024-06-01 00:00:00\')');
-SELECT formatQuerySingleLine('ALTER TABLE db.t EXECUTE expire_snapshots(expire_before = \'2024-06-01 00:00:00\')');
 
 -- Parsing: expire_snapshots without arguments (uses default retention)
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots()');
@@ -10,6 +13,8 @@ SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(snapshot_id
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(dry_run = 1)');
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(dry_run = \'True\')');
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(retention_period = \'1h\', dry_run = 1)');
+-- Positional timestamp combined with named args
+SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE expire_snapshots(\'2024-06-01 00:00:00\', dry_run = 1)');
 
 -- Parsing: other command names should parse successfully (generic EXECUTE syntax)
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE compact()');
@@ -20,13 +25,11 @@ SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE no_args_command()');
 -- Runtime: EXECUTE on MergeTree should fail with NOT_IMPLEMENTED
 DROP TABLE IF EXISTS test_execute_03978;
 CREATE TABLE test_execute_03978 (x UInt32) ENGINE = MergeTree ORDER BY x;
+ALTER TABLE test_execute_03978 EXECUTE expire_snapshots('2024-06-01 00:00:00'); -- { serverError NOT_IMPLEMENTED }
 ALTER TABLE test_execute_03978 EXECUTE expire_snapshots(expire_before = '2024-06-01 00:00:00'); -- { serverError NOT_IMPLEMENTED }
 ALTER TABLE test_execute_03978 EXECUTE expire_snapshots(); -- { serverError NOT_IMPLEMENTED }
 ALTER TABLE test_execute_03978 EXECUTE compact(); -- { serverError NOT_IMPLEMENTED }
 ALTER TABLE test_execute_03978 EXECUTE unknown_command(); -- { serverError NOT_IMPLEMENTED }
--- MergeTree raises NOT_IMPLEMENTED before BAD_ARGUMENTS, so positional-arg error shows as NOT_IMPLEMENTED here.
--- Against a real Iceberg table, expire_snapshots('timestamp') would raise BAD_ARGUMENTS.
-ALTER TABLE test_execute_03978 EXECUTE expire_snapshots('2024-06-01 00:00:00'); -- { serverError NOT_IMPLEMENTED }
 DROP TABLE test_execute_03978;
 
 -- Privilege hierarchy is verified by 01271_show_privileges (ALTER EXECUTE listed under ALTER TABLE)

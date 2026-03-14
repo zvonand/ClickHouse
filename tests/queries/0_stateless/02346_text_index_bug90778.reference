@@ -1,4 +1,8 @@
 1
-Filter column: _CAST(__text_index_idx_equals_888efda921680e32e66fe44752bfa9ba, \'LowCardinality(UInt8)\'_String) (removed)
+Actions: INPUT : 0 -> __text_index_idx_equals_888efda921680e32e66fe44752bfa9ba UInt8 : 0
+FUNCTION _CAST(__text_index_idx_equals_888efda921680e32e66fe44752bfa9ba :: 0, \'LowCardinality(UInt8)\'_String :: 1) -> _CAST(__text_index_idx_equals_888efda921680e32e66fe44752bfa9ba, \'LowCardinality(UInt8)\'_String) LowCardinality(UInt8) : 2
+ALIAS _CAST(__text_index_idx_equals_888efda921680e32e66fe44752bfa9ba, \'LowCardinality(UInt8)\'_String) :: 2 -> equals(__table1.col, \'config\'_String) LowCardinality(UInt8) : 1
 1
-Filter column: _CAST(__text_index_idx_hasToken_3acc763368028663e66c262e993962ad, \'LowCardinality(UInt8)\'_String) (removed)
+Actions: INPUT : 0 -> __text_index_idx_hasToken_3acc763368028663e66c262e993962ad UInt8 : 0
+FUNCTION _CAST(__text_index_idx_hasToken_3acc763368028663e66c262e993962ad :: 0, \'LowCardinality(UInt8)\'_String :: 1) -> _CAST(__text_index_idx_hasToken_3acc763368028663e66c262e993962ad, \'LowCardinality(UInt8)\'_String) LowCardinality(UInt8) : 2
+ALIAS _CAST(__text_index_idx_hasToken_3acc763368028663e66c262e993962ad, \'LowCardinality(UInt8)\'_String) :: 2 -> hasToken(__table1.col, \'config\'_String) LowCardinality(UInt8) : 1

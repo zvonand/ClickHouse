@@ -60,11 +60,14 @@ void ASTSelectWithUnionQuery::formatQueryImpl(WriteBuffer & ostr, const FormatSe
             || mode == SelectUnionMode::EXCEPT_DISTINCT;
     };
 
-    auto get_mode = [&](ASTs::const_iterator it)
+    auto get_mode = [&](ASTs::const_iterator it) -> SelectUnionMode
     {
-        return is_normalized
-            ? union_mode
-            : list_of_modes[it - list_of_selects->children.begin() - 1];
+        if (is_normalized)
+            return union_mode;
+        auto index = static_cast<size_t>(it - list_of_selects->children.begin()) - 1;
+        if (index >= list_of_modes.size())
+            return union_mode;
+        return list_of_modes[index];
     };
 
     for (ASTs::const_iterator it = list_of_selects->children.begin(); it != list_of_selects->children.end(); ++it)

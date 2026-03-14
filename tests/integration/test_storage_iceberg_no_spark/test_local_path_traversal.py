@@ -81,9 +81,13 @@ def _to_relative_path(path, table_path):
     return path
 
 
-def _get_manifest_paths_from_chain(host_path, table_path):
+def _get_manifest_paths_from_chain(host_path, table_path, content_filter=None):
     """Follow metadata.json -> manifest-list -> manifest_path(s).
-    Returns (manifest_list_rel, [manifest_rel, ...])."""
+    Returns (manifest_list_rel, [manifest_rel, ...]).
+
+    In Iceberg v2 each manifest-list entry carries a ``content`` field
+    (0 = data, 1 = deletes).  Pass *content_filter* to keep only entries
+    with that value; ``None`` (default) returns all manifests."""
     metadata_dir = os.path.join(host_path, "metadata")
     version_hint_path = os.path.join(metadata_dir, "version-hint.text")
     if os.path.isfile(version_hint_path):
@@ -122,8 +126,11 @@ def _get_manifest_paths_from_chain(host_path, table_path):
     with open(ml_local, "rb") as f:
         reader = avro.datafile.DataFileReader(f, avro.io.DatumReader())
         for record in reader:
-            if "manifest_path" in record:
-                manifest_paths.append(_to_relative_path(record["manifest_path"], table_path))
+            if "manifest_path" not in record:
+                continue
+            if content_filter is not None and record.get("content") != content_filter:
+                continue
+            manifest_paths.append(_to_relative_path(record["manifest_path"], table_path))
         reader.close()
 
     return ml_rel, manifest_paths
@@ -195,4 +202,72 @@ def test_local_iceberg_path_traversal(started_cluster_iceberg_no_spark):
     assert "PATH_ACCESS_DENIED" in error, f"Expected PATH_ACCESS_DENIED, got: {error}"
     assert "Data file path" in error and "is not inside" in error, (
         f"Expected error from LocalPathValidatingIterator, got: {error}"
+    )
+
+
+def test_local_iceberg_delete_file_path_traversal(started_cluster_iceberg_no_spark):
+    """Position-delete manifest entry whose data_file.file_path contains ../
+    must be rejected with PATH_ACCESS_DENIED via validateDeleteFilePaths.
+
+    Data file paths are left untouched — only the delete file path is
+    corrupted.  This specifically exercises the validateDeleteFilePaths
+    code path, not the LocalPathValidatingIterator that checks data
+    file paths."""
+    instance = started_cluster_iceberg_no_spark.instances["node1"]
+    table_name = "test_delete_path_traversal_" + get_uuid_str()
+    table_path = f"/var/lib/clickhouse/user_files/iceberg_data/default/{table_name}"
+
+    instance.query(
+        f"CREATE TABLE {table_name} (c0 Int) ENGINE = IcebergLocal('{table_path}/', 'Parquet');",
+        settings={"allow_insert_into_iceberg": 1, **NOCACHE},
+    )
+    instance.query(
+        f"INSERT INTO {table_name} VALUES (1), (2), (3)",
+        settings={"allow_insert_into_iceberg": 1, **NOCACHE},
+    )
+    instance.query(
+        f"DELETE FROM {table_name} WHERE c0 = 1",
+        settings={"allow_insert_into_iceberg": 1, **NOCACHE},
+    )
+    result = instance.query(
+        f"SELECT c0 FROM {table_name} ORDER BY c0", settings=NOCACHE
+    )
+    assert result.strip() == "2\n3"
+    instance.query(f"DROP TABLE {table_name}")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        host_path = os.path.join(temp_dir, table_name)
+        os.makedirs(host_path, exist_ok=True)
+        _download_table_from_container(instance, table_path, host_path)
+
+        _, delete_manifest_paths = _get_manifest_paths_from_chain(
+            host_path, table_path, content_filter=1
+        )
+        assert delete_manifest_paths, "No delete manifest found after DELETE FROM"
+
+        for rel_path in delete_manifest_paths:
+            local_manifest = os.path.join(host_path, rel_path)
+            assert os.path.isfile(
+                local_manifest
+            ), f"Delete manifest not found: {local_manifest}"
+
+            _modify_avro_file(
+                local_manifest,
+                ["data_file", "file_path"],
+                lambda _: f"{table_path}/../../../../../../../etc/passwd",
+            )
+            instance.copy_file_to_container(
+                local_manifest, f"{table_path}/{rel_path}"
+            )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    error = instance.query_and_get_error(
+        f"SELECT * FROM icebergLocal(local, path = '{table_path}/')",
+        settings=NOCACHE,
+    )
+    assert "PATH_ACCESS_DENIED" in error, f"Expected PATH_ACCESS_DENIED, got: {error}"
+    assert "Delete file path" in error and "is not inside" in error, (
+        f"Expected error from validateDeleteFilePaths, got: {error}"
     )

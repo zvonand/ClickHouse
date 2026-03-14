@@ -18,6 +18,16 @@ public:
     {
     }
 
+    /// Overload that accepts an explicit context to avoid accessing data_part->storage
+    /// which may be a dangling reference if the storage has been dropped concurrently.
+    LoadedMergeTreeDataPartInfoForReader(
+        MergeTreeData::DataPartPtr data_part_, AlterConversionsPtr alter_conversions_, ContextPtr context_)
+        : IMergeTreeDataPartInfoForReader(std::move(context_))
+        , data_part(std::move(data_part_))
+        , alter_conversions(std::move(alter_conversions_))
+    {
+    }
+
     bool isCompactPart() const override { return DB::isCompactPart(data_part); }
 
     bool isWidePart() const override { return DB::isWidePart(data_part); }

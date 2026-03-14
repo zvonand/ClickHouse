@@ -2,69 +2,57 @@ SELECT count() FROM tab PREWHERE hasToken(text1, 'clickhouse')
 9
 9
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 UInt8 : 0
-ALIAS __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 :: 0 -> hasToken(text1, \'clickhouse\'_String) UInt8 : 1
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasAnyTokens(text1, ['clickhouse', 'database'])
 12
 12
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasAnyTokens_fe3e7ee6319ef68f4ce16598af2f74ad UInt8 : 0
-ALIAS __text_index_inv_idx1_hasAnyTokens_fe3e7ee6319ef68f4ce16598af2f74ad :: 0 -> hasAnyTokens(text1, _CAST([\'clickhouse\', \'database\']_Array(String), \'Array(String)\'_String)) UInt8 : 1
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasAllTokens(text1, ['column', 'store'])
 4
 4
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 UInt8 : 0
-ALIAS __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 :: 0 -> hasAllTokens(text1, _CAST([\'column\', \'store\']_Array(String), \'Array(String)\'_String)) UInt8 : 1
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasToken(text2, 'fastio')
 3
 3
 Actions: INPUT : 0 -> __text_index_inv_idx2_hasToken_031c1e476896eb07f39d9822dd12620f UInt8 : 0
-ALIAS __text_index_inv_idx2_hasToken_031c1e476896eb07f39d9822dd12620f :: 0 -> hasToken(text2, \'fastio\'_String) UInt8 : 1
 Name: inv_idx2
 SELECT count() FROM tab PREWHERE hasAnyTokens(text2, ['search', 'index'])
 8
 8
 Actions: INPUT : 0 -> __text_index_inv_idx2_hasAnyTokens_7bedad7e52c2822f613f74edb329da6c UInt8 : 0
-ALIAS __text_index_inv_idx2_hasAnyTokens_7bedad7e52c2822f613f74edb329da6c :: 0 -> hasAnyTokens(text2, _CAST([\'search\', \'index\']_Array(String), \'Array(String)\'_String)) UInt8 : 1
 Name: inv_idx2
 SELECT count() FROM tab PREWHERE hasAllTokens(text2, ['merge', 'tree'])
 2
 2
 Actions: INPUT : 0 -> __text_index_inv_idx2_hasAllTokens_fead84688df5bafaea91e8424f0132c0 UInt8 : 0
-ALIAS __text_index_inv_idx2_hasAllTokens_fead84688df5bafaea91e8424f0132c0 :: 0 -> hasAllTokens(text2, _CAST([\'merge\', \'tree\']_Array(String), \'Array(String)\'_String)) UInt8 : 1
 Name: inv_idx2
 SELECT count() FROM tab PREWHERE hasToken(text1, 'clickhouse') AND a > 0
 9
 9
 INPUT : 1 -> __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 UInt8 : 2
-ALIAS __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 :: 2 -> hasToken(text1, \'clickhouse\'_String) UInt8 : 1
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasAnyTokens(text1, ['clickhouse', 'database']) AND id BETWEEN 10 AND 100
 9
 9
 INPUT : 1 -> __text_index_inv_idx1_hasAnyTokens_fe3e7ee6319ef68f4ce16598af2f74ad UInt8 : 3
-ALIAS __text_index_inv_idx1_hasAnyTokens_fe3e7ee6319ef68f4ce16598af2f74ad :: 3 -> hasAnyTokens(text1, _CAST([\'clickhouse\', \'database\']_Array(String), \'Array(String)\'_String)) UInt8 : 2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasAllTokens(text1, ['column', 'store']) AND (a % 2) = 0
 4
 4
 INPUT : 1 -> __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 UInt8 : 3
-ALIAS __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 :: 3 -> hasAllTokens(text1, _CAST([\'column\', \'store\']_Array(String), \'Array(String)\'_String)) UInt8 : 1
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasToken(text1, 'analytics') OR a < 0
 4
 4
 INPUT : 1 -> __text_index_inv_idx1_hasToken_1a79efb7d60f86dbac3cb096c962fea4 UInt8 : 2
-ALIAS __text_index_inv_idx1_hasToken_1a79efb7d60f86dbac3cb096c962fea4 :: 2 -> hasToken(text1, \'analytics\'_String) UInt8 : 1
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE (hasAnyTokens(text1, ['log', 'event']) OR hasToken(text2, 'error')) AND id > 0
 5
 5
 INPUT : 1 -> __text_index_inv_idx1_hasAnyTokens_47ba659632d76350faade1513395047b UInt8 : 2
 INPUT : 2 -> __text_index_inv_idx2_hasToken_664111f690124b5e658766a7c244026a UInt8 : 3
-ALIAS __text_index_inv_idx1_hasAnyTokens_47ba659632d76350faade1513395047b :: 2 -> hasAnyTokens(text1, _CAST([\'log\', \'event\']_Array(String), \'Array(String)\'_String)) UInt8 : 1
-ALIAS __text_index_inv_idx2_hasToken_664111f690124b5e658766a7c244026a :: 3 -> hasToken(text2, \'error\'_String) UInt8 : 2
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE (a > 100 AND hasToken(text1, 'hot')) OR (a <= 100 AND hasAnyTokens(text2, ['cold', 'warm']))
@@ -72,8 +60,6 @@ SELECT count() FROM tab PREWHERE (a > 100 AND hasToken(text1, 'hot')) OR (a <= 1
 0
 INPUT : 1 -> __text_index_inv_idx1_hasToken_cd6aac15de6c40ec6770ee1ff075d202 UInt8 : 2
 INPUT : 2 -> __text_index_inv_idx2_hasAnyTokens_902ca71aeafd03caa02967c92f715062 UInt8 : 3
-ALIAS __text_index_inv_idx1_hasToken_cd6aac15de6c40ec6770ee1ff075d202 :: 2 -> hasToken(text1, \'hot\'_String) UInt8 : 1
-ALIAS __text_index_inv_idx2_hasAnyTokens_902ca71aeafd03caa02967c92f715062 :: 3 -> hasAnyTokens(text2, _CAST([\'cold\', \'warm\']_Array(String), \'Array(String)\'_String)) UInt8 : 2
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasToken(text1, 'clickhouse') AND hasAnyTokens(text1, ['clickhouse', 'database'])
@@ -81,32 +67,24 @@ SELECT count() FROM tab PREWHERE hasToken(text1, 'clickhouse') AND hasAnyTokens(
 9
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 UInt8 : 0
 INPUT : 1 -> __text_index_inv_idx1_hasAnyTokens_fe3e7ee6319ef68f4ce16598af2f74ad UInt8 : 1
-ALIAS __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 :: 0 -> hasToken(text1, \'clickhouse\'_String) UInt8 : 2
-ALIAS __text_index_inv_idx1_hasAnyTokens_fe3e7ee6319ef68f4ce16598af2f74ad :: 1 -> hasAnyTokens(text1, _CAST([\'clickhouse\', \'database\']_Array(String), \'Array(String)\'_String)) UInt8 : 0
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasAnyTokens(text1, ['clickhouse', 'database']) AND NOT hasToken(text1, 'mysql')
 12
 12
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasAnyTokens_fe3e7ee6319ef68f4ce16598af2f74ad UInt8 : 0
 INPUT : 1 -> __text_index_inv_idx1_hasToken_a24a29bac317b105b99d581f5caf15af UInt8 : 1
-ALIAS __text_index_inv_idx1_hasAnyTokens_fe3e7ee6319ef68f4ce16598af2f74ad :: 0 -> hasAnyTokens(text1, _CAST([\'clickhouse\', \'database\']_Array(String), \'Array(String)\'_String)) UInt8 : 2
-ALIAS __text_index_inv_idx1_hasToken_a24a29bac317b105b99d581f5caf15af :: 1 -> hasToken(text1, \'mysql\'_String) UInt8 : 0
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasAllTokens(text1, ['column', 'store']) OR hasAnyTokens(text1, ['olap', 'analytics'])
 8
 8
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 UInt8 : 0
 INPUT : 1 -> __text_index_inv_idx1_hasAnyTokens_25116e42046902f8c1d98ab3c6fe6e1e UInt8 : 1
-ALIAS __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 :: 0 -> hasAllTokens(text1, _CAST([\'column\', \'store\']_Array(String), \'Array(String)\'_String)) UInt8 : 2
-ALIAS __text_index_inv_idx1_hasAnyTokens_25116e42046902f8c1d98ab3c6fe6e1e :: 1 -> hasAnyTokens(text1, _CAST([\'olap\', \'analytics\']_Array(String), \'Array(String)\'_String)) UInt8 : 0
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasToken(text1, 'clickhouse') AND hasToken(text2, 'fastio')
 3
 3
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 UInt8 : 0
 INPUT : 1 -> __text_index_inv_idx2_hasToken_031c1e476896eb07f39d9822dd12620f UInt8 : 1
-ALIAS __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 :: 0 -> hasToken(text1, \'clickhouse\'_String) UInt8 : 2
-ALIAS __text_index_inv_idx2_hasToken_031c1e476896eb07f39d9822dd12620f :: 1 -> hasToken(text2, \'fastio\'_String) UInt8 : 0
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasAnyTokens(text1, ['search', 'query']) OR hasAllTokens(text2, ['index', 'optimize'])
@@ -114,8 +92,6 @@ SELECT count() FROM tab PREWHERE hasAnyTokens(text1, ['search', 'query']) OR has
 14
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasAnyTokens_378d09f5b3220164090332a1cec47b65 UInt8 : 0
 INPUT : 1 -> __text_index_inv_idx2_hasAllTokens_cb6b67660bf9b2a4816f8f2e8ad68cc2 UInt8 : 1
-ALIAS __text_index_inv_idx1_hasAnyTokens_378d09f5b3220164090332a1cec47b65 :: 0 -> hasAnyTokens(text1, _CAST([\'search\', \'query\']_Array(String), \'Array(String)\'_String)) UInt8 : 2
-ALIAS __text_index_inv_idx2_hasAllTokens_cb6b67660bf9b2a4816f8f2e8ad68cc2 :: 1 -> hasAllTokens(text2, _CAST([\'index\', \'optimize\']_Array(String), \'Array(String)\'_String)) UInt8 : 0
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE (hasToken(text1, 'user') AND hasAnyTokens(text2, ['login', 'logout'])) OR (a >= 0 AND a <= 10)
@@ -123,8 +99,6 @@ SELECT count() FROM tab PREWHERE (hasToken(text1, 'user') AND hasAnyTokens(text2
 12
 INPUT : 1 -> __text_index_inv_idx1_hasToken_75200db795485e029295a2ddb6c7655a UInt8 : 3
 INPUT : 2 -> __text_index_inv_idx2_hasAnyTokens_f5456eb9877f271790400a40e2ce2432 UInt8 : 4
-ALIAS __text_index_inv_idx1_hasToken_75200db795485e029295a2ddb6c7655a :: 3 -> hasToken(text1, \'user\'_String) UInt8 : 2
-ALIAS __text_index_inv_idx2_hasAnyTokens_f5456eb9877f271790400a40e2ce2432 :: 4 -> hasAnyTokens(text2, _CAST([\'login\', \'logout\']_Array(String), \'Array(String)\'_String)) UInt8 : 3
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE NOT hasToken(text1, 'debug') AND hasAnyTokens(text2, ['info', 'warn', 'error'])
@@ -132,8 +106,6 @@ SELECT count() FROM tab PREWHERE NOT hasToken(text1, 'debug') AND hasAnyTokens(t
 2
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasToken_c217b9edabe6f681fa5d3549045a068e UInt8 : 0
 INPUT : 1 -> __text_index_inv_idx2_hasAnyTokens_ca72c33af5131b335d7619f7e1597825 UInt8 : 1
-ALIAS __text_index_inv_idx1_hasToken_c217b9edabe6f681fa5d3549045a068e :: 0 -> hasToken(text1, \'debug\'_String) UInt8 : 2
-ALIAS __text_index_inv_idx2_hasAnyTokens_ca72c33af5131b335d7619f7e1597825 :: 1 -> hasAnyTokens(text2, _CAST([\'info\', \'warn\', \'error\']_Array(String), \'Array(String)\'_String)) UInt8 : 0
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE NOT hasAllTokens(text1, ['internal', 'test']) AND a > 0 AND hasToken(text2, 'prod')
@@ -141,8 +113,6 @@ SELECT count() FROM tab PREWHERE NOT hasAllTokens(text1, ['internal', 'test']) A
 2
 INPUT : 1 -> __text_index_inv_idx1_hasAllTokens_73b884ae6b94aafc2244b08a91da6a3a UInt8 : 2
 INPUT : 2 -> __text_index_inv_idx2_hasToken_fad102e37c10b7e4124a83a019c495d8 UInt8 : 3
-ALIAS __text_index_inv_idx1_hasAllTokens_73b884ae6b94aafc2244b08a91da6a3a :: 2 -> hasAllTokens(text1, _CAST([\'internal\', \'test\']_Array(String), \'Array(String)\'_String)) UInt8 : 1
-ALIAS __text_index_inv_idx2_hasToken_fad102e37c10b7e4124a83a019c495d8 :: 3 -> hasToken(text2, \'prod\'_String) UInt8 : 2
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE NOT (hasAnyTokens(text1, ['drop', 'truncate']) OR hasToken(text2, 'danger')) AND id IN (1, 2, 3, 4)
@@ -150,8 +120,6 @@ SELECT count() FROM tab PREWHERE NOT (hasAnyTokens(text1, ['drop', 'truncate']) 
 4
 INPUT : 1 -> __text_index_inv_idx1_hasAnyTokens_5fafbc93f0bb83e3a84167577b0daf96 UInt8 : 2
 INPUT : 2 -> __text_index_inv_idx2_hasToken_44f9476b70574758924ffa0c5cf5ee1e UInt8 : 3
-ALIAS __text_index_inv_idx1_hasAnyTokens_5fafbc93f0bb83e3a84167577b0daf96 :: 2 -> hasAnyTokens(text1, _CAST([\'drop\', \'truncate\']_Array(String), \'Array(String)\'_String)) UInt8 : 0
-ALIAS __text_index_inv_idx2_hasToken_44f9476b70574758924ffa0c5cf5ee1e :: 3 -> hasToken(text2, \'danger\'_String) UInt8 : 2
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE (a > 10 AND hasToken(text1, 'clickhouse')) OR (a <= 10 AND hasAnyTokens(text2, ['mysql', 'postgres']))
@@ -159,8 +127,6 @@ SELECT count() FROM tab PREWHERE (a > 10 AND hasToken(text1, 'clickhouse')) OR (
 8
 INPUT : 1 -> __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 UInt8 : 2
 INPUT : 2 -> __text_index_inv_idx2_hasAnyTokens_dfad1455147e3893dec57afe18952421 UInt8 : 3
-ALIAS __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 :: 2 -> hasToken(text1, \'clickhouse\'_String) UInt8 : 1
-ALIAS __text_index_inv_idx2_hasAnyTokens_dfad1455147e3893dec57afe18952421 :: 3 -> hasAnyTokens(text2, _CAST([\'mysql\', \'postgres\']_Array(String), \'Array(String)\'_String)) UInt8 : 2
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE (hasAllTokens(text1, ['column', 'store']) AND a BETWEEN 1 AND 100) OR (hasAnyTokens(text2, ['lake', 'warehouse']) AND id > 1000)
@@ -168,8 +134,6 @@ SELECT count() FROM tab PREWHERE (hasAllTokens(text1, ['column', 'store']) AND a
 2
 INPUT : 2 -> __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 UInt8 : 5
 INPUT : 3 -> __text_index_inv_idx2_hasAnyTokens_cb2a484b4184f8f5cde135d4de6ce4b2 UInt8 : 6
-ALIAS __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 :: 5 -> hasAllTokens(text1, _CAST([\'column\', \'store\']_Array(String), \'Array(String)\'_String)) UInt8 : 4
-ALIAS __text_index_inv_idx2_hasAnyTokens_cb2a484b4184f8f5cde135d4de6ce4b2 :: 6 -> hasAnyTokens(text2, _CAST([\'lake\', \'warehouse\']_Array(String), \'Array(String)\'_String)) UInt8 : 5
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE (NOT hasToken(text1, 'archived') AND a > 0) OR (hasAnyTokens(text2, ['active', 'online']) AND id % 5 = 0)
@@ -177,32 +141,26 @@ SELECT count() FROM tab PREWHERE (NOT hasToken(text1, 'archived') AND a > 0) OR 
 128
 INPUT : 2 -> __text_index_inv_idx1_hasToken_09bfe6cf5d2e899c4076cb956592abb0 UInt8 : 4
 INPUT : 3 -> __text_index_inv_idx2_hasAnyTokens_dab1d10d7d24fdf67733fa0bf8b9da55 UInt8 : 5
-ALIAS __text_index_inv_idx1_hasToken_09bfe6cf5d2e899c4076cb956592abb0 :: 4 -> hasToken(text1, \'archived\'_String) UInt8 : 3
-ALIAS __text_index_inv_idx2_hasAnyTokens_dab1d10d7d24fdf67733fa0bf8b9da55 :: 5 -> hasAnyTokens(text2, _CAST([\'active\', \'online\']_Array(String), \'Array(String)\'_String)) UInt8 : 4
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasToken(text1, 'clickhouse') WHERE a > 0
 9
 9
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 UInt8 : 0
-ALIAS __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 :: 0 -> hasToken(text1, \'clickhouse\'_String) UInt8 : 1
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasAllTokens(text1, ['column', 'store']) WHERE a NOT IN (150, 160) AND id != 15
 4
 4
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 UInt8 : 0
-ALIAS __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 :: 0 -> hasAllTokens(text1, _CAST([\'column\', \'store\']_Array(String), \'Array(String)\'_String)) UInt8 : 1
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasToken(text1, 'clickhouse') WHERE hasToken(text2, 'fastio')
 3
 3
 Actions: INPUT : 0 -> __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 UInt8 : 0
-ALIAS __text_index_inv_idx1_hasToken_8f09eac94ff2d16a375a38795db4e5a7 :: 0 -> hasToken(text1, \'clickhouse\'_String) UInt8 : 1
 Name: inv_idx2
 Name: inv_idx1
 SELECT count() FROM tab PREWHERE hasAllTokens(text1, ['column', 'store']) WHERE hasAnyTokens(text1, ['olap', 'analytics'])
 1
 1
 INPUT : 1 -> __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 UInt8 : 1
-ALIAS __text_index_inv_idx1_hasAllTokens_64566df4f47b0f746cfe56ab10201f26 :: 1 -> hasAllTokens(text1, _CAST([\'column\', \'store\']_Array(String), \'Array(String)\'_String)) UInt8 : 2
 Name: inv_idx1

@@ -17,21 +17,12 @@ Added: [__text_index_idx_hasAnyTokens_6ba31a5fd94cf84b5980ef5b2f57c99c, __text_i
 Added: [__text_index_idx_hasAllTokens_0cf595e5be4a417195d691692e9a6bbb], Removed: [text]
 - Test direct read optimization with EXPLAIN
 Actions: INPUT : 0 -> __text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526 UInt8 : 0
-ALIAS __text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526 :: 0 -> hasToken(text, \'Alick\') UInt8 : 1
 Actions: INPUT : 0 -> __text_index_idx_hasAllTokens_4ee2bec532c6178dac3d1abb4b4de13a UInt8 : 0
-ALIAS __text_index_idx_hasAllTokens_4ee2bec532c6178dac3d1abb4b4de13a :: 0 -> hasAllTokens(text, [\'Alick\']) UInt8 : 1
 Actions: INPUT : 0 -> __text_index_idx_hasAnyTokens_80088ac930a68b662cb3f3d47743878f UInt8 : 0
-ALIAS __text_index_idx_hasAnyTokens_80088ac930a68b662cb3f3d47743878f :: 0 -> hasAnyTokens(text, [\'Alick\']) UInt8 : 1
 INPUT : 1 -> __text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526 UInt8 : 2
-FUNCTION or(__text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526 :: 2, greater(length(text), 1) :: 0) -> or(hasToken(text, \'Alick\'), greater(length(text), 1)) UInt8 : 1
 Actions: INPUT : 0 -> __text_index_idx_hasAnyTokens_80088ac930a68b662cb3f3d47743878f UInt8 : 0
-ALIAS __text_index_idx_hasAnyTokens_80088ac930a68b662cb3f3d47743878f :: 0 -> hasAnyTokens(text, [\'Alick\']) UInt8 : 1
-Prewhere filter column: and(__text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526, __text_index_idx_hasToken_03ba1ee9f8f5547fa3472607e74b54ab) (removed)
 Actions: INPUT : 0 -> __text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526 UInt8 : 0
 INPUT : 1 -> __text_index_idx_hasToken_03ba1ee9f8f5547fa3472607e74b54ab UInt8 : 1
-FUNCTION and(__text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526 :: 0, __text_index_idx_hasToken_03ba1ee9f8f5547fa3472607e74b54ab :: 1) -> and(__text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526, __text_index_idx_hasToken_03ba1ee9f8... UInt8 : 2
 Actions: INPUT : 0 -> __text_index_idx_hasAnyTokens_6ba31a5fd94cf84b5980ef5b2f57c99c UInt8 : 0
 INPUT : 1 -> __text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526 UInt8 : 1
-FUNCTION or(__text_index_idx_hasAnyTokens_6ba31a5fd94cf84b5980ef5b2f57c99c :: 0, __text_index_idx_hasToken_55f6a26b032e423b9e4a3c2172b24526 :: 1) -> or(hasAnyTokens(text, [\'Blick\']), hasToken(text, \'Alick\')) UInt8 : 2
 Actions: INPUT : 0 -> __text_index_idx_hasAllTokens_0cf595e5be4a417195d691692e9a6bbb UInt8 : 0
-FUNCTION not(__text_index_idx_hasAllTokens_0cf595e5be4a417195d691692e9a6bbb :: 0) -> not(hasAllTokens(text, [\'Blick\'])) UInt8 : 1

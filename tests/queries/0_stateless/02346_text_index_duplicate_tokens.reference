@@ -1,11 +1,5 @@
 1
 INPUT : 1 -> __text_index_idx_s_like_c305058f11a5516ef44493a7cfb61e2e UInt8 : 3
-FUNCTION and(__text_index_idx_s_like_c305058f11a5516ef44493a7cfb61e2e : 3, like(__table1.s, \'%Hello%\'_String) :: 4) -> and(__text_index_idx_s_like_c305058f11a5516ef44493a7cfb61e2e, like(__table1.s, \'%Hello%\'_String)) UInt8 : 2
-FUNCTION and(__text_index_idx_s_like_c305058f11a5516ef44493a7cfb61e2e :: 3, like(__table1.s, \'%hello%\'_String) :: 1) -> and(__text_index_idx_s_like_c305058f11a5516ef44493a7cfb61e2e, like(__table1.s, \'%hello%\'_String)) UInt8 : 4
-FUNCTION or(and(__text_index_idx_s_like_c305058f11a5516ef44493a7cfb61e2e, like(__table1.s, \'%Hello%\'_String)) :: 2, and(__text_index_idx_s_like_c305058f11a5516ef44493a7cfb61e2e, like(__table1.s, \'%hello%\'_String)) :: 4) -> or(like(__table1.s, \'%Hello%\'_String), like(__table1.s, \'%hello%\'_String)) UInt8 : 1
 1
 1
 INPUT : 1 -> __text_index_idx_s_startsWith_b7277e8eb6394ebe778469bf968cb40f UInt8 : 3
-FUNCTION and(__text_index_idx_s_startsWith_b7277e8eb6394ebe778469bf968cb40f : 3, startsWith(__table1.s, \'Hello,\'_String) :: 4) -> and(__text_index_idx_s_startsWith_b7277e8eb6394ebe778469bf968cb40f, startsWith(__table1.s, \'Hello,\'_... UInt8 : 2
-FUNCTION and(__text_index_idx_s_startsWith_b7277e8eb6394ebe778469bf968cb40f :: 3, startsWith(__table1.s, \'hello,\'_String) :: 1) -> and(__text_index_idx_s_startsWith_b7277e8eb6394ebe778469bf968cb40f, startsWith(__table1.s, \'hello,\'_... UInt8 : 4
-FUNCTION or(and(__text_index_idx_s_startsWith_b7277e8eb6394ebe778469bf968cb40f, startsWith(__table1.s, \'Hello,\'_... :: 2, and(__text_index_idx_s_startsWith_b7277e8eb6394ebe778469bf968cb40f, startsWith(__table1.s, \'hello,\'_... :: 4) -> or(startsWith(__table1.s, \'Hello,\'_String), startsWith(__table1.s, \'hello,\'_String)) UInt8 : 1

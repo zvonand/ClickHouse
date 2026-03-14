@@ -5,13 +5,13 @@
 #include <Common/Elf.h>
 #include <boost/noncopyable.hpp>
 
-#if defined(OS_DARWIN)
-#include <Common/MachO.h>
-#endif
-
-
 namespace DB
 {
+
+#if defined(OS_DARWIN)
+/// Forward declaration to avoid pulling heavy MachO.h (and MMapReadBufferFromFile) into every includer.
+class MachO;
+#endif
 
 /** Allow to quickly find symbol name from address.
   * Used as a replacement for "dladdr" function which is extremely slow.

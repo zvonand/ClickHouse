@@ -83,23 +83,44 @@ void MachO::init()
 
 std::optional<MachO::Section> MachO::findSectionByName(const char * name) const
 {
-    /// Map ELF-style section names to Mach-O names:
-    /// ".debug_info" -> "__debug_info"
+    /// Map ELF-style section names to Mach-O section names.
+    /// Most follow the pattern ".debug_foo" -> "__debug_foo", but Mach-O section names
+    /// are limited to 16 characters, so longer names need explicit mappings.
+    static const std::pair<const char *, const char *> explicit_mappings[] = {
+        {".debug_str_offsets", "__debug_str_offs"},
+        {".debug_rnglists", "__debug_rnglists"},
+        {".debug_loclists", "__debug_loclists"},
+        {".debug_line_str", "__debug_line_str"},
+        {".debug_addr", "__debug_addr"},
+    };
+
     std::string macho_name;
-    if (name[0] == '.')
+
+    for (const auto & [elf_name, macho_mapped] : explicit_mappings)
     {
-        macho_name = "__";
-        macho_name += (name + 1);
-    }
-    else
-    {
-        macho_name = name;
+        if (strcmp(name, elf_name) == 0)
+        {
+            macho_name = macho_mapped;
+            break;
+        }
     }
 
-    /// Mach-O section names are limited to 16 characters.
-    /// Truncate for matching.
-    if (macho_name.size() > 16)
-        macho_name.resize(16);
+    if (macho_name.empty())
+    {
+        if (name[0] == '.')
+        {
+            macho_name = "__";
+            macho_name += (name + 1);
+        }
+        else
+        {
+            macho_name = name;
+        }
+
+        /// Truncate to 16 characters (Mach-O section name limit).
+        if (macho_name.size() > 16)
+            macho_name.resize(16);
+    }
 
     for (const auto & section : dwarf_sections)
     {

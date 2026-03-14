@@ -423,7 +423,9 @@ void StackTrace::forEachFrame(
                 DB::Dwarf::LocationInfo location;
                 /// Convert runtime address to linked (pre-ASLR) address for DWARF lookup.
                 uintptr_t dwarf_addr = uintptr_t(current_frame.virtual_addr) - object->slide;
-                if (i > 0)
+                /// The first frame (at index `offset`) is the instruction pointer, not a return address.
+                /// Only subtract 1 for subsequent frames to get back into the call instruction.
+                if (i > offset)
                     dwarf_addr -= 1;
 
                 if (dwarf_it->second.findAddress(dwarf_addr, location, mode, inline_frames))

@@ -12,6 +12,7 @@
 #include <filesystem>
 
 #if defined(OS_DARWIN)
+#include <Common/MachO.h>
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
 #include <mach-o/dyld.h>

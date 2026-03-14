@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# The script checks if all submodules defined in $GIT_ROOT/.gitmodules exist in $GIT_ROOT/contrib
+# The script checks if all submodules defined in .gitmodules exist in contrib/,
+# validates their URLs and names, and ensures there are no recursive submodules.
 
 set -e
 
@@ -20,7 +21,7 @@ git config --file .gitmodules --null --get-regexp path | sed -z 's|.*\n||' | \
 
 
 # All submodules should be from https://github.com/
-git config --file "$ROOT_PATH/.gitmodules" --get-regexp 'submodule\..+\.url' | \
+git config --file .gitmodules --get-regexp 'submodule\..+\.url' | \
 while read -r line; do
     name=${line#submodule.}; name=${name%.url*}
     url=${line#* }
@@ -29,9 +30,17 @@ done
 
 # All submodules should be of this form: [submodule "contrib/libxyz"] (for consistency, the submodule name does matter too much)
 # - restrict the check to top-level .gitmodules file
-git config --file "$ROOT_PATH/.gitmodules" --get-regexp 'submodule\..+\.path' | \
+git config --file .gitmodules --get-regexp 'submodule\..+\.path' | \
 while read -r line; do
     name=${line#submodule.}; name=${name%.path*}
     path=${line#* }
     [ "$name" != "$path" ] && echo "Submodule name '$name' is not equal to it's path '$path'"
 done
+
+# No recursive submodules allowed: check that no submodule contains its own .gitmodules with entries
+git config --file .gitmodules --null --get-regexp path | sed -z 's|.*\n||' | \
+  xargs -0 --no-run-if-empty -I{} bash -c '
+    if [ -f "{}/.gitmodules" ] && grep -q "\\[submodule" "{}/.gitmodules"; then
+        echo "Recursive submodules are not allowed: {} contains its own .gitmodules with submodule entries"
+    fi
+  ' 2>&1

@@ -414,7 +414,7 @@ static inline __m256i b58_intermediate_to_raw(__m256i intermediate)
     __m256i cB = _mm256_set1_epi64x(static_cast<long long>(1307386003U)); // 2^42/58^2
     __m256i _58 = _mm256_set1_epi64x(58LL);
 
-    /// div(k) = floor(x / 58^k),  rem(k) = div(k) % 58
+    /// div(k) = floor(x / 58^k), rem(k) = div(k) % 58
     __m256i div0 = intermediate;
     __m256i div1 = _mm256_srli_epi64(_mm256_mul_epu32(div0, cA), 37);
     __m256i rem0 = _mm256_sub_epi64(div0, _mm256_mul_epu32(div1, _58));

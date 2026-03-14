@@ -435,7 +435,24 @@ std::optional<String> optimizeUseNormalProjections(
 
     if (parent_reading_select_result->parts_with_ranges.empty())
     {
-        /// All parts are taken from projection
+        /// All parts are taken from projection.
+        /// If the projection stream has a different header than the original stream
+        /// (e.g., extra columns from PREWHERE when used with parallel replicas),
+        /// add a converting step to match the expected output.
+        const auto & expected_header = iter->node->children[iter->next_child - 1]->step->getOutputHeader();
+        if (!blocksHaveEqualStructure(*next_node->step->getOutputHeader(), *expected_header))
+        {
+            auto converting_dag = ActionsDAG::makeConvertingActions(
+                next_node->step->getOutputHeader()->getColumnsWithTypeAndName(),
+                expected_header->getColumnsWithTypeAndName(),
+                ActionsDAG::MatchColumnsMode::Name,
+                nullptr);
+            auto & converting_node = nodes.emplace_back();
+            converting_node.step = std::make_unique<ExpressionStep>(next_node->step->getOutputHeader(), std::move(converting_dag));
+            converting_node.children.push_back(next_node);
+            next_node = &converting_node;
+        }
+
         iter->node->children[iter->next_child - 1] = next_node;
     }
     else

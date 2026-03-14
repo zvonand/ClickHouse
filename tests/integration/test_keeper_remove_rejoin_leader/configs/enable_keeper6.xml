@@ -11,8 +11,14 @@
             <operation_timeout_ms>5000</operation_timeout_ms>
             <session_timeout_ms>30000</session_timeout_ms>
             <raft_logs_level>trace</raft_logs_level>
+            <!-- Short timeouts so the election timer fires twice before
+                 join_cluster_req arrives (steps_to_down_ 2→1→0), triggering
+                 cancel_schedulers() and leaving all initial peers abandoned
+                 (hb_task_=null) in peers_.  The existing time.sleep(2) before
+                 add_members provides ~1700 ms of margin. -->
             <election_timeout_lower_bound_ms>100</election_timeout_lower_bound_ms>
             <election_timeout_upper_bound_ms>200</election_timeout_upper_bound_ms>
+            <nuraft_test_mode>true</nuraft_test_mode>
         </coordination_settings>
 
         <!-- node6 joins the cluster after nodes 2 and 3 have been removed: active members are 1, 4, 5. -->
@@ -21,26 +27,21 @@
                 <id>1</id>
                 <hostname>{node1}</hostname>
                 <port>9234</port>
-                <priority>100</priority>
             </server>
             <server>
                 <id>4</id>
                 <hostname>{node4}</hostname>
                 <port>9234</port>
-                <priority>1</priority>
             </server>
             <server>
                 <id>5</id>
                 <hostname>{node5}</hostname>
                 <port>9234</port>
-                <priority>1</priority>
             </server>
             <server>
                 <id>6</id>
                 <hostname>{node6}</hostname>
                 <port>9234</port>
-                <priority>1</priority>
-                <start_as_follower>true</start_as_follower>
             </server>
         </raft_configuration>
     </keeper_server>

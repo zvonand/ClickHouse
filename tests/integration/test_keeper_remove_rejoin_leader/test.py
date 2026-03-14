@@ -200,6 +200,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     # Retrieve the generated config filename for node4 from CONFIG_DIR.
     cfg4 = _get_generated_cfg(node_names, 4)
     start_keeper(node4, cfg4)
+    time.sleep(2)
     result = send_rcfg(
         cluster,
         leader,
@@ -246,6 +247,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     # so node5 can connect to them during startup (async Keeper init).
     cfg5 = _get_generated_cfg(node_names, 5)
     start_keeper(node5, cfg5)
+    time.sleep(2)
     result = send_rcfg(
         cluster,
         leader,
@@ -287,6 +289,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     # so node6 can connect to them during startup (async Keeper init).
     cfg6 = _get_generated_cfg(node_names, 6)
     start_keeper(node6, cfg6)
+    time.sleep(2)
     result = send_rcfg(
         cluster,
         leader,
@@ -336,6 +339,12 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     new_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
     assert new_leader is not None, "No leader elected after leadership transfer"
 
+    # Without the fix (NuRaft PR #91), the new leader crashes immediately
+    # inside become_leader(): enable_hb_for_peer() calls schedule_task() with
+    # the null hb_task_ of a peer that was abandoned by cancel_schedulers()
+    # during the joining phase, causing a null pointer dereference.
+    keeper_utils.wait_until_connected(cluster, new_leader, timeout=10.0)
+
     # Remove the original leader (now a follower) from the cluster.
     result = send_rcfg(
         cluster,
@@ -347,6 +356,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
 
     # Verify the cluster is healthy with a leader from the replacement nodes.
     final_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
+    print(f"Final leader: {final_leader}")
     assert (
         final_leader is not None
     ), "No leader in final cluster after removing original leader"

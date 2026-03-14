@@ -9,6 +9,7 @@ without requiring a restart.
 
 import os
 import time
+import uuid
 
 import pytest
 
@@ -185,6 +186,9 @@ def test_cert_reload_on_reconnect(started_cluster):
     # Wait for cluster to be ready
     wait_nodes_ready(all_nodes)
 
+    # Generate unique test ID for this run to avoid conflicts on flaky retries
+    test_id = uuid.uuid4().hex[:8]
+
     # Get initial certificate serial from file
     initial_serial = get_cert_serial_from_file(node1)
     print(f"Initial certificate serial (from file): {initial_serial}")
@@ -195,7 +199,7 @@ def test_cert_reload_on_reconnect(started_cluster):
     assert initial_serial == initial_served, "Raft port should serve initial cert"
 
     # Verify initial cluster works
-    verify_cluster_works("/test_initial", all_nodes)
+    verify_cluster_works(f"/test_initial_{test_id}", all_nodes)
     print("Initial cluster working with first certificates")
 
     # Replace certificate files on ALL nodes
@@ -213,8 +217,15 @@ def test_cert_reload_on_reconnect(started_cluster):
     print(f"New certificate serial (from file): {new_serial}")
     assert initial_serial != new_serial, "Certificate serial should have changed"
 
-    # Give time for reload to process
-    time.sleep(2)
+    # Wait for certificate reload to complete by polling the Raft port
+    def wait_for_cert_reload(node, target_host, expected_serial, timeout=30):
+        start = time.time()
+        while time.time() - start < timeout:
+            served = get_cert_serial_from_raft_port(node, target_host)
+            if served == expected_serial:
+                return True
+            time.sleep(0.5)
+        return False
 
     # Note: Existing connections keep their old cert - that's expected.
     # The new cert is only used for NEW connections.
@@ -228,14 +239,13 @@ def test_cert_reload_on_reconnect(started_cluster):
     print("Node3 restarted and reconnected")
 
     # Verify cluster works - proves new connections use updated certs
-    verify_cluster_works("/test_after_restart", all_nodes)
+    verify_cluster_works(f"/test_after_restart_{test_id}", all_nodes)
     print("Cluster working after restart - new Raft connections use updated certs!")
 
     # Now verify the Raft port is serving the NEW certificate
     # Node3 just restarted, so its connections to node1 are fresh
-    served_serial = get_cert_serial_from_raft_port(node3, "node1")
-    print(f"Certificate serial from Raft port after restart: {served_serial}")
-    assert served_serial == new_serial, (
-        f"Raft port should serve new cert after reload. Expected {new_serial}, got {served_serial}"
+    # Use polling to handle async certificate reload
+    assert wait_for_cert_reload(node3, "node1", new_serial, timeout=30), (
+        f"Raft port should serve new cert after reload. Expected {new_serial}"
     )
     print("Verified: Raft SSL port is serving the updated certificate!")

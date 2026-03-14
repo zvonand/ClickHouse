@@ -552,12 +552,13 @@ static size_t encodeBase58_32(const uint8_t * src, uint8_t * dst)
     __m256i mask1 = _mm256_cmpeq_epi64(skip_div8, compare);
     __m256i mask2 = _mm256_cmpgt_epi64(compare, skip_div8);
 
-    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst - 8ULL * (skip / 8ULL)), mask1, shifted);
+    auto dst_addr = reinterpret_cast<uintptr_t>(dst);
+    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst_addr - 8ULL * (skip / 8ULL)), mask1, shifted);
 
     __m128i last = _mm_bslli_si128(_mm256_extractf128_si256(base58_1, 0), 3);
     _mm_storeu_si128(reinterpret_cast<__m128i *>(dst + 29ULL - skip), last);
 
-    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst - skip), mask2, base58_0);
+    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst_addr - skip), mask2, base58_0);
 
     return RAW58_SZ - skip;
 }
@@ -628,8 +629,9 @@ static size_t encodeBase58_64(const uint8_t * src, uint8_t * dst)
     __m256i mask1 = _mm256_cmpeq_epi64(skip_div8, compare);
     __m256i mask2 = _mm256_cmpgt_epi64(compare, skip_div8);
 
-    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst - 8ULL * (skip / 8ULL)), mask1, shifted);
-    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst - skip), mask2, base58_0);
+    auto dst_addr = reinterpret_cast<uintptr_t>(dst);
+    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst_addr - 8ULL * (skip / 8ULL)), mask1, shifted);
+    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst_addr - skip), mask2, base58_0);
     _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst + 32ULL - skip), base58_1);
 
     __m128i last = _mm_bslli_si128(_mm256_extractf128_si256(base58_2, 1), 6);

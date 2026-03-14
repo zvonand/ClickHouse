@@ -3,6 +3,7 @@
 #include <functional>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <Core/Field.h>
@@ -25,21 +26,26 @@ extern const int BAD_ARGUMENTS;
 ///   - Positional arguments: `command('2026-01-01')` mapped by index to a name
 ///   - Mixed:             `command('2026-01-01', dry_run = 1)`
 ///   - Defaults:          filled in after parsing when an argument was not supplied
+///   - Type validation:   optional per-argument Field::Types::Which constraint
 ///
 /// Usage:
-///     ExecuteCommandArgs parser("remove_orphan_files");
-///     parser.addPositional("older_than", Field::Types::String);
-///     parser.addNamed("location",  Field::Types::String);
-///     parser.addNamed("dry_run",   Field::Types::UInt64);
-///     parser.addDefault("dry_run", Field(UInt64(0)));
+///     ExecuteCommandArgs schema("remove_orphan_files");
+///     schema.addPositional("older_than", Field::Types::String);
+///     schema.addNamed("location",  Field::Types::String);
+///     schema.addNamed("dry_run",   Field::Types::UInt64);
+///     schema.addDefault("dry_run", Field(UInt64(0)));
 ///
-///     auto result = parser.parse(args_ast);
-///     // result.get<String>("older_than"), result.has("location"), etc.
+///     auto result = schema.parse(args_ast);
+///     // result.getAs<String>("older_than"), result.has("location"), etc.
+///
+///   Args registered without a type accept any Field type (useful for
+///   complex types like Array or values needing custom conversion):
+///     schema.addNamed("snapshot_ids");   // no type check
 ///
 class ExecuteCommandArgs
 {
 public:
-    /// Parsed result — a thin wrapper over the resolved name→value map.
+    /// Parsed result — a thin wrapper over the resolved name->value map.
     class Result
     {
     public:
@@ -67,18 +73,32 @@ public:
 
     explicit ExecuteCommandArgs(String command_name_) : command_name(std::move(command_name_)) {}
 
-    /// Register a positional argument.  Positional args are matched in order
-    /// of registration and also accepted as named (`key = value`).
+    /// Register a positional argument with type validation.
     void addPositional(const String & name, Field::Types::Which expected_type)
     {
         positional_names.push_back(name);
+        known_names.insert(name);
         expected_types[name] = expected_type;
     }
 
-    /// Register a named-only argument (cannot be passed positionally).
+    /// Register a positional argument that accepts any Field type.
+    void addPositional(const String & name)
+    {
+        positional_names.push_back(name);
+        known_names.insert(name);
+    }
+
+    /// Register a named-only argument with type validation.
     void addNamed(const String & name, Field::Types::Which expected_type)
     {
+        known_names.insert(name);
         expected_types[name] = expected_type;
+    }
+
+    /// Register a named-only argument that accepts any Field type.
+    void addNamed(const String & name)
+    {
+        known_names.insert(name);
     }
 
     /// Register a default value for an argument (positional or named).
@@ -144,6 +164,7 @@ public:
 private:
     String command_name;
     std::vector<String> positional_names;
+    std::unordered_set<String> known_names;
     std::unordered_map<String, Field::Types::Which> expected_types;
     std::unordered_map<String, Field> defaults;
     std::vector<std::function<void(Result &)>> post_parse_callbacks;
@@ -164,11 +185,13 @@ private:
 
     void setNamed(Result & result, const String & name, const Field & value) const
     {
-        auto it = expected_types.find(name);
-        if (it == expected_types.end())
+        if (!known_names.contains(name))
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unknown parameter '{}' for {}", name, command_name);
 
-        validateType(name, value, it->second);
+        auto it = expected_types.find(name);
+        if (it != expected_types.end())
+            validateType(name, value, it->second);
+
         result.values[name] = value;
     }
 
@@ -203,6 +226,7 @@ private:
             case Field::Types::Int64:   return "Int64";
             case Field::Types::Float64: return "Float64";
             case Field::Types::String:  return "String";
+            case Field::Types::Array:   return "Array";
             default:                    return "Unknown";
         }
     }

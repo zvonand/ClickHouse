@@ -2,6 +2,7 @@
 #if USE_AVRO
 
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -43,6 +44,7 @@
 #include <IO/ReadHelpers.h>
 #include <Parsers/ASTLiteral.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteCommandArgs.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergFieldParseHelpers.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/IcebergMetadataLog.h>
 
@@ -59,7 +61,6 @@
 #include <Storages/ObjectStorage/DataLakes/Common/AvroForIcebergDeserializer.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Compaction.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Constant.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteOptionsParser.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergDataObjectInfo.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergIterator.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergMetadata.h>
@@ -623,6 +624,59 @@ static time_t parseTimestamp(const String & ts_str)
     return ts;
 }
 
+static ExecuteCommandArgs makeExpireSnapshotsSchema()
+{
+    ExecuteCommandArgs schema("expire_snapshots");
+    schema.addPositional("expire_before", Field::Types::String);
+    schema.addNamed("retention_period");
+    schema.addNamed("retain_last");
+    schema.addNamed("snapshot_ids");
+    schema.addNamed("dry_run");
+    schema.addDefault("dry_run", Field(UInt64(0)));
+    return schema;
+}
+
+static Iceberg::ExpireSnapshotsOptions buildExpireSnapshotsOptions(const ExecuteCommandArgs::Result & parsed)
+{
+    Iceberg::ExpireSnapshotsOptions options;
+    static constexpr std::string_view cmd = "expire_snapshots";
+
+    if (parsed.has("expire_before"))
+    {
+        String ts = parsed.getAs<String>("expire_before");
+        ReadBufferFromString buf(ts);
+        time_t expire_time;
+        readDateTimeText(expire_time, buf);
+        options.expire_before_ms = static_cast<Int64>(expire_time) * 1000;
+    }
+
+    if (parsed.has("retention_period"))
+        options.retention_period_ms = Iceberg::fieldToPeriodMs(parsed.get("retention_period"), cmd, "retention_period");
+
+    if (parsed.has("retain_last"))
+    {
+        Int64 retain_last = Iceberg::fieldToInt64(parsed.get("retain_last"), cmd, "retain_last");
+        if (retain_last <= 0)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects 'retain_last' to be positive");
+        if (retain_last > std::numeric_limits<Int32>::max())
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots 'retain_last' is too large: {}", retain_last);
+        options.retain_last = static_cast<Int32>(retain_last);
+    }
+
+    if (parsed.has("snapshot_ids"))
+        options.snapshot_ids = Iceberg::fieldToInt64Array(parsed.get("snapshot_ids"), cmd, "snapshot_ids");
+
+    if (parsed.has("dry_run"))
+        options.dry_run = Iceberg::fieldToBool(parsed.get("dry_run"), cmd, "dry_run");
+
+    if (options.snapshot_ids && (options.retention_period_ms || options.retain_last))
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "expire_snapshots argument 'snapshot_ids' cannot be combined with 'retention_period' or 'retain_last'");
+
+    return options;
+}
+
 static ExecuteCommandArgs makeRemoveOrphanFilesSchema(ContextPtr context)
 {
     ExecuteCommandArgs schema("remove_orphan_files");
@@ -675,7 +729,8 @@ Pipe IcebergMetadata::executeCommand(
                 "To allow its usage, enable setting allow_experimental_expire_snapshots");
         }
 
-        auto options = parseExpireSnapshotsOptions(args, context);
+        auto parsed = makeExpireSnapshotsSchema().parse(args);
+        auto options = buildExpireSnapshotsOptions(parsed);
 
         auto result = Iceberg::expireSnapshots(
             options,

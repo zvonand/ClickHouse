@@ -678,7 +678,10 @@ void KeeperServer::shutdownRaftServer()
     keeper_context->setServerState(KeeperContext::Phase::SHUTDOWN);
 
     if (create_snapshot_on_exit)
+    {
+        auto commit_lock = raft_instance->lockCommit(); // (not required after shutdown, but just in case)
         raft_instance->create_snapshot();
+    }
 
     raft_instance.reset();
 

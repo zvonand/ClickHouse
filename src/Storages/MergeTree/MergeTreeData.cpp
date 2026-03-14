@@ -342,6 +342,14 @@ namespace ErrorCodes
     extern const int TOO_LARGE_LIGHTWEIGHT_UPDATES;
 }
 
+static String getPartNameFromAST(const ASTPtr & partition)
+{
+    const auto * literal = partition->as<ASTLiteral>();
+    if (!literal)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Expected a string literal for part name, got: {}", partition->formatForErrorMessage());
+    return literal->value.safeGet<String>();
+}
+
 static void checkSuspiciousIndices(const ASTFunction * index_function)
 {
     std::unordered_set<UInt64> unique_index_expression_hashes;
@@ -6312,7 +6320,7 @@ void MergeTreeData::checkAlterPartitionIsPossible(
         {
             if (command.part)
             {
-                auto part_name = command.partition->as<ASTLiteral &>().value.safeGet<String>();
+                auto part_name = getPartNameFromAST(command.partition);
                 /// We are able to parse it
                 MergeTreePartInfo::fromPartName(part_name, format_version);
             }
@@ -6400,7 +6408,7 @@ void MergeTreeData::movePartitionToDisk(const ASTPtr & partition, const String &
     String partition_id;
 
     if (moving_part)
-        partition_id = partition->as<ASTLiteral &>().value.safeGet<String>();
+        partition_id = getPartNameFromAST(partition);
     else
         partition_id = getPartitionIDFromQuery(partition, local_context);
 
@@ -6470,7 +6478,7 @@ void MergeTreeData::movePartitionToVolume(const ASTPtr & partition, const String
     String partition_id;
 
     if (moving_part)
-        partition_id = partition->as<ASTLiteral &>().value.safeGet<String>();
+        partition_id = getPartNameFromAST(partition);
     else
         partition_id = getPartitionIDFromQuery(partition, local_context);
 
@@ -6606,7 +6614,7 @@ Pipe MergeTreeData::alterPartition(
             {
                 if (command.part)
                 {
-                    auto part_name = command.partition->as<ASTLiteral &>().value.safeGet<String>();
+                    auto part_name = getPartNameFromAST(command.partition);
                     checkPartCanBeDropped(part_name, query_context);
                     dropPart(part_name, command.detach, query_context);
                 }
@@ -7698,7 +7706,7 @@ void MergeTreeData::dropDetached(const ASTPtr & partition, bool part, ContextPtr
 
     if (part)
     {
-        String part_name = partition->as<ASTLiteral &>().value.safeGet<String>();
+        String part_name = getPartNameFromAST(partition);
         validateDetachedPartName(part_name);
         auto disk = getDiskForDetachedPart(part_name);
         renamed_parts.addPart(part_name, part_name, "deleting_" + part_name, disk);
@@ -7860,7 +7868,7 @@ MergeTreeData::MutableDataPartsVector MergeTreeData::tryLoadPartsToAttach(const 
     /// Let's compose a list of parts that should be added.
     if (command.part)
     {
-        const String part_name = command.partition->as<ASTLiteral &>().value.safeGet<String>();
+        const String part_name = getPartNameFromAST(command.partition);
         const String part_directory = command.from_path.empty() ? part_name : command.from_path;
         validateDetachedPartName(part_name);
         validateDetachedPartName(part_directory);

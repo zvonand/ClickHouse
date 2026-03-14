@@ -16,3 +16,15 @@ DROP TABLE test_printf_fmt;
 
 -- Test 4: Dynamic format with materialized column
 SELECT printf(materialize('%s world'), 'hello');
+
+-- Test 5: Empty format string
+SELECT printf(materialize(''));
+
+-- Test 6: Format with only %% escapes
+SELECT printf(materialize('100%%'));
+
+-- Test 7: Dynamic format — argument count mismatch (too few args)
+SELECT printf(materialize('%s %d'), 'hello'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+
+-- Test 8: Dynamic format — argument count mismatch (too many args)
+SELECT printf(materialize('%s'), 'hello', 123); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }

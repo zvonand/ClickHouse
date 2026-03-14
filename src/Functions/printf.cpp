@@ -255,6 +255,10 @@ private:
         for (size_t row = 0; row < input_rows_count; ++row)
         {
             std::string_view format = format_string_col->getDataAt(row);
+            /// getDataAt includes the trailing null terminator; strip it so
+            /// buildInstructions sees the same content as the const path.
+            if (!format.empty() && format.back() == '\0')
+                format.remove_suffix(1);
 
             /// Build single-row argument columns for this row.
             /// row_args[0] is not used by buildInstructions for data — only for index range checks.
@@ -311,7 +315,7 @@ private:
             instr.format = std::string_view(begin, end - begin);
 
             size_t size = end - begin;
-            if (size > 1 && begin[0] == '%' and begin[1] != '%')
+            if (size > 1 && begin[0] == '%' && begin[1] != '%')
             {
                 instr.is_literal = false;
                 instr.input = arg;

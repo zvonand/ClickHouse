@@ -61,7 +61,11 @@ public:
     Block getHeader() const override { return header; }
 
 protected:
-    /// Initialized in constructor
+    /// Initialized in constructor.
+    /// owned_data_storage must be declared before any member that holds DataPartPtr
+    /// (parts_ranges, per_part_infos) so it is destroyed after them. Part destructors
+    /// call clearCaches() -> storage.getContext(), which requires a live storage.
+    const ConstStoragePtr owned_data_storage;
     const StorageSnapshotPtr storage_snapshot;
     const RangesInDataParts parts_ranges;
     const MutationsSnapshotPtr mutations_snapshot;
@@ -76,7 +80,6 @@ protected:
     const MergeTreeReadTask::BlockSizeParams block_size_params;
     const MarkCachePtr owned_mark_cache;
     const UncompressedCachePtr owned_uncompressed_cache;
-    const ConstStoragePtr owned_data_storage;
     const PatchJoinCachePtr patch_join_cache;
     const Block header;
 

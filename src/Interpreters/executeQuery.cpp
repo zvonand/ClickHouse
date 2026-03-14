@@ -2031,9 +2031,8 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
         {
             fuzzed_ast->checkDepth(500);
         }
-        catch (...)
+        catch (...) // Ok: skip fuzzed ASTs that are too deeply nested
         {
-            LOG_TRACE(logger, "Fuzzed AST too deep, skipping");
             continue;
         }
 
@@ -2046,9 +2045,8 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
             fuzzed_ast->format(fuzzed_query_buf, IAST::FormatSettings(/*one_line=*/true));
             fuzzed_query = fuzzed_query_buf.str();
         }
-        catch (...)
+        catch (...) // Ok: skip fuzzed ASTs that cannot be formatted
         {
-            LOG_TRACE(logger, "Failed to format fuzzed AST, skipping");
             continue;
         }
 

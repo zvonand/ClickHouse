@@ -143,6 +143,7 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsMergeTreeStringSerializationVersion string_serialization_version;
     extern const MergeTreeSettingsMergeTreeNullableSerializationVersion nullable_serialization_version;
     extern const MergeTreeSettingsBool materialize_statistics_on_merge;
+    extern const MergeTreeSettingsBool propagate_types_serialization_versions_to_nested_types;
 }
 
 namespace ErrorCodes
@@ -742,6 +743,7 @@ bool MergeTask::ExecuteAndFinalizeHorizontalPart::prepare() const
         (*merge_tree_settings)[MergeTreeSetting::serialization_info_version],
         (*merge_tree_settings)[MergeTreeSetting::string_serialization_version],
         (*merge_tree_settings)[MergeTreeSetting::nullable_serialization_version],
+        (*merge_tree_settings)[MergeTreeSetting::propagate_types_serialization_versions_to_nested_types],
     };
 
     SerializationInfoByName infos(global_ctx->storage_columns, info_settings);
@@ -1293,7 +1295,10 @@ bool MergeTask::VerticalMergeStage::prepareVerticalMergeForAllColumns() const
     if (global_ctx->chosen_merge_algorithm != MergeAlgorithm::Vertical)
         return false;
 
-    size_t sum_input_rows_exact = global_ctx->merge_list_element_ptr->rows_read;
+    /// `rows_read` is updated from pipeline progress and may include auxiliary
+    /// reads such as `CreatingSetStep` subqueries. Here we need the exact number
+    /// of rows coming from source parts only.
+    size_t sum_input_rows_exact = global_ctx->merge_list_element_ptr->total_rows_count;
     size_t input_rows_filtered = *global_ctx->input_rows_filtered;
     global_ctx->merge_list_element_ptr->columns_written = global_ctx->merging_columns.size();
     global_ctx->merge_list_element_ptr->progress.store(ctx->column_sizes->keyColumnsWeight(), std::memory_order_relaxed);
@@ -2256,38 +2261,24 @@ public:
         const StorageMetadataPtr & metadata_snapshot_,
         const IMergeTreeDataPart::TTLInfos & old_ttl_infos_,
         time_t current_time_,
-        bool force_,
-        const MergeTreeMutableDataPartPtr & data_part_)
+        bool force_)
         : ITransformingStep(input_header_, TTLDeleteFilterTransform::transformHeader(input_header_), getTraits())
-        , current_time(current_time_)
-        , force(force_)
-        , data_part(data_part_)
     {
-        /// Build TTL entries once and share their expressions (including prepared sets)
-        /// across all transforms created in transformPipeline().
-        /// Previously, a "probe" transform was created here to collect subqueries, but then
-        /// transformPipeline() created new transforms that built their own expressions with
-        /// different Set objects that were never filled by CreatingSetsStep.
-        TTLDeleteFilterTransform canonical(context_, input_header_, metadata_snapshot_, old_ttl_infos_, current_time, force, data_part);
-
-        /// Build sets eagerly here rather than via addCreatingSetsStep.
-        /// If they were built inside the merge pipeline, the subquery progress (rows read)
-        /// would be counted in merge_list_element->rows_read, causing a mismatch with
-        /// the rows_sources file size assertion in vertical merge.
-        for (auto & subquery : canonical.getSubqueries())
-            subquery->buildSetInplace(context_);
-
-        shared_entries = canonical.getEntries();
+        /// Build TTL expressions once and share them across all per-stream
+        /// transform instances created by `addSimpleTransform`. This ensures the
+        /// `FutureSet` objects filled by `CreatingSetStep` are the same ones used
+        /// during execution.
+        std::tie(shared_state, subqueries_for_sets)
+            = TTLDeleteFilterTransform::build(context_, metadata_snapshot_, old_ttl_infos_, current_time_, force_);
     }
 
     String getName() const override { return "TTLDeleteFilter"; }
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override
     {
-        pipeline.addSimpleTransform([&](const SharedHeader & header)
+        pipeline.addSimpleTransform([state = shared_state](const SharedHeader & header)
         {
-            return std::make_shared<TTLDeleteFilterTransform>(
-                header, shared_entries, current_time, force, data_part);
+            return std::make_shared<TTLDeleteFilterTransform>(header, state);
         });
     }
 
@@ -2296,7 +2287,7 @@ public:
         output_header = TTLDeleteFilterTransform::transformHeader(input_headers.front());
     }
 
-    PreparedSets::Subqueries getSubqueries() { return {}; }
+    PreparedSets::Subqueries getSubqueries() { return std::move(subqueries_for_sets); }
 
 private:
     static Traits getTraits()
@@ -2314,10 +2305,8 @@ private:
         };
     }
 
-    time_t current_time;
-    bool force;
-    MergeTreeMutableDataPartPtr data_part;
-    std::vector<TTLDeleteFilterTransform::DeleteTTLEntry> shared_entries;
+    std::shared_ptr<const TTLDeleteFilterTransform::SharedState> shared_state;
+    PreparedSets::Subqueries subqueries_for_sets;
 };
 
 class TTLStep : public ITransformingStep
@@ -2717,8 +2706,7 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
             global_ctx->metadata_snapshot,
             global_ctx->new_data_part->ttl_infos,
             global_ctx->time_of_merge,
-            ctx->force_ttl,
-            global_ctx->new_data_part);
+            ctx->force_ttl);
 
         ttl_filter_subqueries = ttl_filter_step->getSubqueries();
         ttl_filter_step->setStepDescription("TTL delete filter");
@@ -2828,22 +2816,7 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
             global_ctx->time_of_merge,
             ctx->force_ttl);
 
-        auto ttl_subqueries = ttl_step->getSubqueries();
-
-        if (global_ctx->vertical_ttl_delete)
-        {
-            /// In vertical TTL delete mode, build sets eagerly rather than via
-            /// addCreatingSetsStep. Otherwise the subquery progress (rows read)
-            /// would be counted in merge_list_element->rows_read, causing a
-            /// mismatch with the rows_sources file size assertion.
-            for (auto & sq : ttl_subqueries)
-                sq->buildSetInplace(global_ctx->context);
-        }
-        else
-        {
-            subqueries = std::move(ttl_subqueries);
-        }
-
+        subqueries = ttl_step->getSubqueries();
         ttl_step->setStepDescription("TTL step");
         merge_parts_query_plan.addStep(std::move(ttl_step));
     }

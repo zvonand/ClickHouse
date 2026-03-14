@@ -279,9 +279,11 @@ static std::optional<size_t> decodeBase58_32(const uint8_t * src, size_t src_len
     if (binary[0] > 0xFFFFFFFFULL)
         return std::nullopt;
 
-    uint32_t * out32 = reinterpret_cast<uint32_t *>(dst);
     for (size_t i = 0; i < BINARY_SZ; i++)
-        out32[i] = b58_bswap32(static_cast<uint32_t>(binary[i]));
+    {
+        uint32_t word_be = b58_bswap32(static_cast<uint32_t>(binary[i]));
+        memcpy(dst + 4 * i, &word_be, sizeof(word_be));
+    }
 
     size_t leading_zero_cnt = 0;
     for (; leading_zero_cnt < BYTE_CNT; leading_zero_cnt++)
@@ -344,9 +346,11 @@ static std::optional<size_t> decodeBase58_64(const uint8_t * src, size_t src_len
     if (binary[0] > 0xFFFFFFFFULL)
         return std::nullopt;
 
-    uint32_t * out32 = reinterpret_cast<uint32_t *>(dst);
     for (size_t i = 0; i < BINARY_SZ; i++)
-        out32[i] = b58_bswap32(static_cast<uint32_t>(binary[i]));
+    {
+        uint32_t word_be = b58_bswap32(static_cast<uint32_t>(binary[i]));
+        memcpy(dst + 4 * i, &word_be, sizeof(word_be));
+    }
 
     size_t leading_zero_cnt = 0;
     for (; leading_zero_cnt < BYTE_CNT; leading_zero_cnt++)

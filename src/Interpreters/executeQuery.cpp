@@ -1177,7 +1177,7 @@ static BlockIO executeQueryImpl(
         {
             if (!settings[Setting::allow_experimental_polyglot_dialect])
                 throw Exception(ErrorCodes::SUPPORT_IS_DISABLED, "Support for polyglot SQL transpiler is disabled (turn on setting 'allow_experimental_polyglot_dialect')");
-            ParserPolyglotQuery parser(max_query_size, settings[Setting::max_parser_depth], settings[Setting::max_parser_backtracks], settings[Setting::polyglot_dialect]);
+            ParserPolyglotQuery parser(max_query_size, settings[Setting::max_parser_depth], settings[Setting::max_parser_backtracks], settings[Setting::polyglot_dialect], end);
             out_ast = parseQuery(parser, begin, end, "", max_query_size, settings[Setting::max_parser_depth], settings[Setting::max_parser_backtracks]);
         }
         else

@@ -149,33 +149,48 @@ class Targeting:
             return symbol[:paren_pos]
         return symbol
 
+    # Symbols covering more than this fraction of all tests are too common to be
+    # useful for test selection (e.g. PipelineExecutor::execute runs in every query).
+    # Using integer arithmetic: count * 100 < total * MAX_PCT avoids floats.
+    MAX_SYMBOL_COVERAGE_PCT = 5
+
     def get_tests_by_changed_symbols(self, symbols):
         """
         Returns a mapping from symbol to a list of tests that cover it.
-        Symbols that appear in ALL tests are client-side startup/initialization noise
-        (e.g. AggregateFunctionCombinator::getName() runs on every clickhouse client
-        invocation regardless of the test). These are excluded.
+        Symbols covering more than MAX_SYMBOL_COVERAGE_PCT% of all tests are excluded:
+        they are either client-side startup noise or hot-path server functions that
+        appear in every test and carry no signal for test selection.
         """
-        TOTAL_TESTS_QUERY = """
-        SELECT count(distinct test_name)
-        FROM checks_coverage_inverted
-        WHERE check_start_time > now() - interval 3 days
-          AND check_name LIKE '{JOB_TYPE}%'
-        """
+        # Minimum absolute test count below which a symbol is never filtered,
+        # regardless of the percentage. Avoids over-filtering when the test corpus
+        # is small (e.g. during local testing or early pipeline runs).
+        MIN_TESTS_THRESHOLD = 50
         SYMBOL_TO_TESTS_QUERY = """
         SELECT groupArray(test_name) as tests
         FROM checks_coverage_inverted
         WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{JOB_TYPE}%'
           AND symbol = '{SYMBOL}'
-        HAVING count(distinct test_name) < {TOTAL_TESTS}
+        HAVING count(distinct test_name) < greatest(
+            toUInt64((
+                SELECT count(distinct test_name) * {MAX_PCT} / 100
+                FROM checks_coverage_inverted
+                WHERE check_start_time > now() - interval 3 days
+                  AND check_name LIKE '{JOB_TYPE}%'
+            )),
+            toUInt64({MIN_THRESHOLD})
+        )
         """
         symbol_to_tests = {}
         cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
-        total_tests = int(cidb.query(TOTAL_TESTS_QUERY.format(JOB_TYPE=self.job_type), log_level="").strip() or 0)
         for symbol in symbols:
             normalized = self.normalize_symbol(symbol)
-            query = SYMBOL_TO_TESTS_QUERY.format(JOB_TYPE=self.job_type, SYMBOL=normalized, TOTAL_TESTS=total_tests)
+            query = SYMBOL_TO_TESTS_QUERY.format(
+                JOB_TYPE=self.job_type,
+                SYMBOL=normalized,
+                MAX_PCT=self.MAX_SYMBOL_COVERAGE_PCT,
+                MIN_THRESHOLD=MIN_TESTS_THRESHOLD,
+            )
             result = cidb.query(query, log_level="")
             # Parse the ClickHouse Array result
             if result.strip():

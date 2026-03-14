@@ -1,4 +1,3 @@
--- Tags: no-fasttest
 -- Verify that printf supports dynamic (non-constant) format strings.
 -- See https://github.com/ClickHouse/ClickHouse/issues/89547
 

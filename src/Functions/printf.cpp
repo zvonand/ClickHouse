@@ -254,7 +254,7 @@ private:
         size_t curr_offset = 0;
         for (size_t row = 0; row < input_rows_count; ++row)
         {
-            std::string_view format = format_string_col->getDataAt(row).toView();
+            std::string_view format = format_string_col->getDataAt(row);
 
             /// Build single-row argument columns for this row.
             /// row_args[0] is not used by buildInstructions for data — only for index range checks.
@@ -275,11 +275,11 @@ private:
                 auto row_result = function_concat->build(concat_args)->execute(
                     concat_args, result_type, 1, false);
 
-                StringRef val = row_result->getDataAt(0);
-                result_chars.resize(curr_offset + val.size);
-                if (val.size)
-                    memcpy(&result_chars[curr_offset], val.data, val.size);
-                curr_offset += val.size;
+                std::string_view val = row_result->getDataAt(0);
+                result_chars.resize(curr_offset + val.size());
+                if (!val.empty())
+                    memcpy(&result_chars[curr_offset], val.data(), val.size());
+                curr_offset += val.size();
             }
             catch (const fmt::v12::format_error & e)
             {

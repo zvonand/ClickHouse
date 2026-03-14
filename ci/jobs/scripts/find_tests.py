@@ -131,19 +131,29 @@ class Targeting:
     def get_tests_by_changed_symbols(self, symbols):
         """
         Returns a mapping from symbol to a list of tests that cover it.
+        Symbols that appear in ALL tests are client-side startup/initialization noise
+        (e.g. AggregateFunctionCombinator::getName() runs on every clickhouse client
+        invocation regardless of the test). These are excluded.
+        """
+        TOTAL_TESTS_QUERY = """
+        SELECT count(distinct test_name)
+        FROM checks_coverage_inverted
+        WHERE check_start_time > now() - interval 3 days
+          AND check_name LIKE '{JOB_TYPE}%'
         """
         SYMBOL_TO_TESTS_QUERY = """
         SELECT groupArray(test_name) as tests
-        from checks_coverage_inverted
-        where 1
-        and check_start_time > now() - interval 3 days
-        and check_name LIKE '{JOB_TYPE}%'
-        and symbol = '{SYMBOL}'
+        FROM checks_coverage_inverted
+        WHERE check_start_time > now() - interval 3 days
+          AND check_name LIKE '{JOB_TYPE}%'
+          AND symbol = '{SYMBOL}'
+        HAVING count(distinct test_name) < {TOTAL_TESTS}
         """
         symbol_to_tests = {}
         cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+        total_tests = int(cidb.query(TOTAL_TESTS_QUERY.format(JOB_TYPE=self.job_type), log_level="").strip() or 0)
         for symbol in symbols:
-            query = SYMBOL_TO_TESTS_QUERY.format(JOB_TYPE=self.job_type, SYMBOL=symbol)
+            query = SYMBOL_TO_TESTS_QUERY.format(JOB_TYPE=self.job_type, SYMBOL=symbol, TOTAL_TESTS=total_tests)
             result = cidb.query(query, log_level="")
             # Parse the ClickHouse Array result
             if result.strip():

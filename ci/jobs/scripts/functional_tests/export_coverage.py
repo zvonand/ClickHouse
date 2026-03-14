@@ -60,12 +60,13 @@ class CoverageExporter:
             if not self.to_file:
                 query = (
                     f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted', '{self.dest.user}', '{self.dest.pwd}') "
-                    "SELECT DISTINCT "
-                    "arrayJoin(symbol) AS symbol, "
+                    "SELECT DISTINCT sym AS symbol, "
                     f"'{self.check_start_time}' AS check_start_time, "
                     f"'{self.job_name}' AS check_name, "
                     "test_name "
-                    f"FROM system.{table}"
+                    f"FROM system.{table} "
+                    "ARRAY JOIN symbol AS sym "
+                    "WHERE sym LIKE 'DB::%'"
                 )
                 res = Shell.check(
                     f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}',

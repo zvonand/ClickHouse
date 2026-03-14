@@ -155,7 +155,7 @@ auto getSslContextProvider(const Poco::Util::AbstractConfiguration & config, std
     }
 
     auto prefer_server_cypher = config.getBool(config_prefix + "preferServerCiphers", false);
-    auto cache_sessions = config.getBool(config_prefix + "cache_sessions", false);
+    auto cache_sessions = config.getBool(config_prefix + "cacheSessions", false);
 
     return [params, disabled_protocols, prefer_server_cypher, cache_sessions, is_server = key == "server", config_prefix, certificate_data]
     {

@@ -128,6 +128,27 @@ class Targeting:
         tests = list(set(tests))
         return sorted(tests)
 
+    @staticmethod
+    def normalize_symbol(symbol: str) -> str:
+        """
+        Strip function argument list from a demangled symbol, keeping only the
+        qualified function name. Matches the normalization applied at export time
+        in export_coverage.py.
+
+        'DB::MergeTree::loadParts(MutableDataPartsVector&, ...)' -> 'DB::MergeTree::loadParts'
+        'DB::(anonymous namespace)::Foo::bar(int)'               -> 'DB::(anonymous namespace)::Foo::bar'
+        'DB::Foo::method'                                        -> 'DB::Foo::method'  (unchanged)
+        """
+        # Replace (anonymous namespace) with a same-length placeholder so that
+        # positions in the modified string match positions in the original.
+        ANON = "(anonymous namespace)"
+        placeholder = "x" * len(ANON)
+        modified = symbol.replace(ANON, placeholder)
+        paren_pos = modified.find("(")
+        if paren_pos > 0:
+            return symbol[:paren_pos]
+        return symbol
+
     def get_tests_by_changed_symbols(self, symbols):
         """
         Returns a mapping from symbol to a list of tests that cover it.
@@ -153,7 +174,8 @@ class Targeting:
         cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
         total_tests = int(cidb.query(TOTAL_TESTS_QUERY.format(JOB_TYPE=self.job_type), log_level="").strip() or 0)
         for symbol in symbols:
-            query = SYMBOL_TO_TESTS_QUERY.format(JOB_TYPE=self.job_type, SYMBOL=symbol, TOTAL_TESTS=total_tests)
+            normalized = self.normalize_symbol(symbol)
+            query = SYMBOL_TO_TESTS_QUERY.format(JOB_TYPE=self.job_type, SYMBOL=normalized, TOTAL_TESTS=total_tests)
             result = cidb.query(query, log_level="")
             # Parse the ClickHouse Array result
             if result.strip():

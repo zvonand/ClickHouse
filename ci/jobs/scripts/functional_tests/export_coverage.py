@@ -60,7 +60,10 @@ class CoverageExporter:
             if not self.to_file:
                 query = (
                     f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted', '{self.dest.user}', '{self.dest.pwd}') "
-                    "SELECT DISTINCT sym AS symbol, "
+                    "SELECT DISTINCT "
+                    "if(position(replaceAll(sym, '(anonymous namespace)', repeat('x', 21)), '(') > 0, "
+                    "   substring(sym, 1, position(replaceAll(sym, '(anonymous namespace)', repeat('x', 21)), '(') - 1), "
+                    "   sym) AS symbol, "
                     f"'{self.check_start_time}' AS check_start_time, "
                     f"'{self.job_name}' AS check_name, "
                     "test_name "

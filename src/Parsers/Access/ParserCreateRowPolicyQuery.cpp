@@ -61,7 +61,7 @@ namespace
                 return true;
             }
 
-            ParserExpressionWithOptionalAlias parser(false);
+            ParserExpression parser;
             ASTPtr x;
             if (!parser.parse(pos, x, expected))
                 return false;

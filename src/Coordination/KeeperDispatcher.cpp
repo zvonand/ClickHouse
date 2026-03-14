@@ -244,11 +244,8 @@ void KeeperDispatcher::requestThread()
 
                             handle_opentelemetery_spans(request.request, request.session_id);
 
-                            /// Read request doesn't need to be sent over network, we'll be executed locally.
-                            /// We must execute it at a very specific time: after all previous writes
-                            /// (from the same session) are committed, before any later writes are committed.
-                            /// I.e. right after committing the previous write.
-                            if (request.request->isReadRequest())
+                            /// Don't append read request into batch, we have to process them separately
+                            if (!coordination_settings[CoordinationSetting::quorum_reads] && request.request->isReadRequest())
                             {
                                 const auto & last_request = current_batch.back();
                                 ZooKeeperOpentelemetrySpans::maybeInitialize(request.request->spans.read_wait_for_write, request.request->tracing_context);

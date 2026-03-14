@@ -3,8 +3,8 @@ openSSL:
     certificateFile: '/etc/clickhouse-server/config.d/first.crt'
     privateKeyFile: '/etc/clickhouse-server/config.d/first.key'
     caConfig: '/etc/clickhouse-server/config.d/rootCA.pem'
-    loadDefaultCAFile: true
-    verificationMode: 'none'
+    loadDefaultCAFile: false
+    verificationMode: 'relaxed'
     cacheSessions: true
     disableProtocols: 'sslv2,sslv3'
     preferServerCiphers: true
@@ -12,8 +12,8 @@ openSSL:
     certificateFile: '/etc/clickhouse-server/config.d/first.crt'
     privateKeyFile: '/etc/clickhouse-server/config.d/first.key'
     caConfig: '/etc/clickhouse-server/config.d/rootCA.pem'
-    loadDefaultCAFile: true
-    verificationMode: 'none'
+    loadDefaultCAFile: false
+    verificationMode: 'relaxed'
     cacheSessions: true
     disableProtocols: 'sslv2,sslv3'
     preferServerCiphers: true

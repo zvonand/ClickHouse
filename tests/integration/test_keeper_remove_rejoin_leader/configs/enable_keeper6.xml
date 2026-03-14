@@ -11,13 +11,6 @@
             <operation_timeout_ms>5000</operation_timeout_ms>
             <session_timeout_ms>30000</session_timeout_ms>
             <raft_logs_level>trace</raft_logs_level>
-            <!-- Timeouts shorter than the default (1000/2000 ms) but longer than
-                 the heartbeat (500 ms) so that:
-                 (a) election timer fires twice within the 4 s pre-join sleep,
-                     triggering cancel_schedulers() and leaving all initial peers
-                     abandoned (hb_task_=null) in peers_; and
-                 (b) the node does not steal leadership from the existing cluster
-                     after joining (election_timeout > heartbeat prevents this). -->
             <election_timeout_lower_bound_ms>600</election_timeout_lower_bound_ms>
             <election_timeout_upper_bound_ms>800</election_timeout_upper_bound_ms>
         </coordination_settings>

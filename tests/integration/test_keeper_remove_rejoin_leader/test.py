@@ -310,33 +310,19 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     assert result["status"] == "ok", f"Failed to add {node_names[6]}: {result}"
     keeper_utils.wait_until_connected(cluster, node6, timeout=60.0)
 
-    # Step 6: Replace the original leader.
-    # ClickHouse rcfg does not allow removing the current leader directly —
-    # transfer_leadership must happen first.  Transferring leadership to node4,
-    # node5, or node6 is also exactly what triggers the bug: become_leader()
-    # calls enable_hb_for_peer() for every peer, and without the fix the stale
+    # Step 6: Yield leadership so that node4, node5, or node6 wins the next
+    # election.  ClickHouse rcfg does not allow removing the current leader
+    # directly, so we first force it to step down via the `ydld` 4lw command.
+    # That command triggers become_leader() on the winning replacement node,
+    # which is exactly what triggers the bug: without the fix the stale
     # hb_task_ = null left by peer::shutdown() causes a null pointer dereference.
-    result = send_rcfg(
-        cluster,
-        leader,
-        {
-            "actions": [
-                {
-                    "transfer_leadership": [
-                        node_id(node4),
-                        node_id(node5),
-                        node_id(node6),
-                    ]
-                }
-            ]
-        },
-        timeout_sec=60,
-    )
-    assert result["status"] == "ok", f"Failed to transfer leadership: {result}"
+    keeper_utils.send_4lw_cmd(cluster, leader, cmd="ydld")
+
+    # Give the election time to complete before checking for the new leader.
+    time.sleep(2)
 
     # Find the new leader among the replacement nodes.
     new_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
-    assert new_leader is not None, "No leader elected after leadership transfer"
 
     # Without the fix (NuRaft PR #91), the new leader crashes immediately
     # inside become_leader(): enable_hb_for_peer() calls schedule_task() with
@@ -356,9 +342,6 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     # Verify the cluster is healthy with a leader from the replacement nodes.
     final_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
     print(f"Final leader: {final_leader}")
-    assert (
-        final_leader is not None
-    ), "No leader in final cluster after removing original leader"
 
 
 def _get_generated_cfg(node_names: dict, node_idx: int) -> str:

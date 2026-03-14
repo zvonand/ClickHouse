@@ -120,26 +120,38 @@ def test_read_in_order(started_cluster_iceberg_with_spark,  storage_type):
 
 def test_defining_columns_with_special_character(started_cluster_iceberg_with_spark):
     instance = started_cluster_iceberg_with_spark.instances["node1"]
-    table_name = "demo_event"
+    table_name = "demo_event_" + get_uuid_str()
     spark = started_cluster_iceberg_with_spark.spark_session
 
     spark.conf.set("spark.sql.iceberg.commit.sync", "true")
 
     spark.sql(
         f"""
-            CREATE TABLE {table_name} 
-            ( 
+            CREATE TABLE {table_name}
+            (
             `#event` STRING NOT NULL ,
-            `#data_lifecycle` STRING NOT NULL, 
-            `#time` TIMESTAMP NOT NULL , 
-            `#log_id` STRING NOT NULL , 
-            `#ingest_time` TIMESTAMP ) 
-            USING iceberg 
-            PARTITIONED BY (`#event`, `#time`) 
-            TBLPROPERTIES ( 
-            'identifier-fields' = '[#data_lifecycle,#event,#log_id]', 
+            `#data_lifecycle` STRING NOT NULL,
+            `#time` TIMESTAMP NOT NULL ,
+            `#log_id` STRING NOT NULL ,
+            `#ingest_time` TIMESTAMP )
+            USING iceberg
+            PARTITIONED BY (`#event`, `#time`)
+            TBLPROPERTIES (
+            'identifier-fields' = '[#data_lifecycle,#event,#log_id]',
             'sort-order' = '#data_lifecycle ASC NULLS FIRST, #event ASC NULLS FIRST, #time ASC NULLS FIRST'
             )
+        """
+    )
+
+    table_expr = get_creation_expression("s3", table_name, started_cluster_iceberg_with_spark, table_function=True)
+
+    instance.query(f"SELECT * FROM {table_expr}")
+
+    spark.sql(
+        f"""
+            INSERT INTO {table_name} VALUES
+            ('click', 'active', TIMESTAMP '2024-01-01 00:00:00', 'log1', TIMESTAMP '2024-01-01 00:00:01'),
+            ('view', 'active', TIMESTAMP '2024-01-02 00:00:00', 'log2', NULL)
         """
     )
 
@@ -149,8 +161,6 @@ def test_defining_columns_with_special_character(started_cluster_iceberg_with_sp
         f"/iceberg_data/default/{table_name}/",
         f"/iceberg_data/default/{table_name}/",
     )
-
-    table_expr = get_creation_expression("s3", table_name, started_cluster_iceberg_with_spark, table_function=True)
 
     instance.query(f"SELECT * FROM {table_expr}")
     spark.sql(f"DROP TABLE {table_name}")

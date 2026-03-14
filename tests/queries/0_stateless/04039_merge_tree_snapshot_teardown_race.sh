@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# Tags: long
+
+set -e
+
+CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# shellcheck source=../shell_config.sh
+. "$CUR_DIR"/../shell_config.sh
+
+TABLE="test_04039_snapshot_teardown_${CLICKHOUSE_TEST_UNIQUE_NAME}"
+ITERATIONS=20
+
+function cleanup()
+{
+    $CLICKHOUSE_CLIENT --query "DROP TABLE IF EXISTS ${TABLE} SYNC" >/dev/null 2>&1 ||:
+}
+
+function wait_for_readers_chain()
+{
+    local query_id=$1 && shift
+    local log_file=$1 && shift
+    local timeout="${1:-30}"
+    local start=$EPOCHSECONDS
+
+    while true; do
+        if grep -F -q "MergeTreeReadersChain" "$log_file"; then
+            return 0
+        fi
+
+        local running
+        running=$($CLICKHOUSE_CLIENT --query "SELECT count() FROM system.processes WHERE query_id = '${query_id}'" 2>/dev/null || echo 0)
+        if [ "$running" = "0" ]; then
+            echo "Query ${query_id} finished before 'MergeTreeReadersChain' appeared" >&2
+            return 1
+        fi
+
+        if ((EPOCHSECONDS - start > timeout)); then
+            echo "Timeout waiting for 'MergeTreeReadersChain' for ${query_id}" >&2
+            return 1
+        fi
+
+        sleep 0.1
+    done
+}
+
+function run_iteration()
+{
+    local iteration=$1 && shift
+    local query_id="04039_${CLICKHOUSE_TEST_UNIQUE_NAME}_${iteration}"
+    local log_file
+    log_file=$(mktemp "${CLICKHOUSE_TMP}/04039.XXXXXX.log")
+
+    local args=(
+        --query_id "$query_id"
+        --format Null
+        --max_threads 1
+        --max_block_size 1
+        # Exercise the path where `ReadFromMergeTree` strips `SnapshotData::parts`.
+        --enable_shared_storage_snapshot_in_query 0
+        --merge_tree_read_split_ranges_into_intersecting_and_non_intersecting_injection_probability 0
+        --send_logs_level test
+        --server_logs_file "$log_file"
+    )
+
+    # Kill the query after readers are initialized so teardown runs while the
+    # pool still owns parts that came from the stripped snapshot.
+    $CLICKHOUSE_CLIENT "${args[@]}" --query "
+        SELECT sleepEachRow(0.01)
+        FROM ${TABLE}
+        WHERE (_part, _part_offset) IN
+        (
+            SELECT _part, _part_offset
+            FROM ${TABLE}
+            WHERE bucket = 1
+        )
+    " >/dev/null 2>&1 &
+    local pid=$!
+
+    wait_for_query_to_start "$query_id"
+    if ! wait_for_readers_chain "$query_id" "$log_file"; then
+        $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '${query_id}' SYNC FORMAT Null" >/dev/null 2>&1 ||:
+        wait "$pid" >/dev/null 2>&1 ||:
+        rm -f "$log_file"
+        return 1
+    fi
+
+    $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '${query_id}' SYNC FORMAT Null" >/dev/null 2>&1 ||:
+    wait "$pid" >/dev/null 2>&1 ||:
+
+    if grep -F "Exception" "$log_file" | grep -v -F "QUERY_WAS_CANCELLED" >/dev/null; then
+        cat "$log_file" >&2
+        rm -f "$log_file"
+        return 1
+    fi
+
+    rm -f "$log_file"
+}
+
+trap cleanup EXIT
+
+cleanup
+
+$CLICKHOUSE_CLIENT --query "
+    CREATE TABLE ${TABLE}
+    (
+        key UInt64,
+        bucket UInt64,
+        value String
+    )
+    ENGINE = MergeTree
+    PARTITION BY bucket
+    ORDER BY (bucket, key)
+    SETTINGS index_granularity = 1
+"
+
+$CLICKHOUSE_CLIENT --query "SYSTEM STOP MERGES ${TABLE}"
+
+for i in {0..31}; do
+    bucket=$((i % 8))
+    offset=$((i * 256))
+
+    $CLICKHOUSE_CLIENT --query "
+        INSERT INTO ${TABLE}
+        SELECT
+            number + ${offset},
+            ${bucket},
+            toString(number + ${offset})
+        FROM numbers(256)
+    "
+done
+
+for iteration in $(seq 1 "${ITERATIONS}"); do
+    run_iteration "$iteration"
+done
+
+$CLICKHOUSE_CLIENT --query "SELECT count() = 8192 FROM ${TABLE}"

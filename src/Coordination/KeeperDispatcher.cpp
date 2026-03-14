@@ -244,13 +244,16 @@ void KeeperDispatcher::requestThread()
 
                             handle_opentelemetery_spans(request.request, request.session_id);
 
-                            /// Don't append read request into batch, we have to process them separately
-                            if (!coordination_settings[CoordinationSetting::quorum_reads] && request.request->isReadRequest())
+                            /// Read request doesn't need to be sent over network, we'll be executed locally.
+                            /// We must execute it at a very specific time: after all previous writes
+                            /// (from the same session) are committed, before any later writes are committed.
+                            /// I.e. right after committing the previous write.
+                            if (request.request->isReadRequest())
                             {
                                 const auto & last_request = current_batch.back();
                                 ZooKeeperOpentelemetrySpans::maybeInitialize(request.request->spans.read_wait_for_write, request.request->tracing_context);
                                 std::lock_guard lock(read_request_queue_mutex);
-                                read_request_queue[last_request.session_id][last_request.request->xid].push_back(request);
+                                read_request_queue[{last_request.session_id, last_request.request->xid}].push_back(request);
                             }
                             else if (request.request->getOpNum() == Coordination::OpNum::Reconfig)
                             {
@@ -578,38 +581,33 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
         {
             {
                 /// check if we have queue of read requests depending on this request to be committed
+                SessionAndXID key(request_for_session.session_id, request_for_session.request->xid);
                 std::lock_guard lock(read_request_queue_mutex);
-                if (auto it = read_request_queue.find(request_for_session.session_id); it != read_request_queue.end())
+                if (auto it = read_request_queue.find(key); it != read_request_queue.end())
                 {
-                    auto & xid_to_request_queue = it->second;
-
-                    if (auto request_queue_it = xid_to_request_queue.find(request_for_session.request->xid);
-                        request_queue_it != xid_to_request_queue.end())
+                    for (const auto & read_request : it->second)
                     {
-                        for (const auto & read_request : request_queue_it->second)
+                        if (!server->isLeaderAlive())
                         {
-                            if (!server->isLeaderAlive())
-                            {
-                                addErrorResponses({read_request}, Coordination::Error::ZCONNECTIONLOSS);
-                                continue;
-                            }
-
-                            ZooKeeperOpentelemetrySpans::maybeFinalize(
-                                read_request.request->spans.read_wait_for_write,
-                                [&]
-                                {
-                                    return std::vector<OpenTelemetry::SpanAttribute>{
-                                        {"keeper.operation", Coordination::opNumToString(read_request.request->getOpNum())},
-                                        {"keeper.session_id", read_request.session_id},
-                                        {"keeper.xid", read_request.request->xid},
-                                    };
-                                });
-
-                            server->putLocalReadRequest(read_request);
+                            addErrorResponses({read_request}, Coordination::Error::ZCONNECTIONLOSS);
+                            continue;
                         }
 
-                        xid_to_request_queue.erase(request_queue_it);
+                        ZooKeeperOpentelemetrySpans::maybeFinalize(
+                            read_request.request->spans.read_wait_for_write,
+                            [&]
+                            {
+                                return std::vector<OpenTelemetry::SpanAttribute>{
+                                    {"keeper.operation", Coordination::opNumToString(read_request.request->getOpNum())},
+                                    {"keeper.session_id", read_request.session_id},
+                                    {"keeper.xid", read_request.request->xid},
+                                };
+                            });
+
+                        server->putLocalReadRequest(read_request);
                     }
+
+                    read_request_queue.erase(it);
                 }
             }
         });
@@ -858,11 +856,6 @@ void KeeperDispatcher::finishSession(int64_t session_id)
         auto close_response = std::make_shared<Coordination::ZooKeeperCloseResponse>();
         close_response->error = Coordination::Error::ZSESSIONEXPIRED;
         callback(close_response, nullptr);
-    }
-
-    {
-        std::lock_guard lock(read_request_queue_mutex);
-        read_request_queue.erase(session_id);
     }
 }
 
@@ -1539,6 +1532,11 @@ catch (...)
     result->set("status", "error");
     result->set("message", getCurrentExceptionMessage(false));
     return result;
+}
+
+uint64_t KeeperDispatcher::SessionAndXIDHash::operator()(std::pair<int64_t, Coordination::XID> p) const
+{
+    return CityHash_v1_0_2::Hash128to64({uint64_t(p.first), uint64_t(p.second)});
 }
 
 

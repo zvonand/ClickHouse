@@ -8,25 +8,25 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 POLYGLOT_OPTS="--allow_experimental_polyglot_dialect 1 --dialect polyglot"
 
-# SQLite: GROUP_CONCAT is an SQLite-specific aggregate function
+# SQLite: TYPEOF() does not exist in ClickHouse
 $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect sqlite \
-    -q "SELECT GROUP_CONCAT(x, ',') FROM (SELECT 'a' AS x UNION ALL SELECT 'b' UNION ALL SELECT 'c')"
+    -q "SELECT TYPEOF(42)"
 
-# MySQL: backtick-quoted identifiers, including reserved words as column names
+# MySQL: double-quoted strings are string literals in MySQL but identifiers in ClickHouse
 $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect mysql \
-    -q 'SELECT `select` FROM (SELECT 1 AS `select`) AS t'
+    -q 'SELECT "hello world"'
 
-# PostgreSQL: :: cast operator and POSITION(x IN y) syntax
+# PostgreSQL: FETCH FIRST N ROWS ONLY is not supported by the ClickHouse parser
 $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect postgresql \
-    -q "SELECT 42::INTEGER, POSITION('world' IN 'hello world')"
+    -q "SELECT number FROM numbers(10) FETCH FIRST 3 ROWS ONLY"
 
-# Snowflake: IFF (Snowflake-specific conditional) and DATEADD
+# Snowflake: IFF() does not exist in ClickHouse (it uses if() instead)
 $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect snowflake \
     -q "SELECT IFF(1 > 0, 'yes', 'no')"
 
-# DuckDB: TRY_CAST
+# DuckDB: SELECT * EXCLUDE(col) is not supported by the ClickHouse parser
 $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect duckdb \
-    -q "SELECT TRY_CAST('123' AS INTEGER)"
+    -q "SELECT * EXCLUDE(b) FROM (SELECT 1 AS a, 2 AS b, 3 AS c)"
 
 # Test that polyglot dialect requires the experimental setting
 $CLICKHOUSE_CLIENT --dialect polyglot --polyglot_dialect sqlite -q "SELECT 1" 2>&1 | grep -o "SUPPORT_IS_DISABLED"

@@ -1,6 +1,8 @@
-a,b,c,
+UInt8
+hello world
+0
 1
-42	7
+2
 yes
-123
+1	3
 SUPPORT_IS_DISABLED

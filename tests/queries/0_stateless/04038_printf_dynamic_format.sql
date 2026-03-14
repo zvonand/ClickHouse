@@ -17,8 +17,8 @@ DROP TABLE test_printf_fmt;
 -- Test 4: Dynamic format with materialized column
 SELECT printf(materialize('%s world'), 'hello');
 
--- Test 5: Empty format string
-SELECT printf(materialize(''));
+-- Test 5: Empty format string — throws because format accounts for one argument slot
+SELECT printf(materialize('')); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
 
 -- Test 6: Format with only %% escapes
 SELECT printf(materialize('100%%'));

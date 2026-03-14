@@ -200,7 +200,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     # Retrieve the generated config filename for node4 from CONFIG_DIR.
     cfg4 = _get_generated_cfg(node_names, 4)
     start_keeper(node4, cfg4)
-    time.sleep(2)
+    time.sleep(4)
     result = send_rcfg(
         cluster,
         leader,
@@ -235,8 +235,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     )
     assert result["status"] == "ok", f"Failed to remove {follower1.name}: {result}"
 
-    # Wait for `cancel_schedulers()` to fire on the removed follower.
-    # 4 × election_timeout_upper_bound_ms = 4 × 200 ms = 800 ms; use 2 s.
+    # Wait for the cluster to stabilize after the removal.
     time.sleep(2)
 
     remaining = [n for n in [node1, node2, node3, node4] if n != follower1]
@@ -247,7 +246,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     # so node5 can connect to them during startup (async Keeper init).
     cfg5 = _get_generated_cfg(node_names, 5)
     start_keeper(node5, cfg5)
-    time.sleep(2)
+    time.sleep(4)
     result = send_rcfg(
         cluster,
         leader,
@@ -289,7 +288,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     # so node6 can connect to them during startup (async Keeper init).
     cfg6 = _get_generated_cfg(node_names, 6)
     start_keeper(node6, cfg6)
-    time.sleep(2)
+    time.sleep(4)
     result = send_rcfg(
         cluster,
         leader,

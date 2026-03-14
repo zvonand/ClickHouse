@@ -61,8 +61,6 @@ for iteration in {1..5}; do
     # Give the background thread time to attempt streaming with no MV
     sleep 0.2
 
-    # The key check: FileLog table must not have accumulated an exception.
-    # Before the fix, DEPENDENCIES_NOT_FOUND was thrown here.
     ${CLICKHOUSE_CLIENT} --query "DROP TABLE ${CLICKHOUSE_DATABASE}.filelog_src SYNC"
     ${CLICKHOUSE_CLIENT} --query "DROP TABLE ${CLICKHOUSE_DATABASE}.filelog_dst SYNC"
 
@@ -72,4 +70,17 @@ done
 
 rm -rf "${DATA_DIR:?}"
 
-echo "OK"
+# Verify that no DEPENDENCIES_NOT_FOUND exception was thrown in the background.
+# Before the fix, the FileLog background thread would throw this exception
+# when the materialized view was dropped during streaming.
+${CLICKHOUSE_CLIENT} --query "SYSTEM FLUSH LOGS text_log"
+${CLICKHOUSE_CLIENT} --query "
+    SELECT count() == 0
+    FROM system.text_log
+    WHERE event_date >= yesterday()
+        AND event_time >= now() - 600
+        AND level = 'Error'
+        AND message LIKE '%DEPENDENCIES_NOT_FOUND%'
+        AND message LIKE '%filelog_src%'
+    SETTINGS max_rows_to_read = 0
+"

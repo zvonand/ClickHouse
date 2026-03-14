@@ -309,17 +309,8 @@ public:
     {
         assertInitialized();
         auto iter = current_metadata->iterate(filter_dag, callback, list_batch_size, storage_metadata, context);
-        if (ready_object_storage)
-        {
-            if (ready_object_storage->getType() == ObjectStorageType::Local)
-                iter = std::make_shared<LocalPathValidatingIterator>(
-                    std::move(iter), ready_object_storage->getCommonKeyPrefix());
-        }
-        else if (BaseStorageConfiguration::getType() == ObjectStorageType::Local)
-        {
-            iter = std::make_shared<LocalPathValidatingIterator>(
-                std::move(iter), context->getUserFilesPath());
-        }
+        if (auto allowed_local_path = getLocalAllowedPath(context))
+            iter = std::make_shared<LocalPathValidatingIterator>(std::move(iter), *allowed_local_path);
         return iter;
     }
 
@@ -429,6 +420,7 @@ public:
 
     void addDeleteTransformers(ObjectInfoPtr object_info, QueryPipelineBuilder & builder, const std::optional<FormatSettings> & format_settings, FormatParserSharedResourcesPtr parser_shared_resources, ContextPtr local_context) const override
     {
+        validateDeleteFilePaths(object_info, local_context);
         current_metadata->addDeleteTransformers(object_info, builder, format_settings, parser_shared_resources, local_context);
     }
 
@@ -457,6 +449,18 @@ private:
     const DataLakeStorageSettingsPtr settings;
     ObjectStoragePtr ready_object_storage;
 
+    std::optional<String> getLocalAllowedPath(ContextPtr local_context) const
+    {
+        if (ready_object_storage)
+        {
+            if (ready_object_storage->getType() == ObjectStorageType::Local)
+                return ready_object_storage->getCommonKeyPrefix();
+        }
+        else if (BaseStorageConfiguration::getType() == ObjectStorageType::Local)
+            return local_context->getUserFilesPath();
+        return std::nullopt;
+    }
+
     void assertLocalPathCorrect(ObjectStoragePtr object_storage, ContextPtr local_context)
     {
         if (object_storage->getType() == ObjectStorageType::Local)
@@ -466,6 +470,35 @@ private:
                 throw Exception(
                     ErrorCodes::PATH_ACCESS_DENIED, "File path {} is not inside {}", this->getPathForRead().path, user_files_path);
         }
+    }
+
+    void validateDeleteFilePaths(const ObjectInfoPtr & object_info, ContextPtr local_context) const
+    {
+        auto allowed = getLocalAllowedPath(local_context);
+        if (!allowed)
+            return;
+
+#if USE_AVRO
+        auto iceberg_info = std::dynamic_pointer_cast<IcebergDataObjectInfo>(object_info);
+        if (!iceberg_info)
+            return;
+
+        auto validate = [&](const String & path)
+        {
+            if (!fileOrSymlinkPathStartsWith(path, *allowed))
+                throw Exception(
+                    ErrorCodes::PATH_ACCESS_DENIED,
+                    "Delete file path {} is not inside {}",
+                    path, *allowed);
+        };
+
+        for (const auto & d : iceberg_info->info.position_deletes_objects)
+            validate(d.file_path);
+        for (const auto & d : iceberg_info->info.equality_deletes_objects)
+            validate(d.file_path);
+#else
+        UNUSED(object_info);
+#endif
     }
 
     void assertInitialized() const

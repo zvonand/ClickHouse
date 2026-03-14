@@ -76,7 +76,7 @@ protected:
     const MergeTreeReadTask::BlockSizeParams block_size_params;
     const MarkCachePtr owned_mark_cache;
     const UncompressedCachePtr owned_uncompressed_cache;
-    const MergeTreeSettingsPtr owned_storage_settings;
+    const ConstStoragePtr owned_data_storage;
     const PatchJoinCachePtr patch_join_cache;
     const Block header;
 

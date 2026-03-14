@@ -2,7 +2,6 @@
 
 #include <vector>
 #include <Core/NamesAndTypes.h>
-#include <Interpreters/Context_fwd.h>
 #include <Storages/MergeTree/AlterConversions.h>
 #include <Storages/MergeTree/IMergeTreeReader.h>
 #include <Storages/MergeTree/MergeTreeIndices.h>
@@ -138,8 +137,6 @@ public:
         PatchJoinCache * patch_join_cache = nullptr;
         MergeTreeReaderSettings reader_settings;
         StorageSnapshotPtr storage_snapshot{};
-        MergeTreeSettingsPtr storage_settings{};
-        ContextPtr context{};
         ValueSizeMap value_size_map{};
         ReadBufferFromFileBase::ProfileCallback profile_callback{};
     };

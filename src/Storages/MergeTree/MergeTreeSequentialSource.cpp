@@ -177,8 +177,6 @@ MergeTreeSequentialSource::MergeTreeSequentialSource(
         .patch_join_cache = patch_join_cache.get(),
         .reader_settings = MergeTreeReaderSettings::createForMergeMutation(std::move(read_settings)),
         .storage_snapshot = storage_snapshot,
-        .storage_settings = storage.getSettings(),
-        .context = storage.getContext(),
     };
 
     readers = MergeTreeReadTask::createReaders(read_task_info, extras, mark_ranges, patch_ranges);

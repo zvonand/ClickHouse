@@ -151,17 +151,13 @@ MergeTreeReadTask::Readers MergeTreeReadTask::createReaders(
 
     auto create_reader = [&](const NamesAndTypesList & columns_to_read, bool is_prewhere)
     {
-        auto part_info = extras.context
-            ? std::make_shared<LoadedMergeTreeDataPartInfoForReader>(read_info->data_part, read_info->alter_conversions, extras.context)
-            : std::make_shared<LoadedMergeTreeDataPartInfoForReader>(read_info->data_part, read_info->alter_conversions);
-
-        auto settings = extras.storage_settings ? extras.storage_settings : read_info->data_part->storage.getSettings();
+        auto part_info = std::make_shared<LoadedMergeTreeDataPartInfoForReader>(read_info->data_part, read_info->alter_conversions);
 
         return createMergeTreeReader(
             part_info,
             columns_to_read,
             extras.storage_snapshot,
-            settings,
+            read_info->data_part->storage.getSettings(),
             ranges,
             read_info->const_virtual_fields,
             extras.uncompressed_cache,
@@ -203,13 +199,11 @@ MergeTreeReadTask::Readers MergeTreeReadTask::createReaders(
 
     auto create_patch_reader = [&](size_t part_idx)
     {
-        auto settings = extras.storage_settings ? extras.storage_settings : read_info->data_part->storage.getSettings();
-
         return createMergeTreeReader(
             read_info->patch_parts[part_idx].part,
             read_info->task_columns.patch_columns[part_idx],
             extras.storage_snapshot,
-            settings,
+            read_info->data_part->storage.getSettings(),
             patches_ranges[part_idx],
             read_info->const_virtual_fields,
             extras.uncompressed_cache,

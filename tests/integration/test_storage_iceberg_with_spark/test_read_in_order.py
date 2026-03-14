@@ -4,7 +4,8 @@ import json
 from helpers.iceberg_utils import (
     default_upload_directory,
     get_uuid_str,
-    create_iceberg_table
+    create_iceberg_table,
+    get_creation_expression
 )
 
 
@@ -142,7 +143,16 @@ def test_defining_columns_with_special_character(started_cluster_iceberg_with_sp
         """
     )
 
-    instance.query(f"SELECT * FROM icebergS3(s3, filename = 'var/lib/clickhouse/user_files/iceberg_data/default/demo_events', url = 'http://minio1:9001/{started_cluster_iceberg_with_spark.minio_bucket}/')")
+    default_upload_directory(
+        started_cluster_iceberg_with_spark,
+        "s3",
+        f"/iceberg_data/default/{table_name}/",
+        f"/iceberg_data/default/{table_name}/",
+    )
+
+    table_expr = get_creation_expression("s3", table_name, started_cluster_iceberg_with_spark, table_function=True)
+
+    instance.query(f"SELECT * FROM {table_expr}")
     spark.sql(f"DROP TABLE {table_name}")
 
 

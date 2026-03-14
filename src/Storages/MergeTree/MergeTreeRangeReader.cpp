@@ -1181,11 +1181,23 @@ void MergeTreeRangeReader::fillVirtualColumns(Columns & columns, ReadResult & re
             result.min_part_offset = 0;
             result.max_part_offset = 0;
         }
+        else if (result.total_rows_per_granule == 0)
+        {
+            result.min_part_offset = 0;
+            result.max_part_offset = 0;
+        }
         else
         {
             result.min_part_offset = result.granule_offsets.front().starting_offset;
-            size_t last_granule_rows = result.rows_per_granule.back();
-            result.max_part_offset = result.granule_offsets.back().starting_offset + (last_granule_rows > 0 ? last_granule_rows - 1 : 0);
+
+            /// Find the last granule with non-zero rows to avoid unsigned underflow in `rows_per_granule[i] - 1`.
+            /// Zero-row granules can appear after `adjustLastGranule` subtracts all rows or after `clear`.
+            size_t last = result.rows_per_granule.size();
+            while (last > 0 && result.rows_per_granule[last - 1] == 0)
+                --last;
+
+            chassert(last > 0); /// total_rows_per_granule > 0 guarantees at least one non-zero granule
+            result.max_part_offset = result.granule_offsets[last - 1].starting_offset + result.rows_per_granule[last - 1] - 1;
         }
     }
 }

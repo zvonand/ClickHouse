@@ -393,7 +393,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
             return processors;
         });
 
-        pipeline.resize(params.max_threads);
+        pipeline.resize(std::min(params.max_threads, pipeline.getNumStreams()));
 
         aggregating = collector.detachProcessors(0);
         return;
@@ -437,7 +437,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
             {
                 pipeline.addSimpleTransform([&](const SharedHeader & header)
                                             { return std::make_shared<FinalizeAggregatedTransform>(header, transform_params); });
-                pipeline.resize(params.max_threads);
+                pipeline.resize(std::min(params.max_threads, pipeline.getNumStreams()));
                 aggregating_in_order = collector.detachProcessors(0);
                 return;
             }
@@ -518,7 +518,13 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
                     dataflow_cache_updater);
             });
 
-        pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : params.max_threads, false, settings.min_outstreams_per_resize_after_split);
+        /// Don't expand beyond the number of aggregation streams.
+        /// The read step may have reduced the stream count for small data,
+        /// and expanding to max_threads creates overhead from mostly-empty streams
+        /// in subsequent steps (sorting, merging).
+        size_t post_aggregation_threads = should_produce_results_in_order_of_bucket_number
+            ? 1 : std::min(params.max_threads, pipeline.getNumStreams());
+        pipeline.resize(post_aggregation_threads, false, settings.min_outstreams_per_resize_after_split);
 
         aggregating = collector.detachProcessors(0);
     }

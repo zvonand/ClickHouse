@@ -1,4 +1,3 @@
--- Tags: no-fasttest
 -- Verify windowFunnel with strict_deduplication returns correct max level.
 -- See https://github.com/ClickHouse/ClickHouse/issues/37177
 
@@ -20,6 +19,10 @@ INSERT INTO test_windowfunnel_strict_dedup VALUES
 
 -- Should return 3 (install→start→login matched before duplicate install stops the chain)
 SELECT windowFunnel(60, 'strict_deduplication')(time, event = 'install', event = 'start', event = 'login', event = 'end') AS step
+FROM test_windowfunnel_strict_dedup;
+
+-- Same test with strict_once to cover the getEventLevelStrictOnce code path
+SELECT windowFunnel(60, 'strict_deduplication', 'strict_once')(time, event = 'install', event = 'start', event = 'login', event = 'end') AS step
 FROM test_windowfunnel_strict_dedup;
 
 DROP TABLE test_windowfunnel_strict_dedup;

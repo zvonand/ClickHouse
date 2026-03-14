@@ -1,6 +1,3 @@
--- Tags: no-parallel-replicas
--- Tag no-parallel-replicas -- direct read is not compatible with parallel replicas
-
 -- Regression test for a bug where OR of hasAllTokens on different columns
 -- with separate text indexes returned incorrect results.
 -- The bug was in MergeTreeReaderTextIndex::fillColumn: when postings.size() == 1

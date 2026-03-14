@@ -71,7 +71,7 @@ def restore_certificates(started_cluster):
             ]
         )
     yield
-    # After test: restore original first.crt/key from backup
+    # After test: restore original first.crt/key from backup and reload config
     for node in all_nodes:
         try:
             node.exec_in_container(
@@ -82,6 +82,12 @@ def restore_certificates(started_cluster):
                     "cp /etc/clickhouse-server/config.d/first.key.bak /etc/clickhouse-server/config.d/first.key",
                 ]
             )
+        except Exception:
+            pass
+    # Reload config so ClickHouse picks up the restored certificates for next iteration
+    for node in all_nodes:
+        try:
+            node.query("SYSTEM RELOAD CONFIG")
         except Exception:
             pass
 
@@ -171,6 +177,17 @@ def get_cert_serial_from_raft_port(node, target_host):
     return result.strip()
 
 
+def wait_for_cert_reload(node, target_host, expected_serial, timeout=30):
+    """Poll the Raft SSL port until it serves the expected certificate."""
+    start = time.time()
+    while time.time() - start < timeout:
+        served = get_cert_serial_from_raft_port(node, target_host)
+        if served == expected_serial:
+            return True
+        time.sleep(0.5)
+    return False
+
+
 def test_cert_reload_on_reconnect(started_cluster):
     """
     Test that restarted node uses updated certificates for new Raft connections.
@@ -193,10 +210,12 @@ def test_cert_reload_on_reconnect(started_cluster):
     initial_serial = get_cert_serial_from_file(node1)
     print(f"Initial certificate serial (from file): {initial_serial}")
 
-    # Verify the Raft port is serving the initial certificate
-    initial_served = get_cert_serial_from_raft_port(node2, "node1")
-    print(f"Initial certificate serial (from Raft port): {initial_served}")
-    assert initial_serial == initial_served, "Raft port should serve initial cert"
+    # Wait for the Raft port to serve the initial certificate
+    # This handles flaky retries where previous run may have left different cert loaded
+    assert wait_for_cert_reload(node2, "node1", initial_serial, timeout=30), (
+        f"Raft port should serve initial cert {initial_serial}"
+    )
+    print(f"Verified: Raft port is serving initial certificate")
 
     # Verify initial cluster works
     verify_cluster_works(f"/test_initial_{test_id}", all_nodes)
@@ -216,16 +235,6 @@ def test_cert_reload_on_reconnect(started_cluster):
     new_serial = get_cert_serial_from_file(node1)
     print(f"New certificate serial (from file): {new_serial}")
     assert initial_serial != new_serial, "Certificate serial should have changed"
-
-    # Wait for certificate reload to complete by polling the Raft port
-    def wait_for_cert_reload(node, target_host, expected_serial, timeout=30):
-        start = time.time()
-        while time.time() - start < timeout:
-            served = get_cert_serial_from_raft_port(node, target_host)
-            if served == expected_serial:
-                return True
-            time.sleep(0.5)
-        return False
 
     # Note: Existing connections keep their old cert - that's expected.
     # The new cert is only used for NEW connections.

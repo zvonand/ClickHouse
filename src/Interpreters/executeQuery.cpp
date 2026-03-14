@@ -2026,9 +2026,31 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
             fuzzer->fuzzMain(fuzzed_ast);
         }
 
-        WriteBufferFromOwnString fuzzed_query_buf;
-        fuzzed_ast->format(fuzzed_query_buf, IAST::FormatSettings(/*one_line=*/true));
-        String fuzzed_query = fuzzed_query_buf.str();
+        /// Skip deeply nested ASTs to avoid stack overflow during formatting or execution.
+        try
+        {
+            fuzzed_ast->checkDepth(500);
+        }
+        catch (...)
+        {
+            LOG_TRACE(logger, "Fuzzed AST too deep, skipping");
+            continue;
+        }
+
+        /// The fuzzer can produce structurally invalid ASTs (e.g. mismatched children counts)
+        /// that cause crashes during formatting. Catch and skip those.
+        String fuzzed_query;
+        try
+        {
+            WriteBufferFromOwnString fuzzed_query_buf;
+            fuzzed_ast->format(fuzzed_query_buf, IAST::FormatSettings(/*one_line=*/true));
+            fuzzed_query = fuzzed_query_buf.str();
+        }
+        catch (...)
+        {
+            LOG_TRACE(logger, "Failed to format fuzzed AST, skipping");
+            continue;
+        }
 
         if (fuzzed_query.size() > 10000)
         {
@@ -2039,16 +2061,31 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
         ProfileEvents::increment(ProfileEvents::ASTFuzzerQueries);
         LOG_TRACE(logger, "Fuzzed query: {}", fuzzed_query);
 
+        /// Reset the transaction (if any), it is stored in session and local context (see InterpreterTransactionControlQuery::executeBegin())
+        context->getQueryContext()->getSessionContext()->setCurrentTransaction(NO_TRANSACTION_PTR);
+        context->setCurrentTransaction(NO_TRANSACTION_PTR);
+
+        /// Declare contexts outside try block so we can reset transactions on all paths.
+        /// MergeTreeTransactionHolder destructor calls rollbackTransaction (noexcept),
+        /// which uses getCurrentExceptionCode with bare `throw;` - that only works
+        /// inside a catch handler, not during stack unwinding.
+        ContextMutablePtr fuzz_session_context;
+        ContextMutablePtr fuzz_context;
+
+        auto reset_transactions = [&]()
+        {
+            if (fuzz_context)
+                fuzz_context->setCurrentTransaction(NO_TRANSACTION_PTR);
+            if (fuzz_session_context)
+                fuzz_session_context->setCurrentTransaction(NO_TRANSACTION_PTR);
+        };
+
         try
         {
-            /// Reset the transaction (if any), it is stored in session and local context (see InterpreterTransactionControlQuery::executeBegin())
-            context->getQueryContext()->getSessionContext()->setCurrentTransaction(NO_TRANSACTION_PTR);
-            context->setCurrentTransaction(NO_TRANSACTION_PTR);
-
-            auto fuzz_session_context = Context::createCopy(context);
+            fuzz_session_context = Context::createCopy(context);
             fuzz_session_context->makeSessionContext();
 
-            auto fuzz_context = Context::createCopy(fuzz_session_context);
+            fuzz_context = Context::createCopy(fuzz_session_context);
             fuzz_context->makeQueryContext();
             fuzz_context->resetInputCallbacks();
             fuzz_context->setSetting("ast_fuzzer_runs", Field(Float64(0)));
@@ -2082,17 +2119,12 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
                 }
             }
 
-            /// Reset transactions before context destruction to prevent std::terminate.
-            /// MergeTreeTransactionHolder destructor calls rollbackTransaction (noexcept),
-            /// which uses getCurrentExceptionCode with bare `throw;` - that only works
-            /// inside a catch handler, not during stack unwinding.
-            fuzz_context->setCurrentTransaction(NO_TRANSACTION_PTR);
-            fuzz_session_context->setCurrentTransaction(NO_TRANSACTION_PTR);
-
+            reset_transactions();
             base_ast = fuzzed_ast;
         }
         catch (...)
         {
+            reset_transactions();
             LOG_TRACE(logger, "Fuzzed query failed: {}", getCurrentExceptionMessage(/*with_stacktrace=*/false));
             auto [fuzzer, lock] = getGlobalASTFuzzer();
             fuzzer->notifyQueryFailed(fuzzed_ast);

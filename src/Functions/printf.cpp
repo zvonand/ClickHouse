@@ -262,7 +262,7 @@ private:
             for (size_t i = 1; i < arguments.size(); ++i)
             {
                 auto single_val_col = arguments[i].column->cut(row, 1);
-                row_args[i] = {std::move(single_val_col), arguments[i].type, arguments[i].name};
+                row_args[i] = {single_val_col, arguments[i].type, arguments[i].name};
             }
 
             try

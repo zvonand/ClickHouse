@@ -101,7 +101,7 @@ std::string normalizeUuid(const std::string & uuid);
 
 DataTypePtr getFunctionResultType(const String & iceberg_transform_name, DataTypePtr source_type);
 
-enum class FileCatagory : uint8_t
+enum class FileCategory : uint8_t
 {
     DATA_FILE,
     POSITION_DELETE_FILE,
@@ -112,7 +112,7 @@ enum class FileCatagory : uint8_t
     STATISTICS_FILE,
 };
 
-FileCatagory getFileCatagory(const String & relative_path);
+FileCategory getFileCategory(const String & relative_path);
 
 KeyDescription getSortingKeyDescriptionFromMetadata(
     Poco::JSON::Object::Ptr metadata_object, const NamesAndTypesList & ch_schema, ContextPtr local_context);

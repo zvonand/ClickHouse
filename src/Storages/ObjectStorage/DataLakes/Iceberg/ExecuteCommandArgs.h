@@ -188,6 +188,10 @@ private:
         if (!known_names.contains(name))
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unknown parameter '{}' for {}", name, command_name);
 
+        if (result.has(name))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Duplicate parameter '{}' for {}()", name, command_name);
+
         auto it = expected_types.find(name);
         if (it != expected_types.end())
             validateType(name, value, it->second);
@@ -202,6 +206,11 @@ private:
                 "{} accepts at most {} positional argument(s)", command_name, positional_names.size());
 
         const auto & name = positional_names[index];
+
+        if (result.has(name))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Duplicate parameter '{}' for {}(): specified both as positional and named argument", name, command_name);
+
         auto it = expected_types.find(name);
         if (it != expected_types.end())
             validateType(name, value, it->second);

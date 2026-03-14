@@ -259,15 +259,15 @@ RemoveOrphanFilesResult removeOrphanFiles(
         RemoveOrphanFilesResult r;
         for (const auto & path : paths)
         {
-            switch (getFileCatagory(path))
+            switch (getFileCategory(path))
             {
-                case FileCatagory::DATA_FILE:                ++r.deleted_data_files_count; break;
-                case FileCatagory::POSITION_DELETE_FILE:      ++r.deleted_position_delete_files_count; break;
-                case FileCatagory::EQUALITY_DELETE_FILE:      ++r.deleted_equality_delete_files_count; break;
-                case FileCatagory::MANIFEST_FILE:             ++r.deleted_manifest_files_count; break;
-                case FileCatagory::MANIFEST_LIST:             ++r.deleted_manifest_lists_count; break;
-                case FileCatagory::METADATA_JSON:             ++r.deleted_metadata_files_count; break;
-                case FileCatagory::STATISTICS_FILE:           ++r.deleted_statistics_files_count; break;
+                case FileCategory::DATA_FILE:                ++r.deleted_data_files_count; break;
+                case FileCategory::POSITION_DELETE_FILE:      ++r.deleted_position_delete_files_count; break;
+                case FileCategory::EQUALITY_DELETE_FILE:      ++r.deleted_equality_delete_files_count; break;
+                case FileCategory::MANIFEST_FILE:             ++r.deleted_manifest_files_count; break;
+                case FileCategory::MANIFEST_LIST:             ++r.deleted_manifest_lists_count; break;
+                case FileCategory::METADATA_JSON:             ++r.deleted_metadata_files_count; break;
+                case FileCategory::STATISTICS_FILE:           ++r.deleted_statistics_files_count; break;
             }
         }
         r.skipped_missing_metadata_count = skipped_missing_metadata;

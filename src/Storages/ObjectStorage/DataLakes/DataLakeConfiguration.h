@@ -309,8 +309,17 @@ public:
     {
         assertInitialized();
         auto iter = current_metadata->iterate(filter_dag, callback, list_batch_size, storage_metadata, context);
-        if (BaseStorageConfiguration::getType() == ObjectStorageType::Local && !ready_object_storage)
-            iter = std::make_shared<LocalPathValidatingIterator>(std::move(iter), context->getUserFilesPath());
+        if (ready_object_storage)
+        {
+            if (ready_object_storage->getType() == ObjectStorageType::Local)
+                iter = std::make_shared<LocalPathValidatingIterator>(
+                    std::move(iter), ready_object_storage->getCommonKeyPrefix());
+        }
+        else if (BaseStorageConfiguration::getType() == ObjectStorageType::Local)
+        {
+            iter = std::make_shared<LocalPathValidatingIterator>(
+                std::move(iter), context->getUserFilesPath());
+        }
         return iter;
     }
 

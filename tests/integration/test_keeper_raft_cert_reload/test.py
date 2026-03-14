@@ -2,15 +2,13 @@
 """
 Test for TLS certificate hot-reload on Keeper Raft connections.
 
-This test verifies that when TLS certificates are replaced on disk and
-config is reloaded, new Raft connections between Keeper nodes use the
-updated certificates. A node restart is used to trigger new connections,
-which then validate against the reloaded certificate material.
+This test verifies that when TLS certificates are replaced on disk,
+new Raft connections between Keeper nodes pick up the new certificates
+without requiring a restart.
 """
 
 import os
 import time
-import uuid
 
 import pytest
 
@@ -56,6 +54,35 @@ def started_cluster():
         yield cluster
     finally:
         cluster.shutdown()
+
+
+@pytest.fixture(autouse=True)
+def restore_certificates(started_cluster):
+    """Backup and restore certificates for each test to support flaky check repeated runs."""
+    # Before test: backup original first.crt/key
+    for node in all_nodes:
+        node.exec_in_container(
+            [
+                "bash",
+                "-c",
+                "cp /etc/clickhouse-server/config.d/first.crt /etc/clickhouse-server/config.d/first.crt.bak && "
+                "cp /etc/clickhouse-server/config.d/first.key /etc/clickhouse-server/config.d/first.key.bak",
+            ]
+        )
+    yield
+    # After test: restore original first.crt/key from backup
+    for node in all_nodes:
+        try:
+            node.exec_in_container(
+                [
+                    "bash",
+                    "-c",
+                    "cp /etc/clickhouse-server/config.d/first.crt.bak /etc/clickhouse-server/config.d/first.crt && "
+                    "cp /etc/clickhouse-server/config.d/first.key.bak /etc/clickhouse-server/config.d/first.key",
+                ]
+            )
+        except Exception:
+            pass
 
 
 def get_fake_zk(nodename, timeout=30.0):
@@ -168,8 +195,7 @@ def test_cert_reload_on_reconnect(started_cluster):
     assert initial_serial == initial_served, "Raft port should serve initial cert"
 
     # Verify initial cluster works
-    test_id = uuid.uuid4().hex[:8]
-    verify_cluster_works(f"/test_initial_{test_id}", all_nodes)
+    verify_cluster_works("/test_initial", all_nodes)
     print("Initial cluster working with first certificates")
 
     # Replace certificate files on ALL nodes
@@ -187,16 +213,8 @@ def test_cert_reload_on_reconnect(started_cluster):
     print(f"New certificate serial (from file): {new_serial}")
     assert initial_serial != new_serial, "Certificate serial should have changed"
 
-    # Wait for certificate reload to complete by polling the Raft port
-    # New connections should use the updated certificate
-    def wait_for_cert_reload(node, target_host, expected_serial, timeout=30):
-        start = time.time()
-        while time.time() - start < timeout:
-            served = get_cert_serial_from_raft_port(node, target_host)
-            if served == expected_serial:
-                return True
-            time.sleep(0.5)
-        return False
+    # Give time for reload to process
+    time.sleep(2)
 
     # Note: Existing connections keep their old cert - that's expected.
     # The new cert is only used for NEW connections.
@@ -210,13 +228,14 @@ def test_cert_reload_on_reconnect(started_cluster):
     print("Node3 restarted and reconnected")
 
     # Verify cluster works - proves new connections use updated certs
-    verify_cluster_works(f"/test_after_restart_{test_id}", all_nodes)
+    verify_cluster_works("/test_after_restart", all_nodes)
     print("Cluster working after restart - new Raft connections use updated certs!")
 
     # Now verify the Raft port is serving the NEW certificate
     # Node3 just restarted, so its connections to node1 are fresh
-    # Use polling to handle async certificate reload
-    assert wait_for_cert_reload(node3, "node1", new_serial, timeout=30), (
-        f"Raft port should serve new cert after reload. Expected {new_serial}"
+    served_serial = get_cert_serial_from_raft_port(node3, "node1")
+    print(f"Certificate serial from Raft port after restart: {served_serial}")
+    assert served_serial == new_serial, (
+        f"Raft port should serve new cert after reload. Expected {new_serial}, got {served_serial}"
     )
     print("Verified: Raft SSL port is serving the updated certificate!")

@@ -17,6 +17,12 @@
 
 namespace DB
 {
+
+namespace ErrorCodes
+{
+    extern const int SYNTAX_ERROR;
+}
+
 namespace
 {
     bool parseRenameTo(IParserBase::Pos & pos, Expected & expected, String & new_short_name)
@@ -65,6 +71,22 @@ namespace
             ASTPtr x;
             if (!parser.parse(pos, x, expected))
                 return false;
+
+            auto has_alias = [](this auto const& self, const ASTPtr & ast)->bool
+            {
+                if (!ast)
+                    return false;
+                if (!ast->tryGetAlias().empty())
+                    return true;
+                for (const auto & child : ast->children)
+                    if (self(child))
+                        return true;
+
+                return false;
+            };
+
+            if (has_alias(x))
+                throw Exception(ErrorCodes::SYNTAX_ERROR, "Aliases are not allowed in CREATE ROW POLICY queries.");
 
             expr = x;
             return true;

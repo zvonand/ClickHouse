@@ -58,6 +58,11 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"allow_experimental_json_lazy_type_hints", false, false, "New experimental setting for lazy JSON type hints"},
             {"allow_iceberg_remove_orphan_files", false, false, "New setting to gate Iceberg orphan file removal"},
             {"iceberg_orphan_files_older_than_seconds", 259200, 259200, "New setting for default orphan file age threshold"},
+            {"allow_experimental_expire_snapshots", false, false, "New setting."},
+            {"iceberg_expire_default_min_snapshots_to_keep", 1, 1, "New setting."},
+            {"iceberg_expire_default_max_snapshot_age_ms", 432000000, 432000000, "New setting."},
+            {"iceberg_expire_default_max_ref_age_ms", 9223372036854775807, 9223372036854775807, "New setting."},
+            {"functions_h3_default_if_invalid", true, false, "A new setting for legacy behaviour to allow invalid inputs to h3 functions"},
         });
         addSettingsChanges(settings_changes_history, "26.2",
         {
@@ -89,6 +94,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"jemalloc_profile_text_symbolize_with_inline", true, true, "New setting to control whether to include inline frames when symbolizing jemalloc heap profile. When enabled, inline frames are included at the cost of slower symbolization; when disabled, they are skipped for faster output"},
             {"jemalloc_profile_text_collapsed_use_count", false, false, "New setting to aggregate by allocation count instead of bytes in the collapsed jemalloc heap profile format"},
             {"opentelemetry_start_keeper_trace_probability", "auto", "auto", "New setting"},
+            {"functions_h3_default_if_invalid", true, false, "A new setting for legacy behaviour to allow invalid inputs to h3 functions"},
         });
         addSettingsChanges(settings_changes_history, "26.1",
         {
@@ -1087,6 +1093,8 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
             {"vertical_merge_optimize_ttl_delete", false, true, "Allow vertical merge algorithm for merges that need to remove rows expired by TTL"},
             {"shared_merge_tree_replica_set_max_lifetime_seconds", 300, 300, "New setting"},
             {"table_readonly", false, false, "New setting to mark table as read-only, preventing inserts and modifications"},
+            {"propagate_types_serialization_versions_to_nested_types", false, true, "Propagate data types serialization version to nested types by default"},
+            {"shared_merge_tree_use_zookeeper_connection_pool", false, false, "New setting"},
         });
         addSettingsChanges(merge_tree_settings_changes_history, "26.2",
         {

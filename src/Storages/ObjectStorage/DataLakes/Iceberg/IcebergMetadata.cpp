@@ -59,6 +59,7 @@
 #include <Storages/ObjectStorage/DataLakes/Common/AvroForIcebergDeserializer.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Compaction.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Constant.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteOptionsParser.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergDataObjectInfo.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergIterator.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergMetadata.h>
@@ -124,6 +125,7 @@ extern const SettingsBool allow_insert_into_iceberg;
 extern const SettingsBool allow_experimental_iceberg_compaction;
 extern const SettingsBool allow_iceberg_remove_orphan_files;
 extern const SettingsUInt64 iceberg_orphan_files_older_than_seconds;
+extern const SettingsBool allow_experimental_expire_snapshots;
 extern const SettingsBool iceberg_delete_data_on_drop;
 }
 
@@ -536,6 +538,11 @@ void IcebergMetadata::checkAlterIsPossible(const AlterCommands & commands)
         if (command.type != AlterCommand::Type::ADD_COLUMN && command.type != AlterCommand::Type::DROP_COLUMN
             && command.type != AlterCommand::Type::MODIFY_COLUMN && command.type != AlterCommand::Type::RENAME_COLUMN)
             throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Alter of type '{}' is not supported by Iceberg storage", command.type);
+
+        if (command.type == AlterCommand::Type::MODIFY_COLUMN && command.to_remove != AlterCommand::RemoveProperty::NO_PROPERTY)
+            throw Exception(
+                ErrorCodes::NOT_IMPLEMENTED,
+                "Removing column property '{}' from column '{}' is not supported by Iceberg storage", command.to_remove, command.column_name);
     }
 }
 
@@ -573,8 +580,10 @@ static Pipe expireSnapshotsResultToPipe(const Iceberg::ExpireSnapshotsResult & r
     add("deleted_manifest_files_count", result.deleted_manifest_files_count);
     add("deleted_manifest_lists_count", result.deleted_manifest_lists_count);
     add("deleted_statistics_files_count", result.deleted_statistics_files_count);
+    add("dry_run", result.dry_run ? 1 : 0);
 
-    Chunk chunk(std::move(columns), 6);
+    const size_t rows = columns[0]->size();
+    Chunk chunk(std::move(columns), rows);
     return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
 }
 
@@ -612,13 +621,6 @@ static time_t parseTimestamp(const String & ts_str)
     time_t ts;
     readDateTimeText(ts, buf);
     return ts;
-}
-
-static ExecuteCommandArgs makeExpireSnapshotsSchema()
-{
-    ExecuteCommandArgs schema("expire_snapshots");
-    schema.addPositional("older_than", Field::Types::String);
-    return schema;
 }
 
 static ExecuteCommandArgs makeRemoveOrphanFilesSchema(ContextPtr context)
@@ -665,14 +667,18 @@ Pipe IcebergMetadata::executeCommand(
 
     if (command_name == "expire_snapshots")
     {
-        auto parsed = makeExpireSnapshotsSchema().parse(args);
+        if (!context->getSettingsRef()[Setting::allow_experimental_expire_snapshots].value)
+        {
+            throw Exception(
+                ErrorCodes::SUPPORT_IS_DISABLED,
+                "Iceberg expire_snapshots is experimental. "
+                "To allow its usage, enable setting allow_experimental_expire_snapshots");
+        }
 
-        std::optional<Int64> expire_before_ms;
-        if (parsed.has("older_than"))
-            expire_before_ms = static_cast<Int64>(parseTimestamp(parsed.getAs<String>("older_than"))) * 1000;
+        auto options = parseExpireSnapshotsOptions(args, context);
 
         auto result = Iceberg::expireSnapshots(
-            expire_before_ms,
+            options,
             context,
             object_storage_,
             data_lake_settings,

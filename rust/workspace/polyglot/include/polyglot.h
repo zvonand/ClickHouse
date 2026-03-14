@@ -20,7 +20,7 @@ int64_t polyglot_transpile(
     uint8_t ** out,
     uint64_t * out_size);
 
-/// Frees the passed in pointer which's memory was allocated by Rust allocators previously.
+/// Frees the passed in pointer whose memory was allocated by Rust allocators previously.
 void polyglot_free_pointer(uint8_t * ptr_to_free);
 
 } // extern "C"

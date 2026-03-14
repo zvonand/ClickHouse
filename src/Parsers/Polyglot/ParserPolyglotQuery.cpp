@@ -89,7 +89,7 @@ bool ParserPolyglotQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expecte
             "Original query: '{}'\nTranspiled SQL: '{}'",
             error_message,
             std::string_view{begin, raw_end},
-            std::string_view(original_sql_query_ptr, original_sql_query_ptr + sql_query_size));
+            std::string_view(original_sql_query_ptr, sql_query_size > 0 ? sql_query_size - 1 : 0));
 
     return true;
 #endif

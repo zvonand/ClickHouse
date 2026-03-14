@@ -30,3 +30,7 @@ $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect duckdb \
 
 # Test that polyglot dialect requires the experimental setting
 $CLICKHOUSE_CLIENT --dialect polyglot --polyglot_dialect sqlite -q "SELECT 1" 2>&1 | grep -o "SUPPORT_IS_DISABLED"
+
+# Test that an invalid dialect name produces a clear error
+$CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect invalid_dialect \
+    -q "SELECT 1" 2>&1 | grep -oP 'SYNTAX_ERROR'

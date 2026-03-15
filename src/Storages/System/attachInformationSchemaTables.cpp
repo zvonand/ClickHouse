@@ -1,13 +1,18 @@
-#include <memory>
 #include <Databases/DatabaseOnDisk.h>
 #include <Storages/System/attachInformationSchemaTables.h>
 #include <Storages/System/attachSystemTablesImpl.h>
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/parseQuery.h>
+#include <span>
 
 
 namespace DB
 {
+
+/// Include views in information_schema.
+///
+/// Note: CMake doesn't recognize changes in #embed-ed files. If you change any of these files, you will need to make a
+/// scratch build.
 
 constexpr unsigned char schemata[] = {
 #embed "information_schema/schemata.sql"

@@ -13,6 +13,8 @@ from .flight_sql_client import (
     DoPutUpdateResult,
     CancelStatus,
     SetSessionOptionsResult,
+    CommandStatementQuery,
+    CommandStatementIngest,
 )
 
 
@@ -425,3 +427,402 @@ def test_poll_flight_info_with_path_descriptor():
 
     # Cancel the running query so cleanup can drop the table
     client.cancel_flight_info(poll_result.info_bytes)
+
+
+#
+# GetSchema Tests
+#
+
+def test_get_schema():
+    """GetSchema returns schema without executing the query."""
+    client = get_client()
+
+    client.execute_update(
+        "CREATE TABLE mytable (id UInt32, name String, value Float64) ENGINE = Memory"
+    )
+
+    # GetSchema via Flight SQL CommandStatementQuery
+    schema_result = client.get_schema("SELECT * FROM mytable")
+    schema = schema_result.schema
+
+    assert len(schema) == 3
+    assert schema.field("id").type == pa.uint32()
+    assert schema.field("name").type == pa.string()
+    assert schema.field("value").type == pa.float64()
+
+
+def test_get_schema_path_descriptor():
+    """GetSchema works with PATH descriptor."""
+    client = get_client()
+
+    client.execute_update("CREATE TABLE mytable (id Int64, name String) ENGINE = Memory")
+
+    descriptor = flight.FlightDescriptor.for_path("mytable")
+    options = client._flight_call_options()
+
+    schema_result = client.client.get_schema(descriptor, options)
+    schema = schema_result.schema
+
+    assert schema.field("id").type == pa.int64()
+    assert schema.field("name").type == pa.string()
+
+
+#
+# Data Type Coverage
+#
+
+def test_array_data_type():
+    """Array type round-trip."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32, arr Array(UInt32)) ENGINE = Memory")
+    client.execute_update("INSERT INTO mytable VALUES (1, [10, 20, 30])")
+
+    flight_info = client.execute("SELECT * FROM mytable")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 1
+    assert isinstance(table.column("arr").type, pa.ListType)
+    assert table.column("arr")[0].as_py() == [10, 20, 30]
+
+
+def test_tuple_data_type():
+    """Tuple type round-trip."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32, t Tuple(String, UInt32)) ENGINE = Memory")
+    client.execute_update("INSERT INTO mytable VALUES (1, ('hello', 42))")
+
+    flight_info = client.execute("SELECT * FROM mytable")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 1
+    # Tuple maps to Arrow struct
+    assert isinstance(table.column("t").type, pa.StructType)
+
+
+def test_nullable_data_type():
+    """Nullable type round-trip."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32, val Nullable(String)) ENGINE = Memory")
+    client.execute_update("INSERT INTO mytable VALUES (1, 'hello'), (2, NULL)")
+
+    flight_info = client.execute("SELECT * FROM mytable ORDER BY id")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 2
+    assert table.column("val")[0].as_py() == "hello"
+    assert table.column("val")[1].as_py() is None
+
+
+def test_datetime_data_types():
+    """DateTime and DateTime64 round-trip."""
+    client = get_client()
+    client.execute_update(
+        "CREATE TABLE mytable (id UInt32, dt DateTime, dt64 DateTime64(3)) ENGINE = Memory"
+    )
+    client.execute_update(
+        "INSERT INTO mytable VALUES (1, '2024-01-15 10:30:00', '2024-01-15 10:30:00.123')"
+    )
+
+    flight_info = client.execute("SELECT * FROM mytable")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 1
+    # DateTime maps to uint32 (unix timestamp)
+    assert table.column("dt").type == pa.uint32()
+    assert table.column("dt")[0].as_py() == 1705314600
+    # DateTime64 maps to Arrow timestamp
+    assert pa.types.is_timestamp(table.column("dt64").type)
+
+def test_decimal_data_type():
+    """Decimal type round-trip."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32, val Decimal(18, 4)) ENGINE = Memory")
+    client.execute_update("INSERT INTO mytable VALUES (1, 123.4567)")
+
+    flight_info = client.execute("SELECT * FROM mytable")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 1
+    assert pa.types.is_decimal(table.column("val").type)
+
+
+def test_uuid_data_type():
+    """UUID type round-trip."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32, uid UUID) ENGINE = Memory")
+    client.execute_update(
+        "INSERT INTO mytable VALUES (1, '550e8400-e29b-41d4-a716-446655440000')"
+    )
+
+    flight_info = client.execute("SELECT * FROM mytable")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 1
+
+
+def test_lowcardinality_data_type():
+    """LowCardinality type round-trip."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32, val LowCardinality(String)) ENGINE = Memory")
+    client.execute_update("INSERT INTO mytable VALUES (1, 'aaa'), (2, 'bbb'), (3, 'aaa')")
+
+    flight_info = client.execute("SELECT * FROM mytable ORDER BY id")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 3
+    vals = [table.column("val")[i].as_py() for i in range(3)]
+    assert vals == ["aaa", "bbb", "aaa"]
+
+
+def test_enum_data_type():
+    """Enum type round-trip."""
+    client = get_client()
+    client.execute_update(
+        "CREATE TABLE mytable (id UInt32, status Enum8('ok' = 1, 'error' = 2)) ENGINE = Memory"
+    )
+    client.execute_update("INSERT INTO mytable VALUES (1, 'ok'), (2, 'error')")
+
+    flight_info = client.execute("SELECT * FROM mytable ORDER BY id")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 2
+
+
+#
+# Session Management
+#
+
+def test_session_state_persistence():
+    """Session ID preserves state across requests (e.g., temp tables, settings)."""
+    client = get_client()  # already uses x-clickhouse-session-id
+
+    client.execute_update("SET max_threads = 2")
+
+    flight_info = client.execute("SELECT value FROM system.settings WHERE name = 'max_threads'")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.column(0)[0].as_py() == "2"
+
+
+def test_different_sessions_are_independent():
+    """Different session IDs have independent state."""
+    import random, string
+    session_id_1 = ''.join(random.choices(string.ascii_letters, k=16))
+    session_id_2 = ''.join(random.choices(string.ascii_letters, k=16))
+
+    client1 = FlightSQLClient(
+        host=node.ip_address, port=8888, insecure=True,
+        disable_server_verification=True,
+        metadata={'x-clickhouse-session-id': session_id_1},
+    )
+    client2 = FlightSQLClient(
+        host=node.ip_address, port=8888, insecure=True,
+        disable_server_verification=True,
+        metadata={'x-clickhouse-session-id': session_id_2},
+    )
+
+    client1.execute_update("SET max_threads = 3")
+
+    # client2 should still see the default
+    flight_info = client2.execute("SELECT value FROM system.settings WHERE name = 'max_threads'")
+    reader = client2.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    # Should NOT be "3" since it's a different session
+    assert table.column(0)[0].as_py() != "3"
+
+
+#
+# Bearer Token Authentication
+#
+
+def test_bearer_token_reuse():
+    """After Basic auth, the returned Bearer token can authenticate subsequent requests."""
+    client = flight.FlightClient(f"grpc://{node.ip_address}:8888")
+
+    # First request with Basic auth returns a Bearer token
+    token_pair = client.authenticate_basic_token("default", "")
+    options = flight.FlightCallOptions(headers=[token_pair])
+
+    # Use the Bearer token for a query
+    ticket = flight.Ticket(b"SELECT 1")
+    reader = client.do_get(ticket, options)
+    table = reader.read_all()
+    assert table.column(0)[0].as_py() == 1
+
+
+#
+# Edge Cases
+#
+
+def test_empty_result_set():
+    """Query returning zero rows produces valid empty table."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32, name String) ENGINE = Memory")
+
+    flight_info = client.execute("SELECT * FROM mytable")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 0
+    assert table.num_columns == 2
+    assert table.schema.field("id").type == pa.uint32()
+    assert table.schema.field("name").type == pa.string()
+
+
+def test_empty_query_in_command_statement():
+    """CommandStatementQuery with empty query returns error."""
+    client = get_client()
+    # Construct a CommandStatementQuery with empty query string
+    cmd = CommandStatementQuery(query="")
+    desc = flight_descriptor(cmd)
+    options = client._flight_call_options()
+
+    with pytest.raises(pa.lib.ArrowInvalid, match="query must not be empty"):
+        client.client.get_flight_info(desc, options)
+
+
+def test_multiple_statements_via_execute_update():
+    """Multiple DDL/DML via execute_update in sequence."""
+    client = get_client()
+
+    client.execute_update("CREATE TABLE mytable (id UInt32, val String) ENGINE = Memory")
+
+    for i in range(10):
+        client.execute_update(f"INSERT INTO mytable VALUES ({i}, 'row_{i}')")
+
+    flight_info = client.execute("SELECT count() FROM mytable")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.column(0)[0].as_py() == 10
+
+
+def test_special_characters_in_data():
+    """Data with special characters (unicode, quotes, newlines) round-trips correctly."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32, val String) ENGINE = Memory")
+    client.execute_update(
+        r"INSERT INTO mytable VALUES (1, 'hello\nworld'), (2, 'it''s \"quoted\"'), (3, '日本語テスト')"
+    )
+
+    flight_info = client.execute("SELECT * FROM mytable ORDER BY id")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+
+    assert table.num_rows == 3
+    assert table.column("val")[2].as_py() == '日本語テスト'
+
+
+#
+# CommandStatementIngest
+#
+
+def test_statement_ingest():
+    """CommandStatementIngest inserts data into existing table."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32, name String) ENGINE = Memory")
+
+    cmd = CommandStatementIngest()
+    cmd.table = "mytable"
+    cmd.table_definition_options.if_not_exist = (
+        CommandStatementIngest.TableDefinitionOptions.TABLE_NOT_EXIST_OPTION_FAIL
+    )
+    cmd.table_definition_options.if_exists = (
+        CommandStatementIngest.TableDefinitionOptions.TABLE_EXISTS_OPTION_APPEND
+    )
+
+    descriptor = flight_descriptor(cmd)
+    schema = pa.schema([("id", pa.uint32()), ("name", pa.string())])
+
+    writer, reader = client.client.do_put(descriptor, schema, client._flight_call_options())
+    batch = pa.record_batch(
+        [pa.array([1, 2, 3], type=pa.uint32()), pa.array(["a", "b", "c"], type=pa.string())],
+        schema=schema,
+    )
+    writer.write_batch(batch)
+    writer.done_writing()
+    result = reader.read()
+    writer.close()
+
+    update_result = DoPutUpdateResult()
+    update_result.ParseFromString(result.to_pybytes())
+    assert update_result.record_count == 3
+
+    # Verify data
+    flight_info = client.execute("SELECT * FROM mytable ORDER BY id")
+    r = client.do_get(flight_info.endpoints[0].ticket)
+    t = r.read_all()
+    assert t.num_rows == 3
+
+
+def test_statement_ingest_with_schema():
+    """CommandStatementIngest with database schema prefix."""
+    client = get_client()
+    client.execute_update("CREATE TABLE default.mytable (id UInt32) ENGINE = Memory")
+
+    cmd = CommandStatementIngest()
+    cmd.table = "mytable"
+    cmd.schema = "default"
+    cmd.table_definition_options.if_not_exist = (
+        CommandStatementIngest.TableDefinitionOptions.TABLE_NOT_EXIST_OPTION_FAIL
+    )
+    cmd.table_definition_options.if_exists = (
+        CommandStatementIngest.TableDefinitionOptions.TABLE_EXISTS_OPTION_APPEND
+    )
+
+    descriptor = flight_descriptor(cmd)
+    schema = pa.schema([("id", pa.uint32())])
+    writer, reader = client.client.do_put(descriptor, schema, client._flight_call_options())
+    batch = pa.record_batch([pa.array([1], type=pa.uint32())], schema=schema)
+    writer.write_batch(batch)
+    writer.done_writing()
+    reader.read()
+    writer.close()
+
+
+def test_statement_ingest_catalog_not_supported():
+    """CommandStatementIngest with catalog returns NotImplemented."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32) ENGINE = Memory")
+
+    cmd = CommandStatementIngest()
+    cmd.table = "mytable"
+    cmd.catalog = "some_catalog"
+
+    descriptor = flight_descriptor(cmd)
+    schema = pa.schema([("id", pa.uint32())])
+    writer, reader = client.client.do_put(descriptor, schema, client._flight_call_options())
+    batch = pa.record_batch([pa.array([1], type=pa.uint32())], schema=schema)
+    writer.write_batch(batch)
+
+    with pytest.raises(pa.lib.ArrowNotImplementedError, match="Catalogs are not supported"):
+        writer.close()
+
+
+def test_statement_ingest_temporary_not_supported():
+    """CommandStatementIngest with temporary=True returns NotImplemented."""
+    client = get_client()
+    client.execute_update("CREATE TABLE mytable (id UInt32) ENGINE = Memory")
+
+    cmd = CommandStatementIngest()
+    cmd.table = "mytable"
+    cmd.temporary = True
+
+    descriptor = flight_descriptor(cmd)
+    schema = pa.schema([("id", pa.uint32())])
+    writer, reader = client.client.do_put(descriptor, schema, client._flight_call_options())
+    batch = pa.record_batch([pa.array([1], type=pa.uint32())], schema=schema)
+    writer.write_batch(batch)
+
+    with pytest.raises(pa.lib.ArrowNotImplementedError, match="Implicit temporary tables are not supported"):
+        writer.close()

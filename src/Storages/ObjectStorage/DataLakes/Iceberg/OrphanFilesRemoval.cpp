@@ -3,7 +3,7 @@
 #if USE_AVRO
 
 #include <chrono>
-#include <set>
+#include <unordered_set>
 
 #include <Common/Exception.h>
 #include <Common/logger_useful.h>
@@ -67,7 +67,7 @@ time_t resolveOlderThanThreshold(const RemoveOrphanFilesParams & params, Context
 
 OrphanScanResult findOrphanFiles(
     const RelativePathsWithMetadata & actual_files,
-    const std::set<String> & reachable,
+    const std::unordered_set<String> & reachable,
     time_t older_than_threshold,
     LoggerPtr log)
 {

@@ -68,7 +68,7 @@ void collectStatisticsPaths(
     const char * field_name,
     const String & table_path,
     const String & table_location,
-    std::set<String> & out)
+    std::unordered_set<String> & out)
 {
     if (!metadata->has(field_name))
         return;
@@ -94,7 +94,7 @@ void collectMetadataRootFiles(
     const Poco::JSON::Object::Ptr & metadata,
     const String & table_path,
     const String & table_location,
-    std::set<String> & out)
+    std::unordered_set<String> & out)
 {
     out.insert(metadata_path);
 
@@ -128,7 +128,7 @@ void collectMetadataRootFiles(
 } // anonymous namespace
 
 
-std::set<String> collectReachableFiles(
+std::unordered_set<String> collectReachableFiles(
     ObjectStoragePtr object_storage,
     PersistentTableComponents & persistent_table_components,
     const DataLakeStorageSettings & data_lake_settings,
@@ -153,7 +153,7 @@ std::set<String> collectReachableFiles(
         compression_method,
         persistent_table_components.table_uuid);
 
-    std::set<String> reachable;
+    std::unordered_set<String> reachable;
 
     collectMetadataRootFiles(
         metadata_path, metadata,

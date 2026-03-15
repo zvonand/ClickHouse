@@ -948,9 +948,9 @@ struct ExpiredFiles
 /// Collect files from expired snapshots that are not referenced by any retained snapshot.
 static ExpiredFiles collectExpiredFiles(
     const std::vector<String> & expired_manifest_list_paths,
-    const std::set<String> & retained_manifest_list_paths,
-    const std::set<String> & retained_manifest_paths,
-    const std::set<String> & retained_data_file_paths,
+    const std::unordered_set<String> & retained_manifest_list_paths,
+    const std::unordered_set<String> & retained_manifest_paths,
+    const std::unordered_set<String> & retained_data_file_paths,
     ObjectStoragePtr object_storage,
     PersistentTableComponents & persistent_table_components,
     ContextPtr context,

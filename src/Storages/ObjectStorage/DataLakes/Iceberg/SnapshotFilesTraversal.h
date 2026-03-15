@@ -4,7 +4,7 @@
 
 #if USE_AVRO
 
-#include <set>
+#include <unordered_set>
 
 #include <Common/Logger_fwd.h>
 #include <Core/Types.h>
@@ -20,10 +20,10 @@ namespace DB::Iceberg
 
 struct SnapshotReferencedFiles
 {
-    std::set<String> manifest_list_metadata_paths;
-    std::set<String> manifest_list_storage_paths;
-    std::set<String> manifest_paths;
-    std::set<String> data_file_paths;
+    std::unordered_set<String> manifest_list_metadata_paths;
+    std::unordered_set<String> manifest_list_storage_paths;
+    std::unordered_set<String> manifest_paths;
+    std::unordered_set<String> data_file_paths;
 };
 
 SnapshotReferencedFiles collectSnapshotReferencedFiles(
@@ -39,7 +39,7 @@ SnapshotReferencedFiles collectSnapshotReferencedFiles(
 /// Traverses: metadata JSON files (from metadata-log), manifest lists (from snapshots),
 /// manifest files (from manifest lists), data/delete files (from manifest files),
 /// statistics files, and the version-hint file.
-std::set<String> collectReachableFiles(
+std::unordered_set<String> collectReachableFiles(
     ObjectStoragePtr object_storage,
     PersistentTableComponents & persistent_table_components,
     const DataLakeStorageSettings & data_lake_settings,

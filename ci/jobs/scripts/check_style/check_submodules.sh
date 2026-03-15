@@ -39,8 +39,8 @@ done
 
 # No recursive submodules allowed: check that no submodule contains its own .gitmodules with entries
 git config --file .gitmodules --null --get-regexp path | sed -z 's|.*\n||' | \
-  xargs -0 --no-run-if-empty -I{} bash -c '
-    if [ -f "{}/.gitmodules" ] && grep -q "\\[submodule" "{}/.gitmodules"; then
-        echo "Recursive submodules are not allowed: {} contains its own .gitmodules with submodule entries"
+  while IFS= read -r -d '' submodule_path; do
+    if [ -f "$submodule_path/.gitmodules" ] && grep -q '\[submodule' "$submodule_path/.gitmodules"; then
+        echo "Recursive submodules are not allowed: $submodule_path contains its own .gitmodules with submodule entries"
     fi
-  ' 2>&1
+  done 2>&1

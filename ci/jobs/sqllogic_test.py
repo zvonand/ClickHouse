@@ -327,11 +327,14 @@ def main():
                     verbose=True,
                 ):
                     return False
-            if not Shell.check(
-                f"git -C {sqllogictest_repo} fetch --depth 1 origin {sqllogictest_commit}",
-                verbose=True,
-            ):
-                return False
+            else:
+                # On reused workspaces, fetch latest refs so the pinned
+                # commit is available even if it was not in the original clone.
+                if not Shell.check(
+                    f"git -C {sqllogictest_repo} fetch origin",
+                    verbose=True,
+                ):
+                    return False
             return Shell.check(
                 f"git -C {sqllogictest_repo} checkout {sqllogictest_commit}",
                 verbose=True,

@@ -277,16 +277,48 @@ HAVING count(DISTINCT test_name) < least(
 
 ## `checks_coverage_inverted` Table
 
-**Schema**: `(symbol LowCardinality(String), check_start_time DateTime, check_name LowCardinality(String), test_name LowCardinality(String))`
+### Recommended schema (local copy / CIDB)
 
-**ORDER BY**: `(toDate(check_start_time), symbol, test_name)` — date first for efficient date filtering; deduplicates same `(date, symbol, test)` rows.
+```sql
+CREATE TABLE default.checks_coverage_inverted
+(
+    symbol      LowCardinality(String),
+    check_start_time DateTime('UTC'),
+    check_name  LowCardinality(String),
+    test_name   LowCardinality(String),
 
-**Text index**: `TYPE text(tokenizer = splitByNonAlpha)` on `symbol` — enables `hasAllTokens` with direct read, ~45-89× faster than column scan.
+    -- splitByNonAlpha tokenizes 'DB::MergeTree::loadDataParts' into
+    -- ['DB','MergeTree','loadDataParts'], enabling hasAllTokens() to match:
+    --   - old-format symbols (with arg lists): tokens from function name still match
+    --   - new-format symbols (args stripped): direct token match
+    --   - all template instantiations: class/function template arg tokens are extras, ignored
+    -- Direct read optimization: queries answered from posting lists without reading symbol column
+    -- (~45-89x faster than column scan per ClickHouse docs).
+    INDEX symbol_text_idx(symbol) TYPE text(tokenizer = splitByNonAlpha)
+)
+ENGINE = MergeTree
+-- Date first: check_start_time > now() - 3 days efficiently skips old granules.
+-- Symbol second: within narrow date range, symbol lookups are fast.
+-- test_name last: deduplicates identical (date, symbol, test) rows.
+ORDER BY (toDate(check_start_time), symbol, test_name)
+PARTITION BY toYYYYMM(check_start_time);
+
+ALTER TABLE checks_coverage_inverted
+    MATERIALIZE INDEX symbol_text_idx SETTINGS mutations_sync = 2;
+```
+
+**Previous CIDB schema** (production, no text index):
+```sql
+ORDER BY (symbol, check_start_time)  -- date is NOT the first key → scanning
+                                      -- all symbols to find recent data hits
+                                      -- max_rows_to_read limits easily
+```
+The production schema is inefficient for date-filtered queries — it must scan all symbol ranges to find recent rows. Local copy uses date-first ORDER BY which is dramatically faster.
 
 **Filtering in queries**:
-- `HAVING count(DISTINCT test_name) * 100 < greatest(total * 5, 50 * 100)` — exclude symbols in >5% of tests (hot-path noise like `PipelineExecutor::execute`)
-- `AND count(DISTINCT test_name) < 100` — absolute cap via `least(...)` in HAVING
-- `__client` rows excluded at export time
+- `HAVING count(DISTINCT test_name) < least(greatest(total*5/100, 50), 200)` — exclude symbols in >5% of tests OR >200 tests (hot-path noise like `PipelineExecutor::execute`)
+- `__client` rows excluded at export time (`WHERE NOT endsWith(test_name, '__client')`)
+- Symbols normalized at export: arg list stripped, trailing template args stripped
 
 ---
 

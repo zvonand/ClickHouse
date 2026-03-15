@@ -25,12 +25,12 @@ embedded_doc_suffixes = [
 ]
 
 
-def file_contains_documentation(file_path):
-    """Check if a file contains a documentation object."""
+def file_contains_marker(file_path, marker):
+    """Check if a file contains the given marker string."""
     try:
         with open(file_path) as f:
             content = f.read()
-        return "FunctionDocumentation" in content
+        return marker in content
     except OSError:
         return False
 
@@ -44,9 +44,12 @@ def check_docs():
             or file in embedded_doc_files
             or (
                 any(file.startswith(path) for path in inline_doc_paths)
-                and file_contains_documentation(file)
+                and file_contains_marker(file, "FunctionDocumentation")
             )
-            or any(file.endswith(suffix) for suffix in embedded_doc_suffixes)
+            or (
+                any(file.endswith(suffix) for suffix in embedded_doc_suffixes)
+                and file_contains_marker(file, "DECLARE_SETTING")
+            )
             for file in changed_files
         )
         if not has_doc_changes:

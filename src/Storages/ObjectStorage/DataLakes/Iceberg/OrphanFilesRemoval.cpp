@@ -44,14 +44,19 @@ String resolveScanPath(const String & table_path, const RemoveOrphanFilesParams 
     String scan_path = table_path;
     if (params.location.has_value())
     {
-        const String & loc = *params.location;
+        String loc = *params.location;
         if (loc.find("..") != String::npos || loc.starts_with('/'))
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "location must be a relative path under the table root, got '{}'", loc);
+
+        while (loc.starts_with("./"))
+            loc = loc.substr(2);
 
         if (!scan_path.ends_with('/'))
             scan_path += '/';
         scan_path += loc;
     }
+    if (!scan_path.empty() && !scan_path.ends_with('/'))
+        scan_path += '/';
     return scan_path;
 }
 

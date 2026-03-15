@@ -78,13 +78,13 @@ bool s3URIMatches(const S3::URI & target_uri, const std::string & base_bucket, c
     return bucket_matches && (endpoint_matches || is_generic_s3_uri);
 }
 
-bool sameEndpointAuthority(const std::string & a, const std::string & b)
+bool sameEndpoint(const std::string & a, const std::string & b)
 {
     SchemeAuthorityKey pa(a);
     SchemeAuthorityKey pb(b);
     if (pa.authority.empty() || pb.authority.empty())
         return false;
-    return pa.authority == pb.authority;
+    return pa.scheme == pb.scheme && pa.authority == pb.authority;
 }
 #endif
 std::pair<ObjectStoragePtr, std::string> getOrCreateStorageAndKey(
@@ -635,7 +635,7 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
                 /// or s3_propagate_credentials_to_other_storages is 1
                 if (base_storage->getType() == ObjectStorageType::S3
                     && (context->getSettingsRef()[Setting::s3_propagate_credentials_to_other_storages]
-                        || sameEndpointAuthority(base_storage->getDescription(), endpoint_to_use)))
+                        || sameEndpoint(base_storage->getDescription(), endpoint_to_use)))
                 {
                     if (auto s3_storage = std::dynamic_pointer_cast<S3ObjectStorage>(base_storage))
                     {

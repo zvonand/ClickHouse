@@ -51,6 +51,48 @@ def _normalize_for_matching(cat: str) -> str:
 MAX_NORMALIZED_DISTANCE = 0.2
 
 
+# Categories that should be skipped in the changelog, grouped by skip reason.
+# Uses the same canonical names as LABEL_CATEGORIES in pr_labels_and_category.py.
+_SKIP_CATEGORIES = {
+    "documentation": ["Documentation"],
+    "not-for-changelog": [
+        "Not for changelog",
+        "CI Fix or Improvement",
+    ],
+}
+
+# Also match historical/legacy category names not present in LABEL_CATEGORIES.
+_SKIP_LEGACY_PATTERN = re.compile(
+    r"(?i)((non|in|not|un)[-\s]*significant)"
+    r"|(changelog[ ]*entry[ ]*is[ ]*not[ ]*required)"
+)
+
+
+def _match_skip_category(category: str) -> Optional[str]:
+    """Check if a category should be skipped from the changelog.
+
+    Returns the skip reason ("documentation" or "not-for-changelog") or None.
+    Uses normalized Levenshtein matching with the same 20% threshold.
+    """
+    norm = _normalize_for_matching(category)
+    compact = norm.replace(" ", "")
+
+    for reason, names in _SKIP_CATEGORIES.items():
+        for name in names:
+            name_norm = _normalize_for_matching(name)
+            if name_norm == norm:
+                return reason
+            name_compact = name_norm.replace(" ", "")
+            if Levenshtein.normalized_distance(compact, name_compact) <= MAX_NORMALIZED_DISTANCE:
+                return reason
+
+    # Handle legacy names that don't match any current category
+    if _SKIP_LEGACY_PATTERN.search(category):
+        return "not-for-changelog"
+
+    return None
+
+
 def _match_changelog_category(category: str) -> Optional[str]:
     """Match a PR category to a preferred changelog category.
 
@@ -311,20 +353,12 @@ def generate_description(item: PullRequest, repo: Repository) -> Optional[Descri
         # Fall through, so that it shows up in output and the user can fix it.
         category = "NO CL CATEGORY"
 
-    # Filter out documentations changelog before not-for-changelog
-    if re.match(
-        r"(?i)doc",
-        category,
-    ):
+    # Filter out categories that are not for changelog, using the same
+    # fuzzy matching as the CI check.
+    skip_label = _match_skip_category(category)
+    if skip_label == "documentation":
         return None
-
-    # Filter out the PR categories that are not for changelog.
-    if re.search(
-        r"(?i)((non|in|not|un)[-\s]*significant)|"
-        r"(not[ ]*for[ ]*changelog)|"
-        r"(changelog[ ]*entry[ ]*is[ ]*not[ ]*required)",
-        category,
-    ):
+    if skip_label == "not-for-changelog":
         category = "NOT FOR CHANGELOG / INSIGNIFICANT"
         # Sometimes we declare not for changelog but still write a description. Keep it
         if len(entry) <= 4 or "Documentation entry" in entry:

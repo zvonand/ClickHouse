@@ -1493,6 +1493,7 @@ arrow::Status ArrowFlightServer::PollFlightInfo(
 
             auto thread_group = ThreadGroup::createForQuery(query_context);
             CurrentThread::attachToGroup(thread_group);
+            SCOPE_EXIT({ CurrentThread::detachFromGroupIfNotDetached(); });
 
             auto [ast, block_io] = executeQuery(sql, query_context, QueryFlags{}, QueryProcessingStage::Complete);
 

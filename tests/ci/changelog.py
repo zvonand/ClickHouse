@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, TextIO, Tuple
 import tqdm  # type: ignore
 from github.GithubException import RateLimitExceededException, UnknownObjectException
 from github.NamedUser import NamedUser
-from thefuzz.fuzz import ratio  # type: ignore
+from rapidfuzz.distance import Levenshtein  # type: ignore
 
 from ci_utils import Shell
 from git_helper import git_runner, is_shallow
@@ -38,6 +38,45 @@ categories_preferred_order = (
     "Build/Testing/Packaging Improvement",
     "Other",
 )
+
+
+def _normalize_for_matching(cat: str) -> str:
+    """Normalize category for matching: strip parenthetical suffix, collapse whitespace, casefold."""
+    pos = cat.find("(")
+    result = cat[:pos] if pos != -1 else cat
+    return re.sub(r"\s+", " ", result.strip()).casefold()
+
+
+# Maximum normalized Levenshtein distance for fuzzy matching (20%)
+MAX_NORMALIZED_DISTANCE = 0.2
+
+
+def _match_changelog_category(category: str) -> Optional[str]:
+    """Match a PR category to a preferred changelog category.
+
+    Uses the same rules as the CI check: case-insensitive, whitespace-insensitive,
+    normalized Levenshtein distance up to 20% (with whitespace removed for comparison).
+    """
+    norm = _normalize_for_matching(category)
+    compact = norm.replace(" ", "")
+
+    # Exact normalized match first
+    for pref in categories_preferred_order:
+        if _normalize_for_matching(pref) == norm:
+            return pref
+
+    # Fuzzy match with normalized Levenshtein distance <= 20%
+    best_dist = MAX_NORMALIZED_DISTANCE + 1e-9
+    best_match = None
+    for pref in categories_preferred_order:
+        pref_compact = _normalize_for_matching(pref).replace(" ", "")
+        dist = Levenshtein.normalized_distance(compact, pref_compact)
+        if dist < best_dist:
+            best_dist = dist
+            best_match = pref
+
+    return best_match
+
 
 FROM_REF = ""
 TO_REF = ""
@@ -314,10 +353,9 @@ def generate_description(item: PullRequest, repo: Repository) -> Optional[Descri
     if entry[-1] != ".":
         entry += "."
 
-    for c in categories_preferred_order:
-        if ratio(category.lower(), c.lower()) >= 90:
-            category = c
-            break
+    matched = _match_changelog_category(category)
+    if matched:
+        category = matched
 
     return Description(item.number, item.user, item.html_url, entry, category)
 

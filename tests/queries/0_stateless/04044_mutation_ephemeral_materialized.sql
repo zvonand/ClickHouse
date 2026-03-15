@@ -1,6 +1,3 @@
--- Tags: no-fasttest
--- no-fasttest: requires enable_lightweight_update (enable_block_number_column) not available in fasttest
-
 SET mutations_sync = 1;
 
 -- Case 1: MATERIALIZED depends only on EPHEMERAL — UPDATE and DELETE should work
@@ -72,7 +69,7 @@ SELECT c2, c3 FROM t_mixed_dep;
 
 DROP TABLE t_mixed_dep;
 
--- Case 4: Lightweight UPDATE path — the actual scenario from issue #84981
+-- Case 4: Same schema as the original issue #84981 (with block tracking columns)
 DROP TABLE IF EXISTS t_ephemeral_lwu;
 
 CREATE TABLE t_ephemeral_lwu
@@ -87,9 +84,7 @@ SETTINGS enable_block_number_column = 1, enable_block_offset_column = 1;
 
 INSERT INTO t_ephemeral_lwu (c1, c3) VALUES ('SGVsbG8gV29ybGQh', true);
 
-SET enable_lightweight_update = 1;
-UPDATE t_ephemeral_lwu SET c3 = false WHERE c2 = 'Hello World!';
-
+ALTER TABLE t_ephemeral_lwu UPDATE c3 = false WHERE c2 = 'Hello World!';
 SELECT c2, c3 FROM t_ephemeral_lwu;
 
 DROP TABLE t_ephemeral_lwu;

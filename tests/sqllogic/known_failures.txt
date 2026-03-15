@@ -1,0 +1,9 @@
+# Known failing tests for SQLLogicTest (complete-clickhouse stage).
+# Format: one failure ID per line, as "test_name:position".
+# Lines starting with # are comments. Empty lines are ignored.
+#
+# To regenerate this file from a CI run's report.json:
+#   python3 tests/sqllogic/generate_known_failures.py <path/to/report.json> > tests/sqllogic/known_failures.txt
+#
+# Or from the current_failures.txt artifact produced by the CI job:
+#   cp current_failures.txt tests/sqllogic/known_failures.txt

@@ -239,7 +239,10 @@ def test_cert_reload_on_reconnect(started_cluster):
     # Note: Existing connections keep their old cert - that's expected.
     # The new cert is only used for NEW connections.
 
-    # Restart node3 - this creates NEW Raft connections using new certs
+    # Restart node3 - this forces NEW Raft connections in BOTH directions:
+    # - node3 CLIENT -> node1/node2 SERVER (node3 rejoining cluster)
+    # - node1/node2 CLIENT -> node3 SERVER (leader heartbeats/replication)
+    # This validates both server-side and client-side SSL context reload.
     print("Restarting node3 to create new Raft connections...")
     node3.restart_clickhouse()
 
@@ -247,7 +250,8 @@ def test_cert_reload_on_reconnect(started_cluster):
     wait_nodes_ready([node3])
     print("Node3 restarted and reconnected")
 
-    # Verify cluster works - proves new connections use updated certs
+    # Verify cluster works - this proves both client and server SSL contexts
+    # reloaded correctly, since Raft requires bidirectional TLS connections
     verify_cluster_works(f"/test_after_restart_{test_id}", all_nodes)
     print("Cluster working after restart - new Raft connections use updated certs!")
 

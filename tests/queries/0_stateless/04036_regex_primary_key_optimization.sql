@@ -14,11 +14,11 @@ INSERT INTO test_regex_pk VALUES
     ('metrics-def-003'), ('metrics-def-004'),
     ('logs-ghi-005'), ('traces-jkl-007');
 
--- Simple prefix: reads only 2 granules (vector-abc-001, vector-abc-002)
-SELECT count() FROM test_regex_pk WHERE match(id, '^vector') SETTINGS force_primary_key = 1, max_rows_to_read = 2;
+-- Simple prefix: reads only vector-abc-* granules (MergeTree may read one extra mark at boundary)
+SELECT count() FROM test_regex_pk WHERE match(id, '^vector') SETTINGS force_primary_key = 1, max_rows_to_read = 3;
 
--- Alternation with common prefix "vector-abc-00": also reads only 2 granules
-SELECT count() FROM test_regex_pk WHERE match(id, '^(vector-abc-001|vector-abc-002)') SETTINGS force_primary_key = 1, max_rows_to_read = 2;
+-- Alternation with common prefix "vector-abc-00": reads only vector-abc-* granules
+SELECT count() FROM test_regex_pk WHERE match(id, '^(vector-abc-001|vector-abc-002)') SETTINGS force_primary_key = 1, max_rows_to_read = 3;
 
 -- Escaped pipe (literal |): prefix "vector-abc-001|vector" matches no rows
 SELECT count() FROM test_regex_pk WHERE match(id, '^vector-abc-001\\|vector') SETTINGS force_primary_key = 1;

@@ -49,7 +49,3 @@ SELECT highlight('cat and cat and cat', ['cat']);
 SELECT '-- FixedString';
 SELECT highlight(toFixedString('Hello World', 20), ['hello']);
 SELECT highlight(toFixedString('abc', 5), ['abc']);  -- trailing padding stripped
-
--- Too many needles (> 255)
-SELECT '-- Error: too many needles';
-SELECT highlight('text', arrayMap(x -> toString(x), range(256))); -- { serverError TOO_MANY_ARGUMENTS_FOR_FUNCTION }

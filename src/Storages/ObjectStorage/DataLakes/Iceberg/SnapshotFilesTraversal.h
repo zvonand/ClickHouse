@@ -12,6 +12,7 @@
 #include <Interpreters/Context_fwd.h>
 #include <Poco/JSON/Array.h>
 
+#include <Storages/ObjectStorage/DataLakes/DataLakeStorageSettings.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PersistentTableComponents.h>
 
 namespace DB::Iceberg
@@ -32,6 +33,18 @@ SnapshotReferencedFiles collectSnapshotReferencedFiles(
     ContextPtr context,
     LoggerPtr log,
     Int32 current_schema_id);
+
+/// Collect all files reachable through the metadata graph.
+///
+/// Traverses: metadata JSON files (from metadata-log), manifest lists (from snapshots),
+/// manifest files (from manifest lists), data/delete files (from manifest files),
+/// statistics files, and the version-hint file.
+std::set<String> collectReachableFiles(
+    ObjectStoragePtr object_storage,
+    PersistentTableComponents & persistent_table_components,
+    const DataLakeStorageSettings & data_lake_settings,
+    ContextPtr context,
+    LoggerPtr log);
 
 }
 

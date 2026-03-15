@@ -198,28 +198,6 @@ class Targeting:
     # consistent with the Python-side max_tests_per_symbol in get_most_relevant_tests().
     MAX_TESTS_PER_SYMBOL = 200
 
-    @staticmethod
-    def _symbol_to_tokens(symbol: str) -> list:
-        """
-        Split a normalized symbol into tokens for hasAllTokens() matching.
-
-        splitByNonAlpha splits on '::', '<', '>', '(', ')', ',', ' ' etc., so:
-          'DB::MergeTreeData::loadDataParts'
-            -> ['DB', 'MergeTreeData', 'loadDataParts']
-          'DB::(anonymous namespace)::Foo::bar'
-            -> ['DB', 'anonymous', 'namespace', 'Foo', 'bar']
-
-        hasAllTokens(cidb_symbol, tokens) then matches:
-          - new format: 'DB::MergeTreeData::loadDataParts'          (exact, no args)
-          - old format: 'DB::MergeTreeData::loadDataParts(bool, ...)' (args stripped by token)
-          - all template instantiations: 'DB::SettingFieldEnum<T>::isChanged'
-            for tokens ['DB','SettingFieldEnum','isChanged'] — T is an extra token, ignored
-
-        Tokens shorter than 3 chars are dropped (too common, add noise).
-        """
-        tokens = re.split(r'[^a-zA-Z0-9_]', symbol)
-        return [t for t in tokens if len(t) >= 3]
-
     def get_tests_by_changed_symbols(self, symbols: list) -> dict:
         """
         Single batch query replacing the previous N+1 per-symbol round-trips.
@@ -257,20 +235,18 @@ class Targeting:
         )
 
         # Build per-symbol hasAllTokens conditions.
-        # Each normalized symbol is split into tokens; hasAllTokens matches any CIDB
-        # symbol that contains ALL of those tokens (in any order, with any extras).
+        # Pass the normalized symbol string directly — ClickHouse tokenizes it with
+        # the same splitByNonAlpha tokenizer used for the index, so no Python-side
+        # token splitting is needed. hasAllTokens(symbol, 'DB::Foo::bar') matches:
+        #   - 'DB::Foo::bar'                (exact, new format)
+        #   - 'DB::Foo::bar(arg1, arg2)'    (old format with args — arg tokens are extras)
+        #   - 'DB::Foo<T>::bar() const'     (class template — T is an extra token)
         match_conditions = []
-        skipped_no_tokens = 0
         for norm in norm_to_originals:
-            tokens = self._symbol_to_tokens(norm)
-            if not tokens:
-                skipped_no_tokens += 1
-                continue
-            tokens_sql = ", ".join(f"'{self._escape_sql_string(t)}'" for t in tokens)
-            match_conditions.append(f"hasAllTokens(symbol, [{tokens_sql}])")
-
-        if skipped_no_tokens:
-            print(f"[find_tests] skipped {skipped_no_tokens} symbols with no tokens")
+            if norm:
+                match_conditions.append(
+                    f"hasAllTokens(symbol, '{self._escape_sql_string(norm)}')"
+                )
 
         if not match_conditions:
             return {sym: [] for sym in symbols}
@@ -342,17 +318,16 @@ class Targeting:
         # The query already unioned all matching CIDB symbols (old/new format, all
         # template instantiations) via hasAllTokens — no further expansion needed here.
         # Multiple originals sharing the same normalized form get the same test list.
+        def _tokens(s: str) -> set:
+            """Replicate ClickHouse splitByNonAlpha tokenization in Python."""
+            return {t for t in re.split(r'[^a-zA-Z0-9_]', s) if t}
+
         symbol_to_tests: dict[str, list] = {}
         for norm, originals in norm_to_originals.items():
-            # The SQL groups by norm_symbol (the CIDB symbol normalized in-SQL).
-            # Collect tests from all CIDB symbols whose tokens matched this input norm.
             tests: set[str] = set()
-            tokens = set(self._symbol_to_tokens(norm))
+            norm_tokens = _tokens(norm)
             for result_norm, result_tests in norm_to_tests.items():
-                # Accept a result if its tokens are a superset of our query tokens
-                # (hasAllTokens guarantees this — just union all matching results).
-                result_tokens = set(self._symbol_to_tokens(result_norm))
-                if tokens <= result_tokens:
+                if norm_tokens <= _tokens(result_norm):
                     tests.update(result_tests)
             tests_list = sorted(tests)
             for orig in originals:

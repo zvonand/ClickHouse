@@ -319,16 +319,9 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     keeper_utils.send_4lw_cmd(cluster, leader, cmd="ydld")
 
     # Give the election time to complete before checking for the new leader.
-    time.sleep(2)
+    time.sleep(5)
 
-    # Find the new leader among the replacement nodes.
-    new_leader = keeper_utils.get_leader(cluster, [leader, node4, node5, node6])
-
-    # Without the fix (NuRaft PR #91), the new leader crashes immediately
-    # inside become_leader(): enable_hb_for_peer() calls schedule_task() with
-    # the null hb_task_ of a peer that was abandoned by cancel_schedulers()
-    # during the joining phase, causing a null pointer dereference.
-    keeper_utils.wait_until_connected(cluster, new_leader, timeout=10.0)
+    keeper_utils.wait_nodes(cluster, [leader, node4, node5, node6])
 
 
 

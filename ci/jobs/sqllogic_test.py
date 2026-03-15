@@ -321,11 +321,14 @@ def main():
         sqllogictest_commit = "634e46492bff"
 
         def clone():
-            if Path(sqllogictest_repo).is_dir():
-                return True
+            if not Path(sqllogictest_repo).is_dir():
+                if not Shell.check(
+                    f"git clone https://github.com/gregrahn/sqllogictest.git {sqllogictest_repo}",
+                    verbose=True,
+                ):
+                    return False
             return Shell.check(
-                f"git clone https://github.com/gregrahn/sqllogictest.git {sqllogictest_repo}"
-                f" && git -C {sqllogictest_repo} checkout {sqllogictest_commit}",
+                f"git -C {sqllogictest_repo} checkout {sqllogictest_commit}",
                 verbose=True,
             )
 

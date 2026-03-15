@@ -20,6 +20,8 @@
 #include <DataTypes/DataTypeMap.h>
 #include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeFixedString.h>
+#include <DataTypes/DataTypeInterval.h>
+#include <Common/IntervalKind.h>
 #include <Processors/Formats/IOutputFormat.h>
 #include <Processors/Formats/Impl/ArrowBufferedStreams.h>
 #include <Processors/Port.h>
@@ -918,6 +920,23 @@ namespace DB
                 break;
                 FOR_INTERNAL_NUMERIC_TYPES(DISPATCH)
 #undef DISPATCH
+            case TypeIndex::Interval:
+            {
+                const auto * interval_type = assert_cast<const DataTypeInterval *>(column_type.get());
+                switch (interval_type->getKind())
+                {
+                    case IntervalKind::Kind::Nanosecond:
+                    case IntervalKind::Kind::Microsecond:
+                    case IntervalKind::Kind::Millisecond:
+                    case IntervalKind::Kind::Second:
+                        fillArrowArrayWithNumericColumnData<Int64, arrow::DurationBuilder>(column, null_bytemap, format_name, array_builder, start, end);
+                        break;
+                    default:
+                        fillArrowArrayWithNumericColumnData<Int64, arrow::Int64Builder>(column, null_bytemap, format_name, array_builder, start, end);
+                        break;
+                }
+                break;
+            }
             default:
                 throw Exception(ErrorCodes::UNKNOWN_TYPE, "Internal type '{}' of a column '{}' is not supported for conversion into {} data format.", column_type->getFamilyName(), column_name, format_name);
         }
@@ -1079,6 +1098,19 @@ namespace DB
 
         if (isIPv4(column_type))
             return arrow::uint32();
+
+        if (isInterval(column_type))
+        {
+            const auto * interval_type = assert_cast<const DataTypeInterval *>(column_type.get());
+            switch (interval_type->getKind())
+            {
+                case IntervalKind::Kind::Nanosecond:  return arrow::duration(arrow::TimeUnit::NANO);
+                case IntervalKind::Kind::Microsecond: return arrow::duration(arrow::TimeUnit::MICRO);
+                case IntervalKind::Kind::Millisecond: return arrow::duration(arrow::TimeUnit::MILLI);
+                case IntervalKind::Kind::Second:      return arrow::duration(arrow::TimeUnit::SECOND);
+                default:                              return arrow::int64();
+            }
+        }
 
         if (isDate(column_type) && settings.output_date_as_uint16)
             return arrow::uint16();

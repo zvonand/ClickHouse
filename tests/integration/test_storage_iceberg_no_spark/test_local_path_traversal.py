@@ -205,16 +205,11 @@ def test_local_iceberg_path_traversal(started_cluster_iceberg_no_spark):
     )
 
 
-def test_local_iceberg_delete_file_path_traversal(started_cluster_iceberg_no_spark):
-    """Position-delete manifest entry whose data_file.file_path contains ../
-    must be rejected with PATH_ACCESS_DENIED via validateDeleteFilePaths.
-
-    Data file paths are left untouched — only the delete file path is
-    corrupted.  This specifically exercises the validateDeleteFilePaths
-    code path, not the LocalPathValidatingIterator that checks data
-    file paths."""
-    instance = started_cluster_iceberg_no_spark.instances["node1"]
-    table_name = "test_delete_path_traversal_" + get_uuid_str()
+def _corrupt_delete_manifest_and_query(instance, modify_manifest_fn):
+    """Create an IcebergLocal table with position deletes, apply
+    *modify_manifest_fn(local_manifest_path, table_path)* to every
+    delete manifest, and return the error string from a SELECT."""
+    table_name = "test_del_traversal_" + get_uuid_str()
     table_path = f"/var/lib/clickhouse/user_files/iceberg_data/default/{table_name}"
 
     instance.query(
@@ -248,26 +243,61 @@ def test_local_iceberg_delete_file_path_traversal(started_cluster_iceberg_no_spa
 
         for rel_path in delete_manifest_paths:
             local_manifest = os.path.join(host_path, rel_path)
-            assert os.path.isfile(
-                local_manifest
-            ), f"Delete manifest not found: {local_manifest}"
-
-            _modify_avro_file(
-                local_manifest,
-                ["data_file", "file_path"],
-                lambda _: f"{table_path}/../../../../../../../etc/passwd",
-            )
+            assert os.path.isfile(local_manifest), f"Not found: {local_manifest}"
+            modify_manifest_fn(local_manifest, table_path)
             instance.copy_file_to_container(
                 local_manifest, f"{table_path}/{rel_path}"
             )
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    error = instance.query_and_get_error(
+    return instance.query_and_get_error(
         f"SELECT * FROM icebergLocal(local, path = '{table_path}/')",
         settings=NOCACHE,
     )
+
+
+def _assert_delete_path_access_denied(error):
     assert "PATH_ACCESS_DENIED" in error, f"Expected PATH_ACCESS_DENIED, got: {error}"
     assert "Delete file path" in error and "is not inside" in error, (
         f"Expected error from validateDeleteFilePaths, got: {error}"
+    )
+
+
+def test_local_iceberg_delete_file_path_traversal(started_cluster_iceberg_no_spark):
+    """Position-delete file_path with ../ must be rejected via
+    validateDeleteFilePaths (not LocalPathValidatingIterator)."""
+    instance = started_cluster_iceberg_no_spark.instances["node1"]
+
+    def corrupt(manifest, table_path):
+        _modify_avro_file(
+            manifest,
+            ["data_file", "file_path"],
+            lambda _: f"{table_path}/../../../../../../../etc/passwd",
+        )
+
+    _assert_delete_path_access_denied(
+        _corrupt_delete_manifest_and_query(instance, corrupt)
+    )
+
+
+def test_local_iceberg_equality_delete_file_path_traversal(
+    started_cluster_iceberg_no_spark,
+):
+    """Equality-delete file_path with ../ must be rejected via
+    validateDeleteFilePaths.  Patches the delete manifest to look like
+    an equality delete (content=2, equality_ids=[1])."""
+    instance = started_cluster_iceberg_no_spark.instances["node1"]
+
+    def corrupt(manifest, table_path):
+        _modify_avro_file(manifest, ["data_file", "content"], lambda _: 2)
+        _modify_avro_file(manifest, ["data_file", "equality_ids"], lambda _: [1])
+        _modify_avro_file(
+            manifest,
+            ["data_file", "file_path"],
+            lambda _: f"{table_path}/../../../../../../../etc/passwd",
+        )
+
+    _assert_delete_path_access_denied(
+        _corrupt_delete_manifest_and_query(instance, corrupt)
     )

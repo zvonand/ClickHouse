@@ -145,7 +145,7 @@ Pipe executeExpireSnapshots(
     return resultToPipe(result);
 }
 
-} // namespace Iceberg
-} // namespace DB
+}
+}
 
 #endif

@@ -102,7 +102,7 @@ Pipe executeRemoveOrphanFiles(
     return resultToPipe(result);
 }
 
-} // namespace Iceberg
-} // namespace DB
+}
+}
 
 #endif

@@ -34,6 +34,9 @@ namespace Setting
     extern const SettingsBool output_format_arrow_unsupported_types_as_binary;
 }
 
+namespace ArrowFlight
+{
+
 static arrow::Result<std::shared_ptr<arrow::Table>> commandGetSqlInfo(const arrow::flight::protocol::sql::CommandGetSqlInfo & command, bool schema_only)
 {
     arrow::MemoryPool* pool = arrow::default_memory_pool();
@@ -379,6 +382,8 @@ CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, boo
     }
 
     return SQLSet{};
+}
+
 }
 
 }

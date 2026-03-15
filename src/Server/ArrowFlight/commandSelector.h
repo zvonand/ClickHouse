@@ -9,6 +9,9 @@
 namespace DB
 {
 
+namespace ArrowFlight
+{
+
 struct SQLSet
 {
     std::string sql;
@@ -45,5 +48,7 @@ struct CommandSelectorResult : private std::variant<SQLSet, arrow::Result<std::s
 /// in arrow::Result<std::shared_ptr<arrow::Table>> variant - on practice just return arrow::Status::<whatever error> -
 /// CommandSelectorResult has implicit constructor for arrow::Status
 CommandSelectorResult commandSelector(const google::protobuf::Any & any_msg, bool schema_only = false);
+
+}
 
 }

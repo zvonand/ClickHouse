@@ -1201,7 +1201,7 @@ arrow::Status ArrowFlightServer::GetFlightInfo(
                     && any_msg.ParseFromArray(request.cmd.data(), static_cast<int>(request.cmd.size()))
             )
             {
-                auto res = commandSelector(any_msg);
+                auto res = ArrowFlight::commandSelector(any_msg);
                 if (const auto * sql_set = res.getSQLSet())
                 {
                     sql = sql_set->sql;
@@ -1321,7 +1321,7 @@ arrow::Status ArrowFlightServer::GetSchema(
                     && any_msg.ParseFromArray(request.cmd.data(), static_cast<int>(request.cmd.size()))
             )
             {
-                auto res = commandSelector(any_msg, true);
+                auto res = ArrowFlight::commandSelector(any_msg, true);
                 if (const auto * sql_set = res.getSQLSet())
                 {
                     sql = sql_set->sql;
@@ -1449,7 +1449,7 @@ arrow::Status ArrowFlightServer::PollFlightInfo(
                     && any_msg.ParseFromArray(request.cmd.data(), static_cast<int>(request.cmd.size()))
             )
             {
-                auto res = commandSelector(any_msg);
+                auto res = ArrowFlight::commandSelector(any_msg);
                 if (const auto * sql_set = res.getSQLSet())
                 {
                     sql = sql_set->sql;

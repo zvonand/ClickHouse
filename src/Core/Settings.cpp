@@ -592,7 +592,7 @@ Use multiple threads for azure multipart upload.
 Throw an error, when ListObjects request cannot match any files
 )", 0) \
     DECLARE(Bool, s3_propagate_credentials_to_other_storages, false, R"(
-Allow copying base storage credentials to secondary object storages with a different endpoint. Default: 0 (credentials only copied when endpoint matches base).
+Credentials from the base storage are always propagated to secondary object storages when endpoints match. When this setting is enabled, credentials are also propagated when endpoints differ.
 )", 0) \
     DECLARE(Bool, hdfs_throw_on_zero_files_match, false, R"(
 Throw an error if matched zero files according to glob expansion rules.

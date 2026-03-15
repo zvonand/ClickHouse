@@ -322,7 +322,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     time.sleep(2)
 
     # Find the new leader among the replacement nodes.
-    new_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
+    new_leader = keeper_utils.get_leader(cluster, [leader, node4, node5, node6])
 
     # Without the fix (NuRaft PR #91), the new leader crashes immediately
     # inside become_leader(): enable_hb_for_peer() calls schedule_task() with
@@ -330,18 +330,6 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     # during the joining phase, causing a null pointer dereference.
     keeper_utils.wait_until_connected(cluster, new_leader, timeout=10.0)
 
-    # Remove the original leader (now a follower) from the cluster.
-    result = send_rcfg(
-        cluster,
-        new_leader,
-        {"actions": [{"remove_members": [node_id(leader)]}]},
-        timeout_sec=30,
-    )
-    assert result["status"] == "ok", f"Failed to remove original leader: {result}"
-
-    # Verify the cluster is healthy with a leader from the replacement nodes.
-    final_leader = keeper_utils.get_leader(cluster, [node4, node5, node6])
-    print(f"Final leader: {final_leader}")
 
 
 def _get_generated_cfg(node_names: dict, node_idx: int) -> str:

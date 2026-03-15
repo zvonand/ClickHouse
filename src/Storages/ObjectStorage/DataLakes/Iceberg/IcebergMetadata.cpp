@@ -59,8 +59,8 @@
 #include <Storages/ObjectStorage/DataLakes/Common/AvroForIcebergDeserializer.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Compaction.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Constant.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteCommandArgs.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergFieldParseHelpers.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/ExpireSnapshotsExecute.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/RemoveOrphanFilesExecute.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergDataObjectInfo.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergIterator.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergMetadata.h>
@@ -69,7 +69,6 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/ManifestFile.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/ManifestFilesPruning.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Mutations.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/OrphanFilesRemoval.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PositionDeleteTransform.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Snapshot.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/StatelessMetadataFileGetter.h>
@@ -125,7 +124,6 @@ extern const SettingsString iceberg_metadata_compression_method;
 extern const SettingsBool allow_insert_into_iceberg;
 extern const SettingsBool allow_experimental_iceberg_compaction;
 extern const SettingsBool allow_iceberg_remove_orphan_files;
-extern const SettingsUInt64 iceberg_orphan_files_older_than_seconds;
 extern const SettingsBool allow_experimental_expire_snapshots;
 extern const SettingsBool iceberg_delete_data_on_drop;
 }
@@ -560,133 +558,6 @@ void IcebergMetadata::alter(const AlterCommands & params, ContextPtr context)
     Iceberg::alter(params, context, object_storage, data_lake_settings, persistent_components, write_format);
 }
 
-static Pipe expireSnapshotsResultToPipe(const Iceberg::ExpireSnapshotsResult & result)
-{
-    Block header{
-        ColumnWithTypeAndName(std::make_shared<DataTypeString>(), "metric_name"),
-        ColumnWithTypeAndName(std::make_shared<DataTypeInt64>(), "metric_value"),
-    };
-
-    MutableColumns columns = header.cloneEmptyColumns();
-
-    auto add = [&](const char * name, Int64 value)
-    {
-        columns[0]->insert(String(name));
-        columns[1]->insert(value);
-    };
-
-    add("deleted_data_files_count", result.deleted_data_files_count);
-    add("deleted_position_delete_files_count", result.deleted_position_delete_files_count);
-    add("deleted_equality_delete_files_count", result.deleted_equality_delete_files_count);
-    add("deleted_manifest_files_count", result.deleted_manifest_files_count);
-    add("deleted_manifest_lists_count", result.deleted_manifest_lists_count);
-    add("deleted_statistics_files_count", result.deleted_statistics_files_count);
-    add("dry_run", result.dry_run ? 1 : 0);
-
-    const size_t rows = columns[0]->size();
-    Chunk chunk(std::move(columns), rows);
-    return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
-}
-
-static Pipe removeOrphanFilesResultToPipe(const Iceberg::RemoveOrphanFilesResult & result)
-{
-    Block header{
-        ColumnWithTypeAndName(std::make_shared<DataTypeString>(), "metric_name"),
-        ColumnWithTypeAndName(std::make_shared<DataTypeInt64>(), "metric_value"),
-    };
-
-    MutableColumns columns = header.cloneEmptyColumns();
-
-    auto add = [&](const char * name, Int64 value)
-    {
-        columns[0]->insert(String(name));
-        columns[1]->insert(value);
-    };
-
-    add("deleted_data_files_count", result.deleted_data_files_count);
-    add("deleted_position_delete_files_count", result.deleted_position_delete_files_count);
-    add("deleted_equality_delete_files_count", result.deleted_equality_delete_files_count);
-    add("deleted_manifest_files_count", result.deleted_manifest_files_count);
-    add("deleted_manifest_lists_count", result.deleted_manifest_lists_count);
-    add("deleted_metadata_files_count", result.deleted_metadata_files_count);
-    add("deleted_statistics_files_count", result.deleted_statistics_files_count);
-    add("skipped_missing_metadata_count", result.skipped_missing_metadata_count);
-
-    Chunk chunk(std::move(columns), 8);
-    return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
-}
-
-static time_t parseTimestamp(const String & ts_str)
-{
-    ReadBufferFromString buf(ts_str);
-    time_t ts;
-    readDateTimeText(ts, buf);
-    return ts;
-}
-
-static ExecuteCommandArgs makeExpireSnapshotsSchema()
-{
-    ExecuteCommandArgs schema("expire_snapshots");
-    schema.addPositional("expire_before", Field::Types::String);
-    schema.addNamed("retention_period");
-    schema.addNamed("retain_last");
-    schema.addNamed("snapshot_ids");
-    schema.addNamed("dry_run");
-    schema.addDefault("dry_run", Field(UInt64(0)));
-    return schema;
-}
-
-static Iceberg::ExpireSnapshotsOptions buildExpireSnapshotsOptions(const ExecuteCommandArgs::Result & parsed)
-{
-    Iceberg::ExpireSnapshotsOptions options;
-    static constexpr std::string_view cmd = "expire_snapshots";
-
-    if (parsed.has("expire_before"))
-    {
-        String ts = parsed.getAs<String>("expire_before");
-        ReadBufferFromString buf(ts);
-        time_t expire_time;
-        readDateTimeText(expire_time, buf);
-        options.expire_before_ms = static_cast<Int64>(expire_time) * 1000;
-    }
-
-    if (parsed.has("retention_period"))
-        options.retention_period_ms = Iceberg::fieldToPeriodMs(parsed.get("retention_period"), cmd, "retention_period");
-
-    if (parsed.has("retain_last"))
-    {
-        Int64 retain_last = Iceberg::fieldToInt64(parsed.get("retain_last"), cmd, "retain_last");
-        if (retain_last <= 0)
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots expects 'retain_last' to be positive");
-        if (retain_last > std::numeric_limits<Int32>::max())
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots 'retain_last' is too large: {}", retain_last);
-        options.retain_last = static_cast<Int32>(retain_last);
-    }
-
-    if (parsed.has("snapshot_ids"))
-        options.snapshot_ids = Iceberg::fieldToInt64Array(parsed.get("snapshot_ids"), cmd, "snapshot_ids");
-
-    if (parsed.has("dry_run"))
-        options.dry_run = Iceberg::fieldToBool(parsed.get("dry_run"), cmd, "dry_run");
-
-    if (options.snapshot_ids && (options.retention_period_ms || options.retain_last))
-        throw Exception(
-            ErrorCodes::BAD_ARGUMENTS,
-            "expire_snapshots argument 'snapshot_ids' cannot be combined with 'retention_period' or 'retain_last'");
-
-    return options;
-}
-
-static ExecuteCommandArgs makeRemoveOrphanFilesSchema()
-{
-    ExecuteCommandArgs schema("remove_orphan_files");
-    schema.addPositional("older_than", Field::Types::String);
-    schema.addNamed("location", Field::Types::String);
-    schema.addNamed("dry_run", Field::Types::UInt64);
-    schema.addDefault("dry_run", Field(UInt64(0)));
-    return schema;
-}
-
 Pipe IcebergMetadata::executeCommand(
     const String & command_name,
     const ASTPtr & args,
@@ -714,22 +585,10 @@ Pipe IcebergMetadata::executeCommand(
                 "To allow its usage, enable setting allow_experimental_expire_snapshots");
         }
 
-        auto parsed = makeExpireSnapshotsSchema().parse(args);
-        auto options = buildExpireSnapshotsOptions(parsed);
-
-        auto result = Iceberg::expireSnapshots(
-            options,
-            context,
-            object_storage_,
-            data_lake_settings,
-            persistent_components,
-            write_format,
-            catalog_,
-            configuration_->getTypeName(),
-            configuration_->getNamespace(),
-            storage_id.getTableName());
-
-        return expireSnapshotsResultToPipe(result);
+        return Iceberg::executeExpireSnapshots(
+            args, context, object_storage_, data_lake_settings, persistent_components,
+            write_format, catalog_, configuration_->getTypeName(),
+            configuration_->getNamespace(), storage_id.getTableName());
     }
     else if (command_name == "remove_orphan_files")
     {
@@ -741,31 +600,8 @@ Pipe IcebergMetadata::executeCommand(
                 "To allow its usage, enable setting allow_iceberg_remove_orphan_files");
         }
 
-        auto parsed = makeRemoveOrphanFilesSchema().parse(args);
-
-        Iceberg::RemoveOrphanFilesParams params;
-        if (parsed.has("older_than"))
-        {
-            params.older_than = parseTimestamp(parsed.getAs<String>("older_than"));
-        }
-        else
-        {
-            UInt64 threshold_seconds = context->getSettingsRef()[Setting::iceberg_orphan_files_older_than_seconds].value;
-            auto now = std::chrono::system_clock::now();
-            params.older_than = std::chrono::system_clock::to_time_t(now - std::chrono::seconds(threshold_seconds));
-        }
-        if (parsed.has("location"))
-            params.location = parsed.getAs<String>("location");
-        params.dry_run = parsed.getAs<UInt64>("dry_run") != 0;
-
-        auto result = Iceberg::removeOrphanFiles(
-            params,
-            context,
-            object_storage_,
-            data_lake_settings,
-            persistent_components);
-
-        return removeOrphanFilesResultToPipe(result);
+        return Iceberg::executeRemoveOrphanFiles(
+            args, context, object_storage_, data_lake_settings, persistent_components);
     }
     else
     {

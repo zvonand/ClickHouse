@@ -8,6 +8,7 @@
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <Functions/FunctionFactory.h>
+#include <Functions/FunctionHelpers.h>
 #include <Functions/IFunction.h>
 
 #include <bech32.h>
@@ -210,10 +211,10 @@ public:
                 else
                 {
                     /// Validate all rows have the same value (guards against non-const column expressions)
-                    String variant = variant_col->getDataAt(0).toString();
+                    String variant(variant_col->getDataAt(0));
                     for (size_t row = 1; row < input_rows_count; ++row)
                     {
-                        if (variant_col->getDataAt(row).toString() != variant)
+                        if (variant_col->getDataAt(row) != variant)
                             throw Exception(
                                 ErrorCodes::BAD_ARGUMENTS,
                                 "Encoding variant must be constant for function {}, got different values in rows",
@@ -503,11 +504,11 @@ public:
             }
             else
             {
-            String mode = mode_col->getDataAt(0).toString();
+            String mode(mode_col->getDataAt(0));
             /// Validate all rows have the same value (guards against non-const column expressions)
             for (size_t row = 1; row < input_rows_count; ++row)
             {
-                if (mode_col->getDataAt(row).toString() != mode)
+                if (mode_col->getDataAt(row) != mode)
                     throw Exception(
                         ErrorCodes::BAD_ARGUMENTS,
                         "Decode mode must be constant for function {}, got different values in rows",

@@ -31,22 +31,21 @@
 #include <Interpreters/PreparedSets.h>
 #include <Storages/ObjectStorage/Utils.h>
 
-#include <Databases/DataLake/Common.h>
-#include <Disks/DiskType.h>
 #include <Core/ColumnsWithTypeAndName.h>
 #include <Core/Settings.h>
 #include <Core/NamesAndTypes.h>
+#include <Databases/DataLake/Common.h>
 #include <Databases/DataLake/ICatalog.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/StoredObject.h>
+#include <Disks/DiskType.h>
 #include <Formats/FormatFactory.h>
 #include <IO/ReadBufferFromFileBase.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
 #include <Parsers/ASTLiteral.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteCommandArgs.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergFieldParseHelpers.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/IcebergMetadataLog.h>
+#include <Interpreters/StorageID.h>
 
 #include <Storages/ObjectStorage/DataLakes/Common/Common.h>
 #include <Storages/ObjectStorage/StorageObjectStorageSource.h>
@@ -56,11 +55,12 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergMetadataFilesCache.h>
 
 #include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage.h>
-#include <Interpreters/StorageID.h>
 #include <Storages/ColumnsDescription.h>
 #include <Storages/ObjectStorage/DataLakes/Common/AvroForIcebergDeserializer.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Compaction.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Constant.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/ExecuteCommandArgs.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergFieldParseHelpers.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergDataObjectInfo.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergIterator.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergMetadata.h>
@@ -677,28 +677,13 @@ static Iceberg::ExpireSnapshotsOptions buildExpireSnapshotsOptions(const Execute
     return options;
 }
 
-static ExecuteCommandArgs makeRemoveOrphanFilesSchema(ContextPtr context)
+static ExecuteCommandArgs makeRemoveOrphanFilesSchema()
 {
     ExecuteCommandArgs schema("remove_orphan_files");
     schema.addPositional("older_than", Field::Types::String);
     schema.addNamed("location", Field::Types::String);
     schema.addNamed("dry_run", Field::Types::UInt64);
     schema.addDefault("dry_run", Field(UInt64(0)));
-    schema.addPostParse([context](ExecuteCommandArgs::Result & result)
-    {
-        if (!result.has("older_than"))
-        {
-            UInt64 threshold_seconds = context->getSettingsRef()[Setting::iceberg_orphan_files_older_than_seconds].value;
-            auto now = std::chrono::system_clock::now();
-            auto cutoff = now - std::chrono::seconds(threshold_seconds);
-            time_t ts = std::chrono::system_clock::to_time_t(cutoff);
-            char buf[20];
-            struct tm t;
-            gmtime_r(&ts, &t);
-            (void)strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &t);
-            result.set("older_than", String(buf));
-        }
-    });
     return schema;
 }
 
@@ -756,10 +741,19 @@ Pipe IcebergMetadata::executeCommand(
                 "To allow its usage, enable setting allow_iceberg_remove_orphan_files");
         }
 
-        auto parsed = makeRemoveOrphanFilesSchema(context).parse(args);
+        auto parsed = makeRemoveOrphanFilesSchema().parse(args);
 
         Iceberg::RemoveOrphanFilesParams params;
-        params.older_than = parseTimestamp(parsed.getAs<String>("older_than"));
+        if (parsed.has("older_than"))
+        {
+            params.older_than = parseTimestamp(parsed.getAs<String>("older_than"));
+        }
+        else
+        {
+            UInt64 threshold_seconds = context->getSettingsRef()[Setting::iceberg_orphan_files_older_than_seconds].value;
+            auto now = std::chrono::system_clock::now();
+            params.older_than = std::chrono::system_clock::to_time_t(now - std::chrono::seconds(threshold_seconds));
+        }
         if (parsed.has("location"))
             params.location = parsed.getAs<String>("location");
         params.dry_run = parsed.getAs<UInt64>("dry_run") != 0;

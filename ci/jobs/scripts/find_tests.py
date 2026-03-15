@@ -131,78 +131,244 @@ class Targeting:
     @staticmethod
     def normalize_symbol(symbol: str) -> str:
         """
-        Strip function argument list from a demangled symbol, keeping only the
-        qualified function name. Matches the normalization applied at export time
-        in export_coverage.py.
+        Extract the qualified function name from a demangled C++ symbol by:
+          1. Finding the first '(' at bracket depth 0 to locate the arg list
+          2. Finding the last ' ' at bracket depth 0 before that to strip return type
+          3. Stripping trailing function template args '<...>' if the result ends with '>'
 
-        'DB::MergeTree::loadParts(MutableDataPartsVector&, ...)' -> 'DB::MergeTree::loadParts'
-        'DB::(anonymous namespace)::Foo::bar(int)'               -> 'DB::(anonymous namespace)::Foo::bar'
-        'DB::Foo::method'                                        -> 'DB::Foo::method'  (unchanged)
+        Handles all cases: 'void DB::Foo::bar()', 'std::shared_ptr<DB::Type> DB::Foo::bar()',
+        '(anonymous namespace)::DistributedIndexAnalyzer::method()',
+        'void DB::JoinStuff::JoinUsedFlags::setUsed<true, true>'
+
+        This is the query-time counterpart of the SQL normalization in export_coverage.py.
+        hasAllTokens() is robust to return-type tokens in stored symbols, so the stored
+        symbol doesn't need identical normalization — only the function name tokens matter.
         """
-        # Replace (anonymous namespace) with a same-length placeholder so that
-        # positions in the modified string match positions in the original.
+        # Replace (anonymous namespace) with same-length placeholder so its '(' and ')'
+        # don't confuse the depth tracking or the arg-list '(' detection.
         ANON = "(anonymous namespace)"
-        placeholder = "x" * len(ANON)
-        modified = symbol.replace(ANON, placeholder)
-        paren_pos = modified.find("(")
-        if paren_pos > 0:
-            return symbol[:paren_pos]
-        return symbol
+        modified = symbol.replace(ANON, "x" * len(ANON))
+
+        # Step 1: scan for first '(' at <> depth 0 — that's the start of the arg list.
+        # Step 2: track last ' ' at <> depth 0 before that — that separates return type
+        #         from the qualified function name.
+        # Only <> affect bracket depth; () are not nested here (arg list '(' is what we seek).
+        depth = 0
+        first_paren = len(modified)
+        last_space = -1
+        for i, c in enumerate(modified):
+            if c == "<":
+                depth += 1
+            elif c == ">":
+                depth -= 1
+            elif depth == 0:
+                if c == "(":
+                    first_paren = i
+                    break
+                elif c == " ":
+                    last_space = i
+
+        # Everything from (last_space + 1) to first_paren is the qualified function name.
+        # Use positions on the ORIGINAL symbol (same lengths after placeholder substitution).
+        func_name = symbol[last_space + 1 : first_paren]
+
+        # Step 3: strip trailing function template args — only when result ends with '>',
+        # meaning no '::method' follows the closing '>'. Class templates like
+        # 'DB::Foo<T>::method' end with 'method' so their class template args are kept.
+        if func_name.endswith(">"):
+            lt_pos = func_name.find("<")
+            if lt_pos > 0:
+                func_name = func_name[:lt_pos]
+
+        return func_name if func_name else symbol
+
+    @staticmethod
+    def _escape_sql_string(s: str) -> str:
+        return s.replace("\\", "\\\\").replace("'", "\\'")
 
     # Symbols covering more than this fraction of all tests are too common to be
     # useful for test selection (e.g. PipelineExecutor::execute runs in every query).
-    # Using integer arithmetic: count * 100 < total * MAX_PCT avoids floats.
     MAX_SYMBOL_COVERAGE_PCT = 5
 
-    def get_tests_by_changed_symbols(self, symbols):
+    # Minimum absolute test count floor — prevents over-filtering in small corpora.
+    MIN_TESTS_THRESHOLD = 50
+
+    # Absolute cap: a symbol covering more than this many tests is excluded
+    # regardless of the percentage threshold. Keeps result sets manageable and
+    # consistent with the Python-side max_tests_per_symbol in get_most_relevant_tests().
+    MAX_TESTS_PER_SYMBOL = 200
+
+    @staticmethod
+    def _symbol_to_tokens(symbol: str) -> list:
         """
-        Returns a mapping from symbol to a list of tests that cover it.
-        Symbols covering more than MAX_SYMBOL_COVERAGE_PCT% of all tests are excluded:
-        they are either client-side startup noise or hot-path server functions that
-        appear in every test and carry no signal for test selection.
+        Split a normalized symbol into tokens for hasAllTokens() matching.
+
+        splitByNonAlpha splits on '::', '<', '>', '(', ')', ',', ' ' etc., so:
+          'DB::MergeTreeData::loadDataParts'
+            -> ['DB', 'MergeTreeData', 'loadDataParts']
+          'DB::(anonymous namespace)::Foo::bar'
+            -> ['DB', 'anonymous', 'namespace', 'Foo', 'bar']
+
+        hasAllTokens(cidb_symbol, tokens) then matches:
+          - new format: 'DB::MergeTreeData::loadDataParts'          (exact, no args)
+          - old format: 'DB::MergeTreeData::loadDataParts(bool, ...)' (args stripped by token)
+          - all template instantiations: 'DB::SettingFieldEnum<T>::isChanged'
+            for tokens ['DB','SettingFieldEnum','isChanged'] — T is an extra token, ignored
+
+        Tokens shorter than 3 chars are dropped (too common, add noise).
         """
-        # Minimum absolute test count below which a symbol is never filtered,
-        # regardless of the percentage. Avoids over-filtering when the test corpus
-        # is small (e.g. during local testing or early pipeline runs).
-        MIN_TESTS_THRESHOLD = 50
-        SYMBOL_TO_TESTS_QUERY = """
-        SELECT groupArray(test_name) as tests
+        tokens = re.split(r'[^a-zA-Z0-9_]', symbol)
+        return [t for t in tokens if len(t) >= 3]
+
+    def get_tests_by_changed_symbols(self, symbols: list) -> dict:
+        """
+        Single batch query replacing the previous N+1 per-symbol round-trips.
+
+        Uses hasAllTokens() with a splitByNonAlpha text index on the symbol column.
+        This single approach handles all three matching scenarios:
+          1. New normalized format (args stripped at export): tokens match exactly
+          2. Old format in CIDB (full args present): token match ignores argument tokens
+          3. Template instantiations (class template args differ): template arg tokens
+             are extra tokens in the CIDB symbol but hasAllTokens only requires the
+             query tokens to ALL be present — extra tokens are allowed
+
+        CIDB symbols are normalized in-SQL (same stripping logic as export_coverage.py)
+        so results are grouped by qualified function name and mapped back to input symbols.
+
+        Symbols covering more than MAX_SYMBOL_COVERAGE_PCT% of all tests are excluded —
+        they carry no signal for targeted test selection.
+        """
+        import time
+        t0 = time.monotonic()
+
+        if not symbols:
+            return {sym: [] for sym in symbols}
+
+        # Normalize each input symbol; deduplicate — multiple input symbols
+        # (e.g. different overloads) can map to the same normalized form.
+        norm_to_originals: dict[str, list] = {}
+        for sym in symbols:
+            norm = self.normalize_symbol(sym)
+            norm_to_originals.setdefault(norm, []).append(sym)
+
+        print(
+            f"[find_tests] input={len(symbols)} symbols, "
+            f"unique_normalized={len(norm_to_originals)}"
+        )
+
+        # Build per-symbol hasAllTokens conditions.
+        # Each normalized symbol is split into tokens; hasAllTokens matches any CIDB
+        # symbol that contains ALL of those tokens (in any order, with any extras).
+        match_conditions = []
+        skipped_no_tokens = 0
+        for norm in norm_to_originals:
+            tokens = self._symbol_to_tokens(norm)
+            if not tokens:
+                skipped_no_tokens += 1
+                continue
+            tokens_sql = ", ".join(f"'{self._escape_sql_string(t)}'" for t in tokens)
+            match_conditions.append(f"hasAllTokens(symbol, [{tokens_sql}])")
+
+        if skipped_no_tokens:
+            print(f"[find_tests] skipped {skipped_no_tokens} symbols with no tokens")
+
+        if not match_conditions:
+            return {sym: [] for sym in symbols}
+
+        combined_match = " OR ".join(f"({c})" for c in match_conditions)
+        print(f"[find_tests] built {len(match_conditions)} hasAllTokens conditions")
+
+        # The SQL normalization expression — strips argument list from CIDB symbols,
+        # identical to the logic in export_coverage.py.  Used to group template
+        # instantiations and old-format symbols under the same key.
+        SQL_NORMALIZE = (
+            "if(position(replaceAll(symbol, '(anonymous namespace)', repeat('x', 21)), '(') > 0,"
+            "   substring(symbol, 1, position(replaceAll(symbol, '(anonymous namespace)', repeat('x', 21)), '(') - 1),"
+            "   symbol)"
+        )
+
+        query = f"""
+        SELECT
+            {SQL_NORMALIZE} AS norm_symbol,
+            groupArray(DISTINCT test_name) AS tests
         FROM checks_coverage_inverted
         WHERE check_start_time > now() - interval 3 days
-          AND check_name LIKE '{JOB_TYPE}%'
-          AND symbol = '{SYMBOL}'
-        HAVING count(distinct test_name) < greatest(
-            toUInt64((
-                SELECT count(distinct test_name) * {MAX_PCT} / 100
-                FROM checks_coverage_inverted
-                WHERE check_start_time > now() - interval 3 days
-                  AND check_name LIKE '{JOB_TYPE}%'
-            )),
-            toUInt64({MIN_THRESHOLD})
+          AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+          AND notEmpty(test_name)
+          AND ({combined_match})
+        GROUP BY norm_symbol
+        HAVING count(DISTINCT test_name) < least(
+            -- Percentage-based cap: exclude symbols covering >MAX_SYMBOL_COVERAGE_PCT%
+            -- of all tests (hot-path functions like PipelineExecutor::execute that
+            -- run in every query carry no signal for targeted test selection).
+            greatest(
+                toUInt64((
+                    SELECT count(DISTINCT test_name) * {self.MAX_SYMBOL_COVERAGE_PCT} / 100
+                    FROM checks_coverage_inverted
+                    WHERE check_start_time > now() - interval 3 days
+                      AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+                )),
+                toUInt64({self.MIN_TESTS_THRESHOLD})
+            ),
+            -- Absolute cap: never return more than MAX_TESTS_PER_SYMBOL tests for
+            -- a single symbol regardless of corpus size. Keeps result sets
+            -- manageable and consistent with the Python-side max_tests_per_symbol
+            -- filter in get_most_relevant_tests().
+            toUInt64({self.MAX_TESTS_PER_SYMBOL})
         )
         """
-        symbol_to_tests = {}
-        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
-        for symbol in symbols:
-            normalized = self.normalize_symbol(symbol)
-            query = SYMBOL_TO_TESTS_QUERY.format(
-                JOB_TYPE=self.job_type,
-                SYMBOL=normalized,
-                MAX_PCT=self.MAX_SYMBOL_COVERAGE_PCT,
-                MIN_THRESHOLD=MIN_TESTS_THRESHOLD,
-            )
-            result = cidb.query(query, log_level="")
-            # Parse the ClickHouse Array result
-            if result.strip():
-                try:
-                    tests = ast.literal_eval(result.strip())
-                    symbol_to_tests[symbol] = tests if isinstance(tests, list) else []
-                except (ValueError, SyntaxError):
-                    print(f"Failed to parse tests for symbol '{symbol}': {result}")
-                    symbol_to_tests[symbol] = []
-            else:
-                symbol_to_tests[symbol] = []
 
+        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+        t_query = time.monotonic()
+        raw = cidb.query(query, log_level="")
+        print(f"[find_tests] CIDB query: {time.monotonic()-t_query:.2f}s, response={len(raw)} bytes")
+
+        # Parse TSV: norm_symbol \t ['test1','test2',...]
+        norm_to_tests: dict[str, list] = {}
+        for line in raw.strip().splitlines():
+            if not line:
+                continue
+            parts = line.split("\t", 1)
+            if len(parts) != 2:
+                continue
+            norm_sym, tests_raw = parts
+            try:
+                tests = ast.literal_eval(tests_raw.strip())
+                norm_to_tests[norm_sym] = tests if isinstance(tests, list) else []
+            except (ValueError, SyntaxError):
+                print(f"Failed to parse tests for '{norm_sym}': {tests_raw[:100]}")
+
+        # Map results back to original input symbols.
+        # The query already unioned all matching CIDB symbols (old/new format, all
+        # template instantiations) via hasAllTokens — no further expansion needed here.
+        # Multiple originals sharing the same normalized form get the same test list.
+        symbol_to_tests: dict[str, list] = {}
+        for norm, originals in norm_to_originals.items():
+            # The SQL groups by norm_symbol (the CIDB symbol normalized in-SQL).
+            # Collect tests from all CIDB symbols whose tokens matched this input norm.
+            tests: set[str] = set()
+            tokens = set(self._symbol_to_tokens(norm))
+            for result_norm, result_tests in norm_to_tests.items():
+                # Accept a result if its tokens are a superset of our query tokens
+                # (hasAllTokens guarantees this — just union all matching results).
+                result_tokens = set(self._symbol_to_tokens(result_norm))
+                if tokens <= result_tokens:
+                    tests.update(result_tests)
+            tests_list = sorted(tests)
+            for orig in originals:
+                symbol_to_tests[orig] = tests_list
+
+        # Fill in empty list for any symbol that got no matches
+        for sym in symbols:
+            symbol_to_tests.setdefault(sym, [])
+
+        total_unique_tests = len({t for tests in symbol_to_tests.values() for t in tests})
+        symbols_with_tests = sum(1 for tests in symbol_to_tests.values() if tests)
+        print(
+            f"[find_tests] done in {time.monotonic()-t0:.2f}s: "
+            f"{symbols_with_tests}/{len(symbols)} symbols matched, "
+            f"{total_unique_tests} unique tests selected"
+        )
         return symbol_to_tests
 
     def get_changed_or_new_tests_with_info(self):

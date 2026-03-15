@@ -33,7 +33,7 @@ The CIDB export does `arrayJoin(symbol)` — it reads symbol names directly. **F
 
 Uses LLVM's SanitizerCoverage (`-fsanitize-coverage=trace-pc-guard,pc-table`). At each instrumented basic block, the compiler inserts a call to `__sanitizer_cov_trace_pc_guard(guard_ptr)`. ClickHouse implements this callback in `base/base/coverage.cpp`.
 
-The callback stores `__builtin_return_address(0)` (the return address in the caller — the address just after the call to the guard inside the instrumented basic block) into two arrays:
+The callback stores `__builtin_return_address(0)` (the return address in the caller) into two arrays:
 - `current_coverage_array[guard_index]` — reset between tests via `SYSTEM RESET COVERAGE`
 - `cumulative_coverage_array[guard_index]` — never reset, accumulates since process startup
 
@@ -58,33 +58,13 @@ WITH arrayDistinct(arrayFilter(x -> x != 0, coverageCurrent())) AS coverage_dist
 SELECT DISTINCT now(), '{test_name}', coverage_distinct,
        arrayMap(x -> demangle(addressToSymbol(x)), coverage_distinct)
 ```
-Captures which server code paths were exercised since the last `SYSTEM RESET COVERAGE`. This is per-test incremental coverage of server-side execution (parsing, planning, executing queries).
 
 **Row 2 — Client dump INSERT** (`test_name = '{test_name}__client'`):
-The `clickhouse client` binary writes its own `cumulative_coverage_array` to `coverage.{database}.{pid}` on exit (via `dumpCoverage()` in `programs/main.cpp`). The test runner reads these files and inserts them:
-```sql
-INSERT INTO system.coverage_log SETTINGS async_insert=1,...
-WITH arrayDistinct(groupArray(data)) AS coverage_distinct
-SELECT now(), '{test_name}__client', coverage_distinct,
-       arrayMap(x -> demangle(addressToSymbol(x)), coverage_distinct)
-FROM input('data UInt64') FORMAT RowBinary
-```
-Captures cumulative client-side coverage since the client process started. Contains mostly startup/initialization noise — see analysis below.
+The `clickhouse client` binary writes its `cumulative_coverage_array` to `coverage.{database}.{pid}` on exit. The test runner reads these files and inserts them. These are dominated by startup/init symbols — see analysis below.
 
-**Before tests start — baseline INSERT** (`test_name = ''`): Captures coverage accumulated during server startup.
+**Before tests start — baseline INSERT** (`test_name = ''`): captures server startup coverage.
 
-Between tests: `SYSTEM RESET COVERAGE` zeroes `current_coverage_array` and resets all guards to 1.
-
-### Two Row Types: Server vs Client — Key Differences
-
-For `00001_select_1.sql`:
-
-| Row | PCs | DB:: symbols | What it captures |
-|-----|-----|-------------|-----------------|
-| `00001_select_1.sql` (server) | ~22K | ~20K (query execution) | Code the **server** ran to process this test's queries |
-| `00001_select_1.sql__client` (client) | ~62K | ~48K (mostly init) | Cumulative client code including **all startup initialization** |
-
-Client symbols are dominated by startup noise (e.g. `AggregateFunctionCombinator*::getName()` — runs on every client start regardless of which test runs). These appear in ALL tests and are filtered at the inverted index query level (see `find_tests.py` `HAVING` filter).
+Between tests: `SYSTEM RESET COVERAGE` zeroes `current_coverage_array` and resets guards to 1.
 
 ### Coverage Log Table Schema
 
@@ -93,8 +73,8 @@ CREATE TABLE IF NOT EXISTS system.coverage_log
 (
     time DateTime,
     test_name String,    -- '{test}' for server row, '{test}__client' for client dump
-    coverage Array(UInt64),   -- file offsets (client dump) or runtime VAs (server)
-    symbol Array(String)      -- demangled symbol names (what actually matters)
+    coverage Array(UInt64),
+    symbol Array(String)
 ) ENGINE = MergeTree ORDER BY test_name
 ```
 
@@ -102,22 +82,10 @@ CREATE TABLE IF NOT EXISTS system.coverage_log
 
 **File**: `ci/jobs/scripts/functional_tests/export_coverage.py`
 
-`CoverageExporter.do()` uses `clickhouse local` to read `system.coverage_log` from the on-disk data directory and inserts into CIDB:
-
-```sql
-INSERT INTO FUNCTION remoteSecure('{cidb_url}', 'default.checks_coverage_inverted', ...)
-SELECT DISTINCT sym AS symbol,
-    '{check_start_time}' AS check_start_time,
-    '{job_name}' AS check_name,
-    test_name
-FROM system.coverage_log
-ARRAY JOIN symbol AS sym
-WHERE sym LIKE 'DB::%'
-```
-
-`ARRAY JOIN symbol AS sym` explodes the array into rows, then `WHERE sym LIKE 'DB::%'` filters at the row level before `SELECT DISTINCT`. Only `DB::` namespace symbols reach CIDB — `std::__1::`, `Poco::`, `boost::`, anonymous lambdas, etc. are dropped.
-
-Both server and `__client` rows are exported. Client startup symbols (common to ALL tests) are filtered at query time via `HAVING count(distinct test_name) < total_tests`.
+Exports to `default.checks_coverage_inverted`:
+- Exports ALL symbols (no namespace filter — see Symbol Normalization section)
+- Excludes `__client` rows: `WHERE NOT endsWith(test_name, '__client')`
+- Normalizes symbols (arg list stripping, trailing template stripping)
 
 ### Test Selection
 
@@ -137,11 +105,8 @@ PR diff (GitHub)
 
 | File | Purpose |
 |------|---------|
-| `base/base/coverage.cpp` | Core: `__sanitizer_cov_trace_pc_guard`, `__sanitizer_cov_pcs_init`, `resetCoverage`, `getCoverage*` |
-| `base/base/coverage.h` | Declares `getCurrentCoverage`, `getCumulativeCoverage`, `getAllInstrumentedAddresses`, `resetCoverage` |
+| `base/base/coverage.cpp` | Core: `__sanitizer_cov_trace_pc_guard`, `resetCoverage`, `getCoverage*` |
 | `src/Functions/coverage.cpp` | SQL functions `coverageCurrent()`, `coverageCumulative()`, `coverageAll()` |
-| `src/Functions/addressToSymbol.cpp` | SQL function `addressToSymbol(UInt64) -> String` |
-| `src/Common/SymbolIndex.cpp` | `SymbolIndex::findSymbol` — resolves addresses/offsets to symbol names |
 | `src/Common/Coverage.cpp` | `dumpCoverage()` — writes cumulative coverage as **file offsets** on client exit |
 | `src/Processors/Formats/Impl/DWARFBlockInputFormat.cpp` | DWARF format reader — exposes ELF DWARF as SQL table |
 | `tests/clickhouse-test` | Test runner; per-test INSERT (server + client), baseline INSERT, JIT suppression |
@@ -153,103 +118,106 @@ PR diff (GitHub)
 
 ---
 
-## How to Run Locally
-
-```bash
-mkdir -p tmp/coverage_run/{data,tmp,logs,user_files,format_schemas}
-fuser -k 9000/tcp 8123/tcp 9010/tcp 2>/dev/null || true
-
-./clickhouse server --config-file=tmp/coverage_run/config.xml \
-    > tmp/coverage_run/logs/server.log 2>&1 &
-sleep 3
-./clickhouse client --port 9000 --query "SELECT 1"
-
-# Run a test with coverage
-python3 tests/clickhouse-test \
-    --binary ./clickhouse \
-    --client-option "port=9000" \
-    --collect-per-test-coverage \
-    "00001_select_1"
-```
-
-Config (`tmp/coverage_run/config.xml`) must have `allow_introspection_functions=1`. Do NOT use `--config-file=/dev/null` (Poco rejects empty files). Do NOT set `<tcp_port_secure>0</tcp_port_secure>` (triggers SSL setup).
-
-```sql
--- Check results
-SELECT test_name, length(coverage) as pcs, countEqual(symbol,'') as empty_syms,
-       length(symbol) - countEqual(symbol,'') as good_syms
-FROM system.coverage_log ORDER BY time;
-```
-
----
-
 ## Bugs Found and Fixed
 
 ### Bug 1: Client dump writes runtime VAs — server can't resolve them (FIXED)
 
-**Symptom**: Client dump row (`{test}__client`) had ~62K PCs all with empty symbols.
+**Root cause**: `dumpCoverage()` wrote raw runtime virtual addresses. The `clickhouse client` runs at a different ASLR base than the server → `SymbolIndex::findObject` returns null → empty symbols.
 
-**Root cause**: `dumpCoverage()` in `src/Common/Coverage.cpp` wrote raw runtime virtual addresses from `cumulative_coverage_array`. The `clickhouse client` process runs at a different ASLR base than the server (PIE binary, ASLR randomizes each process independently). When the server inserts these addresses and calls `addressToSymbol()`:
-- `SymbolIndex::findObject(client_addr)` returns null — client's ASLR base is different from server's
-- Fallback path: tries `client_addr` as a raw file offset — but `0x5573...` (runtime VA) is 94 TB as a file offset → no symbol → empty
+**Fix** (`src/Common/Coverage.cpp`): subtract binary load base before writing → stores file offsets.
 
-**Fix** (`src/Common/Coverage.cpp`): subtract the binary's load base before writing to the dump file:
-```cpp
-uintptr_t load_base = 0;
-if (const DB::SymbolIndex::Object * self = DB::SymbolIndex::instance().thisObject())
-    load_base = reinterpret_cast<uintptr_t>(self->address_begin);
-// ...
-data.push_back(addr - load_base);  // store file offset, not runtime VA
-```
-Now the dump contains file offsets (e.g. `0x1AE6...` = ~450 MB into the binary, valid text section offset). `SymbolIndex::findSymbol()` resolves them correctly via the same fallback path used by `system.stack_trace` (after PR #82809).
+### Bug 2: JIT settings enabled via random session settings (FIXED)
 
-**Result**: Client dump row now has 0 empty symbols.
+**Root cause**: `clickhouse-test` randomizes `compile_expressions`, `compile_sort_description`, etc. These cause the server to JIT-compile code into anonymous mmap. JIT-code return addresses → unresolvable → empty symbols in server-side row.
 
-### Bug 2: JIT settings in random session settings contaminate server coverage (FIXED)
-
-**Symptom**: Server-side `coverageCurrent()` row had all empty symbols when random settings happened to enable JIT.
-
-**Root cause**: `clickhouse-test` randomizes session settings per test including `compile_expressions=1`, `compile_sort_description=1`, `compile_aggregate_expressions=1`. These are sent as session settings to the server. The server JIT-compiles functions at runtime into anonymous mmap memory. JIT code calls instrumented C++ functions; `__builtin_return_address(0)` inside `__sanitizer_cov_trace_pc_guard` returns a JIT address (anonymous mmap, not in the binary's text segment). `SymbolIndex::findObject` returns null, fallback fails (JIT address is too large as file offset) → empty symbol.
-
-**Fix** (`tests/clickhouse-test` `SettingsRandomizer.get_random_settings()`): force all 6 JIT settings to 0 for `SANITIZE_COVERAGE` builds:
-```python
-if is_coverage:
-    for jit_setting in (
-        "compile_expressions", "compile_aggregate_expressions", "compile_sort_description",
-        "min_count_to_compile_expression", "min_count_to_compile_aggregate_expression",
-        "min_count_to_compile_sort_description",
-    ):
-        random_settings[jit_setting] = 0
-```
-All other random settings still apply. Mirrors existing pattern for `BuildFlags.DEBUG`.
+**Fix** (`tests/clickhouse-test`): force 6 JIT settings to 0 in `SettingsRandomizer.get_random_settings()` when `BuildFlags.SANITIZE_COVERAGE`.
 
 ### Bug 3: `BUILD_STRIPPED_BINARY=1` was useless in AMD_COVERAGE (FIXED)
 
-`ci/jobs/build_clickhouse.py` had `-DBUILD_STRIPPED_BINARY=1` in the AMD_COVERAGE cmake command. This creates `clickhouse-stripped` which is never uploaded or used for coverage (only used by `build_master_head_hook.py` for release builds). Wasted time stripping a 6 GB binary. Removed.
+Removed from `ci/jobs/build_clickhouse.py`. Created an unused stripped binary wasting build time.
 
 ### Minor: `coverageAll()` misparses PC table
 
-`__sanitizer_cov_pcs_init` receives `(PC, PCFlags)` pairs but `base/base/coverage.cpp` treats them as a flat array. Every other entry is a flag (0 or 1). `coverageAll()` returns ~50% garbage. Not critical since `coverageAll()` is not exported to CIDB.
+`__sanitizer_cov_pcs_init` receives `(PC, PCFlags)` pairs but code treats as flat array. Not critical since `coverageAll()` is not exported.
 
 ---
 
-## `SymbolIndex::findSymbol` — How Address Resolution Works
+## Symbol Normalization
 
-Located in `src/Common/SymbolIndex.cpp`:
+### Why normalization matters
 
+Demangled C++ symbols from DWARF and coverage have multiple forms:
+- `DB::Foo::bar(arg1, arg2)` — with arg list
+- `void DB::Foo::bar(arg1)` — with return type prefix
+- `bool DB::getNewValueToCheck<DB::Settings>(...)` — template + return type
+- `void DB::JoinStuff::JoinUsedFlags::setUsed<true, true>` — template function with no args (no `()`)
+- `(anonymous namespace)::DistributedIndexAnalyzer::method(...)` — ClickHouse helper in anonymous namespace, NO `DB::` prefix
+
+### Symbol categories in real CIDB
+
+| Category | Count/day | Example |
+|---|---|---|
+| `starts_DB::` | 70.6M | `DB::MergeTreeData::loadDataParts(...)` |
+| `std::prefix` | 12.3M | `std::vector<DB::Type>::method(...)` |
+| `no_DB::_at_all` | 6.7M | LLVM anonymous namespace functions |
+| `other` | 5.5M | `(anonymous namespace)::DistributedIndexAnalyzer::...` — ClickHouse helpers |
+| `lowercase_rettype DB::` | 1.5M | `void DB::...`, `bool DB::...` |
+| `STL_template<DB::>` | 0.5M | `AllocatorWithMemoryTracking<DB::Type>::allocate` |
+
+**Important**: `(anonymous namespace)::DistributedIndexAnalyzer` is a ClickHouse class defined in `src/Interpreters/ClusterProxy/distributedIndexAnalysis.cpp` inside `namespace { using namespace DB; class DistributedIndexAnalyzer { ... }; }` — file-scope anonymous namespace, NOT inside `namespace DB`. Previous `DB::` filter missed all such classes.
+
+### Why `WHERE position(sym, 'DB::') > 0` is wrong
+
+For `std::vector<DB::Type>::method(arg)`: `position('DB::') = 12` is inside template args → extracts `DB::Type>::method(arg)` — garbage.
+
+For `(anonymous namespace)::DistributedIndexAnalyzer(... DB::Connection* ...)`: `position('DB::') = 170` is inside function args → garbage.
+
+### Export normalization (SQL in `export_coverage.py`)
+
+1. Strip function argument list `(...)` using same-length placeholder for `(anonymous namespace)`
+2. Strip trailing template args `<...>` only when the result ends with `>` (function template with no method name after)
+3. **No namespace filter** — export ALL symbols. Return-type stripping is done in Python at query time.
+4. Exclude `__client` rows: `WHERE NOT endsWith(test_name, '__client')`
+
+### Query-time normalization (`normalize_symbol` in `find_tests.py`)
+
+Uses bracket-depth algorithm to correctly handle ALL symbol forms:
+
+```python
+def normalize_symbol(symbol: str) -> str:
+    """Extract qualified function name using bracket-depth tracking."""
+    ANON = "(anonymous namespace)"
+    modified = symbol.replace(ANON, "x" * len(ANON))
+
+    # Find first '(' at <> depth 0 (arg list start)
+    # Find last ' ' at <> depth 0 before that (return type / function name separator)
+    depth = 0
+    first_paren = len(modified)
+    last_space = -1
+    for i, c in enumerate(modified):
+        if c == "<": depth += 1
+        elif c == ">": depth -= 1
+        elif depth == 0:
+            if c == "(": first_paren = i; break
+            elif c == " ": last_space = i
+
+    func_name = symbol[last_space + 1 : first_paren]
+
+    # Strip trailing function template args if symbol ends with '>'
+    if func_name.endswith(">"):
+        lt_pos = func_name.find("<")
+        if lt_pos > 0:
+            func_name = func_name[:lt_pos]
+
+    return func_name if func_name else symbol
 ```
-findSymbol(addr):
-    object = findObject(addr)            -- binary search over mapped objects [address_begin, address_end)
-    if object found:
-        offset = addr - object.address_begin   -- convert runtime VA → file offset
-    else:
-        offset = addr                    -- fallback: treat directly as raw file offset
-    return find(offset, symbols)         -- binary search over .symtab entries by file offset
-```
 
-`address_begin = info->addr` (load base from `dl_iterate_phdr`), `address_end = info->addr + elf_file_size`.
-
-Symbols are stored as **file offsets** (pre-link virtual addresses from ELF `.symtab`). The fallback path (treat value as file offset) is what makes both `system.stack_trace` and fixed client dump addresses resolve correctly.
+Examples:
+- `void DB::JoinStuff::JoinUsedFlags::setUsed<true, true>` → `DB::JoinStuff::JoinUsedFlags::setUsed`
+- `std::shared_ptr<DB::Type> DB::Foo::getBar()` → `DB::Foo::getBar`
+- `(anonymous namespace)::DistributedIndexAnalyzer::method(int)` → `(anonymous namespace)::DistributedIndexAnalyzer::method`
+- `bool DB::getNewValueToCheck<DB::Settings>(...)` → `DB::getNewValueToCheck`
+- `DB::(anonymous namespace)::AggregateFunctionMinMax<T>::getName() const` → `DB::(anonymous namespace)::AggregateFunctionMinMax<T>::getName`
 
 ---
 
@@ -257,125 +225,137 @@ Symbols are stored as **file offsets** (pre-link virtual addresses from ELF `.sy
 
 ### What a Symbol Is
 
-A **demangled C++ function name** from the ELF symbol table, e.g.:
-```
-DB::MergeTreeData::checkPartDynamicColumns(DB::Block&, std::string&) const
-```
-It is the enclosing function of the changed code — NOT a file+line.
+A **demangled C++ function name** (after normalization — no arg list, no return type). NOT a file+line.
 
 ### Full Pipeline: Changed Line → Tests
 
-**Step 1** — `find_symbols.py`: fetch PR diff from GitHub, parse `(file, line)` for all added/removed lines in C/C++ files.
+**Step 1** — `find_symbols.py`: fetch PR diff from GitHub, parse `(file, line)` for changed C/C++ lines.
 
-**Step 2** — `find_symbols.py`: DWARF query via `clickhouse local`:
+**Step 2** — `find_symbols.py`: DWARF query via `clickhouse local` (~85-180s for 6GB binary):
 ```sql
 SELECT diff.filename, diff.line, binary.address, binary.linkage_name,
     if(empty(binary.linkage_name),
         demangle(addressToSymbol(binary.address)),
         demangle(binary.linkage_name)) AS symbol
-FROM file('stdin', 'CSVWithNames', ...) AS diff
+FROM file('stdin', ...) AS diff
 ASOF LEFT JOIN (
     SELECT decl_file, decl_line, linkage_name, ranges[1].1 AS address
-    FROM file('{clickhouse_binary}', 'DWARF')
+    FROM file('{ch_path}', 'DWARF')
     WHERE tag = 'subprogram' AND (notEmpty(linkage_name) OR address != 0)
-      AND notEmpty(decl_file)
 ) AS binary
 ON basename(diff.filename) = basename(binary.decl_file)
-AND diff.line >= binary.decl_line
+   AND diff.line >= binary.decl_line
 ```
+The DWARF step is IO-bound (reads 6GB binary). Timing: 85s warm cache, 180s cold.
 
-**Step 3** — `find_tests.py`: one CIDB query per symbol:
+**Step 3** — `find_tests.py`: single batch `hasAllTokens` query to CIDB with `splitByNonAlpha` text index:
 ```sql
-SELECT groupArray(test_name) AS tests
+SELECT norm_symbol, groupArray(DISTINCT test_name) AS tests
 FROM checks_coverage_inverted
 WHERE check_start_time > now() - interval 3 days
   AND check_name LIKE 'Stateless%'
-  AND symbol = '{SYMBOL}'
-HAVING count(distinct test_name) < {TOTAL_TESTS}
+  AND notEmpty(test_name)
+  AND (hasAllTokens(symbol, ['Foo', 'bar']) OR hasAllTokens(symbol, ['Baz', 'method']) OR ...)
+GROUP BY norm_symbol
+HAVING count(DISTINCT test_name) < least(
+    greatest(toUInt64(total_tests * 5 / 100), 50),
+    100   -- MAX_TESTS_PER_SYMBOL
+)
 ```
-`TOTAL_TESTS` is precomputed once before the loop. The `HAVING` filter excludes symbols appearing in ALL tests (client startup noise).
-
-**Step 4** — Python-side filter: symbols with >100 tests are skipped ("too common code"). Union with: directly changed test files, previously failed tests.
 
 ### DWARF Format Schema
 
-The `file(path, 'DWARF')` table format exposes:
-
 | Column | Type | Description |
 |--------|------|-------------|
-| `tag` | String | DWARF DIE tag (`subprogram`, `inlined_subroutine`, etc.) |
-| `name` | String | Human-readable name |
+| `tag` | String | DWARF DIE tag |
 | `linkage_name` | String | Mangled C++ name |
-| `decl_file` | LowCardinality(String) | Source file of declaration |
-| `decl_line` | UInt32 | Source line of declaration (function start) |
-| `ranges` | Array(Tuple(UInt64, UInt64)) | Machine code address ranges: **(start, end)** pairs |
+| `decl_file` | LowCardinality(String) | Source file |
+| `decl_line` | UInt32 | Function start line |
+| `ranges` | Array(Tuple(UInt64, UInt64)) | **(start, end)** address pairs |
 
-`ranges[1].1` = start address, `ranges[1].2` = end address of the function's machine code.
+---
+
+## `checks_coverage_inverted` Table
+
+**Schema**: `(symbol LowCardinality(String), check_start_time DateTime, check_name LowCardinality(String), test_name LowCardinality(String))`
+
+**ORDER BY**: `(toDate(check_start_time), symbol, test_name)` — date first for efficient date filtering; deduplicates same `(date, symbol, test)` rows.
+
+**Text index**: `TYPE text(tokenizer = splitByNonAlpha)` on `symbol` — enables `hasAllTokens` with direct read, ~45-89× faster than column scan.
+
+**Filtering in queries**:
+- `HAVING count(DISTINCT test_name) * 100 < greatest(total * 5, 50 * 100)` — exclude symbols in >5% of tests (hot-path noise like `PipelineExecutor::execute`)
+- `AND count(DISTINCT test_name) < 100` — absolute cap via `least(...)` in HAVING
+- `__client` rows excluded at export time
 
 ---
 
 ## Problems with Current DWARF→Symbol Matching (Not Yet Fixed)
 
-### Problem 1: Wrong canonical symbol name
+### Problem 1: Basename path matching — false positives
 
-Current uses `demangle(linkage_name)`. Should use `demangle(addressToSymbol(address))` when `address != 0` — that's exactly what coverage stored. For inlined functions (`address=0`), no ELF symbol exists so no match is possible regardless.
+`basename(diff.filename) = basename(binary.decl_file)` — same-named files in different directories collide.
 
-**Fix**: `if(binary.address != 0, demangle(addressToSymbol(binary.address)), demangle(binary.linkage_name))`
+**Fix**: use last 2 path components: `arrayStringConcat(arraySlice(splitByChar('/', path), -2), '/')`
 
 ### Problem 2: No upper bound on function line range
 
-ASOF JOIN only has lower bound (`decl_line ≤ changed_line`). Lines between two functions are wrongly assigned to the preceding one.
+ASOF JOIN only has lower bound (`decl_line ≤ changed_line`). Lines between functions assigned to preceding function.
 
-**Fix**: use `ranges[1].2` (end address) + `addressToLine(ranges[1].2 - 1)` to get `end_line`, add `diff.line <= end_line`. Filter `ranges[1].1 != 0` to drop abstract inlines.
+**Fix**: use `ranges[1].2` + `addressToLine(ranges[1].2 - 1)` for end line. NOTE: `addressToLine` returns `String "file:line"`, NOT a tuple. Use `toUInt32(splitByChar(':', addressToLine(toUInt64(ranges[1].2 - 1)))[2])`. WARNING: this is slow (calls `addressToLine` for every DWARF subprogram row), reverting to ASOF JOIN is needed for performance.
 
-### Problem 3: Template instantiations — only one found
+### Problem 3: Template instantiations — hasAllTokens handles this
 
-All instantiations share the same `decl_line`. ASOF JOIN picks one arbitrarily. Tests exercising `foo<String>` are missed when `foo<int>` was picked.
+With `splitByNonAlpha` tokenizer and `hasAllTokens`, all template instantiations of the same function automatically match since template arg tokens are "extras" that don't need to be in the query tokens. No special handling needed.
 
-**Fix**: strip template args → use `startsWith(symbol, base_name + '<')` in CIDB query.
+### Problem 4: N+1 CIDB queries → FIXED
 
-### Problem 4: Basename path matching — false positives
+Replaced with single batch `hasAllTokens` query.
 
-`basename(...)` — same-named files in different directories collide.
+### Problem 5: Unresolved lines (file-level scope)
 
-**Fix**: use last 2 path components: `arrayStringConcat(arraySlice(splitByChar('/', path), -2), '/')`.
-
-### Problem 5: N+1 CIDB queries
-
-One round-trip per symbol. Fix: batch with `symbol IN (...)`.
-
-### Unfixable: inlined functions in headers
-
-`address=0` in DWARF → no ELF symbol → can never match coverage data. Only fixable by switching to line-level coverage.
+Lines in `#include` statements, namespace declarations, static constants, and function SIGNATURE lines (before the body `{`) cannot be resolved by ASOF JOIN. 4-5 per PR typically. Not fixable without line-level DWARF.
 
 ---
 
-## CIDB Tables
+## `SymbolIndex::findSymbol` — How Address Resolution Works
 
-| Table | Schema | Purpose |
-|-------|--------|---------|
-| `default.checks_coverage_inverted` | `(symbol, check_start_time, check_name, test_name)` | Inverted index: symbol → tests that cover it |
-| `coverage_ci.coverage_data` | metrics | Coverage metrics |
+```
+findSymbol(addr):
+    object = findObject(addr)            -- binary search over loaded objects
+    if object:
+        offset = addr - object.address_begin   -- runtime VA → file offset
+    else:
+        offset = addr                    -- fallback: treat directly as file offset
+    return find(offset, symbols)         -- binary search over .symtab by file offset
+```
+
+The fallback path (treat as raw file offset) is why client dump file offsets resolve correctly — same mechanism as `system.stack_trace` after PR #82809.
 
 ---
 
-## Summary of All Changes Made
+## Summary of All Changes Made (PR #99513)
 
 | File | Change | Why |
 |------|--------|-----|
-| `src/Common/Coverage.cpp` | `dumpCoverage()` subtracts load base → writes file offsets | Client's runtime VAs are unresolvable by server with different ASLR base |
+| `src/Common/Coverage.cpp` | `dumpCoverage()` subtracts load base → writes file offsets | Client's runtime VAs unresolvable by server with different ASLR base |
 | `tests/clickhouse-test` | Force 6 JIT settings to 0 in `get_random_settings()` for SANITIZE_COVERAGE | JIT addresses in anonymous mmap → unresolvable → empty symbols in server row |
-| `tests/clickhouse-test` | Server row named `{test}`, client row named `{test}__client` | Distinguish the two row types clearly |
+| `tests/clickhouse-test` | Server row named `{test}`, client row named `{test}__client` | Distinguish the two row types |
 | `ci/jobs/build_clickhouse.py` | Remove `-DBUILD_STRIPPED_BINARY=1` from AMD_COVERAGE | Creates unused stripped binary; wastes build time |
-| `ci/jobs/scripts/find_tests.py` | `HAVING count(distinct test_name) < {TOTAL_TESTS}` + precompute total | Filter client startup symbols (in all tests) from inverted index queries |
-| `ci/jobs/scripts/functional_tests/export_coverage.py` | `ARRAY JOIN symbol AS sym` + `WHERE sym LIKE 'DB::%'` | Export only `DB::` symbols to CIDB; `std::`, `Poco::`, `boost::` etc. waste storage and are never matched during test selection |
+| `ci/jobs/scripts/find_tests.py` | Single batch `hasAllTokens` query replaces N+1 per-symbol queries | Performance + handles old format, new format, and template instantiations |
+| `ci/jobs/scripts/find_tests.py` | `normalize_symbol` uses bracket-depth algorithm | Correctly handles all symbol forms: void prefix, complex return types, anonymous namespace |
+| `ci/jobs/scripts/find_tests.py` | `_symbol_to_tokens` for `hasAllTokens` | Splits normalized symbol into searchable tokens |
+| `ci/jobs/scripts/find_tests.py` | Frequency filter: `least(5% of total, 100)` via HAVING | Excludes hot-path symbols AND client startup noise |
+| `ci/jobs/scripts/functional_tests/export_coverage.py` | Remove namespace filter, export ALL symbols | `(anonymous namespace)::DistributedIndexAnalyzer` and other ClickHouse helpers now exported |
+| `ci/jobs/scripts/functional_tests/export_coverage.py` | Exclude `__client` rows in export | Prevents inflating `count(distinct test_name)` which breaks frequency filter |
+| `ci/jobs/scripts/functional_tests/export_coverage.py` | Strip only arg list + trailing template (no return type strip in SQL) | Return type stripping moved to Python `normalize_symbol` which handles all cases correctly |
 
 ---
 
 ## Use Cases for Coverage Data
 
 1. **Targeted test selection** (current) — run only tests covering changed symbols
-2. **Test ordering** — run tests covering most recently changed code first for early CI signal
+2. **Test ordering** — run tests covering most recently changed code first
 3. **Minimum covering set** — smallest subset covering all symbols (smoke suite)
 4. **Batch composition** — maximize coverage diversity per CI batch
 5. **Dead code detection** — symbols in `coverageAll()` never in `checks_coverage_inverted`

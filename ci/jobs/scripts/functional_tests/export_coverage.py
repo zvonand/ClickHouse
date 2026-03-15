@@ -60,16 +60,38 @@ class CoverageExporter:
             if not self.to_file:
                 query = (
                     f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted', '{self.dest.user}', '{self.dest.pwd}') "
-                    "SELECT DISTINCT "
-                    "if(position(replaceAll(sym, '(anonymous namespace)', repeat('x', 21)), '(') > 0, "
-                    "   substring(sym, 1, position(replaceAll(sym, '(anonymous namespace)', repeat('x', 21)), '(') - 1), "
-                    "   sym) AS symbol, "
+                    "SELECT DISTINCT symbol, "
                     f"'{self.check_start_time}' AS check_start_time, "
                     f"'{self.job_name}' AS check_name, "
                     "test_name "
-                    f"FROM system.{table} "
-                    "ARRAY JOIN symbol AS sym "
-                    "WHERE sym LIKE 'DB::%'"
+                    "FROM ( "
+                    "  SELECT "
+                    "    -- Step 2: strip trailing function template args '<...>' when the symbol "
+                    "    -- ends with '>' (no '::method' follows). Class templates like "
+                    "    -- 'DB::Foo<T>::method' end with 'method' so their class template args "
+                    "    -- are preserved. Return-type stripping is done at query time in "
+                    "    -- normalize_symbol() — hasAllTokens() is robust to extra prefix tokens. "
+                    "    if(endsWith(sym_no_args, '>') AND position(sym_no_args, '<') > 0, "
+                    "       substring(sym_no_args, 1, position(sym_no_args, '<') - 1), "
+                    "       sym_no_args) AS symbol, "
+                    "    test_name "
+                    "  FROM ( "
+                    "    SELECT "
+                    "      -- Step 1: strip function argument list '(...)'. Use same-length "
+                    "      -- placeholder for '(anonymous namespace)' to keep positions aligned. "
+                    "      if(position(replaceAll(sym, '(anonymous namespace)', repeat('x', 21)), '(') > 0, "
+                    "         substring(sym, 1, "
+                    "                   position(replaceAll(sym, '(anonymous namespace)', repeat('x', 21)), '(') - 1), "
+                    "         sym) AS sym_no_args, "
+                    "      test_name "
+                    f"    FROM system.{table} "
+                    "    ARRAY JOIN symbol AS sym "
+                    # Exclude __client rows: they inflate count(distinct test_name) and
+                    # break the 'symbol in all tests' filter; they also return non-runnable
+                    # identifiers for targeted test selection.
+                    "    WHERE notEmpty(sym) AND NOT endsWith(test_name, '__client') "
+                    "  ) "
+                    ")"
                 )
                 res = Shell.check(
                     f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}',

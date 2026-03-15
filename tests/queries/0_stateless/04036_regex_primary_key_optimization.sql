@@ -1,5 +1,3 @@
--- Tags: no-fasttest
-
 DROP TABLE IF EXISTS test_regex_pk;
 
 CREATE TABLE test_regex_pk

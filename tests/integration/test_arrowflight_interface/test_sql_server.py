@@ -364,9 +364,9 @@ def test_cancel_flight_info():
         b"SELECT sleepEachRow(0.5) FROM numbers(100)"
     )
     poll_result = client.poll_flight_info(descriptor)
-    assert len(poll_result.info) > 0
+    assert poll_result.info is not None
 
-    result = client.cancel_flight_info(poll_result.info)
+    result = client.cancel_flight_info(poll_result.info_bytes)
     assert result.status == CancelStatus.Value('CANCEL_STATUS_CANCELLED')
 
 
@@ -376,3 +376,52 @@ def test_unsupported_action():
     action = flight.Action("SomeUnsupportedAction", b"")
     with pytest.raises(pa.lib.ArrowNotImplementedError, match="not supported"):
         list(client.client.do_action(action, client._flight_call_options()))
+
+
+#
+# PollFlightInfo Tests
+#
+
+def test_poll_flight_info_basic():
+    """PollFlightInfo streams results incrementally."""
+    client = get_client()
+
+    client.execute_update("CREATE TABLE mytable (id UInt32) ENGINE = Memory")
+    client.execute_update("INSERT INTO mytable SELECT number FROM numbers(100)")
+
+    descriptor = flight.FlightDescriptor.for_command(b"SELECT * FROM mytable")
+
+    poll_result = client.poll_flight_info(descriptor)
+    assert poll_result.info is not None
+
+    # Collect all FlightInfo bytes by polling until no next descriptor
+    all_infos = [poll_result.info]
+    while poll_result.flight_descriptor is not None:
+        poll_result = client.poll_flight_info(poll_result.flight_descriptor)
+        all_infos.append(poll_result.info)
+
+    # Read all data via tickets
+    total_rows = 0
+    for endpoint in all_infos[-1].endpoints:
+        reader = client.do_get(endpoint.ticket)
+        table = reader.read_all()
+        total_rows += table.num_rows
+
+    assert total_rows == 100
+
+
+def test_poll_flight_info_with_path_descriptor():
+    """PollFlightInfo works with PATH descriptor (table name)."""
+    client = get_client()
+
+    client.execute_update("CREATE TABLE mytable (id UInt32, name String) ENGINE = Memory")
+    client.execute_update("INSERT INTO mytable VALUES (1, 'a'), (2, 'b')")
+
+    descriptor = flight.FlightDescriptor.for_path("mytable")
+
+    poll_result = client.poll_flight_info(descriptor)
+    assert poll_result.info is not None
+    assert poll_result.info.total_records >= 0
+
+    # Cancel the running query so cleanup can drop the table
+    client.cancel_flight_info(poll_result.info_bytes)

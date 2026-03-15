@@ -206,6 +206,41 @@ CancelFlightInfoResult = _globals['CancelFlightInfoResult']
 PollInfo = _globals['PollInfo']
 CancelStatus = _globals['CancelStatus']
 
+# ---------------------------------------------------------------------------
+# Thin wrapper over PollInfo to deserialize returned data
+# ---------------------------------------------------------------------------
+class PollResult:
+    """Wraps raw PollInfo proto with pyarrow-deserialized accessors."""
+
+    def __init__(self, proto):
+        self._proto = proto
+
+    @property
+    def info(self):
+        """Deserialized FlightInfo, or None."""
+        if self._proto.info:
+            return flight.FlightInfo.deserialize(self._proto.info)
+        return None
+
+    @property
+    def flight_descriptor(self):
+        """Deserialized FlightDescriptor for next poll, or None if query is complete."""
+        if self._proto.flight_descriptor:
+            return flight.FlightDescriptor.deserialize(self._proto.flight_descriptor)
+        return None
+
+    @property
+    def progress(self):
+        """Query progress 0.0-1.0, or None if unknown."""
+        if self._proto.HasField('progress'):
+            return self._proto.progress
+        return None
+
+    @property
+    def info_bytes(self):
+        """Raw serialized FlightInfo bytes for CancelFlightInfo."""
+        return self._proto.info
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -409,7 +444,7 @@ class FlightSQLClient:
         result.ParseFromString(results[0].body.to_pybytes())
         return result
 
-    def poll_flight_info(self, descriptor) -> PollInfo:
+    def poll_flight_info(self, descriptor) -> PollResult:
         """Call PollFlightInfo RPC via grpc.
 
         pyarrow.flight.FlightClient does not expose PollFlightInfo despite
@@ -436,10 +471,10 @@ class FlightSQLClient:
                 response_deserializer=lambda x: x,
             )
             metadata = list(OrderedDict(self.headers).items())
-            raw_response = call(descriptor.serialize(), metadata=metadata)
+            raw_response = call(descriptor.serialize(), metadata=metadata, timeout=30)
         finally:
             channel.close()
 
         result = PollInfo()
         result.ParseFromString(raw_response)
-        return result
+        return PollResult(result)

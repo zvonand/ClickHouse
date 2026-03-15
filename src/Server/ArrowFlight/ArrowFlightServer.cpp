@@ -794,6 +794,15 @@ public:
         }
     }
 
+    std::vector<String> collectPollDescriptorsForQueryId(const String & query_id) const
+    {
+        std::lock_guard lock{mutex};
+        auto it = query_id_to_flight_descriptors.find(query_id);
+        if (it == query_id_to_flight_descriptors.end())
+            return {};
+        return {it->second.begin(), it->second.end()};
+    }
+
     /// Waits until maybe it's time to cancel expired tickets or poll descriptors.
     void waitNextExpirationTime() const
     {
@@ -1898,15 +1907,22 @@ arrow::Status ArrowFlightServer::DoAction(
             LOG_DEBUG(log, "CancelFlightInfo request {}", request.ToString());
             auto query_id = request.info->app_metadata();
             auto result = arrow::flight::CancelFlightInfoResult{arrow::flight::CancelStatus::kNotCancellable};
-            calls_data->eraseFlightDescriptorMapByQueryId(query_id);
-            auto& process_list = server.context()->getProcessList();
-            auto cancel_result = process_list.sendCancelToQuery(query_id, auth.getUsername());
-            if (cancel_result == CancellationCode::CancelSent)
-                result = arrow::flight::CancelFlightInfoResult{arrow::flight::CancelStatus::kCancelled};
+
+            if (!query_id.empty())
+            {
+                auto poll_descriptors = calls_data->collectPollDescriptorsForQueryId(query_id);
+
+                auto & process_list = server.context()->getProcessList();
+                auto cancel_result = process_list.sendCancelToQuery(query_id, auth.getUsername());
+                if (cancel_result == CancellationCode::CancelSent)
+                    result = arrow::flight::CancelFlightInfoResult{arrow::flight::CancelStatus::kCancelled};
+
+                for (const auto & pd : poll_descriptors)
+                    calls_data->cancelPollDescriptor(pd);
+            }
 
             ARROW_ASSIGN_OR_RAISE(auto serialized, result.SerializeToString())
             ARROW_ASSIGN_OR_RAISE(auto packed_result, arrow::Result<arrow::flight::Result>{arrow::flight::Result{arrow::Buffer::FromString(std::move(serialized))}})
-
             results.push_back(std::move(packed_result));
         }
         else if (action.type == arrow::flight::ActionType::kSetSessionOptions.type)

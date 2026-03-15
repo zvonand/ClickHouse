@@ -113,11 +113,11 @@ FileCategory getFileCategory(const String & relative_path)
             return FileCategory::STATISTICS_FILE;
     }
 
-    if (relative_path.find("-deletes.parquet") != String::npos || relative_path.find("-delete-") != String::npos)
-        return FileCategory::POSITION_DELETE_FILE;
-
     if (relative_path.find("-eq-del-") != String::npos)
         return FileCategory::EQUALITY_DELETE_FILE;
+
+    if (relative_path.find("-deletes.parquet") != String::npos || relative_path.find("-delete-") != String::npos)
+        return FileCategory::POSITION_DELETE_FILE;
 
     return FileCategory::DATA_FILE;
 }

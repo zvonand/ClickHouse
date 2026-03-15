@@ -1,4 +1,4 @@
--- Tags: no-parallel, no-replicated-database
+-- Tags: no-parallel, no-replicated-database, no-fasttest
 -- Regression test for https://github.com/ClickHouse/ClickHouse/issues/98615
 -- Creating a table via ON CLUSTER with the same UUID as an existing database should give
 -- a proper error, not trigger an assertion failure in DatabaseCatalog::getTableImpl.

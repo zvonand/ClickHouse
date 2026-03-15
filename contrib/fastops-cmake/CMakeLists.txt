@@ -24,8 +24,11 @@ if(ARCH_AMD64)
 elseif(ARCH_AARCH64)
     set (SRCS ${SRCS} "${LIBRARY_DIR}/fastops/neon/ops_neon.cpp")
 
-    set (SRCS ${SRCS} "${LIBRARY_DIR}/fastops/sve/ops_sve.cpp")
-    set_source_files_properties("${LIBRARY_DIR}/fastops/sve/ops_sve.cpp" PROPERTIES COMPILE_FLAGS "-march=armv8-a+sve")
+    # SVE requires arm_sve.h which is only available on Linux toolchains (not Darwin/FreeBSD).
+    if(OS_LINUX)
+        set (SRCS ${SRCS} "${LIBRARY_DIR}/fastops/sve/ops_sve.cpp")
+        set_source_files_properties("${LIBRARY_DIR}/fastops/sve/ops_sve.cpp" PROPERTIES COMPILE_FLAGS "-march=armv8-a+sve")
+    endif()
 endif()
 
 set (SRCS ${SRCS} "${LIBRARY_DIR}/fastops/fastops.cpp")

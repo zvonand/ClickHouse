@@ -394,8 +394,7 @@ DatabaseAndTable DatabaseCatalog::getTableImpl(
                 if (exception)
                     exception->emplace(Exception(
                         ErrorCodes::TABLE_ALREADY_EXISTS,
-                        "Table {} does not exist. UUID {} is already used by database {}",
-                        table_id.getNameForLogs(),
+                        "Table UUID {} is already used by database {}",
                         table_id.uuid,
                         db_and_table.first->getDatabaseName()));
                 return {};

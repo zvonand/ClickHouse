@@ -319,7 +319,7 @@ def test_leader_election_after_rolling_membership_change(started_cluster):
     keeper_utils.send_4lw_cmd(cluster, leader, cmd="ydld")
 
     # Give the election time to complete before checking for the new leader.
-    time.sleep(5)
+    time.sleep(2)
 
     keeper_utils.wait_nodes(cluster, [leader, node4, node5, node6])
 

@@ -318,7 +318,7 @@ def main():
 
         # Pin to a specific commit to avoid non-deterministic test results
         # when the upstream repo updates (e.g., SQLite version bumps).
-        sqllogictest_commit = "634e46492bff"
+        sqllogictest_commit = "634e46492bff5c206a6eb9ba934f2cd411c74bf0"
 
         def clone():
             if not Path(sqllogictest_repo).is_dir():

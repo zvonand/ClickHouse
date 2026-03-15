@@ -43,10 +43,25 @@ unsafe fn polyglot_transpile_impl(
     };
 
     match polyglot_sql::transpile_by_name(&query_str, &dialect_str, "clickhouse") {
-        Ok(statements) => {
-            let sql_str = statements.join(";\n");
-            set_output(sql_str, out, out_size);
+        Ok(statements) if statements.len() == 1 => {
+            set_output(statements.into_iter().next().unwrap(), out, out_size);
             0
+        }
+        Ok(statements) if statements.is_empty() => {
+            set_output(
+                "Polyglot transpilation returned no statements".to_string(),
+                out,
+                out_size,
+            );
+            1
+        }
+        Ok(_) => {
+            set_output(
+                "Polyglot transpilation returned multiple statements, but only single-statement queries are supported".to_string(),
+                out,
+                out_size,
+            );
+            1
         }
         Err(e) => {
             set_output(format!("Polyglot transpilation failed: {e}"), out, out_size);

@@ -28,7 +28,7 @@ SELECT count() > 0 AS triggered
 FROM system.text_log
 WHERE event_date >= yesterday() AND event_time >= now() - 600
       AND query_id IN ( SELECT query_id FROM system.query_log WHERE log_comment = '04029_range_hash_trigger_i32' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() )
-      AND message LIKE '%Converted join hash map to fixed range hash map%';
+      AND message LIKE '%Converted join hash map to fixed hash map%';
 
 -- Verify conversion for Int64
 SELECT '-- trigger check Int64';
@@ -40,7 +40,7 @@ SELECT count() > 0 AS triggered
 FROM system.text_log
 WHERE event_date >= yesterday() AND event_time >= now() - 600
       AND query_id IN ( SELECT query_id FROM system.query_log WHERE log_comment = '04029_range_hash_trigger_i64' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() )
-      AND message LIKE '%Converted join hash map to fixed range hash map%';
+      AND message LIKE '%Converted join hash map to fixed hash map%';
 
 -- Verify conversion for negative range
 SELECT '-- trigger check negative';
@@ -52,7 +52,7 @@ SELECT count() > 0 AS triggered
 FROM system.text_log
 WHERE event_date >= yesterday() AND event_time >= now() - 600
       AND query_id IN ( SELECT query_id FROM system.query_log WHERE log_comment = '04029_range_hash_trigger_neg' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() )
-      AND message LIKE '%Converted join hash map to fixed range hash map%';
+      AND message LIKE '%Converted join hash map to fixed hash map%';
 
 -- Verify results
 -- ALL INNER JOIN

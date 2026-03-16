@@ -53,7 +53,7 @@ void * operator new(std::size_t size)
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace);
     void * ptr = Memory::newNoExcept(size);
-    if (unlikely(!ptr))
+    if (!ptr) [[unlikely]]
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
         throw std::bad_alloc{};
@@ -67,7 +67,7 @@ void * operator new(std::size_t size, std::align_val_t align)
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace, align);
     void * ptr = Memory::newNoExcept(size, align);
-    if (unlikely(!ptr))
+    if (!ptr) [[unlikely]]
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
         throw std::bad_alloc{};
@@ -81,7 +81,7 @@ void * operator new[](std::size_t size)
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace);
     void * ptr = Memory::newNoExcept(size);
-    if (unlikely(!ptr))
+    if (!ptr) [[unlikely]]
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
         throw std::bad_alloc{};
@@ -95,7 +95,7 @@ void * operator new[](std::size_t size, std::align_val_t align)
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace, align);
     void * ptr = Memory::newNoExcept(size, align);
-    if (unlikely(!ptr))
+    if (!ptr) [[unlikely]]
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
         throw std::bad_alloc{};
@@ -109,7 +109,7 @@ void * operator new(std::size_t size, const std::nothrow_t &) noexcept
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace);
     void * ptr = Memory::newNoExcept(size);
-    if (unlikely(!ptr))
+    if (!ptr) [[unlikely]]
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
         return nullptr;
@@ -123,7 +123,7 @@ void * operator new[](std::size_t size, const std::nothrow_t &) noexcept
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace);
     void * ptr = Memory::newNoExcept(size);
-    if (unlikely(!ptr))
+    if (!ptr) [[unlikely]]
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
         return nullptr;
@@ -137,7 +137,7 @@ void * operator new(std::size_t size, std::align_val_t align, const std::nothrow
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace, align);
     void * ptr = Memory::newNoExcept(size, align);
-    if (unlikely(!ptr))
+    if (!ptr) [[unlikely]]
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
         return nullptr;
@@ -151,7 +151,7 @@ void * operator new[](std::size_t size, std::align_val_t align, const std::nothr
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace, align);
     void * ptr = Memory::newNoExcept(size, align);
-    if (unlikely(!ptr))
+    if (!ptr) [[unlikely]]
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
         return nullptr;

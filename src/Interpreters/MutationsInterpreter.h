@@ -108,8 +108,6 @@ public:
 
     NameSet grabMaterializedProjections() { return std::move(materialized_projections); }
 
-    NameSet grabDroppedProjections() { return std::move(dropped_projections); }
-
     struct MutationKind
     {
         enum MutationKindEnum
@@ -258,7 +256,6 @@ private:
     NameSet materialized_projections;
     NameSet materialized_statistics;
     NameSet dropped_indices; /// Indices dropped by mutation due to alter_column_secondary_index_mode
-    NameSet dropped_projections; /// Projections dropped by mutation when their columns are cleared
 
     MutationKind mutation_kind; /// Do we meet any index or projection mutation.
 

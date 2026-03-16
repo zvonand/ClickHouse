@@ -49,6 +49,10 @@ ALTER TABLE t0 CLEAR COLUMN c1;
 INSERT INTO TABLE t0 (c0, c1) SELECT c0, c1
 FROM generateRandom('c0 Int, c1 Array(Nullable(String))', 2462998867452601120, 64, 10) LIMIT 100;
 
+-- Verify projection exists on parts after CLEAR COLUMN (rebuilt, not dropped).
+SELECT count() > 0 FROM system.projection_parts
+WHERE database = currentDatabase() AND table = 't0' AND active AND name = 'p0';
+
 -- Read c1 before merge to verify per-part projection data is consistent.
 SELECT c1 FROM t0 ORDER BY c1 FORMAT Null;
 
@@ -57,6 +61,10 @@ OPTIMIZE TABLE t0 FINAL;
 
 -- Read c1 after merge to verify merged projection data is consistent.
 SELECT c1 FROM t0 ORDER BY c1 FORMAT Null;
+
+-- Verify projection still exists after merge (rebuilt, not silently dropped).
+SELECT count() > 0 FROM system.projection_parts
+WHERE database = currentDatabase() AND table = 't0' AND active AND name = 'p0';
 
 SELECT count() FROM t0;
 

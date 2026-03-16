@@ -56,7 +56,7 @@ bool ParserPolyglotQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expecte
         &sql_query_ptr,
         &sql_query_size);
 
-    SCOPE_EXIT({ polyglot_free_pointer(sql_query_ptr); });
+    SCOPE_EXIT({ if (sql_query_ptr) polyglot_free_pointer(sql_query_ptr); });
 
     const auto * sql_query_char_ptr = reinterpret_cast<char *>(sql_query_ptr);
     const auto * const original_sql_query_ptr = sql_query_char_ptr;

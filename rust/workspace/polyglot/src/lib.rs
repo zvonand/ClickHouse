@@ -90,7 +90,9 @@ pub unsafe extern "C" fn polyglot_transpile(
 
 #[no_mangle]
 pub unsafe extern "C" fn polyglot_free_pointer(ptr_to_free: *mut u8) {
-    std::mem::drop(CString::from_raw(ptr_to_free as *mut c_char));
+    if !ptr_to_free.is_null() {
+        std::mem::drop(CString::from_raw(ptr_to_free as *mut c_char));
+    }
 }
 
 #[cfg(test)]

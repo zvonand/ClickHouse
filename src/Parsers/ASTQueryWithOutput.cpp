@@ -37,6 +37,8 @@ void ASTQueryWithOutput::cloneOutputOptions(ASTQueryWithOutput & cloned) const
 
 void ASTQueryWithOutput::formatImpl(WriteBuffer & ostr, const FormatSettings & s, FormatState & state, FormatStateStacked frame) const
 {
+    if (hasOutputOptions())
+        frame.has_trailing_output_options = true;
     formatQueryImpl(ostr, s, state, frame);
 
     std::string indent_str = s.one_line ? "" : std::string(4u * frame.indent, ' ');

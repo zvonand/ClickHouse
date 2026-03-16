@@ -41,7 +41,7 @@ git config --file .gitmodules --get-regexp 'submodule\..+\.path' | \
 while read -r line; do
     name=${line#submodule.}; name=${name%.path*}
     path=${line#* }
-    [ "$name" != "$path" ] && echo "Submodule name '$name' is not equal to it's path '$path'"
+    [ "$name" != "$path" ] && echo "Submodule name '$name' is not equal to its path '$path'"
 done
 
 # No recursive submodules allowed: check that no submodule contains its own .gitmodules with entries

@@ -2,6 +2,7 @@
 
 extern uint64_t clickhouse_server_version();
 extern void clickhouse_log(const char * message, uint32_t length);
+extern void clickhouse_log2(uint32_t level, const char * message, uint32_t length);
 extern void clickhouse_throw(const char * message, uint32_t length);
 extern void clickhouse_random(void * data, uint32_t size);
 
@@ -39,6 +40,12 @@ uint32_t test_func(uint32_t terminate) {
     if (terminate) {
         clickhouse_throw("Goodbye, ClickHouse!", 20);
     }
+    return 0;
+}
+
+uint32_t test_log2(uint32_t level) {
+    const char msg[] = "log2_msg";
+    clickhouse_log2(level, msg, sizeof(msg) - 1);
     return 0;
 }
 

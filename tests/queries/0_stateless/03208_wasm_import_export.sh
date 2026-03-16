@@ -10,7 +10,7 @@ ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 DROP FUNCTION IF EXISTS test_host_api;
 DROP FUNCTION IF EXISTS test_func;
 DROP FUNCTION IF EXISTS test_random;
-DROP FUNCTION IF EXISTS test_log2;
+DROP FUNCTION IF EXISTS test_log;
 DROP FUNCTION IF EXISTS export_faulty_malloc;
 DROP FUNCTION IF EXISTS export_incorrect_malloc;
 
@@ -31,31 +31,34 @@ CREATE FUNCTION test_random LANGUAGE WASM ABI ROW_DIRECT FROM 'test_host_api' AR
 SELECT test_random(1 :: UInt32) != test_random(2 :: UInt32);
 
 CREATE FUNCTION test_host_api LANGUAGE WASM ABI ROW_DIRECT FROM 'test_host_api' :: 'test_func' ARGUMENTS (UInt32) RETURNS UInt32;
-CREATE FUNCTION test_log2 LANGUAGE WASM ABI ROW_DIRECT FROM 'test_host_api' :: 'test_log2' ARGUMENTS (UInt32) RETURNS UInt32;
+CREATE FUNCTION test_log LANGUAGE WASM ABI ROW_DIRECT FROM 'test_host_api' :: 'test_log2' ARGUMENTS (UInt32) RETURNS UInt32;
 
 EOF
 
-${CLICKHOUSE_CLIENT}  --allow_experimental_analyzer=1 --allow_repeated_settings --send_logs_level=trace --query \
+${CLICKHOUSE_CLIENT}  --allow_experimental_analyzer=1 --allow_repeated_settings --send_logs_level=debug --query \
     "SELECT test_host_api(materialize(0) :: UInt32) SETTINGS log_comment = '03208_wasm_import_export_ok' FORMAT Null" 2>&1 | grep -o "Hello, ClickHouse"
 
 ${CLICKHOUSE_CLIENT}  --allow_experimental_analyzer=1 --query \
     "SELECT test_host_api(materialize(1) :: UInt32) SETTINGS log_comment = '03208_wasm_import_export_err' FORMAT Null" 2>&1 | grep 'DB::Exception' | grep -o "WebAssembly UDF terminated with error: Goodbye, ClickHouse" | head -1
 
-# clickhouse_log2: DEBUG level (7) — appears at debug filter
-${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --send_logs_level=debug --query \
-    "SELECT test_log2(7 :: UInt32) FORMAT Null" 2>&1 | grep -o "log2_msg"
+# clickhouse_log: DEBUG level (7) — appears at debug filter
+${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --allow_repeated_settings --send_logs_level=debug --query \
+    "SELECT test_log(7 :: UInt32) FORMAT Null" 2>&1 | grep -o "log2_msg"
 
-# clickhouse_log2: INFORMATION level (6) — appears at information filter
-${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --send_logs_level=information --query \
-    "SELECT test_log2(6 :: UInt32) FORMAT Null" 2>&1 | grep -o "log2_msg"
+# clickhouse_log: WARNING level (4) — appears at warning filter
+${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --allow_repeated_settings --send_logs_level=warning --query \
+    "SELECT test_log(4 :: UInt32) FORMAT Null" 2>&1 | grep -o "log2_msg"
 
-# clickhouse_log2: DEBUG level (7) — suppressed at information filter (level respected)
-${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --send_logs_level=information --query \
-    "SELECT test_log2(7 :: UInt32) FORMAT Null" 2>&1 | grep -o "log2_msg" || echo "not_logged"
+# clickhouse_log: DEBUG level (7) — suppressed at warning filter (level respected)
+${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --allow_repeated_settings --send_logs_level=warning --query \
+    "SELECT test_log(7 :: UInt32) FORMAT Null" 2>&1 | grep -o "log2_msg" || echo "not_logged"
 
-# clickhouse_log2: out-of-range levels clamped to TRACE — no error, function returns 0
-${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --query "SELECT test_log2(0 :: UInt32)"
-${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --query "SELECT test_log2(100 :: UInt32)"
+# clickhouse_log: ERROR level (3) clamped to WARNING — appears at warning filter
+${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --allow_repeated_settings --send_logs_level=warning --query \
+    "SELECT test_log(3 :: UInt32) FORMAT Null" 2>&1 | grep -o "log2_msg"
+
+# clickhouse_log: out-of-range levels clamped to TRACE — no error, function returns 0
+${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 --query "SELECT test_log(100 :: UInt32)"
 
 cat ${CUR_DIR}/wasm/import_unknown.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'import_unknown', code FROM input('code String') FORMAT RawBlob"
 
@@ -112,7 +115,7 @@ ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 DROP FUNCTION IF EXISTS test_host_api;
 DROP FUNCTION IF EXISTS test_func;
 DROP FUNCTION IF EXISTS test_random;
-DROP FUNCTION IF EXISTS test_log2;
+DROP FUNCTION IF EXISTS test_log;
 DROP FUNCTION IF EXISTS export_faulty_malloc;
 DROP FUNCTION IF EXISTS export_incorrect_malloc;
 

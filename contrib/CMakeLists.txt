@@ -1,7 +1,7 @@
 #"${folder}/CMakeLists.txt" Third-party libraries may have substandard code.
 
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -ffunction-sections -fdata-sections")
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -ffunction-sections -fdata-sections")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -ffunction-sections -fdata-sections -faddrsig")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -ffunction-sections -fdata-sections -faddrsig")
 
 if (SANITIZE STREQUAL "undefined")
     # 3rd-party libraries usually not intended to work with UBSan.

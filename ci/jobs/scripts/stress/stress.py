@@ -616,6 +616,7 @@ def main():
                     "max_untracked_memory=1Gi",
                     "max_memory_usage_for_user=0",
                     "memory_profiler_step=1Gi",
+                    "ast_fuzzer_runs=0",
                     # Use system database to avoid CREATE/DROP DATABASE queries
                     "--database=system",
                     "--hung-check",

@@ -136,6 +136,13 @@ protected:
 
     std::unique_ptr<SnapshotReceiveCtx> snapshot_receive_ctx TSA_GUARDED_BY(snapshots_lock);
 
+    /// Cached size of the latest snapshot file, updated atomically after each snapshot
+    /// creation/save while snapshots_lock is held. Read lock-free by `getLatestSnapshotSize`
+    /// (called from `mntr`) to avoid blocking on `snapshots_lock` during long-running
+    /// snapshot serialization. On `getFileSize` failure the previous value is retained
+    /// and a warning is logged; the value self-corrects on the next successful snapshot.
+    std::atomic<uint64_t> latest_snapshot_size{0};
+
     CoordinationSettingsPtr coordination_settings;
 
     /// Save/Load and Serialize/Deserialize logic for snapshots.

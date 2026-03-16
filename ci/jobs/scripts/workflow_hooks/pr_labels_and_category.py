@@ -105,27 +105,38 @@ def get_category(pr_body: str) -> Tuple[str, str]:
     error = ""
     i = 0
     while i < len(lines):
-        if re.match(r"(?i)^[#>*_ ]*change\s*log\s*category", lines[i]):
-            i += 1
-            if i >= len(lines):
-                break
-            # Can have one empty line between header and the category
-            # itself. Filter it out.
-            if not lines[i]:
+        m = re.match(
+            r"(?i)^[#>*_ ]*change\s*log\s*category(?:[^:]*:\s*(.*))?$", lines[i]
+        )
+        if m:
+            # Check if the category is on the same line (e.g. "Changelog category: Bug Fix")
+            inline = (m.group(1) or "").strip()
+            inline = re.sub(r"^[-*_\s]*", "", inline)
+            inline = re.sub(r"[-*_\s]*$", "", inline)
+            if inline:
+                category = inline
+                i += 1
+            else:
                 i += 1
                 if i >= len(lines):
                     break
-            category = re.sub(r"^[-*\s]*", "", lines[i])
-            i += 1
+                # Can have one empty line between header and the category
+                # itself. Filter it out.
+                if not lines[i]:
+                    i += 1
+                    if i >= len(lines):
+                        break
+                category = re.sub(r"^[-*\s]*", "", lines[i])
+                i += 1
 
-            # Should not have more than one category. Require empty line
-            # after the first found category.
-            if i >= len(lines):
-                break
-            if lines[i]:
-                second_category = re.sub(r"^[-*\s]*", "", lines[i])
-                error = f"More than one changelog category specified: '{category}', '{second_category}'"
-                break
+                # Should not have more than one category. Require empty line
+                # after the first found category.
+                if i >= len(lines):
+                    break
+                if lines[i]:
+                    second_category = re.sub(r"^[-*\s]*", "", lines[i])
+                    error = f"More than one changelog category specified: '{category}', '{second_category}'"
+                    break
         else:
             i += 1
     if not category or normalize_category(category) not in CATEGORIES_FOLD:

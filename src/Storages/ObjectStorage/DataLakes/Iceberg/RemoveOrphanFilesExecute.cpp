@@ -18,6 +18,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+extern const int BAD_ARGUMENTS;
+}
+
 namespace Setting
 {
 extern const SettingsUInt64 iceberg_orphan_files_older_than_seconds;
@@ -85,6 +90,13 @@ Pipe executeRemoveOrphanFiles(
         ReadBufferFromString buf(parsed.getAs<String>("older_than"));
         time_t ts;
         readDateTimeText(ts, buf);
+
+        auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        if (ts > now)
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "older_than must not be in the future; a future value would bypass the in-progress-write safety window");
+
         params.older_than = ts;
     }
     else

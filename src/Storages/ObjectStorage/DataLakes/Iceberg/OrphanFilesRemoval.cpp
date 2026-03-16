@@ -54,9 +54,10 @@ String resolveScanPath(const String & table_path, const RemoveOrphanFilesParams 
         if (!scan_path.ends_with('/'))
             scan_path += '/';
         scan_path += loc;
+
+        if (!scan_path.ends_with('/'))
+            scan_path += '/';
     }
-    if (!scan_path.empty() && !scan_path.ends_with('/'))
-        scan_path += '/';
     return scan_path;
 }
 

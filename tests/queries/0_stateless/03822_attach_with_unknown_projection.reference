@@ -1,10 +1,10 @@
 === ReplicatedMergeTree ===
 7
-1
+Found unexpected projection directories: pp.proj
 21	21
 7
 21	21
 === MergeTree ===
 7
-1
+Found unexpected projection directories: pp.proj
 7

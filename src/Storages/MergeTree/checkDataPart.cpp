@@ -375,15 +375,8 @@ static IMergeTreeDataPart::Checksums checkDataPart(
     if (!projections_on_disk.empty())
     {
         is_broken_projection = true;
-
         for (const auto & projection_file : projections_on_disk)
-        {
-            LOG_WARNING(log, "Found unknown projection directory {} in part {}",
-                        projection_file, data_part->name);
             checksums_txt.remove(projection_file);
-        }
-
-        projections_on_disk.clear();
     }
 
     if (throw_on_broken_projection)

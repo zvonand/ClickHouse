@@ -382,6 +382,8 @@ static IMergeTreeDataPart::Checksums checkDataPart(
                         projection_file, data_part->name);
             checksums_txt.remove(projection_file);
         }
+
+        projections_on_disk.clear();
     }
 
     if (throw_on_broken_projection)

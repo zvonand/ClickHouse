@@ -9,9 +9,8 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # been dropped from the table metadata must not mark the part as broken or
 # lost.  Covers two code-paths:
 #   1) checkDataPart  (ReplicatedMergeTreePartCheckThread)
-#   2) sendPartFromDisk (DataPartsExchange – inter-replica fetches)
+#   2) sendPartFromDisk (DataPartsExchange -- inter-replica fetches)
 
-# ── helper ──────────────────────────────────────────────────────────────────
 run() { ${CLICKHOUSE_CLIENT} --query "$@"; }
 
 # ── ReplicatedMergeTree test ────────────────────────────────────────────────
@@ -21,10 +20,8 @@ run "CREATE TABLE t_unknown_proj (x Int32, y Int32, PROJECTION p (SELECT x, y OR
      PARTITION BY intDiv(y, 100) ORDER BY y
      SETTINGS max_parts_to_merge_at_once = 1"
 
-# Insert data (projection p is materialised automatically).
 run "INSERT INTO t_unknown_proj SELECT number, number FROM numbers(7)"
 
-# Add a second projection and materialise it for existing parts.
 run "ALTER TABLE t_unknown_proj ADD PROJECTION pp (SELECT x, count() GROUP BY x)"
 run "ALTER TABLE t_unknown_proj MATERIALIZE PROJECTION pp"
 
@@ -40,16 +37,17 @@ run "ALTER TABLE t_unknown_proj DROP PROJECTION pp"
 run "ALTER TABLE t_unknown_proj ATTACH PARTITION 0"
 
 # The part must be usable: CHECK TABLE should pass and data should be intact.
+# Use send_logs_level=error to suppress expected warnings about unknown
+# projection directories during CHECK TABLE.
 echo "=== ReplicatedMergeTree ==="
 run "SELECT count() FROM t_unknown_proj"
-run "CHECK TABLE t_unknown_proj" | grep -o "^1"
+${CLICKHOUSE_CLIENT} --send_logs_level=error --query "CHECK TABLE t_unknown_proj" | grep -o "^1"
 
-# Verify that the data is correct.
 run "SELECT sum(x), sum(y) FROM t_unknown_proj"
 
 # Force a merge to make sure the part with the unknown projection can merge.
 run "ALTER TABLE t_unknown_proj MODIFY SETTING max_parts_to_merge_at_once = 100"
-run "OPTIMIZE TABLE t_unknown_proj FINAL"
+${CLICKHOUSE_CLIENT} --send_logs_level=error --query "OPTIMIZE TABLE t_unknown_proj FINAL"
 run "SELECT count() FROM t_unknown_proj"
 run "SELECT sum(x), sum(y) FROM t_unknown_proj"
 
@@ -76,11 +74,11 @@ run "ALTER TABLE t_unknown_proj_mt ATTACH PARTITION 0"
 
 echo "=== MergeTree ==="
 run "SELECT count() FROM t_unknown_proj_mt"
-run "CHECK TABLE t_unknown_proj_mt" | grep -o "^1"
+${CLICKHOUSE_CLIENT} --send_logs_level=error --query "CHECK TABLE t_unknown_proj_mt" | grep -o "^1"
 
 # Force a merge.
 run "ALTER TABLE t_unknown_proj_mt MODIFY SETTING max_parts_to_merge_at_once = 100"
-run "OPTIMIZE TABLE t_unknown_proj_mt FINAL"
+${CLICKHOUSE_CLIENT} --send_logs_level=error --query "OPTIMIZE TABLE t_unknown_proj_mt FINAL"
 run "SELECT count() FROM t_unknown_proj_mt"
 
 run "DROP TABLE t_unknown_proj_mt SYNC"

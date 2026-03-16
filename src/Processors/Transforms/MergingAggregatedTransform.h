@@ -50,7 +50,7 @@ private:
     bool consume_started = false;
     bool generate_started = false;
 
-    void addBlock(Block block);
+    void addChunk(Columns columns, size_t num_rows, Int32 bucket_num, bool is_overflows);
 };
 
 }

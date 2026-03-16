@@ -113,19 +113,24 @@ MergingAggregatedTransform::MergingAggregatedTransform(
     }
 }
 
-void MergingAggregatedTransform::addBlock(Block block)
+void MergingAggregatedTransform::addChunk(Columns columns, size_t num_rows, Int32 bucket_num, bool is_overflows)
 {
     if (grouping_sets.size() == 1)
     {
-        auto bucket = block.info.bucket_num;
-        bool is_overflows = block.info.is_overflows;
         if (grouping_sets[0].reordering_key_columns_actions)
+        {
+            auto block = getInputPort().getHeader().cloneWithColumns(columns);
+            block.erase(block.getPositionByName("__grouping_set"));
             grouping_sets[0].reordering_key_columns_actions->execute(block);
-        grouping_sets[0].bucket_to_chunks[bucket].emplace_back(
-            Chunk(block.getColumns(), block.rows()), bucket, is_overflows);
+            columns = block.getColumns();
+            num_rows = block.rows();
+        }
+        grouping_sets[0].bucket_to_chunks[bucket_num].emplace_back(
+            Chunk(std::move(columns), num_rows), bucket_num, is_overflows);
         return;
     }
 
+    auto block = getInputPort().getHeader().cloneWithColumns(columns);
     auto grouping_position = block.getPositionByName("__grouping_set");
     auto grouping_column = block.getByPosition(grouping_position).column;
     block.erase(grouping_position);
@@ -139,7 +144,6 @@ void MergingAggregatedTransform::addBlock(Block block)
     IColumn::Selector selector;
 
     const auto & grouping_data = grouping_column_typed->getData();
-    size_t num_rows = grouping_data.size();
     UInt64 last_group = grouping_data[0];
     UInt64 max_group = last_group;
     for (size_t row = 1; row < num_rows; ++row)
@@ -167,11 +171,9 @@ void MergingAggregatedTransform::addBlock(Block block)
     /// Optimization for single group.
     if (selector.empty())
     {
-        auto bucket = block.info.bucket_num;
-        bool is_overflows = block.info.is_overflows;
         grouping_sets[last_group].reordering_key_columns_actions->execute(block);
-        grouping_sets[last_group].bucket_to_chunks[bucket].emplace_back(
-            Chunk(block.getColumns(), block.rows()), bucket, is_overflows);
+        grouping_sets[last_group].bucket_to_chunks[bucket_num].emplace_back(
+            Chunk(block.getColumns(), block.rows()), bucket_num, is_overflows);
         return;
     }
 
@@ -197,8 +199,8 @@ void MergingAggregatedTransform::addBlock(Block block)
         auto & split_block = split_blocks[group];
         split_block.info = block.info;
         grouping_sets[group].reordering_key_columns_actions->execute(split_block);
-        grouping_sets[group].bucket_to_chunks[block.info.bucket_num].emplace_back(
-            Chunk(split_block.getColumns(), split_block.rows()), block.info.bucket_num, block.info.is_overflows);
+        grouping_sets[group].bucket_to_chunks[bucket_num].emplace_back(
+            Chunk(split_block.getColumns(), split_block.rows()), bucket_num, is_overflows);
     }
 }
 
@@ -227,20 +229,11 @@ void MergingAggregatedTransform::consume(Chunk chunk)
           * Then the calculations can be parallelized by buckets.
           * We decompose the blocks to the bucket numbers indicated in them.
           */
-        auto block = getInputPort().getHeader().cloneWithColumns(chunk.getColumns());
-        block.info.is_overflows = agg_info->is_overflows;
-        block.info.bucket_num = agg_info->bucket_num;
-        block.info.out_of_order_buckets = agg_info->out_of_order_buckets;
-
-        addBlock(std::move(block));
+        addChunk(chunk.detachColumns(), input_rows, agg_info->bucket_num, agg_info->is_overflows);
     }
     else if (chunk.getChunkInfos().get<ChunkInfoWithAllocatedBytes>())
     {
-        auto block = getInputPort().getHeader().cloneWithColumns(chunk.getColumns());
-        block.info.is_overflows = false;
-        block.info.bucket_num = -1;
-
-        addBlock(std::move(block));
+        addChunk(chunk.detachColumns(), input_rows, -1, false);
     }
     else
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Chunk should have AggregatedChunkInfo in MergingAggregatedTransform.");

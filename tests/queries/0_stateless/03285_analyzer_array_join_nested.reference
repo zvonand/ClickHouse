@@ -12,7 +12,7 @@ QUERY id: 0
       FUNCTION id: 2, function_name: tupleElement, function_type: ordinary, result_type: String
         ARGUMENTS
           LIST id: 3, nodes: 2
-            COLUMN id: 4, column_name: __array_join_exp_1, result_type: Tuple(names String, values Int64), source_id: 5
+            COLUMN id: 4, column_name: __array_join_exp_1, result_type: Tuple(names String), source_id: 5
             CONSTANT id: 6, constant_value: \'names\', constant_value_type: String
   JOIN TREE
     ARRAY_JOIN id: 5, is_left: 0
@@ -43,7 +43,7 @@ QUERY id: 0
       FUNCTION id: 2, function_name: tupleElement, function_type: ordinary, result_type: String
         ARGUMENTS
           LIST id: 3, nodes: 2
-            COLUMN id: 4, column_name: __array_join_exp_1, result_type: Tuple(names String, values Int64), source_id: 5
+            COLUMN id: 4, column_name: __array_join_exp_1, result_type: Tuple(names String), source_id: 5
             CONSTANT id: 6, constant_value: \'names\', constant_value_type: String
   JOIN TREE
     ARRAY_JOIN id: 5, is_left: 0

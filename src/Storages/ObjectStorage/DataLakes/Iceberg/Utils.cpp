@@ -97,6 +97,10 @@ namespace DB::Iceberg
 
 using namespace DB;
 
+/// Best-effort heuristic based on ClickHouse naming conventions.
+/// Files produced by other engines (Spark, Flink, Trino) may use different
+/// patterns and fall through to DATA_FILE; this only affects per-category
+/// reporting metrics, not deletion safety.
 FileCategory getFileCategory(const String & relative_path)
 {
     if (relative_path.find("/metadata/") != String::npos || relative_path.starts_with("metadata/"))

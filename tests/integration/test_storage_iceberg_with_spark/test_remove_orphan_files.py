@@ -179,12 +179,7 @@ def test_remove_orphan_files_no_orphans(started_cluster_iceberg_with_spark, stor
     time.sleep(2)
 
     counts = env.remove_orphans(older_than=env.now_ts())
-    assert counts["deleted_data_files_count"] == 0
-    assert counts["deleted_position_delete_files_count"] == 0
-    assert counts["deleted_equality_delete_files_count"] == 0
-    assert counts["deleted_manifest_files_count"] == 0
-    assert counts["deleted_manifest_lists_count"] == 0
-    assert counts["deleted_statistics_files_count"] == 0
+    assert all(v == 0 for v in counts.values()), f"Expected all zeros, got {counts}"
     env.assert_data_intact()
 
 
@@ -318,6 +313,40 @@ def test_remove_orphan_files_gate_setting(started_cluster_iceberg_with_spark, st
         settings={"allow_insert_into_iceberg": 1, "allow_iceberg_remove_orphan_files": 0},
     )
     assert "SUPPORT_IS_DISABLED" in error, f"Expected SUPPORT_IS_DISABLED error, got: {error}"
+
+
+@pytest.mark.parametrize("storage_type", ["local", "s3"])
+def test_remove_orphan_files_future_timestamp_rejected(started_cluster_iceberg_with_spark, storage_type):
+    """Passing an older_than in the future should be rejected with BAD_ARGUMENTS."""
+    env = make_env(started_cluster_iceberg_with_spark, storage_type, "test_orphan_future_ts")
+    env.populate(1)
+
+    error = env.instance.query_and_get_error(
+        f"ALTER TABLE {env.table_name} EXECUTE remove_orphan_files('2099-01-01 00:00:00');",
+        settings=ICEBERG_SETTINGS,
+    )
+    assert "BAD_ARGUMENTS" in error, f"Expected BAD_ARGUMENTS error, got: {error}"
+
+
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_remove_orphan_files_location_validation(started_cluster_iceberg_with_spark, storage_type):
+    """Path-traversal and absolute location values should be rejected."""
+    env = make_env(started_cluster_iceberg_with_spark, storage_type, "test_orphan_loc_val")
+    env.populate(1)
+
+    for bad_loc in ["../escape", "/absolute/path"]:
+        error = env.instance.query_and_get_error(
+            f"ALTER TABLE {env.table_name} EXECUTE remove_orphan_files("
+            f"older_than = '{env.now_ts()}', location = '{bad_loc}');",
+            settings=ICEBERG_SETTINGS,
+        )
+        assert "BAD_ARGUMENTS" in error, f"location='{bad_loc}' should fail, got: {error}"
+
+    env.add_orphan("data", "orphan-dotslash.parquet")
+    time.sleep(2)
+    counts = env.remove_orphans(older_than=env.now_ts(), location="./data/")
+    assert counts["deleted_data_files_count"] >= 1, \
+        "location='./data/' should work the same as 'data/'"
 
 
 @pytest.mark.parametrize("storage_type", ["azure"])

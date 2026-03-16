@@ -2,13 +2,11 @@
 
 #if USE_AVRO
 
-#include <chrono>
 #include <unordered_set>
 
 #include <Common/Exception.h>
 #include <Common/logger_useful.h>
 
-#include <Core/Settings.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/StoredObject.h>
 #include <Interpreters/Context.h>
@@ -16,11 +14,6 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/OrphanFilesRemoval.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/SnapshotFilesTraversal.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Utils.h>
-
-namespace DB::Setting
-{
-extern const SettingsUInt64 iceberg_orphan_files_older_than_seconds;
-}
 
 namespace DB::ErrorCodes
 {
@@ -59,16 +52,6 @@ String resolveScanPath(const String & table_path, const RemoveOrphanFilesParams 
             scan_path += '/';
     }
     return scan_path;
-}
-
-time_t resolveOlderThanThreshold(const RemoveOrphanFilesParams & params, ContextPtr context)
-{
-    if (params.older_than.has_value())
-        return *params.older_than;
-
-    UInt64 threshold_seconds = context->getSettingsRef()[Setting::iceberg_orphan_files_older_than_seconds].value;
-    auto now = std::chrono::system_clock::now();
-    return std::chrono::system_clock::to_time_t(now - std::chrono::seconds(threshold_seconds));
 }
 
 OrphanScanResult findOrphanFiles(
@@ -175,8 +158,8 @@ RemoveOrphanFilesResult removeOrphanFiles(
     object_storage->listObjects(scan_path, actual_files, /* max_keys = */ 0);
     LOG_INFO(log, "Found {} actual files under scan path '{}'", actual_files.size(), scan_path);
 
-    time_t older_than = resolveOlderThanThreshold(params, context);
-    auto scan = findOrphanFiles(actual_files, reachable, older_than, log);
+    chassert(params.older_than.has_value());
+    auto scan = findOrphanFiles(actual_files, reachable, *params.older_than, log);
     LOG_INFO(log, "Found {} orphan files (dry_run={})", scan.orphan_paths.size(), params.dry_run);
 
     if (params.dry_run || scan.orphan_paths.empty())

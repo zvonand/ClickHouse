@@ -68,7 +68,8 @@ Pipe resultToPipe(const RemoveOrphanFilesResult & result)
     add("deleted_statistics_files_count", result.deleted_statistics_files_count);
     add("skipped_missing_metadata_count", result.skipped_missing_metadata_count);
 
-    Chunk chunk(std::move(columns), 8);
+    const size_t rows = columns[0]->size();
+    Chunk chunk(std::move(columns), rows);
     return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
 }
 

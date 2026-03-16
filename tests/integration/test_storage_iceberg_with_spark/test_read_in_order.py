@@ -123,8 +123,6 @@ def test_defining_columns_with_special_character(started_cluster_iceberg_with_sp
     table_name = "demo_event_" + get_uuid_str()
     spark = started_cluster_iceberg_with_spark.spark_session
 
-    spark.conf.set("spark.sql.iceberg.commit.sync", "true")
-
     spark.sql(
         f"""
             CREATE TABLE {table_name}

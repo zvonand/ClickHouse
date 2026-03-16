@@ -322,3 +322,111 @@ Expression ((Project names + Projection))
             Granules: 0/1
           Ranges: 0
 0
+-- Case 8.1: Float64 min < 2^53, max > 2^53, query < min, should prune part 8
+Expression ((Project names + Projection))
+  Aggregating
+    Expression (Before GROUP BY)
+      Expression ((WHERE + Change column names to column identifiers))
+        ReadFromMergeTree (default.test_stats_exceeds)
+        Indexes:
+          Partition Min-Max
+            Keys:
+              dt
+            Condition: (dt in [20097, 20097])
+            Parts: 1/9
+            Granules: 1/9
+          Partition
+            Keys:
+              toYYYYMMDD(dt)
+            Condition: (toYYYYMMDD(dt) in [20250109, 20250109])
+            Parts: 1/1
+            Granules: 1/1
+          Statistics
+            Keys:
+              dt
+              val_float64
+            Parts: 0/1
+            Granules: 0/1
+          Ranges: 0
+0
+-- Case 8.2: Float64 min < 2^53, max > 2^53, query > max (2e17), should prune part 8
+Expression ((Project names + Projection))
+  Aggregating
+    Expression (Before GROUP BY)
+      Expression ((WHERE + Change column names to column identifiers))
+        ReadFromMergeTree (default.test_stats_exceeds)
+        Indexes:
+          Partition Min-Max
+            Keys:
+              dt
+            Condition: (dt in [20097, 20097])
+            Parts: 1/9
+            Granules: 1/9
+          Partition
+            Keys:
+              toYYYYMMDD(dt)
+            Condition: (toYYYYMMDD(dt) in [20250109, 20250109])
+            Parts: 1/1
+            Granules: 1/1
+          Statistics
+            Keys:
+              dt
+              val_float64
+            Parts: 0/1
+            Granules: 0/1
+          Ranges: 0
+0
+-- Case 9.1: Float64 min < -2^53, max > -2^53, query > max, should prune part 9
+Expression ((Project names + Projection))
+  Aggregating
+    Expression (Before GROUP BY)
+      Expression ((WHERE + Change column names to column identifiers))
+        ReadFromMergeTree (default.test_stats_exceeds)
+        Indexes:
+          Partition Min-Max
+            Keys:
+              dt
+            Condition: (dt in [20098, 20098])
+            Parts: 1/10
+            Granules: 1/10
+          Partition
+            Keys:
+              toYYYYMMDD(dt)
+            Condition: (toYYYYMMDD(dt) in [20250110, 20250110])
+            Parts: 1/1
+            Granules: 1/1
+          Statistics
+            Keys:
+              dt
+              val_float64
+            Parts: 0/1
+            Granules: 0/1
+          Ranges: 0
+0
+-- Case 9.2: Float64 min < -2^53, max > -2^53, query < min (-2e17), should prune part 9
+Expression ((Project names + Projection))
+  Aggregating
+    Expression (Before GROUP BY)
+      Expression ((WHERE + Change column names to column identifiers))
+        ReadFromMergeTree (default.test_stats_exceeds)
+        Indexes:
+          Partition Min-Max
+            Keys:
+              dt
+            Condition: (dt in [20098, 20098])
+            Parts: 1/10
+            Granules: 1/10
+          Partition
+            Keys:
+              toYYYYMMDD(dt)
+            Condition: (toYYYYMMDD(dt) in [20250110, 20250110])
+            Parts: 1/1
+            Granules: 1/1
+          Statistics
+            Keys:
+              dt
+              val_float64
+            Parts: 0/1
+            Granules: 0/1
+          Ranges: 0
+0

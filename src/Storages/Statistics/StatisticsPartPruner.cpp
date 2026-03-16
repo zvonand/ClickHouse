@@ -1,6 +1,7 @@
 #include <Core/NamesAndTypes.h>
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypesDecimal.h>
+#include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/IDataType.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Storages/Statistics/Statistics.h>
@@ -60,19 +61,23 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
     if (getDecimalPrecisionOrZero(data_type) > StatisticsUtils::MAX_FLOAT64_DECIMAL_PRECISION)
         return make_whole_universe();
 
-    /// For Int, handle values outside Float64's exact integer range [-2^53, 2^53].
+    /// For non-float integer-like types, handle values outside Float64's exact integer range [-2^53, 2^53].
     /// When |value| > 2^53, Float64 cannot represent the exact integer, so we use
     /// the boundary value 2^53 (or -2^53) as a safe conservative bound.
+    /// For Float32/Float64 targets, values outside ±2^53 are valid and the conversion
+    /// via tryConvertFromFloat64 is lossless, so overflow handling is skipped.
     ///
     /// Cases:
     /// 1. max <= -2^53: all data in negative overflow region -> (-inf, -2^53]
     /// 2. min >= 2^53: all data in positive overflow region -> [2^53, +inf)
     /// 3. min <= -2^53: left bound unreliable -> (-inf, max]
     /// 4. max >= 2^53: right bound unreliable -> [min, +inf)
-    bool min_in_negative_overflow = min_value <= -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-    bool max_in_negative_overflow = max_value <= -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-    bool min_in_positive_overflow = min_value >= StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-    bool max_in_positive_overflow = max_value >= StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
+    bool is_float_type = WhichDataType(removeLowCardinalityAndNullable(data_type)).isFloat();
+
+    bool min_in_negative_overflow = !is_float_type && min_value <= -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
+    bool max_in_negative_overflow = !is_float_type && max_value <= -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
+    bool min_in_positive_overflow = !is_float_type && min_value >= StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
+    bool max_in_positive_overflow = !is_float_type && max_value >= StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
 
     /// Case 1: max <= -2^53, use (-inf, -2^53] or whole universe for nullable
     /// For nullable columns, we return whole universe because statistics don't track

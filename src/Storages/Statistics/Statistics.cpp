@@ -70,7 +70,10 @@ std::optional<Field> StatisticsUtils::tryConvertFromFloat64(Float64 value, const
         return std::nullopt;
 
     /// Values outside (-2^53, 2^53) cannot be exactly represented as integers by Float64.
-    if (value > MAX_EXACT_FLOAT64_INTEGER || value < -MAX_EXACT_FLOAT64_INTEGER)
+    /// This guard only applies to non-float target types (integers, decimals, dates, etc.).
+    /// For Float32/Float64 targets, large-magnitude values are valid and the conversion is lossless
+    /// (Float64->Float64) or handled by castColumnAccurate (Float64->Float32).
+    if (!which.isFloat() && (value > MAX_EXACT_FLOAT64_INTEGER || value < -MAX_EXACT_FLOAT64_INTEGER))
         return std::nullopt;
 
     static const DataTypePtr float64_type = std::make_shared<DataTypeFloat64>();

@@ -58,28 +58,18 @@ public:
         , blob_storage_type_name(std::move(blob_storage_type_name_))
         , blob_storage_namespace_name(std::move(blob_storage_namespace_name_))
     {
-        auto trim_backward_slash = [](std::string_view str) -> std::string_view
+        auto trim_backward_slashes = [](String & str)
         {
-            if (str.ends_with('/'))
-            {
-                return str.substr(0, str.size() - 1);
-            }
-            return str;
+            while (!str.empty() && str.back() == '/')
+                str.pop_back();
         };
-        table_root = trim_backward_slash(table_root);
-        table_location = trim_backward_slash(table_location);
-        /// Normalize: ensure table_location does not end with '/'
-        while (!table_location.empty() && table_location.back() == '/')
-            table_location.pop_back();
+        trim_backward_slashes(table_root);
+        trim_backward_slashes(table_location);
 
         /// Normalize: non-URI table_location should start with '/'
         /// (Iceberg spec expects absolute paths in metadata)
         if (!table_location.empty() && table_location.find("://") == String::npos && table_location[0] != '/')
             table_location = "/" + table_location;
-
-        /// Normalize: ensure table_root ends with '/'
-        if (!table_root.empty() && table_root.back() != '/')
-            table_root += '/';
     }
 
     /// Convert a metadata path to an actual storage path for I/O operations.

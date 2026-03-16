@@ -30,8 +30,14 @@ String IcebergPathResolver::resolve(const IcebergPathFromMetadata & metadata_pat
     if (raw_path.starts_with(table_location) && table_location.ends_with(table_root))
     {
         auto result = std::filesystem::path{table_root} / trim_forward_slash(raw_path.substr(table_location.size()));
-        LOG_DEBUG(getLogger("IcebergPathResolver"), "resolve: branch1 result='{}'", result.string());
         return result;
+    }
+
+    if (table_root.empty())
+    {
+        throw ::DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS,
+            "IcebergPathResolver::resolve failed first branch. raw_path='{}', table_location='{}', table_root='{}'",
+            raw_path, table_location, table_root);
     }
 
 

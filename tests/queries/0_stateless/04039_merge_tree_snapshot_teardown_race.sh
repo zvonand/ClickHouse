@@ -86,7 +86,7 @@ function run_iteration_proj()
     $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '${query_id}' SYNC FORMAT Null" >/dev/null 2>&1 ||:
     wait "$pid" >/dev/null 2>&1 ||:
 
-    if grep -F "Exception" "$log_file" | grep -v -F "QUERY_WAS_CANCELLED" >/dev/null; then
+    if grep -F "Code:" "$log_file" | grep -v -F "QUERY_WAS_CANCELLED" >/dev/null; then
         cat "$log_file" >&2
         rm -f "$log_file"
         return 1
@@ -134,7 +134,7 @@ function run_iteration()
     $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '${query_id}' SYNC FORMAT Null" >/dev/null 2>&1 ||:
     wait "$pid" >/dev/null 2>&1 ||:
 
-    if grep -F "Exception" "$log_file" | grep -v -F "QUERY_WAS_CANCELLED" >/dev/null; then
+    if grep -F "Code:" "$log_file" | grep -v -F "QUERY_WAS_CANCELLED" >/dev/null; then
         cat "$log_file" >&2
         rm -f "$log_file"
         return 1

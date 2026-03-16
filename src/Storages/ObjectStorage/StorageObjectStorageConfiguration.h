@@ -63,6 +63,8 @@ public:
     StorageObjectStorageConfiguration() = default;
     virtual ~StorageObjectStorageConfiguration() = default;
 
+    static constexpr auto SCHEMA_HASH_WILDCARD = "{_schema_hash}";
+
     struct Path
     {
         Path() = default;
@@ -73,7 +75,8 @@ public:
         std::string path;
 
         bool hasPartitionWildcard() const;
-        bool hasGlobsIgnorePartitionWildcard() const;
+        bool hasSchemaHashWildcard() const;
+        bool hasGlobsIgnorePlaceholders() const;
         bool hasGlobs() const;
         std::string cutGlobs(bool supports_partial_prefix) const;
     };
@@ -98,8 +101,9 @@ public:
     virtual std::string getNamespaceType() const { return "namespace"; }
 
 
-    // Path provided by the user in the query
+    /// Base path for the object key. May be modified after construction by placeholder resolution.
     virtual Path getRawPath() const = 0;
+    virtual void setRawPath(const Path & path) = 0;
 
     /// Raw URI, specified by a user. Used in permission check.
     virtual const String & getRawURI() const = 0;
@@ -176,6 +180,9 @@ public:
         bool supports_tuple_elements,
         ContextPtr local_context,
         const PrepareReadingFromFormatHiveParams & hive_parameters);
+
+    static String computeSchemaHash(const ColumnsDescription & columns);
+    void setSchemaHash(const String & hash);
 
     void initPartitionStrategy(ASTPtr partition_by, const ColumnsDescription & columns, ContextPtr context);
 
@@ -296,6 +303,7 @@ protected:
     void assertInitialized() const;
 
     bool initialized = false;
+    String schema_hash;
 
 private:
     // Path used for reading, by default it is the same as `getRawPath`

@@ -11,6 +11,7 @@
 #include <Coordination/ReadBufferFromNuraftBuffer.h>
 #include <Coordination/WriteBufferFromNuraftBuffer.h>
 #include <Core/Field.h>
+#include <Disks/IDisk.h>
 #include <IO/CompressionMethod.h>
 #include <IO/ReadBufferFromFile.h>
 #include <IO/ReadHelpers.h>

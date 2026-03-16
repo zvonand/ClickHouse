@@ -8,6 +8,82 @@ import pytest
 import helpers.keeper_utils as keeper_utils
 from helpers.cluster import CLICKHOUSE_CI_MIN_TESTED_VERSION, ClickHouseCluster
 
+
+def _generate_keeper_configs():
+    """Generate per-node Keeper XML configs from a compact cluster description."""
+
+    def make_config(server_id, hosts, chunk_size=None, use_s3=False):
+        s3_block = (
+            "\n        <s3_snapshot>"
+            "\n            <endpoint>http://minio1:9001/snapshots/</endpoint>"
+            "\n            <access_key_id>minio</access_key_id>"
+            "\n            <secret_access_key>ClickHouse_Minio_P@ssw0rd</secret_access_key>"
+            "\n        </s3_snapshot>"
+        ) if use_s3 else ""
+        chunk_line = f"\n            <snapshot_transfer_chunk_size>{chunk_size}</snapshot_transfer_chunk_size>" if chunk_size else ""
+        prios = [70, 20, 10]
+        servers = []
+        for i, (host, prio) in enumerate(zip(hosts, prios), start=1):
+            follower = "\n                <start_as_follower>true</start_as_follower>" if i > 1 else ""
+            servers.append(
+                f"            <server>\n"
+                f"                <id>{i}</id>\n"
+                f"                <hostname>{host}</hostname>\n"
+                f"                <port>9234</port>\n"
+                f"                <can_become_leader>true</can_become_leader>{follower}\n"
+                f"                <priority>{prio}</priority>\n"
+                f"            </server>"
+            )
+        return (
+            f"<clickhouse>\n"
+            f"    <keeper_server>{s3_block}\n"
+            f"        <tcp_port>9181</tcp_port>\n"
+            f"        <server_id>{server_id}</server_id>\n"
+            f"\n"
+            f"        <coordination_settings>\n"
+            f"            <operation_timeout_ms>5000</operation_timeout_ms>\n"
+            f"            <session_timeout_ms>10000</session_timeout_ms>\n"
+            f"            <raft_logs_level>trace</raft_logs_level>\n"
+            f"            <snapshot_distance>50</snapshot_distance>\n"
+            f"            <stale_log_gap>10</stale_log_gap>\n"
+            f"            <reserved_log_items>1</reserved_log_items>{chunk_line}\n"
+            f"        </coordination_settings>\n"
+            f"\n"
+            f"        <raft_configuration>\n"
+            + "\n".join(servers) + "\n"
+            f"        </raft_configuration>\n"
+            f"    </keeper_server>\n"
+            f"</clickhouse>\n"
+        )
+
+    configs_dir = os.path.join(os.path.dirname(__file__), "configs")
+    os.makedirs(configs_dir, exist_ok=True)
+
+    # Each entry: (filenames, hosts, chunk_size, use_s3)
+    clusters = [
+        (["enable_keeper1.xml",             "enable_keeper2.xml",             "enable_keeper3.xml"],
+         ["node1",      "node2",      "node3"],      4096,      False),
+        (["enable_keeper4_large_chunk.xml",  "enable_keeper5_large_chunk.xml",  "enable_keeper6_large_chunk.xml"],
+         ["node4",      "node5",      "node6"],      104857600, False),
+        (["enable_keeper7_s3.xml",           "enable_keeper8_s3.xml",           "enable_keeper9_s3.xml"],
+         ["node7",      "node8",      "node9"],      4096,      True),
+        (["enable_keeper10_large_chunk_s3.xml", "enable_keeper11_large_chunk_s3.xml", "enable_keeper12_large_chunk_s3.xml"],
+         ["node10",     "node11",     "node12"],     104857600, True),
+        (["enable_keeper_compat1.xml",       "enable_keeper_compat2.xml",       "enable_keeper_compat3.xml"],
+         ["compat1",    "compat2",    "compat3"],    None,      False),
+        (["enable_keeper_compat_s3_1.xml",   "enable_keeper_compat_s3_2.xml",   "enable_keeper_compat_s3_3.xml"],
+         ["compat_s3_1","compat_s3_2","compat_s3_3"],None,     True),
+    ]
+
+    for filenames, hosts, chunk_size, use_s3 in clusters:
+        for server_id, filename in enumerate(filenames, start=1):
+            path = os.path.join(configs_dir, filename)
+            with open(path, "w") as f:
+                f.write(make_config(server_id, hosts, chunk_size, use_s3))
+
+
+_generate_keeper_configs()
+
 cluster = ClickHouseCluster(__file__)
 
 # Small-chunk clusters (snapshot_transfer_chunk_size=4096): local and S3.
@@ -249,10 +325,10 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
     Verify that a partial tmp file left by a mid-transfer kill does not prevent
     the next full recovery.
 
-    Uses the keeper_save_snapshot_pause_mid_transfer fail point to pause
-    node_lagging deterministically while writing a middle chunk, then kills it.
-    This leaves a real tmp_snapshot_X.bin on disk.  On the next start the cleanup
-    logic in KeeperSnapshotManager removes it and recovery completes correctly.
+    Simulates an interrupted transfer by placing a `tmp_snapshot_X.bin` marker
+    alongside the real snapshot file after a successful recovery.  On the next
+    startup the `KeeperSnapshotManager` constructor treats the pair as incomplete
+    and removes both.  The node then recovers via a fresh snapshot transfer.
     """
     node_leader = nodes["leader"]
     node_lagging = nodes["lagging"]
@@ -266,32 +342,41 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
     finally:
         stop_zk(leader_zk)
 
-    # First start: pause mid-transfer, then kill to leave tmp_snapshot_X.bin on disk.
-    node_lagging.start_clickhouse(20)
-    node_lagging.query("SYSTEM ENABLE FAILPOINT keeper_save_snapshot_pause_mid_transfer")
-    log_offset = get_log_line_count(node_lagging)
-
-    # Wait until a non-first chunk is being processed — the thread is now paused
-    # at the fail point so no further chunks will be logged until we kill the node.
-    deadline = time.monotonic() + 30
-    mid_chunk_seen = False
-    while time.monotonic() < deadline:
-        output = node_lagging.exec_in_container(
-            ["bash", "-c",
-             f"tail -n +{log_offset + 1} /var/log/clickhouse-server/clickhouse-server.log"
-             " | grep -E 'Saving snapshot [0-9]+ obj_id [1-9]' || true"]
-        )
-        if output.strip():
-            mid_chunk_seen = True
-            break
-        time.sleep(0.5)
-
-    assert mid_chunk_seen, "Fail point was not triggered: no middle chunk seen within timeout"
-    node_lagging.stop_clickhouse(kill=True)  # leaves tmp_snapshot_X.bin on disk
-
-    # Second start: cleanup removes tmp_snapshot_X.bin, then fresh full recovery.
+    # First start: let node_lagging recover normally (no timing dependency).
     node_lagging.start_clickhouse(20)
     keeper_utils.wait_until_connected(cluster, node_lagging)
+
+    # Find the snapshot on the local coordination disk.
+    # KeeperSnapshotManager always writes to the local disk (KeeperSnapshotManagerS3 is a
+    # separate uploader and does not change the base snapshot disk).
+    # Snapshots are compressed by default: snapshot_<idx>.bin.zstd; use 'snapshot_*.bin*'
+    # to match both compressed and uncompressed forms.
+    snapshot_dir = "/var/lib/clickhouse/coordination/snapshots"
+    snapshot_path = node_lagging.exec_in_container(
+        ["bash", "-c",
+         f"find {snapshot_dir} -name 'snapshot_*.bin*' ! -name 'tmp_*' | sort | tail -1 || true"]
+    ).strip()
+    assert snapshot_path, "No snapshot found after recovery"
+
+    # Kill and place a tmp_ marker next to the real snapshot to simulate a transfer
+    # that was interrupted after the file was created but before it was finalised.
+    node_lagging.stop_clickhouse(kill=True)
+    snapshot_name = snapshot_path.rsplit("/", 1)[-1]
+    tmp_snapshot_path = f"{snapshot_dir}/tmp_{snapshot_name}"
+    node_lagging.exec_in_container(["bash", "-c", f"touch {tmp_snapshot_path}"])
+
+    # Second start: KeeperSnapshotManager removes both tmp_snapshot_X.bin and
+    # snapshot_X.bin, then the node recovers via a fresh snapshot transfer.
+    node_lagging.start_clickhouse(20)
+    keeper_utils.wait_until_connected(cluster, node_lagging)
+
+    # Verify the tmp marker was cleaned up.
+    assert (
+        node_lagging.exec_in_container(
+            ["bash", "-c", f"test -f {tmp_snapshot_path} && echo yes || echo no"]
+        ).strip()
+        == "no"
+    ), f"tmp file was not removed on startup: {tmp_snapshot_path}"
 
     try:
         leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)

@@ -265,6 +265,9 @@ def generate_description(item: PullRequest, repo: Repository) -> Optional[Descri
             elif m_entry:
                 # Check if the entry is on the same line
                 inline = (m_entry.group(2) or "").strip()
+                # Strip markdown formatting markers (e.g. "**Changelog entry:**" yields "**")
+                inline = re.sub(r"^[-*_\s]*", "", inline)
+                inline = re.sub(r"[-*_\s]*$", "", inline)
                 if inline:
                     entry_lines = [inline]
                     i += 1

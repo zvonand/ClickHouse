@@ -34,6 +34,9 @@ def check_changelog_entry(category, pr_body: str) -> str:
         if m:
             # Check if the entry is on the same line (e.g. "Changelog entry: Fix something")
             inline = (m.group(2) or "").strip()
+            # Strip markdown formatting markers (e.g. "**Changelog entry:**" yields "**")
+            inline = re.sub(r"^[-*_\s]*", "", inline)
+            inline = re.sub(r"[-*_\s]*$", "", inline)
             if inline:
                 entry_lines = [inline]
                 i += 1

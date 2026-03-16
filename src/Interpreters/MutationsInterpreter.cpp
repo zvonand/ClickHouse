@@ -1132,13 +1132,13 @@ void MutationsInterpreter::prepare(bool dry_run)
                 if (std::find(index_cols.begin(), index_cols.end(), command.column_name) != index_cols.end())
                     dropped_indices.insert(index.name);
             }
-            /// When clearing a column, we also need to rebuild any projections that depend on it,
+            /// When clearing a column, we also need to drop any projections that depend on it,
             /// otherwise stale projection data with outdated sort order will be hardlinked unchanged.
             for (const auto & projection : metadata_snapshot->getProjections())
             {
                 const auto & projection_cols = projection.required_columns;
                 if (std::find(projection_cols.begin(), projection_cols.end(), command.column_name) != projection_cols.end())
-                    materialized_projections.insert(projection.name);
+                    dropped_projections.insert(projection.name);
             }
         }
         /// The following mutations handled separately:

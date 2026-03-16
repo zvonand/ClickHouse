@@ -1348,6 +1348,7 @@ struct MutationContext
     NameSet materialized_projections;
     NameSet materialized_statistics;
     NameSet indices_to_drop_names;
+    NameSet projections_to_drop_names;
 
     IMergedBlockOutputStream::GatheredData all_gathered_data;
     MergeTreeData::MutableDataPartPtr new_data_part;
@@ -1832,6 +1833,9 @@ private:
         for (const auto & projection : projections)
         {
             if (removed_projections.contains(projection.name))
+                continue;
+
+            if (ctx->projections_to_drop_names.contains(projection.name))
                 continue;
 
             bool need_recalculate =
@@ -2833,6 +2837,7 @@ bool MutateTask::prepare()
         ctx->indices_to_drop_names = ctx->interpreter->grabDroppedIndices();
         ctx->materialized_statistics = ctx->interpreter->grabMaterializedStatistics();
         ctx->materialized_projections = ctx->interpreter->grabMaterializedProjections();
+        ctx->projections_to_drop_names = ctx->interpreter->grabDroppedProjections();
         ctx->mutating_pipeline_builder = ctx->interpreter->execute();
         ctx->updated_header = ctx->interpreter->getUpdatedHeader();
         ctx->progress_callback = MergeProgressCallback(

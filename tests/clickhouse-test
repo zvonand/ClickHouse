@@ -2561,7 +2561,7 @@ class TestCase:
                             "INSERT INTO system.coverage_log "
                             "SETTINGS async_insert=1, wait_for_async_insert=0, async_insert_busy_timeout_min_ms=200, async_insert_busy_timeout_max_ms=1000 "
                             f"WITH arrayDistinct(groupArray(data)) AS coverage_distinct "
-                            f"SELECT now(), '{self.case}__client', coverage_distinct, "
+                            f"SELECT now(), '{self.case}', coverage_distinct, "
                             f"arrayMap(x -> demangle(addressToSymbol(x)), coverage_distinct) "
                             f"FROM input('data UInt64') FORMAT RowBinary",
                             body=body,

@@ -63,13 +63,9 @@ class CoverageExporter:
 
             if not self.to_file:
                 # --- Insert 1: raw symbols → checks_coverage_inverted ---
-                # No SQL-side normalization: the text index (splitByNonAlpha +
-                # hasAllTokens) at query time is robust to extra return-type and
-                # template-arg tokens.  SQL normalization was actively harmful: its
-                # naive find('(') hit cast expressions like (char8_t)15 inside
-                # template args, and its first-'<' stripping over-truncated
-                # class-template+function-template symbols, causing hasAllTokens to
-                # miss ~27% of stored symbols.
+                # Raw symbols are stored without SQL-side normalization: the text
+                # index (splitByNonAlpha + hasAllTokens) at query time is robust to
+                # extra return-type and template-arg tokens in the stored symbol.
                 query = (
                     f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted', '{self.dest.user}', '{self.dest.pwd}') "
                     "SELECT DISTINCT sym AS symbol, "
@@ -78,10 +74,7 @@ class CoverageExporter:
                     "test_name "
                     f"FROM system.{table} "
                     "ARRAY JOIN symbol AS sym "
-                    # Exclude __client rows: they inflate count(distinct test_name)
-                    # and break the frequency filter; they also return non-runnable
-                    # identifiers unsuitable for targeted test selection.
-                    "WHERE notEmpty(sym) AND NOT endsWith(test_name, '__client')"
+                    "WHERE notEmpty(sym)"
                 )
                 cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
                 rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
@@ -107,7 +100,7 @@ class CoverageExporter:
                         f"SELECT sym, test_name "
                         f"FROM system.{table} "
                         "ARRAY JOIN symbol AS sym "
-                        "WHERE notEmpty(sym) AND NOT endsWith(test_name, '__client') "
+                        "WHERE notEmpty(sym) "
                         f"INTO OUTFILE '{raw_file}' FORMAT TSV"
                     )
                     cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{select_query}" {command_args_post}'

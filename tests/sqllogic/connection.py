@@ -171,8 +171,8 @@ class ConnectionWrap:
         try:
             tables = list_result.get_result()
         except ProgramError:
-            logger.warning("failed to list tables in %s, skipping cleanup", self.DATABASE_NAME)
-            return
+            logger.warning("failed to list tables in %s, re-raising", self.DATABASE_NAME)
+            raise
         logger.info("tables will be dropped: %s", tables)
         for table_name in tables:
             table_name = table_name[0]

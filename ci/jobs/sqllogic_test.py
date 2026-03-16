@@ -649,12 +649,21 @@ def main():
                                 f" --input-dir /tmp/sqllogic_input"
                                 f" --out-dir /tmp/sqllogic_output"
                             )
+                        displayed = 0
                         for fid in sorted(new_failures.keys()):
+                            if displayed >= MAX_NEW_FAILURES_DISPLAY:
+                                remaining = len(new_failures) - displayed
+                                print(
+                                    f"\n  ... and {remaining:,} more new failures"
+                                    f" (see current_failures.txt artifact for the full list)"
+                                )
+                                break
                             details = new_failures[fid]
                             reason = details.get("reason", "")
                             print(f"\n  {fid}")
                             if reason:
                                 print(f"    Reason: {reason[:300]}")
+                            displayed += 1
 
             # Finalize pass/fail verdict before rendering HTML report
             final_ok = threshold_ok

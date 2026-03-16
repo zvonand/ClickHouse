@@ -15,6 +15,8 @@ from deepdiff import DeepDiff  # pylint:disable=import-error; for style check
 from connection import Engines, default_clickhouse_native_conn_args, setup_connection
 from test_runner import RequestType, Status, TestRunner
 
+logger = logging.getLogger("runner")
+
 LEVEL_NAMES = [  # pylint:disable-next=protected-access
     l.lower() for l, n in logging._nameToLevel.items() if n != logging.NOTSET
 ]

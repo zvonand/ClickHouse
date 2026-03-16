@@ -716,10 +716,13 @@ static StoragePtr create(const StorageFactory::Arguments & args)
         /// We use the local (query) context here so that user-level settings profiles can control
         /// access to dynamic disk features such as `from_env`, `include`, and `from_zk`
         /// (settings `dynamic_disk_allow_from_env`, `dynamic_disk_allow_include`, `dynamic_disk_allow_from_zk`).
-        /// On server restart (ATTACH mode), the same path is taken but the security checks inside
-        /// `getDiskConfigurationFromAST` are intentionally skipped (`is_attach=true`) to allow tables
-        /// to load without requiring the user's profile to be present in the system context.
-        storage_settings->loadFromQuery(*args.storage_def, args.getLocalContext(), LoadingStrictnessLevel::ATTACH <= args.mode);
+        /// On server restart (`FORCE_ATTACH` / `FORCE_RESTORE`), the same path is taken but the
+        /// security checks inside `getDiskConfigurationFromAST` are intentionally skipped
+        /// (`is_attach=true`) to allow tables to load without requiring the user's profile to be
+        /// present in the system context.
+        /// User-initiated `ATTACH TABLE` queries use `LoadingStrictnessLevel::ATTACH` and must
+        /// still be subject to these checks.
+        storage_settings->loadFromQuery(*args.storage_def, args.getLocalContext(), LoadingStrictnessLevel::FORCE_ATTACH <= args.mode);
 
         /// Updates the default storage_settings with settings specified via SETTINGS arg in a query
         if (args.storage_def->settings)

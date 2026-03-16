@@ -19,7 +19,8 @@ namespace ErrorCodes
 
 Squashing::Squashing(SharedHeader header_, size_t min_block_size_rows_, size_t min_block_size_bytes_,
                      size_t max_block_size_rows_, size_t max_block_size_bytes_, bool squash_with_strict_limits_)
-    : header(header_)
+    : pending(squash_with_strict_limits_)
+    , header(header_)
     , min_block_size_rows(min_block_size_rows_)
     , min_block_size_bytes(min_block_size_bytes_)
     , max_block_size_rows(max_block_size_rows_)
@@ -433,6 +434,32 @@ void Squashing::PendingQueue::pushBack(Chunk && chunk)
     total_bytes += bytes;
 }
 
+size_t Squashing::PendingQueue::getBytes() const
+{
+    if (!strict_limits || offset_first == 0)
+        return total_bytes;
+
+    size_t result = total_bytes;
+    result -= chunks.front().bytes();
+    size_t total_rows_in_front = chunks.front().getNumRows();
+    size_t rows_in_front = total_rows_in_front - offset_first;
+    double bytes_per_row = static_cast<double>(chunks.front().bytes()) / static_cast<double>(total_rows_in_front);
+
+    result += static_cast<size_t>(bytes_per_row * static_cast<double>(rows_in_front));
+    return result;
+}
+
+void Squashing::PendingQueue::dropFront()
+{
+    auto & front = chunks.front();
+    size_t rows = front.getNumRows();
+    size_t bytes = front.bytes();
+    total_rows -= rows;
+    total_bytes -= bytes;
+    offset_first = 0;
+    chunks.pop_front();
+}
+
 Chunk Squashing::PendingQueue::pullFront()
 {
     auto result = std::move(chunks.front());
@@ -450,7 +477,14 @@ std::pair<size_t, size_t> Squashing::PendingQueue::calculateConsumable(size_t ma
     const Chunk & chunk = chunks.front();
     size_t total_rows_front = chunk.getNumRows();
     size_t total_bytes_front = chunk.bytes();
+
+    if (offset_first == 0 && 
+        (!max_rows || total_rows_front <= max_rows) && 
+        (!max_bytes || total_bytes_front <= max_bytes))
+        return {total_rows_front, total_bytes_front};
+
     double bytes_per_row = total_rows_front != 0 ? static_cast<double>(total_bytes_front) / static_cast<double>(total_rows_front) : 0.;
+    chassert(total_rows_front > offset_first);
     size_t available_rows = total_rows_front - offset_first;
 
     /// No limits: return entire available front chunk
@@ -475,6 +509,9 @@ std::pair<size_t, size_t> Squashing::PendingQueue::calculateConsumable(size_t ma
 
     auto bytes_to_take = static_cast<size_t>(static_cast<double>(rows_to_take) * bytes_per_row);
 
+    if (bytes_to_take == 0 && rows_to_take > 0 && total_bytes_front > 0)
+        bytes_to_take = 1;
+
     return {rows_to_take, bytes_to_take};
 }
 
@@ -497,17 +534,15 @@ Squashing::PendingQueue::ConsumeResult Squashing::PendingQueue::consumeUpTo(size
     if (exhaust_chunk)
     {
         /// Optimization: take the whole chunk without cloning
-        result_chunk = std::move(front);
-        chunks.pop_front();
+        result_chunk = pullFront();
     }
     else
     {
        result_chunk = front.clone();
     }
+
     size_t offset_old = offset_first;
     offset_first = (offset_first + rows_to_take) % rows_in_front;
-    total_rows -= rows_to_take;
-    total_bytes -= bytes_to_take;
 
     return {std::move(result_chunk), rows_to_take, bytes_to_take, offset_old};
 }

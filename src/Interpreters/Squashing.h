@@ -102,12 +102,13 @@ private:
         };
 
     public:
+        explicit PendingQueue(bool strict_limits_ = false) : strict_limits(strict_limits_) {}
 
-        size_t getRows() const { return total_rows; }
-        size_t getBytes() const { return total_bytes; }
+        size_t getRows() const { return total_rows - offset_first; }
+        size_t getBytes() const;
         const Chunk & peekFront() const { return chunks.front(); }
         Chunk pullFront();
-        void dropFront() { chunks.pop_front(); }
+        void dropFront();
         void pushBack(Chunk && chunk);
         size_t getOffset() const { return offset_first; }
         bool empty() const { return chunks.empty(); }
@@ -120,6 +121,7 @@ private:
         size_t total_rows = 0;
         size_t total_bytes = 0;
         size_t offset_first = 0;
+        bool strict_limits = false;
     };
 
     AccumulatedChunks accumulated;

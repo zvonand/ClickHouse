@@ -1,6 +1,5 @@
--- Tags: no-replicated-database, no-parallel-replicas
--- no-replicated-database: EXPLAIN output differs for replicated database.
--- no-parallel-replicas: EXPLAIN output differs for parallel replicas.
+-- Tags: no-replicated-database, no-parallel-replicas, no-random-merge-tree-settings
+-- EXPLAIN output may differ
 
 DROP TABLE IF EXISTS points;
 CREATE TABLE points(`x` Float64, `y` Float64) ENGINE = MergeTree ORDER BY (x, y) SETTINGS index_granularity = 1000;   

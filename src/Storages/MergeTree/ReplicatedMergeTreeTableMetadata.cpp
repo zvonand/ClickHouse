@@ -255,7 +255,11 @@ ReplicatedMergeTreeTableMetadata ReplicatedMergeTreeTableMetadata::parseRaw(cons
 }
 
 ReplicatedMergeTreeTableMetadata ReplicatedMergeTreeTableMetadata::parseAndNormalize(
-    const String & s, const StorageInMemoryMetadata & metadata, ContextPtr context)
+    const String & s,
+    const ColumnsDescription & columns,
+    bool add_minmax_index_for_numeric_columns,
+    bool add_minmax_index_for_string_columns,
+    ContextPtr context)
 {
     auto result = parseRaw(s);
 
@@ -263,10 +267,9 @@ ReplicatedMergeTreeTableMetadata ReplicatedMergeTreeTableMetadata::parseAndNorma
     /// metadata. Newer replicas only store explicit indices. Strip implicit indices from the
     /// parsed metadata so that all downstream comparisons work against the new format.
     if (result.skip_indices.empty()
-        || (!metadata.add_minmax_index_for_numeric_columns && !metadata.add_minmax_index_for_string_columns))
+        || (!add_minmax_index_for_numeric_columns && !add_minmax_index_for_string_columns))
         return result;
 
-    const auto & columns = metadata.columns;
     constexpr bool escape_index_filenames = true; /// Does not matter here, we re-serialize the parsed result
     auto parsed = IndicesDescription::parse(result.skip_indices, columns, escape_index_filenames, context);
 
@@ -285,8 +288,8 @@ ReplicatedMergeTreeTableMetadata ReplicatedMergeTreeTableMetadata::parseAndNorma
         /// Only `add_minmax_index_for_numeric_columns` and `add_minmax_index_for_string_columns`
         /// need to be checked here. The temporal setting (`add_minmax_index_for_temporal_columns`)
         /// was introduced in 26.2 and never stored implicit indices in Keeper metadata.
-        if ((metadata.add_minmax_index_for_numeric_columns && isNumber(col_type))
-            || (metadata.add_minmax_index_for_string_columns && isString(col_type)))
+        if ((add_minmax_index_for_numeric_columns && isNumber(col_type))
+            || (add_minmax_index_for_string_columns && isString(col_type)))
         {
             index.is_implicitly_created = true;
             has_implicit = true;

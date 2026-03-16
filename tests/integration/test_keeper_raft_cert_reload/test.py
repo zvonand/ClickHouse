@@ -188,17 +188,25 @@ def wait_for_cert_reload(node, target_host, expected_serial, timeout=30):
     return False
 
 
+def kill_raft_connections(node):
+    """Kill all established connections on the Raft port to force reconnection."""
+    node.exec_in_container(
+        ["ss", "--kill", "-tn", "state", "established", "( dport = :9234 or sport = :9234 )"]
+    )
+
+
 def test_cert_reload_on_reconnect(started_cluster):
     """
-    Test that restarted node uses updated certificates for new Raft connections.
+    Test that new Raft connections use updated certificates after reload.
 
     Steps:
     1. Start 3-node cluster with 'first' certificate
     2. Verify cluster works
     3. Replace certificates with 'second' on all nodes
     4. Trigger config reload
-    5. Restart node3 - creates NEW Raft connections
-    6. Verify cluster works (proves new certs work)
+    5. Kill Raft connections to force reconnection with new certs
+    6. Verify all nodes serve the new certificate
+    7. Verify cluster works (proves new certs work)
     """
     # Wait for cluster to be ready
     wait_nodes_ready(all_nodes)
@@ -236,29 +244,24 @@ def test_cert_reload_on_reconnect(started_cluster):
     print(f"New certificate serial (from file): {new_serial}")
     assert initial_serial != new_serial, "Certificate serial should have changed"
 
-    # Note: Existing connections keep their old cert - that's expected.
-    # The new cert is only used for NEW connections.
+    # Kill existing Raft connections on all nodes to force reconnection with new certs
+    for node in all_nodes:
+        kill_raft_connections(node)
+    print("Killed Raft connections on all nodes")
 
-    # Restart node3 - this forces NEW Raft connections in BOTH directions:
-    # - node3 CLIENT -> node1/node2 SERVER (node3 rejoining cluster)
-    # - node1/node2 CLIENT -> node3 SERVER (leader heartbeats/replication)
-    # This validates both server-side and client-side SSL context reload.
-    print("Restarting node3 to create new Raft connections...")
-    node3.restart_clickhouse()
+    # Wait for all nodes to reconnect and serve the new certificate
+    for node in all_nodes:
+        for target in all_nodes:
+            if target != node:
+                assert wait_for_cert_reload(node, target.name, new_serial, timeout=30), (
+                    f"Node {target.name} should serve new cert {new_serial} "
+                    f"(as seen from {node.name})"
+                )
+    print("All nodes serve the new certificate on Raft port")
 
-    # Wait for node3 to rejoin
-    wait_nodes_ready([node3])
-    print("Node3 restarted and reconnected")
+    # Wait for cluster to re-establish quorum after connection reset
+    wait_nodes_ready(all_nodes)
 
-    # Verify cluster works - this proves both client and server SSL contexts
-    # reloaded correctly, since Raft requires bidirectional TLS connections
-    verify_cluster_works(f"/test_after_restart_{test_id}", all_nodes)
-    print("Cluster working after restart - new Raft connections use updated certs!")
-
-    # Now verify the Raft port is serving the NEW certificate
-    # Node3 just restarted, so its connections to node1 are fresh
-    # Use polling to handle async certificate reload
-    assert wait_for_cert_reload(node3, "node1", new_serial, timeout=30), (
-        f"Raft port should serve new cert after reload. Expected {new_serial}"
-    )
-    print("Verified: Raft SSL port is serving the updated certificate!")
+    # Verify cluster works with the new certificates
+    verify_cluster_works(f"/test_after_reload_{test_id}", all_nodes)
+    print("Cluster working after cert reload - new Raft connections use updated certs!")

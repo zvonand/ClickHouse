@@ -185,12 +185,30 @@ public:
     }
 
     template <typename LoadFunc>
-    LatestMetadataVersionPtr getOrSetLatestMetadataVersion(const String & data_path, LoadFunc && load_fn, time_t tolerated_staleness_ms)
+    LatestMetadataVersionPtr getOrSetLatestMetadataVersion(const String & table_path, const std::optional<String> & table_uuid, LoadFunc && load_fn, time_t tolerated_staleness_ms)
     {
+        /// This caching method for latest metadata version:
+        /// 1.    Takes two keys to reference a table - path and [optional] uuid
+        /// 2.    Probes the cache only if stale values are tolerated - sometimes we just have to force the latest value from the remote catalog and to cache it
+        /// 2.1.  Lookup in cache is performed using table uuid if it's provided, or using table path
+        /// 3.    If the value needs to be forced via the remote catalog, we first load it, then we place it in cache under both keys
+
+        /// NOTE: There're couple of caveats and nuances regarding current implementation
+        ///       (a) can't use getOrSet (as should've) at the moment - because load_fn accesses the same cache to extract uuid from the metadata.json file
+        ///       (b) also can't use getOrSet - because there's no mechanism to disregard the existing value because of its staleness
+        ///       (c) single value is referenced using two keys
+        ///       For now the potential impact of these nuances is considered low for the potential gain - in the worst case, we'll call remote catalog more than once, which is still better than now
+        /// TODO:
+        ///       (a) and (c) will be solved by moving to AsyncIterator for Iceberg - the loading process should be decoupled, refactored and broken down into independed pieces;
+        ///                   and later by refactoring caching to create a new logical layer of snapshot caching
+        ///       (b) #97410 will address several design flaws of CacheBase + will introduce custom predicates for get/set operations
+
         /// tolerated_staleness_ms=0 would mean that a non-cached value is required
         if (tolerated_staleness_ms > 0)
         {
+            const String & data_path = table_uuid ? *table_uuid : table_path;
             auto found = Base::get(data_path);
+
             if (found)
             {
                 LatestMetadataVersionPtr cell = std::get<LatestMetadataVersionPtr>(found->cached_element);
@@ -211,20 +229,13 @@ public:
             }
         }
 
-        /// it's either a) nothing found in cache, or b) it's too old (stale), or c) the latest data has been requested - in all cases, we'll load it and cache it
-        /// TODO: we force loading here and not passing the function to inside cache as it would work normally, because
-        ///       we'll be accessing the same cache during the loading (specific to this scenario) and that'd cause self-lock
-        ///       First, #97410 CacheBase needs to be refactored to support generic entity-based quotation
-        ///       Second, we should use two separate caches (can be encapsulated under the same umbrella), 1st keeps logical snapshots (latest version), 2nd files
-        ///               and in this case, we could safely access the 2nd cache while loading the element for the 1st one.
         LatestMetadataVersionPtr cell = std::make_shared<LatestMetadataVersion>();
         cell->latest_metadata = load_fn();
         cell->cached_at = std::chrono::system_clock::now();
 
-        /// TODO: Again, with #97410 by getting a generic caching for TTL & Staleness, we'll be able to force set on a stale key
-        /// NOTE: if several threads will concurrently enter this method, and will concurrently load data - this will result in some extra work, which is fine-ish
-        ///       but at least it won't lead to race - the last thread will overwrite the cached value, and this is okay
-        Base::set(data_path, std::make_shared<IcebergMetadataFilesCacheCell>(cell));
+        Base::set(table_path, std::make_shared<IcebergMetadataFilesCacheCell>(cell));
+        if (table_uuid)
+            Base::set(*table_uuid, std::make_shared<IcebergMetadataFilesCacheCell>(cell));
 
         return cell;
     }

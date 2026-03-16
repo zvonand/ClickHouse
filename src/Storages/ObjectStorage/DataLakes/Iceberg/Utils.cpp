@@ -1101,20 +1101,12 @@ static MetadataFileWithInfo getLatestMetadataFileAndVersion(
 
     if (metadata_cache)
     {
-        /// Latest metadata version is cached by the identifier of the table, used in this case
-        /// TODO: Ask Danila if we'd better just cache by both ids in this case
-        if (table_uuid.has_value())
-            return metadata_cache->getOrSetLatestMetadataVersion(
-                *table_uuid,
-                load_fn,
-                tolerated_staleness_ms
-            )->latest_metadata;
-        else
-            return metadata_cache->getOrSetLatestMetadataVersion(
-                table_path,
-                load_fn,
-                tolerated_staleness_ms
-            )->latest_metadata;
+        return metadata_cache->getOrSetLatestMetadataVersion(
+            table_path,
+            table_uuid,
+            load_fn,
+            tolerated_staleness_ms
+        )->latest_metadata;
     }
     return load_fn();
 }

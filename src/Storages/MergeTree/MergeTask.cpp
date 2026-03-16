@@ -1295,13 +1295,22 @@ bool MergeTask::VerticalMergeStage::prepareVerticalMergeForAllColumns() const
     if (global_ctx->chosen_merge_algorithm != MergeAlgorithm::Vertical)
         return false;
 
-    size_t sum_input_rows_exact = global_ctx->merge_list_element_ptr->rows_read;
+    size_t sum_input_rows_exact = global_ctx->merge_list_element_ptr->total_rows_count;
     size_t input_rows_filtered = *global_ctx->input_rows_filtered;
     global_ctx->merge_list_element_ptr->columns_written = global_ctx->merging_columns.size();
     global_ctx->merge_list_element_ptr->progress.store(ctx->column_sizes->keyColumnsWeight(), std::memory_order_relaxed);
 
     /// Ensure data has written to disk.
     size_t rows_sources_count = ctx->rows_sources_temporary_file->finalizeWriting();
+
+    /// When SYSTEM STOP/START MERGES toggles rapidly, the horizontal merge pipeline
+    /// can be cancelled (is_cancelled() returns true) but the cancellation check in
+    /// finalize() passes because the blocker was released in between. Detect this:
+    /// if we have multiple source parts but wrote zero rows_sources bytes, the horizontal
+    /// stage was effectively cancelled. Abort cleanly instead of continuing with no data.
+    if (rows_sources_count == 0 && global_ctx->future_part->parts.size() > 1)
+        throw Exception(ErrorCodes::ABORTED, "Horizontal merge stage was cancelled, aborting vertical merge");
+
     /// In special case, when there is only one source part, and no rows were skipped, we may have
     /// skipped writing rows_sources file. Otherwise rows_sources_count must be equal to the total
     /// number of input rows.

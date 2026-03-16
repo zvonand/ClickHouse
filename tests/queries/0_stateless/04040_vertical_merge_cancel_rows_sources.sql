@@ -4,8 +4,9 @@
 -- The bug: when SYSTEM STOP/START MERGES toggles rapidly, the horizontal merge
 -- stage can be cancelled (is_cancelled() returns true) but the cancellation check
 -- in finalize() passes because the blocker was released in between. The merge then
--- proceeds to the vertical stage with rows_sources_count=0. Using total_rows_count
--- (a static value) for the assertion made it always fire; rows_read=0 would pass.
+-- proceeds to the vertical stage with rows_sources_count=0, hitting the assertion.
+-- The fix: detect this case (rows_sources_count=0 with multiple parts) and abort
+-- cleanly with ABORTED instead of continuing with no data.
 
 DROP TABLE IF EXISTS test;
 CREATE TABLE test (id UInt64, d Dynamic)

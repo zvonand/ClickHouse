@@ -53,15 +53,11 @@ void * operator new(std::size_t size)
 {
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace);
-    void * ptr = nullptr;
-    try
-    {
-        ptr = Memory::newImpl(size);
-    }
-    catch (...)
+    void * ptr = Memory::newNoExcept(size);
+    if (unlikely(!ptr))
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
-        throw;
+        throw std::bad_alloc{};
     }
     trace.onAlloc(ptr, actual_size);
     return ptr;
@@ -71,15 +67,11 @@ void * operator new(std::size_t size, std::align_val_t align)
 {
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace, align);
-    void * ptr = nullptr;
-    try
-    {
-        ptr = Memory::newImpl(size, align);
-    }
-    catch (...)
+    void * ptr = Memory::newNoExcept(size, align);
+    if (unlikely(!ptr))
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
-        throw;
+        throw std::bad_alloc{};
     }
     trace.onAlloc(ptr, actual_size);
     return ptr;
@@ -89,15 +81,11 @@ void * operator new[](std::size_t size)
 {
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace);
-    void * ptr = nullptr;
-    try
-    {
-        ptr = Memory::newImpl(size);
-    }
-    catch (...)
+    void * ptr = Memory::newNoExcept(size);
+    if (unlikely(!ptr))
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
-        throw;
+        throw std::bad_alloc{};
     }
     trace.onAlloc(ptr, actual_size);
     return ptr;
@@ -107,15 +95,11 @@ void * operator new[](std::size_t size, std::align_val_t align)
 {
     AllocationTrace trace;
     std::size_t actual_size = Memory::trackMemory(size, trace, align);
-    void * ptr = nullptr;
-    try
-    {
-        ptr = Memory::newImpl(size, align);
-    }
-    catch (...)
+    void * ptr = Memory::newNoExcept(size, align);
+    if (unlikely(!ptr))
     {
         [[maybe_unused]] auto rollback_trace = CurrentMemoryTracker::free(actual_size);
-        throw;
+        throw std::bad_alloc{};
     }
     trace.onAlloc(ptr, actual_size);
     return ptr;

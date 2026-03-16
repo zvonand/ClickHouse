@@ -48,23 +48,6 @@ inline ALWAYS_INLINE size_t alignUp(size_t size, size_t align) noexcept
     return (size + align - 1) / align * align;
 }
 
-template <std::same_as<std::align_val_t>... TAlign>
-requires DB::OptionalArgument<TAlign...>
-inline ALWAYS_INLINE void * newImpl(std::size_t size, TAlign... align)
-{
-    void * ptr = nullptr;
-    if constexpr (sizeof...(TAlign) == 1)
-        ptr = __real_aligned_alloc(alignToSizeT(align...), alignUp(size, alignToSizeT(align...)));
-    else
-        ptr = __real_malloc(size);
-
-    if (likely(ptr != nullptr))
-        return ptr;
-
-    /// @note no std::get_new_handler logic implemented
-    throw std::bad_alloc{};
-}
-
 inline ALWAYS_INLINE void * newNoExcept(std::size_t size) noexcept
 {
     return __real_malloc(size);

@@ -6,7 +6,7 @@
 #include <Common/CurrentMetrics.h>
 #include <Common/HashTable/HashSet.h>
 #include <Common/ProfileEvents.h>
-#include <Common/ProfilingScopedRWLock.h>
+#include <Common/ProfiledLocks.h>
 
 #include <Dictionaries/DictionarySource.h>
 #include <Dictionaries/DictionaryPipelineExecutor.h>

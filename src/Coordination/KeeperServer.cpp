@@ -1,6 +1,6 @@
 #include <Coordination/Defines.h>
 #include <Coordination/KeeperServer.h>
-#include <Common/ProfilingScopedRWLock.h>
+#include <Common/ProfiledLocks.h>
 
 #include "config.h"
 

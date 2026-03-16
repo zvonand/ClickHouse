@@ -1,5 +1,5 @@
 #include <Coordination/KeeperDispatcher.h>
-#include <Common/ProfilingScopedRWLock.h>
+#include <Common/ProfiledLocks.h>
 #include <libnuraft/async.hxx>
 
 #include <Poco/Path.h>

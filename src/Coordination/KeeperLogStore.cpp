@@ -1,5 +1,5 @@
 #include <Coordination/KeeperLogStore.h>
-#include <Common/ProfilingScopedRWLock.h>
+#include <Common/ProfiledLocks.h>
 #include <IO/CompressionMethod.h>
 #include <Disks/DiskLocal.h>
 #include <Common/logger_useful.h>

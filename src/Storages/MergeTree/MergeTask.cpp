@@ -2265,8 +2265,16 @@ public:
         /// transform instances created by `addSimpleTransform`. This ensures the
         /// `FutureSet` objects filled by `CreatingSetStep` are the same ones used
         /// during execution.
+        PreparedSets::Subqueries subqueries_for_sets;
         std::tie(shared_state, subqueries_for_sets)
             = TTLDeleteFilterTransform::build(context_, metadata_snapshot_, old_ttl_infos_, current_time_, force_);
+
+        /// Build sets eagerly here rather than via addCreatingSetsStep.
+        /// If they were built inside the merge pipeline, the subquery progress (rows read)
+        /// would be counted in merge_list_element->rows_read, causing a mismatch with
+        /// the rows_sources file size assertion in vertical merge.
+        for (auto & subquery : subqueries_for_sets)
+            subquery->buildSetInplace(context_);
     }
 
     String getName() const override { return "TTLDeleteFilter"; }
@@ -2284,7 +2292,7 @@ public:
         output_header = TTLDeleteFilterTransform::transformHeader(input_headers.front());
     }
 
-    PreparedSets::Subqueries getSubqueries() { return std::move(subqueries_for_sets); }
+    PreparedSets::Subqueries getSubqueries() { return {}; }
 
 private:
     static Traits getTraits()
@@ -2303,7 +2311,6 @@ private:
     }
 
     std::shared_ptr<const TTLDeleteFilterTransform::SharedState> shared_state;
-    PreparedSets::Subqueries subqueries_for_sets;
 };
 
 class TTLStep : public ITransformingStep

@@ -67,8 +67,8 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
     /// Cases:
     /// 1. max <= -2^53: all data in negative overflow region -> (-inf, -2^53]
     /// 2. min >= 2^53: all data in positive overflow region -> [2^53, +inf)
-    /// 3. min <= -2^53: left bound unreliable -> (-inf
-    /// 4. max >= 2^53: right bound unreliable -> +inf)
+    /// 3. min <= -2^53: left bound unreliable -> (-inf, max]
+    /// 4. max >= 2^53: right bound unreliable -> [min, +inf)
     bool min_in_negative_overflow = min_value <= -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
     bool max_in_negative_overflow = max_value <= -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
     bool min_in_positive_overflow = min_value >= StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;

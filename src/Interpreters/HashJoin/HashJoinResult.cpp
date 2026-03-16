@@ -75,13 +75,15 @@ static ColumnWithTypeAndName copyLeftKeyColumnToRight(
     return right_column;
 }
 
-static void replicateColumnLazily(ColumnPtr & column, const IColumn::Offsets & offsets, ColumnPtr & indexes)
+static void replicateColumnLazily(ColumnPtr & column, const IColumn::Offsets & offsets, OffsetsToIndexesResult & indexes_with_filter)
 {
     if (isLazyReplicationUseful(column))
     {
-        if (!indexes)
-            indexes = convertOffsetsToIndexes(offsets);
-        column = ColumnReplicated::create(column, indexes);
+        if (!indexes_with_filter.indexes)
+            indexes_with_filter = convertOffsetsToIndexes(offsets);
+        if (!indexes_with_filter.unused_rows_filter.empty())
+            column = column->filter(indexes_with_filter.unused_rows_filter, -1);
+        column = ColumnReplicated::create(column, indexes_with_filter.indexes);
     }
     else
     {
@@ -151,11 +153,11 @@ static void appendRightColumns(
         auto columns_to_replicate = block.getColumns();
         if (properties.enable_lazy_columns_replication)
         {
-            ColumnPtr indexes;
+            OffsetsToIndexesResult indexes_with_filter;
             for (size_t i = 0; i < existing_columns; ++i)
-                replicateColumnLazily(columns_to_replicate[i], offsets, indexes);
+                replicateColumnLazily(columns_to_replicate[i], offsets, indexes_with_filter);
             for (size_t pos : right_keys_to_replicate)
-                replicateColumnLazily(columns_to_replicate[pos], offsets, indexes);
+                replicateColumnLazily(columns_to_replicate[pos], offsets, indexes_with_filter);
         }
         else
         {

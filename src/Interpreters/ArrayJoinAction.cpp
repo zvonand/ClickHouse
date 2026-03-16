@@ -239,7 +239,7 @@ Block ArrayJoinResultIterator::next()
     bool is_left = array_join->is_left;
     auto cut_any_col = any_array->cut(current_row, next_row - current_row);
     const auto * cut_any_array = typeid_cast<const ColumnArray *>(cut_any_col.get());
-    ColumnPtr indexes_for_lazy_replication;
+    OffsetsToIndexesResult indexes_for_lazy_replication;
 
     for (size_t i = 0; i < num_columns; ++i)
     {
@@ -287,9 +287,11 @@ Block ArrayJoinResultIterator::next()
         {
             if (enable_lazy_columns_replication && isLazyReplicationUseful(current.column))
             {
-                if (!indexes_for_lazy_replication)
+                if (!indexes_for_lazy_replication.indexes)
                     indexes_for_lazy_replication = convertOffsetsToIndexes(cut_any_array->getOffsets());
-                current.column = ColumnReplicated::create(current.column, indexes_for_lazy_replication);
+                if (!indexes_for_lazy_replication.unused_rows_filter.empty())
+                    current.column = current.column->filter(indexes_for_lazy_replication.unused_rows_filter, -1);
+                current.column = ColumnReplicated::create(current.column, indexes_for_lazy_replication.indexes);
             }
             else
             {

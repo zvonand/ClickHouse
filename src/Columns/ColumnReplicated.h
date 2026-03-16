@@ -216,7 +216,15 @@ private:
 };
 
 ColumnPtr recursiveRemoveReplicated(const ColumnPtr & column);
-ColumnPtr convertOffsetsToIndexes(const IColumn::Offsets & offsets);
+
+struct OffsetsToIndexesResult
+{
+    ColumnPtr indexes;
+    /// Filter marking referenced rows. Empty if all rows are referenced.
+    IColumn::Filter unused_rows_filter;
+};
+
+OffsetsToIndexesResult convertOffsetsToIndexes(const IColumn::Offsets & offsets);
 
 /// For some columns like Const/LowCardinality/Int* lazy replication is useless and can lead to worse performance.
 bool isLazyReplicationUseful(const ColumnPtr & column);

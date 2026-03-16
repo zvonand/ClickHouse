@@ -26,27 +26,6 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-namespace
-{
-
-ConstStoragePtr getOwnedDataStorage(const StorageSnapshotPtr & storage_snapshot, const RangesInDataParts * parts_ranges = nullptr)
-{
-    if (storage_snapshot->data)
-    {
-        if (const auto * snapshot_data = dynamic_cast<const MergeTreeData::SnapshotData *>(storage_snapshot->data.get()))
-        {
-            if (snapshot_data->storage)
-                return snapshot_data->storage;
-        }
-    }
-
-    if (parts_ranges && !parts_ranges->empty())
-        return parts_ranges->front().data_part->storage.shared_from_this();
-
-    return storage_snapshot->storage.shared_from_this();
-}
-
-}
 
 MergeTreeReadPoolBase::MergeTreeReadPoolBase(
     RangesInDataParts && parts_,
@@ -63,7 +42,6 @@ MergeTreeReadPoolBase::MergeTreeReadPoolBase(
     const MergeTreeReadTask::BlockSizeParams & block_size_params_,
     const ContextPtr & context_)
     : WithContext(context_)
-    , owned_data_storage(getOwnedDataStorage(storage_snapshot_, &parts_))
     , storage_snapshot(storage_snapshot_)
     , parts_ranges(std::move(parts_))
     , mutations_snapshot(std::move(mutations_snapshot_))
@@ -97,7 +75,6 @@ MergeTreeReadPoolBase::MergeTreeReadPoolBase(
     const MergeTreeReadTask::BlockSizeParams & block_size_params_,
     const ContextPtr & context_)
     : WithContext(context_)
-    , owned_data_storage(getOwnedDataStorage(storage_snapshot_))
     , storage_snapshot(storage_snapshot_)
     , mutations_snapshot(std::move(mutations_snapshot_))
     , prewhere_info(prewhere_info_)

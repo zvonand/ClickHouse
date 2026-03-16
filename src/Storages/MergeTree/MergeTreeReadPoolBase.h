@@ -61,11 +61,7 @@ public:
     Block getHeader() const override { return header; }
 
 protected:
-    /// Initialized in constructor.
-    /// owned_data_storage must be declared before any member that holds DataPartPtr
-    /// (parts_ranges, per_part_infos) so it is destroyed after them. Part destructors
-    /// call clearCaches() -> storage.getContext(), which requires a live storage.
-    const ConstStoragePtr owned_data_storage;
+    /// Initialized in constructor
     const StorageSnapshotPtr storage_snapshot;
     const RangesInDataParts parts_ranges;
     const MutationsSnapshotPtr mutations_snapshot;

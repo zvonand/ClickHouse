@@ -1,2 +1,0 @@
-- `ReadFromMergeTree::initializePipeline` can replace `storage_snapshot->data` during `merge_tree_enable_remove_parts_from_snapshot_optimization`; when stripping `SnapshotData::parts`, preserve `SnapshotData::storage` or `IMergeTreeDataPart::clearCaches` can observe a dangling `data_part->storage`.
-- `MergeTreeReadPoolBase` must retain the storage referenced by `MergeTreeData::SnapshotData::storage` or the parts themselves, not blindly `storage_snapshot->storage`, because wrappers such as `StorageFromMergeTreeProjection` are not the same object as `data_part->storage`.

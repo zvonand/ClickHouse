@@ -63,7 +63,7 @@ ORDER BY tuple();
 INSERT INTO t_mixed_dep (c1, c3) VALUES ('abcdef', 'hello');
 SELECT c2, c3 FROM t_mixed_dep;
 
-ALTER TABLE t_mixed_dep UPDATE c3 = 'world' WHERE c3 = 'hello';
+ALTER TABLE t_mixed_dep UPDATE c3 = 'world' WHERE c3 = 'hello' SETTINGS send_logs_level = 'error';
 -- c2 stays stale (fedcba-hello) because it depends on EPHEMERAL c1 which cannot be re-read
 SELECT c2, c3 FROM t_mixed_dep;
 

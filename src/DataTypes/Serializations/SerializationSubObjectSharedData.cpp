@@ -33,7 +33,8 @@ UInt128 SerializationSubObjectSharedData::getHash(
     SerializationObjectSharedData::SerializationVersion serialization_version_,
     size_t buckets_,
     const String & paths_prefix_,
-    const DataTypePtr & dynamic_type_)
+    const DataTypePtr & dynamic_type_,
+    const SerializationPtr & dynamic_serialization_)
 {
     SipHash hash;
     hash.update("SubObjectSharedData");
@@ -41,6 +42,7 @@ UInt128 SerializationSubObjectSharedData::getHash(
     hash.update(buckets_);
     hash.update(paths_prefix_);
     hash.update(dynamic_type_->getName());
+    hash.update(dynamic_serialization_->getHash());
     return hash.get128();
 }
 
@@ -51,7 +53,7 @@ SerializationPtr SerializationSubObjectSharedData::create(
     const DataTypePtr & dynamic_type_,
     const SerializationPtr & dynamic_serialization_)
 {
-    return ISerialization::pooled(getHash(serialization_version_, buckets_, paths_prefix_, dynamic_type_), [&] { return new SerializationSubObjectSharedData(serialization_version_, buckets_, paths_prefix_, dynamic_type_, dynamic_serialization_); });
+    return ISerialization::pooled(getHash(serialization_version_, buckets_, paths_prefix_, dynamic_type_, dynamic_serialization_), [&] { return new SerializationSubObjectSharedData(serialization_version_, buckets_, paths_prefix_, dynamic_type_, dynamic_serialization_); });
 }
 
 struct DeserializeBinaryBulkStateSubObjectSharedData : public ISerialization::DeserializeBinaryBulkState

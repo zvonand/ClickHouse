@@ -24,12 +24,13 @@ SerializationSubObject::SerializationSubObject(
 }
 
 
-UInt128 SerializationSubObject::getHash(const String & paths_prefix_, const std::unordered_map<String, SerializationPtr> & typed_paths_serializations_, const DataTypePtr & dynamic_type_)
+UInt128 SerializationSubObject::getHash(const String & paths_prefix_, const std::unordered_map<String, SerializationPtr> & typed_paths_serializations_, const DataTypePtr & dynamic_type_, const SerializationPtr & dynamic_serialization_)
 {
     SipHash hash;
     hash.update("SubObject");
     hash.update(paths_prefix_);
     hash.update(dynamic_type_->getName());
+    hash.update(dynamic_serialization_->getHash());
     std::vector<String> sorted_paths;
     sorted_paths.reserve(typed_paths_serializations_.size());
     for (const auto & [path, _] : typed_paths_serializations_)
@@ -50,11 +51,15 @@ SerializationPtr SerializationSubObject::create(const String & paths_prefix_, co
         if (!item->supportsPooling())
             return std::shared_ptr<ISerialization>(new SerializationSubObject(paths_prefix_, typed_paths_serializations_, dynamic_type, dynamic_serialization));
     }
-    return ISerialization::pooled(getHash(paths_prefix_, typed_paths_serializations_, dynamic_type), [&] { return new SerializationSubObject(paths_prefix_, typed_paths_serializations_, dynamic_type, dynamic_serialization); });
+    if (!dynamic_serialization->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationSubObject(paths_prefix_, typed_paths_serializations_, dynamic_type, dynamic_serialization));
+    return ISerialization::pooled(getHash(paths_prefix_, typed_paths_serializations_, dynamic_type, dynamic_serialization), [&] { return new SerializationSubObject(paths_prefix_, typed_paths_serializations_, dynamic_type, dynamic_serialization); });
 }
 
 bool SerializationSubObject::supportsPooling() const
 {
+    if (!dynamic_serialization->supportsPooling())
+        return false;
     for (const auto & [_, item] : typed_paths_serializations)
     {
         if (!item->supportsPooling())

@@ -1,6 +1,4 @@
 #include <cassert>
-#include <cstring>
-#include <netdb.h>
 #include <new>
 #include "config.h"
 
@@ -257,32 +255,6 @@ void operator delete[](void * ptr, std::size_t size, std::align_val_t align) noe
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wreserved-identifier"
 
-namespace
-{
-
-#if !defined(SANITIZER) && !defined(SANITIZE_COVERAGE) && !defined(USE_MUSL)
-
-size_t estimateGetAddrInfoSize(const struct addrinfo * result)
-{
-    size_t total_size = 0;
-    const auto * current = result;
-    while (current)
-    {
-        total_size += sizeof(struct addrinfo);
-        total_size += current->ai_addrlen;
-        if (current->ai_canonname)
-            total_size += std::strlen(current->ai_canonname) + 1;
-
-        current = current->ai_next;
-    }
-
-    return total_size;
-}
-
-#endif
-
-}
-
 extern "C" void * __wrap_malloc(size_t size) // NOLINT
 {
     AllocationTrace trace;
@@ -434,80 +406,5 @@ extern "C" void * __wrap_pvalloc(size_t size) // NOLINT
     return res;
 }
 #endif
-
-#if !defined(SANITIZER) && !defined(SANITIZE_COVERAGE)
-
-/// On musl (static libc), internal malloc/free calls from strdup, strndup,
-/// getaddrinfo, and freeaddrinfo are intercepted by `__wrap_malloc`/`__wrap_free`,
-/// so manual tracking here would double-count.
-#if !defined(USE_MUSL)
-extern "C" char * __wrap_strdup(const char * str) // NOLINT
-{
-    char * res = __real_strdup(str);
-    if (unlikely(!res))
-        return nullptr;
-
-    [[maybe_unused]] MemoryTrackerDebugBlockerInThread blocker;
-#if USE_JEMALLOC
-    size_t actual_size = sallocx(res, 0);
-#elif defined(_GNU_SOURCE)
-    size_t actual_size = malloc_usable_size(res);
-#else
-    size_t actual_size = strlen(res) + 1;
-#endif
-    AllocationTrace trace = CurrentMemoryTracker::allocNoThrow(actual_size);
-    trace.onAlloc(res, actual_size);
-    return res;
-}
-
-extern "C" char * __wrap_strndup(const char * str, size_t size) // NOLINT
-{
-    char * res = __real_strndup(str, size);
-    if (unlikely(!res))
-        return nullptr;
-
-    [[maybe_unused]] MemoryTrackerDebugBlockerInThread blocker;
-#if USE_JEMALLOC
-    size_t actual_size = sallocx(res, 0);
-#elif defined(_GNU_SOURCE)
-    size_t actual_size = malloc_usable_size(res);
-#else
-    size_t actual_size = strnlen(res, size) + 1;
-#endif
-    AllocationTrace trace = CurrentMemoryTracker::allocNoThrow(actual_size);
-    trace.onAlloc(res, actual_size);
-    return res;
-}
-
-extern "C" int __wrap_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result) // NOLINT
-{
-    int res = __real_getaddrinfo(node, service, hints, result);
-
-    if (res != 0 || !result || !*result)
-        return res;
-
-    size_t tracked_size = estimateGetAddrInfoSize(*result);
-    AllocationTrace trace = CurrentMemoryTracker::allocNoThrow(static_cast<Int64>(tracked_size));
-    trace.onAlloc(*result, tracked_size);
-
-    return res;
-}
-
-extern "C" void __wrap_freeaddrinfo(struct addrinfo * result) // NOLINT
-{
-    size_t tracked_size = 0;
-    if (result)
-        tracked_size = estimateGetAddrInfoSize(result);
-
-    if (tracked_size)
-    {
-        auto trace = CurrentMemoryTracker::free(static_cast<Int64>(tracked_size));
-        trace.onFree(result, tracked_size);
-    }
-
-    __real_freeaddrinfo(result);
-}
-#endif // !defined(USE_MUSL)
-#endif // !defined(SANITIZER) && !defined(SANITIZE_COVERAGE)
 
 #pragma clang diagnostic pop

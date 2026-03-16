@@ -26,11 +26,6 @@
 #define __real_pvalloc(size) ::pvalloc(size)
 #endif
 
-#define __real_getaddrinfo(node, service, hints, result) ::getaddrinfo(node, service, hints, result)
-#define __real_freeaddrinfo(result) ::freeaddrinfo(result)
-#define __real_strdup(str) ::strdup(str)
-#define __real_strndup(str, size) ::strndup(str, size)
-
 #else
 
 extern "C" void * __real_malloc(size_t size);
@@ -43,14 +38,6 @@ extern "C" void * __real_memalign(size_t alignment, size_t size);
 extern "C" void   __real_free(void * ptr);
 #if !defined(USE_MUSL) && defined(OS_LINUX)
 extern "C" void * __real_pvalloc(size_t size);
-#endif
-
-#if !defined(USE_MUSL)
-extern "C" char * __real_strdup(const char * str);
-extern "C" char * __real_strndup(const char * str, size_t size);
-
-extern "C" int __real_getaddrinfo(const char * node, const char * service, const struct addrinfo * hints, struct addrinfo ** result); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
-extern "C" void __real_freeaddrinfo(struct addrinfo * result); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #endif
 
 #endif

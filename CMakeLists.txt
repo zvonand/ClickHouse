@@ -516,34 +516,26 @@ macro (clickhouse_add_executable target)
         add_executable (${ARGV} $<TARGET_OBJECTS:clickhouse_malloc>)
     endif ()
 
-    if (NOT (OS_DARWIN OR OS_FREEBSD OR OS_SUNOS))
-        # Wrap malloc/free and related C-style functions to inject memory tracking.
-        # Sanitizers have their own interception for malloc/free, so keep these disabled there.
-        if (NOT (SANITIZE OR SANITIZE_COVERAGE))
+    # Wrap the malloc/free and other C-style functions with our own ones
+    # to inject memory tracking mechanism into them.
+    # Sanitizers have their own way of intercepting the
+    # allocations and deallocations, so we skip this step for them.
+    if (NOT (SANITIZE OR SANITIZE_COVERAGE OR OS_DARWIN OR OS_FREEBSD OR OS_SUNOS))
+        target_link_options(${target} PRIVATE
+            "LINKER:--wrap=malloc"
+            "LINKER:--wrap=free"
+            "LINKER:--wrap=calloc"
+            "LINKER:--wrap=realloc"
+            "LINKER:--wrap=aligned_alloc"
+            "LINKER:--wrap=posix_memalign"
+            "LINKER:--wrap=valloc"
+            "LINKER:--wrap=memalign"
+            "LINKER:--wrap=reallocarray"
+        )
+        if (NOT USE_MUSL)
             target_link_options(${target} PRIVATE
-                "LINKER:--wrap=malloc"
-                "LINKER:--wrap=free"
-                "LINKER:--wrap=calloc"
-                "LINKER:--wrap=realloc"
-                "LINKER:--wrap=aligned_alloc"
-                "LINKER:--wrap=posix_memalign"
-                "LINKER:--wrap=valloc"
-                "LINKER:--wrap=memalign"
-                "LINKER:--wrap=reallocarray"
+                "LINKER:--wrap=pvalloc"
             )
-            if (NOT USE_MUSL)
-                # On musl (static libc), internal malloc/free calls from strdup,
-                # strndup, getaddrinfo, and freeaddrinfo are intercepted by
-                # __wrap_malloc/__wrap_free, so wrapping them would double-count.
-                # pvalloc is also absent from musl.
-                target_link_options(${target} PRIVATE
-                    "LINKER:--wrap=pvalloc"
-                    "LINKER:--wrap=strdup"
-                    "LINKER:--wrap=strndup"
-                    "LINKER:--wrap=getaddrinfo"
-                    "LINKER:--wrap=freeaddrinfo"
-                )
-            endif()
         endif()
     endif()
 

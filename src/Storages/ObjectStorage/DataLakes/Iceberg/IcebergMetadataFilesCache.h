@@ -199,7 +199,7 @@ public:
         ///       (c) single value is referenced using two keys
         ///       For now the potential impact of these nuances is considered low for the potential gain - in the worst case, we'll call remote catalog more than once, which is still better than now
         /// TODO:
-        ///       (a) and (c) will be solved by moving to AsyncIterator for Iceberg - the loading process should be decoupled, refactored and broken down into independed pieces;
+        ///       (a) and (c) will be solved by moving to AsyncIterator for Iceberg - the loading process should be decoupled, refactored and broken down into independent pieces;
         ///                   and later by refactoring caching to create a new logical layer of snapshot caching
         ///       (b) #97410 will address several design flaws of CacheBase + will introduce custom predicates for get/set operations
 

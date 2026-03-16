@@ -478,6 +478,8 @@ public:
     bool is_row = true;
     uint32_t policy_id = 0;
     uint32_t table_id = 0;
+    /// USING predicate stored at creation time; absent means the policy allows all rows.
+    std::optional<WhereStatement> where_expr;
 
     SQLPolicy() = default;
     SQLPolicy(const SQLPolicy & other)
@@ -486,6 +488,7 @@ public:
         this->is_row = other.is_row;
         this->policy_id = other.policy_id;
         this->table_id = other.table_id;
+        this->where_expr = other.where_expr;
     }
     SQLPolicy & operator=(const SQLPolicy & other) = default;
 

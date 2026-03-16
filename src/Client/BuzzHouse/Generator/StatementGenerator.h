@@ -235,6 +235,7 @@ private:
     std::vector<std::reference_wrapper<SQLDictionary>> filtered_dictionaries;
     std::vector<std::reference_wrapper<std::shared_ptr<SQLDatabase>>> filtered_databases;
     std::vector<std::reference_wrapper<SQLFunction>> filtered_functions;
+    std::vector<std::reference_wrapper<SQLPolicy>> filtered_policies;
     std::vector<std::reference_wrapper<const SQLRelation>> filtered_relations;
 
     std::unordered_map<uint32_t, std::unordered_map<String, SQLRelation>> ctes;
@@ -395,6 +396,10 @@ private:
         {
             return functions;
         }
+        else if constexpr (std::is_same_v<T, SQLPolicy>)
+        {
+            return policies;
+        }
         else
         {
             return databases;
@@ -449,6 +454,10 @@ private:
         else if constexpr (std::is_same_v<T, SQLFunction>)
         {
             return filtered_functions;
+        }
+        else if constexpr (std::is_same_v<T, SQLPolicy>)
+        {
+            return filtered_policies;
         }
         else
         {
@@ -539,6 +548,7 @@ private:
     void generateNextCreateView(RandomGenerator & rg, CreateView * cv);
     void generateNextCreateDictionary(RandomGenerator & rg, CreateDictionary * cd);
     void generateNextCreatePolicy(RandomGenerator & rg, bool row, CreatePolicy * crp);
+    const SQLTable & lookupTable(uint32_t table_id) const { return tables.at(table_id); }
     void generateNextDrop(RandomGenerator & rg, Drop * dp);
     void generateInsertToTable(RandomGenerator & rg, const SQLTable & t, bool in_parallel, std::optional<uint64_t> rows, Insert * ins);
     void generateNextInsert(RandomGenerator & rg, bool in_parallel, Insert * ins);
@@ -841,6 +851,18 @@ public:
         = [](const SQLTable & t) { return t.isAttached() && !t.isNotTruncableEngine() && t.hasClickHousePeer(); };
     const std::function<bool(const SQLTable &)> attached_tables_for_external_call
         = [](const SQLTable & t) { return t.isAttached() && t.integration == IntegrationCall::Dolor; };
+
+    /// Row policy oracle: any attached, deterministic, non-GenerateRandom table
+    const std::function<bool(const SQLTable &)> attached_tables_for_row_policy_oracle
+        = [](const SQLTable & t) { return t.isAttached() && t.is_deterministic; };
+    /// Row policy oracle: existing row policies that have a stored USING predicate and sit on a suitable table
+    const std::function<bool(const SQLPolicy &)> row_policies_for_oracle = [this](const SQLPolicy & p) -> bool
+    {
+        if (!p.is_row || !p.where_expr.has_value())
+            return false;
+        const auto it = tables.find(p.table_id);
+        return it != tables.end() && attached_tables_for_row_policy_oracle(it->second);
+    };
 
     const std::function<bool(const std::shared_ptr<SQLDatabase> &)> detached_databases
         = [](const std::shared_ptr<SQLDatabase> & d) { return d->isDettached(); };

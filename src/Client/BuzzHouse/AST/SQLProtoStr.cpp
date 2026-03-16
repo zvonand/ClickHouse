@@ -5933,6 +5933,12 @@ CONV_FN(SQLQueryInner, query)
 
 CONV_FN(ExplainQuery, explain)
 {
+    if (explain.has_execute_as())
+    {
+        ret += "EXECUTE AS '";
+        ret += explain.execute_as();
+        ret += "' ";
+    }
     if (explain.is_explain())
     {
         ret += "EXPLAIN ";

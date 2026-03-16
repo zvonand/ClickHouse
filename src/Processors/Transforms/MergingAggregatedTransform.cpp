@@ -121,8 +121,8 @@ void MergingAggregatedTransform::addBlock(Block block)
         bool is_overflows = block.info.is_overflows;
         if (grouping_sets[0].reordering_key_columns_actions)
             grouping_sets[0].reordering_key_columns_actions->execute(block);
-        grouping_sets[0].bucket_to_chunks[bucket].emplace_back(Aggregator::AggregatedChunk{
-            Chunk(block.getColumns(), block.rows()), bucket, is_overflows});
+        grouping_sets[0].bucket_to_chunks[bucket].emplace_back(
+            Chunk(block.getColumns(), block.rows()), bucket, is_overflows);
         return;
     }
 
@@ -170,8 +170,8 @@ void MergingAggregatedTransform::addBlock(Block block)
         auto bucket = block.info.bucket_num;
         bool is_overflows = block.info.is_overflows;
         grouping_sets[last_group].reordering_key_columns_actions->execute(block);
-        grouping_sets[last_group].bucket_to_chunks[bucket].emplace_back(Aggregator::AggregatedChunk{
-            Chunk(block.getColumns(), block.rows()), bucket, is_overflows});
+        grouping_sets[last_group].bucket_to_chunks[bucket].emplace_back(
+            Chunk(block.getColumns(), block.rows()), bucket, is_overflows);
         return;
     }
 
@@ -197,8 +197,8 @@ void MergingAggregatedTransform::addBlock(Block block)
         auto & split_block = split_blocks[group];
         split_block.info = block.info;
         grouping_sets[group].reordering_key_columns_actions->execute(split_block);
-        grouping_sets[group].bucket_to_chunks[block.info.bucket_num].emplace_back(Aggregator::AggregatedChunk{
-            Chunk(split_block.getColumns(), split_block.rows()), block.info.bucket_num, block.info.is_overflows});
+        grouping_sets[group].bucket_to_chunks[block.info.bucket_num].emplace_back(
+            Chunk(split_block.getColumns(), split_block.rows()), block.info.bucket_num, block.info.is_overflows);
     }
 }
 

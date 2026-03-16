@@ -359,18 +359,15 @@ void MergingAggregatedBucketTransform::transform(Chunk & chunk)
         if (auto agg_info = cur_chunk.getChunkInfos().get<AggregatedChunkInfo>())
         {
             auto num_rows = cur_chunk.getNumRows();
-            chunks_list.emplace_back(Aggregator::AggregatedChunk{
+            chunks_list.emplace_back(
                 Chunk(cur_chunk.detachColumns(), num_rows),
                 agg_info->bucket_num,
-                agg_info->is_overflows});
+                agg_info->is_overflows);
         }
         else if (cur_chunk.getChunkInfos().get<ChunkInfoWithAllocatedBytes>())
         {
             auto num_rows = cur_chunk.getNumRows();
-            chunks_list.emplace_back(Aggregator::AggregatedChunk{
-                Chunk(cur_chunk.detachColumns(), num_rows),
-                -1,
-                false});
+            chunks_list.emplace_back(Chunk(cur_chunk.detachColumns(), num_rows));
         }
         else
         {

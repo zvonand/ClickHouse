@@ -55,7 +55,7 @@ Chunk GroupByModifierTransform::merge(Chunks && chunks, bool is_input, bool fina
 
     Aggregator::AggregatedChunks agg_chunks;
     for (auto & chunk : chunks)
-        agg_chunks.emplace_back(Aggregator::AggregatedChunk{std::move(chunk)});
+        agg_chunks.emplace_back(std::move(chunk));
 
     auto & aggregator = is_input ? params->aggregator : *output_aggregator;
     auto result = aggregator.mergeBlocks(agg_chunks, final, is_cancelled);

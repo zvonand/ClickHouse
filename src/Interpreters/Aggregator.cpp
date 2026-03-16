@@ -2773,7 +2773,7 @@ Aggregator::prepareChunkAndFillSingleLevel(AggregatedDataVariants & data_variant
     {
         AggregatedChunks chunks;
         for (auto & chunk : res_variant)
-            chunks.emplace_back(AggregatedChunk{std::move(chunk)});
+            chunks.emplace_back(std::move(chunk));
         return chunks;
     }
 }

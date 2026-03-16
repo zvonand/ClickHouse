@@ -723,7 +723,8 @@ def test_dynamic_disk_security_settings(start_cluster):
                     access_key_id = 'minio',
                     secret_access_key = '{minio_secret_key}'),
                 include = 'disk_encrypted_keys',
-                path = '/encrypted_node5/')
+                algorithm = 'AES_256_CTR',
+                path = 'encrypted_node5/')
             """,
             user="privileged_user",
         )

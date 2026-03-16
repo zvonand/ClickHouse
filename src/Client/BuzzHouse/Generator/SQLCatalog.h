@@ -480,6 +480,8 @@ public:
     uint32_t table_id = 0;
     /// USING predicate stored at creation time; absent means the policy allows all rows.
     std::optional<WhereStatement> where_expr;
+    /// True when the policy was created with `TO buzzhouse_oracle_role` — eligible for the row policy oracle.
+    bool targets_oracle_role = false;
 
     SQLPolicy() = default;
     SQLPolicy(const SQLPolicy & other)
@@ -489,6 +491,7 @@ public:
         this->policy_id = other.policy_id;
         this->table_id = other.table_id;
         this->where_expr = other.where_expr;
+        this->targets_oracle_role = other.targets_oracle_role;
     }
     SQLPolicy & operator=(const SQLPolicy & other) = default;
 

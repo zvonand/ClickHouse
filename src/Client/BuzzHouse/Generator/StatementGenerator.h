@@ -853,7 +853,7 @@ public:
     const std::function<bool(const SQLTable &)> attached_tables_for_external_call
         = [](const SQLTable & t) { return t.isAttached() && t.integration == IntegrationCall::Dolor; };
     const std::function<bool(const SQLPolicy &)> row_policies_for_oracle
-        = [](const SQLPolicy & p) -> bool { return p.is_row && p.where_expr.has_value(); };
+        = [](const SQLPolicy & p) -> bool { return p.is_row && p.where_expr.has_value() && p.targets_oracle_role; };
 
     const std::function<bool(const std::shared_ptr<SQLDatabase> &)> detached_databases
         = [](const std::shared_ptr<SQLDatabase> & d) { return d->isDettached(); };

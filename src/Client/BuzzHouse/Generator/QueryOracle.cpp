@@ -372,7 +372,7 @@ void QueryOracle::generateRowPolicyOracleQueries(RandomGenerator & rg, Statement
     sq1.CopyFrom(sq2);
     {
         ExplainQuery * eq1 = sq1.mutable_single_query()->mutable_explain();
-        eq1->set_execute_as(QueryOracle::oracleUser);
+        eq1->set_execute_as(FuzzConfig::oracleUser);
         eq1->mutable_inner_query()->mutable_select()->mutable_sel()->mutable_select_core()->clear_where();
     }
 

@@ -2974,6 +2974,8 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
     const bool replace = !policies.empty() && rg.nextMediumNumber() < 16;
 
     next.is_row = row;
+    /// ~50% of row policies are tagged for the oracle role so the row policy oracle has candidates to pick.
+    next.targets_oracle_role = fc.allow_query_oracles && rg.nextBool();
     if (replace)
     {
         /// Let it mix row policies with masking policies
@@ -3022,11 +3024,16 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
             m->set_priority(static_cast<int32_t>(rg.randomInt<uint32_t>(0, 100)));
         }
     }
-    /// USING filter: present ~70% of the time; absent means allow/deny all rows
-    if (rg.nextSmallNumber() < 8)
+    /// USING filter: present ~70% of the time; absent means allow/deny all rows.
+    /// For oracle policies the filter is always present (oracle needs a predicate to test).
+    if (next.targets_oracle_role || rg.nextSmallNumber() < 8)
     {
         generateUptDelWhere(rg, t, crp->mutable_where_expr()->mutable_expr()->mutable_expr());
         next.where_expr = crp->where_expr();
+    }
+    if (next.targets_oracle_role)
+    {
+        crp->set_role(FuzzConfig::oracleRole);
     }
     this->staged_policies[next.policy_id] = next;
 }

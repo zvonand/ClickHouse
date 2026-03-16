@@ -280,6 +280,9 @@ private:
     DB::ClientBase * cb = nullptr;
 
 public:
+    static const constexpr String oracleUser = "buzzhouse_oracle_user";
+    static const constexpr String oracleRole = "buzzhouse_oracle_role";
+
     LoggerPtr log;
     std::ofstream outf;
     DB::Strings collations;

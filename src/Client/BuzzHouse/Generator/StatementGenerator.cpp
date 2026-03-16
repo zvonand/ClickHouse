@@ -2274,6 +2274,10 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
                       cmp->set_priority(static_cast<int32_t>(rg.randomInt<uint32_t>(0, 100)));
                   }
               }
+              if (rp.targets_oracle_role)
+              {
+                  apc->set_role(FuzzConfig::oracleRole);
+              }
               if (rg.nextSmallNumber() < 3)
               {
                   SQLPolicy renamed(rp);

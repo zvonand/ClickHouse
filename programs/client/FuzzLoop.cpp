@@ -625,16 +625,24 @@ bool Client::buzzHouse()
 
         if (fuzz_config->allow_query_oracles)
         {
-            /// Create a dedicated oracle user for the row policy oracle.
-            /// The oracle uses "EXECUTE AS <oracleUser>" to run queries under a restricted
-            /// session where row policies assigned to this user are active.
-            /// Note: EXECUTE AS works without an explicit IMPERSONATE grant when
-            /// access_control_improvements.allow_impersonate_user = true (the default).
+            /// Create a dedicated oracle user and role for the row policy oracle.
+            /// Row policies are created with `TO <oracleRole>` so they apply only to members
+            /// of the role and do not affect the default admin session used for sq2.
+            /// The oracle uses "EXECUTE AS <oracleUser>" (allowed by the default
+            /// access_control_improvements.allow_impersonate_user = true) to run sq1 with
+            /// the row policy active.
             const auto rpu = processTextAsSingleQuery(
-                "CREATE USER IF NOT EXISTS " + BuzzHouse::QueryOracle::oracleUser + " IDENTIFIED WITH no_password");
+                "CREATE USER IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleUser + " IDENTIFIED WITH no_password");
             UNUSED(rpu);
-            const auto rpg = processTextAsSingleQuery("GRANT SELECT ON *.* TO " + BuzzHouse::QueryOracle::oracleUser);
+            const auto rpr = processTextAsSingleQuery(
+                "CREATE ROLE IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleRole);
+            UNUSED(rpr);
+            const auto rpg = processTextAsSingleQuery(
+                "GRANT SELECT ON *.* TO " + BuzzHouse::FuzzConfig::oracleRole);
             UNUSED(rpg);
+            const auto rpgr = processTextAsSingleQuery(
+                "GRANT " + BuzzHouse::FuzzConfig::oracleRole + " TO " + BuzzHouse::FuzzConfig::oracleUser);
+            UNUSED(rpgr);
         }
 
         fuzz_config->outf << "--Session seed: " << rg.getSeed() << std::endl;

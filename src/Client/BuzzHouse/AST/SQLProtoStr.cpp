@@ -4514,18 +4514,17 @@ CONV_FN(RemoveColumnSetting, rcp)
 
 static void RowPolicyClausesToString(
     String & ret,
-    const bool has_is_restrictive,
-    const bool is_restrictive,
-    const bool for_select,
+    const CreateRowPolicy & crp,
     const bool has_where_expr,
-    const WhereStatement & where_expr)
+    const WhereStatement & where_expr,
+    const std::optional<String> & role)
 {
-    if (has_is_restrictive)
+    if (crp.has_is_restrictive())
     {
         ret += " AS ";
-        ret += is_restrictive ? "RESTRICTIVE" : "PERMISSIVE";
+        ret += crp.is_restrictive() ? "RESTRICTIVE" : "PERMISSIVE";
     }
-    if (for_select)
+    if (crp.for_select())
     {
         ret += " FOR SELECT";
     }
@@ -4534,10 +4533,20 @@ static void RowPolicyClausesToString(
         ret += " USING ";
         WhereStatementToString(ret, where_expr);
     }
+    if (role.has_value())
+    {
+        ret += " TO '";
+        ret += role.value();
+        ret += "'";
+    }
 }
 
 static void MaskingPolicyClausesToString(
-    String & ret, const CreateMaskingPolicy & cmp, const bool has_where_expr, const WhereStatement & where_expr, const bool to_all)
+    String & ret,
+    const CreateMaskingPolicy & cmp,
+    const bool has_where_expr,
+    const WhereStatement & where_expr,
+    const std::optional<String> & role)
 {
     if (cmp.has_first_update())
     {
@@ -4554,9 +4563,11 @@ static void MaskingPolicyClausesToString(
         ret += " WHERE ";
         WhereStatementToString(ret, where_expr);
     }
-    if (to_all)
+    if (role.has_value())
     {
-        ret += " TO ALL";
+        ret += " TO '";
+        ret += role.value();
+        ret += "'";
     }
     if (cmp.has_priority())
     {
@@ -4855,6 +4866,7 @@ CONV_FN(AlterItem, alter)
             break;
         case AlterType::kAlterPolicy: {
             const AlterPolicyContent & apc = alter.alter_policy();
+            std::optional<String> role = apc.has_role() ? std::make_optional(apc.role()) : std::nullopt;
 
             ret += "ON ";
             ExprSchemaTableToString(ret, apc.target());
@@ -4865,14 +4877,11 @@ CONV_FN(AlterItem, alter)
             }
             if (apc.has_masking())
             {
-                MaskingPolicyClausesToString(ret, apc.masking(), apc.has_where_expr(), apc.where_expr(), false);
+                MaskingPolicyClausesToString(ret, apc.masking(), apc.has_where_expr(), apc.where_expr(), role);
             }
             else
             {
-                const CreateRowPolicy & crp = apc.row();
-
-                RowPolicyClausesToString(
-                    ret, crp.has_is_restrictive(), crp.is_restrictive(), crp.for_select(), apc.has_where_expr(), apc.where_expr());
+                RowPolicyClausesToString(ret, apc.row(), apc.has_where_expr(), apc.where_expr(), role);
             }
         }
         break;
@@ -5819,6 +5828,7 @@ CONV_FN(ShowStatement, sh)
 CONV_FN(CreatePolicy, cp)
 {
     const bool is_masking = cp.has_masking();
+    std::optional<String> role = cp.has_role() ? std::make_optional(cp.role()) : std::nullopt;
 
     ret += "CREATE ";
     ret += is_masking ? "MASKING" : "ROW";
@@ -5840,14 +5850,11 @@ CONV_FN(CreatePolicy, cp)
     ExprSchemaTableToString(ret, cp.target());
     if (is_masking)
     {
-        MaskingPolicyClausesToString(ret, cp.masking(), cp.has_where_expr(), cp.where_expr(), true);
+        MaskingPolicyClausesToString(ret, cp.masking(), cp.has_where_expr(), cp.where_expr(), role);
     }
     else if (cp.has_row())
     {
-        const CreateRowPolicy & crp = cp.row();
-
-        RowPolicyClausesToString(
-            ret, crp.has_is_restrictive(), crp.is_restrictive(), crp.for_select(), cp.has_where_expr(), cp.where_expr());
+        RowPolicyClausesToString(ret, cp.row(), cp.has_where_expr(), cp.where_expr(), role);
     }
 }
 

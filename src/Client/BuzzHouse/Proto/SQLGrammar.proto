@@ -4010,11 +4010,12 @@ message CreateMaskingPolicy {
 message AlterPolicyContent {
     required ExprSchemaTable target = 1;
     optional WhereStatement where_expr = 2;
+    optional string role = 3;
     oneof create_policy_oneof {
-        CreateRowPolicy row = 3;
-        CreateMaskingPolicy masking = 4;
+        CreateRowPolicy row = 4;
+        CreateMaskingPolicy masking = 5;
     }
-    optional Policy rename_to = 5;
+    optional Policy rename_to = 6;
 }
 
 message AlterItem {
@@ -4391,9 +4392,10 @@ message CreatePolicy {
     required ExprSchemaTable target = 4;
     optional Cluster cluster = 5;
     optional WhereStatement where_expr = 6;
+    optional string role = 7;
     oneof create_policy_oneof {
-        CreateRowPolicy row = 7;
-        CreateMaskingPolicy masking = 8;
+        CreateRowPolicy row = 8;
+        CreateMaskingPolicy masking = 9;
     }
 }
 

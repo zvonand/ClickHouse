@@ -62,8 +62,6 @@ private:
     generateImportQuery(RandomGenerator & rg, StatementGenerator & gen, const SQLTable & t, const SQLQuery & sq2, SQLQuery & sq4) const;
 
 public:
-    static const constexpr String oracleUser = "buzzhouse_oracle_user";
-
     explicit QueryOracle(FuzzConfig & ffc)
         : fc(ffc)
         , qcfile(ffc.client_file_path / "query.data")

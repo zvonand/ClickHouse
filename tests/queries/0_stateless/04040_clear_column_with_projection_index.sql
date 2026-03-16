@@ -49,8 +49,14 @@ ALTER TABLE t0 CLEAR COLUMN c1;
 INSERT INTO TABLE t0 (c0, c1) SELECT c0, c1
 FROM generateRandom('c0 Int, c1 Array(Nullable(String))', 2462998867452601120, 64, 10) LIMIT 100;
 
+-- Read c1 before merge to verify per-part projection data is consistent.
+SELECT c1 FROM t0 ORDER BY c1 FORMAT Null;
+
 -- Force merge to trigger projection merge with mixed data.
 OPTIMIZE TABLE t0 FINAL;
+
+-- Read c1 after merge to verify merged projection data is consistent.
+SELECT c1 FROM t0 ORDER BY c1 FORMAT Null;
 
 SELECT count() FROM t0;
 

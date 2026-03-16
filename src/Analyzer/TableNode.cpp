@@ -152,14 +152,12 @@ QueryTreeNodePtr TableNode::cloneImpl() const
     result_table_node->temporary_table_name = temporary_table_name;
 
     result_table_node->materialized_cte = materialized_cte;
-    result_table_node->children[materialized_cte_subquery_index] = getMaterializedCTESubquery();
 
     return result_table_node;
 }
 
 ASTPtr TableNode::toASTImpl(const ConvertToASTOptions & /* options */) const
 {
-    ///TODO: handle MATERIALIZED CTE subquery
     return toASTIdentifier();
 }
 

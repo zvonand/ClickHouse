@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Analyzer/IQueryTreeNode.h>
 #include <Core/QueryProcessingStage.h>
 #include <Parsers/IAST_fwd.h>
 #include <Processors/QueryPlan/QueryPlan.h>
@@ -8,6 +9,7 @@ namespace DB
 {
 
 std::unique_ptr<QueryPlan> createLocalPlan(
+    const QueryTreeNodePtr & query_tree,
     const ASTPtr & query_ast,
     const Block & header,
     ContextPtr context,

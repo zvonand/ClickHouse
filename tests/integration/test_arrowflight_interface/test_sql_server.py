@@ -820,9 +820,9 @@ def test_statement_ingest_temporary_not_supported():
 
     descriptor = flight_descriptor(cmd)
     schema = pa.schema([("id", pa.uint32())])
-    writer, reader = client.client.do_put(descriptor, schema, client._flight_call_options())
-    batch = pa.record_batch([pa.array([1], type=pa.uint32())], schema=schema)
-    writer.write_batch(batch)
 
     with pytest.raises(pa.lib.ArrowNotImplementedError, match="Implicit temporary tables are not supported"):
+        writer, reader = client.client.do_put(descriptor, schema, client._flight_call_options())
+        batch = pa.record_batch([pa.array([1], type=pa.uint32())], schema=schema)
+        writer.write_batch(batch)
         writer.close()

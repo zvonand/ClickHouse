@@ -39,6 +39,7 @@ namespace ErrorCodes
     extern const int CANNOT_PARSE_INPUT_ASSERTION_FAILED;
     extern const int UNKNOWN_SETTING;
     extern const int SYNTAX_ERROR;
+    extern const int QUERY_WAS_CANCELLED;
 }
 
 namespace Setting
@@ -502,7 +503,11 @@ public:
             if (!previous_info->next_poll_descriptor)
                 throw Exception(ErrorCodes::LOGICAL_ERROR, "Adding a poll descriptor while the previous poll descriptor is final");
             poll_descriptor = *previous_info->next_poll_descriptor;
-            query_id =  getQueryIdByFlightDescriptor(previous_info->poll_descriptor);
+            query_id = getQueryIdByFlightDescriptor(previous_info->poll_descriptor);
+            if (!query_id)
+                throw Exception(ErrorCodes::QUERY_WAS_CANCELLED,
+                    "Cannot create continuation poll descriptor: previous poll descriptor {} was expired or cancelled",
+                    previous_info->poll_descriptor);
         }
         else
         {

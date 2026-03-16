@@ -284,6 +284,16 @@ MergeTreeData::DataPart::Checksums Service::sendPartFromDisk(
         }
     }
 
+    /// Handle unknown projections: .proj entries in part->checksums that are
+    /// not in getProjectionParts() (e.g. a projection was dropped while the
+    /// part was detached, then re-attached).  Copy their stored checksums to
+    /// data_checksums so that checkEqual below does not fail.
+    for (const auto & [name, checksum] : part->checksums.files)
+    {
+        if (name.ends_with(".proj") && !data_checksums.has(name))
+            data_checksums.addFile(name, checksum.file_size, checksum.file_hash);
+    }
+
     writeBinary(replicated_description.files.size(), out);
     for (const auto & [file_name, desc] : replicated_description.files)
     {

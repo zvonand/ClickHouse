@@ -275,11 +275,12 @@ Block getUpdatedHeader(const PatchesToApply & patches, const NameSet & updated_c
                 header.erase(column.name);
         }
 
-        /// Sort columns by name to ensure deterministic order for cross-patch comparison.
-        /// Different patch parts (e.g., Merge vs Join mode) may read columns in different
-        /// orders due to non-deterministic NameSet iteration in addPatchPartsColumns.
-        /// The downstream consumers (createPatchForColumn, applyPatchesToBlockRaw) use
-        /// name-based lookups, so column order does not affect correctness.
+        /// Sort columns by name so that assertCompatibleHeader below compares
+        /// matching columns at the same positions. Patch blocks may arrive with
+        /// different column orderings because addPatchPartsColumns collects names
+        /// from a NameSet (unordered_set) whose iteration order is non-deterministic.
+        /// Downstream consumers use name-based lookups, so order does not matter
+        /// for correctness — only for this positional compatibility check.
         headers.push_back(header.sortColumns());
     }
 

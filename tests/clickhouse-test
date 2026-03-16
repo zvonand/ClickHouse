@@ -1325,6 +1325,7 @@ class SettingsRandomizer:
     def get_random_settings(args, tags):
         random_settings = {}
         is_debug = BuildFlags.DEBUG in args.build_flags
+        is_coverage = BuildFlags.SANITIZE_COVERAGE in args.build_flags
         for setting, generator in SettingsRandomizer.settings.items():
             if (
                 is_debug
@@ -1338,6 +1339,19 @@ class SettingsRandomizer:
         for setting, other_setting in SettingsRandomizer.dependent_settings.items():
             random_settings[setting] = random_settings[other_setting]
         SettingsRandomizer.adjust_settings_for_autopr(args, tags, random_settings)
+        if is_coverage:
+            # JIT-compiled code calls instrumented server functions whose return addresses
+            # land in anonymous mmap (JIT memory), outside any binary's text segment.
+            # addressToSymbol cannot resolve such addresses → coverage symbols are empty.
+            for jit_setting in (
+                "compile_expressions",
+                "compile_aggregate_expressions",
+                "compile_sort_description",
+                "min_count_to_compile_expression",
+                "min_count_to_compile_aggregate_expression",
+                "min_count_to_compile_sort_description",
+            ):
+                random_settings[jit_setting] = 0
         return random_settings
 
 
@@ -3678,19 +3692,21 @@ def collect_build_flags(args):
     value = clickhouse_execute(
         args, "SELECT value FROM system.build_options WHERE name = 'CXX_FLAGS'"
     )
-    if b"-fsanitize=thread" in value:
-        result.append(BuildFlags.THREAD)
-        SANITIZED = True
-    elif b"-fsanitize=address" in value:
-        result.append(BuildFlags.ADDRESS)
-        SANITIZED = True
-    elif b"-fsanitize=undefined" in value:
-        result.append(BuildFlags.UNDEFINED)
-        SANITIZED = True
-    elif b"-fsanitize=memory" in value:
-        result.append(BuildFlags.MEMORY)
-        SANITIZED = True
-    elif b"-DSANITIZE_COVERAGE=1" in value:
+    sanitize_flag_map = {
+        b"thread": BuildFlags.THREAD,
+        b"address": BuildFlags.ADDRESS,
+        b"undefined": BuildFlags.UNDEFINED,
+        b"memory": BuildFlags.MEMORY,
+    }
+    import re as _re
+    m = _re.search(rb"-fsanitize=([\w,]+)", value)
+    if m:
+        for san in m.group(1).split(b","):
+            flag = sanitize_flag_map.get(san)
+            if flag is not None:
+                result.append(flag)
+        SANITIZED = bool(result)
+    if b"-DSANITIZE_COVERAGE=1" in value:
         result.append(BuildFlags.SANITIZE_COVERAGE)
 
     value = clickhouse_execute(

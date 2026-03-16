@@ -315,6 +315,12 @@ void QuotaCache::chooseQuotaToConsumeFor(EnabledQuota & enabled, bool throw_if_c
         }
     }
 
+    /// Clear the resolved intervals cache when quotas are reassigned.
+    {
+        std::lock_guard resolved_lock(enabled.resolved_intervals_mutex);
+        enabled.resolved_intervals_cache.clear();
+    }
+
     if (!intervals)
     {
         enabled.empty = true;

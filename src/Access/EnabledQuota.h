@@ -68,6 +68,10 @@ public:
     /// Returns the information about quota consumption.
     std::optional<QuotaUsage> getUsage() const;
 
+    /// Returns true if this quota is keyed by `NORMALIZED_QUERY_HASH`.
+    /// When true, callers should use `usedForNormalizedQuery` instead of `used`.
+    bool isKeyedByNormalizedQueryHash() const { return interval_resolver != nullptr; }
+
 
 private:
     friend class QuotaCache;

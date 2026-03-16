@@ -135,7 +135,7 @@ workflow = Workflow.Config(
         ],
         JobConfigs.libfuzzer_job.set_dependency(
             FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES
-        ),
+        ).set_allow_merge_on_failure(),
         *[
             job.set_dependency(FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES)
             for job in JobConfigs.performance_comparison_with_master_head_jobs

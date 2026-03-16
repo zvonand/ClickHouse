@@ -103,6 +103,7 @@
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include <Common/config_version.h>
 #include <Common/XDGBaseDirectories.h>
@@ -3737,7 +3738,8 @@ void ClientBase::runInteractive()
 
         try
         {
-            if (!processQueryText(rewriteLocalMetaCommandIfNeeded(input)))
+            text = rewriteLsMetaCommandIfNeeded(input);
+            if (!processQueryText(text)
                 break;
             last_input = input;
         }
@@ -3785,17 +3787,27 @@ bool ClientBase::processMultiQueryFromFile(const String & file_name)
     return executeMultiQuery(queries_from_file);
 }
 
-String ClientBase::rewriteLocalMetaCommandIfNeeded(const String & query) const
+String ClientBase::rewriteLsMetaCommandIfNeeded(const String & query) const
 {
     if (!supportsLocalMetaCommands())
         return query;
 
-    const auto result = tryHandleLocalMetaCommand(query);
+    // First, normalize the input and avoid issues
+    // Accepts formats with and without ';'
+    String str(query);
+    boost::algorithm::trim(str);
 
-    if (result.kind == LocalMetaCommandResult::Kind::RewriteQuery)
-        return result.query;
+    if (!str.empty() && str.back() == ';')
+    {
+        str.pop_back();
+        boost::algorithm::trim(str);
+    }
+    // Non-ls case
+    if (!boost::iequals(str, "ls"))
+        return query;
 
-    return query;
+    // Rewrites command LS into a query that produces the list of all files of the current directory
+    return "SELECT _file AS file FROM file('*', 'One') ORDER BY file";
 }
 
 void ClientBase::runNonInteractive()
@@ -3837,8 +3849,8 @@ void ClientBase::runNonInteractive()
                     return;
             }
             else
-            {
-                if (!processQueryText(rewriteLocalMetaCommandIfNeeded(query)))
+            {   query = rewriteLsMetaCommandIfNeeded(query);
+                if (!processQueryText(query))
                     return;
             }
         }
@@ -3851,7 +3863,7 @@ void ClientBase::runNonInteractive()
         String text;
         readStringUntilEOF(text, in);
 
-        text = rewriteLocalMetaCommandIfNeeded(text);
+        text = rewriteLsMetaCommandIfNeeded(text);
 
         if (query_fuzzer_runs)
             processWithASTFuzzer(text);

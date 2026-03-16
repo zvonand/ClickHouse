@@ -267,7 +267,9 @@ ORDER BY file ASC
 
 You can also run it as a query using the argument -q:
 
+```text title="sh"
 ./clickhouse-local -q ls
+```
 
 ```text title="Response"
 file1.csv

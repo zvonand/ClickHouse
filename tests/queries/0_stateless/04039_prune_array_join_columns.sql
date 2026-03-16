@@ -29,6 +29,10 @@ SELECT 1 FROM t_nested ARRAY JOIN n WHERE n.a > 0;
 EXPLAIN QUERY TREE SELECT 1 FROM t_nested ARRAY JOIN n WHERE n.a > 0;
 EXPLAIN header = 1 SELECT 1 FROM t_nested ARRAY JOIN n WHERE n.a > 0;
 
+-- Numeric tupleElement index — should prune the same as string access.
+SELECT tupleElement(n, 1) FROM t_nested ARRAY JOIN n ORDER BY n.a;
+EXPLAIN header = 1 SELECT tupleElement(n, 1) FROM t_nested ARRAY JOIN n ORDER BY n.a;
+
 DROP TABLE t_nested;
 
 -- General case: ARRAY JOIN with two independent arrays, only one used.

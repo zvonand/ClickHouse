@@ -129,7 +129,26 @@ public:
                 return;
 
             if (expr_it->second.hasNested())
-                expr_it->second.used_subcolumns.insert(constant_node->getValue().safeGet<String>());
+            {
+                const auto & value = constant_node->getValue();
+                if (value.getType() == Field::Types::String)
+                {
+                    expr_it->second.used_subcolumns.insert(value.safeGet<String>());
+                }
+                else if (value.getType() == Field::Types::UInt64)
+                {
+                    /// tupleElement uses 1-based indexing.
+                    UInt64 index = value.safeGet<UInt64>();
+                    if (index >= 1 && index <= expr_it->second.nested_subcolumn_names.size())
+                        expr_it->second.used_subcolumns.insert(expr_it->second.nested_subcolumn_names[index - 1]);
+                    else
+                        expr_it->second.fully_used = true;
+                }
+                else
+                {
+                    expr_it->second.fully_used = true;
+                }
+            }
             else
                 expr_it->second.fully_used = true;
 

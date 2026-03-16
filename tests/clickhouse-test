@@ -3425,6 +3425,7 @@ def run_tests_array(
         Namespace,
         multiprocessing.sharedctypes.Synchronized,
         multiprocessing.synchronize.Event,
+        multiprocessing.sharedctypes.Synchronized,
         multiprocessing.managers.ListProxy,
         int
     ],
@@ -3437,6 +3438,7 @@ def run_tests_array(
         args,
         exit_code,
         server_died,
+        workers_to_shed,
         restarted_tests,
         process_index
     ) = all_tests_with_params
@@ -3494,6 +3496,14 @@ def run_tests_array(
         print(f"Running {about}{num_tests} {test_suite.suite} tests ({proc_name}).")
 
     while True:
+        # Check whether this worker has been asked to shed (stop after finishing
+        # its previous test). The check happens before popping the next test so
+        # no work is lost — the remaining workers will pick up the queue.
+        with workers_to_shed.get_lock():
+            if workers_to_shed.value > 0:
+                workers_to_shed.value -= 1
+                break
+
         if all_tests:
             try:
                 case = all_tests.pop(0)
@@ -3616,7 +3626,7 @@ def run_tests_array(
     sys.stdout.flush()
 
 
-def check_server_liveness(args, max_retries=5) -> bool:
+def check_server_liveness(args, max_retries=10) -> bool:
     """Check if server is responding, with retries and exponential back-off.
 
     Used to distinguish a real server death from a transient network failure
@@ -3904,6 +3914,7 @@ def do_run_tests(
         manager = multiprocessing.Manager()
         parallel_tests = manager.list()
         parallel_tests.extend(test_suite.parallel_tests)
+        workers_to_shed = multiprocessing.Value('i', 0)
 
         processes = []
         for i in range(jobs):
@@ -3918,6 +3929,7 @@ def do_run_tests(
                         args,
                         exit_code,
                         server_died,
+                        workers_to_shed,
                         restarted_tests,
                         i,  # process index
                     ),
@@ -3928,6 +3940,9 @@ def do_run_tests(
 
         # How often (seconds) to query server memory usage.
         MEMORY_CHECK_INTERVAL = 5.0
+        # After shedding a worker, wait this long before the next check to give
+        # memory time to drop before potentially shedding another worker.
+        MEMORY_SHED_COOLDOWN = 30.0
         # Fraction of max_server_memory_usage at which we start shedding workers.
         MEMORY_PRESSURE_THRESHOLD = 0.8
         last_memory_check = time()
@@ -3945,28 +3960,26 @@ def do_run_tests(
                 last_memory_check = now
                 memory_fraction = get_server_memory_fraction(args)
                 if memory_fraction is not None and memory_fraction > MEMORY_PRESSURE_THRESHOLD:
-                    p = processes.pop()
-                    print(
-                        f"Server memory at {memory_fraction:.0%} of limit — "
-                        f"reducing concurrency from {len(processes) + 1} to {len(processes)}"
-                    )
-                    # Do not kill p — let it finish its current test and exit
-                    # naturally. Killing mid-test would lose the test result.
-                    # The concurrency reduction takes effect for all subsequent
-                    # tests once p finishes what it is currently running.
+                    # Cap outstanding shed requests so we never drain the pool
+                    # to zero: only increment if the number of workers that will
+                    # still be running after all pending sheds is greater than 1.
+                    with workers_to_shed.get_lock():
+                        if len(processes) - workers_to_shed.value > 1:
+                            workers_to_shed.value += 1
+                            print(
+                                f"Server memory at {memory_fraction:.0%} of limit — "
+                                f"signalling one worker to stop after its current test "
+                                f"({len(processes)} tracked, {workers_to_shed.value} pending shed)"
+                            )
+                    # Use a longer cooldown so memory has time to drop before
+                    # we consider shedding another worker.
+                    last_memory_check = time() + MEMORY_SHED_COOLDOWN - MEMORY_CHECK_INTERVAL
 
             # Periodically check the server for hangs
             # and stop all processes in this case
             if args.hung_check:
-                try:
-                    clickhouse_execute(
-                        args,
-                        query="SELECT 1 /*hung check*/",
-                        max_http_retries=20,
-                        timeout=10,
-                    )
-                except Exception as e:
-                    print(f"Hung check failed: {str(e)}")
+                if not check_server_liveness(args):
+                    print("Hung check failed: server is not responding")
                     server_died.set()
 
             if server_died.is_set():
@@ -4006,6 +4019,7 @@ def do_run_tests(
                 args,
                 exit_code,
                 server_died,
+                multiprocessing.Value('i', 0),  # sequential runner is never shed
                 restarted_tests,
                 jobs + 1
             )

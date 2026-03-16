@@ -16,6 +16,7 @@ DROP FUNCTION IF EXISTS export_incorrect_malloc;
 
 DELETE FROM system.webassembly_modules WHERE name = 'test_host_api';
 DELETE FROM system.webassembly_modules WHERE name = 'import_unknown';
+DELETE FROM system.webassembly_modules WHERE name = 'import_non_env';
 DELETE FROM system.webassembly_modules WHERE name = 'import_incorrect';
 DELETE FROM system.webassembly_modules WHERE name = 'export_incorrect_malloc';
 DELETE FROM system.webassembly_modules WHERE name = 'export_faulty_malloc';
@@ -65,6 +66,20 @@ DELETE FROM system.webassembly_modules WHERE name = 'import_unknown';
 
 EOF
 
+# Regression: non-"env" imports are skipped by linkHostFunctions (no RESOURCE_NOT_FOUND).
+# The module compiles fine; instantiation fails at call time because the runtime
+# (Wasmtime) cannot satisfy the WASI import either — WASM_ERROR, not RESOURCE_NOT_FOUND.
+cat ${CUR_DIR}/wasm/import_non_env.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'import_non_env', code FROM input('code String') FORMAT RawBlob"
+
+${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
+
+CREATE FUNCTION test_func LANGUAGE WASM ABI ROW_DIRECT FROM 'import_non_env' ARGUMENTS (UInt32) RETURNS UInt32;
+SELECT test_func(1 :: UInt32); -- { serverError WASM_ERROR }
+DROP FUNCTION test_func;
+DELETE FROM system.webassembly_modules WHERE name = 'import_non_env';
+
+EOF
+
 cat ${CUR_DIR}/wasm/import_incorrect.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'import_incorrect', code FROM input('code String') FORMAT RawBlob"
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
@@ -103,6 +118,7 @@ DROP FUNCTION IF EXISTS export_incorrect_malloc;
 
 DELETE FROM system.webassembly_modules WHERE name = 'test_host_api';
 DELETE FROM system.webassembly_modules WHERE name = 'import_unknown';
+DELETE FROM system.webassembly_modules WHERE name = 'import_non_env';
 DELETE FROM system.webassembly_modules WHERE name = 'import_incorrect';
 DELETE FROM system.webassembly_modules WHERE name = 'export_incorrect_malloc';
 DELETE FROM system.webassembly_modules WHERE name = 'export_faulty_malloc';

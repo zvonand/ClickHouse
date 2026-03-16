@@ -20,6 +20,8 @@ struct ListNode
     struct
     {
         uint64_t active_in_map : 1;
+        /// If true, clearOutdatedNodes() should deallocate this node's `key`.
+        /// Used if the node was removed after enabling snapshot mode.
         uint64_t free_key : 1;
         uint64_t version : 62;
     } node_metadata{false, false, 0};
@@ -275,7 +277,15 @@ public:
         bool remove_old = true;
         auto list_itr = it->getMapped();
         uint64_t old_data_size = list_itr->value.sizeInBytes();
-        if (snapshot_mode && list_itr->getVersion() <= snapshot_up_to_version)
+        /// Note: in snapshot mode we can't deallocate the node even if
+        /// `list_itr->getVersion() > snapshot_up_to_version`. Because the node's key may be shared
+        /// with another node (older version of this node). E.g. scenario:
+        ///  1. Enable snapshot mode.
+        ///  2. updateValue(key, ...) - now `list` contains two nodes with `key` pointing to the
+        ///     same range of memory.
+        ///  3. erase(key) - can't do `arena.free(... list_itr->key ...)` as the key is still in
+        ///     use by another node that is part of the snapshot.
+        if (snapshot_mode)
         {
             list_itr->setInactiveInMap();
             snapshot_invalid_iters.push_back(list_itr);

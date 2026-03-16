@@ -599,24 +599,25 @@ def main():
                         f"fixed: {len(fixed_tests):,}"
                     )
 
+            # Finalize pass/fail verdict before rendering HTML report
+            final_ok = threshold_ok
+            if known_count > 0 and len(new_failures) > 0:
+                threshold_info += (
+                    f"; FAILED: {len(new_failures):,} new failures detected"
+                )
+                final_ok = False
+
             generate_html_report(
                 all_reports,
                 report_html_path,
-                threshold_ok,
+                final_ok,
                 threshold_info,
                 new_failures=new_failures,
                 fixed_tests=fixed_tests,
                 known_failures_count=known_count,
             )
 
-            # Fail if there are new failures (only when known_failures.txt is populated)
-            if known_count > 0 and len(new_failures) > 0:
-                threshold_info += (
-                    f"; FAILED: {len(new_failures):,} new failures detected"
-                )
-                return False
-
-            return threshold_ok
+            return final_ok
 
         results.append(
             Result.from_commands_run(

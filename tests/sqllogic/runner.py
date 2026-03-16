@@ -131,20 +131,17 @@ def statements_report(reports, out_dir, mode_name):
 
 
 def _child_process(setup_kwargs, runner_kwargs, input_dir, output_dir, test):
-    try:
-        with setup_connection(**setup_kwargs) as connection:
-            with connection.with_test_database_scope():
-                runner = TestRunner(connection, **runner_kwargs)
-                runner.run_all_tests_from_file(test, input_dir)
-                runner.write_results_to_dir(output_dir)
-                return runner.report
-    except Exception as e:
-        logger.error("Child process failed for %s: %s", test, e)
-        return None
+    with setup_connection(**setup_kwargs) as connection:
+        with connection.with_test_database_scope():
+            runner = TestRunner(connection, **runner_kwargs)
+            runner.run_all_tests_from_file(test, input_dir)
+            runner.write_results_to_dir(output_dir)
+            return runner.report
 
 
 def run_all_tests_in_parallel(setup_kwargs, runner_kwargs, input_dir, output_dir):
     process_count = max(1, os.cpu_count() - 2)
+    tests = list(TestRunner.list_tests(input_dir))
     with multiprocessing.Pool(process_count) as pool:
         async_results = [
             pool.apply_async(
@@ -157,11 +154,28 @@ def run_all_tests_in_parallel(setup_kwargs, runner_kwargs, input_dir, output_dir
                     test,
                 ),
             )
-            for test in TestRunner.list_tests(input_dir)
+            for test in tests
         ]
-        reports = [ar.get() for ar in async_results]
+        failed_tests = []
+        reports = []
+        for test, ar in zip(tests, async_results):
+            try:
+                reports.append(ar.get())
+            except Exception as e:
+                logger.error("Child process failed for %s: %s", test, e)
+                failed_tests.append((test, e))
 
-    reports = [r for r in reports if r is not None]
+    if failed_tests:
+        names = ", ".join(t for t, _ in failed_tests)
+        logger.error(
+            "%d test file(s) failed to run: %s", len(failed_tests), names
+        )
+
+    if not reports:
+        raise RuntimeError(
+            f"All {len(tests)} test file(s) failed, cannot produce a report"
+        )
+
     report = reduce(lambda x, y: x.combine_with(y), reports)
     report.write_report(output_dir)
     return report

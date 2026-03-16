@@ -18,6 +18,7 @@ TIMEOUT = int(os.getenv("TIMEOUT", "0"))
 OUTPUT = "/test_output"
 RUNNERS = int(os.getenv("RUNNERS", "16"))
 DEFAULT_INPUT_TIMEOUT = 1200 # libFuzzer default value for '-timeout' option
+SKIP_MERGE = int(os.getenv("SKIP_MERGE", "0"))
 
 INPUT_TIMEOUT = 0 # for debugging, set 0 when not debugging
 
@@ -88,7 +89,7 @@ class Stopwatch:
 
 
 def run_fuzzer(fuzzer: str, timeout: int):
-    
+
     seed_corpus_dir = f"{fuzzer}.in"
     with Path(seed_corpus_dir) as path:
         if not path.exists() or not path.is_dir():
@@ -203,7 +204,7 @@ def run_fuzzer(fuzzer: str, timeout: int):
     artifact_prefix = f"{results_path}"
 
     # Corpus minimization
-    if active_corpus_present:
+    if active_corpus_present and not SKIP_MERGE:
         logging.info(
             "Running corpus minimization for fuzzer %s for %d seconds...",
             fuzzer,
@@ -340,7 +341,10 @@ def run_fuzzer(fuzzer: str, timeout: int):
             # Delete minimized corpus directory
             shutil.rmtree(mini_corpus_dir)
     else:
-        logging.info("Not running corpus minimization for fuzzer %s - persistent corpus is empty", fuzzer)
+        if SKIP_MERGE:
+            logging.info("Not running corpus minimization for fuzzer %s - SKIP_MERGE is set", fuzzer)
+        else:
+            logging.info("Not running corpus minimization for fuzzer %s - persistent corpus is empty", fuzzer)
 
 
     # Fuzzing

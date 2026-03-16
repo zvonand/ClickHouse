@@ -395,6 +395,8 @@ def main():
         "clickhouse/stateless-test"
     ).pull_image()
 
+    is_master = info.pr_number == 0 and info.git_branch == "master"
+
     fuzzers_path = temp_path
     download_corpus(fuzzers_path)
 
@@ -417,6 +419,9 @@ def main():
 
     additional_envs.append(f"TIMEOUT={TIMEOUT}")
 
+    if not is_master:
+        additional_envs.append("SKIP_MERGE=1")
+
     run_command = get_run_command(
         fuzzers_path,
         repo_path,
@@ -428,7 +433,7 @@ def main():
 
     if Shell.run(run_command) == 0:
         logging.info("Run successfully")
-        if info.pr_number == 0 and info.git_branch == "master":
+        if is_master:
             logging.info("Uploading corpus - running in master")
             upload_corpus(fuzzers_path)
         else:

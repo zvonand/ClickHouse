@@ -23,5 +23,5 @@ for fmt in Arrow ArrowStream; do
             12::IntervalQuarter    AS q,
             13::IntervalYear       AS y
         FORMAT $fmt
-    " | ${CLICKHOUSE_LOCAL} -q "SELECT * FROM stdin FORMAT $fmt"
+    " | ${CLICKHOUSE_LOCAL} -q "SELECT * FROM file('-', '$fmt')"
 done

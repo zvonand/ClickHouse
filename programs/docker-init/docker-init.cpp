@@ -592,6 +592,13 @@ void initClickHouseDB(
     while (tries > 0 && !server_ready && !g_shutdown_requested)
     {
         pid_t check_pid = fork();
+        if (check_pid < 0)
+        {
+            /// fork failed — skip this iteration and retry.
+            --tries;
+            sleep(1); // NOLINT(concurrency-mt-unsafe)
+            continue;
+        }
         if (check_pid == 0)
         {
             int devnull = open("/dev/null", O_WRONLY);
@@ -601,14 +608,16 @@ void initClickHouseDB(
                 dup2(devnull, STDERR_FILENO);
                 close(devnull);
             }
-            auto argv = buildArgv({
+            /// Keep args in a named variable so the strings outlive argv.
+            std::vector<std::string> check_args = {
                 g_clickhouse_binary, "client",
                 "--host", "127.0.0.1",
                 "--port", native_port,
                 "-u", clickhouse_user,
                 "--password", clickhouse_password,
                 "--query", "SELECT 1",
-            });
+            };
+            auto argv = buildArgv(check_args);
             execvp(argv[0], argv.data());
             _exit(127);
         }
@@ -824,8 +833,13 @@ int mainEntryClickHouseDockerInit(int argc, char ** argv)
         {
             /// Build the full path to the symlink (e.g. /usr/bin/clickhouse-client).
             /// The symlink points to the clickhouse binary; dispatching is done by argv[0].
+            /// Short names like "client" must be resolved to "clickhouse-client" since the
+            /// distroless image only has "clickhouse-*" symlinks (not bare "client", "local", etc.).
             fs::path bin_dir = fs::path(g_clickhouse_binary).parent_path();
-            cmd = (bin_dir / extra_args[0]).string();
+            std::string link_name = extra_args[0];
+            if (!link_name.starts_with("clickhouse-"))
+                link_name = "clickhouse-" + link_name;
+            cmd = (bin_dir / link_name).string();
         }
 
         std::vector<std::string> exec_cmd = {cmd};

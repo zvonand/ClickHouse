@@ -400,6 +400,7 @@ void addRequestedFileLikeStorageVirtualsToChunk(
         }
         else if (virtual_column.name == "_row_number")
         {
+#if USE_PARQUET
             auto chunk_info = chunk.getChunkInfos().get<ChunkInfoRowNumbers>();
             if (chunk_info)
             {
@@ -413,8 +414,15 @@ void addRequestedFileLikeStorageVirtualsToChunk(
                 auto null_map = ColumnUInt8::create(chunk.getNumRows(), static_cast<UInt8>(0));
                 chunk.addColumn(ColumnNullable::create(std::move(column), std::move(null_map)));
             }
-            /// Row numbers not known, _row_number = NULL.
+            else
+            {
+                /// Row numbers not known, _row_number = NULL.
+                chunk.addColumn(virtual_column.type->createColumnConstWithDefaultValue(chunk.getNumRows())->convertToFullColumnIfConst());
+            }
+#else
+            // If Parquet format is not used, we don't have row numbers info, so _row_number = NULL.
             chunk.addColumn(virtual_column.type->createColumnConstWithDefaultValue(chunk.getNumRows())->convertToFullColumnIfConst());
+#endif
         }
         else if (virtual_column.name == "_iceberg_metadata_file_path")
         {

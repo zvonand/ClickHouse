@@ -10,6 +10,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+extern const int QUERY_WAS_CANCELLED;
+}
+
 Block ExpressionTransform::transformHeader(const Block & header, const ActionsDAG & expression)
 {
     return expression.updateHeader(header);
@@ -26,11 +31,25 @@ ExpressionTransform::ExpressionTransform(
 void ExpressionTransform::transform(Chunk & chunk)
 {
     size_t num_rows = chunk.getNumRows();
-    auto block = getInputPort().getHeader().cloneWithColumns(chunk.detachColumns());
+    Columns columns = chunk.detachColumns();
+    auto block = getInputPort().getHeader().cloneWithColumns(columns);
 
-    expression->execute(block, num_rows);
-
-    chunk.setColumns(block.getColumns(), num_rows);
+    try
+    {
+        expression->execute(block, num_rows);
+        chunk.setColumns(block.getColumns(), num_rows);
+    }
+    catch (const Exception & e)
+    {
+        if (e.code() == ErrorCodes::QUERY_WAS_CANCELLED)
+        {
+            chunk.setColumns(columns, num_rows);
+        }
+        else
+        {
+            throw;
+        }
+    }
 
     if (updater)
         updater->recordOutputChunk(chunk, block);

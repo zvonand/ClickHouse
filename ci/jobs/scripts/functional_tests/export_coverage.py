@@ -1,5 +1,6 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
+import subprocess
+from multiprocessing import Pool
 
 from ci.jobs.scripts.cidb_cluster import CIDBCluster
 from ci.jobs.scripts.clickhouse_proc import ClickHouseProc
@@ -7,6 +8,27 @@ from ci.jobs.scripts.find_tests import Targeting
 from ci.praktika.utils import Shell, Utils
 
 temp_dir = f"{Utils.cwd()}/ci/tmp"
+
+# Module-level worker function and initializer — must be picklable for Pool.
+_norm_check_start_time: str = ""
+_norm_job_name: str = ""
+
+
+def _init_normalizer(check_start_time: str, job_name: str) -> None:
+    global _norm_check_start_time, _norm_job_name
+    _norm_check_start_time = check_start_time
+    _norm_job_name = job_name
+
+
+def _normalize_line(line: str) -> str:
+    """Normalize one TSV line 'sym\\ttest_name'. Returns output line or ''."""
+    if "\t" not in line:
+        return ""
+    sym, _, test_name = line.partition("\t")
+    norm = Targeting.normalize_symbol(sym)
+    if not norm:
+        return ""
+    return f"{norm}\t{_norm_check_start_time}\t{_norm_job_name}\t{test_name}"
 
 
 class CoverageExporter:
@@ -92,66 +114,61 @@ class CoverageExporter:
                     # args — the stored symbol is the bare qualified function name,
                     # e.g. "DB::Foo::bar".  The bloom_filter index on that table
                     # supports "WHERE symbol = 'DB::Foo::bar'" exact-match queries.
-
-                    # Step 1: dump raw (sym, test_name) pairs to a temp file.
-                    raw_file = f"{temp_dir}/coverage_raw_symbols.tsv"
-                    Shell.check(f"rm -f {raw_file}")
+                    #
+                    # Pool.imap streams proc.stdout lazily through worker processes
+                    # (chunksize lines at a time) and yields results as an iterator —
+                    # peak Python memory is O(chunksize * cpu_count) lines, not the
+                    # full dataset.  sort -u deduplicates on disk, no seen-set needed.
                     select_query = (
                         f"SELECT sym, test_name "
                         f"FROM system.{table} "
                         "ARRAY JOIN symbol AS sym "
                         "WHERE notEmpty(sym) "
-                        f"INTO OUTFILE '{raw_file}' FORMAT TSV"
+                        "FORMAT TSV"
                     )
-                    cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{select_query}" {command_args_post}'
-                    rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
-                    if rc != 0:
-                        print(f"ERROR: normalized select failed (rc={rc})")
-                        if stdout:
-                            print(f"  stdout: {stdout}")
-                        if stderr:
-                            print(f"  stderr: {stderr}")
+                    select_cmd = (
+                        f"cd {self.src.run_path0} && "
+                        f"clickhouse local {command_args} {path_arg} "
+                        f'--query "{select_query}" '
+                        f"{command_args_post}"
+                    )
+
+                    norm_file = f"{temp_dir}/coverage_normalized_symbols.tsv"
+                    dedup_file = f"{temp_dir}/coverage_normalized_dedup.tsv"
+                    Shell.check(f"rm -f {norm_file} {dedup_file}")
+
+                    select_proc = subprocess.Popen(
+                        select_cmd, shell=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                    )
+                    with Pool(
+                        initializer=_init_normalizer,
+                        initargs=(self.check_start_time, self.job_name),
+                    ) as pool, open(norm_file, "w", buffering=1 << 20) as fout:
+                        for result in pool.imap(_normalize_line, select_proc.stdout, chunksize=200_000):
+                            if result:
+                                fout.write(result)
+
+                    _, select_stderr = select_proc.communicate()
+                    if select_proc.returncode != 0:
+                        print(f"ERROR: normalized select failed (rc={select_proc.returncode})")
+                        if select_stderr:
+                            print(f"  stderr: {select_stderr}")
                         res = False
 
                 if res:
-                    # Step 2: normalize symbols in parallel, deduplicate, write TSV.
-                    # normalize_symbol is stateless so chunks are independent.
-                    with open(raw_file) as fin:
-                        raw_pairs = [
-                            tuple(line.rstrip("\n").split("\t", 1))
-                            for line in fin
-                            if "\t" in line
-                        ]
+                    # Deduplicate with LC_ALL=C sort -u (disk-based, bounded memory).
+                    rc, _, sort_stderr = Shell.get_res_stdout_stderr(
+                        f"LC_ALL=C sort -u {norm_file} -o {dedup_file}", verbose=False
+                    )
+                    if rc != 0:
+                        print(f"ERROR: sort -u for deduplication failed (rc={rc})")
+                        if sort_stderr:
+                            print(f"  stderr: {sort_stderr}")
+                        res = False
 
-                    workers = max(1, os.cpu_count() or 4)
-                    chunk_size = max(1, len(raw_pairs) // workers)
-                    chunks = [
-                        raw_pairs[i : i + chunk_size]
-                        for i in range(0, len(raw_pairs), chunk_size)
-                    ]
-
-                    def normalize_chunk(chunk):
-                        result = []
-                        for sym, test_name in chunk:
-                            norm = Targeting.normalize_symbol(sym)
-                            if norm:
-                                result.append((norm, test_name))
-                        return result
-
-                    norm_file = f"{temp_dir}/coverage_normalized_symbols.tsv"
-                    seen = set()
-                    with open(norm_file, "w") as fout:
-                        with ThreadPoolExecutor(max_workers=workers) as executor:
-                            for normalized_chunk in executor.map(normalize_chunk, chunks):
-                                for norm, test_name in normalized_chunk:
-                                    key = (norm, test_name)
-                                    if key not in seen:
-                                        seen.add(key)
-                                        fout.write(
-                                            f"{norm}\t{self.check_start_time}\t{self.job_name}\t{test_name}\n"
-                                        )
-
-                    # Step 3: insert the normalized TSV into checks_coverage_inverted2.
+                if res:
+                    # Step 3: insert the deduplicated normalized TSV.
                     insert_query = (
                         f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted2', '{self.dest.user}', '{self.dest.pwd}') "
                         "(symbol, check_start_time, check_name, test_name) FORMAT TSV"
@@ -159,7 +176,7 @@ class CoverageExporter:
                     cmd = (
                         f"cd {self.src.run_path0} && "
                         f"clickhouse local {command_args} {path_arg} "
-                        f'--query "{insert_query}" < {norm_file} '
+                        f'--query "{insert_query}" < {dedup_file} '
                         f"{command_args_post}"
                     )
                     rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)

@@ -1,4 +1,6 @@
 
+#include <Common/CurrentThread.h>
+#include <Common/QueryScope.h>
 #include <Core/ServerSettings.h>
 #include <Core/ServerUUID.h>
 #include <Core/Settings.h>
@@ -89,11 +91,13 @@ DDLWorker::DDLWorker(
     ContextPtr context_,
     const Poco::Util::AbstractConfiguration * config,
     const String & prefix,
+    const String & zookeeper_name_,
     const String & logger_name,
     const CurrentMetrics::Metric * max_entry_metric_,
     const CurrentMetrics::Metric * max_pushed_entry_metric_)
     : context(Context::createCopy(context_))
     , log(getLogger(logger_name))
+    , zookeeper_name(zookeeper_name_)
     , pool_size(pool_size_)
     , max_entry_metric(max_entry_metric_)
     , max_pushed_entry_metric(max_pushed_entry_metric_)
@@ -163,6 +167,12 @@ void DDLWorker::shutdown()
             cleanup_thread->join();
         worker_pool.reset();
     }
+
+    /// Explicitly clear active node holders with the component guard set,
+    /// because EphemeralNodeHolder destructor calls tryRemove on ZooKeeper
+    /// which requires a component to be set when enforce_keeper_component_tracking is enabled.
+    auto component_guard = Coordination::setCurrentComponent("DDLWorker");
+    active_node_holders.clear();
 }
 
 DDLWorker::~DDLWorker()
@@ -170,6 +180,10 @@ DDLWorker::~DDLWorker()
     DDLWorker::shutdown();
 }
 
+ZooKeeperPtr DDLWorker::getZooKeeperFromContext() const
+{
+    return context->getDefaultOrAuxiliaryZooKeeper(zookeeper_name);
+}
 
 ZooKeeperPtr DDLWorker::getZooKeeper() const
 {
@@ -184,7 +198,7 @@ ZooKeeperPtr DDLWorker::getAndSetZooKeeper()
     std::lock_guard lock(zookeeper_mutex);
 
     if (!current_zookeeper || current_zookeeper->expired())
-        current_zookeeper = context->getZooKeeper();
+        current_zookeeper = getZooKeeperFromContext();
 
     return current_zookeeper;
 }
@@ -521,7 +535,7 @@ bool DDLWorker::tryExecuteQuery(DDLTaskBase & task, const ZooKeeperPtr & zookeep
     String query_to_show_in_logs = query_prefix + task.query_for_logging;
 
     ReadBufferFromString istr(query_to_execute);
-    CurrentThread::QueryScope query_scope;
+    QueryScope query_scope;
 
     try
     {
@@ -538,7 +552,7 @@ bool DDLWorker::tryExecuteQuery(DDLTaskBase & task, const ZooKeeperPtr & zookeep
         query_context->setInitialQueryId(task.entry.initial_query_id);
 
         if (!task.is_initial_query)
-            query_scope = CurrentThread::QueryScope::create(query_context);
+            query_scope = QueryScope::create(query_context);
 
         NullWriteBuffer nullwb;
         executeQuery(istr, nullwb, query_context, {}, QueryFlags{ .internal = internal, .distributed_backup_restore = task.entry.is_backup_restore });
@@ -1109,7 +1123,7 @@ String DDLWorker::enqueueQuery(DDLLogEntry & entry, const ZooKeeperRetriesInfo &
 
 String DDLWorker::enqueueQueryAttempt(DDLLogEntry & entry)
 {
-    auto zookeeper = context->getZooKeeper();
+    auto zookeeper = getZooKeeperFromContext();
 
     String query_path_prefix = fs::path(queue_dir) / "query-";
     zookeeper->createAncestors(query_path_prefix);

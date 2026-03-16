@@ -49,7 +49,7 @@ The callback stores `__builtin_return_address(0)` (the return address in the cal
 
 All coverage INSERTs are sent via HTTP (`clickhouse_execute_http` → port 8123), not via `clickhouse client`.
 
-After each test completes, TWO rows are inserted per test:
+After each test completes, TWO rows are inserted per test, **both using the plain test name**:
 
 **Row 1 — Server-side INSERT** (`test_name = '{test_name}'`):
 ```sql
@@ -59,8 +59,8 @@ SELECT DISTINCT now(), '{test_name}', coverage_distinct,
        arrayMap(x -> demangle(addressToSymbol(x)), coverage_distinct)
 ```
 
-**Row 2 — Client dump INSERT** (`test_name = '{test_name}__client'`):
-The `clickhouse client` binary writes its `cumulative_coverage_array` to `coverage.{database}.{pid}` on exit. The test runner reads these files and inserts them. These are dominated by startup/init symbols — see analysis below.
+**Row 2 — Client dump INSERT** (`test_name = '{test_name}'`):
+The `clickhouse client` binary writes its `cumulative_coverage_array` to `coverage.{database}.{pid}` on exit. The test runner reads these files and inserts them under the same plain test name. Client rows are included in the export (not filtered out) so that test selection can find tests covering client-side code when client symbols change.
 
 **Before tests start — baseline INSERT** (`test_name = ''`): captures server startup coverage.
 
@@ -72,7 +72,7 @@ Between tests: `SYSTEM RESET COVERAGE` zeroes `current_coverage_array` and reset
 CREATE TABLE IF NOT EXISTS system.coverage_log
 (
     time DateTime,
-    test_name String,    -- '{test}' for server row, '{test}__client' for client dump
+    test_name String,    -- plain test name for both server and client rows
     coverage Array(UInt64),
     symbol Array(String)
 ) ENGINE = MergeTree ORDER BY test_name
@@ -82,10 +82,19 @@ CREATE TABLE IF NOT EXISTS system.coverage_log
 
 **File**: `ci/jobs/scripts/functional_tests/export_coverage.py`
 
-Exports to `default.checks_coverage_inverted`:
-- Exports ALL symbols (no namespace filter — see Symbol Normalization section)
-- Excludes `__client` rows: `WHERE NOT endsWith(test_name, '__client')`
-- Normalizes symbols (arg list stripping, trailing template stripping)
+Two sequential inserts, run once per nightly coverage job:
+
+**Insert 1 → `checks_coverage_inverted`** (raw symbols, `hasAllTokens` queries):
+- Exports ALL symbols, no namespace filter
+- No SQL-side normalization — raw symbols stored as-is
+- Text index (`splitByNonAlpha`) handles extra return-type and template-arg tokens at query time
+- `WHERE notEmpty(sym)` only
+
+**Insert 2 → `checks_coverage_inverted2`** (Python-normalized symbols, exact queries):
+- Step 1: `clickhouse local` dumps `(sym, test_name)` pairs to a temp TSV file
+- Step 2: `normalize_symbol` applied to each symbol in parallel via `ThreadPoolExecutor` (one chunk per CPU core); results deduplicated and written to a second TSV
+- Step 3: `clickhouse local` inserts normalized TSV via `remoteSecure()`
+- Stored symbol is the bare qualified name: `DB::Foo::bar` — no return type, no arg list, no template args
 
 ### Test Selection
 
@@ -95,7 +104,8 @@ Exports to `default.checks_coverage_inverted`:
 PR diff (GitHub)
     ↓ parse changed (file, line) pairs for C/C++ files
     ↓ find_symbols.py: DWARF query → symbol names
-    ↓ find_tests.py: CIDB query on checks_coverage_inverted
+    ↓ find_tests.py: CIDB query on checks_coverage_inverted (hasAllTokens)
+    ↓               or checks_coverage_inverted2 (exact match)
     ↓ selected tests
 ```
 
@@ -112,9 +122,10 @@ PR diff (GitHub)
 | `tests/clickhouse-test` | Test runner; per-test INSERT (server + client), baseline INSERT, JIT suppression |
 | `ci/workflows/nightly_coverage.py` | NightlyCoverage CI workflow |
 | `ci/jobs/functional_tests.py` | Coverage-specific test runner setup |
-| `ci/jobs/scripts/functional_tests/export_coverage.py` | Exports `coverage_log` to CIDB |
+| `ci/jobs/scripts/functional_tests/export_coverage.py` | Exports `coverage_log` to CIDB (two inserts) |
 | `ci/jobs/scripts/find_tests.py` | Queries CIDB to find tests relevant to changed symbols |
 | `ci/jobs/scripts/find_symbols.py` | Maps changed `(file, line)` pairs to symbol names via DWARF |
+| `ci/tests/test_normalize_symbol.py` | 61-test suite for `normalize_symbol` |
 
 ---
 
@@ -135,6 +146,18 @@ PR diff (GitHub)
 ### Bug 3: `BUILD_STRIPPED_BINARY=1` was useless in AMD_COVERAGE (FIXED)
 
 Removed from `ci/jobs/build_clickhouse.py`. Created an unused stripped binary wasting build time.
+
+### Bug 4: SQL normalization in export lost ~27% of method name tokens (FIXED)
+
+The SQL normalization in `export_coverage.py` had two bugs that caused `hasAllTokens` at query time to miss the method name for ~27% of stored symbols (validated against 2000 real CIDB symbols):
+
+**Bug 4a — step 1: naive `find('(')` hit C-style casts inside template args**
+C-style casts like `(char8_t)15` or `(DB::DictionaryKeyType)1` appear inside `<...>` template args. The SQL `position(modified, '(')` found these casts before the actual arg-list `(`. For `Foo<int, (char8_t)15>::method(args)`, the stored symbol was truncated to `Foo<int,` — method name `method` lost.
+
+**Bug 4b — step 2: `position('<')` picked the first `<`, not the trailing one**
+For class-template + function-template symbols like `DB::DecimalComparison<T,U>::vectorConstant<bool>`, `endsWith('>')` was true after step 1, so step 2 stripped from `position('<')` = first `<` (in the class template) onwards. Stored symbol became `void DB::DecimalComparison` — method name lost.
+
+**Fix**: Remove SQL normalization entirely from insert 1. Raw symbols are stored; `hasAllTokens` is robust to extra return-type and template-arg tokens. `normalize_symbol` in Python handles correct normalization at query time.
 
 ### Minor: `coverageAll()` misparses PC table
 
@@ -172,56 +195,74 @@ For `std::vector<DB::Type>::method(arg)`: `position('DB::') = 12` is inside temp
 
 For `(anonymous namespace)::DistributedIndexAnalyzer(... DB::Connection* ...)`: `position('DB::') = 170` is inside function args → garbage.
 
-### Export normalization (SQL in `export_coverage.py`)
+### Export (insert 1): raw symbols, no normalization
 
-1. Strip function argument list `(...)` using same-length placeholder for `(anonymous namespace)`
-2. Strip trailing template args `<...>` only when the result ends with `>` (function template with no method name after)
-3. **No namespace filter** — export ALL symbols. Return-type stripping is done in Python at query time.
-4. Exclude `__client` rows: `WHERE NOT endsWith(test_name, '__client')`
+Insert 1 stores raw symbols. `hasAllTokens` at query time is robust to extra tokens:
+- Return-type prefix (`void`, `bool`, `std::shared_ptr<T>`) — extra tokens, ignored
+- Arg list tokens — extra tokens, ignored
+- Template arg tokens (`int`, `256ul`, type names) — extra tokens, ignored
 
 ### Query-time normalization (`normalize_symbol` in `find_tests.py`)
 
-Uses bracket-depth algorithm to correctly handle ALL symbol forms:
+Produces the bare qualified function name with **all** template args stripped. The query `'DB::Foo::bar'` (tokens `['DB','Foo','bar']`) matches any stored symbol that contains those tokens — all template instantiations, all arg-list variants, any return-type prefix.
+
+**Why strip class template args**: `hasAllTokens(stored, 'DB::Foo<int>::bar')` would require the token `int` to be present in the stored symbol. `hasAllTokens(stored, 'DB::Foo::bar')` matches all instantiations. Template arg tokens are extras in the stored symbol that the query need not mention.
+
+Algorithm:
+1. Replace `(anonymous namespace)` with same-length placeholder (so its `(` and `)` don't confuse depth tracking)
+2. Neutralize `<` and `>` in operator tokens (`operator<<`, `operator>>`, `operator->`, etc.) with `_` using same-length substitution
+3. Scan for first `(` at `<>` depth 0 → arg list start; last ` ` at depth 0 before that → return type boundary
+4. Handle conversion operators: find last `operator ` at depth 0 before arg list; override last-space to the depth-0 space just before it
+5. Strip ALL `<...>` blocks from the resulting `func_name` using the same two preprocessing passes (for correct handling of `operator<<` in the name and `(anonymous namespace)` in class names)
 
 ```python
+# Simplified sketch — see find_tests.py for full implementation
 def normalize_symbol(symbol: str) -> str:
-    """Extract qualified function name using bracket-depth tracking."""
     ANON = "(anonymous namespace)"
     modified = symbol.replace(ANON, "x" * len(ANON))
-
-    # Find first '(' at <> depth 0 (arg list start)
-    # Find last ' ' at <> depth 0 before that (return type / function name separator)
-    depth = 0
-    first_paren = len(modified)
-    last_space = -1
-    for i, c in enumerate(modified):
-        if c == "<": depth += 1
-        elif c == ">": depth -= 1
-        elif depth == 0:
-            if c == "(": first_paren = i; break
-            elif c == " ": last_space = i
-
+    # neutralize operator<< / >> / -> with same-length _ substitution
+    modified = re.sub(r"(?<![A-Za-z_\d])operator([<>\-][<>=\-\*]*)",
+                      lambda m: "operator" + m.group(1).replace("<","_").replace(">","_"),
+                      modified)
+    # find arg list '(' and return-type separator ' ' at <> depth 0
+    ...
     func_name = symbol[last_space + 1 : first_paren]
-
-    # Strip trailing function template args if symbol ends with '>'
-    if func_name.endswith(">"):
-        lt_pos = func_name.find("<")
-        if lt_pos > 0:
-            func_name = func_name[:lt_pos]
-
-    return func_name if func_name else symbol
+    # strip ALL <...> template args from func_name
+    ...
+    return func_name or symbol
 ```
 
-Examples (validated against 600 real CIDB symbols — 100% correct):
-- `void DB::JoinStuff::JoinUsedFlags::setUsed<true, true>` → `DB::JoinStuff::JoinUsedFlags::setUsed`
+Examples (validated against 2000 real CIDB symbols — 0 errors):
+- `void DB::JoinStuff::JoinUsedFlags::setUsed<true, true>()` → `DB::JoinStuff::JoinUsedFlags::setUsed`
 - `std::shared_ptr<DB::Type> DB::Foo::getBar()` → `DB::Foo::getBar`
 - `(anonymous namespace)::DistributedIndexAnalyzer::method(int)` → `(anonymous namespace)::DistributedIndexAnalyzer::method`
-- `bool DB::getNewValueToCheck<DB::Settings>(DB::Settings const&)` → `DB::getNewValueToCheck`
-- `DB::(anonymous namespace)::AggregateFunctionMinMax<T>::getName() const` → `DB::(anonymous namespace)::AggregateFunctionMinMax<T>::getName`
-- `DB::HashedDictionaryImpl::HashedDictionaryParallelLoader<(DB::DictionaryKeyType)0, DB::HashedArrayDictionary<(DB::DictionaryKeyType)0, true>>::addBlock(DB::Block)` → `DB::HashedDictionaryImpl::HashedDictionaryParallelLoader<(DB::DictionaryKeyType)0, DB::HashedArrayDictionary<(DB::DictionaryKeyType)0, true>>::addBlock` — enum cast `(DB::DictionaryKeyType)0` inside `<>` is correctly preserved
-- `DB::ContextAccess::checkAccessImplHelper<true, false, false, std::__1::basic_string_view<char>>(...)` → `DB::ContextAccess::checkAccessImplHelper`
+- `DB::(anonymous namespace)::AggregateFunctionMinMax<DB::SingleValueDataFixed<int>>::getName() const` → `DB::(anonymous namespace)::AggregateFunctionMinMax::getName`
+- `DB::AggregateFunctionUniqCombined<char8_t, (char8_t)15, unsigned long>::add(char*, ...)` → `DB::AggregateFunctionUniqCombined::add`
+- `wide::integer<128ul, unsigned int> DB::GCDLCMImpl<char8_t, wide::integer<128ul, unsigned int>, DB::(anonymous namespace)::GCDImpl<...>>::apply<wide::integer<128ul, unsigned int>>(...)` → `DB::GCDLCMImpl::apply`
+- `std::__1::shared_ptr<DB::X>::~shared_ptr[abi:ne210105]()` → `std::__1::shared_ptr::~shared_ptr[abi:ne210105]`
+- `AMQP::Field::operator AMQP::Array const&() const` → `AMQP::Field::operator AMQP::Array const&`
+- `std::ostream& DB::Foo::operator<<(std::ostream&)` → `DB::Foo::operator<<`
 
-**Known limitation**: `decltype(auto)` return type — `decltype(` is at bracket-depth 0 so it's treated as the arg list boundary, producing `decltype` as the result. Only affects STL variant dispatcher internals which are never queried from DWARF results for changed ClickHouse files.
+**Known limitation**: `decltype(auto)` return type — `decltype(` is at bracket-depth 0 so it is treated as the arg-list boundary, producing `decltype` as the result. Only affects STL variant/tuple dispatch internals which are never queried from DWARF results for changed ClickHouse source files.
+
+### Test suite
+
+`ci/tests/test_normalize_symbol.py` — 61 tests covering:
+- Basic forms: no return type, void/complex return type, const/volatile
+- Anonymous namespaces: nested, with and without `DB::` prefix
+- Function templates (trailing args stripped)
+- Class templates (args stripped)
+- Class + function templates combined
+- Conversion operators (`operator int`, `operator AMQP::Array const&`, `operator unsigned int`)
+- Non-conversion operators (`operator==`, `operator++`, `operator<<`, `operator>>`, `operator->`)
+- `operator new` / `operator delete`
+- Cast expressions inside template args: `(char8_t)15`, `(DB::DictionaryKeyType)1`, `_BitInt(8)`
+- Deeply nested class templates with anonymous namespaces inside
+- `std::function<void (char*&)>` in arg list
+- ABI tags: `[abi:fe210105]`
+- Clang `__1` inline namespace
+- Destructors with `noexcept`
+- `decltype(auto)` known limitation
 
 ---
 
@@ -229,7 +270,7 @@ Examples (validated against 600 real CIDB symbols — 100% correct):
 
 ### What a Symbol Is
 
-A **demangled C++ function name** (after normalization — no arg list, no return type). NOT a file+line.
+A **demangled C++ function name** (after normalization — no arg list, no return type, no template args). NOT a file+line.
 
 ### Full Pipeline: Changed Line → Tests
 
@@ -254,7 +295,7 @@ The DWARF step is IO-bound (reads 6GB binary). Timing: 85s warm cache, 180s cold
 
 **Step 3** — `find_tests.py`: single batch `hasAllTokens` query to CIDB with `splitByNonAlpha` text index.
 
-`normalize_symbol` produces the qualified function name (no return type, no args, no trailing template args). That string is passed directly to `hasAllTokens` — ClickHouse tokenizes it with the same `splitByNonAlpha` tokenizer used for the index, so no Python-side token splitting is needed.
+`normalize_symbol` produces the bare qualified name (no return type, no args, no template args). That string is passed directly to `hasAllTokens` — ClickHouse tokenizes it with the same `splitByNonAlpha` tokenizer used for the index, so no Python-side token splitting is needed.
 
 ```sql
 SELECT norm_symbol, groupArray(DISTINCT test_name) AS tests
@@ -293,7 +334,9 @@ HAVING count(DISTINCT test_name) < least(
 
 ## `checks_coverage_inverted` Table
 
-### Recommended schema (local copy / CIDB)
+Stores raw (un-normalized) symbols. Query with `hasAllTokens`.
+
+### Schema
 
 ```sql
 CREATE TABLE default.checks_coverage_inverted
@@ -305,8 +348,7 @@ CREATE TABLE default.checks_coverage_inverted
 
     -- splitByNonAlpha tokenizes 'DB::MergeTree::loadDataParts' into
     -- ['DB','MergeTree','loadDataParts'], enabling hasAllTokens() to match:
-    --   - old-format symbols (with arg lists): tokens from function name still match
-    --   - new-format symbols (args stripped): direct token match
+    --   - raw symbols (with return type + arg list): function name tokens still present
     --   - all template instantiations: class/function template arg tokens are extras, ignored
     -- Direct read optimization: queries answered from posting lists without reading symbol column
     -- (~45-89x faster than column scan per ClickHouse docs).
@@ -333,8 +375,44 @@ The production schema is inefficient for date-filtered queries — it must scan 
 
 **Filtering in queries**:
 - `HAVING count(DISTINCT test_name) < least(greatest(total*5/100, 50), 200)` — exclude symbols in >5% of tests OR >200 tests (hot-path noise like `PipelineExecutor::execute`)
-- `__client` rows excluded at export time (`WHERE NOT endsWith(test_name, '__client')`)
-- Symbols normalized at export: arg list stripped, trailing template args stripped
+
+---
+
+## `checks_coverage_inverted2` Table
+
+Stores Python-normalized symbols (bare qualified names). Query with exact `=` or `IN`.
+
+### Schema
+
+```sql
+CREATE TABLE default.checks_coverage_inverted2
+(
+    symbol           LowCardinality(String),   -- bare qualified name: DB::Foo::bar
+    check_start_time DateTime('UTC'),
+    check_name       LowCardinality(String),
+    test_name        LowCardinality(String),
+
+    -- bloom_filter for exact equality: WHERE symbol = 'DB::Foo::bar'
+    -- Eliminates non-matching granules with ~1% false-positive rate.
+    -- No hasAllTokens needed — symbols are fully normalized at insert time.
+    INDEX symbol_exact_idx(symbol) TYPE bloom_filter GRANULARITY 1
+)
+ENGINE = MergeTree
+ORDER BY (toDate(check_start_time), symbol, test_name)
+PARTITION BY toYYYYMM(check_start_time);
+```
+
+### Query pattern
+
+```sql
+SELECT DISTINCT test_name
+FROM checks_coverage_inverted2
+WHERE check_start_time > now() - interval 3 days
+  AND check_name LIKE 'Stateless%'
+  AND symbol IN ('DB::Foo::bar', 'DB::Baz::qux', ...)
+```
+
+The `IN` list is the output of `normalize_symbol` applied to DWARF-derived symbols. No `hasAllTokens` needed — the stored symbols are already the bare names and equality is sufficient.
 
 ---
 
@@ -388,15 +466,16 @@ The fallback path (treat as raw file offset) is why client dump file offsets res
 |------|--------|-----|
 | `src/Common/Coverage.cpp` | `dumpCoverage()` subtracts load base → writes file offsets | Client's runtime VAs unresolvable by server with different ASLR base |
 | `tests/clickhouse-test` | Force 6 JIT settings to 0 in `get_random_settings()` for SANITIZE_COVERAGE | JIT addresses in anonymous mmap → unresolvable → empty symbols in server row |
-| `tests/clickhouse-test` | Server row named `{test}`, client row named `{test}__client` | Distinguish the two row types |
+| `tests/clickhouse-test` | Client dump row uses plain test name (removed `__client` suffix) | Both rows stored under same name; client coverage included for test selection on client changes |
 | `ci/jobs/build_clickhouse.py` | Remove `-DBUILD_STRIPPED_BINARY=1` from AMD_COVERAGE | Creates unused stripped binary; wastes build time |
 | `ci/jobs/scripts/find_tests.py` | Single batch `hasAllTokens` query replaces N+1 per-symbol queries | Performance + handles old format, new format, and template instantiations |
-| `ci/jobs/scripts/find_tests.py` | `normalize_symbol` uses bracket-depth algorithm | Correctly handles all symbol forms: void prefix, complex return types, anonymous namespace |
-| `ci/jobs/scripts/find_tests.py` | `_symbol_to_tokens` for `hasAllTokens` | Splits normalized symbol into searchable tokens |
-| `ci/jobs/scripts/find_tests.py` | Frequency filter: `least(5% of total, 100)` via HAVING | Excludes hot-path symbols AND client startup noise |
+| `ci/jobs/scripts/find_tests.py` | `normalize_symbol` uses bracket-depth algorithm, strips ALL template args | Correct handling of all symbol forms; bare query name matches all instantiations |
+| `ci/jobs/scripts/find_tests.py` | Frequency filter: `least(5% of total, 200)` via HAVING | Excludes hot-path symbols from results |
 | `ci/jobs/scripts/functional_tests/export_coverage.py` | Remove namespace filter, export ALL symbols | `(anonymous namespace)::DistributedIndexAnalyzer` and other ClickHouse helpers now exported |
-| `ci/jobs/scripts/functional_tests/export_coverage.py` | Exclude `__client` rows in export | Prevents inflating `count(distinct test_name)` which breaks frequency filter |
-| `ci/jobs/scripts/functional_tests/export_coverage.py` | Strip only arg list + trailing template (no return type strip in SQL) | Return type stripping moved to Python `normalize_symbol` which handles all cases correctly |
+| `ci/jobs/scripts/functional_tests/export_coverage.py` | Remove SQL normalization from insert 1; store raw symbols | SQL normalization had two bugs losing method name token for ~27% of symbols |
+| `ci/jobs/scripts/functional_tests/export_coverage.py` | Remove `__client` filter; all rows exported | Client coverage used for test selection on client code changes |
+| `ci/jobs/scripts/functional_tests/export_coverage.py` | Add insert 2 → `checks_coverage_inverted2` with Python-normalized symbols | Exact `=` queries; `bloom_filter` index; parallel normalization via `ThreadPoolExecutor` |
+| `ci/tests/test_normalize_symbol.py` | New: 61-test suite for `normalize_symbol` | Regression coverage for all symbol forms and edge cases |
 
 ---
 

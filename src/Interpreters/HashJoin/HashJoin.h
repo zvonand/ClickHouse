@@ -17,7 +17,6 @@
 #include <Storages/TableLockHolder.h>
 #include <Common/Arena.h>
 #include <Common/HashTable/FixedHashMap.h>
-#include <Common/HashTable/FixedRangeHashMap.h>
 #include <Common/HashTable/HashMap.h>
 #include <Common/HashTable/HashTableTraits.h>
 #include <Common/HashTable/TwoLevelHashMap.h>
@@ -279,8 +278,8 @@ public:
         std::shared_ptr<FixedHashMap<UInt16, Mapped>>                         key16;
         std::shared_ptr<HashMap<UInt32, Mapped, HashCRC32<UInt32>>>           key32;
         std::shared_ptr<HashMap<UInt64, Mapped, HashCRC32<UInt64>>>           key64;
-        std::shared_ptr<FixedRangeHashMap<UInt32, Mapped>> range_key32;
-        std::shared_ptr<FixedRangeHashMap<UInt64, Mapped>> range_key64;
+        std::shared_ptr<RuntimeFixedHashMap<UInt32, Mapped>>                         range_key32;
+        std::shared_ptr<RuntimeFixedHashMap<UInt64, Mapped>>                         range_key64;
         std::shared_ptr<HashMapWithSavedHash<std::string_view, Mapped>>              key_string;
         std::shared_ptr<HashMapWithSavedHash<std::string_view, Mapped>>              key_fixed_string;
         std::shared_ptr<HashMap<UInt128, Mapped, UInt128HashCRC32>>           keys128;
@@ -419,6 +418,9 @@ public:
         /// Whether the right table reranged by key
         bool sorted = false;
 
+        /// For range_key32/range_key64: the minimum key value in the right table. Keys are stored as (key - min_key).
+        UInt64 min_key = 0;
+
         size_t avgPerKeyRows() const
         {
             if (keys_to_join == 0)
@@ -469,7 +471,7 @@ public:
     void tryRerangeRightTableData() override;
     size_t getAndSetRightTableKeys() const;
 
-    void tryConvertToFixedRangeHashMap();
+    void tryConvertToFixedHashMap();
 
     bool hasNonJoinedRows();
     void updateNonJoinedRowsStatus();
@@ -578,7 +580,7 @@ private:
     void tryRerangeRightTableDataImpl(Map & map);
 
     template <bool is_signed, typename Key, typename MapsTemplate>
-    void tryConvertToFixedRangeHashMapImpl(MapsTemplate & maps);
+    void tryConvertToFixedHashMapImpl(MapsTemplate & maps);
 
     void doDebugAsserts() const;
 };

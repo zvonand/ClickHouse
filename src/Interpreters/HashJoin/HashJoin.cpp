@@ -2029,11 +2029,11 @@ void HashJoin::tryRerangeRightTableData()
 }
 
 template <bool is_signed, typename Key, typename MapsTemplate>
-void HashJoin::tryConvertToFixedRangeHashMapImpl(MapsTemplate & maps)
+void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
 {
     using SignedKey = std::make_signed_t<Key>;
 
-    auto max_range = table_join->fixedRangeHashTableMaxSize();
+    auto max_range = table_join->fixedHashTableConversionMaxRange();
 
     auto & source_map = [&]() -> auto &
     {
@@ -2077,11 +2077,27 @@ void HashJoin::tryConvertToFixedRangeHashMapImpl(MapsTemplate & maps)
             return;
     }
 
+    data->min_key = min_key;
+
     using Mapped = typename std::decay_t<decltype(source_map)>::mapped_type;
 
     Stopwatch watch;
 
-    auto range_map = std::make_shared<FixedRangeHashMap<Key, Mapped>>(source_map, min_key, max_key);
+    size_t range = static_cast<size_t>(max_key - min_key);
+    if (range == std::numeric_limits<size_t>::max())
+        throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Range too large and will overflow");
+    size_t num_cells = range + 1;
+
+    auto range_map = std::make_shared<RuntimeFixedHashMap<Key, Mapped>>(num_cells);
+    for (auto source_map_it = source_map.begin(); source_map_it != source_map.end(); ++source_map_it)
+    {
+        typename RuntimeFixedHashMap<Key, Mapped>::LookupResult res;
+        bool inserted;
+        range_map->emplace(source_map_it->getKey() - min_key, res, inserted);
+        if (inserted)
+            res->getMapped() = source_map_it->getMapped();
+    }
+
     auto range_size = range_map->getBufferSizeInCells();
     auto key_count = range_map->size();
 
@@ -2102,15 +2118,15 @@ void HashJoin::tryConvertToFixedRangeHashMapImpl(MapsTemplate & maps)
 
     LOG_DEBUG(
         log,
-        "{}Converted join hash map to fixed range hash map (range: {}, keys: {})",
+        "{}Converted join hash map to fixed hash map (range: {}, keys: {})",
         instance_log_id,
         range_size,
         key_count);
 }
 
-void HashJoin::tryConvertToFixedRangeHashMap()
+void HashJoin::tryConvertToFixedHashMap()
 {
-    if (!table_join->enableFixedRangeHashTable())
+    if (!table_join->enableFixedHashTableConversion())
         return;
 
     if (data->type != Type::key32 && data->type != Type::key64)
@@ -2131,16 +2147,16 @@ void HashJoin::tryConvertToFixedRangeHashMap()
                 if (data->type == Type::key32)
                 {
                     if (right_table_keys.getByPosition(0).type->getTypeId() == TypeIndex::Int32)
-                        tryConvertToFixedRangeHashMapImpl<true, UInt32>(map);
+                        tryConvertToFixedHashMapImpl<true, UInt32>(map);
                     else
-                        tryConvertToFixedRangeHashMapImpl<false, UInt32>(map);
+                        tryConvertToFixedHashMapImpl<false, UInt32>(map);
                 }
                 else
                 {
                     if (right_table_keys.getByPosition(0).type->getTypeId() == TypeIndex::Int64)
-                        tryConvertToFixedRangeHashMapImpl<true, UInt64>(map);
+                        tryConvertToFixedHashMapImpl<true, UInt64>(map);
                     else
-                        tryConvertToFixedRangeHashMapImpl<false, UInt64>(map);
+                        tryConvertToFixedHashMapImpl<false, UInt64>(map);
                 }
             }
         },

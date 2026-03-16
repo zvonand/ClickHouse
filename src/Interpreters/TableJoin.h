@@ -161,8 +161,8 @@ private:
     const bool allow_join_sorting = false;
     const bool allow_dynamic_type_in_join_keys = false;
     const bool enable_lazy_columns_replication = false;
-    const bool enable_fixed_range_hash_table = false;
-    const UInt64 fixed_range_hash_table_max_size = 100'000;
+    const bool enable_conversion_to_fixed_hash_table = false;
+    const UInt64 fixed_hash_table_conversion_max_range = 100'000;
 
     /// Value if setting max_memory_usage for query, can be used when max_bytes_in_join is not specified.
     size_t max_memory_usage = 0;
@@ -324,8 +324,8 @@ public:
     UInt64 temporaryFilesBufferSize() const { return temporary_files_buffer_size; }
     bool needStreamWithNonJoinedRows() const;
     bool enableColumnsLazyReplication() const { return enable_lazy_columns_replication; }
-    bool enableFixedRangeHashTable() const { return enable_fixed_range_hash_table; }
-    UInt64 fixedRangeHashTableMaxSize() const { return fixed_range_hash_table_max_size; }
+    bool enableFixedHashTableConversion() const { return enable_conversion_to_fixed_hash_table; }
+    UInt64 fixedHashTableConversionMaxRange() const { return fixed_hash_table_conversion_max_range; }
 
     bool oneDisjunct() const;
 

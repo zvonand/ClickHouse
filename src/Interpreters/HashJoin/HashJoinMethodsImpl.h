@@ -109,7 +109,7 @@ JoinResultPtr HashJoinMethods<KIND, STRICTNESS, MapsTemplate>::joinBlockImpl(
     else
         added_columns.reserve(join_features.need_replication);
 
-    size_t processed_rows = switchJoinRightColumns(maps_, added_columns, block.getSelector(), join.data->type, *join.used_flags);
+    size_t processed_rows = switchJoinRightColumns(maps_, added_columns, block.getSelector(), join.data->type, *join.used_flags, join.data->min_key);
     /// Do not hold memory for join_on_keys anymore
     added_columns.join_on_keys.clear();
 
@@ -149,18 +149,26 @@ JoinResultPtr HashJoinMethods<KIND, STRICTNESS, MapsTemplate>::joinBlockImpl(
 
 template <JoinKind KIND, JoinStrictness STRICTNESS, typename MapsTemplate>
 template <typename KeyGetter, bool is_asof_join>
-KeyGetter HashJoinMethods<KIND, STRICTNESS, MapsTemplate>::createKeyGetter(const ColumnRawPtrs & key_columns, const Sizes & key_sizes)
+KeyGetter HashJoinMethods<KIND, STRICTNESS, MapsTemplate>::createKeyGetter(const ColumnRawPtrs & key_columns, const Sizes & key_sizes, UInt64 min_key)
 {
-    if constexpr (is_asof_join)
+    KeyGetter getter = [&]()
     {
-        auto key_column_copy = key_columns;
-        auto key_size_copy = key_sizes;
-        key_column_copy.pop_back();
-        key_size_copy.pop_back();
-        return KeyGetter(key_column_copy, key_size_copy, nullptr);
-    }
-    else
-        return KeyGetter(key_columns, key_sizes, nullptr);
+        if constexpr (is_asof_join)
+        {
+            auto key_column_copy = key_columns;
+            auto key_size_copy = key_sizes;
+            key_column_copy.pop_back();
+            key_size_copy.pop_back();
+            return KeyGetter(key_column_copy, key_size_copy, nullptr);
+        }
+        else
+            return KeyGetter(key_columns, key_sizes, nullptr);
+    }();
+
+    if constexpr (ColumnsHashing::IsHashMethodWithMinKey<KeyGetter>::value)
+        getter.min_key = static_cast<decltype(getter.min_key)>(min_key);
+
+    return getter;
 }
 
 template <JoinKind KIND, JoinStrictness STRICTNESS, typename MapsTemplate>
@@ -233,7 +241,8 @@ size_t HashJoinMethods<KIND, STRICTNESS, MapsTemplate>::switchJoinRightColumns(
     AddedColumns & added_columns,
     const ScatteredBlock::Selector & selector,
     HashJoin::Type type,
-    JoinStuff::JoinUsedFlags & used_flags)
+    JoinStuff::JoinUsedFlags & used_flags,
+    UInt64 min_key)
 {
     constexpr bool is_asof_join = STRICTNESS == JoinStrictness::Asof;
     switch (type)
@@ -264,7 +273,7 @@ size_t HashJoinMethods<KIND, STRICTNESS, MapsTemplate>::switchJoinRightColumns(
             const auto & join_on_key = added_columns.join_on_keys[d]; \
             a_map_type_vector[d] = mapv[d]->TYPE.get(); \
             key_getter_vector.push_back( \
-                std::move(createKeyGetter<KeyGetter, is_asof_join>(join_on_key.key_columns, join_on_key.key_sizes))); \
+                std::move(createKeyGetter<KeyGetter, is_asof_join>(join_on_key.key_columns, join_on_key.key_sizes, min_key))); \
         } \
         return joinRightColumnsSwitchNullability<KeyGetter>(std::move(key_getter_vector), a_map_type_vector, added_columns, selector, used_flags); \
     }

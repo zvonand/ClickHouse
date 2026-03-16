@@ -104,8 +104,8 @@ struct JoinSettings
     bool enable_lazy_columns_replication;
     bool use_hash_table_stats_for_join_reordering;
 
-    bool enable_fixed_range_hash_table;
-    UInt64 fixed_range_hash_table_max_size;
+    bool enable_conversion_to_fixed_hash_table;
+    UInt64 fixed_hash_table_conversion_max_range;
 
     explicit JoinSettings(const Settings & query_settings);
     explicit JoinSettings(const QueryPlanSerializationSettings & settings);

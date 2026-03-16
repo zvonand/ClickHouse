@@ -57,8 +57,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"mysql_datatypes_support_level", "", "decimal,datetime64,date2Date32", "Enable modern MySQL type mappings by default."},
             {"allow_experimental_json_lazy_type_hints", false, false, "New experimental setting for lazy JSON type hints"},
             {"functions_h3_default_if_invalid", true, false, "A new setting for legacy behaviour to allow invalid inputs to h3 functions"},
-            {"enable_fixed_range_hash_table", true, true, "Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range."},
-            {"fixed_range_hash_table_max_size", 100'000, 100'000, "Maximum range (max - min + 1) of join key values for the fixed range hash table optimization to apply."},
+            {"enable_conversion_to_fixed_hash_table", true, true, "Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range."},
+            {"fixed_hash_table_conversion_max_range", 100'000, 100'000, "Maximum range (max - min + 1) of join key values for the fixed hash table conversion to apply."},
         });
         addSettingsChanges(settings_changes_history, "26.2",
         {

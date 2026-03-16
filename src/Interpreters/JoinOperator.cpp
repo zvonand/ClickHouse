@@ -67,8 +67,8 @@ namespace Setting
     extern const SettingsBool enable_lazy_columns_replication;
     extern const SettingsBool use_hash_table_stats_for_join_reordering;
 
-    extern const SettingsBool enable_fixed_range_hash_table;
-    extern const SettingsUInt64 fixed_range_hash_table_max_size;
+    extern const SettingsBool enable_conversion_to_fixed_hash_table;
+    extern const SettingsUInt64 fixed_hash_table_conversion_max_range;
 }
 
 namespace QueryPlanSerializationSetting
@@ -114,8 +114,8 @@ namespace QueryPlanSerializationSetting
     extern const QueryPlanSerializationSettingsBool enable_lazy_columns_replication;
     extern const QueryPlanSerializationSettingsBool use_hash_table_stats_for_join_reordering;
 
-    extern const QueryPlanSerializationSettingsBool enable_fixed_range_hash_table;
-    extern const QueryPlanSerializationSettingsUInt64 fixed_range_hash_table_max_size;
+    extern const QueryPlanSerializationSettingsBool enable_conversion_to_fixed_hash_table;
+    extern const QueryPlanSerializationSettingsUInt64 fixed_hash_table_conversion_max_range;
 }
 
 JoinSettings::JoinSettings(const Settings & query_settings)
@@ -169,8 +169,8 @@ JoinSettings::JoinSettings(const Settings & query_settings)
         throw Exception(ErrorCodes::ARGUMENT_OUT_OF_BOUND, "Too large `temporary_files_buffer_size`, maximum 1 GiB");
     use_hash_table_stats_for_join_reordering = query_settings[Setting::use_hash_table_stats_for_join_reordering];
 
-    enable_fixed_range_hash_table = query_settings[Setting::enable_fixed_range_hash_table];
-    fixed_range_hash_table_max_size = query_settings[Setting::fixed_range_hash_table_max_size];
+    enable_conversion_to_fixed_hash_table = query_settings[Setting::enable_conversion_to_fixed_hash_table];
+    fixed_hash_table_conversion_max_range = query_settings[Setting::fixed_hash_table_conversion_max_range];
 }
 
 JoinSettings::JoinSettings(const QueryPlanSerializationSettings & settings)
@@ -220,8 +220,8 @@ JoinSettings::JoinSettings(const QueryPlanSerializationSettings & settings)
     enable_lazy_columns_replication = settings[QueryPlanSerializationSetting::enable_lazy_columns_replication];
     use_hash_table_stats_for_join_reordering = settings[QueryPlanSerializationSetting::use_hash_table_stats_for_join_reordering];
 
-    enable_fixed_range_hash_table = settings[QueryPlanSerializationSetting::enable_fixed_range_hash_table];
-    fixed_range_hash_table_max_size = settings[QueryPlanSerializationSetting::fixed_range_hash_table_max_size];
+    enable_conversion_to_fixed_hash_table = settings[QueryPlanSerializationSetting::enable_conversion_to_fixed_hash_table];
+    fixed_hash_table_conversion_max_range = settings[QueryPlanSerializationSetting::fixed_hash_table_conversion_max_range];
 }
 
 void JoinSettings::updatePlanSettings(QueryPlanSerializationSettings & settings) const
@@ -271,8 +271,8 @@ void JoinSettings::updatePlanSettings(QueryPlanSerializationSettings & settings)
     settings[QueryPlanSerializationSetting::enable_lazy_columns_replication] = enable_lazy_columns_replication;
     settings[QueryPlanSerializationSetting::use_hash_table_stats_for_join_reordering] = use_hash_table_stats_for_join_reordering;
 
-    settings[QueryPlanSerializationSetting::enable_fixed_range_hash_table] = enable_fixed_range_hash_table;
-    settings[QueryPlanSerializationSetting::fixed_range_hash_table_max_size] = fixed_range_hash_table_max_size;
+    settings[QueryPlanSerializationSetting::enable_conversion_to_fixed_hash_table] = enable_conversion_to_fixed_hash_table;
+    settings[QueryPlanSerializationSetting::fixed_hash_table_conversion_max_range] = fixed_hash_table_conversion_max_range;
 }
 
 String toString(const JoinActionRef & node)

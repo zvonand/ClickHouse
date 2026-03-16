@@ -351,7 +351,7 @@ void FillingRightJoinSideTransform::work()
         if (!join->supportParallelJoin())
             join->tryRerangeRightTableData();
         if (auto * hash_join = typeid_cast<HashJoin *>(join.get()))
-            hash_join->tryConvertToFixedRangeHashMap();
+            hash_join->tryConvertToFixedHashMap();
     }
 
     set_totals = for_totals;

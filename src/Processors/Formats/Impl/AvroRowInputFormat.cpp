@@ -3,6 +3,7 @@
 
 #include <numeric>
 
+#include <Core/AccurateComparison.h>
 #include <Core/Field.h>
 
 #include <Common/CacheBase.h>
@@ -111,6 +112,23 @@ size_t AvroInputStreamReadBufferAdapter::byteCount() const
     return in.count();
 }
 
+/// Helper to convert and insert a numeric value with overflow detection.
+template <typename Source, typename Target, typename Column>
+static void convertAndInsert(Column & column, Source value)
+{
+    Target converted;
+    if (!accurate::convertNumeric<Source, Target, /* strict= */ false>(value, converted))
+    {
+        throw Exception(
+            ErrorCodes::VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE,
+            "Cannot convert Avro value {} to {}",
+            // Convert char types to int for logging
+            +value,
+            demangle(typeid(Target).name()));
+    }
+    column.insertValue(converted);
+}
+
 /// Insert value with conversion to the column of target type.
 template <typename T>
 static void insertNumber(IColumn & column, WhichDataType type, T value)
@@ -118,50 +136,62 @@ static void insertNumber(IColumn & column, WhichDataType type, T value)
     switch (type.idx)
     {
         case TypeIndex::UInt8:
-            assert_cast<ColumnUInt8 &>(column).insertValue(static_cast<UInt8>(value));
+            convertAndInsert<T, UInt8>(assert_cast<ColumnUInt8 &>(column), value);
             break;
-        case TypeIndex::Date: [[fallthrough]];
+        case TypeIndex::Date:
+            [[fallthrough]];
         case TypeIndex::UInt16:
-            assert_cast<ColumnUInt16 &>(column).insertValue(static_cast<UInt16>(value));
+            convertAndInsert<T, UInt16>(assert_cast<ColumnUInt16 &>(column), value);
             break;
-        case TypeIndex::DateTime: [[fallthrough]];
+        case TypeIndex::DateTime:
+            [[fallthrough]];
         case TypeIndex::UInt32:
-            assert_cast<ColumnUInt32 &>(column).insertValue(static_cast<UInt32>(value));
+            convertAndInsert<T, UInt32>(assert_cast<ColumnUInt32 &>(column), value);
             break;
         case TypeIndex::UInt64:
-            assert_cast<ColumnUInt64 &>(column).insertValue(static_cast<UInt64>(value));
+            convertAndInsert<T, UInt64>(assert_cast<ColumnUInt64 &>(column), value);
             break;
         case TypeIndex::Int8:
-            assert_cast<ColumnInt8 &>(column).insertValue(static_cast<Int8>(value));
+            convertAndInsert<T, Int8>(assert_cast<ColumnInt8 &>(column), value);
             break;
         case TypeIndex::Int16:
-            assert_cast<ColumnInt16 &>(column).insertValue(static_cast<Int16>(value));
+            convertAndInsert<T, Int16>(assert_cast<ColumnInt16 &>(column), value);
             break;
-        case TypeIndex::Date32: [[fallthrough]];
+        case TypeIndex::Date32:
+            [[fallthrough]];
         case TypeIndex::Int32:
-            assert_cast<ColumnInt32 &>(column).insertValue(static_cast<Int32>(value));
+            convertAndInsert<T, Int32>(assert_cast<ColumnInt32 &>(column), value);
             break;
         case TypeIndex::Int64:
-            assert_cast<ColumnInt64 &>(column).insertValue(static_cast<Int64>(value));
+            convertAndInsert<T, Int64>(assert_cast<ColumnInt64 &>(column), value);
             break;
         case TypeIndex::Float32:
-            assert_cast<ColumnFloat32 &>(column).insertValue(static_cast<Float32>(value));
+            convertAndInsert<T, Float32>(assert_cast<ColumnFloat32 &>(column), value);
             break;
         case TypeIndex::Float64:
-            assert_cast<ColumnFloat64 &>(column).insertValue(static_cast<Float64>(value));
+            convertAndInsert<T, Float64>(assert_cast<ColumnFloat64 &>(column), value);
             break;
         case TypeIndex::Decimal32:
-            assert_cast<ColumnDecimal<Decimal32> &>(column).insertValue(static_cast<Int32>(value));
+            convertAndInsert<T, Int32>(assert_cast<ColumnDecimal<Decimal32> &>(column), value);
             break;
         case TypeIndex::Decimal64:
-            assert_cast<ColumnDecimal<Decimal64> &>(column).insertValue(static_cast<Int64>(value));
+            convertAndInsert<T, Int64>(assert_cast<ColumnDecimal<Decimal64> &>(column), value);
             break;
         case TypeIndex::DateTime64:
-            assert_cast<ColumnDecimal<DateTime64> &>(column).insertValue(static_cast<Int64>(value));
+            convertAndInsert<T, Int64>(assert_cast<ColumnDecimal<DateTime64> &>(column), value);
             break;
         case TypeIndex::IPv4:
-            assert_cast<ColumnIPv4 &>(column).insertValue(IPv4(static_cast<UInt32>(value)));
+        {
+            UInt32 converted;
+            // Can't use convertAndInsert here because we want to call IPv4 on
+            // the result below before inserting it into the column.
+            if (!accurate::convertNumeric<T, UInt32, /* strict= */ false>(value, converted))
+            {
+                throw Exception(ErrorCodes::VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE, "Cannot convert Avro value {} to UInt32", +value);
+            }
+            assert_cast<ColumnIPv4 &>(column).insertValue(IPv4(converted));
             break;
+        }
         default:
             throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Type is not compatible with Avro");
     }
@@ -353,7 +383,8 @@ AvroDeserializer::DeserializeFn AvroDeserializer::createDeserializeFn(const avro
             {
                 return [target](IColumn & column, avro::Decoder & decoder)
                 {
-                    insertNumber(column, target, decoder.decodeBool());
+                    // Cast bool to UInt8 since accurate::convertNumeric doesn't support bool
+                    insertNumber(column, target, static_cast<UInt8>(decoder.decodeBool()));
                     return true;
                 };
             }

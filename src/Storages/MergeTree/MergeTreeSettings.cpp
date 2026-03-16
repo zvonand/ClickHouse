@@ -537,8 +537,9 @@ namespace ErrorCodes
     Minimal number of compressed bytes to do fsync for part after fetch (0 - disabled)
     )", 0) \
     DECLARE(UInt64, replicated_fetches_min_part_level, 0, R"(
-    Minimum part level to fetch from other replicas. Parts with level below this threshold will not be fetched.
-    Use 1 to skip fetching level-0 (unmerged) parts, reducing replication overhead during heavy ingestion.
+    Minimum part level to fetch from other replicas. Parts with level below this threshold are postponed
+    (kept in the replication queue and re-evaluated each scheduling cycle, not permanently skipped).
+    Use 1 to postpone fetching level-0 (unmerged) parts, reducing replication overhead during heavy ingestion.
     Default: 0 (fetch all parts regardless of level).
     )", 0) \
     DECLARE(UInt64, replicated_fetches_min_part_level_timeout_seconds, 300, R"(

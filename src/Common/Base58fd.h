@@ -552,15 +552,23 @@ static size_t encodeBase58_32(const uint8_t * src, uint8_t * dst)
     __m256i mask1 = _mm256_cmpeq_epi64(skip_div8, compare);
     __m256i mask2 = _mm256_cmpgt_epi64(compare, skip_div8);
 
-    auto dst_addr = reinterpret_cast<uintptr_t>(dst);
-    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst_addr - 8ULL * (skip / 8ULL)), mask1, shifted);
+    /// Stage stores into a scratch buffer with front-padding so that
+    /// (scratch_dst - skip) never forms an out-of-bounds pointer.
+    static constexpr uint64_t MAX_SKIP_32 = 13;
+    alignas(32) uint8_t scratch[MAX_SKIP_32 + RAW58_SZ];
+    uint8_t * scratch_dst = scratch + MAX_SKIP_32;
+    auto scratch_addr = reinterpret_cast<uintptr_t>(scratch_dst);
+
+    _mm256_maskstore_epi64(reinterpret_cast<long long *>(scratch_addr - 8ULL * (skip / 8ULL)), mask1, shifted);
 
     __m128i last = _mm_bslli_si128(_mm256_extractf128_si256(base58_1, 0), 3);
-    _mm_storeu_si128(reinterpret_cast<__m128i *>(dst + 29ULL - skip), last);
+    _mm_storeu_si128(reinterpret_cast<__m128i *>(scratch_dst + 29ULL - skip), last);
 
-    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst_addr - skip), mask2, base58_0);
+    _mm256_maskstore_epi64(reinterpret_cast<long long *>(scratch_addr - skip), mask2, base58_0);
 
-    return RAW58_SZ - skip;
+    size_t len = RAW58_SZ - skip;
+    memcpy(dst, scratch_dst, len);
+    return len;
 }
 
 static size_t encodeBase58_64(const uint8_t * src, uint8_t * dst)
@@ -629,16 +637,24 @@ static size_t encodeBase58_64(const uint8_t * src, uint8_t * dst)
     __m256i mask1 = _mm256_cmpeq_epi64(skip_div8, compare);
     __m256i mask2 = _mm256_cmpgt_epi64(compare, skip_div8);
 
-    auto dst_addr = reinterpret_cast<uintptr_t>(dst);
-    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst_addr - 8ULL * (skip / 8ULL)), mask1, shifted);
-    _mm256_maskstore_epi64(reinterpret_cast<long long *>(dst_addr - skip), mask2, base58_0);
-    _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst + 32ULL - skip), base58_1);
+    /// Stage stores into a scratch buffer with front-padding so that
+    /// (scratch_dst - skip) never forms an out-of-bounds pointer.
+    static constexpr uint64_t MAX_SKIP_64 = 26;
+    alignas(32) uint8_t scratch[MAX_SKIP_64 + RAW58_SZ];
+    uint8_t * scratch_dst = scratch + MAX_SKIP_64;
+    auto scratch_addr = reinterpret_cast<uintptr_t>(scratch_dst);
+
+    _mm256_maskstore_epi64(reinterpret_cast<long long *>(scratch_addr - 8ULL * (skip / 8ULL)), mask1, shifted);
+    _mm256_maskstore_epi64(reinterpret_cast<long long *>(scratch_addr - skip), mask2, base58_0);
+    _mm256_storeu_si256(reinterpret_cast<__m256i *>(scratch_dst + 32ULL - skip), base58_1);
 
     __m128i last = _mm_bslli_si128(_mm256_extractf128_si256(base58_2, 1), 6);
-    _mm_storeu_si128(reinterpret_cast<__m128i *>(dst + 74ULL - skip), last);
-    _mm_storeu_si128(reinterpret_cast<__m128i *>(dst + 64ULL - skip), _mm256_extractf128_si256(base58_2, 0));
+    _mm_storeu_si128(reinterpret_cast<__m128i *>(scratch_dst + 74ULL - skip), last);
+    _mm_storeu_si128(reinterpret_cast<__m128i *>(scratch_dst + 64ULL - skip), _mm256_extractf128_si256(base58_2, 0));
 
-    return RAW58_SZ - skip;
+    size_t len = RAW58_SZ - skip;
+    memcpy(dst, scratch_dst, len);
+    return len;
 })
 #endif
 

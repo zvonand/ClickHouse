@@ -29,7 +29,7 @@ void registerTableFunctionFilesystem(TableFunctionFactory & factory)
     factory.registerFunction<TableFunctionFilesystem>(
         {
             .description = R"(
-Provides access to file system to list files and return its metadata and contents. Recursively iterates directories.
+Provides access to file system to list files and return their metadata and contents. Recursively iterates directories.
 This table function provides access to filesystem of a server that runs a query.)",
             .examples
             {

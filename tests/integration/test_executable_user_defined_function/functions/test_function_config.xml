@@ -422,6 +422,19 @@
         <stderr_reaction>log_last</stderr_reaction>
     </function>
 
+    <!-- default stderr_reaction (log_last): stderr with exit 0 should not throw -->
+    <function>
+        <type>executable</type>
+        <name>test_function_stderr_default_reaction</name>
+        <return_type>String</return_type>
+        <argument>
+            <type>String</type>
+        </argument>
+        <format>TabSeparated</format>
+        <command>input_always_error.py</command>
+        <!-- no stderr_reaction: relies on default (log_last) -->
+    </function>
+
     <!-- The next two UDFs have an explicit 'deterministic' tag defined -->
     <function>
         <type>executable</type>

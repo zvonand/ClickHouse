@@ -395,7 +395,7 @@ def test_executable_function_query_cache(started_cluster):
     node.query("SYSTEM CLEAR QUERY CACHE");
 
 def test_executable_function_python_exception_in_query_log(started_cluster):
-    '''Test that Python exceptions with tracebacks appear in query_log when stderr_reaction defaults to throw'''
+    '''Test that Python exceptions with tracebacks appear in query_log when stderr_reaction is configured as throw'''
     skip_test_msan(node)
 
     # Clear query log
@@ -440,6 +440,15 @@ def test_executable_function_python_exception_in_query_log(started_cluster):
 
     for component in required_components:
         assert component in exception_text, f"Missing required component: {component}"
+
+
+def test_executable_function_default_stderr_reaction(started_cluster):
+    '''Test that UDFs writing to stderr succeed under default stderr_reaction (log_last) when exit code is 0'''
+    skip_test_msan(node)
+
+    # input_always_error.py writes "Fake error" to stderr but exits 0
+    # With default stderr_reaction (log_last), this should NOT throw
+    assert node.query("SELECT test_function_stderr_default_reaction('abc')") == "Key abc\n"
 
 
 def test_executable_function_python_exception_log_last_in_query_log(started_cluster):

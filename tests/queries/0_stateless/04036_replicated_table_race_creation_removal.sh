@@ -43,7 +43,7 @@ cleanup
 
 ${CLICKHOUSE_CLIENT} -q "
     CREATE TABLE race_test (a UInt64)
-    ENGINE = ReplicatedMergeTree('${ZK_PATH}', 'r1')
+    ENGINE = ReplicatedMergeTree('/clickhouse/tables/$CLICKHOUSE_TEST_ZOOKEEPER_PREFIX/race_test', 'r1')
     ORDER BY a
 "
 
@@ -76,7 +76,7 @@ echo "Scenario A passed"
 
 ${CLICKHOUSE_CLIENT} -q "
     CREATE TABLE race_test (a UInt64)
-    ENGINE = ReplicatedMergeTree('${ZK_PATH}', 'r1')
+    ENGINE = ReplicatedMergeTree('/clickhouse/tables/$CLICKHOUSE_TEST_ZOOKEEPER_PREFIX/race_test', 'r1')
     ORDER BY a
 "
 

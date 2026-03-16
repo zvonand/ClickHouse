@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Tags: zookeeper, no-parallel, no-shared-merge-tree, no-replicated-database
+# no-parallel: Uses PAUSEABLE_ONCE failpoints that fire exactly once globally; concurrent tests
+#   from another parallel run could steal the failpoint pause and cause this test to hang.
+# no-shared-merge-tree: The failpoints are injected in StorageReplicatedMergeTree::removeTableNodesFromZooKeeper;
+#   SharedMergeTree uses a different code path and would not trigger them.
+# no-replicated-database: Uses explicit ReplicatedMergeTree ZooKeeper paths that conflict with
+#   the DDL replication mechanism of DatabaseReplicated.
+#
+# Regression test: LOGICAL_ERROR "There is a race condition between creation and removal of
+# replicated table" must not be thrown when a ZooKeeper session expires mid-cleanup, allowing
+# a concurrent operation to finish the ZK node removal.
+#
+# Two scenarios are exercised via DROP TABLE SYNC (which calls removeTableNodesFromZooKeeper):
+#   A) Session expires before tryGetChildren: the path is gone → ZNONODE on tryGetChildren.
+#   B) Session expires before the final tryMulti: the path is gone → ZNONODE on tryMulti.
+#
+# Both are handled gracefully by returning `completely_removed = false` with a warning log
+# instead of throwing a LOGICAL_ERROR exception.
+
+CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../shell_config.sh
+. "$CURDIR"/../shell_config.sh
+
+ZK_PATH="/clickhouse/tables/${CLICKHOUSE_TEST_ZOOKEEPER_PREFIX}/race_test"
+
+function cleanup()
+{
+    ${CLICKHOUSE_CLIENT} -q "SYSTEM DISABLE FAILPOINT replicated_table_remove_zk_before_get_children" 2>/dev/null ||:
+    ${CLICKHOUSE_CLIENT} -q "SYSTEM DISABLE FAILPOINT replicated_table_remove_zk_before_final_multi" 2>/dev/null ||:
+    ${CLICKHOUSE_CLIENT} -q "DROP TABLE IF EXISTS race_test SYNC" 2>/dev/null ||:
+    ${CLICKHOUSE_KEEPER_CLIENT} -q "rmr '${ZK_PATH}'" 2>/dev/null ||:
+}
+trap cleanup EXIT
+cleanup
+
+# ===== Scenario A: ZNONODE on tryGetChildren =====
+# Simulates: ZooKeeper session expired after acquiring /dropped/lock but before tryGetChildren.
+# A concurrent process deletes the entire zookeeper_path.
+# The fix: return completely_removed=false with a warning instead of throwing LOGICAL_ERROR.
+
+${CLICKHOUSE_CLIENT} -q "
+    CREATE TABLE race_test (a UInt64)
+    ENGINE = ReplicatedMergeTree('${ZK_PATH}', 'r1')
+    ORDER BY a
+"
+
+${CLICKHOUSE_CLIENT} -q "SYSTEM ENABLE FAILPOINT replicated_table_remove_zk_before_get_children"
+
+# Background: DROP TABLE SYNC triggers dropReplica → removeTableNodesFromZooKeeper.
+# The failpoint will pause execution before tryGetChildren is called.
+${CLICKHOUSE_CLIENT} -q "DROP TABLE race_test SYNC" &
+DROP_PID=$!
+
+# Wait until removeTableNodesFromZooKeeper is paused before tryGetChildren.
+${CLICKHOUSE_CLIENT} -q "SYSTEM WAIT FAILPOINT replicated_table_remove_zk_before_get_children PAUSE"
+
+# Simulate another process completing the ZK cleanup: delete the entire path.
+${CLICKHOUSE_KEEPER_CLIENT} -q "rmr '${ZK_PATH}'" 2>/dev/null ||:
+
+# Resume. tryGetChildren returns ZNONODE; with the fix we return false instead of throwing.
+${CLICKHOUSE_CLIENT} -q "SYSTEM NOTIFY FAILPOINT replicated_table_remove_zk_before_get_children"
+
+wait $DROP_PID
+
+# Verify no LOGICAL_ERROR about race condition was logged in query_log.
+${CLICKHOUSE_CLIENT} -q "SYSTEM FLUSH LOGS query_log"
+${CLICKHOUSE_CLIENT} -q "
+    SELECT count() FROM system.query_log
+    WHERE exception LIKE '%race condition between creation and removal%'
+      AND current_database = currentDatabase()
+      AND event_time >= now() - 60
+"
+
+echo "Scenario A passed"
+
+# ===== Scenario B: ZNONODE on final tryMulti =====
+# Simulates: ZooKeeper session expired after tryGetChildren succeeded but before the final tryMulti.
+# A concurrent process deletes the entire zookeeper_path (including the ephemeral lock).
+# The fix: treat ZNONODE as a concurrent removal (log warning, return false) instead of throwing.
+
+${CLICKHOUSE_CLIENT} -q "
+    CREATE TABLE race_test (a UInt64)
+    ENGINE = ReplicatedMergeTree('${ZK_PATH}', 'r1')
+    ORDER BY a
+"
+
+${CLICKHOUSE_CLIENT} -q "SYSTEM ENABLE FAILPOINT replicated_table_remove_zk_before_final_multi"
+
+${CLICKHOUSE_CLIENT} -q "DROP TABLE race_test SYNC" &
+DROP_PID=$!
+
+# Wait until removeTableNodesFromZooKeeper is paused before the final tryMulti.
+${CLICKHOUSE_CLIENT} -q "SYSTEM WAIT FAILPOINT replicated_table_remove_zk_before_final_multi PAUSE"
+
+# Simulate another process completing the ZK cleanup.
+${CLICKHOUSE_KEEPER_CLIENT} -q "rmr '${ZK_PATH}'" 2>/dev/null ||:
+
+# Resume. tryMulti returns ZNONODE; with the fix we log a warning and return false.
+${CLICKHOUSE_CLIENT} -q "SYSTEM NOTIFY FAILPOINT replicated_table_remove_zk_before_final_multi"
+
+wait $DROP_PID
+
+# Verify no LOGICAL_ERROR about race condition was logged in query_log.
+${CLICKHOUSE_CLIENT} -q "SYSTEM FLUSH LOGS query_log"
+${CLICKHOUSE_CLIENT} -q "
+    SELECT count() FROM system.query_log
+    WHERE exception LIKE '%race condition between creation and removal%'
+      AND current_database = currentDatabase()
+      AND event_time >= now() - 60
+"
+
+echo "Scenario B passed"

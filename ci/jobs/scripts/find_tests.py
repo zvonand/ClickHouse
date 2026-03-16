@@ -149,6 +149,19 @@ class Targeting:
         ANON = "(anonymous namespace)"
         modified = symbol.replace(ANON, "x" * len(ANON))
 
+        # Neutralize < and > that are part of operator token symbols — they must not
+        # alter template-bracket depth. Affected operators: operator<, operator>,
+        # operator<=, operator>=, operator<<, operator>>, operator<=>, operator->,
+        # operator->*, operator<<=, operator>>=, and combinations thereof.
+        # Word-boundary lookbehind (?<![A-Za-z_\d]) avoids matching names like
+        # "custom_operator<T>" that merely end in "operator".
+        import re as _re
+        modified = _re.sub(
+            r"(?<![A-Za-z_\d])operator([<>\-][<>=\-\*]*)",
+            lambda m: "operator" + m.group(1).replace("<", "_").replace(">", "_"),
+            modified,
+        )
+
         # Step 1: scan for first '(' at <> depth 0 — that's the start of the arg list.
         # Step 2: track last ' ' at <> depth 0 before that — that separates return type
         #         from the qualified function name.
@@ -168,17 +181,86 @@ class Targeting:
                 elif c == " ":
                     last_space = i
 
+        # Handle conversion operators: "DB::Foo::operator int", "DB::Foo::operator Type const&".
+        # The forward scan's last_space may land anywhere inside "operator <type>", not just
+        # immediately after "operator", so checking endswith("operator") is insufficient.
+        # Real examples from CIDB:
+        #   AMQP::Field::operator AMQP::Array const&() const  -> last_space after "Array"
+        #   AMQP::NumericField<...>::operator short() const   -> last_space inside template
+        #
+        # Strategy: find the last "operator " token at bracket depth 0 before first_paren,
+        # with a word-boundary check (preceded by '::' / ' ' / string-start) to avoid
+        # matching "custom_operator ". If found, override last_space to the depth-0 space
+        # just before "operator" (i.e., separate return type from function name there).
+        pre = modified[:first_paren]
+        conv_op_pos = -1  # start index of "operator" if this is a conversion operator
+        search_start = 0
+        while True:
+            pos = pre.find("operator ", search_start)
+            if pos == -1:
+                break
+            # Word boundary: "operator" preceded by '::', ' ', or at string start
+            if pos == 0 or pre[pos - 1] in (":", " "):
+                # Verify this position is at bracket depth 0
+                d_check = sum(
+                    1 if ch == "<" else -1 if ch == ">" else 0 for ch in pre[:pos]
+                )
+                if d_check == 0:
+                    conv_op_pos = pos  # keep the last qualifying occurrence
+            search_start = pos + 1
+
+        if conv_op_pos >= 0:
+            # Override last_space: find the last depth-0 space before "operator"
+            d2 = 0
+            last_space = -1
+            for j in range(conv_op_pos):
+                c = modified[j]
+                if c == "<":
+                    d2 += 1
+                elif c == ">":
+                    d2 -= 1
+                elif d2 == 0 and c == " ":
+                    last_space = j
+
         # Everything from (last_space + 1) to first_paren is the qualified function name.
         # Use positions on the ORIGINAL symbol (same lengths after placeholder substitution).
         func_name = symbol[last_space + 1 : first_paren]
 
-        # Step 3: strip trailing function template args — only when result ends with '>',
-        # meaning no '::method' follows the closing '>'. Class templates like
-        # 'DB::Foo<T>::method' end with 'method' so their class template args are kept.
-        if func_name.endswith(">"):
-            lt_pos = func_name.find("<")
-            if lt_pos > 0:
-                func_name = func_name[:lt_pos]
+        # Step 3: strip ALL template args '<...>' from the function name.
+        # The normalized symbol is used as the second arg to hasAllTokens(), which
+        # tokenizes it with splitByNonAlpha and requires all tokens present in the stored
+        # symbol.  Template arg tokens (type names, integer literals, etc.) are "extras"
+        # that must NOT appear in the query — otherwise only the exact instantiation
+        # matches and other instantiations of the same template are missed.
+        # 'DB::Foo<int>::bar'        → 'DB::Foo::bar'   (class template)
+        # 'DB::Foo::setUsed<true>'   → 'DB::Foo::setUsed'  (function template)
+        # 'Foo<T>::bar<U>'           → 'Foo::bar'        (both)
+        #
+        # Uses the same two same-length preprocessing transforms so that positions map
+        # 1:1 between the processed and pre-processed strings:
+        #   a) (anonymous namespace) → placeholder  — neutralises its '(' and ')'
+        #   b) operator<</>>/->  neutralisation    — neutralises operator < > as '_'
+        # Characters are read from the pre-neutralised string so that e.g. operator<<
+        # is preserved in the output with its original '<' characters.
+        PLACEHOLDER = "x" * len(ANON)
+        fn_pre = func_name.replace(ANON, PLACEHOLDER)
+        fn_mod3 = _re.sub(
+            r"(?<![A-Za-z_\d])operator([<>\-][<>=\-\*]*)",
+            lambda m: "operator" + m.group(1).replace("<", "_").replace(">", "_"),
+            fn_pre,
+        )
+        result_chars = []
+        d3 = 0
+        for idx, ch in enumerate(fn_mod3):
+            if ch == "<":
+                d3 += 1
+            elif ch == ">":
+                d3 -= 1
+            elif d3 == 0:
+                result_chars.append(fn_pre[idx])
+        stripped = "".join(result_chars).replace(PLACEHOLDER, ANON)
+        if stripped:
+            func_name = stripped
 
         return func_name if func_name else symbol
 

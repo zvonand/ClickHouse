@@ -1,5 +1,9 @@
+import os
+from concurrent.futures import ThreadPoolExecutor
+
 from ci.jobs.scripts.cidb_cluster import CIDBCluster
 from ci.jobs.scripts.clickhouse_proc import ClickHouseProc
+from ci.jobs.scripts.find_tests import Targeting
 from ci.praktika.utils import Shell, Utils
 
 temp_dir = f"{Utils.cwd()}/ci/tmp"
@@ -58,44 +62,121 @@ class CoverageExporter:
             path_arg = f" --path {self.src.run_path0}"
 
             if not self.to_file:
+                # --- Insert 1: raw symbols → checks_coverage_inverted ---
+                # No SQL-side normalization: the text index (splitByNonAlpha +
+                # hasAllTokens) at query time is robust to extra return-type and
+                # template-arg tokens.  SQL normalization was actively harmful: its
+                # naive find('(') hit cast expressions like (char8_t)15 inside
+                # template args, and its first-'<' stripping over-truncated
+                # class-template+function-template symbols, causing hasAllTokens to
+                # miss ~27% of stored symbols.
                 query = (
                     f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted', '{self.dest.user}', '{self.dest.pwd}') "
-                    "SELECT DISTINCT symbol, "
+                    "SELECT DISTINCT sym AS symbol, "
                     f"'{self.check_start_time}' AS check_start_time, "
                     f"'{self.job_name}' AS check_name, "
                     "test_name "
-                    "FROM ( "
-                    "  SELECT "
-                    "    -- Step 2: strip trailing function template args '<...>' when the symbol "
-                    "    -- ends with '>' (no '::method' follows). Class templates like "
-                    "    -- 'DB::Foo<T>::method' end with 'method' so their class template args "
-                    "    -- are preserved. Return-type stripping is done at query time in "
-                    "    -- normalize_symbol() — hasAllTokens() is robust to extra prefix tokens. "
-                    "    if(endsWith(sym_no_args, '>') AND position(sym_no_args, '<') > 0, "
-                    "       substring(sym_no_args, 1, position(sym_no_args, '<') - 1), "
-                    "       sym_no_args) AS symbol, "
-                    "    test_name "
-                    "  FROM ( "
-                    "    SELECT "
-                    "      -- Step 1: strip function argument list '(...)'. Use same-length "
-                    "      -- placeholder for '(anonymous namespace)' to keep positions aligned. "
-                    "      if(position(replaceAll(sym, '(anonymous namespace)', repeat('x', 21)), '(') > 0, "
-                    "         substring(sym, 1, "
-                    "                   position(replaceAll(sym, '(anonymous namespace)', repeat('x', 21)), '(') - 1), "
-                    "         sym) AS sym_no_args, "
-                    "      test_name "
-                    f"    FROM system.{table} "
-                    "    ARRAY JOIN symbol AS sym "
-                    # Exclude __client rows: they inflate count(distinct test_name) and
-                    # break the 'symbol in all tests' filter; they also return non-runnable
-                    # identifiers for targeted test selection.
-                    "    WHERE notEmpty(sym) AND NOT endsWith(test_name, '__client') "
-                    "  ) "
-                    ")"
+                    f"FROM system.{table} "
+                    "ARRAY JOIN symbol AS sym "
+                    # Exclude __client rows: they inflate count(distinct test_name)
+                    # and break the frequency filter; they also return non-runnable
+                    # identifiers unsuitable for targeted test selection.
+                    "WHERE notEmpty(sym) AND NOT endsWith(test_name, '__client')"
                 )
                 cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
                 rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
                 res = rc == 0
+                if not res:
+                    print(f"ERROR: raw insert (checks_coverage_inverted) failed (rc={rc})")
+                    if stdout:
+                        print(f"  stdout: {stdout}")
+                    if stderr:
+                        print(f"  stderr: {stderr}")
+
+                if res:
+                    # --- Insert 2: normalized symbols → checks_coverage_inverted2 ---
+                    # normalize_symbol strips return type, arg list, and ALL template
+                    # args — the stored symbol is the bare qualified function name,
+                    # e.g. "DB::Foo::bar".  The bloom_filter index on that table
+                    # supports "WHERE symbol = 'DB::Foo::bar'" exact-match queries.
+
+                    # Step 1: dump raw (sym, test_name) pairs to a temp file.
+                    raw_file = f"{temp_dir}/coverage_raw_symbols.tsv"
+                    Shell.check(f"rm -f {raw_file}")
+                    select_query = (
+                        f"SELECT sym, test_name "
+                        f"FROM system.{table} "
+                        "ARRAY JOIN symbol AS sym "
+                        "WHERE notEmpty(sym) AND NOT endsWith(test_name, '__client') "
+                        f"INTO OUTFILE '{raw_file}' FORMAT TSV"
+                    )
+                    cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{select_query}" {command_args_post}'
+                    rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
+                    if rc != 0:
+                        print(f"ERROR: normalized select failed (rc={rc})")
+                        if stdout:
+                            print(f"  stdout: {stdout}")
+                        if stderr:
+                            print(f"  stderr: {stderr}")
+                        res = False
+
+                if res:
+                    # Step 2: normalize symbols in parallel, deduplicate, write TSV.
+                    # normalize_symbol is stateless so chunks are independent.
+                    with open(raw_file) as fin:
+                        raw_pairs = [
+                            tuple(line.rstrip("\n").split("\t", 1))
+                            for line in fin
+                            if "\t" in line
+                        ]
+
+                    workers = max(1, os.cpu_count() or 4)
+                    chunk_size = max(1, len(raw_pairs) // workers)
+                    chunks = [
+                        raw_pairs[i : i + chunk_size]
+                        for i in range(0, len(raw_pairs), chunk_size)
+                    ]
+
+                    def normalize_chunk(chunk):
+                        result = []
+                        for sym, test_name in chunk:
+                            norm = Targeting.normalize_symbol(sym)
+                            if norm:
+                                result.append((norm, test_name))
+                        return result
+
+                    norm_file = f"{temp_dir}/coverage_normalized_symbols.tsv"
+                    seen = set()
+                    with open(norm_file, "w") as fout:
+                        with ThreadPoolExecutor(max_workers=workers) as executor:
+                            for normalized_chunk in executor.map(normalize_chunk, chunks):
+                                for norm, test_name in normalized_chunk:
+                                    key = (norm, test_name)
+                                    if key not in seen:
+                                        seen.add(key)
+                                        fout.write(
+                                            f"{norm}\t{self.check_start_time}\t{self.job_name}\t{test_name}\n"
+                                        )
+
+                    # Step 3: insert the normalized TSV into checks_coverage_inverted2.
+                    insert_query = (
+                        f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted2', '{self.dest.user}', '{self.dest.pwd}') "
+                        "(symbol, check_start_time, check_name, test_name) FORMAT TSV"
+                    )
+                    cmd = (
+                        f"cd {self.src.run_path0} && "
+                        f"clickhouse local {command_args} {path_arg} "
+                        f'--query "{insert_query}" < {norm_file} '
+                        f"{command_args_post}"
+                    )
+                    rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
+                    res = rc == 0
+                    if not res:
+                        print(f"ERROR: normalized insert (checks_coverage_inverted2) failed (rc={rc})")
+                        if stdout:
+                            print(f"  stdout: {stdout}")
+                        if stderr:
+                            print(f"  stderr: {stderr}")
             else:
                 query = (
                     "SELECT "
@@ -111,9 +192,6 @@ class CoverageExporter:
                 res = rc == 0
 
             if not res:
-                print(f"ERROR: Failed to export coverage table: {table} (exit code {rc})")
-                if stdout:
-                    print(f"  stdout: {stdout}")
-                if stderr:
-                    print(f"  stderr: {stderr}")
+                print(f"ERROR: Failed to export coverage table: {table}")
+                break
         return res

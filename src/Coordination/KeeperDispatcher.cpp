@@ -1,4 +1,5 @@
 #include <Coordination/KeeperDispatcher.h>
+#include <Common/ProfilingScopedRWLock.h>
 #include <libnuraft/async.hxx>
 
 #include <Poco/Path.h>
@@ -52,6 +53,10 @@ namespace ProfileEvents
     extern const Event KeeperBatchMaxCount;
     extern const Event KeeperBatchMaxTotalSize;
     extern const Event KeeperRequestRejectedDueToSoftMemoryLimitCount;
+    extern const Event KeeperSessionCallbackLockWaitMicroseconds;
+    extern const Event KeeperSessionCallbackLockHoldMicroseconds;
+    extern const Event KeeperReadRequestQueueLockWaitMicroseconds;
+    extern const Event KeeperReadRequestQueueLockHoldMicroseconds;
 }
 
 namespace HistogramMetrics
@@ -249,7 +254,7 @@ void KeeperDispatcher::requestThread()
                             {
                                 const auto & last_request = current_batch.back();
                                 ZooKeeperOpentelemetrySpans::maybeInitialize(request.request->spans.read_wait_for_write, request.request->tracing_context);
-                                std::lock_guard lock(read_request_queue_mutex);
+                                ProfiledMutexLock lock(read_request_queue_mutex, ProfileEvents::KeeperReadRequestQueueLockWaitMicroseconds, ProfileEvents::KeeperReadRequestQueueLockHoldMicroseconds);
                                 read_request_queue[last_request.session_id][last_request.request->xid].push_back(request);
                             }
                             else if (request.request->getOpNum() == Coordination::OpNum::Reconfig)
@@ -456,7 +461,7 @@ void KeeperDispatcher::snapshotThread()
 
 bool KeeperDispatcher::setResponse(int64_t session_id, const Coordination::ZooKeeperResponsePtr & response, Coordination::ZooKeeperRequestPtr request)
 {
-    std::lock_guard lock(session_to_response_callback_mutex);
+    ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds, ProfileEvents::KeeperSessionCallbackLockHoldMicroseconds);
 
     /// Special new session response.
     if (response->xid != Coordination::WATCH_XID && response->getOpNum() == Coordination::OpNum::SessionID)
@@ -497,7 +502,7 @@ bool KeeperDispatcher::putRequest(const Coordination::ZooKeeperRequestPtr & requ
 {
     {
         /// If session was already disconnected than we will ignore requests
-        std::lock_guard lock(session_to_response_callback_mutex);
+        ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds, ProfileEvents::KeeperSessionCallbackLockHoldMicroseconds);
         if (!session_to_response_callback.contains(session_id))
             return false;
     }
@@ -532,7 +537,7 @@ bool KeeperDispatcher::putLocalReadRequest(const Coordination::ZooKeeperRequestP
 {
     {
         /// If session was already disconnected than we will ignore requests
-        std::lock_guard lock(session_to_response_callback_mutex);
+        ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds, ProfileEvents::KeeperSessionCallbackLockHoldMicroseconds);
         if (!session_to_response_callback.contains(session_id))
             return false;
     }
@@ -578,7 +583,7 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
         {
             {
                 /// check if we have queue of read requests depending on this request to be committed
-                std::lock_guard lock(read_request_queue_mutex);
+                ProfiledMutexLock lock(read_request_queue_mutex, ProfileEvents::KeeperReadRequestQueueLockWaitMicroseconds, ProfileEvents::KeeperReadRequestQueueLockHoldMicroseconds);
                 if (auto it = read_request_queue.find(request_for_session.session_id); it != read_request_queue.end())
                 {
                     auto & xid_to_request_queue = it->second;
@@ -694,7 +699,7 @@ void KeeperDispatcher::shutdown()
         KeeperRequestsForSessions close_requests;
         {
             /// Clear all registered sessions
-            std::lock_guard lock(session_to_response_callback_mutex);
+            ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds, ProfileEvents::KeeperSessionCallbackLockHoldMicroseconds);
 
             if (server && hasLeader())
             {
@@ -774,7 +779,7 @@ KeeperDispatcher::~KeeperDispatcher()
 
 void KeeperDispatcher::registerSession(int64_t session_id, ZooKeeperResponseCallback callback)
 {
-    std::lock_guard lock(session_to_response_callback_mutex);
+    ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds, ProfileEvents::KeeperSessionCallbackLockHoldMicroseconds);
     if (!session_to_response_callback.try_emplace(session_id, callback).second)
         throw Exception(DB::ErrorCodes::LOGICAL_ERROR, "Session with id {} already registered in dispatcher", session_id);
     CurrentMetrics::add(CurrentMetrics::KeeperAliveConnections);
@@ -841,7 +846,7 @@ void KeeperDispatcher::finishSession(int64_t session_id)
 
     ZooKeeperResponseCallback callback;
     {
-        std::lock_guard lock(session_to_response_callback_mutex);
+        ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds, ProfileEvents::KeeperSessionCallbackLockHoldMicroseconds);
         auto session_it = session_to_response_callback.find(session_id);
         if (session_it != session_to_response_callback.end())
         {
@@ -861,7 +866,7 @@ void KeeperDispatcher::finishSession(int64_t session_id)
     }
 
     {
-        std::lock_guard lock(read_request_queue_mutex);
+        ProfiledMutexLock lock(read_request_queue_mutex, ProfileEvents::KeeperReadRequestQueueLockWaitMicroseconds, ProfileEvents::KeeperReadRequestQueueLockHoldMicroseconds);
         read_request_queue.erase(session_id);
     }
 }
@@ -928,7 +933,7 @@ int64_t KeeperDispatcher::getSessionID(int64_t session_timeout_ms)
     auto future = promise->get_future();
 
     {
-        std::lock_guard lock(session_to_response_callback_mutex);
+        ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds, ProfileEvents::KeeperSessionCallbackLockHoldMicroseconds);
         new_session_id_response_callback[request->internal_id]
             = [promise, internal_id = request->internal_id](
                   const Coordination::ZooKeeperResponsePtr & response, Coordination::ZooKeeperRequestPtr /*request*/)
@@ -1148,7 +1153,7 @@ Keeper4LWInfo KeeperDispatcher::getKeeper4LWInfo() const
     Keeper4LWInfo result = server->getPartiallyFilled4LWInfo();
     result.outstanding_requests_count = requests_queue->size();
     {
-        std::lock_guard lock(session_to_response_callback_mutex);
+        ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds, ProfileEvents::KeeperSessionCallbackLockHoldMicroseconds);
         result.alive_connections_count = session_to_response_callback.size();
     }
     return result;

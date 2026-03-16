@@ -63,7 +63,7 @@ void MachO::init()
                     if (reinterpret_cast<const char *>(&sect[j + 1]) > mapped + file_size)
                         break;
 
-                    if (sect[j].offset + sect[j].size > file_size)
+                    if (sect[j].offset > file_size || sect[j].size > file_size - sect[j].offset)
                         continue;
 
                     SectionInfo info;
@@ -75,6 +75,9 @@ void MachO::init()
                 }
             }
         }
+
+        if (cmd->cmdsize < sizeof(load_command) || cmd_ptr + cmd->cmdsize > mapped + file_size)
+            break;
 
         cmd_ptr += cmd->cmdsize;
     }

@@ -72,20 +72,9 @@ namespace
             if (!parser.parse(pos, x, expected))
                 return false;
 
-            auto has_alias = [](this auto const& self, const ASTPtr & ast)->bool
-            {
-                if (!ast)
-                    return false;
-                if (!ast->tryGetAlias().empty())
-                    return true;
-                for (const auto & child : ast->children)
-                    if (self(child))
-                        return true;
-
-                return false;
-            };
-
-            if (has_alias(x))
+            /// This only checks for top-level aliases, nested aliases are always parenthesized so they
+            /// do not cause a formatting inconsistency.
+            if (!x->tryGetAlias().empty())
                 throw Exception(ErrorCodes::SYNTAX_ERROR, "Aliases are not allowed in CREATE ROW POLICY queries.");
 
             expr = x;

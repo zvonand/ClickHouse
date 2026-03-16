@@ -1,4 +1,4 @@
--- Test FixedRangeHashMap optimization for hash joins.
+-- Test on-the-fly conversion of hash table to fixed hash table in hash join.
 
 DROP TABLE IF EXISTS t_left;
 DROP TABLE IF EXISTS t_right_i32;

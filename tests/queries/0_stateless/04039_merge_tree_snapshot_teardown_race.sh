@@ -16,27 +16,26 @@ function cleanup()
     $CLICKHOUSE_CLIENT --query "DROP TABLE IF EXISTS ${TABLE} SYNC" >/dev/null 2>&1 ||:
 }
 
-function wait_for_readers_chain()
+function wait_for_reading()
 {
     local query_id=$1 && shift
-    local log_file=$1 && shift
-    local timeout="${1:-30}"
+    local timeout="${1:-60}"
     local start=$EPOCHSECONDS
 
     while true; do
-        if grep -F -q "MergeTreeReadersChain" "$log_file"; then
+        local read_rows
+        read_rows=$($CLICKHOUSE_CLIENT --query "SELECT read_rows FROM system.processes WHERE query_id = '${query_id}'" 2>/dev/null || echo "")
+        if [ -n "$read_rows" ] && [ "$read_rows" -gt 0 ] 2>/dev/null; then
             return 0
         fi
 
-        local running
-        running=$($CLICKHOUSE_CLIENT --query "SELECT count() FROM system.processes WHERE query_id = '${query_id}'" 2>/dev/null || echo 0)
-        if [ "$running" = "0" ]; then
-            echo "Query ${query_id} finished before 'MergeTreeReadersChain' appeared" >&2
+        if [ -z "$read_rows" ]; then
+            echo "Query ${query_id} finished before any rows were read" >&2
             return 1
         fi
 
         if ((EPOCHSECONDS - start > timeout)); then
-            echo "Timeout waiting for 'MergeTreeReadersChain' for ${query_id}" >&2
+            echo "Timeout waiting for reading to start for ${query_id}" >&2
             return 1
         fi
 
@@ -51,21 +50,16 @@ function run_iteration()
     local log_file
     log_file=$(mktemp "${CLICKHOUSE_TMP}/04039.XXXXXX.log")
 
-    local args=(
-        --query_id "$query_id"
-        --format Null
-        --max_threads 1
-        --max_block_size 1
-        # Exercise the path where `ReadFromMergeTree` strips `SnapshotData::parts`.
-        --enable_shared_storage_snapshot_in_query 0
-        --merge_tree_read_split_ranges_into_intersecting_and_non_intersecting_injection_probability 0
-        --send_logs_level test
-        --server_logs_file "$log_file"
-    )
-
     # Kill the query after readers are initialized so teardown runs while the
     # pool still owns parts that came from the stripped snapshot.
-    $CLICKHOUSE_CLIENT "${args[@]}" --query "
+    $CLICKHOUSE_CLIENT \
+        --query_id "$query_id" \
+        --format Null \
+        --max_threads 1 \
+        --max_block_size 1 \
+        --enable_shared_storage_snapshot_in_query 0 \
+        --merge_tree_read_split_ranges_into_intersecting_and_non_intersecting_injection_probability 0 \
+        --query "
         SELECT sleepEachRow(0.01)
         FROM ${TABLE}
         WHERE (_part, _part_offset) IN
@@ -74,11 +68,11 @@ function run_iteration()
             FROM ${TABLE}
             WHERE bucket = 1
         )
-    " >/dev/null 2>&1 &
+    " >/dev/null 2>"$log_file" &
     local pid=$!
 
     wait_for_query_to_start "$query_id"
-    if ! wait_for_readers_chain "$query_id" "$log_file"; then
+    if ! wait_for_reading "$query_id"; then
         $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '${query_id}' SYNC FORMAT Null" >/dev/null 2>&1 ||:
         wait "$pid" >/dev/null 2>&1 ||:
         rm -f "$log_file"

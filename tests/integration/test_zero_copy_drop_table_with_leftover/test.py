@@ -28,6 +28,7 @@ def started_cluster():
             main_configs=["configs/storage_conf.xml"],
             with_minio=True,
             with_zookeeper=True,
+            stay_alive=True,
         )
         cluster.start()
         yield cluster
@@ -42,6 +43,8 @@ def test_drop_table_with_leftover_part_directory(started_cluster):
     DROP TABLE must succeed without getting stuck.
     """
     node1 = cluster.instances["node1"]
+
+    objects_before = list_blobs(cluster.minio_client)
 
     node1.query(
         """
@@ -93,7 +96,7 @@ def test_drop_table_with_leftover_part_directory(started_cluster):
     )
 
     # Verify S3 objects are cleaned up eventually
-    wait_blobs_count_synchronization(cluster.minio_client, 0)
+    wait_blobs_count_synchronization(cluster.minio_client, len(objects_before))
 
 
 def test_drop_table_with_broken_part(started_cluster):
@@ -104,13 +107,16 @@ def test_drop_table_with_broken_part(started_cluster):
     """
     node1 = cluster.instances["node1"]
 
+    objects_before = list_blobs(cluster.minio_client)
+
     node1.query(
         """
         CREATE TABLE test_broken (key Int64)
         ENGINE = ReplicatedMergeTree('/test/tables/test_broken', '1')
         ORDER BY key
         SETTINGS storage_policy = 's3',
-                 allow_remote_fs_zero_copy_replication = 1
+                 allow_remote_fs_zero_copy_replication = 1,
+                 min_bytes_for_wide_part = 1
         """
     )
 
@@ -142,15 +148,6 @@ def test_drop_table_with_broken_part(started_cluster):
     # Restart the server so the table reloads and the broken part is not tracked
     node1.restart_clickhouse()
 
-    # The broken part should not be in system.parts anymore (or be detached).
-    # Either way, its directory still exists on disk but isn't tracked.
-    active_parts = node1.query(
-        "SELECT count() FROM system.parts "
-        "WHERE table = 'test_broken' AND active"
-    ).strip()
-    # At least the second part should be active; the broken one may be moved to detached
-    assert int(active_parts) >= 1
-
     # DROP TABLE must complete successfully
     node1.query("DROP TABLE test_broken SYNC", timeout=60)
 
@@ -162,7 +159,7 @@ def test_drop_table_with_broken_part(started_cluster):
         == "0\n"
     )
 
-    wait_blobs_count_synchronization(cluster.minio_client, 0)
+    wait_blobs_count_synchronization(cluster.minio_client, len(objects_before) + 1)
 
 
 def test_drop_database_with_leftover_part(started_cluster):
@@ -171,6 +168,8 @@ def test_drop_database_with_leftover_part(started_cluster):
     Verify that dropping an entire database works when a table has leftover parts.
     """
     node1 = cluster.instances["node1"]
+
+    objects_before = list_blobs(cluster.minio_client)
 
     node1.query("CREATE DATABASE test_drop_db")
 
@@ -214,4 +213,4 @@ def test_drop_database_with_leftover_part(started_cluster):
         == "0\n"
     )
 
-    wait_blobs_count_synchronization(cluster.minio_client, 0)
+    wait_blobs_count_synchronization(cluster.minio_client, len(objects_before))

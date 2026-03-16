@@ -18,6 +18,8 @@
 # Both are handled gracefully by returning `completely_removed = false` with a warning log
 # instead of throwing a LOGICAL_ERROR exception.
 
+set -e
+
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
@@ -61,16 +63,9 @@ ${CLICKHOUSE_KEEPER_CLIENT} -q "rmr '${ZK_PATH}'" 2>/dev/null ||:
 # Resume. tryGetChildren returns ZNONODE; with the fix we return false instead of throwing.
 ${CLICKHOUSE_CLIENT} -q "SYSTEM NOTIFY FAILPOINT replicated_table_remove_zk_before_get_children"
 
+# If LOGICAL_ERROR is thrown (release build) or server crashes (debug build),
+# wait returns non-zero and set -e exits the script immediately.
 wait $DROP_PID
-
-# Verify no LOGICAL_ERROR about race condition was logged in query_log.
-${CLICKHOUSE_CLIENT} -q "SYSTEM FLUSH LOGS query_log"
-${CLICKHOUSE_CLIENT} -q "
-    SELECT count() FROM system.query_log
-    WHERE exception LIKE '%race condition between creation and removal%'
-      AND current_database = currentDatabase()
-      AND event_time >= now() - 60
-"
 
 echo "Scenario A passed"
 
@@ -100,14 +95,5 @@ ${CLICKHOUSE_KEEPER_CLIENT} -q "rmr '${ZK_PATH}'" 2>/dev/null ||:
 ${CLICKHOUSE_CLIENT} -q "SYSTEM NOTIFY FAILPOINT replicated_table_remove_zk_before_final_multi"
 
 wait $DROP_PID
-
-# Verify no LOGICAL_ERROR about race condition was logged in query_log.
-${CLICKHOUSE_CLIENT} -q "SYSTEM FLUSH LOGS query_log"
-${CLICKHOUSE_CLIENT} -q "
-    SELECT count() FROM system.query_log
-    WHERE exception LIKE '%race condition between creation and removal%'
-      AND current_database = currentDatabase()
-      AND event_time >= now() - 60
-"
 
 echo "Scenario B passed"

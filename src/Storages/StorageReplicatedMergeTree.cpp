@@ -1643,19 +1643,19 @@ bool StorageReplicatedMergeTree::removeTableNodesFromZooKeeper(zkutil::ZooKeeper
     ops.emplace_back(zkutil::makeRemoveRequest(zookeeper_path, -1));
     code = zookeeper->tryMulti(ops, responses, /* check_session_valid */ true);
 
-    if (code == Coordination::Error::ZNOTEMPTY)
+    if (code == Coordination::Error::ZNONODE)
+    {
+        /// It is possible if ZooKeeper session expired and the ephemeral drop lock was deleted,
+        /// allowing another process to complete the removal or create a new table.
+        LOG_WARNING(logger, "Table {} was not completely removed from ZooKeeper, some nodes were already removed by a concurrent operation", zookeeper_path);
+    }
+    else if (code == Coordination::Error::ZNOTEMPTY)
     {
         LOG_ERROR(
             logger,
             "Table was not completely removed from ZooKeeper, {} still exists and may contain some garbage,"
             "but someone is removing it right now.",
             zookeeper_path);
-    }
-    else if (code == Coordination::Error::ZNONODE)
-    {
-        /// It is possible if ZooKeeper session expired and the ephemeral drop lock was deleted,
-        /// allowing another process to complete the removal or create a new table.
-        LOG_WARNING(logger, "Table {} was not completely removed from ZooKeeper, some nodes were already removed by a concurrent operation", zookeeper_path);
     }
     else if (code != Coordination::Error::ZOK)
     {

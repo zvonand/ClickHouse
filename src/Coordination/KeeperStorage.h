@@ -542,7 +542,12 @@ public:
         {
             std::shared_ptr<Node> node{nullptr};
             std::optional<Coordination::ACLs> acls{};
-            std::unordered_set<uint64_t> applied_zxids{};
+            /// Tracks which zxids have been applied to this uncommitted node.
+            /// Typically 1-3 entries; vector is faster than unordered_set at this size.
+            /// May contain duplicates when a Multi operation applies multiple deltas
+            /// with the same zxid to the same node — this is harmless because erasure
+            /// uses std::erase (removes all matches) and only emptiness is checked.
+            std::vector<uint64_t> applied_zxids{};
 
             void materializeACL(const ACLMap & current_acl_map);
         };

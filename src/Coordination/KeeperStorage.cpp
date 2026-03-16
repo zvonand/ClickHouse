@@ -1,5 +1,6 @@
 /// NOLINTBEGIN(clang-analyzer-optin.core.EnumCastOutOfRange)
 
+#include <algorithm>
 #include <IO/Operators.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/WriteHelpers.h>
@@ -848,7 +849,7 @@ void KeeperStorage<Container>::UncommittedState::applyDelta(const Delta & delta,
                 acls = operation.new_acls;
             }
 
-            applied_zxids.insert(delta.zxid);
+            applied_zxids.push_back(delta.zxid);
             zxid_to_nodes[delta.zxid].insert(node_it);
         },
         delta.operation);
@@ -1009,7 +1010,7 @@ void KeeperStorage<Container>::UncommittedState::cleanup(int64_t commit_zxid)
 
         for (const auto node_it : transaction_nodes)
         {
-            node_it->second.applied_zxids.erase(transaction_zxid);
+            std::erase(node_it->second.applied_zxids, transaction_zxid);
             if (node_it->second.applied_zxids.empty())
                 nodes.erase(node_it);
         }
@@ -1130,7 +1131,7 @@ void KeeperStorage<Container>::UncommittedState::rollback(std::list<Delta> rollb
 
         for (const auto node_it : transaction_nodes)
         {
-            node_it->second.applied_zxids.erase(transaction_zxid);
+            std::erase(node_it->second.applied_zxids, transaction_zxid);
             if (node_it->second.applied_zxids.empty())
                 nodes.erase(node_it);
         }

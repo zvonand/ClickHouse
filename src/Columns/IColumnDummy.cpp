@@ -112,9 +112,7 @@ VectorWithMemoryTracking<MutableColumnPtr> IColumnDummy::scatter(size_t num_colu
     if (s != selector.size())
         throw Exception(ErrorCodes::SIZES_OF_COLUMNS_DOESNT_MATCH, "Size of selector doesn't match size of column.");
 
-    VectorWithMemoryTracking<size_t> counts(num_columns);
-    for (auto idx : selector)
-        ++counts[idx];
+    auto counts = countColumnsSizeInSelector(num_columns, selector);
 
     VectorWithMemoryTracking<MutableColumnPtr> res(num_columns);
     for (size_t i = 0; i < num_columns; ++i)

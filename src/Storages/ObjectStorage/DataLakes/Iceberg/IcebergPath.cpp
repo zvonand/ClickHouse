@@ -46,8 +46,9 @@ String IcebergPathResolver::resolve(const IcebergPathFromMetadata & metadata_pat
     while (pos != std::string::npos)
     {
         auto potential_position = pos + table_root.size();
-        if ((std::string_view(raw_path.data() + potential_position, 6) == "/data/")
-            || (std::string_view(raw_path.data() + potential_position, 10) == "/metadata/"))
+        if (((potential_position + 6 <= raw_path.size()) && (std::string_view(raw_path.data() + potential_position, 6) == "/data/"))
+            || ((potential_position + 10 <= raw_path.size())
+                && (std::string_view(raw_path.data() + potential_position, 10) == "/metadata/")))
         {
             good_pos = pos;
             break;

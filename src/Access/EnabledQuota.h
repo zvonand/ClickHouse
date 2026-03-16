@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Access/Common/QuotaDefs.h>
+#include <Common/HashTable/HashMap.h>
 #include <Core/UUID.h>
 #include <Poco/Net/IPAddress.h>
 #include <boost/container/flat_set.hpp>
@@ -12,7 +13,6 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <unordered_map>
 
 
 namespace DB
@@ -86,7 +86,7 @@ private:
 
         /// Per-normalized-query-hash counters for `QUERIES_PER_NORMALIZED_HASH`.
         mutable std::mutex per_hash_mutex;
-        mutable std::unordered_map<UInt64, QuotaValue> per_hash_used;
+        mutable HashMap<UInt64, QuotaValue> per_hash_used;
 
         Interval(std::chrono::seconds duration_, bool randomize_interval_, std::chrono::system_clock::time_point current_time_);
 
@@ -121,7 +121,7 @@ private:
     IntervalResolver interval_resolver;
     /// Cache of resolved intervals per normalized query hash.
     mutable std::mutex resolved_intervals_mutex;
-    mutable std::unordered_map<UInt64, boost::shared_ptr<const Intervals>> resolved_intervals_cache;
+    mutable HashMap<UInt64, boost::shared_ptr<const Intervals>> resolved_intervals_cache;
 };
 
 }

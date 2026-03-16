@@ -367,7 +367,7 @@ void EnabledQuota::usedForNormalizedQuery(UInt64 normalized_query_hash, QuotaTyp
         auto it = resolved_intervals_cache.find(normalized_query_hash);
         if (it != resolved_intervals_cache.end())
         {
-            resolved = it->second;
+            resolved = it->getMapped();
         }
         else
         {

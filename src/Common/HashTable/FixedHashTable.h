@@ -6,6 +6,7 @@ namespace DB
 {
     namespace ErrorCodes
     {
+        extern const int LOGICAL_ERROR;
         extern const int NO_AVAILABLE_DATA;
     }
 }
@@ -486,7 +487,7 @@ public:
     {
         if constexpr (use_runtime_num_cells)
           throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Serialization is not supported for runtime-sized FixedHashTable");
-        
+
         Cell::State::write(wb);
         DB::writeVarUInt(size(), wb);
 
@@ -507,7 +508,7 @@ public:
     {
         if constexpr (use_runtime_num_cells)
           throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Serialization is not supported for runtime-sized FixedHashTable");
-        
+
         Cell::State::writeText(wb);
         DB::writeText(size(), wb);
 
@@ -530,7 +531,7 @@ public:
     {
         if constexpr (use_runtime_num_cells)
           throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Serialization is not supported for runtime-sized FixedHashTable");
-        
+
         Cell::State::read(rb);
         destroyElements();
         size_t m_size;
@@ -554,7 +555,7 @@ public:
     {
         if constexpr (use_runtime_num_cells)
           throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Serialization is not supported for runtime-sized FixedHashTable");
-        
+
         Cell::State::readText(rb);
         destroyElements();
         size_t m_size;

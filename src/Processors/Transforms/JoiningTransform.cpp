@@ -350,7 +350,7 @@ void FillingRightJoinSideTransform::work()
     if (input.isFinished())
     {
         Stopwatch watch;
-        
+
         if (!join->supportParallelJoin())
             join->tryRerangeRightTableData();
         if (auto * hash_join = typeid_cast<HashJoin *>(join.get()))

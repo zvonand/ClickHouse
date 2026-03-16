@@ -243,12 +243,10 @@ MergeTreeReadersChain MergeTreeReadTask::createReadersChain(
     size_t num_readers = prewhere_actions.steps.size() + task_readers.prewhere.size() + 1;
     range_readers.reserve(num_readers);
 
-    /// Compute a combined flag: true only if ALL readers in the chain support incomplete granules
-    /// and the query condition cache is not used. This ensures that the first reader in the chain
-    /// (which decides batch boundaries) does not create mid-mark boundaries when a later reader
-    /// cannot handle them.
+    /// Compute a combined flag: true only if ALL readers in the chain support incomplete granules.
+    /// This ensures that the first reader in the chain (which decides batch boundaries) does not
+    /// create mid-mark boundaries when a later reader cannot handle them.
     bool can_read_incomplete_granules = task_readers.main->canReadIncompleteGranules()
-        && !task_readers.main->getMergeTreeReaderSettings().use_query_condition_cache
         && std::ranges::all_of(task_readers.prewhere, [](const auto & reader)
         {
             return reader->canReadIncompleteGranules();

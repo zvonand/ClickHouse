@@ -1048,6 +1048,7 @@ MergeTreeRangeReader::ReadResult MergeTreeRangeReader::startReadingChain(size_t 
     /// result.num_rows_read until call to stream.finalize(). Also result.num_added_rows may be less than
     /// result.num_rows_read if the last granule in range also the last in part (so we have to adjust last granule).
     {
+        bool use_query_condition_cache = merge_tree_reader->getMergeTreeReaderSettings().use_query_condition_cache;
         size_t space_left = max_rows;
         while (space_left && (!stream.isFinished() || !ranges.empty()))
         {
@@ -1072,9 +1073,10 @@ MergeTreeRangeReader::ReadResult MergeTreeRangeReader::startReadingChain(size_t 
 
             size_t current_space = space_left;
 
-            /// If any reader in chain can't read part of granule, we have to increase
-            /// number of reading rows to read complete granules and exceed max_rows a bit.
-            if (!can_read_incomplete_granules)
+            /// If any reader in chain can't read part of granule, or query condition cache
+            /// requires complete marks, we have to increase number of reading rows to read
+            /// complete granules and exceed max_rows a bit.
+            if (use_query_condition_cache || !can_read_incomplete_granules)
                 current_space = stream.ceilRowsToCompleteGranules(space_left);
 
             auto rows_to_read = std::min(current_space, stream.numPendingRowsInCurrentGranule());

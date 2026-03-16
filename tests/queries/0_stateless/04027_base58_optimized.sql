@@ -89,7 +89,7 @@ SELECT 'size hint fallback to generic';
 SELECT base58Decode(base58Encode('Hello world!'), 99) = 'Hello world!';
 
 SELECT 'bulk round-trip';
-SELECT sum(base58Decode(base58Encode(randomString(32))) = randomString(32)) == 100 FROM numbers(100);
+SELECT sum(dec = rs) == 100 FROM (SELECT randomString(32) AS rs, base58Decode(base58Encode(rs)) AS dec FROM numbers(100));
 SELECT count() FROM (SELECT base58Decode(base58Encode(rs)) AS dec, rs FROM (SELECT unhex(hex(randomFixedString(32))) AS rs FROM numbers(100)) WHERE dec = rs);
 SELECT count() FROM (SELECT base58Decode(base58Encode(rs)) AS dec, rs FROM (SELECT unhex(hex(randomFixedString(64))) AS rs FROM numbers(100)) WHERE dec = rs);
 

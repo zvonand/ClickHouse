@@ -418,7 +418,7 @@ def main():
         check_name, run_by_hash_num, run_by_hash_total
     )
 
-    timeout = TIMEOUT_PR if info.pr_number else TIMEOUT_MASTER
+    timeout = TIMEOUT_MASTER if is_master else TIMEOUT_PR
     additional_envs.append(f"TIMEOUT={timeout}")
 
     if not is_master:

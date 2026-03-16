@@ -24,9 +24,9 @@ SELECT count() FROM test_regex_pk WHERE match(id, '^(vector-abc-001|vector-abc-0
 SELECT count() FROM test_regex_pk WHERE match(id, '^vector-abc-001\\|vector') SETTINGS force_primary_key = 1;
 
 -- Alternation without common prefix: no optimization possible
-SELECT count() FROM test_regex_pk WHERE match(id, '^(vector-abc-001|metrics-def-003)'); -- {serverError INDEX_NOT_USED}
+SELECT count() FROM test_regex_pk WHERE match(id, '^(vector-abc-001|metrics-def-003)') SETTINGS force_primary_key = 1; -- {serverError INDEX_NOT_USED}
 
 -- Multiple anchors without grouping: no optimization possible
-SELECT count() FROM test_regex_pk WHERE match(id, '^vector|^metrics'); -- {serverError INDEX_NOT_USED}
+SELECT count() FROM test_regex_pk WHERE match(id, '^vector|^metrics') SETTINGS force_primary_key = 1; -- {serverError INDEX_NOT_USED}
 
 DROP TABLE test_regex_pk;

@@ -22,16 +22,22 @@ namespace
 {
 /// API exported to guest WebAssembly code.
 
+constexpr const char * kWasmUdfLogger = "WasmUdf";
+
+std::string_view getWasmString(WasmCompartment * compartment, WasmPtr ptr, WasmSizeT size)
+{
+    auto data = compartment->getMemory(ptr, size);
+    return {reinterpret_cast<const char *>(data.data()), data.size()};
+}
+
 void wasmExportLog(WasmCompartment * compartment, WasmPtr wasm_ptr, WasmSizeT size)
 {
-    auto data = compartment->getMemory(wasm_ptr, size);
-    LOG_TRACE(getLogger("WasmUdf"), "{}", std::string_view(reinterpret_cast<const char *>(data.data()), data.size()));
+    LOG_TRACE(getLogger(kWasmUdfLogger), "{}", getWasmString(compartment, wasm_ptr, size));
 }
 
 void wasmExportLog2(WasmCompartment * compartment, UInt32 level, WasmPtr wasm_ptr, WasmSizeT size)
 {
-    auto data = compartment->getMemory(wasm_ptr, size);
-    std::string_view message(reinterpret_cast<const char *>(data.data()), data.size());
+    std::string_view message = getWasmString(compartment, wasm_ptr, size);
 
     /// Map level to Poco::Message::Priority.
     /// Poco priorities are 1 (FATAL) .. 8 (TRACE), matching the guest-visible contract.
@@ -40,7 +46,7 @@ void wasmExportLog2(WasmCompartment * compartment, UInt32 level, WasmPtr wasm_pt
         ? static_cast<Poco::Message::Priority>(level)
         : Poco::Message::PRIO_TRACE;
 
-    auto logger = getLogger("WasmUdf");
+    auto logger = getLogger(kWasmUdfLogger);
     logger->log(Poco::Message(logger->name(), std::string(message), prio));
 }
 

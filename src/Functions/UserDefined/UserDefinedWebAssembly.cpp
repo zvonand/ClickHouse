@@ -189,15 +189,9 @@ public:
     }
 
 
-    template <typename Callable, typename... Args>
-    static bool tryExecuteForColumnTypes(Callable && callable, Args &&... args)
-    {
-        return tryExecuteForNumericTypes(std::forward<Callable>(callable), std::forward<Args>(args)...);
-    }
-
     static void checkDataTypeWithWasmValKind(const IDataType * type, WasmValKind kind)
     {
-        bool is_data_type_compatible = tryExecuteForColumnTypes(
+        bool is_data_type_compatible = tryExecuteForNumericTypes(
             [type, kind]<typename T>() { return typeid_cast<const DataTypeNumber<T> *>(type) && wasmKindFor<T>() == kind; });
         if (!is_data_type_compatible)
             throw Exception(
@@ -241,11 +235,11 @@ public:
             for (size_t col_idx = 0; col_idx < num_columns; ++col_idx)
             {
                 const auto & column = block.getByPosition(col_idx);
-                if (!tryExecuteForColumnTypes(get_column_element, column.column.get(), row_idx, wasm_args[col_idx]))
+                if (!tryExecuteForNumericTypes(get_column_element, column.column.get(), row_idx, wasm_args[col_idx]))
                     throw Exception(ErrorCodes::BAD_ARGUMENTS, "Cannot convert {} to WebAssembly type", column.type->getName());
             }
 
-            if (!tryExecuteForColumnTypes(invoke_and_set_column, wasm_args))
+            if (!tryExecuteForNumericTypes(invoke_and_set_column, wasm_args))
                 throw Exception(
                     ErrorCodes::BAD_ARGUMENTS,
                     "Cannot get value of type {} from result of WebAssembly function {}",

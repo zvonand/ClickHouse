@@ -359,19 +359,27 @@ void EnabledQuota::usedForNormalizedQuery(UInt64 normalized_query_hash, QuotaTyp
     if (!interval_resolver)
         return;
 
-    String key = std::to_string(normalized_query_hash);
     boost::shared_ptr<const Intervals> resolved;
 
+    /// First, check the cache without calling the resolver (to avoid holding the mutex
+    /// while calling interval_resolver, which acquires QuotaCache::mutex — that would
+    /// create an ABBA deadlock with chooseQuotaToConsumeFor).
     {
         std::lock_guard lock(resolved_intervals_mutex);
-        auto it = resolved_intervals_cache.find(normalized_query_hash);
+        auto * it = resolved_intervals_cache.find(normalized_query_hash);
         if (it != resolved_intervals_cache.end())
-        {
             resolved = it->getMapped();
-        }
-        else
+    }
+
+    /// Cache miss: resolve outside the lock, then store the result.
+    if (!resolved)
+    {
+        String key = std::to_string(normalized_query_hash);
+        resolved = interval_resolver(key);
+
+        if (resolved)
         {
-            resolved = interval_resolver(key);
+            std::lock_guard lock(resolved_intervals_mutex);
             resolved_intervals_cache[normalized_query_hash] = resolved;
         }
     }

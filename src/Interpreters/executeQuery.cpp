@@ -1573,6 +1573,7 @@ static BlockIO executeQueryImpl(
                 {
                     quota->usedForNormalizedQuery(normalized_query_hash, QuotaType::QUERY_INSERTS, 1);
                     quota->usedForNormalizedQuery(normalized_query_hash, QuotaType::QUERIES, 1);
+                    quota->usedForNormalizedQuery(normalized_query_hash, QuotaType::ERRORS, 0, /* check_exceeded = */ true);
                 }
                 else
                 {
@@ -1746,6 +1747,7 @@ static BlockIO executeQueryImpl(
                             else if (out_ast->as<ASTInsertQuery>())
                                 quota->usedForNormalizedQuery(normalized_query_hash, QuotaType::QUERY_INSERTS, 1);
                             quota->usedForNormalizedQuery(normalized_query_hash, QuotaType::QUERIES, 1);
+                            quota->usedForNormalizedQuery(normalized_query_hash, QuotaType::ERRORS, 0, /* check_exceeded = */ true);
                         }
                         else
                         {

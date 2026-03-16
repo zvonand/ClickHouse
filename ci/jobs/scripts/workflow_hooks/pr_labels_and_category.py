@@ -114,7 +114,7 @@ def get_category(pr_body: str) -> Tuple[str, str]:
             inline = re.sub(r"^[-*_\s]*", "", inline)
             inline = re.sub(r"[-*_\s]*$", "", inline)
             if inline:
-                category = inline
+                new_category = inline
                 i += 1
             else:
                 i += 1
@@ -126,17 +126,20 @@ def get_category(pr_body: str) -> Tuple[str, str]:
                     i += 1
                     if i >= len(lines):
                         break
-                category = re.sub(r"^[-*\s]*", "", lines[i])
+                new_category = re.sub(r"^[-*\s]*", "", lines[i])
                 i += 1
 
                 # Should not have more than one category. Require empty line
                 # after the first found category.
-                if i >= len(lines):
-                    break
-                if lines[i]:
+                if i < len(lines) and lines[i]:
                     second_category = re.sub(r"^[-*\s]*", "", lines[i])
-                    error = f"More than one changelog category specified: '{category}', '{second_category}'"
+                    error = f"More than one changelog category specified: '{new_category}', '{second_category}'"
                     break
+
+            if category:
+                error = f"More than one changelog category specified: '{category}', '{new_category}'"
+                break
+            category = new_category
         else:
             i += 1
     if not category or normalize_category(category) not in CATEGORIES_FOLD:

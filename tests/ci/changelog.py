@@ -244,7 +244,7 @@ def generate_description(item: PullRequest, repo: Repository) -> Optional[Descri
                 inline = re.sub(r"^[-*_\s]*", "", inline)
                 inline = re.sub(r"[-*_\s]*$", "", inline)
                 if inline:
-                    category = inline
+                    new_category = inline
                     i += 1
                 else:
                     i += 1
@@ -256,8 +256,12 @@ def generate_description(item: PullRequest, repo: Repository) -> Optional[Descri
                         i += 1
                         if i >= len(lines):
                             break
-                    category = re.sub(r"^[-*\s]*", "", lines[i])
+                    new_category = re.sub(r"^[-*\s]*", "", lines[i])
                     i += 1
+                # If we already found a category, this is a duplicate — skip
+                # silently (changelog.py doesn't report errors, just picks the first).
+                if not category:
+                    category = new_category
             elif m_entry:
                 # Check if the entry is on the same line
                 inline = (m_entry.group(2) or "").strip()

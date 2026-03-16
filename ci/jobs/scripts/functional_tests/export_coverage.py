@@ -93,10 +93,9 @@ class CoverageExporter:
                     "  ) "
                     ")"
                 )
-                res = Shell.check(
-                    f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}',
-                    verbose=False,  # IMPORTANT: do not change
-                )
+                cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
+                rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
+                res = rc == 0
             else:
                 query = (
                     "SELECT "
@@ -107,11 +106,14 @@ class CoverageExporter:
                     f"INTO OUTFILE '{temp_dir}/system_tables/{table}.tsv' "
                     "FORMAT TSVWithNamesAndTypes"
                 )
-                res = Shell.check(
-                    f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}',
-                    verbose=True,
-                )
+                cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
+                rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=True)
+                res = rc == 0
 
             if not res:
-                print(f"ERROR: Failed to export coverage table: {table}")
+                print(f"ERROR: Failed to export coverage table: {table} (exit code {rc})")
+                if stdout:
+                    print(f"  stdout: {stdout}")
+                if stderr:
+                    print(f"  stderr: {stderr}")
         return res

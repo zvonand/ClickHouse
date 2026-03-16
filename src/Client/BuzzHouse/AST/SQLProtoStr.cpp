@@ -3651,6 +3651,7 @@ static const String SQLObjectToString(const SQLObject obj)
 CONV_FN(Drop, dt)
 {
     const bool is_table = dt.sobject() == SQLObject::TABLE;
+    const bool is_policy = dt.sobject() == SQLObject::ROW_POLICY || dt.sobject() == SQLObject::MASKING_POLICY;
 
     ret += "DROP ";
     if ((is_table || dt.sobject() == SQLObject::VIEW) && dt.is_temp())
@@ -3673,7 +3674,7 @@ CONV_FN(Drop, dt)
         const SQLObjectName & other_object = dt.other_objects(i);
 
         ret += ", ";
-        if (dt.sobject() == SQLObject::ROW_POLICY || dt.sobject() == SQLObject::MASKING_POLICY)
+        if (is_policy)
         {
             PolicyToString(ret, other_object.policy().policy());
         }
@@ -3685,6 +3686,11 @@ CONV_FN(Drop, dt)
     if (dt.has_cluster())
     {
         ClusterToString(ret, true, dt.cluster());
+    }
+    if (is_policy)
+    {
+        ret += " ON ";
+        ExprSchemaTableToString(ret, dt.object().policy().target());
     }
     if (dt.sync())
     {

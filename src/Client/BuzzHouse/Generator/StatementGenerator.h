@@ -548,6 +548,7 @@ private:
     void generateNextCreateView(RandomGenerator & rg, CreateView * cv);
     void generateNextCreateDictionary(RandomGenerator & rg, CreateDictionary * cd);
     void generateNextCreatePolicy(RandomGenerator & rg, bool row, CreatePolicy * crp);
+    bool hasTable(uint32_t table_id) const { return tables.contains(table_id); }
     const SQLTable & lookupTable(uint32_t table_id) const { return tables.at(table_id); }
     void generateNextDrop(RandomGenerator & rg, Drop * dp);
     void generateInsertToTable(RandomGenerator & rg, const SQLTable & t, bool in_parallel, std::optional<uint64_t> rows, Insert * ins);
@@ -851,18 +852,8 @@ public:
         = [](const SQLTable & t) { return t.isAttached() && !t.isNotTruncableEngine() && t.hasClickHousePeer(); };
     const std::function<bool(const SQLTable &)> attached_tables_for_external_call
         = [](const SQLTable & t) { return t.isAttached() && t.integration == IntegrationCall::Dolor; };
-
-    /// Row policy oracle: any attached, deterministic, non-GenerateRandom table
-    const std::function<bool(const SQLTable &)> attached_tables_for_row_policy_oracle
-        = [](const SQLTable & t) { return t.isAttached() && t.is_deterministic; };
-    /// Row policy oracle: existing row policies that have a stored USING predicate and sit on a suitable table
-    const std::function<bool(const SQLPolicy &)> row_policies_for_oracle = [this](const SQLPolicy & p) -> bool
-    {
-        if (!p.is_row || !p.where_expr.has_value())
-            return false;
-        const auto it = tables.find(p.table_id);
-        return it != tables.end() && attached_tables_for_row_policy_oracle(it->second);
-    };
+    const std::function<bool(const SQLPolicy &)> row_policies_for_oracle
+        = [](const SQLPolicy & p) -> bool { return p.is_row && p.where_expr.has_value(); };
 
     const std::function<bool(const std::shared_ptr<SQLDatabase> &)> detached_databases
         = [](const std::shared_ptr<SQLDatabase> & d) { return d->isDettached(); };

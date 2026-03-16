@@ -320,10 +320,6 @@ void QueryOracle::generateRowPolicyOracleQueries(RandomGenerator & rg, Statement
     /// Don't compare error codes: EXECUTE AS may introduce different failure modes
     can_test_success = false;
 
-    /// Pick an existing row policy with a USING predicate on a suitable table
-    const SQLPolicy & policy = rg.pickRandomly(gen.filterCollection<SQLPolicy>(gen.row_policies_for_oracle));
-    const SQLTable & t = gen.lookupTable(policy.table_id);
-
     gen.setAllowNotDetermistic(false);
     gen.enforceFinal(true);
     gen.resetAliasCounter();
@@ -335,8 +331,22 @@ void QueryOracle::generateRowPolicyOracleQueries(RandomGenerator & rg, Statement
     SelectStatementCore * ssc2 = sel2->mutable_select_core();
     // FROM db.t [FINAL]
     JoinedTableOrFunction * jtf2 = ssc2->mutable_from()->mutable_tos()->mutable_join_clause()->mutable_tos()->mutable_joined_table();
-    t.setName(jtf2->mutable_tof()->mutable_est(), false);
-    jtf2->set_final(t.supportsFinal());
+    /// Pick an existing row policy with a USING predicate on a suitable table
+    const SQLPolicy & policy = rg.pickRandomly(gen.filterCollection<SQLPolicy>(gen.row_policies_for_oracle));
+    if (gen.hasTable(policy.table_id))
+    {
+        const SQLTable & t = gen.lookupTable(policy.table_id);
+
+        t.setName(jtf2->mutable_tof()->mutable_est(), false);
+        jtf2->set_final(t.supportsFinal());
+    }
+    else
+    {
+        /// The policy's table is gone — this can happen if the policy is detached but not dropped, or if the table was dropped without detaching the policy.
+        /// In either case we can't generate a valid oracle query, so we build a dummy query that selects from system.one with a constant WHERE to produce a predictable result (1 row).
+        jtf2->mutable_tof()->mutable_est()->mutable_database()->set_database("system");
+        jtf2->mutable_tof()->mutable_est()->mutable_table()->set_table("one");
+    }
     // count() result column
     ssc2->add_result_columns()->mutable_eca()->mutable_expr()->mutable_comp_expr()->mutable_func_call()->mutable_func()->set_catalog_func(
         FUNCcount);

@@ -413,6 +413,7 @@ private:
                 }
                 catch (...)
                 {
+                    /// Ok: file might be unreadable (permission denied, etc.) - insert NULL.
                     columns_map["content"]->insertDefault();
                 }
             }

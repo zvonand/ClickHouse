@@ -182,8 +182,8 @@ static SQLSet commandGetDbSchemas(const arrow::flight::protocol::sql::CommandGet
 
 static SQLSet commandGetPrimaryKeys(const arrow::flight::protocol::sql::CommandGetPrimaryKeys & command)
 {
-    std::string where_expression =
-        (command.has_db_schema() ? (" WHERE database = " + quoteString(command.db_schema()) + " AND") : "") +
+    std::string where_expression = " WHERE" +
+        (command.has_db_schema() ? (" database = " + quoteString(command.db_schema()) + " AND") : "") +
         " name = " + quoteString(command.table());
 
     return {

@@ -5,7 +5,7 @@
 
 # Regression test for DEPENDENCIES_NOT_FOUND exception thrown when a
 # materialized view is dropped while the FileLog background thread is
-# streaming data.  There is a TOCTOU race between checkDependencies
+# streaming data. There is a TOCTOU race between checkDependencies
 # (which sees the MV) and collectAllDependencies inside
 # InsertDependenciesBuilder (which no longer sees it).
 # We loop several times to increase the chance of hitting the race window.

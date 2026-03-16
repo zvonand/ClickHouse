@@ -24,6 +24,12 @@ select tokens('taichi张三丰in the house', 'unicode_word');
 select tokens('错误，503', 'unicode_word'); -- default stop words contains common full-width separators
 select tokens('错误and 503', 'unicode_word', ['and']);
 
+-- edge cases
+select tokens('', 'unicode_word');                               -- empty string
+select tokens('a.b', 'unicode_word', ['.']);                     -- dot as stop word does not suppress connector
+select tokens('a.b', 'unicode_word', ['a.b']);                   -- dot-connected token as stop word
+select tokens('test', 'unicode_word', 'not_an_array'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT } -- wrong stop_words type
+
 select tokensForLikePattern('%abc', 'unicode_word');            -- wildcard before token
 select tokensForLikePattern('abc%', 'unicode_word');            -- token before wildcard
 select tokensForLikePattern('a_b%c_d', 'unicode_word');         -- wildcard in between

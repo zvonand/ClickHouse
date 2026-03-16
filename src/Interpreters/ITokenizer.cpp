@@ -159,40 +159,46 @@ bool SplitByNonAlphaTokenizer::nextInStringLike(const char * data, size_t length
     return !bad_token && !token.empty();
 }
 
-void SplitByNonAlphaTokenizer::substringToBloomFilter(const char * data, size_t length, BloomFilter & bloom_filter, bool is_prefix, bool is_suffix) const
-{
-    size_t cur = 0;
-    size_t token_start = 0;
-    size_t token_len = 0;
-
-    while (cur < length && nextInString(data, length, cur, token_start, token_len))
-    {
-        /// In order to avoid filter updates with incomplete tokens, first token is ignored unless substring is prefix,
-        /// and last token is ignored, unless substring is suffix. See comment below for example
-        if ((token_start > 0 || is_prefix) && (token_start + token_len < length || is_suffix))
-            bloom_filter.add(data + token_start, token_len);
-    }
-}
-
-void SplitByNonAlphaTokenizer::substringToTokens(const char * data, size_t length, std::vector<String> & tokens, bool is_prefix, bool is_suffix) const
-{
-    size_t cur = 0;
-    size_t token_start = 0;
-    size_t token_len = 0;
-
-    while (cur < length && nextInString(data, length, cur, token_start, token_len))
-    {
-        /// In order to avoid adding incomplete tokens, first token is ignored unless substring is prefix and last token is ignored, unless substring is suffix.
-        /// Ex: If we want to match row "Service is not ready", and substring is "Serv" or "eady", we don't want to add either
-        /// of these substrings as tokens since they will not match any of the real tokens. However if our token string is
-        /// "Service " or " not ", we want to add these full tokens to our tokens vector.
-        if ((token_start > 0 || is_prefix) && (token_start + token_len < length || is_suffix))
-            tokens.push_back({data + token_start, token_len});
-    }
-}
-
 namespace
 {
+
+/// Shared implementation of `substringToBloomFilter` for word-boundary tokenizers
+/// (`SplitByNonAlphaTokenizer`, `UnicodeWordTokenizer`).
+///
+/// In order to avoid filter updates with incomplete tokens, the first token is
+/// ignored unless the substring is a prefix, and the last token is ignored unless
+/// the substring is a suffix.
+/// Ex: If we want to match row "Service is not ready", and substring is "Serv"
+/// or "eady", we don't want to add either of these substrings as tokens since
+/// they will not match any of the real tokens. However if our token string is
+/// "Service " or " not ", we want to add these full tokens to our bloom filter.
+template <typename Tokenizer>
+void wordBoundarySubstringToBloomFilter(
+    const Tokenizer & tokenizer, const char * data, size_t length, BloomFilter & bloom_filter, bool is_prefix, bool is_suffix)
+{
+    size_t cur = 0;
+    size_t token_start = 0;
+    size_t token_len = 0;
+
+    while (cur < length && tokenizer.nextInString(data, length, cur, token_start, token_len))
+        if ((token_start > 0 || is_prefix) && (token_start + token_len < length || is_suffix))
+            bloom_filter.add(data + token_start, token_len);
+}
+
+/// Shared implementation of `substringToTokens` for word-boundary tokenizers.
+/// Same boundary-filtering logic as `wordBoundarySubstringToBloomFilter`.
+template <typename Tokenizer>
+void wordBoundarySubstringToTokens(
+    const Tokenizer & tokenizer, const char * data, size_t length, std::vector<String> & tokens, bool is_prefix, bool is_suffix)
+{
+    size_t cur = 0;
+    size_t token_start = 0;
+    size_t token_len = 0;
+
+    while (cur < length && tokenizer.nextInString(data, length, cur, token_start, token_len))
+        if ((token_start > 0 || is_prefix) && (token_start + token_len < length || is_suffix))
+            tokens.push_back({data + token_start, token_len});
+}
 
 bool startsWithSeparator(const char * data, size_t length, size_t pos, const std::vector<String> & separators, std::string & matched_sep)
 {
@@ -208,6 +214,18 @@ bool startsWithSeparator(const char * data, size_t length, size_t pos, const std
     return false;
 }
 
+}
+
+void SplitByNonAlphaTokenizer::substringToBloomFilter(
+    const char * data, size_t length, BloomFilter & bloom_filter, bool is_prefix, bool is_suffix) const
+{
+    wordBoundarySubstringToBloomFilter(*this, data, length, bloom_filter, is_prefix, is_suffix);
+}
+
+void SplitByNonAlphaTokenizer::substringToTokens(
+    const char * data, size_t length, std::vector<String> & tokens, bool is_prefix, bool is_suffix) const
+{
+    wordBoundarySubstringToTokens(*this, data, length, tokens, is_prefix, is_suffix);
 }
 
 bool SplitByStringTokenizer::nextInString(const char * data, size_t length, size_t & pos, size_t & token_start, size_t & token_length) const
@@ -637,14 +655,18 @@ bool UnicodeWordTokenizer::nextInStringLike(const char * data, size_t length, si
             /// discarded, since their boundaries are ambiguous.
             if (token_alnum_count > 0 && (!last_glob_pos || (*last_glob_pos + 1 != pos && *last_glob_pos + 1 != token_start)))
             {
+                /// If we consumed a backslash but the escaped char didn't continue the token, back up so the next call
+                /// re-parses `\X` with proper escape context.
+                if (escaped)
+                {
+                    --pos;
+                    escaped = false;
+                }
+
                 /// Check if token is a stop word
                 if (stop_words.contains(token))
                     continue;
 
-                /// If we consumed a backslash but the escaped char didn't continue the token, back up so the next call
-                /// re-parses `\X` with proper escape context.
-                if (escaped)
-                    --pos;
                 return true;
             }
 
@@ -666,10 +688,10 @@ bool UnicodeWordTokenizer::nextInStringLike(const char * data, size_t length, si
         /// Unicode character
         size_t char_len = UTF8::seqLength(static_cast<UInt8>(c));
 
-        /// Prevent out-of-bounds
+        /// Truncated UTF-8 sequence at end of buffer
         if (pos + char_len > length)
         {
-            pos += char_len;
+            pos = length;
             escaped = false;
             continue;
         }
@@ -694,33 +716,13 @@ bool UnicodeWordTokenizer::nextInStringLike(const char * data, size_t length, si
 void UnicodeWordTokenizer::substringToBloomFilter(
     const char * data, size_t length, BloomFilter & bloom_filter, bool is_prefix, bool is_suffix) const
 {
-    size_t cur = 0;
-    size_t token_start = 0;
-    size_t token_len = 0;
-
-    while (cur < length && nextInString(data, length, cur, token_start, token_len))
-        /// In order to avoid filter updates with incomplete tokens,
-        /// first token is ignored, unless substring is prefix and
-        /// last token is ignored, unless substring is suffix
-        if ((token_start > 0 || is_prefix) && (token_start + token_len < length || is_suffix))
-            bloom_filter.add(data + token_start, token_len);
+    wordBoundarySubstringToBloomFilter(*this, data, length, bloom_filter, is_prefix, is_suffix);
 }
 
 void UnicodeWordTokenizer::substringToTokens(
     const char * data, size_t length, std::vector<String> & tokens, bool is_prefix, bool is_suffix) const
 {
-    size_t cur = 0;
-    size_t token_start = 0;
-    size_t token_len = 0;
-
-    while (cur < length && nextInString(data, length, cur, token_start, token_len))
-    {
-        /// In order to avoid filter updates with incomplete tokens,
-        /// first token is ignored, unless substring is prefix and
-        /// last token is ignored, unless substring is suffix
-        if ((token_start > 0 || is_prefix) && (token_start + token_len < length || is_suffix))
-            tokens.push_back({data + token_start, token_len});
-    }
+    wordBoundarySubstringToTokens(*this, data, length, tokens, is_prefix, is_suffix);
 }
 
 }

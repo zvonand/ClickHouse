@@ -427,8 +427,7 @@ struct UnicodeWordTokenizer final : public ITokenizerHelper<UnicodeWordTokenizer
 
     bool nextInStringLike(const char * data, size_t length, size_t & pos, String & token) const override;
 
-    void
-    substringToBloomFilter(const char * data, size_t length, BloomFilter & bloom_filter, bool is_prefix, bool is_suffix) const override;
+    void substringToBloomFilter(const char * data, size_t length, BloomFilter & bloom_filter, bool is_prefix, bool is_suffix) const override;
 
     void substringToTokens(const char * data, size_t length, std::vector<String> & tokens, bool is_prefix, bool is_suffix) const override;
 

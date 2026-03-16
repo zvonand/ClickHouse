@@ -267,11 +267,9 @@ void MergeTreeBackgroundExecutor<Queue>::routine(TaskRuntimeDataPtr item)
         /// Slow part: destroy the task outside the lock.
         NOEXCEPT_SCOPE({
             ALLOW_ALLOCATIONS_IN_SCOPE;
+            captured_storage_id = item_->storage_id.getNameForLogs();
             if (item_->task)
-            {
-                captured_storage_id = item_->task->getStorageID().getNameForLogs();
                 captured_query_id = item_->task->getQueryId();
-            }
             item_->resetTask();
         });
 
@@ -287,7 +285,7 @@ void MergeTreeBackgroundExecutor<Queue>::routine(TaskRuntimeDataPtr item)
             if (elapsed_ms > THRESHOLD_MILLISECONDS)
             {
                 LOG_WARNING(log,
-                    "Releasing background task runtime data took {} milliseconds, executor={}, storage={}, query_id={}",
+                    "Destroying background task took {} milliseconds, executor={}, storage={}, query_id={}",
                     elapsed_ms,
                     name,
                     captured_storage_id.value_or("unknown"),
@@ -303,7 +301,7 @@ void MergeTreeBackgroundExecutor<Queue>::routine(TaskRuntimeDataPtr item)
         item_.reset();
     };
 
-    /// No TSA because of unique_lock
+    /// No TSA because LockGuardWithStopWatch wraps mutex locking and is not understood by TSA
     auto restart_task = [this, &erase_from_active, &release_task] (TaskRuntimeDataPtr && item_) TSA_NO_THREAD_SAFETY_ANALYSIS
     {
         {

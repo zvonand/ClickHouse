@@ -212,10 +212,10 @@ class ConnectionWrap:
         finally:
             self._use_database()
             if self.DBMS_NAME == KnownDBMS.clickhouse.value and db_name != "default":
-                try:
-                    execute_request(f"DROP DATABASE IF EXISTS {db_name}", self)
-                except Exception:
-                    pass
+                result = execute_request(f"DROP DATABASE IF EXISTS {db_name}", self)
+                exc = result.get_exception()
+                if exc is not None:
+                    logger.warning("Failed to drop database %s: %s", db_name, exc)
 
     def __exit__(self, *args):
         if hasattr(self._connection, "close"):

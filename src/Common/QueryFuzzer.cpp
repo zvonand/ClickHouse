@@ -1562,93 +1562,101 @@ void QueryFuzzer::fuzzExpressionList(ASTExpressionList & expr_list)
     }
     for (auto & child : expr_list.children)
     {
+        ASTPtr new_child = nullptr;
         static const constexpr int asterisk_prob = 2000;
 
-        if (auto * /*literal*/ _ = typeid_cast<ASTLiteral *>(child.get()))
+        /// ORDER BY lists contain ASTOrderByElement nodes which must not be replaced by
+        /// arbitrary expressions — doing so breaks the order_by_all formatting invariant
+        /// (ASTSelectQuery::formatImpl assumes children[0] is ASTOrderByElement when
+        /// order_by_all == true) and causes a null-pointer crash in format().
+        if (!typeid_cast<ASTOrderByElement *>(child.get()))
         {
-            /// Return a '*' literal
-            if (fuzz_rand() % asterisk_prob == 0)
-                child = make_intrusive<ASTAsterisk>();
-            else if (fuzz_rand() % 13 == 0)
-                child = fuzzLiteralUnderExpressionList(child);
-        }
-        else if (fuzz_rand() % asterisk_prob == 0 && dynamic_cast<ASTWithAlias *>(child.get()))
-        {
-            /// Return a '*' literal
-            child = make_intrusive<ASTAsterisk>();
-        }
-        else if (fuzz_rand() % 1500 == 0 && current_ast_depth < 80)
-        {
-            /// Wrap child in a scalar subquery (SELECT child)
-            auto sel_list = make_intrusive<ASTExpressionList>();
-            sel_list->children.push_back(child->clone());
-            auto select_query = make_intrusive<ASTSelectQuery>();
-            select_query->setExpression(ASTSelectQuery::Expression::SELECT, std::move(sel_list));
-            child = make_intrusive<ASTSubquery>(std::move(select_query));
-        }
-        else if (fuzz_rand() % 1000 == 0)
-        {
-            /// Wrap child in arithmetic: child op other (or other op child)
-            static const Strings arith_ops = {"plus", "minus", "multiply", "divide", "intDiv", "modulo"};
-            auto other = getRandomColumnLike();
-            if (other)
+            if (auto * /*literal*/ _ = typeid_cast<ASTLiteral *>(child.get()))
             {
-                const String & op = arith_ops[fuzz_rand() % arith_ops.size()];
-                if (fuzz_rand() % 2 == 0)
-                    child = makeASTFunction(op, child, other);
-                else
-                    child = makeASTFunction(op, other, child);
+                /// Return a '*' literal
+                if (fuzz_rand() % asterisk_prob == 0)
+                    new_child = make_intrusive<ASTAsterisk>();
+                else if (fuzz_rand() % 13 == 0)
+                    new_child = fuzzLiteralUnderExpressionList(child);
             }
-        }
-        else if (fuzz_rand() % 1000 == 0 && current_ast_depth < 80)
-        {
-            /// Wrap child in if(cond, child, other) or if(cond, other, child)
-            ASTPtr cond = generatePredicate();
-            auto other = getRandomColumnLike();
-            if (cond && other)
+            else if (fuzz_rand() % asterisk_prob == 0 && dynamic_cast<ASTWithAlias *>(child.get()))
             {
-                if (fuzz_rand() % 2 == 0)
-                    child = makeASTFunction("if", cond, child, other);
-                else
-                    child = makeASTFunction("if", cond, other, child);
+                /// Return a '*' literal
+                new_child = make_intrusive<ASTAsterisk>();
             }
-        }
-        else if (fuzz_rand() % 800 == 0 && current_ast_depth < 80)
-        {
-            /// Build multiIf(cond1, e1[, cond2, e2], else): a CASE WHEN expression
-            auto multiif_func = make_intrusive<ASTFunction>();
-            multiif_func->name = "multiIf";
-            multiif_func->arguments = make_intrusive<ASTExpressionList>();
-            multiif_func->children.push_back(multiif_func->arguments);
-            const int nclauses = (fuzz_rand() % 2) + 1;
-            bool ok = true;
-            for (int ci = 0; ci < nclauses && ok; ci++)
+            else if (fuzz_rand() % 1500 == 0 && current_ast_depth < 80)
             {
-                ASTPtr cond = generatePredicate();
-                auto val = getRandomColumnLike();
-                if (cond && val)
+                /// Wrap child in a scalar subquery (SELECT child)
+                auto sel_list = make_intrusive<ASTExpressionList>();
+                sel_list->children.emplace_back(child->clone());
+                auto select_query = make_intrusive<ASTSelectQuery>();
+                select_query->setExpression(ASTSelectQuery::Expression::SELECT, std::move(sel_list));
+                new_child = make_intrusive<ASTSubquery>(std::move(select_query));
+            }
+            else if (fuzz_rand() % 1000 == 0)
+            {
+                /// Wrap child in arithmetic: child op other (or other op child)
+                static const Strings arith_ops = {"plus", "minus", "multiply", "divide", "intDiv", "modulo"};
+                auto other = getRandomColumnLike();
+                if (other)
                 {
-                    multiif_func->arguments->children.push_back(cond);
-                    multiif_func->arguments->children.push_back(val);
+                    const String & op = arith_ops[fuzz_rand() % arith_ops.size()];
+                    if (fuzz_rand() % 2 == 0)
+                        new_child = makeASTFunction(op, child, other);
+                    else
+                        new_child = makeASTFunction(op, other, child);
                 }
-                else
-                    ok = false;
             }
-            auto else_val = getRandomColumnLike();
-            if (ok && else_val)
+            else if (fuzz_rand() % 1000 == 0 && current_ast_depth < 80)
             {
-                multiif_func->arguments->children.push_back(else_val);
-                child = multiif_func;
+                /// Wrap child in if(cond, child, other) or if(cond, other, child)
+                ASTPtr cond = generatePredicate();
+                auto other = getRandomColumnLike();
+                if (cond && other)
+                {
+                    if (fuzz_rand() % 2 == 0)
+                        new_child = makeASTFunction("if", cond, child, other);
+                    else
+                        new_child = makeASTFunction("if", cond, other, child);
+                }
+            }
+            else if (fuzz_rand() % 800 == 0 && current_ast_depth < 80)
+            {
+                /// Build multiIf(cond1, e1[, cond2, e2], else): a CASE WHEN expression
+                auto multiif_func = make_intrusive<ASTFunction>();
+                multiif_func->name = "multiIf";
+                multiif_func->arguments = make_intrusive<ASTExpressionList>();
+                multiif_func->children.push_back(multiif_func->arguments);
+                const int nclauses = (fuzz_rand() % 2) + 1;
+                bool ok = true;
+                for (int ci = 0; ci < nclauses && ok; ci++)
+                {
+                    ASTPtr cond = generatePredicate();
+                    auto val = getRandomColumnLike();
+                    if (cond && val)
+                    {
+                        multiif_func->arguments->children.emplace_back(cond);
+                        multiif_func->arguments->children.emplace_back(val);
+                    }
+                    else
+                        ok = false;
+                }
+                auto else_val = getRandomColumnLike();
+                if (ok && else_val)
+                {
+                    multiif_func->arguments->children.emplace_back(else_val);
+                    new_child = multiif_func;
+                }
+            }
+            else
+            {
+                new_child = reverseLiteralFuzzing(child);
             }
         }
+        if (new_child)
+            child = new_child;
         else
-        {
-            auto new_child = reverseLiteralFuzzing(child);
-            if (new_child)
-                child = new_child;
-            else
-                fuzz(child);
-        }
+            fuzz(child);
     }
 }
 

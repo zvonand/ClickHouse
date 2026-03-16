@@ -12,12 +12,19 @@ cd "$GIT_ROOT"
 # Remove keys for submodule.*.path parameters, the values are separated by \0
 # and check if the directory exists
 git config --file .gitmodules --null --get-regexp path | sed -z 's|.*\n||' | \
-  xargs -P100 -0 --no-run-if-empty -I{} bash -c 'if ! test -d '"'{}'"'; then echo Directory for submodule {} is not found; exit 1; fi' 2>&1
+  while IFS= read -r -d '' submodule_path; do
+    if ! test -d "$submodule_path"; then
+        echo "Directory for submodule $submodule_path is not found"
+        exit 1
+    fi
+  done 2>&1
 
 
 # And check that the submodule is fine
 git config --file .gitmodules --null --get-regexp path | sed -z 's|.*\n||' | \
-  xargs -P100 -0 --no-run-if-empty -I{} git submodule status -q '{}' 2>&1
+  while IFS= read -r -d '' submodule_path; do
+    git submodule status -q "$submodule_path"
+  done 2>&1
 
 
 # All submodules should be from https://github.com/

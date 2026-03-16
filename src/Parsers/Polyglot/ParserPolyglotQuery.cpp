@@ -80,7 +80,10 @@ bool ParserPolyglotQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expecte
     const auto * const original_sql_query_ptr = sql_query_char_ptr;
 
     if (res != 0)
-        throw Exception(ErrorCodes::SYNTAX_ERROR, "Polyglot SQL transpilation error: '{}'", sql_query_char_ptr);
+        throw Exception(
+            ErrorCodes::SYNTAX_ERROR,
+            "Polyglot SQL transpilation error: '{}'",
+            sql_query_char_ptr ? std::string_view(sql_query_char_ptr, sql_query_size > 0 ? sql_query_size - 1 : 0) : "unknown error");
 
     chassert(sql_query_size > 0);
 

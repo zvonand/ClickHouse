@@ -29,11 +29,11 @@ $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect duckdb \
     -q "SELECT * EXCLUDE(b) FROM (SELECT 1 AS a, 2 AS b, 3 AS c)"
 
 # Test that polyglot dialect requires the experimental setting
-$CLICKHOUSE_CLIENT --dialect polyglot --polyglot_dialect sqlite -q "SELECT 1" 2>&1 | grep -o "SUPPORT_IS_DISABLED"
+$CLICKHOUSE_CLIENT --dialect polyglot --polyglot_dialect sqlite -q "SELECT 1" 2>&1 | grep -om1 "SUPPORT_IS_DISABLED"
 
 # Test that an invalid dialect name produces a clear error
 $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect invalid_dialect \
-    -q "SELECT 1" 2>&1 | grep -oP 'SYNTAX_ERROR'
+    -q "SELECT 1" 2>&1 | grep -om1 'SYNTAX_ERROR'
 
 # Test that multi-statement input is rejected
 $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect sqlite \

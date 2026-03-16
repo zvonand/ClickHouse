@@ -296,7 +296,7 @@ WildcardPartitionStrategy::WildcardPartitionStrategy(KeyDescription partition_ke
     cacheDeterministicActions(cached_result, actions_with_column);
 }
 
-ColumnPtr WildcardPartitionStrategy::computePartitionKey(const Chunk & chunk)
+ColumnPtr WildcardPartitionStrategy::computePartitionKey(const Chunk & chunk) const
 {
     auto actions_with_column = getCachedOrBuildActions(
         cached_result,

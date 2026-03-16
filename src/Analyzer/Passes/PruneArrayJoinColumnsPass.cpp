@@ -54,6 +54,9 @@ using ArrayJoinUsageMap = std::unordered_map<const IQueryTreeNode *, std::unorde
 /// Set of ArrayJoinNode raw pointers that we are tracking.
 using ArrayJoinNodeSet = std::unordered_set<const IQueryTreeNode *>;
 
+/// Map: (ArrayJoinNode raw ptr, column name) → post-pruning column DataType.
+using UpdatedTypeMap = std::unordered_map<const IQueryTreeNode *, std::unordered_map<std::string, DataTypePtr>>;
+
 /// Visitor that marks which ARRAY JOIN expressions and nested subcolumns are used.
 class MarkUsedArrayJoinColumnsVisitor : public InDepthQueryTreeVisitorWithContext<MarkUsedArrayJoinColumnsVisitor>
 {
@@ -231,6 +234,64 @@ void pruneNestedFunctionArguments(
     column_node.setColumnType(std::move(new_column_type));
 }
 
+/// Visitor that updates reference ColumnNode types and re-resolves tupleElement functions
+/// after nested() arguments have been pruned.
+class UpdateArrayJoinReferenceTypesVisitor : public InDepthQueryTreeVisitorWithContext<UpdateArrayJoinReferenceTypesVisitor>
+{
+public:
+    using Base = InDepthQueryTreeVisitorWithContext<UpdateArrayJoinReferenceTypesVisitor>;
+
+    UpdateArrayJoinReferenceTypesVisitor(
+        ContextPtr context_,
+        const UpdatedTypeMap & updated_types_,
+        const ArrayJoinNodeSet & tracked_nodes_)
+        : Base(std::move(context_))
+        , updated_types(updated_types_)
+        , tracked_nodes(tracked_nodes_)
+    {
+    }
+
+    void enterImpl(const QueryTreeNodePtr & node)
+    {
+        auto * function_node = node->as<FunctionNode>();
+        if (!function_node || function_node->getFunctionName() != "tupleElement")
+            return;
+
+        const auto & arguments = function_node->getArguments().getNodes();
+        if (arguments.size() < 2)
+            return;
+
+        auto * column_node = arguments[0]->as<ColumnNode>();
+        if (!column_node)
+            return;
+
+        auto source = column_node->getColumnSourceOrNull();
+        if (!source || !tracked_nodes.contains(source.get()))
+            return;
+
+        auto node_it = updated_types.find(source.get());
+        if (node_it == updated_types.end())
+            return;
+
+        auto type_it = node_it->second.find(column_node->getColumnName());
+        if (type_it == node_it->second.end())
+            return;
+
+        const auto & new_type = type_it->second;
+        if (column_node->getColumnType()->equals(*new_type))
+            return;
+
+        column_node->setColumnType(new_type);
+
+        auto tuple_element_function = FunctionFactory::instance().get("tupleElement", getContext());
+        function_node->resolveAsFunction(tuple_element_function->build(function_node->getArgumentColumns()));
+    }
+
+private:
+    const UpdatedTypeMap & updated_types;
+    const ArrayJoinNodeSet & tracked_nodes;
+};
+
 }
 
 void PruneArrayJoinColumnsPass::run(QueryTreeNodePtr & query_tree_node, ContextPtr context)
@@ -294,6 +355,8 @@ void PruneArrayJoinColumnsPass::run(QueryTreeNodePtr & query_tree_node, ContextP
     visitor.visit(query_tree_node);
 
     /// Step 3: Prune.
+    UpdatedTypeMap updated_types;
+
     for (auto & [node_ptr, expressions_usage] : usage_map)
     {
         /// Find the ArrayJoinNode among our table_expressions.
@@ -358,7 +421,21 @@ void PruneArrayJoinColumnsPass::run(QueryTreeNodePtr & query_tree_node, ContextP
 
             pruneNestedFunctionArguments(*column_node, *function_node, expr_usage, context);
         }
+
+        /// Collect post-pruning types for step 3c.
+        auto & type_map = updated_types[node_ptr];
+        for (const auto & join_expr : join_expressions)
+        {
+            auto * col_node = join_expr->as<ColumnNode>();
+            if (!col_node)
+                continue;
+            type_map[col_node->getColumnName()] = col_node->getColumnType();
+        }
     }
+
+    /// 3c: Update types of reference ColumnNodes and re-resolve tupleElement functions.
+    UpdateArrayJoinReferenceTypesVisitor type_updater(context, updated_types, tracked_nodes);
+    type_updater.visit(query_tree_node);
 }
 
 }

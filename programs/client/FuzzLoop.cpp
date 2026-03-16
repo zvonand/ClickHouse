@@ -628,14 +628,13 @@ bool Client::buzzHouse()
             /// Create a dedicated oracle user for the row policy oracle.
             /// The oracle uses "EXECUTE AS <oracleUser>" to run queries under a restricted
             /// session where row policies assigned to this user are active.
+            /// Note: EXECUTE AS works without an explicit IMPERSONATE grant when
+            /// access_control_improvements.allow_impersonate_user = true (the default).
             const auto rpu = processTextAsSingleQuery(
                 "CREATE USER IF NOT EXISTS " + BuzzHouse::QueryOracle::oracleUser + " IDENTIFIED WITH no_password");
             UNUSED(rpu);
             const auto rpg = processTextAsSingleQuery("GRANT SELECT ON *.* TO " + BuzzHouse::QueryOracle::oracleUser);
             UNUSED(rpg);
-            /// Allow the default/admin user to impersonate the oracle user via EXECUTE AS.
-            const auto rpi = processTextAsSingleQuery("GRANT IMPERSONATE ON " + BuzzHouse::QueryOracle::oracleUser + " TO default");
-            UNUSED(rpi);
         }
 
         fuzz_config->outf << "--Session seed: " << rg.getSeed() << std::endl;
@@ -896,7 +895,7 @@ bool Client::buzzHouse()
                          server_up &= processBuzzHouseQuery(full_query);
                          qo.processSecondOracleQueryResult(error_code, *external_integrations, "Count distinct oracle");
                      }},
-                    {10
+                    {0 /// Disable row policy oracle for now, because of https://github.com/ClickHouse/ClickHouse/issues/99572
                          * static_cast<uint32_t>(
                              fuzz_config->allow_query_oracles && gen.collectionHas<BuzzHouse::SQLPolicy>(gen.row_policies_for_oracle)),
                      [&]()

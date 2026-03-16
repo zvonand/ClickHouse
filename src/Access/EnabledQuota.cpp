@@ -66,6 +66,46 @@ struct EnabledQuota::Impl
         }
     }
 
+    static void usedPerNormalizedHash(
+        const String & user_name,
+        const Intervals & intervals,
+        UInt64 normalized_query_hash,
+        std::chrono::system_clock::time_point current_time)
+    {
+        constexpr auto quota_type = QuotaType::QUERIES_PER_NORMALIZED_HASH;
+        constexpr auto quota_type_i = static_cast<size_t>(quota_type);
+
+        for (const auto & interval : intervals.intervals)
+        {
+            QuotaValue max = interval.max[quota_type_i];
+            if (!max)
+                continue;
+
+            /// Ensure the interval is current (may reset counters).
+            interval.getEndOfInterval(current_time);
+
+            QuotaValue current_count;
+            {
+                std::lock_guard lock(interval.per_hash_mutex);
+                current_count = ++interval.per_hash_used[normalized_query_hash];
+            }
+
+            /// Update the atomic `used` counter with the max across all hashes for reporting.
+            QuotaValue old_used = interval.used[quota_type_i].load();
+            while (current_count > old_used)
+            {
+                if (interval.used[quota_type_i].compare_exchange_weak(old_used, current_count))
+                    break;
+            }
+
+            if (current_count > max)
+            {
+                auto end_of_interval = interval.getEndOfInterval(current_time);
+                throwQuotaExceed(user_name, intervals.quota_name, quota_type, current_count, max, interval.duration, end_of_interval);
+            }
+        }
+    }
+
     static void checkExceeded(
         const String & user_name,
         const Intervals & intervals,
@@ -151,6 +191,14 @@ EnabledQuota::Interval & EnabledQuota::Interval::operator =(const Interval & src
         max[quota_type_i] = src.max[quota_type_i];
         used[quota_type_i].store(src.used[quota_type_i].load());
     }
+
+    /// Copy per-hash map.
+    {
+        std::lock_guard src_lock(src.per_hash_mutex);
+        std::lock_guard dst_lock(per_hash_mutex);
+        per_hash_used = src.per_hash_used;
+    }
+
     return *this;
 }
 
@@ -198,6 +246,13 @@ std::chrono::system_clock::time_point EnabledQuota::Interval::getEndOfInterval(s
     if (need_reset_counters)
     {
         boost::range::fill(used, 0);
+
+        /// Also clear per-hash counters.
+        {
+            std::lock_guard lock(per_hash_mutex);
+            per_hash_used.clear();
+        }
+
         counters_were_reset = true;
     }
     return end;
@@ -286,6 +341,46 @@ void EnabledQuota::used(const std::vector<std::pair<QuotaType, QuotaValue>> & us
     auto current_time = std::chrono::system_clock::now();
     for (const auto & usage : usages)
         Impl::used(getUserName(), *loaded, usage.first, usage.second, current_time, check_exceeded);
+}
+
+
+void EnabledQuota::usedPerNormalizedHash(UInt64 normalized_query_hash) const
+{
+    if (empty)
+        return;
+    auto loaded = intervals.load();
+    auto current_time = std::chrono::system_clock::now();
+    Impl::usedPerNormalizedHash(getUserName(), *loaded, normalized_query_hash, current_time);
+}
+
+
+void EnabledQuota::usedForNormalizedQuery(UInt64 normalized_query_hash, QuotaType quota_type, QuotaValue value, bool check_exceeded) const
+{
+    if (!interval_resolver)
+        return;
+
+    String key = std::to_string(normalized_query_hash);
+    boost::shared_ptr<const Intervals> resolved;
+
+    {
+        std::lock_guard lock(resolved_intervals_mutex);
+        auto it = resolved_intervals_cache.find(normalized_query_hash);
+        if (it != resolved_intervals_cache.end())
+        {
+            resolved = it->second;
+        }
+        else
+        {
+            resolved = interval_resolver(key);
+            resolved_intervals_cache[normalized_query_hash] = resolved;
+        }
+    }
+
+    if (resolved)
+    {
+        auto current_time = std::chrono::system_clock::now();
+        Impl::used(getUserName(), *resolved, quota_type, value, current_time, check_exceeded);
+    }
 }
 
 

@@ -1572,6 +1572,12 @@ static BlockIO executeQueryImpl(
                 quota->used(QuotaType::QUERY_INSERTS, 1);
                 quota->used(QuotaType::QUERIES, 1);
                 quota->checkExceeded(QuotaType::ERRORS);
+
+                /// Track per-normalized-query-hash quota limits.
+                quota->usedPerNormalizedHash(normalized_query_hash);
+
+                /// For NORMALIZED_QUERY_HASH keyed quotas, track usage per distinct query.
+                quota->usedForNormalizedQuery(normalized_query_hash, QuotaType::QUERIES, 1);
             }
 
             /// Invoke HTTP 100-Continue callback after async insert quota checks are completed
@@ -1736,6 +1742,12 @@ static BlockIO executeQueryImpl(
                         }
                         quota->used(QuotaType::QUERIES, 1);
                         quota->checkExceeded(QuotaType::ERRORS);
+
+                        /// Track per-normalized-query-hash quota limits.
+                        quota->usedPerNormalizedHash(normalized_query_hash);
+
+                        /// For NORMALIZED_QUERY_HASH keyed quotas, track usage per distinct query.
+                        quota->usedForNormalizedQuery(normalized_query_hash, QuotaType::QUERIES, 1);
                     }
                 }
 

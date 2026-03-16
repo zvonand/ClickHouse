@@ -44,6 +44,20 @@ bool ParserPolyglotQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expecte
     while (!pos->isEnd())
         ++pos;
 
+    /// Reject multi-statement input: polyglot transpiles each statement
+    /// independently, but we only parse the first result, so silently
+    /// dropping subsequent statements would be surprising.
+    const std::string_view input(begin, raw_end - begin);
+    if (auto semi_pos = input.find(';'); semi_pos != std::string_view::npos)
+    {
+        /// Check if there is any non-whitespace content after the first semicolon.
+        if (input.substr(semi_pos + 1).find_first_not_of(" \t\r\n") != std::string_view::npos)
+            throw Exception(
+                ErrorCodes::SYNTAX_ERROR,
+                "Multi-statement queries are not supported in polyglot dialect mode. "
+                "Please submit one statement at a time.");
+    }
+
     /// Transpile the foreign SQL to ClickHouse SQL.
     uint8_t * sql_query_ptr{nullptr};
     uint64_t sql_query_size{0};
@@ -56,7 +70,11 @@ bool ParserPolyglotQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expecte
         &sql_query_ptr,
         &sql_query_size);
 
-    SCOPE_EXIT({ polyglot_free_pointer(sql_query_ptr); });
+    SCOPE_EXIT(
+    {
+        if (sql_query_ptr)
+            polyglot_free_pointer(sql_query_ptr);
+    });
 
     const auto * sql_query_char_ptr = reinterpret_cast<char *>(sql_query_ptr);
     const auto * const original_sql_query_ptr = sql_query_char_ptr;

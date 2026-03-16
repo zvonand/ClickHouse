@@ -34,3 +34,7 @@ $CLICKHOUSE_CLIENT --dialect polyglot --polyglot_dialect sqlite -q "SELECT 1" 2>
 # Test that an invalid dialect name produces a clear error
 $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect invalid_dialect \
     -q "SELECT 1" 2>&1 | grep -oP 'SYNTAX_ERROR'
+
+# Test that multi-statement input is rejected
+$CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect sqlite \
+    -q "SELECT 1; SELECT 2" 2>&1 | grep -o "Multi-statement"

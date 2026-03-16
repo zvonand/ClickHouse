@@ -176,12 +176,14 @@ TableJoin::TableJoin(const Settings & settings, VolumePtr tmp_volume_, Temporary
     , allow_dynamic_type_in_join_keys(settings[Setting::allow_dynamic_type_in_join_keys])
     , enable_lazy_columns_replication(settings[Setting::enable_lazy_columns_replication])
     , enable_conversion_to_fixed_hash_table(settings[Setting::enable_conversion_to_fixed_hash_table])
-    , fixed_hash_table_conversion_max_range(std::min<UInt64>(settings[Setting::fixed_hash_table_conversion_max_range], 3'000'000)) /// Prevent FixedRangeHashTable from allocating a lot of memory.
+    , fixed_hash_table_conversion_max_range(settings[Setting::fixed_hash_table_conversion_max_range])
     , max_memory_usage(settings[Setting::max_memory_usage])
     , tmp_volume(tmp_volume_)
     , tmp_data(tmp_data_)
     , enable_analyzer(settings[Setting::allow_experimental_analyzer])
 {
+    if (fixed_hash_table_conversion_max_range > MAX_FIXED_HASH_TABLE_CONVERSION_RANGE)
+        throw Exception(ErrorCodes::ARGUMENT_OUT_OF_BOUND, "Setting `fixed_hash_table_conversion_max_range` must not exceed {}", MAX_FIXED_HASH_TABLE_CONVERSION_RANGE);
 }
 
 TableJoin::TableJoin(const JoinSettings & settings, bool join_use_nulls_, VolumePtr tmp_volume_, TemporaryDataOnDiskScopePtr tmp_data_)
@@ -207,12 +209,14 @@ TableJoin::TableJoin(const JoinSettings & settings, bool join_use_nulls_, Volume
     , allow_dynamic_type_in_join_keys(settings.allow_dynamic_type_in_join_keys)
     , enable_lazy_columns_replication(settings.enable_lazy_columns_replication)
     , enable_conversion_to_fixed_hash_table(settings.enable_conversion_to_fixed_hash_table)
-    , fixed_hash_table_conversion_max_range(std::min<UInt64>(settings.fixed_hash_table_conversion_max_range, 3'000'000)) /// Prevent FixedRangeHashTable from allocating a lot of memory.
+    , fixed_hash_table_conversion_max_range(settings.fixed_hash_table_conversion_max_range)
     , max_memory_usage(settings.max_bytes_in_join)
     , tmp_volume(tmp_volume_)
     , tmp_data(tmp_data_)
     , enable_analyzer(true)
 {
+    if (fixed_hash_table_conversion_max_range > MAX_FIXED_HASH_TABLE_CONVERSION_RANGE)
+        throw Exception(ErrorCodes::ARGUMENT_OUT_OF_BOUND, "Setting `fixed_hash_table_conversion_max_range` must not exceed {}", MAX_FIXED_HASH_TABLE_CONVERSION_RANGE);
 }
 
 TableJoin::TableJoin(SizeLimits limits, bool use_nulls, JoinKind kind, JoinStrictness strictness, const Names & key_names_right)

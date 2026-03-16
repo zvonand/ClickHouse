@@ -9,7 +9,6 @@
 #include <Columns/ColumnSparse.h>
 #include <Columns/ColumnString.h>
 #include <Common/CurrentThread.h>
-#include <Common/ProfileEvents.h>
 #include <Common/StackTrace.h>
 #include <Common/logger_useful.h>
 
@@ -35,11 +34,6 @@
 
 #include <Interpreters/HashJoin/HashJoinMethods.h>
 #include <Interpreters/HashJoin/JoinUsedFlags.h>
-
-namespace ProfileEvents
-{
-extern const Event BuiltJoinRangeHashMapMicroseconds;
-}
 
 namespace DB
 {
@@ -2081,8 +2075,6 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
 
     using Mapped = typename std::decay_t<decltype(source_map)>::mapped_type;
 
-    Stopwatch watch;
-
     size_t range = static_cast<size_t>(max_key - min_key);
     if (range == std::numeric_limits<size_t>::max())
         throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Range too large and will overflow");
@@ -2100,8 +2092,6 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
 
     auto range_size = range_map->getBufferSizeInCells();
     auto key_count = range_map->size();
-
-    ProfileEvents::increment(ProfileEvents::BuiltJoinRangeHashMapMicroseconds, watch.elapsedMicroseconds());
 
     if constexpr (std::is_same_v<Key, UInt32>)
     {

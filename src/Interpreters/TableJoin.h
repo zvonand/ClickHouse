@@ -140,6 +140,11 @@ private:
       *     to the subquery will be added expression `expr(t2 columns)`.
       * It's possible to use name `expr(t2 columns)`.
       */
+
+    /// Upper bound for fixed_hash_table_conversion_max_range to prevent excessive memory allocation.
+    /// At most ~96 MB at 32 bytes per hash table cell.
+    static constexpr UInt64 MAX_FIXED_HASH_TABLE_CONVERSION_RANGE = 3'000'000;
+
     SizeLimits size_limits;
     const size_t default_max_bytes = 0;
     const bool join_use_nulls = false;

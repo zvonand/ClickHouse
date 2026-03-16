@@ -1352,7 +1352,7 @@ The server successfully detected this situation and will download merged part fr
     M(RuntimeFilterRowsPassed, "Number of rows that passed (not filtered out by) JOIN Runtime Filters", ValueType::Number) \
     M(RuntimeFilterRowsSkipped, "Number of rows in blocks that were skipped by JOIN Runtime Filters", ValueType::Number) \
     \
-    M(BuiltJoinRangeHashMapMicroseconds, "Elapsed time of building range hash map from normal join hash map", ValueType::Microseconds) \
+    M(JoinBuildPostProcessingMicroseconds, "Elapsed time of post-processing steps after building hash table in JOIN operation.", ValueType::Microseconds) \
 
 
 #ifdef APPLY_FOR_EXTERNAL_EVENTS

@@ -31,11 +31,12 @@ static uint32_t span_count = 0;
 
 Span * clickhouse_create_buffer(uint32_t size)
 {
-    if (span_count >= MAX_SPANS || heap_pos + size > HEAP_SIZE) return NULL;
+    uint32_t aligned_size = (size + 15u) & ~15u;
+    if (span_count >= MAX_SPANS || heap_pos + aligned_size > HEAP_SIZE) return NULL;
     Span * s = &spans[span_count++];
     s->data = &heap[heap_pos];
     s->size = size;
-    heap_pos += (size + 15u) & ~15u;
+    heap_pos += aligned_size;
     return s;
 }
 

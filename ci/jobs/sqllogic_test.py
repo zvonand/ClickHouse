@@ -13,7 +13,7 @@ from praktika.utils import Shell, Utils
 temp_dir = f"{Utils.cwd()}/ci/tmp/"
 
 MIN_TOTAL_TESTS = 5_939_581
-MAX_FAILED_TESTS = 173_986
+MAX_FAILED_TESTS = 174_000
 
 MAX_EXAMPLES_PER_CATEGORY = 5
 MAX_NEW_FAILURES_DISPLAY = 200

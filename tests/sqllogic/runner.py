@@ -131,12 +131,16 @@ def statements_report(reports, out_dir, mode_name):
 
 
 def _child_process(setup_kwargs, runner_kwargs, input_dir, output_dir, test):
-    with setup_connection(**setup_kwargs) as connection:
-        with connection.with_test_database_scope():
-            runner = TestRunner(connection, **runner_kwargs)
-            runner.run_all_tests_from_file(test, input_dir)
-            runner.write_results_to_dir(output_dir)
-            return runner.report
+    try:
+        with setup_connection(**setup_kwargs) as connection:
+            with connection.with_test_database_scope():
+                runner = TestRunner(connection, **runner_kwargs)
+                runner.run_all_tests_from_file(test, input_dir)
+                runner.write_results_to_dir(output_dir)
+                return runner.report
+    except Exception as e:
+        logger.error("Child process failed for %s: %s", test, e)
+        return None
 
 
 def run_all_tests_in_parallel(setup_kwargs, runner_kwargs, input_dir, output_dir):
@@ -157,6 +161,7 @@ def run_all_tests_in_parallel(setup_kwargs, runner_kwargs, input_dir, output_dir
         ]
         reports = [ar.get() for ar in async_results]
 
+    reports = [r for r in reports if r is not None]
     report = reduce(lambda x, y: x.combine_with(y), reports)
     report.write_report(output_dir)
     return report

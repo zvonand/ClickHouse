@@ -243,8 +243,8 @@ bool CertificateReloader::registerAdditionalContext(SSL_CTX * ctx, const std::st
     auto it = data_index.find(prefix);
     if (it == data_index.end())
     {
-        LOG_WARNING(log, "Cannot register additional context for prefix '{}': prefix not found. "
-            "Call tryLoad() first to register the primary context.", prefix);
+        LOG_DEBUG(log, "Cannot register additional context for prefix '{}': prefix not found. "
+            "This is expected when certificate/key paths are not configured for this prefix.", prefix);
         return false;
     }
 

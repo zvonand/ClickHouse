@@ -3,7 +3,6 @@
 #include <Common/Exception.h>
 #include <Core/Settings.h>
 #include <Core/QueryProcessingStage.h>
-#include <DataTypes/DataTypeString.h>
 #include <IO/ConnectionTimeouts.h>
 #include <Interpreters/Cluster.h>
 #include <Interpreters/Context.h>
@@ -13,7 +12,6 @@
 #include <Interpreters/AddDefaultDatabaseVisitor.h>
 #include <Interpreters/TranslateQualifiedNamesVisitor.h>
 #include <Interpreters/InterpreterSelectQueryAnalyzer.h>
-#include <Processors/Sources/NullSource.h>
 #include <Processors/Sources/RemoteSource.h>
 #include <QueryPipeline/narrowPipe.h>
 #include <QueryPipeline/Pipe.h>
@@ -21,7 +19,6 @@
 #include <QueryPipeline/QueryPipelineBuilder.h>
 #include <Storages/IStorage.h>
 #include <Storages/SelectQueryInfo.h>
-#include <Storages/StorageDictionary.h>
 
 #include <algorithm>
 #include <memory>
@@ -92,6 +89,8 @@ void IStorageCluster::read(
     size_t /*max_block_size*/,
     size_t /*num_streams*/)
 {
+    updateConfigurationIfNeeded(context);
+
     storage_snapshot->check(column_names);
 
     updateBeforeRead(context);

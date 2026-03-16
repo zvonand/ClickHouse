@@ -2994,8 +2994,9 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
     }
     next.setName(crp->mutable_policy());
     t.setName(crp->mutable_target(), true);
-    if (!fc.clusters.empty() && rg.nextSmallNumber() < 4)
+    if (row && !fc.clusters.empty() && rg.nextSmallNumber() < 4)
     {
+        /// No cluster support for masking policies
         next.cluster = rg.pickRandomly(fc.clusters);
         setClusterClause(rg, next.cluster, crp->mutable_cluster());
     }

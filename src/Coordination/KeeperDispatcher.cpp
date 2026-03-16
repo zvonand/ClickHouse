@@ -53,6 +53,8 @@ namespace ProfileEvents
     extern const Event KeeperBatchMaxCount;
     extern const Event KeeperBatchMaxTotalSize;
     extern const Event KeeperRequestRejectedDueToSoftMemoryLimitCount;
+    extern const Event KeeperStaleRequestsSkipped;
+    extern const Event KeeperFinishedSessionsCacheFull;
     extern const Event KeeperSessionCallbackLockWaitMicroseconds;
     extern const Event KeeperSessionCallbackLockHoldMicroseconds;
     extern const Event KeeperReadRequestQueueLockWaitMicroseconds;
@@ -689,6 +691,31 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
             /// push to thread-safe queues, so no lock is needed here.
             for (const auto & read_request : pending_reads)
             {
+                /// Skip reads whose session has been finished
+                {
+                    std::lock_guard finished_lock(finished_sessions_mutex);
+                    if (finished_sessions.contains(read_request.session_id))
+                    {
+                        ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
+
+                        ZooKeeperOpentelemetrySpans::maybeFinalize(
+                            read_request.request->spans.read_wait_for_write,
+                            [&]
+                            {
+                                return std::vector<OpenTelemetry::SpanAttribute>{
+                                    {"keeper.operation", Coordination::opNumToString(read_request.request->getOpNum())},
+                                    {"keeper.session_id", read_request.session_id},
+                                    {"keeper.xid", read_request.request->xid},
+                                    {"keeper.stale", true},
+                                };
+                            },
+                            OpenTelemetry::SpanStatus::ERROR,
+                            "Session finished before read could execute");
+
+                        continue;
+                    }
+                }
+
                 if (!server->isLeaderAlive())
                 {
                     addErrorResponses({read_request}, Coordination::Error::ZCONNECTIONLOSS);
@@ -707,6 +734,16 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
                     });
 
                 server->putLocalReadRequest(read_request);
+            }
+
+            /// When Close commits, all prior requests for this session have been processed.
+            /// Remove from finished_sessions to reclaim memory.
+            /// Done after the pending-read loop so reads queued for the closing session
+            /// are still filtered by the stale check above.
+            if (request_for_session.request->getOpNum() == Coordination::OpNum::Close)
+            {
+                std::lock_guard lock(finished_sessions_mutex);
+                finished_sessions.erase(request_for_session.session_id);
             }
         });
 
@@ -1271,11 +1308,10 @@ uint64_t KeeperDispatcher::getSnapDirSize() const
 Keeper4LWInfo KeeperDispatcher::getKeeper4LWInfo() const
 {
     Keeper4LWInfo result = server->getPartiallyFilled4LWInfo();
-    result.outstanding_requests_count = requests_queue->size();
-    {
-        ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds, ProfileEvents::KeeperSessionCallbackLockHoldMicroseconds);
-        result.alive_connections_count = session_to_response_callback.size();
-    }
+    result.outstanding_requests_count
+        = CurrentMetrics::values[CurrentMetrics::KeeperOutstandingRequests].load(std::memory_order_relaxed);
+    result.alive_connections_count
+        = CurrentMetrics::values[CurrentMetrics::KeeperAliveConnections].load(std::memory_order_relaxed);
     return result;
 }
 

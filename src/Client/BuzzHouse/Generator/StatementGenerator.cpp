@@ -3964,20 +3964,19 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 }
             }
         }
-        else if (at.alter().has_alter_policy() && success)
+        else if (at.alter().has_alter_policy())
         {
             const uint32_t old_id = getIdentifierFromString(at.object().policy().policy().policy());
             const uint32_t new_id = at.alter().alter_policy().has_rename_to()
                 ? getIdentifierFromString(at.alter().alter_policy().rename_to().policy())
                 : old_id;
 
-            if (this->policies.contains(old_id))
+            if (success && this->policies.contains(old_id))
             {
                 if (new_id != old_id && this->staged_policies.contains(new_id))
                 {
                     this->policies.erase(old_id);
                     this->policies[new_id] = this->staged_policies[new_id];
-                    this->staged_policies.erase(new_id);
                 }
                 SQLPolicy & p = this->policies[new_id];
                 if (at.alter().alter_policy().has_where_expr())
@@ -3985,6 +3984,8 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 else
                     p.where_expr.reset();
             }
+            if (new_id != old_id)
+                this->staged_policies.erase(new_id);
         }
     }
     else if (ssq.has_explain() && !ssq.explain().is_explain() && (query.has_attach() || query.has_detach()) && success)

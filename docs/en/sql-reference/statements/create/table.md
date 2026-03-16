@@ -42,7 +42,7 @@ If necessary, primary key can be specified, with one or more key expressions.
 
 Comments can be added for columns and for the table.
 
-### With Schema and Data of Existing Table {#clone-schema-data-existing-table}
+### With Schema of Existing Table {#with-a-schema-similar-to-other-table}
 
 ClickHouse supports the ability to copy the schema and data of an existing table. 
 
@@ -54,6 +54,7 @@ CREATE TABLE [IF NOT EXISTS] [db2.]table_clone AS [db.]table [ENGINE = engine]
 
 This creates a table with the same structure as another table. 
 
+### With Schema and Data of Existing Table {#with-a-schema-and-data-cloned-from-another-table}
 
 For replicating the schema and data of an existing table:
 ```sql

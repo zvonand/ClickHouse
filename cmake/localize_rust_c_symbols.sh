@@ -14,7 +14,7 @@
 #
 # Usage: localize_rust_c_symbols.sh <library.a> <objcopy>
 
-set -euo pipefail
+set -eu
 
 LIB_PATH="$1"
 OBJCOPY="$2"
@@ -77,7 +77,7 @@ KNOWN_C_SYMBOLS=(
 # Collect which of these actually exist as global symbols in the library
 TMPFILE=$(mktemp)
 WORK_DIR=""
-cleanup() { rm -f "$TMPFILE"; [ -n "$WORK_DIR" ] && rm -rf "$WORK_DIR"; }
+cleanup() { rm -f "$TMPFILE"; [ -n "$WORK_DIR" ] && rm -rf "$WORK_DIR"; true; }
 trap cleanup EXIT
 
 # Get all global defined symbols from the library

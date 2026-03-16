@@ -350,8 +350,14 @@ void QueryOracle::generateRowPolicyOracleQueries(RandomGenerator & rg, Statement
     // count() result column
     ssc2->add_result_columns()->mutable_eca()->mutable_expr()->mutable_comp_expr()->mutable_func_call()->mutable_func()->set_catalog_func(
         FUNCcount);
-    // WHERE pred — copied from the stored USING predicate of the catalog policy
-    ssc2->mutable_where()->mutable_expr()->CopyFrom(policy.where_expr.value().expr());
+    // WHERE pred — copied from the stored USING predicate of the catalog policy.
+    // In the fallback path (table gone, querying system.one) we cannot reuse column references
+    // from the original table; use a constant TRUE predicate instead so the result is always 1.
+    if (gen.hasTable(policy.table_id))
+        ssc2->mutable_where()->CopyFrom(policy.where_expr.value());
+    else
+        ssc2->mutable_where()->mutable_expr()->mutable_expr()->mutable_lit_val()->mutable_special_val()->set_val(
+            SpecialVal_SpecialValEnum::SpecialVal_SpecialValEnum_VAL_ONE);
 
     finishSettings(sel2->mutable_setting_values());
     ts2->set_format(OutFormat::OUT_CSV);

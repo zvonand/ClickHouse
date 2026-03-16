@@ -2280,7 +2280,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
 
                   renamed.policy_id = this->policy_counter++;
                   renamed.setName(apc->mutable_rename_to());
-                  this->staged_policies[renamed.policy_id] = std::move(renamed);
+                  this->staged_policies[renamed.policy_id] = renamed;
               }
           }}});
     setClusterClause(rg, cluster, at->mutable_cluster());
@@ -3960,16 +3960,26 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 }
             }
         }
-        else if (at.alter().has_alter_policy() && at.alter().alter_policy().has_rename_to() && success)
+        else if (at.alter().has_alter_policy() && success)
         {
             const uint32_t old_id = getIdentifierFromString(at.object().policy().policy().policy());
-            const uint32_t new_id = getIdentifierFromString(at.alter().alter_policy().rename_to().policy());
+            const uint32_t new_id = at.alter().alter_policy().has_rename_to()
+                ? getIdentifierFromString(at.alter().alter_policy().rename_to().policy())
+                : old_id;
 
-            if (this->policies.contains(old_id) && this->staged_policies.contains(new_id))
+            if (this->policies.contains(old_id))
             {
-                this->policies.erase(old_id);
-                this->policies[new_id] = std::move(this->staged_policies[new_id]);
-                this->staged_policies.erase(new_id);
+                if (new_id != old_id && this->staged_policies.contains(new_id))
+                {
+                    this->policies.erase(old_id);
+                    this->policies[new_id] = this->staged_policies[new_id];
+                    this->staged_policies.erase(new_id);
+                }
+                SQLPolicy & p = this->policies[new_id];
+                if (at.alter().alter_policy().has_where_expr())
+                    p.where_expr = at.alter().alter_policy().where_expr();
+                else
+                    p.where_expr.reset();
             }
         }
     }
@@ -4080,7 +4090,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
             {
                 this->policies.erase(policy_id);
             }
-            this->policies[policy_id] = std::move(this->staged_policies[policy_id]);
+            this->policies[policy_id] = this->staged_policies[policy_id];
         }
         this->staged_policies.erase(policy_id);
     }

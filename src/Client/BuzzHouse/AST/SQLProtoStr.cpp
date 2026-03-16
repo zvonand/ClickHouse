@@ -3639,7 +3639,7 @@ CONV_FN(SQLObjectName, son)
     }
 }
 
-static const String SQLObjectToString(const SQLObject obj)
+static String SQLObjectToString(const SQLObject obj)
 {
     if (obj == SQLObject::ROW_POLICY)
         return "ROW POLICY";

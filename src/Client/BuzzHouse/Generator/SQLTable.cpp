@@ -3028,7 +3028,7 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
         generateUptDelWhere(rg, t, crp->mutable_where_expr()->mutable_expr()->mutable_expr());
         next.where_expr = crp->where_expr();
     }
-    this->staged_policies[next.policy_id] = std::move(next);
+    this->staged_policies[next.policy_id] = next;
 }
 
 }

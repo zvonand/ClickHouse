@@ -187,6 +187,7 @@ struct SortCursor : SortCursorHelper<SortCursor>
             /// JIT-compiled functions lack the type metadata prologue that UBSan's
             /// -fsanitize=function expects before every indirect call. When the JIT
             /// code sits at a page boundary the pre-call read hits unmapped memory.
+            /// NOLINTNEXTLINE(bugprone-signed-char-misuse,cert-str34-c) -- JIT comparator returns -1/0/1, sign is meaningful
             int res = callJITFunction(sort_description_func_typed, lhs_pos, rhs_pos, impl->raw_sort_columns_data.data(), rhs.impl->raw_sort_columns_data.data());
 
             if (res > 0)
@@ -238,7 +239,7 @@ struct SimpleSortCursor : SortCursorHelper<SimpleSortCursor>
             assert(impl->raw_sort_columns_data.size() == rhs.impl->raw_sort_columns_data.size());
 
             auto sort_description_func_typed = reinterpret_cast<JITSortDescriptionFunc>(impl->desc.compiled_sort_description);
-            res = callJITFunction(sort_description_func_typed, lhs_pos, rhs_pos, impl->raw_sort_columns_data.data(), rhs.impl->raw_sort_columns_data.data());
+            res = callJITFunction(sort_description_func_typed, lhs_pos, rhs_pos, impl->raw_sort_columns_data.data(), rhs.impl->raw_sort_columns_data.data()); // NOLINT(bugprone-signed-char-misuse,cert-str34-c)
         }
         else
 #endif

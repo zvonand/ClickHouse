@@ -10,7 +10,6 @@
 #include <Core/SortDescription.h>
 #include <Interpreters/sortBlock.h>
 #include <boost/algorithm/string/predicate.hpp>
-#include <Client/LocalMetaCommands.h>
 
 #if USE_CLIENT_AI
 #include <Client/AI/AISQLGenerator.h>
@@ -3738,10 +3737,10 @@ void ClientBase::runInteractive()
 
         try
         {
-            text = rewriteLsMetaCommandIfNeeded(input);
-            if (!processQueryText(text)
+            const String query_input = rewriteLsMetaCommandIfNeeded(input);
+            if (!processQueryText(query_input))
                 break;
-            last_input = input;
+            last_input = query_input;
         }
         catch (const Exception & e)
         {
@@ -3849,8 +3848,8 @@ void ClientBase::runNonInteractive()
                     return;
             }
             else
-            {   query = rewriteLsMetaCommandIfNeeded(query);
-                if (!processQueryText(query))
+            {   const String query_input = rewriteLsMetaCommandIfNeeded(query);
+                if (!processQueryText(query_input))
                     return;
             }
         }

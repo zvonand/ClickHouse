@@ -267,7 +267,7 @@ ORDER BY file ASC
 
 You can also run it as a query using the argument -q:
 
-```text title="sh"
+```sh
 ./clickhouse-local -q ls
 ```
 

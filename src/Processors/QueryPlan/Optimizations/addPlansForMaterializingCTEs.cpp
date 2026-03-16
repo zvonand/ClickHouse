@@ -50,6 +50,8 @@ void resolveMaterializingCTEs(const QueryPlanOptimizationSettings & optimization
     {
         auto & frame = stack.back();
 
+        addPlansForMaterializingCTEs(optimization_settings, root_plan, *frame.node, nodes);
+
         if (frame.next_child < frame.node->children.size())
         {
             auto next_frame = Frame{.node = frame.node->children[frame.next_child]};
@@ -57,8 +59,6 @@ void resolveMaterializingCTEs(const QueryPlanOptimizationSettings & optimization
             stack.push_back(next_frame);
             continue;
         }
-
-        addPlansForMaterializingCTEs(optimization_settings, root_plan, *frame.node, nodes);
 
         stack.pop_back();
     }

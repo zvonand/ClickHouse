@@ -35,7 +35,7 @@ OrderedMaterializedCTEs collectMaterializedCTEs(const QueryTreeNodePtr & node, c
     {
         if (auto * table_node = current_node->as<TableNode>())
         {
-            if (table_node->isMaterializedCTE())
+            if (table_node->getMaterializedCTE())
             {
                 auto [it, _] = materialized_ctes.emplace(table_node->getMaterializedCTE(), MaterializedCteWithLevel{current_node, level});
 
@@ -50,7 +50,7 @@ OrderedMaterializedCTEs collectMaterializedCTEs(const QueryTreeNodePtr & node, c
     {
         if (auto * table_node = current_node->as<TableNode>())
         {
-            if (table_node->isMaterializedCTE())
+            if (table_node->getMaterializedCTE())
                 --level;
         }
     });

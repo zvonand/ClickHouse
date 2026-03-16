@@ -1608,34 +1608,44 @@ void addBuildSubqueriesForMaterializedCTEsIfNeeded(
     // is always materialized before the CTE at level N-1 that depends on it.
     for (const auto & cte_level : materialized_ctes)
     {
-        std::vector<DelayedMaterializingCTEsStep::CTEPlan> cte_plans;
-        cte_plans.reserve(cte_level.size());
+        std::vector<MaterializedCTEPtr> ctes;
+        ctes.reserve(cte_level.size());
 
         for (const auto & cte_node : cte_level)
         {
             auto * cte_table_node = cte_node->as<TableNode>();
-            auto cte_options = select_query_options.subquery();
-            Planner cte_planner(
-                cte_table_node->getMaterializedCTESubquery(),
-                cte_options,
-                std::make_shared<GlobalPlannerContext>(nullptr, nullptr, FiltersForTableExpressionMap{}));
-            cte_planner.buildQueryPlanIfNeeded();
-
-            auto cte_plan = std::move(cte_planner).extractQueryPlan();
-
             auto materialized_cte = cte_table_node->getMaterializedCTE();
-            auto step = std::make_unique<MaterializingCTEStep>(
-                cte_plan.getCurrentHeader(),
-                materialized_cte);
-            step->setStepDescription("Materializing CTE: " + materialized_cte->cte_name, 100);
-            cte_plan.addStep(std::move(step));
+            if (!materialized_cte->hasPlanOrBuilt())
+            {
+                auto cte_subquery = cte_table_node->getMaterializedCTESubquery();
+                if (!cte_subquery)
+                    throw Exception(ErrorCodes::LOGICAL_ERROR,
+                        "CTE '{}' does not have query tree, but was not planned yet",
+                        materialized_cte->cte_name);
 
-            cte_plans.push_back({ materialized_cte, std::make_unique<QueryPlan>(std::move(cte_plan)) });
+                auto cte_options = select_query_options.subquery();
+                Planner cte_planner(
+                    cte_subquery,
+                    cte_options,
+                    std::make_shared<GlobalPlannerContext>(nullptr, nullptr, FiltersForTableExpressionMap{}));
+                cte_planner.buildQueryPlanIfNeeded();
+
+                auto cte_plan = std::move(cte_planner).extractQueryPlan();
+
+                auto step = std::make_unique<MaterializingCTEStep>(
+                    cte_plan.getCurrentHeader(),
+                    materialized_cte);
+                step->setStepDescription("Materializing CTE: " + materialized_cte->cte_name, 100);
+                cte_plan.addStep(std::move(step));
+                materialized_cte->plan = std::make_unique<QueryPlan>(std::move(cte_plan));
+            }
+
+            ctes.push_back(materialized_cte);
         }
 
         auto delayed_step = std::make_unique<DelayedMaterializingCTEsStep>(
             query_plan.getCurrentHeader(),
-            std::move(cte_plans));
+            std::move(ctes));
         query_plan.addStep(std::move(delayed_step));
     }
 }

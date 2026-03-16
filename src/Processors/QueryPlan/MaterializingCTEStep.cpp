@@ -94,8 +94,9 @@ QueryPipelineBuilderPtr MaterializingCTEsStep::updatePipeline(QueryPipelineBuild
 
 DelayedMaterializingCTEsStep::DelayedMaterializingCTEsStep(
     SharedHeader input_header,
-    std::vector<CTEPlan> cte_plans_)
-    : cte_plans(std::move(cte_plans_))
+    std::vector<MaterializedCTEPtr> ctes_
+)
+    : ctes(std::move(ctes_))
 {
     input_headers = {input_header};
     output_header = std::move(input_header);
@@ -113,13 +114,13 @@ std::vector<std::unique_ptr<QueryPlan>> DelayedMaterializingCTEsStep::makePlansF
     const QueryPlanOptimizationSettings & optimization_settings)
 {
     std::vector<std::unique_ptr<QueryPlan>> plans;
-    for (auto & [materialized_cte, plan] : step.cte_plans)
+    for (auto & materialized_cte : step.ctes)
     {
-        if (materialized_cte->is_planned.exchange(true))
+        if (materialized_cte->is_materialization_planned.exchange(true))
             continue;
 
-        plan->optimize(optimization_settings);
-        plans.emplace_back(std::move(plan));
+        materialized_cte->plan->optimize(optimization_settings);
+        plans.emplace_back(std::move(materialized_cte->plan));
     }
     return plans;
 }

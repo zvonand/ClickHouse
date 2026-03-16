@@ -59,13 +59,8 @@ private:
 class DelayedMaterializingCTEsStep final : public IQueryPlanStep
 {
 public:
-    struct CTEPlan
-    {
-        MaterializedCTEPtr materialized_cte;
-        std::unique_ptr<QueryPlan> plan;
-    };
 
-    DelayedMaterializingCTEsStep(SharedHeader input_header, std::vector<CTEPlan> cte_plans_);
+    DelayedMaterializingCTEsStep(SharedHeader input_header, std::vector<MaterializedCTEPtr> ctes_);
 
     String getName() const override { return "DelayedMaterializingCTEs"; }
 
@@ -80,7 +75,7 @@ public:
 private:
     void updateOutputHeader() override { output_header = getInputHeaders().front(); }
 
-    std::vector<CTEPlan> cte_plans;
+    std::vector<MaterializedCTEPtr> ctes;
 };
 
 }

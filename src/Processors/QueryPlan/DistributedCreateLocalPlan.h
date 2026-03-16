@@ -9,7 +9,6 @@ namespace DB
 {
 
 std::unique_ptr<QueryPlan> createLocalPlan(
-    const QueryTreeNodePtr & query_tree,
     const ASTPtr & query_ast,
     const Block & header,
     ContextPtr context,

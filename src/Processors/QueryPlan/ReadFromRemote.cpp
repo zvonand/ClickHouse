@@ -599,7 +599,7 @@ void ReadFromRemote::addLazyPipe(
             if (try_results.empty() || (local_delay < max_remote_delay && local_delay < max_allowed_delay))
             {
                 auto plan = createLocalPlan(
-                    query_tree, query, *header, my_context, my_stage, my_shard.shard_info.shard_num, my_shard_count);
+                    query, *header, my_context, my_stage, my_shard.shard_info.shard_num, my_shard_count);
 
                 return std::move(*plan->buildQueryPipeline(QueryPlanOptimizationSettings(my_context), BuildQueryPipelineSettings(my_context)));
             }

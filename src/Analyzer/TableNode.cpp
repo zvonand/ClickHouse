@@ -26,12 +26,26 @@ namespace Setting
     extern const SettingsSeconds lock_acquire_timeout;
 }
 
+namespace
+{
+
+MaterializedCTEPtr extractCTE(StoragePtr storage)
+{
+    auto * storage_memory = typeid_cast<StorageMemory *>(storage.get());
+    if (!storage_memory)
+        return {};
+    return storage_memory->getMaterializedCTE();
+}
+
+}
+
 TableNode::TableNode(StoragePtr storage_, StorageID storage_id_, TableLockHolder storage_lock_, StorageSnapshotPtr storage_snapshot_)
     : IQueryTreeNode(children_size)
     , storage(std::move(storage_))
     , storage_id(std::move(storage_id_))
     , storage_lock(std::move(storage_lock_))
     , storage_snapshot(std::move(storage_snapshot_))
+    , materialized_cte(extractCTE(storage))
 {}
 
 TableNode::TableNode(StoragePtr storage_, TableLockHolder storage_lock_, StorageSnapshotPtr storage_snapshot_)

@@ -64,7 +64,7 @@ protected:
                 throw Exception(ErrorCodes::LOGICAL_ERROR,
                     "Reading from materialized CTE '{}' before it has been materialized (materialization was planned: {})",
                     materialized_cte->cte_name,
-                    materialized_cte->is_planned.load());
+                    materialized_cte->is_materialization_planned.load());
 
             initializer_func(data);
             initializer_func = {};

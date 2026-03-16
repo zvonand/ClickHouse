@@ -14,7 +14,7 @@ namespace
         {
             return Poco::Net::DNS::thisHost().name();
         }
-        catch (const Poco::Exception &)
+        catch (const Poco::IOException &)
         {
             return Poco::Net::DNS::hostName();
         }

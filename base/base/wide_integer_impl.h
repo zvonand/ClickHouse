@@ -57,7 +57,10 @@ constexpr long double round_to_64bit_mantissa(long double value) noexcept
     // mantissa is now in range [0.5, 1.0) or (-1.0, -0.5]
     // Scale to extract exactly 64 bits of precision
     constexpr long double scale = static_cast<long double>(1ULL << 63) * 2.0L; // 2^64
-    long double scaled = std::round(mantissa * scale);
+
+    // Use rint (round-to-nearest-even) to match x86 FPU default rounding mode,
+    // rather than std::round which uses ties-away-from-zero.
+    long double scaled = std::rint(mantissa * scale);
 
     // Convert back to normalized mantissa with 64-bit precision
     long double rounded_mantissa = scaled / scale;

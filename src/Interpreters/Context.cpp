@@ -6738,6 +6738,12 @@ void Context::resetInputCallbacks()
         input_blocks_reader = {};
 }
 
+void Context::clearTableFunctionResults()
+{
+    std::lock_guard lock(table_function_results_mutex);
+    table_function_results.clear();
+}
+
 
 void Context::setClientInfo(const ClientInfo & client_info_)
 {

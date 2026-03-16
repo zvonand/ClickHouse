@@ -909,6 +909,8 @@ public:
     /// Get callback for reading data for input()
     InputBlocksReader getInputBlocksReaderCallback() const;
     void resetInputCallbacks();
+    /// Clear cached table function results (e.g. StorageInput) to avoid stale state across queries.
+    void clearTableFunctionResults();
 
     /// Returns information about the client executing a query.
     const ClientInfo & getClientInfo() const { return client_info; }

@@ -1295,10 +1295,7 @@ bool MergeTask::VerticalMergeStage::prepareVerticalMergeForAllColumns() const
     if (global_ctx->chosen_merge_algorithm != MergeAlgorithm::Vertical)
         return false;
 
-    /// `rows_read` is updated from pipeline progress and may include auxiliary
-    /// reads such as `CreatingSetStep` subqueries. Here we need the exact number
-    /// of rows coming from source parts only.
-    size_t sum_input_rows_exact = global_ctx->merge_list_element_ptr->total_rows_count;
+    size_t sum_input_rows_exact = global_ctx->merge_list_element_ptr->rows_read;
     size_t input_rows_filtered = *global_ctx->input_rows_filtered;
     global_ctx->merge_list_element_ptr->columns_written = global_ctx->merging_columns.size();
     global_ctx->merge_list_element_ptr->progress.store(ctx->column_sizes->keyColumnsWeight(), std::memory_order_relaxed);
@@ -2325,12 +2322,18 @@ public:
     {
         transform = std::make_shared<TTLTransform>(
             context_, input_header_, storage_, metadata_snapshot_, data_part_, expired_columns_, current_time, force_);
-        subqueries_for_sets = transform->getSubqueries();
+
+        /// Build sets eagerly here rather than via addCreatingSetsStep.
+        /// If they were built inside the merge pipeline, the subquery progress (rows read)
+        /// would be counted in merge_list_element->rows_read, causing a mismatch with
+        /// the rows_sources file size assertion in vertical merge.
+        for (auto & subquery : transform->getSubqueries())
+            subquery->buildSetInplace(context_);
     }
 
     String getName() const override { return "TTL"; }
 
-    PreparedSets::Subqueries getSubqueries() { return std::move(subqueries_for_sets); }
+    PreparedSets::Subqueries getSubqueries() { return {}; }
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override
     {
@@ -2359,7 +2362,6 @@ private:
     }
 
     std::shared_ptr<TTLTransform> transform;
-    PreparedSets::Subqueries subqueries_for_sets;
 };
 
 class BuildTextIndexStep : public ITransformingStep, private WithContext

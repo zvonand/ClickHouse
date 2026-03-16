@@ -329,6 +329,17 @@ def generate_html_report(
                             f"    Reason: <span style='color: orange;'>{html.escape(truncated_reason)}</span>\n"
                         )
 
+                    # Show exact reproduction command
+                    if request:
+                        # Escape single quotes for shell
+                        escaped_query = request.replace(
+                            "\n", " "
+                        ).replace("'", "'\\''")
+                        f.write(
+                            f"    Reproduce: <span style='color: blue;'>"
+                            f"clickhouse-client --query '{html.escape(escaped_query)}'</span>\n"
+                        )
+
                     f.write("\n")
                     displayed += 1
             else:
@@ -598,6 +609,24 @@ def main():
                         f"new: {len(new_failures):,}, "
                         f"fixed: {len(fixed_tests):,}"
                     )
+
+                    if new_failures:
+                        print("\nNEW FAILURES (with reproduction commands):")
+                        for fid in sorted(new_failures.keys()):
+                            details = new_failures[fid]
+                            request = details["request"]
+                            reason = details.get("reason", "")
+                            print(f"\n  {fid}")
+                            if reason:
+                                print(f"    Reason: {reason[:300]}")
+                            if request:
+                                escaped = request.replace(
+                                    "\n", " "
+                                ).replace("'", "'\\''")
+                                print(
+                                    f"    Reproduce: clickhouse-client"
+                                    f" --query '{escaped}'"
+                                )
 
             # Finalize pass/fail verdict before rendering HTML report
             final_ok = threshold_ok

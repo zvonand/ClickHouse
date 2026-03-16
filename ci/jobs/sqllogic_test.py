@@ -287,11 +287,32 @@ def generate_html_report(
                 )
                 f.write(
                     f"  These tests were not failing before. "
-                    f"Each entry shows the test file, line, query, and failure reason.\n"
+                    f"Each entry shows the test file, position, query, and failure reason.\n"
+                )
+                # Collect unique test files and show per-file reproduction commands
+                new_test_files = sorted(
+                    set(d["test_name"] for d in new_failures.values())
                 )
                 f.write(
-                    f"  To reproduce, run the sqllogictest for the given file against ClickHouse.\n\n"
+                    f"\n  To reproduce via sqllogictest (ClickHouse must be running):\n"
+                    f"  <span style='color: blue;'>"
+                    f"git clone https://github.com/gregrahn/sqllogictest.git"
+                    f" /tmp/sqllogictest</span>\n\n"
                 )
+                for tf in new_test_files:
+                    subdir = os.path.dirname(tf)
+                    escaped_tf = html.escape(tf)
+                    escaped_subdir = html.escape(subdir)
+                    f.write(
+                        f"  <span style='color: blue;'>"
+                        f"mkdir -p /tmp/sqllogic_input/{escaped_subdir}"
+                        f" &amp;&amp; cp /tmp/sqllogictest/test/{escaped_tf}"
+                        f" /tmp/sqllogic_input/{escaped_subdir}/\n"
+                        f"  python3 tests/sqllogic/runner.py complete-test"
+                        f" --input-dir /tmp/sqllogic_input"
+                        f" --out-dir /tmp/sqllogic_output</span>\n"
+                    )
+                f.write("\n")
 
                 displayed = 0
                 for fid in sorted(new_failures.keys()):
@@ -331,7 +352,6 @@ def generate_html_report(
 
                     # Show exact reproduction command
                     if request:
-                        # Escape single quotes for shell
                         escaped_query = request.replace(
                             "\n", " "
                         ).replace("'", "'\\''")
@@ -611,7 +631,34 @@ def main():
                     )
 
                     if new_failures:
+                        new_test_files = sorted(
+                            set(d["test_name"] for d in new_failures.values())
+                        )
                         print("\nNEW FAILURES (with reproduction commands):")
+                        print(
+                            "\nTo reproduce via sqllogictest"
+                            " (ClickHouse must be running):"
+                        )
+                        print(
+                            "  git clone"
+                            " https://github.com/gregrahn/sqllogictest.git"
+                            " /tmp/sqllogictest"
+                        )
+                        for tf in new_test_files:
+                            subdir = os.path.dirname(tf)
+                            print(
+                                f"\n  mkdir -p"
+                                f" /tmp/sqllogic_input/{subdir}"
+                                f" && cp"
+                                f" /tmp/sqllogictest/test/{tf}"
+                                f" /tmp/sqllogic_input/{subdir}/"
+                            )
+                            print(
+                                f"  python3 tests/sqllogic/runner.py"
+                                f" complete-test"
+                                f" --input-dir /tmp/sqllogic_input"
+                                f" --out-dir /tmp/sqllogic_output"
+                            )
                         for fid in sorted(new_failures.keys()):
                             details = new_failures[fid]
                             request = details["request"]

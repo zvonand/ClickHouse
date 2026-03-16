@@ -221,7 +221,7 @@ struct OffsetsToIndexesResult
 {
     ColumnPtr indexes;
     /// Filter marking referenced rows. Empty if all rows are referenced.
-    IColumn::Filter unused_rows_filter;
+    IColumn::Filter used_rows_filter;
 };
 
 OffsetsToIndexesResult convertOffsetsToIndexes(const IColumn::Offsets & offsets);

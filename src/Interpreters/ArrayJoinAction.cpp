@@ -289,8 +289,8 @@ Block ArrayJoinResultIterator::next()
             {
                 if (!indexes_for_lazy_replication.indexes)
                     indexes_for_lazy_replication = convertOffsetsToIndexes(cut_any_array->getOffsets());
-                if (!indexes_for_lazy_replication.unused_rows_filter.empty())
-                    current.column = current.column->filter(indexes_for_lazy_replication.unused_rows_filter, -1);
+                if (!indexes_for_lazy_replication.used_rows_filter.empty())
+                    current.column = current.column->filter(indexes_for_lazy_replication.used_rows_filter, -1);
                 current.column = ColumnReplicated::create(current.column, indexes_for_lazy_replication.indexes);
             }
             else

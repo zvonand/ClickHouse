@@ -35,6 +35,9 @@ namespace
 String resolveScanPath(const String & table_path, const RemoveOrphanFilesParams & params)
 {
     String scan_path = table_path;
+    if (!scan_path.empty() && !scan_path.ends_with('/'))
+        scan_path += '/';
+
     if (params.location.has_value())
     {
         String loc = *params.location;
@@ -44,8 +47,6 @@ String resolveScanPath(const String & table_path, const RemoveOrphanFilesParams 
         while (loc.starts_with("./"))
             loc = loc.substr(2);
 
-        if (!scan_path.ends_with('/'))
-            scan_path += '/';
         scan_path += loc;
 
         if (!scan_path.ends_with('/'))

@@ -76,7 +76,9 @@ KNOWN_C_SYMBOLS=(
 
 # Collect which of these actually exist as global symbols in the library
 TMPFILE=$(mktemp)
-trap "rm -f '$TMPFILE'" EXIT
+WORK_DIR=""
+cleanup() { rm -f "$TMPFILE"; [ -n "$WORK_DIR" ] && rm -rf "$WORK_DIR"; }
+trap cleanup EXIT
 
 # Get all global defined symbols from the library
 llvm-nm "$LIB_PATH" 2>/dev/null \
@@ -94,5 +96,18 @@ for sym in "${KNOWN_C_SYMBOLS[@]}"; do
 done
 
 if [ -n "$LOCALIZE_FLAGS" ]; then
-    $OBJCOPY $LOCALIZE_FLAGS "$LIB_PATH"
+    # Try direct objcopy on the archive first (fast path).
+    # Some Rust archives contain non-ELF members (e.g. debug metadata objects)
+    # that cause llvm-objcopy to fail.  In that case, fall back to extracting
+    # individual members, processing only valid ELF objects, and repacking.
+    if ! $OBJCOPY $LOCALIZE_FLAGS "$LIB_PATH" 2>/dev/null; then
+        AR="${OBJCOPY/objcopy/ar}"
+        WORK_DIR=$(mktemp -d)
+
+        (cd "$WORK_DIR" && "$AR" x "$LIB_PATH")
+        for obj in "$WORK_DIR"/*.o; do
+            $OBJCOPY $LOCALIZE_FLAGS "$obj" 2>/dev/null || true
+        done
+        "$AR" rcs "$LIB_PATH" "$WORK_DIR"/*.o
+    fi
 fi

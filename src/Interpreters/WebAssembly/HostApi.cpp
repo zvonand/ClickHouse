@@ -33,10 +33,12 @@ void wasmExportLog(WasmCompartment * compartment, UInt32 level, WasmPtr wasm_ptr
     /// Map level to Poco::Message::Priority.
     /// Poco priorities: 1 (FATAL) .. 8 (TRACE). WASM modules must not emit messages
     /// more severe than WARNING — those could trigger alerting systems and misrepresent
-    /// ClickHouse health. Cast first, then clamp to [PRIO_WARNING, PRIO_TRACE].
-    auto prio = static_cast<Poco::Message::Priority>(level);
-    prio = std::max(prio, Poco::Message::PRIO_WARNING);
-    prio = std::min(prio, Poco::Message::PRIO_TRACE);
+    /// ClickHouse health. Clamp as integers first to avoid signed overflow on large
+    /// UInt32 values (e.g. 0xFFFFFFFF → -1 if cast first), then cast.
+    UInt32 clamped_level = std::clamp(level,
+        static_cast<UInt32>(Poco::Message::PRIO_WARNING),
+        static_cast<UInt32>(Poco::Message::PRIO_TRACE));
+    auto prio = static_cast<Poco::Message::Priority>(clamped_level);
 
     std::string_view message = getWasmString(compartment, wasm_ptr, size);
 

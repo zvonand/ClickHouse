@@ -1483,38 +1483,6 @@ namespace DB
         return arrow::binary();
     }
 
-    CHColumnToArrowColumn::CHColumnToArrowColumn(const Block & header, const std::string & format_name_, const Settings & settings_)
-        : CHColumnToArrowColumn(header.getColumnsWithTypeAndName(), format_name_, settings_)
-    {
-    }
-
-    CHColumnToArrowColumn::CHColumnToArrowColumn(
-        const ColumnsWithTypeAndName & header_columns_, const std::string & format_name_, const Settings & settings_)
-        : format_name(format_name_)
-        , settings(settings_)
-    {
-        if (settings.low_cardinality_as_dictionary)
-        {
-            header_columns = header_columns_;
-            return;
-        }
-        header_columns.reserve(header_columns_.size());
-        for (auto column : header_columns_)
-        {
-            column.type = recursiveRemoveLowCardinality(column.type);
-            column.column = recursiveRemoveLowCardinality(column.column);
-            header_columns.emplace_back(std::move(column));
-        }
-    }
-
-    std::unique_ptr<CHColumnToArrowColumn> CHColumnToArrowColumn::clone(bool copy_arrow_schema) const
-    {
-        auto res = std::make_unique<CHColumnToArrowColumn>(header_columns, format_name, settings);
-        if (copy_arrow_schema)
-            res->arrow_schema = arrow_schema;
-        return res;
-    }
-
     std::shared_ptr<arrow::Schema> CHColumnToArrowColumn::calculateArrowSchema(
         const ColumnsWithTypeAndName & header_columns,
         const std::string & format_name,
@@ -1566,7 +1534,8 @@ namespace DB
         return std::make_shared<arrow::Schema>(arrow_fields);
     }
 
-    std::shared_ptr<arrow::Table> CHColumnToArrowColumn::chunkToArrowTable(
+
+    std::shared_ptr<arrow::Table> CHColumnToArrowColumn::calculateArrowTable(
         const ColumnsWithTypeAndName & header_columns,
         const std::string & format_name,
         const std::vector<Chunk> & chunks,
@@ -1626,6 +1595,38 @@ namespace DB
         return arrow::Table::Make(schema, columns);
     }
 
+    CHColumnToArrowColumn::CHColumnToArrowColumn(const Block & header, const std::string & format_name_, const Settings & settings_)
+        : CHColumnToArrowColumn(header.getColumnsWithTypeAndName(), format_name_, settings_)
+    {
+    }
+
+    CHColumnToArrowColumn::CHColumnToArrowColumn(
+        const ColumnsWithTypeAndName & header_columns_, const std::string & format_name_, const Settings & settings_)
+        : format_name(format_name_)
+        , settings(settings_)
+    {
+        if (settings.low_cardinality_as_dictionary)
+        {
+            header_columns = header_columns_;
+            return;
+        }
+        header_columns.reserve(header_columns_.size());
+        for (auto column : header_columns_)
+        {
+            column.type = recursiveRemoveLowCardinality(column.type);
+            column.column = recursiveRemoveLowCardinality(column.column);
+            header_columns.emplace_back(std::move(column));
+        }
+    }
+
+    std::unique_ptr<CHColumnToArrowColumn> CHColumnToArrowColumn::clone(bool copy_arrow_schema) const
+    {
+        auto res = std::make_unique<CHColumnToArrowColumn>(header_columns, format_name, settings);
+        if (copy_arrow_schema)
+            res->arrow_schema = arrow_schema;
+        return res;
+    }
+
     void CHColumnToArrowColumn::initializeArrowSchema(
         const Chunk * chunk, std::optional<size_t> columns_num, const std::optional<std::unordered_map<String, Int64>> & column_to_field_id)
     {
@@ -1651,7 +1652,7 @@ namespace DB
         const Chunk * chunk_to_initialize_schema = chunks.empty() ? nullptr : chunks.data();
         initializeArrowSchema(chunk_to_initialize_schema, columns_num, column_to_field_id);
 
-        res = chunkToArrowTable(header_columns, format_name, chunks, settings, columns_num, arrow_schema, &dictionary_values);
+        res = calculateArrowTable(header_columns, format_name, chunks, settings, columns_num, arrow_schema, &dictionary_values);
     }
 }
 

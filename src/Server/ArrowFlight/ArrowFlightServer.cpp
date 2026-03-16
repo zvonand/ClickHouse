@@ -1121,7 +1121,7 @@ static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std:
                 if (!single_table)
                 {
                     tables.emplace_back(
-                        CHColumnToArrowColumn::chunkToArrowTable(
+                        CHColumnToArrowColumn::calculateArrowTable(
                             *header, "Arrow", chunks,
                             {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]},
                             header->size(), schema));
@@ -1134,7 +1134,7 @@ static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std:
             tables.emplace_back(getEmptyArrowTable(schema));
         else if (single_table)
             tables.emplace_back(
-        CHColumnToArrowColumn::chunkToArrowTable(
+        CHColumnToArrowColumn::calculateArrowTable(
             *header, "Arrow", chunks,
             {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]},
             header->size(), schema));
@@ -1607,7 +1607,7 @@ arrow::Status ArrowFlightServer::evaluatePollDescriptor(const String & poll_desc
             bytes = block.bytes();
             std::vector<Chunk> chunks;
             chunks.emplace_back(Chunk{std::move(block).getColumns(), rows});
-            std::shared_ptr<arrow::Table> table = CHColumnToArrowColumn::chunkToArrowTable(
+            std::shared_ptr<arrow::Table> table = CHColumnToArrowColumn::calculateArrowTable(
                 header, "Arrow", chunks,
                 {.output_string_as_string = true, .output_unsupported_types_as_binary = poll_session->queryContext()->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]},
                 header.size(), poll_session->getSchema());

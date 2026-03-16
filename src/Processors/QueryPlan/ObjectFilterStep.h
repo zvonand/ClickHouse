@@ -10,7 +10,7 @@ namespace DB
 /// (table functions like `s3Cluster`) and is used only to filter objects,
 /// not to filter data after reading, because initiator can have not this column
 /// In query like `SELECT count() FROM s3Cluster('cluster', ...) WHERE key=42`
-/// column `key` does not exists in blocks getting from cluster replicas.
+/// column `key` does not exist in blocks getting from cluster replicas.
 class ObjectFilterStep : public IQueryPlanStep
 {
 public:

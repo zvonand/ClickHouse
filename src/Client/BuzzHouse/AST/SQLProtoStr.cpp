@@ -3627,12 +3627,7 @@ CONV_FN(SQLObjectName, son)
             FunctionToString(ret, son.function());
             break;
         case SQLObjectNameType::kPolicy:
-            PolicyToString(ret, son.policy().policy());
-            if (son.policy().has_target())
-            {
-                ret += " ON ";
-                ExprSchemaTableToString(ret, son.policy().target());
-            }
+            PolicyToString(ret, son.policy());
             break;
         default:
             ret += "t0";
@@ -3671,26 +3666,17 @@ CONV_FN(Drop, dt)
     SQLObjectNameToString(ret, dt.object());
     for (int i = 0; i < dt.other_objects_size(); i++)
     {
-        const SQLObjectName & other_object = dt.other_objects(i);
-
         ret += ", ";
-        if (is_policy)
-        {
-            PolicyToString(ret, other_object.policy().policy());
-        }
-        else
-        {
-            SQLObjectNameToString(ret, other_object);
-        }
+        SQLObjectNameToString(ret, dt.other_objects(i));
     }
     if (dt.has_cluster())
     {
         ClusterToString(ret, true, dt.cluster());
     }
-    if (is_policy)
+    if (is_policy && dt.has_target())
     {
         ret += " ON ";
-        ExprSchemaTableToString(ret, dt.object().policy().target());
+        ExprSchemaTableToString(ret, dt.target());
     }
     if (dt.sync())
     {
@@ -4904,6 +4890,11 @@ CONV_FN(Alter, alter)
     if (alter.has_cluster())
     {
         ClusterToString(ret, true, alter.cluster());
+    }
+    if (alter.sobject() && alter.has_target())
+    {
+        ret += " ON ";
+        ExprSchemaTableToString(ret, alter.target());
     }
     ret += " ";
     AlterItemToString(ret, alter.alter());

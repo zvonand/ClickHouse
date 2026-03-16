@@ -3568,17 +3568,12 @@ enum SQLObject {
     MASKING_POLICY = 7;
 }
 
-message PolicyName {
-    required Policy policy = 1;
-    optional ExprSchemaTable target = 2;
-}
-
 message SQLObjectName {
     oneof objn_oneof {
         ExprSchemaTable est = 1;
         Database database = 2;
         Function function = 3;
-        PolicyName policy = 4;
+        Policy policy = 4;
     }
 }
 
@@ -3590,8 +3585,9 @@ message Drop {
     required SQLObjectName object = 5;
     repeated SQLObjectName other_objects = 6;
     optional Cluster cluster = 7;
-    optional bool sync = 8;
-    optional SettingValues setting_values = 9;
+    optional ExprSchemaTable target = 8;
+    optional bool sync = 9;
+    optional SettingValues setting_values = 10;
 }
 
 message InsertFromFile {
@@ -4085,9 +4081,10 @@ message Alter {
     required SQLObject sobject = 2;
     required SQLObjectName object = 3;
     optional Cluster cluster = 4;
-    required AlterItem alter = 5;
-    repeated AlterItem other_alters = 6;
-    optional SettingValues setting_values = 7;
+    optional ExprSchemaTable target = 5;
+    required AlterItem alter = 6;
+    repeated AlterItem other_alters = 7;
+    optional SettingValues setting_values = 8;
 }
 
 message Attach {

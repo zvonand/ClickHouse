@@ -791,19 +791,18 @@ void StatementGenerator::generateNextDrop(RandomGenerator & rg, Drop * dp)
           [&]
           {
               const SQLPolicy & rp = rg.pickValueRandomlyFromMap(this->policies);
-              PolicyName * rpn = sot->mutable_policy();
 
               cluster = rp.getCluster();
               dp->set_sobject(rp.is_row ? SQLObject::ROW_POLICY : SQLObject::MASKING_POLICY);
-              rp.setName(rpn->mutable_policy());
+              rp.setName(sot->mutable_policy());
               /// Reconstruct the target table ExprSchemaTable from the stored table id
               if (this->tables.contains(rp.table_id))
               {
-                  this->tables.at(rp.table_id).setName(rpn->mutable_target(), true);
+                  this->tables.at(rp.table_id).setName(dp->mutable_target(), true);
               }
               else
               {
-                  rpn->mutable_target()->mutable_table()->set_table("t" + std::to_string(rp.table_id));
+                  dp->mutable_target()->mutable_table()->set_table("t" + std::to_string(rp.table_id));
               }
           }}});
     setClusterClause(rg, cluster, dp->mutable_cluster());
@@ -2233,13 +2232,13 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
 
               cluster = rp.getCluster();
               at->set_sobject(rp.is_row ? SQLObject::ROW_POLICY : SQLObject::MASKING_POLICY);
-              rp.setName(at->mutable_object()->mutable_policy()->mutable_policy());
+              rp.setName(at->mutable_object()->mutable_policy());
               /// Reconstruct the target table ExprSchemaTable from the stored table id
               if (this->tables.contains(rp.table_id))
               {
                   const auto & t = this->tables.at(rp.table_id);
 
-                  t.setName(apc->mutable_target(), true);
+                  t.setName(at->mutable_target(), true);
                   if (rg.nextSmallNumber() < 8)
                   {
                       generateUptDelWhere(rg, t, apc->mutable_where_expr()->mutable_expr()->mutable_expr());
@@ -2248,7 +2247,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
               else
               {
                   /// Try something default
-                  apc->mutable_target()->mutable_table()->set_table("t" + std::to_string(rp.table_id));
+                  at->mutable_target()->mutable_table()->set_table("t" + std::to_string(rp.table_id));
               }
               if (rp.is_row)
               {
@@ -3675,7 +3674,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         }
         else if (drp.sobject() == SQLObject::ROW_POLICY || drp.sobject() == SQLObject::MASKING_POLICY)
         {
-            this->policies.erase(getIdentifierFromString(drp.object().policy().policy().policy()));
+            this->policies.erase(getIdentifierFromString(drp.object().policy().policy()));
         }
         else
         {
@@ -3966,7 +3965,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         }
         else if (at.alter().has_alter_policy())
         {
-            const uint32_t old_id = getIdentifierFromString(at.object().policy().policy().policy());
+            const uint32_t old_id = getIdentifierFromString(at.object().policy().policy());
             const uint32_t new_id = at.alter().alter_policy().has_rename_to()
                 ? getIdentifierFromString(at.alter().alter_policy().rename_to().policy())
                 : old_id;

@@ -8,6 +8,7 @@
 #include <IO/Archives/IArchiveWriter.h>
 #include <IO/Archives/createArchiveReader.h>
 #include <IO/Archives/createArchiveWriter.h>
+#include <IO/ReadBufferFromFile.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteBufferFromFileBase.h>
@@ -828,12 +829,8 @@ TEST(SevenZipArchiveReaderTest, ReadFromReadBuffer)
     /// Read the archive file into a string to simulate in-memory / object storage access.
     String archive_in_memory;
     {
-        auto file_size = fs::file_size(archive_path);
-        archive_in_memory.resize(file_size);
-        auto fd = ::open(archive_path.c_str(), O_RDONLY);
-        ASSERT_GE(fd, 0);
-        ASSERT_EQ(::read(fd, archive_in_memory.data(), file_size), static_cast<ssize_t>(file_size));
-        ::close(fd);
+        ReadBufferFromFile buf(archive_path);
+        readStringUntilEOF(archive_in_memory, buf);
     }
     fs::remove(archive_path);
 

@@ -44,7 +44,7 @@ std::shared_ptr<IArchiveReader> createArchiveReader(
     {
 #if USE_LIBARCHIVE
         if (archive_read_function)
-            return std::make_shared<SevenZipArchiveReader>(path_to_archive, archive_read_function);
+            return std::make_shared<SevenZipArchiveReader>(path_to_archive, archive_read_function, archive_size);
         else
             return std::make_shared<SevenZipArchiveReader>(path_to_archive);
 #else

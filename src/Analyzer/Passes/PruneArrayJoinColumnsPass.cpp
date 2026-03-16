@@ -8,13 +8,24 @@
 #include <Analyzer/QueryNode.h>
 #include <Analyzer/Utils.h>
 
+#include <Core/Settings.h>
+
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeString.h>
 
 #include <Functions/FunctionFactory.h>
 
+#include <Interpreters/Context.h>
+
 namespace DB
 {
+
+namespace Setting
+{
+
+extern const SettingsBool enable_unaligned_array_join;
+
+}
 
 namespace
 {
@@ -207,6 +218,10 @@ void PruneArrayJoinColumnsPass::run(QueryTreeNodePtr & query_tree_node, ContextP
 {
     auto * top_query_node = query_tree_node->as<QueryNode>();
     if (!top_query_node)
+        return;
+
+    const auto & settings = context->getSettingsRef();
+    if (settings[Setting::enable_unaligned_array_join])
         return;
 
     /// Step 1: Find all ARRAY JOIN nodes and build the usage map.

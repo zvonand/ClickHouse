@@ -1,6 +1,11 @@
 #include <filesystem>
 #include <Core/NamesAndAliases.h>
 #include <DataTypes/DataTypeDateTime64.h>
+#include <DataTypes/DataTypeEnum.h>
+#include <DataTypes/DataTypeFactory.h>
+#include <DataTypes/DataTypeNullable.h>
+#include <DataTypes/DataTypeString.h>
+#include <DataTypes/DataTypesNumber.h>
 #include <Interpreters/evaluateConstantExpression.h>
 #include <Parsers/ASTLiteral.h>
 #include <Storages/StorageFilesystem.h>
@@ -21,8 +26,8 @@ namespace ErrorCodes
 
 void registerTableFunctionFilesystem(TableFunctionFactory & factory)
 {
-    factory.registerFunction<TableFunctionFilesystem>({
-        .documentation = {
+    factory.registerFunction<TableFunctionFilesystem>(
+        {
             .description = R"(
 Provides access to file system to list files and return its metadata and contents. Recursively iterates directories.
 This table function provides access to filesystem of a server that runs a query.)",
@@ -36,8 +41,7 @@ This table function provides access to filesystem of a server that runs a query.
                 }
             },
             .category = FunctionDocumentation::Category::TableFunction
-        }
-    }, TableFunctionFactory::Case::Insensitive);
+        }, {}, TableFunctionFactory::Case::Insensitive);
 }
 
 void TableFunctionFilesystem::parseArguments(const ASTPtr & ast_function, ContextPtr context)

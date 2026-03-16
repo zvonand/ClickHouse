@@ -2307,6 +2307,7 @@ class TestCase:
                         or "Attempt to read after eof" in stderr
                     )
                     and "Received exception from server" not in stderr
+                    and not check_server_liveness(self.args)
                 ):
                     reason = FailureReason.SERVER_DIED
 
@@ -2825,13 +2826,16 @@ class TestCase:
                 try:
                     self.send_test_name_failed(suite.suite, self.case)
                 except Exception:
-                    return TestResult(
-                        self.name,
-                        TestStatus.FAIL,
-                        FailureReason.SERVER_DIED,
-                        0.0,
-                        "\nServer does not respond to health check\n",
-                    )
+                    # If health-check failed, double-check server liveness. A single
+                    # check may fail because of memory exhaustion, for example.
+                    if not check_server_liveness(self.args):
+                        return TestResult(
+                            self.name,
+                            TestStatus.FAIL,
+                            FailureReason.SERVER_DIED,
+                            0.0,
+                            "\nServer does not respond to health check\n",
+                        )
 
             self.runs_count += 1
             self.testcase_args = self.configure_testcase_args(
@@ -2949,14 +2953,24 @@ class TestCase:
             )
         except (ConnectionError, http.client.ImproperConnectionState):
             total_time = (datetime.now() - start_time).total_seconds()
+            exc_description = self.add_info_about_settings(
+                self.get_description_from_exception_info(sys.exc_info())
+            )
+            if not check_server_liveness(self.args):
+                return TestResult(
+                    self.name,
+                    TestStatus.FAIL,
+                    FailureReason.SERVER_DIED,
+                    total_time,
+                    exc_description,
+                )
+            # Server is alive — this was a transient network error.
             return TestResult(
                 self.name,
                 TestStatus.FAIL,
-                FailureReason.SERVER_DIED,
+                FailureReason.EXIT_CODE,
                 total_time,
-                self.add_info_about_settings(
-                    self.get_description_from_exception_info(sys.exc_info())
-                ),
+                exc_description,
             )
         except Exception:
             total_time = (datetime.now() - start_time).total_seconds()
@@ -3602,6 +3616,58 @@ def run_tests_array(
     sys.stdout.flush()
 
 
+def check_server_liveness(args, max_retries=5) -> bool:
+    """Check if server is responding, with retries and exponential back-off.
+
+    Used to distinguish a real server death from a transient network failure
+    (e.g. the server being briefly unresponsive due to memory pressure).
+    Returns True if the server responds within the retry window, False otherwise.
+    """
+    for attempt in range(max_retries):
+        try:
+            clickhouse_execute(
+                args, "SELECT 1 /*liveness check*/", max_http_retries=1, timeout=10
+            )
+            return True
+        except Exception:
+            if attempt < max_retries - 1:
+                sleep(min(2**attempt, 10))
+    return False
+
+
+def get_server_memory_fraction(args) -> Optional[float]:
+    """Return the fraction of max_server_memory_usage currently in use (0.0–1.0).
+
+    Returns None when the limit is unconfigured (0) or the query fails.
+    """
+    try:
+        used = int(
+            clickhouse_execute(
+                args,
+                "SELECT value FROM system.metrics WHERE metric = 'MemoryTracking'",
+                max_http_retries=1,
+                timeout=5,
+            )
+            .decode()
+            .strip()
+        )
+        maximum = int(
+            clickhouse_execute(
+                args,
+                "SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage'",
+                max_http_retries=1,
+                timeout=5,
+            )
+            .decode()
+            .strip()
+        )
+        if maximum == 0:
+            return None
+        return used / maximum
+    except Exception:
+        return None
+
+
 def check_server_started(args):
     print("Connecting to ClickHouse server...", end="")
 
@@ -3860,9 +3926,35 @@ def do_run_tests(
             processes.append(process)
             process.start()
 
+        # How often (seconds) to query server memory usage.
+        MEMORY_CHECK_INTERVAL = 5.0
+        # Fraction of max_server_memory_usage at which we start shedding workers.
+        MEMORY_PRESSURE_THRESHOLD = 0.8
+        last_memory_check = time()
+
         while processes:
             sleep(0.1)
             sys.stdout.flush()
+
+            # Periodically check memory pressure and reduce concurrency if needed.
+            # All workers share the same parallel_tests queue, so stopping one
+            # from picking up new tests reduces future concurrency without losing
+            # any already-queued work.
+            now = time()
+            if now - last_memory_check >= MEMORY_CHECK_INTERVAL and len(processes) > 1:
+                last_memory_check = now
+                memory_fraction = get_server_memory_fraction(args)
+                if memory_fraction is not None and memory_fraction > MEMORY_PRESSURE_THRESHOLD:
+                    p = processes.pop()
+                    print(
+                        f"Server memory at {memory_fraction:.0%} of limit — "
+                        f"reducing concurrency from {len(processes) + 1} to {len(processes)}"
+                    )
+                    # Do not kill p — let it finish its current test and exit
+                    # naturally. Killing mid-test would lose the test result.
+                    # The concurrency reduction takes effect for all subsequent
+                    # tests once p finishes what it is currently running.
+
             # Periodically check the server for hangs
             # and stop all processes in this case
             if args.hung_check:

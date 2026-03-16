@@ -1148,7 +1148,7 @@ void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projectio
         }
         else
         {
-            fuzz(select->orderBy()->children);
+            fuzzOrderByList(select->orderBy().get(), 0);
         }
     }
 }

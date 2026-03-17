@@ -391,7 +391,7 @@ object_storages_properties = {
         "s3_max_single_read_retries": threshold_generator(0.2, 0.2, 0, 16),
         "s3_max_unexpected_write_error_retries": threshold_generator(0.2, 0.2, 0, 16),
         "s3_max_upload_part_size": threshold_generator(
-            0.2, 0.2, 0, 5 * 1024 * 1024 * 1024, 33
+            0.2, 0.2, 16 * 1024 * 1024, 5 * 1024 * 1024 * 1024, 33
         ),
         "s3_strict_upload_part_size": threshold_generator(
             0.2, 0.2, 0, 100 * 1024 * 1024

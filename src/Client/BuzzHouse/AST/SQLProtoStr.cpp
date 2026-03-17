@@ -4502,14 +4502,15 @@ static void RowPolicyClausesToString(
     const CreateRowPolicy & crp,
     const bool has_where_expr,
     const WhereStatement & where_expr,
-    const std::optional<String> & role)
+    const std::optional<String> & role,
+    const bool create)
 {
     if (crp.has_is_restrictive())
     {
         ret += " AS ";
         ret += crp.is_restrictive() ? "RESTRICTIVE" : "PERMISSIVE";
     }
-    if (crp.for_select())
+    if (create && crp.for_select())
     {
         ret += " FOR SELECT";
     }
@@ -4866,7 +4867,7 @@ CONV_FN(AlterItem, alter)
             }
             else
             {
-                RowPolicyClausesToString(ret, apc.row(), apc.has_where_expr(), apc.where_expr(), role);
+                RowPolicyClausesToString(ret, apc.row(), apc.has_where_expr(), apc.where_expr(), role, false);
             }
         }
         break;
@@ -5839,7 +5840,7 @@ CONV_FN(CreatePolicy, cp)
     }
     else if (cp.has_row())
     {
-        RowPolicyClausesToString(ret, cp.row(), cp.has_where_expr(), cp.where_expr(), role);
+        RowPolicyClausesToString(ret, cp.row(), cp.has_where_expr(), cp.where_expr(), role, true);
     }
 }
 

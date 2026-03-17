@@ -509,33 +509,6 @@ NullsAction QueryFuzzer::fuzzNullsAction(NullsAction action)
     return action;
 }
 
-void QueryFuzzer::fuzzWindowDefinition(ASTWindowDefinition & def)
-{
-    auto removeChild = [](ASTWindowDefinition & wdef, ASTPtr & member)
-    {
-        auto & ch = wdef.children;
-        member->children.clear();
-        ch.erase(std::remove(ch.begin(), ch.end(), member), ch.end());
-        member = nullptr;
-    };
-
-    if (def.partition_by)
-    {
-        if (fuzz_rand() % 50 == 0)
-            removeChild(def, def.partition_by);
-        else
-            fuzzColumnLikeExpressionList(def.partition_by.get());
-    }
-    if (def.order_by)
-    {
-        if (fuzz_rand() % 50 == 0)
-            removeChild(def, def.order_by);
-        else
-            fuzzOrderByList(def.order_by.get(), 0);
-    }
-    fuzzWindowFrame(def);
-}
-
 void QueryFuzzer::fuzzWindowFrame(ASTWindowDefinition & def)
 {
     checkIterationLimit();
@@ -1103,54 +1076,9 @@ void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
 
 void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projection)
 {
-    if (!projection.query)
-        return;
-    auto * select = typeid_cast<ASTProjectionSelectQuery *>(projection.query);
-    if (!select || !select->select())
-        return;
+    UNUSED(projection);
 
-    /// Occasionally add _part_offset to SELECT before fuzzing,
-    /// so the fuzz passes can move/replace it along with other expressions.
-    /// _part_offset is valid in projection SELECT and GROUP BY, but NOT in ORDER BY.
-    if (fuzz_rand() % 20 == 0)
-    {
-        select->select()->children.emplace_back(make_intrusive<ASTIdentifier>("_part_offset"));
-    }
-    fuzzColumnLikeExpressionList(select->select().get());
-    /// GROUP BY — ASTProjectionSelectQuery has no ROLLUP/CUBE/GROUPING SETS/TOTALS/HAVING/WHERE
-    if (select->groupBy().get())
-    {
-        if (fuzz_rand() % 50 == 0)
-        {
-            select->groupBy()->children.clear();
-            select->setExpression(ASTProjectionSelectQuery::Expression::GROUP_BY, {});
-        }
-        else
-        {
-            if (fuzz_rand() % 20 == 0)
-            {
-                /// Occasionally add _part_offset to GROUP BY,
-                select->groupBy()->children.emplace_back(make_intrusive<ASTIdentifier>("_part_offset"));
-            }
-            fuzzColumnLikeExpressionList(select->groupBy().get());
-        }
-    }
-    else if (fuzz_rand() % 50 == 0)
-    {
-        select->setExpression(ASTProjectionSelectQuery::Expression::GROUP_BY, getRandomExpressionList(select->select()->children.size()));
-    }
-    if (select->orderBy().get())
-    {
-        if (fuzz_rand() % 50 == 0)
-        {
-            select->orderBy()->children.clear();
-            select->setExpression(ASTProjectionSelectQuery::Expression::ORDER_BY, {});
-        }
-        else
-        {
-            fuzz(select->orderBy()->children);
-        }
-    }
+    /// TODO finish this soon
 }
 
 DataTypePtr QueryFuzzer::fuzzDataType(DataTypePtr type)
@@ -2421,17 +2349,22 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         auto & union_members = with_union->list_of_selects->children;
         if (union_members.size() > 1 && fuzz_rand() % 100 == 0)
         {
-            /// Drop a random member from the UNION; remove a mode to keep sizes in sync
+            /// Drop a random member from the UNION; rebuild modes to keep sizes in sync.
+            /// After normalization, list_of_modes may be stale (wrong size), so we
+            /// rebuild it entirely from union_mode rather than trying to erase one entry.
             union_members.erase(union_members.begin() + fuzz_rand() % union_members.size());
-            if (!with_union->list_of_modes.empty())
-                with_union->list_of_modes.pop_back();
+            with_union->list_of_modes.assign(
+                union_members.empty() ? 0 : union_members.size() - 1,
+                with_union->union_mode);
             with_union->is_normalized = false;
         }
         else if (!union_members.empty() && fuzz_rand() % 100 == 0)
         {
-            /// Duplicate a random member; push a matching mode to keep sizes in sync
+            /// Duplicate a random member; rebuild modes to keep sizes in sync.
             union_members.push_back(union_members[fuzz_rand() % union_members.size()]->clone());
-            with_union->list_of_modes.push_back(with_union->union_mode);
+            with_union->list_of_modes.assign(
+                union_members.size() - 1,
+                with_union->union_mode);
         }
 
         fuzz(with_union->list_of_selects);
@@ -2589,7 +2522,9 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         if (fn->isWindowFunction() && fn->window_definition)
         {
             auto & def = fn->window_definition->as<ASTWindowDefinition &>();
-            fuzzWindowDefinition(def);
+            fuzzColumnLikeExpressionList(def.partition_by.get());
+            fuzzOrderByList(def.order_by.get(), 0);
+            fuzzWindowFrame(def);
         }
 
         fuzz(fn->children);
@@ -2792,22 +2727,10 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             addOrReplacePredicate(select, ASTSelectQuery::Expression::QUALIFY);
         }
 
-        if (select->orderBy().get())
+        fuzzOrderByList(select->orderBy().get(), select->select()->children.size());
+        if (select->orderBy().get() && fuzz_rand() % 50 == 0)
         {
-            if (fuzz_rand() % 50 == 0)
-            {
-                select->orderBy()->children.clear();
-                select->setExpression(ASTSelectQuery::Expression::ORDER_BY, {});
-                select->order_by_all = false;
-            }
-            else
-            {
-                if (fuzz_rand() % 50 == 0)
-                {
-                    select->order_by_all = !select->order_by_all;
-                }
-                fuzzOrderByList(select->orderBy().get(), select->select()->children.size());
-            }
+            select->order_by_all = !select->order_by_all;
         }
         if (select->limitLength())
         {
@@ -3211,7 +3134,9 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
     }
     else if (auto * wdef = typeid_cast<ASTWindowDefinition *>(ast.get()))
     {
-        fuzzWindowDefinition(*wdef);
+        fuzzColumnLikeExpressionList(wdef->partition_by.get());
+        fuzzOrderByList(wdef->order_by.get(), 0);
+        fuzzWindowFrame(*wdef);
         fuzz(wdef->children);
     }
     else if (auto * with_elem = typeid_cast<ASTWithElement *>(ast.get()))

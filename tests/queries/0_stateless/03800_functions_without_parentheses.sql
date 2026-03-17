@@ -82,3 +82,27 @@ SELECT concat; -- { serverError UNKNOWN_IDENTIFIER }
 
 -- Aggregate functions require parentheses
 SELECT count; -- { serverError UNKNOWN_IDENTIFIER }
+
+-- Niladic function in scalar subquery (PR #98941)
+SELECT (SELECT DATABASE) = currentDatabase();
+
+-- Niladic function in GROUP BY
+SELECT DATABASE = currentDatabase(), count() FROM system.one GROUP BY DATABASE ORDER BY DATABASE;
+
+-- Niladic function in ORDER BY
+SELECT 1 AS x ORDER BY NOW;
+
+-- Niladic function in HAVING
+SELECT 1 AS x HAVING NOW > '2000-01-01';
+
+-- Chained alias: niladic feeds into another expression alias
+WITH NOW AS ts, toDate(ts) AS d SELECT d = today();
+
+-- Niladic in CASE expression
+SELECT CASE WHEN DATABASE = currentDatabase() THEN 'ok' ELSE 'fail' END;
+
+-- Niladic in JOIN condition
+SELECT a.x FROM (SELECT 1 AS x, DATABASE AS db) a INNER JOIN (SELECT currentDatabase() AS db) b ON a.db = b.db;
+
+-- Multiple niladic functions in single SELECT
+SELECT DATABASE = currentDatabase(), USER = currentUser(), TODAY = today();

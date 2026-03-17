@@ -145,7 +145,7 @@ def run_fuzzer(fuzzer: str, timeout: int):
 
     use_fuzzer_args = False
 
-    env = {}
+    env_common = {}
 
     path = Path(options_file)
     if path.exists() and path.is_file():
@@ -153,17 +153,17 @@ def run_fuzzer(fuzzer: str, timeout: int):
         parser.read(path)
 
         if parser.has_section("asan"):
-            env["ASAN_OPTIONS"] = (
+            env_common["ASAN_OPTIONS"] = (
                 f"{os.environ['ASAN_OPTIONS']}:{':'.join(f'{key}={value}' for key, value in parser['asan'].items())}"
             )
 
         if parser.has_section("msan"):
-            env["MSAN_OPTIONS"] = (
+            env_common["MSAN_OPTIONS"] = (
                 f"{os.environ['MSAN_OPTIONS']}:{':'.join(f'{key}={value}' for key, value in parser['msan'].items())}"
             )
 
         if parser.has_section("ubsan"):
-            env["UBSAN_OPTIONS"] = (
+            env_common["UBSAN_OPTIONS"] = (
                 f"{os.environ['UBSAN_OPTIONS']}:{':'.join(f'{key}={value}' for key, value in parser['ubsan'].items())}"
             )
 
@@ -214,9 +214,11 @@ def run_fuzzer(fuzzer: str, timeout: int):
         merge_libfuzzer_options = f" {libfuzzer_merge_options} -artifact_prefix={artifact_prefix}mini- -merge=1 -max_total_time={timeout} -merge_control_file={merge_control_file} {mini_corpus_dir} {active_corpus_dir}"
         cmd_line = f"{DEBUGGER} ./{fuzzer}"
 
+        env_fuzzer = {}
+
         with_fuzzer_args = ""
         if use_fuzzer_args:
-            env["FUZZER_ARGS"] = f"{merge_libfuzzer_options}".strip()
+            env_fuzzer["FUZZER_ARGS"] = f"{merge_libfuzzer_options}".strip()
             with_fuzzer_args = f" with FUZZER_ARGS '{env['FUZZER_ARGS']}'"
         else:
             cmd_line += f" {merge_libfuzzer_options}"
@@ -227,8 +229,6 @@ def run_fuzzer(fuzzer: str, timeout: int):
             cmd_line += f" {fuzzer_arguments}"
 
         logging.info("...will execute corpus minimization: '%s'%s", cmd_line, with_fuzzer_args)
-        if env:
-            logging.info("Environment variables for corpus minimization: %s", env)
 
         status_path = f"{results_path}/status_mini.txt"
         out_path = f"{results_path}/out_mini.txt"
@@ -249,7 +249,7 @@ def run_fuzzer(fuzzer: str, timeout: int):
                     errors="replace",
                     timeout=timeout,
                     kill_timeout= input_timeout * 2 if input_timeout > 0 else DEFAULT_INPUT_TIMEOUT,
-                    env=env,
+                    env= os.environ | env_common | env_fuzzer,
                 )
         except subprocess.CalledProcessError as e:
             logging.info("Unexpected termination while running corpus minimization %s: %s", fuzzer, e)
@@ -366,11 +366,12 @@ def run_fuzzer(fuzzer: str, timeout: int):
 
     libfuzzer_corpora = f"{active_corpus_dir} {seed_corpus_dir}"
 
+    env_fuzzer = {}
     cmd_line = f"{DEBUGGER} ./{fuzzer}"
 
     with_fuzzer_args = ""
     if use_fuzzer_args:
-        env["FUZZER_ARGS"] = f"{libfuzzer_options} {libfuzzer_corpora}".strip()
+        env_fuzzer["FUZZER_ARGS"] = f"{libfuzzer_options} {libfuzzer_corpora}".strip()
         with_fuzzer_args = f" with FUZZER_ARGS '{env['FUZZER_ARGS']}'"
     else:
         cmd_line += f" {libfuzzer_options} {libfuzzer_corpora}"
@@ -381,8 +382,6 @@ def run_fuzzer(fuzzer: str, timeout: int):
         cmd_line += f" {fuzzer_arguments}"
 
     logging.info("...will execute: '%s'%s", cmd_line, with_fuzzer_args)
-    if env:
-        logging.info("Environment variables: %s", env)
 
     stopwatch = Stopwatch()
     try:
@@ -397,7 +396,7 @@ def run_fuzzer(fuzzer: str, timeout: int):
                 shell=False,
                 errors="replace",
                 timeout=timeout,
-                env=env,
+                env= os.environ | env_common | env_fuzzer,
             )
     except subprocess.CalledProcessError:
         logging.info("Fail found while running %s", fuzzer)

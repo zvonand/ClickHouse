@@ -46,7 +46,7 @@ void on_exit()
 extern "C"
 int LLVMFuzzerInitialize(int * argc, char ***argv)
 {
-        // If it's a merge coordinator don't initialize anything
+    // If it's a merge coordinator don't initialize anything
     if (isMerge(*argc, *argv))
         return 0;
 

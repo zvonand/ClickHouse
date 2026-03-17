@@ -570,7 +570,7 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
     } while (query_settings.skip_empty_files && object_info->getObjectMetadata()->size_bytes == 0);
 
     ProfileEvents::increment(ProfileEvents::ObjectStorageReadObjects);
-    LOG_DEBUG(log, "Reading object: path={}, size={}",
+    LOG_TRACE(log, "Reading object: path={}, size={}",
         object_info->getPath(),
         object_info->getObjectMetadata()->size_bytes);
 
@@ -1070,9 +1070,7 @@ ObjectInfoPtr StorageObjectStorageSource::GlobIterator::nextUnlocked(size_t /* p
     if (current_batch_processed)
     {
         ObjectInfos new_batch;
-        size_t listed_in_batch = 0;
-        size_t glob_matched_in_batch = 0;
-        size_t after_filter = 0;
+
 
         while (new_batch.empty())
         {
@@ -1090,6 +1088,10 @@ ObjectInfoPtr StorageObjectStorageSource::GlobIterator::nextUnlocked(size_t /* p
                 result->end(),
                 std::back_inserter(new_batch),
                 [&](const std::shared_ptr<RelativePathWithMetadata> & object) { return std::make_shared<ObjectInfo>(*object); });
+
+            size_t listed_in_batch = 0;
+            size_t glob_matched_in_batch = 0;
+            size_t after_filter = 0;
 
             listed_in_batch = new_batch.size();
 
@@ -1115,16 +1117,19 @@ ObjectInfoPtr StorageObjectStorageSource::GlobIterator::nextUnlocked(size_t /* p
 
             after_filter = new_batch.size();
 
-            LOG_TRACE(log, "Listed batch: listed={}, glob_matched={}, after_filter={}",
-                listed_in_batch, glob_matched_in_batch, new_batch.size());
+            auto glob_filtered_out = listed_in_batch - glob_matched_in_batch;
+            auto predicate_filtered_out = glob_matched_in_batch - after_filter;
+
+            LOG_TRACE(log, "Listed batch: listed={}, glob filtered={}, predicate filtered={}",
+                listed_in_batch, glob_filtered_out, predicate_filtered_out);
 
             total_listed += listed_in_batch;
-            total_glob_filtered += listed_in_batch - glob_matched_in_batch;
-            total_predicate_filtered += glob_matched_in_batch - after_filter;
+            total_glob_filtered += glob_filtered_out;
+            total_predicate_filtered += predicate_filtered_out;
 
             ProfileEvents::increment(ProfileEvents::ObjectStorageListedObjects, listed_in_batch);
-            ProfileEvents::increment(ProfileEvents::ObjectStorageGlobFilteredObjects, listed_in_batch - glob_matched_in_batch);
-            ProfileEvents::increment(ProfileEvents::ObjectStoragePredicateFilteredObjects, glob_matched_in_batch - after_filter);
+            ProfileEvents::increment(ProfileEvents::ObjectStorageGlobFilteredObjects, glob_filtered_out);
+            ProfileEvents::increment(ProfileEvents::ObjectStoragePredicateFilteredObjects, predicate_filtered_out);
         }
 
         index = 0;

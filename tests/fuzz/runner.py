@@ -186,7 +186,7 @@ def run_fuzzer(fuzzer: str, timeout: int):
             )
             input_timeout = parser["libfuzzer"].getint("timeout", fallback=input_timeout)
 
-        # FUZZER_ARGS flag is used to make it deliver libFuzzer arguments throught FUZZER_ARGS environment variable
+        # FUZZER_ARGS flag is used to make it deliver libFuzzer arguments through FUZZER_ARGS environment variable
         # for special cases of fuzzers written in the way they don't use libFuzzer framework, but rather
         # implement their own main (usually it's a whole application which implements fuzzer functionality alongside)
         # and then initialize libFuzzer driver themselves. Such approach allows fuzzer executable to process its
@@ -227,6 +227,8 @@ def run_fuzzer(fuzzer: str, timeout: int):
             cmd_line += f" {fuzzer_arguments}"
 
         logging.info("...will execute corpus minimization: '%s'%s", cmd_line, with_fuzzer_args)
+        if env:
+            logging.info("Environment variables for corpus minimization: %s", env)
 
         status_path = f"{results_path}/status_mini.txt"
         out_path = f"{results_path}/out_mini.txt"
@@ -379,6 +381,8 @@ def run_fuzzer(fuzzer: str, timeout: int):
         cmd_line += f" {fuzzer_arguments}"
 
     logging.info("...will execute: '%s'%s", cmd_line, with_fuzzer_args)
+    if env:
+        logging.info("Environment variables: %s", env)
 
     stopwatch = Stopwatch()
     try:

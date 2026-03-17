@@ -5399,18 +5399,6 @@ CONV_FN(SystemCommand, cmd)
         case CmdType::kStartCleanup:
             SystemCommandOnCluster(ret, "START CLEANUP", cmd, cmd.start_cleanup());
             break;
-        case CmdType::kStopVirtualPartsUpdate:
-            SystemCommandOnCluster(ret, "STOP VIRTUAL PARTS UPDATE", cmd, cmd.stop_virtual_parts_update());
-            break;
-        case CmdType::kStartVirtualPartsUpdate:
-            SystemCommandOnCluster(ret, "START VIRTUAL PARTS UPDATE", cmd, cmd.start_virtual_parts_update());
-            break;
-        case CmdType::kStopReduceBlockingParts:
-            SystemCommandOnCluster(ret, "STOP REDUCE BLOCKING PARTS", cmd, cmd.stop_reduce_blocking_parts());
-            break;
-        case CmdType::kStartReduceBlockingParts:
-            SystemCommandOnCluster(ret, "START REDUCE BLOCKING PARTS", cmd, cmd.start_reduce_blocking_parts());
-            break;
         case CmdType::kStopReplicatedDdlQueries:
             ret += "STOP REPLICATED DDL QUERIES";
             can_set_cluster = true;
@@ -5453,22 +5441,6 @@ CONV_FN(SystemCommand, cmd)
             break;
         case CmdType::kDropDistributedCache:
             ret += "DROP DISTRIBUTED CACHE";
-            break;
-        case CmdType::kRestartDisk:
-            ret += "RESTART DISK '";
-            ret += cmd.restart_disk();
-            ret += "'";
-            can_set_cluster = true;
-            break;
-        case CmdType::kClearDiskMetadataCache:
-            ret += "DROP DISK METADATA CACHE";
-            if (!cmd.clear_disk_metadata_cache().empty())
-            {
-                ret += " '";
-                ret += cmd.clear_disk_metadata_cache();
-                ret += "'";
-            }
-            can_set_cluster = true;
             break;
         case CmdType::kUnlockSnapshot:
             ret += "UNLOCK SNAPSHOT '";

@@ -2620,20 +2620,9 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
              if (rg.nextSmallNumber() < 4)
                  d->setName(dr->mutable_database());
          }},
-        /// MergeTree cleanup / virtual parts / reduce blocking parts
-        {3 * has_merge_tree, [&] { cluster = setTableSystemStatement<SQLTable>(rg, has_merge_tree_func, sc->mutable_stop_cleanup()); }},
-        {3 * has_merge_tree, [&] { cluster = setTableSystemStatement<SQLTable>(rg, has_merge_tree_func, sc->mutable_start_cleanup()); }},
-        {3 * has_merge_tree,
-         [&] { cluster = setTableSystemStatement<SQLTable>(rg, has_merge_tree_func, sc->mutable_stop_virtual_parts_update()); }},
-        {3 * has_merge_tree,
-         [&] { cluster = setTableSystemStatement<SQLTable>(rg, has_merge_tree_func, sc->mutable_start_virtual_parts_update()); }},
-        {3 * has_merge_tree,
-         [&] { cluster = setTableSystemStatement<SQLTable>(rg, has_merge_tree_func, sc->mutable_stop_reduce_blocking_parts()); }},
-        {3 * has_merge_tree,
-         [&] { cluster = setTableSystemStatement<SQLTable>(rg, has_merge_tree_func, sc->mutable_start_reduce_blocking_parts()); }},
         /// Replicated DDL
-        {3, [&] { sc->set_stop_replicated_ddl_queries(true); }},
-        {3, [&] { sc->set_start_replicated_ddl_queries(true); }},
+        {3 * static_cast<uint32_t>(supports_cloud_features), [&] { sc->set_stop_replicated_ddl_queries(true); }},
+        {3 * static_cast<uint32_t>(supports_cloud_features), [&] { sc->set_start_replicated_ddl_queries(true); }},
         /// Jemalloc
         {1, [&] { sc->set_jemalloc_purge(true); }},
         {1, [&] { sc->set_jemalloc_enable_profile(true); }},
@@ -2644,11 +2633,7 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
         {3, [&] { sc->set_start_thread_fuzzer(true); }},
         {3, [&] { sc->set_stop_thread_fuzzer(true); }},
         {3, [&] { sc->set_drop_parquet_metadata_cache(true); }},
-        /// New cache / memory operations
-        {3, [&] { sc->set_drop_distributed_cache(true); }},
-        {3 * static_cast<uint32_t>(!fc.disks.empty()), [&] { sc->set_restart_disk(rg.pickRandomly(fc.disks).name); }},
-        {3 * static_cast<uint32_t>(!fc.disks.empty()),
-         [&] { sc->set_clear_disk_metadata_cache(rg.nextBool() ? rg.pickRandomly(fc.disks).name : ""); }},
+        {3 * static_cast<uint32_t>(supports_cloud_features), [&] { sc->set_drop_distributed_cache(true); }},
         {3 * static_cast<uint32_t>(freeze_counter > 0),
          [&]
          {

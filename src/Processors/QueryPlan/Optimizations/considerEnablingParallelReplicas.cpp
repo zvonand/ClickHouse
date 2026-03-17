@@ -320,6 +320,8 @@ void considerEnablingParallelReplicas(
         if (apply_plan_with_parallel_replicas)
         {
             const auto max_threads = optimization_settings.max_threads;
+            // This value is an upper bound on the number of threads that can be used for reading (we simply don't have enough data to utilize more threads).
+            // Since the Auto PR optimization is currently estimates only reading, it is better to use this value to avoid overestimating the benefits of PRs.
             const auto effective_max_reading_threads = optimization_settings.min_bytes_per_task_for_reading
                 ? stats->input_bytes / optimization_settings.min_bytes_per_task_for_reading + 1
                 : SIZE_MAX;

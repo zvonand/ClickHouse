@@ -2,6 +2,7 @@
 
 #include <Core/Field.h>
 #include <Core/AccurateComparison.h>
+#include <Core/CompareHelper.h>
 #include <base/demangle.h>
 #include <Common/FieldVisitors.h>
 #include <Common/NaNUtils.h>
@@ -45,20 +46,28 @@ public:
         {
             if constexpr (std::is_same_v<T, U>)
             {
-                /// Match IColumn::compareAt behavior: NaN == NaN is true.
-                if constexpr (is_floating_point<T>)
+                if constexpr (std::is_floating_point_v<T>)
                 {
-                    if (isNaN(l) && isNaN(r))
-                        return true;
+                    /// NaN should be treated as equal to NaN for index range analysis
+                    /// (consistent with ClickHouse sort order where NaN has a defined position).
+                    static constexpr int nan_direction_hint = 1;
+                    return FloatCompareHelper<T>::equals(l, r, nan_direction_hint);
                 }
-                return l == r;
+                else
+                    return l == r;
             }
 
             if constexpr (is_arithmetic_v<T> && is_arithmetic_v<U>)
             {
-                /// Match IColumn::compareAt behavior: NaN == NaN is true.
-                if (isNaN(l) && isNaN(r))
-                    return true;
+                /// NaN is not equal to any non-NaN value in cross-type comparisons.
+                if constexpr (std::is_floating_point_v<T>)
+                {
+                    if (isNaN(l)) return false;
+                }
+                if constexpr (std::is_floating_point_v<U>)
+                {
+                    if (isNaN(r)) return false;
+                }
                 return accurate::equalsOp(l, r);
             }
 
@@ -128,26 +137,29 @@ public:
         {
             if constexpr (std::is_same_v<T, U>)
             {
-                /// Match IColumn::compareAt behavior with nan_direction_hint=-1:
-                /// NaN sorts before everything.
-                if constexpr (is_floating_point<T>)
+                if constexpr (std::is_floating_point_v<T>)
                 {
-                    bool l_nan = isNaN(l);
-                    bool r_nan = isNaN(r);
-                    if (l_nan || r_nan)
-                        return l_nan && !r_nan;
+                    /// NaN should be treated as greater than all normal values (consistent with ClickHouse sort order).
+                    /// Plain IEEE 754 `<` makes NaN incomparable, which breaks Range::intersectsRange.
+                    static constexpr int nan_direction_hint = 1;
+                    return FloatCompareHelper<T>::less(l, r, nan_direction_hint);
                 }
-                return l < r;
+                else
+                    return l < r;
             }
 
             if constexpr (is_arithmetic_v<T> && is_arithmetic_v<U>)
             {
-                /// Match IColumn::compareAt behavior with nan_direction_hint=-1:
-                /// NaN sorts before everything.
-                bool l_nan = isNaN(l);
-                bool r_nan = isNaN(r);
-                if (l_nan || r_nan)
-                    return l_nan && !r_nan;
+                /// For cross-type comparisons involving NaN, treat NaN as greater than all values
+                /// (consistent with ClickHouse sort order, nan_direction_hint = 1).
+                if constexpr (std::is_floating_point_v<T>)
+                {
+                    if (isNaN(l)) return false; /// NaN is not less than anything
+                }
+                if constexpr (std::is_floating_point_v<U>)
+                {
+                    if (isNaN(r)) return true; /// everything is less than NaN
+                }
                 return accurate::lessOp(l, r);
             }
 

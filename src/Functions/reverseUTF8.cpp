@@ -12,7 +12,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int ILLEGAL_COLUMN;
-    extern const int UNICODE_ERROR;
+
 }
 
 namespace
@@ -41,48 +41,38 @@ struct ReverseUTF8Impl
         res_data.resize(data.size());
         res_offsets.assign(offsets);
 
-        /// If the input is not valid UTF8, we may read and write up to 3 bytes out of bounds.
-        /// That's ok because ColumnString buffer is padded on both ends, but we have to opt out of
-        /// bounds checking asserts, and also use ssize_t for indices that may be negative
-        /// (just to satisfy UBSAN, the actual CPU doesn't care about signed vs unsigned).
-        const UInt8 * data_ptr = data.data();
-        UInt8 * res_data_ptr = res_data.data();
-
         ColumnString::Offset prev_offset = 0;
         for (size_t i = 0; i < input_rows_count; ++i)
         {
             ColumnString::Offset j = prev_offset;
             while (j < offsets[i])
             {
-                if (data_ptr[j] < 0xC0)
+                size_t remaining = offsets[i] - j;
+
+                unsigned int char_len;
+                if (data[j] < 0xC0)
+                    char_len = 1;
+                else if (data[j] < 0xE0)
+                    char_len = 2;
+                else if (data[j] < 0xF0)
+                    char_len = 3;
+                else
+                    char_len = 4;
+
+                /// If not enough bytes remaining, treat as single byte (invalid UTF-8).
+                if (char_len > remaining)
+                    char_len = 1;
+
+                if (char_len == 1)
                 {
-                    res_data_ptr[offsets[i] + prev_offset - 1 - j] = data_ptr[j];
-                    j += 1;
-                }
-                else if (data_ptr[j] < 0xE0)
-                {
-                    if (j + 2 > offsets[i])
-                        throw Exception(ErrorCodes::UNICODE_ERROR, "String ends in the middle of a UTF8 character");
-                    memcpy(&res_data_ptr[ssize_t(offsets[i] + prev_offset - 1 - j - 1)], &data_ptr[j], 2);
-                    j += 2;
-                }
-                else if (data_ptr[j] < 0xF0)
-                {
-                    if (j + 3 > offsets[i])
-                        throw Exception(ErrorCodes::UNICODE_ERROR, "String ends in the middle of a UTF8 character");
-                    memcpy(&res_data_ptr[ssize_t(offsets[i] + prev_offset - 1 - j - 2)], &data_ptr[j], 3);
-                    j += 3;
+                    res_data[offsets[i] + prev_offset - 1 - j] = data[j];
                 }
                 else
                 {
-                    if (j + 4 > offsets[i])
-                        throw Exception(ErrorCodes::UNICODE_ERROR, "String ends in the middle of a UTF8 character");
-                    memcpy(&res_data_ptr[ssize_t(offsets[i] + prev_offset - 1 - j - 3)], &data_ptr[j], 4);
-                    j += 4;
+                    memcpy(&res_data[offsets[i] + prev_offset - j - char_len], &data[j], char_len);
                 }
+                j += char_len;
             }
-            if (j > offsets[i])
-                throw Exception(ErrorCodes::UNICODE_ERROR, "String ends in the middle of a UTF8 character");
 
             prev_offset = offsets[i];
         }

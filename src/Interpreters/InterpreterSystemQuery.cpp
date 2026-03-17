@@ -2433,7 +2433,7 @@ AccessRightsElements InterpreterSystemQuery::getRequiredAccessForDDLOnCluster() 
         case Type::RESTART_DISK:
         case Type::WAIT_BLOBS_CLEANUP:
         {
-            required_access.emplace_back(AccessType::SYSTEM_RESTART_DISK);
+            required_access.emplace_back(AccessType::SYSTEM_WAIT_BLOBS_CLEANUP);
             break;
         }
         case Type::UNFREEZE:

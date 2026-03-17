@@ -900,6 +900,9 @@ BlockIO InterpreterSystemQuery::execute()
             if (!object_disk)
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "Disk '{}' is not an object storage disk", query.disk);
 
+            /// We wait 2 times here because a background blob cleanup round may already be running
+            /// and this query must guarantee that after it returns, all expected blobs have been cleaned up.
+            object_disk->waitBlobsCleanup();
             object_disk->waitBlobsCleanup();
 
             break;

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import sys
 import traceback
 from pathlib import Path
@@ -380,9 +381,10 @@ class Runner:
             #   1. Point the mount at an arbitrary host directory.
             #   2. Docker-in-Docker: the inner Docker daemon needs the real
             #      host path (not the outer container's CWD) for volume mounts.
-            #      This variable make it more flexible to set the real host path.
+            #      This variable makes it more flexible to set the real host path.
             # When unset, defaults to "./" (current directory).
             host_dir = os.environ.get("PRAKTIKA_HOST_WORKDIR", "./")
+            host_dir_q = shlex.quote(host_dir)
 
             # Rewrite relative host paths in user-supplied --volume settings
             # so that they resolve correctly when PRAKTIKA_HOST_WORKDIR is set
@@ -401,7 +403,7 @@ class Runner:
                     rewritten_settings.append(s)
                 settings = rewritten_settings
 
-            cmd = f"docker run {tty} --rm --name {container_name} {'--user $(id -u):$(id -g)' if not from_root else ''} -e PYTHONUNBUFFERED=1 -e PYTHONPATH='.:./ci' --volume {host_dir}:{current_dir} {extra_mounts} {gh_mount} {workdir} {' '.join(settings)} {docker} {job.command}"
+            cmd = f"docker run {tty} --rm --name {container_name} {'--user $(id -u):$(id -g)' if not from_root else ''} -e PYTHONUNBUFFERED=1 -e PYTHONPATH='.:./ci' --volume {host_dir_q}:{current_dir} {extra_mounts} {gh_mount} {workdir} {' '.join(settings)} {docker} {job.command}"
         else:
             cmd = job.command
             python_path = os.getenv("PYTHONPATH", ":")
@@ -489,7 +491,7 @@ class Runner:
             # Get host user's UID and GID (not from inside the container)
             uid = os.getuid()
             gid = os.getgid()
-            chown_cmd = f"docker run --rm --user root --volume {host_dir}:{current_dir} --workdir={current_dir} {docker} chown -R {uid}:{gid} {Settings.TEMP_DIR}"
+            chown_cmd = f"docker run --rm --user root --volume {host_dir_q}:{current_dir} --workdir={current_dir} {docker} chown -R {uid}:{gid} {Settings.TEMP_DIR}"
             Shell.run(chown_cmd)
 
         return exit_code

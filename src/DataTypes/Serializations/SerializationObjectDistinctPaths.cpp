@@ -37,6 +37,12 @@ UInt128 SerializationObjectDistinctPaths::getHash(const std::vector<String> & ty
 
 SerializationPtr SerializationObjectDistinctPaths::create(const std::vector<String> & typed_paths_)
 {
+    /// shared_data_paths_serialization is always derived from the static
+    /// DataTypeObject::getTypeOfSharedData() type, which always supports pooling,
+    /// but we check for consistency with other composite serializations.
+    auto result = std::shared_ptr<ISerialization>(new SerializationObjectDistinctPaths(typed_paths_));
+    if (!result->supportsPooling())
+        return result;
     return ISerialization::pooled(getHash(typed_paths_), [&] { return new SerializationObjectDistinctPaths(typed_paths_); });
 }
 

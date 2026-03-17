@@ -24,6 +24,7 @@ public:
     static SerializationPtr create(const std::vector<String> & typed_paths_);
 
     size_t allocatedBytes() const override;
+    bool supportsPooling() const override { return shared_data_paths_serialization->supportsPooling(); }
 
     void enumerateStreams(
         EnumerateStreamsSettings & settings,

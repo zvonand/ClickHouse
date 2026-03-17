@@ -87,7 +87,7 @@ private:
 
     const NameSet required_output;
     std::set<size_t> columns_to_remove;
-    JoinLocality locality;
+    JoinLocality locality = JoinLocality::Unspecified;
     bool keep_left_read_in_order;
     bool use_new_analyzer = false;
     bool use_join_disjunctions_push_down;

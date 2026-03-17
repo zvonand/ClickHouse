@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Storages/MergeTree/Compaction/MergeSelectors/IMergeSelector.h>
-#include <Storages/MergeTree/Compaction/MergeSelectors/PartitionStatistics.h>
+#include <Storages/MergeTree/Compaction/PartitionStatistics.h>
 
 /**
 We have a set of data parts that is dynamically changing - new data parts are added and there is background merging process.
@@ -172,6 +172,7 @@ public:
           * Lower max_parts_to_merge_at_once automatically when number of parts in partition approaching parts_to_throw_insert
           */
         bool enable_heuristic_to_lower_max_parts_to_merge_at_once = false;
+        size_t heuristic_to_lower_max_parts_to_merge_at_once_exponent = 5;
         const PartitionsStatistics * partitions_stats = nullptr;
     };
 
@@ -179,7 +180,7 @@ public:
 
     PartsRanges select(
         const PartsRanges & parts_ranges,
-        const MergeSizes & max_merge_sizes,
+        const MergeConstraints & merge_constraints,
         const RangeFilter & range_filter) const override;
 
 private:

@@ -2,9 +2,10 @@
 #include <Parsers/ASTBackupQuery.h>
 #include <Parsers/ASTCheckQuery.h>
 #include <Parsers/ASTCreateQuery.h>
-#include <Parsers/ASTCreateFunctionQuery.h>
 #include <Parsers/ASTCreateWorkloadQuery.h>
 #include <Parsers/ASTCreateResourceQuery.h>
+#include <Parsers/ASTCreateSQLFunctionQuery.h>
+#include <Parsers/ASTCreateWasmFunctionQuery.h>
 #include <Parsers/ASTCreateIndexQuery.h>
 #include <Parsers/ASTDeleteQuery.h>
 #include <Parsers/ASTDropFunctionQuery.h>
@@ -42,6 +43,7 @@
 #include <Parsers/Access/ASTCreateQuotaQuery.h>
 #include <Parsers/Access/ASTCreateRoleQuery.h>
 #include <Parsers/Access/ASTCreateRowPolicyQuery.h>
+#include <Parsers/Access/ASTCreateMaskingPolicyQuery.h>
 #include <Parsers/Access/ASTCreateSettingsProfileQuery.h>
 #include <Parsers/Access/ASTCreateUserQuery.h>
 #include <Parsers/Access/ASTDropAccessEntityQuery.h>
@@ -289,6 +291,10 @@ InterpreterFactory::InterpreterPtr InterpreterFactory::get(ASTPtr & query, Conte
     {
         interpreter_name = "InterpreterCreateRowPolicyQuery";
     }
+    else if (query->as<ASTCreateMaskingPolicyQuery>())
+    {
+        interpreter_name = "InterpreterCreateMaskingPolicyQuery";
+    }
     else if (query->as<ASTCreateSettingsProfileQuery>())
     {
         interpreter_name = "InterpreterCreateSettingsProfileQuery";
@@ -337,7 +343,7 @@ InterpreterFactory::InterpreterPtr InterpreterFactory::get(ASTPtr & query, Conte
     {
         interpreter_name = "InterpreterTransactionControlQuery";
     }
-    else if (query->as<ASTCreateFunctionQuery>())
+    else if (query->as<ASTCreateSQLFunctionQuery>() || query->as<ASTCreateWasmFunctionQuery>())
     {
         interpreter_name = "InterpreterCreateFunctionQuery";
     }

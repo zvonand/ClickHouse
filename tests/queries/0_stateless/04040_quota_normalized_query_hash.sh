@@ -39,14 +39,14 @@ ${CLICKHOUSE_CLIENT} -q "SHOW CREATE QUOTA q04040_norm_key"
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number FROM numbers(1) FORMAT Null"
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number FROM numbers(1) FORMAT Null"
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number FROM numbers(1) FORMAT Null"
-${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number FROM numbers(1) FORMAT Null" 2>&1 | grep -o 'QUOTA_EXCEEDED'
+${CLICKHOUSE_CLIENT} --user u04040 --send_logs_level=none -q "SELECT number FROM numbers(1) FORMAT Null" 2>&1 | grep -o 'QUOTA_EXCEEDED'
 
 # Pattern B: structurally different query (two columns instead of one).
 # Has a different normalized hash, so gets its own bucket.
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number, number FROM numbers(1) FORMAT Null"
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number, number FROM numbers(1) FORMAT Null"
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number, number FROM numbers(1) FORMAT Null"
-${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number, number FROM numbers(1) FORMAT Null" 2>&1 | grep -o 'QUOTA_EXCEEDED'
+${CLICKHOUSE_CLIENT} --user u04040 --send_logs_level=none -q "SELECT number, number FROM numbers(1) FORMAT Null" 2>&1 | grep -o 'QUOTA_EXCEEDED'
 
 # Cleanup Feature 1.
 ${CLICKHOUSE_CLIENT} -q "DROP QUOTA q04040_norm_key"
@@ -65,12 +65,12 @@ ${CLICKHOUSE_CLIENT} -q "SHOW CREATE QUOTA q04040_per_hash"
 # Pattern C: 2 times should succeed, 3rd should fail.
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number FROM numbers(1) FORMAT Null"
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number FROM numbers(1) FORMAT Null"
-${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number FROM numbers(1) FORMAT Null" 2>&1 | grep -o 'QUOTA_EXCEEDED'
+${CLICKHOUSE_CLIENT} --user u04040 --send_logs_level=none -q "SELECT number FROM numbers(1) FORMAT Null" 2>&1 | grep -o 'QUOTA_EXCEEDED'
 
 # Pattern D: structurally different query, separate per-hash counter.
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number, number FROM numbers(1) FORMAT Null"
 ${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number, number FROM numbers(1) FORMAT Null"
-${CLICKHOUSE_CLIENT} --user u04040 -q "SELECT number, number FROM numbers(1) FORMAT Null" 2>&1 | grep -o 'QUOTA_EXCEEDED'
+${CLICKHOUSE_CLIENT} --user u04040 --send_logs_level=none -q "SELECT number, number FROM numbers(1) FORMAT Null" 2>&1 | grep -o 'QUOTA_EXCEEDED'
 
 # Cleanup
 ${CLICKHOUSE_CLIENT} -q "DROP QUOTA IF EXISTS q04040_per_hash"

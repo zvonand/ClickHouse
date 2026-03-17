@@ -3,6 +3,7 @@
 #include <optional>
 #include <AggregateFunctions/AggregateFunctionGroupBitmapData.h>
 #include <Core/Settings.h>
+#include <Common/logger_useful.h>
 #include <Common/setThreadName.h>
 #include <Disks/IO/AsynchronousBoundedReadBuffer.h>
 #include <Disks/IO/CachedOnDiskReadBufferFromFile.h>
@@ -130,6 +131,7 @@ StorageObjectStorageSource::StorageObjectStorageSource(
 
 StorageObjectStorageSource::~StorageObjectStorageSource()
 {
+    LOG_DEBUG(log, "Source finished: files_read={}", total_files_read);
     create_reader_pool->wait();
 }
 
@@ -494,7 +496,6 @@ Chunk StorageObjectStorageSource::generate()
         reader_future = createReaderAsync();
     }
 
-    LOG_DEBUG(log, "Source finished: files_read={}", total_files_read);
     return {};
 }
 

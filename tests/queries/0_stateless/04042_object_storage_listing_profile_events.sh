@@ -39,10 +39,11 @@ LIMIT 1;
 
 $CLICKHOUSE_CLIENT -q "INSERT INTO FUNCTION s3('http://localhost:11111/test/${CLICKHOUSE_DATABASE}/04042_data/a_a.csv', 'test', 'testtest', 'CSV', 'x UInt64') SELECT number FROM numbers(50) SETTINGS s3_truncate_on_insert=1;"
 $CLICKHOUSE_CLIENT -q "INSERT INTO FUNCTION s3('http://localhost:11111/test/${CLICKHOUSE_DATABASE}/04042_data/a_b.csv', 'test', 'testtest', 'CSV', 'x UInt64') SELECT number FROM numbers(50) SETTINGS s3_truncate_on_insert=1;"
+$CLICKHOUSE_CLIENT -q "INSERT INTO FUNCTION s3('http://localhost:11111/test/${CLICKHOUSE_DATABASE}/04042_data/a_c.txt', 'test', 'testtest', 'CSV', 'x UInt64') SELECT number FROM numbers(50) SETTINGS s3_truncate_on_insert=1;"
 
 # Read with glob pattern
 query_id="SELECT_2_$RANDOM$RANDOM"
-$CLICKHOUSE_CLIENT -q "SELECT count() FROM s3('http://localhost:11111/test/${CLICKHOUSE_DATABASE}/04042_data/a_*.csv', 'test', 'testtest', 'CSV', 'x UInt64') SETTINGS log_queries=1;"
+$CLICKHOUSE_CLIENT --query_id="$query_id" -q "SELECT count() FROM s3('http://localhost:11111/test/${CLICKHOUSE_DATABASE}/04042_data/a_*.csv', 'test', 'testtest', 'CSV', 'x UInt64') WHERE _file != 'a_a.csv' SETTINGS log_queries=1;"
 
 $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS query_log;"
 

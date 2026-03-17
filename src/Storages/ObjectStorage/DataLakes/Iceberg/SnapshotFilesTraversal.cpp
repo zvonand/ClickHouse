@@ -125,7 +125,7 @@ void collectMetadataRootFiles(
     out.insert(version_hint);
 }
 
-} // anonymous namespace
+}
 
 
 std::unordered_set<String> collectReachableFiles(

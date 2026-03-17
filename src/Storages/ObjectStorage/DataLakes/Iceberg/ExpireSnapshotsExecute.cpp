@@ -112,7 +112,7 @@ Pipe resultToPipe(const ExpireSnapshotsResult & result)
     return Pipe(std::make_shared<SourceFromSingleChunk>(std::make_shared<const Block>(std::move(header)), std::move(chunk)));
 }
 
-} // anonymous namespace
+}
 
 
 Pipe executeExpireSnapshots(

@@ -386,8 +386,7 @@ Columns ColumnIndex::removeUnusedRowsInIndexedData(const Columns & indexed_colum
     size_t indexed_data_size = indexed_columns[0]->size();
     for (size_t i = 1; i < indexed_columns.size(); ++i)
         if (indexed_columns[i]->size() != indexed_data_size)
-            throw Exception(ErrorCodes::SIZES_OF_COLUMNS_DOESNT_MATCH, "All columns must have equal size, got {} and {}",
-                            indexed_data_size, indexed_columns[i]->size());
+            chassert(indexed_columns[i]->size() == indexed_data_size);
 
     /// First, create a filter for indexed data to filter out all unused rows.
     auto filter_opt = buildUsedRowsFilter(indexed_data_size);

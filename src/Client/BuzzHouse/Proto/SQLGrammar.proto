@@ -4081,10 +4081,9 @@ message Alter {
     required SQLObject sobject = 2;
     required SQLObjectName object = 3;
     optional Cluster cluster = 4;
-    optional ExprSchemaTable target = 5;
-    required AlterItem alter = 6;
-    repeated AlterItem other_alters = 7;
-    optional SettingValues setting_values = 8;
+    required AlterItem alter = 5;
+    repeated AlterItem other_alters = 6;
+    optional SettingValues setting_values = 7;
 }
 
 message Attach {

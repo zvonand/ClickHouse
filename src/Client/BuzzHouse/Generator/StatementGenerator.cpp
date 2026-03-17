@@ -2238,7 +2238,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
               {
                   const auto & t = this->tables.at(rp.table_id);
 
-                  t.setName(at->mutable_target(), true);
+                  t.setName(apc->mutable_target(), true);
                   if (rg.nextSmallNumber() < 8)
                   {
                       generateUptDelWhere(rg, t, apc->mutable_where_expr()->mutable_expr()->mutable_expr());
@@ -2247,7 +2247,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
               else
               {
                   /// Try something default
-                  at->mutable_target()->mutable_table()->set_table("t" + std::to_string(rp.table_id));
+                  apc->mutable_target()->mutable_table()->set_table("t" + std::to_string(rp.table_id));
               }
               if (rp.is_row)
               {

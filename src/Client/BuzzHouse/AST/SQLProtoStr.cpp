@@ -3646,7 +3646,6 @@ static String SQLObjectToString(const SQLObject obj)
 CONV_FN(Drop, dt)
 {
     const bool is_table = dt.sobject() == SQLObject::TABLE;
-    const bool is_policy = dt.sobject() == SQLObject::ROW_POLICY || dt.sobject() == SQLObject::MASKING_POLICY;
 
     ret += "DROP ";
     if ((is_table || dt.sobject() == SQLObject::VIEW) && dt.is_temp())
@@ -3673,7 +3672,7 @@ CONV_FN(Drop, dt)
     {
         ClusterToString(ret, true, dt.cluster());
     }
-    if (is_policy && dt.has_target())
+    if ((dt.sobject() == SQLObject::ROW_POLICY || dt.sobject() == SQLObject::MASKING_POLICY) && dt.has_target())
     {
         ret += " ON ";
         ExprSchemaTableToString(ret, dt.target());
@@ -4890,11 +4889,6 @@ CONV_FN(Alter, alter)
     if (alter.has_cluster())
     {
         ClusterToString(ret, true, alter.cluster());
-    }
-    if (alter.sobject() && alter.has_target())
-    {
-        ret += " ON ";
-        ExprSchemaTableToString(ret, alter.target());
     }
     ret += " ";
     AlterItemToString(ret, alter.alter());

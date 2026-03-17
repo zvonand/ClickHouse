@@ -669,15 +669,15 @@ def test_dynamic_disk_security_settings(start_cluster):
     node.query(
         "CREATE USER IF NOT EXISTS restricted_user SETTINGS PROFILE 'default'"
     )
-    node.query("GRANT CREATE TABLE ON *.* TO restricted_user")
+    node.query("GRANT CREATE TABLE, CREATE DATABASE ON *.* TO restricted_user")
     node.query(
         "CREATE USER IF NOT EXISTS locked_user SETTINGS PROFILE 'deny_dynamic_disk_readonly'"
     )
-    node.query("GRANT CREATE TABLE ON *.* TO locked_user")
+    node.query("GRANT CREATE TABLE, CREATE DATABASE ON *.* TO locked_user")
     node.query(
         "CREATE USER IF NOT EXISTS privileged_user SETTINGS PROFILE 'allow_dynamic_disk_access'"
     )
-    node.query("GRANT CREATE TABLE ON *.* TO privileged_user")
+    node.query("GRANT CREATE TABLE, CREATE DATABASE ON *.* TO privileged_user")
 
     try:
         # restricted_user (default profile): from_env is blocked
@@ -782,6 +782,24 @@ def test_dynamic_disk_security_settings(start_cluster):
                 secret_access_key = clickhouse)
             """,
             user="locked_user",
+        )
+        assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_env" in error, error
+
+        # Regression: ATTACH DATABASE must also enforce dynamic_disk_allow_* restrictions.
+        # A user must not be able to bypass from_env checks by using ATTACH DATABASE instead of
+        # CREATE DATABASE. Only FORCE_ATTACH / FORCE_RESTORE (server startup) should skip checks.
+        error = node.query_and_get_error(
+            """
+            ATTACH DATABASE test_security_attach_db UUID '00000000-0000-0000-0000-000000000003'
+            ENGINE = Atomic
+            SETTINGS disk = disk(
+                type = object_storage,
+                object_storage_type = s3,
+                endpoint = 'from_env HOME',
+                access_key_id = clickhouse,
+                secret_access_key = clickhouse)
+            """,
+            user="restricted_user",
         )
         assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_env" in error, error
 

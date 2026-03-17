@@ -1,4 +1,5 @@
 #include <Processors/QueryPlan/Optimizations/joinOrder.h>
+#include <Common/CurrentThread.h>
 
 #include <algorithm>
 #include <deque>
@@ -112,7 +113,7 @@ public:
         : query_graph(std::move(query_graph_))
         , enabled_algorithms(enabled_algorithms_)
     {
-        auto context = CurrentThread::getQueryContext();
+        auto context = CurrentThread::tryGetQueryContext();
         if (context)
         {
             query_status = context->getProcessListElementSafe();

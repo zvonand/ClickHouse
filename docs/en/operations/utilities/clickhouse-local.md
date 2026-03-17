@@ -242,7 +242,7 @@ Also, there are arguments for each ClickHouse configuration variable which are m
 
 ## Commands {#commands}
 
-# LS Command
+### LS Command
 
 Lists all the files in the current working directory accessible to clickhouse-local.
 

@@ -3740,7 +3740,7 @@ void ClientBase::runInteractive()
             const String query_input = rewriteLsMetaCommandIfNeeded(input);
             if (!processQueryText(query_input))
                 break;
-            last_input = query_input;
+            last_input = input;
         }
         catch (const Exception & e)
         {

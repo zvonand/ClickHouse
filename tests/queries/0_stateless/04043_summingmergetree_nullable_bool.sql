@@ -1,7 +1,7 @@
 -- Verify that `Nullable(Bool)` columns are not summed by `SummingMergeTree`.
 -- `DataTypeNullable::isSummable` delegates to the nested type; after PR #98976
 -- `Bool.isSummable()` returns false, so `Nullable(Bool)` must also be skipped
--- by the summing algorithm and kept as the first-row value.
+-- by the summing algorithm and kept as a non-summed representative value.
 -- Use `toUInt8` to distinguish the fixed result (1) from the broken result (2)
 -- that would occur if the column were summed (1 + NULL + 1 = 2).
 

@@ -1,4 +1,3 @@
--- Tags: no-fasttest
 -- Test `getLeastSupertype` for `Time`/`Time64` mixed with `DateTime`/`DateTime64`
 -- (PR #99267). The existing test 04037 covers `Time` vs `DateTime64` comparisons;
 -- this test covers the explicit supertype resolution paths added to

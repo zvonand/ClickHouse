@@ -1,4 +1,3 @@
--- Tags: no-fasttest
 -- Test `Time`/`Time64` vs `DateTime` comparison with non-UTC timezones, and
 -- `Time64` → `DateTime64` explicit CAST with scale changes (PR #99267).
 -- The PR's own test (04037) covers UTC and DateTime64 with non-UTC timezone;

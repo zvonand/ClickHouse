@@ -16,7 +16,8 @@ SETTINGS
     map_buckets_strategy = 'constant',
     map_buckets_min_avg_size = 0,
     min_bytes_for_wide_part = 1,
-    min_rows_for_wide_part = 1;
+    min_rows_for_wide_part = 1,
+    serialization_info_version = 'with_types';
 
 INSERT INTO t_map_having SELECT number, map('key1', number, 'key2', number + 1) FROM numbers(10);
 OPTIMIZE TABLE t_map_having FINAL;

@@ -103,6 +103,8 @@ namespace
         const IPartitionStrategy & partition_strategy,
         BuildAST && build_ast)
     {
+        /// The cache write happens in the cacheDeterministicActions function, which is called from the constructor of the partition strategy.
+        /// If the actions are not deterministic, it will not be cached.
         if (cached_result)
             return *cached_result;
 

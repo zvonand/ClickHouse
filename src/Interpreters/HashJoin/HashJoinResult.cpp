@@ -81,8 +81,8 @@ static void replicateColumnLazily(ColumnPtr & column, const IColumn::Offsets & o
     {
         if (!indexes_with_filter.indexes)
             indexes_with_filter = convertOffsetsToIndexes(offsets);
-        if (!indexes_with_filter.used_rows_filter.empty())
-            column = column->filter(indexes_with_filter.used_rows_filter, -1);
+        if (!indexes_with_filter.unused_rows_filter.empty())
+            column = column->filter(indexes_with_filter.unused_rows_filter, -1);
         column = ColumnReplicated::create(column, indexes_with_filter.indexes);
     }
     else

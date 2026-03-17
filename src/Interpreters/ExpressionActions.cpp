@@ -635,8 +635,8 @@ static void replicateColumnsLazily(ColumnsWithTypeAndName & columns, const IColu
         {
             if (isLazyReplicationUseful(column.column))
             {
-                if (!indexes_with_filter.used_rows_filter.empty())
-                    column.column = column.column->filter(indexes_with_filter.used_rows_filter, -1);
+                if (!indexes_with_filter.unused_rows_filter.empty())
+                    column.column = column.column->filter(indexes_with_filter.unused_rows_filter, -1);
                 column.column = ColumnReplicated::create(column.column, indexes_with_filter.indexes);
             }
             else

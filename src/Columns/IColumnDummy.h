@@ -40,7 +40,7 @@ public:
 
     Field operator[](size_t) const override;
     void get(size_t, Field &) const override;
-    DataTypePtr getValueNameAndTypeImpl(WriteBufferFromOwnString &, size_t n, const Options &) const override;
+    void getValueNameImpl(WriteBufferFromOwnString &, size_t n, const Options &) const override;
     void insert(const Field &) override;
     bool tryInsert(const Field &) override { return false; }
     bool isDefaultAt(size_t) const override;
@@ -94,6 +94,8 @@ public:
 
     ColumnPtr filter(const Filter & filt, ssize_t /*result_size_hint*/) const override;
 
+    void filter(const Filter & filt) override;
+
     void expand(const IColumn::Filter & mask, bool inverted) override;
 
     ColumnPtr permute(const Permutation & perm, size_t limit) const override;
@@ -117,7 +119,7 @@ public:
     void getIndicesOfNonDefaultRows(Offsets &, size_t, size_t) const override;
     void gather(ColumnGathererStream &) override;
 
-    void getExtremes(Field &, Field &) const override
+    void getExtremes(Field &, Field &, size_t, size_t) const override
     {
     }
 

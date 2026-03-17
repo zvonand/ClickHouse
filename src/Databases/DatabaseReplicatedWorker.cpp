@@ -159,6 +159,8 @@ void DatabaseReplicatedDDLWorker::shutdown()
     }
     catch (...)
     {
+        /// Best-effort: don't let a transient ZK error prevent database detach.
+        /// The ephemeral node will expire with the session anyway.
         tryLogCurrentException(log, "Failed to remove active node on shutdown");
     }
 

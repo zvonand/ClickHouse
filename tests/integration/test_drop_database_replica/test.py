@@ -122,7 +122,7 @@ def cleanup_database_on_all_nodes():
         if zk_client.exists("/test/db"):
             zk_client.delete("/test/db", recursive=True)
     except Exception:
-        pass
+        logging.warning("Failed to clean up ZooKeeper path /test/db", exc_info=True)
 
 
 @pytest.mark.parametrize("with_tables", [False, True])

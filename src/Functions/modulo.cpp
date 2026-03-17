@@ -114,6 +114,10 @@ struct ModuloByConstantImpl
         if (b & (b - 1))
         {
             libdivide::divider<A> divider(static_cast<A>(b));
+            /// The compiler auto-vectorizes this with vpmuludq on v3+, creating
+            /// a function ~2x larger (1801 B vs 977 B) for marginal throughput
+            /// gain that loses to i-cache pressure on some microarchitectures.
+#pragma clang loop vectorize(disable)
             for (size_t i = 0; i < size; ++i)
             {
                 /// NOTE: perhaps, the division semantics with the remainder of negative numbers is not preserved.

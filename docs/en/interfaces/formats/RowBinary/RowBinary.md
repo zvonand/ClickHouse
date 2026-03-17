@@ -201,7 +201,7 @@ SELECT CAST('2024-01-15', 'Date') AS d
 
 Stored as `Int32` (four bytes) representing the number of days ***before or after*** `1970-01-01`.
 
-Supported range of values: `[1900-01-01, 2299-12-31]`
+Supported range of values: `[1900-01-01, 2299-12-31]`.
 
 Sample underlying values for `Date32`:
 
@@ -268,7 +268,7 @@ Examples of valid DateTime64 definitions: `DateTime64(0)`, `DateTime64(3)`, `Dat
 As with `DateTime`, the binary value is always a UTC epoch offset. The timezone affects how string values are interpreted on insertion (see the [DateTime](#datetime) note), but the encoding itself is always `Int64` ticks since the UTC epoch.
 :::
 
-The underlying `Int64` value of the `DateTime64` type could be used as number of the following units before or after the UNIX epoch:
+The underlying `Int64` value of the `DateTime64` type can be interpreted as the number of the following units before or after the UNIX epoch:
 
 - `DateTime64(0)` - seconds.
 - `DateTime64(3)` - milliseconds.
@@ -508,8 +508,9 @@ A nullable data type is encoded as follows:
 For example, a `Nullable(UInt32)` value:
 
 ```sql
-SELECT    CAST(42,   'Nullable(UInt32)') AS a,
-    CAST(NULL, 'Nullable(UInt32)') AS b
+SELECT    
+   CAST(42,   'Nullable(UInt32)') AS a,
+   CAST(NULL, 'Nullable(UInt32)') AS b
 ```
 
 ```text
@@ -527,7 +528,7 @@ This only applies to RowBinary. In the Native format, `LowCardinality` uses a di
 :::
 
 :::note
-A column can be defined as LowCardinality(Nullable(T)), but it is not possible to define it as Nullable(LowCardinality(T)) - it will always result in an error from the server.
+A column can be defined as `LowCardinality(Nullable(T))`, but it is not possible to define it as `Nullable(LowCardinality(T))` - it will always result in an error from the server.
 :::
 
 While testing, [allow_suspicious_low_cardinality_types](https://clickhouse.com/docs/operations/settings/settings#allow_suspicious_low_cardinality_types) can be set to `1` to allow most of the data types inside `LowCardinality` for better coverage.
@@ -621,7 +622,7 @@ INSERT INTO foo VALUES ((42, 'foo', array(99, 144)));
 0x90,                   // 144 as UInt8
 ```
 
-The string encoding of the tuple data type presents the similar challenges as with the [Enum type](#enum8-enum16), such as tracking the escaped symbols and special characters; now, with Tuple it is also required to track open and closing parenthesis. Additionally, note that the most complex Tuples can contain other nested Tuples, Arrays, Maps, and even enums.
+The string encoding of the tuple data type presents similar challenges as with the [Enum type](#enum8-enum16), such as tracking the escaped symbols and special characters; now, with Tuple it is also required to track open and closing parentheses. Additionally, note that the most complex Tuples can contain other nested Tuples, Arrays, Maps, and even enums.
 
 For example, in the following table, the tuple contains an enum with a tick and parenthesis in the name, which can cause parsing issues if not handled properly:
 
@@ -726,11 +727,11 @@ SELECT NULL :: Variant(UInt32, String)
 0xFF, // discriminant = NULL
 ```
 
-[allow_suspicious_variant_types](https://clickhouse.com/docs/operations/settings/settings#allow_suspicious_variant_types) setting can be used to allow more exhaustive testing of the `Variant` type.
+The [allow_suspicious_variant_types](https://clickhouse.com/docs/operations/settings/settings#allow_suspicious_variant_types) setting can be used to allow more exhaustive testing of the `Variant` type.
 
 ### Dynamic {#dynamic}
 
-The `Dynamic` type can hold values of any type, determined at runtime. In RowBinary format, each value is self-describing: the first part is the type specification in **[this format](https://clickhouse.com/docs/sql-reference/data-types/data-types-binary-encoding)**. The contents then follow, with the value encoding as described in this document. So to parse a value you just need to use the type index to determine the right parser and then re-use the RowBinary parsing you already have elsewhere.
+The `Dynamic` type can hold values of any type, determined at runtime. In RowBinary format, each value is self-describing: the first part is the type specification in [this format](https://clickhouse.com/docs/sql-reference/data-types/data-types-binary-encoding). The contents then follow, with the value encoding as described in this document. So to parse a value you just need to use the type index to determine the right parser and then re-use the RowBinary parsing you already have elsewhere.
 
 ```text
 [BinaryTypeIndex][type-specific parameters...][value]
@@ -847,7 +848,7 @@ Binary encoding (hex with annotations):
 
 **3. Null handling:**
 
-With typed nullable column you get null:
+With a typed nullable column you get null:
 
 Schema: `JSON(score Nullable(Int32))`
 
@@ -863,7 +864,7 @@ Binary encoding (hex with annotations):
 01                              # Nullable flag: 1 (is NULL, no value follows)
 ```
 
-With typed non-nullable column, you get the default value:
+With a typed non-nullable column, you get the default value:
 
 Schema: `JSON(name String)`
 
@@ -878,7 +879,7 @@ Binary encoding:
 00              # String length 0 (empty string)
 ```
 
-With dynamic path, it is ignored:
+With a dynamic path, it is ignored:
 
 Schema: `JSON(id UInt64)`
 
@@ -924,7 +925,7 @@ Note: Nested objects are flattened into dot-separated paths (e.g., `user.name` i
 
 **Alternative: JSON as String Mode**
 
-With the setting `output_format_binary_write_json_as_string=1`, JSON columns are serialized as a single JSON text string instead of the structured binary format. There is a corresponding setting for writing to JSON columns, `input_format_binary_read_json_as_string`. The choice of setting here comes down to whether you want to parse the json in the client or the server.
+With the setting `output_format_binary_write_json_as_string=1`, JSON columns are serialized as a single JSON text string instead of the structured binary format. There is a corresponding setting for writing to JSON columns, `input_format_binary_read_json_as_string`. The choice of setting here comes down to whether you want to parse the JSON in the client or the server.
 
 ### Geo types {#geo-types}
 
@@ -972,7 +973,7 @@ SELECT    (1.0, 2.0)                                       :: Point           AS
   0x01, // LEB128 - the second ring has 1 point
       // Polygon - Ring #2 - Point #1 (the only one)
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0x40, 
-      0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x28, 0x40, 
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x28, 0x40, 
 // MultiPolygon - or Array(Array(Array(Tuple(Float64, Float64))))
 0x01, // LEB128 - the "multi_polygon" array has 1 polygon
    0x02, // LEB128 - the first polygon has 2 rings
@@ -1215,7 +1216,7 @@ More complex functions like `uniq`, `quantile`, or `groupArray` use implementati
 
 ### QBit {#qbit}
 
-`QBit` vector type for efficient lookup with different levels of precision. Internally it’s stored in a transposed format. On the wire, QBit is simply an `Array` of the underlying element type (`Float32`, `Float64`, or `BFloat16`). The bit-transpose optimization for storage happens server-side, not in the RowBinary protocol.
+`QBit` is a vector type for efficient lookup with different levels of precision. Internally it’s stored in a transposed format. On the wire, QBit is simply an `Array` of the underlying element type (`Float32`, `Float64`, or `BFloat16`). The bit-transpose optimization for storage happens server-side, not in the RowBinary protocol.
 
 Syntax:
 

@@ -1790,6 +1790,10 @@ message Policy {
     required string policy = 1;
 }
 
+message Role {
+    required string role = 1;
+}
+
 message Cluster {
     optional string cluster = 1;
 }
@@ -4006,7 +4010,7 @@ message CreateMaskingPolicy {
 message AlterPolicyContent {
     required ExprSchemaTable target = 1;
     optional WhereStatement where_expr = 2;
-    optional string role = 3;
+    optional Role role = 3;
     oneof create_policy_oneof {
         CreateRowPolicy row = 4;
         CreateMaskingPolicy masking = 5;
@@ -4382,7 +4386,7 @@ message CreatePolicy {
     required ExprSchemaTable target = 4;
     optional Cluster cluster = 5;
     optional WhereStatement where_expr = 6;
-    optional string role = 7;
+    optional Role role = 7;
     oneof create_policy_oneof {
         CreateRowPolicy row = 8;
         CreateMaskingPolicy masking = 9;

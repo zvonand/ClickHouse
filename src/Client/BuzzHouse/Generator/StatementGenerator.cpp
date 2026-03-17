@@ -2275,7 +2275,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
               }
               if (rp.targets_oracle_role)
               {
-                  apc->set_role(FuzzConfig::oracleRole);
+                  apc->mutable_role()->set_role(FuzzConfig::oracleRole);
               }
               if (rg.nextSmallNumber() < 3)
               {

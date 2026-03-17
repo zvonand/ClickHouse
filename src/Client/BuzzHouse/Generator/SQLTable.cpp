@@ -3033,7 +3033,7 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
     }
     if (next.targets_oracle_role)
     {
-        crp->set_role(FuzzConfig::oracleRole);
+        crp->mutable_role()->set_role(FuzzConfig::oracleRole);
     }
     this->staged_policies[next.policy_id] = next;
 }

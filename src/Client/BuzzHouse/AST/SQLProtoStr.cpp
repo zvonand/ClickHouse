@@ -94,6 +94,19 @@ CONV_FN(Policy, rowp)
     ret += rowp.policy();
 }
 
+CONV_FN(Role, r)
+{
+    ret += "`";
+    for (const char & c : r.role())
+    {
+        if (c == '`')
+            ret += "``";
+        else
+            ret += c;
+    }
+    ret += "`";
+}
+
 void ClusterToString(String & ret, const bool clause, const Cluster & cl)
 {
     if (cl.has_cluster())
@@ -4502,7 +4515,7 @@ static void RowPolicyClausesToString(
     const CreateRowPolicy & crp,
     const bool has_where_expr,
     const WhereStatement & where_expr,
-    const std::optional<String> & role,
+    const Role * role,
     const bool create)
 {
     if (crp.has_is_restrictive())
@@ -4519,20 +4532,15 @@ static void RowPolicyClausesToString(
         ret += " USING ";
         WhereStatementToString(ret, where_expr);
     }
-    if (role.has_value())
+    if (role)
     {
-        ret += " TO '";
-        ret += role.value();
-        ret += "'";
+        ret += " TO ";
+        RoleToString(ret, *role);
     }
 }
 
 static void MaskingPolicyClausesToString(
-    String & ret,
-    const CreateMaskingPolicy & cmp,
-    const bool has_where_expr,
-    const WhereStatement & where_expr,
-    const std::optional<String> & role)
+    String & ret, const CreateMaskingPolicy & cmp, const bool has_where_expr, const WhereStatement & where_expr, const Role * role)
 {
     if (cmp.has_first_update())
     {
@@ -4549,11 +4557,10 @@ static void MaskingPolicyClausesToString(
         ret += " WHERE ";
         WhereStatementToString(ret, where_expr);
     }
-    if (role.has_value())
+    if (role)
     {
-        ret += " TO '";
-        ret += role.value();
-        ret += "'";
+        ret += " TO ";
+        RoleToString(ret, *role);
     }
     if (cmp.has_priority())
     {
@@ -4852,7 +4859,7 @@ CONV_FN(AlterItem, alter)
             break;
         case AlterType::kAlterPolicy: {
             const AlterPolicyContent & apc = alter.alter_policy();
-            std::optional<String> role = apc.has_role() ? std::make_optional(apc.role()) : std::nullopt;
+            const Role * role = apc.has_role() ? &apc.role() : nullptr;
 
             ret += "ON ";
             ExprSchemaTableToString(ret, apc.target());
@@ -5786,7 +5793,7 @@ CONV_FN(ShowStatement, sh)
 CONV_FN(CreatePolicy, cp)
 {
     const bool is_masking = cp.has_masking();
-    std::optional<String> role = cp.has_role() ? std::make_optional(cp.role()) : std::nullopt;
+    const Role * role = cp.has_role() ? &cp.role() : nullptr;
 
     ret += "CREATE ";
     ret += is_masking ? "MASKING" : "ROW";

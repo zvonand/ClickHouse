@@ -155,7 +155,7 @@ if (OS_LINUX)
     #   and whatever is poisoning it by LD_PRELOAD should not link to our symbols.
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--no-export-dynamic -Wl,--gc-sections")
 
-    if (LINKER_NAME MATCHES "lld" AND NOT SANITIZE)
+    if (LINKER_NAME MATCHES "lld" AND NOT SANITIZE AND NOT SANITIZE_COVERAGE AND NOT WITH_COVERAGE)
         # Fold identical code and data sections to reduce binary size.
         set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--icf=all")
     endif ()
@@ -288,10 +288,10 @@ set(COMPILER_FLAGS "${COMPILER_FLAGS} -falign-functions=64")
 # remove unused ones (--gc-sections) and fold identical ones (--icf).
 # -faddrsig emits an address-significance table that lets the linker's ICF
 # distinguish address-taken symbols from non-address-taken ones.
-# Sanitizer builds do not benefit from these size optimizations and the extra
-# sections hurt instruction-cache locality in hot loops (e.g. XML config parsing),
-# causing timing-sensitive tests to fail under UBSan.
-if (NOT SANITIZE)
+# Sanitizer and coverage builds do not benefit from these size optimizations
+# and the extra sections hurt instruction-cache locality in hot loops,
+# causing timing-sensitive tests to fail.
+if (NOT SANITIZE AND NOT SANITIZE_COVERAGE AND NOT WITH_COVERAGE)
     set(COMPILER_FLAGS "${COMPILER_FLAGS} -ffunction-sections -fdata-sections -faddrsig")
 endif()
 

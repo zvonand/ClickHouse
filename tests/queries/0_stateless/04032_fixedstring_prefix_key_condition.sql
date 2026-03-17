@@ -298,4 +298,28 @@ WHERE match(CAST(lc_fs_col, 'String'), '^11.')
 ORDER BY text
 SETTINGS force_primary_key = 1, max_rows_to_read = 3;
 
+SELECT text
+FROM test_lc_fixedstring
+WHERE startsWith(CAST(lc_fs_col, 'LowCardinality(String)'), '11')
+ORDER BY text
+SETTINGS force_primary_key = 1, max_rows_to_read = 3;
+
+SELECT text
+FROM test_lc_fixedstring
+WHERE CAST(lc_fs_col, 'LowCardinality(String)') LIKE '11%'
+ORDER BY text
+SETTINGS force_primary_key = 1, max_rows_to_read = 3;
+
+SELECT text
+FROM test_lc_fixedstring
+WHERE CAST(lc_fs_col, 'LowCardinality(String)') NOT LIKE '99%'
+ORDER BY text
+SETTINGS force_primary_key = 1, max_rows_to_read = 5;
+
+SELECT text
+FROM test_lc_fixedstring
+WHERE match(CAST(lc_fs_col, 'LowCardinality(String)'), '^11.')
+ORDER BY text
+SETTINGS force_primary_key = 1, max_rows_to_read = 3;
+
 DROP TABLE IF EXISTS test_lc_fixedstring;

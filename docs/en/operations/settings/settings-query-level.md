@@ -86,13 +86,18 @@ Custom settings enable you to pass **session-specific parameters** that can be r
 - Maintain stateful information across queries in a session
 
 A custom setting name must begin with one of a number of predefined prefixes from a list you define.
-The list of prefixes can be declared using the [`custom_settings_prefixes`](../../operations/server-configuration-parameters/settings.md#custom_settings_prefixes) setting, defined in your server configuration file.
+The list of prefixes can be specified using the [`custom_settings_prefixes`](../../operations/server-configuration-parameters/settings.md#custom_settings_prefixes) server setting, defined in your server configuration file.
 
 In the example below, `SQL_` is chosen as the custom prefix:
 
 ```xml
 <custom_settings_prefixes>SQL_</custom_settings_prefixes>
 ```
+
+:::note
+In ClickHouse Cloud it is not possible to specify a custom prefix.
+All user settings begin with prefix `SQL_`.
+:::
 
 To define a custom setting use the `SET` command:
 

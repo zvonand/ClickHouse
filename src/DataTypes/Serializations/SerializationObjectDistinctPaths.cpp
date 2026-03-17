@@ -26,8 +26,9 @@ UInt128 SerializationObjectDistinctPaths::getHash(const std::vector<String> & ty
     hash.update("ObjectDistinctPaths");
     for (const auto & path : typed_paths_)
         hash.update(path);
-    const auto & shared_data_type = DataTypeObject::getTypeOfSharedData();
-    hash.update(shared_data_type->getSubcolumnSerialization("paths", shared_data_type->getDefaultSerialization())->getHash());
+    /// shared_data_paths_serialization is always derived from the static
+    /// DataTypeObject::getTypeOfSharedData() type, so it is the same for all
+    /// instances and does not need to be part of the distinguishing hash.
     return hash.get128();
 }
 

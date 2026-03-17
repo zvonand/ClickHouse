@@ -1702,9 +1702,8 @@ bool ReplicatedMergeTreeQueue::shouldExecuteLogEntry(
                 /// If create_time is unknown (0), be safe and allow the fetch immediately.
                 if (entry.create_time > 0)
                 {
-                    auto elapsed = time(nullptr) - entry.create_time;
-                    if (elapsed < 0)
-                        elapsed = 0;
+                    const auto elapsed = std::max(time(nullptr) - entry.create_time, static_cast<time_t>(0));
+
                     if (elapsed < static_cast<time_t>(timeout_sec))
                     {
                         auto remaining = static_cast<time_t>(timeout_sec) - elapsed;

@@ -1229,6 +1229,14 @@ int IKeeperStateMachine::read_logical_snp_obj(
         return -1;
     }
 
+    /// Guard against multiplication overflow before computing offset.
+    if (ctx->chunk_size != 0 && obj_id > ctx->file_size / ctx->chunk_size)
+    {
+        LOG_WARNING(log, "Snapshot obj_id {} would overflow offset computation (file_size={}, chunk_size={})",
+            obj_id, ctx->file_size, ctx->chunk_size);
+        free_user_snp_ctx(user_snp_ctx);
+        return -1;
+    }
     const uint64_t offset = obj_id * ctx->chunk_size;
     if (offset >= ctx->file_size)
     {

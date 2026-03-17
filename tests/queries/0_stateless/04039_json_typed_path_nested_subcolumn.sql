@@ -1,7 +1,7 @@
 -- Test that nested subcolumn access on typed paths works without [] sugar.
 -- E.g. json.a.b where a is a typed path of type Array(JSON).
 
-SET allow_experimental_json_type = 1;
+SET enable_analyzer = 1;
 
 DROP TABLE IF EXISTS test_typed_json;
 

@@ -50,7 +50,7 @@ SerializationPtr getOrCreate(UInt128 key, SerializationCreator creator)
     }
 
     /// Creating the serialization object must be outside of the critical section
-    /// because there might be nested serializaitons.
+    /// because there might be nested serializations.
     auto tmp = std::unique_ptr<const ISerialization>(creator());
     auto allocated_bytes = tmp->allocatedBytes();
 

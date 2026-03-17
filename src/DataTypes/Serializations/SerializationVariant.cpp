@@ -1107,7 +1107,7 @@ bool SerializationVariant::tryDeserializeTextEscapedOrRawImpl(
     };
 
     /// Some data types can deserialize absence of data (e.g. empty string), so eof is ok.
-    if (istr.eof() || null_representation.empty() || *istr.position() != null_representation[0])
+    if (istr.eof() || (!null_representation.empty() && *istr.position() != null_representation[0]))
         return read_field_and_try_deserialize(istr);
 
     /// Check if we have enough data in buffer to check if it's a null.

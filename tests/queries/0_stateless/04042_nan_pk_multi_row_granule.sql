@@ -1,4 +1,4 @@
--- Tags: no-fasttest, no-random-merge-tree-settings
+-- Tags: no-random-merge-tree-settings
 -- PR #98964 fixed NaN handling in `checkInHyperrectangle` for index range
 -- analysis. The PR's own test (`04031`) uses `index_granularity = 1` which
 -- puts each value in its own granule, so the `right` bound of every granule

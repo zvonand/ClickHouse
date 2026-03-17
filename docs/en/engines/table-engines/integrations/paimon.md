@@ -75,7 +75,7 @@ CREATE TABLE paimon_table ENGINE=PaimonS3(paimon_conf, filename = 'test_table')
 This engine uses the same settings as the corresponding object storage engines and adds Paimon-specific settings:
 
 - `paimon_incremental_read` — enable incremental read mode.
-- `paimon_metadata_refresh_interval_ms` — background metadata refresh interval in milliseconds. When set to a value greater than 0, a background task periodically pulls the latest snapshot and schema from object storage. Default: 0 (disabled).
+- `paimon_metadata_refresh_interval_sec` — background metadata refresh interval in seconds. When set to a value greater than 0, a background task periodically pulls the latest snapshot and schema from object storage. Default: 30.
 - `paimon_keeper_path` — Keeper path for incremental read state. Must be set and unique per table; supports macros such as `{database}`, `{table}`, `{uuid}`.
 - `paimon_replica_name` — Replica name for incremental read state. Must be set and unique per replica; supports macros such as `{replica}`.
 
@@ -116,7 +116,7 @@ SETTINGS
     paimon_incremental_read = 1,
     paimon_keeper_path = '/clickhouse/tables/{uuid}',
     paimon_replica_name = '{replica}',
-    paimon_metadata_refresh_interval_ms = 100;
+    paimon_metadata_refresh_interval_sec = 1;
 
 -- S3 storage (Paimon is an alias for PaimonS3)
 CREATE TABLE paimon_mv_source
@@ -125,10 +125,10 @@ SETTINGS
     paimon_incremental_read = 1,
     paimon_keeper_path = '/clickhouse/tables/{uuid}',
     paimon_replica_name = '{replica}',
-    paimon_metadata_refresh_interval_ms = 100;
+    paimon_metadata_refresh_interval_sec = 1;
 ```
 
-`paimon_metadata_refresh_interval_ms` sets the background metadata refresh interval in milliseconds. When greater than 0, a background task periodically pulls the latest snapshot and schema from object storage, so that the MV refresh cycle can see newly committed data without waiting for a query to trigger the metadata update. Default is 0 (disabled). Use cautiously on many tables to avoid excessive object storage and Keeper I/O.
+`paimon_metadata_refresh_interval_sec` sets the background metadata refresh interval in seconds. When greater than 0, a background task periodically pulls the latest snapshot and schema from object storage, so that the MV refresh cycle can see newly committed data without waiting for a query to trigger the metadata update. Default is 30. Use cautiously on many tables to avoid excessive object storage and Keeper I/O.
 
 **Step 2 — Create the MergeTree destination table (schema cloned from the Paimon table):**
 

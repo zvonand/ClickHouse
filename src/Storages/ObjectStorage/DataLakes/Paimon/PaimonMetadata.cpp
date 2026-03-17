@@ -58,7 +58,7 @@ extern const SettingsUInt64 max_consume_snapshots;
 namespace DataLakeStorageSetting
 {
 extern const DataLakeStorageSettingsBool paimon_incremental_read;
-extern const DataLakeStorageSettingsInt64 paimon_metadata_refresh_interval_ms;
+extern const DataLakeStorageSettingsInt64 paimon_metadata_refresh_interval_sec;
 extern const DataLakeStorageSettingsString paimon_keeper_path;
 extern const DataLakeStorageSettingsString paimon_replica_name;
 }
@@ -110,7 +110,7 @@ DataLakeMetadataPtr PaimonMetadata::create(
     /// Check if incremental read is enabled
     const auto & data_lake_settings = configuration_ptr->getDataLakeSettings();
     bool incremental_read_enabled = data_lake_settings[DataLakeStorageSetting::paimon_incremental_read].value;
-    Int64 metadata_refresh_interval_ms = data_lake_settings[DataLakeStorageSetting::paimon_metadata_refresh_interval_ms].value;
+    Int64 metadata_refresh_interval_sec = data_lake_settings[DataLakeStorageSetting::paimon_metadata_refresh_interval_sec].value;
     PaimonStreamStatePtr stream_state = nullptr;
 
     if (incremental_read_enabled)
@@ -143,7 +143,7 @@ DataLakeMetadataPtr PaimonMetadata::create(
         table_path,
         partition_default_name,
         incremental_read_enabled,
-        metadata_refresh_interval_ms);
+        metadata_refresh_interval_sec);
 
     return std::make_unique<PaimonMetadata>(
         object_storage, configuration_ptr, global_context, std::move(persistent_components), table_client);
@@ -160,9 +160,9 @@ PaimonMetadata::PaimonMetadata(
     , table_client(std::move(table_client_))
     , object_storage(std::move(object_storage_))
     , log(getLogger("PaimonMetadata"))
-    , refresh_interval_ms(persistent_components.metadata_refresh_interval_ms > 0
-            ? std::chrono::milliseconds(persistent_components.metadata_refresh_interval_ms)
-            : std::chrono::milliseconds(0))
+    , refresh_interval_sec(persistent_components.metadata_refresh_interval_sec > 0
+            ? std::chrono::seconds(persistent_components.metadata_refresh_interval_sec)
+            : std::chrono::seconds(0))
 {
     /// Load initial state
     auto initial_state = loadLatestState();
@@ -485,7 +485,7 @@ void PaimonMetadata::commitSnapshot(Int64 snapshot_id)
 
 void PaimonMetadata::scheduleBackgroundRefresh()
 {
-    if (refresh_interval_ms.count() == 0)
+    if (refresh_interval_sec.count() == 0)
         return;
 
     auto & schedule_pool = getContext()->getSchedulePool();
@@ -495,7 +495,7 @@ void PaimonMetadata::scheduleBackgroundRefresh()
         {
             runBackgroundRefresh();
         });
-    refresh_task->scheduleAfter(refresh_interval_ms.count());
+    refresh_task->scheduleAfter(std::chrono::duration_cast<std::chrono::milliseconds>(refresh_interval_sec).count());
 }
 
 void PaimonMetadata::runBackgroundRefresh()
@@ -507,7 +507,7 @@ void PaimonMetadata::runBackgroundRefresh()
     bool expected = false;
     if (!refresh_in_progress.compare_exchange_strong(expected, true))
     {
-        refresh_task->scheduleAfter(refresh_interval_ms.count());
+        refresh_task->scheduleAfter(std::chrono::duration_cast<std::chrono::milliseconds>(refresh_interval_sec).count());
         return;
     }
 
@@ -521,7 +521,7 @@ void PaimonMetadata::runBackgroundRefresh()
     }
 
     refresh_in_progress.store(false);
-    refresh_task->scheduleAfter(refresh_interval_ms.count());
+    refresh_task->scheduleAfter(std::chrono::duration_cast<std::chrono::milliseconds>(refresh_interval_sec).count());
 }
 
 PaimonTableStatePtr PaimonMetadata::loadStateForSnapshot(Int64 snapshot_id) const

@@ -18,8 +18,7 @@ INCREMENTAL_WRITER_JAR = (
 path_to_userfiles_from_defaut_config = "user_files"
 CLICKHOUSE_WORKDIR = "/var/lib/clickhouse"
 USER_FILES_PATH = f"{CLICKHOUSE_WORKDIR}/{path_to_userfiles_from_defaut_config}"
-PAIMON_WAREHOUSE_URI = f"file://{USER_FILES_PATH}/warehouse/"
-PAIMON_TABLE_PATH = f"{USER_FILES_PATH}/warehouse/test.db/test_table"
+
 CH_TABLE_NAME = "paimon_inc_read"
 CH_TABLE_NAME_WITH_LIMIT = "paimon_inc_read_with_limit"
 CH_MV_PAIMON_TABLE = "paimon_mv_source"
@@ -109,13 +108,14 @@ def _wait_until_query_result(
 def _run_writer(
     instance_id: str,
     *,
+    warehouse_uri: str,
     start_id: int,
     rows_per_commit: int,
     commit_times: int,
 ) -> None:
     writer_cmd = (
         f"java -jar {INCREMENTAL_WRITER_JAR} "
-        f'"{PAIMON_WAREHOUSE_URI}" "test" "test_table" "{start_id}" "{rows_per_commit}" "{commit_times}"'
+        f'"{warehouse_uri}" "test" "test_table" "{start_id}" "{rows_per_commit}" "{commit_times}"'
     )
     run_and_check(
         [
@@ -127,7 +127,9 @@ def _run_writer(
     )
 
 
-def _create_clickhouse_table_for_paimon_incremental_read(table_name: str):
+def _create_clickhouse_table_for_paimon_incremental_read(
+    table_name: str, table_path: str, refresh_interval_sec: int = 1
+):
     node.query(f"DROP TABLE IF EXISTS {table_name} SYNC;")
     node.query(
         "CREATE TABLE {table_name} "
@@ -136,9 +138,22 @@ def _create_clickhouse_table_for_paimon_incremental_read(table_name: str):
         "paimon_incremental_read = 1, "
         "paimon_keeper_path = '/clickhouse/tables/{{uuid}}', "
         "paimon_replica_name = '{{replica}}', "
-        "paimon_metadata_refresh_interval_ms = 100".format(
-            table_name=table_name, table_path=PAIMON_TABLE_PATH
+        "paimon_metadata_refresh_interval_sec = {refresh_interval_sec}".format(
+            table_name=table_name,
+            table_path=table_path,
+            refresh_interval_sec=refresh_interval_sec,
         )
+    )
+
+
+def _clean_warehouse(instance_id: str, warehouse_dir: str):
+    run_and_check(
+        [
+            "docker exec {cont_id} bash -lc \"rm -rf {warehouse}\"".format(
+                cont_id=instance_id, warehouse=warehouse_dir
+            )
+        ],
+        shell=True,
     )
 
 
@@ -146,20 +161,18 @@ def test_paimon_incremental_read_via_paimon_table_engine(started_cluster):
     instance_id = cluster.get_instance_docker_id("node")
     _prepare_incremental_writer(instance_id)
 
+    warehouse_name = "warehouse_inc"
+    warehouse_uri = f"file://{USER_FILES_PATH}/{warehouse_name}/"
+    warehouse_dir = f"{USER_FILES_PATH}/{warehouse_name}"
+    table_path = f"{USER_FILES_PATH}/{warehouse_name}/test.db/test_table"
+
     # Clean warehouse for idempotent re-runs.
-    run_and_check(
-        [
-            "docker exec {cont_id} bash -lc \"rm -rf {warehouse}\"".format(
-                cont_id=instance_id, warehouse=f"{USER_FILES_PATH}/warehouse"
-            )
-        ],
-        shell=True,
-    )
+    _clean_warehouse(instance_id, warehouse_dir)
 
     # Warm-up commit: ensure there is at least one parquet file so schema can be inferred.
-    _run_writer(instance_id, start_id=0, rows_per_commit=1, commit_times=1)
+    _run_writer(instance_id, warehouse_uri=warehouse_uri, start_id=0, rows_per_commit=1, commit_times=1)
 
-    _create_clickhouse_table_for_paimon_incremental_read(CH_TABLE_NAME)
+    _create_clickhouse_table_for_paimon_incremental_read(CH_TABLE_NAME, table_path)
 
     # Consume warm-up snapshot and reset incremental state baseline.
     _wait_until_query_result(
@@ -174,7 +187,7 @@ def test_paimon_incremental_read_via_paimon_table_engine(started_cluster):
     )
 
     # First snapshot: 10 rows.
-    _run_writer(instance_id, start_id=1, rows_per_commit=10, commit_times=1)
+    _run_writer(instance_id, warehouse_uri=warehouse_uri, start_id=1, rows_per_commit=10, commit_times=1)
     _wait_until_query_result(
         f"SELECT count() FROM {CH_TABLE_NAME}",
         "10\n",
@@ -187,7 +200,7 @@ def test_paimon_incremental_read_via_paimon_table_engine(started_cluster):
     )
 
     # Second snapshot: another 10 rows.
-    _run_writer(instance_id, start_id=11, rows_per_commit=10, commit_times=1)
+    _run_writer(instance_id, warehouse_uri=warehouse_uri, start_id=11, rows_per_commit=10, commit_times=1)
     _wait_until_query_result(
         f"SELECT count() FROM {CH_TABLE_NAME}",
         "10\n",
@@ -213,18 +226,11 @@ def test_paimon_incremental_read_via_paimon_table_engine(started_cluster):
 
     # max_consume_snapshots limit: consume at most 2 snapshots per query.
     node.query(f"DROP TABLE IF EXISTS {CH_TABLE_NAME} SYNC;")
-    run_and_check(
-        [
-            "docker exec {cont_id} bash -lc \"rm -rf {warehouse}\"".format(
-                cont_id=instance_id, warehouse=f"{USER_FILES_PATH}/warehouse"
-            )
-        ],
-        shell=True,
-    )
+    _clean_warehouse(instance_id, warehouse_dir)
 
     # Recreate clean Paimon table with one warm-up snapshot for schema inference.
-    _run_writer(instance_id, start_id=0, rows_per_commit=1, commit_times=1)
-    _create_clickhouse_table_for_paimon_incremental_read(CH_TABLE_NAME_WITH_LIMIT)
+    _run_writer(instance_id, warehouse_uri=warehouse_uri, start_id=0, rows_per_commit=1, commit_times=1)
+    _create_clickhouse_table_for_paimon_incremental_read(CH_TABLE_NAME_WITH_LIMIT, table_path)
 
     # Consume warm-up snapshot before testing max_consume_snapshots behavior.
     _wait_until_query_result(
@@ -239,7 +245,7 @@ def test_paimon_incremental_read_via_paimon_table_engine(started_cluster):
     )
 
     # Produce 3 snapshots, each snapshot contains 10 rows.
-    _run_writer(instance_id, start_id=1, rows_per_commit=10, commit_times=3)
+    _run_writer(instance_id, warehouse_uri=warehouse_uri, start_id=1, rows_per_commit=10, commit_times=3)
     _wait_until_query_result(
         f"SELECT count() FROM {CH_TABLE_NAME_WITH_LIMIT} SETTINGS max_consume_snapshots=2",
         "20\n",
@@ -270,7 +276,7 @@ def test_paimon_to_mergetree_via_refresh_mv(started_cluster):
     destination table.
 
     Prerequisites:
-      - The Paimon source table must have paimon_metadata_refresh_interval_ms
+      - The Paimon source table must have paimon_metadata_refresh_interval_sec
         enabled so that new snapshots are picked up automatically between
         MV refresh cycles.
     """
@@ -280,25 +286,21 @@ def test_paimon_to_mergetree_via_refresh_mv(started_cluster):
     instance_id = cluster.get_instance_docker_id("node")
     _prepare_incremental_writer(instance_id)
 
+    warehouse_name = "warehouse_mv"
+    warehouse_uri = f"file://{USER_FILES_PATH}/{warehouse_name}/"
+    warehouse_dir = f"{USER_FILES_PATH}/{warehouse_name}"
+    table_path = f"{USER_FILES_PATH}/{warehouse_name}/test.db/test_table"
+
     # Clean warehouse for idempotent re-runs.
-    run_and_check(
-        [
-            "docker exec {cont_id} bash -lc \"rm -rf {warehouse}\"".format(
-                cont_id=instance_id, warehouse=f"{USER_FILES_PATH}/warehouse"
-            )
-        ],
-        shell=True,
-    )
+    _clean_warehouse(instance_id, warehouse_dir)
 
     # Warm-up commit: create initial Paimon snapshot so schema can be inferred.
-    _run_writer(instance_id, start_id=0, rows_per_commit=1, commit_times=1)
+    _run_writer(instance_id, warehouse_uri=warehouse_uri, start_id=0, rows_per_commit=1, commit_times=1)
 
     # Create Paimon source table with incremental read enabled.
-    # Note: _create_clickhouse_table_for_paimon_incremental_read sets
-    # paimon_metadata_refresh_interval_ms = 100, which ensures the Paimon
-    # engine detects new snapshots within 100 ms — well before the 30 s
-    # MV refresh cycle fires.
-    _create_clickhouse_table_for_paimon_incremental_read(CH_MV_PAIMON_TABLE)
+    # paimon_metadata_refresh_interval_sec = 1 ensures the Paimon engine
+    # detects new snapshots within 1 s — well before the MV refresh cycle.
+    _create_clickhouse_table_for_paimon_incremental_read(CH_MV_PAIMON_TABLE, table_path)
 
     # Consume warm-up snapshot to establish incremental read baseline.
     _wait_until_query_result(
@@ -336,18 +338,18 @@ def test_paimon_to_mergetree_via_refresh_mv(started_cluster):
     )
 
     # --- First batch: write 10 rows to Paimon ---
-    _run_writer(instance_id, start_id=1, rows_per_commit=10, commit_times=1)
+    _run_writer(instance_id, warehouse_uri=warehouse_uri, start_id=1, rows_per_commit=10, commit_times=1)
 
     # Sleep to wait for the next MV refresh cycle to pick up the new data.
-    # Timeline: writer commits → Paimon metadata refreshes within 100 ms →
-    # MV fires within ≤30 s → data lands in MergeTree.
+    # Timeline: writer commits → Paimon metadata refreshes within 1 s →
+    # MV fires within ≤10 s → data lands in MergeTree.
     time.sleep(SLEEP_AFTER_WRITE_SEC)
 
     result = node.query(f"SELECT count() FROM {CH_MV_MERGETREE_TABLE}")
     assert result == "10\n", f"Expected 10 rows after first refresh, got {result}"
 
     # --- Second batch: write another 10 rows to Paimon ---
-    _run_writer(instance_id, start_id=11, rows_per_commit=10, commit_times=1)
+    _run_writer(instance_id, warehouse_uri=warehouse_uri, start_id=11, rows_per_commit=10, commit_times=1)
 
     time.sleep(SLEEP_AFTER_WRITE_SEC)
 

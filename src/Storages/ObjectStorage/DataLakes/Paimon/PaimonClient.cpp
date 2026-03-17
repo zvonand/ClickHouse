@@ -169,22 +169,32 @@ std::optional<std::pair<Int64, String>> PaimonTableClient::getLastestTableSnapsh
     String latest_snapshot_path;
     RelativePathWithMetadata relative_path_with_metadata(
         std::filesystem::path(table_location) / PAIMON_SNAPSHOT_DIR / PAIMON_SNAPSHOT_LATEST_HINT);
-    if (object_storage->exists(StoredObject(relative_path_with_metadata.relative_path)))
+    try
     {
-        auto buf = createReadBuffer(relative_path_with_metadata, object_storage, getContext(), log);
-        String hint_version_string;
-        readStringUntilEOF(hint_version_string, *buf);
+        if (object_storage->exists(StoredObject(relative_path_with_metadata.relative_path)))
         {
-            auto [_, ec]
-                = std::from_chars(hint_version_string.data(), hint_version_string.data() + hint_version_string.size(), snapshot_version);
-            if (ec != std::errc())
+            auto buf = createReadBuffer(relative_path_with_metadata, object_storage, getContext(), log);
+            String hint_version_string;
+            readStringUntilEOF(hint_version_string, *buf);
             {
-                throw Exception(
-                    ErrorCodes::CANNOT_PARSE_NUMBER, "The Paimon snapshot hint file content: {} is invalid.", hint_version_string);
+                auto [_, ec]
+                    = std::from_chars(hint_version_string.data(), hint_version_string.data() + hint_version_string.size(), snapshot_version);
+                if (ec != std::errc())
+                {
+                    throw Exception(
+                        ErrorCodes::CANNOT_PARSE_NUMBER, "The Paimon snapshot hint file content: {} is invalid.", hint_version_string);
+                }
             }
+            latest_snapshot_path
+                = std::filesystem::path(table_location) / (PAIMON_SNAPSHOT_DIR) / (PAIMON_SNAPSHOT_PREFIX + std::to_string(snapshot_version));
         }
-        latest_snapshot_path
-            = std::filesystem::path(table_location) / (PAIMON_SNAPSHOT_DIR) / (PAIMON_SNAPSHOT_PREFIX + std::to_string(snapshot_version));
+    }
+    catch (...)
+    {
+        LOG_WARNING(log, "Failed to read Paimon LATEST hint file, falling back to snapshot listing: {}",
+                    getCurrentExceptionMessage(false));
+        snapshot_version = -1;
+        latest_snapshot_path.clear();
     }
 
     /// check latest hint is real latest snapshot

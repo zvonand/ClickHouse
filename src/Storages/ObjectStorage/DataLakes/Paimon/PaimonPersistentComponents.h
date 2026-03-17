@@ -37,8 +37,8 @@ struct PaimonPersistentComponents
     /// Whether incremental read is enabled
     const bool incremental_read_enabled;
 
-    /// Background metadata refresh interval (ms). 0 means disabled.
-    const Int64 metadata_refresh_interval_ms;
+    /// Background metadata refresh interval (seconds). 0 means disabled.
+    const Int64 metadata_refresh_interval_sec;
 
     PaimonPersistentComponents(
         PaimonSchemaProcessorPtr schema_processor_,
@@ -47,14 +47,14 @@ struct PaimonPersistentComponents
         String table_path_,
         String partition_default_name_ = "__DEFAULT_PARTITION__",
         bool incremental_read_enabled_ = false,
-        Int64 metadata_refresh_interval_ms_ = 0)
+        Int64 metadata_refresh_interval_sec_ = 0)
         : schema_processor(std::move(schema_processor_))
         , stream_state(std::move(stream_state_))
         , table_location(std::move(table_location_))
         , table_path(std::move(table_path_))
         , partition_default_name(std::move(partition_default_name_))
         , incremental_read_enabled(incremental_read_enabled_)
-        , metadata_refresh_interval_ms(metadata_refresh_interval_ms_)
+        , metadata_refresh_interval_sec(metadata_refresh_interval_sec_)
     {
     }
 

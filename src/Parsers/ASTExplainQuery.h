@@ -132,7 +132,7 @@ protected:
             /// consumed by the inner SELECT during re-parsing.
             /// For inner ASTQueryWithOutput queries (like CREATE TABLE), the flag propagates
             /// through the frame and is handled by each query's own formatQueryImpl.
-            bool need_parens = frame.has_trailing_output_options
+            bool need_parens = frame.parent_has_trailing_settings
                 && !dynamic_cast<const ASTQueryWithOutput *>(query.get());
             if (need_parens)
                 ostr << "(";

@@ -22,6 +22,7 @@
 #include <Analyzer/Identifier.h>
 #include <Analyzer/InDepthQueryTreeVisitor.h>
 #include <Analyzer/JoinNode.h>
+#include <Analyzer/QueryNode.h>
 #include <Analyzer/TableNode.h>
 #include <Analyzer/Utils.h>
 
@@ -488,10 +489,12 @@ std::set<std::pair<TypeIndex, String>> transformers_safe_with_indexes =
 /// Normally the optimizer skips a column if it's used both in a transformable
 /// function and as a plain column reference, because introducing a new
 /// subcolumn identifier complicates analysis. But for Map key lookups the
-/// transformation is always beneficial in PREWHERE/WHERE: only the relevant
-/// bucket is read for the filter, while the full map is still read for the
-/// matching rows in SELECT. The reads are independent and semantically correct.
-std::set<std::pair<TypeIndex, String>> transformers_always_optimize_with_full_column =
+/// transformation is beneficial when the occurrence is in WHERE/PREWHERE: only
+/// the relevant bucket is read for the filter, while the full map is still read
+/// for matching rows in SELECT. The reads are independent and semantically correct.
+/// Note: this exception does NOT apply to HAVING or other clauses where the
+/// subcolumn would need to appear in GROUP BY.
+std::set<std::pair<TypeIndex, String>> transformers_optimize_in_filter_with_full_column =
 {
     {TypeIndex::Map, "arrayElement"},
 };
@@ -589,8 +592,34 @@ public:
             if (query_node->isGroupByWithCube() || query_node->isGroupByWithRollup() || query_node->isGroupByWithGroupingSets())
                 can_wrap_result_columns_with_nullable |= getContext()->getSettingsRef()[Setting::group_by_use_nulls];
             has_where_prewhere_or_group_by = query_node->hasWhere() || query_node->hasPrewhere() || query_node->hasGroupBy();
+            /// Push a placeholder for this query level; needChildVisit will update it
+            /// to true when we descend into WHERE or PREWHERE.
+            in_where_prewhere_stack.push_back(false);
             return;
         }
+    }
+
+    void leaveImpl(const QueryTreeNodePtr & node)
+    {
+        if (!getSettings()[Setting::optimize_functions_to_subcolumns])
+            return;
+
+        if (node->as<QueryNode>())
+            in_where_prewhere_stack.pop_back();
+    }
+
+    bool needChildVisit(const QueryTreeNodePtr & parent, const QueryTreeNodePtr & child)
+    {
+        if (const auto * query_node = parent->as<QueryNode>())
+        {
+            if (!in_where_prewhere_stack.empty())
+            {
+                bool is_where = query_node->hasWhere() && child.get() == query_node->getWhere().get();
+                bool is_prewhere = query_node->hasPrewhere() && child.get() == query_node->getPrewhere().get();
+                in_where_prewhere_stack.back() = is_where || is_prewhere;
+            }
+        }
+        return true;
     }
 
     std::unordered_set<Identifier> getIdentifiersToOptimize() const
@@ -615,10 +644,12 @@ public:
         ///     SELECT n FROM table GROUP BY n HAVING not(n.null)
         /// Will produce: `n.null` is not under aggregate function and not in GROUP BY keys)
         ///
-        /// Exception: transformers listed in `transformers_always_optimize_with_full_column`
-        /// are applied even when the full column is also read. For Map key lookups this is
-        /// always beneficial: the key lookup in PREWHERE/WHERE reads only the relevant bucket
-        /// while the full Map is read from SELECT only for the matching rows.
+        /// Exception: transformers listed in `transformers_optimize_in_filter_with_full_column`
+        /// are applied even when the full column is also read, but only when the optimizable
+        /// occurrence is in WHERE or PREWHERE. For Map key lookups this is beneficial: the key
+        /// lookup in PREWHERE/WHERE reads only the relevant bucket while the full Map is read
+        /// from SELECT only for the matching rows. This exception does NOT apply to HAVING,
+        /// since the resulting subcolumn would not be in GROUP BY.
         ///
         /// Do not optimize index columns (primary, min-max, secondary),
         /// because otherwise analysis of indexes may be broken.
@@ -640,7 +671,7 @@ public:
             if (it == identifiers_count.end())
                 continue;
 
-            if (it->second == count || always_optimize_identifiers.contains(identifier))
+            if (it->second == count || identifiers_with_filter_optimization.contains(identifier))
                 identifiers_to_optimize.insert(identifier);
         }
 
@@ -654,9 +685,13 @@ private:
     /// Counts only uses of transformers from `transformers_safe_with_indexes`.
     std::unordered_map<Identifier, UInt64> optimized_identifiers_index_safe_count;
     /// Identifiers that have at least one use of a transformer from
-    /// `transformers_always_optimize_with_full_column`. These are optimized
-    /// even when the column is also read as a full column elsewhere.
-    std::unordered_set<Identifier> always_optimize_identifiers;
+    /// `transformers_optimize_in_filter_with_full_column` inside WHERE or PREWHERE.
+    /// These are optimized even when the column is also read as a full column elsewhere.
+    std::unordered_set<Identifier> identifiers_with_filter_optimization;
+
+    /// Stack tracking whether the current node is inside a WHERE or PREWHERE clause.
+    /// One entry per QueryNode depth; true means we are inside WHERE/PREWHERE.
+    std::vector<bool> in_where_prewhere_stack;
 
     NameSet processed_tables;
     bool can_wrap_result_columns_with_nullable = false;
@@ -730,8 +765,9 @@ private:
             ++optimized_identifiers_count[qualified_name];
             if (transformers_safe_with_indexes.contains(transformer_key))
                 ++optimized_identifiers_index_safe_count[qualified_name];
-            if (transformers_always_optimize_with_full_column.contains(transformer_key))
-                always_optimize_identifiers.insert(qualified_name);
+            if (transformers_optimize_in_filter_with_full_column.contains(transformer_key)
+                && !in_where_prewhere_stack.empty() && in_where_prewhere_stack.back())
+                identifiers_with_filter_optimization.insert(qualified_name);
         }
     }
 };

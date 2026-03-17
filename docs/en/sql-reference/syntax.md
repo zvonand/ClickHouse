@@ -64,7 +64,9 @@ For more information about format parsers, see the [Formats](../interfaces/forma
 ClickHouse supports both SQL-style and C-style comments:
 
 - SQL-style comments begin with `--`, `#!` or `# ` and continue to the end of the line. A space after `--` and `#!` can be omitted.
-- C-style comments span from `/*` to `*/` and can be multiline. Spaces are not required either.
+- C-style comments:
+  - `//` (or more than 2 `/` characters) followed by text until the end of the line. Spaces after `/` are not required.
+  - Can span from `/*` to `*/` for multiline comments. Spaces are not required either.
 
 ## Keywords {#keywords}
 

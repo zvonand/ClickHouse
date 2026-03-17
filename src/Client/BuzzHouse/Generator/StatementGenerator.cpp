@@ -2634,7 +2634,7 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
         {3, [&] { sc->set_stop_thread_fuzzer(true); }},
         {3, [&] { sc->set_drop_parquet_metadata_cache(true); }},
         {3 * static_cast<uint32_t>(supports_cloud_features), [&] { sc->set_drop_distributed_cache(true); }},
-        {3 * static_cast<uint32_t>(freeze_counter > 0),
+        {3 * static_cast<uint32_t>(supports_cloud_features && freeze_counter > 0),
          [&]
          {
              chassert(freeze_counter > 0);

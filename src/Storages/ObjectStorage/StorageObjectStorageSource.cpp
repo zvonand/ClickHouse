@@ -570,11 +570,6 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
         }
     } while (query_settings.skip_empty_files && object_info->getObjectMetadata()->size_bytes == 0);
 
-    ProfileEvents::increment(ProfileEvents::ObjectStorageReadObjects);
-    LOG_TRACE(log, "Reading object: path={}, size={}",
-        object_info->getPath(),
-        object_info->getObjectMetadata()->size_bytes);
-
     QueryPipelineBuilder builder;
     std::shared_ptr<ISource> source;
     std::unique_ptr<ReadBuffer> read_buf;
@@ -618,6 +613,11 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
     }
     else
     {
+        ProfileEvents::increment(ProfileEvents::ObjectStorageReadObjects);
+        LOG_TRACE(log, "Reading object: path={}, size={}",
+            object_info->getPath(),
+            object_info->getObjectMetadata()->size_bytes);
+
         CompressionMethod compression_method;
         if (const auto * object_info_in_archive = dynamic_cast<const ArchiveIterator::ObjectInfoInArchive *>(object_info.get()))
         {

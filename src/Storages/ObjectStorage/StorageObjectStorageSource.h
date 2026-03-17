@@ -288,6 +288,12 @@ public:
 
     size_t estimatedKeysCount() override;
 
+    void setEmitProfileEvents(bool value) override
+    {
+        emit_profile_events = value;
+        archives_iterator->setEmitProfileEvents(value);
+    }
+
     struct ObjectInfoInArchive : public ObjectInfo
     {
         ObjectInfoInArchive(

@@ -71,8 +71,6 @@ MESSAGES_TO_RETRY = [
     "No such file or directory",
     "Permission denied",
     "Net Exception: Connection reset by peer",
-    # Transient errors when reading from S3
-    "No message received",
     # Transient Keeper errors that happen under heavy load (e.g. ARM ASan builds)
     "Coordination::Exception: Connection loss",
     "Coordination::Exception: Session expired",

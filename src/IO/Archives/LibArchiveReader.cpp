@@ -51,9 +51,11 @@ public:
             {
                 /// Convert SEEK_END to SEEK_SET because not all SeekableReadBuffer
                 /// implementations support SEEK_END (e.g. ReadBufferFromMemory).
-                if (read_stream->archive_size == 0)
-                    throw Exception(ErrorCodes::UNSUPPORTED_METHOD, "Current client reader does not support seeking a device");
-                return read_stream->read_buffer->seek(static_cast<la_int64_t>(read_stream->archive_size) + offset, SEEK_SET);
+                /// When archive_size is known, compute the absolute position;
+                /// otherwise fall back to the buffer's native SEEK_END support.
+                if (read_stream->archive_size > 0)
+                    return read_stream->read_buffer->seek(static_cast<la_int64_t>(read_stream->archive_size) + offset, SEEK_SET);
+                return read_stream->read_buffer->seek(offset, SEEK_END);
             }
             return read_stream->read_buffer->seek(offset, whence);
         }

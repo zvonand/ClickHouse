@@ -14,4 +14,4 @@ SELECT id, data, _file, _path FROM s3(s3_conn, filename='04040_archive*.7z :: ex
 SELECT id, data, _file, _path FROM s3(s3_conn, filename='04040_archive*.7z :: example*', format='CSV', structure='id UInt32, data String') ORDER BY (id, _file, _path);
 
 -- Nonexistent file inside archive
-SELECT id, data FROM s3(s3_conn, filename='04040_archive1.7z :: nonexistent.csv', format='CSV', structure='id UInt32, data String'); -- { serverError CANNOT_EXTRACT_TABLE_STRUCTURE }
+SELECT id, data FROM s3(s3_conn, filename='04040_archive1.7z :: nonexistent.csv'); -- { serverError CANNOT_EXTRACT_TABLE_STRUCTURE }

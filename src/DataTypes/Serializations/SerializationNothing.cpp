@@ -47,9 +47,4 @@ void SerializationNothing::deserializeBinaryBulk(IColumn & column, ReadBuffer & 
     typeid_cast<ColumnNothing &>(column).addSize(istr.tryIgnore(limit));
 }
 
-size_t SerializationNothing::allocatedBytes() const
-{
-    return sizeof(*this);
-}
-
 }

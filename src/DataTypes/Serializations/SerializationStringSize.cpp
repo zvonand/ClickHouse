@@ -261,9 +261,4 @@ void SerializationStringSize::deserializeBinaryBulkWithSizeStream(
     settings.path.pop_back();
 }
 
-size_t SerializationStringSize::allocatedBytes() const
-{
-    return sizeof(*this);
-}
-
 }

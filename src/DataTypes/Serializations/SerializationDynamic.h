@@ -26,8 +26,6 @@ public:
 
     static SerializationPtr create(size_t max_dynamic_types_ = DataTypeDynamic::DEFAULT_MAX_DYNAMIC_TYPES, const SerializationInfoSettings & serialization_info_settings_ = {});
 
-    size_t allocatedBytes() const override;
-
     struct SerializationVersion
     {
         enum Value

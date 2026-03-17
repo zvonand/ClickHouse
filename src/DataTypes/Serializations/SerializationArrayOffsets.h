@@ -16,8 +16,6 @@ public:
 
     static SerializationPtr create();
 
-    size_t allocatedBytes() const override;
-
     void deserializeBinaryBulkWithMultipleStreams(
     ColumnPtr & column,
     size_t rows_offset,

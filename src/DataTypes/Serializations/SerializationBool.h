@@ -15,7 +15,6 @@ private:
 public:
     static UInt128 getHash(const SerializationPtr & nested_);
     static SerializationPtr create(const SerializationPtr & nested_);
-    size_t allocatedBytes() const override;
 
     void deserializeBinary(Field & field, ReadBuffer & istr, const FormatSettings & settings) const override;
 

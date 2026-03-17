@@ -15,7 +15,6 @@ private:
 public:
     static UInt128 getHash(const SerializationPtr & nested_);
     static SerializationPtr create(const SerializationPtr & nested_);
-    size_t allocatedBytes() const override;
     bool supportsPooling() const override { return nested->supportsPooling(); }
 
     void serializeBinary(const Field & field, WriteBuffer & ostr, const FormatSettings & settings) const override;

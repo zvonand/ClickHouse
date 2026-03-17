@@ -16,8 +16,6 @@ public:
 
     static SerializationPtr create();
 
-    size_t allocatedBytes() const override;
-
     void serializeBinary(const Field &, WriteBuffer &, const FormatSettings &) const override                       { throwNoSerialization(); }
     void deserializeBinary(Field &, ReadBuffer &, const FormatSettings &) const override                            { throwNoSerialization(); }
     void serializeBinary(const IColumn &, size_t, WriteBuffer &, const FormatSettings &) const override             { throwNoSerialization(); }

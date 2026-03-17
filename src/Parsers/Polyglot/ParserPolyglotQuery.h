@@ -21,6 +21,7 @@ private:
     [[maybe_unused]] size_t max_parser_backtracks;
     [[maybe_unused]] String source_dialect;
     [[maybe_unused]] const char * raw_end;
+    [[maybe_unused]] bool feature_enabled;
 
 public:
     ParserPolyglotQuery(
@@ -28,12 +29,14 @@ public:
         size_t max_parser_depth_,
         size_t max_parser_backtracks_,
         const String & source_dialect_,
-        const char * raw_end_)
+        const char * raw_end_,
+        bool feature_enabled_)
         : max_query_size(max_query_size_)
         , max_parser_depth(max_parser_depth_)
         , max_parser_backtracks(max_parser_backtracks_)
         , source_dialect(source_dialect_)
         , raw_end(raw_end_)
+        , feature_enabled(feature_enabled_)
     {
     }
 

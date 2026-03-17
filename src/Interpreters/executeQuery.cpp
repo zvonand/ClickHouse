@@ -1173,9 +1173,17 @@ static BlockIO executeQueryImpl(
         }
         else if (settings[Setting::dialect] == Dialect::polyglot && !internal)
         {
-            if (!settings[Setting::allow_experimental_polyglot_dialect])
-                throw Exception(ErrorCodes::SUPPORT_IS_DISABLED, "Support for polyglot SQL transpiler is disabled (turn on setting 'allow_experimental_polyglot_dialect')");
-            ParserPolyglotQuery parser(max_query_size, settings[Setting::max_parser_depth], settings[Setting::max_parser_backtracks], settings[Setting::polyglot_dialect], end);
+            /// Pass through to `ParserPolyglotQuery` which handles SET queries
+            /// internally (via the standard parser) even when the feature gate
+            /// is off.  This lets users recover from misconfigured profiles
+            /// (e.g. `SET dialect = 'clickhouse'`) without being locked out.
+            ParserPolyglotQuery parser(
+                max_query_size,
+                settings[Setting::max_parser_depth],
+                settings[Setting::max_parser_backtracks],
+                settings[Setting::polyglot_dialect],
+                end,
+                settings[Setting::allow_experimental_polyglot_dialect]);
             out_ast = parseQuery(parser, begin, end, "", max_query_size, settings[Setting::max_parser_depth], settings[Setting::max_parser_backtracks]);
         }
         else

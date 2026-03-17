@@ -9,9 +9,16 @@ SET use_query_condition_cache = 0;
 
 DROP TABLE IF EXISTS t_04045_rvrow;
 
+-- index_granularity_bytes = 10485760: disables adaptive granularity so
+-- index_granularity = 8192 is the effective granule size regardless of the
+-- random MergeTree settings the flaky check injects (e.g. index_granularity_bytes = 1588).
+-- add_minmax_index_for_numeric_columns = 0: prevents automatic minmax indexes
+-- from changing read_rows (same guard used in 03031).
 CREATE TABLE t_04045_rvrow (x UInt64, y UInt64)
 ENGINE = MergeTree ORDER BY (x, y)
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192,
+         index_granularity_bytes = 10485760,
+         add_minmax_index_for_numeric_columns = 0;
 
 SYSTEM STOP MERGES t_04045_rvrow;
 

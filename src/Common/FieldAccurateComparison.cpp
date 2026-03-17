@@ -116,10 +116,7 @@ public:
         }
         else if constexpr (std::is_same_v<T, Null>)
         {
-            /// Match IColumn::compareAt behavior with nan_direction_hint=-1:
-            /// NULL sorts before non-NULL. Plain Null and negative-infinity Null
-            /// are both "less than" any non-Null value; only positive-infinity is not.
-            return !l.isPositiveInfinity();
+            return l.isNegativeInfinity();
         }
         else if constexpr (std::is_same_v<U, Null>)
         {

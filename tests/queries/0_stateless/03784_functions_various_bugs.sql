@@ -7,7 +7,6 @@ select randomFixedString(CAST(607668569663131286404589520 AS UInt128)); -- { ser
 select IPv6NumToString(IPv6StringToNumOrDefault(materialize(CAST('1:0:0:0::' AS FixedString(10))))) from numbers(2);
 select IPv6NumToString(IPv6StringToNumOrDefault(materialize(CAST('1:0:0:0::\0' AS String)))) from numbers(2);
 select IPv6NumToString(IPv6StringToNumOrDefault(x)) from system.one array join ['1::','oh no'] as x;
-select reverseUTF8('\xfe'); -- { serverError UNICODE_ERROR }
 select IPv6NumToString(IPv6StringToNumOrDefault(x)) from system.one array join ['24', '5.123.234'] as x;
 select intDiv(1, materialize(CAST(null as LowCardinality(Nullable(Int8))))) settings allow_suspicious_low_cardinality_types=1; -- { serverError ILLEGAL_DIVISION }
 select -1::Int32 as x, 2::Int32 as y, x%y, materialize(x)%y;

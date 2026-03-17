@@ -10,11 +10,6 @@
 namespace DB
 {
 
-namespace ErrorCodes
-{
-extern const int QUERY_WAS_CANCELLED;
-}
-
 Block ExpressionTransform::transformHeader(const Block & header, const ActionsDAG & expression)
 {
     return expression.updateHeader(header);

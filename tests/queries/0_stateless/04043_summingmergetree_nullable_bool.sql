@@ -1,4 +1,3 @@
--- Tags: no-fasttest
 -- Verify that `Nullable(Bool)` columns are not summed by `SummingMergeTree`.
 -- `DataTypeNullable::isSummable` delegates to the nested type; after PR #98976
 -- `Bool.isSummable()` returns false, so `Nullable(Bool)` must also be skipped

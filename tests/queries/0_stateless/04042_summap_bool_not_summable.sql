@@ -1,4 +1,3 @@
--- Tags: no-fasttest
 -- Verify that `sumMap` and `sumMapWithOverflow` reject `Bool` values after
 -- `DataTypeNumber::isSummable` was changed to return false for custom-named
 -- types (PR #98976). The `Bool` type is a custom-named `UInt8` and must not

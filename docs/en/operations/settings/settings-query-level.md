@@ -96,7 +96,7 @@ In the example below, `SQL_` is chosen as the custom prefix:
 
 :::note
 In ClickHouse Cloud it is not possible to specify a custom prefix.
-All user settings begin with prefix `SQL_`.
+All custom user settings begin with prefix `SQL_`.
 :::
 
 To define a custom setting use the `SET` command:

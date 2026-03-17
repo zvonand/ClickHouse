@@ -1703,6 +1703,8 @@ bool ReplicatedMergeTreeQueue::shouldExecuteLogEntry(
                 if (entry.create_time > 0)
                 {
                     auto elapsed = time(nullptr) - entry.create_time;
+                    if (elapsed < 0)
+                        elapsed = 0;
                     if (elapsed < static_cast<time_t>(timeout_sec))
                     {
                         auto remaining = static_cast<time_t>(timeout_sec) - elapsed;

@@ -233,20 +233,17 @@ MergeTreeReadTaskPtr MergeTreeReadPoolParallelReplicas::getTask(size_t /*task_id
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Assignment contains an unknown part (current_task: {})", current_task.describe());
     const size_t part_idx = std::distance(per_part_infos.begin(), part_it);
 
-    /// The coordinator propagates per-part `min_marks_per_task` computed by the initiator after primary key analysis.
-    /// This is more accurate than locally computed values on replicas that skip index analysis.
-    if (current_task.min_marks_per_task == 0)
-        throw Exception(
-            ErrorCodes::LOGICAL_ERROR,
-            "Coordinator returned zero min_marks_per_task for part {}. "
-            "This is a bug — the initiator must always propagate this value.",
-            current_task.describe());
+    /// Since protocol version 6, the coordinator propagates per-part `min_marks_per_task` computed by the initiator
+    /// after primary key analysis. Fall back to locally computed value for old initiators (protocol < 6).
+    const size_t effective_min_marks = current_task.min_marks_per_task > 0
+        ? current_task.min_marks_per_task
+        : (*part_it)->min_marks_per_task;
 
     MarkRanges ranges_to_read;
     size_t current_sum_marks = 0;
-    while (current_sum_marks < current_task.min_marks_per_task && !current_task.ranges.empty())
+    while (current_sum_marks < effective_min_marks && !current_task.ranges.empty())
     {
-        auto diff = current_task.min_marks_per_task - current_sum_marks;
+        auto diff = effective_min_marks - current_sum_marks;
         auto range = current_task.ranges.front();
         if (range.getNumberOfMarks() > diff)
         {

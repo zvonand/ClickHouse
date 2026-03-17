@@ -38,7 +38,8 @@ INSERT INTO users_tuple VALUES (1, (10, 'x')), (2, (20, 'y')), (3, (30, 'z'));
 
 DELETE FROM users_tuple WHERE uid = 1;
 
-SELECT tup FROM users_tuple WHERE tup.a = 20;
+SELECT tup FROM users_tuple WHERE tup.a = 20
+SETTINGS optimize_use_projections = 1, force_optimize_projection = 1;
 
 DROP TABLE users_tuple;
 

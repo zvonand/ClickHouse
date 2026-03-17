@@ -1206,7 +1206,7 @@ struct FunctionsStressTestThread
                     handle_unexpected_exception();
                 }
             }
-            catch (...)
+            catch (...) // Ok: handle_unexpected_exception logs all details
             {
                 handle_unexpected_exception();
             }

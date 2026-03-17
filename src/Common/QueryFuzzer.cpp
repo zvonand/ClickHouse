@@ -1137,6 +1137,7 @@ void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projectio
     }
     else if (fuzz_rand() % 50 == 0)
     {
+        /// Add a GROUP BY when the projection has none.
         select->setExpression(ASTProjectionSelectQuery::Expression::GROUP_BY, getRandomExpressionList(select->select()->children.size()));
     }
     if (select->orderBy().get())
@@ -1148,10 +1149,33 @@ void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projectio
         }
         else
         {
-            fuzzOrderByList(select->orderBy().get(), 0);
+            /// ASTProjectionSelectQuery stores ORDER BY as either a bare ASTOrderByElement
+            /// (single key) or an ASTFunction("tuple", arguments=ASTExpressionList)
+            /// (multiple keys) — never as a bare ASTExpressionList like ASTSelectQuery.
+            auto * as_func = select->orderBy().get()->as<ASTFunction>();
+            if (as_func && as_func->name == "tuple" && as_func->arguments)
+            {
+                fuzzOrderByList(as_func->arguments.get(), 0);
+            }
+        }
+    }
+    else if (fuzz_rand() % 50 == 0)
+    {
+        /// Add an ORDER BY when the projection has none.
+        const auto col = getRandomColumnLike();
+        if (col)
+        {
+            auto elem = make_intrusive<ASTOrderByElement>();
+            elem->children.emplace_back(col);
+            elem->direction = 1;
+            elem->nulls_direction = 1;
+            elem->nulls_direction_was_explicitly_specified = false;
+            elem->with_fill = false;
+            select->setExpression(ASTProjectionSelectQuery::Expression::ORDER_BY, std::move(elem));
         }
     }
 }
+
 
 DataTypePtr QueryFuzzer::fuzzDataType(DataTypePtr type)
 {
@@ -2425,18 +2449,14 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             /// After normalization, list_of_modes may be stale (wrong size), so we
             /// rebuild it entirely from union_mode rather than trying to erase one entry.
             union_members.erase(union_members.begin() + fuzz_rand() % union_members.size());
-            with_union->list_of_modes.assign(
-                union_members.empty() ? 0 : union_members.size() - 1,
-                with_union->union_mode);
+            with_union->list_of_modes.assign(union_members.empty() ? 0 : union_members.size() - 1, with_union->union_mode);
             with_union->is_normalized = false;
         }
         else if (!union_members.empty() && fuzz_rand() % 100 == 0)
         {
             /// Duplicate a random member; rebuild modes to keep sizes in sync.
             union_members.push_back(union_members[fuzz_rand() % union_members.size()]->clone());
-            with_union->list_of_modes.assign(
-                union_members.size() - 1,
-                with_union->union_mode);
+            with_union->list_of_modes.assign(union_members.size() - 1, with_union->union_mode);
         }
 
         fuzz(with_union->list_of_selects);

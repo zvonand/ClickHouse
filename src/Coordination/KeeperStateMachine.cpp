@@ -1474,8 +1474,10 @@ void KeeperStateMachine<Storage>::cancelIfHasUnfinishedReceive()
 
     try
     {
+        const auto tmp_snapshot_file_name = "tmp_" + snapshot_file_name;
+        LOG_INFO(log, "Canceling unfinished snapshot receive, removing partial files {} and {}", snapshot_file_name, tmp_snapshot_file_name);
         disk->removeFileIfExists(snapshot_file_name);
-        disk->removeFileIfExists("tmp_" + snapshot_file_name);
+        disk->removeFileIfExists(tmp_snapshot_file_name);
     }
     catch (...)
     {

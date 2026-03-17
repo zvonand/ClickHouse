@@ -161,16 +161,13 @@ def fill_test_tree(zk, base, count=300):
         zk.delete(f"{base}/{i}")
 
 
-def cleanup_test_tree(leader_node, base, count=300):
-    """Delete all nodes created by `fill_test_tree`."""
+def cleanup_test_tree(leader_node, base):
+    """Delete the subtree rooted at `base` if it exists."""
     zk = None
     try:
         zk = keeper_utils.get_fake_zk(cluster, leader_node.name)
-        for i in range(count):
-            if zk.exists(f"{base}/{i}"):
-                zk.delete(f"{base}/{i}")
         if zk.exists(base):
-            zk.delete(base)
+            zk.delete(base, recursive=True)
     except:
         pass
     finally:
@@ -227,10 +224,17 @@ def get_received_snapshot_info(node, from_line):
     lines = [line for line in output.splitlines() if line]
     if not lines:
         return None
-    m = re.search(r"Saving snapshot (\d+) obj_id", lines[0])
-    if not m:
+    # Find the first transfer that started from obj_id=0 within the test window.
+    # Ignore partial tails of transfers that began before from_line (e.g. obj_id=71
+    # logged just after from_line because the previous transfer finished concurrently).
+    log_idx = None
+    for line in lines:
+        m = re.search(r"Saving snapshot (\d+) obj_id (\d+)", line)
+        if m and int(m.group(2)) == 0:
+            log_idx = int(m.group(1))
+            break
+    if log_idx is None:
         return None
-    log_idx = int(m.group(1))
     size_result = node.exec_in_container(
         ["bash", "-c",
          f"find /var/lib/clickhouse/coordination/snapshots/ -name 'snapshot_{log_idx}.bin*'"
@@ -273,6 +277,8 @@ def test_recover_from_snapshot_with_chunked_transfer(started_cluster, nodes):
     node_lagging = nodes["lagging"]
     prefix = "/test_chunked_snapshot_transfer"
     leader_zk = middle_zk = lagging_zk = None
+
+    cleanup_test_tree(node_leader, prefix)
 
     try:
         leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
@@ -335,6 +341,8 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
     prefix = "/test_interrupted_chunked_transfer"
     leader_zk = lagging_zk = None
 
+    cleanup_test_tree(node_leader, prefix)
+
     try:
         leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
         node_lagging.stop_clickhouse(kill=True)
@@ -360,10 +368,14 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
 
     # Kill and place a tmp_ marker next to the real snapshot to simulate a transfer
     # that was interrupted after the file was created but before it was finalised.
+    # Also wipe changelogs so the node cannot bootstrap from logs alone and is forced
+    # to receive a fresh snapshot from the leader (avoids CORRUPTED_DATA on restart
+    # when changelogs have been compacted past the last committed index).
     node_lagging.stop_clickhouse(kill=True)
     snapshot_name = snapshot_path.rsplit("/", 1)[-1]
     tmp_snapshot_path = f"{snapshot_dir}/tmp_{snapshot_name}"
-    node_lagging.exec_in_container(["bash", "-c", f"touch {tmp_snapshot_path}"])
+    changelogs_dir = "/var/lib/clickhouse/coordination/logs"
+    node_lagging.exec_in_container(["bash", "-c", f"touch {tmp_snapshot_path} && rm -f {changelogs_dir}/*.bin*"])
 
     # Second start: KeeperSnapshotManager removes both tmp_snapshot_X.bin and
     # snapshot_X.bin, then the node recovers via a fresh snapshot transfer.

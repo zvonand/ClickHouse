@@ -954,10 +954,16 @@ def test_expire_snapshots_snapshot_ids_with_fuse(started_cluster_iceberg_with_sp
     instance = started_cluster_iceberg_with_spark.instances["node1"]
     TABLE_NAME = make_table_name("test_expire_ids_fuse", storage_type)
 
-    # 3 INSERTs → S1 (oldest), S2, S3 = current
+    # Create S1 first, then sleep 2 s before S2/S3 so they land in a different
+    # second.  expire_before is passed at second granularity ("%Y-%m-%d %H:%M:%S"),
+    # so S1 and S2 must be at least 1 second apart for the fuse to sit strictly
+    # between them without truncation artifacts.
     create_and_populate(
-        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 3
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 1
     )
+    time.sleep(2)
+    instance.query(f"INSERT INTO {TABLE_NAME} VALUES (2);", settings=ICEBERG_SETTINGS)
+    instance.query(f"INSERT INTO {TABLE_NAME} VALUES (3);", settings=ICEBERG_SETTINGS)
 
     snap_ids = get_snapshot_ids(instance, TABLE_NAME)
     assert len(snap_ids) == 3
@@ -966,9 +972,10 @@ def test_expire_snapshots_snapshot_ids_with_fuse(started_cluster_iceberg_with_sp
     # Read raw timestamps so we can place the fuse between S1 and S2
     meta = read_iceberg_metadata(instance, TABLE_NAME)
     ts = {s["snapshot-id"]: s["timestamp-ms"] for s in meta["snapshots"]}
-    # fuse_ms is strictly between S1 and S2 timestamps
-    fuse_ms = (ts[s1_id] + ts[s2_id]) // 2 + 1
-    fuse_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(fuse_ms / 1000))
+    # Round S1's timestamp up to the next full second: always > ts[s1_id]
+    # and always <= ts[s2_id] (which is >= ts[s1_id] + 2000 ms).
+    fuse_s = ts[s1_id] // 1000 + 1
+    fuse_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(fuse_s))
 
     # Attempt to expire both S1 and S2 explicitly, with fuse protecting S2
     # S1 timestamp < fuse_ms  → should be expired

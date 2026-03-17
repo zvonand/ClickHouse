@@ -64,7 +64,8 @@ ObjectInfoPtr ObjectIteratorWithPathAndFileFilter::next(size_t id)
         if (!object)
             break;
 
-        ProfileEvents::increment(ProfileEvents::ObjectStorageListedObjects);
+        if (emit_profile_events)
+            ProfileEvents::increment(ProfileEvents::ObjectStorageListedObjects);
 
         if (filter_actions)
         {
@@ -82,7 +83,8 @@ ObjectInfoPtr ObjectIteratorWithPathAndFileFilter::next(size_t id)
 
             if (keys.empty())
             {
-                ProfileEvents::increment(ProfileEvents::ObjectStoragePredicateFilteredObjects);
+                if (emit_profile_events)
+                    ProfileEvents::increment(ProfileEvents::ObjectStoragePredicateFilteredObjects);
                 LOG_TRACE(log, "Filtered out object: {}", object->getPath());
                 continue;
             }

@@ -60,6 +60,11 @@ struct IObjectIterator
     virtual ObjectInfoPtr next(size_t) = 0;
     virtual size_t estimatedKeysCount() = 0;
     virtual std::optional<UInt64> getSnapshotVersion() const { return std::nullopt; }
+
+    /// When false, the iterator should not emit ProfileEvents.
+    /// Used when the iterator is created for metadata purposes (e.g. getPathSample)
+    /// rather than for actual data reading.
+    bool emit_profile_events = true;
 };
 
 using ObjectIterator = std::shared_ptr<IObjectIterator>;

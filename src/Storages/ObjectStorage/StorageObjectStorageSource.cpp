@@ -1128,9 +1128,12 @@ ObjectInfoPtr StorageObjectStorageSource::GlobIterator::nextUnlocked(size_t /* p
             total_glob_filtered += glob_filtered_out;
             total_predicate_filtered += predicate_filtered_out;
 
-            ProfileEvents::increment(ProfileEvents::ObjectStorageListedObjects, listed_in_batch);
-            ProfileEvents::increment(ProfileEvents::ObjectStorageGlobFilteredObjects, glob_filtered_out);
-            ProfileEvents::increment(ProfileEvents::ObjectStoragePredicateFilteredObjects, predicate_filtered_out);
+            if (emit_profile_events)
+            {
+                ProfileEvents::increment(ProfileEvents::ObjectStorageListedObjects, listed_in_batch);
+                ProfileEvents::increment(ProfileEvents::ObjectStorageGlobFilteredObjects, glob_filtered_out);
+                ProfileEvents::increment(ProfileEvents::ObjectStoragePredicateFilteredObjects, predicate_filtered_out);
+            }
         }
 
         index = 0;
@@ -1216,7 +1219,8 @@ ObjectInfoPtr StorageObjectStorageSource::KeysIterator::next(size_t /* processor
         if (file_progress_callback)
             file_progress_callback(FileProgress(0, object_metadata.size_bytes));
 
-        ProfileEvents::increment(ProfileEvents::ObjectStorageListedObjects);
+        if (emit_profile_events)
+            ProfileEvents::increment(ProfileEvents::ObjectStorageListedObjects);
 
         return std::make_shared<ObjectInfo>(RelativePathWithMetadata(key, object_metadata));
     }

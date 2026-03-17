@@ -70,7 +70,11 @@ public:
 
     /// Returns true if this quota is keyed by `NORMALIZED_QUERY_HASH`.
     /// When true, callers should use `usedForNormalizedQuery` instead of `used`.
-    bool isKeyedByNormalizedQueryHash() const { return interval_resolver != nullptr; }
+    bool isKeyedByNormalizedQueryHash() const
+    {
+        std::lock_guard lock(resolved_intervals_mutex);
+        return interval_resolver != nullptr;
+    }
 
 
 private:

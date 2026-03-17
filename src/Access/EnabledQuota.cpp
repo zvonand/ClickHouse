@@ -356,26 +356,26 @@ void EnabledQuota::usedPerNormalizedHash(UInt64 normalized_query_hash) const
 
 void EnabledQuota::usedForNormalizedQuery(UInt64 normalized_query_hash, QuotaType quota_type, QuotaValue value, bool check_exceeded) const
 {
-    if (!interval_resolver)
-        return;
-
     boost::shared_ptr<const Intervals> resolved;
+    IntervalResolver resolver_copy;
 
-    /// First, check the cache without calling the resolver (to avoid holding the mutex
-    /// while calling interval_resolver, which acquires QuotaCache::mutex — that would
-    /// create an ABBA deadlock with chooseQuotaToConsumeFor).
+    /// Take a snapshot of the resolver and check the cache under the lock.
     {
         std::lock_guard lock(resolved_intervals_mutex);
+        if (!interval_resolver)
+            return;
         auto * it = resolved_intervals_cache.find(normalized_query_hash);
         if (it != resolved_intervals_cache.end())
             resolved = it->getMapped();
+        else
+            resolver_copy = interval_resolver;
     }
 
     /// Cache miss: resolve outside the lock, then store the result.
-    if (!resolved)
+    if (!resolved && resolver_copy)
     {
         String key = std::to_string(normalized_query_hash);
-        resolved = interval_resolver(key);
+        resolved = resolver_copy(key);
 
         if (resolved)
         {

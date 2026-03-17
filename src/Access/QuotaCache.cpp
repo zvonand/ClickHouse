@@ -294,38 +294,41 @@ void QuotaCache::chooseQuotaToConsumeFor(EnabledQuota & enabled, bool throw_if_c
 
             /// For NORMALIZED_QUERY_HASH keyed quotas, set up a resolver callback
             /// so that EnabledQuota can lazily resolve intervals per query hash.
-            if (info.quota->key_type == QuotaKeyType::NORMALIZED_QUERY_HASH)
+            /// Both interval_resolver and resolved_intervals_cache are protected
+            /// by resolved_intervals_mutex to avoid data races with concurrent readers.
             {
-                UUID found_quota_id = info.quota_id;
-                enabled.interval_resolver = [this, found_quota_id](const String & hash_key) -> boost::shared_ptr<const Intervals>
+                std::lock_guard resolved_lock(enabled.resolved_intervals_mutex);
+                if (info.quota->key_type == QuotaKeyType::NORMALIZED_QUERY_HASH)
                 {
-                    std::lock_guard lock(mutex);
-                    auto it = all_quotas.find(found_quota_id);
-                    if (it == all_quotas.end())
-                        return nullptr;
-                    return it->second.getOrBuildIntervals(hash_key);
-                };
-            }
-            else
-            {
-                enabled.interval_resolver = nullptr;
+                    UUID found_quota_id = info.quota_id;
+                    enabled.interval_resolver = [this, found_quota_id](const String & hash_key) -> boost::shared_ptr<const Intervals>
+                    {
+                        std::lock_guard lock(mutex);
+                        auto it = all_quotas.find(found_quota_id);
+                        if (it == all_quotas.end())
+                            return nullptr;
+                        return it->second.getOrBuildIntervals(hash_key);
+                    };
+                }
+                else
+                {
+                    enabled.interval_resolver = nullptr;
+                }
+                enabled.resolved_intervals_cache.clear();
             }
 
             break;
         }
     }
 
-    /// Clear the resolved intervals cache when quotas are reassigned.
-    {
-        std::lock_guard resolved_lock(enabled.resolved_intervals_mutex);
-        enabled.resolved_intervals_cache.clear();
-    }
-
     if (!intervals)
     {
         enabled.empty = true;
         enabled.intervals = boost::make_shared<Intervals>(); /// No quota == no limits.
-        enabled.interval_resolver = nullptr;
+        {
+            std::lock_guard resolved_lock(enabled.resolved_intervals_mutex);
+            enabled.interval_resolver = nullptr;
+        }
     }
     else
     {

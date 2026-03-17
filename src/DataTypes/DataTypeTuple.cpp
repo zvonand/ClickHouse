@@ -324,7 +324,7 @@ bool DataTypeTuple::textCanContainOnlyValidUTF8() const
 
 bool DataTypeTuple::hasDynamicStructure() const
 {
-    return std::any_of(elems.begin(), elems.end(), [](auto && elem) { return elem->hasDynamicStructure(); });
+    return std::ranges::any_of(elems, [](auto && elem) { return elem->hasDynamicStructure(); });
 }
 
 bool DataTypeTuple::haveMaximumSizeOfValue() const

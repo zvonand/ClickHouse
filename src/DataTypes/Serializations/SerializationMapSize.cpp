@@ -8,6 +8,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int NOT_IMPLEMENTED;
+    extern const int LOGICAL_ERROR;
 }
 
 SerializationMapSize::SerializationMapSize(
@@ -135,6 +136,9 @@ namespace
 /// the final UInt64 size column.
 void collectMapSizeFromBuckets(const std::vector<ColumnPtr> & size_buckets, IColumn & size_column)
 {
+    if (size_buckets.empty())
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Empty list of buckets provided");
+
     std::vector<const ColumnUInt64::Container *> data_buckets(size_buckets.size());
     for (size_t bucket = 0; bucket != size_buckets.size(); ++bucket)
         data_buckets[bucket] = &assert_cast<const ColumnUInt64 &>(*size_buckets[bucket]).getData();

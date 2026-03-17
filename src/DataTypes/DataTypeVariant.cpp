@@ -144,7 +144,7 @@ bool DataTypeVariant::textCanContainOnlyValidUTF8() const
 
 bool DataTypeVariant::hasDynamicStructure() const
 {
-    return std::any_of(variants.begin(), variants.end(), [](auto && elem) { return elem->hasDynamicStructure(); });
+    return std::ranges::any_of(variants, [](auto && elem) { return elem->hasDynamicStructure(); });
 }
 
 bool DataTypeVariant::haveMaximumSizeOfValue() const

@@ -23,6 +23,9 @@ private:
 public:
     static constexpr bool is_parametric = true;
 
+    /// Prefix used for dynamic subcolumn names that represent a single map key, e.g. `m.key_foo`.
+    static constexpr std::string_view KEY_SUBCOLUMN_PREFIX = "key_";
+
     explicit DataTypeMap(const DataTypePtr & nested_);
     explicit DataTypeMap(const DataTypes & elems);
     DataTypeMap(const DataTypePtr & key_type_, const DataTypePtr & value_type_);

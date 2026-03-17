@@ -21,7 +21,6 @@
 #include <IO/ReadHelpers.h>
 #include <IO/WriteBufferFromString.h>
 #include <IO/WriteHelpers.h>
-#include <llvm/AsmParser/LLToken.h>
 #include <Common/SipHash.h>
 #include <Common/assert_cast.h>
 

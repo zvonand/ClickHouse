@@ -140,8 +140,10 @@ void findKeyPositions(
 
         if (!found)
         {
+            /// Keep the prediction unchanged: if only this row is missing the key,
+            /// subsequent rows likely have the same key order, so the prediction
+            /// may still be valid. A wrong prediction costs only one extra match call.
             matched_positions[positions_row_idx] = KEY_NOT_FOUND;
-            have_prediction = false;
         }
     }
 }

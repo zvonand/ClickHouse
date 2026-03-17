@@ -8,6 +8,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int NOT_IMPLEMENTED;
+    extern const int LOGICAL_ERROR;
 }
 
 SerializationMapKeysOrValues::SerializationMapKeysOrValues(
@@ -137,6 +138,9 @@ namespace
 /// (keys or values) instead of a full Map(key, value).
 void collectMapKeysOrValuesFromBuckets(const std::vector<ColumnPtr> & keys_or_values_buckets, IColumn & keys_or_values_column)
 {
+    if (keys_or_values_buckets.empty())
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Empty list of buckets provided");
+
     std::vector<ColumnPtr> data_buckets(keys_or_values_buckets.size());
     std::vector<const ColumnArray::Offsets *> offsets_buckets(keys_or_values_buckets.size());
     for (size_t bucket = 0; bucket != keys_or_values_buckets.size(); ++bucket)

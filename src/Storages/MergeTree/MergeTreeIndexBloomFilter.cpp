@@ -206,23 +206,23 @@ std::optional<MapIndexInfo> tryResolveMapIndexInfo(const String & map_column_nam
     auto map_keys_index_column_name = fmt::format("mapKeys({})", map_column_name);
     auto map_values_index_column_name = fmt::format("mapValues({})", map_column_name);
 
-    bool has_keys = header.has(map_keys_index_column_name);
-    bool has_values = header.has(map_values_index_column_name);
+    auto keys_position = header.findPositionByName(map_keys_index_column_name);
+    auto values_position = header.findPositionByName(map_values_index_column_name);
 
-    if (!has_keys && !has_values)
+    if (!keys_position && !values_position)
         return std::nullopt;
 
     MapIndexInfo info;
     info.key_field = key_field;
-    if (has_keys)
+    if (keys_position)
     {
         info.has_keys_index = true;
-        info.keys_index_position = header.getPositionByName(map_keys_index_column_name);
+        info.keys_index_position = *keys_position;
     }
-    if (has_values)
+    if (values_position)
     {
         info.has_values_index = true;
-        info.values_index_position = header.getPositionByName(map_values_index_column_name);
+        info.values_index_position = *values_position;
     }
     return info;
 }

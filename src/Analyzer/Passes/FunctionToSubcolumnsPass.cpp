@@ -182,7 +182,7 @@ void optimizeFunctionArrayElementForMap(QueryTreeNodePtr & node, FunctionNode & 
     /// e.g. the string key "foo" becomes the subcolumn suffix "key_foo".
     WriteBufferFromOwnString buf;
     key_type->getDefaultSerialization()->serializeText(*tmp_key_column, 0, buf, FormatSettings());
-    String subcolumn_name = "key_" + buf.str();
+    String subcolumn_name = String(DataTypeMap::KEY_SUBCOLUMN_PREFIX) + buf.str();
 
     /// The resulting subcolumn has the map's value type, e.g. `m.key_foo : V` for `Map(K, V)`.
     NameAndTypePair column{ctx.column.name + "." + subcolumn_name, data_type_map.getValueType()};

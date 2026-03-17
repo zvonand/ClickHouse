@@ -1,4 +1,5 @@
--- Tags: no-random-settings
+SET enable_analyzer = 1;
+SET enable_parallel_replicas = 0;
 
 DROP TABLE IF EXISTS t_nested;
 CREATE TABLE t_nested (`n.a` Array(Int64), `n.b` Array(Int64), `n.c` Array(Int64)) ENGINE = MergeTree ORDER BY tuple();

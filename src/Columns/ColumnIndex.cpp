@@ -11,7 +11,6 @@ namespace ErrorCodes
 {
     extern const int ILLEGAL_COLUMN;
     extern const int LOGICAL_ERROR;
-    extern const int SIZES_OF_COLUMNS_DOESNT_MATCH;
 }
 
 

@@ -85,6 +85,7 @@ private:
     const NamesAndTypesList virtual_columns;
     const NamesAndTypesList hive_partition_columns;
     const std::shared_ptr<ExpressionActions> filter_actions;
+    LoggerPtr log = getLogger("ObjectIteratorWithPathAndFileFilter");
 };
 
 class ObjectIteratorSplitByBuckets : public IObjectIterator, private WithContext

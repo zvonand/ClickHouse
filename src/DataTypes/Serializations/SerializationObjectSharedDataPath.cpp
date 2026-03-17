@@ -43,11 +43,17 @@ UInt128 SerializationObjectSharedDataPath::getHash(const SerializationPtr & nest
     hash.update("ObjectSharedDataPath");
     hash.update(nested_->getHash());
     hash.update(static_cast<int>(serialization_version_.value));
+    hash.update(path_.size());
     hash.update(path_);
+    hash.update(path_subcolumn_.size());
     hash.update(path_subcolumn_);
-    hash.update(dynamic_type_->getName());
+    auto dynamic_type_name = dynamic_type_->getName();
+    hash.update(dynamic_type_name.size());
+    hash.update(dynamic_type_name);
     hash.update(dynamic_serialization_->getHash());
-    hash.update(subcolumn_type_->getName());
+    auto subcolumn_type_name = subcolumn_type_->getName();
+    hash.update(subcolumn_type_name.size());
+    hash.update(subcolumn_type_name);
     hash.update(bucket_);
     return hash.get128();
 }

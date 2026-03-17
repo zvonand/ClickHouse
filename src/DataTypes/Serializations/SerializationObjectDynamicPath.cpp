@@ -55,11 +55,17 @@ UInt128 SerializationObjectDynamicPath::getHash(const SerializationPtr & nested_
     SipHash hash;
     hash.update("ObjectDynamicPath");
     hash.update(nested_->getHash());
+    hash.update(path_.size());
     hash.update(path_);
+    hash.update(path_subcolumn_.size());
     hash.update(path_subcolumn_);
     hash.update(dynamic_serialization_->getHash());
-    hash.update(dynamic_type_->getName());
-    hash.update(subcolumn_type_->getName());
+    auto dynamic_type_name = dynamic_type_->getName();
+    hash.update(dynamic_type_name.size());
+    hash.update(dynamic_type_name);
+    auto subcolumn_type_name = subcolumn_type_->getName();
+    hash.update(subcolumn_type_name.size());
+    hash.update(subcolumn_type_name);
     return hash.get128();
 }
 

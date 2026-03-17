@@ -25,7 +25,10 @@ UInt128 SerializationObjectDistinctPaths::getHash(const std::vector<String> & ty
     SipHash hash;
     hash.update("ObjectDistinctPaths");
     for (const auto & path : typed_paths_)
+    {
+        hash.update(path.size());
         hash.update(path);
+    }
     /// shared_data_paths_serialization is always derived from the static
     /// DataTypeObject::getTypeOfSharedData() type, so it is the same for all
     /// instances and does not need to be part of the distinguishing hash.

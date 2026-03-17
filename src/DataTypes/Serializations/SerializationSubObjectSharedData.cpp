@@ -40,8 +40,11 @@ UInt128 SerializationSubObjectSharedData::getHash(
     hash.update("SubObjectSharedData");
     hash.update(static_cast<int>(serialization_version_.value));
     hash.update(buckets_);
+    hash.update(paths_prefix_.size());
     hash.update(paths_prefix_);
-    hash.update(dynamic_type_->getName());
+    auto dynamic_type_name = dynamic_type_->getName();
+    hash.update(dynamic_type_name.size());
+    hash.update(dynamic_type_name);
     hash.update(dynamic_serialization_->getHash());
     return hash.get128();
 }

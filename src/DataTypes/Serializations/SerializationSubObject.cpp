@@ -28,8 +28,11 @@ UInt128 SerializationSubObject::getHash(const String & paths_prefix_, const std:
 {
     SipHash hash;
     hash.update("SubObject");
+    hash.update(paths_prefix_.size());
     hash.update(paths_prefix_);
-    hash.update(dynamic_type_->getName());
+    auto dynamic_type_name = dynamic_type_->getName();
+    hash.update(dynamic_type_name.size());
+    hash.update(dynamic_type_name);
     hash.update(dynamic_serialization_->getHash());
     std::vector<String> sorted_paths;
     sorted_paths.reserve(typed_paths_serializations_.size());
@@ -38,6 +41,7 @@ UInt128 SerializationSubObject::getHash(const String & paths_prefix_, const std:
     std::sort(sorted_paths.begin(), sorted_paths.end());
     for (const auto & path : sorted_paths)
     {
+        hash.update(path.size());
         hash.update(path);
         hash.update(typed_paths_serializations_.at(path)->getHash());
     }

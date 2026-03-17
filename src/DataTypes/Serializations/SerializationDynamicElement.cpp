@@ -26,7 +26,9 @@ UInt128 SerializationDynamicElement::getHash(const SerializationPtr & nested_, c
     hash.update("DynamicElement");
     hash.update(nested_->getHash());
     hash.update(shared_variant_serialization_->getHash());
+    hash.update(dynamic_element_name_.size());
     hash.update(dynamic_element_name_);
+    hash.update(nested_subcolumn_.size());
     hash.update(nested_subcolumn_);
     hash.update(is_null_map_subcolumn_);
     return hash.get128();

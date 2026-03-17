@@ -664,7 +664,7 @@ It is possible to have maps with deeply nested structures, such as `Map(String, 
 This type represents a union of other data types. Type `Variant(T1, T2, ..., TN)` means that each row of this type has a value of either type `T1` or `T2` or … or `TN` or none of them (`NULL` value).
 
 :::warning
-While for the end user Variant(T1, T2) means exactly the same as Variant(T2, T1), the order of types in the definition matters for the wire format: the types in the definition are always sorted alphabetically, and this is important, since the exact variant is encoded by a "discriminant" - the data type index in the definition.
+While for the end user `Variant(T1, T2)` means exactly the same as `Variant(T2, T1)`, the order of types in the definition matters for the wire format: the types in the definition are always sorted alphabetically, and this is important, since the exact variant is encoded by a "discriminant" - the data type index in the definition.
 :::
 
 Consider the following example:

@@ -8,7 +8,7 @@ CREATE TABLE children (
     `name` String, 
     age Int16, 
     parent_id Int16,
-    INDEX age_i age TYPE set(10) GRANULARITY 2,
+    INDEX age_i age TYPE minmax GRANULARITY 1,
     INDEX name_i `name` TYPE tokenbf_v1(8192, 1, 0) GRANULARITY 1
     ) 
 ENGINE = MergeTree()
@@ -33,14 +33,14 @@ INSERT INTO parents VALUES (2, 'Tom', 25);
 INSERT INTO parents VALUES (3, 'Jack', 26);
 ALTER TABLE parents ADD INDEX name_i name TYPE tokenbf_v1(8192, 1, 0) GRANULARITY 1;
 
-SELECT * FROM children FORMAT Null SETTINGS log_comment='1'; -- no skip indexes used
-SELECT * FROM children WHERE age = 3 FORMAT Null SETTINGS log_comment='2'; -- age_i used
-SELECT * FROM children WHERE startsWith(name, 'Al') FORMAT Null SETTINGS log_comment='3'; -- name_i used
-SELECT * FROM children WHERE age = 3 AND name = 'Alice' FORMAT Null SETTINGS log_comment='4'; -- age_i and name_i used
+SELECT * FROM children FORMAT Null SETTINGS log_comment='1', use_skip_indexes_on_data_read=1; -- no skip indexes used
+SELECT * FROM children WHERE age = 3 FORMAT Null SETTINGS log_comment='2', use_skip_indexes_on_data_read=1; -- age_i used
+SELECT * FROM children WHERE startsWith(name, 'Al') FORMAT Null SETTINGS log_comment='3', use_skip_indexes_on_data_read=1; -- name_i used
+SELECT * FROM children WHERE age = 3 AND name = 'Alice' FORMAT Null SETTINGS log_comment='4', use_skip_indexes_on_data_read=1; -- age_i and name_i used
 SELECT * FROM children 
 LEFT JOIN parents ON children.parent_id = parents.uid 
 WHERE parents.age >= 25 AND children.name = 'Alice' 
-FORMAT Null SETTINGS log_comment='5'; -- age_i and name_i used
+FORMAT Null SETTINGS log_comment='5', use_skip_indexes_on_data_read=1; -- age_i and name_i used
 
 SYSTEM FLUSH LOGS system.query_log;
 

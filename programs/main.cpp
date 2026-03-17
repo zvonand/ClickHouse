@@ -38,6 +38,16 @@ const char * __lsan_default_options()
 {
     return "max_allocation_size_mb=32768";
 }
+const char * __lsan_default_suppressions()
+{
+    /// OpenSSL intentionally does not free all global state at exit.
+    /// These are known false positives from OpenSSL provider initialization.
+    return "leak:ossl_provider_new\n"
+           "leak:OSSL_PROVIDER_try_load_ex\n"
+           "leak:ossl_rand_ctx_new\n"
+           "leak:OSSL_LIB_CTX_new\n"
+           "leak:ossl_legacy_provider_init\n";
+}
 #endif
 
 #ifdef MEMORY_SANITIZER

@@ -112,7 +112,7 @@ enum class FileCategory : uint8_t
     STATISTICS_FILE,
 };
 
-FileCategory getFileCategory(const String & relative_path);
+FileCategory inspectFileCategory(const String & relative_path);
 
 KeyDescription getSortingKeyDescriptionFromMetadata(
     Poco::JSON::Object::Ptr metadata_object, const NamesAndTypesList & ch_schema, ContextPtr local_context);

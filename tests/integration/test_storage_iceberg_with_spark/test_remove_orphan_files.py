@@ -173,13 +173,15 @@ def test_remove_orphan_files_basic(started_cluster_iceberg_with_spark, storage_t
 
 @pytest.mark.parametrize("storage_type", ["local", "s3"])
 def test_remove_orphan_files_no_orphans(started_cluster_iceberg_with_spark, storage_type):
-    """When there are no user-created orphan files, data/manifest/statistics counts should be zero."""
+    """When there are no user-created orphan files, data/manifest/statistics counts should be zero.
+    Metadata files (old v*.metadata.json) may legitimately be orphaned after multiple inserts."""
     env = make_env(started_cluster_iceberg_with_spark, storage_type, "test_orphan_no_orphans")
     env.populate(2)
     time.sleep(2)
 
     counts = env.remove_orphans(older_than=env.now_ts())
-    assert all(v == 0 for v in counts.values()), f"Expected all zeros, got {counts}"
+    non_metadata = {k: v for k, v in counts.items() if k not in ("deleted_metadata_files_count", "skipped_missing_metadata_count")}
+    assert all(v == 0 for v in non_metadata.values()), f"Expected data/manifest/stat zeros, got {counts}"
     env.assert_data_intact()
 
 

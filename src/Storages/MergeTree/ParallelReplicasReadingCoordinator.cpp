@@ -523,8 +523,8 @@ void DefaultCoordinator::tryToTakeFromDistributionQueue(
             if (!result.ranges.empty())
                 /// We're switching to a different part, so have to save currently accumulated ranges
                 description.push_back(result);
-            result = {.info = distribution_queue.begin()->info, .projection_name = distribution_queue.begin()->projection_name,
-                       .min_marks_per_task = distribution_queue.begin()->min_marks_per_task};
+            const auto & first_element = distribution_queue.begin();
+            result = {.info = first_element->info, .projection_name = first_element->projection_name, .min_marks_per_task = first_element->min_marks_per_task};
         }
 
         /// NOTE: this works because ranges are not considered by the comparator

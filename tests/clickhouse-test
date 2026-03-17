@@ -3648,32 +3648,50 @@ def check_server_liveness(args, max_retries=10) -> bool:
 def get_server_memory_fraction(args) -> Optional[float]:
     """Return the fraction of max_server_memory_usage currently in use (0.0–1.0).
 
-    Returns None when the limit is unconfigured (0) or the query fails.
+    Reads the server process RSS from /proc/<pid>/statm, which is more reliable
+    than querying MemoryTracking from system.metrics — the latter can be far
+    below actual RSS under sanitizer builds where jemalloc is disabled and the
+    memory tracker is not corrected to match RSS.
+
+    The max_server_memory_usage value is fetched once from the server and cached.
+
+    Returns None when the server PID is unavailable, the limit is unconfigured
+    (0), or the query/read fails.
     """
-    try:
-        used = int(
-            clickhouse_execute(
-                args,
-                "SELECT value FROM system.metrics WHERE metric = 'MemoryTracking'",
-                max_http_retries=1,
-                timeout=5,
+    # Cache the hard limit — it does not change at runtime.
+    if not hasattr(get_server_memory_fraction, "_max_memory"):
+        try:
+            get_server_memory_fraction._max_memory = int(
+                clickhouse_execute(
+                    args,
+                    "SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage'",
+                    max_http_retries=1,
+                    timeout=5,
+                )
+                .decode()
+                .strip()
             )
-            .decode()
-            .strip()
-        )
-        maximum = int(
-            clickhouse_execute(
-                args,
-                "SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage'",
-                max_http_retries=1,
-                timeout=5,
-            )
-            .decode()
-            .strip()
-        )
-        if maximum == 0:
+        except Exception:
             return None
-        return used / maximum
+
+    maximum = get_server_memory_fraction._max_memory
+    if maximum == 0:
+        return None
+
+    # Cache the server PID — it does not change during a test run.
+    if not hasattr(get_server_memory_fraction, "_server_pid"):
+        get_server_memory_fraction._server_pid = get_server_pid()
+    pid = get_server_memory_fraction._server_pid
+    if pid is None:
+        return None
+
+    try:
+        # /proc/<pid>/statm fields: size resident shared text lib data dt (in pages)
+        with open(f"/proc/{pid}/statm", "r") as f:
+            parts = f.read().split()
+        rss_pages = int(parts[1])
+        rss_bytes = rss_pages * os.sysconf("SC_PAGE_SIZE")
+        return rss_bytes / maximum
     except Exception:
         return None
 

@@ -21,7 +21,7 @@ FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES = [
         for substr in (
             "_debug, parallel",
             "_binary, parallel",
-            "_asan, distributed plan, parallel",
+            "_asan_ubsan, distributed plan, parallel",
             "_tsan, parallel",
         )
     )

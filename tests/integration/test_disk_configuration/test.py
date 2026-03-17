@@ -82,81 +82,86 @@ def test_merge_tree_disk_setting(start_cluster):
     node1 = cluster.instances["node1"]
     minio = cluster.minio_client
 
+    # Cleanup from any previous failed run
+    node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME} SYNC")
+    node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_2 SYNC")
+
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data")
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data2")
 
-    node1.query(
-        f"""
-        CREATE TABLE {TABLE_NAME} (a Int32)
-        ENGINE = MergeTree()
-        ORDER BY tuple()
-        SETTINGS disk = 's3';
-    """
-    )
+    try:
+        node1.query(
+            f"""
+            CREATE TABLE {TABLE_NAME} (a Int32)
+            ENGINE = MergeTree()
+            ORDER BY tuple()
+            SETTINGS disk = 's3';
+        """
+        )
 
-    count = len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
+        count = len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
 
-    node1.query(f"INSERT INTO {TABLE_NAME} SELECT number FROM numbers(100)")
-    assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
-    assert (
-        len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
-        > count
-    )
+        node1.query(f"INSERT INTO {TABLE_NAME} SELECT number FROM numbers(100)")
+        assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
+        assert (
+            len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
+            > count
+        )
 
-    node1.query(
-        f"""
-        CREATE TABLE {TABLE_NAME}_2 (a Int32)
-        ENGINE = MergeTree()
-        ORDER BY tuple()
-        SETTINGS disk = 's3';
-    """
-    )
+        node1.query(
+            f"""
+            CREATE TABLE {TABLE_NAME}_2 (a Int32)
+            ENGINE = MergeTree()
+            ORDER BY tuple()
+            SETTINGS disk = 's3';
+        """
+        )
 
-    node1.query(f"INSERT INTO {TABLE_NAME}_2 SELECT number FROM numbers(100)")
-    assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}_2")) == 100
+        node1.query(f"INSERT INTO {TABLE_NAME}_2 SELECT number FROM numbers(100)")
+        assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}_2")) == 100
 
-    assert (
-        "__s3"
-        in node1.query(
-            f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}'"
-        ).strip()
-    )
-    assert (
-        "__s3"
-        in node1.query(
-            f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}_2'"
-        ).strip()
-    )
+        assert (
+            "__s3"
+            in node1.query(
+                f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}'"
+            ).strip()
+        )
+        assert (
+            "__s3"
+            in node1.query(
+                f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}_2'"
+            ).strip()
+        )
 
-    node1.query("SYSTEM RELOAD CONFIG")
-    assert not node1.contains_in_log(
-        "An error has occurred while reloading storage policies, storage policies were not applied"
-    )
-    assert (
-        "['s3']"
-        in node1.query(
-            "SELECT disks FROM system.storage_policies WHERE policy_name = '__s3'"
-        ).strip()
-    )
+        node1.query("SYSTEM RELOAD CONFIG")
+        assert not node1.contains_in_log(
+            "An error has occurred while reloading storage policies, storage policies were not applied"
+        )
+        assert (
+            "['s3']"
+            in node1.query(
+                "SELECT disks FROM system.storage_policies WHERE policy_name = '__s3'"
+            ).strip()
+        )
 
-    node1.restart_clickhouse()
+        node1.restart_clickhouse()
 
-    assert (
-        "_s3"
-        in node1.query(
-            f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}'"
-        ).strip()
-    )
-    assert (
-        "['s3']"
-        in node1.query(
-            "SELECT disks FROM system.storage_policies WHERE policy_name = '__s3'"
-        ).strip()
-    )
-    assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
-
-    node1.query(f"DROP TABLE {TABLE_NAME} SYNC")
-    node1.query(f"DROP TABLE {TABLE_NAME}_2 SYNC")
+        assert (
+            "_s3"
+            in node1.query(
+                f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}'"
+            ).strip()
+        )
+        assert (
+            "['s3']"
+            in node1.query(
+                "SELECT disks FROM system.storage_policies WHERE policy_name = '__s3'"
+            ).strip()
+        )
+        assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
+    finally:
+        node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME} SYNC")
+        node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_2 SYNC")
 
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data")
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data2")
@@ -169,6 +174,13 @@ def test_merge_tree_custom_disk_setting(start_cluster):
     minio = cluster.minio_client
     zk_client = start_cluster.get_kazoo_client("zoo1")
 
+    # Cleanup from any previous failed run
+    node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME} SYNC")
+    node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_2 SYNC")
+    node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_3 SYNC")
+    node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_4 SYNC")
+    node2.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_4 SYNC")
+
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data")
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data2")
 
@@ -178,169 +190,171 @@ def test_merge_tree_custom_disk_setting(start_cluster):
         zk_client.create("/minio/access_key_id")
 
     zk_client.set("/minio/access_key_id", b"minio")
-    node1.query(
-        f"""
-        CREATE TABLE {TABLE_NAME} (a Int32)
-        ENGINE = MergeTree()
-        ORDER BY tuple()
-        SETTINGS
-            disk = disk(
-                type=s3,
-                include = 'include_endpoint',
-                access_key_id = 'from_zk /minio/access_key_id',
-                secret_access_key='from_env MINIO_SECRET');
-    """
-    )
 
-    # Check that data was indeed created on s3 with the needed path in s3
-
-    count = len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
-
-    node1.query(f"INSERT INTO {TABLE_NAME} SELECT number FROM numbers(100)")
-    assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
-    assert (
-        len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
-        > count
-    )
-
-    # Check that data for the second table was created on the same disk on the same path
-
-    node1.query(
-        f"""
-        CREATE TABLE {TABLE_NAME}_2 (a Int32)
-        ENGINE = MergeTree()
-        ORDER BY tuple()
-        SETTINGS
-            disk = disk(
-                type=s3,
-                endpoint='http://minio1:9001/root/data/',
-                access_key_id='minio',
-                secret_access_key='{minio_secret_key}');
-    """
-    )
-
-    count = len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
-    node1.query(f"INSERT INTO {TABLE_NAME}_2 SELECT number FROM numbers(100)")
-    assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}_2")) == 100
-    assert (
-        len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
-        > count
-    )
-
-    # Check that data for a disk with a different path was created on the different path
-
-    node1.query(
-        f"""
-        CREATE TABLE {TABLE_NAME}_3 (a Int32)
-        ENGINE = MergeTree()
-        ORDER BY tuple()
-        SETTINGS
-            disk = disk(
-                type=s3,
-                endpoint='http://minio1:9001/root/data2/',
-                access_key_id='minio',
-                secret_access_key='{minio_secret_key}');
-    """
-    )
-
-    list1 = list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True))
-    count1 = len(list1)
-
-    node1.query(f"INSERT INTO {TABLE_NAME}_3 SELECT number FROM numbers(100)")
-    assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}_3")) == 100
-
-    list2 = list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True))
-    count2 = len(list2)
-
-    if count1 != count2:
-        logging.info(f"list1: {list1}")
-        logging.info(f"list2: {list2}")
-
-    assert count1 == count2
-    assert (
-        len(list(minio.list_objects(cluster.minio_bucket, "data2/", recursive=True)))
-        > 0
-    )
-
-    # check DETACH ATTACH
-
-    node1.query(f"DETACH TABLE {TABLE_NAME}")
-    node1.query(f"ATTACH TABLE {TABLE_NAME}")
-
-    node1.query(f"INSERT INTO {TABLE_NAME} SELECT number FROM numbers(100)")
-    assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 200
-
-    # check after server restart the same disk path is used with the same metadata
-
-    node1.restart_clickhouse()
-
-    node1.query(f"INSERT INTO {TABLE_NAME} SELECT number FROM numbers(100)")
-    assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 300
-
-    # check reload config does not wipe custom disk
-
-    node1.query("SYSTEM RELOAD CONFIG")
-    assert not node1.contains_in_log(
-        "disappeared from configuration, this change will be applied after restart of ClickHouse"
-    )
-    assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 300
-
-    # check replicated merge tree on cluster
-
-    replica = "{replica}"
-    node1.query(
-        f"""
-        CREATE TABLE {TABLE_NAME}_4 ON CLUSTER 'cluster' (a Int32)
-        ENGINE=ReplicatedMergeTree('/clickhouse/tables/tbl/', '{replica}')
-        ORDER BY tuple()
-        SETTINGS
-            disk = disk(
-                name='test_name',
-                type=s3,
-                endpoint='http://minio1:9001/root/data2/',
-                access_key_id='minio',
-                secret_access_key='{minio_secret_key}');
-    """
-    )
-
-    expected = """
-        SETTINGS disk = disk(name = \\'test_name\\', type = s3, endpoint = \\'[HIDDEN]\\', access_key_id = \\'[HIDDEN]\\', secret_access_key = \\'[HIDDEN]\\'), index_granularity = 8192
-    """
-
-    assert expected.strip() in node1.query(f"SHOW CREATE TABLE {TABLE_NAME}_4").strip()
-    assert expected.strip() in node2.query(f"SHOW CREATE TABLE {TABLE_NAME}_4").strip()
-
-    node1.restart_clickhouse()
-    node2.restart_clickhouse()
-
-    assert expected.strip() in node1.query(f"SHOW CREATE TABLE {TABLE_NAME}_4").strip()
-    assert expected.strip() in node2.query(f"SHOW CREATE TABLE {TABLE_NAME}_4").strip()
-
-    # check that disk names are the same for all replicas
-
-    policy1 = node1.query(
-        f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}_4'"
-    ).strip()
-
-    policy2 = node2.query(
-        f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}_4'"
-    ).strip()
-
-    assert policy1 == policy2
-    assert (
+    try:
         node1.query(
-            f"SELECT disks FROM system.storage_policies WHERE policy_name = '{policy1}'"
-        ).strip()
-        == node2.query(
-            f"SELECT disks FROM system.storage_policies WHERE policy_name = '{policy2}'"
-        ).strip()
-    )
+            f"""
+            CREATE TABLE {TABLE_NAME} (a Int32)
+            ENGINE = MergeTree()
+            ORDER BY tuple()
+            SETTINGS
+                disk = disk(
+                    type=s3,
+                    include = 'include_endpoint',
+                    access_key_id = 'from_zk /minio/access_key_id',
+                    secret_access_key='from_env MINIO_SECRET');
+        """
+        )
 
-    node1.query(f"DROP TABLE {TABLE_NAME} SYNC")
-    node1.query(f"DROP TABLE {TABLE_NAME}_2 SYNC")
-    node1.query(f"DROP TABLE {TABLE_NAME}_3 SYNC")
-    node1.query(f"DROP TABLE {TABLE_NAME}_4 SYNC")
-    node2.query(f"DROP TABLE {TABLE_NAME}_4 SYNC")
+        # Check that data was indeed created on s3 with the needed path in s3
+
+        count = len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
+
+        node1.query(f"INSERT INTO {TABLE_NAME} SELECT number FROM numbers(100)")
+        assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
+        assert (
+            len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
+            > count
+        )
+
+        # Check that data for the second table was created on the same disk on the same path
+
+        node1.query(
+            f"""
+            CREATE TABLE {TABLE_NAME}_2 (a Int32)
+            ENGINE = MergeTree()
+            ORDER BY tuple()
+            SETTINGS
+                disk = disk(
+                    type=s3,
+                    endpoint='http://minio1:9001/root/data/',
+                    access_key_id='minio',
+                    secret_access_key='{minio_secret_key}');
+        """
+        )
+
+        count = len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
+        node1.query(f"INSERT INTO {TABLE_NAME}_2 SELECT number FROM numbers(100)")
+        assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}_2")) == 100
+        assert (
+            len(list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True)))
+            > count
+        )
+
+        # Check that data for a disk with a different path was created on the different path
+
+        node1.query(
+            f"""
+            CREATE TABLE {TABLE_NAME}_3 (a Int32)
+            ENGINE = MergeTree()
+            ORDER BY tuple()
+            SETTINGS
+                disk = disk(
+                    type=s3,
+                    endpoint='http://minio1:9001/root/data2/',
+                    access_key_id='minio',
+                    secret_access_key='{minio_secret_key}');
+        """
+        )
+
+        list1 = list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True))
+        count1 = len(list1)
+
+        node1.query(f"INSERT INTO {TABLE_NAME}_3 SELECT number FROM numbers(100)")
+        assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}_3")) == 100
+
+        list2 = list(minio.list_objects(cluster.minio_bucket, "data/", recursive=True))
+        count2 = len(list2)
+
+        if count1 != count2:
+            logging.info(f"list1: {list1}")
+            logging.info(f"list2: {list2}")
+
+        assert count1 == count2
+        assert (
+            len(list(minio.list_objects(cluster.minio_bucket, "data2/", recursive=True)))
+            > 0
+        )
+
+        # check DETACH ATTACH
+
+        node1.query(f"DETACH TABLE {TABLE_NAME}")
+        node1.query(f"ATTACH TABLE {TABLE_NAME}")
+
+        node1.query(f"INSERT INTO {TABLE_NAME} SELECT number FROM numbers(100)")
+        assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 200
+
+        # check after server restart the same disk path is used with the same metadata
+
+        node1.restart_clickhouse()
+
+        node1.query(f"INSERT INTO {TABLE_NAME} SELECT number FROM numbers(100)")
+        assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 300
+
+        # check reload config does not wipe custom disk
+
+        node1.query("SYSTEM RELOAD CONFIG")
+        assert not node1.contains_in_log(
+            "disappeared from configuration, this change will be applied after restart of ClickHouse"
+        )
+        assert int(node1.query(f"SELECT count() FROM {TABLE_NAME}")) == 300
+
+        # check replicated merge tree on cluster
+
+        replica = "{replica}"
+        node1.query(
+            f"""
+            CREATE TABLE {TABLE_NAME}_4 ON CLUSTER 'cluster' (a Int32)
+            ENGINE=ReplicatedMergeTree('/clickhouse/tables/tbl/', '{replica}')
+            ORDER BY tuple()
+            SETTINGS
+                disk = disk(
+                    name='test_name',
+                    type=s3,
+                    endpoint='http://minio1:9001/root/data2/',
+                    access_key_id='minio',
+                    secret_access_key='{minio_secret_key}');
+        """
+        )
+
+        expected = """
+            SETTINGS disk = disk(name = \\'test_name\\', type = s3, endpoint = \\'[HIDDEN]\\', access_key_id = \\'[HIDDEN]\\', secret_access_key = \\'[HIDDEN]\\'), index_granularity = 8192
+        """
+
+        assert expected.strip() in node1.query(f"SHOW CREATE TABLE {TABLE_NAME}_4").strip()
+        assert expected.strip() in node2.query(f"SHOW CREATE TABLE {TABLE_NAME}_4").strip()
+
+        node1.restart_clickhouse()
+        node2.restart_clickhouse()
+
+        assert expected.strip() in node1.query(f"SHOW CREATE TABLE {TABLE_NAME}_4").strip()
+        assert expected.strip() in node2.query(f"SHOW CREATE TABLE {TABLE_NAME}_4").strip()
+
+        # check that disk names are the same for all replicas
+
+        policy1 = node1.query(
+            f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}_4'"
+        ).strip()
+
+        policy2 = node2.query(
+            f"SELECT storage_policy FROM system.tables WHERE name = '{TABLE_NAME}_4'"
+        ).strip()
+
+        assert policy1 == policy2
+        assert (
+            node1.query(
+                f"SELECT disks FROM system.storage_policies WHERE policy_name = '{policy1}'"
+            ).strip()
+            == node2.query(
+                f"SELECT disks FROM system.storage_policies WHERE policy_name = '{policy2}'"
+            ).strip()
+        )
+    finally:
+        node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME} SYNC")
+        node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_2 SYNC")
+        node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_3 SYNC")
+        node1.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_4 SYNC")
+        node2.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_4 SYNC")
 
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data")
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data2")
@@ -350,6 +364,9 @@ def test_merge_tree_nested_custom_disk_setting(start_cluster):
     TABLE_NAME = "test_merge_tree_nested_custom_disk_setting"
     node = cluster.instances["node1"]
     minio = cluster.minio_client
+
+    # Cleanup from any previous failed run
+    node.query(f"DROP TABLE IF EXISTS {TABLE_NAME} SYNC")
 
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data")
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data2")
@@ -402,6 +419,9 @@ def test_merge_tree_setting_override(start_cluster):
     TABLE_NAME = "test_merge_tree_setting_override"
     node = cluster.instances["node3"]
     minio = cluster.minio_client
+
+    # Cleanup from any previous failed run
+    node.query(f"DROP TABLE IF EXISTS {TABLE_NAME} SYNC")
 
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data")
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data2")
@@ -562,6 +582,9 @@ def test_merge_tree_custom_encrypted_disk_include(start_cluster, use_node):
     node = cluster.instances[use_node]
     minio = cluster.minio_client
 
+    # Cleanup from any previous failed run
+    node.query(f"DROP TABLE IF EXISTS {TABLE_NAME}_encrypted SYNC")
+
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data")
     wait_blobs_count_synchronization(minio, 0, bucket="root", path="data2")
 
@@ -619,6 +642,15 @@ def test_dynamic_disk_security_settings(start_cluster):
       - privileged_user: allow_dynamic_disk_access profile (all enabled)
     """
     node = cluster.instances["node5"]
+    minio = cluster.minio_client
+
+    # Cleanup from any previous failed run
+    node.query("DROP TABLE IF EXISTS test_security_from_env_ok SYNC")
+    node.query("DROP TABLE IF EXISTS test_security_from_zk_ok SYNC")
+    node.query("DROP TABLE IF EXISTS test_security_include_ok SYNC")
+    zk_client = cluster.get_kazoo_client("zoo1")
+    if zk_client.exists("/test_security_minio_secret"):
+        zk_client.delete("/test_security_minio_secret")
 
     node.query(
         "CREATE SETTINGS PROFILE IF NOT EXISTS allow_dynamic_disk_access "
@@ -754,7 +786,6 @@ def test_dynamic_disk_security_settings(start_cluster):
         assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_env" in error, error
 
         # privileged_user (allow_dynamic_disk_access profile): from_env is allowed - CREATE TABLE succeeds
-        zk_client = cluster.get_kazoo_client("zoo1")
         zk_client.create(
             "/test_security_minio_secret",
             minio_secret_key.encode(),
@@ -804,11 +835,16 @@ def test_dynamic_disk_security_settings(start_cluster):
             user="privileged_user",
         )
     finally:
-        node.query("DROP TABLE IF EXISTS test_security_from_env_ok")
-        node.query("DROP TABLE IF EXISTS test_security_from_zk_ok")
-        node.query("DROP TABLE IF EXISTS test_security_include_ok")
+        node.query("DROP TABLE IF EXISTS test_security_from_env_ok SYNC")
+        node.query("DROP TABLE IF EXISTS test_security_from_zk_ok SYNC")
+        node.query("DROP TABLE IF EXISTS test_security_include_ok SYNC")
         node.query("DROP USER IF EXISTS restricted_user")
         node.query("DROP USER IF EXISTS locked_user")
         node.query("DROP USER IF EXISTS privileged_user")
         node.query("DROP SETTINGS PROFILE IF EXISTS allow_dynamic_disk_access")
         node.query("DROP SETTINGS PROFILE IF EXISTS deny_dynamic_disk_readonly")
+        if zk_client.exists("/test_security_minio_secret"):
+            zk_client.delete("/test_security_minio_secret")
+
+    wait_blobs_count_synchronization(minio, 0, bucket="root", path="data")
+    wait_blobs_count_synchronization(minio, 0, bucket="root", path="data2")

@@ -205,6 +205,7 @@ SyncGuardPtr IDisk::getDirectorySyncGuard(const String & /* path */) const
 void IDisk::startup(bool skip_access_check)
 {
     auto component_guard = Coordination::setCurrentComponent("IDisk::startup");
+    startupImpl();
     if (!skip_access_check)
     {
         if (isReadOnly())
@@ -216,7 +217,6 @@ void IDisk::startup(bool skip_access_check)
         else
             checkAccess();
     }
-    startupImpl();
 }
 
 void IDisk::checkAccess()

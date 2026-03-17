@@ -7,8 +7,17 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$CUR_DIR"/../shell_config.sh
 
 # Test that all interval kinds can be exported to Arrow/ArrowStream and values are preserved
+tmp_dir="${CUR_DIR}/tmp/04036_arrow_interval_types"
+mkdir -p "${tmp_dir}"
+cleanup()
+{
+    rm -f "${tmp_dir}/arrow_"*.bin
+}
+trap cleanup EXIT
+
 for fmt in Arrow ArrowStream; do
     echo "=== $fmt ==="
+    out_file="${tmp_dir}/arrow_${fmt}.bin"
     ${CLICKHOUSE_LOCAL} -q "
         SELECT
             3::IntervalNanosecond  AS ns,
@@ -23,5 +32,25 @@ for fmt in Arrow ArrowStream; do
             12::IntervalQuarter    AS q,
             13::IntervalYear       AS y
         FORMAT $fmt
-    " | ${CLICKHOUSE_LOCAL} -q "SELECT * FROM file('-', '$fmt')"
+    " > "${out_file}"
+
+    echo "-- inferred types --"
+    ${CLICKHOUSE_LOCAL} -q "
+        SELECT
+            toTypeName(ns) AS ns,
+            toTypeName(us) AS us,
+            toTypeName(ms) AS ms,
+            toTypeName(s)  AS s,
+            toTypeName(m)  AS m,
+            toTypeName(h)  AS h,
+            toTypeName(d)  AS d,
+            toTypeName(w)  AS w,
+            toTypeName(mo) AS mo,
+            toTypeName(q)  AS q,
+            toTypeName(y)  AS y
+        FROM file('${out_file}', '$fmt')
+    "
+
+    echo "-- values --"
+    ${CLICKHOUSE_LOCAL} -q "SELECT * FROM file('${out_file}', '$fmt')"
 done

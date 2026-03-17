@@ -21,7 +21,7 @@ INSERT INTO t_04045_rvrow SELECT number + 8192 * 3, number + 8192 * 3 FROM numbe
 
 -- DESC with preliminary merge (two_level_merge_threshold = 0)
 -- Expecting 2 virtual rows + one block (8192) for result + one extra block (8192)
--- for next consumption in merge transform = 16386 rows read.
+-- for next consumption in merge transform = 16384 rows read.
 SELECT x FROM t_04045_rvrow
 ORDER BY x DESC
 LIMIT 4
@@ -40,7 +40,7 @@ ORDER BY query_start_time DESC
 LIMIT 1;
 
 -- DESC without preliminary merge (threshold above part count)
--- Expecting 2 virtual rows + one block (8192) for result + one extra block (8192) = 16386.
+-- Expecting 2 virtual rows + one block (8192) for result + one extra block (8192) = 16384.
 SELECT x FROM t_04045_rvrow
 ORDER BY x DESC
 LIMIT 4

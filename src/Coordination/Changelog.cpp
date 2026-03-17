@@ -1438,11 +1438,7 @@ uint64_t LogEntryStorage::termAt(uint64_t index) const
     if (log_term_infos.empty())
         return 0;
 
-    auto it = std::upper_bound(
-        log_term_infos.begin(),
-        log_term_infos.end(),
-        index,
-        [](uint64_t idx, const auto & info) { return idx < info.first_index; });
+    auto it = std::ranges::upper_bound(log_term_infos, index, {}, &LogTermInfo::first_index);
 
     if (it == log_term_infos.begin())
         return 0;

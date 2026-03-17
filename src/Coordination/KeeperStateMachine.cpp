@@ -1224,6 +1224,7 @@ int IKeeperStateMachine::read_logical_snp_obj(
     if (!ctx)
     {
         LOG_WARNING(log, "Snapshot transfer context is null for obj_id {}", obj_id);
+        free_user_snp_ctx(user_snp_ctx);
         chassert(false); /// This should not happen, catch in CI.
         return -1;
     }
@@ -1232,6 +1233,7 @@ int IKeeperStateMachine::read_logical_snp_obj(
     if (offset >= ctx->file_size)
     {
         LOG_WARNING(log, "Snapshot obj_id {} is out of range (file_size={})", obj_id, ctx->file_size);
+        free_user_snp_ctx(user_snp_ctx);
         chassert(false); /// This should not happen, catch in CI.
         return -1;
     }
@@ -1250,6 +1252,7 @@ int IKeeperStateMachine::read_logical_snp_obj(
     catch (...)
     {
         tryLogCurrentException(log);
+        free_user_snp_ctx(user_snp_ctx);
         return -1;
     }
 

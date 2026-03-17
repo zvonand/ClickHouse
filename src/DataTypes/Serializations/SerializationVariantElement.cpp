@@ -21,6 +21,7 @@ UInt128 SerializationVariantElement::getHash(const SerializationPtr & nested_, c
     SipHash hash;
     hash.update("VariantElement");
     hash.update(nested_->getHash());
+    hash.update(variant_element_name_.size());
     hash.update(variant_element_name_);
     hash.update(variant_discriminator_);
     return hash.get128();

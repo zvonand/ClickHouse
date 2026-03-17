@@ -30,7 +30,10 @@ UInt128 SerializationAggregateFunction::getHash(const AggregateFunctionPtr & fun
 {
     SipHash hash;
     hash.update("AggregateFunction");
-    hash.update(function_->getStateType()->getName());
+    auto state_type_name = function_->getStateType()->getName();
+    hash.update(state_type_name.size());
+    hash.update(state_type_name);
+    hash.update(type_name_.size());
     hash.update(type_name_);
     hash.update(version_);
     return hash.get128();

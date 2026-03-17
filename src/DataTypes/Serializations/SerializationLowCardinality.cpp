@@ -45,7 +45,9 @@ UInt128 SerializationLowCardinality::getHash(const DataTypePtr & dictionary_type
 {
     SipHash hash;
     hash.update("LowCardinality");
-    hash.update(dictionary_type_->getName());
+    auto dict_type_name = dictionary_type_->getName();
+    hash.update(dict_type_name.size());
+    hash.update(dict_type_name);
     hash.update(removeNullable(dictionary_type_)->getDefaultSerialization()->getHash());
     return hash.get128();
 }

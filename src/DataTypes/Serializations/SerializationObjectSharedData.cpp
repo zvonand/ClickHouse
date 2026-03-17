@@ -37,7 +37,9 @@ UInt128 SerializationObjectSharedData::getHash(SerializationVersion serializatio
     SipHash hash;
     hash.update("ObjectSharedData");
     hash.update(static_cast<int>(serialization_version_.value));
-    hash.update(dynamic_type_->getName());
+    auto dynamic_type_name = dynamic_type_->getName();
+    hash.update(dynamic_type_name.size());
+    hash.update(dynamic_type_name);
     hash.update(dynamic_serialization_->getHash());
     hash.update(buckets_);
     return hash.get128();

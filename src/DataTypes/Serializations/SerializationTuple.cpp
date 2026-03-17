@@ -42,7 +42,10 @@ UInt128 SerializationTuple::getHash(const ElementSerializations & elems_, bool h
     for (const auto & elem : elems_)
     {
         if (has_explicit_names_)
+        {
+            hash.update(elem->getElementName().size());
             hash.update(elem->getElementName());
+        }
         hash.update(elem->getNested()->getHash());
     }
     return hash.get128();

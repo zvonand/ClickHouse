@@ -20,6 +20,7 @@ UInt128 SerializationObjectTypedPath::getHash(const SerializationPtr & nested_, 
     SipHash hash;
     hash.update("ObjectTypedPath");
     hash.update(nested_->getHash());
+    hash.update(path_.size());
     hash.update(path_);
     return hash.get128();
 }

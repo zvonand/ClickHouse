@@ -42,6 +42,7 @@ UInt128 SerializationVariantElementNullMap::getHash(const String & variant_eleme
 {
     SipHash hash;
     hash.update("VariantElementNullMap");
+    hash.update(variant_element_name_.size());
     hash.update(variant_element_name_);
     hash.update(variant_discriminator_);
     return hash.get128();

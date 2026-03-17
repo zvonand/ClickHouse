@@ -38,6 +38,7 @@ UInt128 SerializationVariant::getHash(const VariantSerializations & variant_seri
 {
     SipHash hash;
     hash.update("Variant");
+    hash.update(variant_name_.size());
     hash.update(variant_name_);
     for (const auto & serialization : variant_serializations_)
         hash.update(serialization->getHash());

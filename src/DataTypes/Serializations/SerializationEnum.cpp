@@ -229,6 +229,7 @@ UInt128 SerializationEnum<Type>::getHash(const Values & values)
     hash.update(TypeName<Type>);
     for (const auto & [name, value] : values)
     {
+        hash.update(name.size());
         hash.update(name);
         hash.update(value);
     }

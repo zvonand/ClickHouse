@@ -27,6 +27,7 @@ UInt128 SerializationNamed::getHash(const SerializationPtr & nested_, const Stri
     SipHash hash;
     hash.update("Named");
     hash.update(nested_->getHash());
+    hash.update(name_.size());
     hash.update(name_);
     hash.update(static_cast<int>(substream_type_));
     return hash.get128();

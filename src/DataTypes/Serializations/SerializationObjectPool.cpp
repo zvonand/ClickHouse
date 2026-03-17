@@ -9,8 +9,8 @@
 
 namespace CurrentMetrics
 {
-    extern const Metric SerializationCacheBytes;
-    extern const Metric SerializationCacheBytesUncorrected;
+    extern const Metric SerializationCacheBytesInMemoryAllocated;
+    extern const Metric SerializationCacheBytesInMemory;
     extern const Metric SerializationCacheCount;
 }
 
@@ -61,10 +61,10 @@ SerializationPtr getOrCreate(UInt128 key, SerializationCreator creator)
             return res;
 
     CurrentMetrics::add(CurrentMetrics::SerializationCacheCount);
-    CurrentMetrics::add(CurrentMetrics::SerializationCacheBytesUncorrected, allocated_bytes);
-    CurrentMetrics::set(CurrentMetrics::SerializationCacheBytes,
+    CurrentMetrics::add(CurrentMetrics::SerializationCacheBytesInMemory, allocated_bytes);
+    CurrentMetrics::set(CurrentMetrics::SerializationCacheBytesInMemoryAllocated,
         sizeof(typename Pool::SerializationMap::value_type) * pool.map.capacity()
-        + CurrentMetrics::get(CurrentMetrics::SerializationCacheBytesUncorrected));
+        + CurrentMetrics::get(CurrentMetrics::SerializationCacheBytesInMemory));
 
     SerializationPtr ret
     (
@@ -79,10 +79,10 @@ SerializationPtr getOrCreate(UInt128 key, SerializationCreator creator)
                     p.map.erase(map_it);
 
                 CurrentMetrics::sub(CurrentMetrics::SerializationCacheCount);
-                CurrentMetrics::sub(CurrentMetrics::SerializationCacheBytesUncorrected, b);
-                CurrentMetrics::set(CurrentMetrics::SerializationCacheBytes,
+                CurrentMetrics::sub(CurrentMetrics::SerializationCacheBytesInMemory, b);
+                CurrentMetrics::set(CurrentMetrics::SerializationCacheBytesInMemoryAllocated,
                     sizeof(typename Pool::SerializationMap::value_type) * p.map.capacity()
-                    + CurrentMetrics::get(CurrentMetrics::SerializationCacheBytesUncorrected));
+                    + CurrentMetrics::get(CurrentMetrics::SerializationCacheBytesInMemory));
             }
             delete ptr;
         }

@@ -137,6 +137,7 @@ namespace Setting
     extern const SettingsBool throw_if_no_data_to_insert;
     extern const SettingsBool implicit_select;
     extern const SettingsBool apply_settings_from_server;
+    extern const SettingsBool allow_experimental_polyglot_dialect;
     extern const SettingsString polyglot_dialect;
     extern const SettingsString promql_database;
     extern const SettingsString promql_table;

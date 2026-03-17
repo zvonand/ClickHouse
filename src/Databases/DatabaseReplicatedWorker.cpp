@@ -149,19 +149,10 @@ void DatabaseReplicatedDDLWorker::shutdown()
     /// and the ephemeral node persists until the shared ZK session expires.
     /// This can cause SYSTEM DROP DATABASE REPLICA to spuriously fail with "is active".
     auto component_guard = Coordination::setCurrentComponent("DatabaseReplicatedDDLWorker::shutdown");
-    try
+    if (active_node_holder_zookeeper && !active_node_holder_zookeeper->expired())
     {
-        if (active_node_holder_zookeeper && !active_node_holder_zookeeper->expired())
-        {
-            String active_path = fs::path(database->replica_path) / "active";
-            active_node_holder_zookeeper->tryRemove(active_path);
-        }
-    }
-    catch (...)
-    {
-        /// Best-effort: don't let a transient ZK error prevent database detach.
-        /// The ephemeral node will expire with the session anyway.
-        tryLogCurrentException(log, "Failed to remove active node on shutdown");
+        String active_path = fs::path(database->replica_path) / "active";
+        active_node_holder_zookeeper->tryRemove(active_path);
     }
 
     if (active_node_holder)

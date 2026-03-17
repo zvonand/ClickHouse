@@ -88,15 +88,18 @@ class CoverageExporter:
                 # Raw symbols are stored without SQL-side normalization: the text
                 # index (splitByNonAlpha + hasAllTokens) at query time is robust to
                 # extra return-type and template-arg tokens in the stored symbol.
+                # GROUP BY instead of DISTINCT: ClickHouse executes GROUP BY as a
+                # streaming aggregation, avoiding full materialisation in memory.
                 query = (
                     f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted', '{self.dest.user}', '{self.dest.pwd}') "
-                    "SELECT DISTINCT sym AS symbol, "
+                    "SELECT sym AS symbol, "
                     f"'{self.check_start_time}' AS check_start_time, "
                     f"'{self.job_name}' AS check_name, "
                     "test_name "
                     f"FROM system.{table} "
                     "ARRAY JOIN symbol AS sym "
-                    "WHERE notEmpty(sym)"
+                    "WHERE notEmpty(sym) "
+                    "GROUP BY sym, test_name"
                 )
                 cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
                 rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)

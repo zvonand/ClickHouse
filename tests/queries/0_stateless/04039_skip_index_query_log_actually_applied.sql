@@ -39,7 +39,7 @@ INSERT INTO t_skip_applied SELECT 100 + number, number FROM numbers(10);
 -- use_skip_indexes_on_data_read=0 forces mark-selection path so indices actually drop granules here.
 SELECT count() FROM t_skip_applied WHERE a = 5 AND b = 5 SETTINGS log_queries = 1, use_skip_indexes_on_data_read = 0;
 
-SYSTEM FLUSH LOGS;
+SYSTEM FLUSH LOGS query_log;
 
 SELECT
     has(skip_indices, concat(currentDatabase(), '.t_skip_applied.idx_a')) AS idx_a_logged,
@@ -56,7 +56,7 @@ LIMIT 1;
 -- (50 not in [0,9] and 50 not in [100,109]), so idx_b never gets to run and is NOT logged.
 SELECT count() FROM t_skip_applied WHERE a = 50 AND b = 50 SETTINGS log_queries = 1, use_skip_indexes_on_data_read = 0;
 
-SYSTEM FLUSH LOGS;
+SYSTEM FLUSH LOGS query_log;
 
 SELECT
     has(skip_indices, concat(currentDatabase(), '.t_skip_applied.idx_a')) AS idx_a_logged,

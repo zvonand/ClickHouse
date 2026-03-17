@@ -131,7 +131,7 @@ template <> struct FunctionUnaryArithmeticMonotonicity<NameNegate>
         {
             switch (f.getType())
             {
-                case Field::Types::UInt64: return f.safeGet<UInt64>() > 1ul << 63;
+                case Field::Types::UInt64: return f.safeGet<UInt64>() > UInt64(1) << 63;
                 case Field::Types::UInt128: return f.safeGet<UInt128>() > UInt128(1) << 127;
                 case Field::Types::UInt256: return f.safeGet<UInt256>() > UInt256(1) << 255;
                 default: break;

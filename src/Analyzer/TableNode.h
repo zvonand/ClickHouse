@@ -41,13 +41,6 @@ public:
     /// Construct table node with storage, context
     explicit TableNode(StoragePtr storage_, const ContextPtr & context);
 
-    /// Construct table node for MATERIALIZED CTE
-    explicit TableNode(
-        const TemporaryTableHolder & temporary_table_holder_,
-        const std::string & cte_name_,
-        QueryTreeNodePtr materialized_cte_subquery_,
-        const ContextPtr & context_);
-
     /// Construct table node for deferred MATERIALIZED CTE (subquery not yet resolved).
     /// Creates StorageDummy as a placeholder; call finalizeMaterializedCTE after resolving the subquery.
     explicit TableNode(

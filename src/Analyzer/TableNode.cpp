@@ -62,20 +62,6 @@ TableNode::TableNode(StoragePtr storage_, const ContextPtr & context)
 }
 
 TableNode::TableNode(
-    const TemporaryTableHolder & temporary_table_holder_,
-    const std::string & cte_name_,
-    QueryTreeNodePtr materialized_cte_subquery_,
-    const ContextPtr & context_
-)
-    : TableNode(temporary_table_holder_.getTable(), context_)
-{
-    materialized_cte = std::make_shared<MaterializedCTE>(storage, cte_name_);
-    typeid_cast<StorageMemory *>(storage.get())->setMaterializedCTE(materialized_cte);
-
-    children[materialized_cte_subquery_index] = std::move(materialized_cte_subquery_);
-}
-
-TableNode::TableNode(
     const std::string & cte_name_,
     QueryTreeNodePtr materialized_cte_subquery_,
     const ContextPtr & context_)
@@ -85,7 +71,7 @@ TableNode::TableNode(
             ColumnsDescription{NamesAndTypesList{{"_dummy", std::make_shared<DataTypeUInt8>()}}}),
         context_)
 {
-    materialized_cte = std::make_shared<MaterializedCTE>(nullptr, cte_name_);
+    materialized_cte = std::make_shared<MaterializedCTE>(cte_name_);
     children[materialized_cte_subquery_index] = std::move(materialized_cte_subquery_);
 }
 

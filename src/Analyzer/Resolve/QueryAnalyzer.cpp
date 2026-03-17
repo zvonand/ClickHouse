@@ -2907,7 +2907,7 @@ ProjectionNames QueryAnalyzer::resolveExpressionNode(
                         }
 
                         /// Create temp table only if no other clone has done it yet.
-                        if (!materialized_cte_ptr->storage)
+                        if (!materialized_cte_ptr->isStorageInitialized())
                         {
                             const auto & proj_cols = mat_subquery->as<QueryNode>()
                                 ? mat_subquery->as<QueryNode>()->getProjectionColumns()
@@ -4797,7 +4797,7 @@ void QueryAnalyzer::resolveQueryJoinTreeNode(QueryTreeNodePtr & join_tree_node, 
 
                 /// Each clone gets a deep-cloned subquery (IQueryTreeNode::clone deep-clones children).
                 /// Use materialized_cte->storage (shared across clones) to distinguish first vs subsequent.
-                if (!materialized_cte_ptr->storage)
+                if (!materialized_cte_ptr->isStorageInitialized())
                 {
                     auto & subquery = table_node->getMaterializedCTESubquery();
 

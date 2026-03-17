@@ -19,7 +19,7 @@ class QueryPlan;
 /// and the main plan), the table is written exactly once.
 struct MaterializedCTE
 {
-    explicit MaterializedCTE(const StoragePtr & storage_, const std::string & cte_name_);
+    explicit MaterializedCTE(const std::string & cte_name_);
 
     MaterializedCTE(const MaterializedCTE &) = delete;
     MaterializedCTE & operator=(const MaterializedCTE &) = delete;
@@ -37,11 +37,11 @@ struct MaterializedCTE
     }
 
     /// Temporary table storage.
-    StoragePtr storage;
+    StoragePtr storage = {};
     /// Name of the CTE.
     const std::string cte_name;
     /// Query Plan for the CTE
-    std::unique_ptr<QueryPlan> plan;
+    std::unique_ptr<QueryPlan> plan = {};
     /// If true, query plan is built for the CTE (i.e. the table is being populated, but is not ready for reads yet).
     std::atomic_bool is_materialization_planned{false};
     /// If true, the CTE has been materialized (i.e. the table has been populated and is ready for reads).

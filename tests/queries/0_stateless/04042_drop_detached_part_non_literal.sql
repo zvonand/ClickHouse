@@ -1,4 +1,3 @@
--- Tags: no-fasttest
 -- PR #99489 added a test for `ALTER TABLE DROP PART` with a non-String typed
 -- query parameter. This test covers the same fix in `dropDetached`, which uses
 -- `getPartNameFromAST` at `MergeTreeData.cpp` line 7706. A non-String typed

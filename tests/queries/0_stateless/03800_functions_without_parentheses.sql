@@ -95,8 +95,10 @@ SELECT 1 AS x ORDER BY NOW;
 -- Niladic function in HAVING
 SELECT 1 AS x HAVING NOW > '2000-01-01';
 
--- Chained alias: niladic feeds into another expression alias
-WITH NOW AS ts, toDate(ts) AS d SELECT d = today();
+-- Niladic function directly inside a function alias body: most targeted test for the PR #98941 fix.
+-- Before the fix, allow_niladic_functions was inadvertently false when resolving the FUNCTION-type
+-- alias node at QueryAnalyzer.cpp:1084, so TODAY inside toDate(TODAY) would fail to resolve.
+WITH toDate(TODAY) AS d SELECT d = today();
 
 -- Niladic in CASE expression
 SELECT CASE WHEN DATABASE = currentDatabase() THEN 'ok' ELSE 'fail' END;

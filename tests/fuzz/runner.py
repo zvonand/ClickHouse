@@ -219,7 +219,7 @@ def run_fuzzer(fuzzer: str, timeout: int):
         with_fuzzer_args = ""
         if use_fuzzer_args:
             env_fuzzer["FUZZER_ARGS"] = f"{merge_libfuzzer_options}".strip()
-            with_fuzzer_args = f" with FUZZER_ARGS '{env['FUZZER_ARGS']}'"
+            with_fuzzer_args = f" with FUZZER_ARGS '{env_fuzzer['FUZZER_ARGS']}'"
         else:
             cmd_line += f" {merge_libfuzzer_options}"
             if fuzzer_arguments:
@@ -372,7 +372,7 @@ def run_fuzzer(fuzzer: str, timeout: int):
     with_fuzzer_args = ""
     if use_fuzzer_args:
         env_fuzzer["FUZZER_ARGS"] = f"{libfuzzer_options} {libfuzzer_corpora}".strip()
-        with_fuzzer_args = f" with FUZZER_ARGS '{env['FUZZER_ARGS']}'"
+        with_fuzzer_args = f" with FUZZER_ARGS '{env_fuzzer['FUZZER_ARGS']}'"
     else:
         cmd_line += f" {libfuzzer_options} {libfuzzer_corpora}"
         if fuzzer_arguments:

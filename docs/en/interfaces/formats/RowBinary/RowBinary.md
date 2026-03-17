@@ -629,7 +629,10 @@ For example, in the following table, the tuple contains an enum with a tick and 
 CREATE OR REPLACE TABLE foo
 (
    `t` Tuple(
-          Enum8('f\'()' = 0),          Array(Nullable(Tuple(UInt32, String)))       ))ENGINE = Memory;
+          Enum8('f\'()' = 0),
+          Array(Nullable(Tuple(UInt32, String)))
+       )
+) ENGINE = Memory;
 ```
 
 ### Map {#map}
@@ -690,7 +693,7 @@ CREATE OR REPLACE TABLE foo
 ENGINE = MergeTree
 ORDER BY ();
 INSERT INTO foo VALUES (true), ('foobar' :: FixedString(6)), (100.5 :: Float64), (100 :: Int128), ([1, 2, 3] :: Array(Int16));
-SELECT * FROM foo;
+SELECT * FROM foo FORMAT RowBinary;
 ```
 
 ```text
@@ -727,7 +730,7 @@ SELECT NULL :: Variant(UInt32, String)
 
 ### Dynamic {#dynamic}
 
-The `Dynamic` type can hold values of any type, determined at runtime. In RowBinary format, each value is self-describing: the first part is the type specification in [**this format](https://clickhouse.com/docs/sql-reference/data-types/data-types-binary-encoding).** The contents then follow, with the value encoding as described in this document. So to parse a value you just need to use the type index to determine the right parser and then re-use the RowBinary parsing you already have elsewhere. 
+The `Dynamic` type can hold values of any type, determined at runtime. In RowBinary format, each value is self-describing: the first part is the type specification in **[this format](https://clickhouse.com/docs/sql-reference/data-types/data-types-binary-encoding)**. The contents then follow, with the value encoding as described in this document. So to parse a value you just need to use the type index to determine the right parser and then re-use the RowBinary parsing you already have elsewhere.
 
 ```text
 [BinaryTypeIndex][type-specific parameters...][value]
@@ -862,8 +865,6 @@ Binary encoding (hex with annotations):
 
 With typed non-nullable column, you get the default value:
 
-JSON(name String)
-
 Schema: `JSON(name String)`
 
 Row: `{"name": null}`
@@ -936,8 +937,7 @@ Geo is a category of data types that represent geographical data. It includes:
 - `LineString` - as `Array(Point)`, or `Array(Tuple(Float64, Float64))`.
 - `MultiLineString` - as `Array(LineString)`, or `Array(Array(Tuple(Float64, Float64)))`.
 
-The wire format of the Geo values is exactly the same as with Tuple and Array. [RowBinaryWithNamesAndTypes](#rowbinarywithnamesandtypes)
-and [Native](#native) formats headers will contain the aliases for these types, e.g., `Point`, `Ring`, `Polygon`, `MultiPolygon`, `LineString`, and `MultiLineString`.
+The wire format of the Geo values is exactly the same as with Tuple and Array. `RowBinaryWithNamesAndTypes` format headers will contain the aliases for these types, e.g., `Point`, `Ring`, `Polygon`, `MultiPolygon`, `LineString`, and `MultiLineString`.
 
 ```sql
 SELECT    (1.0, 2.0)                                       :: Point           AS point,

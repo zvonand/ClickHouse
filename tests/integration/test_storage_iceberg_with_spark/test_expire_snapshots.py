@@ -854,3 +854,88 @@ def test_expire_snapshots_boundary_max_ref_age(started_cluster_iceberg_with_spar
     expire_snapshots(instance, TABLE_NAME, FAR_FUTURE)
     assert "feature" not in get_refs(instance, TABLE_NAME), \
         "Ref with 1ms max-ref-age should be expired"
+
+
+# ---------------------------------------------------------------------------
+# Regression test: shared manifests between expired snapshots
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_expire_snapshots_shared_manifest_no_double_count(started_cluster_iceberg_with_spark, storage_type):
+    """Manifest lists shared between expired snapshots are counted and deleted exactly once.
+
+    Regression test for double-counting in collectExpiredFiles:
+    - The outer loop had no dedup for manifest-list paths: if two expired snapshots
+      referenced the same manifest-list, result.manifest_lists was incremented twice.
+    - The inner loop had no dedup for manifest-file paths: if two expired manifest-lists
+      referenced the same manifest, result.manifest_files was incremented twice.
+
+    Setup: 3 INSERTs → S1 (ML1), S2 (ML2), S3=current (ML3). We patch S2's
+    manifest-list to ML1, so both S1 and S2 reference the same file. After
+    expiration ML1 must appear in deleted_manifest_lists_count exactly once.
+    The sum of reported .avro deletions must equal actual deleted .avro files.
+    """
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    TABLE_NAME = make_table_name("test_expire_shared_manifest", storage_type)
+
+    # 3 INSERTs → S1 (ML1), S2 (ML2), S3=current (ML3)
+    create_and_populate(
+        started_cluster_iceberg_with_spark, instance, storage_type, TABLE_NAME, 3
+    )
+
+    meta = read_iceberg_metadata(instance, TABLE_NAME)
+    current_id = meta["current-snapshot-id"]
+    snap_ids = get_snapshot_ids(instance, TABLE_NAME)
+    expired_ids = [sid for sid in snap_ids if sid != current_id]
+    assert len(expired_ids) >= 2, "Need at least 2 expired snapshots for this test"
+
+    s1_id = expired_ids[0]
+    s2_id = expired_ids[1]
+    s1_manifest_list = next(
+        s["manifest-list"] for s in meta["snapshots"] if s["snapshot-id"] == s1_id
+    )
+
+    # Patch S2 to share S1's manifest-list path.
+    # expired_manifest_list_paths will now contain ML1 twice (once for S1, once for S2).
+    # Without the outer-loop dedup fix, ML1 is counted/deleted twice.
+    def share_s1_manifest_list(m):
+        for s in m["snapshots"]:
+            if s["snapshot-id"] == s2_id:
+                s["manifest-list"] = s1_manifest_list
+        m.setdefault("properties", {}).update(AGGRESSIVE_RETENTION)
+
+    update_iceberg_metadata(instance, TABLE_NAME, share_s1_manifest_list)
+
+    time.sleep(1)
+
+    metadata_dir = f"/var/lib/clickhouse/user_files/iceberg_data/default/{TABLE_NAME}/metadata"
+    avro_before = set(
+        instance.exec_in_container(
+            ["bash", "-c", f"ls {metadata_dir}/*.avro 2>/dev/null || true"]
+        ).split()
+    )
+
+    result = expire_snapshots(instance, TABLE_NAME, FAR_FUTURE)
+    counts = parse_expire_result(result)
+
+    avro_after = set(
+        instance.exec_in_container(
+            ["bash", "-c", f"ls {metadata_dir}/*.avro 2>/dev/null || true"]
+        ).split()
+    )
+    deleted_avro = avro_before - avro_after
+
+    # Both manifest files and manifest lists are .avro files.
+    # Their reported sum must exactly equal the actual number of deleted .avro files.
+    # Double-counting of either type inflates the sum above the real count.
+    reported_avro_total = counts["deleted_manifest_files_count"] + counts["deleted_manifest_lists_count"]
+    assert reported_avro_total == len(deleted_avro), (
+        f"Double-counting detected: reported {reported_avro_total} total .avro deletions "
+        f"(manifest_files={counts['deleted_manifest_files_count']}, "
+        f"manifest_lists={counts['deleted_manifest_lists_count']}) "
+        f"but only {len(deleted_avro)} .avro files were actually removed"
+    )
+    assert counts["deleted_manifest_lists_count"] >= 1, \
+        "Expected at least one manifest list deleted (ML1 shared by S1 and S2)"
+
+    assert_data_intact(instance, TABLE_NAME, 3)

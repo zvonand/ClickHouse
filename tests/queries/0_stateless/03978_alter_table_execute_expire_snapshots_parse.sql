@@ -22,6 +22,17 @@ SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE optimize_manifests()');
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE some_future_command(\'arg1\', 42)');
 SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE no_args_command()');
 
+-- Parsing: multiple EXECUTE commands in one ALTER statement
+SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE cmd1(), EXECUTE cmd2()');
+
+-- Parsing: expression arguments in EXECUTE
+SELECT formatQuerySingleLine('ALTER TABLE t EXECUTE cmd(1 + 2)');
+
+-- AST clone/format roundtrip via EXPLAIN AST (exercises ASTAlterCommand::clone for execute_args)
+EXPLAIN AST ALTER TABLE t EXECUTE expire_snapshots('2024-06-01 00:00:00');
+EXPLAIN AST ALTER TABLE t EXECUTE expire_snapshots();
+EXPLAIN AST ALTER TABLE t EXECUTE some_cmd('a', 42, 3.14);
+
 -- Runtime: EXECUTE on MergeTree should fail with NOT_IMPLEMENTED
 DROP TABLE IF EXISTS test_execute_03978;
 CREATE TABLE test_execute_03978 (x UInt32) ENGINE = MergeTree ORDER BY x;

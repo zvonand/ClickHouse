@@ -958,9 +958,14 @@ static ExpiredFiles collectExpiredFiles(
     Int32 current_schema_id)
 {
     ExpiredFiles result;
+    std::set<String> seen_expired_manifest_list_paths;
+    std::set<String> seen_expired_manifest_paths;
     for (const auto & ml_path : expired_manifest_list_paths)
     {
         if (retained_manifest_list_paths.contains(ml_path))
+            continue;
+
+        if (seen_expired_manifest_list_paths.contains(ml_path))
             continue;
 
         String storage_ml_path = getProperFilePathFromMetadataInfo(
@@ -981,6 +986,9 @@ static ExpiredFiles collectExpiredFiles(
         for (const auto & mf_key : manifest_keys)
         {
             if (retained_manifest_paths.contains(mf_key.manifest_file_path))
+                continue;
+
+            if (seen_expired_manifest_paths.contains(mf_key.manifest_file_path))
                 continue;
 
             try
@@ -1014,10 +1022,12 @@ static ExpiredFiles collectExpiredFiles(
                 continue;
             }
 
+            seen_expired_manifest_paths.insert(mf_key.manifest_file_path);
             result.all_paths.push_back(mf_key.manifest_file_path);
             ++result.manifest_files;
         }
 
+        seen_expired_manifest_list_paths.insert(ml_path);
         result.all_paths.push_back(storage_ml_path);
         ++result.manifest_lists;
     }

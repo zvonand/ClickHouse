@@ -43,7 +43,6 @@ namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int NOT_FOUND_COLUMN_IN_BLOCK;
-    extern const int QUERY_WAS_CANCELLED;
     extern const int TOO_MANY_TEMPORARY_COLUMNS;
     extern const int TOO_MANY_TEMPORARY_NON_CONST_COLUMNS;
     extern const int TYPE_MISMATCH;
@@ -862,7 +861,7 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
         }
 
         if (isCancelled())
-            throw Exception(ErrorCodes::QUERY_WAS_CANCELLED, "Query was cancelled");
+            return;
     }
 
     if (project_inputs)

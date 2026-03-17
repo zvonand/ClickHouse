@@ -31,26 +31,14 @@ ExpressionTransform::ExpressionTransform(
 void ExpressionTransform::transform(Chunk & chunk)
 {
     size_t num_rows = chunk.getNumRows();
-    Columns columns = chunk.detachColumns();
-    auto block = getInputPort().getHeader().cloneWithColumns(columns);
+    auto block = getInputPort().getHeader().cloneWithColumns(chunk.detachColumns());
 
-    try
-    {
-        expression->execute(block, num_rows);
-        chunk.setColumns(block.getColumns(), num_rows);
-    }
-    catch (const Exception & e)
-    {
-        if (e.code() == ErrorCodes::QUERY_WAS_CANCELLED)
-        {
-            chunk.setColumns(columns, num_rows);
-        }
-        else
-        {
-            throw;
-        }
-    }
+    expression->execute(block, num_rows);
 
+    if (isCancelled())
+        return;
+
+    chunk.setColumns(block.getColumns(), num_rows);
     if (updater)
         updater->recordOutputChunk(chunk, block);
 }

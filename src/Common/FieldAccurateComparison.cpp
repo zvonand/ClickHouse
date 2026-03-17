@@ -5,7 +5,6 @@
 #include <Core/CompareHelper.h>
 #include <base/demangle.h>
 #include <Common/FieldVisitors.h>
-#include <Common/NaNUtils.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
 

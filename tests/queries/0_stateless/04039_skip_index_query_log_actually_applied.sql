@@ -15,7 +15,7 @@ DROP TABLE IF EXISTS t_skip_applied;
 -- we also want to use mismatched index types since different index types have different priority
 -- when we are choosing indices to filter parts with
 -- in the past I saw that with matching index types, the first index was always being picked because
--- they shared the same priortiy, and the part sizes are identical
+-- they shared the same priority, and the part sizes are identical
 CREATE TABLE t_skip_applied
 (
     a UInt64,

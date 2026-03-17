@@ -456,16 +456,12 @@ ColumnPtr IExecutableFunction::execute(
         /// from the result using common indexes.
         ColumnPtr common_replicated_indexes;
         bool has_full_columns = false;
-        size_t nested_column_size = 0;
         for (const auto & argument : arguments)
         {
             if (const auto * column_replicated = typeid_cast<const ColumnReplicated *>(argument.column.get()))
             {
                 if (!common_replicated_indexes)
-                {
                     common_replicated_indexes = column_replicated->getIndexesColumn();
-                    nested_column_size = column_replicated->getNestedColumn()->size();
-                }
                 else if (common_replicated_indexes != column_replicated->getIndexesColumn())
                 {
                     common_replicated_indexes.reset();
@@ -486,11 +482,23 @@ ColumnPtr IExecutableFunction::execute(
             return executeWithoutReplicatedColumns(arguments_without_replicated, result_type, input_rows_count, dry_run);
         }
 
+        Columns nested_columns;
+        for (const auto & argument : arguments_without_replicated)
+            if (const auto * col = typeid_cast<const ColumnReplicated *>(argument.column.get()))
+                nested_columns.push_back(col->getNestedColumn());
+
+        /// Filter out unreferenced rows from nested columns.
+        ColumnIndex column_index(IColumn::mutate(common_replicated_indexes));
+        auto filtered_nested_columns = column_index.removeUnusedRowsInIndexedData(nested_columns);
+        common_replicated_indexes = column_index.getIndexes();
+        size_t nested_column_size = filtered_nested_columns.empty() ? 0 : filtered_nested_columns[0]->size();
+
+        size_t col_idx = 0;
         for (auto & argument : arguments_without_replicated)
         {
-            /// Replace replicated columns to their nested columns.
-            if (const auto * column_replicated = typeid_cast<const ColumnReplicated *>(argument.column.get()))
-                argument.column = column_replicated->getNestedColumn();
+            /// Replace replicated columns to their filtered nested columns.
+            if (typeid_cast<const ColumnReplicated *>(argument.column.get()))
+                argument.column = filtered_nested_columns[col_idx++];
             /// Change size for constants.
             else if (const auto * column_const = checkAndGetColumn<ColumnConst>(argument.column.get()))
                 argument.column = ColumnConst::create(column_const->getDataColumnPtr(), nested_column_size);

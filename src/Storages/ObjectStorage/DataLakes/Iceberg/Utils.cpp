@@ -78,6 +78,11 @@ namespace DB::DataLakeStorageSetting
     extern const DataLakeStorageSettingsNonZeroUInt64 iceberg_format_version;
 }
 
+namespace DB::Setting
+{
+extern const SettingsString iceberg_metadata_compression_method;
+}
+
 namespace ProfileEvents
 {
     extern const Event IcebergVersionHintUsed;
@@ -1058,6 +1063,52 @@ static String resolveContained(const std::filesystem::path & base, const std::fi
     return combined.string();
 }
 
+/// Resolve metadata filename from version hint content.
+/// Version hint may contain just a version number (e.g. "1") or a full filename (e.g. "v1.metadata.json").
+/// When only a version number is given, we try to find the actual file, which may have a compression suffix.
+static std::optional<String> resolveMetadataFilenameFromVersionHint(
+    const String & version_hint_content,
+    const String & table_path,
+    const ObjectStoragePtr & object_storage,
+    CompressionMethod known_compression_method,
+    const ContextPtr & local_context)
+{
+    String metadata_file = version_hint_content;
+    if (metadata_file.ends_with(".metadata.json"))
+        return metadata_file;
+
+    if (!std::all_of(metadata_file.begin(), metadata_file.end(), isdigit))
+        return metadata_file + ".metadata.json";
+
+    /// Version hint is a number. Try to find the actual file.
+    String version_number = metadata_file;
+
+    /// First try without compression.
+    String candidate = "v" + version_number + ".metadata.json";
+    auto candidate_path = std::filesystem::path(table_path) / "metadata" / candidate;
+    if (object_storage->exists(StoredObject(candidate_path)))
+        return candidate;
+
+    /// Try with known compression method.
+    auto compression_method = known_compression_method;
+    if (compression_method == CompressionMethod::None)
+    {
+        auto compression_method_str = local_context->getSettingsRef()[Setting::iceberg_metadata_compression_method].value;
+        compression_method = chooseCompressionMethod(compression_method_str, compression_method_str);
+    }
+    if (compression_method != CompressionMethod::None)
+    {
+        auto suffix = toContentEncodingName(compression_method);
+        String compressed_candidate = "v" + version_number + "." + suffix + ".metadata.json";
+        auto compressed_path = std::filesystem::path(table_path) / "metadata" / compressed_candidate;
+        if (object_storage->exists(StoredObject(compressed_path)))
+            return compressed_candidate;
+    }
+
+    /// Nothing found via direct checks.
+    return std::nullopt;
+}
+
 MetadataFileWithInfo getLatestOrExplicitMetadataFileAndVersion(
     const ObjectStoragePtr & object_storage,
     const String & table_path,
@@ -1065,7 +1116,8 @@ MetadataFileWithInfo getLatestOrExplicitMetadataFileAndVersion(
     IcebergMetadataFilesCachePtr metadata_cache,
     const ContextPtr & local_context,
     Poco::Logger * log,
-    const std::optional<String> & table_uuid)
+    const std::optional<String> & table_uuid,
+    CompressionMethod known_compression_method)
 {
     if (data_lake_settings[DataLakeStorageSetting::iceberg_metadata_file_path].changed)
     {
@@ -1110,19 +1162,17 @@ MetadataFileWithInfo getLatestOrExplicitMetadataFileAndVersion(
         StoredObject version_hint(version_hint_path);
         auto buf = object_storage->readObject(version_hint, ReadSettings{});
         readString(metadata_file, *buf);
-        if (!metadata_file.ends_with(".metadata.json"))
+        auto resolved
+            = resolveMetadataFilenameFromVersionHint(metadata_file, table_path, object_storage, known_compression_method, local_context);
+        if (resolved.has_value())
         {
-            if (std::all_of(metadata_file.begin(), metadata_file.end(), isdigit))
-                metadata_file = "v" + metadata_file + ".metadata.json";
-            else
-                metadata_file = metadata_file + ".metadata.json";
+            LOG_TEST(log, "Version hint file points to {}, will read from this metadata file", *resolved);
+            ProfileEvents::increment(ProfileEvents::IcebergVersionHintUsed);
+            return getMetadataFileAndVersion(std::filesystem::path(table_path) / "metadata" / fs::path(*resolved).filename());
         }
-        LOG_TEST(log, "Version hint file points to {}, will read from this metadata file", metadata_file);
-        ProfileEvents::increment(ProfileEvents::IcebergVersionHintUsed);
-
-        return getMetadataFileAndVersion(std::filesystem::path(table_path) / "metadata" / fs::path(metadata_file).filename());
+        LOG_WARNING(log, "Version hint content '{}' could not be resolved to a metadata file, falling back to listing", metadata_file);
     }
-    else
+
     {
         return getLatestMetadataFileAndVersion(
             object_storage, table_path, data_lake_settings, metadata_cache, local_context, table_uuid, false);

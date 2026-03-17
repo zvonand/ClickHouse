@@ -91,7 +91,8 @@ MetadataFileWithInfo getLatestOrExplicitMetadataFileAndVersion(
     IcebergMetadataFilesCachePtr metadata_cache,
     const ContextPtr & local_context,
     Poco::Logger * log,
-    const std::optional<String> & table_uuid);
+    const std::optional<String> & table_uuid,
+    CompressionMethod known_compression_method = CompressionMethod::None);
 
 std::pair<Poco::JSON::Object::Ptr, Int32> parseTableSchemaV1Method(const Poco::JSON::Object::Ptr & metadata_object);
 std::pair<Poco::JSON::Object::Ptr, Int32> parseTableSchemaV2Method(const Poco::JSON::Object::Ptr & metadata_object);

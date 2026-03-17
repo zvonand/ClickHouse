@@ -560,7 +560,8 @@ void mutate(
             persistent_table_components.metadata_cache,
             context,
             log.get(),
-            persistent_table_components.table_uuid);
+            persistent_table_components.table_uuid,
+            persistent_table_components.metadata_compression_method);
 
         FileNamesGenerator filename_generator(persistent_table_components.path_resolver.getTableLocation(), false, CompressionMethod::None, write_format);
         filename_generator.setVersion(last_version + 1);
@@ -689,7 +690,8 @@ void alter(
             persistent_table_components.metadata_cache,
             context,
             log.get(),
-            persistent_table_components.table_uuid);
+            persistent_table_components.table_uuid,
+            persistent_table_components.metadata_compression_method);
 
         FileNamesGenerator filename_generator(persistent_table_components.path_resolver.getTableLocation(), false, CompressionMethod::None, write_format);
         filename_generator.setVersion(last_version + 1);
@@ -1277,7 +1279,8 @@ ExpireSnapshotsResult expireSnapshots(
             persistent_table_components.metadata_cache,
             context,
             log.get(),
-            persistent_table_components.table_uuid);
+            persistent_table_components.table_uuid,
+            persistent_table_components.metadata_compression_method);
 
         filename_generator.setVersion(last_version + 1);
         filename_generator.setCompressionMethod(compression_method);

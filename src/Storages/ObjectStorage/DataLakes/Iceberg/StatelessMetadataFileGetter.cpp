@@ -167,7 +167,7 @@ ManifestFileCacheKeys getManifestList(
             local_context,
             manifest_list_deserializer.getMetadataContent(),
             DB::IcebergMetadataLogLevel::ManifestListMetadata,
-            persistent_table_components.table_path,
+            persistent_table_components.path_resolver.getTableRoot(),
             filename,
             std::nullopt,
             std::nullopt);
@@ -210,7 +210,7 @@ ManifestFileCacheKeys getManifestList(
                 local_context,
                 manifest_list_deserializer.getContent(i),
                 DB::IcebergMetadataLogLevel::ManifestListEntry,
-                persistent_table_components.table_path,
+                persistent_table_components.path_resolver.getTableRoot(),
                 filename,
                 i,
                 std::nullopt);

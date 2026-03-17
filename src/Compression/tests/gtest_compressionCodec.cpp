@@ -1440,47 +1440,55 @@ TEST(T64Test, TranscodeRawInput)
     }
 }
 
-TEST(T64Test, DecompressMalformedInput)
+TEST(T64Test, DecompressMalformedInputBytesToSkip)
 {
-    /// Reproducer found by t64_decompress_fuzzer: heap-buffer-overflow when
-    /// `bytes_to_skip > bytes_size` in `decompressData`. The fix adds a bounds
-    /// check before the trailing-bytes `memcpy` and before the 16-byte header read.
-    ///
-    /// Fuzzer input (10 bytes): 85 68 85 3b 8d 85 0a fd 81 2c
-    ///   First 8 bytes = AuxiliaryRandomData { decompressed_size = 0xfd0a858d3b856885 }
-    ///   decompressed_size % 65536 = 0x6885 = 26757
-    ///   Payload passed to doDecompressData: 81 2c (2 bytes)
+    /// Reproducer for heap-buffer-overflow when `bytes_to_skip > bytes_size`
+    /// in `doDecompressData`. decompressed_size % sizeof(UInt64) = 26757 (bytes_to_skip)
+    /// but only 2 payload bytes are present.
     constexpr unsigned char block[] = {
         0x93,                   /// T64 method byte
         0x0B, 0x00, 0x00, 0x00, /// compressed_size = 11 (9-byte header + 2-byte payload)
         0x85, 0x68, 0x00, 0x00, /// decompressed_size = 26757
-        0x81, 0x2C,             /// crash-triggering payload
+        0x81, 0x2C,             /// 2-byte payload; bytes_to_skip=26757 > bytes_size=2
     };
 
     const char * source = reinterpret_cast<const char *>(block);
     const UInt32 source_size = static_cast<UInt32>(std::size(block));
-    constexpr UInt32 decompressed_size = 26757;
 
     DB::Memory<> dest;
-    dest.resize(decompressed_size);
+    dest.resize(26757);
 
     auto codec = makeCodec("T64", std::make_shared<DataTypeUInt64>());
     ASSERT_THROW(codec->decompress(source, source_size, dest.data()), Exception);
 }
 
-TEST(CompressionCodecMultipleTest, DecompressMalformedInput)
+TEST(T64Test, DecompressMalformedInputShortHeader)
 {
-    /// Reproducer found by multiple_decompress_fuzzer: process abort when
-    /// `compression_methods_size + 1 > source_size`, which caused `PODArray` to
-    /// be constructed from a reversed pointer range, triggering an ~2^64-byte
-    /// allocation that aborts the process. The fix adds a bounds check before
-    /// constructing the payload buffer.
-    ///
-    /// Fuzzer input (9 bytes): 00 00 00 00 00 00 db 00 9a
-    ///   First 8 bytes = AuxiliaryRandomData { decompressed_size = 0x00db000000000000 }
-    ///   decompressed_size % 65536 = 0
-    ///   Payload passed to doDecompressData: 9a (1 byte)
-    ///   source[0] = 0x9a = 154 codecs claimed, but only 1 byte available
+    /// Reproducer for heap-buffer-overflow when payload has no bytes_to_skip
+    /// but is shorter than the 16-byte min/max header required by T64.
+    /// decompressed_size=8 → bytes_to_skip = 8 % 8 = 0; bytes_size=8 < header_size=16.
+    constexpr unsigned char block[] = {
+        0x93,                   /// T64 method byte
+        0x11, 0x00, 0x00, 0x00, /// compressed_size = 17 (9-byte header + 8-byte payload)
+        0x08, 0x00, 0x00, 0x00, /// decompressed_size = 8 (bytes_to_skip = 8 % 8 = 0)
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, /// 8-byte payload; bytes_size=8 < header_size=16
+    };
+
+    const char * source = reinterpret_cast<const char *>(block);
+    const UInt32 source_size = static_cast<UInt32>(std::size(block));
+
+    DB::Memory<> dest;
+    dest.resize(8);
+
+    auto codec = makeCodec("T64", std::make_shared<DataTypeUInt64>());
+    ASSERT_THROW(codec->decompress(source, source_size, dest.data()), Exception);
+}
+
+TEST(CompressionCodecMultipleTest, DecompressMalformedInputReversedRange)
+{
+    /// Reproducer for process abort when `compression_methods_size + 1 > source_size`:
+    /// PODArray constructed from reversed pointer range → ~2^64-byte allocation.
+    /// source[0] = 0x9a = 154 codecs claimed in a 1-byte payload.
     constexpr unsigned char block[] = {
         0x91,                   /// Multiple method byte
         0x0A, 0x00, 0x00, 0x00, /// compressed_size = 10 (9-byte header + 1-byte payload)
@@ -1494,7 +1502,31 @@ TEST(CompressionCodecMultipleTest, DecompressMalformedInput)
     DB::Memory<> dest;
     dest.resize(64);
 
-    auto codec = CompressionCodecFactory::instance().get("Multiple", {});
+    auto codec = CompressionCodecFactory::instance().get(static_cast<UInt8>(CompressionMethodByte::Multiple));
+    ASSERT_THROW(codec->decompress(source, source_size, dest.data()), Exception);
+}
+
+TEST(CompressionCodecMultipleTest, DecompressMalformedInputShortBlockHeader)
+{
+    /// Reproducer for OOB read when the compressed payload after the methods list
+    /// is shorter than COMPRESSED_BLOCK_HEADER_SIZE (9 bytes).
+    /// 1 codec declared; 4 bytes of compressed data follow — too short for a block header.
+    constexpr unsigned char block[] = {
+        0x91,                   /// Multiple method byte
+        0x0F, 0x00, 0x00, 0x00, /// compressed_size = 15 (9-byte header + 6-byte payload)
+        0x00, 0x00, 0x00, 0x00, /// decompressed_size = 0
+        0x01,                   /// compression_methods_size = 1
+        0x82,                   /// LZ4 method byte
+        0x00, 0x01, 0x02, 0x03, /// 4-byte compressed data; source_size=4 < COMPRESSED_BLOCK_HEADER_SIZE=9
+    };
+
+    const char * source = reinterpret_cast<const char *>(block);
+    const UInt32 source_size = static_cast<UInt32>(std::size(block));
+
+    DB::Memory<> dest;
+    dest.resize(64);
+
+    auto codec = CompressionCodecFactory::instance().get(static_cast<UInt8>(CompressionMethodByte::Multiple));
     ASSERT_THROW(codec->decompress(source, source_size, dest.data()), Exception);
 }
 

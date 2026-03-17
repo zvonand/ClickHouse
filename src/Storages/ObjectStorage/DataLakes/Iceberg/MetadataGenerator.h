@@ -24,7 +24,7 @@ public:
         Poco::JSON::Object::Ptr snapshot = nullptr;
         /// Metadata path for the manifest list file (e.g. "wasb://container@account/table/metadata/snap-xxx.avro").
         /// Use IcebergPathResolver::resolve to get storage path for I/O.
-        /// Use .getRawPath() to get the path for writing into Iceberg metadata.
+        /// Use .serialize() to get the path for writing into Iceberg metadata.
         Iceberg::IcebergPathFromMetadata manifest_list_path;
     };
 

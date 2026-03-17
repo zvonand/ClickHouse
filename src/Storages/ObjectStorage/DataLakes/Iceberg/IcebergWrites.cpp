@@ -322,7 +322,7 @@ void generateManifestFile(
         avro::GenericRecord & data_file = manifest.field(Iceberg::f_data_file).value<avro::GenericRecord>();
         if (version > 1)
             data_file.field(Iceberg::f_content) = avro::GenericDatum(static_cast<Int32>(content_type));
-        data_file.field(Iceberg::f_file_path) = avro::GenericDatum(data_file_name.getRawPath());
+        data_file.field(Iceberg::f_file_path) = avro::GenericDatum(data_file_name.serialize());
         data_file.field(Iceberg::f_file_format) = avro::GenericDatum(format);
 
         if (data_file_statistics)
@@ -461,7 +461,7 @@ void generateManifestList(
         avro::GenericDatum entry_datum(schema.root());
         avro::GenericRecord & entry = entry_datum.value<avro::GenericRecord>();
 
-        entry.field(Iceberg::f_manifest_path) = manifest_entry_names[entry_idx].getRawPath();
+        entry.field(Iceberg::f_manifest_path) = manifest_entry_names[entry_idx].serialize();
         entry.field(Iceberg::f_manifest_length) = manifest_entry_sizes[entry_idx];
         entry.field(Iceberg::f_partition_spec_id) = metadata->getValue<Int64>(Iceberg::f_default_spec_id);
         if (version > 1)
@@ -538,7 +538,7 @@ void generateManifestList(
         {
             if (snapshots->getObject(static_cast<UInt32>(i))->getValue<Int64>(Iceberg::f_metadata_snapshot_id) == parent_snapshot_id)
             {
-                auto manifest_list = Iceberg::IcebergPathFromMetadata(
+                auto manifest_list = Iceberg::IcebergPathFromMetadata::deserialize(
                     snapshots->getObject(static_cast<UInt32>(i))->getValue<String>(Iceberg::f_manifest_list));
 
                 RelativePathWithMetadata relative_path_with_metadata(path_resolver.resolve(manifest_list));

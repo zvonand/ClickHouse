@@ -98,7 +98,7 @@ struct ParsedManifestFileEntry : boost::noncopyable
         std::optional<Int64> written_sequence_number_,
         std::optional<Int64> written_snapshot_id_,
         DB::Row partition_key_value_,
-        std::unordered_map<Int32, ColumnInfo> columns_infos_, 
+        std::unordered_map<Int32, ColumnInfo> columns_infos_,
         std::unordered_map<Int32, std::pair<Field, Field>> value_bounds_,
         String file_format_,
         std::optional<IcebergPathFromMetadata> lower_reference_data_file_path_,

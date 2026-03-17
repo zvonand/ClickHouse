@@ -11,7 +11,7 @@ extern const int BAD_ARGUMENTS;
 namespace DB::Iceberg
 {
 
-// This function is used to get the file path inside the directory which corresponds to iceberg table from the full blob path which is written in manifest and metadata files.
+// This function is used to get the file path inside the directory which corresponds to Iceberg table from the full blob path which is written in manifest and metadata files.
 // For example, if the full blob path is s3://bucket/table_name/data/00000-1-1234567890.avro, the function will return table_name/data/00000-1-1234567890.avro
 // Common path should end with "<table_name>" or "<table_name>/".
 String IcebergPathResolver::resolve(const IcebergPathFromMetadata & metadata_path) const
@@ -25,7 +25,7 @@ String IcebergPathResolver::resolve(const IcebergPathFromMetadata & metadata_pat
         return str;
     };
 
-    auto raw_path = metadata_path.getRawPath();
+    auto raw_path = metadata_path.serialize();
 
     if (raw_path.starts_with(table_location) && table_location.ends_with(table_root))
     {

@@ -40,11 +40,7 @@ TableStateSnapshot TableStateSnapshot::deserialize(ReadBuffer & in, const int da
     if (datalake_state_protocol_version == 1)
     {
         TableStateSnapshot state;
-        {
-            String raw_path;
-            readStringBinary(raw_path, in);
-            state.metadata_file_path = std::move(raw_path);
-        }
+        readStringBinary(state.metadata_file_path, in);
         readVarInt(state.metadata_version, in);
         readVarInt(state.schema_id, in);
         char snapshot_has_value;

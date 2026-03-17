@@ -966,7 +966,7 @@ static void collectRetainedFiles(
         if (!snapshot->has(Iceberg::f_manifest_list))
             continue;
 
-        auto manifest_list_path = IcebergPathFromMetadata{snapshot->getValue<String>(Iceberg::f_manifest_list)};
+        auto manifest_list_path = IcebergPathFromMetadata::deserialize(snapshot->getValue<String>(Iceberg::f_manifest_list));
         retained_manifest_list_paths.insert(manifest_list_path);
 
         auto manifest_keys = getManifestList(object_storage, persistent_table_components, context, manifest_list_path, log);
@@ -1019,7 +1019,7 @@ static ExpiredFiles collectExpiredFiles(
         try
         {
             manifest_keys = getManifestList(
-                object_storage, persistent_table_components, context, IcebergPathFromMetadata(ml_path), log);
+                object_storage, persistent_table_components, context, ml_path, log);
         }
         catch (...)
         {
@@ -1136,7 +1136,7 @@ static SnapshotPartition partitionSnapshots(
             result.expired_snapshot_ids.insert(snap_id);
             if (snapshot->has(Iceberg::f_manifest_list))
                 result.expired_manifest_list_paths.push_back(
-                    Iceberg::IcebergPathFromMetadata(snapshot->getValue<String>(Iceberg::f_manifest_list)));
+                    Iceberg::IcebergPathFromMetadata::deserialize(snapshot->getValue<String>(Iceberg::f_manifest_list)));
         }
     }
     return result;
@@ -1187,7 +1187,7 @@ static SnapshotPartition partitionSnapshotsByIds(
         {
             result.expired_snapshot_ids.insert(snap_id);
             if (snapshot->has(Iceberg::f_manifest_list))
-                result.expired_manifest_list_paths.push_back(Iceberg::IcebergPathFromMetadata(snapshot->getValue<String>(Iceberg::f_manifest_list)));
+                result.expired_manifest_list_paths.push_back(Iceberg::IcebergPathFromMetadata::deserialize(snapshot->getValue<String>(Iceberg::f_manifest_list)));
         }
         else
         {

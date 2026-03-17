@@ -380,7 +380,7 @@ Chunk StorageObjectStorageSource::generate()
             const String * iceberg_metadata_file_path = nullptr;
 #if USE_AVRO
             if (const auto * iceberg_info = dynamic_cast<const IcebergDataObjectInfo *>(object_info.get()))
-                iceberg_metadata_file_path = &iceberg_info->info.data_object_file_path_key.getRawPath();
+                iceberg_metadata_file_path = &iceberg_info->info.data_object_file_path_key.serialize();
 #endif
 
             VirtualColumnUtils::addRequestedFileLikeStorageVirtualsToChunk(

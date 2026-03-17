@@ -93,7 +93,7 @@ void IcebergDataObjectInfo::addEqualityDeleteObject(const Iceberg::ProcessedMani
 void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuffer & out, size_t protocol_version) const
 {
     checkVersion(protocol_version);
-    writeStringBinary(data_object_file_path_key.getRawPath(), out);
+    writeStringBinary(data_object_file_path_key.serialize(), out);
     writeVarInt(underlying_format_read_schema_id, out);
     writeVarInt(schema_id_relevant_to_iterator, out);
     writeVarInt(sequence_number, out);
@@ -145,7 +145,7 @@ void IcebergObjectSerializableInfo::deserializeForClusterFunctionProtocol(ReadBu
     {
         String raw_path;
         readStringBinary(raw_path, in);
-        data_object_file_path_key = IcebergPathFromMetadata{std::move(raw_path)};
+        data_object_file_path_key = IcebergPathFromMetadata::deserialize(std::move(raw_path));
     }
     readVarInt(underlying_format_read_schema_id, in);
     readVarInt(schema_id_relevant_to_iterator, in);

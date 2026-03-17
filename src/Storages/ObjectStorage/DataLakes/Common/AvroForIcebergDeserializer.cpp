@@ -149,7 +149,7 @@ ParsedManifestFileEntryPtr AvroForIcebergDeserializer::createParsedManifestFileE
     }
 
 
-    const Iceberg::IcebergPathFromMetadata file_path_key(
+    const auto file_path_key = IcebergPathFromMetadata::deserialize(
         getValueFromRowByName(row_index, c_data_file_file_path, TypeIndex::String).safeGet<String>());
     /// NOTE: This is weird, because in manifest file partition looks like this:
     /// {
@@ -259,8 +259,10 @@ ParsedManifestFileEntryPtr AvroForIcebergDeserializer::createParsedManifestFileE
                 Field reference_file_path_field = getValueFromRowByName(row_index, c_data_file_referenced_data_file);
                 if (!reference_file_path_field.isNull())
                 {
-                    lower_reference_data_file_path.emplace(reference_file_path_field.safeGet<String>());
-                    upper_reference_data_file_path.emplace(reference_file_path_field.safeGet<String>());
+                    lower_reference_data_file_path.emplace(
+                        Iceberg::IcebergPathFromMetadata::deserialize(reference_file_path_field.safeGet<String>()));
+                    upper_reference_data_file_path.emplace(
+                        Iceberg::IcebergPathFromMetadata::deserialize(reference_file_path_field.safeGet<String>()));
                     bounds_set_by_referenced_data_file = true;
                 }
             }
@@ -271,9 +273,9 @@ ParsedManifestFileEntryPtr AvroForIcebergDeserializer::createParsedManifestFileE
                 {
                     auto & [lower, upper] = it->second;
                     if (!lower.isNull())
-                        lower_reference_data_file_path.emplace(lower.safeGet<String>());
+                        lower_reference_data_file_path.emplace(Iceberg::IcebergPathFromMetadata::deserialize(lower.safeGet<String>()));
                     if (!upper.isNull())
-                        upper_reference_data_file_path.emplace(upper.safeGet<String>());
+                        upper_reference_data_file_path.emplace(Iceberg::IcebergPathFromMetadata::deserialize(upper.safeGet<String>()));
                 }
             }
             return std::make_shared<const ParsedManifestFileEntry>(

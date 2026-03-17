@@ -74,7 +74,7 @@ private:
          size_t total_size = 0;
          for (const auto & entry: manifest_file_cache_keys)
          {
-             total_size += sizeof(ManifestFileCacheKey) + entry.manifest_file_path.getRawPath().capacity();
+             total_size += sizeof(ManifestFileCacheKey) + entry.manifest_file_path.serialize().capacity();
          }
          return total_size;
     }

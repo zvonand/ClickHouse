@@ -107,7 +107,7 @@ void insertRowToLogTable(
             .query_id = local_context->getCurrentQueryId(),
             .content_type = row_log_level,
             .table_path = table_path,
-            .file_path = file_path.getRawPath(),
+            .file_path = file_path.serialize(),
             .metadata_content = row,
             .row_in_file = row_in_file,
             .pruning_status = pruning_status});

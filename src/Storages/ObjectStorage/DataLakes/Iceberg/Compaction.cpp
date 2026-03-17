@@ -464,7 +464,11 @@ void writeMetadataFiles(
         for (const auto & entry : renamed_manifest_entries)
             per_manifest_sizes.push_back(manifest_file_sizes[entry]);
         auto buffer_manifest_list = object_storage->writeObject(
-            StoredObject(path_resolver.resolve(Iceberg::IcebergPathFromMetadata(renamed_manifest_list))), WriteMode::Rewrite, std::nullopt, DBMS_DEFAULT_BUFFER_SIZE, context->getWriteSettings());
+            StoredObject(path_resolver.resolve(renamed_manifest_list)),
+            WriteMode::Rewrite,
+            std::nullopt,
+            DBMS_DEFAULT_BUFFER_SIZE,
+            context->getWriteSettings());
         generateManifestList(
             path_resolver,
             metadata_object,

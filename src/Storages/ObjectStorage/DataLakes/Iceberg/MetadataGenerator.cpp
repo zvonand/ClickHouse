@@ -171,7 +171,7 @@ MetadataGenerator::NextMetadataResult MetadataGenerator::generateNextMetadata(
     new_snapshot->set(Iceberg::f_summary, summary);
 
     new_snapshot->set(Iceberg::f_schema_id, metadata_object->getValue<Int32>(Iceberg::f_current_schema_id));
-    new_snapshot->set(Iceberg::f_manifest_list, manifest_list_suffix.getRawPath());
+    new_snapshot->set(Iceberg::f_manifest_list, manifest_list_suffix.serialize());
 
     metadata_object->getArray(Iceberg::f_snapshots)->add(new_snapshot);
     metadata_object->set(Iceberg::f_current_snapshot_id, snapshot_id);
@@ -192,7 +192,7 @@ MetadataGenerator::NextMetadataResult MetadataGenerator::generateNextMetadata(
 
     {
         Poco::JSON::Object::Ptr new_metadata_item = new Poco::JSON::Object;
-        new_metadata_item->set(Iceberg::f_metadata_file, metadata_file_path.getRawPath());
+        new_metadata_item->set(Iceberg::f_metadata_file, metadata_file_path.serialize());
         new_metadata_item->set(Iceberg::f_timestamp_ms, timestamp);
         metadata_object->getArray(Iceberg::f_metadata_log)->add(new_metadata_item);
     }

@@ -353,8 +353,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                     "(lower bound: `{}`, upper bound: `{}`)",
                     position_delete->parsed_entry->file_path_key,
                     data_file_path,
-                    lower.has_value() ? lower->getRawPath() : "[no lower bound]",
-                    upper.has_value() ? upper->getRawPath() : "[no upper bound]");
+                    lower.has_value() ? lower->serialize() : "[no lower bound]",
+                    upper.has_value() ? upper->serialize() : "[no upper bound]");
             }
             else
             {
@@ -365,8 +365,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                     "(lower bound: `{}`, upper bound: `{}`)",
                     position_delete->parsed_entry->file_path_key,
                     data_file_path,
-                    lower.has_value() ? lower->getRawPath() : "[no lower bound]",
-                    upper.has_value() ? upper->getRawPath() : "[no upper bound]");
+                    lower.has_value() ? lower->serialize() : "[no lower bound]",
+                    upper.has_value() ? upper->serialize() : "[no upper bound]");
                 object_info->addPositionDeleteObject(
                     position_delete, persistent_components.path_resolver.resolve(position_delete->parsed_entry->file_path_key));
             }

@@ -126,12 +126,15 @@ protected:
         {
             ostr << settings.nl_or_ws;
 
-            /// When trailing output options (SETTINGS, FORMAT, etc.) follow the EXPLAIN body,
-            /// and the inner query is not an ASTQueryWithOutput (e.g. a bare SELECT or UNION),
-            /// we must wrap it in parentheses. Otherwise the trailing SETTINGS clause would be
-            /// consumed by the inner SELECT during re-parsing.
-            /// For inner ASTQueryWithOutput queries (like CREATE TABLE), the flag propagates
-            /// through the frame and is handled by each query's own formatQueryImpl.
+            /// When the EXPLAIN has any trailing output options (SETTINGS, FORMAT, INTO OUTFILE),
+            /// inner queries may need parenthesization. For CREATE TABLE ... AS SELECT, the
+            /// AS-select must be wrapped in parens so that FORMAT/SETTINGS are not consumed by
+            /// the inner SELECT during re-parsing. Propagate the flag so inner nodes can decide.
+            if (hasOutputOptions())
+                frame.parent_has_trailing_settings = true;
+
+            /// For non-ASTQueryWithOutput inner queries (e.g. bare SELECT), wrap in parens
+            /// directly since they don't have their own formatQueryImpl to handle the flag.
             bool need_parens = frame.parent_has_trailing_settings
                 && !dynamic_cast<const ASTQueryWithOutput *>(query.get());
             if (need_parens)

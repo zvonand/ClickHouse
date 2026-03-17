@@ -30,12 +30,7 @@ UInt128 SerializationDynamic::getHash(size_t max_dynamic_types_, const Serializa
     SipHash hash;
     hash.update("Dynamic");
     hash.update(max_dynamic_types_);
-    hash.update(serialization_info_settings_.ratio_of_defaults_for_sparse);
-    hash.update(serialization_info_settings_.choose_kind);
-    hash.update(static_cast<int>(serialization_info_settings_.version));
-    hash.update(static_cast<int>(serialization_info_settings_.string_serialization_version));
-    hash.update(static_cast<int>(serialization_info_settings_.nullable_serialization_version));
-    hash.update(serialization_info_settings_.propagate_types_serialization_versions_to_nested_types);
+    serialization_info_settings_.updateHash(hash);
     return hash.get128();
 }
 

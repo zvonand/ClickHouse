@@ -250,17 +250,17 @@ public:
         {
             Int64 start_timestamp_raw = 0;
             if (common::mulOverflow(start_timestamp_column.get64(i), start_timestamp_multiplier, start_timestamp_raw))
-                throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "Numeric overflow");
+                throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "Numeric overflow in function {}", name);
             auto start_timestamp = static_cast<TimestampType>(start_timestamp_raw);
 
             Int64 end_timestamp_raw = 0;
             if (common::mulOverflow(end_timestamp_column.get64(i), end_timestamp_multiplier, end_timestamp_raw))
-                throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "Numeric overflow");
+                throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "Numeric overflow in function {}", name);
             auto end_timestamp = static_cast<TimestampType>(end_timestamp_raw);
 
             Int64 step_raw = 0;
             if (common::mulOverflow(step_column.getInt(i), step_multiplier, step_raw))
-                throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "Numeric overflow");
+                throw Exception(ErrorCodes::DECIMAL_OVERFLOW, "Numeric overflow in function {}", name);
             auto step = static_cast<IntervalType>(step_raw);
 
             if (end_timestamp < start_timestamp)

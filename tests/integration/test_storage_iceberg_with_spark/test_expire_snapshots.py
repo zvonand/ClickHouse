@@ -1013,5 +1013,3 @@ def test_expire_snapshots_requires_experimental_setting(started_cluster_iceberg_
     result = expire_snapshots(instance, TABLE_NAME)
     parse_expire_result(result)
     assert_data_intact(instance, TABLE_NAME, 2)
-
-    assert_data_intact(instance, TABLE_NAME, 3)

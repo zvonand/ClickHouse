@@ -159,6 +159,12 @@ def test_defining_columns_with_special_character(started_cluster_iceberg_with_sp
             ('view', 'active', TIMESTAMP '2024-01-02 00:00:00', 'log2', NULL)
         """
     )
+    default_upload_directory(
+        started_cluster_iceberg_with_spark,
+        "s3",
+        f"/iceberg_data/default/{table_name}/",
+        f"/iceberg_data/default/{table_name}/",
+    )
     instance.query(f"SELECT * FROM {table_expr}")
     spark.sql(f"DROP TABLE {table_name}")
 

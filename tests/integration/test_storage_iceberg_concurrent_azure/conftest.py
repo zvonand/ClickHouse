@@ -27,9 +27,6 @@ def get_spark(log_dir=None):
         pyspark.sql.SparkSession.builder
             .appName("IcebergAzureConcurrent")
             .config("spark.jars.repositories", "https://repo1.maven.org/maven2")
-            .config("spark.jars.packages",
-                    f"org.apache.hadoop:hadoop-azure:{hadoop_version},"
-                    f"com.microsoft.azure:azure-storage:8.6.6")
             .config("spark.sql.extensions",
                     "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
             .config("spark.sql.catalog.spark_catalog",

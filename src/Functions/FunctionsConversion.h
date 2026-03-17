@@ -1846,7 +1846,10 @@ static ColumnPtr NO_SANITIZE_UNDEFINED convertNumericGeneral(
             /// Prevent auto-vectorization on x86: the compiler's attempt to semi-vectorize
             /// UInt64->Float32 with AVX2 is slower than scalar code, because there is no
             /// vector instruction for this conversion before AVX-512.
-            _Pragma("clang loop vectorize(disable)")
+            /// Also disable unrolling: with LTO on v3, the compiler unrolls this scalar
+            /// loop 2-4x, bloating the function by ~2KB with no throughput benefit
+            /// (vcvtsi2ss is inherently serial).
+            _Pragma("clang loop vectorize(disable) unroll(disable)")
             for (size_t j = 0; j < remaining; ++j)
                 d[j] = static_cast<Float32>(s[j]);
 #else

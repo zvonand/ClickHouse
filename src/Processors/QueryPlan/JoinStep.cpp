@@ -247,7 +247,7 @@ void JoinStep::describeActions(FormatSettings & settings) const
         const auto & [name, value] = description[i];
         settings.out << prefix << name << ": " << value << '\n';
     }
-    
+
     if (swap_streams)
         settings.out << prefix << "Swapped: true\n";
     if (!primary_key_sharding.empty())

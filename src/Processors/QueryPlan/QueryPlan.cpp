@@ -502,7 +502,7 @@ static void buildTreeOffset(
         settings_format.detail_prefix += current.node->children.empty() ? "   " : "│  ";
         return;
     }
-    
+
     for (size_t i = 0; i < frames.size() - 2; ++i)
     {
         const auto & segment = frames[i + 1].is_last_child ? "   " : "│  ";

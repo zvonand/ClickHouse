@@ -35,6 +35,12 @@ bool ParserPolyglotQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expecte
             ErrorCodes::SUPPORT_IS_DISABLED,
             "Support for polyglot SQL transpiler is disabled (turn on setting 'allow_experimental_polyglot_dialect')");
 
+    if (source_dialect.empty())
+        throw Exception(
+            ErrorCodes::SYNTAX_ERROR,
+            "The `polyglot_dialect` setting must not be empty. "
+            "Please specify the source SQL dialect (e.g. 'sqlite', 'mysql', 'postgresql').");
+
 #if !USE_POLYGLOT
     throw Exception(
         ErrorCodes::SUPPORT_IS_DISABLED,

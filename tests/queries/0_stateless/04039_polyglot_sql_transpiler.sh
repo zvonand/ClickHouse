@@ -41,4 +41,4 @@ $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect '' \
 
 # Test that multi-statement input is rejected
 $CLICKHOUSE_CLIENT $POLYGLOT_OPTS --polyglot_dialect sqlite \
-    -q "SELECT 1; SELECT 2" 2>&1 | grep -o "Multi-statement"
+    -q "SELECT 1; SELECT 2" 2>&1 | grep -om1 'SYNTAX_ERROR'

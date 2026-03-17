@@ -978,8 +978,8 @@ def test_expire_snapshots_snapshot_ids_with_fuse(started_cluster_iceberg_with_sp
     fuse_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(fuse_s))
 
     # Attempt to expire both S1 and S2 explicitly, with fuse protecting S2
-    # S1 timestamp < fuse_ms  → should be expired
-    # S2 timestamp >= fuse_ms → is_protected_by_fuse = true → should be retained
+    # S1 timestamp_s < fuse_s  → should be expired
+    # S2 timestamp_s >= fuse_s → is_protected_by_fuse = true → should be retained
     result = expire_snapshots(
         instance,
         TABLE_NAME,

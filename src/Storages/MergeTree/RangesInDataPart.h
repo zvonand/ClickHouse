@@ -24,8 +24,9 @@ struct RangesInDataPartDescription
     size_t rows = 0;
     String projection_name;
 
-    /// Coordinator-provided hint for task sizing on replicas.
-    /// The initiator computes this per part after primary key analysis and propagates it through the coordinator.
+    /// Initiator-provided hint for task sizing on replicas. Technically, all replicas send this value with the
+    /// initial announcement request, but we always use the value from the replica local to the coordinator.
+    /// The initiator computes this per part after PK analysis and propagates back to replicas in read request responses.
     size_t min_marks_per_task = 0;
 
     void serialize(WriteBuffer & out, UInt64 parallel_protocol_version) const;

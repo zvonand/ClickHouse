@@ -178,6 +178,8 @@ public:
     const CoordinationMode mode;
     size_t unavailable_replicas_count{0};
     size_t received_initial_requests{0};
+    /// Total number of marks a replica wants per coordinator request, announced once by the first replica.
+    size_t announced_min_number_of_marks{0};
     ProgressCallback progress_callback;
 
     struct ReplicaStatus
@@ -216,6 +218,11 @@ public:
             throw Exception(ErrorCodes::LOGICAL_ERROR, "Duplicate announcement received for replica number {}", announcement.replica_num);
 
         replica_status[announcement.replica_num].is_announcement_received = true;
+
+        /// Use `min_number_of_marks` from the first announcement (the local replica that did PK analysis).
+        /// Old replicas (protocol < 6) don't send this field — the coordinator will fall back to per-request values.
+        if (announced_min_number_of_marks == 0 && announcement.min_number_of_marks > 0)
+            announced_min_number_of_marks = announcement.min_number_of_marks;
 
         doHandleInitialAllRangesAnnouncement(std::move(announcement));
     }
@@ -423,7 +430,8 @@ void DefaultCoordinator::initializeReadingState(InitialAllRangesAnnouncement ann
     if (mark_segment_size == 0)
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Zero value provided for `mark_segment_size`");
 
-    LOG_TRACE(log, "Reading state is fully initialized: {}, mark_segment_size: {}", fmt::join(all_parts_to_read, "; "), mark_segment_size);
+    LOG_TRACE(log, "Reading state is fully initialized: {}, mark_segment_size: {}, min_number_of_marks: {}",
+              fmt::join(all_parts_to_read, "; "), mark_segment_size, announced_min_number_of_marks);
 }
 
 void DefaultCoordinator::markReplicaAsUnavailable(size_t replica_number)
@@ -800,11 +808,15 @@ size_t DefaultCoordinator::computeConsistentHash(const std::string & part_name, 
 
 ParallelReadResponse DefaultCoordinator::handleRequest(ParallelReadRequest request)
 {
+    /// Since protocol version 6, `min_number_of_marks` is sent once in the initial announcement.
+    /// Fall back to the per-request value for backward compatibility with older replicas.
+    const size_t effective_min_marks = announced_min_number_of_marks > 0 ? announced_min_number_of_marks : request.min_number_of_marks;
+
     LOG_TRACE(
         log,
         "Handling request from replica {}, minimal marks size is {}, request count {}",
         request.replica_num,
-        request.min_number_of_marks,
+        effective_min_marks,
         stats[request.replica_num].number_of_requests);
 
     ParallelReadResponse response;
@@ -812,18 +824,18 @@ ParallelReadResponse DefaultCoordinator::handleRequest(ParallelReadRequest reque
 
     /// 1. Try to select ranges meant for this replica by consistent hash
     selectPartsAndRanges(
-        request.replica_num, ScanMode::TakeWhatsMineByHash, request.min_number_of_marks, current_mark_size, response.description);
+        request.replica_num, ScanMode::TakeWhatsMineByHash, effective_min_marks, current_mark_size, response.description);
     const size_t assigned_to_me = current_mark_size;
 
     /// 2. Try to steal but with caching again (with different key)
     selectPartsAndRanges(
-        request.replica_num, ScanMode::TakeWhatsMineForStealing, request.min_number_of_marks, current_mark_size, response.description);
+        request.replica_num, ScanMode::TakeWhatsMineForStealing, effective_min_marks, current_mark_size, response.description);
     const size_t stolen_by_hash = current_mark_size - assigned_to_me;
 
     /// 3. Try to steal with no preference. We're trying to postpone it as much as possible.
     if (current_mark_size == 0)
         selectPartsAndRanges(
-            request.replica_num, ScanMode::TakeEverythingAvailable, request.min_number_of_marks, current_mark_size, response.description);
+            request.replica_num, ScanMode::TakeEverythingAvailable, effective_min_marks, current_mark_size, response.description);
     const size_t stolen_unassigned = current_mark_size - stolen_by_hash - assigned_to_me;
 
     stats[request.replica_num].number_of_requests += 1;
@@ -1013,6 +1025,8 @@ void InOrderCoordinator::doHandleInitialAllRangesAnnouncement(InitialAllRangesAn
 
 ParallelReadResponse InOrderCoordinator::handleRequest(ParallelReadRequest request)
 {
+    const size_t effective_min_marks = announced_min_number_of_marks > 0 ? announced_min_number_of_marks : request.min_number_of_marks;
+
     LOG_TRACE(log, "Got read request: {}", request.describe());
 
     ParallelReadResponse response;
@@ -1050,10 +1064,10 @@ ParallelReadResponse InOrderCoordinator::handleRequest(ParallelReadRequest reque
         /// Now we can recommend to read more intervals
         if (mode == CoordinationMode::ReverseOrder)
         {
-            while (!global_part_it->description.ranges.empty() && current_mark_size < request.min_number_of_marks)
+            while (!global_part_it->description.ranges.empty() && current_mark_size < effective_min_marks)
             {
                 auto & range = global_part_it->description.ranges.back();
-                const size_t needed = request.min_number_of_marks - current_mark_size;
+                const size_t needed = effective_min_marks - current_mark_size;
 
                 if (range.getNumberOfMarks() > needed)
                 {
@@ -1072,10 +1086,10 @@ ParallelReadResponse InOrderCoordinator::handleRequest(ParallelReadRequest reque
         }
         else if (mode == CoordinationMode::WithOrder)
         {
-            while (!global_part_it->description.ranges.empty() && current_mark_size < request.min_number_of_marks)
+            while (!global_part_it->description.ranges.empty() && current_mark_size < effective_min_marks)
             {
                 auto & range = global_part_it->description.ranges.front();
-                const size_t needed = request.min_number_of_marks - current_mark_size;
+                const size_t needed = effective_min_marks - current_mark_size;
 
                 if (range.getNumberOfMarks() > needed)
                 {
@@ -1144,10 +1158,6 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
 
 ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelReadRequest request)
 {
-    if (request.min_number_of_marks == 0)
-        throw Exception(
-            ErrorCodes::BAD_ARGUMENTS, "Chosen number of marks to read is zero (likely because of weird interference of settings)");
-
     ProfileEvents::increment(ProfileEvents::ParallelReplicasNumRequests);
     ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::ParallelReplicasHandleRequestMicroseconds);
 

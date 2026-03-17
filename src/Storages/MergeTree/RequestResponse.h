@@ -58,6 +58,9 @@ struct ParallelReadRequest
 
     CoordinationMode mode;
     size_t replica_num;
+    /// Since protocol version 6, this value is sent once in the initial announcement
+    /// and the coordinator uses the announced value. Retained here for backward compatibility
+    /// with older initiators that still read it from each request.
     size_t min_number_of_marks;
     /// Extension for Ordered (InOrder or ReverseOrder) mode
     /// Contains only data part names without mark ranges.
@@ -93,14 +96,25 @@ struct InitialAllRangesAnnouncement
     /// No default constructor, you must initialize all fields at once.
 
     InitialAllRangesAnnouncement(
-        CoordinationMode mode_, RangesInDataPartsDescription description_, size_t replica_num_, size_t mark_segment_size_)
-        : mode(mode_), description(std::move(description_)), replica_num(replica_num_), mark_segment_size(mark_segment_size_)
+        CoordinationMode mode_,
+        RangesInDataPartsDescription description_,
+        size_t replica_num_,
+        size_t mark_segment_size_,
+        size_t min_number_of_marks_ = 0)
+        : mode(mode_)
+        , description(std::move(description_))
+        , replica_num(replica_num_)
+        , mark_segment_size(mark_segment_size_)
+        , min_number_of_marks(min_number_of_marks_)
     {}
 
     CoordinationMode mode;
     RangesInDataPartsDescription description;
     size_t replica_num;
     size_t mark_segment_size;
+    /// Total number of marks the replica wants per coordinator request.
+    /// Sent once here instead of repeating in every read request.
+    size_t min_number_of_marks;
 
     void serialize(WriteBuffer & out, UInt64 initiator_protocol_version) const;
     String describe();

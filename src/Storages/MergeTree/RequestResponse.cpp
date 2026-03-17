@@ -40,7 +40,12 @@ void ParallelReadRequest::serialize(WriteBuffer & out, UInt64 initiator_protocol
 
     writeIntBinary(mode, out);
     writeIntBinary(replica_num, out);
-    writeIntBinary(min_number_of_marks, out);
+    /// Since protocol version 6, `min_number_of_marks` is sent once in the initial announcement.
+    /// Write the real value for older initiators that still read it; write 0 for new ones.
+    if (initiator_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
+        writeIntBinary(static_cast<size_t>(0), out);
+    else
+        writeIntBinary(min_number_of_marks, out);
     description.serialize(out, initiator_protocol_version);
 }
 
@@ -137,6 +142,8 @@ void InitialAllRangesAnnouncement::serialize(WriteBuffer & out, UInt64 initiator
     writeIntBinary(replica_num, out);
     if (initiator_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MARK_SEGMENT_SIZE_FIELD)
         writeIntBinary(mark_segment_size, out);
+    if (initiator_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
+        writeIntBinary(min_number_of_marks, out);
 }
 
 
@@ -170,7 +177,11 @@ InitialAllRangesAnnouncement InitialAllRangesAnnouncement::deserialize(ReadBuffe
     if (replica_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MARK_SEGMENT_SIZE_FIELD)
         readIntBinary(mark_segment_size, in);
 
-    return InitialAllRangesAnnouncement{mode, description, replica_num, mark_segment_size};
+    size_t min_number_of_marks = 0;
+    if (replica_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
+        readIntBinary(min_number_of_marks, in);
+
+    return InitialAllRangesAnnouncement{mode, description, replica_num, mark_segment_size, min_number_of_marks};
 }
 
 }

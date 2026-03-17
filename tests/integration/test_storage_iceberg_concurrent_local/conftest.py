@@ -76,7 +76,6 @@ def started_cluster_iceberg():
         cluster.add_instance(
             "node1",
             main_configs=[
-                "configs/config.d/query_log.xml",
                 "configs/config.d/cluster.xml",
                 "configs/config.d/named_collections.xml",
             ],
@@ -88,7 +87,6 @@ def started_cluster_iceberg():
         cluster.add_instance(
             "node2",
             main_configs=[
-                "configs/config.d/query_log.xml",
                 "configs/config.d/cluster.xml",
                 "configs/config.d/named_collections.xml",
             ],

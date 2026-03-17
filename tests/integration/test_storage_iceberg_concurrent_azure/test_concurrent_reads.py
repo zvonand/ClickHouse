@@ -1,5 +1,4 @@
 import logging
-import os
 
 from helpers.iceberg_utils import get_uuid_str
 
@@ -234,109 +233,14 @@ def test_ch_write_spark_read(started_cluster_iceberg):
     expected_sum = sum(range(10)) + 42 + 123  # 45 + 42 + 123 = 210
     assert int(result) == expected_sum, f"Expected sum {expected_sum}, got {result.strip()}"
 
-    # List all blobs to see what CH wrote
-    blob_client = started_cluster_iceberg.blob_service_client
-    container_client = blob_client.get_container_client(AZURE_CONTAINER)
-    blobs = sorted([b.name for b in container_client.list_blobs(name_starts_with=blob_path)])
-    logging.info(f"Blobs after CH writes ({len(blobs)}):")
-    for b in blobs:
-        logging.info(f"  {b}")
-
-    # Check version-hint content
-    version_hint_path = f"{blob_path}metadata/version-hint.text"
-    try:
-        hint_blob = container_client.get_blob_client(version_hint_path)
-        hint_content = hint_blob.download_blob().readall().decode()
-        logging.info(f"version-hint.text content: '{hint_content}'")
-    except Exception as e:
-        logging.info(f"version-hint.text not found or error: {e}")
-
-    # Dump key fields from v4.metadata.json
-    import json as json_mod
-    v4_path = f"{blob_path}metadata/v4.metadata.json"
-    try:
-        v4_blob = container_client.get_blob_client(v4_path)
-        v4_content = v4_blob.download_blob().readall().decode()
-        v4 = json_mod.loads(v4_content)
-        logging.info(f"v4 location: {v4.get('location')}")
-        logging.info(f"v4 current-snapshot-id: {v4.get('current-snapshot-id')}")
-        for snap in v4.get("snapshots", []):
-            logging.info(f"  snapshot {snap.get('snapshot-id')}: manifest-list={snap.get('manifest-list')}")
-    except Exception as e:
-        logging.info(f"v4.metadata.json error: {e}")
-
     # Spark should also see the data written by ClickHouse.
-    # Read via direct path to bypass catalog caching entirely.
     started_cluster_iceberg.spark_session._restart()
     spark = started_cluster_iceberg.spark_session
 
     wasb_table_path = (
         f"wasb://{AZURE_CONTAINER}@devstoreaccount1.blob.core.windows.net/{blob_path}"
     )
-    # Try reading snapshots metadata to see which version Spark loaded
-    try:
-        snapshots_df = spark.read.format("iceberg").load(f"{wasb_table_path}#snapshots").collect()
-        logging.info(f"Spark sees {len(snapshots_df)} snapshots")
-        for s in snapshots_df:
-            logging.info(f"  snapshot: {s}")
-    except Exception as e:
-        logging.info(f"Cannot read snapshots: {e}")
-
-    # Try reading individual parquet files to check if Spark can access CH-written data
-    for b in blobs:
-        if b.endswith(".parquet"):
-            wasb_file = f"wasb://{AZURE_CONTAINER}@devstoreaccount1.blob.core.windows.net/{b}"
-            try:
-                pq_df = spark.read.parquet(wasb_file)
-                pq_rows = pq_df.collect()
-                logging.info(f"Parquet {b}: {len(pq_rows)} rows, schema={pq_df.schema}, values={pq_rows}")
-            except Exception as e:
-                logging.info(f"Parquet {b}: FAILED - {e}")
-
-    # Use Spark to read manifest lists as avro files directly
-    snap_blobs = [b for b in blobs if "snap-" in b and b.endswith(".avro")]
-    for snap_blob in snap_blobs:
-        wasb_snap = f"wasb://{AZURE_CONTAINER}@devstoreaccount1.blob.core.windows.net/{snap_blob}"
-        try:
-            avro_df = spark.read.format("avro").load(wasb_snap)
-            rows = avro_df.collect()
-            logging.info(f"ManifestList {snap_blob}: {len(rows)} entries")
-            for r in rows:
-                logging.info(f"  entry: {r.asDict()}")
-        except Exception as e:
-            logging.info(f"ManifestList {snap_blob}: FAILED - {e}")
-
-    # Read CH-written manifest files (not manifest lists) as avro
-    manifest_blobs = [b for b in blobs if b.endswith(".avro") and "snap-" not in b and "/metadata/" in b]
-    for manifest_blob in manifest_blobs:
-        wasb_manifest = f"wasb://{AZURE_CONTAINER}@devstoreaccount1.blob.core.windows.net/{manifest_blob}"
-        try:
-            avro_df = spark.read.format("avro").load(wasb_manifest)
-            rows = avro_df.collect()
-            logging.info(f"ManifestFile {manifest_blob}: {len(rows)} entries, schema={avro_df.schema.simpleString()}")
-            for r in rows:
-                logging.info(f"  data_file entry: {r.asDict()}")
-        except Exception as e:
-            logging.info(f"ManifestFile {manifest_blob}: FAILED - {e}")
-
-    # Read with each snapshot to isolate which one is broken
-    for snap in snapshots_df:
-        sid = snap.snapshot_id
-        try:
-            snap_df = spark.read.format("iceberg").option("snapshot-id", sid).load(wasb_table_path).collect()
-            logging.info(f"Snapshot {sid}: {len(snap_df)} rows")
-        except Exception as e:
-            logging.info(f"Snapshot {sid}: FAILED - {e}")
-
     df = spark.read.format("iceberg").load(wasb_table_path).collect()
-
-    # Dump Spark log for Iceberg debug info
-    spark_log = os.path.join(started_cluster_iceberg.instances_dir, "spark.log")
-    if os.path.exists(spark_log):
-        with open(spark_log) as f:
-            for line in f:
-                if "iceberg" in line.lower() or "manifest" in line.lower() or "scan" in line.lower():
-                    logging.info(f"SPARK: {line.rstrip()}")
 
     assert len(df) == 12, f"Spark expected 12 rows, got {len(df)}"
 

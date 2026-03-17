@@ -33,10 +33,6 @@ appender.file.name = file
 appender.file.fileName = {spark_log_path}
 appender.file.layout.type = PatternLayout
 appender.file.layout.pattern = %d{{yy/MM/dd HH:mm:ss}} %p %c{{1}}: %m%n%ex
-
-# Enable trace logging for Iceberg internals
-logger.iceberg.name = org.apache.iceberg
-logger.iceberg.level = trace
 """
         )
     return props_path

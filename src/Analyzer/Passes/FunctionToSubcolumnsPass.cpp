@@ -442,7 +442,7 @@ std::map<std::pair<TypeIndex, String>, NodeToSubcolumnTransformer> node_transfor
 ///
 /// intermediate_functions contains the chain from outermost to innermost,
 /// e.g. [inner_tupleElement_1, ..., inner_tupleElement_M, arrayElement].
-void optimizeJsonArrayElement(
+void optimizeJSONArrayElement(
     QueryTreeNodePtr &, FunctionNode & function_node, ColumnContext & ctx,
     std::vector<FunctionNode *> & intermediate_functions)
 {
@@ -539,7 +539,7 @@ void optimizeJsonArrayElement(
 std::map<std::pair<TypeIndex, String>, ChainedNodeToSubcolumnTransformer> chained_node_transformers =
 {
     {
-        {TypeIndex::Dynamic, "tupleElement"}, optimizeJsonArrayElement,
+        {TypeIndex::Dynamic, "tupleElement"}, optimizeJSONArrayElement,
     },
 };
 

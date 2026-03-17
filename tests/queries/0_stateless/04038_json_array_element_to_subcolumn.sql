@@ -1,4 +1,4 @@
--- Tags: no-parallel-replicas
+-- Tags: no-fasttest, no-parallel-replicas
 
 SET enable_analyzer = 1;
 

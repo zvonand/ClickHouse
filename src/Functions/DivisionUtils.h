@@ -148,9 +148,10 @@ struct ModuloImpl
 
     static const constexpr bool allow_fixed_string = false;
     static const constexpr bool allow_string_integer = false;
-    /// See the comment in DivideIntegralImpl. Modulo uses the same `div` instruction.
-    /// ModuloOrZeroImpl<UInt32, UInt32> Vector: 256 B (v2) vs 1344 B (v3) without this.
-    static constexpr bool no_vectorize = true;
+    /// Integer modulo uses the same `div` instruction as integer division — no
+    /// SIMD benefit, only code bloat.  But the float path (a - trunc(a/b)*b)
+    /// vectorizes well (divpd/roundpd are 2x throughput of divsd/roundsd).
+    static constexpr bool no_vectorize = !is_floating_point<typename NumberTraits::ResultOfModulo<A, B>::Type>;
 
     template <typename Result = ResultType>
     static Result apply(A a, B b)

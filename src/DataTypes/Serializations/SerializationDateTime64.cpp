@@ -313,4 +313,9 @@ bool SerializationDateTime64::tryDeserializeTextCSV(IColumn & column, ReadBuffer
     return true;
 }
 
+size_t SerializationDateTime64::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
 }

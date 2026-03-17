@@ -874,4 +874,9 @@ bool SerializationLowCardinality::tryDeserializeImpl(
     return true;
 }
 
+size_t SerializationLowCardinality::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
 }

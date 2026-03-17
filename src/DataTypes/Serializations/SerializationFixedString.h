@@ -18,6 +18,8 @@ public:
 
     static SerializationPtr create(size_t n_);
 
+    size_t allocatedBytes() const override;
+
     size_t getN() const { return n; }
 
     void serializeBinary(const Field & field, WriteBuffer & ostr, const FormatSettings &) const override;

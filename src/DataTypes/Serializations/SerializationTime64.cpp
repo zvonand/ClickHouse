@@ -302,4 +302,9 @@ bool SerializationTime64::tryDeserializeTextCSV(IColumn & column, ReadBuffer & i
     return true;
 }
 
+size_t SerializationTime64::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
 }

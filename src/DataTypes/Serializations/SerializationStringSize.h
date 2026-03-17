@@ -18,6 +18,8 @@ public:
 
     static SerializationPtr create(MergeTreeStringSerializationVersion version_);
 
+    size_t allocatedBytes() const override;
+
     void enumerateStreams(
         EnumerateStreamsSettings & settings,
         const StreamCallback & callback,

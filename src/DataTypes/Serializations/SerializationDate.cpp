@@ -153,4 +153,9 @@ SerializationPtr SerializationDate::create(const DateLUTImpl & time_zone_)
     return ISerialization::pooled(getHash(time_zone_), [&] { return new SerializationDate(time_zone_); });
 }
 
+size_t SerializationDate::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
 }

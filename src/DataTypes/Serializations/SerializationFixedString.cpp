@@ -308,4 +308,9 @@ void SerializationFixedString::serializeTextMarkdown(
         serializeTextEscaped(column, row_num, ostr, settings);
 }
 
+size_t SerializationFixedString::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
 }

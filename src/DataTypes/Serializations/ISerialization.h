@@ -667,7 +667,7 @@ public:
 
     /// Returns the total number of bytes allocated for this serialization object,
     /// including sizeof(*this) and any heap allocations (strings, vectors, etc.).
-    virtual size_t allocatedBytes() const { return sizeof(*this); }
+    virtual size_t allocatedBytes() const { return 0; }
 
     /// Returns true if this serialization supports pooling (caching by hash).
     /// Returns false if the serialization or any of its nested serializations

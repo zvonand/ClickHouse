@@ -16,6 +16,8 @@ public:
 
     static SerializationPtr create(const DateLUTImpl & time_zone_ = DateLUT::instance());
 
+    size_t allocatedBytes() const override;
+
     void serializeText(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings &) const override;
     void deserializeWholeText(IColumn & column, ReadBuffer & istr, const FormatSettings &) const override;
     bool tryDeserializeWholeText(IColumn & column, ReadBuffer & istr, const FormatSettings &) const override;

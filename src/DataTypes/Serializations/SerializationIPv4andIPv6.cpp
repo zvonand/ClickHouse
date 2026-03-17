@@ -199,6 +199,12 @@ SerializationPtr SerializationIP<IPv>::create()
     return ISerialization::pooled(getHash(), [] { return new SerializationIP<IPv>(); });
 }
 
+template <typename IPv>
+size_t SerializationIP<IPv>::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
 template class SerializationIP<IPv4>;
 template class SerializationIP<IPv6>;
 

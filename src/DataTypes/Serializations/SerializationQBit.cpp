@@ -635,4 +635,9 @@ template void SerializationQBit::untransposeBitPlane(const UInt8 * src, UInt64 *
 template void SerializationQBit::untransposeBitPlane(const UInt8 * src, UInt32 * dst, size_t stride_len, UInt32 bit_mask);
 template void SerializationQBit::untransposeBitPlane(const UInt8 * src, UInt16 * dst, size_t stride_len, UInt16 bit_mask);
 
+size_t SerializationQBit::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
 }

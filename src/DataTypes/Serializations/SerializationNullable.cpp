@@ -952,4 +952,9 @@ SerializationPtr SerializationNullable::create(const SerializationPtr & nested_,
     return ISerialization::pooled(getHash(nested_, use_default_null_map_), [&] { return new SerializationNullable(nested_, use_default_null_map_); });
 }
 
+size_t SerializationNullable::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
 }

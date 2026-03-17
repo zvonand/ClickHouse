@@ -1184,6 +1184,11 @@ void SerializationDynamic::serializeTextXML(const IColumn & column, size_t row_n
     serializeTextImpl(column, row_num, ostr, nested_serialize);
 }
 
+size_t SerializationDynamic::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
 SerializationPtr SerializationDynamic::createSerializationForType(const DataTypePtr & type) const
 {
     return type->getSerialization(serialization_info_settings);

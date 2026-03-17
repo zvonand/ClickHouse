@@ -664,33 +664,19 @@ namespace
 {
 
 template <typename T>
-OffsetsToIndexesResult convertOffsetsToIndexesImpl(const IColumn::Offsets & offsets)
+ColumnPtr convertOffsetsToIndexesImpl(const IColumn::Offsets & offsets)
 {
     auto result = ColumnVector<T>::create();
     auto & data = result->getData();
     data.reserve_exact(offsets.back());
-    IColumn::Filter filter(offsets.size(), 0);
-    size_t new_index = 0;
     for (size_t i = 0; i != offsets.size(); ++i)
-    {
-        size_t count = offsets[i] - offsets[i - 1];
-        if (count > 0)
-        {
-            filter[i] = 1;
-            data.resize_fill(data.size() + count, static_cast<T>(new_index));
-            ++new_index;
-        }
-    }
-
-    if (new_index == offsets.size())
-          return {std::move(result), {}};
-
-    return {std::move(result), std::move(filter)};
+        data.resize_fill(data.size() + offsets[i] - offsets[i - 1], static_cast<T>(i));
+    return result;
 }
 
 }
 
-OffsetsToIndexesResult convertOffsetsToIndexes(const IColumn::Offsets & offsets)
+ColumnPtr convertOffsetsToIndexes(const IColumn::Offsets & offsets)
 {
     size_t max_index = offsets.size();
     if (max_index <= std::numeric_limits<UInt8>::max())

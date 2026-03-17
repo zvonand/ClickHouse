@@ -627,18 +627,14 @@ static void replicateColumns(ColumnsWithTypeAndName & columns, const IColumn::Of
             column.column = column.column->replicate(offsets);
 }
 
-static void replicateColumnsLazily(ColumnsWithTypeAndName & columns, const IColumn::Offsets & offsets, const OffsetsToIndexesResult & indexes_with_filter)
+static void replicateColumnsLazily(ColumnsWithTypeAndName & columns, const IColumn::Offsets & offsets, const ColumnPtr & indexes)
 {
     for (auto & column : columns)
     {
         if (column.column)
         {
             if (isLazyReplicationUseful(column.column))
-            {
-                if (!indexes_with_filter.unused_rows_filter.empty())
-                    column.column = column.column->filter(indexes_with_filter.unused_rows_filter, -1);
-                column.column = ColumnReplicated::create(column.column, indexes_with_filter.indexes);
-            }
+                column.column = ColumnReplicated::create(column.column, indexes);
             else
                 column.column = column.column->replicate(offsets);
         }
@@ -726,9 +722,9 @@ static void executeAction(const ExpressionActions::Action & action, ExecutionCon
 
             if (enable_lazy_columns_replication)
             {
-                auto indexes_with_filter = convertOffsetsToIndexes(array->getOffsets());
-                replicateColumnsLazily(columns, array->getOffsets(), indexes_with_filter);
-                replicateColumnsLazily(inputs, array->getOffsets(), indexes_with_filter);
+                ColumnPtr indexes = convertOffsetsToIndexes(array->getOffsets());
+                replicateColumnsLazily(columns, array->getOffsets(), indexes);
+                replicateColumnsLazily(inputs, array->getOffsets(), indexes);
             }
             else
             {

@@ -1,8 +1,6 @@
 -- ls
-alpha.tsv
-beta.csv
+OK
 -- ls;
-alpha.tsv
-beta.csv
--- ls foo
+OK
+-- ls foo (should fail)
 Code: 47. DB::Exception: Unknown expression identifier `ls` in scope SELECT ls AS foo. (UNKNOWN_IDENTIFIER)

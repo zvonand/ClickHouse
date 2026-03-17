@@ -103,7 +103,7 @@ class Targeting:
         ), "Find tests by previous failures applicable only for PRs"
 
         tests = []
-        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="nikf", passwd="s2djrs4SSfdoWp")
         if self.job_type == self.INTEGRATION_JOB_TYPE:
             test_name_pattern = "^test_"
         elif self.job_type == self.STATELESS_JOB_TYPE:
@@ -282,18 +282,11 @@ class Targeting:
 
     def get_tests_by_changed_symbols(self, symbols: list) -> dict:
         """
-        Single batch query replacing the previous N+1 per-symbol round-trips.
+        Single batch query against checks_coverage_inverted2.
 
-        Uses hasAllTokens() with a splitByNonAlpha text index on the symbol column.
-        This single approach handles all three matching scenarios:
-          1. New normalized format (args stripped at export): tokens match exactly
-          2. Old format in CIDB (full args present): token match ignores argument tokens
-          3. Template instantiations (class template args differ): template arg tokens
-             are extra tokens in the CIDB symbol but hasAllTokens only requires the
-             query tokens to ALL be present — extra tokens are allowed
-
-        CIDB symbols are normalized in-SQL (same stripping logic as export_coverage.py)
-        so results are grouped by qualified function name and mapped back to input symbols.
+        Symbols are pre-normalized by normalize_symbol() (no return type, no args,
+        no template args) and matched with exact IN lookup against the stored
+        normalized symbols. The bloom_filter index makes per-symbol lookup fast.
 
         Symbols covering more than MAX_SYMBOL_COVERAGE_PCT% of all tests are excluded —
         they carry no signal for targeted test selection.
@@ -316,62 +309,33 @@ class Targeting:
             f"unique_normalized={len(norm_to_originals)}"
         )
 
-        # Build per-symbol hasAllTokens conditions.
-        # Pass the normalized symbol string directly — ClickHouse tokenizes it with
-        # the same splitByNonAlpha tokenizer used for the index, so no Python-side
-        # token splitting is needed. hasAllTokens(symbol, 'DB::Foo::bar') matches:
-        #   - 'DB::Foo::bar'                (exact, new format)
-        #   - 'DB::Foo::bar(arg1, arg2)'    (old format with args — arg tokens are extras)
-        #   - 'DB::Foo<T>::bar() const'     (class template — T is an extra token)
-        match_conditions = []
-        for norm in norm_to_originals:
-            if norm:
-                match_conditions.append(
-                    f"hasAllTokens(symbol, '{self._escape_sql_string(norm)}')"
-                )
-
-        if not match_conditions:
+        norms = [n for n in norm_to_originals if n]
+        if not norms:
             return {sym: [] for sym in symbols}
 
-        combined_match = " OR ".join(f"({c})" for c in match_conditions)
-        print(f"[find_tests] built {len(match_conditions)} hasAllTokens conditions")
-
-        # The SQL normalization expression — strips argument list from CIDB symbols,
-        # identical to the logic in export_coverage.py.  Used to group template
-        # instantiations and old-format symbols under the same key.
-        SQL_NORMALIZE = (
-            "if(position(replaceAll(symbol, '(anonymous namespace)', repeat('x', 21)), '(') > 0,"
-            "   substring(symbol, 1, position(replaceAll(symbol, '(anonymous namespace)', repeat('x', 21)), '(') - 1),"
-            "   symbol)"
-        )
+        in_list = ", ".join(f"'{self._escape_sql_string(n)}'" for n in norms)
+        print(f"[find_tests] built {len(norms)} exact-match conditions")
 
         query = f"""
         SELECT
-            {SQL_NORMALIZE} AS norm_symbol,
+            symbol AS norm_symbol,
             groupArray(DISTINCT test_name) AS tests
-        FROM checks_coverage_inverted
+        FROM checks_coverage_inverted2
         WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND notEmpty(test_name)
-          AND ({combined_match})
+          AND symbol IN ({in_list})
         GROUP BY norm_symbol
         HAVING count(DISTINCT test_name) < least(
-            -- Percentage-based cap: exclude symbols covering >MAX_SYMBOL_COVERAGE_PCT%
-            -- of all tests (hot-path functions like PipelineExecutor::execute that
-            -- run in every query carry no signal for targeted test selection).
             greatest(
                 toUInt64((
                     SELECT count(DISTINCT test_name) * {self.MAX_SYMBOL_COVERAGE_PCT} / 100
-                    FROM checks_coverage_inverted
+                    FROM checks_coverage_inverted2
                     WHERE check_start_time > now() - interval 3 days
                       AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
                 )),
                 toUInt64({self.MIN_TESTS_THRESHOLD})
             ),
-            -- Absolute cap: never return more than MAX_TESTS_PER_SYMBOL tests for
-            -- a single symbol regardless of corpus size. Keeps result sets
-            -- manageable and consistent with the Python-side max_tests_per_symbol
-            -- filter in get_most_relevant_tests().
             toUInt64({self.MAX_TESTS_PER_SYMBOL})
         )
         """
@@ -397,21 +361,10 @@ class Targeting:
                 print(f"Failed to parse tests for '{norm_sym}': {tests_raw[:100]}")
 
         # Map results back to original input symbols.
-        # The query already unioned all matching CIDB symbols (old/new format, all
-        # template instantiations) via hasAllTokens — no further expansion needed here.
         # Multiple originals sharing the same normalized form get the same test list.
-        def _tokens(s: str) -> set:
-            """Replicate ClickHouse splitByNonAlpha tokenization in Python."""
-            return {t for t in re.split(r'[^a-zA-Z0-9_]', s) if t}
-
         symbol_to_tests: dict[str, list] = {}
         for norm, originals in norm_to_originals.items():
-            tests: set[str] = set()
-            norm_tokens = _tokens(norm)
-            for result_norm, result_tests in norm_to_tests.items():
-                if norm_tokens <= _tokens(result_norm):
-                    tests.update(result_tests)
-            tests_list = sorted(tests)
+            tests_list = sorted(norm_to_tests.get(norm, []))
             for orig in originals:
                 symbol_to_tests[orig] = tests_list
 
@@ -618,12 +571,18 @@ if __name__ == "__main__":
             f"{file}:{line} -> symbol [{symbol[:70] + '...' if symbol else 'NOT FOUND'}"
         )
 
+    all_tests: set = set()
+    for tests in (t for _, (_, t) in file_line_to_symbol_tests.items() if t):
+        all_tests.update(tests)
+
     print("\nTests found for lines:")
     for (file, line), (symbol, tests) in file_line_to_symbol_tests.items():
         if not tests:
             continue
         print(f"{file}:{line} -> symbol [{symbol[:70]}...]:")
-        for test in tests[:10]:
+        for test in tests:
             print(f" - {test}")
-        if len(tests) > 10:
-            print(f" - ... and {len(tests) - 10} more tests")
+
+    print(f"\nAll selected tests ({len(all_tests)}):")
+    for test in sorted(all_tests):
+        print(f" {test}")

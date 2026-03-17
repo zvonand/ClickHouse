@@ -479,6 +479,189 @@ The fallback path (treat as raw file offset) is why client dump file offsets res
 
 ---
 
+## Future Work: Better Test Selection
+
+### The fundamental gap
+
+Coverage data tells you **correlation** — "this code ran during this test."
+What you actually want is **causation** — "this test would catch a bug in this code."
+
+A test that runs `DB::Decimal::add` as infrastructure (it happens to be in the
+query path) is very different from a test that *asserts* the correctness of decimal
+arithmetic. Coverage treats them identically.
+
+Two tractable improvements require no fundamental research, just engineering:
+
+---
+
+### Improvement 1: Token matching (easy, build today)
+
+**Problem it solves**: Setting/configuration changes, SQL function renames, storage
+engine parameters. When you change `merge_selector_algorithm`, DWARF gives you the
+settings parser — which runs in every query, hits the frequency filter, gets dropped.
+The test that does `SET merge_selector_algorithm = 'Simple'` is invisible to coverage
+but trivially found by grep.
+
+**How it works**:
+1. Extract identifiers from the PR diff — CamelCase + snake_case split, ≥5 chars,
+   filter language keywords
+2. Grep `tests/queries/0_stateless/*.sql` (and reference files) for those tokens
+3. Score by number of matching tokens, take top N
+
+**Estimated gain**: ~55% recall improvement specifically for the ~20% of PRs that
+touch settings/config/SQL function names. Small overhead (a grep, no new infra).
+
+**What to store**: nothing new — this is a local grep at PR time.
+
+---
+
+### Improvement 2: Call graph traversal (moderate, requires one new artifact)
+
+**Problem it solves**: When function B is changed, coverage only finds tests that
+directly exercised B. But if A calls B, any test covering A would also catch a bug in B.
+Coverage already captures this transitively *when the tests were run* — the gap is for
+functions recently added or rarely called.
+
+**How it works**:
+
+```
+Test → A → B (changed)
+```
+
+DWARF 5 records `DW_TAG_call_site` entries inside each `DW_TAG_subprogram` — every
+call site in the binary. Query: "which functions call the changed function?" at depth 1-2.
+Add those callers to the symbol set, then query the coverage table for their tests.
+
+Depth 3+ is noise — everything eventually calls `String::find`.
+
+**Required new artifact — `checks_call_graph` table**:
+
+```sql
+CREATE TABLE default.checks_call_graph
+(
+    callee      LowCardinality(String),  -- normalized: DB::Foo::bar
+    caller      LowCardinality(String),  -- normalized: DB::Baz::qux
+    binary_sha  LowCardinality(String),  -- which nightly build
+    built_at    DateTime('UTC'),
+    INDEX callee_idx(callee) TYPE bloom_filter GRANULARITY 1
+)
+ENGINE = ReplacingMergeTree(built_at)
+ORDER BY (callee, caller);
+```
+
+Updated nightly: one row per `(caller, callee)` edge extracted from the coverage binary.
+
+**Required new job — `export_call_graph.py`** (runs after the coverage binary is built,
+before tests start):
+
+```python
+# clickhouse local reads DWARF call_site entries from the binary
+query = """
+    SELECT
+        demangle(callee.linkage_name) AS callee_sym,
+        demangle(caller.linkage_name) AS caller_sym
+    FROM file('{binary}', 'DWARF') AS call_site
+    JOIN file('{binary}', 'DWARF') AS callee
+      ON call_site.call_target = callee.address
+    JOIN file('{binary}', 'DWARF') AS caller
+      ON call_site.parent = caller.offset
+    WHERE call_site.tag = 'call_site'
+      AND callee.tag = 'subprogram'
+      AND caller.tag = 'subprogram'
+      AND notEmpty(callee.linkage_name)
+      AND notEmpty(caller.linkage_name)
+"""
+# INSERT into checks_call_graph via remoteSecure
+```
+
+NOTE: whether `DW_TAG_call_site` is exposed by ClickHouse's DWARF reader needs
+verification. If not, alternative is binary disassembly: parse CALL instruction targets
+from `llvm-objdump --disassemble` output.
+
+**Change to `find_symbols.py`**: after DWARF lookup produces `changed_symbols`, query
+`checks_call_graph` to expand to callers at depth 1-2:
+
+```sql
+-- depth-1 callers
+SELECT caller FROM checks_call_graph
+WHERE callee IN (changed_symbols)
+  AND binary_sha = (SELECT max(binary_sha) FROM checks_call_graph)
+```
+
+Run this query twice (once more for depth-2), union with the original symbols, then pass
+the expanded set to `find_tests.py` as before. No change to `find_tests.py`.
+
+**No change to `find_tests.py`** — it already handles a list of symbols.
+
+**Estimated gain**: ~5-15% recall on top of coverage, mostly for recently-added code
+and low-frequency utility functions. Coverage already transitively captures most
+call chains for stable code.
+
+---
+
+### Full pipeline with both improvements
+
+```
+PR diff
+  │
+  ├─ Token extraction (new) ─────────────────────────────────┐
+  │    split CamelCase/snake_case, ≥5 chars                  │
+  │    ↓                                                      │
+  │  diff_tokens                                              │
+  │    ↓                                                      │
+  │  grep tests/queries/**/*.sql ─────────────────> token_tests (scored)
+  │                                                           │
+  ├─ DWARF lookup (existing) ────────────────────┐            │
+  │    changed (file, line) → function names     │            │
+  │    ↓                                         │            │
+  │  changed_symbols                             │            │
+  │    ↓                                         │            │
+  │  call graph expansion (new)                  │            │
+  │    checks_call_graph depth 1-2               │            │
+  │    ↓                                         │            │
+  │  expanded_symbols                            │            │
+  │    ↓                                         ↓            │
+  │  CIDB hasAllTokens query ───────────> coverage_tests      │
+  │  (checks_coverage_inverted)                  │            │
+  │                                              │            │
+  └──────────────────────────────────────────────┴────────────┘
+                                                  ↓
+                                         union, rank by:
+                                         1. direct coverage match (depth 0)
+                                         2. caller coverage match (depth 1-2)
+                                         3. token match score
+                                         → top N tests
+```
+
+---
+
+### How to measure the gain before building
+
+Retrospective evaluation on existing CIDB data:
+
+```python
+# For each PR with test failures in the last 90 days:
+# 1. Get diff tokens from GitHub
+# 2. Grep test SQL for tokens
+# 3. Compare overlap with actual failing tests
+# Measure: recall = failing_tests_selected / all_failing_tests
+
+for pr, failing_tests in get_failed_prs(last_90_days):
+    tokens = extract_tokens(get_pr_diff(pr))
+    token_selected = grep_tests(tokens)
+    coverage_selected = get_coverage_selected(pr)
+
+    print(f"PR {pr}:")
+    print(f"  coverage recall:      {recall(coverage_selected, failing_tests):.0%}")
+    print(f"  +token recall:        {recall(coverage_selected | token_selected, failing_tests):.0%}")
+    print(f"  selected set size:    {len(coverage_selected)} → {len(coverage_selected | token_selected)}")
+```
+
+Run this before writing any production code. It costs one day and gives hard numbers
+instead of estimates.
+
+---
+
 ## Use Cases for Coverage Data
 
 1. **Targeted test selection** (current) — run only tests covering changed symbols

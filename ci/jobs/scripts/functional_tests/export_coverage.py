@@ -145,10 +145,11 @@ class CoverageExporter:
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                     )
                     with Pool(
+                        processes=max(8, os.cpu_count() or 8),
                         initializer=_init_normalizer,
                         initargs=(self.check_start_time, self.job_name),
                     ) as pool, open(norm_file, "w", buffering=1 << 20) as fout:
-                        for result in pool.imap(_normalize_line, select_proc.stdout, chunksize=200_000):
+                        for result in pool.imap(_normalize_line, select_proc.stdout, chunksize=1_000_000):
                             if result:
                                 fout.write(result)
 

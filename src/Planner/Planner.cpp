@@ -1872,6 +1872,21 @@ void Planner::buildPlanForUnionNode()
             false /*pre distinct*/);
         query_plan.addStep(std::move(distinct_step));
     }
+
+    /// Each child of the UNION/INTERSECT/EXCEPT may independently add a DelayedMaterializingCTEsStep
+    /// for the same CTE. During optimization only one child wins the atomic is_materialization_planned
+    /// flag, leaving the other children without CTE materialization. Because IntersectOrExceptStep
+    /// runs all children concurrently, the losing child may read from the CTE StorageMemory before the
+    /// winning child has finished materializing it.
+    ///
+    /// Fix: add a DelayedMaterializingCTEsStep at the UNION level so that resolveMaterializingCTEs
+    /// (which walks pre-order) claims the CTE here first, ensuring materialization completes before
+    /// any child starts reading.
+    if (!select_query_options.only_analyze)
+    {
+        auto materialized_ctes = collectMaterializedCTEs(query_tree, select_query_options);
+        addBuildSubqueriesForMaterializedCTEsIfNeeded(query_plan, select_query_options, materialized_ctes);
+    }
 }
 
 void Planner::buildPlanForQueryNode()

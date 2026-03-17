@@ -605,15 +605,16 @@ void ASTCreateQuery::formatQueryImpl(WriteBuffer & ostr, const FormatSettings & 
         /// When the query has trailing output options like SETTINGS, FORMAT, or INTO OUTFILE
         /// (either from this CREATE query or from an outer query like EXPLAIN),
         /// we must wrap the AS-select in parentheses. Otherwise the trailing
-        /// SETTINGS clause would be consumed by ParserSelectQuery as part of the
+        /// SETTINGS clause would be consumed by `ParserSelectQuery` as part of the
         /// last SELECT in the UNION/INTERSECT chain during re-parsing, instead of
-        /// remaining on the ASTCreateQuery — breaking the formatting roundtrip.
-        /// The outer parentheses already protect against SETTINGS consumption, so
-        /// clear the flag to prevent inner nodes from adding redundant parentheses.
-        if (settings_ast || frame.parent_has_trailing_settings)
+        /// remaining on the outer query — breaking the formatting roundtrip.
+        /// The outer parentheses already protect against consumption, so
+        /// clear the flags to prevent inner nodes from adding redundant parentheses.
+        if (settings_ast || frame.has_trailing_output_options)
         {
             ostr << "(";
             frame.parent_has_trailing_settings = false;
+            frame.has_trailing_output_options = false;
             select->format(ostr, settings, state, frame);
             ostr << ")";
         }

@@ -33,11 +33,11 @@ namespace ErrorCodes
 {
     extern const int BAD_ARGUMENTS;
     extern const int DUPLICATE_COLUMN;
+    extern const int INCORRECT_DATA;
     extern const int NOT_FOUND_COLUMN_IN_BLOCK;
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
     extern const int SIZES_OF_COLUMNS_IN_TUPLE_DOESNT_MATCH;
     extern const int ARGUMENT_OUT_OF_BOUND;
-    extern const int LOGICAL_ERROR;
 }
 
 
@@ -217,7 +217,7 @@ MutableColumnPtr DataTypeTuple::createColumn(const ISerialization & serializatio
 
     const auto * serialization_tuple = typeid_cast<const SerializationTuple *>(current_serialization);
     if (!serialization_tuple)
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "Unexpected serialization to create column of type Tuple");
+        throw Exception(ErrorCodes::INCORRECT_DATA, "Unexpected serialization to create column of type Tuple");
 
     if (elems.empty())
         return IDataType::createColumn(serialization);

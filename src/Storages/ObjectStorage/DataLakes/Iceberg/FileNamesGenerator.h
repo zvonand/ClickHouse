@@ -52,8 +52,8 @@ public:
     void setCompressionMethod(CompressionMethod compression_method_) { compression_method = compression_method_; }
     void setDataDir(const String & data_table_dir, const String & data_storage_dir)
     {
-        data_dir = data_table_dir + "data/";
-        storage_data_dir = data_storage_dir + "data/";
+        data_dir = data_table_dir;
+        storage_data_dir = data_storage_dir;
     }
 
 private:

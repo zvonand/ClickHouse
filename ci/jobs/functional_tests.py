@@ -190,6 +190,8 @@ def main():
             is_llvm_coverage = True
         elif "coverage" in to:
             is_coverage = True
+        if "per_test_coverage" in to:
+            is_coverage = True
         if "s3 storage" in to:
             is_s3_storage = True
         if "azure" in to:

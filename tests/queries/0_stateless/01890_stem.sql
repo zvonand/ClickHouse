@@ -35,8 +35,7 @@ SELECT stem('étudié', 'fr');
 SELECT stem('peuvent', 'fr');
 
 SELECT '-- FixedString input produces String output.';
-SELECT stem(toFixedString('blessing', 10), 'en');
-SELECT toTypeName(stem(toFixedString('word', 10), 'en'));
+SELECT stem(toFixedString('blessing', 10), 'en'), toTypeName(stem(toFixedString('word', 10), 'en'));
 
 SELECT '-- Nullable(String) input preserves nullability.';
 SELECT stem(toNullable('blessing'), 'en');

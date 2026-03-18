@@ -25,8 +25,7 @@ intens
 étudi
 peuvent
 -- FixedString input produces String output.
-bless
-String
+bless	String
 -- Nullable(String) input preserves nullability.
 bless
 \N

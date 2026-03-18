@@ -1,3 +1,5 @@
+-- Tags: no-random-merge-tree-settings, no-random-settings
+
 -- Regression test for https://github.com/ClickHouse/ClickHouse/issues/99578
 --
 -- A TOCTOU race between SYSTEM STOP MERGES / SYSTEM START MERGES could let a
@@ -6,9 +8,8 @@
 --   "Number of rows in source parts ... differs from number of bytes written
 --    to rows_sources file ... It is a bug."
 --
--- The fix latches the cancellation into the per-task `is_cancelled` flag so
--- that `checkOperationIsNotCanceled` reliably throws even when the global
--- blocker is cleared concurrently.
+-- The fix detects that the horizontal stage was cancelled (rows_sources_count == 0
+-- with multiple source parts) and aborts cleanly instead of hitting the assertion.
 
 DROP TABLE IF EXISTS test_vertical_merge_race;
 CREATE TABLE test_vertical_merge_race (

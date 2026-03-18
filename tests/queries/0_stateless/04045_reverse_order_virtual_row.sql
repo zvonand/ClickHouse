@@ -66,18 +66,44 @@ ORDER BY query_start_time DESC
 LIMIT 1;
 
 -- DESC with filter
+-- PK index prunes part 2 entirely (all rows >= 24576 fail x < 16384);
+-- LIMIT 4 satisfied from part 1's last qualifying granule: 1 * 8192 = 8192 rows.
 SELECT x FROM t_04045_rvrow
 WHERE x < 8192 * 2
 ORDER BY x DESC
 LIMIT 4
 SETTINGS read_in_order_use_virtual_row = 1, read_in_order_two_level_merge_threshold = 0,
-         max_threads = 1, optimize_read_in_order = 1, max_block_size = 8192;
+         max_threads = 1, optimize_read_in_order = 1, max_block_size = 8192,
+         log_comment = 'desc_filter';
+
+SYSTEM FLUSH LOGS query_log;
+
+SELECT read_rows FROM system.query_log
+WHERE event_date >= yesterday() AND event_time >= now() - 600
+    AND current_database = currentDatabase()
+    AND log_comment = 'desc_filter'
+    AND type = 'QueryFinish'
+ORDER BY query_start_time DESC
+LIMIT 1;
 
 -- DESC multi-column key
+-- ORDER BY (x DESC, y DESC) matches the table key reversed; virtual rows work
+-- identically to the single-column case: 2 * 8192 = 16384 rows.
 SELECT x, y FROM t_04045_rvrow
 ORDER BY x DESC, y DESC
 LIMIT 4
 SETTINGS read_in_order_use_virtual_row = 1, read_in_order_two_level_merge_threshold = 0,
-         max_threads = 1, optimize_read_in_order = 1, max_block_size = 8192;
+         max_threads = 1, optimize_read_in_order = 1, max_block_size = 8192,
+         log_comment = 'desc_multicol';
+
+SYSTEM FLUSH LOGS query_log;
+
+SELECT read_rows FROM system.query_log
+WHERE event_date >= yesterday() AND event_time >= now() - 600
+    AND current_database = currentDatabase()
+    AND log_comment = 'desc_multicol'
+    AND type = 'QueryFinish'
+ORDER BY query_start_time DESC
+LIMIT 1;
 
 DROP TABLE t_04045_rvrow;

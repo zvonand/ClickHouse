@@ -1,3 +1,5 @@
+SET enable_analyzer = 1;
+
 -- https://github.com/ClickHouse/ClickHouse/issues/62566
 SELECT
     *,

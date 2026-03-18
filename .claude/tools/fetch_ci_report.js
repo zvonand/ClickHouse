@@ -278,12 +278,21 @@ function extractArtifactLinks(jsonData) {
 
   extractFromResults(jsonData.results);
 
-  // Filter to only artifact links
-  return links.filter(link =>
-    link.href.includes('.tar.gz') ||
-    link.href.includes('.log') ||
-    link.href.includes('configs')
-  );
+  // Filter to artifact/log links; exclude json.html navigation links and raw binaries
+  return links.filter(link => {
+    const h = link.href;
+    // Exclude CI navigation/report links
+    if (h.includes('json.html')) return false;
+    // Include all log and archive formats
+    if (h.includes('.log') || h.includes('.log.zst')) return true;
+    if (h.includes('.tar.gz') || h.includes('.tar.zst') || h.includes('.tgz')) return true;
+    if (h.includes('.zst')) return true;
+    if (h.includes('.html') && !h.includes('json.html')) return true;
+    if (h.includes('.tsv')) return true;
+    if (h.includes('configs')) return true;
+    if (h.includes('artifact_report')) return true;
+    return false;
+  });
 }
 
 /**
@@ -618,10 +627,11 @@ async function fetchReport(inputUrl, options = {}) {
 
     // Download logs if requested
     if (options.downloadLogs) {
-      const logsLink = artifactLinks.find(l => l.href.includes('logs.tar.gz'));
+      const logsLink = artifactLinks.find(l => l.href.includes('logs.tar.gz') || l.href.includes('logs.tar.zst'));
       if (logsLink) {
         console.log(`\nDownloading logs from: ${logsLink.href}`);
-        const logsPath = '/tmp/ci_logs.tar.gz';
+        const ext = logsLink.href.endsWith('.zst') ? '.tar.zst' : '.tar.gz';
+        const logsPath = `/tmp/ci_logs${ext}`;
         execSync(`curl -sL "${logsLink.href}" -o ${logsPath}`);
         console.log(`Logs saved to: ${logsPath}`);
 

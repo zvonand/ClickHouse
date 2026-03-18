@@ -26,10 +26,6 @@ trap cleanup EXIT
 
 mkdir "$TESTDIR"
 
-F1="ls_test_file_1.tmp"
-F2="ls_test_file_2.tmp"
-F3="ls_test_file_3.tmp"
-
 echo "-- prepare files"
 touch "$TESTDIR/$F1" "$TESTDIR/$F2" "$TESTDIR/$F3"
 

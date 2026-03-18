@@ -65,10 +65,27 @@ def test_selecting_with_stale_vs_latest_metadata(started_cluster_iceberg_with_sp
 
     # no reads from S3 should be performed as a part of this operation
     instance.query("SYSTEM FLUSH LOGS query_log")
-    assert 0 == int(instance.query(f"""SELECT ProfileEvents['S3ReadRequestsCount']
-            FROM system.query_log
-            WHERE type = 'QueryFinish' AND log_comment = '{TABLE_NAME}_01'
-    """).strip())
+    s3_read, s3_get, s3_head, s3_list, cache_hit, cache_miss, cache_stale_miss = instance.query(f"""
+        SELECT
+            ProfileEvents['S3ReadRequestsCount'],
+            ProfileEvents['S3GetObject'],
+            ProfileEvents['S3HeadObject'],
+            ProfileEvents['S3ListObjects'],
+            ProfileEvents['IcebergMetadataFilesCacheHits'],
+            ProfileEvents['IcebergMetadataFilesCacheMisses'],
+            ProfileEvents['IcebergMetadataFilesCacheStaleMisses']
+        FROM system.query_log
+        WHERE type = 'QueryFinish' AND log_comment = '{TABLE_NAME}_01'
+    """).strip().split('\t')
+    # nothing has been requested from the remote catalog (s3)
+    assert 0 == int(s3_read)
+    assert 0 == int(s3_get)
+    assert 0 == int(s3_head)
+    assert 0 == int(s3_list)
+    # cache hits only, no misses
+    assert 0 < int(cache_hit)
+    assert 0 == int(cache_miss)
+    assert 0 == int(cache_stale_miss)
 
 
     # by default, SELECT will query remote catalog for the latest metadata
@@ -78,11 +95,25 @@ def test_selecting_with_stale_vs_latest_metadata(started_cluster_iceberg_with_sp
 
     # some reads should occur as a part of this operation
     instance.query("SYSTEM FLUSH LOGS query_log")
-    assert 0 < int(instance.query(f"""SELECT ProfileEvents['S3ReadRequestsCount']
-            FROM system.query_log
-            WHERE type = 'QueryFinish' AND log_comment = '{TABLE_NAME}_02'
-    """).strip())
-
+    s3_read, s3_get, s3_head, s3_list, cache_hit, cache_miss, cache_stale_miss = instance.query(f"""
+        SELECT
+            ProfileEvents['S3ReadRequestsCount'],
+            ProfileEvents['S3GetObject'],
+            ProfileEvents['S3HeadObject'],
+            ProfileEvents['S3ListObjects'],
+            ProfileEvents['IcebergMetadataFilesCacheHits'],
+            ProfileEvents['IcebergMetadataFilesCacheMisses'],
+            ProfileEvents['IcebergMetadataFilesCacheStaleMisses']
+        FROM system.query_log
+        WHERE type = 'QueryFinish' AND log_comment = '{TABLE_NAME}_02'
+    """).strip().split('\t')
+    assert 0 < int(s3_read)
+    assert 0 < int(s3_get)
+    assert 0 < int(s3_head)
+    assert 0 < int(s3_list)
+    assert 0 < int(cache_hit)   # old manifest lists & files are found in cache
+    assert 0 < int(cache_miss)  # new manifest lists & files are not found in local cache
+    assert 0 == int(cache_stale_miss)
 
     # 2. Validating that SELECT will pull the latest metadata if the cached version is stale
     write_iceberg_from_df(
@@ -98,34 +129,48 @@ def test_selecting_with_stale_vs_latest_metadata(started_cluster_iceberg_with_sp
         "",
     )
 
-    # first we sleep to make the cached metadata to be measurably stale
+    # first, we sleep to make the cached metadata to be measurably stale
     time.sleep(5)
 
-    # we accept stale metadata at SELECT, and running it with using cached metadata only - no call to remote catalog
+    # then, we accept really stale metadata at SELECT - no call to remote catalog
     assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}", settings={
                               "iceberg_metadata_staleness_ms":600_000,
                               "log_comment":f"{TABLE_NAME}_03"
                               })) == 200
 
     instance.query("SYSTEM FLUSH LOGS query_log")
+    # nothing has been queried from s3
     assert 0 == int(instance.query(f"""SELECT ProfileEvents['S3ReadRequestsCount']
             FROM system.query_log
             WHERE type = 'QueryFinish' AND log_comment = '{TABLE_NAME}_03'
     """).strip())
 
-    # now we'll query it with the staleness tolerance less that we slept, the latest metadata should get pulled from remote catalog
+    # lastly, we SELECT with tiny tolerance to stale metadata - latest metadata will be fetched from s3
     assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}", settings={
                               "iceberg_metadata_staleness_ms":4_000,
                               "log_comment":f"{TABLE_NAME}_04"
                               })) == 300
-
+    # latest metadata was fetched from s3
     instance.query("SYSTEM FLUSH LOGS query_log")
-    s3_reads, iceberg_cache_stale_misses = instance.query(f"""SELECT ProfileEvents['S3ReadRequestsCount'], ProfileEvents['IcebergMetadataFilesCacheStaleMisses']
-            FROM system.query_log
-            WHERE type = 'QueryFinish' AND log_comment = '{TABLE_NAME}_04'
+    s3_read, s3_get, s3_head, s3_list, cache_hit, cache_miss, cache_stale_miss = instance.query(f"""
+        SELECT
+            ProfileEvents['S3ReadRequestsCount'],
+            ProfileEvents['S3GetObject'],
+            ProfileEvents['S3HeadObject'],
+            ProfileEvents['S3ListObjects'],
+            ProfileEvents['IcebergMetadataFilesCacheHits'],
+            ProfileEvents['IcebergMetadataFilesCacheMisses'],
+            ProfileEvents['IcebergMetadataFilesCacheStaleMisses']
+        FROM system.query_log
+        WHERE type = 'QueryFinish' AND log_comment = '{TABLE_NAME}_04'
     """).strip().split('\t')
-    assert int(s3_reads) > 0
-    assert int(iceberg_cache_stale_misses) == 1
+    assert 0 < int(s3_read)
+    assert 0 < int(s3_get)
+    assert 0 < int(s3_head)
+    assert 0 < int(s3_list)
+    assert 0 < int(cache_hit)   # old manifest lists & files are found in cache
+    assert 0 < int(cache_miss)  # new manifest lists & files are not found in local cache
+    assert 0 < int(cache_stale_miss) # the cached metadata has been considered stale
 
 
 @pytest.mark.parametrize("storage_type", ["s3"])
@@ -208,8 +253,6 @@ def test_async_metadata_refresh(started_cluster_iceberg_with_spark, storage_type
         additional_settings = [
             f"iceberg_metadata_async_prefetch_period_ms={ASYNC_METADATA_REFRESH_PERIOD_MS}"
     ])
-
-
     assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
 
     # In order to track background activity against S3, let's remember current metric

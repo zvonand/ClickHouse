@@ -1026,6 +1026,28 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
         }
 
         get_column_options.withVirtuals();
+
+        /// Replace references to columns that don't exist in this child table with default values.
+        /// This happens when merge() is used over tables with different schemas and the processing
+        /// stage is above FetchColumns (e.g., for distributed/remote tables where the full query
+        /// is sent to the child for processing).
+        for (const auto & column_name : required_column_names)
+        {
+            if (column_name_to_node.contains(column_name))
+                continue;
+
+            if (storage_snapshot_->tryGetColumn(get_column_options, column_name))
+                continue;
+
+            auto merge_column = merge_storage_snapshot->tryGetColumn(
+                GetColumnsOptions(GetColumnsOptions::All).withVirtuals(), column_name);
+            if (!merge_column)
+                continue;
+
+            column_name_to_node.emplace(column_name,
+                std::make_shared<ConstantNode>(merge_column->type->getDefault(), merge_column->type));
+        }
+
         auto storage_columns = storage_snapshot_->metadata->getColumns();
 
         bool with_aliases = /* common_processed_stage == QueryProcessingStage::FetchColumns && */ !storage_columns.getAliases().empty();

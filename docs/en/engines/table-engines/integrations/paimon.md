@@ -185,7 +185,7 @@ Table engine `Paimon` is an alias to `PaimonS3` now.
 
 ## Data Types supported {#data-types-supported}
 
-| Paimon Data Type | ClickHouse Data Type 
+| Paimon Data Type | ClickHouse Data Type |
 |-------|--------|
 |BOOLEAN     |Int8      |
 |TINYINT     |Int8      |

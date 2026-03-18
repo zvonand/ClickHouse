@@ -361,7 +361,9 @@ bool createDirectoryAndChown(const std::string & dir, uid_t uid, gid_t gid, bool
 }
 
 /// Write the user management XML to `/etc/clickhouse-server/users.d/default-user.xml`.
-void manageClickHouseUser(
+/// Returns false if a user-requested setup (CLICKHOUSE_USER/PASSWORD/ACCESS_MANAGEMENT)
+/// is invalid — caller should treat this as fatal.
+bool manageClickHouseUser(
     const std::string & config_file,
     const std::string & clickhouse_user,
     const std::string & clickhouse_password,
@@ -371,7 +373,7 @@ void manageClickHouseUser(
     if (skip_user_setup)
     {
         std::cerr << "docker-init: explicitly skip changing user 'default'\n";
-        return;
+        return true;
     }
 
     const std::string users_d_dir = "/etc/clickhouse-server/users.d";
@@ -422,7 +424,7 @@ void manageClickHouseUser(
         {
             std::cerr << "docker-init: error: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT must be '0' or '1', got '"
                       << access_management << "'\n";
-            return;
+            return false;
         }
 
         if (!isValidIdentifier(clickhouse_user))
@@ -430,7 +432,7 @@ void manageClickHouseUser(
             std::cerr << "docker-init: error: CLICKHOUSE_USER '" << clickhouse_user
                       << "' contains characters not allowed in an XML element name; "
                          "use only alphanumeric characters and underscores\n";
-            return;
+            return false;
         }
 
         std::cerr << "docker-init: create new user '" << clickhouse_user << "' instead 'default'\n";
@@ -502,6 +504,7 @@ void manageClickHouseUser(
                 std::cerr << "docker-init: error: failed to write " << default_user_xml << "\n";
         }
     }
+    return true;
 }
 
 /// Start a temporary ClickHouse server, run init scripts, then stop it.
@@ -656,6 +659,8 @@ void initClickHouseDB(
         "--password", clickhouse_password,
     };
 
+    bool init_ok = true;
+
     /// Create default database if CLICKHOUSE_DB is set.
     if (!clickhouse_db.empty())
     {
@@ -664,6 +669,7 @@ void initClickHouseDB(
             std::cerr << "docker-init: error: CLICKHOUSE_DB '" << clickhouse_db
                       << "' contains characters not safe for use in SQL; "
                          "use only alphanumeric characters and underscores\n";
+            init_ok = false;
         }
         else
         {
@@ -672,12 +678,16 @@ void initClickHouseDB(
             create_db_args.insert(create_db_args.end(), {
                 "-q", "CREATE DATABASE IF NOT EXISTS " + clickhouse_db,
             });
-            runCommand(create_db_args);
+            if (runCommand(create_db_args) != 0)
+            {
+                std::cerr << "docker-init: error: failed to create database '" << clickhouse_db << "'\n";
+                init_ok = false;
+            }
         }
     }
 
     /// Process init scripts in sorted order.
-    if (fs::is_directory("/docker-entrypoint-initdb.d", ec))
+    if (init_ok && fs::is_directory("/docker-entrypoint-initdb.d", ec))
     {
         std::vector<fs::path> init_files;
         for (const auto & entry : fs::directory_iterator("/docker-entrypoint-initdb.d", ec))
@@ -694,7 +704,12 @@ void initClickHouseDB(
                 std::vector<std::string> args = client_base;
                 args.emplace_back("--queries-file");
                 args.push_back(path.string());
-                runCommand(args);
+                if (runCommand(args) != 0)
+                {
+                    std::cerr << "docker-init: error: init script " << path << " failed\n";
+                    init_ok = false;
+                    break;
+                }
             }
             else if (filename.ends_with(".sql.gz"))
             {
@@ -709,12 +724,17 @@ void initClickHouseDB(
                     else
                         escaped_path += c;
                 }
-                runPipeline(
-                    {g_clickhouse_binary, "local",
-                     "--query",
-                     "SELECT * FROM file('" + escaped_path + "', RawBLOB) FORMAT RawBLOB"},
-                    client_base
-                );
+                std::vector<std::string> decompress_args = {
+                    g_clickhouse_binary, "local",
+                    "--query",
+                    "SELECT * FROM file('" + escaped_path + "', RawBLOB) FORMAT RawBLOB",
+                };
+                if (runPipeline(decompress_args, client_base) != 0)
+                {
+                    std::cerr << "docker-init: error: init script " << path << " failed\n";
+                    init_ok = false;
+                    break;
+                }
             }
             else if (filename.ends_with(".sh"))
             {
@@ -920,7 +940,8 @@ int mainEntryClickHouseDockerInit(int argc, char ** argv)
                                   data_dir + "/coordination/log",
                                   data_dir + "/coordination/snapshots"})
         {
-            createDirectoryAndChown(dir, run_uid, run_gid, do_chown);
+            if (!createDirectoryAndChown(dir, run_uid, run_gid, do_chown))
+                return 1;
         }
 
         /// Default to disabled so Ctrl+C works in Docker. Don't override if already set.
@@ -968,20 +989,22 @@ int mainEntryClickHouseDockerInit(int argc, char ** argv)
     auto disk_metadata_paths = extractConfigValues(config_file, "storage_configuration.disks.*.metadata_path");
 
     /// Create and chown data directory first, then cd into it.
-    if (!data_dir.empty())
-        createDirectoryAndChown(data_dir, run_uid, run_gid, do_chown);
+    if (!data_dir.empty() && !createDirectoryAndChown(data_dir, run_uid, run_gid, do_chown))
+        return 1;
 
     chdir(data_dir.empty() ? "/" : data_dir.c_str()); // NOLINT(bugprone-unused-return-value)
 
     for (const auto & dir : {error_log_dir, log_dir, tmp_dir, user_files_path, format_schema_path})
     {
-        if (!dir.empty())
-            createDirectoryAndChown(dir, run_uid, run_gid, do_chown);
+        if (!dir.empty() && !createDirectoryAndChown(dir, run_uid, run_gid, do_chown))
+            return 1;
     }
     for (const auto & dir : disk_paths)
-        createDirectoryAndChown(dir, run_uid, run_gid, do_chown);
+        if (!createDirectoryAndChown(dir, run_uid, run_gid, do_chown))
+            return 1;
     for (const auto & dir : disk_metadata_paths)
-        createDirectoryAndChown(dir, run_uid, run_gid, do_chown);
+        if (!createDirectoryAndChown(dir, run_uid, run_gid, do_chown))
+            return 1;
 
     /// Resolve password (from env or file).
     std::string clickhouse_user = getEnv("CLICKHOUSE_USER", "default");
@@ -1000,7 +1023,8 @@ int mainEntryClickHouseDockerInit(int argc, char ** argv)
     std::string access_management = getEnv("CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT", "0");
     bool skip_user_setup = (getEnv("CLICKHOUSE_SKIP_USER_SETUP") == "1");
 
-    manageClickHouseUser(config_file, clickhouse_user, clickhouse_password, access_management, skip_user_setup);
+    if (!manageClickHouseUser(config_file, clickhouse_user, clickhouse_password, access_management, skip_user_setup))
+        return 1;
 
     /// Install signal handlers so `docker stop` during init triggers graceful shutdown.
     /// As PID 1, signals without a handler are silently dropped by the kernel.

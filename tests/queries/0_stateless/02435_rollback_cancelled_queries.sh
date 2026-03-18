@@ -43,7 +43,11 @@ function insert_data
         $CLICKHOUSE_CURL -sS -F 'file=@-' "$CLICKHOUSE_URL&$TRASH_SETTINGS&file_format=TSV&file_types=UInt64" -X POST --form-string 'query=insert into dedup_test select * from file' < $DATA_FILE
     else
         # client will send 1000-rows blocks, server will squash them into 110000-rows blocks (more chances to catch a bug on query cancellation)
-        timeout 120 $CLICKHOUSE_CLIENT --stacktrace --query_id="$ID" --throw_on_unsupported_query_inside_transaction=0 --implicit_transaction="$IMPLICIT" \
+        # Use -k 5s so that SIGKILL is sent 5 seconds after SIGTERM if the client does not exit.
+        # Under ASan, receiving SIGINT while the allocator lock is held causes DoLeakCheck (called from
+        # safeExit via interruptSignalHandler) to deadlock acquiring the same lock. The client then ignores
+        # SIGTERM too, so without -k the timeout wrapper waits forever, keeping the pipe open.
+        timeout -k 5s 120 $CLICKHOUSE_CLIENT --stacktrace --query_id="$ID" --throw_on_unsupported_query_inside_transaction=0 --implicit_transaction="$IMPLICIT" \
             --max_block_size=1000 --max_insert_block_size=1000 -q \
             "${BEGIN}insert into dedup_test settings max_insert_block_size=110000, min_insert_block_size_rows=110000 format TSV$COMMIT" < $DATA_FILE \
             | grep -Fv "Transaction is not in RUNNING state" | grep -Fv "There is no current transaction"

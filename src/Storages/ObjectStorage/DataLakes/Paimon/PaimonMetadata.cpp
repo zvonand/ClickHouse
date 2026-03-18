@@ -43,7 +43,6 @@ using namespace Paimon;
 namespace ErrorCodes
 {
 extern const int BAD_ARGUMENTS;
-extern const int FILE_DOESNT_EXIST;
 extern const int LOGICAL_ERROR;
 extern const int NO_ZOOKEEPER;
 }
@@ -571,27 +570,15 @@ std::vector<PaimonTableStatePtr> PaimonMetadata::getSnapshotsBetween(
         if (max_snapshots_to_load > 0 && snapshots.size() >= max_snapshots_to_load)
             break;
 
-        try
-        {
-            auto state = loadStateForSnapshot(snapshot_id);
+        auto state = loadStateForSnapshot(snapshot_id);
 
-            if (skip_compact && state->isCompact())
-            {
-                LOG_TRACE(log, "Skipping Compact snapshot_id={} in incremental read", snapshot_id);
-                continue;
-            }
-
-            snapshots.emplace_back(std::move(state));
-        }
-        catch (const Exception & e)
+        if (skip_compact && state->isCompact())
         {
-            if (e.code() == ErrorCodes::FILE_DOESNT_EXIST)
-            {
-                LOG_WARNING(log, "Paimon snapshot file for id {} not found, skip it", snapshot_id);
-                continue;
-            }
-            throw;
+            LOG_TRACE(log, "Skipping Compact snapshot_id={} in incremental read", snapshot_id);
+            continue;
         }
+
+        snapshots.emplace_back(std::move(state));
     }
 
     return snapshots;

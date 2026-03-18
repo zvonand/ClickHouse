@@ -150,7 +150,11 @@ Iceberg::TableStateSnapshotPtr extractIcebergSnapshotIdFromMetadataObject(Storag
 }
 
 Iceberg::PersistentTableComponents IcebergMetadata::initializePersistentTableComponents(
-    StorageObjectStorageConfigurationPtr configuration, IcebergMetadataFilesCachePtr cache_ptr, ContextPtr context_)
+    ObjectStoragePtr object_storage,
+    StorageObjectStorageConfigurationPtr configuration,
+    IcebergMetadataFilesCachePtr cache_ptr,
+    ContextPtr context_,
+    LoggerPtr log)
 {
     const auto [metadata_version, metadata_file_path, compression_method]
         = getLatestOrExplicitMetadataFileAndVersion(object_storage, configuration->getPathForRead().path, configuration->getDataLakeSettings(), cache_ptr, context_, log.get(), std::nullopt);
@@ -202,11 +206,10 @@ std::pair<IcebergDataSnapshotPtr, TableStateSnapshot> IcebergMetadata::getReleva
 IcebergMetadata::IcebergMetadata(
     ObjectStoragePtr object_storage_,
     StorageObjectStorageConfigurationPtr configuration_,
-    const ContextPtr & context_,
-    IcebergMetadataFilesCachePtr cache_ptr)
+    Iceberg::PersistentTableComponents persistent_components_)
     : log(getLogger("IcebergMetadata"))
     , object_storage(std::move(object_storage_))
-    , persistent_components(initializePersistentTableComponents(configuration_, cache_ptr, context_))
+    , persistent_components(std::move(persistent_components_))
     , data_lake_settings(configuration_->getDataLakeSettings())
     , write_format(configuration_->format)
 {
@@ -748,8 +751,8 @@ DataLakeMetadataPtr IcebergMetadata::create(
     else
         LOG_TRACE(
             log, "Not using in-memory cache for iceberg metadata files, because the setting use_iceberg_metadata_files_cache is false.");
-
-    return std::make_unique<IcebergMetadata>(object_storage, configuration_ptr, local_context, cache_ptr);
+    auto persistent_components = initializePersistentTableComponents(object_storage, configuration_ptr, cache_ptr, local_context, log);
+    return std::make_unique<IcebergMetadata>(object_storage, configuration_ptr, persistent_components);
 }
 
 IcebergMetadata::IcebergHistory IcebergMetadata::getHistory(ContextPtr local_context) const

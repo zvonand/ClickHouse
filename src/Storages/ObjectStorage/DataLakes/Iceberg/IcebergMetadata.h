@@ -44,8 +44,7 @@ public:
     IcebergMetadata(
         ObjectStoragePtr object_storage_,
         StorageObjectStorageConfigurationPtr configuration_,
-        const ContextPtr & context_,
-        IcebergMetadataFilesCachePtr cache_ptr);
+        Iceberg::PersistentTableComponents persistent_components_);
 
     /// Get table schema parsed from metadata.
     NamesAndTypesList getTableSchema(ContextPtr local_context) const override;
@@ -143,8 +142,12 @@ public:
     void drop(ContextPtr context) override;
 
 private:
-    Iceberg::PersistentTableComponents initializePersistentTableComponents(
-        StorageObjectStorageConfigurationPtr configuration, IcebergMetadataFilesCachePtr cache_ptr, ContextPtr context_);
+    static Iceberg::PersistentTableComponents initializePersistentTableComponents(
+        ObjectStoragePtr object_storage,
+        StorageObjectStorageConfigurationPtr configuration,
+        IcebergMetadataFilesCachePtr cache_ptr,
+        ContextPtr context_,
+        LoggerPtr log);
 
     Iceberg::IcebergDataSnapshotPtr
     getIcebergDataSnapshot(Poco::JSON::Object::Ptr metadata_object, Int64 snapshot_id, ContextPtr local_context) const;

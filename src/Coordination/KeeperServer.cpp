@@ -1217,9 +1217,8 @@ ClusterUpdateActions KeeperServer::getRaftConfigurationDiff(const Poco::Util::Ab
 
 void KeeperServer::applyConfigUpdateWithReconfigDisabled(const ClusterUpdateAction& action)
 {
-    /// This method manually manages lock/unlock around sleep backoffs,
-    /// so it cannot use ProfiledMutexLock which does not expose those operations.
-    std::unique_lock server_write_lock{server_write_mutex};
+    ProfiledMutexLock server_write_lock(
+        server_write_mutex, ProfileEvents::KeeperServerWriteLockWaitMicroseconds, ProfileEvents::KeeperServerWriteLockHoldMicroseconds);
     if (is_recovering) return;
     constexpr auto sleep_time = 500ms;
 
@@ -1227,7 +1226,7 @@ void KeeperServer::applyConfigUpdateWithReconfigDisabled(const ClusterUpdateActi
 
     auto applied = [&] { LOG_INFO(log, "Applied {}", action); };
     auto not_leader = [&] { LOG_INFO(log, "Not leader anymore, aborting"); };
-    auto backoff_on_refusal = [&](size_t i)
+    auto backoff_on_refusal = [&](size_t i) TSA_NO_THREAD_SAFETY_ANALYSIS
     {
         LOG_INFO(log, "Update was not accepted (try {}), backing off for {}", i + 1, sleep_time * (i + 1));
         server_write_lock.unlock();

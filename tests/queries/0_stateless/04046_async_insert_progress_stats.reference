@@ -1,5 +1,3 @@
-TCP written_rows	3
-TCP result_rows	3
-HTTP written_rows	3
-HTTP result_rows	3
+TCP:	3	27	3	27	3	27	1
+HTTP:	3	27	3	27	3	27	2
 total_rows	6

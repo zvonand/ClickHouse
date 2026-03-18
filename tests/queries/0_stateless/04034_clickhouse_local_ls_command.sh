@@ -17,16 +17,25 @@ F1="ls_test_file_.1"
 F2="ls_test_file_.2"
 F3="ls_test_file_.3"
 
+TESTDIR="$CURDIR/ls_test_dir"
+
 cleanup() {
-    rm -f "$CURDIR/$F1" "$CURDIR/$F2" "$CURDIR/$F3"
+rm -rf "$TESTDIR"
 }
 trap cleanup EXIT
+
+mkdir "$TESTDIR"
+
+F1="ls_test_file_1.tmp"
+F2="ls_test_file_2.tmp"
+F3="ls_test_file_3.tmp"
+
 echo "-- prepare files"
-touch "$CURDIR/$F1" "$CURDIR/$F2" "$CURDIR/$F3"
+touch "$TESTDIR/$F1" "$TESTDIR/$F2" "$TESTDIR/$F3"
 
 echo "-- ls"
 (
-cd "$CURDIR"
+cd "$TESTDIR"
 OUT=$($CLICKHOUSE_LOCAL -q "ls")
 echo "$OUT" | grep -F "$F1"
 echo "$OUT" | grep -F "$F2"
@@ -36,7 +45,7 @@ echo "OK"
 
 echo "-- ls;"
 (
-cd "$CURDIR"
+cd "$TESTDIR"
 OUT=$($CLICKHOUSE_LOCAL -q "ls;")
 echo "$OUT" | grep -F "$F1"
 echo "$OUT" | grep -F "$F2"
@@ -46,7 +55,6 @@ echo "OK"
 
 echo "-- ls foo (should fail)"
 (
-cd "$CURDIR"
-OUT=$($CLICKHOUSE_LOCAL -q "ls foo")
-)
-echo "$OUT"
+cd "$TESTDIR"
+$CLICKHOUSE_LOCAL -q "ls foo" 2>&1 || true
+) | grep -F "Unknown expression identifier"

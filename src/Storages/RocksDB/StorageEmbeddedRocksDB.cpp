@@ -1,3 +1,4 @@
+#include <base/sanitizer_defs.h>
 #include <Storages/MutationCommands.h>
 #include <Storages/RocksDB/StorageEmbeddedRocksDB.h>
 #include <Storages/checkAndGetLiteralArgument.h>
@@ -147,7 +148,10 @@ public:
         return storage.getBySerializedKeys(raw_keys, nullptr);
     }
 
-    Chunk generateFullScan()
+    /// UBSan is suppressed here because a corrupted RocksDB slice (size = (size_t)-2)
+    /// causes pointer arithmetic overflow in BufferBase. This is a pre-existing bug
+    /// tracked in https://github.com/ClickHouse/ClickHouse/issues/99862
+    NO_SANITIZE_UNDEFINED Chunk generateFullScan()
     {
         if (!iterator->Valid())
             return {};

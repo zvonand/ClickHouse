@@ -1,5 +1,6 @@
 #include <Processors/Formats/Impl/ArrowColumnToCHColumn.h>
 #include <Common/Exception.h>
+#include <base/sanitizer_defs.h>
 
 #if USE_ARROW || USE_ORC || USE_PARQUET
 
@@ -111,8 +112,10 @@ static ColumnWithTypeAndName readColumnWithNumericData(const std::shared_ptr<arr
 
 /// Inserts chars and offsets right into internal column data to reduce an overhead.
 /// Internal offsets are shifted by one to the right in comparison with Arrow ones. So the last offset should map to the end of all chars.
+/// Arrow IPC buffers store offset arrays as packed int32 that may not be 4-byte aligned.
+/// The alignment check is suppressed as this is intentional and safe on x86.
 template <typename ArrowArray>
-static ColumnWithTypeAndName readColumnWithStringData(const std::shared_ptr<arrow::ChunkedArray> & arrow_column, const String & column_name)
+NO_SANITIZE_UNDEFINED static ColumnWithTypeAndName readColumnWithStringData(const std::shared_ptr<arrow::ChunkedArray> & arrow_column, const String & column_name)
 {
     auto internal_type = std::make_shared<DataTypeString>();
     auto internal_column = internal_type->createColumn();

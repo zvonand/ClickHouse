@@ -120,6 +120,11 @@ CLICKHOUSE_ERROR_LOG_FILE = "/var/log/clickhouse-server/clickhouse-server.err.lo
 # This means that this minimum need to be, at least, 1 year older than the current release
 CLICKHOUSE_CI_MIN_TESTED_VERSION = "23.3"
 
+# `Nullable(Tuple)` experimental feature is introduced in 26.1. This has lead to changes in the output return type
+# of many aggregate functions from `Tuple(...)` to `Nullable(Tuple(...))`. This version can be used as baseline to do
+# compatibility checks for features that are affected by this experimental feature.
+CLICKHOUSE_CI_PRE_NULLABLE_TUPLE_VERSION = "25.12"
+
 ZOOKEEPER_CONTAINERS = ("zoo1", "zoo2", "zoo3")
 
 NET_LOCK_PATH = "/tmp/docker_net.lock"
@@ -3388,7 +3393,13 @@ class ClickHouseCluster:
                         "Got exception pulling images: %s", kwargs["exception"]
                     )
 
-            retry(log_function=logging_pulling_images, retries=3, delay=8, jitter=8)(run_and_check, images_pull_cmd, nothrow=True, timeout=600)
+            retry(log_function=logging_pulling_images, retries=3, delay=8, jitter=8)(run_and_check, images_pull_cmd, timeout=180)
+
+            def logging_compose_up(**kwargs):
+                if "exception" in kwargs:
+                    logging.info(
+                        "Got exception in docker compose up: %s", kwargs["exception"]
+                    )
 
             if self.with_zookeeper_secure and self.base_zookeeper_cmd:
                 logging.debug("Setup ZooKeeper Secure")
@@ -3400,7 +3411,9 @@ class ClickHouseCluster:
                         shutil.rmtree(self.zookeeper_instance_dir_prefix + f"{i}", ignore_errors=True)
                 for dir in self.zookeeper_dirs_to_create:
                     os.makedirs(dir)
-                run_and_check(self.base_zookeeper_cmd + common_opts, env=self.env)
+                retry(log_function=logging_compose_up, retries=3, delay=3, jitter=2)(
+                    run_and_check, self.base_zookeeper_cmd + common_opts, env=self.env
+                )
                 self.up_called = True
 
                 self.wait_zookeeper_secure_to_start()
@@ -3490,7 +3503,9 @@ class ClickHouseCluster:
                                 ),
                             )
 
-                run_and_check(self.base_zookeeper_cmd + common_opts, env=self.env)
+                retry(log_function=logging_compose_up, retries=3, delay=3, jitter=2)(
+                    run_and_check, self.base_zookeeper_cmd + common_opts, env=self.env
+                )
                 self.up_called = True
 
                 self.wait_zookeeper_to_start()
@@ -3839,7 +3854,7 @@ class ClickHouseCluster:
             if self.with_letsencrypt_pebble and self.base_letsencrypt_pebble_cmd:
                 letsencrypt_pebble_pull_cmd = self.base_letsencrypt_pebble_cmd + ["pull"]
                 retry(log_function=logging_pulling_images, retries=3, delay=8, jitter=8)(
-                    run_and_check, letsencrypt_pebble_pull_cmd, nothrow=True, timeout=600
+                    run_and_check, letsencrypt_pebble_pull_cmd, timeout=180
                 )
                 letsencrypt_pebble_start_cmd = self.base_letsencrypt_pebble_cmd + common_opts
                 run_and_check(letsencrypt_pebble_start_cmd)

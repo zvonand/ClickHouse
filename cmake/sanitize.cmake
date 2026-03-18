@@ -66,20 +66,7 @@ if (WITH_COVERAGE)
 
     # But the actual coverage will be enabled on per-library basis: for ClickHouse code, but not for 3rd-party.
     set (COVERAGE_FLAGS -fprofile-instr-generate -fcoverage-mapping)
-
-    # Find the LLVM profile runtime explicitly instead of relying on -fprofile-instr-generate
-    # auto-linking, which looks in a compiler-version-dependent path that may not exist in CI.
-    execute_process (COMMAND
-        ${CMAKE_CXX_COMPILER} --target=${CMAKE_CXX_COMPILER_TARGET}
-            --print-file-name=libclang_rt.profile.a --rtlib=compiler-rt
-        OUTPUT_VARIABLE PROFILE_RUNTIME_LIBRARY
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if (EXISTS "${PROFILE_RUNTIME_LIBRARY}")
-        set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PROFILE_RUNTIME_LIBRARY}")
-    else ()
-        # Fall back to auto-linking; may fail if the runtime is not in the expected path.
-        set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate")
-    endif ()
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate")
 
     set (WITHOUT_COVERAGE_FLAGS "-fno-profile-instr-generate -fno-coverage-mapping")
     set (WITHOUT_COVERAGE_FLAGS_LIST -fno-profile-instr-generate -fno-coverage-mapping)

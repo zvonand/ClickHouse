@@ -1215,7 +1215,10 @@ bool MergeTask::ExecuteAndFinalizeHorizontalPart::executeImpl() const
     {
         Block block;
 
-        if (ctx->is_cancelled() || !global_ctx->merging_executor->pull(block))
+        if (ctx->is_cancelled())
+            global_ctx->horizontal_stage_cancelled = true;
+
+        if (global_ctx->horizontal_stage_cancelled || !global_ctx->merging_executor->pull(block))
         {
             finalize();
             return false;
@@ -1303,15 +1306,10 @@ bool MergeTask::VerticalMergeStage::prepareVerticalMergeForAllColumns() const
     /// Ensure data has written to disk.
     size_t rows_sources_count = ctx->rows_sources_temporary_file->finalizeWriting();
 
-    /// When SYSTEM STOP/START MERGES toggles rapidly, the horizontal merge pipeline
-    /// can be cancelled (is_cancelled() returns true) but the cancellation check in
-    /// finalize() passes because the blocker was released in between. Detect this:
-    /// if we have multiple source parts but wrote zero rows_sources bytes AND the missing
-    /// rows are not accounted for by TTL filtering, the horizontal stage was effectively
-    /// cancelled. Abort cleanly instead of continuing with no data.
-    /// Note: rows_sources_count == 0 is legitimate when TTL filtering removes all rows,
-    /// in which case input_rows_filtered == sum_input_rows_exact.
-    if (rows_sources_count == 0 && global_ctx->future_part->parts.size() > 1 && input_rows_filtered < sum_input_rows_exact)
+    /// The horizontal merge pipeline may have been cancelled (e.g. by SYSTEM STOP MERGES toggling),
+    /// but the cancellation check in `finalize` passed because the blocker was released in between.
+    /// In that case, abort cleanly instead of continuing with incomplete data.
+    if (global_ctx->horizontal_stage_cancelled)
         throw Exception(ErrorCodes::ABORTED, "Horizontal merge stage was cancelled, aborting vertical merge");
 
     /// In special case, when there is only one source part, and no rows were skipped, we may have

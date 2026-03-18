@@ -2408,7 +2408,7 @@ Calculates the approximate [cosine distance](https://en.wikipedia.org/wiki/Cosin
             "using more bits increases accuracy at the cost of performance.",
             {"UInt"}}};
     FunctionDocumentation::ReturnedValue returned_value_cosine_distance_transposed
-        = {"Returns the approximate cosine of the angle between two vectors subtracted from one. The return type is determined by the least common supertype of the input element types: `Float32` for `Float32` or `BFloat16` inputs, `Float64` for integer or `Float64` inputs.", {"Float*"}};
+        = {"Returns the approximate cosine distance (one minus the cosine similarity). Always returns Float64.", {"Float64"}};
     FunctionDocumentation::Examples examples_cosine_distance_transposed
         = {{"Basic usage",
             R"(

@@ -256,7 +256,6 @@ o
 Привет
 
 \N
-
 -- Regression test: right() with INT64_MIN caused signed integer overflow (UBSan)
 SELECT right('Hello', -9223372036854775808);
 

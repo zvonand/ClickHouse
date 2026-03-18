@@ -7,6 +7,6 @@ SET allow_experimental_ts_to_grid_aggregate_function = 1;
 CREATE TABLE ts_data_overflow (timestamp DateTime64(3, 'UTC'), value Float64) ENGINE=MergeTree() ORDER BY tuple();
 INSERT INTO ts_data_overflow VALUES ('2020-01-01 00:00:00.000', 1.0), ('2020-01-01 00:00:01.000', 2.0);
 
-SELECT timeSeriesResampleToGridWithStaleness(100, 150, 9223372036854775806, 50)(timestamp, value) AS res FROM ts_data_overflow FORMAT Null;
+SELECT timeSeriesResampleToGridWithStaleness(100, 150, 9223372036854775806, 50)(timestamp, value) AS res FROM ts_data_overflow FORMAT Null; -- { serverError BAD_ARGUMENTS }
 
 DROP TABLE ts_data_overflow;

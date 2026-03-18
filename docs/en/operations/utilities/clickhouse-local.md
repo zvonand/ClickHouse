@@ -248,7 +248,8 @@ Lists all the files in the current working directory accessible to clickhouse-lo
 
 You can run it in interactive mode like:
 
-```sql ClickHouse local version 26.3.1.1.
+```sql 
+ClickHouse local version 26.3.1.1.
 
 :) ls
 

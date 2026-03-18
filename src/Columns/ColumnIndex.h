@@ -59,7 +59,7 @@ public:
     ColumnPtr removeUnusedRowsInIndexedData(const ColumnPtr & indexed_data);
 
     void removeUnusedRowsInIndexedData(MutableColumnPtr & indexed_data);
-    
+
     struct CompactIndexedColumnsResult
     {
         ColumnPtr compact_indexes;

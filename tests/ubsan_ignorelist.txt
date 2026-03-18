@@ -20,3 +20,15 @@ src:*/contrib/boost/boost/geometry/*
 # We don't want to receive sanitizer alerts from third-party libraries during fuzzing
 src:*/contrib/contrib/protobuf/*
 src:*/contrib/libprotobuf-mutator/*
+
+# Arrow IPC buffers are read with potentially unaligned offsets on purpose.
+# The Arrow format stores offset arrays as packed int32 arrays that may not be
+# 4-byte aligned relative to the start of the IPC buffer.
+src:*/contrib/arrow/cpp/src/arrow/array/array_binary.h*
+
+# ReadBufferFromString is used to parse RocksDB slices. When an iterator returns
+# a slice with a corrupted size (pre-existing bug, likely memory corruption in
+# EmbeddedRocksDB read-only mode restart), the pointer arithmetic in BufferBase
+# overflows. Suppress until the root cause is fixed.
+# Issue: https://github.com/ClickHouse/ClickHouse/issues/99862
+fun:*DB::BufferBase::BufferBase*

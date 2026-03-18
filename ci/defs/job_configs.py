@@ -117,6 +117,7 @@ common_stress_job_config = Job.Config(
         include_paths=[
             "./tests/queries/0_stateless/",
             "./ci/jobs/stress_job.py",
+            "./ci/jobs/scripts/clickhouse_proc.py",
             "./ci/jobs/scripts/stress/stress.py",
             "./tests/clickhouse-test",
             "./tests/config",

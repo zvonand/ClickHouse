@@ -508,7 +508,7 @@ bool manageClickHouseUser(
 }
 
 /// Start a temporary ClickHouse server, run init scripts, then stop it.
-void initClickHouseDB(
+bool initClickHouseDB(
     const std::string & config_file,
     const std::string & data_dir,
     const std::string & clickhouse_user,
@@ -524,7 +524,7 @@ void initClickHouseDB(
     {
         std::cerr << "docker-init: ClickHouse data directory appears to contain a database; "
                      "skipping initialization\n";
-        return;
+        return true;
     }
 
     std::string clickhouse_db = getEnv("CLICKHOUSE_DB");
@@ -535,7 +535,7 @@ void initClickHouseDB(
         && fs::directory_iterator("/docker-entrypoint-initdb.d", ec) != fs::directory_iterator{};
 
     if (!has_init_files && clickhouse_db.empty())
-        return;
+        return true;
 
     std::string native_port = extractConfigValue(config_file, "tcp_port");
     if (native_port.empty())
@@ -556,13 +556,13 @@ void initClickHouseDB(
         server_args.push_back(arg);
 
     if (g_shutdown_requested)
-        return;
+        return true;
 
     pid_t server_pid = fork();
     if (server_pid < 0)
     {
         std::cerr << "docker-init: failed to fork temporary server\n";
-        return;
+        return false;
     }
 
     if (server_pid == 0)
@@ -647,7 +647,7 @@ void initClickHouseDB(
         kill(server_pid, SIGTERM);
         while (waitpid(server_pid, nullptr, 0) < 0 && errno == EINTR) {}
         g_init_server_pid = 0;
-        return;
+        return false;
     }
 
     std::vector<std::string> client_base = {
@@ -755,6 +755,7 @@ void initClickHouseDB(
     g_init_server_pid = 0;
     if (!WIFEXITED(server_status) || WEXITSTATUS(server_status) != 0)
         std::cerr << "docker-init: warning: init server did not exit cleanly\n";
+    return init_ok;
 }
 
 } // anonymous namespace
@@ -1038,8 +1039,9 @@ int mainEntryClickHouseDockerInit(int argc, char ** argv)
     }
 
     bool always_run_initdb = !getEnv("CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS").empty();
-    initClickHouseDB(config_file, data_dir, clickhouse_user, clickhouse_password,
-                     run_uid, run_gid, extra_args, always_run_initdb);
+    if (!initClickHouseDB(config_file, data_dir, clickhouse_user, clickhouse_password,
+                          run_uid, run_gid, extra_args, always_run_initdb))
+        return 1;
 
     if (g_shutdown_requested)
     {

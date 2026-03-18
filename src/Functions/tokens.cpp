@@ -316,6 +316,7 @@ tokens(value, 'splitByString'[, separators])
 tokens(value, 'ngrams'[, n])
 tokens(value, 'sparseGrams'[, min_length, max_length[, min_cutoff_length]])
 tokens(value, 'array')
+tokens(value, 'unicode_word')
 )";
     FunctionDocumentation::Arguments arguments = {
         {"value", "The input string.", {"String", "FixedString"}},

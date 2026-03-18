@@ -1,11 +1,14 @@
 -- prepare files
 -- ls
-ls_test_file_1.tmp
-ls_test_file_2.tmp
-ls_test_file_3.tmp
+ls_test_file_.1
+ls_test_file_.2
+ls_test_file_.3
 OK
 -- ls;
-ls_test_file_1.tmp
-ls_test_file_2.tmp
-ls_test_file_3.tmp
+ls_test_file_.1
+ls_test_file_.2
+ls_test_file_.3
 OK
+-- ls x
+Code: 47. DB::Exception: Unknown expression identifier `ls` in scope SELECT ls AS x. (UNKNOWN_IDENTIFIER)
+Not OK

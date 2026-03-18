@@ -48,3 +48,10 @@ echo "$OUT" | grep -F "$F2"
 echo "$OUT" | grep -F "$F3"
 )
 echo "OK"
+
+echo "-- ls x"
+(
+cd "$TESTDIR"
+OUT=$($CLICKHOUSE_LOCAL -q "ls x")
+)
+echo "Not OK"

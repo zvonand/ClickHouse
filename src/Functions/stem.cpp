@@ -249,27 +249,24 @@ public:
 REGISTER_FUNCTION(Stem)
 {
     FunctionDocumentation::Description description = R"(
-Performs stemming on a word or an array of words using the libstemmer library (Snowball algorithms).
-Each input string must be a single word — strings containing spaces cause an exception.
+Performs stemming on a word or an array of words using the Snowball algorithms.
+Each input string must be a single word — strings containing whitespace cause an exception.
 Returns String for scalar inputs (including FixedString) and Array(String) for array inputs.
 Nullable and LowCardinality variants of String and FixedString are supported.
 )";
-    FunctionDocumentation::Syntax syntax = "stem(word, lang)";
+    FunctionDocumentation::Syntax syntax = "stem(word, language)";
     FunctionDocumentation::Arguments arguments = {
         {"word",
          "A single lowercase word (or array of words) to stem. "
-         "Accepts String, FixedString, Nullable(String), Nullable(FixedString), "
-         "LowCardinality(String), LowCardinality(FixedString), "
-         "Array(String), Array(FixedString), Array(Nullable(String)), Array(Nullable(FixedString)). "
-         "Each value must not contain spaces.",
+         "Accepts String, FixedString, Array(String), Array(FixedString), "
+         "Array(Nullable(String)), or Array(Nullable(FixedString)).",
          {"String", "FixedString", "Array(String)", "Array(FixedString)"}},
-        {"lang",
+        {"language",
          "Language whose stemming rules will be applied. Use the two-letter ISO 639-1 code (e.g. 'en', 'de', 'fr').",
          {"String"}},
     };
     FunctionDocumentation::ReturnedValue returned_value = {
-        "The stemmed form of the word (String), or an array of stemmed words (Array(String)). "
-        "Nullable and LowCardinality wrappers are preserved.",
+        "The stemmed form of the word (String), or an array of stemmed words (Array(String)).",
         {"String", "Array(String)"}};
     FunctionDocumentation::Examples examples = {
         {

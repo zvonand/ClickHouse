@@ -177,26 +177,6 @@ static std::optional<ActionsDAG::ActionsForFilterPushDown> splitFilter(QueryPlan
         {
             materializeFilterColumnIfNeededAfterPushDown(*filter, is_filter_column_const_before, result->is_filter_const_after_push_down);
         }
-
-        /// After partial push-down, the remaining expression may evaluate to a constant
-        /// on 0-row header input, even though it has non-const DAG inputs.
-        /// Example: `plus(X, NULL)` folds to const NULL regardless of X.
-        /// The `is_filter_const_after_push_down` flag only captures the case where ALL
-        /// conjunctions are pushed down, not this "runtime folding" case.
-        /// If the filter column was non-const before and becomes const after header
-        /// recomputation, parent steps holding the old non-const header will see a
-        /// "Block structure mismatch". Prevent this by wrapping in `materialize`.
-        if (!is_filter_column_const_before && !removes_filter && !result->is_filter_const_after_push_down)
-        {
-            auto updated_header = expression.updateHeader(*filter->getInputHeaders().front());
-            const auto & col = updated_header.getByName(filter_column_name);
-            if (col.column && col.column->isConst())
-            {
-                const auto & filter_node = expression.findInOutputs(filter_column_name);
-                const auto & non_const_node = expression.materializeNode(filter_node, false);
-                expression.addOrReplaceInOutputs(non_const_node);
-            }
-        }
     }
     return result;
 }

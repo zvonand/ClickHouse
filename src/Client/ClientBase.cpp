@@ -2966,10 +2966,12 @@ bool ClientBase::processQueryText(const String & text)
 
         return processMultiQueryFromFile(file_name);
     }
-    // Treat clickhouse-local ls command
+    
+    // Handle `ls` metacommand
     if (supportsLocalMetaCommands() && boost::iequals(trimmed_input, "ls"))
     {
-        // Rewrites command LS into a query that produces the list of all files of the current directory
+        // Rewrites `ls` into a query that returns the list of all files of the current working directory
+        // TODO: Use the filesystem table engine once https://github.com/ClickHouse/ClickHouse/pull/53610 is merged
         const String ls_query = "SELECT _file AS file FROM file('*', 'One') ORDER BY file";
         return executeMultiQuery(ls_query);
     }

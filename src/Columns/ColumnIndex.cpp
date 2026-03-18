@@ -377,10 +377,10 @@ void ColumnIndex::removeUnusedRowsInIndexedData(MutableColumnPtr & indexed_data)
     indexed_data->filter(filter);
 }
 
-Columns ColumnIndex::removeUnusedRowsInIndexedData(const Columns & indexed_columns)
+ColumnIndex::CompactIndexedColumnsResult ColumnIndex::buildCompactIndexedColumns(const Columns & indexed_columns) const
 {
     if (indexed_columns.empty())
-        return indexed_columns;
+        return {getIndexes(), indexed_columns};
 
     size_t indexed_data_size = indexed_columns[0]->size();
     for (size_t i = 1; i < indexed_columns.size(); ++i)
@@ -390,19 +390,20 @@ Columns ColumnIndex::removeUnusedRowsInIndexedData(const Columns & indexed_colum
     /// First, create a filter for indexed data to filter out all unused rows.
     auto filter_opt = buildUsedRowsFilter(indexed_data_size);
     if (!filter_opt.has_value())
-        return indexed_columns;
+        return {getIndexes(), indexed_columns};
 
     IColumn::Filter & filter = filter_opt.value();
 
     /// Second, adjust indexes.
-    size_t result_size_hint = compactIndexes(filter, indexed_data_size);
+    ColumnIndex compact_column_index(IColumn::mutate(getIndexes()));
+    size_t result_size_hint = compact_column_index.compactIndexes(filter, indexed_data_size);
 
     Columns filtered_columns;
     filtered_columns.reserve(indexed_columns.size());
     for (const auto & column : indexed_columns)
         filtered_columns.push_back(column->filter(filter, result_size_hint));
 
-    return filtered_columns;
+    return {compact_column_index.getIndexes(), filtered_columns};
 }
 
 void ColumnIndex::getIndexesByMask(IColumn::Offsets & result_indexes, const PaddedPODArray<UInt8> & mask, size_t start, size_t end) const

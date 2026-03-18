@@ -59,8 +59,14 @@ public:
     ColumnPtr removeUnusedRowsInIndexedData(const ColumnPtr & indexed_data);
 
     void removeUnusedRowsInIndexedData(MutableColumnPtr & indexed_data);
+    
+    struct CompactIndexedColumnsResult
+    {
+        ColumnPtr compact_indexes;
+        Columns compact_indexed_columns;
+    };
 
-    Columns removeUnusedRowsInIndexedData(const Columns & indexed_columns);
+    CompactIndexedColumnsResult buildCompactIndexedColumns(const Columns & indexed_columns) const;
 
     /// Collect rows where mask[index] is 1.
     void getIndexesByMask(IColumn::Offsets & result_indexes, const PaddedPODArray<UInt8> & mask, size_t start, size_t end) const;

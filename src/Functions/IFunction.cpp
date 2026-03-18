@@ -455,11 +455,13 @@ ColumnPtr IExecutableFunction::execute(
         /// we can execute function on nested columns and create replicated column
         /// from the result using common indexes.
         ColumnPtr common_replicated_indexes;
+        Columns nested_columns;
         bool has_full_columns = false;
         for (const auto & argument : arguments)
         {
             if (const auto * column_replicated = typeid_cast<const ColumnReplicated *>(argument.column.get()))
             {
+                nested_columns.push_back(column_replicated->getNestedColumn());
                 if (!common_replicated_indexes)
                     common_replicated_indexes = column_replicated->getIndexesColumn();
                 else if (common_replicated_indexes != column_replicated->getIndexesColumn())
@@ -482,15 +484,9 @@ ColumnPtr IExecutableFunction::execute(
             return executeWithoutReplicatedColumns(arguments_without_replicated, result_type, input_rows_count, dry_run);
         }
 
-        Columns nested_columns;
-        for (const auto & argument : arguments_without_replicated)
-            if (const auto * col = typeid_cast<const ColumnReplicated *>(argument.column.get()))
-                nested_columns.push_back(col->getNestedColumn());
-
         /// Filter out unreferenced rows from nested columns.
-        ColumnIndex column_index(IColumn::mutate(common_replicated_indexes));
-        auto filtered_nested_columns = column_index.removeUnusedRowsInIndexedData(nested_columns);
-        common_replicated_indexes = column_index.getIndexes();
+        ColumnIndex column_index(common_replicated_indexes);
+        auto [compact_common_replicated_indexes, filtered_nested_columns] = column_index.buildCompactIndexedColumns(nested_columns);
         size_t nested_column_size = filtered_nested_columns.empty() ? 0 : filtered_nested_columns[0]->size();
 
         size_t col_idx = 0;
@@ -507,9 +503,9 @@ ColumnPtr IExecutableFunction::execute(
         auto result = executeWithoutReplicatedColumns(arguments_without_replicated, result_type, nested_column_size, dry_run);
 
         if (isLazyReplicationUseful(result))
-            return ColumnReplicated::create(result, common_replicated_indexes);
+            return ColumnReplicated::create(result, compact_common_replicated_indexes);
 
-        return result->index(*common_replicated_indexes, 0);
+        return result->index(*compact_common_replicated_indexes, 0);
     }
 
     return executeWithoutReplicatedColumns(arguments, result_type, input_rows_count, dry_run);

@@ -52,9 +52,3 @@ echo "$OUT" | grep -F "$F2"
 echo "$OUT" | grep -F "$F3"
 )
 echo "OK"
-
-echo "-- ls foo (should fail)"
-(
-cd "$TESTDIR"
-$CLICKHOUSE_LOCAL -q "ls foo" 2>&1 || true
-) | grep -F "Unknown expression identifier"

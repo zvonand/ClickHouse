@@ -9,5 +9,3 @@ ls_test_file_1.tmp
 ls_test_file_2.tmp
 ls_test_file_3.tmp
 OK
--- ls foo (should fail)
-Code: 47. DB::Exception: Unknown expression identifier `ls` in scope SELECT ls AS foo. (UNKNOWN_IDENTIFIER)

@@ -614,9 +614,6 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
     else
     {
         ProfileEvents::increment(ProfileEvents::ObjectStorageReadObjects);
-        LOG_TRACE(log, "Reading object: path={}, size={}",
-            object_info->getPath(),
-            object_info->getObjectMetadata()->size_bytes);
 
         CompressionMethod compression_method;
         if (const auto * object_info_in_archive = dynamic_cast<const ArchiveIterator::ObjectInfoInArchive *>(object_info.get()))

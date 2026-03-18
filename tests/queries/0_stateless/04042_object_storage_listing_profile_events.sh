@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest
+# Tags: no-fasttest, no-parallel-replicas
 # Tag no-fasttest: requires s3 storage
+# Tag no-parallel-replicas: relies on query_log which does not account other replicas
 
 # Test that object storage listing/reading ProfileEvents are populated
 

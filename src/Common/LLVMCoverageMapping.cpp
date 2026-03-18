@@ -106,10 +106,10 @@ std::vector<FilenameTable> parseCovMapFilenames(
         uint32_t filenames_size;
         uint32_t coverage_size;
         uint32_t version;
-        memcpy(&n_records,     p,      4);
-        memcpy(&filenames_size, p + 4,  4);
-        memcpy(&coverage_size, p + 8,  4);
-        memcpy(&version,       p + 12, 4);
+        memcpy(&n_records, p, 4);
+        memcpy(&filenames_size, p + 4, 4);
+        memcpy(&coverage_size, p + 8, 4);
+        memcpy(&version, p + 12, 4);
 
         p += 16;
 
@@ -197,13 +197,13 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
     struct stat st;
     if (::fstat(fd, &st) < 0)
     {
-        ::close(fd);
+        [[maybe_unused]] int err = ::close(fd);
         return result;
     }
 
     const size_t size = static_cast<size_t>(st.st_size);
     void * mapped = ::mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
-    ::close(fd);
+    [[maybe_unused]] int err = ::close(fd); /// mmap keeps the mapping valid after close
     if (mapped == MAP_FAILED)
         return result;
 
@@ -459,6 +459,6 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
     return result;
 }
 
-} // namespace DB
+}
 
 #endif

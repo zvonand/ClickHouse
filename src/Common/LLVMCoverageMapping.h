@@ -22,6 +22,6 @@ struct CoverageRegion
 /// Only includes code regions (region_kind == 0), not gap/branch regions.
 std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path);
 
-} // namespace DB
+}
 
 #endif

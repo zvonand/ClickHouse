@@ -25,6 +25,6 @@ void collectAndInsertCoverage(
     const std::vector<uint64_t> & name_refs,
     ContextPtr context);
 
-} // namespace DB
+}
 
 #endif

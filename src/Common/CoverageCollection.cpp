@@ -164,6 +164,6 @@ void collectAndInsertCoverage(
     }
 }
 
-} // namespace DB
+}
 
 #endif

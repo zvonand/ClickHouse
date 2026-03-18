@@ -178,8 +178,10 @@ public:
     const CoordinationMode mode;
     size_t unavailable_replicas_count{0};
     size_t received_initial_requests{0};
+
     /// Total number of marks a replica wants per coordinator request, announced once by the first replica.
     size_t announced_min_marks_per_request{0};
+
     ProgressCallback progress_callback;
 
     struct ReplicaStatus
@@ -811,13 +813,14 @@ ParallelReadResponse DefaultCoordinator::handleRequest(ParallelReadRequest reque
 {
     /// Since DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK, `min_marks_per_request` is sent once
     /// in the initial announcement. Fall back to the per-request value for older replicas.
-    const size_t effective_min_marks = announced_min_marks_per_request > 0 ? announced_min_marks_per_request : request.min_marks_per_request;
+    const size_t effective_min_marks_per_request
+        = announced_min_marks_per_request > 0 ? announced_min_marks_per_request : request.min_marks_per_request;
 
     LOG_TRACE(
         log,
         "Handling request from replica {}, minimal marks size is {}, request count {}",
         request.replica_num,
-        effective_min_marks,
+        effective_min_marks_per_request,
         stats[request.replica_num].number_of_requests);
 
     ParallelReadResponse response;
@@ -825,18 +828,22 @@ ParallelReadResponse DefaultCoordinator::handleRequest(ParallelReadRequest reque
 
     /// 1. Try to select ranges meant for this replica by consistent hash
     selectPartsAndRanges(
-        request.replica_num, ScanMode::TakeWhatsMineByHash, effective_min_marks, current_mark_size, response.description);
+        request.replica_num, ScanMode::TakeWhatsMineByHash, effective_min_marks_per_request, current_mark_size, response.description);
     const size_t assigned_to_me = current_mark_size;
 
     /// 2. Try to steal but with caching again (with different key)
     selectPartsAndRanges(
-        request.replica_num, ScanMode::TakeWhatsMineForStealing, effective_min_marks, current_mark_size, response.description);
+        request.replica_num, ScanMode::TakeWhatsMineForStealing, effective_min_marks_per_request, current_mark_size, response.description);
     const size_t stolen_by_hash = current_mark_size - assigned_to_me;
 
     /// 3. Try to steal with no preference. We're trying to postpone it as much as possible.
     if (current_mark_size == 0)
         selectPartsAndRanges(
-            request.replica_num, ScanMode::TakeEverythingAvailable, effective_min_marks, current_mark_size, response.description);
+            request.replica_num,
+            ScanMode::TakeEverythingAvailable,
+            effective_min_marks_per_request,
+            current_mark_size,
+            response.description);
     const size_t stolen_unassigned = current_mark_size - stolen_by_hash - assigned_to_me;
 
     stats[request.replica_num].number_of_requests += 1;
@@ -1026,7 +1033,8 @@ void InOrderCoordinator::doHandleInitialAllRangesAnnouncement(InitialAllRangesAn
 
 ParallelReadResponse InOrderCoordinator::handleRequest(ParallelReadRequest request)
 {
-    const size_t effective_min_marks = announced_min_marks_per_request > 0 ? announced_min_marks_per_request : request.min_marks_per_request;
+    const size_t effective_min_marks_per_request
+        = announced_min_marks_per_request > 0 ? announced_min_marks_per_request : request.min_marks_per_request;
 
     LOG_TRACE(log, "Got read request: {}", request.describe());
 
@@ -1065,10 +1073,10 @@ ParallelReadResponse InOrderCoordinator::handleRequest(ParallelReadRequest reque
         /// Now we can recommend to read more intervals
         if (mode == CoordinationMode::ReverseOrder)
         {
-            while (!global_part_it->description.ranges.empty() && current_mark_size < effective_min_marks)
+            while (!global_part_it->description.ranges.empty() && current_mark_size < effective_min_marks_per_request)
             {
                 auto & range = global_part_it->description.ranges.back();
-                const size_t needed = effective_min_marks - current_mark_size;
+                const size_t needed = effective_min_marks_per_request - current_mark_size;
 
                 if (range.getNumberOfMarks() > needed)
                 {
@@ -1087,10 +1095,10 @@ ParallelReadResponse InOrderCoordinator::handleRequest(ParallelReadRequest reque
         }
         else if (mode == CoordinationMode::WithOrder)
         {
-            while (!global_part_it->description.ranges.empty() && current_mark_size < effective_min_marks)
+            while (!global_part_it->description.ranges.empty() && current_mark_size < effective_min_marks_per_request)
             {
                 auto & range = global_part_it->description.ranges.front();
-                const size_t needed = effective_min_marks - current_mark_size;
+                const size_t needed = effective_min_marks_per_request - current_mark_size;
 
                 if (range.getNumberOfMarks() > needed)
                 {

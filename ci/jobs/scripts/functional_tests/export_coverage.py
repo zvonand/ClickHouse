@@ -52,49 +52,43 @@ class CoverageExporter:
         Shell.check(
             f"rm -rf {temp_dir}/system_tables && mkdir -p {temp_dir}/system_tables"
         )
-        res = True
+        table = "coverage_log"
+        path_arg = f" --path {self.src.run_path0}"
 
-        for table in ["coverage_log"]:
-            path_arg = f" --path {self.src.run_path0}"
-
-            if not self.to_file:
-                query = (
-                    f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_lines', '{self.dest.user}', '{self.dest.pwd}') "
-                    "SELECT file, line_start, line_end, "
-                    f"'{self.check_start_time}' AS check_start_time, "
-                    f"'{self.job_name}' AS check_name, "
-                    "test_name "
-                    f"FROM system.{table} "
-                    "ARRAY JOIN files AS file, line_starts AS line_start, line_ends AS line_end "
-                    "WHERE notEmpty(test_name) AND notEmpty(file) "
-                    "GROUP BY file, line_start, line_end, test_name"
-                )
-                cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
-                rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
-                res = rc == 0
-                if not res:
-                    print(f"ERROR: insert (checks_coverage_lines) failed (rc={rc})")
-                    if stdout:
-                        print(f"  stdout: {stdout}")
-                    if stderr:
-                        print(f"  stderr: {stderr}")
-            else:
-                query = (
-                    "SELECT "
-                    "time, "
-                    "test_name, "
-                    "arrayJoin(files) AS file, "
-                    "arrayJoin(line_starts) AS line_start, "
-                    "arrayJoin(line_ends) AS line_end "
-                    f"FROM system.{table} "
-                    f"INTO OUTFILE '{temp_dir}/system_tables/{table}.tsv' "
-                    "FORMAT TSVWithNamesAndTypes"
-                )
-                cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
-                rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=True)
-                res = rc == 0
-
-            if not res:
-                print(f"ERROR: Failed to export coverage table: {table}")
-                break
-        return res
+        if not self.to_file:
+            query = (
+                f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_lines', '{self.dest.user}', '{self.dest.pwd}') "
+                "SELECT file, line_start, line_end, "
+                f"'{self.check_start_time}' AS check_start_time, "
+                f"'{self.job_name}' AS check_name, "
+                "test_name "
+                f"FROM system.{table} "
+                "ARRAY JOIN files AS file, line_starts AS line_start, line_ends AS line_end "
+                "WHERE notEmpty(test_name) AND notEmpty(file) "
+                "GROUP BY file, line_start, line_end, test_name"
+            )
+            cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
+            rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
+            if rc != 0:
+                print(f"ERROR: insert (checks_coverage_lines) failed (rc={rc})")
+                if stdout:
+                    print(f"  stdout: {stdout}")
+                if stderr:
+                    print(f"  stderr: {stderr}")
+                raise RuntimeError(f"Failed to export coverage table: {table}")
+        else:
+            query = (
+                "SELECT "
+                "time, "
+                "test_name, "
+                "arrayJoin(files) AS file, "
+                "arrayJoin(line_starts) AS line_start, "
+                "arrayJoin(line_ends) AS line_end "
+                f"FROM system.{table} "
+                f"INTO OUTFILE '{temp_dir}/system_tables/{table}.tsv' "
+                "FORMAT TSVWithNamesAndTypes"
+            )
+            cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
+            rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=True)
+            if rc != 0:
+                raise RuntimeError(f"Failed to export coverage table to file: {table}")

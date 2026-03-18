@@ -1,5 +1,7 @@
 #include <IO/ReadBufferFromString.h>
 
+#include <Core/CaseAwareBlockNameMap.h>
+
 #include <Formats/FormatFactory.h>
 #include <Formats/FormatSettings.h>
 #include <Formats/BSONTypes.h>
@@ -30,7 +32,6 @@
 #include <DataTypes/Serializations/SerializationArray.h>
 #include <DataTypes/Serializations/SerializationTuple.h>
 #include <DataTypes/Serializations/SerializationMap.h>
-#include "Core/CaseAwareBlockNameMap.h"
 
 
 namespace DB

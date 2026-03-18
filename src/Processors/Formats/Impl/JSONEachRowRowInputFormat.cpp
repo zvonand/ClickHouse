@@ -2,6 +2,8 @@
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
 
+#include <Core/CaseAwareBlockNameMap.h>
+
 #include <DataTypes/NestedUtils.h>
 #include <DataTypes/Serializations/SerializationNullable.h>
 #include <DataTypes/getLeastSupertype.h>
@@ -11,7 +13,6 @@
 #include <Formats/SchemaInferenceUtils.h>
 #include <Processors/Formats/Impl/JSONEachRowRowInputFormat.h>
 #include <Common/Exception.h>
-#include "Core/CaseAwareBlockNameMap.h"
 
 namespace DB
 {

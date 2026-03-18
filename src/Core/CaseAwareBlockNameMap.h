@@ -9,7 +9,8 @@ namespace DB
 class Block;
 
 /// Interface for BlockNameMaps
-class IBlockNameMap {
+class IBlockNameMap
+{
 public:
     enum SearchResult : size_t
     {

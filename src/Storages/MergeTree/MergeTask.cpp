@@ -28,7 +28,6 @@
 #include <Processors/Merges/ReplacingSortedTransform.h>
 #include <Processors/Merges/SummingSortedTransform.h>
 #include <Processors/Merges/VersionedCollapsingTransform.h>
-#include <Processors/QueryPlan/CreatingSetsStep.h>
 #include <Processors/QueryPlan/DistinctStep.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/ExtractColumnsStep.h>
@@ -2299,8 +2298,6 @@ public:
         output_header = TTLDeleteFilterTransform::transformHeader(input_headers.front());
     }
 
-    PreparedSets::Subqueries getSubqueries() { return {}; }
-
 private:
     static Traits getTraits()
     {
@@ -2346,8 +2343,6 @@ public:
     }
 
     String getName() const override { return "TTL"; }
-
-    PreparedSets::Subqueries getSubqueries() { return {}; }
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override
     {
@@ -2709,8 +2704,6 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
         merge_parts_query_plan.addStep(std::move(calculate_sorting_key_expression_step));
     }
 
-    PreparedSets::Subqueries ttl_filter_subqueries;
-
     /// For vertical merge with TTL delete, add a step that evaluates TTL expressions
     /// and produces a filter column. This must be before the merge step so each input
     /// stream has the filter column available for the merging algorithm.
@@ -2724,7 +2717,6 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
             global_ctx->time_of_merge,
             ctx->force_ttl);
 
-        ttl_filter_subqueries = ttl_filter_step->getSubqueries();
         ttl_filter_step->setStepDescription("TTL delete filter");
         merge_parts_query_plan.addStep(std::move(ttl_filter_step));
     }
@@ -2815,8 +2807,6 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
         merge_parts_query_plan.addStep(std::move(deduplication_step));
     }
 
-    PreparedSets::Subqueries subqueries;
-
     /// TTL step: still runs after the merge even in vertical TTL mode.
     /// In vertical TTL mode, rows are already filtered by the merging algorithm,
     /// so the TTL step only updates TTL info without removing any rows.
@@ -2832,19 +2822,13 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
             global_ctx->time_of_merge,
             ctx->force_ttl);
 
-        subqueries = ttl_step->getSubqueries();
         ttl_step->setStepDescription("TTL step");
         merge_parts_query_plan.addStep(std::move(ttl_step));
     }
 
-    subqueries.insert(subqueries.end(), ttl_filter_subqueries.begin(), ttl_filter_subqueries.end());
-
     /// Secondary indices expressions
     if (!global_ctx->merging_skip_indexes.empty())
         addSkipIndexesExpressionSteps(merge_parts_query_plan, global_ctx->merging_skip_indexes, global_ctx);
-
-    if (!subqueries.empty())
-        addCreatingSetsStep(merge_parts_query_plan, std::move(subqueries), global_ctx->context);
 
     /// If merge may reduce rows, rebuild text index and statistics for the resulting part.
     if (global_ctx->merge_may_reduce_rows)

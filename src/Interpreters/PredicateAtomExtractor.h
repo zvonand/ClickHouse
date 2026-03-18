@@ -1,19 +1,12 @@
 #pragma once
 
+#include <Interpreters/PredicateAtom.h>
 #include <Interpreters/ActionsDAG.h>
-#include <base/types.h>
 #include <vector>
 
 
 namespace DB
 {
-
-struct PredicateAtom
-{
-    String column_name;
-    String predicate_class;   /// "Equality", "Range", "In", "LikeSubstring", "IsNull", "Other"
-    String function_name;     /// "equals", "less", ...
-};
 
 /// uses ActionsDAG::extractConjunctionAtoms to decompose AND chains
 /// then classifies each atom by inspecting `function_base->getName`

@@ -1,7 +1,7 @@
 #pragma once
 #include <Processors/ISimpleTransform.h>
 #include <Columns/FilterDescription.h>
-#include <Interpreters/PredicateAtomExtractor.h>
+#include <Interpreters/PredicateAtom.h>
 #include <Storages/MergeTree/MarkRange.h>
 
 namespace DB
@@ -68,6 +68,9 @@ private:
     UInt64 predicate_stats_sample_rate = 0;
     UInt64 chunk_counter = 0;
     String cached_filter_expression;
+    String cached_database;
+    String cached_table;
+    bool table_resolved = false;
 
     void doTransform(Chunk & chunk);
     void removeFilterIfNeed(Columns & columns) const;

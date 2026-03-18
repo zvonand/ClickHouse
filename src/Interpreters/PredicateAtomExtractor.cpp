@@ -32,9 +32,12 @@ String classifyPredicateFunction(const String & function_name)
 namespace
 {
 
-void collectInputColumnNames(const ActionsDAG::Node * node, std::unordered_set<String> & out)
+void collectInputColumnNames(
+    const ActionsDAG::Node * node,
+    std::unordered_set<String> & out,
+    std::unordered_set<const ActionsDAG::Node *> & visited)
 {
-    if (!node)
+    if (!node || !visited.insert(node).second)
         return;
 
     if (node->type == ActionsDAG::ActionType::INPUT)
@@ -44,7 +47,7 @@ void collectInputColumnNames(const ActionsDAG::Node * node, std::unordered_set<S
     }
 
     for (const auto * child : node->children)
-        collectInputColumnNames(child, out);
+        collectInputColumnNames(child, out, visited);
 }
 
 /// return single INPUT column name if the subtree references exactly one column
@@ -52,7 +55,8 @@ void collectInputColumnNames(const ActionsDAG::Node * node, std::unordered_set<S
 String findSingleInputColumnName(const ActionsDAG::Node * node)
 {
     std::unordered_set<String> columns;
-    collectInputColumnNames(node, columns);
+    std::unordered_set<const ActionsDAG::Node *> visited;
+    collectInputColumnNames(node, columns, visited);
     if (columns.size() == 1)
         return *columns.begin();
     return {};

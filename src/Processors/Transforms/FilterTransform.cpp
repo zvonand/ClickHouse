@@ -3,9 +3,9 @@
 #include <Columns/ColumnNullable.h>
 #include <Columns/ColumnSparse.h>
 #include <Columns/ColumnsCommon.h>
+#include <Columns/ColumnsNumber.h>
 #include <Common/CurrentThread.h>
 #include <Common/DateLUT.h>
-#include <Columns/ColumnsNumber.h>
 #include <Core/Field.h>
 #include <Core/ServerSettings.h>
 #include <DataTypes/DataTypeLowCardinality.h>
@@ -14,6 +14,7 @@
 #include <Interpreters/Context.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Interpreters/ExpressionActions.h>
+#include <Interpreters/PredicateAtomExtractor.h>
 #include <Interpreters/PredicateStatisticsLog.h>
 #include <Processors/Chunk.h>
 #include <Storages/IStorage.h>
@@ -324,32 +325,34 @@ void FilterTransform::collectPredicateStatistics(size_t num_rows_before, size_t 
     if (chunk_counter % predicate_stats_sample_rate != 0)
         return;
 
+    /// Resolve database/table once and cache for subsequent chunks
+    if (!table_resolved)
+    {
+        if (auto mark_ranges_info = chunk.getChunkInfos().get<MarkRangesInfo>())
+        {
+            auto db_and_table = DatabaseCatalog::instance().tryGetByUUID(mark_ranges_info->table_uuid);
+            if (db_and_table.first && db_and_table.second)
+            {
+                auto storage_id = db_and_table.second->getStorageID();
+                cached_database = storage_id.database_name;
+                cached_table = storage_id.table_name;
+            }
+        }
+        table_resolved = true;
+    }
+
     time_t now = time(nullptr);
     UInt16 today = static_cast<UInt16>(DateLUT::instance().toDayNum(now));
     Float64 selectivity = static_cast<Float64>(num_rows_after) / static_cast<Float64>(num_rows_before);
     String query_id(CurrentThread::getQueryId());
-
-    /// try to resolve database/table from MarkRangesInfo
-    String database;
-    String table;
-    if (auto mark_ranges_info = chunk.getChunkInfos().get<MarkRangesInfo>())
-    {
-        auto db_and_table = DatabaseCatalog::instance().tryGetByUUID(mark_ranges_info->table_uuid);
-        if (db_and_table.first && db_and_table.second)
-        {
-            auto storage_id = db_and_table.second->getStorageID();
-            database = storage_id.database_name;
-            table = storage_id.table_name;
-        }
-    }
 
     for (const auto & atom : predicate_atoms)
     {
         PredicateStatisticsLogElement elem;
         elem.event_date = today;
         elem.event_time = now;
-        elem.database = database;
-        elem.table = table;
+        elem.database = cached_database;
+        elem.table = cached_table;
         elem.query_id = query_id;
         elem.filter_expression = cached_filter_expression;
         elem.column_name = atom.column_name;

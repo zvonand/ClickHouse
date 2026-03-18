@@ -1,6 +1,13 @@
+-- prepare files
 -- ls
+ls_test_file_.1
+ls_test_file_.2
+ls_test_file_.3
 OK
 -- ls;
+ls_test_file_.1
+ls_test_file_.2
+ls_test_file_.3
 OK
 -- ls foo (should fail)
 Code: 47. DB::Exception: Unknown expression identifier `ls` in scope SELECT ls AS foo. (UNKNOWN_IDENTIFIER)

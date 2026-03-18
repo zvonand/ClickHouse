@@ -3832,7 +3832,7 @@ void ClientBase::runNonInteractive()
                     return;
             }
             else
-            {   
+            {
                 if (!processQueryText(query))
                     return;
             }

@@ -13,23 +13,40 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-# Test ls command
+F1="ls_test_file_.1"
+F2="ls_test_file_.2"
+F3="ls_test_file_.3"
+
+cleanup() {
+    rm -f "$CURDIR/$F1" "$CURDIR/$F2" "$CURDIR/$F3"
+}
+trap cleanup EXIT
+echo "-- prepare files"
+touch "$CURDIR/$F1" "$CURDIR/$F2" "$CURDIR/$F3"
+
 echo "-- ls"
 (
-    cd "$CURDIR"
-    test "$($CLICKHOUSE_LOCAL -q "ls" 2>/dev/null | wc -l)" -gt 0
+cd "$CURDIR"
+OUT=$($CLICKHOUSE_LOCAL -q "ls")
+echo "$OUT" | grep -F "$F1"
+echo "$OUT" | grep -F "$F2"
+echo "$OUT" | grep -F "$F3"
 )
 echo "OK"
 
 echo "-- ls;"
 (
-    cd "$CURDIR"
-    test "$($CLICKHOUSE_LOCAL -q "ls;" 2>/dev/null | wc -l)" -gt 0
+cd "$CURDIR"
+OUT=$($CLICKHOUSE_LOCAL -q "ls;")
+echo "$OUT" | grep -F "$F1"
+echo "$OUT" | grep -F "$F2"
+echo "$OUT" | grep -F "$F3"
 )
 echo "OK"
 
 echo "-- ls foo (should fail)"
 (
-    cd "$CURDIR"
-    $CLICKHOUSE_LOCAL -q "ls foo" 2>&1 || true
-) | grep -F "Unknown expression identifier"
+cd "$CURDIR"
+OUT=$($CLICKHOUSE_LOCAL -q "ls foo")
+)
+echo "$OUT"

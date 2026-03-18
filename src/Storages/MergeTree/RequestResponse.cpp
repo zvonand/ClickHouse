@@ -40,12 +40,7 @@ void ParallelReadRequest::serialize(WriteBuffer & out, UInt64 initiator_protocol
 
     writeIntBinary(mode, out);
     writeIntBinary(replica_num, out);
-    /// Since DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK, `min_marks_per_request` is sent once
-    /// in the initial announcement. Write the real value for older initiators that still read it; write 0 for new ones.
-    if (initiator_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
-        writeIntBinary(static_cast<size_t>(0), out);
-    else
-        writeIntBinary(min_marks_per_request, out);
+    writeIntBinary(min_marks_per_request, out);
     description.serialize(out, initiator_protocol_version);
 }
 

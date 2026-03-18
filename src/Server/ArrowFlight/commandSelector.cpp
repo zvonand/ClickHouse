@@ -265,13 +265,14 @@ static SQLSet commandGetTables(const arrow::flight::protocol::sql::CommandGetTab
 
     auto block_modifier = [](ContextPtr query_context, Block & block)
     {
-        const auto & table_scheme_column = block.getByPosition(4);
+        const auto & table_schema_column = block.getByPosition(4);
         auto new_column = ColumnString::create();
-        const auto & arr = typeid_cast<const ColumnArray &>(*table_scheme_column.column);
+        auto col = table_schema_column.column->convertToFullIfNeeded();
+        const auto & arr = typeid_cast<const ColumnArray &>(*col);
         const auto & tuple_col = typeid_cast<const ColumnTuple &>(arr.getData());
         const auto & name_col = typeid_cast<const ColumnString &>(tuple_col.getColumn(0));
         const auto & type_col = typeid_cast<const ColumnString &>(tuple_col.getColumn(1));
-        for (size_t i = 0; i < table_scheme_column.column->size(); ++i)
+        for (size_t i = 0; i < col->size(); ++i)
         {
             ColumnsWithTypeAndName table_columns;
             auto start = i ? arr.getOffsets()[i - 1] : 0;
@@ -294,7 +295,7 @@ static SQLSet commandGetTables(const arrow::flight::protocol::sql::CommandGetTab
             new_column->insertData(reinterpret_cast<const char *>(serialized_buffer->data()), serialized_buffer->size());
         }
 
-        auto table_scheme_column_name = table_scheme_column.name;
+        auto table_scheme_column_name = table_schema_column.name;
         block.erase(4);
         block.insert(ColumnWithTypeAndName(std::move(new_column), std::make_shared<DataTypeString>(), table_scheme_column_name));
     };

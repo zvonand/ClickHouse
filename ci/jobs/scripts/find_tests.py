@@ -102,7 +102,7 @@ class Targeting:
         ), "Find tests by previous failures applicable only for PRs"
 
         tests = []
-        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="nikf", passwd="s2djrs4SSfdoWp")
+        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
         if self.job_type == self.INTEGRATION_JOB_TYPE:
             test_name_pattern = "^test_"
         elif self.job_type == self.STATELESS_JOB_TYPE:
@@ -170,7 +170,7 @@ class Targeting:
         HAVING count(DISTINCT test_name) < {self.MAX_TESTS_PER_LINE}
         """
 
-        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="nikf", passwd="s2djrs4SSfdoWp")
+        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
         t_query = time.monotonic()
         raw = cidb.query(query, log_level="")
         print(f"[find_tests] CIDB query: {time.monotonic()-t_query:.2f}s, response={len(raw)} bytes")

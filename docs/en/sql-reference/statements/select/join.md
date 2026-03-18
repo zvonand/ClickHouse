@@ -33,7 +33,7 @@ All standard [SQL JOIN](https://en.wikipedia.org/wiki/Join_(SQL)) types are supp
 | `RIGHT OUTER JOIN`| non-matching rows from right table are returned in addition to matching rows. |
 | `FULL OUTER JOIN` | non-matching rows from both tables are returned in addition to matching rows. |
 | `CROSS JOIN`      | produces cartesian product of whole tables, "join keys" are **not** specified.|
-| `NATURAL JOIN`    | automatically joins on all columns with the same name in both tables; each common column appears once in the result. Supports `INNER` (default), `LEFT`, `RIGHT`, and `FULL OUTER` variants. Equivalent to `JOIN ... USING (col1, col2, ...)` where the column list is derived automatically. |
+| `NATURAL JOIN`    | automatically joins on all columns with the same name in both tables; each common column appears once in the result. Supports `INNER` (default), `LEFT`, `RIGHT`, and `FULL` variants. Equivalent to `JOIN ... USING (col1, col2, ...)` where the column list is derived automatically. |
 
 - `JOIN` without a type specified implies `INNER`.
 - The keyword `OUTER` can be safely omitted.

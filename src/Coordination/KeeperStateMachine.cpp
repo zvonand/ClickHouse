@@ -1053,21 +1053,21 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
 
         if (is_last_obj)
         {
-            LOG_DEBUG(
-                log, "Saved snapshot {} to path {} ({} chunks)",
-                s.get_last_log_idx(), latest_snapshot_info->path, obj_id);
             ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshot);
 
+            uint64_t snp_size = 0;
             try
             {
-                latest_snapshot_size.store(
-                    latest_snapshot_info->disk->getFileSize(latest_snapshot_info->path),
-                    std::memory_order_relaxed);
+                snp_size = latest_snapshot_info->disk->getFileSize(latest_snapshot_info->path);
+                latest_snapshot_size.store(snp_size, std::memory_order_relaxed);
             }
             catch (...)
             {
                 tryLogCurrentException(log, "Failed to get snapshot size after save");
             }
+            LOG_DEBUG(
+                log, "Saved snapshot {} ({} chunks, {} bytes)",
+                s.get_last_log_idx(), obj_id, snp_size);
         }
     }
     catch (...)

@@ -1325,7 +1325,6 @@ class SettingsRandomizer:
     def get_random_settings(args, tags):
         random_settings = {}
         is_debug = BuildFlags.DEBUG in args.build_flags
-        is_coverage = BuildFlags.WITH_COVERAGE in args.build_flags
         for setting, generator in SettingsRandomizer.settings.items():
             if (
                 is_debug
@@ -1339,19 +1338,6 @@ class SettingsRandomizer:
         for setting, other_setting in SettingsRandomizer.dependent_settings.items():
             random_settings[setting] = random_settings[other_setting]
         SettingsRandomizer.adjust_settings_for_autopr(args, tags, random_settings)
-        if is_coverage:
-            # JIT-compiled code is generated at runtime and is not tracked by
-            # LLVM source-based coverage instrumentation. Disable JIT to ensure
-            # coverage data reflects only statically compiled code paths.
-            for jit_setting in (
-                "compile_expressions",
-                "compile_aggregate_expressions",
-                "compile_sort_description",
-                "min_count_to_compile_expression",
-                "min_count_to_compile_aggregate_expression",
-                "min_count_to_compile_sort_description",
-            ):
-                random_settings[jit_setting] = 0
         return random_settings
 
 

@@ -8,7 +8,6 @@
 #include <Interpreters/Context.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Interpreters/inplaceBlockConversions.h>
-#include <Databases/enableAllExperimentalSettings.h>
 #include <Common/logger_useful.h>
 #include <Columns/ColumnsNumber.h>
 #include <Storages/MergeTree/TextIndexCache.h>
@@ -104,19 +103,8 @@ MergeTreeReaderTextIndex::MergeTreeReaderTextIndex(
         /// not a physical column), we compile each virtual column's default expression
         /// (the original search predicate) and determine the required physical columns
         /// from it. The fallback reader is then created for those physical columns only.
-        auto context_copy = Context::createCopy(data_part_info_for_read->getContext());
-        enableAllExperimentalSettings(context_copy);
-        context_copy->setSetting("enable_analyzer", settings.enable_analyzer);
-
-        /// Build combined columns description: physical columns + virtual columns with defaults.
-        /// evaluateMissingDefaults needs this to resolve the virtual column's default expression.
-        auto combined_columns = storage_snapshot->metadata->getColumns();
-        if (storage_snapshot->virtual_columns)
-        {
-            for (const auto & vc : *storage_snapshot->virtual_columns)
-                if (vc.default_desc.expression)
-                    combined_columns.add(vc);
-        }
+        auto context_copy = createContextForDefaultExpressions();
+        auto combined_columns = buildCombinedColumnsForDefaultExpressions();
 
         /// Build a header block containing all physical columns (column type only, no data).
         /// evaluateMissingDefaults passes this to createExpressionsAnalyzer, which creates

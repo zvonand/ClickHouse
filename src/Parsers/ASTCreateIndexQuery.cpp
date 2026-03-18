@@ -68,7 +68,8 @@ ASTPtr ASTCreateIndexQuery::convertToASTAlterCommand() const
     command->type = ASTAlterCommand::ADD_INDEX;
     command->if_not_exists = if_not_exists;
 
-    command->index_decl = command->children.emplace_back(index_decl).get();
+    command->index_decl = command->children.emplace_back(index_decl->clone()).get();
+    command->index_decl->as<ASTIndexDeclaration &>().part_of_create_index_query = false;
 
     return command;
 }

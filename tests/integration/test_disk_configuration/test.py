@@ -52,6 +52,9 @@ def start_cluster():
         )
 
         cluster.start()
+        cluster.instances["node1"].query("SYSTEM WAIT BLOBS CLEANUP 's3'")
+        cluster.instances["node2"].query("SYSTEM WAIT BLOBS CLEANUP 's3'")
+        cluster.instances["node3"].query("SYSTEM WAIT BLOBS CLEANUP 's3'")
         yield cluster
 
     finally:

@@ -1001,23 +1001,22 @@ static ExpiredFiles collectExpiredFiles(
     ExpiredFiles result;
     std::set<Iceberg::IcebergPathFromMetadata> seen_expired_manifest_list_paths;
     std::set<Iceberg::IcebergPathFromMetadata> seen_expired_manifest_paths;
-    for (const auto & ml_path : expired_manifest_list_paths)
+    for (const auto & manifest_list_path : expired_manifest_list_paths)
     {
-        if (retained_manifest_list_paths.contains(ml_path))
+        if (retained_manifest_list_paths.contains(manifest_list_path))
             continue;
 
-        if (seen_expired_manifest_list_paths.contains(ml_path))
+        if (seen_expired_manifest_list_paths.contains(manifest_list_path))
             continue;
 
         ManifestFileCacheKeys manifest_keys;
         try
         {
-            manifest_keys = getManifestList(
-                object_storage, persistent_table_components, context, ml_path, log);
+            manifest_keys = getManifestList(object_storage, persistent_table_components, context, manifest_list_path, log);
         }
         catch (...)
         {
-            LOG_WARNING(log, "Failed to read manifest list {}, skipping", ml_path);
+            LOG_WARNING(log, "Failed to read manifest list {}, skipping", manifest_list_path);
             continue;
         }
 
@@ -1065,8 +1064,8 @@ static ExpiredFiles collectExpiredFiles(
             ++result.manifest_files;
         }
 
-        seen_expired_manifest_list_paths.insert(ml_path);
-        result.all_paths.push_back(ml_path);
+        seen_expired_manifest_list_paths.insert(manifest_list_path);
+        result.all_paths.push_back(manifest_list_path);
         ++result.manifest_lists;
     }
     return result;

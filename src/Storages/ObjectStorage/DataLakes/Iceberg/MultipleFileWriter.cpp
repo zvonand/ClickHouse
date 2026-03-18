@@ -44,11 +44,7 @@ void MultipleFileWriter::startNewFile()
     auto metadata_path = filename_generator.generateDataFileName();
     auto storage_path = path_resolver.resolve(metadata_path);
 
-    /// Store the metadata path (used in Iceberg manifest files for other engines to read).
     data_file_names.push_back(metadata_path);
-    /// Also track storage paths for cleanup.
-    data_file_storage_paths.push_back(storage_path);
-    /// Write to the actual storage path.
     buffer = object_storage->writeObject(
         StoredObject(storage_path), WriteMode::Rewrite, std::nullopt, DBMS_DEFAULT_BUFFER_SIZE, context->getWriteSettings());
 
@@ -85,11 +81,11 @@ void MultipleFileWriter::finalize()
     {
         total_bytes += buffer_bytes;
     }
-    else if (!data_file_storage_paths.empty())
+    else if (!data_file_names.empty())
     {
         /// Some storage backends (e.g. Azure) don't track bytes in the write buffer.
         /// Fall back to querying the actual object size.
-        auto metadata = object_storage->getObjectMetadata(data_file_storage_paths.back(), /*with_tags=*/ false);
+        auto metadata = object_storage->getObjectMetadata(path_resolver.resolve(data_file_names.back()), /*with_tags=*/false);
         total_bytes += metadata.size_bytes;
     }
 }
@@ -110,8 +106,8 @@ void MultipleFileWriter::cancel()
 
 void MultipleFileWriter::clearAllDataFiles() const
 {
-    for (const auto & storage_path : data_file_storage_paths)
-        object_storage->removeObjectIfExists(StoredObject(storage_path));
+    for (const auto & metadata_path : data_file_names)
+        object_storage->removeObjectIfExists(StoredObject(path_resolver.resolve(metadata_path)));
 }
 
 UInt64 MultipleFileWriter::getResultBytes() const

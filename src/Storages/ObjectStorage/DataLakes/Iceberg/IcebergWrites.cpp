@@ -980,7 +980,6 @@ bool IcebergStorageSink::initializeMetadata()
                 buffer_manifest_entry->finalize();
                 auto manifest_storage_path = resolver.resolve(manifest_entry_path);
                 auto manifest_metadata = object_storage->getObjectMetadata(manifest_storage_path, /*with_tags=*/ false);
-                LOG_DEBUG(log, "Manifest file {} size: {} bytes", manifest_storage_path, manifest_metadata.size_bytes);
                 manifest_entry_sizes.push_back(manifest_metadata.size_bytes);
             }
             catch (...)

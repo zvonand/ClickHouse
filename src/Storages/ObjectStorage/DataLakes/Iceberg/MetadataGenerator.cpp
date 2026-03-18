@@ -126,7 +126,7 @@ MetadataGenerator::NextMetadataResult MetadataGenerator::generateNextMetadata(
     }
     Int64 snapshot_id = user_defined_snapshot_id.value_or(static_cast<Int64>(dis(gen)));
 
-    auto manifest_list_suffix = generator.generateManifestListName(snapshot_id, format_version);
+    auto manifest_list_path = generator.generateManifestListName(snapshot_id, format_version);
     new_snapshot->set(Iceberg::f_metadata_snapshot_id, snapshot_id);
     new_snapshot->set(Iceberg::f_parent_snapshot_id, parent_snapshot_id);
 
@@ -171,7 +171,7 @@ MetadataGenerator::NextMetadataResult MetadataGenerator::generateNextMetadata(
     new_snapshot->set(Iceberg::f_summary, summary);
 
     new_snapshot->set(Iceberg::f_schema_id, metadata_object->getValue<Int32>(Iceberg::f_current_schema_id));
-    new_snapshot->set(Iceberg::f_manifest_list, manifest_list_suffix.serialize());
+    new_snapshot->set(Iceberg::f_manifest_list, manifest_list_path.serialize());
 
     metadata_object->getArray(Iceberg::f_snapshots)->add(new_snapshot);
     metadata_object->set(Iceberg::f_current_snapshot_id, snapshot_id);
@@ -216,7 +216,7 @@ MetadataGenerator::NextMetadataResult MetadataGenerator::generateNextMetadata(
         properties->set("write.merge.mode", "merge-on-read");
         properties->set("write.update.mode", "merge-on-read");
     }
-    return {new_snapshot, manifest_list_suffix};
+    return {new_snapshot, manifest_list_path};
 }
 
 void MetadataGenerator::generateDropColumnMetadata(const String & column_name)

@@ -237,8 +237,6 @@ bool writeMetadataFileAndVersionHint(
     DB::ContextPtr context,
     bool try_write_version_hint)
 {
-    auto compression_method = metadata_file_info.compression_method;
-    auto version_number = metadata_file_info.version;
     auto storage_metadata_path = resolver.resolve(metadata_file_info.path);
     auto storage_version_hint_path = resolver.resolve(version_hint_path);
     try
@@ -247,7 +245,13 @@ bool writeMetadataFileAndVersionHint(
             return false;
 
         Iceberg::writeMessageToFile(
-            metadata_file_content, storage_metadata_path, object_storage, context, /* write-if-none-match */ "*", "", compression_method);
+            metadata_file_content,
+            storage_metadata_path,
+            object_storage,
+            context,
+            /* write-if-none-match */ "*",
+            "",
+            metadata_file_info.compression_method);
     }
     catch (...)
     {
@@ -284,13 +288,13 @@ bool writeMetadataFileAndVersionHint(
                     old_version = getMetadataFileAndVersion(version_hint_value).version;
                 }
             }
-            if (old_version < version_number)
+            if (old_version < metadata_file_info.version)
             {
                 try
                 {
                     /// Write just the version number for Spark/spec compatibility.
                     Iceberg::writeMessageToFile(
-                        std::to_string(version_number),
+                        std::to_string(metadata_file_info.version),
                         storage_version_hint_path,
                         object_storage,
                         context,

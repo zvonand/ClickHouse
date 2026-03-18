@@ -4230,6 +4230,7 @@ def main(args):
         args.collect_per_test_coverage
         and BuildFlags.WITH_COVERAGE in args.build_flags
     ):
+        print("Per-test coverage collection enabled (WITH_COVERAGE detected)")
         clickhouse_execute(
             args,
             """CREATE TABLE IF NOT EXISTS system.coverage_log

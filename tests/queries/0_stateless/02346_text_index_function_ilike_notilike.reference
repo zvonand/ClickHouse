@@ -80,3 +80,12 @@ Tests fallback when threshold is exceeded for expression index
 7547
 92453
 92453
+Test ILIKE optimization is disabled for nested preprocessors (lower(reverse(col)))
+-- without optimization
+[1]
+[1]
+[2]
+-- with optimization (must produce same results)
+[1]
+[1]
+[2]

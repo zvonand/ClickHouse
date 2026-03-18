@@ -246,3 +246,68 @@ SELECT count() FROM tab WHERE message NOT ILIKE '%A%';
 SELECT count() FROM tab WHERE message NOT ILIKE '%A%' SETTINGS use_skip_indexes = 0;
 
 DROP TABLE tab;
+
+SELECT 'Test ILIKE optimization is disabled for nested preprocessors (lower(reverse(col)))';
+
+-- lower(reverse(message)) is not pure case folding.
+-- For 'FOO BAR': reverse → 'RAB OOF', lower → 'rab oof', tokens: ['rab', 'oof'].
+-- ILIKE '%foo%' on the raw message is TRUE, but 'foo' is absent from the dictionary.
+-- Without the isCaseFolding() guard the optimization would skip row 1 (wrong result).
+DROP TABLE IF EXISTS tab;
+
+CREATE TABLE tab
+(
+    id UInt32,
+    message String,
+    INDEX idx(message) TYPE text(tokenizer = splitByNonAlpha, preprocessor = lower(reverse(message)))
+)
+ENGINE = MergeTree ORDER BY id;
+
+INSERT INTO tab(id, message) VALUES (1, 'FOO BAR'), (2, 'XYZ');
+
+SET use_text_index_like_optimization = 0;
+
+SELECT '-- without optimization';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%FOO%';
+SELECT groupArray(id) FROM tab WHERE message NOT ILIKE '%foo%';
+
+SET use_text_index_like_optimization = 1;
+
+SELECT '-- with optimization (must produce same results)';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%FOO%';
+SELECT groupArray(id) FROM tab WHERE message NOT ILIKE '%foo%';
+
+DROP TABLE tab;
+
+SELECT 'Test ILIKE optimization is disabled for non-case-folding preprocessor (reverse(col))';
+
+-- reverse(message) is not case folding at all.
+-- For 'foo bar': reverse → 'rab oof', tokens: ['rab', 'oof'].
+-- Without the guard the optimization would look for 'foo' in the dictionary and skip row 1.
+DROP TABLE IF EXISTS tab;
+
+CREATE TABLE tab
+(
+    id UInt32,
+    message String,
+    INDEX idx(message) TYPE text(tokenizer = splitByNonAlpha, preprocessor = reverse(message))
+)
+ENGINE = MergeTree ORDER BY id;
+
+INSERT INTO tab(id, message) VALUES (1, 'foo bar'), (2, 'xyz');
+
+SET use_text_index_like_optimization = 0;
+
+SELECT '-- without optimization';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
+SELECT groupArray(id) FROM tab WHERE message NOT ILIKE '%foo%';
+
+SET use_text_index_like_optimization = 1;
+
+SELECT '-- with optimization (must produce same results)';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
+SELECT groupArray(id) FROM tab WHERE message NOT ILIKE '%foo%';
+
+DROP TABLE tab;

@@ -1450,7 +1450,7 @@ TEST(T64Test, DecompressMalformedInputBytesToSkip)
         0x93,                   /// T64 method byte
         0x0B, 0x00, 0x00, 0x00, /// compressed_size = 11 (9-byte header + 2-byte payload)
         0x85, 0x68, 0x00, 0x00, /// decompressed_size = 26757
-        0x81, 0x2C,             /// 2-byte payload; bytes_to_skip=26757 > bytes_size=2
+        0x84, 0x2C,             /// cookie 0x84 = UInt64/Bit; bytes_to_skip=5 > bytes_size=1
     };
 
     const char * source = reinterpret_cast<const char *>(block);

@@ -68,13 +68,8 @@ class CoverageExporter:
                 "GROUP BY file, line_start, line_end, test_name"
             )
             cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
-            rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
+            rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=True)
             if rc != 0:
-                print(f"ERROR: insert (checks_coverage_lines) failed (rc={rc})")
-                if stdout:
-                    print(f"  stdout: {stdout}")
-                if stderr:
-                    print(f"  stderr: {stderr}")
                 raise RuntimeError(f"Failed to export coverage table: {table}")
         else:
             query = (

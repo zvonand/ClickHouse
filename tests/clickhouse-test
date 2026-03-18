@@ -4158,6 +4158,12 @@ def main(args):
     args.build_flags = collect_build_flags(args)
     args.changed_merge_tree_settings = collect_changed_merge_tree_settings(args)
 
+    print(
+        f"build_flags={args.build_flags} "
+        f"collect_per_test_coverage={args.collect_per_test_coverage} "
+        f"coverage_active={args.collect_per_test_coverage and BuildFlags.WITH_COVERAGE in args.build_flags}"
+    )
+
     if args.s3_storage and (BuildFlags.RELEASE not in args.build_flags):
         args.no_random_settings = True
 
@@ -4230,7 +4236,6 @@ def main(args):
         args.collect_per_test_coverage
         and BuildFlags.WITH_COVERAGE in args.build_flags
     ):
-        print("Per-test coverage collection enabled (WITH_COVERAGE detected)")
         clickhouse_execute(
             args,
             """CREATE TABLE IF NOT EXISTS system.coverage_log

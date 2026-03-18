@@ -2,6 +2,7 @@
 
 #include <Common/Exception.h>
 
+#include <base/defines.h>
 #include <memory>
 
 namespace DB
@@ -187,6 +188,7 @@ void CompactChildrenSet::erase(std::string_view child)
         /// The string_view points to arena-owned keys in SnapshotableHashTable
         /// that outlive this set, so it's safe to keep the pointer.
         std::string_view remaining = *set->begin();
+        chassert(!remaining.empty());
         delete set;
         ptr = remaining.data();
         name_size = remaining.size();
@@ -276,7 +278,7 @@ CompactChildrenSet::ConstIterator CompactChildrenSet::end() const
 size_t CompactChildrenSet::heapSizeInBytes() const
 {
     if (isSet())
-        return sizeof(ChildrenSet) + asSet()->size() * sizeof(std::string_view);
+        return sizeof(ChildrenSet) + asSet()->capacity() * sizeof(std::string_view);
     return 0;
 }
 

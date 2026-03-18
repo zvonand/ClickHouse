@@ -39,7 +39,7 @@ public:
         using difference_type = std::ptrdiff_t;
         using iterator_category = std::forward_iterator_tag;
 
-        ConstIterator() = default;
+        ConstIterator() : sv() {}
 
         reference operator*() const;
         pointer operator->() const;
@@ -62,11 +62,14 @@ public:
         bool set_mode = false;
         bool done = true;
 
-        /// Used in single mode: holds its own copy of the string_view
-        std::string_view sv;
+        union
+        {
+            /// Used in single mode: holds its own copy of the string_view
+            std::string_view sv;
 
-        /// Used in set mode
-        ChildrenSet::const_iterator set_it;
+            /// Used in set mode
+            ChildrenSet::const_iterator set_it;
+        };
     };
 
     CompactChildrenSet() = default;

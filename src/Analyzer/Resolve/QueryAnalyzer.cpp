@@ -4545,9 +4545,11 @@ void QueryAnalyzer::resolveJoin(QueryTreeNodePtr & join_node, IdentifierResolveS
         }
 
         if (using_nodes.empty())
-            throw Exception(ErrorCodes::EMPTY_LIST_OF_COLUMNS_QUERIED,
-                "NATURAL JOIN: tables have no common column names in {}",
-                join_node_typed.formatASTForErrorMessage());
+        {
+            /// No common columns — degrade to CROSS JOIN (standard SQL behavior).
+            join_node_typed.setKind(JoinKind::Cross);
+            return;
+        }
 
         join_node_typed.getJoinExpression() = std::make_shared<ListNode>(std::move(using_nodes));
         join_node_typed.setUsingJoinExpression();

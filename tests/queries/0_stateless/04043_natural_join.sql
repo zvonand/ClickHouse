@@ -37,10 +37,10 @@ SELECT * FROM t1 NATURAL JOIN t2 USING (id); -- { clientError SYNTAX_ERROR } Err
 SELECT * FROM t1 NATURAL JOIN t2 ON t1.id = t2.id; -- { clientError SYNTAX_ERROR } Error: NATURAL JOIN cannot specify ON
 SELECT * FROM t1 NATURAL CROSS JOIN t2; -- { clientError SYNTAX_ERROR } Error: NATURAL JOIN cannot be CROSS JOIN
 
--- Error: no common columns between tables
+-- No common columns: NATURAL JOIN degrades to CROSS JOIN
 CREATE TABLE t4 (x UInt64) ENGINE = Memory;
 INSERT INTO t4 VALUES (1);
-SELECT * FROM t1 NATURAL JOIN t4; -- { serverError EMPTY_LIST_OF_COLUMNS_QUERIED }
+SELECT * FROM t1 NATURAL JOIN t4 ORDER BY id;
 
 DROP TABLE t1;
 DROP TABLE t2;

@@ -707,8 +707,12 @@ void resolveNaturalJoin(ASTTableJoin & table_join, const TablesWithColumns & tab
     }
 
     if (using_list->children.empty())
-        throw Exception(ErrorCodes::EMPTY_LIST_OF_COLUMNS_QUERIED,
-            "NATURAL JOIN: tables have no common column names");
+    {
+        /// No common columns — degrade to CROSS JOIN (standard SQL behavior).
+        table_join.kind = JoinKind::Cross;
+        table_join.is_natural = false;
+        return;
+    }
 
     table_join.using_expression_list = std::move(using_list);
     table_join.children.push_back(table_join.using_expression_list);

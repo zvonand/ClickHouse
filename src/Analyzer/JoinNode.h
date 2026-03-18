@@ -143,6 +143,12 @@ public:
         return kind;
     }
 
+    /// Set join kind
+    void setKind(JoinKind kind_value)
+    {
+        kind = kind_value;
+    }
+
     /// Convert join node to ASTTableJoin
     ASTPtr toASTTableJoin() const;
 

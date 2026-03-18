@@ -232,11 +232,11 @@ Field QueryFuzzer::getRandomField(int type)
                 = {"{}",
                    "[]",
                    "null",
-                   "{\"a\":1}",
-                   "{\"a\":null,\"b\":true,\"c\":false}",
-                   "{\"a\":{\"b\":{\"c\":42}}}",
-                   "{\"a\":[1,2,3],\"b\":\"str\"}",
-                   "[1,\"two\",null,true,{}]"};
+                   R"({"a":1})",
+                   R"({"a":null,"b":true,"c":false})",
+                   R"({"a":{"b":{"c":42}}})",
+                   R"({"a":[1,2,3],"b":"str"})",
+                   R"([1,"two",null,true,{}])"};
             return String(json_values[fuzz_rand() % std::size(json_values)]);
         }
         default:

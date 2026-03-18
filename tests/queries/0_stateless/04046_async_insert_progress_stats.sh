@@ -13,13 +13,29 @@ ${CLICKHOUSE_CLIENT} --query "CREATE TABLE test_async_insert_progress (x String)
 
 # Test 1: TCP protocol (clickhouse-client uses TCP)
 query_tcp_id="ASYNC_INSERT_TCP_$RANDOM$RANDOM"
-${CLICKHOUSE_CLIENT} --query_id="$query_tcp_id" --async_insert 1 --wait_for_async_insert 1 --query \
-    "INSERT INTO test_async_insert_progress VALUES ('one'), ('two'), ('three')"
+${CLICKHOUSE_CLIENT} --progress err --query_id="$query_tcp_id" --async_insert 1 --wait_for_async_insert 1 --query \
+    "INSERT INTO test_async_insert_progress VALUES ('one'), ('two'), ('three')" 2>&1 \
+    | grep "Progress:" |  sed 's/.*Progress: \([0-9.]*\) rows, \([0-9.]* [A-Za-z]*\).*/TCP: Rows: \1, Bytes: \2/'
 
 # Test 2: HTTP protocol
 query_http_id="ASYNC_INSERT_HTTP_$RANDOM$RANDOM"
-${CLICKHOUSE_CURL} -sS "${CLICKHOUSE_URL}&async_insert=1&wait_for_async_insert=1&query_id=$query_http_id" \
-    -d "INSERT INTO test_async_insert_progress VALUES ('four'), ('five'), ('six')"
+${CLICKHOUSE_CURL} -vsS "${CLICKHOUSE_URL}&async_insert=1&wait_for_async_insert=1&query_id=$query_http_id" \
+    -d "INSERT INTO test_async_insert_progress VALUES ('four'), ('five'), ('six')" 2>&1 \
+    | grep "X-ClickHouse-Summary" | grep -v "Access-Control-Expose-Headers" | sed 's/,\"elapsed_ns[^}]*//' | sed 's/,\"memory_usage[^}]*//'
+
+for _ in $(seq 1 60);
+do
+    $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS query_log"
+    count=$($CLICKHOUSE_CLIENT -q "
+        SELECT count(DISTINCT query_id) FROM system.query_log
+        WHERE
+            current_database = currentDatabase()
+            AND event_date >= yesterday()
+            AND query_id = '$query_http_id'
+        ")
+    [ "$count" -ge 1 ] && break
+    sleep 0.5
+done
 
 ${CLICKHOUSE_CLIENT} --query "SYSTEM FLUSH LOGS query_log"
 

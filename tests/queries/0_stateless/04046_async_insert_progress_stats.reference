@@ -1,3 +1,5 @@
+TCP: Rows: 3.00, Bytes: 27.00 B
+< X-ClickHouse-Summary: {"read_rows":"3","read_bytes":"27","written_rows":"3","written_bytes":"27","total_rows_to_read":"0","result_rows":"6","result_bytes":"54"}
 TCP:	3	27	3	27	3	27	1
 HTTP:	3	27	3	27	3	27	2
 total_rows	6

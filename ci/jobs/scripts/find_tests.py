@@ -170,7 +170,7 @@ class Targeting:
         HAVING count(DISTINCT test_name) < {self.MAX_TESTS_PER_LINE}
         """
 
-        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="nikf", passwd="s2djrs4SSfdoWp")
         t_query = time.monotonic()
         raw = cidb.query(query, log_level="")
         print(f"[find_tests] CIDB query: {time.monotonic()-t_query:.2f}s, response={len(raw)} bytes")

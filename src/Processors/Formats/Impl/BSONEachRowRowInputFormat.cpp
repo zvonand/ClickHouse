@@ -61,7 +61,7 @@ BSONEachRowRowInputFormat::BSONEachRowRowInputFormat(
     , prev_positions(header_->columns(), {std::string_view{}, NOT_INITIALIZED})
     , types(header_->getDataTypes())
 {
-    name_map.getNamesToIndexesMap(getPort().getHeader());
+    name_map.initFromBlock(getPort().getHeader());
 }
 
 inline size_t BSONEachRowRowInputFormat::columnIndex(std::string_view name, size_t key_index)

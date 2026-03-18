@@ -48,8 +48,7 @@ JSONEachRowRowInputFormat::JSONEachRowRowInputFormat(
     , yield_strings(yield_strings_)
     , format_settings(format_settings_)
 {
-    name_map.getNamesToIndexesMap(getPort().getHeader());
-    column_seen_before.resize(name_map.size());
+    name_map.initFromBlock(getPort().getHeader());
     const auto & header = getPort().getHeader();
     if (format_settings_.import_nested_json)
     {
@@ -160,9 +159,6 @@ void JSONEachRowRowInputFormat::readJSONObject(MutableColumns & columns)
 {
     assertChar('{', *in);
 
-    // Reset the seen columns for each new object
-    std::fill(column_seen_before.begin(), column_seen_before.end(), false);
-
     for (size_t key_index = 0; advanceToNextKey(key_index); ++key_index)
     {
         std::string_view name_ref = readColumnName(*in);
@@ -196,12 +192,6 @@ void JSONEachRowRowInputFormat::readJSONObject(MutableColumns & columns)
         }
         else
         {
-            if (column_seen_before[column_index])
-            {
-                throw Exception(ErrorCodes::INCORRECT_DATA, "Repeated field (`{}`) when processing data.", name_ref);
-            }
-
-            column_seen_before[column_index] = true;
             JSONUtils::skipColon(*in);
             readField(column_index, columns);
         }

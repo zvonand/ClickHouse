@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cctype>
 #include <string_view>
 #include <Formats/FormatSettings.h>
 
@@ -35,7 +34,7 @@ public:
     void setSize(size_t size);
 
     /// Constructs the map from the given block
-    void getNamesToIndexesMap(const Block & block);
+    void initFromBlock(const Block & block);
 
     /// Compares two strings, using the same method as the one used internally
     bool equal(std::string_view left, std::string_view right) const;

@@ -48,13 +48,11 @@ void ColumnMapping::addColumns(
                             name, column_indexes_for_input_fields.size());
         }
 
-        const auto column_index = idx;
-
-        if (read_columns[column_index])
+        if (read_columns[idx])
             throw Exception(ErrorCodes::INCORRECT_DATA, "Duplicate field found while parsing format header: {}", name);
 
-        read_columns[column_index] = true;
-        column_indexes_for_input_fields.emplace_back(column_index);
+        read_columns[idx] = true;
+        column_indexes_for_input_fields.emplace_back(idx);
     }
 
     for (size_t i = 0; i != read_columns.size(); ++i)

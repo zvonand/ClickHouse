@@ -24,10 +24,10 @@ struct CaseInsensitiveHash
 {
     size_t operator()(const std::string_view key) const
     {
-        // TODO: there is probably a way to calculate this without copying the string
-        std::string key_s{key};
-        Poco::toLowerInPlace(key_s);
-        return sipHash64(key_s);
+        SipHash hash;
+        for (char c : key)
+            hash.update(static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(c))));
+        return hash.get64();
     }
 };
 
@@ -39,7 +39,7 @@ struct CaseInsensitiveEquality
     {
         if (left.size() != right.size())
             return false;
-        return Poco::toLower(std::string(left)) == Poco::toLower(std::string(right));
+        return strncasecmp(left.data(), right.data(), left.size()) == 0;
     }
 };
 
@@ -196,7 +196,7 @@ CaseAwareBlockNameMap::CaseAwareBlockNameMap(FormatSettings::InputFormatColumnMa
 
 CaseAwareBlockNameMap::~CaseAwareBlockNameMap() = default;
 
-void CaseAwareBlockNameMap::getNamesToIndexesMap(const Block & block)
+void CaseAwareBlockNameMap::initFromBlock(const Block & block)
 {
     setSize(block.getIndexByName().size());
     const auto & index_by_name = block.getIndexByName();

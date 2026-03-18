@@ -69,8 +69,7 @@ inline size_t BSONEachRowRowInputFormat::columnIndex(std::string_view name, size
     /// Optimization by caching the order of fields (which is almost always the same)
     /// and a quick check to match the next expected field, instead of searching the hash table.
 
-    if (prev_positions.size() > key_index
-        && prev_positions[key_index].second != NOT_INITIALIZED 
+    if (prev_positions.size() > key_index && prev_positions[key_index].second != NOT_INITIALIZED
         && name_map.equal(name, prev_positions[key_index].first))
     {
         return prev_positions[key_index].second;

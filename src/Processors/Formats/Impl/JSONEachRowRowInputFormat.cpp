@@ -1,16 +1,16 @@
 #include <algorithm>
-#include <IO/ReadHelpers.h>
 #include <IO/ReadBufferFromString.h>
+#include <IO/ReadHelpers.h>
 
-#include <Processors/Formats/Impl/JSONEachRowRowInputFormat.h>
-#include <Formats/JSONUtils.h>
-#include <Formats/EscapingRuleUtils.h>
-#include <Formats/SchemaInferenceUtils.h>
-#include <Formats/FormatFactory.h>
 #include <DataTypes/NestedUtils.h>
 #include <DataTypes/Serializations/SerializationNullable.h>
 #include <DataTypes/getLeastSupertype.h>
-#include "Common/Exception.h"
+#include <Formats/EscapingRuleUtils.h>
+#include <Formats/FormatFactory.h>
+#include <Formats/JSONUtils.h>
+#include <Formats/SchemaInferenceUtils.h>
+#include <Processors/Formats/Impl/JSONEachRowRowInputFormat.h>
+#include <Common/Exception.h>
 
 namespace DB
 {
@@ -75,8 +75,7 @@ inline size_t JSONEachRowRowInputFormat::columnIndex(std::string_view name, size
 {
     /// Optimization by caching the order of fields (which is almost always the same)
     /// and a quick check to match the next expected field, instead of searching the hash table.
-    if (prev_positions.size() > key_index
-        && prev_positions[key_index].second != NOT_INITIALIZED 
+    if (prev_positions.size() > key_index && prev_positions[key_index].second != NOT_INITIALIZED
         && name_map.equal(name, prev_positions[key_index].first))
     {
         return prev_positions[key_index].second;
@@ -197,7 +196,8 @@ void JSONEachRowRowInputFormat::readJSONObject(MutableColumns & columns)
         }
         else
         {
-            if(column_seen_before[column_index]){
+            if (column_seen_before[column_index])
+            {
                 throw Exception(ErrorCodes::INCORRECT_DATA, "Repeated field (`{}`) when processing data.", name_ref);
             }
 

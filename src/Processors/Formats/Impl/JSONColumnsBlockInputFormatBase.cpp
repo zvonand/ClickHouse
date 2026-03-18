@@ -180,7 +180,7 @@ Chunk JSONColumnsBlockInputFormatBase::read()
         if (column_index >= columns.size())
             throw Exception(ErrorCodes::INCORRECT_DATA, "Input data has too many columns, expected {} columns", columns.size());
 
-        if(seen_columns[column_index])
+        if (seen_columns[column_index])
             throw Exception(ErrorCodes::INCORRECT_DATA, "Repeated field (`{}`) when processing data.", column_name.value());
 
         seen_columns[column_index] = 1;

@@ -4,7 +4,8 @@
 #include <string_view>
 #include <Formats/FormatSettings.h>
 
-namespace DB {
+namespace DB
+{
 
 class Block;
 class CaseSensitiveBlockNameMap;
@@ -12,9 +13,11 @@ class CaseInsensitiveBlockNameMap;
 class AutoCaseBlockNameMap;
 
 /// Interface for case aware map between column name and position in a Block
-class CaseAwareBlockNameMap{
+class CaseAwareBlockNameMap
+{
 public:
-    enum SearchResult : size_t {
+    enum SearchResult : size_t
+    {
         NOT_FOUND = size_t(-1), /// Return value of `get` method whenever the key is not found
     };
 

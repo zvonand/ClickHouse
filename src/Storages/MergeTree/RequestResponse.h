@@ -99,12 +99,12 @@ struct InitialAllRangesAnnouncement
         RangesInDataPartsDescription description_,
         size_t replica_num_,
         size_t mark_segment_size_,
-        size_t min_number_of_marks_)
+        size_t min_marks_per_request_)
         : mode(mode_)
         , description(std::move(description_))
         , replica_num(replica_num_)
         , mark_segment_size(mark_segment_size_)
-        , min_marks_per_request(min_number_of_marks_)
+        , min_marks_per_request(min_marks_per_request_)
     {}
 
     CoordinationMode mode;

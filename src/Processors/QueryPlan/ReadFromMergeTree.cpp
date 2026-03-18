@@ -3356,7 +3356,7 @@ void ReadFromMergeTree::initializePipeline(QueryPipelineBuilder & pipeline, cons
         };
         // This code is executed only if there is no parts to read, so the parameter values don't really matter
         extension.sendInitialRequest(
-            get_coordination_mode(), result.parts_with_ranges.getDescriptions(), /*mark_segment_size=*/1, /*min_number_of_marks=*/1);
+            get_coordination_mode(), result.parts_with_ranges.getDescriptions(), /*mark_segment_size=*/1, /*min_marks_per_request=*/1);
     }
 
     if (result.parts_with_ranges.empty())

@@ -40,7 +40,7 @@ void ParallelReadRequest::serialize(WriteBuffer & out, UInt64 initiator_protocol
 
     writeIntBinary(mode, out);
     writeIntBinary(replica_num, out);
-    /// Since DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK, `min_number_of_marks` is sent once
+    /// Since DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK, `min_marks_per_request` is sent once
     /// in the initial announcement. Write the real value for older initiators that still read it; write 0 for new ones.
     if (initiator_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
         writeIntBinary(static_cast<size_t>(0), out);
@@ -70,24 +70,24 @@ ParallelReadRequest ParallelReadRequest::deserialize(ReadBuffer & in, UInt64 rep
 
     CoordinationMode mode;
     size_t replica_num;
-    size_t min_number_of_marks;
+    size_t min_marks_per_request;
     RangesInDataPartsDescription description;
 
     uint8_t mode_candidate;
     readIntBinary(mode_candidate, in);
     mode = validateAndGet(mode_candidate);
     readIntBinary(replica_num, in);
-    readIntBinary(min_number_of_marks, in);
+    readIntBinary(min_marks_per_request, in);
     description.deserialize(in, replica_protocol_version);
 
-    return ParallelReadRequest(mode, replica_num, min_number_of_marks, std::move(description));
+    return ParallelReadRequest(mode, replica_num, min_marks_per_request, std::move(description));
 }
 
 void ParallelReadRequest::merge(ParallelReadRequest & other)
 {
     assert(mode == other.mode);
     assert(replica_num == other.replica_num);
-    assert(min_number_of_marks == other.min_number_of_marks);
+    assert(min_marks_per_request == other.min_marks_per_request);
     description.merge(other.description);
 }
 
@@ -177,11 +177,11 @@ InitialAllRangesAnnouncement InitialAllRangesAnnouncement::deserialize(ReadBuffe
     if (replica_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MARK_SEGMENT_SIZE_FIELD)
         readIntBinary(mark_segment_size, in);
 
-    size_t min_number_of_marks = 0;
+    size_t min_marks_per_request = 0;
     if (replica_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
-        readIntBinary(min_number_of_marks, in);
+        readIntBinary(min_marks_per_request, in);
 
-    return InitialAllRangesAnnouncement{mode, description, replica_num, mark_segment_size, min_number_of_marks};
+    return InitialAllRangesAnnouncement{mode, description, replica_num, mark_segment_size, min_marks_per_request};
 }
 
 }

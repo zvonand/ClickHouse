@@ -36,9 +36,9 @@ size_t roundDownToMultiple(size_t num, size_t multiple)
 }
 
 size_t
-takeFromRange(const MarkRange & range, size_t min_number_of_marks, size_t & current_marks_amount, RangesInDataPartDescription & result)
+takeFromRange(const MarkRange & range, size_t min_marks_per_request, size_t & current_marks_amount, RangesInDataPartDescription & result)
 {
-    const auto marks_needed = min_number_of_marks - current_marks_amount;
+    const auto marks_needed = min_marks_per_request - current_marks_amount;
     chassert(marks_needed);
     auto range_we_take = MarkRange{range.begin, range.begin + std::min(marks_needed, range.getNumberOfMarks())};
     if (!result.ranges.empty() && result.ranges.back().end == range_we_take.begin)
@@ -179,7 +179,7 @@ public:
     size_t unavailable_replicas_count{0};
     size_t received_initial_requests{0};
     /// Total number of marks a replica wants per coordinator request, announced once by the first replica.
-    size_t announced_min_number_of_marks{0};
+    size_t announced_min_marks_per_request{0};
     ProgressCallback progress_callback;
 
     struct ReplicaStatus
@@ -219,11 +219,11 @@ public:
 
         replica_status[announcement.replica_num].is_announcement_received = true;
 
-        /// Use `min_number_of_marks` from the first announcement (the local replica that did PK analysis).
+        /// Use `min_marks_per_request` from the first announcement (the local replica that did PK analysis).
         /// Old replicas (protocol < DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK) don't send
         /// this field — the coordinator will fall back to per-request values.
-        if (announced_min_number_of_marks == 0 && announcement.min_marks_per_request > 0)
-            announced_min_number_of_marks = announcement.min_marks_per_request;
+        if (announced_min_marks_per_request == 0 && announcement.min_marks_per_request > 0)
+            announced_min_marks_per_request = announcement.min_marks_per_request;
 
         doHandleInitialAllRangesAnnouncement(std::move(announcement));
     }
@@ -344,19 +344,19 @@ private:
     void selectPartsAndRanges(
         size_t replica_num,
         ScanMode scan_mode,
-        size_t min_number_of_marks,
+        size_t min_marks_per_request,
         size_t & current_marks_amount,
         RangesInDataPartsDescription & description);
 
     size_t computeConsistentHash(const std::string & part_name, size_t segment_begin, ScanMode scan_mode) const;
 
     void tryToTakeFromDistributionQueue(
-        size_t replica_num, size_t min_number_of_marks, size_t & current_marks_amount, RangesInDataPartsDescription & description);
+        size_t replica_num, size_t min_marks_per_request, size_t & current_marks_amount, RangesInDataPartsDescription & description);
 
     void tryToStealFromQueues(
         size_t replica_num,
         ScanMode scan_mode,
-        size_t min_number_of_marks,
+        size_t min_marks_per_request,
         size_t & current_marks_amount,
         RangesInDataPartsDescription & description);
 
@@ -365,14 +365,14 @@ private:
         ssize_t owner, /// In case `queue` is `distribution_by_hash_queue[replica]`
         size_t replica_num,
         ScanMode scan_mode,
-        size_t min_number_of_marks,
+        size_t min_marks_per_request,
         size_t & current_marks_amount,
         RangesInDataPartsDescription & description);
 
     void processPartsFurther(
         size_t replica_num,
         ScanMode scan_mode,
-        size_t min_number_of_marks,
+        size_t min_marks_per_request,
         size_t & current_marks_amount,
         RangesInDataPartsDescription & description);
 
@@ -431,8 +431,8 @@ void DefaultCoordinator::initializeReadingState(InitialAllRangesAnnouncement ann
     if (mark_segment_size == 0)
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Zero value provided for `mark_segment_size`");
 
-    LOG_TRACE(log, "Reading state is fully initialized: {}, mark_segment_size: {}, min_number_of_marks: {}",
-              fmt::join(all_parts_to_read, "; "), mark_segment_size, announced_min_number_of_marks);
+    LOG_TRACE(log, "Reading state is fully initialized: {}, mark_segment_size: {}, min_marks_per_request: {}",
+              fmt::join(all_parts_to_read, "; "), mark_segment_size, announced_min_marks_per_request);
 }
 
 void DefaultCoordinator::markReplicaAsUnavailable(size_t replica_number)
@@ -508,7 +508,7 @@ void DefaultCoordinator::doHandleInitialAllRangesAnnouncement(InitialAllRangesAn
 }
 
 void DefaultCoordinator::tryToTakeFromDistributionQueue(
-    size_t replica_num, size_t min_number_of_marks, size_t & current_marks_amount, RangesInDataPartsDescription & description)
+    size_t replica_num, size_t min_marks_per_request, size_t & current_marks_amount, RangesInDataPartsDescription & description)
 {
     ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::ParallelReplicasCollectingOwnedSegmentsMicroseconds);
 
@@ -517,7 +517,7 @@ void DefaultCoordinator::tryToTakeFromDistributionQueue(
 
     RangesInDataPartDescription result;
 
-    while (!distribution_queue.empty() && current_marks_amount < min_number_of_marks)
+    while (!distribution_queue.empty() && current_marks_amount < min_marks_per_request)
     {
         if (result.ranges.empty() || distribution_queue.begin()->info != result.info)
         {
@@ -535,7 +535,7 @@ void DefaultCoordinator::tryToTakeFromDistributionQueue(
 
         if (replica_can_read_part(replica_num, part_ranges))
         {
-            if (auto taken = takeFromRange(range, min_number_of_marks, current_marks_amount, result); taken == range.getNumberOfMarks())
+            if (auto taken = takeFromRange(range, min_marks_per_request, current_marks_amount, result); taken == range.getNumberOfMarks())
                 distribution_queue.erase(distribution_queue.begin());
             else
             {
@@ -559,7 +559,7 @@ void DefaultCoordinator::tryToTakeFromDistributionQueue(
 void DefaultCoordinator::tryToStealFromQueues(
     size_t replica_num,
     ScanMode scan_mode,
-    size_t min_number_of_marks,
+    size_t min_marks_per_request,
     size_t & current_marks_amount,
     RangesInDataPartsDescription & description)
 {
@@ -577,7 +577,7 @@ void DefaultCoordinator::tryToStealFromQueues(
                 replica,
                 replica_num,
                 scan_mode,
-                min_number_of_marks,
+                min_marks_per_request,
                 current_marks_amount,
                 description);
     };
@@ -592,7 +592,7 @@ void DefaultCoordinator::tryToStealFromQueues(
         ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::ParallelReplicasStealingLeftoversMicroseconds);
         /// All replicas can steal orphaned ranges to reduce long-tail latency.
         tryToStealFromQueue(
-            ranges_for_stealing_queue, /*owner=*/-1, replica_num, scan_mode, min_number_of_marks, current_marks_amount, description);
+            ranges_for_stealing_queue, /*owner=*/-1, replica_num, scan_mode, min_marks_per_request, current_marks_amount, description);
 
         /// Last hope. In case we haven't yet figured out that some node is unavailable its segments are still in the distribution queue.
         /// Only the source replica steals from other replicas to preserve cache locality.
@@ -606,7 +606,7 @@ void DefaultCoordinator::tryToStealFromQueue(
     ssize_t owner,
     size_t replica_num,
     ScanMode scan_mode,
-    size_t min_number_of_marks,
+    size_t min_marks_per_request,
     size_t & current_marks_amount,
     RangesInDataPartsDescription & description)
 {
@@ -615,7 +615,7 @@ void DefaultCoordinator::tryToStealFromQueue(
     RangesInDataPartDescription result;
 
     auto it = queue.rbegin();
-    while (it != queue.rend() && current_marks_amount < min_number_of_marks)
+    while (it != queue.rend() && current_marks_amount < min_marks_per_request)
     {
         auto & part_ranges = const_cast<RangesInDataPartDescription &>(*it);
         chassert(part_ranges.ranges.size() == 1);
@@ -646,7 +646,7 @@ void DefaultCoordinator::tryToStealFromQueue(
             }
             if (can_take)
             {
-                auto taken = takeFromRange(range, min_number_of_marks, current_marks_amount, result);
+                auto taken = takeFromRange(range, min_marks_per_request, current_marks_amount, result);
                 if (taken == range.getNumberOfMarks())
                 {
                     it = decltype(it)(queue.erase(std::next(it).base()));
@@ -666,7 +666,7 @@ void DefaultCoordinator::tryToStealFromQueue(
 void DefaultCoordinator::processPartsFurther(
     size_t replica_num,
     ScanMode scan_mode,
-    size_t min_number_of_marks,
+    size_t min_marks_per_request,
     size_t & current_marks_amount,
     RangesInDataPartsDescription & description)
 {
@@ -676,9 +676,9 @@ void DefaultCoordinator::processPartsFurther(
 
     for (const auto & part : all_parts_to_read)
     {
-        if (current_marks_amount >= min_number_of_marks)
+        if (current_marks_amount >= min_marks_per_request)
         {
-            LOG_TEST(log, "Current mark size {} is bigger than min_number_marks {}", current_marks_amount, min_number_of_marks);
+            LOG_TEST(log, "Current mark size {} is bigger than min_marks_per_request {}", current_marks_amount, min_marks_per_request);
             return;
         }
 
@@ -688,13 +688,13 @@ void DefaultCoordinator::processPartsFurther(
         auto & part_ranges = part.description.ranges;
         auto & part_description = part.description;
 
-        while (!part_ranges.empty() && current_marks_amount < min_number_of_marks)
+        while (!part_ranges.empty() && current_marks_amount < min_marks_per_request)
         {
             auto & range = part_ranges.front();
 
             /// Parts are divided into segments of `mark_segment_size` granules staring from 0-th granule
             for (size_t segment_begin = roundDownToMultiple(range.begin, mark_segment_size);
-                 segment_begin < range.end && current_marks_amount < min_number_of_marks;
+                 segment_begin < range.end && current_marks_amount < min_marks_per_request;
                  segment_begin += mark_segment_size)
             {
                 const auto cur_segment
@@ -703,7 +703,7 @@ void DefaultCoordinator::processPartsFurther(
                 const auto owner = computeConsistentHash(part_description.getPartOrProjectionName(), segment_begin, scan_mode);
                 if (owner == replica_num && replica_can_read_part(replica_num, part_description))
                 {
-                    const auto taken = takeFromRange(cur_segment, min_number_of_marks, current_marks_amount, result);
+                    const auto taken = takeFromRange(cur_segment, min_marks_per_request, current_marks_amount, result);
                     if (taken == range.getNumberOfMarks())
                     {
                         part_ranges.pop_front();
@@ -739,19 +739,19 @@ void DefaultCoordinator::processPartsFurther(
 void DefaultCoordinator::selectPartsAndRanges(
     size_t replica_num,
     ScanMode scan_mode,
-    size_t min_number_of_marks,
+    size_t min_marks_per_request,
     size_t & current_marks_amount,
     RangesInDataPartsDescription & description)
 {
     if (scan_mode == ScanMode::TakeWhatsMineByHash)
     {
-        tryToTakeFromDistributionQueue(replica_num, min_number_of_marks, current_marks_amount, description);
-        processPartsFurther(replica_num, scan_mode, min_number_of_marks, current_marks_amount, description);
+        tryToTakeFromDistributionQueue(replica_num, min_marks_per_request, current_marks_amount, description);
+        processPartsFurther(replica_num, scan_mode, min_marks_per_request, current_marks_amount, description);
         /// We might back-fill `distribution_by_hash_queue` for this replica in `enqueueToStealerOrStealingQueue`
-        tryToTakeFromDistributionQueue(replica_num, min_number_of_marks, current_marks_amount, description);
+        tryToTakeFromDistributionQueue(replica_num, min_marks_per_request, current_marks_amount, description);
     }
     else
-        tryToStealFromQueues(replica_num, scan_mode, min_number_of_marks, current_marks_amount, description);
+        tryToStealFromQueues(replica_num, scan_mode, min_marks_per_request, current_marks_amount, description);
 }
 
 bool DefaultCoordinator::possiblyCanReadPart(size_t replica, const RangesInDataPartDescription & description) const
@@ -809,9 +809,9 @@ size_t DefaultCoordinator::computeConsistentHash(const std::string & part_name, 
 
 ParallelReadResponse DefaultCoordinator::handleRequest(ParallelReadRequest request)
 {
-    /// Since DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK, `min_number_of_marks` is sent once
+    /// Since DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK, `min_marks_per_request` is sent once
     /// in the initial announcement. Fall back to the per-request value for older replicas.
-    const size_t effective_min_marks = announced_min_number_of_marks > 0 ? announced_min_number_of_marks : request.min_marks_per_request;
+    const size_t effective_min_marks = announced_min_marks_per_request > 0 ? announced_min_marks_per_request : request.min_marks_per_request;
 
     LOG_TRACE(
         log,
@@ -1026,7 +1026,7 @@ void InOrderCoordinator::doHandleInitialAllRangesAnnouncement(InitialAllRangesAn
 
 ParallelReadResponse InOrderCoordinator::handleRequest(ParallelReadRequest request)
 {
-    const size_t effective_min_marks = announced_min_number_of_marks > 0 ? announced_min_number_of_marks : request.min_marks_per_request;
+    const size_t effective_min_marks = announced_min_marks_per_request > 0 ? announced_min_marks_per_request : request.min_marks_per_request;
 
     LOG_TRACE(log, "Got read request: {}", request.describe());
 

@@ -121,7 +121,7 @@ std::unique_ptr<WriteBufferFromFileBase> CachedObjectStorage::writeObject( /// N
             cache,
             implementation_buffer->getFileName(),
             key,
-            CurrentThread::isInitialized() && CurrentThread::get().getQueryContext() ? std::string(CurrentThread::getQueryId()) : "",
+            CurrentThread::isInitialized() && CurrentThread::get().tryGetQueryContext() ? std::string(CurrentThread::getQueryId()) : "",
             modified_write_settings,
             cache->getCommonOriginWithSegmentKeyType(object.local_path),
             Context::getGlobalContextInstance()->getFilesystemCacheLog(),
@@ -144,15 +144,12 @@ void CachedObjectStorage::removeCacheIfExists(const std::string & path_key_for_c
 void CachedObjectStorage::removeObjectIfExists(const StoredObject & object)
 {
     removeCacheIfExists(object.remote_path);
-    object_storage->removeObjectIfExists(object);
 }
 
 void CachedObjectStorage::removeObjectsIfExist(const StoredObjects & objects)
 {
     for (const auto & object : objects)
         removeCacheIfExists(object.remote_path);
-
-    object_storage->removeObjectsIfExist(objects);
 }
 
 void CachedObjectStorage::copyObjectToAnotherObjectStorage( // NOLINT

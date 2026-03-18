@@ -280,10 +280,6 @@ private:
         /// Current merge may or may not reduce number of rows. It's not known until the horizontal stage is finished.
         bool merge_may_reduce_rows{false};
 
-        /// Set to true when the horizontal merge pipeline was cancelled (e.g. by SYSTEM STOP MERGES).
-        /// Used by the vertical merge stage to detect incomplete horizontal merges.
-        bool horizontal_stage_cancelled{false};
-
         // will throw an exception if merge was cancelled in any way.
         void checkOperationIsNotCanceled() const;
         bool isCancelled() const;

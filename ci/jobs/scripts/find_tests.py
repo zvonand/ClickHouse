@@ -260,16 +260,25 @@ class Targeting:
                         changed.append((current_file, ln))
         return changed
 
-    def get_most_relevant_tests(self, binary_path=None):
+    def get_most_relevant_tests(self):
         """
         1. Gets changed lines from the PR diff.
         2. Queries `checks_coverage_lines` for tests covering those lines.
-        3. Returns the unique tests and a `Result` with info about the findings.
+        3. Ranks tests by how many changed lines they cover (descending).
+        4. Returns the ranked list and a `Result` with info about the findings.
         """
         changed_lines = self.get_changed_lines_from_diff()
         line_to_tests = self.get_tests_by_changed_lines(changed_lines)
 
-        selected_tests: set = set()
+        # Count how many changed lines each test covers.
+        test_hit_count: dict = {}
+        for tests in line_to_tests.values():
+            for t in tests:
+                test_hit_count[t] = test_hit_count.get(t, 0) + 1
+
+        # Sort descending by hit count — tests covering more changed lines come first.
+        ranked = sorted(test_hit_count, key=lambda t: -test_hit_count[t])
+
         info = "Tests found for lines:\n"
         if not line_to_tests:
             info += "  No changed lines found in diff\n"
@@ -277,33 +286,44 @@ class Targeting:
             for (file_, line_), tests in line_to_tests.items():
                 if tests:
                     info += f"  {file_}:{line_} -> {len(tests)} tests\n"
-                    selected_tests.update(tests)
+        info += f"Total unique tests: {len(ranked)}\n"
+        if ranked:
+            info += f"Top test: {ranked[0]} ({test_hit_count[ranked[0]]} lines covered)\n"
 
-        info += f"Total unique tests: {len(selected_tests)}\n"
-        return list(selected_tests), Result(
+        return ranked, Result(
             name="tests found by coverage", status=Result.StatusExtended.OK, info=info
         )
 
-    def get_all_relevant_tests_with_info(self, ch_path):
-        tests = set()
+    def get_all_relevant_tests_with_info(self):
+        # Use a list to preserve insertion order and a seen set to deduplicate.
+        # Priority: changed/new tests first, then previously failed, then
+        # coverage-ranked tests (most changed lines covered first).
+        seen: set = set()
+        ranked: list = []
         results = []
+
+        def add_tests(new_tests):
+            for t in new_tests:
+                if t not in seen:
+                    seen.add(t)
+                    ranked.append(t)
 
         # Integration tests run changed test suboptimally (entire module), it might be too long
         # limit it to stateless tests only
         if self.job_type == self.STATELESS_JOB_TYPE:
             changed_tests, result = self.get_changed_or_new_tests_with_info()
-            tests.update(changed_tests)
+            add_tests(changed_tests)
             results.append(result)
 
         previously_failed_tests, result = self.get_previously_failed_tests_with_info()
-        tests.update(previously_failed_tests)
+        add_tests(previously_failed_tests)
         results.append(result)
 
-        # TODO: Add coverage supoort for Integration tests
+        # TODO: Add coverage support for Integration tests
         if self.job_type == self.STATELESS_JOB_TYPE:
             try:
-                covering_tests, result = self.get_most_relevant_tests(ch_path)
-                tests.update(covering_tests)
+                covering_tests, result = self.get_most_relevant_tests()
+                add_tests(covering_tests)
                 results.append(result)
             except Exception as e:
                 print(
@@ -319,10 +339,10 @@ class Targeting:
                 )
                 raise
 
-        return tests, Result(
+        return ranked, Result(
             name="Fetch relevant tests",
             status=Result.Status.SUCCESS,
-            info=f"Found {len(tests)} relevant tests",
+            info=f"Found {len(ranked)} relevant tests",
             results=results,
         )
 

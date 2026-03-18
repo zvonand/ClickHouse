@@ -376,7 +376,7 @@ def main():
 
     if is_targeted_check:
         assert not args.test, "--test not supposed to be used for targeted check ???"
-        tests, results_with_info = targeter.get_all_relevant_tests_with_info(ch_path)
+        tests, results_with_info = targeter.get_all_relevant_tests_with_info()
         results.append(results_with_info)
         if not tests:
             # early exit

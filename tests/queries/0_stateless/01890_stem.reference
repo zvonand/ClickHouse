@@ -48,6 +48,9 @@ Array(String)
 -- Array(Nullable(String)) input preserves nulls.
 ['bless',NULL,'run']
 Array(Nullable(String))
+-- Array(LowCardinality(String)) input.
+['bless','run']
+Array(String)
 -- Array(Nullable(FixedString)) input.
 ['bless',NULL,'run']
 Array(Nullable(String))
@@ -100,7 +103,7 @@ disguis
 -- Array(UInt32) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.
 -- Array(Nullable(UInt32)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.
 -- Array(Array(String)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.
--- Array(LowCardinality(String)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT (LowCardinality inside arrays is not unwrapped by the framework).
+
 -- Nullable(Array(String)) input: framework strips outer Nullable, result is Nullable(Array(String)).
 ['bless','run']
 Nullable(Array(String))

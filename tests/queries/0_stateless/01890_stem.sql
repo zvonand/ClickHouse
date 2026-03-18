@@ -67,6 +67,10 @@ SELECT '-- Array(Nullable(String)) input preserves nulls.';
 SELECT stem([toNullable('blessing'), NULL, toNullable('running')], 'en');
 SELECT toTypeName(stem([toNullable('word')], 'en'));
 
+SELECT '-- Array(LowCardinality(String)) input.';
+SELECT stem([toLowCardinality('blessing'), toLowCardinality('running')], 'en');
+SELECT toTypeName(stem([toLowCardinality('word')], 'en'));
+
 SELECT '-- Array(Nullable(FixedString)) input.';
 SELECT stem([toNullable(toFixedString('blessing', 10)), NULL, toNullable(toFixedString('running', 10))], 'en');
 SELECT toTypeName(stem([toNullable(toFixedString('word', 10))], 'en'));
@@ -158,8 +162,6 @@ SELECT stem([toNullable(1)], 'en'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT '-- Array(Array(String)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.';
 SELECT stem([['hello', 'world']], 'en'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
-SELECT '-- Array(LowCardinality(String)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT (LowCardinality inside arrays is not unwrapped by the framework).';
-SELECT stem([toLowCardinality('hello')], 'en'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 SELECT '-- Nullable(Array(String)) input: framework strips outer Nullable, result is Nullable(Array(String)).';
 SELECT stem(toNullable(['blessing', 'running']), 'en');

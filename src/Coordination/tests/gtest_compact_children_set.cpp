@@ -334,6 +334,9 @@ TEST(CompactChildrenSet, IteratorPostIncrement)
 
 TEST(CompactChildrenSet, RejectsEmptyChildName)
 {
+#ifndef DEBUG_OR_SANITIZER_BUILD
+    /// `LOGICAL_ERROR` aborts in debug/sanitizer builds, so we can only test
+    /// the throwing path in release builds.
     CompactChildrenSet cs;
     EXPECT_THROW(cs.insert(""), Exception);
 
@@ -347,6 +350,7 @@ TEST(CompactChildrenSet, RejectsEmptyChildName)
 
     /// Container unchanged after rejected inserts
     EXPECT_EQ(cs.size(), 2);
+#endif
 }
 
 TEST(CompactChildrenSet, CopyAssignmentSetToSingle)

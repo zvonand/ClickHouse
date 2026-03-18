@@ -122,4 +122,4 @@ These patterns make PRs harder to read or signal low effort:
 
 It's fine to mention AI assistance openly. `Co-Authored-By:` in commits or acknowledgements in the PR description are acceptable — ClickHouse is open about AI-assisted development.
 
-Before creating or updating the PR, check user memory for a confirmation preference. If no preference is stored, ask once: "Should I always show you the description for approval before applying it, or just go ahead every time?" Save the answer to memory and apply it from then on.
+Before creating or updating the PR, check user memory for a confirmation preference. If no preference is stored and the session is interactive, ask once: "Should I always show you the description for approval before applying it, or just go ahead every time?" Save the answer to memory and apply it from then on. If the session is non-interactive, proceed directly without asking.

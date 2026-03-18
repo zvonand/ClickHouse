@@ -1,34 +1,8 @@
-import os
-import subprocess
-from multiprocessing import Pool
-
 from ci.jobs.scripts.cidb_cluster import CIDBCluster
 from ci.jobs.scripts.clickhouse_proc import ClickHouseProc
-from ci.jobs.scripts.find_tests import Targeting
 from ci.praktika.utils import Shell, Utils
 
 temp_dir = f"{Utils.cwd()}/ci/tmp"
-
-# Module-level worker function and initializer — must be picklable for Pool.
-_norm_check_start_time: str = ""
-_norm_job_name: str = ""
-
-
-def _init_normalizer(check_start_time: str, job_name: str) -> None:
-    global _norm_check_start_time, _norm_job_name
-    _norm_check_start_time = check_start_time
-    _norm_job_name = job_name
-
-
-def _normalize_line(line: str) -> str:
-    """Normalize one TSV line 'sym\\ttest_name'. Returns output line or ''."""
-    if "\t" not in line:
-        return ""
-    sym, _, test_name = line.partition("\t")
-    norm = Targeting.normalize_symbol(sym)
-    if not norm:
-        return ""
-    return f"{norm}\t{_norm_check_start_time}\t{_norm_job_name}\t{test_name}"
 
 
 class CoverageExporter:
@@ -84,119 +58,34 @@ class CoverageExporter:
             path_arg = f" --path {self.src.run_path0}"
 
             if not self.to_file:
-                # --- Insert 1: raw symbols → checks_coverage_inverted ---
-                # Raw symbols are stored without SQL-side normalization: the text
-                # index (splitByNonAlpha + hasAllTokens) at query time is robust to
-                # extra return-type and template-arg tokens in the stored symbol.
-                # GROUP BY instead of DISTINCT: ClickHouse executes GROUP BY as a
-                # streaming aggregation, avoiding full materialisation in memory.
                 query = (
-                    f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted', '{self.dest.user}', '{self.dest.pwd}') "
-                    "SELECT sym AS symbol, "
+                    f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_lines', '{self.dest.user}', '{self.dest.pwd}') "
+                    "SELECT file, line_start, line_end, "
                     f"'{self.check_start_time}' AS check_start_time, "
                     f"'{self.job_name}' AS check_name, "
                     "test_name "
                     f"FROM system.{table} "
-                    "ARRAY JOIN symbol AS sym "
-                    "WHERE notEmpty(sym) "
-                    "GROUP BY sym, test_name"
+                    "ARRAY JOIN files AS file, line_starts AS line_start, line_ends AS line_end "
+                    "WHERE notEmpty(test_name) AND notEmpty(file) "
+                    "GROUP BY file, line_start, line_end, test_name"
                 )
                 cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
                 rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
                 res = rc == 0
                 if not res:
-                    print(f"ERROR: raw insert (checks_coverage_inverted) failed (rc={rc})")
+                    print(f"ERROR: insert (checks_coverage_lines) failed (rc={rc})")
                     if stdout:
                         print(f"  stdout: {stdout}")
                     if stderr:
                         print(f"  stderr: {stderr}")
-
-                if res:
-                    # --- Insert 2: normalized symbols → checks_coverage_inverted2 ---
-                    # normalize_symbol strips return type, arg list, and ALL template
-                    # args — the stored symbol is the bare qualified function name,
-                    # e.g. "DB::Foo::bar".  The bloom_filter index on that table
-                    # supports "WHERE symbol = 'DB::Foo::bar'" exact-match queries.
-                    #
-                    # Pool.imap streams proc.stdout lazily through worker processes
-                    # (chunksize lines at a time) and yields results as an iterator —
-                    # peak Python memory is O(chunksize * cpu_count) lines, not the
-                    # full dataset.  sort -u deduplicates on disk, no seen-set needed.
-                    select_query = (
-                        f"SELECT sym, test_name "
-                        f"FROM system.{table} "
-                        "ARRAY JOIN symbol AS sym "
-                        "WHERE notEmpty(sym) "
-                        "FORMAT TSV"
-                    )
-                    select_cmd = (
-                        f"cd {self.src.run_path0} && "
-                        f"clickhouse local {command_args} {path_arg} "
-                        f'--query "{select_query}" '
-                        f"{command_args_post}"
-                    )
-
-                    norm_file = f"{temp_dir}/coverage_normalized_symbols.tsv"
-                    dedup_file = f"{temp_dir}/coverage_normalized_dedup.tsv"
-                    Shell.check(f"rm -f {norm_file} {dedup_file}")
-
-                    select_proc = subprocess.Popen(
-                        select_cmd, shell=True,
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                    )
-                    with Pool(
-                        processes=max(8, os.cpu_count() or 8),
-                        initializer=_init_normalizer,
-                        initargs=(self.check_start_time, self.job_name),
-                    ) as pool, open(norm_file, "w", buffering=1 << 20) as fout:
-                        for result in pool.imap(_normalize_line, select_proc.stdout, chunksize=1_000_000):
-                            if result:
-                                fout.write(result)
-
-                    _, select_stderr = select_proc.communicate()
-                    if select_proc.returncode != 0:
-                        print(f"ERROR: normalized select failed (rc={select_proc.returncode})")
-                        if select_stderr:
-                            print(f"  stderr: {select_stderr}")
-                        res = False
-
-                if res:
-                    # Deduplicate with LC_ALL=C sort -u (disk-based, bounded memory).
-                    rc, _, sort_stderr = Shell.get_res_stdout_stderr(
-                        f"LC_ALL=C sort -u {norm_file} -o {dedup_file}", verbose=False
-                    )
-                    if rc != 0:
-                        print(f"ERROR: sort -u for deduplication failed (rc={rc})")
-                        if sort_stderr:
-                            print(f"  stderr: {sort_stderr}")
-                        res = False
-
-                if res:
-                    # Step 3: insert the deduplicated normalized TSV.
-                    insert_query = (
-                        f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_inverted2', '{self.dest.user}', '{self.dest.pwd}') "
-                        "(symbol, check_start_time, check_name, test_name) FORMAT TSV"
-                    )
-                    cmd = (
-                        f"cd {self.src.run_path0} && "
-                        f"clickhouse local {command_args} {path_arg} "
-                        f'--query "{insert_query}" < {dedup_file} '
-                        f"{command_args_post}"
-                    )
-                    rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=False)
-                    res = rc == 0
-                    if not res:
-                        print(f"ERROR: normalized insert (checks_coverage_inverted2) failed (rc={rc})")
-                        if stdout:
-                            print(f"  stdout: {stdout}")
-                        if stderr:
-                            print(f"  stderr: {stderr}")
             else:
                 query = (
                     "SELECT "
                     "time, "
-                    "arrayJoin(symbol) AS symbol, "
-                    "test_name "
+                    "test_name, "
+                    "arrayJoin(files) AS file, "
+                    "arrayJoin(line_starts) AS line_start, "
+                    "arrayJoin(line_ends) AS line_end "
                     f"FROM system.{table} "
                     f"INTO OUTFILE '{temp_dir}/system_tables/{table}.tsv' "
                     "FORMAT TSVWithNamesAndTypes"

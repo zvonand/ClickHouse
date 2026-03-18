@@ -58,8 +58,21 @@ option(WITH_COVERAGE "Instrumentation for code coverage with default implementat
 
 if (WITH_COVERAGE)
     message (STATUS "Enabled instrumentation for code coverage")
+
+    # We set this define for whole build to indicate that at least some parts are compiled with coverage.
+    # And to expose it in system.build_options.
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWITH_COVERAGE=1")
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DWITH_COVERAGE=1")
+
+    # But the actual coverage will be enabled on per-library basis: for ClickHouse code, but not for 3rd-party.
     set (COVERAGE_FLAGS -fprofile-instr-generate -fcoverage-mapping)
-    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate -fcoverage-mapping")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate")
+
+    set (WITHOUT_COVERAGE_FLAGS "-fno-profile-instr-generate -fno-coverage-mapping")
+    set (WITHOUT_COVERAGE_FLAGS_LIST -fno-profile-instr-generate -fno-coverage-mapping)
+else()
+    set (WITHOUT_COVERAGE_FLAGS "")
+    set (WITHOUT_COVERAGE_FLAGS_LIST "")
 endif()
 
 # Use our bundled compiler-rt headers (sanitizer/ and xray/ interfaces) instead of the ones
@@ -71,23 +84,3 @@ endif()
 # bundled path here ensures it takes precedence without disrupting #include_next chains (which
 # libcxx relies on to reach the compiler's own stddef.h, stdarg.h, etc.).
 include_directories (SYSTEM "${ClickHouse_SOURCE_DIR}/contrib/llvm-project/compiler-rt/include")
-
-option (SANITIZE_COVERAGE "Instrumentation for code coverage with custom callbacks" OFF)
-
-if (SANITIZE_COVERAGE)
-    message (STATUS "Enabled instrumentation for code coverage")
-
-    # We set this define for whole build to indicate that at least some parts are compiled with coverage.
-    # And to expose it in system.build_options.
-    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DSANITIZE_COVERAGE=1")
-    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DSANITIZE_COVERAGE=1")
-
-    # But the actual coverage will be enabled on per-library basis: for ClickHouse code, but not for 3rd-party.
-    set (COVERAGE_FLAGS "-fsanitize-coverage=trace-pc-guard,pc-table")
-
-    set (WITHOUT_COVERAGE_FLAGS "-fno-profile-instr-generate -fno-coverage-mapping -fno-sanitize-coverage=trace-pc-guard,pc-table")
-    set (WITHOUT_COVERAGE_FLAGS_LIST -fno-profile-instr-generate -fno-coverage-mapping -fno-sanitize-coverage=trace-pc-guard,pc-table)
-else()
-    set (WITHOUT_COVERAGE_FLAGS "")
-    set (WITHOUT_COVERAGE_FLAGS_LIST "")
-endif()

@@ -7,7 +7,6 @@ from pathlib import Path
 
 sys.path.append("./")
 
-from ci.jobs.scripts.find_symbols import DiffToSymbols
 from ci.praktika.cidb import CIDB
 from ci.praktika.info import Info
 from ci.praktika.result import Result
@@ -129,215 +128,46 @@ class Targeting:
         return sorted(tests)
 
     @staticmethod
-    def normalize_symbol(symbol: str) -> str:
-        """
-        Extract the qualified function name from a demangled C++ symbol by:
-          1. Finding the first '(' at bracket depth 0 to locate the arg list
-          2. Finding the last ' ' at bracket depth 0 before that to strip return type
-          3. Stripping trailing function template args '<...>' if the result ends with '>'
-
-        Handles all cases: 'void DB::Foo::bar()', 'std::shared_ptr<DB::Type> DB::Foo::bar()',
-        '(anonymous namespace)::DistributedIndexAnalyzer::method()',
-        'void DB::JoinStuff::JoinUsedFlags::setUsed<true, true>'
-
-        This is the query-time counterpart of the SQL normalization in export_coverage.py.
-        hasAllTokens() is robust to return-type tokens in stored symbols, so the stored
-        symbol doesn't need identical normalization — only the function name tokens matter.
-        """
-        # Replace (anonymous namespace) with same-length placeholder so its '(' and ')'
-        # don't confuse the depth tracking or the arg-list '(' detection.
-        ANON = "(anonymous namespace)"
-        modified = symbol.replace(ANON, "x" * len(ANON))
-
-        # Neutralize < and > that are part of operator token symbols — they must not
-        # alter template-bracket depth. Affected operators: operator<, operator>,
-        # operator<=, operator>=, operator<<, operator>>, operator<=>, operator->,
-        # operator->*, operator<<=, operator>>=, and combinations thereof.
-        # Word-boundary lookbehind (?<![A-Za-z_\d]) avoids matching names like
-        # "custom_operator<T>" that merely end in "operator".
-        import re as _re
-        modified = _re.sub(
-            r"(?<![A-Za-z_\d])operator([<>\-][<>=\-\*]*)",
-            lambda m: "operator" + m.group(1).replace("<", "_").replace(">", "_"),
-            modified,
-        )
-
-        # Step 1: scan for first '(' at <> depth 0 — that's the start of the arg list.
-        # Step 2: track last ' ' at <> depth 0 before that — that separates return type
-        #         from the qualified function name.
-        # Only <> affect bracket depth; () are not nested here (arg list '(' is what we seek).
-        depth = 0
-        first_paren = len(modified)
-        last_space = -1
-        for i, c in enumerate(modified):
-            if c == "<":
-                depth += 1
-            elif c == ">":
-                depth -= 1
-            elif depth == 0:
-                if c == "(":
-                    first_paren = i
-                    break
-                elif c == " ":
-                    last_space = i
-
-        # Handle conversion operators: "DB::Foo::operator int", "DB::Foo::operator Type const&".
-        # The forward scan's last_space may land anywhere inside "operator <type>", not just
-        # immediately after "operator", so checking endswith("operator") is insufficient.
-        # Real examples from CIDB:
-        #   AMQP::Field::operator AMQP::Array const&() const  -> last_space after "Array"
-        #   AMQP::NumericField<...>::operator short() const   -> last_space inside template
-        #
-        # Strategy: find the last "operator " token at bracket depth 0 before first_paren,
-        # with a word-boundary check (preceded by '::' / ' ' / string-start) to avoid
-        # matching "custom_operator ". If found, override last_space to the depth-0 space
-        # just before "operator" (i.e., separate return type from function name there).
-        pre = modified[:first_paren]
-        conv_op_pos = -1  # start index of "operator" if this is a conversion operator
-        search_start = 0
-        while True:
-            pos = pre.find("operator ", search_start)
-            if pos == -1:
-                break
-            # Word boundary: "operator" preceded by '::', ' ', or at string start
-            if pos == 0 or pre[pos - 1] in (":", " "):
-                # Verify this position is at bracket depth 0
-                d_check = sum(
-                    1 if ch == "<" else -1 if ch == ">" else 0 for ch in pre[:pos]
-                )
-                if d_check == 0:
-                    conv_op_pos = pos  # keep the last qualifying occurrence
-            search_start = pos + 1
-
-        if conv_op_pos >= 0:
-            # Override last_space: find the last depth-0 space before "operator"
-            d2 = 0
-            last_space = -1
-            for j in range(conv_op_pos):
-                c = modified[j]
-                if c == "<":
-                    d2 += 1
-                elif c == ">":
-                    d2 -= 1
-                elif d2 == 0 and c == " ":
-                    last_space = j
-
-        # Everything from (last_space + 1) to first_paren is the qualified function name.
-        # Use positions on the ORIGINAL symbol (same lengths after placeholder substitution).
-        func_name = symbol[last_space + 1 : first_paren]
-
-        # Step 3: strip ALL template args '<...>' from the function name.
-        # The normalized symbol is used as the second arg to hasAllTokens(), which
-        # tokenizes it with splitByNonAlpha and requires all tokens present in the stored
-        # symbol.  Template arg tokens (type names, integer literals, etc.) are "extras"
-        # that must NOT appear in the query — otherwise only the exact instantiation
-        # matches and other instantiations of the same template are missed.
-        # 'DB::Foo<int>::bar'        → 'DB::Foo::bar'   (class template)
-        # 'DB::Foo::setUsed<true>'   → 'DB::Foo::setUsed'  (function template)
-        # 'Foo<T>::bar<U>'           → 'Foo::bar'        (both)
-        #
-        # Uses the same two same-length preprocessing transforms so that positions map
-        # 1:1 between the processed and pre-processed strings:
-        #   a) (anonymous namespace) → placeholder  — neutralises its '(' and ')'
-        #   b) operator<</>>/->  neutralisation    — neutralises operator < > as '_'
-        # Characters are read from the pre-neutralised string so that e.g. operator<<
-        # is preserved in the output with its original '<' characters.
-        PLACEHOLDER = "x" * len(ANON)
-        fn_pre = func_name.replace(ANON, PLACEHOLDER)
-        fn_mod3 = _re.sub(
-            r"(?<![A-Za-z_\d])operator([<>\-][<>=\-\*]*)",
-            lambda m: "operator" + m.group(1).replace("<", "_").replace(">", "_"),
-            fn_pre,
-        )
-        result_chars = []
-        d3 = 0
-        for idx, ch in enumerate(fn_mod3):
-            if ch == "<":
-                d3 += 1
-            elif ch == ">":
-                d3 -= 1
-            elif d3 == 0:
-                result_chars.append(fn_pre[idx])
-        stripped = "".join(result_chars).replace(PLACEHOLDER, ANON)
-        if stripped:
-            func_name = stripped
-
-        return func_name if func_name else symbol
-
-    @staticmethod
     def _escape_sql_string(s: str) -> str:
         return s.replace("\\", "\\\\").replace("'", "\\'")
 
-    # Symbols covering more than this fraction of all tests are too common to be
-    # useful for test selection (e.g. PipelineExecutor::execute runs in every query).
-    MAX_SYMBOL_COVERAGE_PCT = 5
+    # Absolute cap: a line covering more than this many tests is excluded
+    # (too common code — carries no signal for targeted test selection).
+    MAX_TESTS_PER_LINE = 200
 
-    # Minimum absolute test count floor — prevents over-filtering in small corpora.
-    MIN_TESTS_THRESHOLD = 50
-
-    # Absolute cap: a symbol covering more than this many tests is excluded
-    # regardless of the percentage threshold. Keeps result sets manageable and
-    # consistent with the Python-side max_tests_per_symbol in get_most_relevant_tests().
-    MAX_TESTS_PER_SYMBOL = 200
-
-    def get_tests_by_changed_symbols(self, symbols: list) -> dict:
+    def get_tests_by_changed_lines(self, changed_lines: list) -> dict:
         """
-        Single batch query against checks_coverage_inverted2.
+        Query `checks_coverage_lines` for tests that cover each (filename, line_no) pair.
 
-        Symbols are pre-normalized by normalize_symbol() (no return type, no args,
-        no template args) and matched with exact IN lookup against the stored
-        normalized symbols. The bloom_filter index makes per-symbol lookup fast.
-
-        Symbols covering more than MAX_SYMBOL_COVERAGE_PCT% of all tests are excluded —
-        they carry no signal for targeted test selection.
+        `changed_lines` is a list of `(filename, line_no)` tuples.
+        Returns a dict mapping each input tuple to a list of test names.
         """
         import time
         t0 = time.monotonic()
 
-        if not symbols:
-            return {sym: [] for sym in symbols}
+        if not changed_lines:
+            return {fl: [] for fl in changed_lines}
 
-        # Normalize each input symbol; deduplicate — multiple input symbols
-        # (e.g. different overloads) can map to the same normalized form.
-        norm_to_originals: dict[str, list] = {}
-        for sym in symbols:
-            norm = self.normalize_symbol(sym)
-            norm_to_originals.setdefault(norm, []).append(sym)
+        print(f"[find_tests] querying coverage for {len(changed_lines)} changed lines")
 
-        print(
-            f"[find_tests] input={len(symbols)} symbols, "
-            f"unique_normalized={len(norm_to_originals)}"
+        conditions = " OR ".join(
+            f"(endsWith(file, '{self._escape_sql_string(os.path.basename(f))}') AND line_start <= {ln} AND line_end >= {ln})"
+            for f, ln in changed_lines
         )
-
-        norms = [n for n in norm_to_originals if n]
-        if not norms:
-            return {sym: [] for sym in symbols}
-
-        in_list = ", ".join(f"'{self._escape_sql_string(n)}'" for n in norms)
-        print(f"[find_tests] built {len(norms)} exact-match conditions")
 
         query = f"""
         SELECT
-            symbol AS norm_symbol,
+            file,
+            line_start,
+            line_end,
             groupArray(DISTINCT test_name) AS tests
-        FROM checks_coverage_inverted2
+        FROM checks_coverage_lines
         WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND notEmpty(test_name)
-          AND symbol IN ({in_list})
-        GROUP BY norm_symbol
-        HAVING count(DISTINCT test_name) < least(
-            greatest(
-                toUInt64((
-                    SELECT count(DISTINCT test_name) * {self.MAX_SYMBOL_COVERAGE_PCT} / 100
-                    FROM checks_coverage_inverted2
-                    WHERE check_start_time > now() - interval 3 days
-                      AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
-                )),
-                toUInt64({self.MIN_TESTS_THRESHOLD})
-            ),
-            toUInt64({self.MAX_TESTS_PER_SYMBOL})
-        )
+          AND ({conditions})
+        GROUP BY file, line_start, line_end
+        HAVING count(DISTINCT test_name) < {self.MAX_TESTS_PER_LINE}
         """
 
         cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
@@ -345,41 +175,42 @@ class Targeting:
         raw = cidb.query(query, log_level="")
         print(f"[find_tests] CIDB query: {time.monotonic()-t_query:.2f}s, response={len(raw)} bytes")
 
-        # Parse TSV: norm_symbol \t ['test1','test2',...]
-        norm_to_tests: dict[str, list] = {}
-        for line in raw.strip().splitlines():
-            if not line:
+        # Parse TSV: file \t line_start \t line_end \t ['test1','test2',...]
+        coverage_ranges: list = []
+        for row in raw.strip().splitlines():
+            if not row:
                 continue
-            parts = line.split("\t", 1)
-            if len(parts) != 2:
+            parts = row.split("\t", 3)
+            if len(parts) != 4:
                 continue
-            norm_sym, tests_raw = parts
+            file_, line_start_s, line_end_s, tests_raw = parts
             try:
+                line_start = int(line_start_s)
+                line_end = int(line_end_s)
                 tests = ast.literal_eval(tests_raw.strip())
-                norm_to_tests[norm_sym] = tests if isinstance(tests, list) else []
+                if isinstance(tests, list):
+                    coverage_ranges.append((file_, line_start, line_end, tests))
             except (ValueError, SyntaxError):
-                print(f"Failed to parse tests for '{norm_sym}': {tests_raw[:100]}")
+                print(f"Failed to parse coverage row: {row[:100]}")
 
-        # Map results back to original input symbols.
-        # Multiple originals sharing the same normalized form get the same test list.
-        symbol_to_tests: dict[str, list] = {}
-        for norm, originals in norm_to_originals.items():
-            tests_list = sorted(norm_to_tests.get(norm, []))
-            for orig in originals:
-                symbol_to_tests[orig] = tests_list
+        # Map each input (filename, line_no) to its tests.
+        result: dict = {}
+        for filename, line_no in changed_lines:
+            basename = os.path.basename(filename)
+            matched: list = []
+            for file_, line_start, line_end, tests in coverage_ranges:
+                if file_.endswith(basename) and line_start <= line_no <= line_end:
+                    matched.extend(tests)
+            result[(filename, line_no)] = sorted(set(matched))
 
-        # Fill in empty list for any symbol that got no matches
-        for sym in symbols:
-            symbol_to_tests.setdefault(sym, [])
-
-        total_unique_tests = len({t for tests in symbol_to_tests.values() for t in tests})
-        symbols_with_tests = sum(1 for tests in symbol_to_tests.values() if tests)
+        total_unique_tests = len({t for tests in result.values() for t in tests})
+        lines_with_tests = sum(1 for tests in result.values() if tests)
         print(
             f"[find_tests] done in {time.monotonic()-t0:.2f}s: "
-            f"{symbols_with_tests}/{len(symbols)} symbols matched, "
+            f"{lines_with_tests}/{len(changed_lines)} lines matched, "
             f"{total_unique_tests} unique tests selected"
         )
-        return symbol_to_tests
+        return result
 
     def get_changed_or_new_tests_with_info(self):
         tests = self.get_changed_tests()
@@ -404,96 +235,52 @@ class Targeting:
             info=info,
         )
 
-    def get_map_file_line_to_symbol_tests(self, binary_path):
+    def get_changed_lines_from_diff(self):
         """
-        Build a mapping from (file, line) to (resolved symbol, [tests]).
-        Returns:
-            dict: {(file, line): (symbol or None, [tests])}
+        Return a list of `(filename, line_no)` tuples from the PR diff.
+        Uses `git diff` for local runs and `info.get_changed_files()` otherwise.
         """
         assert self.info.pr_number > 0, "Find tests by diff applicable for PRs only"
-        dts = DiffToSymbols(binary_path, self.info.pr_number)
-        file_line_to_address_linkagename_symbol = dts.get_map_line_to_symbol()
-        not_resolved_file_lines = {}
-        symbols_to_file_lines = {}
-
-        for (file_, line_), (
-            address,
-            linkage_name,
-            symbol,
-        ) in file_line_to_address_linkagename_symbol.items():
-            if symbol in symbols_to_file_lines:
-                continue
-            if not symbol:
-                if file_ not in not_resolved_file_lines:
-                    not_resolved_file_lines[file_] = set()
-                if (
-                    line_ - 1 in not_resolved_file_lines[file_]
-                ):  # skip consecutive lines
-                    continue
-                not_resolved_file_lines[file_].add(line_)
-            else:
-                symbols_to_file_lines[symbol] = (file_, line_)
-
-        # Fetch mapping of symbols to tests from the coverage database
-        symbol_to_tests = self.get_tests_by_changed_symbols(
-            list(symbols_to_file_lines.keys())
+        diff_output = Shell.get_output(
+            "git diff $(git merge-base master HEAD) --unified=0"
         )
-        map_file_line_to_test = {}
-        for symbol, tests in symbol_to_tests.items():
-            map_file_line_to_test[
-                (symbols_to_file_lines[symbol][0], symbols_to_file_lines[symbol][1])
-            ] = (symbol, list(set(tests)))
-        for file_, lines in not_resolved_file_lines.items():
-            for line in lines:
-                map_file_line_to_test[(file_, line)] = (None, [])
+        changed: list = []
+        current_file = None
+        for line in diff_output.splitlines():
+            if line.startswith("+++ b/"):
+                current_file = line[6:]
+            elif line.startswith("@@ ") and current_file:
+                # Parse @@ -old +new,count @@ and collect new lines
+                import re as _re
+                m = _re.search(r"\+(\d+)(?:,(\d+))?", line)
+                if m:
+                    start = int(m.group(1))
+                    count = int(m.group(2)) if m.group(2) is not None else 1
+                    for ln in range(start, start + count):
+                        changed.append((current_file, ln))
+        return changed
 
-        return map_file_line_to_test
-
-    def get_most_relevant_tests(self, binary_path, max_tests_per_symbol=100):
+    def get_most_relevant_tests(self, binary_path=None):
         """
-        1. Makes a best effort to get changed symbols by reading the PR diff and the ClickHouse binary DWARF.
-        2. Gets a list of tests that cover each found symbol from the coverage database.
-        3. Skips symbols with more than 'max_tests_per_symbol' tests (too common code).
-        4. Returns the unique tests and a Result with info about the findings.
+        1. Gets changed lines from the PR diff.
+        2. Queries `checks_coverage_lines` for tests covering those lines.
+        3. Returns the unique tests and a `Result` with info about the findings.
         """
+        changed_lines = self.get_changed_lines_from_diff()
+        line_to_tests = self.get_tests_by_changed_lines(changed_lines)
 
-        file_line_to_symbol_tests = self.get_map_file_line_to_symbol_tests(binary_path)
-        not_resolved_file_lines = {}
-        resolved_file_lines = {}
-        symbols_to_tests = {}
-        selected_tests = set()
-
-        for (file_, line_), (symbol, tests) in file_line_to_symbol_tests.items():
-            if not tests:
-                if (file_, line_) not in not_resolved_file_lines:
-                    not_resolved_file_lines[(file_, line_)] = []
-                not_resolved_file_lines[(file_, line_)] = symbol
-            else:
-                if symbol in symbols_to_tests:
-                    continue
-                symbols_to_tests[symbol] = tests
-                resolved_file_lines[(file_, line_)] = (symbol, tests)
-
-        info = "Tests not found for lines:\n"
-        for (file_, line), symbol in not_resolved_file_lines.items():
-            info += f"  {file_}:{line} -> symbol: {symbol[:70] + '...' if symbol else 'NOT FOUND'}\n"
+        selected_tests: set = set()
         info = "Tests found for lines:\n"
-        if not resolved_file_lines:
-            info += "  No updates in source code\n"
+        if not line_to_tests:
+            info += "  No changed lines found in diff\n"
         else:
-            for (file_, line), (symbol, tests) in resolved_file_lines.items():
-                info += f"  {file_}:{line} -> symbol: {symbol[:70]}...\n"
-                if len(tests) > max_tests_per_symbol:
-                    info += f"    skipping {len(tests)} tests (too common code)\n"
-                else:
+            for (file_, line_), tests in line_to_tests.items():
+                if tests:
+                    info += f"  {file_}:{line_} -> {len(tests)} tests\n"
                     selected_tests.update(tests)
-            for test in tests[:10]:
-                info += f"  - {test}\n"
-            if len(tests) > 10:
-                info += f"    ... and {len(tests) - 10} more tests\n"
+
         info += f"Total unique tests: {len(selected_tests)}\n"
-        selected_tests = list(selected_tests)
-        return selected_tests, Result(
+        return list(selected_tests), Result(
             name="tests found by coverage", status=Result.StatusExtended.OK, info=info
         )
 
@@ -543,13 +330,9 @@ class Targeting:
 if __name__ == "__main__":
     # local run tests
     parser = argparse.ArgumentParser(
-        description="List changed symbols for a PR by parsing the diff and querying ClickHouse."
+        description="List tests covering changed lines for a PR by querying the coverage database."
     )
     parser.add_argument("pr", help="Pull request number")
-    parser.add_argument(
-        "clickhouse_path",
-        help='Path to the clickhouse binary (executed as "clickhouse local")',
-    )
     args = parser.parse_args()
 
     class InfoLocalTest:
@@ -559,27 +342,24 @@ if __name__ == "__main__":
 
     info = InfoLocalTest()
     targeting = Targeting(info)
-    file_line_to_symbol_tests = targeting.get_map_file_line_to_symbol_tests(
-        args.clickhouse_path
-    )
+    changed_lines = targeting.get_changed_lines_from_diff()
+    line_to_tests = targeting.get_tests_by_changed_lines(changed_lines)
 
     print("\nNo tests found for lines:")
-    for (file, line), (symbol, tests) in file_line_to_symbol_tests.items():
+    for (file, line), tests in line_to_tests.items():
         if tests:
             continue
-        print(
-            f"{file}:{line} -> symbol [{symbol[:70] + '...' if symbol else 'NOT FOUND'}"
-        )
+        print(f"{file}:{line} -> NOT FOUND")
 
     all_tests: set = set()
-    for tests in (t for _, (_, t) in file_line_to_symbol_tests.items() if t):
+    for tests in line_to_tests.values():
         all_tests.update(tests)
 
     print("\nTests found for lines:")
-    for (file, line), (symbol, tests) in file_line_to_symbol_tests.items():
+    for (file, line), tests in line_to_tests.items():
         if not tests:
             continue
-        print(f"{file}:{line} -> symbol [{symbol[:70]}...]:")
+        print(f"{file}:{line}:")
         for test in tests:
             print(f" - {test}")
 

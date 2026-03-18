@@ -1022,6 +1022,12 @@ BlockIO InterpreterSystemQuery::execute()
             resetCoverage();
             break;
         }
+        case Type::SET_COVERAGE_TEST:
+        {
+            getContext()->checkAccess(AccessType::SYSTEM);
+            setCoverageTest(query.coverage_test_name);
+            break;
+        }
         case Type::LOAD_PRIMARY_KEY: {
             loadPrimaryKeys();
             break;
@@ -2494,6 +2500,7 @@ AccessRightsElements InterpreterSystemQuery::getRequiredAccessForDDLOnCluster() 
         case Type::NOTIFY_FAILPOINT:
         case Type::DISABLE_FAILPOINT:
         case Type::RESET_COVERAGE:
+        case Type::SET_COVERAGE_TEST:
         case Type::UNKNOWN:
         case Type::RESET_DDL_WORKER:
         case Type::END: break;

@@ -1,8 +1,9 @@
 #pragma once
 
-#include <span>
 #include <cstdint>
 #include <string>
+#include <string_view>
+#include <vector>
 
 /// Flush coverage report to file, depending on coverage system
 /// proposed by compiler (llvm for clang and gcov for gcc).
@@ -12,18 +13,19 @@
 /// Idempotent, may be called multiple times.
 void dumpCoverageReportIfPossible();
 
-/// This is effective if SANITIZE_COVERAGE is enabled at build time.
-/// Get accumulated unique program addresses of the instrumented parts of the code,
-/// seen so far after program startup or after previous reset.
-/// The returned span will be represented as a sparse map, containing mostly zeros, which you should filter away.
-std::span<const uintptr_t> getCurrentCoverage();
+/// Initialize the coverage mapping from the server's own ELF sections.
+/// Reads /proc/self/exe to parse __llvm_covmap and __llvm_covfun sections.
+/// Builds a counter→region index for fast per-test scanning.
+/// Call once at server startup.
+/// Noop if build without coverage (WITH_COVERAGE=0).
+void loadCoverageMapping();
 
-/// Similar but not being reset.
-std::span<const uintptr_t> getCumulativeCoverage();
-
-/// Get all instrumented addresses that could be in the coverage.
-std::span<const uintptr_t> getAllInstrumentedAddresses();
+/// Atomically flush current coverage for the previous test → reset counters → arm new test name.
+/// Call before each test. Empty name flushes without starting a new test.
+/// Noop if build without coverage (WITH_COVERAGE=0).
+void setCoverageTest(std::string_view test_name);
 
 /// Reset the accumulated coverage.
-/// This is useful to compare coverage of different tests, including differential coverage.
+/// For compatibility: equivalent to setCoverageTest("").
+/// Noop if build without coverage (WITH_COVERAGE=0).
 void resetCoverage();

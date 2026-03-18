@@ -168,7 +168,7 @@ else ()
     set(NO_WHOLE_ARCHIVE --no-whole-archive)
 endif ()
 
-if (NOT (SANITIZE_COVERAGE OR WITH_COVERAGE)
+if (NOT WITH_COVERAGE
     AND (CMAKE_BUILD_TYPE_UC STREQUAL "RELEASE"
         OR CMAKE_BUILD_TYPE_UC STREQUAL "RELWITHDEBINFO"
         OR CMAKE_BUILD_TYPE_UC STREQUAL "MINSIZEREL"))
@@ -339,7 +339,7 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-absolute-paths")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-absolute-paths")
 
-if (NOT ENABLE_TESTS AND NOT ENABLE_CLANG_TIDY AND NOT SANITIZE AND NOT SANITIZE_COVERAGE AND OS_LINUX)
+if (NOT ENABLE_TESTS AND NOT ENABLE_CLANG_TIDY AND NOT SANITIZE AND NOT WITH_COVERAGE AND OS_LINUX)
     # https://clang.llvm.org/docs/ThinLTO.html
     # Applies to clang and linux only.
     # Disabled when building with tests or sanitizers.
@@ -516,6 +516,8 @@ macro (clickhouse_add_executable target)
         add_executable (${ARGV} $<TARGET_OBJECTS:clickhouse_malloc>)
     endif ()
 
+
+
     get_target_property (type ${target} TYPE)
     if (${type} STREQUAL EXECUTABLE)
         target_link_libraries (${target} PUBLIC clickhouse_new_delete)
@@ -570,7 +572,7 @@ if (ENABLE_RUST)
 endif()
 
 if (CMAKE_BUILD_TYPE_UC STREQUAL "RELWITHDEBINFO"
-    AND NOT SANITIZE AND NOT SANITIZE_COVERAGE AND NOT ENABLE_FUZZING
+    AND NOT SANITIZE AND NOT WITH_COVERAGE AND NOT ENABLE_FUZZING
     AND OMIT_HEAVY_DEBUG_SYMBOLS AND OS_LINUX AND (ARCH_AMD64 OR ARCH_AARCH64))
     set(CHECK_LARGE_OBJECT_SIZES_DEFAULT ON)
 else ()

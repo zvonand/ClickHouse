@@ -1,5 +1,4 @@
 #pragma once
 
-#if defined(SANITIZE_COVERAGE)
-void dumpCoverage();
-#endif
+/// Client-side coverage dump. No longer used — client coverage is collected
+/// server-side via system.coverage_log with SYSTEM SET COVERAGE TEST.

@@ -8,9 +8,6 @@
 #include <Common/getHashOfLoadedBinary.h>
 #include <Common/Crypto/OpenSSLInitializer.h>
 
-#if defined(SANITIZE_COVERAGE)
-#    include <Common/Coverage.h>
-#endif
 
 #include "config.h"
 #include "config_tools.h"
@@ -398,10 +395,6 @@ int main(int argc_, char ** argv_)
     }
 
     int exit_code = main_func(static_cast<int>(argv.size()), argv.data());
-
-#if defined(SANITIZE_COVERAGE)
-    dumpCoverage();
-#endif
 
     return exit_code;
 }

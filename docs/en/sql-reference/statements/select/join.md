@@ -38,6 +38,7 @@ All standard [SQL JOIN](https://en.wikipedia.org/wiki/Join_(SQL)) types are supp
 - `JOIN` without a type specified implies `INNER`.
 - The keyword `OUTER` can be safely omitted.
 - An alternative syntax for `CROSS JOIN` is specifying multiple tables in the [`FROM` clause](../../../sql-reference/statements/select/from.md) separated by commas.
+- If there are no matching columns for a `NATURAL JOIN`, it functions like a `CROSS JOIN`.
 
 Additional join types available in ClickHouse are:
 

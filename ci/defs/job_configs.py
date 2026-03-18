@@ -283,7 +283,7 @@ class JobConfigs:
             provides=[
                 ArtifactNames.CH_COV_BIN,
             ],
-            runs_on=RunnerLabels.ARM_LARGE,
+            runs_on=RunnerLabels.AMD_LARGE,
         ),
     )
     release_build_jobs = common_build_job_config.set_post_hooks(

@@ -178,10 +178,8 @@ public:
     bool isSuitableForShortCircuitArgumentsExecution(const DataTypesWithConstInfo & /*arguments*/) const override { return true; }
 
     bool useDefaultImplementationForConstants() const override { return true; }
-
-    /// useDefaultImplementationForNulls() and useDefaultImplementationForLowCardinalityColumns()
-    /// both default to true in IFunction, so Nullable and LowCardinality wrappers at the top level
-    /// are handled automatically by the framework.
+    bool useDefaultImplementationForNulls() const override { return true; }
+    bool useDefaultImplementationForLowCardinalityColumns() const override { return true; }
 
     ColumnNumbers getArgumentsThatAreAlwaysConstant() const override { return {1}; }
 

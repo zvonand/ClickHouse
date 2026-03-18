@@ -169,7 +169,7 @@ void dumpCoverageReportIfPossible()
 
 void loadCoverageMapping()
 {
-    /// Full LLVM coverage mapping reader will be implemented in a follow-up.
-    /// For now this is a noop placeholder — coverage is collected via per-test
-    /// profraw dumps post-processed by llvm-cov.
+    /// Coverage mapping is loaded lazily on the first call to collectAndInsertCoverage
+    /// (in CoverageCollection.cpp). This function is kept as a placeholder for potential
+    /// eager initialization in the future.
 }

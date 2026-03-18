@@ -1,3 +1,5 @@
+-- Tags: no-parallel-replicas
+-- ^ query_plan_direct_read_from_text_index is not compatible with parallel replicas
 -- Test that `query_plan_direct_read_from_text_index` works when the text-index
 -- predicate is referenced via an alias in `SELECT` and used in `PREWHERE`.
 -- PR #99504 fixed `NOT_FOUND_COLUMN_IN_BLOCK` for this pattern.
@@ -37,4 +39,4 @@ SELECT id, hasAnyTokens(text, 'test foo') AS w FROM t_04042_ti PREWHERE w ORDER 
 -- NOT predicate with PREWHERE alias
 SELECT id, hasToken(text, 'test') AS x FROM t_04042_ti PREWHERE NOT x ORDER BY id;
 
-DROP TABLE t_04042_ti;
+DROP TABLE IF EXISTS t_04042_ti;

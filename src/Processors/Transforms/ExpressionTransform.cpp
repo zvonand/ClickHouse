@@ -28,6 +28,9 @@ void ExpressionTransform::transform(Chunk & chunk)
     size_t num_rows = chunk.getNumRows();
     auto block = getInputPort().getHeader().cloneWithColumns(chunk.detachColumns());
 
+    if (isCancelled())
+        return;
+
     expression->execute(block, num_rows);
 
     if (isCancelled())

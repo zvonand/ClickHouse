@@ -30,6 +30,7 @@
 #include <DataTypes/Serializations/SerializationArray.h>
 #include <DataTypes/Serializations/SerializationTuple.h>
 #include <DataTypes/Serializations/SerializationMap.h>
+#include "Core/CaseAwareBlockNameMap.h"
 
 
 namespace DB
@@ -76,7 +77,7 @@ inline size_t BSONEachRowRowInputFormat::columnIndex(std::string_view name, size
     }
 
     auto position = name_map.get(name);
-    if (position != CaseAwareBlockNameMap::SearchResult::NOT_FOUND)
+    if (position != IBlockNameMap::SearchResult::NOT_FOUND)
     {
         if (key_index < prev_positions.size() && position < getPort().getHeader().columns())
             prev_positions[key_index] = {getPort().getHeader().getByPosition(position).name, position};

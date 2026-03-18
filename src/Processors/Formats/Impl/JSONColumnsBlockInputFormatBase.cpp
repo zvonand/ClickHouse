@@ -166,7 +166,7 @@ Chunk JSONColumnsBlockInputFormatBase::read()
             /// Check if this name appears in header. If no, skip this column or throw
             /// an exception according to setting input_format_skip_unknown_fields
             auto idx = name_to_index.get(*column_name);
-            if (idx == CaseAwareBlockNameMap::NOT_FOUND)
+            if (idx == IBlockNameMap::NOT_FOUND)
             {
                 if (!format_settings.skip_unknown_fields)
                     throw Exception(ErrorCodes::INCORRECT_DATA, "Unknown column found in input data: {}", *column_name);

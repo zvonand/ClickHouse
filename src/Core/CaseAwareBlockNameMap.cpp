@@ -44,32 +44,32 @@ struct CaseInsensitiveEquality
 };
 
 /// Case aware map
-class CaseSensitiveBlockNameMap
+class CaseSensitiveBlockNameMap : public IBlockNameMap
 {
 public:
     CaseSensitiveBlockNameMap() { map.set_empty_key(std::string_view{}); }
 
-    void setSize(size_t size)
+    void setSize(size_t size) override
     {
         expected_size = size;
         map.resize(size);
     }
 
-    void add(const std::string_view key, size_t idx) { map[key] = idx; }
+    void add(const std::string_view key, size_t idx) override { map[key] = idx; }
 
-    size_t size() const { return expected_size; }
+    size_t size() const override { return expected_size; }
 
-    size_t get(const std::string_view key) const
+    size_t get(const std::string_view key) const override
     {
         auto it = map.find(key);
         if (it == map.end())
         {
-            return CaseAwareBlockNameMap::NOT_FOUND;
+            return IBlockNameMap::NOT_FOUND;
         }
         return it->second;
     }
 
-    bool stringCompare(std::string_view left, std::string_view right) const { return left == right; }
+    bool stringCompare(std::string_view left, std::string_view right) const override { return left == right; }
 
 private:
     ::google::dense_hash_map<std::string_view, size_t, StringViewHash> map;
@@ -77,18 +77,18 @@ private:
 };
 
 /// Case independent map
-class CaseInsensitiveBlockNameMap
+class CaseInsensitiveBlockNameMap : public IBlockNameMap
 {
 public:
     CaseInsensitiveBlockNameMap() { map.set_empty_key(std::string_view{}); }
 
-    void setSize(size_t size)
+    void setSize(size_t size) override
     {
         expected_size = size;
         map.resize(size);
     }
 
-    void add(const std::string_view key, size_t idx)
+    void add(const std::string_view key, size_t idx) override
     {
         if (map.find(key) != map.end())
         {
@@ -97,17 +97,17 @@ public:
         map[key] = idx;
     }
 
-    size_t size() const { return expected_size; }
+    size_t size() const override { return expected_size; }
 
     /// Retrieves the position of a given key
     /// Can throw in the case where `key` is ambiguous
     /// For example: Name and namE will both map to the same key (name)
-    size_t get(const std::string_view key) const
+    size_t get(const std::string_view key) const override
     {
         auto it = map.find(key);
         if (it == map.end())
         {
-            return CaseAwareBlockNameMap::NOT_FOUND;
+            return IBlockNameMap::NOT_FOUND;
         }
         if (ambiguous_keys.contains(key))
         {
@@ -116,7 +116,7 @@ public:
         return it->second;
     }
 
-    bool stringCompare(std::string_view left, std::string_view right) const { return CaseInsensitiveEquality::equal(left, right); }
+    bool stringCompare(std::string_view left, std::string_view right) const override { return CaseInsensitiveEquality::equal(left, right); }
 
 protected:
     ::google::dense_hash_map<std::string_view, size_t, CaseInsensitiveHash, CaseInsensitiveEquality> map;
@@ -126,23 +126,23 @@ protected:
 
 /// Auto case map
 /// First tries a case aware search, if it fails then it tries case independent
-class AutoCaseBlockNameMap
+class AutoCaseBlockNameMap : public IBlockNameMap
 {
 public:
-    void setSize(size_t size)
+    void setSize(size_t size) override
     {
         expected_size = size;
         map.setSize(size);
         i_map.setSize(size);
     }
 
-    void add(const std::string_view key, size_t idx)
+    void add(const std::string_view key, size_t idx) override
     {
         map.add(key, idx);
         i_map.add(key, idx);
     }
 
-    size_t size() const { return expected_size; }
+    size_t size() const override { return expected_size; }
 
     /** Retrieves the position of a given key
       * Can throw in the case where `key` is ambiguous
@@ -153,11 +153,11 @@ public:
       *  map[namE] -> 1
       *  map[name] -> error, ambiguous
       */
-    size_t get(const std::string_view key) const
+    size_t get(const std::string_view key) const override
     {
         // First check if the key has an exact match
         auto idx = map.get(key);
-        if (idx != CaseAwareBlockNameMap::NOT_FOUND)
+        if (idx != IBlockNameMap::NOT_FOUND)
         {
             return idx;
         }
@@ -166,7 +166,7 @@ public:
         return i_map.get(key);
     }
 
-    bool stringCompare(std::string_view left, std::string_view right) const { return map.stringCompare(left, right); }
+    bool stringCompare(std::string_view left, std::string_view right) const override { return map.stringCompare(left, right); }
 
 private:
     CaseSensitiveBlockNameMap map;
@@ -175,26 +175,23 @@ private:
 };
 
 CaseAwareBlockNameMap::CaseAwareBlockNameMap(FormatSettings::InputFormatColumnMatchingCaseSensitivity input_mode)
-    : mode(input_mode)
 {
-    switch (mode)
+    switch (input_mode)
     {
         case FormatSettings::InputFormatColumnMatchingCaseSensitivity::MATCH_CASE: {
-            this->match_case = std::make_unique<CaseSensitiveBlockNameMap>();
+            map = std::make_unique<CaseSensitiveBlockNameMap>();
             break;
         }
         case FormatSettings::InputFormatColumnMatchingCaseSensitivity::IGNORE_CASE: {
-            this->ignore_case = std::make_unique<CaseInsensitiveBlockNameMap>();
+            map = std::make_unique<CaseInsensitiveBlockNameMap>();
             break;
         }
         case FormatSettings::InputFormatColumnMatchingCaseSensitivity::AUTO: {
-            this->auto_case = std::make_unique<AutoCaseBlockNameMap>();
+            map = std::make_unique<AutoCaseBlockNameMap>();
             break;
         }
     }
 }
-
-CaseAwareBlockNameMap::~CaseAwareBlockNameMap() = default;
 
 void CaseAwareBlockNameMap::initFromBlock(const Block & block)
 {
@@ -208,103 +205,27 @@ void CaseAwareBlockNameMap::initFromBlock(const Block & block)
 
 void CaseAwareBlockNameMap::add(std::string_view column_name, size_t idx)
 {
-    switch (mode)
-    {
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::MATCH_CASE: {
-            chassert(this->match_case);
-            this->match_case->add(column_name, idx);
-            break;
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::IGNORE_CASE: {
-            chassert(this->ignore_case);
-            this->ignore_case->add(column_name, idx);
-            break;
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::AUTO: {
-            chassert(this->auto_case);
-            this->auto_case->add(column_name, idx);
-            break;
-        }
-    }
+    map->add(column_name, idx);
 }
 
 size_t CaseAwareBlockNameMap::get(std::string_view column_name) const
 {
-    switch (mode)
-    {
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::MATCH_CASE: {
-            chassert(this->match_case);
-            return this->match_case->get(column_name);
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::IGNORE_CASE: {
-            chassert(this->ignore_case);
-            return this->ignore_case->get(column_name);
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::AUTO: {
-            chassert(this->auto_case);
-            return this->auto_case->get(column_name);
-        }
-    }
+    return map->get(column_name);
 }
 
 
 bool CaseAwareBlockNameMap::equal(std::string_view left, std::string_view right) const
 {
-    switch (mode)
-    {
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::MATCH_CASE: {
-            chassert(this->match_case);
-            return this->match_case->stringCompare(left, right);
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::IGNORE_CASE: {
-            chassert(this->ignore_case);
-            return this->ignore_case->stringCompare(left, right);
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::AUTO: {
-            chassert(this->auto_case);
-            return this->auto_case->stringCompare(left, right);
-        }
-    }
+    return map->stringCompare(left, right);
 }
 
 size_t CaseAwareBlockNameMap::size() const
 {
-    switch (mode)
-    {
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::MATCH_CASE: {
-            chassert(this->match_case);
-            return this->match_case->size();
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::IGNORE_CASE: {
-            chassert(this->ignore_case);
-            return this->ignore_case->size();
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::AUTO: {
-            chassert(this->auto_case);
-            return this->auto_case->size();
-        }
-    }
+    return map->size();
 }
 
 void CaseAwareBlockNameMap::setSize(size_t size)
 {
-    switch (mode)
-    {
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::MATCH_CASE: {
-            chassert(this->match_case);
-            this->match_case->setSize(size);
-            break;
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::IGNORE_CASE: {
-            chassert(this->ignore_case);
-            this->ignore_case->setSize(size);
-            break;
-        }
-        case FormatSettings::InputFormatColumnMatchingCaseSensitivity::AUTO: {
-            chassert(this->auto_case);
-            this->auto_case->setSize(size);
-            break;
-        }
-    }
+    map->setSize(size);
 }
 }

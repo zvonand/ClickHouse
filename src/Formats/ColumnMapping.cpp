@@ -32,7 +32,7 @@ void ColumnMapping::addColumns(
         names_of_columns.push_back(name);
 
         auto idx = column_indexes_by_names.get(name);
-        if (idx == CaseAwareBlockNameMap::NOT_FOUND)
+        if (idx == IBlockNameMap::NOT_FOUND)
         {
             if (settings.skip_unknown_fields)
             {

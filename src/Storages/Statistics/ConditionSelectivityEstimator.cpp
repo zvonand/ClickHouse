@@ -312,10 +312,8 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
                     }
                 }
             }
-            /// The atom handlers for `in`/`notIn` expect a Tuple. When the IN argument
-            /// was resolved via tryGetConstant (AST literal path), it may be a plain scalar
-            /// (e.g. `IN (single_value)` with a single literal). Wrap it so safeGet<Tuple>
-            /// does not throw.
+
+            /// The atom handlers for IN / NOT IN expect a Tuple but we may have parsed a single scalar in the case of IN (single_value).
             if (is_in_operator && const_value.getType() != Field::Types::Tuple)
                 const_value = Tuple{const_value};
 

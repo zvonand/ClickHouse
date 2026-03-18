@@ -1,11 +1,6 @@
 -- Regression test: `IN` with a single literal value must not throw
 -- "Bad get: has String, requested Tuple" in ConditionSelectivityEstimator.
 
--- The AST-based PREWHERE optimizer (InterpreterSelectQuery path) is active when
--- query_plan_optimize_prewhere=0. In that path the IN argument is an ASTLiteral,
--- so tryGetConstant returns a plain String Field instead of a Tuple, and the
--- atom handler for "in" used to call value.safeGet<Tuple>() unconditionally.
-
 SET allow_experimental_statistics = 1;
 SET use_statistics = 1;
 SET enable_analyzer = 0;

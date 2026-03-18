@@ -481,7 +481,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"use_query_condition_cache", false, false, "New setting."},
             {"parallel_replicas_for_cluster_engines", false, true, "New setting."},
             {"parallel_hash_join_threshold", 0, 0, "New setting"},
-            {"input_format_column_name_matching_mode", "", "match_case", "New setting."},
+            {"input_format_column_name_matching_mode", "match_case", "match_case", "New setting."},
             /// Release closed. Please use 25.4
         });
         addSettingsChanges(settings_changes_history, "25.2",

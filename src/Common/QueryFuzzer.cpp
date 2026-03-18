@@ -9,6 +9,7 @@
 #include <DataTypes/DataTypeFixedString.h>
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeMap.h>
+#include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeObject.h>
 #include <DataTypes/DataTypeQBit.h>
@@ -1460,10 +1461,18 @@ DataTypePtr QueryFuzzer::getRandomType()
             return std::make_shared<DataTypeArray>(getRandomType());
         case TypeIndex::Map:
             return std::make_shared<DataTypeMap>(getRandomType(), getRandomType());
-        case TypeIndex::LowCardinality:
-            return std::make_shared<DataTypeLowCardinality>(getRandomType());
-        case TypeIndex::Nullable:
-            return std::make_shared<DataTypeNullable>(getRandomType());
+        case TypeIndex::LowCardinality: {
+            auto inner = getRandomType();
+            if (!inner->canBeInsideLowCardinality())
+                inner = std::make_shared<DataTypeString>();
+            return std::make_shared<DataTypeLowCardinality>(inner);
+        }
+        case TypeIndex::Nullable: {
+            auto inner = getRandomType();
+            if (!inner->canBeInsideNullable())
+                inner = std::make_shared<DataTypeString>();
+            return std::make_shared<DataTypeNullable>(inner);
+        }
             DISPATCH(Decimal32)
             DISPATCH(Decimal64)
             DISPATCH(Decimal128)

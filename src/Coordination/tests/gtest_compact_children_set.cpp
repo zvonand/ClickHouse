@@ -199,7 +199,7 @@ TEST(CompactChildrenSet, Clear)
 TEST(CompactChildrenSet, CopyFromEmpty)
 {
     CompactChildrenSet cs;
-    CompactChildrenSet copy(cs);
+    const CompactChildrenSet copy(cs); // NOLINT(performance-unnecessary-copy-initialization) - intentionally testing copy constructor
     EXPECT_TRUE(copy.empty());
 }
 
@@ -208,7 +208,7 @@ TEST(CompactChildrenSet, CopyFromSingle)
     CompactChildrenSet cs;
     cs.insert(CHILD_A);
 
-    CompactChildrenSet copy(cs);
+    const CompactChildrenSet copy(cs);
     EXPECT_EQ(copy.size(), 1);
     EXPECT_TRUE(copy.contains(CHILD_A));
 
@@ -305,7 +305,9 @@ TEST(CompactChildrenSet, IteratorSetMode)
     cs.insert(CHILD_C);
 
     size_t count = 0;
-    bool found_a = false, found_b = false, found_c = false;
+    bool found_a = false;
+    bool found_b = false;
+    bool found_c = false;
     for (const auto & child : cs)
     {
         if (child == CHILD_A) found_a = true;

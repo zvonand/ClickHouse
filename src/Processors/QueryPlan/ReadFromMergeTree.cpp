@@ -1,9 +1,11 @@
 #include <Processors/QueryPlan/ReadFromMergeTree.h>
 
 #include <Analyzer/QueryNode.h>
+#include <Functions/IFunction.h>
 #include <Core/Settings.h>
 #include <Core/ServerSettings.h>
 #include <Functions/IFunction.h>
+#include <Core/ServerSettings.h>
 #include <IO/Operators.h>
 #include <Interpreters/Cluster.h>
 #include <Interpreters/Context.h>
@@ -56,6 +58,8 @@
 #include <Storages/MergeTree/RequestResponse.h>
 #include <Storages/Statistics/ConditionSelectivityEstimator.h>
 #include <Storages/VirtualColumnUtils.h>
+#include <Common/CurrentThread.h>
+#include <Common/DateLUT.h>
 #include <Common/JSONBuilder.h>
 #include <Common/logger_useful.h>
 #include <Common/thread_local_rng.h>
@@ -157,6 +161,11 @@ namespace ProfileEvents
 
 namespace DB
 {
+
+namespace ServerSetting
+{
+    extern const ServerSettingsUInt64 predicate_statistics_sample_rate;
+}
 
 namespace Setting
 {

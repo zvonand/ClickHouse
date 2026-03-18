@@ -12,10 +12,15 @@ ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS test_async_insert_progress"
 ${CLICKHOUSE_CLIENT} --query "CREATE TABLE test_async_insert_progress (x String) ENGINE = MergeTree ORDER BY x"
 
 # Test 1: TCP protocol (clickhouse-client uses TCP)
-query_tcp_id="ASYNC_INSERT_TCP_$RANDOM$RANDOM"
-${CLICKHOUSE_CLIENT} --progress err --query_id="$query_tcp_id" --async_insert 1 --wait_for_async_insert 1 --query \
+query_tcp_values_id="ASYNC_INSERT_TCP_VALUES_$RANDOM$RANDOM"
+${CLICKHOUSE_CLIENT} --progress err --query_id="$query_tcp_values_id" --async_insert 1 --wait_for_async_insert 1 --query \
     "INSERT INTO test_async_insert_progress VALUES ('one'), ('two'), ('three')" 2>&1 \
-    | grep "Progress:" |  sed 's/.*Progress: \([0-9.]*\) rows, \([0-9.]* [A-Za-z]*\).*/TCP: Rows: \1, Bytes: \2/'
+    | grep "Progress:" |  sed 's/.*Progress: \([0-9.]*\) rows, \([0-9.]* [A-Za-z]*\).*/TCP client values: Rows: \1, Bytes: \2/'
+
+query_tcp_data_id="ASYNC_INSERT_TCP_DATA_$RANDOM$RANDOM"
+echo -e "one\n two\n three" | ${CLICKHOUSE_CLIENT} --progress err --query_id="$query_tcp_data_id" --async_insert 1 --wait_for_async_insert 1 --query \
+    "INSERT INTO test_async_insert_progress FORMAT TSV" 2>&1 \
+    | grep "Progress:" |  sed 's/.*Progress: \([0-9.]*\) rows, \([0-9.]* [A-Za-z]*\).*/TCP client data: Rows: \1, Bytes: \2/'
 
 # Test 2: HTTP protocol
 query_http_id="ASYNC_INSERT_HTTP_$RANDOM$RANDOM"
@@ -40,16 +45,25 @@ done
 ${CLICKHOUSE_CLIENT} --query "SYSTEM FLUSH LOGS query_log"
 
 ${CLICKHOUSE_CLIENT} --query "
-    SELECT 'TCP:', read_rows, read_bytes, written_rows, written_bytes, result_rows, result_bytes, interface
+    SELECT 'TCP data query log:', read_rows, read_bytes, written_rows, written_bytes, result_rows, result_bytes, interface
     FROM system.query_log
     WHERE current_database = currentDatabase()
-        AND query_id = '$query_tcp_id'
+        AND query_id = '$query_tcp_values_id'
         AND type = 'QueryFinish'
     ORDER BY event_time_microseconds DESC
     LIMIT 1"
 
 ${CLICKHOUSE_CLIENT} --query "
-    SELECT 'HTTP:', read_rows, read_bytes, written_rows, written_bytes, result_rows, result_bytes, interface
+    SELECT 'TCP values query log:', read_rows, read_bytes, written_rows, written_bytes, result_rows, result_bytes, interface
+    FROM system.query_log
+    WHERE current_database = currentDatabase()
+        AND query_id = '$query_tcp_data_id'
+        AND type = 'QueryFinish'
+    ORDER BY event_time_microseconds DESC
+    LIMIT 1"
+
+${CLICKHOUSE_CLIENT} --query "
+    SELECT 'HTTP query log:', read_rows, read_bytes, written_rows, written_bytes, result_rows, result_bytes, interface
     FROM system.query_log
     WHERE current_database = currentDatabase()
         AND query_id = '$query_http_id'

@@ -2966,7 +2966,7 @@ bool ClientBase::processQueryText(const String & text)
 
         return processMultiQueryFromFile(file_name);
     }
-    
+
     // Handle `ls` metacommand
     if (supportsLocalMetaCommands() && boost::iequals(trimmed_input, "ls"))
     {

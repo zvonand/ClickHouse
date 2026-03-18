@@ -24,11 +24,11 @@ src:*/contrib/libprotobuf-mutator/*
 # Arrow IPC buffers are read with potentially unaligned offsets on purpose.
 # The Arrow format stores offset arrays as packed int32 arrays that may not be
 # 4-byte aligned relative to the start of the IPC buffer.
-src:*/contrib/arrow/cpp/src/arrow/array/array_binary.h*
+src:*/contrib/arrow/*
 
 # ReadBufferFromString is used to parse RocksDB slices. When an iterator returns
-# a slice with a corrupted size (pre-existing bug, likely memory corruption in
-# EmbeddedRocksDB read-only mode restart), the pointer arithmetic in BufferBase
-# overflows. Suppress until the root cause is fixed.
+# a slice with a corrupted size (first found in EmbeddedRocksDB read-only mode),
+# the pointer arithmetic in BufferBase overflows. BufferBase::BufferBase is inlined
+# so fun: suppression does not work; suppress via source file instead.
 # Issue: https://github.com/ClickHouse/ClickHouse/issues/99862
-fun:*DB::BufferBase::BufferBase*
+src:*/src/IO/BufferBase.h

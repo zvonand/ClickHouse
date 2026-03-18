@@ -284,7 +284,8 @@ Pipe executeRemoveOrphanFiles(
     RemoveOrphanFilesParams params;
     if (parsed.has("older_than"))
     {
-        ReadBufferFromString buf(parsed.getAs<String>("older_than"));
+        String older_than_str = parsed.getAs<String>("older_than");
+        ReadBufferFromString buf(older_than_str);
         time_t ts;
         readDateTimeText(ts, buf);
 

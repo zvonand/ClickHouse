@@ -496,13 +496,6 @@ bool UnicodeWordTokenizer::nextInString(
             /// Token must contain at least one alphanumeric character
             if (token_alnum_count > 0)
             {
-                /// Check if token is a stop word
-                std::string_view token_view(data + token_start, token_length);
-                if (stop_words.contains(token_view))
-                {
-                    token_length = 0;
-                    continue;
-                }
                 return true;
             }
 
@@ -528,15 +521,6 @@ bool UnicodeWordTokenizer::nextInString(
         {
             pos = length;
             return false;
-        }
-
-        std::string_view utf8_char(data + pos, char_len);
-
-        /// 3a. Stop words: skip
-        if (stop_words.contains(utf8_char))
-        {
-            pos += char_len;
-            continue;
         }
 
         token_start = pos;
@@ -663,10 +647,6 @@ bool UnicodeWordTokenizer::nextInStringLike(const char * data, size_t length, si
                     escaped = false;
                 }
 
-                /// Check if token is a stop word
-                if (stop_words.contains(token))
-                    continue;
-
                 return true;
             }
 
@@ -697,14 +677,6 @@ bool UnicodeWordTokenizer::nextInStringLike(const char * data, size_t length, si
         }
 
         token = {data + pos, char_len};
-
-        /// 3a. Stop words: skip
-        if (stop_words.contains(token))
-        {
-            pos += char_len;
-            escaped = false;
-            continue;
-        }
 
         pos += char_len;
         return true;

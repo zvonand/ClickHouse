@@ -2039,7 +2039,7 @@ void ReadFromMergeTree::buildIndexes(
         auto can_skip_index_be_used_for_top_k_filtering = [top_k_filter_info](const MergeTreeIndexPtr & skip_index)
         {
                 if (!top_k_filter_info || !skip_index->index.isSimpleSingleColumnIndex()
-                    || skip_index->index.type != "minmax" || skip_index->index.granularity != 1
+                    || skip_index->index.type != "minmax"
                     || top_k_filter_info->column_name != skip_index->index.column_names[0])
                     return false;
 

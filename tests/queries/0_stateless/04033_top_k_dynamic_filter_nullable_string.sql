@@ -1,5 +1,5 @@
 -- Test top-k dynamic filtering for Nullable, String, and collation types
--- Tags: long, no-tsan, no-asan, no-msan, no-s3-storage, no-fasttest
+-- Tags: no-fasttest
 
 -- Nullable(UInt32) ORDER BY ... LIMIT with NULLS LAST (default)
 DROP TABLE IF EXISTS tab_nullable;

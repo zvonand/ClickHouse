@@ -123,6 +123,8 @@ void TableFunctionExecutable::parseArguments(const ASTPtr & ast_function, Contex
 
     auto script_name_with_arguments_value = checkAndGetLiteralArgument<String>(args[0], "script_name_with_arguments_value");
     auto script_name_with_arguments = boost::program_options::split_unix(script_name_with_arguments_value);
+    if (script_name_with_arguments.empty())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Script name cannot be empty");
 
     script_name = std::move(script_name_with_arguments[0]);
     script_name_with_arguments.erase(script_name_with_arguments.begin());

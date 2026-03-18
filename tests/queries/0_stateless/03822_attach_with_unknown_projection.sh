@@ -43,11 +43,18 @@ run "ALTER TABLE t_unknown_proj_1 DROP PROJECTION pp SETTINGS mutations_sync=2"
 run "ALTER TABLE t_unknown_proj_1 ATTACH PARTITION 0 SETTINGS mutations_sync=2"
 
 # The part must be usable: CHECK TABLE should pass and data should be intact.
-echo "=== ReplicatedMergeTree ==="
+echo "=== Replicated MergeTree ==="
 run "SELECT count() FROM t_unknown_proj_1"
 run "CHECK TABLE t_unknown_proj_1" 2>&1 | grep -o "Found unexpected projection directories: pp.proj" | uniq
 
 run "SELECT sum(x), sum(y) FROM t_unknown_proj_1"
+
+# Replica 2 must fetch the part with the unknown projection from replica 1
+# via downloadPartToDisk on a local disk.  This exercises the receiver-side
+# checkEqual that compares checksums.txt against actually transferred files.
+run "SYSTEM SYNC REPLICA t_unknown_proj_2"
+run "SELECT count() FROM t_unknown_proj_2"
+run "SELECT sum(x), sum(y) FROM t_unknown_proj_2"
 
 # Force a merge to make sure the part with the unknown projection can merge.
 run "ALTER TABLE t_unknown_proj_1 MODIFY SETTING max_parts_to_merge_at_once = 100"

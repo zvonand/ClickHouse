@@ -44,7 +44,7 @@ public:
     IcebergMetadata(
         ObjectStoragePtr object_storage_,
         StorageObjectStorageConfigurationPtr configuration_,
-        Iceberg::PersistentTableComponents persistent_components_);
+        Iceberg::PersistentTableComponents && persistent_components_);
 
     /// Get table schema parsed from metadata.
     NamesAndTypesList getTableSchema(ContextPtr local_context) const override;

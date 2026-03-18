@@ -206,7 +206,7 @@ std::pair<IcebergDataSnapshotPtr, TableStateSnapshot> IcebergMetadata::getReleva
 IcebergMetadata::IcebergMetadata(
     ObjectStoragePtr object_storage_,
     StorageObjectStorageConfigurationPtr configuration_,
-    Iceberg::PersistentTableComponents persistent_components_)
+    Iceberg::PersistentTableComponents && persistent_components_)
     : log(getLogger("IcebergMetadata"))
     , object_storage(std::move(object_storage_))
     , persistent_components(std::move(persistent_components_))
@@ -752,7 +752,7 @@ DataLakeMetadataPtr IcebergMetadata::create(
         LOG_TRACE(
             log, "Not using in-memory cache for iceberg metadata files, because the setting use_iceberg_metadata_files_cache is false.");
     auto persistent_components = initializePersistentTableComponents(object_storage, configuration_ptr, cache_ptr, local_context, log);
-    return std::make_unique<IcebergMetadata>(object_storage, configuration_ptr, persistent_components);
+    return std::make_unique<IcebergMetadata>(object_storage, configuration_ptr, std::move(persistent_components));
 }
 
 IcebergMetadata::IcebergHistory IcebergMetadata::getHistory(ContextPtr local_context) const

@@ -81,14 +81,16 @@ namespace impl
         ColumnPtr key0;
         ColumnPtr key1;
         bool is_const;
-        const ColumnArray::Offsets * offsets = nullptr;
+        /// Chain of array offsets from innermost to outermost, used to map
+        /// a nested element index back to the original row index.
+        std::vector<const ColumnArray::Offsets *> all_offsets;
 
         size_t size() const
         {
             assert(key0 && key1);
             assert(key0->size() == key1->size());
-            if (offsets != nullptr && !offsets->empty())
-                return offsets->back();
+            if (!all_offsets.empty() && !all_offsets.front()->empty())
+                return all_offsets.front()->back();
             return key0->size();
         }
 
@@ -97,13 +99,10 @@ namespace impl
             if (is_const)
                 i = 0;
             assert(key0->size() == key1->size());
-            if (offsets != nullptr && i > 0)
-            {
-                const auto * const begin = std::upper_bound(offsets->begin(), offsets->end(), i - 1);
-                const auto * upper = std::upper_bound(begin, offsets->end(), i);
-                if (upper != offsets->end())
-                    i = upper - begin;
-            }
+            /// Map from nested element index to row index by chaining
+            /// through all offset levels (innermost first, outermost last).
+            for (const auto * offsets : all_offsets)
+                i = std::upper_bound(offsets->begin(), offsets->end(), i) - offsets->begin();
             const auto & key0data = assert_cast<const ColumnUInt64 &>(*key0).getData();
             const auto & key1data = assert_cast<const ColumnUInt64 &>(*key1).getData();
             assert(key0->size() > i);
@@ -131,7 +130,7 @@ namespace impl
         if (!col_key_tuple || col_key_tuple->tupleSize() != 2)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "The key must be of type Tuple(UInt64, UInt64)");
 
-        SipHashKeyColumns result{.key0 = col_key_tuple->getColumnPtr(0), .key1 = col_key_tuple->getColumnPtr(1), .is_const = is_const};
+        SipHashKeyColumns result{.key0 = col_key_tuple->getColumnPtr(0), .key1 = col_key_tuple->getColumnPtr(1), .is_const = is_const, .all_offsets = {}};
 
         assert(result.key0);
         assert(result.key1);
@@ -1229,7 +1228,7 @@ private:
             if constexpr (Keyed)
             {
                 KeyColumnsType key_cols_tmp{key_cols};
-                key_cols_tmp.offsets = &offsets;
+                key_cols_tmp.all_offsets.insert(key_cols_tmp.all_offsets.begin(), &offsets);
                 executeForArgument(key_cols_tmp, nested_type, nested_column, vec_temp, nested_is_first);
             }
             else

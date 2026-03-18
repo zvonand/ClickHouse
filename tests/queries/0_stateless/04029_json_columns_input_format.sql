@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS test;
 
 CREATE TABLE test (id Int, ID Int, NAME String, NaMe String);
 
-SET input_format_with_names_case_insensitive_column_matching='auto';
+SET input_format_column_name_matching_mode='auto';
 
 INSERT INTO test FORMAT JSONColumns {
     "id": [0, 1, 2],
@@ -21,7 +21,7 @@ DROP TABLE IF EXISTS test;
 
 CREATE TABLE test (id Int, iD Int, name String, nAmE String);
 
-SET input_format_with_names_case_insensitive_column_matching='auto';
+SET input_format_column_name_matching_mode='auto';
 
 INSERT INTO test FORMAT JSONColumns {
     "id": [0, 1, 2],
@@ -39,7 +39,7 @@ DROP TABLE IF EXISTS test;
 
 CREATE TABLE test (id Int, ID Int, NAME String, NaMe String);
 
-SET input_format_with_names_case_insensitive_column_matching='match_case';
+SET input_format_column_name_matching_mode='match_case';
 
 INSERT INTO test FORMAT JSONColumns{
     "id": [0, 1, 2],
@@ -58,7 +58,7 @@ DROP TABLE IF EXISTS test;
 
 CREATE TABLE test (ID Int, name String);
 
-SET input_format_with_names_case_insensitive_column_matching='ignore_case';
+SET input_format_column_name_matching_mode='ignore_case';
 
 INSERT INTO test FORMAT JSONColumns{
     "id": [0, 1, 2],
@@ -74,7 +74,7 @@ DROP TABLE IF EXISTS test;
 
 CREATE TABLE test (id Int, ID Int, NAME String, NaMe String);
 
-SET input_format_with_names_case_insensitive_column_matching='ignore_case';
+SET input_format_column_name_matching_mode='ignore_case';
 
 INSERT INTO test FORMAT JSONColumns {
     "id": [0, 1, 2],
@@ -92,7 +92,7 @@ DROP TABLE IF EXISTS test;
 
 CREATE TABLE test (id Int);
 
-SET input_format_with_names_case_insensitive_column_matching='auto';
+SET input_format_column_name_matching_mode='auto';
 
 INSERT INTO test FORMAT JSONColumns {
     "id": [0, 1, 2],
@@ -106,7 +106,7 @@ DROP TABLE test;
 -- Test ambiguity when two input columns map to the same table column (ignore case)
 CREATE TABLE json_test (id Int);
 
-SET input_format_with_names_case_insensitive_column_matching='ignore_case';
+SET input_format_column_name_matching_mode='ignore_case';
 
 INSERT INTO json_test FORMAT JSONColumns {"ID": [444], "id": [123]} -- { clientError 117 }
 

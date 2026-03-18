@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS json_test;
 
 CREATE TABLE json_test (id Int, name String, NaMe String);
 
-SET input_format_with_names_case_insensitive_column_matching='auto';
+SET input_format_column_name_matching_mode='auto';
 
 INSERT INTO json_test FORMAT JSONEachRow {"id": 0, "name": "aa", "NaMe": "bb"}
 
@@ -14,7 +14,7 @@ DROP TABLE json_test;
 -- Test auto case ambiguity
 CREATE TABLE json_test (age Int, AGE Int);
 
-SET input_format_with_names_case_insensitive_column_matching='auto';
+SET input_format_column_name_matching_mode='auto';
 
 INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10};
 
@@ -27,7 +27,7 @@ DROP TABLE json_test;
 -- Test auto case -- corner case
 CREATE TABLE json_test (age Int, AGE Int);
 
-SET input_format_with_names_case_insensitive_column_matching='auto';
+SET input_format_column_name_matching_mode='auto';
 
 INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10};
 
@@ -40,7 +40,7 @@ DROP TABLE json_test;
 -- Test match case
 CREATE TABLE json_test (age Int, AGE Int, name String, NaMe String);
 
-SET input_format_with_names_case_insensitive_column_matching='match_case';
+SET input_format_column_name_matching_mode='match_case';
 
 INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10, "name": "a", "NaMe": "b"} {"name": "aa", "age": 1, "NaMe": "bb", "AGE": 20};
 
@@ -51,7 +51,7 @@ DROP TABLE json_test;
 -- Test ignore case
 CREATE TABLE json_test (id Int, age Int);
 
-SET input_format_with_names_case_insensitive_column_matching='ignore_case';
+SET input_format_column_name_matching_mode='ignore_case';
 
 INSERT INTO json_test FORMAT JSONEachRow {"ID": 0, "AGE": 10} {"Id": 1, "AgE": 100};
 
@@ -62,7 +62,7 @@ DROP TABLE json_test;
 -- Test ignore case ambiguity
 CREATE TABLE json_test (AGE Int, age Int, id Int);
 
-SET input_format_with_names_case_insensitive_column_matching='ignore_case';
+SET input_format_column_name_matching_mode='ignore_case';
 
 INSERT INTO json_test FORMAT JSONEachRow {"age": 0, "AGE": 10}; -- { clientError 117 }
 
@@ -77,7 +77,7 @@ DROP TABLE json_test;
 -- Test ambiguity when two input columns map to the same table column (auto case match)
 CREATE TABLE json_test (id Int);
 
-SET input_format_with_names_case_insensitive_column_matching='auto';
+SET input_format_column_name_matching_mode='auto';
 SET input_format_json_ignore_unnecessary_fields=false;
 
 INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123}; -- { clientError 117 }
@@ -93,7 +93,7 @@ DROP TABLE json_test;
 -- Test ambiguity when two input columns map to the same table column (ignore case)
 CREATE TABLE json_test (id Int);
 
-SET input_format_with_names_case_insensitive_column_matching='ignore_case';
+SET input_format_column_name_matching_mode='ignore_case';
 SET input_format_json_ignore_unnecessary_fields=false;
 
 INSERT INTO json_test FORMAT JSONEachRow {"ID": 444, "id": 123}; -- { clientError 117 }

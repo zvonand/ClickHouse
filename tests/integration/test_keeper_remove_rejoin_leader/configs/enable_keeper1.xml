@@ -13,9 +13,6 @@
             <operation_timeout_ms>5000</operation_timeout_ms>
             <session_timeout_ms>30000</session_timeout_ms>
             <raft_logs_level>trace</raft_logs_level>
-            <!-- Short timeouts to speed up the test: cancel_schedulers() fires after
-                 steps_to_down_ (=2) decrements, i.e., 2 election timeouts.
-                 With upper bound of 200ms that is ~400ms; sleeping 2s is safe. -->
         </coordination_settings>
 
         <raft_configuration>

@@ -28,4 +28,15 @@ GROUP BY GROUPING SETS ((g))
 HAVING h
 ORDER BY g DESC;
 
+-- After partial push-down of AND, the remaining expression may fold to a constant
+-- on 0-row header input (e.g., plus(X, NULL) → const NULL), even though the DAG
+-- node has non-const inputs. This caused "Block structure mismatch" when
+-- mergeExpressions used a stale non-const header from the parent step.
+SELECT
+    (MAX(c0) + NULL) AND materialize(0) AS h,
+    -c0 AS g
+FROM t_const_having
+GROUP BY g
+HAVING h;
+
 DROP TABLE t_const_having;

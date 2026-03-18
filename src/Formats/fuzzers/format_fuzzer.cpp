@@ -58,6 +58,8 @@ extern "C" int LLVMFuzzerInitialize(const int * argc, char *** argv)
     if (isMerge(*argc, *argv))
         return 0;
 
+    getContext()->makeGlobalContext();
+
     env_format_name = getFormatNameFromEnv();
 
     MainThreadStatus::getInstance();

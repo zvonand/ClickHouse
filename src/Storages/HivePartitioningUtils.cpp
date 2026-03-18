@@ -85,8 +85,10 @@ NamesAndTypesList extractHivePartitionColumnsFromPath(
         }
         else
         {
+            auto hive_format_settings = format_settings ? *format_settings : getFormatSettings(context);
+            hive_format_settings.allow_number_leading_zeros = true;
             if (const auto type = tryInferDataTypeByEscapingRule(
-                    value, format_settings ? *format_settings : getFormatSettings(context), FormatSettings::EscapingRule::Raw))
+                    value, hive_format_settings, FormatSettings::EscapingRule::Raw))
             {
                 if (type->canBeInsideLowCardinality() && isStringOrFixedString(type))
                 {

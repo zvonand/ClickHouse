@@ -42,7 +42,7 @@ INFRASTRUCTURE_ERROR_PATTERNS = [
     "OCI runtime create failed",
     "toomanyrequests",
     "pull access denied",
-    "logging_pulling_images",  # docker pull timeout during cluster.start()
+    "Got exception pulling images:",  # docker pull failure during cluster.start()
 ]
 
 

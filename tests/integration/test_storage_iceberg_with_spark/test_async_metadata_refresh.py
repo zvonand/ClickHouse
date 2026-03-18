@@ -1,6 +1,5 @@
 import time
 import pytest
-
 from helpers.iceberg_utils import (
     create_iceberg_table,
     generate_data,
@@ -17,7 +16,7 @@ def test_selecting_with_stale_vs_latest_metadata(started_cluster_iceberg_with_sp
     instance = started_cluster_iceberg_with_spark.instances["node1"]
     spark = started_cluster_iceberg_with_spark.spark_session
     TABLE_NAME = (
-        "test_iceberg_getting_stale_data"
+        "test_selecting_with_stale_vs_latest_metadata"
         + "_"
         + storage_type
         + "_"
@@ -39,7 +38,9 @@ def test_selecting_with_stale_vs_latest_metadata(started_cluster_iceberg_with_sp
 
     # disabling async refresher to validate that the latest metadata will be pulled at SELECT
     create_iceberg_table(storage_type, instance, TABLE_NAME, started_cluster_iceberg_with_spark,
-                         iceberg_metadata_async_refresh_period_ms=3_600_000)
+        additional_settings = [
+            f"iceberg_metadata_async_prefetch_period_ms=0"
+    ])
     assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
 
     # 1. Validating that SELECT will pull the latest metadata by default
@@ -132,7 +133,7 @@ def test_default_async_metadata_refresh(started_cluster_iceberg_with_spark, stor
     instance = started_cluster_iceberg_with_spark.instances["node1"]
     spark = started_cluster_iceberg_with_spark.spark_session
     TABLE_NAME = (
-        "test_iceberg_getting_stale_data"
+        "test_default_async_metadata_refresh"
         + "_"
         + storage_type
         + "_"
@@ -152,8 +153,7 @@ def test_default_async_metadata_refresh(started_cluster_iceberg_with_spark, stor
         "",
     )
 
-    # The expection is that async metadata refresher starts for each table if the cache is enabled; default interval is DEFAULT_ICEBERG_METADATA_ASYNC_REFRESH_PERIOD=10sec
-    # It could be explicitly set at table creation as iceberg_metadata_async_refresh_period_ms, but we're checking the default in this scenario
+    # The expectation is that async metadata fetcher is disabled by default
     create_iceberg_table(storage_type, instance, TABLE_NAME, started_cluster_iceberg_with_spark)
     assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
 
@@ -172,10 +172,10 @@ def test_default_async_metadata_refresh(started_cluster_iceberg_with_spark, stor
 
     # the fresh metadata won't get pulled at SELECT, so we see stale data
     assert int(instance.query(f"SELECT count() FROM {TABLE_NAME} SETTINGS iceberg_metadata_staleness_ms=600000")) == 100
-    # sleeping twice the update interval to let the refresh finish even if the server is overloaded
-    time.sleep(10 * 2)
-    # we don't pull fresh metadata at SELECT, but the data is up to date because of the async refresh
-    assert int(instance.query(f"SELECT count() FROM {TABLE_NAME} SETTINGS iceberg_metadata_staleness_ms=600000")) == 200
+    # sleeping a little bit
+    time.sleep(10)
+    # the metadata is not updated after sleep
+    assert int(instance.query(f"SELECT count() FROM {TABLE_NAME} SETTINGS iceberg_metadata_staleness_ms=600000")) == 100
 
 
 @pytest.mark.parametrize("storage_type", ["s3"])
@@ -183,7 +183,7 @@ def test_async_metadata_refresh(started_cluster_iceberg_with_spark, storage_type
     instance = started_cluster_iceberg_with_spark.instances["node1"]
     spark = started_cluster_iceberg_with_spark.spark_session
     TABLE_NAME = (
-        "test_iceberg_async_refresh"
+        "test_async_metadata_refresh"
         + "_"
         + storage_type
         + "_"
@@ -203,8 +203,13 @@ def test_async_metadata_refresh(started_cluster_iceberg_with_spark, storage_type
         "",
     )
 
-    ASYNC_METADATA_REFRESH_PERIOD_MS=5000
-    create_iceberg_table(storage_type, instance, TABLE_NAME, started_cluster_iceberg_with_spark, iceberg_metadata_async_refresh_period_ms=ASYNC_METADATA_REFRESH_PERIOD_MS)
+    ASYNC_METADATA_REFRESH_PERIOD_MS=5_000
+    create_iceberg_table(storage_type, instance, TABLE_NAME, started_cluster_iceberg_with_spark,
+        additional_settings = [
+            f"iceberg_metadata_async_prefetch_period_ms={ASYNC_METADATA_REFRESH_PERIOD_MS}"
+    ])
+
+
     assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
 
     # In order to track background activity against S3, let's remember current metric
@@ -242,7 +247,7 @@ def test_async_metadata_refresh(started_cluster_iceberg_with_spark, storage_type
 def test_insert_updates_metadata_cache(started_cluster_iceberg_with_spark, storage_type):
     instance = started_cluster_iceberg_with_spark.instances["node1"]
     TABLE_NAME = (
-        "test_iceberg_write_updates_metadata"
+        "test_insert_updates_metadata_cache"
         + "_"
         + storage_type
         + "_"
@@ -250,11 +255,14 @@ def test_insert_updates_metadata_cache(started_cluster_iceberg_with_spark, stora
     )
 
     schema = "(a Int64)"
-    create_iceberg_table(storage_type, instance, TABLE_NAME, started_cluster_iceberg_with_spark, schema, iceberg_metadata_async_refresh_period_ms=3_600_000)
+    create_iceberg_table(storage_type, instance, TABLE_NAME, started_cluster_iceberg_with_spark, schema,
+        additional_settings = [
+            f"iceberg_metadata_async_prefetch_period_ms=0"
+    ])
 
     instance.query(
         f"INSERT INTO {TABLE_NAME} SELECT number FROM numbers(100)",
-        settings={"allow_experimental_insert_into_iceberg": 1},
+        settings={"allow_insert_into_iceberg": 1},
     )
 
     assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}", settings={

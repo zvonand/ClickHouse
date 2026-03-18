@@ -165,11 +165,11 @@ private:
     DB::Iceberg::PersistentTableComponents persistent_components;
     const DataLakeStorageSettings & data_lake_settings;
     const String write_format;
-    BackgroundSchedulePoolTaskHolder background_metadata_refresher_task;
+    BackgroundSchedulePoolTaskHolder background_metadata_prefetch_task;
 
     KeyDescription getSortingKey(ContextPtr local_context, Iceberg::TableStateSnapshot actual_table_state_snapshot) const;
 
-    void backgroundMetadataRefresherThread();
+    void backgroundMetadataPrefetcherThread();
 };
 }
 

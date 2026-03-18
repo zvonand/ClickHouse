@@ -93,7 +93,7 @@ namespace DataLakeStorageSetting
 {
 extern const DataLakeStorageSettingsString iceberg_metadata_file_path;
 extern const DataLakeStorageSettingsString iceberg_metadata_table_uuid;
-extern const DataLakeStorageSettingsUInt32 iceberg_metadata_async_refresh_period_ms;
+extern const DataLakeStorageSettingsUInt32 iceberg_metadata_async_prefetch_period_ms;
 extern const DataLakeStorageSettingsBool iceberg_recent_metadata_file_by_last_updated_ms_field;
 extern const DataLakeStorageSettingsBool iceberg_use_version_hint;
 extern const DataLakeStorageSettingsNonZeroUInt64 iceberg_format_version;
@@ -215,37 +215,38 @@ IcebergMetadata::IcebergMetadata(
     , data_lake_settings(configuration_->getDataLakeSettings())
     , write_format(configuration_->format)
 {
-
     /// TODO: for now it's okay to start/stop the task via constructor/destructor. Once refactored, we'd need to plumb startup/shutdown and schedule the task from there
-    if (cache_ptr && data_lake_settings[DataLakeStorageSetting::iceberg_metadata_async_refresh_period_ms] != 0)
+    if (cache_ptr && data_lake_settings[DataLakeStorageSetting::iceberg_metadata_async_prefetch_period_ms] != 0)
     {
-        background_metadata_refresher_task = context_->getIcebergSchedulePool().createTask(
+        background_metadata_prefetch_task = context_->getIcebergSchedulePool().createTask(
             StorageID("", persistent_components.table_uuid ? *persistent_components.table_uuid : persistent_components.table_path),
-            "backgroundMetadataRefresherThread",
+            "backgroundMetadataPrefetcherThread",
             [this]
             {
-                this->backgroundMetadataRefresherThread();
+                this->backgroundMetadataPrefetcherThread();
             }
         );
-        background_metadata_refresher_task->activateAndSchedule();
+        background_metadata_prefetch_task->activateAndSchedule();
     }
 }
 
 IcebergMetadata::~IcebergMetadata()
 {
-    if (background_metadata_refresher_task)
-        background_metadata_refresher_task->deactivate();
+    if (background_metadata_prefetch_task)
+        background_metadata_prefetch_task->deactivate();
 }
 
-void IcebergMetadata::backgroundMetadataRefresherThread()
+void IcebergMetadata::backgroundMetadataPrefetcherThread()
 {
-    size_t refresh_period = data_lake_settings[DataLakeStorageSetting::iceberg_metadata_async_refresh_period_ms];
+    size_t interval = data_lake_settings[DataLakeStorageSetting::iceberg_metadata_async_prefetch_period_ms];
     SCOPE_EXIT({
-        background_metadata_refresher_task->scheduleAfter(refresh_period);
+        background_metadata_prefetch_task->scheduleAfter(interval);
     });
 
     try
     {
+        Stopwatch watch;
+
         /// TODO: also we'd want to run all these download operations as separate scheduled tasks - to parallelize it and
         ///       to prevent running a heavy multi-step operation as: IO > deserialization > parsing > IO > deserialization > parsing > ...
         ///       We'll be able to achieve that after getting asyncIterator refactoring
@@ -265,8 +266,9 @@ void IcebergMetadata::backgroundMetadataRefresherThread()
             }
         }
 
-        LOG_TRACE(log, "backgroundMetadataRefresherThread: refresh_period={} table_path={}/{} latest_metadata={}/{}",
-                 refresh_period,
+        LOG_TRACE(log, "backgroundMetadataPrefetcherThread: interval={} prefetch_time_ms={} table_path={}/{} latest_metadata={}/{}",
+                 interval,
+                 watch.elapsedMilliseconds(),
                  persistent_components.table_path,
                  persistent_components.table_uuid ? *(persistent_components.table_uuid) : "no_uuid",
                  actual_table_state_snapshot.metadata_version,

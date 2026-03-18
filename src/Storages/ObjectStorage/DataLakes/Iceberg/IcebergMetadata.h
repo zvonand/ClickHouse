@@ -163,7 +163,7 @@ private:
 
     LoggerPtr log;
     const ObjectStoragePtr object_storage;
-    DB::Iceberg::PersistentTableComponents persistent_components;
+    const DB::Iceberg::PersistentTableComponents persistent_components;
     const DataLakeStorageSettings & data_lake_settings;
     const String write_format;
     KeyDescription getSortingKey(ContextPtr local_context, Iceberg::TableStateSnapshot actual_table_state_snapshot) const;

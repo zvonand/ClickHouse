@@ -10,4 +10,4 @@ ls_test_file_.2
 ls_test_file_.3
 OK
 -- ls x
-Code: 47. DB::Exception: Unknown expression identifier `ls` in scope SELECT ls AS x. (UNKNOWN_IDENTIFIER)
+OK

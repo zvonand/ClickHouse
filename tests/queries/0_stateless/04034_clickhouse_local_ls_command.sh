@@ -53,4 +53,5 @@ echo "-- ls x"
 (
     cd "$TESTDIR"
     $CLICKHOUSE_LOCAL -q "ls x" 2>&1 || true
-) | grep -F 'Unknown expression identifier `ls`'
+) | grep -F 'Unknown expression identifier `ls`' > /dev/null
+echo "OK"

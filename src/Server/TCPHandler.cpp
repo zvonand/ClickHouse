@@ -1378,25 +1378,29 @@ void TCPHandler::processInsertQuery(QueryState & state)
 
                 /// Report the written rows/bytes as progress so that the client
                 /// and query_log reflect the actual insert stats.
-                Progress write_progress;
-                write_progress.written_rows = write_result.written_rows;
-                write_progress.written_bytes = write_result.written_bytes;
-
-                /// For INSERT queries, read_rows/read_bytes should also reflect
-                /// the data that was parsed — same as written for non-deduplicated inserts.
-                Progress read_progress;
-                read_progress.read_rows = write_result.written_rows;
-                read_progress.read_bytes = write_result.written_bytes;
-
                 if (auto process_list_elem = state.query_context->getProcessListElement())
                 {
+                    Progress write_progress;
+                    write_progress.written_rows = write_result.written_rows;
+                    write_progress.written_bytes = write_result.written_bytes;
                     process_list_elem->updateProgressOut(write_progress);
+
+                    Progress read_progress;
+                    read_progress.read_rows = write_result.written_rows;
+                    read_progress.read_bytes = write_result.written_bytes;
                     process_list_elem->updateProgressIn(read_progress);
                 }
 
-                /// Update state.progress so that sendProgress picks it up.
-                state.progress.incrementPiecewiseAtomically(write_progress);
-                state.progress.incrementPiecewiseAtomically(read_progress);
+                /// Update state.progress so that sendProgress sends it to the client.
+                /// Include result_rows so the client displays "N rows in set".
+                Progress client_progress;
+                client_progress.written_rows = write_result.written_rows;
+                client_progress.written_bytes = write_result.written_bytes;
+                client_progress.read_rows = write_result.written_rows;
+                client_progress.read_bytes = write_result.written_bytes;
+                client_progress.result_rows = write_result.written_rows;
+                client_progress.result_bytes = write_result.written_bytes;
+                state.progress.incrementPiecewiseAtomically(client_progress);
             }
 
             {

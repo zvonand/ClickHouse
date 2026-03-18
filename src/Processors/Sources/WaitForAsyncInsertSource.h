@@ -71,6 +71,8 @@ protected:
             p.written_bytes = write_result.written_bytes;
             p.read_rows = write_result.written_rows;
             p.read_bytes = write_result.written_bytes;
+            p.result_rows = write_result.written_rows;
+            p.result_bytes = write_result.written_bytes;
             progress_callback(p);
         }
 

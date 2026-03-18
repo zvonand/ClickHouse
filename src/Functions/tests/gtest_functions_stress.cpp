@@ -13,6 +13,7 @@
 #include <Columns/ColumnNothing.h>
 #include <Columns/ColumnNullable.h>
 #include <Columns/ColumnsNumber.h>
+#include <Common/CurrentThread.h>
 #include <Common/FieldAccurateComparison.h>
 #include <Common/logger_useful.h>
 #include <Common/SignalHandlers.h>

@@ -20,6 +20,24 @@ namespace ErrorCodes
 extern const int INCORRECT_DATA;
 }
 
+/// Interface for BlockNameMaps
+class IBlockNameMap
+{
+public:
+    virtual ~IBlockNameMap() = default;
+
+    /// Adds a new element to the map
+    virtual void add(std::string_view key, size_t idx) = 0;
+    /// Sets the size of the map
+    virtual void setSize(size_t size) = 0;
+    /// Gets the size
+    virtual size_t size() const = 0;
+    /// Gets the value for the given key, returns NOT_FOUND if key is not present
+    virtual size_t get(std::string_view key) const = 0;
+    /// Method used by the map to compare strings
+    virtual bool stringCompare(std::string_view left, std::string_view right) const = 0;
+};
+
 struct CaseInsensitiveHash
 {
     size_t operator()(const std::string_view key) const
@@ -64,7 +82,7 @@ public:
         auto it = map.find(key);
         if (it == map.end())
         {
-            return IBlockNameMap::NOT_FOUND;
+            return CaseAwareBlockNameMap::NOT_FOUND;
         }
         return it->second;
     }
@@ -107,7 +125,7 @@ public:
         auto it = map.find(key);
         if (it == map.end())
         {
-            return IBlockNameMap::NOT_FOUND;
+            return CaseAwareBlockNameMap::NOT_FOUND;
         }
         if (ambiguous_keys.contains(key))
         {
@@ -157,7 +175,7 @@ public:
     {
         // First check if the key has an exact match
         auto idx = map.get(key);
-        if (idx != IBlockNameMap::NOT_FOUND)
+        if (idx != CaseAwareBlockNameMap::NOT_FOUND)
         {
             return idx;
         }
@@ -192,6 +210,8 @@ CaseAwareBlockNameMap::CaseAwareBlockNameMap(FormatSettings::InputFormatColumnMa
         }
     }
 }
+
+CaseAwareBlockNameMap::~CaseAwareBlockNameMap() = default;
 
 void CaseAwareBlockNameMap::initFromBlock(const Block & block)
 {

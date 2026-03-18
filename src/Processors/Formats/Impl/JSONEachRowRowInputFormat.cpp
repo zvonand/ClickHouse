@@ -83,7 +83,7 @@ inline size_t JSONEachRowRowInputFormat::columnIndex(std::string_view name, size
     }
 
     auto position = name_map.get(name);
-    if (position != IBlockNameMap::SearchResult::NOT_FOUND)
+    if (position != CaseAwareBlockNameMap::NOT_FOUND)
     {
         if (key_index < prev_positions.size() && position < getPort().getHeader().columns())
             prev_positions[key_index] = {getPort().getHeader().getByPosition(position).name, position};

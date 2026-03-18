@@ -40,19 +40,19 @@ void ParallelReadRequest::serialize(WriteBuffer & out, UInt64 initiator_protocol
 
     writeIntBinary(mode, out);
     writeIntBinary(replica_num, out);
-    /// Since protocol version 6, `min_number_of_marks` is sent once in the initial announcement.
-    /// Write the real value for older initiators that still read it; write 0 for new ones.
+    /// Since DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK, `min_number_of_marks` is sent once
+    /// in the initial announcement. Write the real value for older initiators that still read it; write 0 for new ones.
     if (initiator_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
         writeIntBinary(static_cast<size_t>(0), out);
     else
-        writeIntBinary(min_number_of_marks, out);
+        writeIntBinary(min_marks_per_request, out);
     description.serialize(out, initiator_protocol_version);
 }
 
 
 String ParallelReadRequest::describe() const
 {
-    String result = fmt::format("replica_num {}, min_num_of_marks {}, ", replica_num, min_number_of_marks);
+    String result = fmt::format("replica_num {}, min_num_of_marks {}, ", replica_num, min_marks_per_request);
     result += description.describe();
     return result;
 }
@@ -143,7 +143,7 @@ void InitialAllRangesAnnouncement::serialize(WriteBuffer & out, UInt64 initiator
     if (initiator_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MARK_SEGMENT_SIZE_FIELD)
         writeIntBinary(mark_segment_size, out);
     if (initiator_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
-        writeIntBinary(min_number_of_marks, out);
+        writeIntBinary(min_marks_per_request, out);
 }
 
 

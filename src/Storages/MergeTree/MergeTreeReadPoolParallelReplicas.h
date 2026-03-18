@@ -37,9 +37,12 @@ private:
     LoggerPtr log = getLogger("MergeTreeReadPoolParallelReplicas");
     const ParallelReadingExtension extension;
     const CoordinationMode coordination_mode;
+
     /// Retained for backward compatibility with old initiators that read it from each read request.
-    /// New initiators (protocol >= 6) use the value from the initial announcement instead.
-    size_t min_marks_per_coordinator_request{0};
+    /// New initiators (protocol >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
+    /// use the value from the initial announcement instead.
+    size_t min_marks_per_request{0};
+
     RangesInDataPartsDescription buffered_ranges;
     bool no_more_tasks_available{false};
 

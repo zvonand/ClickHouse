@@ -139,7 +139,7 @@ MergeTreeReadPoolParallelReplicas::MergeTreeReadPoolParallelReplicas(
     , coordination_mode(CoordinationMode::Default)
 {
     const size_t min_marks_per_task = getMinMarksPerTask(pool_settings.min_marks_for_concurrent_read, per_part_infos);
-    min_marks_per_coordinator_request = min_marks_per_task * pool_settings.threads;
+    min_marks_per_request = min_marks_per_task * pool_settings.threads;
 
     const size_t mark_segment_size = chooseSegmentSize(
         log,
@@ -156,7 +156,7 @@ MergeTreeReadPoolParallelReplicas::MergeTreeReadPoolParallelReplicas(
     for (size_t i = 0; i < descriptions.size(); ++i)
         descriptions[i].min_marks_per_task = per_part_infos[i]->min_marks_per_task;
 
-    extension.sendInitialRequest(coordination_mode, std::move(descriptions), mark_segment_size, min_marks_per_coordinator_request);
+    extension.sendInitialRequest(coordination_mode, std::move(descriptions), mark_segment_size, min_marks_per_request);
 }
 
 MergeTreeReadTaskPtr MergeTreeReadPoolParallelReplicas::getTask(size_t /*task_idx*/, MergeTreeReadTask * previous_task)
@@ -186,7 +186,7 @@ MergeTreeReadTaskPtr MergeTreeReadPoolParallelReplicas::getTask(size_t /*task_id
         {
             response = extension.sendReadRequest(
                 coordination_mode,
-                min_marks_per_coordinator_request,
+                min_marks_per_request,
                 /// For Default coordination mode we don't need to pass part names.
                 RangesInDataPartsDescription{});
         }
@@ -233,17 +233,17 @@ MergeTreeReadTaskPtr MergeTreeReadPoolParallelReplicas::getTask(size_t /*task_id
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Assignment contains an unknown part (current_task: {})", current_task.describe());
     const size_t part_idx = std::distance(per_part_infos.begin(), part_it);
 
-    /// Since protocol version 6, the coordinator propagates per-part `min_marks_per_task` computed by the initiator
-    /// after primary key analysis. Fall back to locally computed value for old initiators (protocol < 6).
-    const size_t effective_min_marks = current_task.min_marks_per_task > 0
-        ? current_task.min_marks_per_task
-        : (*part_it)->min_marks_per_task;
+    /// Since DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK, the coordinator propagates per-part
+    /// `min_marks_per_task` computed by the initiator after primary key analysis.
+    /// Fall back to locally computed value for old initiators.
+    const size_t effective_min_marks_per_task
+        = current_task.min_marks_per_task > 0 ? current_task.min_marks_per_task : (*part_it)->min_marks_per_task;
 
     MarkRanges ranges_to_read;
     size_t current_sum_marks = 0;
-    while (current_sum_marks < effective_min_marks && !current_task.ranges.empty())
+    while (current_sum_marks < effective_min_marks_per_task && !current_task.ranges.empty())
     {
-        auto diff = effective_min_marks - current_sum_marks;
+        auto diff = effective_min_marks_per_task - current_sum_marks;
         auto range = current_task.ranges.front();
         if (range.getNumberOfMarks() > diff)
         {

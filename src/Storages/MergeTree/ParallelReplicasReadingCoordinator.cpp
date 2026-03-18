@@ -220,9 +220,10 @@ public:
         replica_status[announcement.replica_num].is_announcement_received = true;
 
         /// Use `min_number_of_marks` from the first announcement (the local replica that did PK analysis).
-        /// Old replicas (protocol < 6) don't send this field — the coordinator will fall back to per-request values.
-        if (announced_min_number_of_marks == 0 && announcement.min_number_of_marks > 0)
-            announced_min_number_of_marks = announcement.min_number_of_marks;
+        /// Old replicas (protocol < DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK) don't send
+        /// this field — the coordinator will fall back to per-request values.
+        if (announced_min_number_of_marks == 0 && announcement.min_marks_per_request > 0)
+            announced_min_number_of_marks = announcement.min_marks_per_request;
 
         doHandleInitialAllRangesAnnouncement(std::move(announcement));
     }
@@ -808,9 +809,9 @@ size_t DefaultCoordinator::computeConsistentHash(const std::string & part_name, 
 
 ParallelReadResponse DefaultCoordinator::handleRequest(ParallelReadRequest request)
 {
-    /// Since protocol version 6, `min_number_of_marks` is sent once in the initial announcement.
-    /// Fall back to the per-request value for backward compatibility with older replicas.
-    const size_t effective_min_marks = announced_min_number_of_marks > 0 ? announced_min_number_of_marks : request.min_number_of_marks;
+    /// Since DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK, `min_number_of_marks` is sent once
+    /// in the initial announcement. Fall back to the per-request value for older replicas.
+    const size_t effective_min_marks = announced_min_number_of_marks > 0 ? announced_min_number_of_marks : request.min_marks_per_request;
 
     LOG_TRACE(
         log,
@@ -1025,7 +1026,7 @@ void InOrderCoordinator::doHandleInitialAllRangesAnnouncement(InitialAllRangesAn
 
 ParallelReadResponse InOrderCoordinator::handleRequest(ParallelReadRequest request)
 {
-    const size_t effective_min_marks = announced_min_number_of_marks > 0 ? announced_min_number_of_marks : request.min_number_of_marks;
+    const size_t effective_min_marks = announced_min_number_of_marks > 0 ? announced_min_number_of_marks : request.min_marks_per_request;
 
     LOG_TRACE(log, "Got read request: {}", request.describe());
 

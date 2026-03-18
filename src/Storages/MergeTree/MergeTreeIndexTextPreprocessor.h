@@ -30,7 +30,8 @@ public:
     bool isCaseFolding() const { return is_case_folding; }
 
 private:
-    /// Indicates if the preprocessor expression is lower, lowerUTF8, upper, or upperUTF8.
+    /// True only when the preprocessor is exactly lower/lowerUTF8/upper/upperUTF8 applied
+    /// directly to the index column (no nested transformations).
     bool is_case_folding = false;
     /// The name of the column on which the index is defined.
     String index_column_name;

@@ -3845,7 +3845,6 @@ void ClientBase::runNonInteractive()
         ReadBufferFromFileDescriptor in(stdin_fd);
         String text;
         readStringUntilEOF(text, in);
-
         if (query_fuzzer_runs)
             processWithASTFuzzer(text);
         else

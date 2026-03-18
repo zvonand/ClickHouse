@@ -264,7 +264,6 @@ private:
     /// Returns empty string on exception
     std::string executeQueryForSingleString(const std::string & query);
     virtual bool supportsLocalMetaCommands() const { return false; }
-    String rewriteLsMetaCommandIfNeeded(const String & query) const;
 
 protected:
 

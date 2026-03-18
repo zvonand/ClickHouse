@@ -522,7 +522,10 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
         {
             normalized_path = "gs://" + target_decomposed.authority + "/" + target_decomposed.key;
         }
-        S3::URI s3_uri(normalized_path);
+        /// Paths from metadata already have correct encoding; disable Poco::URI
+        /// percent-decoding so that keys like `col=12%3A00%3A00` are preserved as-is.
+        S3::URI s3_uri(normalized_path, /*allow_archive_path_syntax*/ false,
+                       /*keep_presigned_query_parameters*/ true, /*enable_url_encoding*/ false);
 
         std::string key_to_use = s3_uri.key;
 
@@ -550,7 +553,8 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
             {
                 normalized_table_location = "gs://" + table_location_decomposed.authority + "/" + table_location_decomposed.key;
             }
-            S3::URI base_s3_uri(normalized_table_location);
+            S3::URI base_s3_uri(normalized_table_location, /*allow_archive_path_syntax*/ false,
+                                /*keep_presigned_query_parameters*/ true, /*enable_url_encoding*/ false);
 
             if (s3URIMatches(s3_uri, base_s3_uri.bucket, base_s3_uri.endpoint, target_scheme_normalized))
                 use_base_storage = true;

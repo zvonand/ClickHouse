@@ -872,6 +872,7 @@ void KeeperStateMachine<Storage>::create_snapshot(nuraft::snapshot & s, nuraft::
                                 *snapshot_buf, snapshot->snapshot_meta->get_last_log_idx());
                             latest_snapshot_info = std::move(snapshot_info);
                         }
+                        snapshot_loader_info.reset();
 
                         ProfileEvents::increment(ProfileEvents::KeeperSnapshotCreations);
                         LOG_DEBUG(
@@ -965,6 +966,7 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
 
             latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(data, s.get_last_log_idx());
             latest_snapshot_meta = cloned_meta;
+            snapshot_loader_info.reset();
             ++obj_id;
         }
         else
@@ -1034,6 +1036,7 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
 
                 latest_snapshot_info = snapshot_manager.finalizeSnapshotReceiveToDisk(*snapshot_receive_ctx);
                 latest_snapshot_meta = cloned_meta;
+                snapshot_loader_info.reset();
                 snapshot_receive_ctx.reset();
             }
         }
@@ -1078,9 +1081,9 @@ struct SnapshotTransferCtx
     int fd = -1;
     nuraft::byte * mmap_ptr = nullptr;
 
-    /// Non-local disk: streaming read directly from the remote disk.
-    std::unique_ptr<ReadBufferFromFileBase> read_buf;
-    uint64_t read_offset = 0;
+    /// Non-local disk: shared loader; chunks are read from remote storage on demand
+    /// and cached in loader->buf for reuse by subsequent followers.
+    std::shared_ptr<SnapshotLoaderInfo> loader;
 };
 
 }
@@ -1165,7 +1168,7 @@ int IKeeperStateMachine::read_logical_snp_obj(
                 .chunk_size = effective_chunk_size,
                 .fd = fd,
                 .mmap_ptr = mmap_ptr,
-                .read_buf = nullptr,
+                .loader = nullptr,
             };
         }
         else
@@ -1186,23 +1189,30 @@ int IKeeperStateMachine::read_logical_snp_obj(
                 return -1;
             }
 
-            std::unique_ptr<ReadBufferFromFileBase> read_buf;
-            try
+            if (!snapshot_loader_info)
             {
-                LOG_DEBUG(log, "Opening snapshot {} on remote disk for streaming transfer", s.get_last_log_idx());
-                read_buf = disk->readFile(path, ReadSettings{}, file_size);
-            }
-            catch (...)
-            {
-                tryLogCurrentException(log, "Failed to open snapshot for streaming transfer");
-                return -1;
+                std::unique_ptr<ReadBufferFromFileBase> reader;
+                try
+                {
+                    LOG_DEBUG(log, "Opening snapshot {} on remote disk for transfer", s.get_last_log_idx());
+                    reader = disk->readFile(path, getReadSettings(), file_size);
+                }
+                catch (...)
+                {
+                    tryLogCurrentException(log, "Failed to open snapshot for transfer");
+                    return -1;
+                }
+                snapshot_loader_info = std::make_shared<SnapshotLoaderInfo>(
+                    SnapshotLoaderInfo{.buf = nuraft::buffer::alloc(file_size), .reader = std::move(reader), .file_size = file_size});
             }
 
             const uint64_t effective_chunk_size = configured_chunk_size == 0 ? file_size : configured_chunk_size;
             user_snp_ctx = new SnapshotTransferCtx{
-                .file_size = file_size,
+                .file_size = snapshot_loader_info->file_size,
                 .chunk_size = effective_chunk_size,
-                .read_buf = std::move(read_buf),
+                .fd = -1,
+                .mmap_ptr = nullptr,
+                .loader = snapshot_loader_info,
             };
         }
     }
@@ -1244,14 +1254,22 @@ int IKeeperStateMachine::read_logical_snp_obj(
         }
         else
         {
-            /// Seek only on retry (normally NuRaft calls sequentially).
-            if (ctx->read_offset != offset)
+            auto & loader = *ctx->loader;
+            const uint64_t needed = offset + chunk_size;
+            if (loader.loaded_bytes < needed)
             {
-                ctx->read_buf->seek(static_cast<off_t>(offset), SEEK_SET);
-                ctx->read_offset = offset;
+                chassert(loader.reader != nullptr);
+                loader.reader->readStrict(
+                    reinterpret_cast<char *>(loader.buf->data_begin()) + loader.loaded_bytes,
+                    needed - loader.loaded_bytes);
+                loader.loaded_bytes = needed;
+                if (loader.loaded_bytes == loader.file_size)
+                {
+                    LOG_DEBUG(log, "Snapshot {} fully loaded into memory, closing reader", s.get_last_log_idx());
+                    loader.reader.reset();
+                }
             }
-            ctx->read_buf->readStrict(reinterpret_cast<char *>(data_out->data_begin()), chunk_size);
-            ctx->read_offset += chunk_size;
+            data_out->put_raw(loader.buf->data_begin() + offset, chunk_size);
         }
     }
     catch (...)

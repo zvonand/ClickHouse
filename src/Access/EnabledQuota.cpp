@@ -193,9 +193,10 @@ EnabledQuota::Interval & EnabledQuota::Interval::operator =(const Interval & src
     }
 
     /// Copy per-hash map.
+    /// Use std::scoped_lock to acquire both mutexes with deadlock avoidance,
+    /// because std::swap (used in sort) calls operator= in both directions.
     {
-        std::lock_guard src_lock(src.per_hash_mutex);
-        std::lock_guard dst_lock(per_hash_mutex);
+        std::scoped_lock both_locks(src.per_hash_mutex, per_hash_mutex);
         per_hash_used = src.per_hash_used;
     }
 

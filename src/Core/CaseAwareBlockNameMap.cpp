@@ -7,6 +7,7 @@
 #include <Formats/FormatSettings.h>
 #include <base/StringViewHash.h>
 #include <base/defines.h>
+#include <curl/stdcheaders.h>
 #include <sparsehash/dense_hash_map>
 #include <Poco/String.h>
 #include <Common/Exception.h>
@@ -57,7 +58,13 @@ struct CaseInsensitiveEquality
     {
         if (left.size() != right.size())
             return false;
-        return strncasecmp(left.data(), right.data(), left.size()) == 0;
+
+        for (size_t i = 0; i < left.size(); i++)
+        {
+            if (Poco::Ascii::toLower(left[i]) != Poco::Ascii::toLower(right[i]))
+                return false;
+        }
+        return true;
     }
 };
 

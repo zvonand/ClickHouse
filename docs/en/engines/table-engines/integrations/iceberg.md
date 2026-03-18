@@ -304,7 +304,7 @@ In order to enable this feature, a non-zero value of milliseconds should be give
 If enabled, the server will run a recurring background operation to list the remote catalog and to detect new metadata version. It will then parse it and recursively walk the snapshot, fetching active manifest list files and manifest files.
 The files already available at the metadata cache, won't be downloaded again. At the end of each prefetching cycle, the latest metadata snapshot is available at the metadata cache.
 
-```sql 
+```sql
 CREATE TABLE example_table ENGINE = Iceberg(
     's3://bucket/path/to/iceberg_table'
 ) SETTINGS
@@ -315,7 +315,7 @@ In order to make the most of asynchronous metadata prefetching at read operation
 By specifying tolerance to metadata staleness, the server is allowed to use the cached version of metadata snapshot without calling the remote catalog. If there's metadata version in cache, and it has been downloaded within the given window of staleness, it will be used to process the query.
 Otherwise the latest version will be fetched from the remote catalog.
 
-```
+```sql
 SELECT count() FROM icebench_table WHERE ...
 SETTINGS iceberg_metadata_staleness_ms=120000
 ```

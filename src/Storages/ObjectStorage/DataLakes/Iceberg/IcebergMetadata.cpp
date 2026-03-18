@@ -245,6 +245,13 @@ void IcebergMetadata::backgroundMetadataPrefetcherThread()
 
     try
     {
+        if (!Context::getGlobalContextInstance())
+        {
+            /// Should never happen, but if seen, this is clear indicator that the task should be started/stopped via startup/shutdown mechanism (check TODOs above)
+            LOG_DEBUG(log, "backgroundMetadataPrefetcherThread: no global context - skipping");
+            return;
+        }
+
         Stopwatch watch;
 
         /// TODO: also we'd want to run all these download operations as separate scheduled tasks - to parallelize it and

@@ -220,6 +220,12 @@ def get_snapshot_log_lines_for_idx(node, snapshot_log_idx, after_time, timeout=1
     )
 
 
+def assert_receiving_snapshot_logged(node_lagging, after_time):
+    """Assert that `save_logical_snp_obj` fired on the first chunk (proves the snapshot was actually received)."""
+    lines = _query_text_log(node_lagging, after_time, "Receiving snapshot % to % disk", timeout=15)
+    assert lines, f"Expected 'Receiving snapshot % to % disk' in system.text_log on {node_lagging.name}"
+
+
 def assert_obj_ids(node_lagging, snapshot_log_idx, expected, after_time):
     lines = get_snapshot_log_lines_for_idx(node_lagging, snapshot_log_idx, after_time)
     assert lines, "No 'Saving snapshot' log lines appeared during recovery"
@@ -271,6 +277,8 @@ def test_recover_from_snapshot_with_chunked_transfer(started_cluster, nodes):
     assert n_chunks == expected_chunks, \
         f"Expected {expected_chunks} chunks for {snapshot_size}-byte snapshot (chunk_size={CHUNK_SIZE}), got {n_chunks}"
     assert_obj_ids(node_lagging, snapshot_log_idx, list(range(n_chunks)), kill_time)
+
+    assert_receiving_snapshot_logged(node_lagging, kill_time)
 
 
 @pytest.mark.parametrize("nodes", CHUNKED_TRANSFER_PARAMS)
@@ -367,6 +375,7 @@ def test_recover_with_chunk_size_larger_than_snapshot(started_cluster, nodes):
     snapshot_log_idx, n_chunks, _ = received
     assert n_chunks == 1, f"Expected 1 chunk (snapshot fits within chunk_size), got {n_chunks}"
     assert_obj_ids(node_lagging, snapshot_log_idx, [0], kill_time)
+    assert_receiving_snapshot_logged(node_lagging, kill_time)
 
 
 @pytest.mark.parametrize("nodes", COMPAT_PARAMS)
@@ -397,3 +406,4 @@ def test_recover_from_snapshot_sent_by_old_leader(started_cluster, nodes):
     snapshot_log_idx, n_chunks, _ = received
     assert n_chunks == 1, f"Old leader always sends snapshot as single object, got {n_chunks} chunks"
     assert_obj_ids(node_lagging, snapshot_log_idx, [0], kill_time)
+    assert_receiving_snapshot_logged(node_lagging, kill_time)

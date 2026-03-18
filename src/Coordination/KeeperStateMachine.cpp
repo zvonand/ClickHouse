@@ -14,7 +14,9 @@
 #include <Coordination/ReadBufferFromNuraftBuffer.h>
 #include <Coordination/WriteBufferFromNuraftBuffer.h>
 #include <Disks/DiskLocal.h>
+#include <IO/ReadBufferFromFileBase.h>
 #include <IO/ReadHelpers.h>
+#include <IO/ReadSettings.h>
 #include <IO/copyData.h>
 #include <base/defines.h>
 #include <base/errnoToString.h>
@@ -42,7 +44,6 @@ namespace ProfileEvents
     extern const Event KeeperSnapshotApplysFailed;
     extern const Event KeeperReadSnapshot;
     extern const Event KeeperSaveSnapshot;
-    extern const Event KeeperSnapshotLoadedFromDisk;
     extern const Event KeeperStorageLockWaitMicroseconds;
 }
 
@@ -145,8 +146,8 @@ void KeeperStateMachine<Storage>::init()
         {
             std::lock_guard lock(snapshots_lock);
 
-            latest_snapshot_buf = snapshot_manager.deserializeSnapshotBufferFromDisk(latest_log_index);
-            auto snapshot_deserialization_result = snapshot_manager.deserializeSnapshotFromBuffer(latest_snapshot_buf);
+            auto snapshot_buf = snapshot_manager.deserializeSnapshotBufferFromDisk(latest_log_index);
+            auto snapshot_deserialization_result = snapshot_manager.deserializeSnapshotFromBuffer(snapshot_buf);
             latest_snapshot_info = snapshot_manager.getLatestSnapshotInfo();
             chassert(latest_snapshot_info);
 
@@ -160,10 +161,6 @@ void KeeperStateMachine<Storage>::init()
             {
                 tryLogCurrentException(log, "Failed to get snapshot size during init");
             }
-
-            /// When this node becomes a leader and needs to send the snapshot, it is loaded on demand
-            /// (see read_logical_snp_obj and loadSnapshotBufFromDisk).
-            latest_snapshot_buf = nullptr;
 
             storage = std::move(snapshot_deserialization_result.storage);
             latest_snapshot_meta = snapshot_deserialization_result.snapshot_meta;
@@ -743,9 +740,10 @@ template<typename Storage>
 bool KeeperStateMachine<Storage>::apply_snapshot(nuraft::snapshot & s)
 {
     LOG_DEBUG(log, "Applying snapshot {}", s.get_last_log_idx());
-    nuraft::ptr<nuraft::buffer> latest_snapshot_ptr;
-    { /// save snapshot into memory
+
+    { /// deserialize and apply snapshot to storage
         std::lock_guard lock(snapshots_lock);
+
         if (s.get_last_log_idx() > latest_snapshot_meta->get_last_log_idx())
         {
             ProfileEvents::increment(ProfileEvents::KeeperSnapshotApplysFailed);
@@ -764,18 +762,8 @@ bool KeeperStateMachine<Storage>::apply_snapshot(nuraft::snapshot & s)
             return true;
         }
 
-        latest_snapshot_ptr = latest_snapshot_buf;
-    }
-
-    { /// deserialize and apply snapshot to storage
-        std::lock_guard lock(snapshots_lock);
-
-        SnapshotDeserializationResult<Storage> snapshot_deserialization_result;
-        if (latest_snapshot_ptr)
-            snapshot_deserialization_result = snapshot_manager.deserializeSnapshotFromBuffer(latest_snapshot_ptr);
-        else
-            snapshot_deserialization_result
-                = snapshot_manager.deserializeSnapshotFromBuffer(snapshot_manager.deserializeSnapshotBufferFromDisk(s.get_last_log_idx()));
+        SnapshotDeserializationResult<Storage> snapshot_deserialization_result
+            = snapshot_manager.deserializeSnapshotFromBuffer(snapshot_manager.deserializeSnapshotBufferFromDisk(s.get_last_log_idx()));
 
         LockGuardWithStats<false> storage_lock(storage_mutex);
         /// maybe some logs were preprocessed with log idx larger than the snapshot idx
@@ -876,7 +864,6 @@ void KeeperStateMachine<Storage>::create_snapshot(nuraft::snapshot & s, nuraft::
                         {
                             auto snapshot_info = snapshot_manager.serializeSnapshotToDisk(*snapshot);
                             latest_snapshot_info = std::move(snapshot_info);
-                            latest_snapshot_buf = nullptr;
                         }
                         else
                         {
@@ -884,7 +871,6 @@ void KeeperStateMachine<Storage>::create_snapshot(nuraft::snapshot & s, nuraft::
                             auto snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(
                                 *snapshot_buf, snapshot->snapshot_meta->get_last_log_idx());
                             latest_snapshot_info = std::move(snapshot_info);
-                            latest_snapshot_buf = nullptr;
                         }
 
                         ProfileEvents::increment(ProfileEvents::KeeperSnapshotCreations);
@@ -962,6 +948,13 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
     {
         std::lock_guard lock(snapshots_lock);
 
+        if (is_first_obj)
+            LOG_DEBUG(
+                log,
+                "Receiving snapshot {} to {} disk",
+                s.get_last_log_idx(),
+                isLocalDisk(*keeper_context->getSnapshotDisk()) ? "local" : "remote");
+
         if (is_first_obj && is_last_obj)
         {
             /// If there is non-finalized state from previous call - clean it up.
@@ -972,8 +965,6 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
 
             latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(data, s.get_last_log_idx());
             latest_snapshot_meta = cloned_meta;
-            /// Snapshot is on disk; loaded on demand if this node becomes a leader (see read_logical_snp_obj).
-            latest_snapshot_buf = nullptr;
             ++obj_id;
         }
         else
@@ -1043,10 +1034,6 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
 
                 latest_snapshot_info = snapshot_manager.finalizeSnapshotReceiveToDisk(*snapshot_receive_ctx);
                 latest_snapshot_meta = cloned_meta;
-                /// Chunks were written directly to disk; no in-memory copy is kept.
-                /// If this node becomes a leader, the snapshot is loaded from disk on demand (see read_logical_snp_obj).
-                latest_snapshot_buf = nullptr;
-
                 snapshot_receive_ctx.reset();
             }
         }
@@ -1087,15 +1074,13 @@ struct SnapshotTransferCtx
     uint64_t file_size = 0;
     uint64_t chunk_size = 0;
 
-    /// Cached at obj_id=0 so subsequent calls don't re-derive it from latest_snapshot_info.
-    bool is_local_disk = false;
-
-    /// Local disk: mmap-based access.
+    /// Local disk: mmap-based access (mmap_ptr != nullptr when active).
     int fd = -1;
     nuraft::byte * mmap_ptr = nullptr;
 
-    /// Non-local disk: slice directly from the in-memory snapshot buffer.
-    nuraft::ptr<nuraft::buffer> snapshot_buf;
+    /// Non-local disk: streaming read directly from the remote disk.
+    std::unique_ptr<ReadBufferFromFileBase> read_buf;
+    uint64_t read_offset = 0;
 };
 
 }
@@ -1172,50 +1157,52 @@ int IKeeperStateMachine::read_logical_snp_obj(
                 return -1;
             }
 
+            LOG_DEBUG(log, "Opening snapshot {} on local disk for transfer", s.get_last_log_idx());
             /// chunk_size == 0 means disabled: send the whole file in one object (backward-compatible behavior).
             const uint64_t effective_chunk_size = configured_chunk_size == 0 ? file_size : configured_chunk_size;
             user_snp_ctx = new SnapshotTransferCtx{
                 .file_size = file_size,
                 .chunk_size = effective_chunk_size,
-                .is_local_disk = true,
                 .fd = fd,
                 .mmap_ptr = mmap_ptr,
-                .snapshot_buf = nullptr};
+                .read_buf = nullptr,
+            };
         }
         else
         {
-            if (!latest_snapshot_buf)
+            uint64_t file_size = 0;
+            try
             {
-                /// For non-local disks, mmap is unavailable; load into memory on demand.
-                LOG_DEBUG(log, "Loading snapshot {} from disk into memory for transfer", s.get_last_log_idx());
-                try
-                {
-                    latest_snapshot_buf = loadSnapshotBufFromDisk(s.get_last_log_idx());
-                }
-                catch (...)
-                {
-                    tryLogCurrentException(log, "Failed to load snapshot from disk");
-                    return -1;
-                }
-                if (!latest_snapshot_buf)
-                {
-                    LOG_WARNING(log, "Failed to load snapshot {} from disk", s.get_last_log_idx());
-                    return -1;
-                }
+                file_size = disk->getFileSize(path);
             }
-            const uint64_t buf_size = latest_snapshot_buf->size();
-            if (buf_size == 0)
+            catch (...)
             {
-                LOG_WARNING(log, "Snapshot buffer is empty for log index {}", s.get_last_log_idx());
+                tryLogCurrentException(log, "Failed to get snapshot size for transfer");
+                return -1;
+            }
+            if (file_size == 0)
+            {
+                LOG_WARNING(log, "Snapshot {} on remote disk has zero size", s.get_last_log_idx());
                 return -1;
             }
 
-            const uint64_t effective_chunk_size = configured_chunk_size == 0 ? buf_size : configured_chunk_size;
+            std::unique_ptr<ReadBufferFromFileBase> read_buf;
+            try
+            {
+                LOG_DEBUG(log, "Opening snapshot {} on remote disk for streaming transfer", s.get_last_log_idx());
+                read_buf = disk->readFile(path, ReadSettings{}, file_size);
+            }
+            catch (...)
+            {
+                tryLogCurrentException(log, "Failed to open snapshot for streaming transfer");
+                return -1;
+            }
+
+            const uint64_t effective_chunk_size = configured_chunk_size == 0 ? file_size : configured_chunk_size;
             user_snp_ctx = new SnapshotTransferCtx{
-                .file_size = buf_size,
+                .file_size = file_size,
                 .chunk_size = effective_chunk_size,
-                .is_local_disk = false,
-                .snapshot_buf = latest_snapshot_buf
+                .read_buf = std::move(read_buf),
             };
         }
     }
@@ -1251,11 +1238,21 @@ int IKeeperStateMachine::read_logical_snp_obj(
     try
     {
         data_out = nuraft::buffer::alloc(chunk_size);
-        /// For local disk read from the mmap; for non-local disk slice from the in-memory buffer.
-        const nuraft::byte * src = ctx->is_local_disk
-            ? ctx->mmap_ptr + offset
-            : ctx->snapshot_buf->data_begin() + offset;
-        data_out->put_raw(src, chunk_size);
+        if (ctx->mmap_ptr)
+        {
+            data_out->put_raw(ctx->mmap_ptr + offset, chunk_size);
+        }
+        else
+        {
+            /// Seek only on retry (normally NuRaft calls sequentially).
+            if (ctx->read_offset != offset)
+            {
+                ctx->read_buf->seek(static_cast<off_t>(offset), SEEK_SET);
+                ctx->read_offset = offset;
+            }
+            ctx->read_buf->readStrict(reinterpret_cast<char *>(data_out->data_begin()), chunk_size);
+            ctx->read_offset += chunk_size;
+        }
     }
     catch (...)
     {
@@ -1452,13 +1449,6 @@ void KeeperStateMachine<Storage>::recalculateStorageStats()
     LOG_INFO(log, "Recalculating storage stats");
     storage->recalculateStats();
     LOG_INFO(log, "Done recalculating storage stats");
-}
-
-template<typename Storage>
-nuraft::ptr<nuraft::buffer> KeeperStateMachine<Storage>::loadSnapshotBufFromDisk(uint64_t log_idx)
-{
-    ProfileEvents::increment(ProfileEvents::KeeperSnapshotLoadedFromDisk);
-    return snapshot_manager.deserializeSnapshotBufferFromDisk(log_idx);
 }
 
 template<typename Storage>

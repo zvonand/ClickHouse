@@ -954,7 +954,6 @@ The server successfully detected this situation and will download merged part fr
     M(KeeperSnapshotApplysFailed, "Number of failed snapshot applying", ValueType::Number) \
     M(KeeperReadSnapshot, "Number of snapshot read(serialization)", ValueType::Number) \
     M(KeeperSaveSnapshot, "Number of snapshot save", ValueType::Number) \
-    M(KeeperSnapshotLoadedFromDisk, "Number of times a snapshot was loaded from disk into memory to be served to a lagging follower", ValueType::Number) \
     M(KeeperCreateRequest, "Number of create requests", ValueType::Number) \
     M(KeeperRemoveRequest, "Number of remove requests", ValueType::Number) \
     M(KeeperSetRequest, "Number of set requests", ValueType::Number) \

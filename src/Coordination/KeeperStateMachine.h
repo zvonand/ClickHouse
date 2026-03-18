@@ -123,16 +123,10 @@ public:
 
     virtual void reconfigure(const KeeperRequestForSession& request_for_session) = 0;
 
-    /// Load snapshot into memory from disk; used by read_logical_snp_obj for non-local disks.
-    virtual nuraft::ptr<nuraft::buffer> loadSnapshotBufFromDisk(uint64_t log_idx) = 0;
-
 protected:
     CommitCallback commit_callback;
-    /// In our state machine we always have a single snapshot which is stored
-    /// in memory in compressed (serialized) format.
     SnapshotMetadataPtr latest_snapshot_meta TSA_GUARDED_BY(snapshots_lock) = nullptr;
     std::shared_ptr<SnapshotFileInfo> latest_snapshot_info TSA_GUARDED_BY(snapshots_lock);
-    nuraft::ptr<nuraft::buffer> latest_snapshot_buf TSA_GUARDED_BY(snapshots_lock) = nullptr;
 
     std::unique_ptr<SnapshotReceiveCtx> snapshot_receive_ctx TSA_GUARDED_BY(snapshots_lock);
 
@@ -272,8 +266,6 @@ public:
     void recalculateStorageStats() override;
 
     void reconfigure(const KeeperRequestForSession& request_for_session) override;
-
-    nuraft::ptr<nuraft::buffer> loadSnapshotBufFromDisk(uint64_t log_idx) override;
 
     /// Cancel an in-progress snapshot receive: remove partial files and reset the context.
     void cancelIfHasUnfinishedReceive() TSA_REQUIRES(snapshots_lock);

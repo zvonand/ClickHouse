@@ -4250,6 +4250,24 @@ def main(args):
             ORDER BY test_name
             COMMENT 'Contains information about per-test coverage from the CI, but used only for exporting to the CI cluster'""",
         )
+        # Self-test: verify the coverage collection pipeline works end-to-end.
+        clickhouse_execute(args, "SYSTEM SET COVERAGE TEST '_selftest'")
+        clickhouse_execute(args, "SELECT 1")
+        clickhouse_execute(args, "SYSTEM SET COVERAGE TEST ''")
+        selftest_rows = int(
+            clickhouse_execute(
+                args,
+                "SELECT count() FROM system.coverage_log WHERE test_name = '_selftest'",
+            )
+            or 0
+        )
+        print(
+            f"Coverage self-test: coverage_log rows for _selftest = {selftest_rows} "
+            f"({'OK' if selftest_rows > 0 else 'EMPTY - coverage mapping not working'})"
+        )
+        clickhouse_execute(
+            args, "DELETE FROM system.coverage_log WHERE test_name = '_selftest'"
+        )
 
     total_tests_run = 0
     cloud_skip_list = try_get_skip_list(base_dir, "../queries-no-cloud-tests.txt")

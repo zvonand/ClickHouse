@@ -72,3 +72,23 @@ Tests fallback when threshold is exceeded for reading large postings
 7547
 92453
 92453
+Test results are same with/without the optimization with expression index
+-- without optimization
+[1,3]
+[2,4]
+[3,4]
+[2,4,5]
+[1,3]
+[2,4]
+-- with optimization
+[1,3]
+[2,4]
+[3,4]
+[2,4,5]
+[1,3]
+[2,4]
+Tests fallback when threshold is exceeded for expression index
+7547
+7547
+92453
+92453

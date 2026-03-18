@@ -179,3 +179,70 @@ SELECT count() FROM tab WHERE message NOT ILIKE '%A%';
 SELECT count() FROM tab WHERE message NOT ILIKE '%A%' SETTINGS use_skip_indexes = 0;
 
 DROP TABLE tab;
+
+SELECT 'Test results are same with/without the optimization with expression index';
+
+DROP TABLE IF EXISTS tab;
+
+CREATE TABLE tab
+(
+    id UInt32,
+    message String,
+    INDEX idx lower(message) TYPE text(tokenizer = splitByNonAlpha)
+)
+ENGINE = MergeTree
+ORDER BY (id);
+
+INSERT INTO tab(id, message) VALUES
+    (1, 'abc def foo'),
+    (2, 'abc def bar'),
+    (3, 'abc BAZ FOO'),
+    (4, 'abc baz bar'),
+    (5, 'xyz');
+
+SELECT '-- without optimization';
+
+SET use_text_index_like_optimization = 0;
+
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%FOO%';
+SELECT groupArray(id) FROM tab WHERE message NOT ILIKE '%foo%';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%' AND message ILIKE '%abc%';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%abc%' AND message NOT ILIKE '%foo%';
+
+SELECT '-- with optimization';
+
+SET use_text_index_like_optimization = 1;
+
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%FOO%';
+SELECT groupArray(id) FROM tab WHERE message NOT ILIKE '%foo%';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%' AND message ILIKE '%abc%';
+SELECT groupArray(id) FROM tab WHERE message ILIKE '%abc%' AND message NOT ILIKE '%foo%';
+
+DROP TABLE tab;
+
+SELECT 'Tests fallback when threshold is exceeded for expression index';
+
+SET use_text_index_like_optimization = 1;
+
+DROP TABLE IF EXISTS tab;
+
+CREATE TABLE tab
+(
+    id UInt64,
+    message String,
+    INDEX idx lower(message) TYPE text(tokenizer = splitByNonAlpha)
+)
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO tab SELECT number, concat(char(97 + (number % 26)), char(97 + intDiv(number, 26) % 26)) FROM numbers(100000);
+
+SELECT count() FROM tab WHERE message ILIKE '%A%';
+SELECT count() FROM tab WHERE message ILIKE '%A%' SETTINGS use_skip_indexes = 0;
+
+SELECT count() FROM tab WHERE message NOT ILIKE '%A%';
+SELECT count() FROM tab WHERE message NOT ILIKE '%A%' SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab;

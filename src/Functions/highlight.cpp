@@ -208,7 +208,7 @@ The function performs ASCII case-insensitive matching. If multiple search terms 
     )";
     FunctionDocumentation::Syntax syntax = "highlight(haystack, needles[, open_tag, close_tag])";
     FunctionDocumentation::Arguments func_arguments = {
-        {"haystack", "The text to search in.", {"String"}},
+        {"haystack", "The text to search in.", {"String", "FixedString"}},
         {"needles", "An array of search terms to highlight.", {"const Array(String)"}},
         {"open_tag", "The opening tag to insert before each match. Default: `<em>`.", {"const String"}},
         {"close_tag", "The closing tag to insert after each match. Default: `</em>`.", {"const String"}}

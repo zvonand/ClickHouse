@@ -1445,7 +1445,6 @@ TEST(T64Test, DecompressMalformedInputBytesToSkip)
     /// Reproducer for heap-buffer-overflow when `bytes_to_skip > bytes_size`
     /// in `decompressData`. Cookie 0x84 -> UInt64; bytes_to_skip = 26757 % 8 = 5,
     /// but only 1 payload byte remains after the cookie.
-    /// but only 2 payload bytes are present.
     constexpr unsigned char block[] = {
         0x93,                   /// T64 method byte
         0x0B, 0x00, 0x00, 0x00, /// compressed_size = 11 (9-byte header + 2-byte payload)

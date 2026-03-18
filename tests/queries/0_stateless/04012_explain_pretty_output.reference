@@ -36,10 +36,10 @@ Join (JOIN FillRightFirst)
 │  t1[100] ⋈ t2[100]
 │  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
 │  ResultRows: 100
+│  Clauses: [(__table1.a) = (__table2.x)]
 │  Output:
 │    Left:  a, b
 │    Right: y
-│  Clauses: [(__table1.a) = (__table2.x)]
 ├──ReadFromMergeTree (default.t1)
 │     ReadType: Default
 │     Parts: 1
@@ -57,10 +57,10 @@ Join (JOIN FillRightFirst)
 │  t1[100] ⋈ t2[100]
 │  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
 │  ResultRows: 100
+│  Clauses: [(__table1.a) = (__table2.x)]
 │  Output:
 │    Left:  a, b, c
 │    Right: x, y
-│  Clauses: [(__table1.a) = (__table2.x)]
 ├──ReadFromMergeTree (default.t1)
 │     ReadType: Default
 │     Parts: 1
@@ -78,10 +78,10 @@ Join (JOIN FillRightFirst)
 │  t1[100] ⋈ t2[100]
 │  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
 │  ResultRows: 100
+│  Clauses: [(__table1.a) = (__table2.x)]
 │  Output:
 │    Left:  a, b
 │    Right: Empty
-│  Clauses: [(__table1.a) = (__table2.x)]
 ├──ReadFromMergeTree (default.t1)
 │     ReadType: Default
 │     Parts: 1
@@ -99,10 +99,10 @@ Join (JOIN FillRightFirst)
 │  t1[100] ⋈ t2[100]
 │  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
 │  ResultRows: 100
+│  Clauses: [(__table1.a) = (__table2.x)]
 │  Output:
 │    Left:  Empty
 │    Right: x, y
-│  Clauses: [(__table1.a) = (__table2.x)]
 ├──ReadFromMergeTree (default.t1)
 │     ReadType: Default
 │     Parts: 1

@@ -238,8 +238,6 @@ void JoinStep::describeActions(FormatSettings & settings) const
 
         if (locality != JoinLocality::Unspecified)
             settings.out << prefix << "Locality: " << toString(locality) << '\n';
-
-        QueryPlanFormat::formatJoinOutputColumns(settings.out, *this, prefix);
     }
 
     for (size_t i = inline_count; i < description.size(); ++i)
@@ -265,6 +263,9 @@ void JoinStep::describeActions(FormatSettings & settings) const
 
         settings.out << "]\n";
     }
+
+    if (settings.pretty)
+        QueryPlanFormat::formatJoinOutputColumns(settings.out, *this, prefix);
 }
 
 void JoinStep::describeActions(JSONBuilder::JSONMap & map) const

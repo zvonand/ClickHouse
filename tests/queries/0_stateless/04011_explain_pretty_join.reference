@@ -4,10 +4,10 @@ Join (JOIN FillRightFirst)
 │  t1[100] ⋈ t2[100]
 │  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
 │  ResultRows: 100
+│  Clauses: [(__table1.id) = (__table2.id)]
 │  Output:
 │    Left:  id, value
 │    Right: id, value
-│  Clauses: [(__table1.id) = (__table2.id)]
 ├──ReadFromMergeTree (default.t1)
 │     ReadType: Default
 │     Parts: 1
@@ -24,18 +24,18 @@ Join (JOIN FillRightFirst)
 │  t1[100] ⋈ t2[100] ⋈ t3[100]
 │  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
 │  ResultRows: 100
+│  Clauses: [(__table2.id) = (__table3.id)]
 │  Output:
 │    Left:  id, id, value, value
 │    Right: id, value
-│  Clauses: [(__table2.id) = (__table3.id)]
 ├──Join (JOIN FillRightFirst)
 │  │  t1[100] ⋈ t2[100]
 │  │  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
 │  │  ResultRows: 100
+│  │  Clauses: [(__table1.id) = (__table2.id)]
 │  │  Output:
 │  │    Left:  id, value
 │  │    Right: id, value
-│  │  Clauses: [(__table1.id) = (__table2.id)]
 │  ├──ReadFromMergeTree (default.t1)
 │  │     ReadType: Default
 │  │     Parts: 1

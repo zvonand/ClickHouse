@@ -92,8 +92,14 @@ function thread_cancel
         if (( RANDOM % 2 )); then
             SIGNAL="KILL"
         fi
-        PID=$(grep -Fa "$TEST_MARK" /proc/*/cmdline | grep -Fav grep | grep -Eoa "/proc/[0-9]*/cmdline:" | grep -Eo "[0-9]*" | head -1)
-        if [ ! -z "$PID" ]; then kill -s "$SIGNAL" "$PID"; fi
+        # Kill all matching processes, not just the first one. The TYPE=4 insert path wraps clickhouse-client
+        # in `timeout 120`, which forks a child: both the timeout wrapper (lower PID) and the clickhouse-client
+        # (higher PID) contain $TEST_MARK in their cmdlines. Killing only the wrapper (head -1 picks the lower
+        # PID) orphans the client, leaving the pipe write end open and blocking all downstream grep processes
+        # indefinitely.
+        for PID in $(grep -Fa "$TEST_MARK" /proc/*/cmdline 2>/dev/null | grep -Fav grep | grep -Eoa "/proc/[0-9]*/cmdline:" | grep -Eo "[0-9]*"); do
+            kill -s "$SIGNAL" "$PID" 2>/dev/null || true
+        done
         sleep 0.$RANDOM;
     done
 }

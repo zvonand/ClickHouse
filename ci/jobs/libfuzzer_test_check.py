@@ -198,6 +198,27 @@ def process_error(output_log: Path, fuzzer_result_dir: Path) -> list:
     with open(output_log, "r", encoding="utf-8", errors="replace") as file:
         for line in file:
             line = line.rstrip("\n")
+
+            match = re.search(TEST_UNIT_LINE, line)
+            if match:
+                test_unit = os.path.basename(match.group(1))
+                trace_file = f"{test_unit}.trace"
+                trace_path = f"{fuzzer_result_dir}/{trace_file}"
+
+                if not is_error and len(stack_trace) > 0:
+                    with open(trace_path, "w", encoding="utf-8") as tracef:
+                        tracef.write("\n".join(stack_trace))
+                    error_info.append(
+                        (error_source, error_reason, test_unit, trace_file)
+                    )
+                    # reset for next error
+                    error_source = ""
+                    error_reason = ""
+                    test_unit = ""
+                    trace_file = ""
+                    stack_trace = []
+                continue
+
             if is_error:
                 match = re.search(ERROR_END, line)
                 if match:
@@ -225,25 +246,6 @@ def process_error(output_log: Path, fuzzer_result_dir: Path) -> list:
                 error_source = match.group(1)
                 error_reason = match.group(2)
                 is_error = True
-                continue
-
-            match = re.search(TEST_UNIT_LINE, line)
-            if match:
-                test_unit = os.path.basename(match.group(1))
-                trace_file = f"{test_unit}.trace"
-                trace_path = f"{fuzzer_result_dir}/{trace_file}"
-                if len(stack_trace) > 0:
-                    with open(trace_path, "w", encoding="utf-8") as tracef:
-                        tracef.write("\n".join(stack_trace))
-                    error_info.append(
-                        (error_source, error_reason, test_unit, trace_file)
-                    )
-                    # reset for next error
-                    error_source = ""
-                    error_reason = ""
-                    test_unit = ""
-                    trace_file = ""
-                    stack_trace = []
 
     return error_info
 

@@ -114,10 +114,19 @@ struct ModuloByConstantImpl
         if (b & (b - 1))
         {
             libdivide::divider<A> divider(static_cast<A>(b));
-            /// The compiler auto-vectorizes this with vpmuludq on v3+, creating
-            /// a function ~2x larger (1801 B vs 977 B) for marginal throughput
-            /// gain that loses to i-cache pressure on some microarchitectures.
+            /// On x86-64 v3+ (AVX2), the compiler auto-vectorizes this loop using
+            /// `vpmuludq ymm`, producing a function ~2x larger (e.g. 1801 B vs 977 B
+            /// for UInt64 % UInt8) with marginal throughput benefit.  libdivide's
+            /// multiply+shift sequence is latency-bound rather than throughput-bound,
+            /// so wider SIMD does not help.  The larger code increases i-cache pressure
+            /// and causes measurable regressions (~1.2x) on Intel Sapphire Rapids.
+            ///
+            /// On AArch64, NEON vectorization of this loop is genuinely beneficial:
+            /// wider registers improve throughput without the same i-cache cost, so
+            /// auto-vectorization is left enabled there.
+#if defined(__x86_64__)
 #pragma clang loop vectorize(disable)
+#endif
             for (size_t i = 0; i < size; ++i)
             {
                 /// NOTE: perhaps, the division semantics with the remainder of negative numbers is not preserved.

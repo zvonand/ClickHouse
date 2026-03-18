@@ -334,9 +334,11 @@ namespace ErrorCodes
     )", 0) \
     DECLARE(NonZeroUInt64, object_shared_data_buckets_for_compact_part, 8, R"(
     The number of buckets for JSON shared data serialization in Compact parts. Works with `map_with_buckets` and `advanced` shared data serializations.
+    The maximum allowed value is 256.
     )", 0) \
     DECLARE(NonZeroUInt64, object_shared_data_buckets_for_wide_part, 32, R"(
     The number of buckets for JSON shared data serialization in Wide parts. Works with `map_with_buckets` and `advanced` shared data serializations.
+    The maximum allowed value is 256.
     )", 0) \
     DECLARE(MergeTreeDynamicSerializationVersion, dynamic_serialization_version, "v3", R"(
     Serialization version for Dynamic data type. Required for compatibility.
@@ -368,6 +370,7 @@ namespace ErrorCodes
     DECLARE(NonZeroUInt64, max_buckets_in_map, 32, R"(
     The maximum number of buckets for `Map` serialization. Works with `with_buckets` `Map` serialization.
     The actual number of buckets is determined by [map_buckets_strategy](#map_buckets_strategy).
+    The maximum allowed value is 256.
     )", 0) \
     DECLARE(MergeTreeMapBucketsStrategy, map_buckets_strategy, "sqrt", R"(
     Controls the strategy for choosing the number of buckets in `with_buckets` `Map` serialization based on the average map size.
@@ -2413,6 +2416,35 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
             ErrorCodes::BAD_ARGUMENTS,
             "The value of merge_selecting_sleep_slowdown_factor setting ({}) cannot be less than 1.0",
             merge_selecting_sleep_slowdown_factor.value);
+    }
+
+    static constexpr UInt64 max_allowed_buckets = 256;
+
+    if (max_buckets_in_map > max_allowed_buckets)
+    {
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "The value of max_buckets_in_map setting ({}) exceeds the maximum allowed value of {}",
+            max_buckets_in_map.value,
+            max_allowed_buckets);
+    }
+
+    if (object_shared_data_buckets_for_compact_part > max_allowed_buckets)
+    {
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "The value of object_shared_data_buckets_for_compact_part setting ({}) exceeds the maximum allowed value of {}",
+            object_shared_data_buckets_for_compact_part.value,
+            max_allowed_buckets);
+    }
+
+    if (object_shared_data_buckets_for_wide_part > max_allowed_buckets)
+    {
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "The value of object_shared_data_buckets_for_wide_part setting ({}) exceeds the maximum allowed value of {}",
+            object_shared_data_buckets_for_wide_part.value,
+            max_allowed_buckets);
     }
 
     if (zero_copy_merge_mutation_min_parts_size_sleep_before_lock != 0

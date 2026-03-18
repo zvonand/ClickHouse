@@ -168,7 +168,7 @@ The bucket count can vary between parts. When parts with different bucket counts
 |---------|---------|-------------|
 | `map_serialization_version` | `basic` | Serialization format for `Map` columns. `basic` stores as a single array stream. `with_buckets` splits keys into buckets for faster single-key reads. |
 | `map_serialization_version_for_zero_level_parts` | `basic` | Serialization format for zero-level parts (created by `INSERT`). Allows keeping `basic` for inserts to avoid write overhead, while merged parts use `with_buckets`. |
-| `max_buckets_in_map` | `32` | Upper bound on the number of buckets. The actual count depends on `map_buckets_strategy`. |
+| `max_buckets_in_map` | `32` | Upper bound on the number of buckets. The actual count depends on `map_buckets_strategy`. The maximum allowed value is 256. |
 | `map_buckets_strategy` | `sqrt` | Strategy for computing bucket count from average map size: `constant` — always use `max_buckets_in_map`; `sqrt` — use `round(coefficient * sqrt(avg_size))`; `linear` — use `round(coefficient * avg_size)`. Result is clamped to `[1, max_buckets_in_map]`. |
 | `map_buckets_coefficient` | `1.0` | Multiplier for `sqrt` and `linear` strategies. Ignored when strategy is `constant`. |
 | `map_buckets_min_avg_size` | `32` | Minimum average keys per row to enable bucketing. If the average is below this threshold, a single bucket is used regardless of other settings. Set to `0` to disable the threshold. |

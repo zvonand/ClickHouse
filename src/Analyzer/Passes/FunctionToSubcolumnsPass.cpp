@@ -52,6 +52,19 @@ struct ColumnContext
     ContextPtr context;
 };
 
+struct IdentifiersToOptimize
+{
+    /// Identifiers where ALL uses are optimizable (count matches).
+    /// Rewritten unconditionally in every clause.
+    std::unordered_set<Identifier> everywhere;
+
+    /// Identifiers that also have plain column references, but have at least one
+    /// transformable use in WHERE/PREWHERE. Rewritten ONLY inside WHERE/PREWHERE.
+    std::unordered_set<Identifier> filter_only;
+
+    bool empty() const { return everywhere.empty() && filter_only.empty(); }
+};
+
 using NodeToSubcolumnTransformer = std::function<void(QueryTreeNodePtr &, FunctionNode &, ColumnContext &)>;
 
 /// Before columns to substream optimization, we need to make sure, that column with such name as substream does not exists, otherwise the optimize will use it instead of substream.
@@ -622,7 +635,7 @@ public:
         return true;
     }
 
-    std::unordered_set<Identifier> getIdentifiersToOptimize() const
+    IdentifiersToOptimize getIdentifiersToOptimize() const
     {
         if (can_wrap_result_columns_with_nullable)
         {
@@ -644,12 +657,15 @@ public:
         ///     SELECT n FROM table GROUP BY n HAVING not(n.null)
         /// Will produce: `n.null` is not under aggregate function and not in GROUP BY keys)
         ///
-        /// Exception: transformers listed in `transformers_optimize_in_filter_with_full_column`
-        /// are applied even when the full column is also read, but only when the optimizable
-        /// occurrence is in WHERE or PREWHERE. For Map key lookups this is beneficial: the key
-        /// lookup in PREWHERE/WHERE reads only the relevant bucket while the full Map is read
-        /// from SELECT only for the matching rows. This exception does NOT apply to HAVING,
-        /// since the resulting subcolumn would not be in GROUP BY.
+        /// When all uses of an identifier are optimizable (count matches), the
+        /// identifier goes into `everywhere` — it is rewritten in every clause.
+        ///
+        /// When there are also plain column references but a transformable use
+        /// exists in WHERE/PREWHERE (recorded in `identifiers_with_filter_optimization`),
+        /// the identifier goes into `filter_only` — it is rewritten only inside
+        /// WHERE/PREWHERE by the second pass. This is beneficial for Map key
+        /// lookups: only the relevant bucket is read for the filter while the
+        /// full Map is still read for matching rows in SELECT.
         ///
         /// Do not optimize index columns (primary, min-max, secondary),
         /// because otherwise analysis of indexes may be broken.
@@ -657,7 +673,7 @@ public:
         /// even for indexed columns, provided ALL optimizable uses of the column are safe.
         /// TODO: handle all subcolumns in index analysis.
 
-        std::unordered_set<Identifier> identifiers_to_optimize;
+        IdentifiersToOptimize result;
         for (const auto & [identifier, count] : optimized_identifiers_count)
         {
             if (all_key_columns.contains(identifier))
@@ -671,11 +687,13 @@ public:
             if (it == identifiers_count.end())
                 continue;
 
-            if (it->second == count || identifiers_with_filter_optimization.contains(identifier))
-                identifiers_to_optimize.insert(identifier);
+            if (it->second == count)
+                result.everywhere.insert(identifier);
+            else if (identifiers_with_filter_optimization.contains(identifier))
+                result.filter_only.insert(identifier);
         }
 
-        return identifiers_to_optimize;
+        return result;
     }
 
 private:
@@ -773,18 +791,25 @@ private:
 };
 
 /// Second pass optimizes functions to subcolumns for allowed identifiers.
+/// For identifiers in `filter_only`, the rewrite is restricted to WHERE/PREWHERE
+/// clauses only, because in post-aggregation clauses (HAVING, ORDER BY, etc.)
+/// the subcolumn would not be present in the block after GROUP BY.
 class FunctionToSubcolumnsVisitorSecondPass : public InDepthQueryTreeVisitorWithContext<FunctionToSubcolumnsVisitorSecondPass>
 {
 private:
-    std::unordered_set<Identifier> identifiers_to_optimize;
+    IdentifiersToOptimize identifiers_to_optimize;
     std::unordered_set<const TableNode *> outer_joined_tables;
+
+    /// Stack tracking whether the current node is inside a WHERE or PREWHERE clause.
+    /// One entry per QueryNode depth; true means we are inside WHERE/PREWHERE.
+    std::vector<bool> in_where_prewhere_stack;
 
 public:
     using Base = InDepthQueryTreeVisitorWithContext<FunctionToSubcolumnsVisitorSecondPass>;
     using Base::Base;
 
     FunctionToSubcolumnsVisitorSecondPass(ContextPtr context_,
-        std::unordered_set<Identifier> identifiers_to_optimize_,
+        IdentifiersToOptimize identifiers_to_optimize_,
         std::unordered_set<const TableNode *> outer_joined_tables_)
         : Base(std::move(context_))
         , identifiers_to_optimize(std::move(identifiers_to_optimize_))
@@ -792,10 +817,30 @@ public:
     {
     }
 
-    void enterImpl(QueryTreeNodePtr & node) const
+    bool needChildVisit(const QueryTreeNodePtr & parent, const QueryTreeNodePtr & child)
+    {
+        if (const auto * query_node = parent->as<QueryNode>())
+        {
+            if (!in_where_prewhere_stack.empty())
+            {
+                bool is_where = query_node->hasWhere() && child.get() == query_node->getWhere().get();
+                bool is_prewhere = query_node->hasPrewhere() && child.get() == query_node->getPrewhere().get();
+                in_where_prewhere_stack.back() = is_where || is_prewhere;
+            }
+        }
+        return true;
+    }
+
+    void enterImpl(QueryTreeNodePtr & node)
     {
         if (!getSettings()[Setting::optimize_functions_to_subcolumns])
             return;
+
+        if (node->as<QueryNode>())
+        {
+            in_where_prewhere_stack.push_back(false);
+            return;
+        }
 
         auto [function_node, first_argument_column_node, table_node] = getTypedNodesForOptimization(node, getContext());
         if (!function_node || !first_argument_column_node || !table_node)
@@ -805,7 +850,16 @@ public:
         auto table_name = table_node->getStorage()->getStorageID().getFullTableName();
 
         Identifier qualified_name({table_name, column.name});
-        if (!identifiers_to_optimize.contains(qualified_name))
+
+        /// For "filter_only" identifiers, only optimize when inside WHERE/PREWHERE.
+        bool should_optimize = identifiers_to_optimize.everywhere.contains(qualified_name);
+        if (!should_optimize
+            && identifiers_to_optimize.filter_only.contains(qualified_name)
+            && !in_where_prewhere_stack.empty()
+            && in_where_prewhere_stack.back())
+            should_optimize = true;
+
+        if (!should_optimize)
             return;
 
         auto result_type = function_node->getResultType();
@@ -819,6 +873,15 @@ public:
             if (!result_type->equals(*node->getResultType()))
                 node = buildCastFunction(node, result_type, getContext());
         }
+    }
+
+    void leaveImpl(const QueryTreeNodePtr & node)
+    {
+        if (!getSettings()[Setting::optimize_functions_to_subcolumns])
+            return;
+
+        if (node->as<QueryNode>())
+            in_where_prewhere_stack.pop_back();
     }
 };
 

@@ -59,6 +59,7 @@
 #include <Storages/StorageReplicatedMergeTree.h>
 #include <Storages/StorageURL.h>
 #include <base/coverage.h>
+#include <Common/CoverageCollection.h>
 #include <Common/ActionLock.h>
 #include <Common/CurrentMetrics.h>
 #include <Common/DNSResolver.h>
@@ -1025,6 +1026,27 @@ BlockIO InterpreterSystemQuery::execute()
         case Type::SET_COVERAGE_TEST:
         {
             getContext()->checkAccess(AccessType::SYSTEM);
+#if WITH_COVERAGE
+            {
+                /// Register (or re-register) the flush callback so coverage data is
+                /// resolved and inserted into system.coverage_log when the previous
+                /// test's counters are flushed.  We re-register on each call so the
+                /// captured global context stays fresh after server restart scenarios,
+                /// and so that the callback is available even on the very first call.
+                ContextPtr global_ctx = getContext()->getGlobalContext();
+                registerCoverageFlushCallback(
+                    [global_ctx](std::string_view prev_test, const std::vector<uint64_t> & name_refs)
+                    {
+#if defined(__ELF__) && !defined(OS_FREEBSD)
+                        DB::collectAndInsertCoverage(prev_test, name_refs, global_ctx);
+#else
+                        (void)prev_test;
+                        (void)name_refs;
+                        (void)global_ctx;
+#endif
+                    });
+            }
+#endif
             setCoverageTest(query.coverage_test_name);
             break;
         }

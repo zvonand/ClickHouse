@@ -5,6 +5,7 @@
 #include <DataTypes/DataTypeString.h>
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnVector.h>
+#include <Columns/ColumnsNumber.h>
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnConst.h>
 #include <Functions/FunctionFactory.h>
@@ -59,7 +60,7 @@ public:
         return std::make_shared<DataTypeArray>(std::make_shared<DataTypeUInt32>());
     }
 
-    ColumnPtr executeImpl(const ColumnsWithTypeAndName &, const DataTypePtr & result_type, size_t input_rows_count) const override
+    ColumnPtr executeImpl(const ColumnsWithTypeAndName &, const DataTypePtr &, size_t input_rows_count) const override
     {
         /// Full implementation pending LLVMCoverageMapping reader.
         /// Returns empty arrays for now.

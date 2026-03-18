@@ -127,7 +127,7 @@ static bool isTemporaryMetadataFile(const String & file_name)
     return Poco::UUID{}.tryParse(substring);
 }
 
-static Iceberg::MetadataFileWithInfo getMetadataFileAndVersion(const std::string & path)
+static MetadataFileWithInfo getMetadataFileAndVersion(const std::string & path)
 {
     String file_name = std::filesystem::path(path).filename();
     if (isTemporaryMetadataFile(file_name))
@@ -150,9 +150,53 @@ static Iceberg::MetadataFileWithInfo getMetadataFileAndVersion(const std::string
             ErrorCodes::BAD_ARGUMENTS, "Bad metadata file name: '{}'. Expected vN.metadata.json where N is a number", file_name);
 
     return MetadataFileWithInfo{
-        .version = std::stoi(version_str),
-        .path = path,
-        .compression_method = getCompressionMethodFromMetadataFile(path)};
+        .version = std::stoi(version_str), .path = path, .compression_method = getCompressionMethodFromMetadataFile(path)};
+}
+
+/// Resolve metadata filename from version hint content.
+/// Version hint may contain just a version number (e.g. "1") or a full filename (e.g. "v1.metadata.json").
+/// When only a version number is given, we try to find the actual file, which may have a compression suffix.
+static std::optional<String> resolveMetadataFilenameFromVersionHint(
+    const String & version_hint_content,
+    const String & table_path,
+    const ObjectStoragePtr & object_storage,
+    CompressionMethod known_compression_method,
+    const ContextPtr & local_context)
+{
+    String metadata_file = version_hint_content;
+    if (metadata_file.ends_with(".metadata.json"))
+        return metadata_file;
+
+    if (!std::all_of(metadata_file.begin(), metadata_file.end(), isdigit))
+        return metadata_file + ".metadata.json";
+
+    /// Version hint is a number. Try to find the actual file.
+    String version_number = metadata_file;
+
+    /// First try without compression.
+    String candidate = "v" + version_number + ".metadata.json";
+    auto candidate_path = std::filesystem::path(table_path) / "metadata" / candidate;
+    if (object_storage->exists(StoredObject(candidate_path)))
+        return candidate;
+
+    /// Try with known compression method.
+    auto compression_method = known_compression_method;
+    if (compression_method == CompressionMethod::None)
+    {
+        auto compression_method_str = local_context->getSettingsRef()[Setting::iceberg_metadata_compression_method].value;
+        compression_method = chooseCompressionMethod(compression_method_str, compression_method_str);
+    }
+    if (compression_method != CompressionMethod::None)
+    {
+        auto suffix = toContentEncodingName(compression_method);
+        String compressed_candidate = "v" + version_number + "." + suffix + ".metadata.json";
+        auto compressed_path = std::filesystem::path(table_path) / "metadata" / compressed_candidate;
+        if (object_storage->exists(StoredObject(compressed_path)))
+            return compressed_candidate;
+    }
+
+    /// Nothing found via direct checks.
+    return std::nullopt;
 }
 
 
@@ -185,21 +229,25 @@ void writeMessageToFile(
 }
 
 bool writeMetadataFileAndVersionHint(
-    const std::string & metadata_file_path,
+    const IcebergPathResolver & resolver,
+    const GeneratedMetadataFileWithInfo & metadata_file_info,
     const std::string & metadata_file_content,
-    const std::string & version_hint_path,
-    std::string version_hint_content,
+    const IcebergPathFromMetadata & version_hint_path,
     DB::ObjectStoragePtr object_storage,
     DB::ContextPtr context,
-    DB::CompressionMethod compression_method,
     bool try_write_version_hint)
 {
+    auto compression_method = metadata_file_info.compression_method;
+    auto version_number = metadata_file_info.version;
+    auto storage_metadata_path = resolver.resolve(metadata_file_info.path);
+    auto storage_version_hint_path = resolver.resolve(version_hint_path);
     try
     {
-        if (object_storage->exists(StoredObject(metadata_file_path)))
+        if (object_storage->exists(StoredObject(storage_metadata_path)))
             return false;
 
-        Iceberg::writeMessageToFile(metadata_file_content, metadata_file_path, object_storage, context, /* write-if-none-match */ "*", "", compression_method);
+        Iceberg::writeMessageToFile(
+            metadata_file_content, storage_metadata_path, object_storage, context, /* write-if-none-match */ "*", "", compression_method);
     }
     catch (...)
     {
@@ -209,13 +257,10 @@ bool writeMetadataFileAndVersionHint(
 
     if (try_write_version_hint)
     {
-        if (version_hint_content.starts_with('/'))
-            version_hint_content = version_hint_content.substr(1);
-
         size_t i = 0;
         while (i < MAX_TRANSACTION_RETRIES)
         {
-            StoredObject object_info(version_hint_path);
+            StoredObject object_info(storage_version_hint_path);
             std::string version_hint_value;
             std::string etag;
             std::string write_if_none_match = "*";
@@ -227,34 +272,30 @@ bool writeMetadataFileAndVersionHint(
                 write_if_none_match.clear();
             }
 
-            /// Normalize version-hint content: it may be just a number (Spark format)
-            /// or a full metadata file path (ClickHouse format). Ensure it's a valid
-            /// metadata filename before parsing.
-            auto normalizeVersionHint = [](std::string & hint)
-            {
-                if (hint.empty())
-                    return;
-                if (!hint.ends_with(".metadata.json"))
-                {
-                    if (std::all_of(hint.begin(), hint.end(), isdigit))
-                        hint = "v" + hint + ".metadata.json";
-                    else
-                        hint = hint + ".metadata.json";
-                }
-            };
-            normalizeVersionHint(version_hint_value);
-            normalizeVersionHint(version_hint_content);
-
             Int32 old_version = 0;
             if (!version_hint_value.empty())
-                old_version = getMetadataFileAndVersion(version_hint_value).version;
-            auto new_version = getMetadataFileAndVersion(version_hint_content).version;
-            if (old_version < new_version)
+            {
+                if (std::all_of(version_hint_value.begin(), version_hint_value.end(), isdigit))
+                {
+                    old_version = std::stoi(version_hint_value);
+                }
+                else
+                {
+                    old_version = getMetadataFileAndVersion(version_hint_value).version;
+                }
+            }
+            if (old_version < version_number)
             {
                 try
                 {
                     /// Write just the version number for Spark/spec compatibility.
-                    Iceberg::writeMessageToFile(std::to_string(new_version), version_hint_path, object_storage, context, write_if_none_match, /* write-if-match */ etag);
+                    Iceberg::writeMessageToFile(
+                        std::to_string(version_number),
+                        storage_version_hint_path,
+                        object_storage,
+                        context,
+                        write_if_none_match,
+                        /* write-if-match */ etag);
                     break;
                 }
                 catch (...)
@@ -1061,52 +1102,6 @@ static String resolveContained(const std::filesystem::path & base, const std::fi
     }
 
     return combined.string();
-}
-
-/// Resolve metadata filename from version hint content.
-/// Version hint may contain just a version number (e.g. "1") or a full filename (e.g. "v1.metadata.json").
-/// When only a version number is given, we try to find the actual file, which may have a compression suffix.
-static std::optional<String> resolveMetadataFilenameFromVersionHint(
-    const String & version_hint_content,
-    const String & table_path,
-    const ObjectStoragePtr & object_storage,
-    CompressionMethod known_compression_method,
-    const ContextPtr & local_context)
-{
-    String metadata_file = version_hint_content;
-    if (metadata_file.ends_with(".metadata.json"))
-        return metadata_file;
-
-    if (!std::all_of(metadata_file.begin(), metadata_file.end(), isdigit))
-        return metadata_file + ".metadata.json";
-
-    /// Version hint is a number. Try to find the actual file.
-    String version_number = metadata_file;
-
-    /// First try without compression.
-    String candidate = "v" + version_number + ".metadata.json";
-    auto candidate_path = std::filesystem::path(table_path) / "metadata" / candidate;
-    if (object_storage->exists(StoredObject(candidate_path)))
-        return candidate;
-
-    /// Try with known compression method.
-    auto compression_method = known_compression_method;
-    if (compression_method == CompressionMethod::None)
-    {
-        auto compression_method_str = local_context->getSettingsRef()[Setting::iceberg_metadata_compression_method].value;
-        compression_method = chooseCompressionMethod(compression_method_str, compression_method_str);
-    }
-    if (compression_method != CompressionMethod::None)
-    {
-        auto suffix = toContentEncodingName(compression_method);
-        String compressed_candidate = "v" + version_number + "." + suffix + ".metadata.json";
-        auto compressed_path = std::filesystem::path(table_path) / "metadata" / compressed_candidate;
-        if (object_storage->exists(StoredObject(compressed_path)))
-            return compressed_candidate;
-    }
-
-    /// Nothing found via direct checks.
-    return std::nullopt;
 }
 
 MetadataFileWithInfo getLatestOrExplicitMetadataFileAndVersion(

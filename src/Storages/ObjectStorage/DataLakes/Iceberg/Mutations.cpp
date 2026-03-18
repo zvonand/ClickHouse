@@ -345,11 +345,10 @@ static bool writeMetadataFiles(
     std::optional<ChunkPartitioner> & chunk_partitioner,
     Iceberg::FileContentType content_type,
     SharedHeader sample_block,
-    CompressionMethod compression_method,
     bool write_metadata_json_file)
 {
-    auto metadata_path = filename_generator.generateMetadataName();
-    auto storage_metadata_name = path_resolver.resolve(metadata_path);
+    auto metadata_info = filename_generator.generateMetadataPathWithInfo();
+    auto storage_metadata_name = path_resolver.resolve(metadata_info.path);
     Int64 parent_snapshot = -1;
     if (metadata->has(Iceberg::f_current_snapshot_id))
         parent_snapshot = metadata->getValue<Int64>(Iceberg::f_current_snapshot_id);
@@ -370,7 +369,7 @@ static bool writeMetadataFiles(
     {
         auto result = MetadataGenerator(metadata).generateNextMetadata(
             filename_generator,
-            metadata_path,
+            metadata_info.path,
             parent_snapshot,
             /* added_files */ 0,
             /* added_records */ 0,
@@ -385,7 +384,7 @@ static bool writeMetadataFiles(
     {
         auto result = MetadataGenerator(metadata).generateNextMetadata(
             filename_generator,
-            metadata_path,
+            metadata_info.path,
             parent_snapshot,
             /* added_files */ total_files,
             /* added_records */ total_rows,
@@ -500,13 +499,12 @@ static bool writeMetadataFiles(
 
             auto hint_path = filename_generator.generateVersionHint();
             if (!writeMetadataFileAndVersionHint(
-                    storage_metadata_name,
+                    path_resolver,
+                    metadata_info,
                     json_representation,
-                    path_resolver.resolve(hint_path),
-                    storage_metadata_name,
+                    hint_path,
                     object_storage,
                     context,
-                    compression_method,
                     data_lake_settings[DataLakeStorageSetting::iceberg_use_version_hint]))
             {
                 cleanup();
@@ -515,7 +513,7 @@ static bool writeMetadataFiles(
 
             if (catalog)
             {
-                auto catalog_filename = path_resolver.resolveForCatalog(metadata_path);
+                auto catalog_filename = path_resolver.resolveForCatalog(metadata_info.path);
                 const auto & [namespace_name, table_name] = DataLake::parseTableName(table_id.getTableName());
                 if (!catalog->updateMetadata(namespace_name, table_name, catalog_filename, new_snapshot))
                 {
@@ -630,7 +628,6 @@ void mutate(
                 chunk_partitioner,
                 Iceberg::FileContentType::POSITION_DELETE,
                 std::make_shared<const Block>(getPositionDeleteFileSampleBlock()),
-                compression_method,
                 !mutation_files->data_file);
             if (!result_delete_files_metadata)
                 continue;
@@ -653,7 +650,6 @@ void mutate(
                     chunk_partitioner,
                     Iceberg::FileContentType::DATA,
                     sample_block,
-                    compression_method,
                     true);
                 if (!result_data_files_metadata)
                 {
@@ -725,18 +721,16 @@ void alter(
         Poco::JSON::Stringifier::stringify(metadata, oss, 4);
         std::string json_representation = removeEscapedSlashes(oss.str());
 
-        auto md_path = filename_generator.generateMetadataName();
-        auto storage_metadata_name = persistent_table_components.path_resolver.resolve(md_path);
+        auto md_info = filename_generator.generateMetadataPathWithInfo();
 
         auto hint_path = filename_generator.generateVersionHint();
         if (writeMetadataFileAndVersionHint(
-                storage_metadata_name,
+                persistent_table_components.path_resolver,
+                md_info,
                 json_representation,
-                persistent_table_components.path_resolver.resolve(hint_path),
-                storage_metadata_name,
+                hint_path,
                 object_storage,
                 context,
-                compression_method,
                 data_lake_settings[DataLakeStorageSetting::iceberg_use_version_hint]))
             break;
     }
@@ -1286,7 +1280,13 @@ ExpireSnapshotsResult expireSnapshots(
         filename_generator.setCompressionMethod(compression_method);
 
         auto metadata = getMetadataJSONObject(
-            metadata_path, object_storage, persistent_table_components.metadata_cache, context, log, compression_method, persistent_table_components.table_uuid);
+            metadata_path,
+            object_storage,
+            persistent_table_components.metadata_cache,
+            context,
+            log,
+            compression_method,
+            persistent_table_components.table_uuid);
 
         if (metadata->getValue<Int32>(f_format_version) < 2)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "expire_snapshots is supported only for the second version of iceberg format");
@@ -1359,17 +1359,15 @@ ExpireSnapshotsResult expireSnapshots(
         std::ostringstream oss; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
         Poco::JSON::Stringifier::stringify(metadata, oss, 4);
         std::string json_representation = removeEscapedSlashes(oss.str());
-        auto md_path = filename_generator.generateMetadataName();
-        auto storage_metadata_name = persistent_table_components.path_resolver.resolve(md_path);
+        auto md_info = filename_generator.generateMetadataPathWithInfo();
         auto hint_path = filename_generator.generateVersionHint();
         if (!writeMetadataFileAndVersionHint(
-                storage_metadata_name,
+                persistent_table_components.path_resolver,
+                md_info,
                 json_representation,
-                persistent_table_components.path_resolver.resolve(hint_path),
-                storage_metadata_name,
+                hint_path,
                 object_storage,
                 context,
-                compression_method,
                 data_lake_settings[DataLakeStorageSetting::iceberg_use_version_hint]))
         {
             LOG_WARNING(log, "Metadata commit conflict during expire_snapshots, retrying ({} retries left)", max_retries);
@@ -1378,7 +1376,7 @@ ExpireSnapshotsResult expireSnapshots(
 
         if (catalog)
         {
-            auto catalog_filename = persistent_table_components.path_resolver.resolveForCatalog(md_path);
+            auto catalog_filename = persistent_table_components.path_resolver.resolveForCatalog(md_info.path);
             const auto & [namespace_name, parsed_table_name] = DataLake::parseTableName(table_name);
             if (!catalog->updateMetadata(namespace_name, parsed_table_name, catalog_filename, nullptr))
             {

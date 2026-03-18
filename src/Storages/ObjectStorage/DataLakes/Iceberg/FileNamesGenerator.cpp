@@ -64,23 +64,28 @@ Iceberg::IcebergPathFromMetadata FileNamesGenerator::generateManifestListName(In
     return Iceberg::IcebergPathFromMetadata(fmt::format("{}metadata/snap-{}-{}-{}.avro", table_location, snapshot_id, format_version, uuid_str));
 }
 
-Iceberg::IcebergPathFromMetadata FileNamesGenerator::generateMetadataName()
+GeneratedMetadataFileWithInfo FileNamesGenerator::generateMetadataPathWithInfo()
 {
     auto compression_suffix = toContentEncodingName(compression_method);
     if (!compression_suffix.empty())
         compression_suffix = "." + compression_suffix;
+    auto used_version = initial_version++;
     if (!use_uuid_in_metadata)
     {
-        auto res = Iceberg::IcebergPathFromMetadata(fmt::format("{}metadata/v{}{}.metadata.json", table_location, initial_version, compression_suffix));
-        initial_version++;
-        return res;
+        return GeneratedMetadataFileWithInfo{
+            .path = Iceberg::IcebergPathFromMetadata(
+                fmt::format("{}metadata/v{}{}.metadata.json", table_location, used_version, compression_suffix)),
+            .version = used_version,
+            .compression_method = compression_method};
     }
     else
     {
         auto uuid_str = uuid_generator.createRandom().toString();
-        auto res = Iceberg::IcebergPathFromMetadata(fmt::format("{}metadata/v{}-{}{}.metadata.json", table_location, initial_version, uuid_str, compression_suffix));
-        initial_version++;
-        return res;
+        return GeneratedMetadataFileWithInfo{
+            .path = Iceberg::IcebergPathFromMetadata(
+                fmt::format("{}metadata/v{}-{}{}.metadata.json", table_location, used_version, uuid_str, compression_suffix)),
+            .version = used_version,
+            .compression_method = compression_method};
     }
 }
 

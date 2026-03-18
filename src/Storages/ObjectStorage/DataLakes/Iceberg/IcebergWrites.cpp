@@ -858,8 +858,7 @@ void IcebergStorageSink::cancelBuffers()
 bool IcebergStorageSink::initializeMetadata()
 {
     const auto & resolver = persistent_table_components.path_resolver;
-    auto metadata_md_path = filename_generator.generateMetadataName();
-    auto storage_metadata_name = resolver.resolve(metadata_md_path);
+    auto metadata_info = filename_generator.generateMetadataPathWithInfo();
 
     Int64 parent_snapshot = -1;
     if (metadata->has(Iceberg::f_current_snapshot_id))
@@ -870,7 +869,7 @@ bool IcebergStorageSink::initializeMetadata()
         total_data_files += writer.getDataFiles().size();
     auto [new_snapshot, manifest_list_path] = MetadataGenerator(metadata).generateNextMetadata(
         filename_generator,
-        metadata_md_path,
+        metadata_info.path,
         parent_snapshot,
         total_data_files,
         total_rows,
@@ -1017,30 +1016,29 @@ bool IcebergStorageSink::initializeMetadata()
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "Failpoint for cleanup enabled");
             });
 
-            LOG_DEBUG(log, "Writing new metadata file {}", storage_metadata_name);
+            LOG_DEBUG(log, "Writing new metadata file {}", metadata_info.path);
             auto hint_path = filename_generator.generateVersionHint();
             if (!writeMetadataFileAndVersionHint(
-                    storage_metadata_name,
+                    persistent_table_components.path_resolver,
+                    metadata_info,
                     json_representation,
-                    resolver.resolve(hint_path),
-                    storage_metadata_name,
+                    hint_path,
                     object_storage,
                     context,
-                    metadata_compression_method,
                     data_lake_settings[DataLakeStorageSetting::iceberg_use_version_hint]))
             {
-                LOG_DEBUG(log, "Failed to write metadata {}, retrying", storage_metadata_name);
+                LOG_DEBUG(log, "Failed to write metadata {}, retrying", metadata_info.path);
                 cleanup(true);
                 return false;
             }
             else
             {
-                LOG_DEBUG(log, "Metadata file {} written", storage_metadata_name);
+                LOG_DEBUG(log, "Metadata file {} written", metadata_info.path);
             }
 
             if (catalog)
             {
-                auto catalog_filename = resolver.resolveForCatalog(metadata_md_path);
+                auto catalog_filename = resolver.resolveForCatalog(metadata_info.path);
 
                 const auto & [namespace_name, table_name] = DataLake::parseTableName(table_id.getTableName());
                 if (!catalog->updateMetadata(namespace_name, table_name, catalog_filename, new_snapshot))

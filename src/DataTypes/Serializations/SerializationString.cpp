@@ -310,6 +310,22 @@ void SerializationString::deserializeBinaryBulkWithMultipleStreams(
     }
 }
 
+DataTypePtr SerializationString::SizeSubcolumnCreator::create(const DataTypePtr & prev) const
+{
+    return prev;
+}
+
+SerializationPtr SerializationString::SizeSubcolumnCreator::create(const SerializationPtr & prev, const DataTypePtr &) const
+{
+    return prev;
+}
+
+ColumnPtr SerializationString::SizeSubcolumnCreator::create(const ColumnPtr &) const
+{
+    const auto & column_string = assert_cast<const ColumnString &>(*string_column);
+    return column_string.createSizeSubcolumn();
+}
+
 void SerializationString::enumerateStreamsWithoutSize(
     EnumerateStreamsSettings & settings,
     const StreamCallback & callback,
@@ -318,21 +334,19 @@ void SerializationString::enumerateStreamsWithoutSize(
     if (settings.enumerate_virtual_streams)
     {
         const auto * type_string = data.type ? &assert_cast<const DataTypeString &>(*data.type) : nullptr;
-        const auto * column_string = data.column ? &assert_cast<const ColumnString &>(*data.column) : nullptr;
-        ColumnPtr sizes_column;
-        if (column_string)
-        {
-            /// TODO(ab): Will this unnecessarily create useless .size subcolumn?
-            sizes_column = column_string->createSizeSubcolumn();
-        }
 
         auto sizes_serialization = std::make_shared<SerializationStringSize>(version);
 
-        /// Inlined size stream
+        /// Inlined size stream. The column is not computed eagerly; instead a
+        /// `SizeSubcolumnCreator` is attached so that `createFromPath` can derive it
+        /// on demand when the `.size` subcolumn is actually requested.
         settings.path.push_back(Substream::InlinedStringSizes);
+        if (data.column)
+            settings.path.back().creator = std::make_shared<SizeSubcolumnCreator>(data.column, version);
+
         settings.path.back().data = SubstreamData(sizes_serialization)
                                         .withType(type_string ? std::make_shared<DataTypeUInt64>() : nullptr)
-                                        .withColumn(std::move(sizes_column))
+                                        .withColumn(nullptr)
                                         .withSerializationInfo(data.serialization_info);
 
         callback(settings.path);
@@ -655,21 +669,17 @@ void SerializationString::enumerateStreamsWithSize(
     const SubstreamData & data) const
 {
     const auto * type_string = data.type ? &assert_cast<const DataTypeString &>(*data.type) : nullptr;
-    const auto * column_string = data.column ? &assert_cast<const ColumnString &>(*data.column) : nullptr;
-    ColumnPtr sizes_column;
-    if (column_string)
-    {
-        /// TODO(ab): Will this unnecessarily create useless .size subcolumn?
-        sizes_column = column_string->createSizeSubcolumn();
-    }
 
-    auto sizes_serialization= std::make_shared<SerializationStringSize>(version);
+    auto sizes_serialization = std::make_shared<SerializationStringSize>(version);
 
-    /// Size stream
+    /// Size stream. Same lazy pattern as in `enumerateStreamsWithoutSize`.
     settings.path.push_back(Substream::StringSizes);
+    if (data.column)
+        settings.path.back().creator = std::make_shared<SizeSubcolumnCreator>(data.column, version);
+
     settings.path.back().data = SubstreamData(sizes_serialization)
                                     .withType(type_string ? std::make_shared<DataTypeUInt64>() : nullptr)
-                                    .withColumn(std::move(sizes_column))
+                                    .withColumn(nullptr)
                                     .withSerializationInfo(data.serialization_info);
     callback(settings.path);
 

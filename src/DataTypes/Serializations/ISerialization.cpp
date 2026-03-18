@@ -705,6 +705,14 @@ ISerialization::SubstreamData ISerialization::createFromPath(const SubstreamPath
 
     ssize_t last_elem = prefix_len - 1;
     auto res = path[last_elem].data;
+
+    /// Apply the leaf element's creator when the column is null.
+    /// This supports deferred (lazy) column creation for ephemeral subcolumns
+    /// like `.size` on String, whose column data is derived from the parent
+    /// column and should only be computed when actually requested.
+    if (!res.column && path[last_elem].creator)
+        res.column = path[last_elem].creator->create(res.column);
+
     for (ssize_t i = last_elem - 1; i >= 0; --i)
     {
         const auto & creator = path[i].creator;

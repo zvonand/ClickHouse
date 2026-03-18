@@ -22,6 +22,24 @@ class SerializationString final : public ISerialization
 public:
     explicit SerializationString(MergeTreeStringSerializationVersion version_ = MergeTreeStringSerializationVersion::SINGLE_STREAM);
 
+    /// Defers creation of the `.size` subcolumn until actually needed.
+    /// Stored on the leaf path element and invoked by `createFromPath`
+    /// only when the size subcolumn is the one being extracted.
+    struct SizeSubcolumnCreator : public ISubcolumnCreator
+    {
+        ColumnPtr string_column;
+        MergeTreeStringSerializationVersion version;
+
+        SizeSubcolumnCreator(ColumnPtr string_column_, MergeTreeStringSerializationVersion version_)
+            : string_column(std::move(string_column_)), version(version_)
+        {
+        }
+
+        DataTypePtr create(const DataTypePtr & prev) const override;
+        SerializationPtr create(const SerializationPtr & prev, const DataTypePtr & prev_type) const override;
+        ColumnPtr create(const ColumnPtr & prev) const override;
+    };
+
     void serializeBinary(const Field & field, WriteBuffer & ostr, const FormatSettings & settings) const override;
     void deserializeBinary(Field & field, ReadBuffer & istr, const FormatSettings & settings) const override;
     void serializeBinary(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings & settings) const override;

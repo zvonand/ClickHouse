@@ -714,6 +714,10 @@ void MutationsInterpreter::prepare(bool dry_run)
     bool need_rebuild_projections = false;
     std::vector<String> read_columns;
 
+    /// Columns that are being cleared and need default values in the pipeline
+    /// for correct projection rebuild (instead of passing through original values).
+    NameSet cleared_columns_for_projections;
+
     if (has_lightweight_delete_materialization || has_rewrite_parts)
     {
         auto & stage = stages.emplace_back(context);
@@ -1134,8 +1138,9 @@ void MutationsInterpreter::prepare(bool dry_run)
             }
             /// When clearing a column, we also need to rebuild any projections that depend on it,
             /// otherwise stale projection data with outdated sort order will be hardlinked unchanged.
-            /// We add the projection's required columns as dependencies so that the cleared column
-            /// (with default values) is available in the mutation pipeline for projection rebuild.
+            /// We add the projection's required columns as dependencies so that they are available
+            /// in the mutation pipeline for projection rebuild. The cleared column itself is tracked
+            /// separately so the readonly stage can replace it with the type default value.
             for (const auto & projection : metadata_snapshot->getProjections())
             {
                 const auto & projection_cols = projection.required_columns;
@@ -1143,6 +1148,7 @@ void MutationsInterpreter::prepare(bool dry_run)
                 {
                     for (const auto & col : projection_cols)
                         dependencies.emplace(col, ColumnDependency::PROJECTION);
+                    cleared_columns_for_projections.insert(command.column_name);
                     materialized_projections.insert(projection.name);
                 }
             }
@@ -1223,8 +1229,24 @@ void MutationsInterpreter::prepare(bool dry_run)
             stages.emplace_back(context);
             stages.back().is_readonly = true;
             for (const auto & column : unchanged_columns)
-                stages.back().column_to_updated.emplace(
-                    column, make_intrusive<ASTIdentifier>(column));
+            {
+                if (cleared_columns_for_projections.contains(column))
+                {
+                    /// For columns being cleared, provide the type default value
+                    /// instead of the original value from the source part.
+                    auto col_decl = metadata_snapshot->getColumns().getPhysical(column);
+                    stages.back().column_to_updated.emplace(
+                        column,
+                        makeASTFunction("_CAST",
+                            make_intrusive<ASTLiteral>(col_decl.type->getDefault()),
+                            make_intrusive<ASTLiteral>(col_decl.type->getName())));
+                }
+                else
+                {
+                    stages.back().column_to_updated.emplace(
+                        column, make_intrusive<ASTIdentifier>(column));
+                }
+            }
         }
     }
 

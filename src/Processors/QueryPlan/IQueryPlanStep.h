@@ -2,6 +2,7 @@
 
 #include <Core/Block_fwd.h>
 #include <Core/SortDescription.h>
+#include <Interpreters/ActionsDAG.h>
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
 #include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <string_view>

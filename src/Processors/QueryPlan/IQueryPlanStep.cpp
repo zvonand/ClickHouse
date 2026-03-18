@@ -1,5 +1,7 @@
 #include <Common/CurrentThread.h>
 #include <IO/Operators.h>
+#include <IO/WriteBufferFromString.h>
+#include <Interpreters/ActionsDAG.h>
 #include <Processors/IProcessor.h>
 #include <Processors/Port.h>
 #include <Processors/QueryPlan/IQueryPlanStep.h>

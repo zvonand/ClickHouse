@@ -28,6 +28,8 @@ def cluster():
         cluster.start()
         logging.info("Cluster started")
 
+        cluster.instances["node"].query("SYSTEM WAIT BLOBS CLEANUP 's3'")
+
         yield cluster
     finally:
         cluster.shutdown()

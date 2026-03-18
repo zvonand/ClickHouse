@@ -3622,7 +3622,13 @@ def collect_build_flags(args):
     elif b"-fsanitize=memory" in value:
         result.append(BuildFlags.MEMORY)
         SANITIZED = True
-    elif b"-DWITH_COVERAGE=1" in value:
+
+    # WITH_COVERAGE has a dedicated row in system.build_options; do not rely
+    # on CXX_FLAGS which uses FULL_CXX_FLAGS_NORMALIZED and may not include it.
+    with_coverage = clickhouse_execute(
+        args, "SELECT value FROM system.build_options WHERE name = 'WITH_COVERAGE'"
+    )
+    if with_coverage.strip() in (b"ON", b"1"):
         result.append(BuildFlags.WITH_COVERAGE)
 
     value = clickhouse_execute(

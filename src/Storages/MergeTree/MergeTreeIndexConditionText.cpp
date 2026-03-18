@@ -781,6 +781,10 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
     if ((function_name == "ilike" || function_name == "notILike") && tokenizer->getType() == ITokenizer::Type::SplitByNonAlpha
         && settings[Setting::use_text_index_like_optimization])
     {
+        const bool has_preprocessor = preprocessor && preprocessor->hasActions();
+        if (has_preprocessor && !preprocessor->isCaseFolding())
+            return false;
+
         auto patterns = stringLikeToPatterns(value_field, true);
         if (patterns.size() == 1)
         {

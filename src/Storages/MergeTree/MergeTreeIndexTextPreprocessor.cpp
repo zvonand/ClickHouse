@@ -182,6 +182,12 @@ MergeTreeIndexTextPreprocessor::MergeTreeIndexTextPreprocessor(ASTPtr expression
         std::make_shared<DataTypeString>(),
         convertASTForConstant(index_description, expression_ast)))
 {
+    if (expression_ast)
+    {
+        /// Detect pure case folding preprocessors (lower / lowerUTF8, upper / upperUTF8).
+        const auto * func = expression_ast->as<ASTFunction>();
+        is_case_folding = func && (func->name == "lower" || func->name == "lowerUTF8" || func->name == "upper" || func->name == "upperUTF8");
+    }
 }
 
 std::pair<ColumnPtr, size_t> MergeTreeIndexTextPreprocessor::processColumn(const ColumnWithTypeAndName & column, size_t start_row, size_t n_rows) const

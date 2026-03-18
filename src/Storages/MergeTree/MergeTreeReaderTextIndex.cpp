@@ -118,6 +118,14 @@ MergeTreeReaderTextIndex::MergeTreeReaderTextIndex(
                     combined_columns.add(vc);
         }
 
+        /// Build a header block containing all physical columns (column type only, no data).
+        /// evaluateMissingDefaults passes this to createExpressionsAnalyzer, which creates
+        /// a StorageDummy from it — StorageDummy requires at least one column, so the header
+        /// must be non-empty.
+        Block physical_header;
+        for (const auto & phys_col : storage_snapshot->metadata->getColumns().getAllPhysical())
+            physical_header.insert({phys_col.type->createColumn(), phys_col.type, phys_col.name});
+
         NameSet fallback_columns_set;
         for (const auto & col : columns_)
         {
@@ -126,10 +134,10 @@ MergeTreeReaderTextIndex::MergeTreeReaderTextIndex(
                 continue;
 
             /// Compile the virtual column's default expression (the original search predicate).
-            /// We pass an empty header so the DAG computes everything from physical columns.
-            Block empty_header;
+            /// We pass a header with all physical columns so that createExpressionsAnalyzer
+            /// can build a non-empty StorageDummy (it requires at least one column).
             NamesAndTypesList need_col{{col.name, col.type}};
-            auto dag = DB::evaluateMissingDefaults(empty_header, need_col, combined_columns, context_copy);
+            auto dag = DB::evaluateMissingDefaults(physical_header, need_col, combined_columns, context_copy);
             if (!dag)
                 continue;
 
@@ -502,8 +510,11 @@ double MergeTreeReaderTextIndex::estimateCardinality(const TextSearchQuery & que
             for (const auto & token : query.tokens)
             {
                 auto it = remaining_tokens.find(token);
+                /// If a token is absent from the sparse index it means it is too common
+                /// (appears in more rows than the sparse-index threshold). Treat it as
+                /// matching all rows so the hint is discarded via the selectivity check.
                 if (it == remaining_tokens.end())
-                    return 0;
+                    return static_cast<double>(total_rows);
 
                 cardinality *= it->second->cardinality;
             }
@@ -526,7 +537,8 @@ double MergeTreeReaderTextIndex::estimateCardinality(const TextSearchQuery & que
             for (const auto & token : query.tokens)
             {
                 auto it = remaining_tokens.find(token);
-                double token_cardinality = it == remaining_tokens.end() ? 0 : it->second->cardinality;
+                /// Same reasoning as above: absent from sparse index ⟹ too common ⟹ treat as all rows.
+                double token_cardinality = it == remaining_tokens.end() ? static_cast<double>(total_rows) : it->second->cardinality;
                 cardinality *= (1.0 - (token_cardinality / static_cast<double>(total_rows)));
             }
 
@@ -775,7 +787,9 @@ void MergeTreeReaderTextIndex::fillColumn(IColumn & column, const String & colum
     }
     else if (search_query->search_mode == TextSearchMode::Any || postings.size() == 1)
     {
-    if (search_query->search_mode == TextSearchMode::Any)
+        /// For Any mode, or when there is only one posting list, applyPostingsAny is correct
+        /// and more efficient. Note: when postings.size() == 1 and mode is All, the two
+        /// apply functions are equivalent (one token must match), so applyPostingsAny is safe.
         applyPostingsAny(column, postings, indices_buffer, search_query->tokens, old_size, row_offset, num_rows);
     }
     else if (search_query->search_mode == TextSearchMode::All)

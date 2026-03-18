@@ -27,7 +27,11 @@ public:
     bool hasActions() const { return !original_actions.getActions().empty(); }
     const ActionsDAG & getOriginalActionsDAG() const { return original_actions.getActionsDAG(); }
 
+    bool isCaseFolding() const { return is_case_folding; }
+
 private:
+    /// Indicates if the preprocessor expression is lower, lowerUTF8, upper, or upperUTF8.
+    bool is_case_folding = false;
     /// The name of the column on which the index is defined.
     String index_column_name;
     /// The type of the column on which the index is defined.

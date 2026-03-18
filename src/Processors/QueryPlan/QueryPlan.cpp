@@ -10,9 +10,11 @@
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/FilterStep.h>
+#include <Processors/QueryPlan/IQueryPlanStep.h>
 #include <Processors/QueryPlan/Optimizations/Optimizations.h>
 #include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
 #include <Processors/QueryPlan/QueryPlan.h>
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <Processors/QueryPlan/ReadFromMergeTree.h>
 #include <Processors/QueryPlan/QueryPlanVisitor.h>
 
@@ -441,7 +443,7 @@ static void explainStep(
         if (const auto & sort_description = step.getSortDescription(); !sort_description.empty())
         {
             settings.out << prefix << "Sorting: ";
-            dumpSortDescription(sort_description, settings.out);
+            dumpSortDescription(sort_description, settings);
             settings.out.write('\n');
         }
     }
@@ -463,7 +465,7 @@ std::string debugExplainStep(IQueryPlanStep & step)
 {
     WriteBufferFromOwnString out;
     ExplainPlanOptions options{.actions = true};
-    IQueryPlanStep::FormatSettings settings{.out = out, .step_prefix = "", .other_prefix = "", .input_dags = {}};
+    IQueryPlanStep::FormatSettings settings{.out = out, .step_prefix = "", .other_prefix = "", .pretty_names = {}};
     explainStep(step, settings, options, 0);
     return out.str();
 }
@@ -534,8 +536,11 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
         .write_header = options.header,
         .verbose = options.verbose,
         .pretty = options.pretty,
-        .input_dags = {}
+        .pretty_names = {}
     };
+
+    if (options.pretty)
+        QueryPlanFormat::buildPrettyNamesMap(*this, settings.pretty_names);
 
     std::deque<ExplainPlan::Frame> stack;
 
@@ -556,19 +561,6 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
                 buildTreeOffset(stack, frame, settings);
             else
                 buildIndentOffset(stack, settings, offset);
-
-            settings.input_dags.clear();
-            if (settings.pretty)
-            {
-                for (const auto * child : frame.node->children)
-                {
-                    const auto & name = child->step->getName();
-                    if (name == "Expression")
-                        settings.input_dags.push_back(&static_cast<const ExpressionStep *>(child->step.get())->getExpression());
-                    else if (name == "Filter")
-                        settings.input_dags.push_back(&static_cast<const FilterStep *>(child->step.get())->getExpression());
-                }
-            }
 
             explainStep(*frame.node->step, settings, options, max_description_length);
             frame.is_description_printed = true;
@@ -615,7 +607,7 @@ void QueryPlan::explainPipeline(WriteBuffer & buffer, const ExplainPipelineOptio
 {
     checkInitialized();
 
-    IQueryPlanStep::FormatSettings settings{.out = buffer, .step_prefix = "", .other_prefix = "", .write_header = options.header, .input_dags = {}};
+    IQueryPlanStep::FormatSettings settings{.out = buffer, .step_prefix = "", .other_prefix = "", .write_header = options.header, .pretty_names = {}};
 
     struct Frame
     {

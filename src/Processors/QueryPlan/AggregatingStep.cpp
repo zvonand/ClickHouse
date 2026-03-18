@@ -538,54 +538,13 @@ void AggregatingStep::describeActions(FormatSettings & settings) const
 {
     const String & prefix = settings.other_prefix;
 
-    if (settings.pretty)
-    {
-        auto & out = settings.out;
-
-        out << prefix << "Keys:";
-        bool first = true;
-        for (const auto & key : params.keys)
-        {
-            out << (first ? " " : ", ");
-            first = false;
-            out << QueryPlanFormat::formatColumnForExplain(key, settings);
-        }
-        out << '\n';
-
-        if (!params.aggregates.empty())
-        {
-            out << prefix << "Aggregates:";
-            first = true;
-            for (const auto & aggregate : params.aggregates)
-            {
-                out << (first ? " " : ", ");
-                first = false;
-
-                if (aggregate.function)
-                    out << aggregate.function->getName();
-
-                out << '(';
-                bool first_arg = true;
-                for (const auto & arg : aggregate.argument_names)
-                {
-                    if (!first_arg)
-                        out << ", ";
-                    first_arg = false;
-                    out << QueryPlanFormat::formatColumnForExplain(arg, settings);
-                }
-                out << ')';
-            }
-            out << '\n';
-        }
-    }
-    else
-    {
-        params.explain(settings.out, prefix);
-    }
+    params.explain(settings);
 
     if (!sort_description_for_merging.empty())
     {
-        settings.out << prefix << "Order: " << dumpSortDescription(sort_description_for_merging) << '\n';
+        settings.out << prefix << "Order: ";
+        dumpSortDescription(sort_description_for_merging, settings);
+        settings.out << '\n';
     }
     settings.out << prefix << "Skip merging: " << skip_merging << '\n';
 }

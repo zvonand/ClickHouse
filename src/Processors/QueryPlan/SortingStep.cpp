@@ -538,17 +538,17 @@ void SortingStep::describeActions(FormatSettings & settings) const
     if (!prefix_description.empty())
     {
         settings.out << prefix << "Prefix sort description: ";
-        dumpSortDescription(prefix_description, settings.out);
+        dumpSortDescription(prefix_description, settings);
         settings.out << '\n';
 
         settings.out << prefix << "Result sort description: ";
-        dumpSortDescription(result_description, settings.out);
+        dumpSortDescription(result_description, settings);
         settings.out << '\n';
     }
     else
     {
         settings.out << prefix << "Sort description: ";
-        dumpSortDescription(result_description, settings.out);
+        dumpSortDescription(result_description, settings);
         settings.out << '\n';
     }
 

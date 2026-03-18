@@ -61,7 +61,7 @@ void FillingStep::describeActions(FormatSettings & settings) const
 {
     const String & prefix = settings.other_prefix;
     settings.out << prefix;
-    dumpSortDescription(sort_description, settings.out);
+    dumpSortDescription(sort_description, settings);
     settings.out << '\n';
     if (interpolate_description)
     {

@@ -10,6 +10,7 @@
 #include <Common/typeid_cast.h>
 #include <Core/BlockNameMap.h>
 #include <Processors/Transforms/ColumnPermuteTransform.h>
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <fmt/format.h>
 
 namespace DB
@@ -23,7 +24,7 @@ namespace ErrorCodes
 namespace
 {
 
-std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join, bool pretty = false)
+std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join, const ExplainFormatSettings & settings)
 {
     std::vector<std::pair<String, String>> description;
     const auto & table_join = join->getTableJoin();
@@ -37,8 +38,8 @@ std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join,
 
     if (!table_join.getClauses().empty())
     {
-        if (pretty)
-            description.emplace_back("Clauses", TableJoin::formatClausesPretty(table_join.getClauses()));
+        if (settings.pretty)
+            description.emplace_back("Clauses", TableJoin::formatClausesPretty(table_join.getClauses(), settings));
         else
             description.emplace_back("Clauses", TableJoin::formatClauses(table_join.getClauses(), true /*short_format*/));
     }
@@ -220,7 +221,7 @@ void JoinStep::describeActions(FormatSettings & settings) const
 {
     const String & prefix = settings.other_prefix;
 
-    auto description = describeJoinActions(join, settings.pretty);
+    auto description = describeJoinActions(join, settings);
     const size_t inline_count = settings.pretty ? 3 : 0;
 
     if (settings.pretty)
@@ -272,7 +273,10 @@ void JoinStep::describeActions(FormatSettings & settings) const
 
 void JoinStep::describeActions(JSONBuilder::JSONMap & map) const
 {
-    for (const auto & [name, value] : describeJoinActions(join))
+    WriteBufferFromOwnString dummy;
+    ExplainFormatSettings dummy_settings{.out = dummy, .step_prefix = "", .other_prefix = "", .pretty_names = {}};
+
+    for (const auto & [name, value] : describeJoinActions(join, dummy_settings))
         map.add(name, value);
     if (swap_streams)
         map.add("Swapped", true);
@@ -384,13 +388,16 @@ void FilledJoinStep::describeActions(FormatSettings & settings) const
 {
     const String & prefix = settings.other_prefix;
 
-    for (const auto & [name, value] : describeJoinActions(join))
+    for (const auto & [name, value] : describeJoinActions(join, settings))
         settings.out << prefix << name << ": " << value << '\n';
 }
 
 void FilledJoinStep::describeActions(JSONBuilder::JSONMap & map) const
 {
-    for (const auto & [name, value] : describeJoinActions(join))
+    WriteBufferFromOwnString dummy;
+    ExplainFormatSettings dummy_settings{.out = dummy, .step_prefix = "", .other_prefix = "", .pretty_names = {}};
+
+    for (const auto & [name, value] : describeJoinActions(join, dummy_settings))
         map.add(name, value);
 }
 

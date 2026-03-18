@@ -3,8 +3,8 @@
 #include <Common/CurrentThread.h>
 #include <Core/Block_fwd.h>
 #include <Core/SortDescription.h>
-#include <Interpreters/ActionsDAG.h>
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <string_view>
 #include <variant>
 
@@ -81,19 +81,7 @@ public:
 
     virtual const SortDescription & getSortDescription() const;
 
-    struct FormatSettings
-    {
-        WriteBuffer & out;
-        std::string step_prefix;
-        std::string other_prefix;
-        size_t offset = 0;
-        const size_t base_indent = 2;
-        const char indent_char = ' ';
-        const bool write_header = false;
-        bool verbose = false;
-        bool pretty = false;
-        std::vector<const ActionsDAG *> input_dags;
-    };
+    using FormatSettings = ExplainFormatSettings;
 
     /// Get detailed description of step actions. This is shown in EXPLAIN query with options `actions = 1`.
     virtual void describeActions(JSONBuilder::JSONMap & /*map*/) const {}
@@ -177,14 +165,4 @@ private:
     size_t step_index = 0;
 };
 
-namespace QueryPlanFormat
-{
-    std::string_view trimColumnIdentifier(std::string_view name);
-    void formatOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
-    void formatJoinOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
-
-    String formatNodePretty(const ActionsDAG::Node * node, int parent_precedence = 0);
-    String formatNamePrettyIfPossible(const ActionsDAG & dag, const String & name);
-    String formatColumnForExplain(const String & column_name, const IQueryPlanStep::FormatSettings & settings);
-}
 }

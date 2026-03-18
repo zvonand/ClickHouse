@@ -180,7 +180,7 @@ public:
         AggregateColumnsConstData makeAggregateColumnsData(const Block & block) const;
 
         /// Returns keys and aggregated for EXPLAIN query
-        void explain(WriteBuffer & out, const std::string & prefix) const;
+        void explain(ExplainFormatSettings & settings) const;
         void explain(JSONBuilder::JSONMap & map) const;
     };
 

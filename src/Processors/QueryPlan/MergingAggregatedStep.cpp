@@ -153,11 +153,14 @@ void MergingAggregatedStep::transformPipeline(QueryPipelineBuilder & pipeline, c
 
 void MergingAggregatedStep::describeActions(FormatSettings & settings) const
 {
-    params.explain(settings.out, settings.other_prefix);
+    params.explain(settings);
+
     if (!group_by_sort_description.empty())
     {
         const String & prefix = settings.other_prefix;
-        settings.out << prefix << "Order: " << dumpSortDescription(group_by_sort_description) << '\n';
+        settings.out << prefix << "Order: ";
+        dumpSortDescription(group_by_sort_description, settings);
+        settings.out << '\n';
     }
 }
 

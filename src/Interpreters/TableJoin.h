@@ -38,6 +38,7 @@ struct ColumnWithTypeAndName;
 using ColumnsWithTypeAndName = std::vector<ColumnWithTypeAndName>;
 
 struct Settings;
+struct ExplainFormatSettings;
 
 class IVolume;
 using VolumePtr = std::shared_ptr<IVolume>;
@@ -123,13 +124,13 @@ public:
                 && analyzer_left_filter_condition_column_name.empty() && analyzer_right_filter_condition_column_name.empty();
         }
 
-        String formatPretty() const;
+        String formatPretty(const ExplainFormatSettings & settings) const;
     };
 
     using Clauses = std::vector<JoinOnClause>;
 
     static std::string formatClauses(const Clauses & clauses, bool short_format = false);
-    static std::string formatClausesPretty(const Clauses & clauses);
+    static std::string formatClausesPretty(const Clauses & clauses, const ExplainFormatSettings & settings);
 
 private:
     /** Query of the form `SELECT expr(x) AS k FROM t1 ANY LEFT JOIN (SELECT expr(x) AS k FROM t2) USING k`

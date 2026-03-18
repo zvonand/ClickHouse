@@ -65,7 +65,7 @@ void LimitByStep::describeActions(FormatSettings & settings) const
                 settings.out << ", ";
             first = false;
 
-            settings.out << column;
+            settings.out << (settings.pretty ? QueryPlanFormat::formatColumnForExplain(column, settings) : column);
         }
         settings.out << '\n';
     }

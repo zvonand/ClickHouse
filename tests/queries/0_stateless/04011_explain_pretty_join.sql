@@ -3,6 +3,7 @@ SET parallel_hash_join_threshold = 0;
 SET enable_join_runtime_filters = 0;
 SET query_plan_join_swap_table = 0;
 SET enable_parallel_replicas = 0;
+SET use_statistics = 0;
 
 DROP TABLE IF EXISTS t1;
 DROP TABLE IF EXISTS t2;
@@ -16,11 +17,11 @@ INSERT INTO t1 SELECT number, toString(number) FROM numbers(100);
 INSERT INTO t2 SELECT number, toString(number) FROM numbers(100);
 INSERT INTO t3 SELECT number, toString(number) FROM numbers(100);
 
-EXPLAIN PLAN actions = 1, verbose=0, pretty = 1
+EXPLAIN PLAN actions = 1, compact=1, pretty = 1
 SELECT * FROM t1
 INNER JOIN t2 ON t1.id = t2.id;
 
-EXPLAIN PLAN actions = 1, verbose=0, pretty = 1
+EXPLAIN PLAN actions = 1, compact=1, pretty = 1
 SELECT * FROM t1
 INNER JOIN t2 ON t1.id = t2.id
 INNER JOIN t3 ON t2.id = t3.id;

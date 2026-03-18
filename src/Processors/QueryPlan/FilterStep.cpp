@@ -194,7 +194,7 @@ void FilterStep::transformPipeline(QueryPipelineBuilder & pipeline, const BuildQ
 
 void FilterStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
 
     auto cloned_dag = actions_dag.clone();
 
@@ -205,7 +205,7 @@ void FilterStep::describeActions(FormatSettings & settings) const
     for (auto & and_atom : and_atoms)
     {
         settings.out << prefix << "AND column: " << and_atom.name << '\n';
-        if (settings.verbose)
+        if (!settings.compact)
         {
             auto expression = std::make_shared<ExpressionActions>(std::move(and_atom.dag));
             expression->describeActions(settings.out, prefix);
@@ -220,7 +220,7 @@ void FilterStep::describeActions(FormatSettings & settings) const
     settings.out << '\n';
 
     auto expression = std::make_shared<ExpressionActions>(std::move(cloned_dag));
-    if (settings.verbose)
+    if (!settings.compact)
         expression->describeActions(settings.out, prefix);
 }
 

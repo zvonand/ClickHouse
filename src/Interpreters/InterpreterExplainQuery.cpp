@@ -270,7 +270,7 @@ struct QueryPlanSettings
             {"keep_logical_steps", keep_logical_steps},
             {"input_headers", query_plan_options.input_headers},
             {"column_structure", query_plan_options.column_structure},
-            {"verbose", query_plan_options.verbose},
+            {"compact", query_plan_options.compact},
             {"pretty", query_plan_options.pretty},
 
     };

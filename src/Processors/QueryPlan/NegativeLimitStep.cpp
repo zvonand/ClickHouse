@@ -47,7 +47,7 @@ void NegativeLimitStep::transformPipeline(QueryPipelineBuilder & pipeline, const
 
 void NegativeLimitStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
     settings.out << prefix << "Negative Limit " << limit << '\n';
     settings.out << prefix << "Negative Offset " << offset << '\n';
 }

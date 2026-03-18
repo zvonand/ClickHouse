@@ -99,17 +99,10 @@ void ExpressionStep::transformPipeline(QueryPipelineBuilder & pipeline, const Bu
 
 void ExpressionStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
     auto expression = std::make_shared<ExpressionActions>(actions_dag.clone());
 
-    auto description = getStepDescription();
-
-    if (settings.pretty && (description == "Project" || description == "Project names" || description == "(Project names + Projection)"))
-    {
-        QueryPlanFormat::formatOutputColumns(settings.out, *this, prefix);
-    }
-
-    if (settings.verbose)
+    if (!settings.compact)
         expression->describeActions(settings.out, prefix);
 }
 

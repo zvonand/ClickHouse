@@ -157,7 +157,7 @@ void MergingAggregatedStep::describeActions(FormatSettings & settings) const
 
     if (!group_by_sort_description.empty())
     {
-        const String & prefix = settings.other_prefix;
+        const String & prefix = settings.detail_prefix;
         settings.out << prefix << "Order: ";
         dumpSortDescription(group_by_sort_description, settings);
         settings.out << '\n';

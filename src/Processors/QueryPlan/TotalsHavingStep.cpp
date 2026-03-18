@@ -112,7 +112,7 @@ static String totalsModeToString(TotalsMode totals_mode, double auto_include_thr
 
 void TotalsHavingStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
 
     settings.out << prefix << "Filter column: ";
 
@@ -124,7 +124,7 @@ void TotalsHavingStep::describeActions(FormatSettings & settings) const
     settings.out << '\n';
     settings.out << prefix << "Mode: " << totalsModeToString(totals_mode, auto_include_threshold) << '\n';
 
-    if (settings.verbose && actions_dag)
+    if (!settings.compact && actions_dag)
     {
         bool first = true;
         auto expression = std::make_shared<ExpressionActions>(actions_dag->clone());

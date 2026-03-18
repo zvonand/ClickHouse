@@ -17,13 +17,13 @@ class QueryPlan;
 struct ExplainFormatSettings
 {
     WriteBuffer & out;
-    std::string step_prefix;
-    std::string other_prefix;
+    std::string header_prefix;
+    std::string detail_prefix;
     size_t offset = 0;
     const size_t base_indent = 2;
     const char indent_char = ' ';
     const bool write_header = false;
-    bool verbose = false;
+    bool compact = false;
     bool pretty = false;
     std::unordered_map<String, String> pretty_names;
 };

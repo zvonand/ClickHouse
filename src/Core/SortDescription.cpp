@@ -219,7 +219,7 @@ void compileSortDescriptionIfNeeded(SortDescription & description, const DataTyp
 std::string dumpSortDescription(const SortDescription & description)
 {
     WriteBufferFromOwnString wb;
-    ExplainFormatSettings settings{.out = wb, .step_prefix = "", .other_prefix = "", .pretty_names = {}};
+    ExplainFormatSettings settings{.out = wb, .header_prefix = "", .detail_prefix = "", .pretty_names = {}};
 
     dumpSortDescription(description, settings);
     return wb.str();

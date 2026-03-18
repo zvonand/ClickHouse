@@ -54,7 +54,7 @@ void LimitStep::transformPipeline(QueryPipelineBuilder & pipeline, const BuildQu
 
 void LimitStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
     settings.out << prefix << "Limit " << limit << '\n';
     settings.out << prefix << "Offset " << offset << '\n';
 

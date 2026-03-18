@@ -219,7 +219,7 @@ void JoinStep::describePipeline(FormatSettings & settings) const
 
 void JoinStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
 
     auto description = describeJoinActions(join, settings);
     const size_t inline_count = settings.pretty ? 3 : 0;
@@ -238,10 +238,12 @@ void JoinStep::describeActions(FormatSettings & settings) const
             settings.out << name << ": " << value;
         }
         settings.out << '\n';
-        settings.out << prefix << "ResultRows: "
-        << (result_rows_estimation ? toString(*result_rows_estimation) : "unknown") << '\n';
 
-        settings.out << prefix << "Locality: " << toString(locality) << '\n';
+        if (result_rows_estimation)
+            settings.out << prefix << "ResultRows: " << toString(*result_rows_estimation) << '\n';
+
+        if (locality != JoinLocality::Unspecified)
+            settings.out << prefix << "Locality: " << toString(locality) << '\n';
     }
 
     for (size_t i = inline_count; i < description.size(); ++i)
@@ -274,7 +276,7 @@ void JoinStep::describeActions(FormatSettings & settings) const
 void JoinStep::describeActions(JSONBuilder::JSONMap & map) const
 {
     WriteBufferFromOwnString dummy;
-    ExplainFormatSettings dummy_settings{.out = dummy, .step_prefix = "", .other_prefix = "", .pretty_names = {}};
+    ExplainFormatSettings dummy_settings{.out = dummy, .header_prefix = "", .detail_prefix = "", .pretty_names = {}};
 
     for (const auto & [name, value] : describeJoinActions(join, dummy_settings))
         map.add(name, value);
@@ -386,7 +388,7 @@ void FilledJoinStep::updateOutputHeader()
 
 void FilledJoinStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.other_prefix;
+    const String & prefix = settings.detail_prefix;
 
     for (const auto & [name, value] : describeJoinActions(join, settings))
         settings.out << prefix << name << ": " << value << '\n';
@@ -395,7 +397,7 @@ void FilledJoinStep::describeActions(FormatSettings & settings) const
 void FilledJoinStep::describeActions(JSONBuilder::JSONMap & map) const
 {
     WriteBufferFromOwnString dummy;
-    ExplainFormatSettings dummy_settings{.out = dummy, .step_prefix = "", .other_prefix = "", .pretty_names = {}};
+    ExplainFormatSettings dummy_settings{.out = dummy, .header_prefix = "", .detail_prefix = "", .pretty_names = {}};
 
     for (const auto & [name, value] : describeJoinActions(join, dummy_settings))
         map.add(name, value);

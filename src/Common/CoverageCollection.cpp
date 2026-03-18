@@ -52,8 +52,15 @@ void collectAndInsertCoverage(
     const std::vector<uint64_t> & name_refs,
     ContextPtr context)
 {
+    LOG_INFO(getLogger("CoverageCollection"),
+        "Flushing test '{}': {} covered NameRefs, coverage map size {}",
+        test_name, name_refs.size(), g_coverage_map.size());
+
     if (name_refs.empty())
+    {
+        LOG_INFO(getLogger("CoverageCollection"), "No covered NameRefs for test '{}', skipping", test_name);
         return;
+    }
 
     ensureCoverageMapLoaded();
 
@@ -105,6 +112,10 @@ void collectAndInsertCoverage(
         line_starts.push_back(region.line_start);
         line_ends.push_back(region.line_end);
     }
+
+    LOG_INFO(getLogger("CoverageCollection"),
+        "Test '{}': {} NameRefs resolved to {} unique (file, line) pairs (map_size={})",
+        test_name, name_refs.size(), files.size(), g_coverage_map.size());
 
     if (files.empty())
         return;

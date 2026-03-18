@@ -1026,6 +1026,8 @@ BlockIO InterpreterSystemQuery::execute()
         case Type::SET_COVERAGE_TEST:
         {
             getContext()->checkAccess(AccessType::SYSTEM);
+            LOG_INFO(getLogger("InterpreterSystemQuery"),
+                "SYSTEM SET COVERAGE TEST '{}' received", query.coverage_test_name);
 #if WITH_COVERAGE
             {
                 /// Register (or re-register) the flush callback so coverage data is
@@ -1037,6 +1039,9 @@ BlockIO InterpreterSystemQuery::execute()
                 registerCoverageFlushCallback(
                     [global_ctx](std::string_view prev_test, const std::vector<uint64_t> & name_refs)
                     {
+                        LOG_INFO(getLogger("CoverageCollection"),
+                            "Flushing coverage for test '{}': {} covered functions",
+                            prev_test, name_refs.size());
 #if defined(__ELF__) && !defined(OS_FREEBSD)
                         DB::collectAndInsertCoverage(prev_test, name_refs, global_ctx);
 #else

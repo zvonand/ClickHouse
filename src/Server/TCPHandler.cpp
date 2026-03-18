@@ -1374,11 +1374,36 @@ void TCPHandler::processInsertQuery(QueryState & state)
                 if (wait_status == std::future_status::timeout)
                     throw Exception(ErrorCodes::TIMEOUT_EXCEEDED, "Wait for async insert timeout ({} ms) exceeded)", timeout_ms);
 
-                result.future.get();
+                auto write_result = result.future.get();
+
+                /// Report the written rows/bytes as progress so that the client
+                /// and query_log reflect the actual insert stats.
+                Progress write_progress;
+                write_progress.written_rows = write_result.written_rows;
+                write_progress.written_bytes = write_result.written_bytes;
+
+                /// For INSERT queries, read_rows/read_bytes should also reflect
+                /// the data that was parsed — same as written for non-deduplicated inserts.
+                Progress read_progress;
+                read_progress.read_rows = write_result.written_rows;
+                read_progress.read_bytes = write_result.written_bytes;
+
+                if (auto process_list_elem = state.query_context->getProcessListElement())
+                {
+                    process_list_elem->updateProgressOut(write_progress);
+                    process_list_elem->updateProgressIn(read_progress);
+                }
+
+                /// Update state.progress so that sendProgress picks it up.
+                state.progress.incrementPiecewiseAtomically(write_progress);
+                state.progress.incrementPiecewiseAtomically(read_progress);
             }
 
-            std::lock_guard lock(*callback_mutex);
-            sendInsertProfileEvents(state);
+            {
+                std::lock_guard lock(*callback_mutex);
+                sendProgress(state);
+                sendInsertProfileEvents(state);
+            }
             return;
         }
         if (result.status == AsynchronousInsertQueue::PushResult::TOO_MUCH_DATA)

@@ -241,22 +241,23 @@ void AsynchronousInsertQueue::InsertData::Entry::resetChunk()
     chunk = {};
 }
 
+void AsynchronousInsertQueue::InsertData::Entry::finish(WriteResult result)
+{
+    if (finished.exchange(true))
+        return;
+
+    resetChunk();
+    promise.set_value(result);
+}
+
 void AsynchronousInsertQueue::InsertData::Entry::finish(std::exception_ptr exception_)
 {
     if (finished.exchange(true))
         return;
 
     resetChunk();
-
-    if (exception_)
-    {
-        promise.set_exception(exception_);
-        ProfileEvents::increment(ProfileEvents::FailedAsyncInsertQuery, 1);
-    }
-    else
-    {
-        promise.set_value();
-    }
+    promise.set_exception(exception_);
+    ProfileEvents::increment(ProfileEvents::FailedAsyncInsertQuery, 1);
 }
 
 AsynchronousInsertQueue::QueueShardFlushTimeHistory::TimePoints
@@ -534,7 +535,7 @@ AsynchronousInsertQueue::PushResult AsynchronousInsertQueue::pushDataChunk(ASTPt
 
     InsertQuery key{query, query_context->getUserID(), query_context->getCurrentRoles(), settings, data_kind};
     InsertDataPtr data_to_process;
-    std::future<void> insert_future;
+    std::future<WriteResult> insert_future;
 
     size_t shard_num = static_cast<size_t>(key.hash % pool_size);
     auto & shard = queue_shards[shard_num];
@@ -1044,12 +1045,20 @@ try
     if (async_insert_log)
         log_elements.reserve(data->entries.size());
 
+    /// Per-entry write stats, populated during parsing/preprocessing,
+    /// used later to communicate results back to waiting clients.
+    std::unordered_map<InsertData::Entry *, WriteResult> per_entry_write_results;
+
     auto add_entry_to_asynchronous_insert_log = [&, query_by_format = NameToNameMap{}](
         const InsertData::EntryPtr & entry,
         const String & parsing_exception,
         size_t num_rows,
         size_t num_bytes) mutable
     {
+        /// Track per-entry stats for reporting back to clients on success.
+        if (parsing_exception.empty())
+            per_entry_write_results[entry.get()] = WriteResult{num_rows, num_bytes};
+
         if (!async_insert_log)
             return;
 
@@ -1161,7 +1170,13 @@ try
         for (const auto & entry : data->entries)
         {
             if (!entry->isFinished())
-                entry->finish();
+            {
+                auto it = per_entry_write_results.find(entry.get());
+                if (it != per_entry_write_results.end())
+                    entry->finish(it->second);
+                else
+                    entry->finish();
+            }
         }
     };
 

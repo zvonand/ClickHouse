@@ -1,4 +1,3 @@
--- Tags: no-parallel
 -- Issue: https://github.com/ClickHouse/ClickHouse/issues/94659
 -- ROW POLICY + ALIAS column with dictGet should not cause LOGICAL_ERROR
 

@@ -20,6 +20,9 @@ DATA_DIR="${USER_FILES_PATH}/${CLICKHOUSE_TEST_UNIQUE_NAME}"
 mkdir -p "${DATA_DIR}"
 rm -rf "${DATA_DIR:?}"/*
 
+# Capture start time to scope the text_log check to this test run only
+TEST_START=$(${CLICKHOUSE_CLIENT} --query "SELECT now()")
+
 for iteration in {1..5}; do
     # Prepare a data file for FileLog to consume
     for i in {1..10}; do
@@ -48,6 +51,11 @@ for iteration in {1..5}; do
         [[ "${count}" -ge 10 ]] && break
         sleep 0.2
     done
+
+    if [[ "${count}" -lt 10 ]]; then
+        echo "Warm-up failed: only ${count} rows consumed after 30 attempts" >&2
+        exit 1
+    fi
 
     # Drop the MV while writing new data to trigger the race:
     # the background thread may have already passed checkDependencies
@@ -78,7 +86,7 @@ ${CLICKHOUSE_CLIENT} --query "
     SELECT count() == 0
     FROM system.text_log
     WHERE event_date >= yesterday()
-        AND event_time >= now() - 600
+        AND event_time >= '${TEST_START}'
         AND level = 'Error'
         AND message LIKE '%DEPENDENCIES_NOT_FOUND%'
         AND message LIKE '%filelog_src%'

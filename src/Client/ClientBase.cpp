@@ -2966,6 +2966,14 @@ bool ClientBase::processQueryText(const String & text)
 
         return processMultiQueryFromFile(file_name);
     }
+    // Treat clickhouse-local ls command
+    if (supportsLocalMetaCommands() && boost::iequals(trimmed_input, "ls"))
+    {
+        // Rewrites command LS into a query that produces the list of all files of the current directory
+        const String ls_query = "SELECT _file AS file FROM file('*', 'One') ORDER BY file";
+        return executeMultiQuery(ls_query);
+    }
+
 
 #if USE_CLIENT_AI
     // Handle "?? <free_text>" command
@@ -3737,8 +3745,7 @@ void ClientBase::runInteractive()
 
         try
         {
-            const String query_input = rewriteLsMetaCommandIfNeeded(input);
-            if (!processQueryText(query_input))
+            if (!processQueryText(input))
                 break;
             last_input = input;
         }
@@ -3786,29 +3793,6 @@ bool ClientBase::processMultiQueryFromFile(const String & file_name)
     return executeMultiQuery(queries_from_file);
 }
 
-String ClientBase::rewriteLsMetaCommandIfNeeded(const String & query) const
-{
-    if (!supportsLocalMetaCommands())
-        return query;
-
-    // First, normalize the input and avoid issues
-    // Accepts formats with and without ';'
-    String str(query);
-    boost::algorithm::trim(str);
-
-    if (!str.empty() && str.back() == ';')
-    {
-        str.pop_back();
-        boost::algorithm::trim(str);
-    }
-    // Non-ls case
-    if (!boost::iequals(str, "ls"))
-        return query;
-
-    // Rewrites command LS into a query that produces the list of all files of the current directory
-    return "SELECT _file AS file FROM file('*', 'One') ORDER BY file";
-}
-
 void ClientBase::runNonInteractive()
 {
     if (delayed_interactive)
@@ -3848,8 +3832,8 @@ void ClientBase::runNonInteractive()
                     return;
             }
             else
-            {   const String query_input = rewriteLsMetaCommandIfNeeded(query);
-                if (!processQueryText(query_input))
+            {   
+                if (!processQueryText(query))
                     return;
             }
         }
@@ -3861,8 +3845,6 @@ void ClientBase::runNonInteractive()
         ReadBufferFromFileDescriptor in(stdin_fd);
         String text;
         readStringUntilEOF(text, in);
-
-        text = rewriteLsMetaCommandIfNeeded(text);
 
         if (query_fuzzer_runs)
             processWithASTFuzzer(text);

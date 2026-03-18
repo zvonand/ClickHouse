@@ -17,14 +17,14 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 echo "-- ls"
 (
     cd "$CURDIR"
-    test "$($CLICKHOUSE_LOCAL -q "ls" | wc -l)" -gt 0
+    test "$($CLICKHOUSE_LOCAL -q "ls" 2>/dev/null | wc -l)" -gt 0
 )
 echo "OK"
 
 echo "-- ls;"
 (
     cd "$CURDIR"
-    test "$($CLICKHOUSE_LOCAL -q "ls;" | wc -l)" -gt 0
+    test "$($CLICKHOUSE_LOCAL -q "ls;" 2>/dev/null | wc -l)" -gt 0
 )
 echo "OK"
 

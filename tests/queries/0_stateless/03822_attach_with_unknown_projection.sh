@@ -38,6 +38,9 @@ run "ALTER TABLE t_unknown_proj_1 DETACH PARTITION 0 SETTINGS mutations_sync=2"
 run "ALTER TABLE t_unknown_proj_1 CLEAR PROJECTION pp SETTINGS mutations_sync=2"
 run "ALTER TABLE t_unknown_proj_1 DROP PROJECTION pp SETTINGS mutations_sync=2"
 
+# Drop the detached part from replica 2 to force it to fetch the part with the unknown projection from replica 1.
+run "ALTER TABLE t_unknown_proj_2 DROP DETACHED PARTITION 0 SETTINGS allow_drop_detached=1"
+
 # Re-attach: the part still has pp.proj on disk, but the table no longer
 # knows about projection pp.
 run "ALTER TABLE t_unknown_proj_1 ATTACH PARTITION 0 SETTINGS mutations_sync=2"

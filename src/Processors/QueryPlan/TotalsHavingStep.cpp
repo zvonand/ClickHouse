@@ -112,7 +112,7 @@ static String totalsModeToString(TotalsMode totals_mode, double auto_include_thr
 
 void TotalsHavingStep::describeActions(FormatSettings & settings) const
 {
-    const String & prefix = settings.detail_prefix;
+    const String & prefiHx = settings.detail_prefix;
 
     settings.out << prefix << "Filter column: ";
 

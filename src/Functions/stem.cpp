@@ -2,13 +2,16 @@
 
 #if USE_NLP
 
+#include <algorithm>
+#include <cstring>
+#include <string_view>
+
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnNullable.h>
 #include <Columns/ColumnString.h>
 #include <Core/Settings.h>
 #include <DataTypes/DataTypeArray.h>
-#include <DataTypes/DataTypeFixedString.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeString.h>
 #include <Functions/FunctionFactory.h>
@@ -38,6 +41,22 @@ namespace ErrorCodes
 
 namespace
 {
+
+bool isValidStemWordType(const IDataType & type)
+{
+    if (isStringOrFixedString(type))
+        return true;
+    if (const auto * array_type = typeid_cast<const DataTypeArray *>(&type))
+    {
+        const IDataType & nested = *array_type->getNestedType();
+        if (isStringOrFixedString(nested))
+            return true;
+        if (const auto * nullable_type = typeid_cast<const DataTypeNullable *>(&nested))
+            return isStringOrFixedString(*nullable_type->getNestedType());
+    }
+    return false;
+}
+
 
 /// RAII wrapper around sb_stemmer. Constructed from a language code; throws
 /// ILLEGAL_TYPE_OF_ARGUMENT in the constructor if the language is unsupported.
@@ -166,63 +185,44 @@ public:
 
     ColumnNumbers getArgumentsThatAreAlwaysConstant() const override { return {1}; }
 
-    DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
+    DataTypePtr getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const override
     {
-        /// Argument 0: word(s) — see supported types below.
-        /// Argument 1: language code — must be a constant String.
+        FunctionArgumentDescriptors args{
+            {"word", &isValidStemWordType, nullptr,
+             "String, FixedString, Array(String), Array(FixedString), Array(Nullable(String)), or Array(Nullable(FixedString))"},
+            {"language", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), isColumnConst, "const String"},
+        };
+        validateFunctionArguments(*this, arguments, args);
 
-        if (!isString(arguments[1]))
-            throw Exception(
-                ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                "Second argument (language) of function {} must be String, got {}",
-                getName(), arguments[1]->getName());
+        const IDataType & arg0 = *arguments[0].type;
 
-        const DataTypePtr & arg0 = arguments[0];
-
-        /// String or FixedString → String
         if (isStringOrFixedString(arg0))
             return std::make_shared<DataTypeString>();
 
-        /// Array(T) where T is String, FixedString, or Nullable(String/FixedString)
-        if (const auto * array_type = typeid_cast<const DataTypeArray *>(arg0.get()))
-        {
-            const DataTypePtr & nested = array_type->getNestedType();
+        const auto & array_type = assert_cast<const DataTypeArray &>(arg0);
+        const IDataType & nested = *array_type.getNestedType();
 
-            if (isStringOrFixedString(nested))
-                return std::make_shared<DataTypeArray>(std::make_shared<DataTypeString>());
+        if (isStringOrFixedString(nested))
+            return std::make_shared<DataTypeArray>(std::make_shared<DataTypeString>());
 
-            if (const auto * nullable_type = typeid_cast<const DataTypeNullable *>(nested.get()))
-            {
-                if (isStringOrFixedString(nullable_type->getNestedType()))
-                    return std::make_shared<DataTypeArray>(
-                        std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>()));
-            }
-        }
-
-        throw Exception(
-            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-            "First argument of function {} must be String, FixedString, "
-            "Array(String), Array(FixedString), Array(Nullable(String)), or Array(Nullable(FixedString)). "
-            "Nullable and LowCardinality variants of String/FixedString are also accepted. "
-            "Got: {}",
-            getName(), arg0->getName());
+        /// Array(Nullable(String/FixedString))
+        const auto & nullable_type = assert_cast<const DataTypeNullable &>(nested);
+        chassert(isStringOrFixedString(*nullable_type.getNestedType()));
+        return std::make_shared<DataTypeArray>(
+            std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>()));
     }
 
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const override
     {
-        const ColumnConst * lang_col = checkAndGetColumn<ColumnConst>(arguments[1].column.get());
-        if (!lang_col)
-            throw Exception(
-                ErrorCodes::ILLEGAL_COLUMN,
-                "Second argument (language) of function {} must be a constant String",
-                getName());
+        const ColumnConst * language_col = checkAndGetColumn<ColumnConst>(arguments[1].column.get());
+        assert(language_col);
 
-        Stemmer stemmer(lang_col->getValue<String>());
+        Stemmer stemmer(language_col->getValue<String>());
 
         const ColumnPtr & input_col = arguments[0].column;
 
         /// Case 1: String or FixedString → String
-        if (!checkAndGetColumn<ColumnArray>(input_col.get()))
+        if (checkAndGetColumn<ColumnString>(input_col.get()) || checkAndGetColumn<ColumnFixedString>(input_col.get()))
             return stemmer.stemColumn(*input_col, input_rows_count);
 
         /// Case 2: Array(String/FixedString/Nullable(String/FixedString)) → Array(...)

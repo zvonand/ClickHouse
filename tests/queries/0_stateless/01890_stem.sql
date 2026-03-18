@@ -155,6 +155,16 @@ SELECT stem([1, 2, 3], 'en'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT '-- Array(Nullable(UInt32)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.';
 SELECT stem([toNullable(1)], 'en'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
+SELECT '-- Array(Array(String)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.';
+SELECT stem([['hello', 'world']], 'en'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+
+SELECT '-- Array(LowCardinality(String)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT (LowCardinality inside arrays is not unwrapped by the framework).';
+SELECT stem([toLowCardinality('hello')], 'en'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+
+SELECT '-- Nullable(Array(String)) input: framework strips outer Nullable, result is Nullable(Array(String)).';
+SELECT stem(toNullable(['blessing', 'running']), 'en');
+SELECT toTypeName(stem(toNullable(['word']), 'en'));
+
 SELECT '-- Calling without the experimental setting raises SUPPORT_IS_DISABLED.';
 SET allow_experimental_nlp_functions = 0;
 SELECT stem('blessing', 'en'); -- { serverError SUPPORT_IS_DISABLED }

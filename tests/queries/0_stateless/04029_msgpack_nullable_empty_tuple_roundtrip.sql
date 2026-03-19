@@ -19,17 +19,17 @@ SELECT c0 FROM file(currentDatabase() || '_04029_single.msgpack', 'MsgPack', 'c0
 
 SELECT 'multiple elements';
 DROP TABLE IF EXISTS test_multi;
-CREATE TABLE test_multi (c0 Nullable(Tuple(Int32, String, Float64))) ENGINE = Memory;
-INSERT INTO test_multi VALUES ((1, 'hello', 3.14)), (NULL), ((42, 'world', 2.72));
-INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04029_multi.msgpack', 'MsgPack', 'c0 Nullable(Tuple(Int32, String, Float64))') SELECT c0 FROM test_multi;
-SELECT c0 FROM file(currentDatabase() || '_04029_multi.msgpack', 'MsgPack', 'c0 Nullable(Tuple(Int32, String, Float64))');
+CREATE TABLE test_multi (c0 Nullable(Tuple(Int32, String, Int64))) ENGINE = Memory;
+INSERT INTO test_multi VALUES ((1, 'hello', 314)), (NULL), ((42, 'world', 272));
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04029_multi.msgpack', 'MsgPack', 'c0 Nullable(Tuple(Int32, String, Int64))') SELECT c0 FROM test_multi;
+SELECT c0 FROM file(currentDatabase() || '_04029_multi.msgpack', 'MsgPack', 'c0 Nullable(Tuple(Int32, String, Int64))');
 
 SELECT 'nested tuple';
 DROP TABLE IF EXISTS test_nested;
-CREATE TABLE test_nested (c0 Nullable(Tuple(Int32, Tuple(String, Float64)))) ENGINE = Memory;
-INSERT INTO test_nested VALUES ((1, ('a', 0.1))), (NULL), ((2, ('b', 0.2)));
-INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04029_nested.msgpack', 'MsgPack', 'c0 Nullable(Tuple(Int32, Tuple(String, Float64)))') SELECT c0 FROM test_nested;
-SELECT c0 FROM file(currentDatabase() || '_04029_nested.msgpack', 'MsgPack', 'c0 Nullable(Tuple(Int32, Tuple(String, Float64)))');
+CREATE TABLE test_nested (c0 Nullable(Tuple(Int32, Tuple(String, Int32)))) ENGINE = Memory;
+INSERT INTO test_nested VALUES ((1, ('a', 10))), (NULL), ((2, ('b', 20)));
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04029_nested.msgpack', 'MsgPack', 'c0 Nullable(Tuple(Int32, Tuple(String, Int32)))') SELECT c0 FROM test_nested;
+SELECT c0 FROM file(currentDatabase() || '_04029_nested.msgpack', 'MsgPack', 'c0 Nullable(Tuple(Int32, Tuple(String, Int32)))');
 
 SELECT 'all nulls';
 DROP TABLE IF EXISTS test_allnull;

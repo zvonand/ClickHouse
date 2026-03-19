@@ -62,9 +62,18 @@ class CoverageExporter:
         stats_cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{stats_query}" {command_args_post}'
         rc_stats, stdout_stats, stderr_stats = Shell.get_res_stdout_stderr(stats_cmd, verbose=True)
         if rc_stats != 0:
-            print(f"WARNING: Failed to read {table} statistics, stderr: {stderr_stats}")
+            raise RuntimeError(
+                f"Failed to read system.{table} statistics, stderr: {stderr_stats}"
+            )
         else:
             print(f"Coverage log statistics: {stdout_stats}")
+            rows = int(stdout_stats.strip().split("\t")[0])
+            if rows == 0:
+                raise RuntimeError(
+                    f"system.{table} is empty — per-test coverage collection is broken. "
+                    "Check that the server was built with WITH_COVERAGE=ON and that "
+                    "SYSTEM SET COVERAGE TEST flushed data correctly."
+                )
 
         if not self.to_file:
             query = (

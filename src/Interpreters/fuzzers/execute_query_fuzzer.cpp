@@ -28,6 +28,8 @@
 #include <iostream>
 #include <map>
 
+/// This fuzzer supports additional options: arguments after -ignore_remaining_args=1 are parsed as settings and applied to the context.
+
 using namespace DB;
 namespace fs = std::filesystem;
 

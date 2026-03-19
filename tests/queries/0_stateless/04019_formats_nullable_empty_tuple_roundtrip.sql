@@ -1,3 +1,6 @@
+-- Tags: no-fasttest
+-- no-fasttest: Some formats not available in fasttest enviroment
+
 -- { echo }
 
 SET allow_experimental_nullable_tuple_type = 1;

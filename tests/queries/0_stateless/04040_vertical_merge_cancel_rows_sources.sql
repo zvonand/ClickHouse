@@ -5,8 +5,9 @@
 -- stage can be cancelled (is_cancelled() returns true) but the cancellation check
 -- in finalize() passes because the blocker was released in between. The merge then
 -- proceeds to the vertical stage with rows_sources_count=0, hitting the assertion.
--- The fix: detect this case (rows_sources_count=0 with multiple parts) and abort
--- cleanly with ABORTED instead of continuing with no data.
+-- The fix: once cancellation is detected, persist it in merge_list_element->is_cancelled
+-- so that subsequent checks (finalize, vertical stage) also see the cancellation
+-- even if the merge blocker is released in between.
 
 DROP TABLE IF EXISTS test;
 CREATE TABLE test (id UInt64, d Dynamic)

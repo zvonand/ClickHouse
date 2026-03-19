@@ -28,7 +28,6 @@
 #include <Processors/Merges/ReplacingSortedTransform.h>
 #include <Processors/Merges/SummingSortedTransform.h>
 #include <Processors/Merges/VersionedCollapsingTransform.h>
-#include <Processors/QueryPlan/CreatingSetsStep.h>
 #include <Processors/QueryPlan/DistinctStep.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/ExtractColumnsStep.h>
@@ -308,8 +307,22 @@ static void addMissedColumnsToSerializationInfos(
 
 bool MergeTask::GlobalRuntimeContext::isCancelled() const
 {
-    return (future_part ? merges_blocker->isCancelledForPartition(future_part->part_info.getPartitionId()) : merges_blocker->isCancelled())
-        || merge_list_element_ptr->is_cancelled.load(std::memory_order_relaxed);
+    /// Once cancellation is detected, persist it so that subsequent checks still see it
+    /// even if the merge blocker is released in between (e.g. rapid SYSTEM STOP/START MERGES toggling).
+    if (merge_list_element_ptr->is_cancelled.load(std::memory_order_relaxed))
+        return true;
+
+    bool cancelled = future_part
+        ? merges_blocker->isCancelledForPartition(future_part->part_info.getPartitionId())
+        : merges_blocker->isCancelled();
+
+    if (cancelled)
+    {
+        merge_list_element_ptr->is_cancelled.store(true, std::memory_order_relaxed);
+        return true;
+    }
+
+    return false;
 }
 
 void MergeTask::GlobalRuntimeContext::checkOperationIsNotCanceled() const
@@ -890,9 +903,21 @@ bool MergeTask::ExecuteAndFinalizeHorizontalPart::prepare() const
         merge_list_element = global_ctx->merge_list_element_ptr,
         partition_id = global_ctx->future_part->part_info.getPartitionId()]() -> bool
     {
-        return merges_blocker->isCancelledForPartition(partition_id)
-            || (need_remove && ttl_merges_blocker->isCancelled())
-            || merge_list_element->is_cancelled.load(std::memory_order_relaxed);
+        /// Once cancellation is detected, persist it so that subsequent checks still see it
+        /// even if the merge blocker is released in between (e.g. rapid SYSTEM STOP/START MERGES toggling).
+        if (merge_list_element->is_cancelled.load(std::memory_order_relaxed))
+            return true;
+
+        bool cancelled = merges_blocker->isCancelledForPartition(partition_id)
+            || (need_remove && ttl_merges_blocker->isCancelled());
+
+        if (cancelled)
+        {
+            merge_list_element->is_cancelled.store(true, std::memory_order_relaxed);
+            return true;
+        }
+
+        return false;
     };
 
     /// This is the end of preparation. Execution will be per block.
@@ -1302,17 +1327,6 @@ bool MergeTask::VerticalMergeStage::prepareVerticalMergeForAllColumns() const
 
     /// Ensure data has written to disk.
     size_t rows_sources_count = ctx->rows_sources_temporary_file->finalizeWriting();
-
-    /// When SYSTEM STOP/START MERGES toggles rapidly, the horizontal merge pipeline
-    /// can be cancelled (is_cancelled() returns true) but the cancellation check in
-    /// finalize() passes because the blocker was released in between. Detect this:
-    /// if we have multiple source parts but wrote zero rows_sources bytes AND the missing
-    /// rows are not accounted for by TTL filtering, the horizontal stage was effectively
-    /// cancelled. Abort cleanly instead of continuing with no data.
-    /// Note: rows_sources_count == 0 is legitimate when TTL filtering removes all rows,
-    /// in which case input_rows_filtered == sum_input_rows_exact.
-    if (rows_sources_count == 0 && global_ctx->future_part->parts.size() > 1 && input_rows_filtered < sum_input_rows_exact)
-        throw Exception(ErrorCodes::ABORTED, "Horizontal merge stage was cancelled, aborting vertical merge");
 
     /// In special case, when there is only one source part, and no rows were skipped, we may have
     /// skipped writing rows_sources file. Otherwise rows_sources_count must be equal to the total
@@ -2304,8 +2318,6 @@ public:
         output_header = TTLDeleteFilterTransform::transformHeader(input_headers.front());
     }
 
-    PreparedSets::Subqueries getSubqueries() { return {}; }
-
 private:
     static Traits getTraits()
     {
@@ -2351,8 +2363,6 @@ public:
     }
 
     String getName() const override { return "TTL"; }
-
-    PreparedSets::Subqueries getSubqueries() { return {}; }
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override
     {
@@ -2714,8 +2724,6 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
         merge_parts_query_plan.addStep(std::move(calculate_sorting_key_expression_step));
     }
 
-    PreparedSets::Subqueries ttl_filter_subqueries;
-
     /// For vertical merge with TTL delete, add a step that evaluates TTL expressions
     /// and produces a filter column. This must be before the merge step so each input
     /// stream has the filter column available for the merging algorithm.
@@ -2729,7 +2737,6 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
             global_ctx->time_of_merge,
             ctx->force_ttl);
 
-        ttl_filter_subqueries = ttl_filter_step->getSubqueries();
         ttl_filter_step->setStepDescription("TTL delete filter");
         merge_parts_query_plan.addStep(std::move(ttl_filter_step));
     }
@@ -2820,8 +2827,6 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
         merge_parts_query_plan.addStep(std::move(deduplication_step));
     }
 
-    PreparedSets::Subqueries subqueries;
-
     /// TTL step: still runs after the merge even in vertical TTL mode.
     /// In vertical TTL mode, rows are already filtered by the merging algorithm,
     /// so the TTL step only updates TTL info without removing any rows.
@@ -2837,19 +2842,13 @@ void MergeTask::ExecuteAndFinalizeHorizontalPart::createMergedStream() const
             global_ctx->time_of_merge,
             ctx->force_ttl);
 
-        subqueries = ttl_step->getSubqueries();
         ttl_step->setStepDescription("TTL step");
         merge_parts_query_plan.addStep(std::move(ttl_step));
     }
 
-    subqueries.insert(subqueries.end(), ttl_filter_subqueries.begin(), ttl_filter_subqueries.end());
-
     /// Secondary indices expressions
     if (!global_ctx->merging_skip_indexes.empty())
         addSkipIndexesExpressionSteps(merge_parts_query_plan, global_ctx->merging_skip_indexes, global_ctx);
-
-    if (!subqueries.empty())
-        addCreatingSetsStep(merge_parts_query_plan, std::move(subqueries), global_ctx->context);
 
     /// If merge may reduce rows, rebuild text index and statistics for the resulting part.
     if (global_ctx->merge_may_reduce_rows)

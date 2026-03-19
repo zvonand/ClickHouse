@@ -132,10 +132,15 @@ class Targeting:
         return s.replace("\\", "\\\\").replace("'", "\\'")
 
     @staticmethod
-    def _normalize_path(path: str) -> str:
-        """Strip leading ./ so endsWith matches against stored absolute paths."""
+    def _stored_path(path: str) -> str:
+        """Convert a repo-relative diff path to the stored coverage path format.
+
+        Coverage data is built with -ffile-prefix-map=/ClickHouse=. so all
+        source paths are stored as ./src/... in checks_coverage_lines.
+        Strip any leading ./ from the diff path then re-add the ./ prefix.
+        """
         p = path.replace("\\", "/").lstrip("./")
-        return p
+        return "./" + p
 
     # Absolute cap: a line covering more than this many tests is excluded
     # (too common code — carries no signal for targeted test selection).
@@ -157,7 +162,7 @@ class Targeting:
         print(f"[find_tests] querying coverage for {len(changed_lines)} changed lines")
 
         conditions = " OR ".join(
-            f"(endsWith(file, '{self._escape_sql_string(self._normalize_path(f))}') AND line_start <= {ln} AND line_end >= {ln})"
+            f"(file = '{self._escape_sql_string(self._stored_path(f))}' AND line_start <= {ln} AND line_end >= {ln})"
             for f, ln in changed_lines
         )
 
@@ -202,10 +207,10 @@ class Targeting:
         # Map each input (filename, line_no) to its tests.
         result: dict = {}
         for filename, line_no in changed_lines:
-            suffix = self._normalize_path(filename)
+            stored = self._stored_path(filename)
             matched: list = []
             for file_, line_start, line_end, tests in coverage_ranges:
-                if file_.endswith(suffix) and line_start <= line_no <= line_end:
+                if file_ == stored and line_start <= line_no <= line_end:
                     matched.extend(tests)
             result[(filename, line_no)] = sorted(set(matched))
 

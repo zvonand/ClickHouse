@@ -768,8 +768,7 @@ def test_scenario(scenario, cluster_factory, request, run_meta):
     seed_val = request.config.getoption("--seed")
     print(f"[keeper] seed={int(seed_val)} faults={'enabled' if fs_effective else 'disabled'} (scenario={scenario.get('id')})")
 
-    run_meta_eff = run_meta
-    run_meta_eff["backend"] = backend
+    run_meta_eff = {**run_meta, "backend": backend}
 
     run_id = f"{scenario.get('id','')}-{run_meta.get('commit_sha','local')}-{uuid.uuid4().hex[:8]}"
     cname = re.sub(r"[^a-zA-Z0-9_-]", "_", run_id)

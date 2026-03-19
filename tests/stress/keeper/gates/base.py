@@ -145,40 +145,40 @@ def coord_timeouts_match(nodes, ctx, startup=None, shutdown=None):
     Best-effort: parse generated keeper_config_*.xml from instances_dir/configs/<cluster_name>/.
     If values are missing or files not found, treat as non-fatal (pass).
     """
-    try:
-        if ctx is None:
-            return
-        cluster = ctx.get("cluster")
-        if cluster is None:
-            return
-        cname = os.environ.get("KEEPER_CLUSTER_NAME", "")
-        inst_dir = Path(getattr(cluster, "instances_dir", ""))
-        conf_dir = inst_dir / "configs" / (cname or "")
-        if not conf_dir.exists():
-            return
-        # Read one config (all nodes share the same coord settings)
-        paths = sorted(conf_dir.glob("keeper_config_*.xml"))
-        if not paths:
-            return
-        txt = paths[0].read_text(encoding="utf-8")
-
-        if startup is not None:
-            exp = int(startup)
-            m = re.search(r"<startup_timeout>\s*([0-9]+)\s*</startup_timeout>", txt)
-            if m and int(m.group(1)) != exp:
-                raise AssertionError(
-                    f"coord_timeouts_match: startup_timeout={m.group(1)} != {exp}"
-                )
-        if shutdown is not None:
-            exp = int(shutdown)
-            m = re.search(r"<shutdown_timeout>\s*([0-9]+)\s*</shutdown_timeout>", txt)
-            if m and int(m.group(1)) != exp:
-                raise AssertionError(
-                    f"coord_timeouts_match: shutdown_timeout={m.group(1)} != {exp}"
-                )
-    except Exception:
-        # Non-fatal in stress env
+    if ctx is None:
         return
+    cluster = ctx.get("cluster")
+    if cluster is None:
+        return
+    cname = os.environ.get("KEEPER_CLUSTER_NAME", "")
+    inst_dir = Path(getattr(cluster, "instances_dir", ""))
+    conf_dir = inst_dir / "configs" / (cname or "")
+    if not conf_dir.exists():
+        return
+    # Read one config (all nodes share the same coord settings)
+    paths = sorted(conf_dir.glob("keeper_config_*.xml"))
+    if not paths:
+        return
+    try:
+        txt = paths[0].read_text(encoding="utf-8")
+    except OSError:
+        # Non-fatal: config file may be unavailable in stress env
+        return
+
+    if startup is not None:
+        exp = int(startup)
+        m = re.search(r"<startup_timeout>\s*([0-9]+)\s*</startup_timeout>", txt)
+        if m and int(m.group(1)) != exp:
+            raise AssertionError(
+                f"coord_timeouts_match: startup_timeout={m.group(1)} != {exp}"
+            )
+    if shutdown is not None:
+        exp = int(shutdown)
+        m = re.search(r"<shutdown_timeout>\s*([0-9]+)\s*</shutdown_timeout>", txt)
+        if m and int(m.group(1)) != exp:
+            raise AssertionError(
+                f"coord_timeouts_match: shutdown_timeout={m.group(1)} != {exp}"
+            )
 
 
 def error_rate_le(summary, max_ratio=DEFAULT_ERROR_RATE):

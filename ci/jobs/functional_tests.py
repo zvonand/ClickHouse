@@ -163,7 +163,7 @@ def main():
             pass
         elif to in OPTIONS_TO_TEST_RUNNER_ARGUMENTS:
             pass
-        elif to == "per_test_coverage":
+        elif to in ("per_test_coverage", "llvm_coverage_build"):
             pass
         else:
             assert False, f"Unknown option [{to}]"

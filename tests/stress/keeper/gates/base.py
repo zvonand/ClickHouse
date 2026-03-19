@@ -62,6 +62,7 @@ def backlog_drains(nodes, max_s=120):
     # Best-effort: wait until watches drop near baseline
     deadline = time.time() + max(1, int(max_s))
     last = None
+    _warned = False
     while time.time() < deadline:
         try:
             cur = sum(wchs_total(n) for n in nodes)
@@ -69,8 +70,10 @@ def backlog_drains(nodes, max_s=120):
                 if cur <= 5:
                     return
             last = cur
-        except Exception:
-            pass
+        except Exception as e:
+            if not _warned:
+                print(f"Watch count probe failed while waiting for backlog to drain, will keep retrying: {e}")
+                _warned = True
         time.sleep(1.0)
 
 
@@ -85,7 +88,8 @@ def _aggregate_totals(nodes, targets, aggregate, per_node_values_fn):
                     continue
                 v = float(val) if val is not None else 0.0
                 totals[k] = max(totals[k], v) if agg == "max" else totals[k] + v
-        except Exception:
+        except Exception as e:
+            print(f"Skipping metrics aggregation for node {getattr(n, 'name', n)}: {e}")
             continue
     return totals
 
@@ -95,7 +99,8 @@ def _conf_members_count(node):
     try:
         txt = four(node, "conf") or ""
         return sum(1 for line in txt.splitlines() if line.strip().startswith("server."))
-    except Exception:
+    except Exception as e:
+        print(f"4lw 'conf' query failed on node {getattr(node, 'name', node)}, treating as 0 cluster members: {e}")
         return 0
 
 
@@ -122,6 +127,7 @@ def config_converged(nodes, timeout_s=30):
     if expected <= 0:
         expected = len(nodes)
     deadline = time.time() + max(1, int(timeout_s))
+    _warned = False
     while time.time() < deadline:
         try:
             ok = True
@@ -133,8 +139,10 @@ def config_converged(nodes, timeout_s=30):
                     break
             if ok:
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            if not _warned:
+                print(f"Cluster conf convergence check failed, will keep retrying: {e}")
+                _warned = True
         time.sleep(0.5)
     raise AssertionError("config_converged: mismatch across nodes")
 
@@ -146,27 +154,27 @@ def coord_timeouts_match(nodes, ctx, startup=None, shutdown=None):
     If values are missing or files not found, treat as non-fatal (pass).
     """
     if ctx is None:
-        print("[coord_timeouts_match] skip: no ctx")
+        print("Skipping coordination timeout validation: no metrics context available to locate keeper config files")
         return
     cluster = ctx.get("cluster")
     if cluster is None:
-        print("[coord_timeouts_match] skip: no cluster in ctx")
+        print("Skipping coordination timeout validation: cluster object not found in metrics context")
         return
     cname = os.environ.get("KEEPER_CLUSTER_NAME", "")
     inst_dir = Path(getattr(cluster, "instances_dir", ""))
     conf_dir = inst_dir / "configs" / (cname or "")
     if not conf_dir.exists():
-        print(f"[coord_timeouts_match] skip: config dir not found: {conf_dir}")
+        print(f"Skipping coordination timeout validation: keeper config directory not found at {conf_dir}")
         return
     # Read one config (all nodes share the same coord settings)
     paths = sorted(conf_dir.glob("keeper_config_*.xml"))
     if not paths:
-        print(f"[coord_timeouts_match] skip: no keeper_config_*.xml in {conf_dir}")
+        print(f"Skipping coordination timeout validation: no keeper_config_*.xml files found in {conf_dir}")
         return
     try:
         txt = paths[0].read_text(encoding="utf-8")
     except OSError as e:
-        print(f"[coord_timeouts_match] skip: could not read {paths[0]}: {e}")
+        print(f"Skipping coordination timeout validation: could not read config file {paths[0]}: {e}")
         return
 
     if startup is not None:
@@ -413,24 +421,30 @@ def no_watcher_hotspot(nodes, ctx=None, max_share=0.95, max_path_share=None):
 
 def ephemerals_gone_within(nodes, max_s=60):
     deadline = time.time() + max(1, int(max_s))
+    _warned = False
     while time.time() < deadline:
         try:
             if not any(any_ephemerals(n) for n in nodes):
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            if not _warned:
+                print(f"Ephemeral node probe failed while waiting for sessions to expire, will keep retrying: {e}")
+                _warned = True
         time.sleep(0.5)
 
 
 def ready_expect(nodes, leader, ok=True, timeout_s=60):
     deadline = time.time() + max(1, int(timeout_s))
+    _warned = False
     while time.time() < deadline:
         try:
             r = ready(leader)
             if bool(r) == bool(ok):
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            if not _warned:
+                print(f"Keeper readiness probe failed, will keep retrying for up to {int(timeout_s)}s: {e}")
+                _warned = True
         time.sleep(0.5)
     raise AssertionError(
         f"ready_expect: expected {bool(ok)} but condition not met in {int(timeout_s)}s"

@@ -284,8 +284,8 @@ class MetricsSampler:
             ):
                 try:
                     self.flush()
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Metrics flush failed, some data points may be lost: {e}")
             time.sleep(self.interval_s)
 
     def start(self):

@@ -93,6 +93,7 @@ def _step_background_schedule(step, nodes, leader, ctx):
     dur = _get_duration(step)
     subs = step.get("steps") or []
     if not subs:
+        print(f"Fault step kind={step.get('kind')!r} has no sub-steps configured, skipping")
         return
 
     seed = None
@@ -138,6 +139,7 @@ def _step_ensure_paths(step, nodes, leader, ctx):
     """Ensure znode paths exist via keeper-client (in-container for Keeper; from host for ZooKeeper)."""
     paths = [str(p).strip() for p in (step.get("paths") or []) if str(p).strip()]
     if not paths:
+        print("ensure_paths step has no paths configured, skipping znode creation")
         return
     targets = resolve_targets(step.get("on", "leader"), nodes, leader)
     cluster = (ctx or {}).get("cluster")
@@ -177,8 +179,8 @@ def _step_ensure_paths(step, nodes, leader, ctx):
             print(
                 f"[keeper] ensure_paths node={t.name} zk_znode_count={m.get('zk_znode_count')}"
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Could not read znode count stats from node {getattr(t, 'name', t)}: {e}")
 
 
 
@@ -194,6 +196,7 @@ def _step_parallel(step, nodes, leader, ctx):
     """
     subs = step.get("steps") or []
     if not subs:
+        print(f"Parallel fault step has no sub-steps configured, skipping")
         return
 
     parent_dur = step.get("duration_s")
@@ -270,6 +273,7 @@ def apply_step(step, nodes, leader, ctx):
     """
     kind = step.get("kind")
     if not kind:
+        print(f"Fault step is missing required 'kind' field, skipping: {step}")
         return
 
     # 1. Try registered fault handler
@@ -304,5 +308,6 @@ def apply_step(step, nodes, leader, ctx):
     if callable(builtin_handler):
         return builtin_handler(step, nodes, leader, ctx)
 
-    # No handler found for this step kind; do nothing
+    # No handler found for this step kind
+    print(f"No handler registered for fault step kind={kind!r}, step will be skipped")
     return

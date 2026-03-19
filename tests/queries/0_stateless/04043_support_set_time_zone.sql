@@ -11,3 +11,4 @@ SELECT timezone(), timezoneOf(now());
 
 SET TIME ZONE 'Asia/Novosibirsk';
 SELECT timezone(), timezoneOf(now());
+

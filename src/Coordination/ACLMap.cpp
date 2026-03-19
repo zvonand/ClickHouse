@@ -49,10 +49,15 @@ ACLId ACLMap::convertACLs(const Coordination::ACLs & acls)
     if (acl_to_num.contains(acls))
         return acl_to_num[acls];
 
-    /// Start from one
+    /// Start from one. After overflow, skip zero (sentinel) and IDs still in use.
+    auto start = max_acl_id;
     auto index = max_acl_id++;
     while (index == 0 || num_to_acl.contains(index))
+    {
         index = max_acl_id++;
+        if (max_acl_id == start)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "All ACL IDs are in use");
+    }
 
     acl_to_num[acls] = index;
     num_to_acl[index] = acls;

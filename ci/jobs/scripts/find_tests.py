@@ -165,11 +165,21 @@ class Targeting:
         if not changed_lines:
             return {fl: [] for fl in changed_lines}
 
-        print(f"[find_tests] querying coverage for {len(changed_lines)} changed lines")
+        # Group changed lines by file so we query with `file IN (…)` instead of
+        # one condition per line.  A PR touching 13 files but 1000+ lines would
+        # otherwise generate a URL too long for the CIDB HTTP endpoint.
+        files_to_lines: dict = {}
+        for f, ln in changed_lines:
+            files_to_lines.setdefault(self._stored_path(f), set()).add(ln)
 
-        conditions = " OR ".join(
-            f"(file = '{self._escape_sql_string(self._stored_path(f))}' AND line_start <= {ln} AND line_end >= {ln})"
-            for f, ln in changed_lines
+        unique_files = sorted(files_to_lines)
+        print(
+            f"[find_tests] querying coverage for {len(changed_lines)} changed lines "
+            f"across {len(unique_files)} files"
+        )
+
+        file_list = ", ".join(
+            f"'{self._escape_sql_string(f)}'" for f in unique_files
         )
 
         query = f"""
@@ -182,7 +192,7 @@ class Targeting:
         WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND notEmpty(test_name)
-          AND ({conditions})
+          AND file IN ({file_list})
         GROUP BY file, line_start, line_end
         """
 
@@ -210,6 +220,8 @@ class Targeting:
                 print(f"Failed to parse coverage row: {row[:100]}")
 
         # Map each input (filename, line_no) to (test_name, region_width) pairs.
+        # The CIDB query returned all ranges for the touched files; now filter
+        # in Python to only ranges that actually overlap a changed line.
         result: dict = {}
         for filename, line_no in changed_lines:
             stored = self._stored_path(filename)

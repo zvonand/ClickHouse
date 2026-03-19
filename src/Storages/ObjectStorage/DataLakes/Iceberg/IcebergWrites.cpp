@@ -569,7 +569,7 @@ void generateManifestList(
                         {
                             if (old_added_snapshot_id_entry.unionBranch() == 0) /// it means add_snapshot_id is null
                             {
-                                /// This only happens when we read data written by a old version of iceberg, which violent the spec of iceberg.
+                                /// This only happens when we read data written by a old version of iceberg, which violates the spec of iceberg.
                                 throw Exception(
                                     ErrorCodes::ICEBERG_SPECIFICATION_VIOLATION,
                                     "Manifest list {} has null value for field '{}', but it is required",

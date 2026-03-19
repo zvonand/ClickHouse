@@ -5992,7 +5992,10 @@ CONV_FN(ExplainQuery, explain)
             ret += " ";
         }
     }
-    SQLQueryInnerToString(ret, explain.inner_query());
+    if (!explain.has_expl() || explain.expl() != ExplainQuery_ExplainValues_CURRENT_TRANSACTION)
+    {
+        SQLQueryInnerToString(ret, explain.inner_query());
+    }
 }
 
 CONV_FN(SingleSQLQuery, query)

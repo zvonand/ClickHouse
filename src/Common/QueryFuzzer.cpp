@@ -1599,9 +1599,11 @@ void QueryFuzzer::fuzzExplainSettings(ASTSetQuery & settings_ast, ASTExplainQuer
 
     static const std::unordered_map<ASTExplainQuery::ExplainKind, DB::Strings> settings_by_kind
         = {{ASTExplainQuery::ExplainKind::ParsedAST, {"graph", "optimize"}},
-           {ASTExplainQuery::ExplainKind::AnalyzedSyntax, {"oneline", "query_tree_passes"}},
-           {ASTExplainQuery::QueryTree, {"run_passes", "dump_passes", "dump_ast", "passes"}},
-           {ASTExplainQuery::ExplainKind::QueryPlan, {"header", "description", "actions", "indexes", "optimize", "json", "sorting"}},
+           {ASTExplainQuery::ExplainKind::AnalyzedSyntax, {"oneline", "run_query_tree_passes", "query_tree_passes"}},
+           {ASTExplainQuery::QueryTree, {"run_passes", "dump_tree", "dump_passes", "dump_ast", "passes"}},
+           {ASTExplainQuery::ExplainKind::QueryPlan,
+            {"header", "description", "actions", "indexes", "projections", "optimize", "json", "sorting", "distributed",
+             "keep_logical_steps", "input_headers", "compact"}},
            {ASTExplainQuery::ExplainKind::QueryPipeline, {"header", "graph", "compact"}},
            {ASTExplainQuery::ExplainKind::QueryEstimates, {}},
            {ASTExplainQuery::ExplainKind::TableOverride, {}},

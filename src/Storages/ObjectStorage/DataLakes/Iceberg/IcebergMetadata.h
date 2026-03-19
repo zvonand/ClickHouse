@@ -44,7 +44,8 @@ public:
     IcebergMetadata(
         ObjectStoragePtr object_storage_,
         StorageObjectStorageConfigurationPtr configuration_,
-        Iceberg::PersistentTableComponents && persistent_components_);
+        Iceberg::PersistentTableComponents && persistent_components_,
+        ContextPtr context_);
 
     ~IcebergMetadata() override;
 

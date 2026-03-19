@@ -3,13 +3,24 @@ use std::panic;
 use std::slice;
 
 fn set_output(result: String, out: *mut *mut u8, out_size: *mut u64) {
-    assert!(!out_size.is_null());
-    let out_size_ptr = unsafe { &mut *out_size };
-    *out_size_ptr = (result.len() + 1).try_into().unwrap();
+    if out_size.is_null() || out.is_null() {
+        return;
+    }
 
-    assert!(!out.is_null());
-    let out_ptr = unsafe { &mut *out };
-    *out_ptr = CString::new(result).unwrap().into_raw() as *mut u8;
+    let cstring = match CString::new(result) {
+        Ok(s) => s,
+        Err(e) => {
+            // If the result contains embedded null bytes, strip them.
+            let mut bytes = e.into_vec();
+            bytes.retain(|&b| b != 0);
+            CString::new(bytes).unwrap_or_default()
+        }
+    };
+
+    unsafe {
+        out_size.write((cstring.as_bytes().len() + 1) as u64);
+        out.write(cstring.into_raw() as *mut u8);
+    }
 }
 
 /// Transpiles SQL from one dialect to ClickHouse SQL.
@@ -21,8 +32,8 @@ unsafe fn polyglot_transpile_impl(
     out: *mut *mut u8,
     out_size: *mut u64,
 ) -> i64 {
-    let query_vec = slice::from_raw_parts(query, query_size.try_into().unwrap()).to_vec();
-    let Ok(query_str) = String::from_utf8(query_vec) else {
+    let query_slice = slice::from_raw_parts(query, query_size.try_into().unwrap());
+    let Ok(query_str) = std::str::from_utf8(query_slice) else {
         set_output(
             "The query must be UTF-8 encoded!".to_string(),
             out,
@@ -31,9 +42,9 @@ unsafe fn polyglot_transpile_impl(
         return 1;
     };
 
-    let dialect_vec =
-        slice::from_raw_parts(source_dialect, source_dialect_size.try_into().unwrap()).to_vec();
-    let Ok(dialect_str) = String::from_utf8(dialect_vec) else {
+    let dialect_slice =
+        slice::from_raw_parts(source_dialect, source_dialect_size.try_into().unwrap());
+    let Ok(dialect_str) = std::str::from_utf8(dialect_slice) else {
         set_output(
             "The dialect name must be UTF-8 encoded!".to_string(),
             out,
@@ -42,7 +53,7 @@ unsafe fn polyglot_transpile_impl(
         return 1;
     };
 
-    match polyglot_sql::transpile_by_name(&query_str, &dialect_str, "clickhouse") {
+    match polyglot_sql::transpile_by_name(query_str, dialect_str, "clickhouse") {
         Ok(statements) if statements.len() == 1 => {
             set_output(statements.into_iter().next().unwrap(), out, out_size);
             0

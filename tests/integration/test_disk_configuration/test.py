@@ -631,14 +631,15 @@ def test_merge_tree_custom_encrypted_disk_include(start_cluster, use_node):
 def test_dynamic_disk_security_settings(start_cluster):
     """Test that settings profiles control access to from_env, include, and from_zk in dynamic disks.
 
-    Three profiles are created:
+    The dynamic_disk_allow_* settings default to false and are self-locking: a user whose
+    current session value is false cannot raise it via SET or query-level overrides
+    (QUERY_IS_PROHIBITED). Only an admin can grant access via a settings profile.
+
+    One profile is created:
       - allow_dynamic_disk_access: all three settings enabled
-      - deny_dynamic_disk_readonly: all three settings disabled with READONLY constraint
-        (prevents the user from overriding them via SET or query-level settings)
 
     Users:
-      - restricted_user: default profile (settings are false by default, but overridable)
-      - locked_user: deny_dynamic_disk_readonly profile (settings locked to false, not overridable)
+      - restricted_user: default profile (settings are false and non-bypassable)
       - privileged_user: allow_dynamic_disk_access profile (all enabled)
     """
     node = cluster.instances["node5"]
@@ -658,22 +659,10 @@ def test_dynamic_disk_security_settings(start_cluster):
         "dynamic_disk_allow_include = true, "
         "dynamic_disk_allow_from_zk = true"
     )
-    # deny_dynamic_disk_readonly locks the settings to false with READONLY so that users
-    # assigned to this profile cannot lift the restriction via SET or query-level overrides.
-    node.query(
-        "CREATE SETTINGS PROFILE IF NOT EXISTS deny_dynamic_disk_readonly "
-        "SETTINGS dynamic_disk_allow_from_env = false READONLY, "
-        "dynamic_disk_allow_include = false READONLY, "
-        "dynamic_disk_allow_from_zk = false READONLY"
-    )
     node.query(
         "CREATE USER IF NOT EXISTS restricted_user SETTINGS PROFILE 'default'"
     )
     node.query("GRANT CREATE TABLE, CREATE DATABASE ON *.* TO restricted_user")
-    node.query(
-        "CREATE USER IF NOT EXISTS locked_user SETTINGS PROFILE 'deny_dynamic_disk_readonly'"
-    )
-    node.query("GRANT CREATE TABLE, CREATE DATABASE ON *.* TO locked_user")
     node.query(
         "CREATE USER IF NOT EXISTS privileged_user SETTINGS PROFILE 'allow_dynamic_disk_access'"
     )
@@ -744,19 +733,15 @@ def test_dynamic_disk_security_settings(start_cluster):
         )
         assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_env" in error, error
 
-        # locked_user (deny_dynamic_disk_readonly profile): attempting to override the
-        # setting via SET must be blocked by the READONLY constraint (SETTING_CONSTRAINT_VIOLATION).
-        error = node.query_and_get_error(
-            "SET dynamic_disk_allow_from_env = 1",
-            user="locked_user",
-        )
-        assert "SETTING_CONSTRAINT_VIOLATION" in error, error
+        # restricted_user: all three settings are self-locking — SET cannot raise any of them from false.
+        for setting in ("dynamic_disk_allow_from_env", "dynamic_disk_allow_include", "dynamic_disk_allow_from_zk"):
+            error = node.query_and_get_error(f"SET {setting} = 1", user="restricted_user")
+            assert "QUERY_IS_PROHIBITED" in error, f"{setting}: {error}"
 
-        # locked_user: a query-level settings override (--setting=value passed by the client)
-        # is subject to the same READONLY constraint (SETTING_CONSTRAINT_VIOLATION) and must also be rejected.
+        # restricted_user: a query-level override is also rejected by the self-locking check.
         error = node.query_and_get_error(
             """
-            CREATE TABLE test_security_locked_from_env (a Int32) ENGINE = MergeTree() ORDER BY tuple()
+            CREATE TABLE test_security_bypass_from_env (a Int32) ENGINE = MergeTree() ORDER BY tuple()
             SETTINGS disk = disk(
                 type = object_storage,
                 object_storage_type = s3,
@@ -764,26 +749,40 @@ def test_dynamic_disk_security_settings(start_cluster):
                 access_key_id = clickhouse,
                 secret_access_key = clickhouse)
             """,
-            user="locked_user",
+            user="restricted_user",
             settings={"dynamic_disk_allow_from_env": 1},
         )
-        assert "SETTING_CONSTRAINT_VIOLATION" in error, error
+        assert "QUERY_IS_PROHIBITED" in error, error
 
-        # locked_user: ATTACH TABLE with from_env is also blocked (regression for ATTACH bypass).
         error = node.query_and_get_error(
             """
-            ATTACH TABLE test_security_locked_attach UUID '00000000-0000-0000-0000-000000000002'
-            (a Int32) ENGINE = MergeTree() ORDER BY tuple()
+            CREATE TABLE test_security_bypass_include (a Int32) ENGINE = MergeTree() ORDER BY tuple()
             SETTINGS disk = disk(
                 type = object_storage,
                 object_storage_type = s3,
-                endpoint = 'from_env HOME',
+                include = 'some_include',
                 access_key_id = clickhouse,
                 secret_access_key = clickhouse)
             """,
-            user="locked_user",
+            user="restricted_user",
+            settings={"dynamic_disk_allow_include": 1},
         )
-        assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_env" in error, error
+        assert "QUERY_IS_PROHIBITED" in error, error
+
+        error = node.query_and_get_error(
+            """
+            CREATE TABLE test_security_bypass_from_zk (a Int32) ENGINE = MergeTree() ORDER BY tuple()
+            SETTINGS disk = disk(
+                type = object_storage,
+                object_storage_type = s3,
+                endpoint = 'from_zk /some/zk/path',
+                access_key_id = clickhouse,
+                secret_access_key = clickhouse)
+            """,
+            user="restricted_user",
+            settings={"dynamic_disk_allow_from_zk": 1},
+        )
+        assert "QUERY_IS_PROHIBITED" in error, error
 
         # Regression: ATTACH DATABASE must also enforce dynamic_disk_allow_* restrictions.
         # A user must not be able to bypass from_env checks by using ATTACH DATABASE instead of
@@ -857,10 +856,8 @@ def test_dynamic_disk_security_settings(start_cluster):
         node.query("DROP TABLE IF EXISTS test_security_from_zk_ok SYNC")
         node.query("DROP TABLE IF EXISTS test_security_include_ok SYNC")
         node.query("DROP USER IF EXISTS restricted_user")
-        node.query("DROP USER IF EXISTS locked_user")
         node.query("DROP USER IF EXISTS privileged_user")
         node.query("DROP SETTINGS PROFILE IF EXISTS allow_dynamic_disk_access")
-        node.query("DROP SETTINGS PROFILE IF EXISTS deny_dynamic_disk_readonly")
         if zk_client.exists("/test_security_minio_secret"):
             zk_client.delete("/test_security_minio_secret")
 

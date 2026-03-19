@@ -1157,12 +1157,6 @@ void MergeTreeData::checkProperties(
                     "Projection {} uses `_block_offset` column, but MergeTree setting `enable_block_offset_column` is disabled",
                     projection.name);
         }
-
-        if (projection.with_block_number + projection.with_block_offset == 1)
-            throw Exception(
-                ErrorCodes::BAD_ARGUMENTS,
-                "Projection {} uses only _block_number or _block_offset column. It is required to use both at once.",
-                projection.name);
     }
 
     const auto validate_complex_projection = [&](const std::string & projection_name, const std::vector<std::string> & forbid_columns)

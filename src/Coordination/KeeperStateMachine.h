@@ -3,7 +3,6 @@
 #include <Coordination/KeeperSnapshotManager.h>
 #include <Coordination/KeeperSnapshotManagerS3.h>
 #include <Coordination/KeeperContext.h>
-#include <IO/ReadBufferFromFileBase.h>
 #include <Common/SharedMutex.h>
 #include <Interpreters/OpenTelemetrySpanLog.h>
 
@@ -22,17 +21,7 @@ using SnapshotsQueue = ConcurrentBoundedQueue<CreateSnapshotTask>;
 
 struct KeeperStorageStats;
 
-/// Holds state for serving a remote-disk snapshot to lagging followers.
-/// Filled on demand chunk by chunk; once fully loaded the reader is closed
-/// and the buffer is reused for subsequent followers without re-reading from remote storage.
-struct SnapshotLoaderInfo
-{
-    nuraft::ptr<nuraft::buffer> buf;
-    std::unique_ptr<ReadBufferFromFileBase> reader; /// null once fully loaded
-    uint64_t file_size = 0;
-    uint64_t loaded_bytes = 0;
-    uint64_t snapshot_id = 0;
-};
+struct ISnapshotLoader; /// defined in KeeperStateMachine.cpp
 
 class IKeeperStateMachine : public nuraft::state_machine
 {
@@ -143,10 +132,10 @@ protected:
 
     std::unique_ptr<SnapshotReceiveCtx> snapshot_receive_ctx TSA_GUARDED_BY(snapshots_lock);
 
-    /// Cache for serving the latest snapshot to lagging followers over a non-local disk.
-    /// Holds a buffer with the snapshot file content and how many bytes have been loaded so far.
-    /// Shared across concurrent followers transferring the same snapshot; reset when a new snapshot is created.
-    std::shared_ptr<SnapshotLoaderInfo> snapshot_loader_info TSA_GUARDED_BY(snapshots_lock);
+    /// Cached loader for serving the latest snapshot to lagging followers over a remote disk.
+    /// Shared across concurrent followers transferring the same snapshot; reset when a new snapshot is created
+    /// or when the loader encounters an error.
+    std::shared_ptr<ISnapshotLoader> snapshot_loader_info TSA_GUARDED_BY(snapshots_lock);
 
     /// Cached size of the latest snapshot file, updated atomically after each snapshot
     /// creation/save while snapshots_lock is held. Read lock-free by `getLatestSnapshotSize`
@@ -214,7 +203,6 @@ public:
     KeeperStateMachine(
         ResponsesQueue & responses_queue_,
         SnapshotsQueue & snapshots_queue_,
-        /// const CoordinationSettingsPtr & coordination_settings_,
         const KeeperContextPtr & keeper_context_,
         KeeperSnapshotManagerS3 * snapshot_manager_s3_,
         CommitCallback commit_callback_ = {},

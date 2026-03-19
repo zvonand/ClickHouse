@@ -1,3 +1,4 @@
+-- Tags: no-replicated-database
 -- Regression test: ALTER TABLE ... MODIFY QUERY with SETTINGS must not produce
 -- extra parentheses in nested subqueries that break re-parsing (inconsistent AST formatting).
 

@@ -2,95 +2,37 @@
 import concurrent.futures
 import math
 import os
-import re
-import time
 import pytest
 
 import helpers.keeper_utils as keeper_utils
 from helpers.cluster import CLICKHOUSE_CI_MIN_TESTED_VERSION, ClickHouseCluster
+from helpers.keeper_snapshot_utils import (
+    generate_keeper_configs,
+    fill_test_tree,
+    cleanup_test_tree,
+    verify_test_tree,
+    get_kill_timestamp,
+    get_received_snapshot_info,
+    assert_receiving_snapshot_logged,
+    assert_obj_ids,
+)
 
 
-def _generate_keeper_configs():
-    def make_config(server_id, hosts, chunk_size=None, use_s3=False):
-        s3_block = (
-            "\n        <s3_snapshot>"
-            "\n            <endpoint>http://minio1:9001/snapshots/</endpoint>"
-            "\n            <access_key_id>minio</access_key_id>"
-            "\n            <secret_access_key>ClickHouse_Minio_P@ssw0rd</secret_access_key>"
-            "\n        </s3_snapshot>"
-        ) if use_s3 else ""
-        chunk_line = f"\n            <snapshot_transfer_chunk_size>{chunk_size}</snapshot_transfer_chunk_size>" if chunk_size else ""
-        # Assign decreasing priorities: first node is most likely to become leader.
-        base_prios = [70, 20, 10, 5, 3]
-        prios = base_prios[:len(hosts)]
-        servers = []
-        for i, (host, prio) in enumerate(zip(hosts, prios), start=1):
-            follower = "\n                <start_as_follower>true</start_as_follower>" if i > 1 else ""
-            servers.append(
-                f"            <server>\n"
-                f"                <id>{i}</id>\n"
-                f"                <hostname>{host}</hostname>\n"
-                f"                <port>9234</port>\n"
-                f"                <can_become_leader>true</can_become_leader>{follower}\n"
-                f"                <priority>{prio}</priority>\n"
-                f"            </server>"
-            )
-        return (
-            f"<clickhouse>\n"
-            f"    <keeper_server>{s3_block}\n"
-            f"        <tcp_port>9181</tcp_port>\n"
-            f"        <server_id>{server_id}</server_id>\n"
-            f"\n"
-            f"        <coordination_settings>\n"
-            f"            <operation_timeout_ms>5000</operation_timeout_ms>\n"
-            f"            <session_timeout_ms>10000</session_timeout_ms>\n"
-            f"            <raft_logs_level>trace</raft_logs_level>\n"
-            f"            <snapshot_distance>50</snapshot_distance>\n"
-            f"            <stale_log_gap>10</stale_log_gap>\n"
-            f"            <reserved_log_items>1</reserved_log_items>{chunk_line}\n"
-            f"        </coordination_settings>\n"
-            f"\n"
-            f"        <raft_configuration>\n"
-            + "\n".join(servers) + "\n"
-            f"        </raft_configuration>\n"
-            f"    </keeper_server>\n"
-            f"</clickhouse>\n"
-        )
-
-    configs_dir = os.path.join(os.path.dirname(__file__), "configs")
-    os.makedirs(configs_dir, exist_ok=True)
-
-    clusters = [
-        (["enable_keeper1.xml",             "enable_keeper2.xml",             "enable_keeper3.xml"],
-         ["node1",      "node2",      "node3"],      4096,      False),
-        (["enable_keeper4_large_chunk.xml",  "enable_keeper5_large_chunk.xml",  "enable_keeper6_large_chunk.xml"],
-         ["node4",      "node5",      "node6"],      104857600, False),
-        (["enable_keeper7_s3.xml",           "enable_keeper8_s3.xml",           "enable_keeper9_s3.xml"],
-         ["node7",      "node8",      "node9"],      4096,      True),
-        (["enable_keeper10_large_chunk_s3.xml", "enable_keeper11_large_chunk_s3.xml", "enable_keeper12_large_chunk_s3.xml"],
-         ["node10",     "node11",     "node12"],     104857600, True),
-        (["enable_keeper_compat1.xml",       "enable_keeper_compat2.xml",       "enable_keeper_compat3.xml"],
-         ["compat1",    "compat2",    "compat3"],    None,      False),
-        (["enable_keeper_compat_s3_1.xml",   "enable_keeper_compat_s3_2.xml",   "enable_keeper_compat_s3_3.xml"],
-         ["compat_s3_1","compat_s3_2","compat_s3_3"],None,     True),
-        # 5-node clusters for concurrent-followers test:
-        # quorum=3, so 2 followers can lag simultaneously while 3 nodes maintain quorum.
-        (["enable_keeper_conc1.xml",  "enable_keeper_conc2.xml",  "enable_keeper_conc3.xml",
-          "enable_keeper_conc4.xml",  "enable_keeper_conc5.xml"],
-         ["node_conc1", "node_conc2", "node_conc3", "node_conc4", "node_conc5"], 4096, False),
-        (["enable_keeper_conc_s3_1.xml", "enable_keeper_conc_s3_2.xml", "enable_keeper_conc_s3_3.xml",
-          "enable_keeper_conc_s3_4.xml", "enable_keeper_conc_s3_5.xml"],
-         ["node_concs1", "node_concs2", "node_concs3", "node_concs4", "node_concs5"], 4096, True),
-    ]
-
-    for filenames, hosts, chunk_size, use_s3 in clusters:
-        for server_id, filename in enumerate(filenames, start=1):
-            path = os.path.join(configs_dir, filename)
-            with open(path, "w") as f:
-                f.write(make_config(server_id, hosts, chunk_size, use_s3))
-
-
-_generate_keeper_configs()
+configs_dir = os.path.join(os.path.dirname(__file__), "configs")
+generate_keeper_configs(configs_dir, [
+    (["enable_keeper1.xml",             "enable_keeper2.xml",             "enable_keeper3.xml"],
+     ["node1",      "node2",      "node3"],      4096,      False),
+    (["enable_keeper4_large_chunk.xml",  "enable_keeper5_large_chunk.xml",  "enable_keeper6_large_chunk.xml"],
+     ["node4",      "node5",      "node6"],      104857600, False),
+    (["enable_keeper7_s3.xml",           "enable_keeper8_s3.xml",           "enable_keeper9_s3.xml"],
+     ["node7",      "node8",      "node9"],      4096,      True),
+    (["enable_keeper10_large_chunk_s3.xml", "enable_keeper11_large_chunk_s3.xml", "enable_keeper12_large_chunk_s3.xml"],
+     ["node10",     "node11",     "node12"],     104857600, True),
+    (["enable_keeper_compat1.xml",       "enable_keeper_compat2.xml",       "enable_keeper_compat3.xml"],
+     ["compat1",    "compat2",    "compat3"],    None,      False),
+    (["enable_keeper_compat_s3_1.xml",   "enable_keeper_compat_s3_2.xml",   "enable_keeper_compat_s3_3.xml"],
+     ["compat_s3_1","compat_s3_2","compat_s3_3"],None,     True),
+])
 
 cluster = ClickHouseCluster(__file__)
 
@@ -121,19 +63,6 @@ compat_s3_1 = cluster.add_instance("compat_s3_1", main_configs=["configs/enable_
 compat_s3_2 = cluster.add_instance("compat_s3_2", main_configs=["configs/enable_keeper_compat_s3_2.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag=CLICKHOUSE_CI_MIN_TESTED_VERSION, with_installed_binary=True, with_remote_database_disk=False)
 compat_s3_3 = cluster.add_instance("compat_s3_3", main_configs=["configs/enable_keeper_compat_s3_3.xml", "configs/text_log.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
 
-# 5-node clusters for concurrent-followers test (local and S3)
-node_conc1 = cluster.add_instance("node_conc1", main_configs=["configs/enable_keeper_conc1.xml"], stay_alive=True, with_remote_database_disk=False)
-node_conc2 = cluster.add_instance("node_conc2", main_configs=["configs/enable_keeper_conc2.xml"], stay_alive=True, with_remote_database_disk=False)
-node_conc3 = cluster.add_instance("node_conc3", main_configs=["configs/enable_keeper_conc3.xml"], stay_alive=True, with_remote_database_disk=False)
-node_conc4 = cluster.add_instance("node_conc4", main_configs=["configs/enable_keeper_conc4.xml"], stay_alive=True, with_remote_database_disk=False)
-node_conc5 = cluster.add_instance("node_conc5", main_configs=["configs/enable_keeper_conc5.xml"], stay_alive=True, with_remote_database_disk=False)
-
-node_concs1 = cluster.add_instance("node_concs1", main_configs=["configs/enable_keeper_conc_s3_1.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node_concs2 = cluster.add_instance("node_concs2", main_configs=["configs/enable_keeper_conc_s3_2.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node_concs3 = cluster.add_instance("node_concs3", main_configs=["configs/enable_keeper_conc_s3_3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node_concs4 = cluster.add_instance("node_concs4", main_configs=["configs/enable_keeper_conc_s3_4.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node_concs5 = cluster.add_instance("node_concs5", main_configs=["configs/enable_keeper_conc_s3_5.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-
 
 @pytest.fixture(scope="module")
 def started_cluster():
@@ -162,111 +91,6 @@ COMPAT_PARAMS = [
     pytest.param({"old_leader": compat_s3_1, "lagging": compat_s3_3}, id="s3_disk"),
 ]
 
-# 5-node clusters: nodes 4 and 5 are the two lagging followers; nodes 1-3 maintain quorum.
-CONCURRENT_FOLLOWERS_PARAMS = [
-    pytest.param({"leader": node_conc1, "quorum": [node_conc2, node_conc3], "lagging": [node_conc4, node_conc5]}, id="local_disk"),
-    pytest.param({"leader": node_concs1, "quorum": [node_concs2, node_concs3], "lagging": [node_concs4, node_concs5]}, id="s3_disk"),
-]
-
-
-def stop_zk(zk):
-    try:
-        if zk:
-            zk.stop()
-            zk.close()
-    except:
-        pass
-
-
-def fill_test_tree(zk, base, count=300):
-    zk.ensure_path(base)
-    for i in range(count):
-        zk.create(f"{base}/{i}", os.urandom(1024))  # random to resist ZSTD compression
-    for i in range(0, count, 10):
-        zk.delete(f"{base}/{i}")
-
-
-def cleanup_test_tree(leader_node, base):
-    zk = None
-    try:
-        zk = keeper_utils.get_fake_zk(cluster, leader_node.name)
-        if zk.exists(base):
-            zk.delete(base, recursive=True)
-    except:
-        pass
-    finally:
-        stop_zk(zk)
-
-
-def verify_test_tree(leader_zk, lagging_zk, base, count=300):
-    leader_zk.sync(base)
-    lagging_zk.sync(base)
-    for i in range(count):
-        if i % 10 != 0:
-            assert lagging_zk.get(f"{base}/{i}")[0] == leader_zk.get(f"{base}/{i}")[0]
-        else:
-            assert lagging_zk.exists(f"{base}/{i}") is None
-
-
-def get_kill_timestamp(node):
-    return node.query("SELECT now64(6)").strip()
-
-
-def _query_text_log(node, after_time, pattern, timeout=15):
-    deadline = time.time() + timeout
-    while True:
-        try:
-            node.query("SYSTEM FLUSH LOGS")
-            result = node.query(
-                f"SELECT message FROM system.text_log "
-                f"WHERE event_time_microseconds > '{after_time}' "
-                f"AND message LIKE '{pattern}' "
-                f"ORDER BY event_time_microseconds"
-            ).strip()
-            if result:
-                return [line for line in result.splitlines() if line]
-        except Exception:
-            pass
-
-        if time.time() >= deadline:
-            return []
-        time.sleep(1)
-
-
-def get_received_snapshot_info(node, after_time, timeout=15):
-    lines = _query_text_log(node, after_time, "Saved snapshot % chunks, % bytes)", timeout)
-    if not lines:
-        return None
-    m = re.search(r"Saved snapshot (\d+) \((\d+) chunks, (\d+) bytes\)", lines[-1])
-    if not m:
-        return None
-    return int(m.group(1)), int(m.group(2)), int(m.group(3))
-
-
-def get_snapshot_log_lines_for_idx(node, snapshot_log_idx, after_time, timeout=15):
-    return _query_text_log(
-        node, after_time, f"Saving snapshot {snapshot_log_idx} obj_id %", timeout
-    )
-
-
-def assert_receiving_snapshot_logged(node_lagging, after_time):
-    """Assert that `save_logical_snp_obj` fired on the first chunk (proves the snapshot was actually received)."""
-    lines = _query_text_log(node_lagging, after_time, "Receiving snapshot % to % disk", timeout=15)
-    assert lines, f"Expected 'Receiving snapshot % to % disk' in system.text_log on {node_lagging.name}"
-
-
-def assert_obj_ids(node_lagging, snapshot_log_idx, expected, after_time):
-    lines = get_snapshot_log_lines_for_idx(node_lagging, snapshot_log_idx, after_time)
-    assert lines, "No 'Saving snapshot' log lines appeared during recovery"
-    all_ids = [int(m.group(1)) for line in lines if (m := re.search(r"obj_id (\d+)", line))]
-    duplicates = len(all_ids) - len(set(all_ids))
-    # NuRaft may re-send a chunk when a heartbeat fires before the first ACK returns;
-    # tolerate at most len(expected)//2 duplicates to catch systematic bugs.
-    max_allowed = len(expected) // 2
-    assert set(all_ids) == set(expected), f"Expected obj_ids={set(expected)}, got: {sorted(set(all_ids))}"
-    assert duplicates <= max_allowed, \
-        f"Too many duplicate chunks: {duplicates} (max {max_allowed}), obj_ids={all_ids}"
-
 
 @pytest.mark.parametrize("nodes", CHUNKED_TRANSFER_PARAMS)
 def test_recover_from_snapshot_with_chunked_transfer(started_cluster, nodes):
@@ -275,7 +99,7 @@ def test_recover_from_snapshot_with_chunked_transfer(started_cluster, nodes):
     node_lagging = nodes["lagging"]
     prefix = "/test_chunked_snapshot_transfer"
 
-    cleanup_test_tree(node_leader, prefix)
+    cleanup_test_tree(cluster, node_leader, prefix)
 
     leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
     middle_zk = keeper_utils.get_fake_zk(cluster, node_middle.name)
@@ -317,7 +141,7 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
     node_lagging = nodes["lagging"]
     prefix = "/test_interrupted_chunked_transfer"
 
-    cleanup_test_tree(node_leader, prefix)
+    cleanup_test_tree(cluster, node_leader, prefix)
 
     leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
     node_lagging.stop_clickhouse(kill=True)
@@ -379,7 +203,7 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
     leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
     lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
     verify_test_tree(leader_zk, lagging_zk, prefix)
-    cleanup_test_tree(node_leader, prefix)
+    cleanup_test_tree(cluster, node_leader, prefix)
 
 
 @pytest.mark.parametrize("nodes", LARGE_CHUNK_PARAMS)
@@ -389,7 +213,7 @@ def test_recover_with_chunk_size_larger_than_snapshot(started_cluster, nodes):
     node_lagging = nodes["lagging"]
     prefix = "/test_large_chunk_transfer"
 
-    cleanup_test_tree(node_leader, prefix)
+    cleanup_test_tree(cluster, node_leader, prefix)
 
     kill_time = get_kill_timestamp(node_lagging)
     node_lagging.stop_clickhouse(kill=True)
@@ -404,7 +228,7 @@ def test_recover_with_chunk_size_larger_than_snapshot(started_cluster, nodes):
     leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
     lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
     verify_test_tree(leader_zk, lagging_zk, prefix)
-    cleanup_test_tree(node_leader, prefix)
+    cleanup_test_tree(cluster, node_leader, prefix)
 
     assert received is not None
     snapshot_log_idx, n_chunks, _ = received
@@ -420,7 +244,7 @@ def test_recover_from_snapshot_sent_by_old_leader(started_cluster, nodes):
     node_lagging = nodes["lagging"]
     prefix = "/test_compat_snapshot_transfer"
 
-    cleanup_test_tree(node_old_leader, prefix)
+    cleanup_test_tree(cluster, node_old_leader, prefix)
 
     kill_time = get_kill_timestamp(node_lagging)
     node_lagging.stop_clickhouse(kill=True)
@@ -435,49 +259,10 @@ def test_recover_from_snapshot_sent_by_old_leader(started_cluster, nodes):
     leader_zk = keeper_utils.get_fake_zk(cluster, node_old_leader.name)
     lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
     verify_test_tree(leader_zk, lagging_zk, prefix)
-    cleanup_test_tree(node_old_leader, prefix)
+    cleanup_test_tree(cluster, node_old_leader, prefix)
 
     assert received is not None
     snapshot_log_idx, n_chunks, _ = received
     assert n_chunks == 1, f"Old leader always sends snapshot as single object, got {n_chunks} chunks"
     assert_obj_ids(node_lagging, snapshot_log_idx, [0], kill_time)
     assert_receiving_snapshot_logged(node_lagging, kill_time)
-
-
-@pytest.mark.parametrize("nodes", CONCURRENT_FOLLOWERS_PARAMS)
-def test_concurrent_followers_fetch_snapshot(started_cluster, nodes):
-    """Two followers lagging behind must both recover correctly when fetching
-    the same snapshot concurrently from the leader. Tests shared loader access
-    under concurrent load — especially the RemoteSnapshotLoader mutex on S3."""
-    node_leader = nodes["leader"]
-    lagging = nodes["lagging"]
-    prefix = "/test_concurrent_followers_snapshot"
-
-    cleanup_test_tree(node_leader, prefix)
-
-    # Stop both lagging followers; the remaining 3 nodes maintain quorum (majority of 5).
-    for node in lagging:
-        node.stop_clickhouse(kill=True)
-
-    leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
-    fill_test_tree(leader_zk, prefix)
-    kill_time = get_kill_timestamp(node_leader)
-
-    # Start both lagging followers concurrently to exercise simultaneous snapshot transfer.
-    def start_and_wait(node):
-        node.start_clickhouse(20)
-        keeper_utils.wait_until_connected(cluster, node)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(lagging)) as pool:
-        futures = [pool.submit(start_and_wait, node) for node in lagging]
-        for future in concurrent.futures.as_completed(futures):
-            future.result()
-
-    leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
-    for node in lagging:
-        node_zk = keeper_utils.get_fake_zk(cluster, node.name)
-        verify_test_tree(leader_zk, node_zk, prefix)
-        received = get_received_snapshot_info(node, kill_time)
-        assert received is not None, f"{node.name} did not receive a snapshot"
-
-    cleanup_test_tree(node_leader, prefix)

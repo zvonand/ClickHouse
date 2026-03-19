@@ -1036,6 +1036,12 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
             if (column_name_to_node.contains(column_name))
                 continue;
 
+            /// Virtual columns like `_table` are handled separately by the Merge engine
+            /// (added as plan steps after the child query executes), so they should not be
+            /// replaced with default values here.
+            if (column_name == "_table" || column_name == "_database")
+                continue;
+
             if (storage_snapshot_->tryGetColumn(get_column_options, column_name))
                 continue;
 

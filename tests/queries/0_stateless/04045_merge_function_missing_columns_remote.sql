@@ -28,6 +28,9 @@ SELECT uniq(b) FROM merge(currentDatabase(), 'r_t[12]') ORDER BY ALL;
 SELECT sum(b) FROM merge(currentDatabase(), 'r_t[12]');
 SELECT a, b FROM merge(currentDatabase(), 'r_t[12]') ORDER BY a;
 
+-- Verify that _table virtual column returns correct table names, not empty strings.
+SELECT _table, a FROM merge(currentDatabase(), 'r_t[12]') ORDER BY a;
+
 DROP TABLE r_t1;
 DROP TABLE r_t2;
 DROP TABLE t1;

@@ -241,7 +241,8 @@ TYPED_TEST(CoordinationTest, TestStorageSnapshotSimple)
     storage.getSessionID(130);
     storage.getSessionID(130);
 
-    DB::KeeperStorageSnapshot<Storage> snapshot(&storage, 2, nullptr, DB::SnapshotVersion::V7);
+    DB::KeeperStorageSnapshot<Storage> snapshot(&storage, 2);
+    snapshot.version = DB::SnapshotVersion::V7;
 
     EXPECT_EQ(snapshot.snapshot_meta->get_last_log_idx(), 2);
     EXPECT_EQ(snapshot.session_id, 7);

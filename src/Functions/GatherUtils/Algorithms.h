@@ -388,8 +388,22 @@ static void sliceDynamicOffsetBoundedImpl(Source && src, Sink && sink, const ICo
             if (common::subOverflow(Int64(0), size, abs_size))
                 throw Exception(DB::ErrorCodes::ARGUMENT_OUT_OF_BOUND,
                     "Overflow in length argument of substring-like function: {}", size);
-            Int64 adjustment = offset > 0 ? static_cast<Int64>(src.getElementSize()) - (offset - 1) : static_cast<Int64>(-UInt64(offset));
-            size += adjustment;
+            Int64 adjustment;
+            if (offset > 0)
+            {
+                adjustment = static_cast<Int64>(src.getElementSize()) - (offset - 1);
+            }
+            else
+            {
+                if (common::subOverflow(Int64(0), offset, adjustment))
+                    throw Exception(DB::ErrorCodes::ARGUMENT_OUT_OF_BOUND,
+                        "Overflow in offset argument of substring-like function: {}", offset);
+            }
+            Int64 new_size;
+            if (common::addOverflow(size, adjustment, new_size))
+                throw Exception(DB::ErrorCodes::ARGUMENT_OUT_OF_BOUND,
+                    "Overflow when computing slice size in substring-like function: size={}, adjustment={}", size, adjustment);
+            size = new_size;
         }
 
         if (offset != 0 && size > 0)

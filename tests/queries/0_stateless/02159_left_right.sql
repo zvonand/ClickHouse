@@ -93,3 +93,9 @@ SELECT rightUTF8(materialize('Привет'), -9223372036854775808); -- { server
 -- Dynamic-length path: bitNot(INT64_MAX) == INT64_MIN
 SELECT right('Hello', materialize(bitNot(toInt64(9223372036854775807)))); -- { serverError ARGUMENT_OUT_OF_BOUND }
 SELECT rightUTF8('Привет', materialize(bitNot(toInt64(9223372036854775807)))); -- { serverError ARGUMENT_OUT_OF_BOUND }
+-- substring with negative offset=INT64_MIN: abs(offset) overflows in sliceDynamicOffsetBoundedImpl
+-- materialize() prevents constant-folding so the dynamic code path is taken
+SELECT substring('Hello', materialize(bitNot(toInt64(9223372036854775807))), -1); -- { serverError ARGUMENT_OUT_OF_BOUND }
+-- substring with large positive offset: adjustment=element_size-(offset-1) is very negative,
+-- and size+adjustment underflows Int64
+SELECT substring('Hello', materialize(toInt64(9223372036854775807)), -8); -- { serverError ARGUMENT_OUT_OF_BOUND }

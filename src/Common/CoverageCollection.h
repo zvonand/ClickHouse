@@ -34,6 +34,9 @@ size_t countCoverageMatches(const std::vector<uint64_t> & name_refs);
 /// Returns the first key in the coverage map (for diagnostics), 0 if empty.
 uint64_t getFirstCoverageMapKey();
 
+/// Returns (non_empty_file_count, zero_line_count, first_file_len<<32|first_line).
+std::tuple<size_t, size_t, uint64_t> diagCoverageRegions(const std::vector<uint64_t> & name_refs);
+
 }
 
 #endif

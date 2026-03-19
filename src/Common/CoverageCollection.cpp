@@ -199,6 +199,33 @@ uint64_t getFirstCoverageMapKey()
     return g_coverage_map.begin()->first;
 }
 
+/// Returns (non_empty_file_count, zero_line_count, first_file_hash)
+/// among matched regions for diagnostic purposes.
+std::tuple<size_t, size_t, uint64_t> diagCoverageRegions(const std::vector<uint64_t> & name_refs)
+{
+    ensureCoverageMapLoaded();
+    size_t non_empty = 0, zero_line = 0;
+    uint64_t first_file_hash = 0;
+    for (uint64_t nr : name_refs)
+    {
+        auto it = g_coverage_map.find(nr);
+        if (it == g_coverage_map.end()) continue;
+        const CoverageRegion & r = it->second;
+        if (!r.file.empty())
+        {
+            ++non_empty;
+            if (first_file_hash == 0)
+            {
+                /// Store length of first file as a proxy diagnostic
+                first_file_hash = static_cast<uint64_t>(r.file.size()) << 32
+                    | static_cast<uint64_t>(r.line_start);
+            }
+        }
+        if (r.line_start == 0) ++zero_line;
+    }
+    return {non_empty, zero_line, first_file_hash};
+}
+
 }
 
 #endif

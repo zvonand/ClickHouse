@@ -105,14 +105,15 @@ public:
         auto name_refs = getCurrentCoveredNameRefs();
         size_t map_size = DB::getCoverageMapSize();
         size_t matches = DB::countCoverageMatches(name_refs);
+        auto [non_empty, zero_line, first_info] = DB::diagCoverageRegions(name_refs);
         data.push_back(static_cast<UInt64>(name_refs.size()));
         data.push_back(static_cast<UInt64>(map_size));
         data.push_back(static_cast<UInt64>(matches));
-        // First covered NameRef (for comparison)
-        data.push_back(name_refs.empty() ? 0 : name_refs[0]);
-        // First coverage map key (for comparison)
-        data.push_back(static_cast<UInt64>(DB::getFirstCoverageMapKey()));
+        data.push_back(static_cast<UInt64>(non_empty));   // regions with non-empty file
+        data.push_back(static_cast<UInt64>(zero_line));   // regions with line_start==0
+        data.push_back(static_cast<UInt64>(first_info));  // file_len<<32|line_start of first match
 #else
+        data.push_back(0);
         data.push_back(0);
         data.push_back(0);
         data.push_back(0);

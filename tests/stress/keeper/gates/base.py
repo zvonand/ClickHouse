@@ -146,23 +146,27 @@ def coord_timeouts_match(nodes, ctx, startup=None, shutdown=None):
     If values are missing or files not found, treat as non-fatal (pass).
     """
     if ctx is None:
+        print("[coord_timeouts_match] skip: no ctx")
         return
     cluster = ctx.get("cluster")
     if cluster is None:
+        print("[coord_timeouts_match] skip: no cluster in ctx")
         return
     cname = os.environ.get("KEEPER_CLUSTER_NAME", "")
     inst_dir = Path(getattr(cluster, "instances_dir", ""))
     conf_dir = inst_dir / "configs" / (cname or "")
     if not conf_dir.exists():
+        print(f"[coord_timeouts_match] skip: config dir not found: {conf_dir}")
         return
     # Read one config (all nodes share the same coord settings)
     paths = sorted(conf_dir.glob("keeper_config_*.xml"))
     if not paths:
+        print(f"[coord_timeouts_match] skip: no keeper_config_*.xml in {conf_dir}")
         return
     try:
         txt = paths[0].read_text(encoding="utf-8")
-    except OSError:
-        # Non-fatal: config file may be unavailable in stress env
+    except OSError as e:
+        print(f"[coord_timeouts_match] skip: could not read {paths[0]}: {e}")
         return
 
     if startup is not None:

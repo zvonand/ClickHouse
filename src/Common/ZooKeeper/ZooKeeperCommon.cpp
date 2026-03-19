@@ -20,25 +20,22 @@ using namespace DB;
 
 void ZooKeeperResponse::write(WriteBuffer & out, bool use_xid_64) const
 {
-    size_t response_size = 0;
+    /// Write body first, then prefix with length. Single virtual dispatch (writeImpl)
+    /// instead of two (sizeImpl + writeImpl). Matters for multi-responses where each
+    /// sub-response triggers expensive RTTI through virtual inheritance.
+    WriteBufferFromOwnString body;
     if (use_xid_64)
-        response_size += sizeof(int64_t);
+        Coordination::write(xid, body);
     else
-        response_size += sizeof(int32_t);
-
-    response_size += Coordination::size(zxid) + Coordination::size(error);
+        Coordination::write(static_cast<int32_t>(xid), body);
+    Coordination::write(zxid, body);
+    Coordination::write(error, body);
     if (error == Error::ZOK)
-        response_size += sizeImpl();
+        writeImpl(body);
 
-    Coordination::write(static_cast<int32_t>(response_size), out);
-    if (use_xid_64)
-        Coordination::write(xid, out);
-    else
-        Coordination::write(static_cast<int32_t>(xid), out);
-    Coordination::write(zxid, out);
-    Coordination::write(error, out);
-    if (error == Error::ZOK)
-        writeImpl(out);
+    const auto & s = body.str();
+    Coordination::write(static_cast<int32_t>(s.size()), out);
+    out.write(s.data(), s.size());
 }
 
 std::string ZooKeeperRequest::toString(bool short_format) const

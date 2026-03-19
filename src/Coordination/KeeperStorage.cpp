@@ -800,6 +800,11 @@ void KeeperStorage<Container>::UncommittedState::applyDelta(const Delta & delta,
         uncommitted_node = &emplaced_it->second;
     }
 
+    /// Cache the zxid_to_nodes set reference and node membership once,
+    /// avoiding repeated std::map lookups inside the variant visitor.
+    auto & zxid_nodes = zxid_to_nodes[delta.zxid];
+    const bool node_not_yet_in_zxid = !zxid_nodes.contains(node_it);
+
     /// if it's the first time we see that node in the transaction
     /// we need to subtract it's digest from the point before
     /// we started the transaction
@@ -819,7 +824,7 @@ void KeeperStorage<Container>::UncommittedState::applyDelta(const Delta & delta,
             }
             else if constexpr (std::same_as<DeltaType, RemoveNodeDelta>)
             {
-                if (digest && !zxid_to_nodes[delta.zxid].contains(node_it))
+                if (digest && node_not_yet_in_zxid)
                     *digest -= node->getDigest(delta.path);
 
                 chassert(node);
@@ -827,7 +832,7 @@ void KeeperStorage<Container>::UncommittedState::applyDelta(const Delta & delta,
             }
             else if constexpr (std::same_as<DeltaType, UpdateNodeStatDelta>)
             {
-                if (digest && !zxid_to_nodes[delta.zxid].contains(node_it))
+                if (digest && node_not_yet_in_zxid)
                     *digest -= node->getDigest(delta.path);
 
                 chassert(node);
@@ -836,7 +841,7 @@ void KeeperStorage<Container>::UncommittedState::applyDelta(const Delta & delta,
             }
             else if constexpr (std::same_as<DeltaType, UpdateNodeDataDelta>)
             {
-                if (digest && !zxid_to_nodes[delta.zxid].contains(node_it))
+                if (digest && node_not_yet_in_zxid)
                     *digest -= node->getDigest(delta.path);
 
                 chassert(node);
@@ -849,7 +854,7 @@ void KeeperStorage<Container>::UncommittedState::applyDelta(const Delta & delta,
             }
 
             applied_zxids.insert(delta.zxid);
-            zxid_to_nodes[delta.zxid].insert(node_it);
+            zxid_nodes.insert(node_it);
         },
         delta.operation);
 }

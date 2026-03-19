@@ -175,6 +175,12 @@ void collectAndInsertCoverage(
     }
 }
 
+size_t getCoverageMapSize()
+{
+    ensureCoverageMapLoaded();
+    return g_coverage_map.size();
+}
+
 }
 
 #endif

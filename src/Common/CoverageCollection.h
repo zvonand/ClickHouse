@@ -25,6 +25,10 @@ void collectAndInsertCoverage(
     const std::vector<uint64_t> & name_refs,
     ContextPtr context);
 
+/// Returns the number of entries in the lazily-loaded coverage map.
+/// Triggers loading if not already done.
+size_t getCoverageMapSize();
+
 }
 
 #endif

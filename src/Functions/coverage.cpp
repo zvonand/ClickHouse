@@ -11,6 +11,11 @@
 #include <Functions/FunctionFactory.h>
 #include <Functions/IFunction.h>
 #include <Interpreters/Context.h>
+#include <base/coverage.h>
+
+#if defined(__ELF__) && !defined(OS_FREEBSD)
+#include <Common/CoverageCollection.h>
+#endif
 
 
 namespace DB
@@ -80,8 +85,46 @@ public:
 
 }
 
+/// Returns diagnostic info: (profile_data_records, covered_name_refs, coverage_map_size)
+class FunctionCoverageDiag : public IFunction
+{
+public:
+    String getName() const override { return "coverageDiag"; }
+    bool isSuitableForShortCircuitArgumentsExecution(const DataTypesWithConstInfo &) const override { return false; }
+    size_t getNumberOfArguments() const override { return 0; }
+    bool isDeterministic() const override { return false; }
+    DataTypePtr getReturnTypeImpl(const DataTypes &) const override
+    {
+        return std::make_shared<DataTypeArray>(std::make_shared<DataTypeUInt64>());
+    }
+    ColumnPtr executeImpl(const ColumnsWithTypeAndName &, const DataTypePtr &, size_t input_rows_count) const override
+    {
+        auto column = ColumnUInt64::create();
+        auto & data = column->getData();
+#if defined(__ELF__) && !defined(OS_FREEBSD)
+        auto name_refs = getCurrentCoveredNameRefs();
+        data.push_back(static_cast<UInt64>(name_refs.size()));
+        data.push_back(static_cast<UInt64>(DB::getCoverageMapSize()));
+#else
+        data.push_back(0);
+        data.push_back(0);
+#endif
+        auto offsets = ColumnArray::ColumnOffsets::create(1, data.size());
+        auto array = ColumnArray::create(std::move(column), std::move(offsets));
+        return ColumnConst::create(std::move(array), input_rows_count);
+    }
+};
+
 REGISTER_FUNCTION(CoverageLines)
 {
+    factory.registerFunction("coverageDiag", [](ContextPtr){ return std::make_shared<FunctionCoverageDiag>(); },
+        FunctionDocumentation
+        {
+            .description = R"(Returns [name_refs_count, coverage_map_size] for diagnostics.)",
+            .introduced_in = {25, 6},
+            .category = FunctionDocumentation::Category::Introspection
+        });
+
     factory.registerFunction("coverageCurrentFiles", [](ContextPtr){ return std::make_shared<FunctionCoverageLines>(Kind::Files); },
         FunctionDocumentation
         {

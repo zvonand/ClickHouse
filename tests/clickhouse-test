@@ -4252,15 +4252,15 @@ def main(args):
         )
         # Self-test: verify the coverage collection pipeline works end-to-end.
         clickhouse_execute(args, "SYSTEM SET COVERAGE TEST '_selftest'")
-        # Diagnostic: check the binary accessible via SQL
+        # Diagnostic: check coverage map size and covered NameRefs via SQL
         try:
-            exe_info = clickhouse_execute(
-                args,
-                "SELECT length(readFile('/proc/self/exe')) AS exe_bytes"
+            diag = clickhouse_execute(
+                args, "SELECT coverageDiag()"
             ).decode(errors="replace").strip()
-            print(f"Coverage diagnostic: /proc/self/exe readable, size={exe_info} bytes")
+            print(f"Coverage diagnostic (before self-test): coverageDiag={diag} "
+                  f"(name_refs_count, coverage_map_size)")
         except Exception as e:
-            print(f"Coverage diagnostic: /proc/self/exe error: {e}")
+            print(f"Coverage diagnostic: coverageDiag() failed: {e}")
         clickhouse_execute(args, "SELECT 1")
         clickhouse_execute(args, "SYSTEM SET COVERAGE TEST ''")
         selftest_rows = int(
@@ -4270,6 +4270,13 @@ def main(args):
             )
             or 0
         )
+        try:
+            diag2 = clickhouse_execute(
+                args, "SELECT coverageDiag()"
+            ).decode(errors="replace").strip()
+            print(f"Coverage diagnostic (after self-test): coverageDiag={diag2}")
+        except Exception:
+            pass
         print(
             f"Coverage self-test: coverage_log rows for _selftest = {selftest_rows} "
             f"({'OK' if selftest_rows > 0 else 'EMPTY - coverage mapping not working'})"

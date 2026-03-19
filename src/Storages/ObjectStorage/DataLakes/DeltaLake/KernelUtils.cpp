@@ -153,9 +153,27 @@ std::optional<std::string> tryGetPhysicalName(const std::string & name, const DB
         return name;
 
     auto it = physical_names_map.find(name);
-    if (it == physical_names_map.end())
-        return std::nullopt;
-    return it->second;
+    if (it != physical_names_map.end())
+        return it->second;
+
+    /// For dotted column names (e.g. "c1.values") that are not directly in the map,
+    /// try finding the longest matching prefix that has a physical name mapping.
+    /// This handles the case where `filterTupleColumnsToRead` creates dotted names
+    /// from Tuple element paths, but only the parent column (not its nested fields)
+    /// has a physical name entry in column mapping.
+    std::optional<std::string> result;
+    size_t pos = 0;
+    while (true)
+    {
+        pos = name.find('.', pos);
+        if (pos == std::string::npos)
+            break;
+        auto prefix_it = physical_names_map.find(name.substr(0, pos));
+        if (prefix_it != physical_names_map.end())
+            result = prefix_it->second + name.substr(pos);
+        ++pos;
+    }
+    return result;
 }
 
 std::string getPhysicalName(const std::string & name, const DB::NameToNameMap & physical_names_map)

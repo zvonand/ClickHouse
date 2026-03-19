@@ -57,9 +57,9 @@ bool isMerge(int argc, char ** argv)
 }
 
 // Helper function to parse settings from command line arguments
-std::unordered_map<std::string, std::string> parseSettingsFromArgs(int argc, char ** argv)
+std::unordered_map<std::string, std::string> parseSettingsFromArgs(int argc, char ** argv) // STYLE_CHECK_ALLOW_STD_CONTAINERS
 {
-    std::unordered_map<std::string, std::string> settings;
+    std::unordered_map<std::string, std::string> settings; // STYLE_CHECK_ALLOW_STD_CONTAINERS
     bool ignore_remaining = false;
 
     for (int i = 1; i < argc; ++i)

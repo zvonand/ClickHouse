@@ -699,11 +699,6 @@ class JobConfigs:
     )
     stress_test_jobs = common_stress_job_config.parametrize(
         Job.ParamSet(
-            parameter="amd_release",
-            runs_on=RunnerLabels.FUNC_TESTER_AMD,
-            requires=[ArtifactNames.DEB_AMD_RELEASE],
-        ),
-        Job.ParamSet(
             parameter="amd_debug",
             runs_on=RunnerLabels.FUNC_TESTER_AMD,
             requires=[ArtifactNames.DEB_AMD_DEBUG],
@@ -712,11 +707,6 @@ class JobConfigs:
             parameter="amd_tsan",
             runs_on=RunnerLabels.FUNC_TESTER_AMD,
             requires=[ArtifactNames.DEB_AMD_TSAN],
-        ),
-        Job.ParamSet(
-            parameter="arm_asan_ubsan",
-            runs_on=RunnerLabels.FUNC_TESTER_ARM,
-            requires=[ArtifactNames.DEB_ARM_ASAN_UBSAN],
         ),
         Job.ParamSet(
             parameter="arm_asan_ubsan, s3",

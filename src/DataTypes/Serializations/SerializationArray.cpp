@@ -26,6 +26,7 @@ namespace ErrorCodes
     extern const int CANNOT_READ_ARRAY_FROM_TEXT;
     extern const int TOO_LARGE_ARRAY_SIZE;
     extern const int INCORRECT_DATA;
+    extern const int LOGICAL_ERROR;
 }
 
 static constexpr size_t MAX_ARRAY_SIZE = 1ULL << 30;
@@ -475,7 +476,7 @@ std::pair<size_t, size_t> SerializationArray::deserializeOffsetsBinaryBulkAndGet
     /// Number of values corresponding with `offset_values` must be read.
     size_t last_offset = offset_values.back();
     if (last_offset < prev_last_offset)
-        throw Exception(ErrorCodes::INCORRECT_DATA, "Array elements column is longer (>{}) than the last offset ({})", prev_last_offset, last_offset);
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Array elements column is longer (>{}) than the last offset ({})", prev_last_offset, last_offset);
     size_t nested_limit = last_offset - prev_last_offset;
     return {skipped_nested_rows, nested_limit};
 }

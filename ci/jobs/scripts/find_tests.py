@@ -62,12 +62,9 @@ class Targeting:
     def get_changed_tests(self):
         # TODO: add support for integration tests
         result = set()
-        if self.info.is_local_run:
-            changed_files = Shell.get_output(
-                "git diff --name-only $(git merge-base master HEAD)"
-            ).splitlines()
-        else:
-            changed_files = self.info.get_changed_files()
+        changed_files = Shell.get_output(
+            f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse --name-only"
+        ).splitlines() if self.info.is_local_run else self.info.get_changed_files()
         assert changed_files, "No changed files"
 
         for fpath in changed_files:
@@ -146,12 +143,21 @@ class Targeting:
     # (too common code — carries no signal for targeted test selection).
     MAX_TESTS_PER_LINE = 200
 
+    # Regions wider than this are considered "broad" (low signal).
+    NARROW_REGION_MAX_LINES = 20
+
     def get_tests_by_changed_lines(self, changed_lines: list) -> dict:
         """
         Query `checks_coverage_lines` for tests that cover each (filename, line_no) pair.
 
         `changed_lines` is a list of `(filename, line_no)` tuples.
-        Returns a dict mapping each input tuple to a list of test names.
+        Returns a dict mapping each input tuple to a list of `(test_name, region_width)`
+        tuples, where `region_width = line_end - line_start + 1`.  The region width is
+        used by the caller to weight test scores (narrow regions = high signal).
+
+        The hard per-region test-count cap is replaced by width-based scoring in
+        `get_most_relevant_tests`, so all regions are returned regardless of how many
+        tests cover them.
         """
         import time
         t0 = time.monotonic()
@@ -178,7 +184,6 @@ class Targeting:
           AND notEmpty(test_name)
           AND ({conditions})
         GROUP BY file, line_start, line_end
-        HAVING count(DISTINCT test_name) < {self.MAX_TESTS_PER_LINE}
         """
 
         cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
@@ -204,18 +209,25 @@ class Targeting:
             except (ValueError, SyntaxError):
                 print(f"Failed to parse coverage row: {row[:100]}")
 
-        # Map each input (filename, line_no) to its tests.
+        # Map each input (filename, line_no) to (test_name, region_width) pairs.
         result: dict = {}
         for filename, line_no in changed_lines:
             stored = self._stored_path(filename)
             matched: list = []
             for file_, line_start, line_end, tests in coverage_ranges:
                 if file_ == stored and line_start <= line_no <= line_end:
-                    matched.extend(tests)
-            result[(filename, line_no)] = sorted(set(matched))
+                    width = line_end - line_start + 1
+                    for t in tests:
+                        matched.append((t, width))
+            # Deduplicate: keep the narrowest region width seen for each test.
+            by_test: dict = {}
+            for t, w in matched:
+                if t not in by_test or w < by_test[t]:
+                    by_test[t] = w
+            result[(filename, line_no)] = sorted(by_test.items())
 
-        total_unique_tests = len({t for tests in result.values() for t in tests})
-        lines_with_tests = sum(1 for tests in result.values() if tests)
+        total_unique_tests = len({t for pairs in result.values() for t, _ in pairs})
+        lines_with_tests = sum(1 for pairs in result.values() if pairs)
         print(
             f"[find_tests] done in {time.monotonic()-t0:.2f}s: "
             f"{lines_with_tests}/{len(changed_lines)} lines matched, "
@@ -249,11 +261,12 @@ class Targeting:
     def get_changed_lines_from_diff(self):
         """
         Return a list of `(filename, line_no)` tuples from the PR diff.
-        Uses `git diff` for local runs and `info.get_changed_files()` otherwise.
+        Always fetches the diff from GitHub using `gh pr diff` so that results
+        reflect the actual PR regardless of the local checkout state.
         """
         assert self.info.pr_number > 0, "Find tests by diff applicable for PRs only"
         diff_output = Shell.get_output(
-            "git diff $(git merge-base master HEAD) --unified=0"
+            f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse"
         )
         changed: list = []
         current_file = None
@@ -261,9 +274,7 @@ class Targeting:
             if line.startswith("+++ b/"):
                 current_file = line[6:]
             elif line.startswith("@@ ") and current_file:
-                # Parse @@ -old +new,count @@ and collect new lines
-                import re as _re
-                m = _re.search(r"\+(\d+)(?:,(\d+))?", line)
+                m = re.search(r"\+(\d+)(?:,(\d+))?", line)
                 if m:
                     start = int(m.group(1))
                     count = int(m.group(2)) if m.group(2) is not None else 1
@@ -275,31 +286,51 @@ class Targeting:
         """
         1. Gets changed lines from the PR diff.
         2. Queries `checks_coverage_lines` for tests covering those lines.
-        3. Ranks tests by how many changed lines they cover (descending).
+        3. Ranks tests by a composite score:
+             - Tier (idea 4): tests with at least one narrow-region hit rank above
+               tests that only appear in wide regions.
+             - Width score (ideas 1+3): each (changed_line, test) hit contributes
+               1 / region_width to the score.  Narrow regions (high precision)
+               outweigh broad ones (e.g. an entire function body), so tests that
+               cover the specific changed lines rather than incidentally passing
+               through a large surrounding region rank higher.
         4. Returns the ranked list and a `Result` with info about the findings.
         """
         changed_lines = self.get_changed_lines_from_diff()
         line_to_tests = self.get_tests_by_changed_lines(changed_lines)
 
-        # Count how many changed lines each test covers.
-        test_hit_count: dict = {}
-        for tests in line_to_tests.values():
-            for t in tests:
-                test_hit_count[t] = test_hit_count.get(t, 0) + 1
+        # Accumulate per-test scores across all changed lines.
+        # line_to_tests values are lists of (test_name, region_width).
+        width_score: dict = {}   # test -> sum(1/width) across covered changed lines
+        has_narrow_hit: dict = {}  # test -> bool: any covering region is narrow
+        for pairs in line_to_tests.values():
+            for t, width in pairs:
+                width_score[t] = width_score.get(t, 0.0) + 1.0 / width
+                has_narrow_hit[t] = has_narrow_hit.get(t, False) or (
+                    width <= self.NARROW_REGION_MAX_LINES
+                )
 
-        # Sort descending by hit count — tests covering more changed lines come first.
-        ranked = sorted(test_hit_count, key=lambda t: -test_hit_count[t])
+        # Sort: narrow-hit tier first, then by width score descending.
+        ranked = sorted(
+            width_score,
+            key=lambda t: (not has_narrow_hit[t], -width_score[t]),
+        )
+
+        narrow_count = sum(1 for t in ranked if has_narrow_hit[t])
+        broad_count = len(ranked) - narrow_count
 
         info = "Tests found for lines:\n"
         if not line_to_tests:
             info += "  No changed lines found in diff\n"
         else:
-            for (file_, line_), tests in line_to_tests.items():
-                if tests:
-                    info += f"  {file_}:{line_} -> {len(tests)} tests\n"
-        info += f"Total unique tests: {len(ranked)}\n"
+            for (file_, line_), pairs in line_to_tests.items():
+                if pairs:
+                    info += f"  {file_}:{line_} -> {len(pairs)} tests\n"
+        info += f"Total unique tests: {len(ranked)} ({narrow_count} narrow, {broad_count} broad)\n"
         if ranked:
-            info += f"Top test: {ranked[0]} ({test_hit_count[ranked[0]]} lines covered)\n"
+            top = ranked[0]
+            tier = "narrow" if has_narrow_hit[top] else "broad"
+            info += f"Top test: {top} (score={width_score[top]:.3f}, {tier})\n"
 
         return ranked, Result(
             name="tests found by coverage", status=Result.StatusExtended.OK, info=info
@@ -377,23 +408,29 @@ if __name__ == "__main__":
     line_to_tests = targeting.get_tests_by_changed_lines(changed_lines)
 
     print("\nNo tests found for lines:")
-    for (file, line), tests in line_to_tests.items():
-        if tests:
+    for (file, line), pairs in line_to_tests.items():
+        if pairs:
             continue
         print(f"{file}:{line} -> NOT FOUND")
 
-    all_tests: set = set()
-    for tests in line_to_tests.values():
-        all_tests.update(tests)
+    # pairs is list of (test_name, region_width)
+    all_tests: dict = {}  # test -> min region_width seen
+    for pairs in line_to_tests.values():
+        for t, w in pairs:
+            if t not in all_tests or w < all_tests[t]:
+                all_tests[t] = w
 
     print("\nTests found for lines:")
-    for (file, line), tests in line_to_tests.items():
-        if not tests:
+    for (file, line), pairs in line_to_tests.items():
+        if not pairs:
             continue
         print(f"{file}:{line}:")
-        for test in tests:
-            print(f" - {test}")
+        for test, width in pairs:
+            tag = "narrow" if width <= Targeting.NARROW_REGION_MAX_LINES else f"width={width}"
+            print(f" - {test}  [{tag}]")
 
     print(f"\nAll selected tests ({len(all_tests)}):")
     for test in sorted(all_tests):
-        print(f" {test}")
+        w = all_tests[test]
+        tag = "narrow" if w <= Targeting.NARROW_REGION_MAX_LINES else f"width={w}"
+        print(f" {test}  [{tag}]")

@@ -16,10 +16,7 @@ private:
 
 public:
     static UInt128 getHash(IntervalKind kind_);
-
     static SerializationPtr create(IntervalKind kind_);
-
-    size_t allocatedBytes() const override;
 
     void serializeText(const IColumn & column, size_t row, WriteBuffer & ostr, const FormatSettings & settings) const override;
     void serializeTextJSON(const IColumn & column, size_t row, WriteBuffer & ostr, const FormatSettings & settings) const override;

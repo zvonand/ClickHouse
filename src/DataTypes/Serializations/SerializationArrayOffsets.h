@@ -13,10 +13,7 @@ private:
 
 public:
     static UInt128 getHash();
-
     static SerializationPtr create();
-
-    size_t allocatedBytes() const override;
 
     void deserializeBinaryBulkWithMultipleStreams(
     ColumnPtr & column,

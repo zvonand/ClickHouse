@@ -939,9 +939,4 @@ bool SerializationArray::tryDeserializeTextCSV(IColumn & column, ReadBuffer & is
     return deserializeTextImpl<bool>(column, rb, read_nested, true);
 }
 
-size_t SerializationArray::allocatedBytes() const
-{
-    return sizeof(*this);
-}
-
 }

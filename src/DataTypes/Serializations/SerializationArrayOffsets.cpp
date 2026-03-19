@@ -81,9 +81,4 @@ void SerializationArrayOffsets::deserializeBinaryBulkWithMultipleStreams(
     settings.path.pop_back();
 }
 
-size_t SerializationArrayOffsets::allocatedBytes() const
-{
-    return sizeof(*this);
-}
-
 }

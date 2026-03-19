@@ -24,10 +24,7 @@ private:
 
 public:
     static UInt128 getHash(MergeTreeStringSerializationVersion version_);
-
     static SerializationPtr create(MergeTreeStringSerializationVersion version_ = MergeTreeStringSerializationVersion::SINGLE_STREAM);
-
-    size_t allocatedBytes() const override;
 
     void serializeBinary(const Field & field, WriteBuffer & ostr, const FormatSettings & settings) const override;
     void deserializeBinary(Field & field, ReadBuffer & istr, const FormatSettings & settings) const override;

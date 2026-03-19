@@ -104,9 +104,4 @@ SerializationPtr SerializationDetached::create(const SerializationPtr & nested_)
     return ISerialization::pooled(getHash(nested_), [&] { return new SerializationDetached(nested_); });
 }
 
-size_t SerializationDetached::allocatedBytes() const
-{
-    return sizeof(*this);
-}
-
 }

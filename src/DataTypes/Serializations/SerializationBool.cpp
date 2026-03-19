@@ -478,9 +478,4 @@ void SerializationBool::serializeTextXML(const IColumn & column, size_t row_num,
     serializeSimple(column, row_num, ostr, settings);
 }
 
-size_t SerializationBool::allocatedBytes() const
-{
-    return sizeof(*this);
-}
-
 }

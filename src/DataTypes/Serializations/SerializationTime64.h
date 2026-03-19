@@ -18,12 +18,8 @@ private:
 
 public:
     static UInt128 getHash(UInt32 scale_);
-
     static SerializationPtr create(UInt32 scale_);
-
     static SerializationPtr create(UInt32 scale_, const DataTypeTime64 & time_type);
-
-    size_t allocatedBytes() const override;
 
     void serializeText(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings &) const override;
     void deserializeText(IColumn & column, ReadBuffer & istr, const FormatSettings & settings, bool whole) const override;

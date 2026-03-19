@@ -340,14 +340,4 @@ bool SerializationDateTime::tryDeserializeTextCSV(IColumn & column, ReadBuffer &
     return true;
 }
 
-size_t SerializationDateTime::allocatedBytes() const
-{
-    return sizeof(*this);
-}
-
-size_t SerializationTime::allocatedBytes() const
-{
-    return sizeof(*this);
-}
-
 }

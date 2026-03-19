@@ -43,10 +43,7 @@ private:
 
 public:
     static UInt128 getHash(const DataTypeTime & time_type);
-
     static SerializationPtr create(const DataTypeTime & time_type);
-
-    size_t allocatedBytes() const override;
 
     void serializeText(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings &) const override;
     void deserializeWholeText(IColumn & column, ReadBuffer & istr, const FormatSettings & settings) const override;
@@ -66,4 +63,3 @@ public:
 };
 
 }
-

@@ -56,6 +56,8 @@ SerializationPtr SerializationSubObjectSharedData::create(
     const DataTypePtr & dynamic_type_,
     const SerializationPtr & dynamic_serialization_)
 {
+    if (!dynamic_serialization_->supportsPooling())
+        return std::shared_ptr<SerializationSubObjectSharedData>(new SerializationSubObjectSharedData(serialization_version_, buckets_, paths_prefix_, dynamic_type_, dynamic_serialization_));
     return ISerialization::pooled(getHash(serialization_version_, buckets_, paths_prefix_, dynamic_type_, dynamic_serialization_), [&] { return new SerializationSubObjectSharedData(serialization_version_, buckets_, paths_prefix_, dynamic_type_, dynamic_serialization_); });
 }
 

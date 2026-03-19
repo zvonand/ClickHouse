@@ -13,10 +13,7 @@ private:
 
 public:
     static UInt128 getHash();
-
     static SerializationPtr create();
-
-    size_t allocatedBytes() const override;
 
     void serializeBinary(const Field &, WriteBuffer &, const FormatSettings &) const override                       { throwNoSerialization(); }
     void deserializeBinary(Field &, ReadBuffer &, const FormatSettings &) const override                            { throwNoSerialization(); }

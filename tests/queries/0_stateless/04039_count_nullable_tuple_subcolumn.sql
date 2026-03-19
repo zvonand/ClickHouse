@@ -5,6 +5,7 @@ SET enable_analyzer = 1;
 SET allow_experimental_nullable_tuple_type = 1;
 SET optimize_functions_to_subcolumns = 1;
 
+DROP TABLE IF EXISTS test;
 CREATE TABLE test (t Tuple(v Nullable(Tuple(w Nullable(UInt32))))) ENGINE = MergeTree ORDER BY tuple();
 INSERT INTO test VALUES (((1))), (((NULL))), ((NULL));
 

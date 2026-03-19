@@ -44,7 +44,7 @@ struct CaseInsensitiveHash
     {
         SipHash hash;
         for (char c : key)
-            hash.update(static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(c))));
+            hash.update(static_cast<unsigned char>(Poco::Ascii::toLower(static_cast<unsigned char>(c))));
         return hash.get64();
     }
 };

@@ -17,7 +17,7 @@ Provides a table-like interface to [Delta Lake](https://github.com/delta-io/delt
 `deltaLake` is an alias of `deltaLakeS3` which is supported for compatibility.
 
 ```sql
-deltaLake(url [,aws_access_key_id, aws_secret_access_key] [,format] [,structure] [,compression])
+deltaLake(url [,aws_access_key_id, aws_secret_access_key] [,format] [,structure] [,compression] [,extra_credentials])
 
 deltaLakeS3(url [,aws_access_key_id, aws_secret_access_key] [,format] [,structure] [,compression] [,extra_credentials])
 

@@ -585,6 +585,33 @@
             position: relative;
         }
 
+        #query-params
+        {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem 0.5rem;
+            margin-top: 0.25rem;
+            align-items: center;
+        }
+
+        .query-param
+        {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .query-param label
+        {
+            color: var(--misc-text-color);
+            white-space: nowrap;
+        }
+
+        .query-param input
+        {
+            width: 10em;
+        }
+
         a, a:visited
         {
             color: var(--link-color);
@@ -671,6 +698,7 @@
                 <input name="url" spellcheck="false" class="monospace shadow" id="url" type="url" value="" placeholder="url" /><span id="url_status"><span id="server_info"></span>●</span><input name="user" spellcheck="false" class="monospace shadow" id="user" type="text" value="default" placeholder="user" /><input name="password" class="monospace shadow" id="password" type="password" placeholder="password" />
             </div>
             <div id="query_div"><textarea autofocus spellcheck="false" autocorrect="false" autocomplete="false" data-gramm="false" class="monospace shadow" id="query"></textarea></div>
+            <div id="query-params"></div>
             <div id="run_div">
                 <button type="submit" class="shadow" id="run">Run</button>
                 <div id="hint">&nbsp;(Ctrl/Cmd+Enter)</div>
@@ -2264,6 +2292,16 @@ async function postImpl(posted_request_num, query)
     /// But we don't use cached results, so the results that we get here, are always fresh.
     url += '&use_query_cache=1&enable_reads_from_query_cache=0&enable_writes_to_query_cache=1&query_cache_ttl=600&query_cache_nondeterministic_function_handling=save&query_cache_system_table_handling=ignore';
 
+    /// Add query parameter values.
+    const paramValues = getParamValues();
+    for (const [name, value] of Object.entries(paramValues))
+    {
+        if (value !== '')
+        {
+            url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
+        }
+    }
+
     /// Extremes only if the format is likely to be unchanged. This is imprecise.
     if (!query.match(/\bFORMAT\s+\w+/i)) url += '&extremes=1';
 
@@ -2421,6 +2459,7 @@ async function postImpl(posted_request_num, query)
             ok: response.ok,
             data: reply.length > 100000 ? null : reply, /// Lower than the browser's limit.
             elapsed_ns: elapsed_ns,
+            params: getParamValues(),
         };
         const title = "ClickHouse Query: " + query;
 
@@ -2431,6 +2470,14 @@ async function postImpl(posted_request_num, query)
         if (server_address != location.origin) {
             /// Save server's address in URL if it's not identical to the address of the play UI.
             history_url += '&url=' + encodeURIComponent(server_address);
+        }
+        const historyParamValues = getParamValues();
+        for (const [name, value] of Object.entries(historyParamValues))
+        {
+            if (value !== '')
+            {
+                history_url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
+            }
         }
         history_url += '#' + toBase64(query);
 
@@ -2448,6 +2495,13 @@ async function restoreFromHistory(state) {
     clear();
     query_area.value = state.query;
     resultEl.queryText = state.query;
+
+    /// Restore query parameter inputs and their values.
+    await updateQueryParams();
+    if (state.params)
+    {
+        setParamValues(state.params);
+    }
 
     if (!state.data) return;
 
@@ -2851,6 +2905,127 @@ async function getQueryUnderCursor() {
     return all_queries;
 }
 
+/// Query parameters support: detect {name:Type} placeholders and show input fields.
+
+let queryParamsContainer = document.getElementById('query-params');
+let currentQueryParams = [];
+
+function extractQueryParams(tokens)
+{
+    const params = [];
+    const seen = new Set();
+    const significant = tokens.filter(t => t.significant);
+
+    for (let i = 0; i < significant.length - 3; i++)
+    {
+        if (significant[i].token === '{' && significant[i + 2].token === ':')
+        {
+            const name = significant[i + 1].token;
+            if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) && !seen.has(name))
+            {
+                for (let j = i + 3; j < significant.length; j++)
+                {
+                    if (significant[j].token === '}')
+                    {
+                        params.push(name);
+                        seen.add(name);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    return params;
+}
+
+function getParamValues()
+{
+    const values = {};
+    for (const name of currentQueryParams)
+    {
+        const input = document.getElementById('param-' + name);
+        if (input)
+        {
+            values[name] = input.value;
+        }
+    }
+    return values;
+}
+
+function setParamValues(values)
+{
+    if (!values) return;
+    for (const [name, value] of Object.entries(values))
+    {
+        const input = document.getElementById('param-' + name);
+        if (input)
+        {
+            input.value = value;
+        }
+    }
+}
+
+async function updateQueryParams()
+{
+    if (typeof WebAssembly !== 'object' || typeof WebAssembly.instantiate !== 'function')
+    {
+        return;
+    }
+
+    const query = query_area.value;
+    if (!query)
+    {
+        queryParamsContainer.innerHTML = '';
+        currentQueryParams = [];
+        return;
+    }
+
+    const tokens = await tokenize(query);
+    const params = extractQueryParams(tokens);
+
+    if (JSON.stringify(params) === JSON.stringify(currentQueryParams))
+    {
+        return;
+    }
+
+    const oldValues = getParamValues();
+    currentQueryParams = params;
+    queryParamsContainer.innerHTML = '';
+
+    for (const name of params)
+    {
+        const wrapper = document.createElement('span');
+        wrapper.className = 'query-param';
+
+        const label = document.createElement('label');
+        label.textContent = name + ':';
+        label.setAttribute('for', 'param-' + name);
+        wrapper.appendChild(label);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = 'param-' + name;
+        input.className = 'monospace shadow';
+        input.spellcheck = false;
+        input.placeholder = name;
+        if (oldValues[name] !== undefined)
+        {
+            input.value = oldValues[name];
+        }
+        wrapper.appendChild(input);
+
+        queryParamsContainer.appendChild(wrapper);
+    }
+}
+
+let paramDebounceTimer = null;
+query_area.addEventListener('input', () =>
+{
+    clearTimeout(paramDebounceTimer);
+    paramDebounceTimer = setTimeout(updateQueryParams, 1000);
+});
+
 function setColorTheme(new_theme, update_preference) {
     theme = new_theme;
     if (update_preference) {
@@ -2882,7 +3057,29 @@ if (theme) {
     });
 }
 
-if (run_immediately) {
+/// Detect query parameters on page load and restore their values from the URL.
+/// If run_immediately is set, run the query after params are ready.
+if (query_area.value)
+{
+    updateQueryParams().then(() =>
+    {
+        for (const name of currentQueryParams)
+        {
+            const value = current_url.searchParams.get('param_' + name);
+            if (value !== null)
+            {
+                const input = document.getElementById('param-' + name);
+                if (input) input.value = value;
+            }
+        }
+        if (run_immediately)
+        {
+            post();
+        }
+    });
+}
+else if (run_immediately)
+{
     post();
 }
 
@@ -2998,6 +3195,15 @@ document.getElementById('download-button').addEventListener('click', async funct
         '&http_response_headers=' + encodeURIComponent(`{'Content-Disposition':'attachment; filename="result.${encodeURIComponent(format.toLowerCase())}"'}`);
     if (user) url += '&user=' + encodeURIComponent(user);
     if (password) url += '&password=' + encodeURIComponent(password);
+
+    const downloadParamValues = getParamValues();
+    for (const [name, value] of Object.entries(downloadParamValues))
+    {
+        if (value !== '')
+        {
+            url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
+        }
+    }
 
     let downloadQuery = query.replaceAll(/\bFORMAT\s+\w+/ig, '');
 

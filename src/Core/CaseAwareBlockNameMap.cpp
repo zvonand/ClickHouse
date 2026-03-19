@@ -7,7 +7,6 @@
 #include <Formats/FormatSettings.h>
 #include <base/StringViewHash.h>
 #include <base/defines.h>
-#include <curl/stdcheaders.h>
 #include <sparsehash/dense_hash_map>
 #include <Poco/String.h>
 #include <Common/Exception.h>

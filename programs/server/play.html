@@ -610,6 +610,7 @@
         .query-param input
         {
             width: 10em;
+            max-width: 20em;
         }
 
         a, a:visited
@@ -3007,6 +3008,16 @@ async function updateQueryParams()
         {
             input.value = oldValues[name];
         }
+        input.addEventListener('input', function()
+        {
+            /// Resize to fit the value, clamped between 10em and 20em.
+            this.style.width = '10em';
+            if (this.scrollWidth > this.clientWidth)
+            {
+                this.style.width = Math.min(this.scrollWidth, this.clientWidth * 2) + 'px';
+            }
+        });
+        input.dispatchEvent(new Event('input'));
         wrapper.appendChild(input);
 
         queryParamsContainer.appendChild(wrapper);

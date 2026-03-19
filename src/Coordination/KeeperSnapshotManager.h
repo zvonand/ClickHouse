@@ -73,10 +73,10 @@ struct KeeperStorageSnapshot
 #endif
 
 public:
-    KeeperStorageSnapshot(Storage * storage_, uint64_t up_to_log_idx_, const ClusterConfigPtr & cluster_config_ = nullptr);
+    KeeperStorageSnapshot(Storage * storage_, uint64_t up_to_log_idx_, const ClusterConfigPtr & cluster_config_ = nullptr, SnapshotVersion version_ = SnapshotVersion::V6);
 
     KeeperStorageSnapshot(
-        Storage * storage_, const SnapshotMetadataPtr & snapshot_meta_, const ClusterConfigPtr & cluster_config_ = nullptr);
+        Storage * storage_, const SnapshotMetadataPtr & snapshot_meta_, const ClusterConfigPtr & cluster_config_ = nullptr, SnapshotVersion version_ = SnapshotVersion::V6);
 
     KeeperStorageSnapshot(const KeeperStorageSnapshot<Storage>&) = delete;
     KeeperStorageSnapshot(KeeperStorageSnapshot<Storage>&&) = default;
@@ -89,7 +89,7 @@ public:
 
     Storage * storage;
 
-    SnapshotVersion version = CURRENT_SNAPSHOT_VERSION;
+    SnapshotVersion version;
     /// Snapshot metadata
     SnapshotMetadataPtr snapshot_meta;
     /// Max session id

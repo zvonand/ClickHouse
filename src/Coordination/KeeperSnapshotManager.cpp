@@ -89,7 +89,10 @@ namespace
         writeBinary(node.getData(), out);
 
         /// Serialize ACL
-        writeBinary(node.acl_id, out);
+        if (version >= SnapshotVersion::V7)
+            writeBinary(node.acl_id, out);
+        else
+            writeBinary(static_cast<uint64_t>(node.acl_id), out);
         /// Write is_sequential for backwards compatibility
         if (version < SnapshotVersion::V6)
             writeBinary(false, out);
@@ -108,7 +111,10 @@ namespace
         writeBinary(node.numChildren(), out);
         writeBinary(node.stats.pzxid, out);
 
-        writeBinary(node.stats.seqNum(), out);
+        if (version >= SnapshotVersion::V7)
+            writeBinary(node.stats.seqNum(), out);
+        else
+            writeBinary(static_cast<int32_t>(node.stats.seqNum()), out);
 
         if (version >= SnapshotVersion::V4 && version <= SnapshotVersion::V5)
             writeBinary(node.sizeInBytes(), out);
@@ -267,7 +273,10 @@ void KeeperStorageSnapshot<Storage>::serialize(const KeeperStorageSnapshot<Stora
     writeBinary(sorted_acl_map.size(), out);
     for (const auto & [acl_id, acls] : sorted_acl_map)
     {
-        writeBinary(acl_id, out);
+        if (snapshot.version >= SnapshotVersion::V7)
+            writeBinary(acl_id, out);
+        else
+            writeBinary(static_cast<uint64_t>(acl_id), out);
         writeBinary(acls.size(), out);
         for (const auto & acl : acls)
         {
@@ -617,8 +626,9 @@ void KeeperStorageSnapshot<Storage>::deserialize(SnapshotDeserializationResult<S
 }
 
 template<typename Storage>
-KeeperStorageSnapshot<Storage>::KeeperStorageSnapshot(Storage * storage_, uint64_t up_to_log_idx_, const ClusterConfigPtr & cluster_config_)
+KeeperStorageSnapshot<Storage>::KeeperStorageSnapshot(Storage * storage_, uint64_t up_to_log_idx_, const ClusterConfigPtr & cluster_config_, SnapshotVersion version_)
     : storage(storage_)
+    , version(version_)
     , snapshot_meta(std::make_shared<SnapshotMetadata>(up_to_log_idx_, 0, std::make_shared<nuraft::cluster_config>()))
     , session_id(storage->session_id_counter)
     , cluster_config(cluster_config_)
@@ -636,8 +646,9 @@ KeeperStorageSnapshot<Storage>::KeeperStorageSnapshot(Storage * storage_, uint64
 
 template<typename Storage>
 KeeperStorageSnapshot<Storage>::KeeperStorageSnapshot(
-    Storage * storage_, const SnapshotMetadataPtr & snapshot_meta_, const ClusterConfigPtr & cluster_config_)
+    Storage * storage_, const SnapshotMetadataPtr & snapshot_meta_, const ClusterConfigPtr & cluster_config_, SnapshotVersion version_)
     : storage(storage_)
+    , version(version_)
     , snapshot_meta(snapshot_meta_)
     , session_id(storage->session_id_counter)
     , cluster_config(cluster_config_)

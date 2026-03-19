@@ -838,9 +838,12 @@ InterpreterSelectQuery::InterpreterSelectQuery(
                         parts_for_estimator = *parts;
                 }
 
-                /// Just attempting to read statistics files on disk can increase query latencies
-                /// First check the in-memory metadata if statistics are present at all
-                auto estimator = storage_snapshot->metadata->hasStatistics()
+                /// Just attempting to read statistics files on disk can increase query latencies.
+                /// First check the in-memory metadata if statistics are present at all.
+                /// Statistics are only used to reorder conditions, so skip if there is just one.
+                const auto * where_function = query.where()->as<ASTFunction>();
+                const bool has_multiple_conditions = where_function && where_function->name == "and";
+                auto estimator = (storage_snapshot->metadata->hasStatistics() && has_multiple_conditions)
                                     ? storage->getConditionSelectivityEstimator(parts_for_estimator, queried_columns, context)
                                     : nullptr;
 

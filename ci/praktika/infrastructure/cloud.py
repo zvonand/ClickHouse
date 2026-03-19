@@ -128,7 +128,7 @@ class CloudInfrastructure:
             # Deploy EC2 Instances
             if _wants("EC2Instance", "EC2Instances", "Instance", "Instances"):
                 for instance_config in self.ec2_instances:
-                    if self._settings and self._settings.AWS_REGION:
+                    if self._settings and self._settings.AWS_REGION and not instance_config.region:
                         instance_config.region = self._settings.AWS_REGION
 
                     print("\n" + "=" * 60)

@@ -101,11 +101,6 @@ SerializationDateTime::SerializationDateTime(const TimezoneMixin & time_zone_)
 {
 }
 
-size_t SerializationDateTime::allocatedBytes() const
-{
-    return sizeof(*this);
-}
-
 SerializationPtr SerializationDateTime::create(const TimezoneMixin & time_zone_)
 {
     return ISerialization::pooled(getHash(time_zone_), [&] { return new SerializationDateTime(time_zone_); });

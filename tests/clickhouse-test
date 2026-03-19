@@ -4252,6 +4252,15 @@ def main(args):
         )
         # Self-test: verify the coverage collection pipeline works end-to-end.
         clickhouse_execute(args, "SYSTEM SET COVERAGE TEST '_selftest'")
+        # Diagnostic: check the binary accessible via SQL
+        try:
+            exe_info = clickhouse_execute(
+                args,
+                "SELECT length(readFile('/proc/self/exe')) AS exe_bytes"
+            ).decode(errors="replace").strip()
+            print(f"Coverage diagnostic: /proc/self/exe readable, size={exe_info} bytes")
+        except Exception as e:
+            print(f"Coverage diagnostic: /proc/self/exe error: {e}")
         clickhouse_execute(args, "SELECT 1")
         clickhouse_execute(args, "SYSTEM SET COVERAGE TEST ''")
         selftest_rows = int(

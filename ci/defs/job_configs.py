@@ -279,7 +279,7 @@ class JobConfigs:
     )
     coverage_build_jobs = common_build_job_config.parametrize(
         Job.ParamSet(
-            parameter=BuildTypes.LLVM_COVERAGE_BUILD,
+            parameter="amd_llvm_coverage",
             provides=[
                 ArtifactNames.CH_AMD_LLVM_COVERAGE_BUILD,
             ],
@@ -675,7 +675,7 @@ class JobConfigs:
     functional_tests_jobs_coverage = common_ft_job_config.parametrize(
         *[
             Job.ParamSet(
-                parameter=f"{BuildTypes.LLVM_COVERAGE_BUILD}, per_test_coverage, {batch}/{total_batches}",
+                parameter=f"amd_llvm_coverage, per_test_coverage, {batch}/{total_batches}",
                 runs_on=RunnerLabels.AMD_SMALL,
                 requires=[ArtifactNames.CH_AMD_LLVM_COVERAGE_BUILD],
             )

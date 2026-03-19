@@ -175,7 +175,7 @@ def test_mysql_dictionary_host_filter(start_cluster):
     """MySQL dictionary source should respect RemoteHostFilter for inline DDL params."""
     # node5 has an empty <remote_url_allow_hosts> section, so all hosts are denied.
     # CREATE DICTIONARY succeeds because dictionary loading is async.
-    # The host filter check (after fix) runs in the factory lambda at load time, before
+    # The host filter check runs in the factory lambda at load time, before
     # any TCP connection is attempted, so no running MySQL server is required.
     node5.query("DROP DICTIONARY IF EXISTS default.test_mysql_host_filter")
     node5.query(

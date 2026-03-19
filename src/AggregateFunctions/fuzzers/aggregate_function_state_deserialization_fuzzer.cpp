@@ -23,7 +23,7 @@
 
 #include <iostream>
 
-/// This fuzzer supports its own argyments:
+/// This fuzzer supports its own arguments:
 /// - `-max_parser_depth=N` sets the maximum parser depth (default: 150 for debug/sanitizer, 300 otherwise)
 /// - `-max_parser_backtracks=N` sets the maximum parser backtracks (default: DBMS_DEFAULT_MAX_PARSER_BACKTRACKS)
 /// - `-max_query_size=N` sets the maximum query size (default: DBMS_DEFAULT_MAX_QUERY_SIZE)

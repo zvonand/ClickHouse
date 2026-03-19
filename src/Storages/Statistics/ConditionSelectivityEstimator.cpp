@@ -286,7 +286,25 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
             {
                 if (const_value.getType() == Field::Types::String)
                 {
-                    const_value = convertFieldToType(const_value, *column_type);
+                    try
+                    {
+                        const_value = convertFieldToType(const_value, *column_type);
+                    }
+                    catch (...)
+                    {
+                        /// The string value is not valid for the column type (e.g. unknown enum element).
+                        /// For equality, the condition can never match, so selectivity is 0.
+                        /// For other operators, fall back to default unknown selectivity.
+                        LOG_DEBUG(getLogger("ConditionSelectivityEstimator"),
+                            "Cannot convert value to column type, skipping statistics estimation. The exception is : {}",
+                            getCurrentExceptionMessage(false));
+                        if (func_name == "equals")
+                        {
+                            out.function = RPNElement::ALWAYS_FALSE;
+                            return true;
+                        }
+                        return false;
+                    }
                     if (const_value.isNull())
                         return false;
                 }

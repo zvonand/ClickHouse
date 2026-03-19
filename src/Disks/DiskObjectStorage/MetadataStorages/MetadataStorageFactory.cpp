@@ -135,7 +135,8 @@ void registerMetadataStorageFromDisk(MetadataStorageFactory & factory)
         auto key_compatibility_prefix = getObjectKeyCompatiblePrefix(local_object_storage, config, config_prefix);
         auto key_generator = local_object_storage->createKeyGenerator();
 
-        return std::make_shared<MetadataStorageFromDisk>(db_disk, std::move(key_compatibility_prefix), std::move(key_generator));
+        bool wait_for_blob_removal = config.getBool(config_prefix + ".wait_for_blob_removal", true);
+        return std::make_shared<MetadataStorageFromDisk>(db_disk, std::move(key_compatibility_prefix), std::move(key_generator), wait_for_blob_removal);
     });
 }
 

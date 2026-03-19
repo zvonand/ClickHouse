@@ -8,8 +8,6 @@
 
 #include <Common/logger_useful.h>
 
-#include <limits>
-#include <ranges>
 #include <memory>
 #include <shared_mutex>
 
@@ -21,10 +19,11 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-MetadataStorageFromDisk::MetadataStorageFromDisk(DiskPtr disk_, std::string compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_)
+MetadataStorageFromDisk::MetadataStorageFromDisk(DiskPtr disk_, std::string compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_, bool wait_for_blob_removal_)
     : disk(disk_)
     , compatible_key_prefix(std::move(compatible_key_prefix_))
     , key_generator(std::move(key_generator_))
+    , wait_for_blob_removal(wait_for_blob_removal_)
 {
 }
 
@@ -157,6 +156,11 @@ int64_t MetadataStorageFromDisk::recordAsRemoved(const StoredObjects & blobs)
     return blobs_removal_await_queue.recordAsRemoved(blobs);
 }
 
+void MetadataStorageFromDisk::applyNewSettings(const Poco::Util::AbstractConfiguration & config, const std::string & config_prefix, ContextPtr /*context*/)
+{
+    wait_for_blob_removal = config.getBool(config_prefix + ".wait_for_blob_removal", true);
+}
+
 MetadataStorageFromDiskTransaction::MetadataStorageFromDiskTransaction(MetadataStorageFromDisk & metadata_storage_)
     : metadata_storage(metadata_storage_)
 {
@@ -173,7 +177,7 @@ void MetadataStorageFromDiskTransaction::commit(const TransactionCommitOptionsVa
     }
 
     operations.finalize();
-    metadata_storage.blobs_removal_await_queue.addBlobsPendingRemoval(objects_to_remove, /*need_wait_removal=*/true);
+    metadata_storage.blobs_removal_await_queue.addBlobsPendingRemoval(objects_to_remove, metadata_storage.wait_for_blob_removal);
 }
 
 TransactionCommitOutcomeVariant MetadataStorageFromDiskTransaction::tryCommit(const TransactionCommitOptionsVariant & options)

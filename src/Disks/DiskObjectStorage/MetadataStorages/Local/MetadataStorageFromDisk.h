@@ -31,9 +31,10 @@ private:
     const ObjectStorageKeyGeneratorPtr key_generator;
 
     BlobsRemovalAwaitQueue blobs_removal_await_queue;
+    std::atomic<bool> wait_for_blob_removal;
 
 public:
-    MetadataStorageFromDisk(DiskPtr disk_, String compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_);
+    MetadataStorageFromDisk(DiskPtr disk_, String compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_, bool wait_for_blob_removal_);
 
     MetadataTransactionPtr createTransaction() override;
 
@@ -88,6 +89,11 @@ public:
 
     BlobsToRemove getBlobsToRemove(const ClusterConfigurationPtr & cluster, int64_t max_count) override;
     int64_t recordAsRemoved(const StoredObjects & blobs) override;
+
+    void applyNewSettings(
+        const Poco::Util::AbstractConfiguration & config,
+        const std::string & config_prefix,
+        ContextPtr context) override;
 };
 
 class MetadataStorageFromDiskTransaction final : public IMetadataTransaction

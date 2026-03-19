@@ -513,7 +513,7 @@ void Aggregator::Params::explain(ExplainFormatSettings & settings) const
     {
         out << (first ? " " : ", ");
         first = false;
-        out << (settings.pretty ? QueryPlanFormat::formatColumnForExplain(key, settings) : key);
+        out << (settings.pretty ? QueryPlanFormat::formatColumnPretty(key, settings) : key);
     }
     out << '\n';
 

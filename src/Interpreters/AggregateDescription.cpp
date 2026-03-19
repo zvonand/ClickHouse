@@ -108,7 +108,7 @@ void AggregateDescription::explainPretty(ExplainFormatSettings & settings) const
         if (!first)
             out << ", ";
         first = false;
-        out << QueryPlanFormat::formatColumnForExplain(arg, settings);
+        out << QueryPlanFormat::formatColumnPretty(arg, settings);
     }
     out << ')';
 }

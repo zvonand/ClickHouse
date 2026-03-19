@@ -3646,42 +3646,22 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
 
     if (query_info.prewhere_info)
     {
-        if (!format_settings.pretty)
-            format_settings.out << prefix << "Prewhere filter" << '\n';
-        format_settings.out << prefix << "Prewhere filter column: ";
-
-        const auto & dag = query_info.prewhere_info->prewhere_actions;
-        const auto & column_name = query_info.prewhere_info->prewhere_column_name;
-
-        format_settings.out << (format_settings.pretty ? QueryPlanFormat::formatNamePrettyIfPossible(dag, column_name) : column_name);
-
-        if (!format_settings.pretty && query_info.prewhere_info->remove_prewhere_column)
-            format_settings.out << " (removed)";
-        format_settings.out << '\n';
-
-        auto expression = std::make_shared<ExpressionActions>(query_info.prewhere_info->prewhere_actions.clone());
-        if (!format_settings.compact)
-            expression->describeActions(format_settings.out, prefix);
+        QueryPlanFormat::describeSourceFilter(
+            format_settings.out, "Prewhere filter",
+            query_info.prewhere_info->prewhere_actions,
+            query_info.prewhere_info->prewhere_column_name,
+            query_info.prewhere_info->remove_prewhere_column,
+            format_settings, prefix);
     }
 
     if (query_info.row_level_filter)
     {
-        if (!format_settings.pretty)
-            format_settings.out << prefix << "Row level filter" << '\n';
-        format_settings.out << prefix << "Row level filter column: ";
-
-        const auto & dag = query_info.row_level_filter->actions;
-        const auto & column_name = query_info.row_level_filter->column_name;
-
-        format_settings.out << (format_settings.pretty ? QueryPlanFormat::formatNamePrettyIfPossible(dag, column_name) : column_name);
-
-        if (!format_settings.pretty && query_info.row_level_filter->do_remove_column)
-            format_settings.out << " (removed)";
-        format_settings.out << '\n';
-
-        auto expression = std::make_shared<ExpressionActions>(query_info.row_level_filter->actions.clone());
-        if (!format_settings.compact)
-            expression->describeActions(format_settings.out, prefix);
+        QueryPlanFormat::describeSourceFilter(
+            format_settings.out, "Row level filter",
+            query_info.row_level_filter->actions,
+            query_info.row_level_filter->column_name,
+            query_info.row_level_filter->do_remove_column,
+            format_settings, prefix);
     }
 
     if (deferred_prewhere_info || deferred_row_level_filter)
@@ -3689,23 +3669,21 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
         format_settings.out << prefix << "Deferred filters (applied after FINAL)" << '\n';
         if (deferred_row_level_filter)
         {
-            format_settings.out << prefix << "  Deferred row level filter column: ";
-
-            const auto & dag = deferred_row_level_filter->actions;
-            const auto & column_name = deferred_row_level_filter->column_name;
-
-            format_settings.out << (format_settings.pretty ? QueryPlanFormat::formatNamePrettyIfPossible(dag, column_name) : column_name);
-            format_settings.out << '\n';
+            format_settings.out << prefix << "  Deferred row level filter column: "
+                << QueryPlanFormat::formatFilterColumn(
+                       deferred_row_level_filter->actions,
+                       deferred_row_level_filter->column_name,
+                       format_settings.pretty)
+                << '\n';
         }
         if (deferred_prewhere_info)
         {
-            format_settings.out << prefix << "  Deferred prewhere filter column: ";
-
-            const auto & dag = deferred_prewhere_info->prewhere_actions;
-            const auto & column_name = deferred_prewhere_info->prewhere_column_name;
-
-            format_settings.out << (format_settings.pretty ? QueryPlanFormat::formatNamePrettyIfPossible(dag, column_name) : column_name);
-            format_settings.out << '\n';
+            format_settings.out << prefix << "  Deferred prewhere filter column: "
+                << QueryPlanFormat::formatFilterColumn(
+                       deferred_prewhere_info->prewhere_actions,
+                       deferred_prewhere_info->prewhere_column_name,
+                       format_settings.pretty)
+                << '\n';
         }
     }
 

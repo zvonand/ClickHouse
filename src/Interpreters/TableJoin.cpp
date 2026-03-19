@@ -162,17 +162,17 @@ String TableJoin::JoinOnClause::formatPretty(const ExplainFormatSettings & setti
 
     for (size_t i = 0; i < key_names_left.size(); ++i)
     {
-        String left = QueryPlanFormat::formatColumnForExplain(key_names_left[i], settings);
-        String right = QueryPlanFormat::formatColumnForExplain(key_names_right[i], settings);
+        String left = QueryPlanFormat::formatColumnPretty(key_names_left[i], settings);
+        String right = QueryPlanFormat::formatColumnPretty(key_names_right[i], settings);
         bool null_safe = nullsafe_compare_key_indexes.contains(i);
         parts.push_back(fmt::format("{} {} {}", left, null_safe ? "<=>" : "=", right));
     }
 
     const auto & [left_cond, right_cond] = condColumnNames();
     if (!left_cond.empty())
-        parts.push_back(QueryPlanFormat::formatColumnForExplain(left_cond, settings));
+        parts.push_back(QueryPlanFormat::formatColumnPretty(left_cond, settings));
     if (!right_cond.empty())
-        parts.push_back(QueryPlanFormat::formatColumnForExplain(right_cond, settings));
+        parts.push_back(QueryPlanFormat::formatColumnPretty(right_cond, settings));
 
     return fmt::format("{}", fmt::join(parts, " AND "));
 }

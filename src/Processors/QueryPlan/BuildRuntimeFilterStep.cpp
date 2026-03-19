@@ -193,10 +193,18 @@ QueryPlanStepPtr BuildRuntimeFilterStep::clone() const
 void BuildRuntimeFilterStep::describeActions(FormatSettings & format_settings) const
 {
     const std::string & prefix = format_settings.detail_prefix;
-    format_settings.out
-        << prefix << "Filter id: " << filter_name << '\n'
-        << prefix << "Allow not exact filter: " << allow_to_use_not_exact_filter << '\n';
 
+    if (format_settings.pretty)
+    {
+        if (const auto * rf = QueryPlanFormat::findRuntimeFilter(filter_name, format_settings))
+            format_settings.out << prefix << "Filter: " << rf->pretty_name << ": " << rf->build_column_name << '\n';
+    }
+    else
+    {
+        format_settings.out
+            << prefix << "Filter id: " << filter_name << '\n'
+            << prefix << "Allow not exact filter: " << allow_to_use_not_exact_filter << '\n';
+    }
 }
 
 void registerBuildRuntimeFilterStep(QueryPlanStepRegistry & registry)

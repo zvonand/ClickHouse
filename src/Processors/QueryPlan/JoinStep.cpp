@@ -276,7 +276,7 @@ void JoinStep::describeActions(FormatSettings & settings) const
 void JoinStep::describeActions(JSONBuilder::JSONMap & map) const
 {
     WriteBufferFromOwnString dummy;
-    ExplainFormatSettings dummy_settings{.out = dummy, .header_prefix = "", .detail_prefix = "", .pretty_names = {}};
+    ExplainFormatSettings dummy_settings{.out = dummy, .header_prefix = "", .detail_prefix = "", .pretty_names = {}, .runtime_filter_names = {}};
 
     for (const auto & [name, value] : describeJoinActions(join, dummy_settings))
         map.add(name, value);
@@ -397,7 +397,7 @@ void FilledJoinStep::describeActions(FormatSettings & settings) const
 void FilledJoinStep::describeActions(JSONBuilder::JSONMap & map) const
 {
     WriteBufferFromOwnString dummy;
-    ExplainFormatSettings dummy_settings{.out = dummy, .header_prefix = "", .detail_prefix = "", .pretty_names = {}};
+    ExplainFormatSettings dummy_settings{.out = dummy, .header_prefix = "", .detail_prefix = "", .pretty_names = {}, .runtime_filter_names = {}};
 
     for (const auto & [name, value] : describeJoinActions(join, dummy_settings))
         map.add(name, value);

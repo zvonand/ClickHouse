@@ -465,7 +465,7 @@ std::string debugExplainStep(IQueryPlanStep & step)
 {
     WriteBufferFromOwnString out;
     ExplainPlanOptions options{.actions = true};
-    IQueryPlanStep::FormatSettings settings{.out = out, .header_prefix = "", .detail_prefix = "", .pretty_names = {}};
+    IQueryPlanStep::FormatSettings settings{.out = out, .header_prefix = "", .detail_prefix = "", .pretty_names = {}, .runtime_filter_names = {}};
     explainStep(step, settings, options, 0);
     return out.str();
 }
@@ -536,7 +536,8 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
         .write_header = options.header,
         .compact = options.compact,
         .pretty = options.pretty,
-        .pretty_names = {}
+        .pretty_names = {},
+        .runtime_filter_names = {}
     };
 
     auto skip_expressions = [&](Node * node) -> Node * {
@@ -546,7 +547,7 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
     };
 
     if (options.pretty)
-        QueryPlanFormat::buildPrettyNamesMap(*this, settings.pretty_names);
+        QueryPlanFormat::buildPrettyNamesMap(*this, settings.pretty_names, settings.runtime_filter_names);
 
     std::deque<ExplainPlan::Frame> stack;
 
@@ -615,7 +616,7 @@ void QueryPlan::explainPipeline(WriteBuffer & buffer, const ExplainPipelineOptio
 {
     checkInitialized();
 
-    IQueryPlanStep::FormatSettings settings{.out = buffer, .header_prefix = "", .detail_prefix = "", .write_header = options.header, .pretty_names = {}};
+    IQueryPlanStep::FormatSettings settings{.out = buffer, .header_prefix = "", .detail_prefix = "", .write_header = options.header, .pretty_names = {}, .runtime_filter_names = {}};
 
     struct Frame
     {

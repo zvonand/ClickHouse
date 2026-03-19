@@ -11,6 +11,7 @@
 #include <IO/WriteBufferFromString.h>
 #include <Interpreters/ActionsDAG.h>
 #include <Interpreters/Aggregator.h>
+#include <Interpreters/ExpressionActions.h>
 #include <Processors/QueryPlan/AggregatingStep.h>
 #include <Processors/QueryPlan/CubeStep.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
@@ -19,6 +20,7 @@
 #include <Processors/QueryPlan/MergingAggregatedStep.h>
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/QueryPlanFormat.h>
+#include <Processors/QueryPlan/BuildRuntimeFilterStep.h>
 #include <Processors/QueryPlan/RollupStep.h>
 
 #include <fmt/format.h>
@@ -316,7 +318,7 @@ namespace QueryPlanFormat
         return node ? QueryPlanFormat::formatNodePretty(node) : name;
     }
 
-    String formatColumnForExplain(const String & column_name, const ExplainFormatSettings & settings)
+    String formatColumnPretty(const String & column_name, const ExplainFormatSettings & settings)
     {
         if (auto it = settings.pretty_names.find(column_name); it != settings.pretty_names.end())
             return it->second;
@@ -347,10 +349,13 @@ namespace QueryPlanFormat
         }
     }
 
-    static void buildPrettyNamesForNode(const QueryPlan::Node * node, std::unordered_map<String, String> & pretty_names)
+    static void buildPrettyNamesForNode(
+        const QueryPlan::Node * node,
+        std::unordered_map<String, String> & pretty_names,
+        std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names)
     {
         for (const auto * child : node->children)
-            buildPrettyNamesForNode(child, pretty_names);
+            buildPrettyNamesForNode(child, pretty_names, runtime_filter_names);
 
         const auto & step = node->step;
         const auto & step_name = step->getName();
@@ -385,12 +390,152 @@ namespace QueryPlanFormat
         {
             addAggregatesPrettyNames(static_cast<const CubeStep *>(step.get())->getParams(), pretty_names);
         }
+        else if (step_name == "BuildRuntimeFilter")
+        {
+            const auto * rf_step = static_cast<const BuildRuntimeFilterStep *>(step.get());
+            size_t rf_index = runtime_filter_names.size() + 1;
+            String pretty = fmt::format("RF{}", rf_index);
+            String build_col = trimColumnIdentifier(rf_step->getFilterColumnName());
+            runtime_filter_names[rf_step->getFilterName()] = {std::move(pretty), std::move(build_col)};
+        }
     }
 
-    void buildPrettyNamesMap(const QueryPlan & plan, std::unordered_map<String, String> & pretty_names)
+    void buildPrettyNamesMap(
+        const QueryPlan & plan,
+        std::unordered_map<String, String> & pretty_names,
+        std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names)
     {
         if (plan.getRootNode())
-            buildPrettyNamesForNode(plan.getRootNode(), pretty_names);
+            buildPrettyNamesForNode(plan.getRootNode(), pretty_names, runtime_filter_names);
+    }
+
+    namespace
+    {
+        bool isRuntimeFilterNode(const ActionsDAG::Node * node)
+        {
+            return node->type == ActionsDAG::ActionType::FUNCTION
+                && node->function_base
+                && node->function_base->getName() == "__applyFilter";
+        }
+
+        String getRuntimeFilterId(const ActionsDAG::Node * node)
+        {
+            Field value;
+            node->children[0]->column->get(0, value);
+            return value.safeGet<String>();
+        }
+
+        struct SplitResult
+        {
+            ActionsDAG::NodeRawConstPtrs user_atoms;
+            ActionsDAG::NodeRawConstPtrs rf_atoms;
+        };
+
+        SplitResult splitByRuntimeFilters(const ActionsDAG & dag, const String & column_name)
+        {
+            SplitResult result;
+            const auto * node = dag.tryFindInOutputs(column_name);
+            if (!node)
+                return result;
+
+            auto atoms = ActionsDAG::extractConjunctionAtoms(node);
+            for (const auto * atom : atoms)
+            {
+                if (isRuntimeFilterNode(atom))
+                    result.rf_atoms.push_back(atom);
+                else
+                    result.user_atoms.push_back(atom);
+            }
+            return result;
+        }
+
+        void writeRuntimeFilters(
+            WriteBuffer & out,
+            const ActionsDAG::NodeRawConstPtrs & rf_atoms,
+            const std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names,
+            const String & prefix)
+        {
+            out << prefix << "Runtime filters: ";
+            bool first = true;
+            for (const auto * atom : rf_atoms)
+            {
+                if (!first)
+                    out << ", ";
+                first = false;
+
+                String filter_id = getRuntimeFilterId(atom);
+                String probe_col = trimColumnIdentifier(atom->children[1]->result_name);
+
+                if (auto it = runtime_filter_names.find(filter_id); it != runtime_filter_names.end())
+                    out << it->second.pretty_name << ": " << probe_col << " = " << it->second.build_column_name;
+                else
+                    out << filter_id << ": " << probe_col;
+            }
+            out << '\n';
+        }
+
+        void writeFilterAtoms(
+            WriteBuffer & out,
+            const ActionsDAG::NodeRawConstPtrs & atoms,
+            const String & label,
+            const String & prefix)
+        {
+            out << prefix << label << " column: ";
+            for (size_t i = 0; i < atoms.size(); ++i)
+            {
+                if (i > 0)
+                    out << " AND ";
+                out << formatNodePretty(atoms[i], 4);
+            }
+            out << '\n';
+        }
+    }
+
+    String formatFilterColumn(const ActionsDAG & dag, const String & column_name, bool pretty)
+    {
+        return pretty ? formatNamePrettyIfPossible(dag, column_name) : column_name;
+    }
+
+    const RuntimeFilterInfo * findRuntimeFilter(const String & filter_id, const ExplainFormatSettings & settings)
+    {
+        if (auto it = settings.runtime_filter_names.find(filter_id); it != settings.runtime_filter_names.end())
+            return &it->second;
+        return nullptr;
+    }
+
+    void describeSourceFilter(
+        WriteBuffer & out,
+        const String & label,
+        const ActionsDAG & dag,
+        const String & column_name,
+        bool remove_column,
+        const ExplainFormatSettings & settings,
+        const String & prefix)
+    {
+        if (settings.pretty)
+        {
+            auto split = splitByRuntimeFilters(dag, column_name);
+
+            if (!split.user_atoms.empty())
+                writeFilterAtoms(out, split.user_atoms, label, prefix);
+
+            if (!split.rf_atoms.empty())
+                writeRuntimeFilters(out, split.rf_atoms, settings.runtime_filter_names, prefix);
+        }
+        else
+        {
+            out << prefix << label << '\n';
+            out << prefix << label << " column: " << column_name;
+            if (remove_column)
+                out << " (removed)";
+            out << '\n';
+        }
+        
+        if (!settings.compact)
+        {
+            auto expression = std::make_shared<ExpressionActions>(dag.clone());
+            expression->describeActions(out, prefix);
+        }
     }
 
 }

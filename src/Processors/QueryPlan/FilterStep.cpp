@@ -212,8 +212,8 @@ void FilterStep::describeActions(FormatSettings & settings) const
         }
     }
 
-    settings.out << prefix << "Filter column: ";
-    settings.out << (settings.pretty ? QueryPlanFormat::formatNamePrettyIfPossible(actions_dag, filter_column_name) : filter_column_name);
+    settings.out << prefix << "Filter column: "
+        << QueryPlanFormat::formatFilterColumn(actions_dag, filter_column_name, settings.pretty);
 
     if (!settings.pretty && remove_filter_column)
         settings.out << " (removed)";

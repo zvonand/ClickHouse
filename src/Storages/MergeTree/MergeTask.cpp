@@ -1240,7 +1240,13 @@ bool MergeTask::ExecuteAndFinalizeHorizontalPart::executeImpl() const
     {
         Block block;
 
-        if (ctx->is_cancelled() || !global_ctx->merging_executor->pull(block))
+        /// Persist the blocker-based cancellation into merge_list_element so that
+        /// it remains visible even if the blocker is released before `finalize`
+        /// checks it via `checkOperationIsNotCanceled`.
+        if (ctx->is_cancelled())
+            global_ctx->merge_list_element_ptr->is_cancelled.store(true, std::memory_order_relaxed);
+
+        if (global_ctx->isCancelled() || !global_ctx->merging_executor->pull(block))
         {
             finalize();
             return false;

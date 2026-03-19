@@ -6,6 +6,8 @@
 #include <Common/MemoryTrackerDebugBlockerInThread.h>
 #include <Common/SymbolIndex.h>
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <optional>
 
@@ -542,6 +544,28 @@ const SymbolIndex::Symbol * SymbolIndex::findSymbol(const void * address) const
 const SymbolIndex::Object * SymbolIndex::findObject(const void * address) const
 {
     return find(address, data.objects);
+}
+
+String SymbolIndex::diagnose(const void * address) const
+{
+    /// Mirror findSymbol exactly: if address is not in any mapped object,
+    /// fall back to treating it as a raw file offset (same as findSymbol does).
+    const Object * object = findObject(address);
+    const void * offset = address;
+
+    if (object)
+        offset = reinterpret_cast<const void *>(
+            reinterpret_cast<uintptr_t>(address) - reinterpret_cast<uintptr_t>(object->address_begin));
+
+    const Symbol * symbol = find(offset, data.symbols);
+    if (!symbol)
+    {
+        if (!object)
+            return "no_object";
+        return fmt::format("no_symbol[object={}:offset=0x{:x}]", object->name, reinterpret_cast<uintptr_t>(offset));
+    }
+
+    return fmt::format("found:{}", symbol->name);
 }
 
 const SymbolIndex::Object * SymbolIndex::thisObject() const

@@ -15,6 +15,8 @@
 #include <Storages/StorageInMemoryMetadata.h>
 #include <Storages/MergeTree/RPNBuilder.h>
 #include <Storages/MergeTree/IMergeTreeDataPart.h>
+#include <Processors/Formats/IRowInputFormat.h>
+
 
 namespace DB
 {
@@ -290,8 +292,11 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
                     {
                         const_value = convertFieldToType(const_value, *column_type);
                     }
-                    catch (...)
+                    catch (const Exception & e)
                     {
+                        if (!isParseError(e.code()))
+                            throw;
+
                         /// The string value is not valid for the column type (e.g. unknown enum element).
                         /// For equality, the condition can never match, so selectivity is 0.
                         /// For other operators, fall back to default unknown selectivity.

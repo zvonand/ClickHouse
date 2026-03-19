@@ -8,8 +8,9 @@
 --   "Number of rows in source parts ... differs from number of bytes written
 --    to rows_sources file ... It is a bug."
 --
--- The fix detects that the horizontal stage was cancelled (rows_sources_count == 0
--- with multiple source parts) and aborts cleanly instead of hitting the assertion.
+-- The fix latches the cancellation at both decision points (`executeImpl` and
+-- `executeVerticalMergeForOneColumn`) so that `checkOperationIsNotCanceled`
+-- reliably throws ABORTED regardless of the blocker's current state.
 
 DROP TABLE IF EXISTS test_vertical_merge_race;
 CREATE TABLE test_vertical_merge_race (
@@ -39,7 +40,8 @@ INSERT INTO test_vertical_merge_race SELECT number + 800, 'a','b','c','d','e','f
 INSERT INTO test_vertical_merge_race SELECT number + 900, 'a','b','c','d','e','f','g','h','i','j','k','l' FROM numbers(100);
 
 -- Rapidly toggle STOP / START to maximise the chance of hitting the TOCTOU window
--- inside MergeTask::executeImpl. Background merges are triggered each time merges
+-- inside MergeTask::executeImpl and executeVerticalMergeForOneColumn.
+-- Background merges are triggered each time merges
 -- are re-enabled.
 SYSTEM START MERGES test_vertical_merge_race;
 SYSTEM STOP MERGES test_vertical_merge_race;

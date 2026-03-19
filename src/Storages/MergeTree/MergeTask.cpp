@@ -1240,14 +1240,15 @@ bool MergeTask::ExecuteAndFinalizeHorizontalPart::executeImpl() const
     {
         Block block;
 
-        /// Persist the blocker-based cancellation into merge_list_element so that
-        /// it remains visible even if the blocker is released before `finalize`
-        /// checks it via `checkOperationIsNotCanceled`.
-        if (ctx->is_cancelled())
-            global_ctx->merge_list_element_ptr->is_cancelled.store(true, std::memory_order_relaxed);
-
-        if (global_ctx->isCancelled() || !global_ctx->merging_executor->pull(block))
+        /// Latch the cancellation: capture the blocker state once and, if it is
+        /// set, persist it into merge_list_element so that `checkOperationIsNotCanceled`
+        /// in `finalize` reliably throws ABORTED even if SYSTEM START MERGES
+        /// clears the blocker between these two reads.
+        bool cancelled = ctx->is_cancelled();
+        if (cancelled || !global_ctx->merging_executor->pull(block))
         {
+            if (cancelled)
+                global_ctx->merge_list_element_ptr->is_cancelled.store(true, std::memory_order_relaxed);
             finalize();
             return false;
         }
@@ -1333,17 +1334,6 @@ bool MergeTask::VerticalMergeStage::prepareVerticalMergeForAllColumns() const
 
     /// Ensure data has written to disk.
     size_t rows_sources_count = ctx->rows_sources_temporary_file->finalizeWriting();
-
-    /// When SYSTEM STOP/START MERGES toggles rapidly, the horizontal merge pipeline
-    /// can be cancelled (is_cancelled() returns true) but the cancellation check in
-    /// finalize() passes because the blocker was released in between. Detect this:
-    /// if we have multiple source parts but wrote zero rows_sources bytes AND the missing
-    /// rows are not accounted for by TTL filtering, the horizontal stage was effectively
-    /// cancelled. Abort cleanly instead of continuing with no data.
-    /// Note: rows_sources_count == 0 is legitimate when TTL filtering removes all rows,
-    /// in which case input_rows_filtered == sum_input_rows_exact.
-    if (rows_sources_count == 0 && global_ctx->future_part->parts.size() > 1 && input_rows_filtered < sum_input_rows_exact)
-        throw Exception(ErrorCodes::ABORTED, "Horizontal merge stage was cancelled, aborting vertical merge");
 
     /// In special case, when there is only one source part, and no rows were skipped, we may have
     /// skipped writing rows_sources file. Otherwise rows_sources_count must be equal to the total
@@ -1618,9 +1608,16 @@ bool MergeTask::VerticalMergeStage::executeVerticalMergeForOneColumn() const
     {
         Block block;
 
-        if (global_ctx->isCancelled()
-            || !ctx->executor->pull(block))
+        /// Latch the cancellation so that `finalizeVerticalMergeForOneColumn`
+        /// sees it via `checkOperationIsNotCanceled` even if the blocker is
+        /// released between these two reads.
+        bool cancelled = global_ctx->isCancelled();
+        if (cancelled || !ctx->executor->pull(block))
+        {
+            if (cancelled)
+                global_ctx->merge_list_element_ptr->is_cancelled.store(true, std::memory_order_relaxed);
             return false;
+        }
 
         ctx->column_elems_written += block.rows();
         ctx->column_to->write(block);

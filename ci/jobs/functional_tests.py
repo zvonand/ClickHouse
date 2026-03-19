@@ -234,7 +234,9 @@ def main():
     if is_llvm_coverage:
         # Randomization makes coverage non-deterministic, long tests are slow to collect coverage
         runner_options += " --no-random-settings --no-random-merge-tree-settings --no-long --llvm-coverage"
-        if not is_per_test_coverage:
+        if is_per_test_coverage:
+            runner_options += " --collect-per-test-coverage"
+        else:
             os.environ["LLVM_PROFILE_FILE"] = f"ft-{batch_num}-%2m.profraw"
 
     rerun_count = 1

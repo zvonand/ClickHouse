@@ -212,7 +212,10 @@ def get_images_from_compose_files(compose_files: List[Path]) -> List[str]:
         except OSError:
             continue
         for m in re.finditer(r"^\s+image:\s+(.+)$", content, re.MULTILINE):
-            resolved = resolve_image(m.group(1).strip())
+            # Strip inline YAML comments from unquoted values before resolving
+            # (e.g. `coredns/coredns:1.9.3 # :latest broke this test`).
+            raw = re.sub(r"\s+#.*$", "", m.group(1).strip())
+            resolved = resolve_image(raw)
             if resolved:
                 images.add(resolved)
 
@@ -222,58 +225,27 @@ def get_images_from_compose_files(compose_files: List[Path]) -> List[str]:
 def prefetch_images(
     images: List[str], retries: int = 3, pull_timeout: int = 300
 ) -> bool:
-    """Pull every image with up to `retries` attempts and a per-attempt `pull_timeout`.
+    """Pull every image in parallel using `ci/prefetch-integration-test-images`.
 
-    Returns True if every image was pulled successfully, False otherwise.
+    Images with no manifest for the current architecture (e.g. amd64-only images
+    on arm64 runners) are silently skipped.  Returns True on success, False if any
+    image fails to pull for a real reason.
     """
     if not images:
         print("No images to pre-fetch.")
         return True
 
-    print(f"Pre-fetching {len(images)} Docker image(s):")
-    for img in images:
-        print(f"  {img}")
-
-    failed: List[str] = []
-    total_start = time.perf_counter()
-    for image in images:
-        ok = False
-        for attempt in range(1, retries + 1):
-            print(
-                f"Pulling {image} (attempt {attempt}/{retries}, "
-                f"elapsed {time.perf_counter() - total_start:.1f}s) ...",
-                flush=True,
-            )
-            pull_start = time.perf_counter()
-            if Shell.check(
-                f"timeout {pull_timeout} docker pull {image}", verbose=True
-            ):
-                print(
-                    f"Pulled {image} in {time.perf_counter() - pull_start:.1f}s",
-                    flush=True,
-                )
-                ok = True
-                break
-            print(
-                f"Pull of {image} failed on attempt {attempt} "
-                f"({time.perf_counter() - pull_start:.1f}s elapsed)",
-                flush=True,
-            )
-            if attempt < retries:
-                time.sleep(5)
-        if not ok:
-            failed.append(image)
-
-    total_elapsed = time.perf_counter() - total_start
-    if failed:
-        print(
-            f"ERROR: Failed to pull the following image(s) after {retries} attempt(s) "
-            f"({total_elapsed:.1f}s total): {failed}"
-        )
-        return False
-
-    print(f"All images pre-fetched successfully in {total_elapsed:.1f}s.")
-    return True
+    script = f"{repo_dir}/ci/jobs/scripts/prefetch-integration-test-images"
+    env = {
+        **os.environ,
+        "PULL_RETRIES": str(retries),
+        "PULL_TIMEOUT": str(pull_timeout),
+    }
+    return Shell.check(
+        f"{script} {' '.join(images)}",
+        verbose=True,
+        env=env,
+    )
 
 
 def parse_args():

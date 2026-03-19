@@ -1278,10 +1278,6 @@ public:
 
         res_bm = lhs.getAllNonZeroIndex();
 
-        /// checkValidValue above guarantees rhs >= 0, but the compiler may not see that.
-        /// For integer types, std::floor is a no-op but introduces an implicit int-to-double
-        /// conversion; for float types, UInt64(std::floor(negative)) is UB.
-        /// Use an explicit non-negative cast to avoid UB in both cases.
         UInt64 long_value;
         if constexpr (std::is_floating_point_v<ValueType>)
         {

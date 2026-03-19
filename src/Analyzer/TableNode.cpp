@@ -73,12 +73,14 @@ TableNode::TableNode(
 {
     materialized_cte = std::make_shared<MaterializedCTE>(cte_name_);
     children[materialized_cte_subquery_index] = std::move(materialized_cte_subquery_);
+    setTemporaryTableName(materialized_cte->temporary_table_name);
 }
 
-void TableNode::finalizeMaterializedCTE(const TemporaryTableHolder & temporary_table_holder_, const ContextPtr & context_)
+void TableNode::finalizeMaterializedCTE(TemporaryTableHolder temporary_table_holder_, const ContextPtr & context_)
 {
     auto real_storage = temporary_table_holder_.getTable();
     materialized_cte->storage = real_storage;
+    materialized_cte->table_holder = std::move(temporary_table_holder_);
     typeid_cast<StorageMemory *>(real_storage.get())->setMaterializedCTE(materialized_cte);
     updateStorage(std::move(real_storage), context_);
 }

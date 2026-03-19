@@ -1,7 +1,11 @@
 #pragma once
 
+#include <Interpreters/DatabaseCatalog.h>
+#include <base/defines.h>
+
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace DB
@@ -36,10 +40,20 @@ struct MaterializedCTE
         return plan != nullptr || is_built;
     }
 
+    TemporaryTableHolder extractTableHolder()
+    {
+        chassert(table_holder.has_value());
+        return std::move(*table_holder);
+    }
+
     /// Temporary table storage.
     StoragePtr storage = {};
+    /// Temporary table storage.
+    std::optional<TemporaryTableHolder> table_holder = {};
     /// Name of the CTE.
     const std::string cte_name;
+    /// Temporary table name
+    const std::string temporary_table_name;
     /// Query Plan for the CTE
     std::unique_ptr<QueryPlan> plan = {};
     /// If true, query plan is built for the CTE (i.e. the table is being populated, but is not ready for reads yet).

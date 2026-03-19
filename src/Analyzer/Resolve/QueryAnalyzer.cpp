@@ -2925,18 +2925,11 @@ ProjectionNames QueryAnalyzer::resolveExpressionNode(
                                 nullptr /*query*/,
                                 true /*create_for_global_subquery*/);
 
-                            auto temp_name = fmt::format("_materialized_cte_{}", toString(mat_subquery->getTreeHash()));
-                            mat_table_node->setTemporaryTableName(temp_name);
-                            mat_table_node->finalizeMaterializedCTE(storage_holder, scope.context);
-
-                            query_context->addExternalTable(temp_name, std::move(storage_holder));
+                            mat_table_node->finalizeMaterializedCTE(std::move(storage_holder), scope.context);
                         }
                         else
                         {
                             mat_table_node->updateStorage(materialized_cte_ptr->storage, scope.context);
-
-                            auto temp_name = fmt::format("_materialized_cte_{}", toString(mat_subquery->getTreeHash()));
-                            mat_table_node->setTemporaryTableName(temp_name);
                         }
                     }
                 }
@@ -4791,7 +4784,7 @@ void QueryAnalyzer::resolveQueryJoinTreeNode(QueryTreeNodePtr & join_tree_node, 
         case QueryTreeNodeType::TABLE:
         {
             auto * table_node = join_tree_node->as<TableNode>();
-            if (table_node && table_node->isMaterializedCTE())
+            if (table_node->isMaterializedCTE())
             {
                 auto materialized_cte_ptr = table_node->getMaterializedCTE();
 
@@ -4853,11 +4846,7 @@ void QueryAnalyzer::resolveQueryJoinTreeNode(QueryTreeNodePtr & join_tree_node, 
                         nullptr /*query*/,
                         true /*create_for_global_subquery*/);
 
-                    auto temporary_table_name = fmt::format("_materialized_cte_{}", toString(subquery->getTreeHash()));
-                    table_node->setTemporaryTableName(temporary_table_name);
-                    table_node->finalizeMaterializedCTE(storage_holder, scope.context);
-
-                    query_context->addExternalTable(temporary_table_name, std::move(storage_holder));
+                    table_node->finalizeMaterializedCTE(std::move(storage_holder), scope.context);
                 }
                 else
                 {
@@ -4865,19 +4854,9 @@ void QueryAnalyzer::resolveQueryJoinTreeNode(QueryTreeNodePtr & join_tree_node, 
                     /// Resolve this clone's own subquery copy for correct EXPLAIN output,
                     /// then reuse the existing storage.
                     auto & subquery = table_node->getMaterializedCTESubquery();
-
-                    IdentifierResolveScope & subquery_scope = createIdentifierResolveScope(subquery, &scope);
-                    subquery_scope.subquery_depth = scope.subquery_depth + 1;
-
-                    if (subquery->getNodeType() == QueryTreeNodeType::QUERY)
-                        resolveQuery(subquery, subquery_scope);
-                    else
-                        resolveUnion(subquery, subquery_scope);
+                    resolveExpressionNode(subquery, scope, false /*allow_lambda_expression*/, true /*allow_table_expression*/, true /*ignore_alias=*/);
 
                     table_node->updateStorage(materialized_cte_ptr->storage, scope.context);
-
-                    auto temporary_table_name = fmt::format("_materialized_cte_{}", toString(subquery->getTreeHash()));
-                    table_node->setTemporaryTableName(temporary_table_name);
                 }
             }
             break;

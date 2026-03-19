@@ -3,6 +3,8 @@
 #include <Analyzer/TableNode.h>
 #include <Analyzer/InDepthQueryTreeVisitor.h>
 
+#include <Interpreters/MaterializedCTE.h>
+
 namespace DB
 {
 
@@ -54,6 +56,11 @@ private:
 
 void inlineMaterializedCTEIfNeeded(QueryTreeNodePtr & node, const ReusedMaterializedCTEs & reused_materialized_cte, ContextPtr context)
 {
+    /// Register Materialized CTEs as External tables
+    auto query_context = context->getQueryContext();
+    for (const auto & materialized_cte : reused_materialized_cte)
+        query_context->addExternalTable(materialized_cte->temporary_table_name, materialized_cte->extractTableHolder());
+
     InlineMaterializedCTEsVisitor visitor(reused_materialized_cte, std::move(context));
     visitor.visit(node);
 

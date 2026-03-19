@@ -49,7 +49,7 @@ public:
         const ContextPtr & context_);
 
     /// Replace the placeholder storage with the real StorageMemory from the temporary table holder.
-    void finalizeMaterializedCTE(const TemporaryTableHolder & temporary_table_holder_, const ContextPtr & context_);
+    void finalizeMaterializedCTE(TemporaryTableHolder temporary_table_holder_, const ContextPtr & context_);
 
     /** Update table node storage.
       * After this call storage, storage_id, storage_lock, storage_snapshot will be updated using new storage.

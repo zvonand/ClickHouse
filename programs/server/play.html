@@ -2922,7 +2922,8 @@ function extractQueryParams(tokens)
                 {
                     if (significant[j].token === '}')
                     {
-                        params.push(name);
+                        const type = significant.slice(i + 3, j).map(t => t.token).join('');
+                        params.push({name: name, type: type});
                         seen.add(name);
                         break;
                     }
@@ -2937,12 +2938,12 @@ function extractQueryParams(tokens)
 function getParamValues()
 {
     const values = {};
-    for (const name of currentQueryParams)
+    for (const param of currentQueryParams)
     {
-        const input = document.getElementById('param-' + name);
+        const input = document.getElementById('param-' + param.name);
         if (input)
         {
-            values[name] = input.value;
+            values[param.name] = input.value;
         }
     }
     return values;
@@ -2989,25 +2990,29 @@ async function updateQueryParams()
     currentQueryParams = params;
     queryParamsContainer.innerHTML = '';
 
-    for (const name of params)
+    for (const param of params)
     {
         const wrapper = document.createElement('span');
         wrapper.className = 'query-param';
 
         const label = document.createElement('label');
-        label.textContent = name + ':';
-        label.setAttribute('for', 'param-' + name);
+        label.textContent = param.name + ':';
+        label.setAttribute('for', 'param-' + param.name);
         wrapper.appendChild(label);
+
+        let placeholder = param.type;
+        if (/^Date$/.test(param.type)) placeholder = 'YYYY-MM-DD';
+        else if (/^DateTime/.test(param.type)) placeholder = 'YYYY-MM-DD hh:mm:ss';
 
         const input = document.createElement('input');
         input.type = 'text';
-        input.id = 'param-' + name;
+        input.id = 'param-' + param.name;
         input.className = 'monospace shadow';
         input.spellcheck = false;
-        input.placeholder = name;
-        if (oldValues[name] !== undefined)
+        input.placeholder = placeholder;
+        if (oldValues[param.name] !== undefined)
         {
-            input.value = oldValues[name];
+            input.value = oldValues[param.name];
         }
         input.addEventListener('input', function()
         {
@@ -3072,12 +3077,12 @@ if (query_area.value)
     updateQueryParams().then(() =>
     {
         const urlParamValues = {};
-        for (const name of currentQueryParams)
+        for (const param of currentQueryParams)
         {
-            const value = current_url.searchParams.get('param_' + name);
+            const value = current_url.searchParams.get('param_' + param.name);
             if (value !== null)
             {
-                urlParamValues[name] = value;
+                urlParamValues[param.name] = value;
             }
         }
         setParamValues(urlParamValues);

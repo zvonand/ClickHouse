@@ -117,6 +117,10 @@ private:
     /// Do not allow user to do this as it achieves nothing and is very likely by mistake.
     constexpr inline static void checkValidValue(const ValueType & value)
     {
+        if (value < 0)
+        {
+            throw Exception(ErrorCodes::INCORRECT_DATA, "NumericIndexedVector does not support negative values");
+        }
         if constexpr (std::is_floating_point_v<ValueType>)
         {
             if (isnan(value))
@@ -1274,7 +1278,13 @@ public:
 
         res_bm = lhs.getAllNonZeroIndex();
 
-        UInt64 long_value = UInt64(std::floor(rhs));
+        /// For integer types, std::floor is a no-op but introduces an implicit conversion to double,
+        /// which is UB when the result is negative and then cast to UInt64.
+        UInt64 long_value;
+        if constexpr (std::is_floating_point_v<ValueType>)
+            long_value = UInt64(std::floor(rhs));
+        else
+            long_value = UInt64(rhs);
         /// if ValueType is floating point, use ValueType for calculation, otherwise use UInt64
         using CalculationType = std::conditional_t<std::is_floating_point_v<ValueType>, ValueType, UInt64>;
         UInt64 decimal_value = static_cast<UInt64>((rhs - static_cast<CalculationType>(long_value)) * static_cast<CalculationType>(1ULL << lhs.fraction_bit_num));

@@ -1278,13 +1278,20 @@ public:
 
         res_bm = lhs.getAllNonZeroIndex();
 
-        /// For integer types, std::floor is a no-op but introduces an implicit conversion to double,
-        /// which is UB when the result is negative and then cast to UInt64.
+        /// checkValidValue above guarantees rhs >= 0, but the compiler may not see that.
+        /// For integer types, std::floor is a no-op but introduces an implicit int-to-double
+        /// conversion; for float types, UInt64(std::floor(negative)) is UB.
+        /// Use an explicit non-negative cast to avoid UB in both cases.
         UInt64 long_value;
         if constexpr (std::is_floating_point_v<ValueType>)
-            long_value = UInt64(std::floor(rhs));
+        {
+            auto floored = std::floor(rhs);
+            long_value = floored >= 0 ? static_cast<UInt64>(floored) : static_cast<UInt64>(static_cast<Int64>(floored));
+        }
         else
-            long_value = UInt64(rhs);
+        {
+            long_value = static_cast<UInt64>(rhs);
+        }
         /// if ValueType is floating point, use ValueType for calculation, otherwise use UInt64
         using CalculationType = std::conditional_t<std::is_floating_point_v<ValueType>, ValueType, UInt64>;
         UInt64 decimal_value = static_cast<UInt64>((rhs - static_cast<CalculationType>(long_value)) * static_cast<CalculationType>(1ULL << lhs.fraction_bit_num));

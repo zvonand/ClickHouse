@@ -26,14 +26,6 @@
 namespace DB::Iceberg
 {
 
-
-struct MetadataFileWithInfo
-{
-    Int32 version;
-    String path;
-    CompressionMethod compression_method;
-};
-
 void writeMessageToFile(
     const String & data,
     const String & filename,
@@ -93,7 +85,8 @@ MetadataFileWithInfo getLatestOrExplicitMetadataFileAndVersion(
     const ContextPtr & local_context,
     Poco::Logger * log,
     const std::optional<String> & table_uuid,
-    CompressionMethod known_compression_method = CompressionMethod::None);
+    CompressionMethod known_compression_method,
+    bool force_fetch_latest_metadata = true);
 
 std::pair<Poco::JSON::Object::Ptr, Int32> parseTableSchemaV1Method(const Poco::JSON::Object::Ptr & metadata_object);
 std::pair<Poco::JSON::Object::Ptr, Int32> parseTableSchemaV2Method(const Poco::JSON::Object::Ptr & metadata_object);

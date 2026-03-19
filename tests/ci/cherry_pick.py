@@ -592,7 +592,7 @@ class BackportPRs:
 
         since_date = since_date or self.oldest_commit_date()
         labels_to_backport = labels_to_backport or (
-            self.labels_to_backport + [Labels.MUST_BACKPORT]
+            self.labels_to_backport + [Labels.MUST_BACKPORT, Labels.MUST_BACKPORT_FORCE]
         )
         repo_name = repo_name or self.repo.full_name
         # To not have a possible TZ issues

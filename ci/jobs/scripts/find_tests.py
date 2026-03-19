@@ -314,7 +314,7 @@ class Targeting:
         ranked = sorted(
             width_score,
             key=lambda t: (not has_narrow_hit[t], -width_score[t]),
-        )
+        )[:1000]
 
         narrow_count = sum(1 for t in ranked if has_narrow_hit[t])
         broad_count = len(ranked) - narrow_count

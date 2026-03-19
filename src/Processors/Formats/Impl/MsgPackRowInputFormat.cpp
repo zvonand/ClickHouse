@@ -400,6 +400,11 @@ bool MsgPackVisitor::start_array(size_t size) // NOLINT
     }
     else if (isTuple(removeNullable(info_stack.top().type)))
     {
+        const auto & tuple_type = assert_cast<const DataTypeTuple &>(*removeNullable(info_stack.top().type));
+        const auto & nested_types = tuple_type.getElements();
+        if (size != nested_types.size())
+            throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Cannot insert MessagePack array with size {} into Tuple column with {} elements", size, nested_types.size());
+
         /// If the type is Nullable, reaching start_array means the value
         /// is non-null (for nulls, the parser calls visit_nil instead).
         /// So we can safely unwrap the Nullable to work with the inner
@@ -411,11 +416,6 @@ bool MsgPackVisitor::start_array(size_t size) // NOLINT
             nullable_column.getNullMapColumn().insertValue(0);
             column_ptr = &nullable_column.getNestedColumn();
         }
-
-        const auto & tuple_type = assert_cast<const DataTypeTuple &>(*removeNullable(info_stack.top().type));
-        const auto & nested_types = tuple_type.getElements();
-        if (size != nested_types.size())
-            throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Cannot insert MessagePack array with size {} into Tuple column with {} elements", size, nested_types.size());
 
         ColumnTuple & column_tuple = assert_cast<ColumnTuple &>(*column_ptr);
         /// Push nested columns into stack in reverse order.

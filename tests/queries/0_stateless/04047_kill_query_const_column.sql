@@ -13,5 +13,5 @@ KILL MUTATION WHERE 1 TEST FORMAT Null;
 KILL MUTATION WHERE database = currentDatabase() TEST FORMAT Null;
 KILL MUTATION WHERE mutation_id = 'nonexistent_mutation_id' TEST FORMAT Null;
 
-SELECT 'KILL TRANSACTION';
-KILL TRANSACTION WHERE 1 TEST FORMAT Null;
+-- KILL TRANSACTION is not tested here because system.transactions
+-- only exists when experimental transactions are enabled.

@@ -216,7 +216,8 @@ def main():
             nproc = int(Utils.cpu_count() * 0.4)
         elif is_per_test_coverage:
             cidb_cluster = CIDBCluster()
-            assert cidb_cluster.is_ready()
+            if not info.is_local_run:
+                assert cidb_cluster.is_ready()
             nproc = 1
         else:
             pass
@@ -233,10 +234,11 @@ def main():
 
     if is_llvm_coverage:
         # Randomization makes coverage non-deterministic, long tests are slow to collect coverage
-        runner_options += " --no-random-settings --no-random-merge-tree-settings --no-long --llvm-coverage"
+        runner_options += " --llvm-coverage"
         if is_per_test_coverage:
-            runner_options += " --collect-per-test-coverage"
+            runner_options += " --no-long --collect-per-test-coverage"
         else:
+            runner_options += " --no-random-settings --no-random-merge-tree-settings"
             os.environ["LLVM_PROFILE_FILE"] = f"ft-{batch_num}-%2m.profraw"
 
     rerun_count = 1

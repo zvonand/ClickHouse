@@ -12,6 +12,7 @@
 #include <QueryPipeline/BlockIO.h>
 #include <base/coverage.h>
 
+#include <iostream>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -85,7 +86,9 @@ void collectAndInsertCoverage(
 
     if (name_refs.empty())
     {
-        LOG_INFO(getLogger("CoverageCollection"), "No covered NameRefs for test '{}', skipping", test_name);
+        auto msg = fmt::format("CoverageCollection: No covered NameRefs for test '{}', skipping", test_name);
+        LOG_INFO(getLogger("CoverageCollection"), "{}", msg);
+        std::cerr << msg << "\n";
         return;
     }
 
@@ -188,20 +191,25 @@ void collectAndInsertCoverage(
         query_context->setSetting("max_query_size", Field{0ULL});
         auto block_io = executeQuery(query, query_context, QueryFlags{.internal = true}).second;
         block_io.onFinish();
+        std::cerr << fmt::format(
+            "CoverageCollection: Inserted coverage for test '{}': {} regions\n",
+            test_name, files.size());
     }
     catch (const Exception & e)
     {
-        LOG_WARNING(
-            getLogger("CoverageCollection"),
-            "Failed to insert coverage for test '{}': {}",
-            test_name, e.message());
+        auto msg = fmt::format(
+            "CoverageCollection: Failed to insert coverage for test '{}': code={} msg={}",
+            test_name, e.code(), e.message());
+        LOG_WARNING(getLogger("CoverageCollection"), "{}", msg);
+        std::cerr << msg << "\n";
     }
     catch (...)
     {
-        LOG_WARNING(
-            getLogger("CoverageCollection"),
-            "Failed to insert coverage for test '{}'",
+        auto msg = fmt::format(
+            "CoverageCollection: Failed to insert coverage for test '{}': unknown exception",
             test_name);
+        LOG_WARNING(getLogger("CoverageCollection"), "{}", msg);
+        std::cerr << msg << "\n";
     }
 }
 

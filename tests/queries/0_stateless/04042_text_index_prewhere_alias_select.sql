@@ -1,5 +1,3 @@
--- Tags: no-parallel-replicas
--- ^ query_plan_direct_read_from_text_index is not compatible with parallel replicas
 -- Test that `query_plan_direct_read_from_text_index` works when the text-index
 -- predicate is referenced via an alias in `SELECT` and used in `PREWHERE`.
 -- PR #99504 fixed `NOT_FOUND_COLUMN_IN_BLOCK` for this pattern.

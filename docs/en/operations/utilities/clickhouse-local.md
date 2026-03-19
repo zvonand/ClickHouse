@@ -239,10 +239,9 @@ Arguments:
 
 Also, there are arguments for each ClickHouse configuration variable which are more commonly used instead of `--config-file`.
 
-
 ## Commands {#commands}
 
-### LS Command
+### LS Command {#ls-command}
 
 Lists all the files in the current working directory accessible to clickhouse-local.
 

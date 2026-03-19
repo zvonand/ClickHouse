@@ -1,6 +1,6 @@
 -- Regression test for legacy `JoinStep` filter pushdown through equivalent `USING` columns.
--- Equivalent-column replacement changes argument types in the rebuilt filter DAG,
--- so the cloned function metadata must be resolved using the actual child types.
+-- Equivalent-column replacement must preserve `Cast JOIN USING columns` actions instead of
+-- replacing the derived node by name and dropping the type-conversion chain.
 
 SET enable_analyzer = 1;
 SET query_plan_use_new_logical_join_step = 0;

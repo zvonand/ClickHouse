@@ -1,6 +1,6 @@
 -- Regression test for legacy `JoinStep` filter pushdown through equivalent `USING` columns.
--- The filter is built for the post-join `id` type, but equivalent-column replacement
--- during pushdown must not substitute a raw pre-join key with a different type.
+-- Equivalent-column replacement changes argument types in the rebuilt filter DAG,
+-- so the cloned function metadata must be resolved using the actual child types.
 
 SET enable_analyzer = 1;
 SET query_plan_use_new_logical_join_step = 0;

@@ -493,17 +493,6 @@ static size_t tryPushDownOverJoinStep(QueryPlan::Node * parent_node, QueryPlan::
     bool has_single_clause = table_join_ptr && table_join_ptr->getClauses().size() == 1;
     if (has_single_clause && !filled_join)
     {
-        auto can_replace_with_equivalent_column = [&](const String & column_name, const DataTypePtr & replacement_type)
-        {
-            /// The legacy JoinStep cannot rebuild pushed-down expressions when equivalent
-            /// USING-column substitution changes the post-join type of the key.
-            /// This is the same limitation as for direct column push-down above.
-            if (!join_header->has(column_name))
-                return false;
-
-            return join_header->getByName(column_name).type->equals(*replacement_type);
-        };
-
         const auto & join_clause = table_join_ptr->getClauses()[0];
         size_t key_names_size = join_clause.key_names_left.size();
 
@@ -517,11 +506,8 @@ static size_t tryPushDownOverJoinStep(QueryPlan::Node * parent_node, QueryPlan::
             if (!left_table_column.type->equals(*right_table_column.type))
                 continue;
 
-            if (can_replace_with_equivalent_column(left_table_key_name, right_table_column.type))
-                equivalent_left_stream_column_to_right_stream_column[left_table_key_name] = right_table_column;
-
-            if (can_replace_with_equivalent_column(right_table_key_name, left_table_column.type))
-                equivalent_right_stream_column_to_left_stream_column[right_table_key_name] = left_table_column;
+            equivalent_left_stream_column_to_right_stream_column[left_table_key_name] = right_table_column;
+            equivalent_right_stream_column_to_left_stream_column[right_table_key_name] = left_table_column;
         }
     }
     else if (logical_join)

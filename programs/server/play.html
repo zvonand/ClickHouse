@@ -3071,15 +3071,16 @@ if (query_area.value)
 {
     updateQueryParams().then(() =>
     {
+        const urlParamValues = {};
         for (const name of currentQueryParams)
         {
             const value = current_url.searchParams.get('param_' + name);
             if (value !== null)
             {
-                const input = document.getElementById('param-' + name);
-                if (input) input.value = value;
+                urlParamValues[name] = value;
             }
         }
+        setParamValues(urlParamValues);
         if (run_immediately)
         {
             post();

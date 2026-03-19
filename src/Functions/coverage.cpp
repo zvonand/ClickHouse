@@ -67,8 +67,34 @@ public:
 
     ColumnPtr executeImpl(const ColumnsWithTypeAndName &, const DataTypePtr &, size_t input_rows_count) const override
     {
-        /// Full implementation pending LLVMCoverageMapping reader.
-        /// Returns empty arrays for now.
+#if defined(__ELF__) && !defined(OS_FREEBSD)
+        const DB::CurrentCoverageRegions regions = DB::getCurrentCoverageRegions();
+
+        if (kind == Kind::Files)
+        {
+            auto column = ColumnString::create();
+            for (const auto & f : regions.files)
+                column->insertData(f.data(), f.size());
+            auto offsets = ColumnArray::ColumnOffsets::create(1, regions.files.size());
+            auto array = ColumnArray::create(std::move(column), std::move(offsets));
+            return ColumnConst::create(std::move(array), input_rows_count);
+        }
+        if (kind == Kind::LineStarts)
+        {
+            auto column = ColumnUInt32::create();
+            column->getData().insert(regions.line_starts.begin(), regions.line_starts.end());
+            auto offsets = ColumnArray::ColumnOffsets::create(1, regions.line_starts.size());
+            auto array = ColumnArray::create(std::move(column), std::move(offsets));
+            return ColumnConst::create(std::move(array), input_rows_count);
+        }
+        {
+            auto column = ColumnUInt32::create();
+            column->getData().insert(regions.line_ends.begin(), regions.line_ends.end());
+            auto offsets = ColumnArray::ColumnOffsets::create(1, regions.line_ends.size());
+            auto array = ColumnArray::create(std::move(column), std::move(offsets));
+            return ColumnConst::create(std::move(array), input_rows_count);
+        }
+#else
         if (kind == Kind::Files)
         {
             auto column = ColumnString::create();
@@ -80,6 +106,7 @@ public:
         auto offsets = ColumnArray::ColumnOffsets::create(1, 0);
         auto array = ColumnArray::create(std::move(column), std::move(offsets));
         return ColumnConst::create(std::move(array), input_rows_count);
+#endif
     }
 };
 
@@ -102,7 +129,7 @@ public:
         auto column = ColumnUInt64::create();
         auto & data = column->getData();
 #if defined(__ELF__) && !defined(OS_FREEBSD)
-        auto name_refs = getCurrentCoveredNameRefs();
+        const auto name_refs = getCurrentCoveredNameRefs();
         size_t map_size = DB::getCoverageMapSize();
         size_t matches = DB::countCoverageMatches(name_refs);
         auto [non_empty, zero_line, first_info] = DB::diagCoverageRegions(name_refs);

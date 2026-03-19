@@ -148,7 +148,7 @@ def main():
     is_encrypted_storage = random.choice([True, False])
     is_parallel_replicas = False
     is_llvm_coverage = False
-    is_coverage = False
+    is_per_test_coverage = False
     runner_options = ""
     # optimal value for most of the jobs
     nproc = int(Utils.cpu_count() * 0.6)
@@ -190,10 +190,8 @@ def main():
             is_bugfix_validation = True
         elif "amd_llvm_coverage" in to:
             is_llvm_coverage = True
-        elif "coverage" in to:
-            is_coverage = True
         if "per_test_coverage" in to:
-            is_coverage = True
+            is_per_test_coverage = True
         if "s3 storage" in to:
             is_s3_storage = True
         if "azure" in to:
@@ -216,7 +214,7 @@ def main():
         elif "msan" in args.options:
             # MSan is slow
             nproc = int(Utils.cpu_count() * 0.4)
-        elif is_coverage:
+        elif is_per_test_coverage:
             cidb_cluster = CIDBCluster()
             assert cidb_cluster.is_ready()
             nproc = 1
@@ -305,11 +303,11 @@ def main():
     debug_files = []
 
     stages = list(JobStages)
-    if not is_coverage:
+    if not is_per_test_coverage:
         stages.remove(JobStages.COLLECT_COVERAGE)
     else:
         stages.remove(JobStages.COLLECT_LOGS)
-    if is_coverage or info.is_local_run or is_bugfix_validation:
+    if is_per_test_coverage or info.is_local_run or is_bugfix_validation:
         # For bugfix validation, we intentionally skip the check error stage (checks FATAL messages):
         # regular test failures are assumed to be sufficient to validate the test
         stages.remove(JobStages.CHECK_ERRORS)
@@ -320,7 +318,7 @@ def main():
             stages.remove(JobStages.COLLECT_COVERAGE)
     if (
         is_flaky_check
-        or is_coverage
+        or is_per_test_coverage
         or is_bugfix_validation
         or is_targeted_check
         or info.is_local_run
@@ -440,7 +438,7 @@ def main():
             f"prof_prefix:{temp_dir}/jemalloc_profiles/clickhouse.jemalloc"
         )
 
-        if not is_coverage:
+        if not is_per_test_coverage:
             commands.append(configure_log_export)
 
         results.append(

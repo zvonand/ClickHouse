@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 
@@ -69,7 +70,7 @@ namespace
 }
 
 
-std::vector<uint64_t> getCurrentCoveredNameRefs()
+std::vector<std::pair<uint64_t, uint64_t>> getCurrentCoveredNameRefs()
 {
     const LLVMProfileData * begin = __llvm_profile_begin_data(); // NOLINT
     const LLVMProfileData * end   = __llvm_profile_end_data();   // NOLINT
@@ -79,7 +80,7 @@ std::vector<uint64_t> getCurrentCoveredNameRefs()
 
     const std::size_t total = static_cast<std::size_t>(end - begin);
 
-    std::vector<uint64_t> result;
+    std::vector<std::pair<uint64_t, uint64_t>> result;
     result.reserve(std::min(total, std::size_t{65536}));
 
     for (const LLVMProfileData * data = begin; data != end; ++data)
@@ -95,7 +96,7 @@ std::vector<uint64_t> getCurrentCoveredNameRefs()
             continue;
 
         if (*entry_counter > 0)
-            result.push_back(data->NameRef);
+            result.emplace_back(data->NameRef, data->FuncHash);
     }
 
     return result;
@@ -114,7 +115,7 @@ void setCoverageTest(std::string_view test_name)
     /// We collect what we need under the lock, then release it before invoking
     /// the callback (which may do heavy DB work and must not hold the mutex).
     std::string prev_test_name;
-    std::vector<uint64_t> name_refs;
+    std::vector<std::pair<uint64_t, uint64_t>> name_refs;
     CoverageFlushCallback cb;
 
     {

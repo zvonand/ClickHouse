@@ -133,6 +133,14 @@ std::vector<FilenameTable> parseCovMapFilenames(
         if (!ok || num_filenames == 0)
             continue;
 
+        /// Sanity-check the uncompressed size before allocating to avoid OOM on corrupt data.
+        /// 256 MB is a generous upper bound; also require it is not implausibly large
+        /// relative to the compressed/raw input (a 16× expansion factor is already very liberal).
+        static constexpr uint64_t kMaxUncompressedLen = 256u * 1024u * 1024u;
+        if (uncompressed_len > kMaxUncompressedLen
+            || uncompressed_len > filenames_size * 16)
+            continue;
+
         std::string uncompressed;
         if (compressed_len > 0)
         {
@@ -233,10 +241,26 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
         return result;
     }
 
+    /// Bounds check: verify section header table fits in the file.
+    if (elf->e_shoff + static_cast<size_t>(elf->e_shnum) * sizeof(Elf64_Shdr) > size)
+    {
+        cleanup();
+        return result;
+    }
+
     const Elf64_Shdr * const shdrs =
         reinterpret_cast<const Elf64_Shdr *>(base + elf->e_shoff);
+
+    /// Bounds check: verify the string table section offset is within the file.
+    if (shdrs[elf->e_shstrndx].sh_offset >= size)
+    {
+        cleanup();
+        return result;
+    }
+
     const char * const shstrtab =
         reinterpret_cast<const char *>(base + shdrs[elf->e_shstrndx].sh_offset);
+    const size_t shstrtab_size = static_cast<size_t>(shdrs[elf->e_shstrndx].sh_size);
 
     const uint8_t * covmap_data = nullptr;
     size_t covmap_size = 0;
@@ -246,14 +270,25 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
     for (int i = 0; i < elf->e_shnum; ++i)
     {
         const Elf64_Shdr * const sh = &shdrs[i];
+
+        /// Bounds check: sh_name must be within the string table.
+        if (sh->sh_name >= shstrtab_size)
+            continue;
+
         const char * const name = shstrtab + sh->sh_name;
         if (strcmp(name, "__llvm_covmap") == 0)
         {
+            /// Bounds check: section data must fit in the file.
+            if (sh->sh_offset > size || sh->sh_size > size - sh->sh_offset)
+                continue;
             covmap_data = base + sh->sh_offset;
             covmap_size = static_cast<size_t>(sh->sh_size);
         }
         else if (strcmp(name, "__llvm_covfun") == 0)
         {
+            /// Bounds check: section data must fit in the file.
+            if (sh->sh_offset > size || sh->sh_size > size - sh->sh_offset)
+                continue;
             covfun_data = base + sh->sh_offset;
             covfun_size = static_cast<size_t>(sh->sh_size);
         }
@@ -324,10 +359,12 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
 
         int64_t  name_ref_raw;
         uint32_t data_size;
+        uint64_t func_hash;
         uint64_t filenames_ref;
 
         memcpy(&name_ref_raw,  p,      8);
         memcpy(&data_size,     p + 8,  4);
+        memcpy(&func_hash,     p + 12, 8);
         memcpy(&filenames_ref, p + 20, 8);
 
         const uint64_t name_hash = static_cast<uint64_t>(name_ref_raw);
@@ -449,6 +486,7 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
 
         CoverageRegion region;
         region.name_hash  = name_hash;
+        region.func_hash  = func_hash;
         region.file       = filenames[file_idx];
         region.line_start = line_start;
         region.line_end   = line_end;

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <csignal>
 #include <filesystem>
+#include <utility>
 #include <unistd.h>
 #include <Access/AccessControl.h>
 #include <Access/Common/AllowedClientHosts.h>
@@ -1037,7 +1038,7 @@ BlockIO InterpreterSystemQuery::execute()
                 /// and so that the callback is available even on the very first call.
                 ContextPtr global_ctx = getContext()->getGlobalContext();
                 registerCoverageFlushCallback(
-                    [global_ctx](std::string_view prev_test, const std::vector<uint64_t> & name_refs)
+                    [global_ctx](std::string_view prev_test, const std::vector<std::pair<uint64_t, uint64_t>> & name_refs)
                     {
                         LOG_INFO(getLogger("CoverageCollection"),
                             "Flushing coverage for test '{}': {} covered functions",

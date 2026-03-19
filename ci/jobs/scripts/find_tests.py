@@ -131,6 +131,18 @@ class Targeting:
     def _escape_sql_string(s: str) -> str:
         return s.replace("\\", "\\\\").replace("'", "\\'")
 
+    @staticmethod
+    def _path_suffix(path: str, levels: int = 3) -> str:
+        """Return the last `levels` path components joined with '/'.
+
+        For example, ``src/Interpreters/Context.cpp`` (levels=3) returns
+        ``src/Interpreters/Context.cpp``, while ``a/b/c/d/e.cpp`` returns
+        ``c/d/e.cpp``.  Using more than one component avoids false matches
+        when two different directories contain a file with the same basename.
+        """
+        parts = path.replace("\\", "/").split("/")
+        return "/".join(parts[-min(levels, len(parts)):])
+
     # Absolute cap: a line covering more than this many tests is excluded
     # (too common code — carries no signal for targeted test selection).
     MAX_TESTS_PER_LINE = 200
@@ -151,7 +163,7 @@ class Targeting:
         print(f"[find_tests] querying coverage for {len(changed_lines)} changed lines")
 
         conditions = " OR ".join(
-            f"(endsWith(file, '{self._escape_sql_string(os.path.basename(f))}') AND line_start <= {ln} AND line_end >= {ln})"
+            f"(endsWith(file, '{self._escape_sql_string(self._path_suffix(f))}') AND line_start <= {ln} AND line_end >= {ln})"
             for f, ln in changed_lines
         )
 
@@ -196,10 +208,10 @@ class Targeting:
         # Map each input (filename, line_no) to its tests.
         result: dict = {}
         for filename, line_no in changed_lines:
-            basename = os.path.basename(filename)
+            suffix = self._path_suffix(filename)
             matched: list = []
             for file_, line_start, line_end, tests in coverage_ranges:
-                if file_.endswith(basename) and line_start <= line_no <= line_end:
+                if file_.endswith(suffix) and line_start <= line_no <= line_end:
                     matched.extend(tests)
             result[(filename, line_no)] = sorted(set(matched))
 

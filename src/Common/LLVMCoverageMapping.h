@@ -12,6 +12,7 @@ namespace DB
 struct CoverageRegion
 {
     uint64_t name_hash;   /// Matches __llvm_profile_data::NameRef
+    uint64_t func_hash;   /// Matches __llvm_profile_data::FuncHash (from CovMapFunctionRecordV3 at offset 12)
     std::string file;
     uint32_t line_start;
     uint32_t line_end;

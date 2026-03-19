@@ -4,6 +4,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 /// Flush coverage report to file, depending on coverage system
@@ -33,14 +34,15 @@ void resetCoverage();
 
 #if WITH_COVERAGE
 
-/// Return the NameRef values (MD5 hashes of mangled function names) of all functions
-/// whose entry counter is > 0 since the last counter reset.
-/// These match the NameRef field in __llvm_profile_data and in __llvm_covfun records.
-std::vector<uint64_t> getCurrentCoveredNameRefs();
+/// Return (NameRef, FuncHash) pairs of all functions whose entry counter is > 0
+/// since the last counter reset.
+/// NameRef and FuncHash match the corresponding fields in __llvm_profile_data
+/// and in __llvm_covfun records.
+std::vector<std::pair<uint64_t, uint64_t>> getCurrentCoveredNameRefs();
 
 /// Callback invoked by setCoverageTest when flushing coverage for the previous test.
-/// Arguments: (test_name, covered_name_refs).
-using CoverageFlushCallback = std::function<void(std::string_view, const std::vector<uint64_t> &)>;
+/// Arguments: (test_name, covered_name_ref_pairs).
+using CoverageFlushCallback = std::function<void(std::string_view, const std::vector<std::pair<uint64_t, uint64_t>> &)>;
 
 /// Register a callback that is called by setCoverageTest before resetting counters.
 /// Only one callback can be registered at a time; a second call overwrites the first.

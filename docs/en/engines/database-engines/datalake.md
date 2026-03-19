@@ -56,7 +56,7 @@ The following settings are supported:
 | `storage_endpoint`      | Endpoint URL for the underlying storage                                                 |
 | `oauth_server_uri`      | URI of the OAuth2 authorization server for authentication                               |
 | `vended_credentials`    | Boolean indicating whether to use vended credentials from the catalog (supports AWS S3 and Azure ADLS Gen2) |
-| `aws_access_key_id`     | AWS access key ID for S3/Glue access (if not using vended credentials)                  |
+| `aws_access_key_id`     | AWS access key ID for S3/Glue access (if not using vended credentials). In ClickHouse Cloud, you can also use [role-based access](/cloud/data-sources/secure-s3) instead of access keys. |
 | `aws_secret_access_key` | AWS secret access key for S3/Glue access (if not using vended credentials)              |
 | `region`                | AWS region for the service (e.g., `us-east-1`)                                          |
 | `dlf_access_key_id`     | Access key ID for DLF access                                                            |

@@ -635,10 +635,10 @@ async function fetchReport(inputUrl, options = {}) {
         execSync(`curl -sL "${logsLink.href}" -o ${logsPath}`);
         console.log(`Logs saved to: ${logsPath}`);
 
-        // List contents
+        // List contents (tar auto-detects compression format with -tf)
         try {
           console.log('\nLogs archive contents (pytest logs):');
-          const contents = execSync(`tar -tzf ${logsPath} | grep -E "pytest.*\\.log$|pytest.*\\.jsonl$" | head -20`).toString();
+          const contents = execSync(`tar -tf ${logsPath} | grep -E "pytest.*\\.log$|pytest.*\\.jsonl$" | head -20`).toString();
           console.log(contents || '(no pytest logs found)');
         } catch (e) {
           // Ignore errors from grep/head

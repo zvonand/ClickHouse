@@ -16,7 +16,7 @@
  *   --all            Show all test results (not just summary)
  *   --links          Show artifact links
  *   --cidb           Show CIDB links for failed tests
- *   --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
+ *   --download-logs [path]  Download logs to given path (default: /tmp/ci_logs.tar.gz or .tar.zst)
  *   --report <number> For PR URLs: fetch only one specific report (default: fetch all)
  *   --credentials <user,password>  HTTP Basic Auth credentials (comma-separated). Only for ClickHouse_private repository
  *
@@ -631,7 +631,7 @@ async function fetchReport(inputUrl, options = {}) {
       if (logsLink) {
         console.log(`\nDownloading logs from: ${logsLink.href}`);
         const ext = logsLink.href.endsWith('.zst') ? '.tar.zst' : '.tar.gz';
-        const logsPath = `/tmp/ci_logs${ext}`;
+        const logsPath = options.downloadLogs !== true ? options.downloadLogs : `/tmp/ci_logs${ext}`;
         execSync(`curl -sL "${logsLink.href}" -o ${logsPath}`);
         console.log(`Logs saved to: ${logsPath}`);
 
@@ -674,7 +674,7 @@ Options:
   --all            Show all test results (not just summary)
   --links          Show artifact links
   --cidb           Show CIDB links for failed tests
-  --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
+  --download-logs [path]  Download logs to path (default: /tmp/ci_logs.tar.{gz,zst})
   --report <number> For PR URLs: fetch only one specific report (default: fetch all)
   --credentials <user,password>  HTTP Basic Auth credentials
 
@@ -719,7 +719,12 @@ Examples:
         options.showCidb = true;
         break;
       case '--download-logs':
-        options.downloadLogs = true;
+        // Optional path argument: if next arg doesn't start with -- and isn't a URL, use it as path
+        if (i + 1 < args.length && !args[i + 1].startsWith('--') && !args[i + 1].startsWith('http')) {
+          options.downloadLogs = args[++i];
+        } else {
+          options.downloadLogs = true;
+        }
         break;
       case '--report':
         options.reportIndex = args[++i];

@@ -155,6 +155,73 @@ grep "Starting ClickHouse" tmp/right/server.log | head -1
 
 This shows the exact revision, build ID, and PID. Compare with what you expect — the CI perf test may use a different binary than the latest commit if the build was cached.
 
+### 8. Deep-dive: trace log profiling (flamegraphs)
+
+The `logs.tar.zst` archive contains `right-trace-log.tsv` and `left-trace-log.tsv` — these are exports of `system.trace_log` from each server, containing CPU and real-time stack samples for every query.
+
+**Extract trace logs:**
+
+```bash
+tar -I zstd -xf tmp/perf_logs.tar.zst -C tmp/ ./right-trace-log.tsv ./left-trace-log.tsv
+```
+
+**Key columns** (TSV format, header in row 1, types in row 2, data from row 3):
+- Column 7: `trace_type` — `CPU` (sampled CPU time), `Real` (wall clock), `Memory`, etc.
+- Column 11: `query_id` — matches the `{test.queryN.runM}` pattern from server logs
+- Column 19: `symbols` — comma-separated list of function names (leaf first), wrapped in `['...']`
+
+**Find the hotspot for a specific query** — extract CPU traces and count leaf functions:
+
+```bash
+grep "math.query2" tmp/right-trace-log.tsv | awk -F'\t' '$7 == "CPU" {print $19}' | \
+  sed "s/\[//g; s/\]//g; s/'//g" | \
+  awk -F',' '{print $1}' | \
+  sort | uniq -c | sort -rn | head -20
+```
+
+This gives a flat profile of where CPU time is spent, similar to `perf report`. Compare left (master) vs right (PR) to see what changed.
+
+**Build collapsed stacks for flamegraph visualization:**
+
+```bash
+grep "math.query2" tmp/right-trace-log.tsv | awk -F'\t' '$7 == "CPU" {print $19}' | \
+  sed "s/\[//g; s/\]//g; s/','/;/g; s/'//g" | \
+  sort | uniq -c | awk '{print $2, $1}' > tmp/math2_right.collapsed
+```
+
+The resulting `.collapsed` file can be processed with `flamegraph.pl` or the `analyze-assembly.py --perf-map` tool.
+
+**This is the fastest way to identify the root cause of a regression.** Example: for a 31x `exp10` regression, the trace log immediately showed `modf` consuming 577/1200 CPU samples on the PR binary vs 28/60 on master — pinpointing the exact function responsible without needing to reproduce locally.
+
+**The archive also contains pre-built SVG flamegraphs** for queries the framework selected for detailed analysis:
+
+```bash
+tar -I zstd -tf tmp/perf_logs.tar.zst | grep "\.svg"
+```
+
+These come in `.left.svg` (master), `.right.svg` (PR), and `.diff.svg` (differential) variants, for both `CPU` and `Real` time. Not all queries get flamegraphs — only those the framework considers interesting.
+
+### 9. Deep-dive: profile events from raw TSV
+
+The archive contains per-query raw metric data in `analyze/tmp/{test}_{queryN}.tsv`. Each row is one run, with an array of all ProfileEvents (counters like `UserTimeMicroseconds`, `OSCPUVirtualTimeMicroseconds`, `RealTimeMicroseconds`, etc.).
+
+```bash
+tar -I zstd -xf tmp/perf_logs.tar.zst -C tmp/ ./analyze/tmp/math_2.tsv
+```
+
+The `all-query-metrics.tsv` file (linked from `--links` output) contains the processed comparison data with old/new values, ratios, and thresholds for every metric of every query. The `fetch_perf_report.py` tool already parses this, but the raw file has all metrics, not just `client_time`.
+
+### Important: use unique download paths
+
+When analyzing multiple shards or PRs, use unique directory names to avoid overwriting:
+
+```bash
+mkdir -p tmp/shard1_amd tmp/shard5_amd
+curl -sS "<shard1-logs-url>" -o tmp/shard1_amd/logs.tar.zst
+curl -sS "<shard5-logs-url>" -o tmp/shard5_amd/logs.tar.zst
+tar -I zstd -xf tmp/shard1_amd/logs.tar.zst -C tmp/shard1_amd/
+```
+
 ## Rules
 
 - **Never dismiss a regression without checking master history first.** Do not call anything "noise" or "not actionable" based on intuition alone.

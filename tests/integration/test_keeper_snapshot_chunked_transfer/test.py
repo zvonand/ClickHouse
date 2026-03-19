@@ -151,19 +151,25 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
     # before the TCP port (9000) is ready, so the snapshot transfer can complete
     # entirely before start_clickhouse returns.  Blocking the port prevents any
     # Raft connection until we have enabled the failpoint.
+    def _drop_rule():
+        node_lagging.exec_in_container(
+            ["iptables", "--wait", "-D", "INPUT", "-p", "tcp", "--dport", "9234", "-j", "DROP"],
+            user="root",
+        )
+
     node_lagging.exec_in_container(
         ["iptables", "--wait", "-A", "INPUT", "-p", "tcp", "--dport", "9234", "-j", "DROP"],
         user="root",
     )
-
-    node_lagging.start_clickhouse(20)
-    node_lagging.query("SYSTEM ENABLE FAILPOINT keeper_save_snapshot_pause_mid_transfer")
+    try:
+        node_lagging.start_clickhouse(20)
+        node_lagging.query("SYSTEM ENABLE FAILPOINT keeper_save_snapshot_pause_mid_transfer")
+    except Exception:
+        _drop_rule()
+        raise
 
     # Allow Raft to connect now that the failpoint is armed.
-    node_lagging.exec_in_container(
-        ["iptables", "--wait", "-D", "INPUT", "-p", "tcp", "--dport", "9234", "-j", "DROP"],
-        user="root",
-    )
+    _drop_rule()
 
     # SYSTEM WAIT FAILPOINT ... PAUSE blocks until a thread pauses at the failpoint.
     # We run it in a background thread so that the main thread can kill the node.

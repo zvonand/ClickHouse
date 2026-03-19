@@ -158,6 +158,8 @@ public:
 
         const auto & endpoint = connection_params.endpoint;
 
+        /// Supported options
+        /// https://github.com/apache/arrow-rs-object-store/blob/main/src/azure/builder.rs#L390
         set_option("azure_container_name", endpoint.container_name);
 
         std::visit([&](const auto & auth)
@@ -165,7 +167,48 @@ public:
             using T = std::decay_t<decltype(auth)>;
             if constexpr (std::is_same_v<T, DB::AzureBlobStorage::ConnectionString>)
             {
-                set_option("azure_storage_connection_string", auth.toUnderType());
+                /// delta-kernel-rs does not support azure_storage_connection_string directly.
+                /// Parse the connection string into individual components instead.
+                auto parsed = Azure::Storage::_internal::ParseConnectionString(auth.toUnderType());
+
+                if (!parsed.AccountName.empty())
+                    set_option("azure_storage_account_name", parsed.AccountName);
+
+                if (!parsed.AccountKey.empty())
+                {
+                    set_option("azure_storage_account_key", parsed.AccountKey);
+                }
+                else
+                {
+                    /// SAS-based connection string: extract the SAS token from the
+                    /// blob service URL query parameters (appended by ParseConnectionString).
+                    auto query_params = parsed.BlobServiceUrl.GetQueryParameters();
+                    if (!query_params.empty())
+                    {
+                        std::string sas;
+                        for (const auto & [k, v] : query_params)
+                        {
+                            if (!sas.empty())
+                                sas += '&';
+                            sas += k + '=' + v;
+                        }
+                        set_option("azure_storage_sas_key", sas);
+                    }
+                }
+
+                /// Set the blob service endpoint URL (without SAS query parameters).
+                const auto & blob_url = parsed.BlobServiceUrl;
+                const auto & scheme = blob_url.GetScheme();
+                const auto & host = blob_url.GetHost();
+                if (!scheme.empty() && !host.empty())
+                {
+                    std::string blob_endpoint = scheme + "://" + host;
+                    if (const uint16_t port = blob_url.GetPort(); port != 0)
+                        blob_endpoint += ':' + std::to_string(port);
+                    set_option("azure_endpoint", blob_endpoint);
+                    if (scheme == "http")
+                        set_option("azure_allow_http", "true");
+                }
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Storage::StorageSharedKeyCredential>>)
             {

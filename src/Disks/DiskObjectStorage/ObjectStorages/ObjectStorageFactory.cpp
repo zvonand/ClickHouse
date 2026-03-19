@@ -186,10 +186,12 @@ void registerAzureObjectStorage(ObjectStorageFactory & factory)
         /// We keep using empty prefix by default for compatibility, but allow to configure another one
         const String & common_key_prefix = config.getString(config_prefix + ".common_key_prefix_for_azure", "");
 
-        AzureBlobStorage::ConnectionParams params;
-        params.endpoint = AzureBlobStorage::processEndpoint(config, config_prefix);
-        params.auth_method = AzureBlobStorage::getAuthMethod(config, config_prefix);
-        params.client_options = AzureBlobStorage::getClientOptions(context, context->getSettingsRef(), *azure_settings, /*for_disk=*/ true);
+        AzureBlobStorage::ConnectionParams params
+        {
+            .endpoint = AzureBlobStorage::processEndpoint(config, config_prefix),
+            .auth_method = AzureBlobStorage::getAuthMethod(config, config_prefix),
+            .client_options = AzureBlobStorage::getClientOptions(context, context->getSettingsRef(), *azure_settings, /*for_disk=*/ true)
+        };
 
         return std::make_shared<AzureObjectStorage>(
             name,

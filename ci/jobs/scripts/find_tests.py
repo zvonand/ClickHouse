@@ -178,8 +178,13 @@ class Targeting:
             f"across {len(unique_files)} files"
         )
 
-        file_list = ", ".join(
-            f"'{self._escape_sql_string(f)}'" for f in unique_files
+        # Build one condition per file: file='X' AND line_end >= min_changed AND line_start <= max_changed.
+        # This pre-filters to regions that *could* overlap any changed line in that file,
+        # avoiding a full table scan per file while keeping the query size O(files) not O(lines).
+        per_file_conds = " OR ".join(
+            f"(file = '{self._escape_sql_string(f)}'"
+            f" AND line_end >= {min(lines)} AND line_start <= {max(lines)})"
+            for f, lines in sorted(files_to_lines.items())
         )
 
         query = f"""
@@ -192,7 +197,7 @@ class Targeting:
         WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND notEmpty(test_name)
-          AND file IN ({file_list})
+          AND ({per_file_conds})
         GROUP BY file, line_start, line_end
         """
 

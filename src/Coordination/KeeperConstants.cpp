@@ -311,7 +311,7 @@
 \
     M(KeeperRequestRejectedDueToSoftMemoryLimitCount) \
     M(KeeperStaleRequestsSkipped) \
-    M(KeeperFinishedSessionsCacheFull) \
+    M(KeeperFinishedSessionsCacheEvictions) \
 
 namespace ProfileEvents
 {

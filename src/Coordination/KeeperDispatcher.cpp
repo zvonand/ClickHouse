@@ -53,7 +53,7 @@ namespace ProfileEvents
     extern const Event KeeperBatchMaxTotalSize;
     extern const Event KeeperRequestRejectedDueToSoftMemoryLimitCount;
     extern const Event KeeperStaleRequestsSkipped;
-    extern const Event KeeperFinishedSessionsCacheFull;
+    extern const Event KeeperFinishedSessionsCacheEvictions;
 }
 
 namespace HistogramMetrics
@@ -707,14 +707,14 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
                 }
             }
 
-            /// When Close commits, all prior requests for this session have been processed.
-            /// Remove from finished_sessions to reclaim memory.
-            /// Done after the pending-read loop so reads queued for the closing session
-            /// are still filtered by the stale check above.
+            /// When Close commits, insert into finished_sessions so that stale requests
+            /// still sitting in the backed-up queue will be filtered. This fires on ALL
+            /// nodes via RAFT, which is how followers learn about closed sessions.
+            /// Entries are never explicitly removed — they are evicted by insertion order
+            /// when the cache reaches `max_finished_sessions_cache_size`.
             if (request_for_session.request->getOpNum() == Coordination::OpNum::Close)
             {
-                std::lock_guard lock(finished_sessions_mutex);
-                finished_sessions.erase(request_for_session.session_id);
+                trackFinishedSession(request_for_session.session_id);
             }
         });
 
@@ -918,9 +918,9 @@ void KeeperDispatcher::sessionCleanerTask()
                         .digest = std::nullopt
                     };
                     /// Mark session as finished before pushing Close to the queue.
-                    /// This prevents a race where Close commits and erases from
-                    /// `finished_sessions` before `finishSession` inserts it,
-                    /// which would permanently leak the session ID in the set.
+                    /// This gives the leader early filtering — stale requests for
+                    /// this session are skipped as soon as the session expiry is detected,
+                    /// before the Close even enters the queue.
                     /// Close requests are exempt from stale filtering, so the
                     /// Close will still pass through RAFT for ephemeral cleanup.
                     finishSession(dead_session);
@@ -942,6 +942,28 @@ void KeeperDispatcher::sessionCleanerTask()
     }
 }
 
+void KeeperDispatcher::trackFinishedSession(int64_t session_id)
+{
+    auto cap = configuration_and_settings->coordination_settings[CoordinationSetting::max_finished_sessions_cache_size];
+    if (cap == 0)
+        return;
+
+    std::lock_guard lock(finished_sessions_mutex);
+
+    if (finished_sessions.contains(session_id))
+        return;
+
+    while (finished_sessions.size() >= cap && !finished_sessions_order.empty())
+    {
+        finished_sessions.erase(finished_sessions_order.front());
+        finished_sessions_order.pop_front();
+        ProfileEvents::increment(ProfileEvents::KeeperFinishedSessionsCacheEvictions);
+    }
+
+    finished_sessions.insert(session_id);
+    finished_sessions_order.push_back(session_id);
+}
+
 void KeeperDispatcher::finishSession(int64_t session_id)
 {
     /// shutdown() method will cleanup sessions if needed
@@ -961,28 +983,15 @@ void KeeperDispatcher::finishSession(int64_t session_id)
         else
         {
             /// Session was already finished by another path (e.g. `sessionCleanerTask`
-            /// raced with `KeeperTCPHandler`). The `Close` request may have already
-            /// committed and erased `finished_sessions`, so inserting now would leak
-            /// the session ID with no one to clean it up.
+            /// raced with `KeeperTCPHandler`). That path already called
+            /// `trackFinishedSession`, so the session is (or will be) in the cache.
             return;
         }
     }
 
     /// Mark session as finished so `requestThread` can skip stale requests
     /// still sitting in the queue for this session.
-    {
-        std::lock_guard lock(finished_sessions_mutex);
-        if (finished_sessions.size() < configuration_and_settings->coordination_settings[CoordinationSetting::max_finished_sessions_cache_size])
-        {
-            finished_sessions.insert(session_id);
-        }
-        else
-        {
-            ProfileEvents::increment(ProfileEvents::KeeperFinishedSessionsCacheFull);
-            LOG_WARNING(LogFrequencyLimiter(log, 10), "Finished sessions cache is full (size {}), session {} will not be tracked for stale request filtering",
-                finished_sessions.size(), session_id);
-        }
-    }
+    trackFinishedSession(session_id);
 
     /// Notify the callback that session is being closed before removing it
     /// This allows clients to mark themselves as expired

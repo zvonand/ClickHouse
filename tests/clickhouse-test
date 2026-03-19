@@ -4258,7 +4258,7 @@ def main(args):
                 args, "SELECT coverageDiag()"
             ).decode(errors="replace").strip()
             print(f"Coverage diagnostic (before self-test): coverageDiag={diag} "
-                  f"(name_refs_count, coverage_map_size)")
+                  f"(name_refs, map_size, matches, first_name_ref, first_map_key)")
         except Exception as e:
             print(f"Coverage diagnostic: coverageDiag() failed: {e}")
         clickhouse_execute(args, "SELECT 1")
@@ -4274,7 +4274,8 @@ def main(args):
             diag2 = clickhouse_execute(
                 args, "SELECT coverageDiag()"
             ).decode(errors="replace").strip()
-            print(f"Coverage diagnostic (after self-test): coverageDiag={diag2}")
+            print(f"Coverage diagnostic (after self-test): coverageDiag={diag2} "
+                  f"(name_refs, map_size, matches, first_name_ref, first_map_key)")
         except Exception:
             pass
         print(

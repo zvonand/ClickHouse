@@ -26,8 +26,13 @@ void collectAndInsertCoverage(
     ContextPtr context);
 
 /// Returns the number of entries in the lazily-loaded coverage map.
-/// Triggers loading if not already done.
 size_t getCoverageMapSize();
+
+/// Returns how many of the given NameRefs have a match in the coverage map.
+size_t countCoverageMatches(const std::vector<uint64_t> & name_refs);
+
+/// Returns the first key in the coverage map (for diagnostics), 0 if empty.
+uint64_t getFirstCoverageMapKey();
 
 }
 

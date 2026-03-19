@@ -181,6 +181,24 @@ size_t getCoverageMapSize()
     return g_coverage_map.size();
 }
 
+size_t countCoverageMatches(const std::vector<uint64_t> & name_refs)
+{
+    ensureCoverageMapLoaded();
+    size_t count = 0;
+    for (uint64_t nr : name_refs)
+        if (g_coverage_map.count(nr))
+            ++count;
+    return count;
+}
+
+uint64_t getFirstCoverageMapKey()
+{
+    ensureCoverageMapLoaded();
+    if (g_coverage_map.empty())
+        return 0;
+    return g_coverage_map.begin()->first;
+}
+
 }
 
 #endif

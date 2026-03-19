@@ -103,9 +103,19 @@ public:
         auto & data = column->getData();
 #if defined(__ELF__) && !defined(OS_FREEBSD)
         auto name_refs = getCurrentCoveredNameRefs();
+        size_t map_size = DB::getCoverageMapSize();
+        size_t matches = DB::countCoverageMatches(name_refs);
         data.push_back(static_cast<UInt64>(name_refs.size()));
-        data.push_back(static_cast<UInt64>(DB::getCoverageMapSize()));
+        data.push_back(static_cast<UInt64>(map_size));
+        data.push_back(static_cast<UInt64>(matches));
+        // First covered NameRef (for comparison)
+        data.push_back(name_refs.empty() ? 0 : name_refs[0]);
+        // First coverage map key (for comparison)
+        data.push_back(static_cast<UInt64>(DB::getFirstCoverageMapKey()));
 #else
+        data.push_back(0);
+        data.push_back(0);
+        data.push_back(0);
         data.push_back(0);
         data.push_back(0);
 #endif

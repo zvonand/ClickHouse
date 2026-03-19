@@ -642,10 +642,7 @@ bool UnicodeWordTokenizer::nextInStringLike(const char * data, size_t length, si
                 /// If we consumed a backslash but the escaped char didn't continue the token, back up so the next call
                 /// re-parses `\X` with proper escape context.
                 if (escaped)
-                {
                     --pos;
-                    escaped = false;
-                }
 
                 return true;
             }

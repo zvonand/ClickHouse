@@ -4,8 +4,8 @@
 
 -- `multiply` triggers self-merge via exponentiation by squaring (even branch).
 SELECT arrayJoin([numericIndexedVectorToMap(
-    multiply(2, groupNumericIndexedVectorState(1, 100)))]);
+    multiply(2, groupNumericIndexedVectorState(100, 1)))]);
 
 -- Power of 2 forces multiple self-merge iterations.
 SELECT arrayJoin([numericIndexedVectorToMap(
-    multiply(4, groupNumericIndexedVectorState(1, 100)))]);
+    multiply(4, groupNumericIndexedVectorState(100, 1)))]);

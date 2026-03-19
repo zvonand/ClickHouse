@@ -89,7 +89,17 @@ CLOUD = CloudInfrastructure.Config(
             ],
             instance_type="mac1.metal",
             auto_placement="on",
-            quantity_per_az=2,
+            quantity_per_az=3,
+            praktika_resource_tag="mac",
+        ),
+        DedicatedHost.Config(
+            name="mac2-m2pro.metal",
+            availability_zones=[
+                "ap-southeast-2b",
+            ],
+            instance_type="mac2-m2pro.metal",
+            auto_placement="on",
+            quantity_per_az=3,
             praktika_resource_tag="mac",
         ),
     ],
@@ -109,7 +119,7 @@ CLOUD = CloudInfrastructure.Config(
             tenancy="host",
             praktika_resource_tag="mac",
             runner_type=RunnerLabels.MACOS_AMD_SMALL[1],
-            quantity=2,
+            quantity=3,
         ),
     ],
     # TODO: add autoscaling and launch templates

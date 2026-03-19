@@ -107,7 +107,6 @@ private:
             FUNCTION_HAS_ANY_TOKENS,
             FUNCTION_HAS_ALL_TOKENS,
             FUNCTION_LIKE,
-            FUNCTION_NOT_LIKE,
             /// Can take any value
             FUNCTION_UNKNOWN,
             /// Operators

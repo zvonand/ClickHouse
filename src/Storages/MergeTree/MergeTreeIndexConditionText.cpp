@@ -287,7 +287,6 @@ bool MergeTreeIndexConditionText::alwaysUnknownOrTrue() const
          RPNElement::FUNCTION_HAS_ANY_TOKENS,
          RPNElement::FUNCTION_HAS_ALL_TOKENS,
          RPNElement::FUNCTION_LIKE,
-         RPNElement::FUNCTION_NOT_LIKE,
          RPNElement::FUNCTION_IN,
          RPNElement::FUNCTION_MATCH});
 }
@@ -307,15 +306,13 @@ bool MergeTreeIndexConditionText::mayBeTrueOnGranule(MergeTreeIndexGranulePtr id
         {
             rpn_stack.emplace_back(true, true);
         }
-        else if (element.function == RPNElement::FUNCTION_LIKE || element.function == RPNElement::FUNCTION_NOT_LIKE)
+        else if (element.function == RPNElement::FUNCTION_LIKE)
         {
             chassert(element.text_search_queries.size() == 1);
             const auto & text_search_query = element.text_search_queries.front();
             bool exists_in_granule = granule->hasAnyQueryPatterns(*text_search_query);
             rpn_stack.emplace_back(exists_in_granule, true);
 
-            if (element.function == RPNElement::FUNCTION_NOT_LIKE)
-                rpn_stack.back() = !rpn_stack.back();
         }
         else if (element.function == RPNElement::FUNCTION_HAS_ANY_TOKENS)
         {

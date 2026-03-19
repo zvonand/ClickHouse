@@ -760,12 +760,6 @@ void MergeTreeReaderTextIndex::fillColumn(IColumn & column, const String & colum
         if (!matched_tokens.empty())
             applyPostingsAny(column, postings, indices_buffer, matched_tokens, old_size, row_offset, num_rows);
 
-        if (search_query->function_name == "notLike" || search_query->function_name == "notILike")
-        {
-            /// NOT LIKE / NOT ILIKE: flip the result here even if the column is still all-zero.
-            for (size_t i = 0; i < num_rows; ++i)
-                column_data[old_size + i] ^= 1;
-        }
         return;
     }
 
@@ -776,11 +770,8 @@ void MergeTreeReaderTextIndex::fillColumn(IColumn & column, const String & colum
     {
         return;
     }
-    else if (search_query->search_mode == TextSearchMode::Any || postings.size() == 1)
+    else if (search_query->search_mode == TextSearchMode::Any)
     {
-        /// For Any mode, or when there is only one posting list, applyPostingsAny is correct
-        /// and more efficient. Note: when postings.size() == 1 and mode is All, the two
-        /// apply functions are equivalent (one token must match), so applyPostingsAny is safe.
         applyPostingsAny(column, postings, indices_buffer, search_query->tokens, old_size, row_offset, num_rows);
     }
     else if (search_query->search_mode == TextSearchMode::All)

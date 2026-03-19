@@ -67,6 +67,7 @@ def test_initiator_snapshot_is_used_for_reading(start_cluster):
                     "max_parallel_replicas": 100,
                     "cluster_for_parallel_replicas": "parallel_replicas",
                     "parallel_replicas_local_plan": True,
+                    "enable_shared_storage_snapshot_in_query": False,
                 },
             )
             == f"{expected}\n"

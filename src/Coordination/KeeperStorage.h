@@ -13,7 +13,7 @@
 
 #include <base/defines.h>
 
-#include <absl/container/flat_hash_set.h>
+#include <Coordination/CompactChildrenSet.h>
 
 #include "config.h"
 #if USE_ROCKSDB
@@ -27,8 +27,6 @@ class KeeperContext;
 using KeeperContextPtr = std::shared_ptr<KeeperContext>;
 
 using ResponseCallback = std::function<void(const Coordination::ZooKeeperResponsePtr &)>;
-using ChildrenSet = absl::flat_hash_set<std::string_view, StringViewHash>;
-
 struct NodeStats
 {
     int64_t czxid{0};
@@ -273,7 +271,7 @@ struct KeeperMemNode
     // move it to the new copy of node
     KeeperMemNode copyFromSnapshotNode();
 private:
-    ChildrenSet children{};
+    CompactChildrenSet children{};
 };
 
 struct KeeperStorageStats
@@ -490,10 +488,14 @@ public:
     using Node = Container::Node;
 
 #if !defined(ADDRESS_SANITIZER) && !defined(MEMORY_SANITIZER)
+    static_assert(sizeof(CompactChildrenSet) == 16);
+    static_assert(sizeof(KeeperMemNode) == 104);
     static_assert(
-        sizeof(ListNode<Node>) <= 144,
-        "std::list node containing ListNode<Node> is > 160 bytes (sizeof(ListNode<Node>) + 16 bytes for pointers) which will increase "
+        sizeof(ListNode<Node>) <= 128,
+        "std::list node containing ListNode<Node> is > 144 bytes (sizeof(ListNode<Node>) + 16 bytes for pointers) which will increase "
         "memory consumption");
+    static_assert(std::is_nothrow_move_assignable_v<CompactChildrenSet>);
+    static_assert(std::is_nothrow_move_constructible_v<CompactChildrenSet>);
 #endif
 
 

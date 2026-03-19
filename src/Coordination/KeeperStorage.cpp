@@ -428,7 +428,7 @@ KeeperMemNode & KeeperMemNode::operator=(KeeperMemNode && other) noexcept
 
     other.stats.data_size = 0;
 
-    static_assert(std::is_nothrow_move_assignable_v<ChildrenSet>);
+    static_assert(std::is_nothrow_move_assignable_v<CompactChildrenSet>);
     children = std::move(other.children);
 
     return *this;
@@ -466,7 +466,7 @@ void KeeperMemNode::setResponseStat(Coordination::Stat & response_stat) const
 
 uint64_t KeeperMemNode::sizeInBytes() const
 {
-    return sizeof(KeeperMemNode) + children.size() * sizeof(std::string_view) + stats.data_size;
+    return sizeof(KeeperMemNode) + children.heapSizeInBytes() + stats.data_size;
 }
 
 void KeeperMemNode::setData(const String & new_data)

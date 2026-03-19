@@ -3017,7 +3017,7 @@ let paramDebounceTimer = null;
 query_area.addEventListener('input', () =>
 {
     clearTimeout(paramDebounceTimer);
-    paramDebounceTimer = setTimeout(updateQueryParams, 1000);
+    paramDebounceTimer = setTimeout(updateQueryParams, 100);
 });
 
 function setColorTheme(new_theme, update_preference) {

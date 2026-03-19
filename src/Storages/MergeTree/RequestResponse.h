@@ -65,9 +65,9 @@ struct ParallelReadRequest
     /// Contains only data part names without mark ranges.
     RangesInDataPartsDescription description;
 
-    void serialize(WriteBuffer & out, UInt64 initiator_protocol_version) const;
+    void serialize(WriteBuffer & out, UInt64 initiator_pr_protocol_version, UInt64 initiator_tcp_protocol_version) const;
     String describe() const;
-    static ParallelReadRequest deserialize(ReadBuffer & in, UInt64 replica_protocol_version);
+    static ParallelReadRequest deserialize(ReadBuffer & in, UInt64 replica_pr_protocol_version);
     void merge(ParallelReadRequest & other);
 };
 
@@ -80,9 +80,9 @@ struct ParallelReadResponse
     bool finish{false};
     RangesInDataPartsDescription description;
 
-    void serialize(WriteBuffer & out, UInt64 replica_protocol_version) const;
+    void serialize(WriteBuffer & out, UInt64 replica_pr_protocol_version, UInt64 replica_tcp_protocol_version) const;
     String describe() const;
-    void deserialize(ReadBuffer & in, UInt64 replica_protocol_version);
+    void deserialize(ReadBuffer & in, UInt64 replica_pr_protocol_version);
 };
 
 
@@ -117,9 +117,9 @@ struct InitialAllRangesAnnouncement
     /// Total number of marks the replica wants per coordinator request.
     size_t min_marks_per_request;
 
-    void serialize(WriteBuffer & out, UInt64 initiator_protocol_version) const;
+    void serialize(WriteBuffer & out, UInt64 initiator_pr_protocol_version, UInt64 initiator_tcp_protocol_version) const;
     String describe();
-    static InitialAllRangesAnnouncement deserialize(ReadBuffer & i, UInt64 replica_protocol_version);
+    static InitialAllRangesAnnouncement deserialize(ReadBuffer & i, UInt64 replica_pr_protocol_version);
 };
 
 

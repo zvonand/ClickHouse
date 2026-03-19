@@ -39,10 +39,9 @@ public:
 
     bool empty() const { return raw_path.empty(); }
 
-    bool operator==(const IcebergPathFromMetadata & other) const { return raw_path == other.raw_path; }
-    bool operator<(const IcebergPathFromMetadata & other) const { return raw_path < other.raw_path; }
-    bool operator<=(const IcebergPathFromMetadata & other) const { return raw_path <= other.raw_path; }
-    bool operator>=(const IcebergPathFromMetadata & other) const { return raw_path >= other.raw_path; }
+    auto operator<=>(const IcebergPathFromMetadata & other) const { return raw_path <=> other.raw_path; }
+    auto operator==(const IcebergPathFromMetadata & other) const { return raw_path == other.raw_path; }
+
 
 private:
     friend class DB::FileNamesGenerator;

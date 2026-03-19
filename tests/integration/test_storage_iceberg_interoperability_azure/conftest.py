@@ -5,11 +5,11 @@ import os
 import os.path as p
 
 from helpers.cluster import ClickHouseCluster
+from helpers.iceberg_utils import get_uuid_str
 from helpers.spark_tools import ResilientSparkSession, write_spark_log_config
 
 
 AZURE_ACCOUNT_NAME = "devstoreaccount1"
-AZURE_ACCOUNT_KEY = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
 AZURE_CONTAINER = "testcontainer"
 
 
@@ -25,7 +25,7 @@ def get_spark(log_dir=None):
 
     builder = (
         pyspark.sql.SparkSession.builder
-            .appName("IcebergAzureConcurrent")
+            .appName("IcebergAzureInteroperability")
             .config("spark.jars.repositories", "https://repo1.maven.org/maven2")
             .config("spark.sql.extensions",
                     "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
@@ -89,3 +89,44 @@ def started_cluster_iceberg():
 
     finally:
         cluster.shutdown()
+
+
+def test_spark_write_and_read(started_cluster_iceberg):
+    """Verify Spark can write to and read from Azurite via WASB emulator mode."""
+    spark = started_cluster_iceberg.spark_session
+
+    TABLE_NAME = "test_spark_roundtrip_" + get_uuid_str()
+
+    # Write
+    spark.sql(
+        f"""
+            CREATE TABLE {TABLE_NAME} (
+                number INT
+            )
+            USING iceberg
+            OPTIONS('format-version'='2');
+        """
+    )
+
+    spark.sql(
+        f"""
+            INSERT INTO {TABLE_NAME}
+            SELECT id as number FROM range(100)
+        """
+    )
+
+    # Read back
+    df = spark.sql(f"SELECT count(*) as cnt FROM {TABLE_NAME}").collect()
+    count = df[0].cnt
+    logging.info(f"Spark read back {count} rows")
+    assert count == 100, f"Expected 100 rows, got {count}"
+
+    # List blobs to see what paths Spark actually wrote
+    blob_client = started_cluster_iceberg.blob_service_client
+    container_client = blob_client.get_container_client(AZURE_CONTAINER)
+    blobs = list(container_client.list_blobs())
+    print(f"Blobs in container ({len(blobs)}):")
+    for blob in blobs[:20]:
+        print(f"  {blob.name}")
+
+    assert len(blobs) > 0, "No blobs written to Azurite!"

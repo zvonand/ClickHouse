@@ -4,6 +4,7 @@ import pyspark
 import os
 
 from helpers.cluster import ClickHouseCluster
+from helpers.iceberg_utils import get_uuid_str
 from helpers.spark_tools import ResilientSparkSession, write_spark_log_config
 
 
@@ -124,3 +125,36 @@ def started_cluster_iceberg():
         for link in symlinks:
             cleanup_host_symlink(link)
         cluster.shutdown()
+
+
+def test_spark_write_and_read(started_cluster_iceberg):
+    """Verify Spark can write to and read from local filesystem via Iceberg."""
+    spark = started_cluster_iceberg.spark_session
+
+    TABLE_NAME = "test_spark_roundtrip_" + get_uuid_str()
+
+    # Write
+    spark.sql(
+        f"""
+            CREATE TABLE node1_catalog.default.{TABLE_NAME} (
+                number INT
+            )
+            USING iceberg
+            OPTIONS('format-version'='2');
+        """
+    )
+
+    spark.sql(
+        f"""
+            INSERT INTO node1_catalog.default.{TABLE_NAME}
+            SELECT id as number FROM range(100)
+        """
+    )
+
+    # Read back
+    df = spark.sql(
+        f"SELECT count(*) as cnt FROM node1_catalog.default.{TABLE_NAME}"
+    ).collect()
+    count = df[0].cnt
+    logging.info(f"Spark read back {count} rows")
+    assert count == 100, f"Expected 100 rows, got {count}"

@@ -12,6 +12,13 @@ namespace DB
 
 #if USE_AVRO
 
+struct GeneratedMetadataFileWithInfo
+{
+    Iceberg::IcebergPathFromMetadata path;
+    Int32 version;
+    CompressionMethod compression_method;
+};
+
 /// Generates Iceberg metadata paths (IcebergPathFromMetadata) for new files.
 ///
 /// All generated paths use table_location as prefix, ensuring they are
@@ -37,7 +44,7 @@ public:
     Iceberg::IcebergPathFromMetadata generateDataFileName();
     Iceberg::IcebergPathFromMetadata generateManifestEntryName();
     Iceberg::IcebergPathFromMetadata generateManifestListName(Int64 snapshot_id, Int32 format_version);
-    Iceberg::IcebergPathFromMetadata generateMetadataName();
+    GeneratedMetadataFileWithInfo generateMetadataPathWithInfo();
     Iceberg::IcebergPathFromMetadata generateVersionHint();
     Iceberg::IcebergPathFromMetadata generatePositionDeleteFile();
 

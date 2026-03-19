@@ -643,7 +643,8 @@ IcebergStorageSink::IcebergStorageSink(
         context_,
         log.get(),
         persistent_table_components.table_uuid,
-        persistent_table_components.metadata_compression_method);
+        persistent_table_components.metadata_compression_method,
+        true);
 
     metadata = getMetadataJSONObject(
         metadata_path,
@@ -830,6 +831,7 @@ void IcebergStorageSink::finalizeBuffers()
     if (writer_per_partition_key.empty())
         return;
 
+    /// TODO: there's a chance that initializeMetadata() doesn't succeed within MAX_TRANSACTION_RETRIES without throwing, perhaps we should fail in this case
     size_t i = 0;
     while (i < MAX_TRANSACTION_RETRIES)
     {
@@ -858,8 +860,7 @@ void IcebergStorageSink::cancelBuffers()
 bool IcebergStorageSink::initializeMetadata()
 {
     const auto & resolver = persistent_table_components.path_resolver;
-    auto metadata_md_path = filename_generator.generateMetadataName();
-    auto storage_metadata_name = resolver.resolve(metadata_md_path);
+    auto metadata_info = filename_generator.generateMetadataPathWithInfo();
 
     Int64 parent_snapshot = -1;
     if (metadata->has(Iceberg::f_current_snapshot_id))
@@ -870,7 +871,7 @@ bool IcebergStorageSink::initializeMetadata()
         total_data_files += writer.getDataFiles().size();
     auto [new_snapshot, manifest_list_path] = MetadataGenerator(metadata).generateNextMetadata(
         filename_generator,
-        metadata_md_path,
+        metadata_info.path,
         parent_snapshot,
         total_data_files,
         total_rows,
@@ -908,7 +909,8 @@ bool IcebergStorageSink::initializeMetadata()
                 context,
                 getLogger("IcebergWrites").get(),
                 persistent_table_components.table_uuid,
-                persistent_table_components.metadata_compression_method);
+                persistent_table_components.metadata_compression_method,
+                true);
 
             LOG_DEBUG(log, "Rereading metadata file {} with version {}", metadata_path, last_version);
 
@@ -981,7 +983,6 @@ bool IcebergStorageSink::initializeMetadata()
                 buffer_manifest_entry->finalize();
                 auto manifest_storage_path = resolver.resolve(manifest_entry_path);
                 auto manifest_metadata = object_storage->getObjectMetadata(manifest_storage_path, /*with_tags=*/ false);
-                LOG_DEBUG(log, "Manifest file {} size: {} bytes", manifest_storage_path, manifest_metadata.size_bytes);
                 manifest_entry_sizes.push_back(manifest_metadata.size_bytes);
             }
             catch (...)
@@ -1017,30 +1018,29 @@ bool IcebergStorageSink::initializeMetadata()
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "Failpoint for cleanup enabled");
             });
 
-            LOG_DEBUG(log, "Writing new metadata file {}", storage_metadata_name);
+            LOG_DEBUG(log, "Writing new metadata file {}", metadata_info.path);
             auto hint_path = filename_generator.generateVersionHint();
             if (!writeMetadataFileAndVersionHint(
-                    storage_metadata_name,
+                    persistent_table_components.path_resolver,
+                    metadata_info,
                     json_representation,
-                    resolver.resolve(hint_path),
-                    storage_metadata_name,
+                    hint_path,
                     object_storage,
                     context,
-                    metadata_compression_method,
                     data_lake_settings[DataLakeStorageSetting::iceberg_use_version_hint]))
             {
-                LOG_DEBUG(log, "Failed to write metadata {}, retrying", storage_metadata_name);
+                LOG_DEBUG(log, "Failed to write metadata {}, retrying", metadata_info.path);
                 cleanup(true);
                 return false;
             }
             else
             {
-                LOG_DEBUG(log, "Metadata file {} written", storage_metadata_name);
+                LOG_DEBUG(log, "Metadata file {} written", metadata_info.path);
             }
 
             if (catalog)
             {
-                auto catalog_filename = resolver.resolveForCatalog(metadata_md_path);
+                auto catalog_filename = resolver.resolveForCatalog(metadata_info.path);
 
                 const auto & [namespace_name, table_name] = DataLake::parseTableName(table_id.getTableName());
                 if (!catalog->updateMetadata(namespace_name, table_name, catalog_filename, new_snapshot))
@@ -1049,6 +1049,16 @@ bool IcebergStorageSink::initializeMetadata()
                     return false;
                 }
             }
+        }
+
+        if (persistent_table_components.metadata_cache)
+        {
+            /// If there's an active metadata cache
+            /// We can't just cache 'our' written version as latest, because it could've been overwritten by a concurrent catalog update
+            /// This is why, we are safely invalidating the cache, and the very next reader will get the most up-to-date latest version
+            persistent_table_components.metadata_cache->remove(persistent_table_components.table_path);
+            if (persistent_table_components.table_uuid)
+                persistent_table_components.metadata_cache->remove(*persistent_table_components.table_uuid);
         }
     }
     catch (...)

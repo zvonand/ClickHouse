@@ -173,8 +173,8 @@ std::optional<ProcessedManifestFileEntryPtr> SingleThreadIcebergKeysIterator::ne
         /// Find the next manifest file with matching content type.
         while (manifest_file_index < data_snapshot->manifest_list_entries.size())
         {
-            const auto & mle = data_snapshot->manifest_list_entries[manifest_file_index++];
-            if (mle.content_type != manifest_file_content_type)
+            const auto & manifest_list_entry = data_snapshot->manifest_list_entries[manifest_file_index++];
+            if (manifest_list_entry.content_type != manifest_file_content_type)
                 continue;
 
             auto manifest_file_cacheable_part = Iceberg::getManifestFile(
@@ -182,17 +182,17 @@ std::optional<ProcessedManifestFileEntryPtr> SingleThreadIcebergKeysIterator::ne
                 persistent_components,
                 local_context,
                 log,
-                mle.manifest_file_path,
-                mle.manifest_file_byte_size);
+                manifest_list_entry.manifest_file_path,
+                manifest_list_entry.manifest_file_byte_size);
 
             current_manifest_file_iterator = Iceberg::ManifestFileIterator::create(
                 manifest_file_cacheable_part.deserializer,
-                mle.manifest_file_path,
+                manifest_list_entry.manifest_file_path,
                 persistent_components.format_version,
                 persistent_components.path_resolver,
                 *persistent_components.schema_processor,
-                mle.added_sequence_number,
-                mle.added_snapshot_id,
+                manifest_list_entry.added_sequence_number,
+                manifest_list_entry.added_snapshot_id,
                 local_context,
                 filter_dag,
                 table_snapshot->schema_id);

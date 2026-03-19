@@ -34,7 +34,7 @@ const https = require('https');
 const http = require('http');
 const { URL } = require('url');
 const fs = require('fs');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const zlib = require('zlib');
 
 /**
@@ -632,13 +632,14 @@ async function fetchReport(inputUrl, options = {}) {
         console.log(`\nDownloading logs from: ${logsLink.href}`);
         const ext = logsLink.href.endsWith('.zst') ? '.tar.zst' : '.tar.gz';
         const logsPath = options.downloadLogs !== true ? options.downloadLogs : `/tmp/ci_logs${ext}`;
-        execSync(`curl -sL "${logsLink.href}" -o ${logsPath}`);
+        execFileSync('curl', ['-sL', logsLink.href, '-o', logsPath]);
         console.log(`Logs saved to: ${logsPath}`);
 
         // List contents (tar auto-detects compression format with -tf)
         try {
           console.log('\nLogs archive contents (pytest logs):');
-          const contents = execSync(`tar -tf ${logsPath} | grep -E "pytest.*\\.log$|pytest.*\\.jsonl$" | head -20`).toString();
+          const listing = execFileSync('tar', ['-tf', logsPath]).toString();
+          const contents = listing.split('\n').filter(l => /pytest.*\.(log|jsonl)$/.test(l)).slice(0, 20).join('\n');
           console.log(contents || '(no pytest logs found)');
         } catch (e) {
           // Ignore errors from grep/head

@@ -19,11 +19,10 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-MetadataStorageFromDisk::MetadataStorageFromDisk(DiskPtr disk_, std::string compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_, bool wait_for_blob_removal_)
+MetadataStorageFromDisk::MetadataStorageFromDisk(DiskPtr disk_, std::string compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_)
     : disk(disk_)
     , compatible_key_prefix(std::move(compatible_key_prefix_))
     , key_generator(std::move(key_generator_))
-    , wait_for_blob_removal(wait_for_blob_removal_)
 {
 }
 
@@ -148,17 +147,38 @@ uint32_t MetadataStorageFromDisk::getHardlinkCount(const std::string & path) con
 
 IMetadataStorage::BlobsToRemove MetadataStorageFromDisk::getBlobsToRemove(const ClusterConfigurationPtr & cluster, int64_t max_count)
 {
-    return blobs_removal_await_queue.getBlobsPendingRemoval(cluster, max_count);
+    std::lock_guard guard(removed_objects_mutex);
+
+    if (max_count == 0)
+        max_count = std::numeric_limits<int64_t>::max();
+
+    BlobsToRemove blobs_to_remove;
+    for (const auto & blob : objects_to_remove | std::views::take(max_count))
+        blobs_to_remove[blob] = {cluster->getLocalLocation()};
+
+    return blobs_to_remove;
 }
 
 int64_t MetadataStorageFromDisk::recordAsRemoved(const StoredObjects & blobs)
 {
-    return blobs_removal_await_queue.recordAsRemoved(blobs);
+    std::lock_guard guard(removed_objects_mutex);
+
+    int64_t recorded_count = 0;
+    for (const auto & removed_blob : blobs)
+        recorded_count += objects_to_remove.erase(removed_blob);
+
+    return recorded_count;
 }
 
-void MetadataStorageFromDisk::applyNewSettings(const Poco::Util::AbstractConfiguration & config, const std::string & config_prefix, ContextPtr /*context*/)
+bool MetadataStorageFromDisk::hasPendingRemovalBlobs(const StoredObjects & blobs) const
 {
-    wait_for_blob_removal = config.getBool(config_prefix + ".wait_for_blob_removal", true);
+    std::lock_guard guard(removed_objects_mutex);
+
+    for (const auto & blob : blobs)
+        if (objects_to_remove.contains(blob))
+            return true;
+
+    return false;
 }
 
 MetadataStorageFromDiskTransaction::MetadataStorageFromDiskTransaction(MetadataStorageFromDisk & metadata_storage_)
@@ -177,7 +197,11 @@ void MetadataStorageFromDiskTransaction::commit(const TransactionCommitOptionsVa
     }
 
     operations.finalize();
-    metadata_storage.blobs_removal_await_queue.addBlobsPendingRemoval(objects_to_remove, metadata_storage.wait_for_blob_removal);
+
+    {
+        std::lock_guard guard(metadata_storage.removed_objects_mutex);
+        metadata_storage.objects_to_remove.insert_range(objects_to_remove);
+    }
 }
 
 TransactionCommitOutcomeVariant MetadataStorageFromDiskTransaction::tryCommit(const TransactionCommitOptionsVariant & options)

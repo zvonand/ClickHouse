@@ -46,10 +46,14 @@ namespace ErrorCodes
 DiskObjectStorageTransaction::DiskObjectStorageTransaction(
     ClusterConfigurationPtr cluster_,
     MetadataStoragePtr metadata_storage_,
-    ObjectStorageRouterPtr object_storages_)
+    ObjectStorageRouterPtr object_storages_,
+    BlobKillerThreadPtr blob_killer_,
+    bool wait_blob_removal_)
     : cluster(std::move(cluster_))
     , metadata_storage(std::move(metadata_storage_))
     , object_storages(std::move(object_storages_))
+    , blob_killer(std::move(blob_killer_))
+    , wait_blob_removal(wait_blob_removal_)
     , metadata_transaction(metadata_storage->createTransaction())
 {
 }
@@ -61,7 +65,7 @@ MultipleDisksObjectStorageTransaction::MultipleDisksObjectStorageTransaction(
     ClusterConfigurationPtr destination_cluster_,
     MetadataStoragePtr destination_metadata_storage_,
     ObjectStorageRouterPtr destination_object_storages_)
-    : DiskObjectStorageTransaction(destination_cluster_, destination_metadata_storage_, destination_object_storages_)
+    : DiskObjectStorageTransaction(destination_cluster_, destination_metadata_storage_, destination_object_storages_, /*blob_killer=*/nullptr, /*wait_blob_removal=*/false)
     , source_cluster(std::move(source_cluster_))
     , source_metadata_storage(std::move(source_metadata_storage_))
     , source_object_storages(std::move(source_object_storages_))
@@ -508,6 +512,10 @@ void DiskObjectStorageTransaction::commit()
         throw;
     }
 
+    if (wait_blob_removal)
+        while (metadata_storage->hasPendingRemovalBlobs(metadata_transaction->getSubmittedForRemovalBlobs()))
+            blob_killer->triggerAndWait();
+
     operations_to_execute.clear();
     written_blobs.clear();
     LOG_TEST(getLogger("DiskObjectStorageTransaction"), "Transaction committed successfully");
@@ -578,6 +586,10 @@ TransactionCommitOutcomeVariant DiskObjectStorageTransaction::tryCommit(const Tr
 
         return outcome;
     }
+
+    if (wait_blob_removal)
+        while (metadata_storage->hasPendingRemovalBlobs(metadata_transaction->getSubmittedForRemovalBlobs()))
+            blob_killer->triggerAndWait();
 
     operations_to_execute.clear();
     written_blobs.clear();

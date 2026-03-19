@@ -2422,8 +2422,23 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         {"bitAnd", "bitOr", "bitXor"},
         /// Bit shift operators
         {"bitShiftLeft", "bitShiftRight"},
-        /// String case, length, and validity functions (string → string or UInt64)
-        {"upper", "lower", "lowerUTF8", "upperUTF8", "reverse", "reverseUTF8", "length", "lengthUTF8", "isValidASCII", "isValidUTF8"},
+        /// String case, length, validity and normalization functions (string → string or UInt64)
+        {"upper",
+         "lower",
+         "lowerUTF8",
+         "upperUTF8",
+         "reverse",
+         "reverseUTF8",
+         "length",
+         "lengthUTF8",
+         "isValidASCII",
+         "isValidUTF8",
+         "normalizeUTF8NFC",
+         "normalizeUTF8NFD",
+         "normalizeUTF8NFKC",
+         "normalizeUTF8NFKD",
+         "caseFoldUTF8",
+         "removeDiacriticsUTF8"},
         /// String left/right extraction and padding
         {"right", "rightPad", "rightPadUTF8", "rightUTF8", "left", "leftPad", "leftPadUTF8", "leftUTF8"},
         /// Whitespace trimming

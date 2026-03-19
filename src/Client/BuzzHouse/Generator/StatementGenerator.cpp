@@ -2133,6 +2133,27 @@ std::optional<String> StatementGenerator::alterSingleTable(
                      generateNextTablePartition(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, ope->mutable_single_partition()->mutable_partition());
              }},
+            /// Expire snapshots (Iceberg-specific)
+            {4,
+             [&]
+             {
+                 ExpireSnapshots * es = ati->mutable_execute_command()->mutable_expire_snapshots();
+                 static const DB::Strings periods = {"1s", "15s", "1m", "1h", "1d", "7d"};
+
+                 if (rg.nextSmallNumber() < 4)
+                     es->set_positional_timestamp(getNextIcebergTimestamp(rg, fc));
+                 if (rg.nextSmallNumber() < 4)
+                     es->set_expire_before(getNextIcebergTimestamp(rg, fc));
+                 if (rg.nextSmallNumber() < 4)
+                     es->set_retention_period(rg.pickRandomly(periods));
+                 if (rg.nextSmallNumber() < 4)
+                     es->set_retain_last(rg.randomInt<uint32_t>(0, 10));
+                 if (rg.nextSmallNumber() < 4)
+                     for (uint32_t j = 0, cnt = rg.randomInt<uint32_t>(0, 3); j < cnt; j++)
+                         es->add_snapshot_ids(fc.getRandomIcebergHistoryValue("\"snapshot_id\""));
+                 if (rg.nextSmallNumber() < 4)
+                     es->set_dry_run(rg.nextBool());
+             }},
         });
     }
 

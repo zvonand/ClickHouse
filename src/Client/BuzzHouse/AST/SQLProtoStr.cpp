@@ -4569,6 +4569,50 @@ static void MaskingPolicyClausesToString(
     }
 }
 
+CONV_FN(ExpireSnapshots, es)
+{
+    bool has_arg = false;
+    auto sep = [&]() -> String { return std::exchange(has_arg, true) ? ", " : ""; };
+
+    ret += "expire_snapshots(";
+    if (es.has_positional_timestamp())
+        ret += sep() + "'" + es.positional_timestamp() + "'";
+    if (es.has_expire_before())
+        ret += sep() + "expire_before = '" + es.expire_before() + "'";
+    if (es.has_retention_period())
+        ret += sep() + "retention_period = '" + es.retention_period() + "'";
+    if (es.has_retain_last())
+        ret += sep() + "retain_last = " + std::to_string(es.retain_last());
+    if (es.snapshot_ids_size() > 0)
+    {
+        ret += sep() + "snapshot_ids = [";
+        for (int j = 0; j < es.snapshot_ids_size(); j++)
+        {
+            if (j > 0)
+                ret += ", ";
+            ret += es.snapshot_ids(j);
+        }
+        ret += "]";
+    }
+    if (es.has_dry_run() && es.dry_run())
+        ret += sep() + "dry_run = 1";
+    ret += ")";
+}
+
+CONV_FN(ExecuteCommand, ec)
+{
+    ret += "EXECUTE ";
+    using CommandType = ExecuteCommand::CommandCase;
+    switch (ec.command_case())
+    {
+        case CommandType::kExpireSnapshots:
+            ExpireSnapshotsToString(ret, ec.expire_snapshots());
+            break;
+        default:
+            break;
+    }
+}
+
 CONV_FN(AlterItem, alter)
 {
     ret += alter.paren() ? "(" : "";
@@ -4848,6 +4892,9 @@ CONV_FN(AlterItem, alter)
                 ret += " IN ";
                 SinglePartitionExprToString(ret, alter.apply_patches().single_partition());
             }
+            break;
+        case AlterType::kExecuteCommand:
+            ExecuteCommandToString(ret, alter.execute_command());
             break;
         case AlterType::kModifyQuery:
             ret += "MODIFY QUERY ";

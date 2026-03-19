@@ -196,7 +196,11 @@ void SerializationReplicated::deserializeBinaryBulkWithMultipleStreams(
     readVarUInt(num_rows, *indexes_stream);
     /// In Native format we always read the whole serialized column.
     if (num_rows != limit)
-        throw Exception(ErrorCodes::INCORRECT_DATA, "Unexpected number of rows in indexes column in ColumnReplicated in Native format: {}. Expected {}", num_rows, limit);
+        throw Exception(
+            settings.native_format ? ErrorCodes::INCORRECT_DATA : ErrorCodes::LOGICAL_ERROR,
+            "Unexpected number of rows in indexes column in ColumnReplicated in Native format: {}. Expected {}",
+            num_rows,
+            limit);
 
     UInt8 size_of_indexes_type;
     readBinary(size_of_indexes_type, *indexes_stream);
@@ -222,7 +226,10 @@ void SerializationReplicated::deserializeBinaryBulkWithMultipleStreams(
             SerializationNumber<UInt64>().deserializeBinaryBulk(*indexes, *indexes_stream, 0, limit, 0);
             break;
         default:
-            throw Exception(ErrorCodes::INCORRECT_DATA, "Unexpected size of index type for ColumnReplicated: {}", UInt32(size_of_indexes_type));
+            throw Exception(
+                settings.native_format ? ErrorCodes::INCORRECT_DATA : ErrorCodes::LOGICAL_ERROR,
+                "Unexpected size of index type for ColumnReplicated: {}",
+                UInt32(size_of_indexes_type));
     }
 
     column_replicated.getIndexes().attachIndexes(std::move(indexes));
@@ -232,7 +239,7 @@ void SerializationReplicated::deserializeBinaryBulkWithMultipleStreams(
     settings.path.pop_back();
 
     if (!elements_stream)
-        throw Exception(ErrorCodes::INCORRECT_DATA, "Got empty stream for SerializationReplicated elements.");
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Got empty stream for SerializationReplicated elements.");
 
     size_t num_elements;
     readVarUInt(num_elements, *elements_stream);

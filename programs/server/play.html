@@ -2957,6 +2957,7 @@ function setParamValues(values)
         if (input)
         {
             input.value = value;
+            input.dispatchEvent(new Event('input'));
         }
     }
 }
@@ -3017,10 +3018,12 @@ async function updateQueryParams()
                 this.style.width = Math.min(this.scrollWidth, this.clientWidth * 2) + 'px';
             }
         });
-        input.dispatchEvent(new Event('input'));
         wrapper.appendChild(input);
 
         queryParamsContainer.appendChild(wrapper);
+
+        /// Trigger resize after the element is in the DOM so scrollWidth is valid.
+        input.dispatchEvent(new Event('input'));
     }
 }
 

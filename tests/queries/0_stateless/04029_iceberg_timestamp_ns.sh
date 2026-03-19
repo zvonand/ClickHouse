@@ -35,7 +35,7 @@ cat > "${TEST_DIR}/metadata/v1.metadata.json" << 'EOF'
   "table-uuid": "12345678-1234-1234-1234-123456789012",
   "location": "test_location",
   "last-updated-ms": 1700000000000,
-  "last-column-id": 3,
+  "last-column-id": 5,
   "schema": {
     "type": "struct",
     "schema-id": 0,

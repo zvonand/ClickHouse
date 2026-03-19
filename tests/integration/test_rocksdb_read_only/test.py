@@ -24,6 +24,16 @@ def start_cluster():
 
 
 def test_read_only(start_cluster):
+    # Cleanup any leftover state from previous runs to ensure idempotent execution
+    for table in ["test", "test_fail", "test_1", "test_2"]:
+        node.query(f"DROP TABLE IF EXISTS {table} SYNC")
+    node.exec_in_container(
+        [
+            "bash",
+            "-c",
+            "rm -rf /var/lib/clickhouse/user_files/test_rocksdb_read_only",
+        ]
+    )
     # fail if read_only = true and directory does not exist.
     with pytest.raises(QueryRuntimeException):
         node.query(
@@ -87,6 +97,16 @@ def test_read_only(start_cluster):
 
 
 def test_dirctory_missing_after_stop(start_cluster):
+    # Ensure server is running and cleanup any leftover state from previous runs
+    node.start_clickhouse()
+    node.query("DROP TABLE IF EXISTS test_missing SYNC")
+    node.exec_in_container(
+        [
+            "bash",
+            "-c",
+            "rm -rf /var/lib/clickhouse/user_files/test_rocksdb_read_only_missing",
+        ]
+    )
     # for read_only = false
     node.query(
         """

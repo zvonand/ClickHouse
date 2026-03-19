@@ -51,6 +51,8 @@ ACLId ACLMap::convertACLs(const Coordination::ACLs & acls)
 
     /// Start from one
     auto index = max_acl_id++;
+    while (index == 0 || num_to_acl.contains(index))
+        index = max_acl_id++;
 
     acl_to_num[acls] = index;
     num_to_acl[index] = acls;

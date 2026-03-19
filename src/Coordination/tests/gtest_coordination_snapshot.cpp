@@ -24,6 +24,23 @@ struct IntNode
 
 }
 
+TEST(ACLMapTest, OverflowWraparound)
+{
+    DB::ACLMap acl_map;
+
+    auto id1 = acl_map.convertACLs({{1, "digest", "user1:pwd"}});
+    EXPECT_EQ(id1, 1);
+
+    /// Push max_acl_id to UINT32_MAX so the next allocation is at the boundary
+    acl_map.addMapping(std::numeric_limits<DB::ACLId>::max() - 1, {{1, "digest", "placeholder"}});
+
+    auto id2 = acl_map.convertACLs({{1, "digest", "user2:pwd"}});
+    EXPECT_EQ(id2, std::numeric_limits<DB::ACLId>::max());
+
+    auto id3 = acl_map.convertACLs({{1, "digest", "user3:pwd"}});
+    EXPECT_EQ(id3, 2);
+}
+
 TYPED_TEST(CoordinationTest, SnapshotableHashMapSimple)
 {
     DB::SnapshotableHashTable<IntNode> hello;

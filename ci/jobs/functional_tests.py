@@ -310,8 +310,6 @@ def main():
     stages = list(JobStages)
     if not is_per_test_coverage:
         stages.remove(JobStages.COLLECT_COVERAGE)
-    else:
-        stages.remove(JobStages.COLLECT_LOGS)
     if is_per_test_coverage or info.is_local_run or is_bugfix_validation:
         # For bugfix validation, we intentionally skip the check error stage (checks FATAL messages):
         # regular test failures are assumed to be sufficient to validate the test

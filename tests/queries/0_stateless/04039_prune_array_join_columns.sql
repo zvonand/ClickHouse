@@ -34,6 +34,18 @@ EXPLAIN header = 1 SELECT 1 FROM t_nested ARRAY JOIN n WHERE n.a > 0;
 SELECT tupleElement(n, 1) FROM t_nested ARRAY JOIN n ORDER BY n.a;
 EXPLAIN header = 1 SELECT tupleElement(n, 1) FROM t_nested ARRAY JOIN n ORDER BY n.a;
 
+-- Numeric tupleElement index > 1: n.b is at position 2, n.a (position 1) gets pruned.
+-- The index must be rewritten from 2 to 1 after pruning.
+SELECT tupleElement(n, 2) FROM t_nested ARRAY JOIN n ORDER BY tupleElement(n, 2);
+
+-- Numeric tupleElement index 3: n.c is the last element, n.a and n.b get pruned.
+-- The index must be rewritten from 3 to 1 after pruning.
+SELECT tupleElement(n, 3) FROM t_nested ARRAY JOIN n ORDER BY tupleElement(n, 3);
+
+-- Mixed numeric indices: positions 1 and 3. Position 2 (n.b) gets pruned.
+-- Index 1 stays 1, index 3 must be rewritten to 2.
+SELECT tupleElement(n, 1), tupleElement(n, 3) FROM t_nested ARRAY JOIN n ORDER BY tupleElement(n, 1);
+
 DROP TABLE t_nested;
 
 -- General case: ARRAY JOIN with two independent arrays, only one used.

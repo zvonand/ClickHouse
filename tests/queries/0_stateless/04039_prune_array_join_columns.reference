@@ -208,6 +208,12 @@ Header: tupleElement(n, 1) Int64
           Header: n.a Array(Int64)
 3
 4
+5
+6
+1	5
+2	6
+3
+4
 QUERY id: 0
   PROJECTION COLUMNS
     b Int64

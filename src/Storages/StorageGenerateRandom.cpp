@@ -133,18 +133,63 @@ T randomInteger(pcg64 & rng)
         static_assert(false, "unexpected sizeof(T)");
 }
 
+/// Pick a random bit width and randomize only so many lowest bits, so that small numbers are more likely.
+/// Otherwise near-zero values for 64-bit types would effectively never be generated, and many code paths wouldn't be hit.
+/// Set the remaining upper bits to either all 0 or all 1 (i.e. negative number close to 0).
+///
+/// Implementation works on a UInt64 representation to avoid UB (signed overflow, shift-into-sign-bit).
+/// For wide integers, we apply the same logic to the lowest 64-bit word and extend the sign to upper words.
 template <typename T>
 T fuzzyRandomInteger(pcg64 & rng)
 {
     T number = randomInteger<T>(rng);
 
-    /// Pick a random bit width and randomize only so many lowest bits, so that small numbers are more likely.
-    /// Otherwise near-zero values for 64-bit types would effectively never be generated, and many code paths wouldn't be hit.
-    /// Set the remaining upper bits to either all 0 or all 1 (i.e. negative number close to 0).
     size_t num_bits = rng() % (sizeof(T) * 8);
-    T low_mask = static_cast<T>((T(1) << num_bits) - 1);
-    T sign = -(number >> (sizeof(T) * 8 - 1)); // fill all 64 bits with copies of the sign bit
-    return (number & low_mask) | (sign & ~low_mask);
+
+    if constexpr (sizeof(T) <= sizeof(UInt64))
+    {
+        UInt64 low_mask = num_bits == 64 ? ~UInt64(0) : (UInt64(1) << num_bits) - 1;
+        UInt64 u_number = static_cast<UInt64>(static_cast<std::make_unsigned_t<T>>(number));
+        UInt64 sign = -(u_number >> (sizeof(T) * 8 - 1));
+        return static_cast<T>((u_number & low_mask) | (sign & ~low_mask));
+    }
+    else
+    {
+        /// For wide integers, build the mask and sign-extension word by word.
+        /// Each word is 64 bits. We process from the least significant word upward.
+        constexpr size_t num_words = sizeof(T) / sizeof(UInt64);
+        UInt64 words[num_words];
+        memcpy(words, &number, sizeof(T));
+
+        UInt64 sign_word = (words[num_words - 1] >> 63) ? ~UInt64(0) : UInt64(0);
+
+        for (size_t w = 0; w < num_words; ++w)
+        {
+            size_t word_lo = w * 64;
+            size_t word_hi = word_lo + 64;
+
+            if (num_bits >= word_hi)
+            {
+                /// This entire word is within the random part — keep as-is.
+            }
+            else if (num_bits <= word_lo)
+            {
+                /// This entire word is above the random part — fill with sign.
+                words[w] = sign_word;
+            }
+            else
+            {
+                /// The boundary falls within this word.
+                size_t bits_in_word = num_bits - word_lo;
+                UInt64 low_mask = (UInt64(1) << bits_in_word) - 1;
+                words[w] = (words[w] & low_mask) | (sign_word & ~low_mask);
+            }
+        }
+
+        T result;
+        memcpy(&result, words, sizeof(T));
+        return result;
+    }
 }
 
 /// Note: only sizeof(T) matters, it's ok to e.g. use T = UInt64 for Int64 column to reduce the number of template instantiations.

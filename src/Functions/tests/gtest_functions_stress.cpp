@@ -205,6 +205,7 @@ struct Options
     /// We ignore them by default so the test can run in CI without false failures.
     /// Use --ignore-problems to override (e.g. pass empty value to enable all checks).
     VectorOfStrings ignore_problems = {{"late_typecheck", "const_dependent_checks", "broken_nullable_input", "data_dependent_const",
+        "exception_in_prepare", "bulk_success_but_row_error", "bulk_error_but_row_success",
         "broken_determinism", "broken_injectivity", "broken_monotonicity", "unexpected_error"}};
     VectorOfStrings functions;
     VectorOfStrings skip_functions;
@@ -325,6 +326,59 @@ const std::unordered_set<std::string_view> excluded_functions = {
     "cutToFirstSignificantSubdomainCustomWithWWW",
     "lemmatize",
     "fuzzQuery",
+
+    /// H3 functions can read out of bounds of global arrays in the H3 contrib library
+    /// when given invalid H3 indexes (found by ASan).
+    "geoToH3",
+    "h3CellAreaM2",
+    "h3CellAreaRads2",
+    "h3Distance",
+    "h3EdgeAngle",
+    "h3EdgeLengthKm",
+    "h3EdgeLengthM",
+    "h3ExactEdgeLengthKm",
+    "h3ExactEdgeLengthM",
+    "h3ExactEdgeLengthRads",
+    "h3GetBaseCell",
+    "h3GetDestinationIndexFromUnidirectionalEdge",
+    "h3GetFaces",
+    "h3GetIndexesFromUnidirectionalEdge",
+    "h3GetOriginIndexFromUnidirectionalEdge",
+    "h3GetPentagonIndexes",
+    "h3GetRes0Indexes",
+    "h3GetResolution",
+    "h3GetUnidirectionalEdge",
+    "h3GetUnidirectionalEdgeBoundary",
+    "h3GetUnidirectionalEdgesFromHexagon",
+    "h3HexAreaKm2",
+    "h3HexAreaM2",
+    "h3HexRing",
+    "h3IndexesAreNeighbors",
+    "h3IsPentagon",
+    "h3IsResClassIII",
+    "h3IsValid",
+    "h3Line",
+    "h3NumHexagons",
+    "h3PolygonToCells",
+    "h3ToCenterChild",
+    "h3ToChildren",
+    "h3ToGeo",
+    "h3ToGeoBoundary",
+    "h3ToParent",
+    "h3ToString",
+    "h3UnidirectionalEdgeIsValid",
+    "h3kRing",
+    "stringToH3",
+
+    /// readWKB functions can try to allocate huge amounts of memory on random input
+    /// (no bounds checking on polygon counts in WKB parsing).
+    "readWKB",
+    "readWKBPoint",
+    "readWKBLineString",
+    "readWKBMultiLineString",
+    "readWKBPolygon",
+    "readWKBMultiPolygon",
+
     /// Random distribution functions can hang with extreme parameters
     /// (e.g. randBinomial with trials=44988101480975, or randChiSquared with df=3e307).
     "randUniform",

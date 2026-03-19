@@ -1,8 +1,3 @@
--- Tags: no-random-merge-tree-settings, no-parallel-replicas
--- Test that MATERIALIZE PROJECTION on level-0 parts does not create
--- commit-order projections with wrong _block_number values.
--- The projection should only appear after merge.
-
 set enable_analyzer = 1;
 set mutations_sync = 2;
 
@@ -29,7 +24,7 @@ select count() from system.projection_parts
     where database = currentDatabase() and table = 'mt_materialize' and active;
 
 -- MATERIALIZE PROJECTION should materialize projections
-alter table mt_materialize materialize projection _commit_order settings mutations_sync=2;
+alter table mt_materialize materialize projection _commit_order;
 
 select 'after materialize';
 select count() from system.projection_parts
@@ -43,7 +38,7 @@ where _part = 'all_2_2_0_3'
 settings max_threads=1;
 
 -- Mutation on merged part (level > 0) should correctly rebuild the projection
-alter table mt_materialize update b = b + 1 where a = 1 settings mutations_sync=2;
+alter table mt_materialize update b = b + 1 where a = 1;
 
 select 'after mutation on merged part';
 select a, b, _block_number, _block_offset

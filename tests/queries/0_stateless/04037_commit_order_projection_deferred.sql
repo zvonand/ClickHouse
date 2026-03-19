@@ -1,8 +1,3 @@
--- Tags: no-random-merge-tree-settings, no-parallel-replicas
--- Test that commit-order projection is NOT materialized during insert
--- (because _block_number is not finalized until commit time)
--- and IS materialized after merge.
-
 set enable_analyzer = 1;
 
 drop table if exists mt_deferred sync;

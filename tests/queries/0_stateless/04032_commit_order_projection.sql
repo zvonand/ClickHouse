@@ -1,5 +1,3 @@
--- Tags: no-random-merge-tree-settings, no-parallel-replicas
-
 set enable_analyzer = 1;
 
 drop table if exists mt_with_commit_order sync;

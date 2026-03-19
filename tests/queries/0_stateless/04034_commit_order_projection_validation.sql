@@ -1,5 +1,3 @@
--- Tags: no-random-merge-tree-settings, no-parallel-replicas
-
 set enable_analyzer = 1;
 
 -- Missing allow_commit_order_projection

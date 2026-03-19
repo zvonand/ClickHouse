@@ -331,7 +331,7 @@ bool ParserSetQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
             return false;
 
         /// Parse SET TIME ZONE 'tz' as an alias for SET session_timezone = 'tz'
-        if (ParserKeyword{Keyword::TIME_ZONE}.ignore(pos, expected)) 
+        if (ParserKeyword{Keyword::TIME_ZONE}.ignore(pos, expected))
         {
             ASTPtr value_node;
             ParserLiteralOrMap literal_parser;

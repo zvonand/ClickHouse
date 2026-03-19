@@ -6,6 +6,7 @@
                 <endpoint>http://localhost:11111/test/test/</endpoint>
                 <access_key_id>clickhouse</access_key_id>
                 <secret_access_key>clickhouse</secret_access_key>
+                <metadata_persist_removal_queue>true</metadata_persist_removal_queue>
             </s3>
             <cached_s3>
                 <type>cache</type>

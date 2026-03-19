@@ -32,8 +32,24 @@ private:
     std::mutex removed_objects_mutex;
     StoredObjectSet objects_to_remove TSA_GUARDED_BY(removed_objects_mutex);
 
+    static constexpr std::string_view REMOVAL_LOG_FILE = "blobs_to_remove.log";
+    static constexpr std::string_view REMOVAL_LOG_ADD_PREFIX = "ADD";
+    static constexpr std::string_view REMOVAL_LOG_REMOVED_PREFIX = "REMOVED";
+    static constexpr size_t REMOVAL_LOG_COMPACTION_THRESHOLD = 1000;
+
+    /// Persistence for the removal queue.
+    void loadRemovalLog() TSA_REQUIRES(removed_objects_mutex);
+    void appendToRemovalLog(std::string_view prefix, const StoredObjects & blobs) TSA_REQUIRES(removed_objects_mutex);
+    void compactRemovalLog() TSA_REQUIRES(removed_objects_mutex);
+
+    /// Number of REMOVED entries in the log that haven't been compacted yet.
+    size_t removal_log_stale_entries TSA_GUARDED_BY(removed_objects_mutex) = 0;
+
+    const bool persist_removal_queue;
+    LoggerPtr log;
+
 public:
-    MetadataStorageFromDisk(DiskPtr disk_, String compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_);
+    MetadataStorageFromDisk(DiskPtr disk_, String compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_, bool persist_removal_queue_);
 
     MetadataTransactionPtr createTransaction() override;
 
@@ -85,6 +101,8 @@ public:
     DiskObjectStorageMetadataPtr readMetadataUnlocked(const std::string & path, std::shared_lock<SharedMutex> & lock) const;
 
     bool isReadOnly() const override { return disk->isReadOnly(); }
+
+    void startup() override;
 
     BlobsToRemove getBlobsToRemove(const ClusterConfigurationPtr & cluster, int64_t max_count) override;
     int64_t recordAsRemoved(const StoredObjects & blobs) override;

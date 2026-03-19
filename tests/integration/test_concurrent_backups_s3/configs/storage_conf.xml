@@ -7,6 +7,7 @@
                 <access_key_id>minio</access_key_id>
                 <secret_access_key>ClickHouse_Minio_P@ssw0rd</secret_access_key>
                 <s3_max_single_part_upload_size>33554432</s3_max_single_part_upload_size>
+                <metadata_persist_removal_queue>true</metadata_persist_removal_queue>
             </s3>
             <hdd>
                 <type>local</type>

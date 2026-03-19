@@ -15,6 +15,7 @@
                 -->
                 <request_timeout_ms>60000</request_timeout_ms>
                 <use_adaptive_timeouts>false</use_adaptive_timeouts>
+                <metadata_persist_removal_queue>true</metadata_persist_removal_queue>
             </s3>
         </disks>
         <policies>

@@ -21,10 +21,12 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-MetadataStorageFromDisk::MetadataStorageFromDisk(DiskPtr disk_, std::string compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_)
+MetadataStorageFromDisk::MetadataStorageFromDisk(DiskPtr disk_, std::string compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_, bool persist_removal_queue_)
     : disk(disk_)
     , compatible_key_prefix(std::move(compatible_key_prefix_))
     , key_generator(std::move(key_generator_))
+    , persist_removal_queue(persist_removal_queue_)
+    , log(getLogger("MetadataStorageFromDisk"))
 {
 }
 
@@ -147,6 +149,99 @@ uint32_t MetadataStorageFromDisk::getHardlinkCount(const std::string & path) con
     return readMetadata(path)->ref_count;
 }
 
+void MetadataStorageFromDisk::startup()
+{
+    if (!persist_removal_queue)
+        return;
+
+    std::lock_guard guard(removed_objects_mutex);
+    loadRemovalLog();
+    /// Compact on startup to remove stale REMOVED entries from the log file.
+    compactRemovalLog();
+    LOG_INFO(log, "Loaded {} blobs pending removal from {}", objects_to_remove.size(), REMOVAL_LOG_FILE);
+}
+
+void MetadataStorageFromDisk::loadRemovalLog()
+{
+    const auto path = std::string(REMOVAL_LOG_FILE);
+    auto buf = disk->readFileIfExists(path, ReadSettings{});
+    if (!buf)
+        return;
+
+    while (!buf->eof())
+    {
+        try
+        {
+            /// Format: prefix \t remote_path \t local_path \t bytes_size \n
+            String prefix;
+            readString(prefix, *buf);
+            assertChar('\t', *buf);
+
+            StoredObject object;
+            readString(object.remote_path, *buf);
+            assertChar('\t', *buf);
+            readString(object.local_path, *buf);
+            assertChar('\t', *buf);
+            readIntText(object.bytes_size, *buf);
+            assertChar('\n', *buf);
+
+            if (prefix == REMOVAL_LOG_ADD_PREFIX)
+                objects_to_remove.insert(std::move(object));
+            else if (prefix == REMOVAL_LOG_REMOVED_PREFIX)
+                objects_to_remove.erase(object);
+            else
+                LOG_WARNING(log, "Skipping unknown prefix '{}' in {}", prefix, REMOVAL_LOG_FILE);
+        }
+        catch (...)
+        {
+            LOG_WARNING(log, "Skipping malformed entry in {}: {}", REMOVAL_LOG_FILE, getCurrentExceptionMessage(false));
+            /// Skip to the next line.
+            skipToNextLineOrEOF(*buf);
+        }
+    }
+}
+
+void MetadataStorageFromDisk::appendToRemovalLog(std::string_view prefix, const StoredObjects & blobs)
+{
+    auto buf = disk->writeFile(String(REMOVAL_LOG_FILE), /* buf_size */ DBMS_DEFAULT_BUFFER_SIZE, WriteMode::Append, /* settings */ {});
+    for (const auto & blob : blobs)
+    {
+        writeString(prefix, *buf);
+        writeChar('\t', *buf);
+        writeString(blob.remote_path, *buf);
+        writeChar('\t', *buf);
+        writeString(blob.local_path, *buf);
+        writeChar('\t', *buf);
+        writeIntText(blob.bytes_size, *buf);
+        writeChar('\n', *buf);
+    }
+    buf->finalize();
+    buf->sync();
+}
+
+void MetadataStorageFromDisk::compactRemovalLog()
+{
+    static constexpr std::string_view REMOVAL_LOG_TMP_FILE = "blobs_to_remove.log.tmp";
+
+    auto buf = disk->writeFile(String(REMOVAL_LOG_TMP_FILE), /* buf_size */ DBMS_DEFAULT_BUFFER_SIZE, WriteMode::Rewrite, /* settings */ {});
+    for (const auto & blob : objects_to_remove)
+    {
+        writeString(REMOVAL_LOG_ADD_PREFIX, *buf);
+        writeChar('\t', *buf);
+        writeString(blob.remote_path, *buf);
+        writeChar('\t', *buf);
+        writeString(blob.local_path, *buf);
+        writeChar('\t', *buf);
+        writeIntText(blob.bytes_size, *buf);
+        writeChar('\n', *buf);
+    }
+    buf->finalize();
+    buf->sync();
+
+    disk->replaceFile(String(REMOVAL_LOG_TMP_FILE), String(REMOVAL_LOG_FILE));
+    removal_log_stale_entries = 0;
+}
+
 IMetadataStorage::BlobsToRemove MetadataStorageFromDisk::getBlobsToRemove(const ClusterConfigurationPtr & cluster, int64_t max_count)
 {
     std::lock_guard guard(removed_objects_mutex);
@@ -165,11 +260,23 @@ int64_t MetadataStorageFromDisk::recordAsRemoved(const StoredObjects & blobs)
 {
     std::lock_guard guard(removed_objects_mutex);
 
-    int64_t recorded_count = 0;
+    StoredObjects actually_removed;
     for (const auto & removed_blob : blobs)
-        recorded_count += objects_to_remove.erase(removed_blob);
+    {
+        if (objects_to_remove.erase(removed_blob))
+            actually_removed.push_back(removed_blob);
+    }
 
-    return recorded_count;
+    if (persist_removal_queue && !actually_removed.empty())
+    {
+        appendToRemovalLog(REMOVAL_LOG_REMOVED_PREFIX, actually_removed);
+        removal_log_stale_entries += actually_removed.size();
+
+        if (removal_log_stale_entries >= REMOVAL_LOG_COMPACTION_THRESHOLD)
+            compactRemovalLog();
+    }
+
+    return static_cast<int64_t>(actually_removed.size());
 }
 
 MetadataStorageFromDiskTransaction::MetadataStorageFromDiskTransaction(MetadataStorageFromDisk & metadata_storage_)
@@ -189,9 +296,33 @@ void MetadataStorageFromDiskTransaction::commit(const TransactionCommitOptionsVa
 
     operations.finalize();
 
+    if (!objects_to_remove.empty())
     {
         std::lock_guard guard(metadata_storage.removed_objects_mutex);
-        metadata_storage.objects_to_remove.insert_range(objects_to_remove);
+
+        try
+        {
+
+            metadata_storage.objects_to_remove.insert_range(objects_to_remove);
+        }
+        catch (...)
+        {
+            LOG_ERROR(metadata_storage.log, "Failed to insert removal queue entries: {}", getCurrentExceptionMessage(false));
+        }
+
+        if (metadata_storage.persist_removal_queue)
+        {
+            try
+            {
+                metadata_storage.appendToRemovalLog(MetadataStorageFromDisk::REMOVAL_LOG_ADD_PREFIX, objects_to_remove);
+            }
+            catch (...)
+            {
+                LOG_ERROR(metadata_storage.log, "Failed to persist removal queue entry: {}. "
+                    "Blobs are tracked in memory but may become orphaned on crash.",
+                    getCurrentExceptionMessage(false));
+            }
+        }
     }
 }
 

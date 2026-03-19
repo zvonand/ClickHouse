@@ -29,15 +29,15 @@ done
 
 run "INSERT INTO t_unknown_proj_1 SELECT number, number FROM numbers(7)"
 
-run "ALTER TABLE t_unknown_proj_1 ADD PROJECTION pp (SELECT x, count() GROUP BY x) SETTINGS mutations_sync=2"
-run "ALTER TABLE t_unknown_proj_1 MATERIALIZE PROJECTION pp SETTINGS mutations_sync=2"
+run "ALTER TABLE t_unknown_proj_1 ADD PROJECTION pp (SELECT x, count() GROUP BY x) SETTINGS mutations_sync=2, alter_sync=2"
+run "ALTER TABLE t_unknown_proj_1 MATERIALIZE PROJECTION pp SETTINGS mutations_sync=2, alter_sync=2"
 
 # Detach the partition so that parts with pp.proj are moved to detached/.
-run "ALTER TABLE t_unknown_proj_1 DETACH PARTITION 0 SETTINGS mutations_sync=2"
+run "ALTER TABLE t_unknown_proj_1 DETACH PARTITION 0 SETTINGS mutations_sync=2, alter_sync=2"
 
 # Drop projection pp from the table metadata while the partition is detached.
-run "ALTER TABLE t_unknown_proj_1 CLEAR PROJECTION pp SETTINGS mutations_sync=2"
-run "ALTER TABLE t_unknown_proj_1 DROP PROJECTION pp SETTINGS mutations_sync=2"
+run "ALTER TABLE t_unknown_proj_1 CLEAR PROJECTION pp SETTINGS mutations_sync=2, alter_sync=2"
+run "ALTER TABLE t_unknown_proj_1 DROP PROJECTION pp SETTINGS mutations_sync=2, alter_sync=2"
 
 # Drop the detached part from replica 2 to force it to fetch the part with the unknown projection from replica 1.
 run "ALTER TABLE t_unknown_proj_2 DROP DETACHED PARTITION 0 SETTINGS allow_drop_detached=1"
@@ -81,14 +81,14 @@ run "CREATE TABLE t_unknown_proj_mt (x Int32, y Int32, PROJECTION p (SELECT x, y
 run "INSERT INTO t_unknown_proj_mt SELECT number, number FROM numbers(7)"
 
 run "ALTER TABLE t_unknown_proj_mt ADD PROJECTION pp (SELECT x, count() GROUP BY x) SETTINGS mutations_sync=2"
-run "ALTER TABLE t_unknown_proj_mt MATERIALIZE PROJECTION pp SETTINGS mutations_sync=2"
+run "ALTER TABLE t_unknown_proj_mt MATERIALIZE PROJECTION pp SETTINGS mutations_sync=2, alter_sync=2"
 
-run "ALTER TABLE t_unknown_proj_mt DETACH PARTITION 0 SETTINGS mutations_sync=2"
+run "ALTER TABLE t_unknown_proj_mt DETACH PARTITION 0 SETTINGS mutations_sync=2, alter_sync=2"
 
-run "ALTER TABLE t_unknown_proj_mt CLEAR PROJECTION pp SETTINGS mutations_sync=2"
-run "ALTER TABLE t_unknown_proj_mt DROP PROJECTION pp SETTINGS mutations_sync=2"
+run "ALTER TABLE t_unknown_proj_mt CLEAR PROJECTION pp SETTINGS mutations_sync=2, alter_sync=2"
+run "ALTER TABLE t_unknown_proj_mt DROP PROJECTION pp SETTINGS mutations_sync=2, alter_sync=2"
 
-run "ALTER TABLE t_unknown_proj_mt ATTACH PARTITION 0 SETTINGS mutations_sync=2"
+run "ALTER TABLE t_unknown_proj_mt ATTACH PARTITION 0 SETTINGS mutations_sync=2, alter_sync=2"
 
 echo "=== MergeTree ==="
 run "SELECT count() FROM t_unknown_proj_mt"

@@ -2296,10 +2296,7 @@ async function postImpl(posted_request_num, query)
     const paramValues = getParamValues();
     for (const [name, value] of Object.entries(paramValues))
     {
-        if (value !== '')
-        {
-            url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
-        }
+        url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
     }
 
     /// Extremes only if the format is likely to be unchanged. This is imprecise.
@@ -2474,10 +2471,7 @@ async function postImpl(posted_request_num, query)
         const historyParamValues = getParamValues();
         for (const [name, value] of Object.entries(historyParamValues))
         {
-            if (value !== '')
-            {
-                history_url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
-            }
+            history_url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
         }
         history_url += '#' + toBase64(query);
 
@@ -3199,10 +3193,7 @@ document.getElementById('download-button').addEventListener('click', async funct
     const downloadParamValues = getParamValues();
     for (const [name, value] of Object.entries(downloadParamValues))
     {
-        if (value !== '')
-        {
-            url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
-        }
+        url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
     }
 
     let downloadQuery = query.replaceAll(/\bFORMAT\s+\w+/ig, '');

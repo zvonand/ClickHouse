@@ -1603,9 +1603,11 @@ void QueryFuzzer::fuzzExplainSettings(ASTSetQuery & settings_ast, ASTExplainQuer
            {ASTExplainQuery::QueryTree, {"run_passes", "dump_tree", "dump_passes", "dump_ast", "passes"}},
            {ASTExplainQuery::ExplainKind::QueryPlan,
             {"header", "description", "actions", "indexes", "projections", "optimize", "json", "sorting", "distributed",
-             "keep_logical_steps", "input_headers", "compact"}},
+             "keep_logical_steps", "input_headers", "compact", "column_structure", "pretty"}},
            {ASTExplainQuery::ExplainKind::QueryPipeline, {"header", "graph", "compact"}},
-           {ASTExplainQuery::ExplainKind::QueryEstimates, {}},
+           {ASTExplainQuery::ExplainKind::QueryEstimates,
+            {"header", "description", "actions", "indexes", "projections", "optimize", "json", "sorting", "distributed",
+             "keep_logical_steps", "input_headers", "compact", "column_structure", "pretty"}},
            {ASTExplainQuery::ExplainKind::TableOverride, {}},
            {ASTExplainQuery::ExplainKind::CurrentTransaction, {}}};
 

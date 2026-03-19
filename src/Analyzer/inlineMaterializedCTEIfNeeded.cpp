@@ -54,12 +54,19 @@ private:
 
 }
 
-void inlineMaterializedCTEIfNeeded(QueryTreeNodePtr & node, const ReusedMaterializedCTEs & reused_materialized_cte, ContextPtr context)
+void inlineMaterializedCTEIfNeeded(QueryTreeNodePtr & node, ReusedMaterializedCTEs & reused_materialized_cte, ContextPtr context)
 {
-    /// Register Materialized CTEs as External tables
-    auto query_context = context->getQueryContext();
-    for (const auto & materialized_cte : reused_materialized_cte)
-        query_context->addExternalTable(materialized_cte->temporary_table_name, materialized_cte->extractTableHolder());
+    if (context->hasQueryContext())
+    {
+        /// Register Materialized CTEs as External tables
+        auto query_context = context->getQueryContext();
+        for (const auto & materialized_cte : reused_materialized_cte)
+            query_context->addExternalTable(materialized_cte->temporary_table_name, materialized_cte->extractTableHolder());
+    }
+    else
+    {
+        reused_materialized_cte.clear();
+    }
 
     InlineMaterializedCTEsVisitor visitor(reused_materialized_cte, std::move(context));
     visitor.visit(node);

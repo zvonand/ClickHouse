@@ -15,6 +15,6 @@ using MaterializedCTEPtr = std::shared_ptr<MaterializedCTE>;
 
 using ReusedMaterializedCTEs = std::unordered_set<MaterializedCTEPtr>;
 
-void inlineMaterializedCTEIfNeeded(QueryTreeNodePtr & node, const ReusedMaterializedCTEs & reused_materialized_cte, ContextPtr context);
+void inlineMaterializedCTEIfNeeded(QueryTreeNodePtr & node, ReusedMaterializedCTEs & reused_materialized_cte, ContextPtr context);
 
 }

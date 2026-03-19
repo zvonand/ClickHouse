@@ -329,7 +329,7 @@ namespace DB
         }
     }
 
-  static std::shared_ptr<arrow::Array> fillArrowArray(
+    static std::shared_ptr<arrow::Array> fillArrowArray(
         const String & column_name,
         ColumnPtr column,
         const DataTypePtr & column_type,

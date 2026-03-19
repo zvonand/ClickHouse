@@ -189,6 +189,10 @@ void collectAndInsertCoverage(
         /// Allow arbitrarily large INSERT queries — the VALUES literal may be megabytes
         /// when a test covers many thousands of functions.
         query_context->setSetting("max_query_size", Field{0ULL});
+        /// Disable async insert so the row is immediately visible to subsequent SELECTs.
+        /// Without this the insert goes into AsynchronousInsertQueue and the coverage_log
+        /// selftest check (which runs right after the flush) would see 0 rows.
+        query_context->setSetting("async_insert", Field{0ULL});
         auto block_io = executeQuery(query, query_context, QueryFlags{.internal = true}).second;
         block_io.onFinish();
         std::cerr << fmt::format(

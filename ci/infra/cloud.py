@@ -100,7 +100,7 @@ CLOUD = CloudInfrastructure.Config(
             instance_type="mac2-m2pro.metal",
             auto_placement="on",
             quantity_per_az=3,
-            praktika_resource_tag="mac",
+            praktika_resource_tag="mac_m2_pro",
         ),
     ],
     ec2_instances=[

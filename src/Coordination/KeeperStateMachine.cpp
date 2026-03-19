@@ -44,6 +44,8 @@ namespace ProfileEvents
     extern const Event KeeperSnapshotApplys;
     extern const Event KeeperSnapshotApplysFailed;
     extern const Event KeeperReadSnapshot;
+    extern const Event KeeperReadSnapshotObject;
+    extern const Event KeeperReadSnapshotFailed;
     extern const Event KeeperSaveSnapshot;
     extern const Event KeeperStorageLockWaitMicroseconds;
     extern const Event KeeperStorageLockHoldMicroseconds;
@@ -79,6 +81,14 @@ namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int CORRUPTED_DATA;
+}
+
+/// nuraft::snapshot holds only Raft metadata (last_log_idx, last_log_term, size, cluster_config).
+/// It is non-copyable, so serialize+deserialize is used as a deep clone.
+static nuraft::ptr<nuraft::snapshot> cloneSnapshotMeta(nuraft::snapshot & s)
+{
+    auto buf = s.serialize();
+    return nuraft::snapshot::deserialize(*buf);
 }
 
 IKeeperStateMachine::IKeeperStateMachine(
@@ -824,8 +834,7 @@ void KeeperStateMachine<Storage>::create_snapshot(nuraft::snapshot & s, nuraft::
 {
     LOG_DEBUG(log, "Creating snapshot {}", s.get_last_log_idx());
 
-    nuraft::ptr<nuraft::buffer> snp_buf = s.serialize();
-    auto snapshot_meta_copy = nuraft::snapshot::deserialize(*snp_buf);
+    auto snapshot_meta_copy = cloneSnapshotMeta(s);
     CreateSnapshotTask snapshot_task;
     { /// lock storage for a short period time to turn on "snapshot mode". After that we can read consistent storage state without locking.
         KEEPER_STORAGE_LOCK_EXCLUSIVE(lock);
@@ -958,12 +967,10 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
         {
             /// If there is non-finalized state from previous call - clean it up.
             cancelIfHasUnfinishedReceive();
-            /// Single-chunk transfer.
-            nuraft::ptr<nuraft::buffer> snp_buf = s.serialize();
-            nuraft::ptr<nuraft::snapshot> cloned_meta = nuraft::snapshot::deserialize(*snp_buf);
-
+            /// Single-chunk transfer, write all data at once.
             latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(data, s.get_last_log_idx());
-            latest_snapshot_meta = cloned_meta;
+            latest_snapshot_meta = cloneSnapshotMeta(s);
+            /// Reset snapshot loader if present, it is needed only on leader
             snapshot_loader_info.reset();
             ++obj_id;
         }
@@ -1013,9 +1020,10 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
                         s.get_last_log_idx(),
                         obj_id,
                         snapshot_receive_ctx->expected_obj_id);
-                    cancelIfHasUnfinishedReceive();
                     obj_id = 0;
                 }
+                if (!obj_id)
+                    cancelIfHasUnfinishedReceive();
                 return;
             }
 
@@ -1029,13 +1037,13 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
 
             if (is_last_obj)
             {
-                nuraft::ptr<nuraft::buffer> snp_buf = s.serialize();
-                nuraft::ptr<nuraft::snapshot> cloned_meta = nuraft::snapshot::deserialize(*snp_buf);
+                auto cloned_meta = cloneSnapshotMeta(s);
 
                 latest_snapshot_info = snapshot_manager.finalizeSnapshotReceiveToDisk(*snapshot_receive_ctx);
                 latest_snapshot_meta = cloned_meta;
-                snapshot_loader_info.reset();
                 snapshot_receive_ctx.reset();
+                /// Reset snapshot loader if present, it is needed only on leader
+                snapshot_loader_info.reset();
             }
         }
 
@@ -1091,6 +1099,12 @@ int IKeeperStateMachine::read_logical_snp_obj(
 {
     LOG_DEBUG(log, "Reading snapshot {} obj_id {}", s.get_last_log_idx(), obj_id);
 
+    bool success = false;
+    SCOPE_EXIT({
+        if (!success)
+            ProfileEvents::increment(ProfileEvents::KeeperReadSnapshotFailed);
+    });
+
     std::lock_guard lock(snapshots_lock);
     /// Our snapshot is not equal to required. Maybe we still creating it in the background.
     /// Let's wait and NuRaft will retry this call.
@@ -1101,6 +1115,8 @@ int IKeeperStateMachine::read_logical_snp_obj(
             "Required to apply snapshot with last log index {}, but our last log index is {}. Will ignore this one and retry",
             s.get_last_log_idx(),
             latest_snapshot_meta->get_last_log_idx());
+        if (user_snp_ctx)
+            free_user_snp_ctx(user_snp_ctx);
         return -1;
     }
 
@@ -1171,24 +1187,24 @@ int IKeeperStateMachine::read_logical_snp_obj(
         }
         else
         {
-            uint64_t file_size = 0;
-            try
-            {
-                file_size = disk->getFileSize(path);
-            }
-            catch (...)
-            {
-                tryLogCurrentException(log, "Failed to get snapshot size for transfer");
-                return -1;
-            }
-            if (file_size == 0)
-            {
-                LOG_WARNING(log, "Snapshot {} on remote disk has zero size", s.get_last_log_idx());
-                return -1;
-            }
-
             if (!snapshot_loader_info)
             {
+                uint64_t file_size = 0;
+                try
+                {
+                    file_size = disk->getFileSize(path);
+                }
+                catch (...)
+                {
+                    tryLogCurrentException(log, "Failed to get snapshot size for transfer");
+                    return -1;
+                }
+                if (file_size == 0)
+                {
+                    LOG_WARNING(log, "Snapshot {} on remote disk has zero size", s.get_last_log_idx());
+                    return -1;
+                }
+
                 std::unique_ptr<ReadBufferFromFileBase> reader;
                 try
                 {
@@ -1200,10 +1216,19 @@ int IKeeperStateMachine::read_logical_snp_obj(
                     tryLogCurrentException(log, "Failed to open snapshot for transfer");
                     return -1;
                 }
+                /// Pre-allocate full-size buffer to avoid rereading snapshot from S3 for each follower.
+                /// Chunks for all followers are served from this shared copy.
                 snapshot_loader_info = std::make_shared<SnapshotLoaderInfo>(
-                    SnapshotLoaderInfo{.buf = nuraft::buffer::alloc(file_size), .reader = std::move(reader), .file_size = file_size});
+                    SnapshotLoaderInfo{
+                    .buf = nuraft::buffer::alloc(file_size),
+                    .reader = std::move(reader),
+                    .file_size = file_size,
+                    .snapshot_id = s.get_last_log_idx(),
+                });
             }
 
+            chassert(snapshot_loader_info->snapshot_id == s.get_last_log_idx());
+            const uint64_t file_size = snapshot_loader_info->file_size;
             const uint64_t effective_chunk_size = configured_chunk_size == 0 ? file_size : configured_chunk_size;
             user_snp_ctx = new SnapshotTransferCtx{
                 .file_size = snapshot_loader_info->file_size,
@@ -1258,8 +1283,8 @@ int IKeeperStateMachine::read_logical_snp_obj(
             {
                 chassert(loader.reader != nullptr);
                 loader.reader->readStrict(
-                    reinterpret_cast<char *>(loader.buf->data_begin()) + loader.loaded_bytes,
-                    needed - loader.loaded_bytes);
+                    /* to */reinterpret_cast<char *>(loader.buf->data_begin()) + loader.loaded_bytes,
+                    /* n */needed - loader.loaded_bytes);
                 loader.loaded_bytes = needed;
                 if (loader.loaded_bytes == loader.file_size)
                 {
@@ -1273,6 +1298,7 @@ int IKeeperStateMachine::read_logical_snp_obj(
     catch (...)
     {
         tryLogCurrentException(log);
+        snapshot_loader_info.reset();  /// force fresh reader on next retry
         free_user_snp_ctx(user_snp_ctx);
         return -1;
     }
@@ -1280,7 +1306,10 @@ int IKeeperStateMachine::read_logical_snp_obj(
     chassert(offset + chunk_size <= ctx->file_size);
     is_last_obj = (offset + chunk_size == ctx->file_size);
 
-    ProfileEvents::increment(ProfileEvents::KeeperReadSnapshot);
+    success = true;
+    ProfileEvents::increment(ProfileEvents::KeeperReadSnapshotObject);
+    if (is_last_obj)
+        ProfileEvents::increment(ProfileEvents::KeeperReadSnapshot);
     return 1;
 }
 

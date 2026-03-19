@@ -314,13 +314,19 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
 
     # SYSTEM WAIT FAILPOINT ... PAUSE blocks until a thread pauses at the failpoint.
     # We run it in a background thread so that the main thread can kill the node.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        wait_future = pool.submit(
-            node_lagging.query,
-            "SYSTEM WAIT FAILPOINT keeper_save_snapshot_pause_mid_transfer PAUSE",
-        )
-        done, _ = concurrent.futures.wait([wait_future], timeout=60)
-    assert done, "Failpoint keeper_save_snapshot_pause_mid_transfer not triggered within 60 s"
+    # The executor must stay alive until after the assertion; otherwise leaving the
+    # `with` block would call pool.shutdown(wait=True), blocking indefinitely if the
+    # failpoint is never hit (the worker is stuck in SYSTEM WAIT FAILPOINT ... PAUSE).
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    wait_future = pool.submit(
+        node_lagging.query,
+        "SYSTEM WAIT FAILPOINT keeper_save_snapshot_pause_mid_transfer PAUSE",
+    )
+    done, _ = concurrent.futures.wait([wait_future], timeout=60)
+    if not done:
+        pool.shutdown(wait=False, cancel_futures=True)
+        assert False, "Failpoint keeper_save_snapshot_pause_mid_transfer not triggered within 60 s"
+    pool.shutdown(wait=False)
 
     # Thread is paused mid-transfer: tmp_snapshot_X.bin is on disk.
     node_lagging.stop_clickhouse(kill=True)

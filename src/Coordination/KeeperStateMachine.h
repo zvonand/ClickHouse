@@ -31,6 +31,7 @@ struct SnapshotLoaderInfo
     std::unique_ptr<ReadBufferFromFileBase> reader;  /// null once fully loaded
     uint64_t file_size = 0;
     uint64_t loaded_bytes = 0;
+    uint64_t snapshot_id = 0;
 };
 
 class IKeeperStateMachine : public nuraft::state_machine
@@ -142,6 +143,9 @@ protected:
 
     std::unique_ptr<SnapshotReceiveCtx> snapshot_receive_ctx TSA_GUARDED_BY(snapshots_lock);
 
+    /// Cache for serving the latest snapshot to lagging followers over a non-local disk.
+    /// Holds a buffer with the snapshot file content and how many bytes have been loaded so far.
+    /// Shared across concurrent followers transferring the same snapshot; reset when a new snapshot is created.
     std::shared_ptr<SnapshotLoaderInfo> snapshot_loader_info TSA_GUARDED_BY(snapshots_lock);
 
     /// Cached size of the latest snapshot file, updated atomically after each snapshot

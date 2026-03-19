@@ -266,6 +266,8 @@
     M(KeeperSnapshotApplys) \
     M(KeeperSnapshotApplysFailed) \
     M(KeeperReadSnapshot) \
+    M(KeeperReadSnapshotObject) \
+    M(KeeperReadSnapshotFailed) \
     M(KeeperSaveSnapshot) \
     M(KeeperCreateRequest) \
     M(KeeperRemoveRequest) \

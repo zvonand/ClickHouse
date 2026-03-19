@@ -721,12 +721,12 @@ void alter(
         Poco::JSON::Stringifier::stringify(metadata, oss, 4);
         std::string json_representation = removeEscapedSlashes(oss.str());
 
-        auto md_info = filename_generator.generateMetadataPathWithInfo();
+        auto metadata_info = filename_generator.generateMetadataPathWithInfo();
 
         auto hint_path = filename_generator.generateVersionHint();
         if (writeMetadataFileAndVersionHint(
                 persistent_table_components.path_resolver,
-                md_info,
+                metadata_info,
                 json_representation,
                 hint_path,
                 object_storage,
@@ -1358,11 +1358,11 @@ ExpireSnapshotsResult expireSnapshots(
         std::ostringstream oss; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
         Poco::JSON::Stringifier::stringify(metadata, oss, 4);
         std::string json_representation = removeEscapedSlashes(oss.str());
-        auto md_info = filename_generator.generateMetadataPathWithInfo();
+        auto metadata_info = filename_generator.generateMetadataPathWithInfo();
         auto hint_path = filename_generator.generateVersionHint();
         if (!writeMetadataFileAndVersionHint(
                 persistent_table_components.path_resolver,
-                md_info,
+                metadata_info,
                 json_representation,
                 hint_path,
                 object_storage,
@@ -1375,7 +1375,7 @@ ExpireSnapshotsResult expireSnapshots(
 
         if (catalog)
         {
-            auto catalog_filename = persistent_table_components.path_resolver.resolveForCatalog(md_info.path);
+            auto catalog_filename = persistent_table_components.path_resolver.resolveForCatalog(metadata_info.path);
             const auto & [namespace_name, parsed_table_name] = DataLake::parseTableName(table_name);
             if (!catalog->updateMetadata(namespace_name, parsed_table_name, catalog_filename, nullptr))
             {

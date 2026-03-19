@@ -172,22 +172,15 @@ public:
     }
 
     String getName() const override { return name; }
-
     size_t getNumberOfArguments() const override { return 2; }
-
     bool isSuitableForShortCircuitArgumentsExecution(const DataTypesWithConstInfo & /*arguments*/) const override { return true; }
-
     bool useDefaultImplementationForConstants() const override { return true; }
-    bool useDefaultImplementationForNulls() const override { return true; }
-    bool useDefaultImplementationForLowCardinalityColumns() const override { return true; }
-
     ColumnNumbers getArgumentsThatAreAlwaysConstant() const override { return {1}; }
 
     DataTypePtr getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const override
     {
         FunctionArgumentDescriptors args{
-            {"word", &isValidStemWordType, nullptr,
-             "String, FixedString, Array(String), Array(FixedString), Array(Nullable(String)), or Array(Nullable(FixedString))"},
+            {"word", &isValidStemWordType, nullptr, "String, FixedString, Array(String), Array(FixedString), Array(Nullable(String)), or Array(Nullable(FixedString))"},
             {"language", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), isColumnConst, "const String"},
         };
         validateFunctionArguments(*this, arguments, args);
@@ -262,7 +255,7 @@ Nullable and LowCardinality variants of String and FixedString are supported.
          "Array(Nullable(String)), or Array(Nullable(FixedString)).",
          {"String", "FixedString", "Array(String)", "Array(FixedString)"}},
         {"language",
-         "Language whose stemming rules will be applied. Use the two-letter ISO 639-1 code (e.g. 'en', 'de', 'fr'), see https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes.",
+         "Language whose stemming rules will be applied. A two-letter [ISO 639-1 code](https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes), e.g. 'en', 'de', 'fr', see .",
          {"String"}},
     };
     FunctionDocumentation::ReturnedValue returned_value = {

@@ -36,6 +36,7 @@ namespace Setting
     extern const SettingsUInt64 max_replica_delay_for_distributed_queries;
     extern const SettingsBool prefer_localhost_replica;
     extern const SettingsBool serialize_query_plan;
+    extern const SettingsBool skip_unavailable_shards;
     extern const SettingsUInt64 distributed_group_by_no_merge;
 }
 
@@ -232,6 +233,12 @@ void SelectStreamFactory::createForShardImpl(
                     "There is no table {} on local replica of shard {}, will try remote replicas.",
                     main_table.getNameForLogs(), shard_info.shard_num);
                 emplace_remote_stream();
+            }
+            else if (settings[Setting::skip_unavailable_shards])
+            {
+                LOG_WARNING(getLogger("ClusterProxy::SelectStreamFactory"),
+                    "There is no table {} on local replica of shard {}, and no remote replicas configured. Skipping.",
+                    main_table.getNameForLogs(), shard_info.shard_num);
             }
             else
                 emplace_local_stream();  /// Let it fail the usual way.

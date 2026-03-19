@@ -216,6 +216,20 @@ int64_t MetadataStorageFromCacheObjectStorage::recordAsRemoved(const StoredObjec
     return recorded_count;
 }
 
+bool MetadataStorageFromCacheObjectStorage::hasPendingRemovalBlobs(const StoredObjects & blobs) const
+{
+    if (underlying->hasPendingRemovalBlobs(blobs))
+        return true;
+
+    std::lock_guard guard(removed_objects_mutex);
+
+    for (const auto & blob : blobs)
+        if (objects_to_remove.contains(blob))
+            return true;
+
+    return false;
+}
+
 IMetadataStorage::BlobsToReplicate MetadataStorageFromCacheObjectStorage::getBlobsToReplicate(const ClusterConfigurationPtr & cluster, int64_t max_count)
 {
     return underlying->getBlobsToReplicate(cluster, max_count);

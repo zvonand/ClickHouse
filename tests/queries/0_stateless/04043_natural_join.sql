@@ -42,7 +42,27 @@ CREATE TABLE t4 (x UInt64) ENGINE = Memory;
 INSERT INTO t4 VALUES (1);
 SELECT * FROM t1 NATURAL JOIN t4 ORDER BY id;
 
+-- Multi-table joins: NATURAL JOIN mixed with other join types
+CREATE TABLE t5 (id UInt64, flag UInt64) ENGINE = Memory;
+INSERT INTO t5 VALUES (1, 42);
+
+-- Two chained NATURAL JOINs: second one matches on both id and name
+SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3 ORDER BY id;
+
+-- NATURAL JOIN first, then a regular LEFT JOIN
+SELECT * FROM t1 NATURAL JOIN t2 LEFT JOIN t5 USING (id) ORDER BY id;
+
+-- Regular INNER JOIN first, then NATURAL JOIN
+SELECT * FROM t1 INNER JOIN t5 USING (id) NATURAL JOIN t2 ORDER BY id;
+
+-- NATURAL FULL JOIN first, then a regular LEFT JOIN
+SELECT * FROM t1 NATURAL FULL JOIN t2 LEFT JOIN t5 USING (id) ORDER BY id;
+
+-- CROSS JOIN first, then NATURAL JOIN (cross product feeds into natural join on id)
+SELECT * FROM t1 CROSS JOIN t4 NATURAL JOIN t5 ORDER BY id;
+
 DROP TABLE t1;
 DROP TABLE t2;
 DROP TABLE t3;
 DROP TABLE t4;
+DROP TABLE t5;

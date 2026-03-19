@@ -7,6 +7,8 @@ SET query_plan_optimize_lazy_materialization = 0;
 SET query_plan_optimize_prewhere = 1;
 SET optimize_move_to_prewhere = 1;
 SET optimize_sorting_by_input_stream_properties = 1;
+SET use_skip_indexes_for_top_k = 0;
+SET use_top_k_dynamic_filtering = 0;
 
 DROP TABLE IF EXISTS t_read_in_order;
 

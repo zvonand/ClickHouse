@@ -274,7 +274,7 @@ public:
     void reconfigure(const KeeperRequestForSession& request_for_session) override;
 
     /// Cancel an in-progress snapshot receive: remove partial files and reset the context.
-    void cancelIfHasUnfinishedReceive() TSA_REQUIRES(snapshots_lock);
+    void cancelIfHasUnfinishedSnapshotReceive() TSA_REQUIRES(snapshots_lock);
 
 private:
     /// Main state machine logic

@@ -779,6 +779,9 @@ bool KeeperStateMachine<Storage>::apply_snapshot(nuraft::snapshot & s)
         storage = std::move(snapshot_deserialization_result.storage);
         latest_snapshot_meta = snapshot_deserialization_result.snapshot_meta;
         cluster_config = snapshot_deserialization_result.cluster_config;
+
+        snapshot_loader_info.reset();
+        cancelIfHasUnfinishedSnapshotReceive();
     }
 
     ProfileEvents::increment(ProfileEvents::KeeperSnapshotApplys);
@@ -966,7 +969,7 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
             if (is_first_obj && is_last_obj)
             {
                 /// If there is non-finalized state from previous call - clean it up.
-                cancelIfHasUnfinishedReceive();
+                cancelIfHasUnfinishedSnapshotReceive();
                 /// Single-chunk transfer, write all data at once.
                 latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(data, s.get_last_log_idx());
                 latest_snapshot_meta = cloneSnapshotMeta(s);
@@ -980,7 +983,7 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
                 if (is_first_obj)
                 {
                     /// If there is non-finalized state from previous call - clean it up.
-                    cancelIfHasUnfinishedReceive();
+                    cancelIfHasUnfinishedSnapshotReceive();
                     snapshot_receive_ctx = snapshot_manager.beginSnapshotReceiveToDisk(s.get_last_log_idx());
                 }
 
@@ -994,7 +997,7 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
                         s.get_last_log_idx(),
                         obj_id,
                         snapshot_receive_ctx ? snapshot_receive_ctx->log_idx : 0);
-                    cancelIfHasUnfinishedReceive();
+                    cancelIfHasUnfinishedSnapshotReceive();
                     obj_id = 0;
                     return;
                 }
@@ -1024,7 +1027,7 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
                         obj_id = 0;
                     }
                     if (!obj_id)
-                        cancelIfHasUnfinishedReceive();
+                        cancelIfHasUnfinishedSnapshotReceive();
                     return;
                 }
 
@@ -1055,7 +1058,7 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
         }
         catch (...)
         {
-            cancelIfHasUnfinishedReceive();
+            cancelIfHasUnfinishedSnapshotReceive();
             tryLogCurrentException(log);
             ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotFailed);
         }
@@ -1602,7 +1605,7 @@ void KeeperStateMachine<Storage>::recalculateStorageStats()
 }
 
 template<typename Storage>
-void KeeperStateMachine<Storage>::cancelIfHasUnfinishedReceive()
+void KeeperStateMachine<Storage>::cancelIfHasUnfinishedSnapshotReceive()
 {
     if (!snapshot_receive_ctx)
         return;

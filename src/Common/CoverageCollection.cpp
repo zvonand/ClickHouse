@@ -194,7 +194,11 @@ void collectAndInsertCoverage(
         /// selftest check (which runs right after the flush) would see 0 rows.
         query_context->setSetting("async_insert", Field{0ULL});
         auto block_io = executeQuery(query, query_context, QueryFlags{.internal = true}).second;
-        block_io.onFinish();
+        /// For a VALUES INSERT with async_insert=0, executeQuery returns a "completed"
+        /// pipeline (source=Values parser, sink=MergeTreeSink).  Calling onFinish()
+        /// alone only resets the pipeline without running it — data would be lost.
+        /// executeTrivialBlockIO executes the pipeline first, then finalises.
+        executeTrivialBlockIO(block_io, query_context);
         std::cerr << fmt::format(
             "CoverageCollection: Inserted coverage for test '{}': {} regions\n",
             test_name, files.size());

@@ -9,9 +9,9 @@ DROP TABLE IF EXISTS t1;
 DROP TABLE IF EXISTS t2;
 DROP TABLE IF EXISTS t3;
 
-CREATE TABLE t1 (id UInt64, value String) ENGINE = MergeTree ORDER BY id;
-CREATE TABLE t2 (id UInt64, value String) ENGINE = MergeTree ORDER BY id;
-CREATE TABLE t3 (id UInt64, value String) ENGINE = MergeTree ORDER BY id;
+CREATE TABLE t1 (id UInt64, value String) ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 8192, index_granularity_bytes = '10Mi';
+CREATE TABLE t2 (id UInt64, value String) ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 8192, index_granularity_bytes = '10Mi';
+CREATE TABLE t3 (id UInt64, value String) ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 8192, index_granularity_bytes = '10Mi';
 
 INSERT INTO t1 SELECT number, toString(number) FROM numbers(100);
 INSERT INTO t2 SELECT number, toString(number) FROM numbers(100);

@@ -28,7 +28,7 @@ If a direct CI report URL is given instead of a PR number, use it directly.
 Extract all changed queries (column 10 == 1 means the change exceeds the threshold):
 - Column 1: test name
 - Column 2: query index
-- Column 4: shard
+- Column 4: batch
 - Column 5: old time
 - Column 6: new time
 - Column 8: ratio (e.g. 1.5 = 1.5x)
@@ -38,7 +38,7 @@ Extract all changed queries (column 10 == 1 means the change exceeds the thresho
 
 ### 2. List ALL changes
 
-Present the **complete, unfiltered** list of all changes above 1.10x, sorted by magnitude, for both architectures separately. Use tables with columns: Magnitude, Direction, Test, Query#, Shard.
+Present the **complete, unfiltered** list of all changes above 1.10x, sorted by magnitude, for both architectures separately. Use tables with columns: Magnitude, Direction, Test, Query#, Batch.
 
 Do NOT summarize, collapse, or hide entries. Do NOT dismiss anything as "noise" or "not actionable" without evidence. Every entry must be visible.
 
@@ -79,10 +79,10 @@ ORDER BY slower_count DESC, test
 
 For each test, classify based on the master history:
 
-- **Flaky on master**: appears as slower in >1% of master runs, or has many unstable entries. Note the ratio (e.g. "8/685 runs, flaky").
-- **Never on master**: 0 slower appearances in the last 30 days with a meaningful number of total runs (>50). This is likely a genuine regression introduced by the PR.
+- **Flaky on master**: appears as slower in >1% of master runs, or has many unstable entries. Note the count (e.g. "8/685 runs").
+- **New in this PR**: 0 slower (or faster) appearances on master in the last 30 days with a meaningful number of total runs (>50). This change was first observed in this PR.
 - **Rarely on master**: 1-2 appearances out of hundreds. Treat as borderline — note it but don't dismiss.
-- For "faster" results: check if the test was previously *slower* on master (meaning this PR fixes it) or if it was never faster before (genuine improvement).
+- For "faster" results: check if the test was previously *slower* on master (meaning this PR fixes it).
 
 ### 5. Present the verdict
 
@@ -94,9 +94,9 @@ Present the final classification in a table per architecture:
 Classify as:
 - **Flaky** — frequently appears on master, dismiss
 - **Unstable** — high unstable count on master, dismiss
-- **Never on master — investigate** — genuine regression
+- **New in this PR — investigate** — regression not seen on master before
+- **New in this PR — improvement** — speedup not seen on master before, or fixes a previously-slower test
 - **Rarely on master** — borderline, note it
-- **Real improvement** — never faster on master before, or fixes a previously-slower test
 
 ### 6. Summary
 
@@ -113,7 +113,7 @@ When the user asks to investigate a specific regression further, download and an
 **Get artifact links** using the `fetch_ci_report.js` tool with `--links`:
 
 ```bash
-node .claude/tools/fetch_ci_report.js "<CI-report-URL-for-specific-shard>" --links
+node .claude/tools/fetch_ci_report.js "<CI-report-URL-for-specific-batch>" --links
 ```
 
 This will show `logs.tar.zst`, `job.log.zst`, `all-query-metrics.tsv`, `report.html`, etc.
@@ -213,13 +213,13 @@ The `all-query-metrics.tsv` file (linked from `--links` output) contains the pro
 
 ### Important: use unique download paths
 
-When analyzing multiple shards or PRs, use unique directory names to avoid overwriting:
+When analyzing multiple batches or PRs, use unique directory names to avoid overwriting:
 
 ```bash
-mkdir -p tmp/shard1_amd tmp/shard5_amd
-curl -sS "<shard1-logs-url>" -o tmp/shard1_amd/logs.tar.zst
-curl -sS "<shard5-logs-url>" -o tmp/shard5_amd/logs.tar.zst
-tar -I zstd -xf tmp/shard1_amd/logs.tar.zst -C tmp/shard1_amd/
+mkdir -p tmp/batch1_amd tmp/batch5_amd
+curl -sS "<batch1-logs-url>" -o tmp/batch1_amd/logs.tar.zst
+curl -sS "<batch5-logs-url>" -o tmp/batch5_amd/logs.tar.zst
+tar -I zstd -xf tmp/batch1_amd/logs.tar.zst -C tmp/batch1_amd/
 ```
 
 ## Rules

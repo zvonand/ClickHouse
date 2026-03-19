@@ -844,6 +844,13 @@ Field readFieldBinary(ReadBuffer & buf);
 
 String fieldToString(const Field & x);
 
+/// Check if a Field contains a NaN value.
+/// Float32 is stored as Float64 internally, so checking Float64 is sufficient.
+inline bool isNaNField(const Field & f)
+{
+    return f.isNaN();
+}
+
 }
 
 template <>

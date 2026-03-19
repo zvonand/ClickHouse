@@ -2912,6 +2912,10 @@ public:
     {
         const std::string_view name_view = Name::name;
 
+        // NaN breaks monotonicity for floating-point types.
+        if (isNaNField(left_point) || isNaNField(right_point))
+            return {false, true, false, false};
+
         // For simplicity, we treat null values as monotonicity breakers, except for variable / non-zero constant.
         if (left_point.isNull() || right_point.isNull())
         {

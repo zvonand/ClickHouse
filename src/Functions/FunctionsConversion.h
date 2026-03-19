@@ -3642,8 +3642,33 @@ private:
 struct PositiveMonotonicity
 {
     static bool has() { return true; }
-    static IFunction::Monotonicity get(const IDataType &, const Field &, const Field &)
+    static IFunction::Monotonicity get(const IDataType & type, const Field & left, const Field & right)
     {
+        /// Interval values are stored as Int64. If the source type is wider than Int64
+        /// (e.g., UInt128, Int128, UInt256, Int256) or unsigned and wider than Int64's
+        /// positive range, the conversion can overflow, breaking monotonicity.
+        if (!type.isValueRepresentedByNumber())
+            return {};
+
+        size_t size_of_from = type.getSizeOfValueInMemory();
+
+        /// Types wider than 8 bytes (Int128, UInt128, Int256, UInt256) can overflow Int64.
+        if (size_of_from > sizeof(Int64))
+            return {};
+
+        /// UInt64 can overflow Int64 for values > INT64_MAX.
+        if (size_of_from == sizeof(Int64) && type.isValueRepresentedByUnsignedInteger())
+        {
+            if (left.isNull() || right.isNull())
+                return {};
+
+            /// Only monotonic if both values fit in Int64 (i.e., are non-negative when cast to Int64).
+            Int64 left_val = static_cast<Int64>(left.safeGet<UInt64>());
+            Int64 right_val = static_cast<Int64>(right.safeGet<UInt64>());
+            if (left_val < 0 || right_val < 0)
+                return {};
+        }
+
         return { .is_monotonic = true };
     }
 };
@@ -3773,6 +3798,23 @@ struct ToNumberMonotonicity
             if (from_is_unsigned == to_is_unsigned)
                 return { .is_monotonic = true, .is_always_monotonic = true, .is_strict = true };
 
+            /// When converting between signed and unsigned of the same size,
+            /// monotonicity holds only when both endpoints are in the same "half"
+            /// of the type's range (i.e., the conversion does not wrap around).
+            /// For unsigned->signed: values in [0, 2^(N-1)-1] map monotonically,
+            /// and values in [2^(N-1), 2^N-1] also map monotonically (to negative),
+            /// but crossing the boundary breaks monotonicity.
+            if (left.isNull() || right.isNull())
+                return {};
+
+            if (from_is_unsigned && !to_is_unsigned)
+            {
+                /// Check if both values, when reinterpreted as signed T, have the same sign.
+                const bool is_monotonic = (T(left.safeGet<UInt64>()) >= 0) == (T(right.safeGet<UInt64>()) >= 0);
+                return { .is_monotonic = is_monotonic };
+            }
+
+            /// signed -> unsigned of the same size
             if (left_in_first_half == right_in_first_half)
                 return { .is_monotonic = true };
 

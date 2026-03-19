@@ -448,7 +448,12 @@ static bool writeMetadataFiles(
                     *buffer_manifest_entry,
                     content_type);
                 buffer_manifest_entry->finalize();
-                manifest_entry_sizes.push_back(buffer_manifest_entry->count());
+                auto size = buffer_manifest_entry->count();
+                if (size == 0)
+                {
+                    size = object_storage->getObjectMetadata(path_resolver.resolve(manifest_entry_path), /*with_tags=*/false).size_bytes;
+                }
+                manifest_entry_sizes.push_back(size);
             }
             catch (...)
             {

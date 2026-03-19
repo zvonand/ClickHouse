@@ -484,8 +484,12 @@ void TableJoin::setUsedColumns(const Names & column_names)
     for (auto it = columns_from_joined_table.begin(); it != columns_from_joined_table.end(); ++it)
         right_columns_idx[it->name] = it;
 
+    NameSet seen_columns;
     for (const auto & column_name : column_names)
     {
+        if (!seen_columns.emplace(column_name).second)
+            continue;
+
         if (auto lit = left_columns_idx.find(column_name); lit != left_columns_idx.end())
             setUsedColumn(*lit->second, JoinTableSide::Left);
         else if (auto rit = right_columns_idx.find(column_name); rit != right_columns_idx.end())

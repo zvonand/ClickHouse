@@ -46,21 +46,21 @@ catalog_type,
 
 The following settings are supported:
 
-| Setting                 | Description                                                                                                  |
-|-------------------------|--------------------------------------------------------------------------------------------------------------|
-| `catalog_type`          | Type of catalog: `glue`, `unity` (Delta), `rest` (Iceberg), `hive`, `onelake` (Iceberg)                      |
-| `warehouse`             | The warehouse/database name to use in the catalog.                                                           |
-| `catalog_credential`    | Authentication credential for the catalog (e.g., API key or token)                                           |
-| `auth_header`           | Custom HTTP header for authentication with the catalog service                                               |
-| `auth_scope`            | OAuth2 scope for authentication (if using OAuth)                                                             |
-| `storage_endpoint`      | Endpoint URL for the underlying storage                                                                      |
-| `oauth_server_uri`      | URI of the OAuth2 authorization server for authentication                                                    |
-| `vended_credentials`    | Boolean indicating whether to use vended credentials from the catalog (supports AWS S3 and Azure ADLS Gen2)  |
-| `aws_access_key_id`     | AWS access key ID for S3/Glue access (if not using vended credentials).                                      |
-| `aws_secret_access_key` | AWS secret access key for S3/Glue access (if not using vended credentials)                                   |
-| `region`                | AWS region for the service (e.g., `us-east-1`)                                                               |
-| `dlf_access_key_id`     | Access key ID for DLF access                                                                                 |
-| `dlf_access_key_secret` | Access key Secret for DLF access                                                                             |
+| Setting                 | Description                                                                             |
+|-------------------------|-----------------------------------------------------------------------------------------|
+| `catalog_type`          | Type of catalog: `glue`, `unity` (Delta), `rest` (Iceberg), `hive`, `onelake` (Iceberg) |
+| `warehouse`             | The warehouse/database name to use in the catalog.                                      |
+| `catalog_credential`    | Authentication credential for the catalog (e.g., API key or token)                      |
+| `auth_header`           | Custom HTTP header for authentication with the catalog service                          |
+| `auth_scope`            | OAuth2 scope for authentication (if using OAuth)                                        |
+| `storage_endpoint`      | Endpoint URL for the underlying storage                                                 |
+| `oauth_server_uri`      | URI of the OAuth2 authorization server for authentication                               |
+| `vended_credentials`    | Boolean indicating whether to use vended credentials from the catalog (supports AWS S3 and Azure ADLS Gen2) |
+| `aws_access_key_id`     | AWS access key ID for S3/Glue access (if not using vended credentials)                  |
+| `aws_secret_access_key` | AWS secret access key for S3/Glue access (if not using vended credentials)              |
+| `region`                | AWS region for the service (e.g., `us-east-1`)                                          |
+| `dlf_access_key_id`     | Access key ID for DLF access                                                            |
+| `dlf_access_key_secret` | Access key Secret for DLF access                                                        |
 
 ## Examples {#examples}
 
@@ -81,6 +81,6 @@ SETTINGS
    auth_scope = auth_scope, 
    onelake_client_id = client_id, 
    onelake_client_secret = client_secret;
-SHOW TABLES IN databse_name;       
+SHOW TABLES IN databse_name;
 SELECT count() from database_name.table_name;
 ```

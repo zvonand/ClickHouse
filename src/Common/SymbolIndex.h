@@ -42,11 +42,6 @@ public:
     const Object * findObject(const void * address) const;
     const Object * thisObject() const;
 
-    /// For debugging: explain why findSymbol returned nullptr.
-    /// Returns the symbol name (if found), "no_object" (address not in any mapped binary),
-    /// or "no_symbol[object=<name>:offset=0x<hex>]" (in binary but no symbol at that offset).
-    String diagnose(const void * address) const;
-
     const std::vector<Symbol> & symbols() const { return data.symbols; }
     const std::vector<Object> & objects() const { return data.objects; }
 

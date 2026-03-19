@@ -9,7 +9,6 @@
 #include <vector>
 
 #include <Common/IO.h>
-#include <Common/SymbolIndex.h>
 #include <base/coverage.h>
 
 #include <fmt/format.h>
@@ -36,23 +35,14 @@ void dumpCoverage()
 
     if (const char * coverage_filename_prefix = getenv("CLICKHOUSE_WRITE_COVERAGE")) // NOLINT(concurrency-mt-unsafe)
     {
-        /// Convert runtime virtual addresses to file offsets by subtracting the binary's load base.
-        /// This makes the dump portable across processes with different ASLR bases:
-        /// when the server inserts the dump and calls addressToSymbol(), SymbolIndex::findSymbol()
-        /// will use the fallback path that treats the value directly as a file offset — the same
-        /// mechanism used by system.stack_trace (after PR #82809).
-        uintptr_t load_base = 0;
-        if (const DB::SymbolIndex::Object * self = DB::SymbolIndex::instance().thisObject())
-            load_base = reinterpret_cast<uintptr_t>(self->address_begin);
-
-        auto dump = [load_base](const std::string & name, auto span)
+        auto dump = [](const std::string & name, auto span)
         {
-            /// Write only non-zeros, converted to file offsets.
+            /// Write only non-zeros.
             std::vector<uintptr_t> data;
             data.reserve(span.size());
             for (auto addr : span)
                 if (addr)
-                    data.push_back(addr - load_base);
+                    data.push_back(addr);
 
             int fd = ::open(name.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0400);
             if (-1 == fd)

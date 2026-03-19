@@ -28,7 +28,7 @@ struct KeeperStorageStats;
 struct SnapshotLoaderInfo
 {
     nuraft::ptr<nuraft::buffer> buf;
-    std::unique_ptr<ReadBufferFromFileBase> reader;  /// null once fully loaded
+    std::unique_ptr<ReadBufferFromFileBase> reader; /// null once fully loaded
     uint64_t file_size = 0;
     uint64_t loaded_bytes = 0;
     uint64_t snapshot_id = 0;

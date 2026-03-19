@@ -46,6 +46,8 @@ namespace ProfileEvents
     extern const Event KeeperReadSnapshot;
     extern const Event KeeperReadSnapshotObject;
     extern const Event KeeperReadSnapshotFailed;
+    extern const Event KeeperSaveSnapshotObject;
+    extern const Event KeeperSaveSnapshotFailed;
     extern const Event KeeperSaveSnapshot;
     extern const Event KeeperStorageLockWaitMicroseconds;
     extern const Event KeeperStorageLockHoldMicroseconds;
@@ -952,6 +954,7 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
 {
     LOG_DEBUG(log, "Saving snapshot {} obj_id {}", s.get_last_log_idx(), obj_id);
 
+    std::shared_ptr<SnapshotFileInfo> completed_snapshot_info;
     try
     {
         std::lock_guard lock(snapshots_lock);
@@ -973,6 +976,7 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
             /// Reset snapshot loader if present, it is needed only on leader
             snapshot_loader_info.reset();
             ++obj_id;
+            ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotObject);
         }
         else
         {
@@ -1031,16 +1035,15 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
             copyData(reader, *snapshot_receive_ctx->write_buf);
             /// Advance obj_id to the next chunk we want; NuRaft forwards it to the leader as the next offset.
             obj_id = ++snapshot_receive_ctx->expected_obj_id;
+            ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotObject);
 
             if (!is_first_obj && !is_last_obj)
                 FailPointInjection::pauseFailPoint(FailPoints::keeper_save_snapshot_pause_mid_transfer);
 
             if (is_last_obj)
             {
-                auto cloned_meta = cloneSnapshotMeta(s);
-
                 latest_snapshot_info = snapshot_manager.finalizeSnapshotReceiveToDisk(*snapshot_receive_ctx);
-                latest_snapshot_meta = cloned_meta;
+                latest_snapshot_meta = cloneSnapshotMeta(s);
                 snapshot_receive_ctx.reset();
                 /// Reset snapshot loader if present, it is needed only on leader
                 snapshot_loader_info.reset();
@@ -1050,26 +1053,31 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
         if (is_last_obj)
         {
             ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshot);
-
-            uint64_t snp_size = 0;
-            try
-            {
-                snp_size = latest_snapshot_info->disk->getFileSize(latest_snapshot_info->path);
-                latest_snapshot_size.store(snp_size, std::memory_order_relaxed);
-            }
-            catch (...)
-            {
-                tryLogCurrentException(log, "Failed to get snapshot size after save");
-            }
-            LOG_DEBUG(
-                log, "Saved snapshot {} ({} chunks, {} bytes)",
-                s.get_last_log_idx(), obj_id, snp_size);
+            completed_snapshot_info = latest_snapshot_info;
         }
     }
     catch (...)
     {
         cancelIfHasUnfinishedReceive();
         tryLogCurrentException(log);
+        ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotFailed);
+    }
+
+    if (completed_snapshot_info)
+    {
+        uint64_t snp_size = 0;
+        try
+        {
+            if (!latest_snapshot_size.load(std::memory_order_relaxed))
+                snp_size = completed_snapshot_info->disk->getFileSize(completed_snapshot_info->path);
+            if (!latest_snapshot_size.load(std::memory_order_relaxed))
+                latest_snapshot_size.store(snp_size, std::memory_order_relaxed);
+        }
+        catch (...)
+        {
+            tryLogCurrentException(log, "Failed to get snapshot size after save");
+        }
+        LOG_DEBUG(log, "Saved snapshot {} ({} chunks, {} bytes)", s.get_last_log_idx(), obj_id, snp_size);
     }
 }
 

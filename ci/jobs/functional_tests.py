@@ -234,7 +234,8 @@ def main():
     if is_llvm_coverage:
         # Randomization makes coverage non-deterministic, long tests are slow to collect coverage
         runner_options += " --no-random-settings --no-random-merge-tree-settings --no-long --llvm-coverage"
-        os.environ["LLVM_PROFILE_FILE"] = f"ft-{batch_num}-%2m.profraw"
+        if not is_per_test_coverage:
+            os.environ["LLVM_PROFILE_FILE"] = f"ft-{batch_num}-%2m.profraw"
 
     rerun_count = 1
     if args.count:
@@ -397,7 +398,9 @@ def main():
 
     Utils.add_to_PATH(f"{ch_path}:tests")
     CH = ClickHouseProc(
-        is_db_replicated=is_database_replicated, is_shared_catalog=is_shared_catalog
+        is_db_replicated=is_database_replicated,
+        is_shared_catalog=is_shared_catalog,
+        is_per_test_coverage=is_per_test_coverage,
     )
 
     job_info = ""
@@ -797,7 +800,7 @@ def main():
         info=job_info,
     )
 
-    if is_llvm_coverage:
+    if is_llvm_coverage and not is_per_test_coverage:
         print("Collecting and merging LLVM coverage files...")
         Shell.get_output("pwd", verbose=True).strip().split("\n")
         profraw_files = (

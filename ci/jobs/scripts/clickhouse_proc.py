@@ -57,11 +57,16 @@ class ClickHouseProc:
     CH_LOCAL_ERR_LOG = f"{temp_dir}/clickhouse-local.err.log"
 
     def __init__(
-        self, fast_test=False, is_db_replicated=False, is_shared_catalog=False
+        self,
+        fast_test=False,
+        is_db_replicated=False,
+        is_shared_catalog=False,
+        is_per_test_coverage=False,
     ):
         self.fast_test = fast_test
         self.is_db_replicated = is_db_replicated
         self.is_shared_catalog = is_shared_catalog
+        self.is_per_test_coverage = is_per_test_coverage
         self.ch_config_dir = f"/etc/clickhouse-server"
         self.ch_var_lib_dir = f"/var/lib/clickhouse"
         self.run_path0 = f"{temp_dir}/run_r0"
@@ -453,8 +458,10 @@ profiles:
             Utils.physical_memory() * 65 // 100 // 1024 // 1024 // replicas
         )
 
-        # set profile file for the server
-        os.environ["LLVM_PROFILE_FILE"] = f"ft-server-%m.profraw"
+        # set profile file for the server (not needed for per-test coverage,
+        # which uses system.coverage_log instead of .profraw files)
+        if not self.is_per_test_coverage:
+            os.environ["LLVM_PROFILE_FILE"] = f"ft-server-%m.profraw"
 
         env = os.environ.copy()
         env["TSAN_OPTIONS"] = " ".join(

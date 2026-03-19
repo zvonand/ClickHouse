@@ -55,6 +55,17 @@ class CoverageExporter:
         table = "coverage_log"
         path_arg = f" --path {self.src.run_path0}"
 
+        stats_query = (
+            f"SELECT count() AS rows, countIf(notEmpty(test_name)) AS rows_with_test, uniqExact(test_name) AS tests, uniqExact(arrayJoin(files)) AS files "
+            f"FROM system.{table}"
+        )
+        stats_cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{stats_query}" {command_args_post}'
+        rc_stats, stdout_stats, stderr_stats = Shell.get_res_stdout_stderr(stats_cmd, verbose=True)
+        if rc_stats != 0:
+            print(f"WARNING: Failed to read {table} statistics, stderr: {stderr_stats}")
+        else:
+            print(f"Coverage log statistics: {stdout_stats}")
+
         if not self.to_file:
             query = (
                 f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_lines', '{self.dest.user}', '{self.dest.pwd}') "
@@ -69,6 +80,10 @@ class CoverageExporter:
             )
             cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
             rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=True)
+            if stdout:
+                print(f"Export stdout: {stdout}")
+            if stderr:
+                print(f"Export stderr: {stderr}")
             if rc != 0:
                 raise RuntimeError(f"Failed to export coverage table: {table}")
         else:

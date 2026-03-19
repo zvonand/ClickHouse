@@ -455,6 +455,13 @@ static void splitAndModifyMutationCommands(
                 /// We add it "for renames" because these set of commands also removes redundant files
                 for_file_renames.push_back(command);
             }
+            else if (command.type == MutationCommand::Type::DROP_COLUMN && command.clear)
+            {
+                /// CLEAR COLUMN must go to the interpreter so that dependent
+                /// projections and indices are detected and rebuilt correctly.
+                for_interpreter.push_back(command);
+                for_file_renames.push_back(command);
+            }
             else if (command.type == MutationCommand::Type::DROP_INDEX
                      || command.type == MutationCommand::Type::DROP_PROJECTION
                      || command.type == MutationCommand::Type::DROP_STATISTICS)

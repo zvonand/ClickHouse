@@ -655,6 +655,7 @@ public:
         if (it == poll_descriptors.end())
         {
             /// The poll descriptor expired during the query execution.
+            evaluation_ended.notify_all();
             return;
         }
 
@@ -696,6 +697,10 @@ public:
                 evaluation_ended.notify_all();
             }
         }
+        else
+        {
+            evaluation_ended.notify_all();
+        }
     }
 
     /// Cancels a poll descriptor to free memory.
@@ -725,6 +730,7 @@ public:
                 poll_sessions.erase(it2);
             }
             eraseFlightDescriptorMapEntryLocked(poll_descriptor);
+            evaluation_ended.notify_all();
         }
 
         if (poll_session_to_cancel)

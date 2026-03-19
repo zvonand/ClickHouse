@@ -788,7 +788,10 @@ static void getFileReader(
         return;
 
     orc::ReaderOptions options;
-    options.setCacheOptions(orc::CacheOptions{.holeSizeLimit = min_bytes_for_seek, .rangeSizeLimit = 10 * 1024 * 1024UL});
+    /// ORC library requires rangeSizeLimit > holeSizeLimit.
+    static constexpr uint64_t default_range_size_limit = 10 * 1024 * 1024UL;
+    uint64_t range_size_limit = std::max(default_range_size_limit, min_bytes_for_seek + 1);
+    options.setCacheOptions(orc::CacheOptions{.holeSizeLimit = min_bytes_for_seek, .rangeSizeLimit = range_size_limit});
 
     auto input_stream = asORCInputStream(in, format_settings, use_prefetch, is_stopped);
     file_reader = orc::createReader(std::move(input_stream), options);

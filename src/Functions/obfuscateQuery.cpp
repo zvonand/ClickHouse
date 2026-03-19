@@ -7,11 +7,12 @@
 #include <IO/WriteBufferFromString.h>
 #include <Functions/FunctionHelpers.h>
 #include <Common/SipHash.h>
-#include <Common/randomSeed.h>
+#include <Common/thread_local_rng.h>
 #include <Common/typeid_cast.h>
 #include <Common/Exception.h>
 #include <string_view>
 #include <optional>
+
 
 namespace DB
 {
@@ -82,10 +83,9 @@ ColumnPtr ObfuscateQueryFunction::execute(const ColumnsWithTypeAndName & argumen
     const ColumnPtr col_query = arguments[0].column;
 
     auto col_res = ColumnString::create();
-    const UInt64 base_random_seed = (mode == Mode::WithProvidedSeed) ? 0 : randomSeed();
     const std::optional<UInt64> const_seed_hash = (arguments.size() >= 2) ? extractConstSeedFromArg(arguments[1].column) : std::nullopt;
 
-    /// Two main paths: column of strings, or const column.
+    /// Two main paths: column of strings, or a const column.
     if (const ColumnString * col_query_string = checkAndGetColumn<ColumnString>(col_query.get()))
     {
         for (size_t i = 0; i < input_rows_count; ++i)
@@ -97,14 +97,9 @@ ColumnPtr ObfuscateQueryFunction::execute(const ColumnsWithTypeAndName & argumen
             {
                 seed_value = const_seed_hash ? *const_seed_hash : extractSeedFromArg(arguments[1].column, i);
             }
-            else if (mode == Mode::WithTag && arguments.size() >= 2)
-            {
-                UInt64 tag_hash = const_seed_hash ? *const_seed_hash : extractSeedFromArg(arguments[1].column, i);
-                seed_value = base_random_seed ^ tag_hash ^ static_cast<UInt64>(i + 1);
-            }
             else
             {
-                seed_value = base_random_seed ^ hashStringToUInt64(src) ^ static_cast<UInt64>(i + 1);
+                seed_value = thread_local_rng();
             }
 
             WordMap obfuscate_map;
@@ -132,14 +127,9 @@ ColumnPtr ObfuscateQueryFunction::execute(const ColumnsWithTypeAndName & argumen
             {
                 seed_value = const_seed_hash ? *const_seed_hash : extractSeedFromArg(arguments[1].column, i);
             }
-            else if (mode == Mode::WithTag && arguments.size() >= 2)
-            {
-                UInt64 tag_hash = const_seed_hash ? *const_seed_hash : extractSeedFromArg(arguments[1].column, i);
-                seed_value = base_random_seed ^ tag_hash ^ static_cast<UInt64>(i + 1);
-            }
             else
             {
-                seed_value = base_random_seed ^ const_query_hash ^ static_cast<UInt64>(i + 1);
+                seed_value = thread_local_rng();
             }
 
             WordMap obfuscate_map;

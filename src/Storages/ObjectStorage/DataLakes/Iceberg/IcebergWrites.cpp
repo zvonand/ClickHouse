@@ -591,7 +591,6 @@ void generateManifestList(
                         if (old_entry.hasField(field))
                             new_entry.field(field) = old_entry.field(field);
                     };
-                    add_field_to_datum(Iceberg::f_added_snapshot_id);
                     add_field_to_datum(Iceberg::f_added_files_count);
                     add_field_to_datum(Iceberg::f_existing_files_count);
                     add_field_to_datum(Iceberg::f_deleted_files_count);
@@ -602,6 +601,7 @@ void generateManifestList(
                     add_field_to_datum(Iceberg::f_key_metadata);
                     if (version == 2)
                     {
+                        add_field_to_datum(Iceberg::f_added_snapshot_id);
                         add_field_to_datum(Iceberg::f_content);
                         add_field_to_datum(Iceberg::f_sequence_number);
                         add_field_to_datum(Iceberg::f_min_sequence_number);

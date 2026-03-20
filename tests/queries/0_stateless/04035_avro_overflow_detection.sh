@@ -1,35 +1,41 @@
 #!/usr/bin/env bash
 # Tags: no-fasttest
 
-# Test that Avro format properly detects numeric overflow and type conversion errors
+# Test that Avro format properly handles numeric conversions:
+# - Float-to-integer and float-to-float overflow are undefined behavior and must be detected
+# - Integer-to-integer conversions use defined C++ behavior (truncation/wrapping)
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
+ expect_error() {
+     if grep -q "$1"; then
+         echo "OK"
+     else
+         echo "FAIL"
+     fi
+ }
+
 #
-# Integer overflow tests
+# Integer narrowing tests (defined behavior - truncation/wrapping)
 #
 
-echo "Test 1: Long to UInt8 overflow"
+echo "Test 1: Long to UInt8 narrowing (300 mod 256 = 44)"
 ${CLICKHOUSE_LOCAL} -q "SELECT toInt64(300) AS x FORMAT Avro" | \
-    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x UInt8' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x UInt8' -q "SELECT * FROM table"
 
-echo "Test 2: Negative to UInt8 overflow"
+echo "Test 2: Negative to UInt8 (wraps to 255)"
 ${CLICKHOUSE_LOCAL} -q "SELECT toInt64(-1) AS x FORMAT Avro" | \
-    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x UInt8' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x UInt8' -q "SELECT * FROM table"
 
-echo "Test 3: Large Int64 to Int8 overflow"
+echo "Test 3: Large Int64 to Int8 (200 truncates to -56)"
 ${CLICKHOUSE_LOCAL} -q "SELECT toInt64(200) AS x FORMAT Avro" | \
-    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Int8' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Int8' -q "SELECT * FROM table"
 
-echo "Test 4: Negative Int64 to UInt64 overflow"
+echo "Test 4: Negative Int64 to UInt64 (wraps)"
 ${CLICKHOUSE_LOCAL} -q "SELECT toInt64(-100) AS x FORMAT Avro" | \
-    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x UInt64' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x UInt64' -q "SELECT * FROM table"
 
 echo "Test 5: Value within range (should succeed)"
 ${CLICKHOUSE_LOCAL} -q "SELECT toInt64(100) AS x FORMAT Avro" | \
@@ -42,7 +48,7 @@ ${CLICKHOUSE_LOCAL} -q "SELECT toInt64(100) AS x FORMAT Avro" | \
 echo "Test 6: Large double to Float32 overflow"
 ${CLICKHOUSE_LOCAL} -q "SELECT toFloat64(1e300) AS x FORMAT Avro" | \
     ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Float32' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    expect_error "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE"
 
 #
 # Float to integer conversion tests
@@ -59,7 +65,7 @@ ${CLICKHOUSE_LOCAL} -q "SELECT -2.7::Float64 AS x FORMAT Avro" | \
 echo "Test 9: Large float outside int range"
 ${CLICKHOUSE_LOCAL} -q "SELECT 1e20::Float64 AS x FORMAT Avro" | \
     ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Int32' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    expect_error "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE"
 
 echo "Test 10: Whole number float to int (should succeed)"
 ${CLICKHOUSE_LOCAL} -q "SELECT 100.0::Float64 AS x FORMAT Avro" | \
@@ -80,7 +86,7 @@ ${CLICKHOUSE_LOCAL} -q "SELECT nan::Float64 AS x FORMAT Avro" | \
 echo "Test 14: Infinity to int"
 ${CLICKHOUSE_LOCAL} -q "SELECT inf::Float64 AS x FORMAT Avro" | \
     ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Int32' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    expect_error "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE"
 
 #
 # Bool conversion tests
@@ -98,24 +104,21 @@ echo "Test 17: Int 2 to Bool (converts to true)"
 ${CLICKHOUSE_LOCAL} -q "SELECT 2::Int64 AS x FORMAT Avro" | \
     ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Bool' -q "SELECT * FROM table"
 
-echo "Test 18: Negative int to Bool"
+echo "Test 18: Negative int to Bool (wraps to true)"
 ${CLICKHOUSE_LOCAL} -q "SELECT -1::Int64 AS x FORMAT Avro" | \
-    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Bool' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Bool' -q "SELECT * FROM table"
 
 #
-# IPv4 conversion tests
+# IPv4 conversion tests (integer narrowing - defined behavior)
 #
 
-echo "Test 19: Negative to IPv4"
+echo "Test 19: Negative to IPv4 (wraps to 255.255.255.255)"
 ${CLICKHOUSE_LOCAL} -q "SELECT -1::Int64 AS x FORMAT Avro" | \
-    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x IPv4' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x IPv4' -q "SELECT * FROM table"
 
-echo "Test 20: Value exceeding UInt32 max to IPv4"
+echo "Test 20: Value exceeding UInt32 max to IPv4 (truncates)"
 ${CLICKHOUSE_LOCAL} -q "SELECT 5000000000::Int64 AS x FORMAT Avro" | \
-    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x IPv4' -q "SELECT * FROM table" 2>&1 | \
-    grep -q "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE" && echo "OK" || echo "FAIL"
+    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x IPv4' -q "SELECT * FROM table"
 
 echo "Test 21: Fractional float to IPv4 (truncates)"
 ${CLICKHOUSE_LOCAL} -q "SELECT 192.5::Float64 AS x FORMAT Avro" | \

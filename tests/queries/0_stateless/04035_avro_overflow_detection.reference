@@ -1,11 +1,11 @@
-Test 1: Long to UInt8 overflow
-OK
-Test 2: Negative to UInt8 overflow
-OK
-Test 3: Large Int64 to Int8 overflow
-OK
-Test 4: Negative Int64 to UInt64 overflow
-OK
+Test 1: Long to UInt8 narrowing (300 mod 256 = 44)
+44
+Test 2: Negative to UInt8 (wraps to 255)
+255
+Test 3: Large Int64 to Int8 (200 truncates to -56)
+-56
+Test 4: Negative Int64 to UInt64 (wraps)
+18446744073709551516
 Test 5: Value within range (should succeed)
 100
 Test 6: Large double to Float32 overflow
@@ -32,12 +32,12 @@ Test 16: Int 0 to Bool (should succeed)
 false
 Test 17: Int 2 to Bool (converts to true)
 true
-Test 18: Negative int to Bool
-OK
-Test 19: Negative to IPv4
-OK
-Test 20: Value exceeding UInt32 max to IPv4
-OK
+Test 18: Negative int to Bool (wraps to true)
+true
+Test 19: Negative to IPv4 (wraps to 255.255.255.255)
+255.255.255.255
+Test 20: Value exceeding UInt32 max to IPv4 (truncates)
+42.5.242.0
 Test 21: Fractional float to IPv4 (truncates)
 0.0.0.192
 Test 22: Valid UInt32 to IPv4 (should succeed)

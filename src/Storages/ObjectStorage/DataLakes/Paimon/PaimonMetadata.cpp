@@ -602,7 +602,7 @@ Strings PaimonMetadata::collectIncrementalDataFiles(
         /// First read should include full snapshot (base + delta) to build the initial watermark.
         LOG_INFO(log, "No committed snapshot found, performing initial full read (base+delta) for snapshot_id={}",
                  state->snapshot_id);
-        data_files = collectDataFilesFromManifests({state}, ManifestKind::Both, partition_pruner, true, false);
+        data_files = collectDataFilesFromManifests({state}, ManifestKind::Both, partition_pruner, true, true);
         last_consumed_snapshot_id = state->snapshot_id;
     }
     else if (*committed_snapshot_id >= state->snapshot_id)

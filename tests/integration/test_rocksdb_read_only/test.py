@@ -87,6 +87,7 @@ def test_read_only(start_cluster):
 
 
 def test_dirctory_missing_after_stop(start_cluster):
+    # Test that RocksDB handles a missing directory after node restart.
     # for read_only = false
     node.query(
         """

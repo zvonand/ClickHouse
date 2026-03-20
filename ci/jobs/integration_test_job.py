@@ -469,10 +469,12 @@ tar -czf ./ci/tmp/logs.tar.gz \
         else:
             assert False, f"Unknown job option [{to}]"
 
-    if args.count or is_flaky_check:
-        repeat_option = (
-            f"--count {args.count or FLAKY_CHECK_TEST_REPEAT_COUNT} --random-order"
-        )
+    if args.count:
+        repeat_option = f"--count {args.count} --random-order"
+    elif is_flaky_check:
+        # Run tests in module scope: the module_repeat_cnt loop repeats entire modules,
+        # preserving module-scoped fixtures (cluster setup/teardown per module, not per function).
+        repeat_option = f"--count {FLAKY_CHECK_TEST_REPEAT_COUNT} --random-order --repeat-scope=module"
     elif is_targeted_check:
         repeat_option = f"--count 10 --random-order"
 

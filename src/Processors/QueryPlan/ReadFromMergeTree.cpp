@@ -4,8 +4,6 @@
 #include <Functions/IFunction.h>
 #include <Core/Settings.h>
 #include <Core/ServerSettings.h>
-#include <Functions/IFunction.h>
-#include <Core/ServerSettings.h>
 #include <IO/Operators.h>
 #include <Interpreters/Cluster.h>
 #include <Interpreters/Context.h>
@@ -161,11 +159,6 @@ namespace ProfileEvents
 
 namespace DB
 {
-
-namespace ServerSetting
-{
-    extern const ServerSettingsUInt64 predicate_statistics_sample_rate;
-}
 
 namespace Setting
 {

@@ -87,7 +87,6 @@ def test_read_only(start_cluster):
 
 
 def test_dirctory_missing_after_stop(start_cluster):
-    # Tests that RocksDB recovers after the data directory is removed while the server is stopped.
     # for read_only = false
     node.query(
         """

@@ -310,22 +310,6 @@ void SerializationString::deserializeBinaryBulkWithMultipleStreams(
     }
 }
 
-DataTypePtr SerializationString::SizeSubcolumnCreator::create(const DataTypePtr & prev) const
-{
-    return prev;
-}
-
-SerializationPtr SerializationString::SizeSubcolumnCreator::create(const SerializationPtr & prev, const DataTypePtr &) const
-{
-    return prev;
-}
-
-ColumnPtr SerializationString::SizeSubcolumnCreator::create(const ColumnPtr &) const
-{
-    const auto & column_string = assert_cast<const ColumnString &>(*string_column);
-    return column_string.createSizeSubcolumn();
-}
-
 void SerializationString::enumerateStreamsWithoutSize(
     EnumerateStreamsSettings & settings,
     const StreamCallback & callback,
@@ -338,16 +322,24 @@ void SerializationString::enumerateStreamsWithoutSize(
         auto sizes_serialization = std::make_shared<SerializationStringSize>(version);
 
         /// Inlined size stream. The column is not computed eagerly; instead a
-        /// `SizeSubcolumnCreator` is attached so that `createFromPath` can derive it
+        /// lazy column creator is attached so that `createFromPath` can derive it
         /// on demand when the `.size` subcolumn is actually requested.
         settings.path.push_back(Substream::InlinedStringSizes);
-        if (data.column)
-            settings.path.back().creator = std::make_shared<SizeSubcolumnCreator>(data.column, version);
 
-        settings.path.back().data = SubstreamData(sizes_serialization)
-                                        .withType(type_string ? std::make_shared<DataTypeUInt64>() : nullptr)
-                                        .withColumn(nullptr)
-                                        .withSerializationInfo(data.serialization_info);
+        auto substream_data = SubstreamData(sizes_serialization)
+                                  .withType(type_string ? std::make_shared<DataTypeUInt64>() : nullptr)
+                                  .withColumn(nullptr)
+                                  .withSerializationInfo(data.serialization_info);
+
+        if (data.column)
+        {
+            substream_data.withLazyColumnCreator([parent_col = data.column]() -> ColumnPtr
+            {
+                return assert_cast<const ColumnString &>(*parent_col).createSizeSubcolumn();
+            });
+        }
+
+        settings.path.back().data = std::move(substream_data);
 
         callback(settings.path);
         settings.path.pop_back();
@@ -674,13 +666,21 @@ void SerializationString::enumerateStreamsWithSize(
 
     /// Size stream. Same lazy pattern as in `enumerateStreamsWithoutSize`.
     settings.path.push_back(Substream::StringSizes);
-    if (data.column)
-        settings.path.back().creator = std::make_shared<SizeSubcolumnCreator>(data.column, version);
 
-    settings.path.back().data = SubstreamData(sizes_serialization)
-                                    .withType(type_string ? std::make_shared<DataTypeUInt64>() : nullptr)
-                                    .withColumn(nullptr)
-                                    .withSerializationInfo(data.serialization_info);
+    auto substream_data = SubstreamData(sizes_serialization)
+                              .withType(type_string ? std::make_shared<DataTypeUInt64>() : nullptr)
+                              .withColumn(nullptr)
+                              .withSerializationInfo(data.serialization_info);
+
+    if (data.column)
+    {
+        substream_data.withLazyColumnCreator([parent_col = data.column]() -> ColumnPtr
+        {
+            return assert_cast<const ColumnString &>(*parent_col).createSizeSubcolumn();
+        });
+    }
+
+    settings.path.back().data = std::move(substream_data);
     callback(settings.path);
 
     /// Regular stream

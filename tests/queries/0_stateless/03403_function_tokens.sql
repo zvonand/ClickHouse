@@ -131,4 +131,3 @@ SELECT tokens('hello_world', 'unicodeWord') AS tokenized, toTypeName(tokenized),
 SELECT tokens('你好世界', 'unicodeWord') AS tokenized, toTypeName(tokenized), isConstant(tokenized);
 SELECT tokens('错误503', 'unicodeWord') AS tokenized, toTypeName(tokenized), isConstant(tokenized);
 SELECT tokens('hello，world', 'unicodeWord') AS tokenized, toTypeName(tokenized), isConstant(tokenized);
-SELECT tokens('hello world', 'unicodeWord', ['hello']) AS tokenized, toTypeName(tokenized), isConstant(tokenized);

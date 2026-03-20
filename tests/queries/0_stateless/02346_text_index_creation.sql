@@ -179,15 +179,6 @@ ENGINE = MergeTree
 ORDER BY tuple();
 DROP TABLE tab;
 
-CREATE TABLE tab
-(
-    str String,
-    INDEX idx str TYPE text(tokenizer = unicodeWord(['，', '。']))
-)
-ENGINE = MergeTree
-ORDER BY tuple();
-DROP TABLE tab;
-
 SELECT 'Test ngrams tokenizer.';
 
 CREATE TABLE tab

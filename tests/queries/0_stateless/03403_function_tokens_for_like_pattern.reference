@@ -69,6 +69,6 @@ SELECT tokens('你好世界', 'unicodeWord'), tokensForLikePattern('%你好%世�
 SELECT tokens('a:bc.d', 'unicodeWord'), tokensForLikePattern('a:b%c.d', 'unicodeWord');
 ['a:bc.d']	[]
 SELECT tokens('测试数据', 'unicodeWord'), tokensForLikePattern('%测试，数据%', 'unicodeWord');
-['测','试','数','据']	['测','试','数','据']
+['测','试','数','据']	['测','试','，','数','据']
 SELECT tokens('test_data', 'unicodeWord'), tokensForLikePattern('test\_%data', 'unicodeWord');
 ['test_data']	[]

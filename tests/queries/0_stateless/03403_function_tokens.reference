@@ -49,5 +49,4 @@ unicodeWord tokenizer
 ['hello_world']	Array(String)	1
 ['你','好','世','界']	Array(String)	1
 ['错','误','503']	Array(String)	1
-['hello','world']	Array(String)	1
-['world']	Array(String)	1
+['hello','，','world']	Array(String)	1

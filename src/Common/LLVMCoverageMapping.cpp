@@ -454,10 +454,12 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
         if (!ok || num_regions == 0)
             continue;
 
-        static constexpr uint64_t kTagMask      = 3u;   /// Counter::EncodingTagMask
-        static constexpr uint64_t kExpansionBit = 4u;   /// EncodingExpansionRegionBit
-        static constexpr uint64_t kKindShift    = 4u;   /// EncodingCounterTagAndExpansionRegionTagBits
-        static constexpr uint64_t kBranchKind   = 4u;   /// CounterMappingRegion::BranchRegion = 4
+        static constexpr uint64_t kTagMask           = 3u;  /// Counter::EncodingTagMask
+        static constexpr uint64_t kExpansionBit      = 4u;  /// EncodingExpansionRegionBit
+        static constexpr uint64_t kKindShift         = 4u;  /// EncodingCounterTagAndExpansionRegionTagBits
+        static constexpr uint64_t kBranchKind        = 4u;  /// CounterMappingRegion::BranchRegion
+        static constexpr uint64_t kMCDCDecisionKind  = 5u;  /// CounterMappingRegion::MCDCDecisionRegion (LLVM 17+)
+        static constexpr uint64_t kMCDCBranchKind    = 6u;  /// CounterMappingRegion::MCDCBranchRegion  (LLVM 17+)
 
         uint32_t cur_line = 0;  /// tracks delta-encoded absolute line position
 
@@ -492,8 +494,10 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
             /// Format: [kind_marker] [true_counter] [false_counter] [line_delta] [col] [num_lines] [col_end]
             if (tag == 0 && !(encoded & kExpansionBit) && (encoded >> kKindShift) == kBranchKind)
             {
-                const uint64_t true_enc  = readULEB128(cur, mend, ok);
-                const uint64_t false_enc = readULEB128(cur, mend, ok);
+                /// BranchRegion: [kind=0x40][true_counter][false_counter]
+                ///                [line_delta][col_start][num_lines][col_end]
+                const uint64_t true_enc   = readULEB128(cur, mend, ok);
+                const uint64_t false_enc  = readULEB128(cur, mend, ok);
                 const uint64_t line_delta = readULEB128(cur, mend, ok);
                 /* col_start = */           readULEB128(cur, mend, ok);
                 const uint64_t num_lines  = readULEB128(cur, mend, ok);
@@ -507,14 +511,28 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
                 continue;
             }
 
-            /// CodeRegion or other: read line/col normally.
-            const uint64_t line_delta     = readULEB128(cur, mend, ok);
-            /* col_start = */               readULEB128(cur, mend, ok);
-            const uint64_t num_lines      = readULEB128(cur, mend, ok);
-            /* col_end_combined = */        readULEB128(cur, mend, ok);
+            /// For all region kinds, the format starts with 4 standard position fields:
+            ///   [line_delta] [col_start] [num_lines] [col_end]
+            /// Some LLVM 17+ kinds (MCDCDecision, MCDCBranch) add extra fields AFTER.
+            const uint64_t line_delta = readULEB128(cur, mend, ok);
+            /* col_start = */           readULEB128(cur, mend, ok);
+            const uint64_t num_lines  = readULEB128(cur, mend, ok);
+            /* col_end = */             readULEB128(cur, mend, ok);
             if (!ok) break;
 
             cur_line += static_cast<uint32_t>(line_delta);
+
+            /// MCDCDecisionRegion (kind=5) and MCDCBranchRegion (kind=6): LLVM 17+ MCDC.
+            /// These have extra fields after the 4 standard position fields.
+            /// Exact field count varies by LLVM version; we skip them conservatively
+            /// by breaking out of the region loop for this function (safest to avoid
+            /// cursor misalignment from wrong field counts).
+            if (tag == 0 && !(encoded & kExpansionBit))
+            {
+                const uint64_t kind = encoded >> kKindShift;
+                if (kind == kMCDCDecisionKind || kind == kMCDCBranchKind)
+                    break; /// stop parsing this function's regions safely
+            }
 
             /// Only store direct-counter code regions (tag == 1).
             /// tag==0 non-branch: zero/skipped/gap/expansion — skip.

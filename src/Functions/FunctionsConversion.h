@@ -3804,17 +3804,18 @@ struct ToNumberMonotonicity
             /// For unsigned->signed: values in [0, 2^(N-1)-1] map monotonically,
             /// and values in [2^(N-1), 2^N-1] also map monotonically (to negative),
             /// but crossing the boundary breaks monotonicity.
-            if (left.isNull() || right.isNull())
-                return {};
-
             if (from_is_unsigned && !to_is_unsigned)
             {
+                if (left.isNull() || right.isNull())
+                    return {};
+
                 /// Check if both values, when reinterpreted as signed T, have the same sign.
                 const bool is_monotonic = (T(left.safeGet<UInt64>()) >= 0) == (T(right.safeGet<UInt64>()) >= 0);
                 return { .is_monotonic = is_monotonic };
             }
 
             /// signed -> unsigned of the same size
+            /// `left_in_first_half` already handles NULL bounds via a heuristic.
             if (left_in_first_half == right_in_first_half)
                 return { .is_monotonic = true };
 

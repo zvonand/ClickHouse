@@ -87,6 +87,7 @@ extern std::unordered_map<DictionaryLayouts, std::unordered_map<String, CHSettin
 
 String generateNextCodecString(RandomGenerator & rg);
 String getNextIcebergTimestamp(RandomGenerator & rg, FuzzConfig & fc);
+String getNextIcebergExpireTimestamp(RandomGenerator & rg, FuzzConfig & fc);
 void loadFuzzerServerSettings(const FuzzConfig & fc);
 void loadFuzzerTableSettings(const FuzzConfig & fc);
 void loadSystemTables(FuzzConfig & fc);

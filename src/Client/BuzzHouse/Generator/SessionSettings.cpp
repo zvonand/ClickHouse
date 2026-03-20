@@ -151,6 +151,31 @@ String getNextIcebergTimestamp(RandomGenerator & rg, FuzzConfig & fc)
     }
 }
 
+/// Returns a DateTime string suitable for expire_snapshots positional/expire_before arguments.
+/// The parser uses readDateTimeText (expects "YYYY-MM-DD HH:MM:SS") and then multiplies by 1000,
+/// so we must produce seconds-granularity DateTime strings, not millisecond integers.
+String getNextIcebergExpireTimestamp(RandomGenerator & rg, FuzzConfig & fc)
+{
+    if (rg.nextBool())
+    {
+        /// Convert history ms timestamp to DateTime string that readDateTimeText can parse.
+        return fc.getRandomIcebergHistoryValue("toString(toDateTime(intDiv(\"made_current_at\", 1000)))");
+    }
+    else
+    {
+        char buf[32];
+        struct tm tm_buf;
+        static const std::vector<uint32_t> offsets_sec = {1, 2, 3, 5, 10, 15, 20, 30, 60};
+        const auto now = std::chrono::system_clock::now();
+        auto secs = static_cast<time_t>(duration_cast<std::chrono::seconds>(now.time_since_epoch()).count());
+
+        secs -= rg.pickRandomly(offsets_sec);
+        localtime_r(&secs, &tm_buf);
+        strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_buf);
+        return buf;
+    }
+}
+
 std::unordered_map<String, CHSetting> performanceSettings
     = {{"allow_aggregate_partitions_independently", trueOrFalseSetting},
        {"allow_calculating_subcolumns_sizes_for_merge_tree_reading", trueOrFalseSetting},

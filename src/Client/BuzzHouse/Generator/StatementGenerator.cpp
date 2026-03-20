@@ -2141,9 +2141,9 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  static const DB::Strings periods = {"1s", "15s", "1m", "1h", "1d", "7d"};
 
                  if (rg.nextSmallNumber() < 4)
-                     es->set_positional_timestamp(getNextIcebergTimestamp(rg, fc));
+                     es->set_positional_timestamp(getNextIcebergExpireTimestamp(rg, fc));
                  if (rg.nextSmallNumber() < 4)
-                     es->set_expire_before(getNextIcebergTimestamp(rg, fc));
+                     es->set_expire_before(getNextIcebergExpireTimestamp(rg, fc));
                  if (rg.nextSmallNumber() < 4)
                      es->set_retention_period(rg.pickRandomly(periods));
                  if (rg.nextSmallNumber() < 4)

@@ -207,8 +207,7 @@ ConcurrentHashJoin::~ConcurrentHashJoin()
         if (!build_phase_finished || !hash_joins[0]->data->twoLevelMapIsUsed())
             return;
 
-        if (build_phase_finished)
-            updateStatistics(hash_joins, stats_collecting_params);
+        updateStatistics(hash_joins, stats_collecting_params);
 
         for (size_t i = 0; i < slots; ++i)
         {

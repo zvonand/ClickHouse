@@ -1421,6 +1421,12 @@ void ObjectStorageQueueSource::preparePartitionProcessedRequests(
     }
 }
 
+void ObjectStorageQueueSource::setUncertainCommit()
+{
+    for (auto & file : processed_files)
+        file.metadata->setUncertainCommit();
+}
+
 void ObjectStorageQueueSource::finalizeCommit(
     bool insert_succeeded,
     UInt64 commit_id,

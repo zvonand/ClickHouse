@@ -258,7 +258,7 @@ void KeeperDispatcher::requestThread()
                         ReadableSize(total_memory_tracker.get()),
                         ReadableSize(total_memory_tracker.getRSS()),
                         request.request->getOpNum());
-                    addErrorResponses({request}, Coordination::Error::ZOUTOFMEMORY);
+                    addErrorResponses({request}, Coordination::Error::ZOUTOFMEMORY, /*may_have_dependent_reads=*/ false);
                     continue;
                 }
 
@@ -388,13 +388,31 @@ void KeeperDispatcher::requestThread()
                     /// which always returns nullptr
                     /// in that case we don't have to do manual wait because are already sure that the batch was committed when we get
                     /// the result back
-                    /// otherwise, we need to manually wait until the batch is committed
+                    /// otherwise, we need to manually wait until the batch is committed.
+                    /// TODO: there are a few problems:
+                    ///  * There can be multiple forceWaitAndProcessResult calls for different
+                    ///    batches between waitCommittedUpto calls.
+                    ///    In such case, the addErrorResponses below would apply only apply to the
+                    ///    latest of those batches, but they may all be failed.
+                    ///  * Of those multiple forceWaitAndProcessResult calls, it's possible that an
+                    ///    earlier one succeeds but a later one fails. Then we won't call
+                    ///    waitCommittedUpto on the log_idx from the earlier batch, so a subsequent
+                    ///    read may happen before that write is committed, violating
+                    ///    read-after-write consistency.
+                    ///  * With async replication, it's possible for requests to fail even after
+                    ///    their forceWaitAndProcessResult call succeeds, if the leader died after
+                    ///    accepting the requests for processing (and returning log_idx) but before
+                    ///    sending them to a majority of followers. In such case we'll never send
+                    ///    a response to the client for those requests. And we may execute
+                    ///    subsequent requests from the same session and send responses for those,
+                    ///    violating ordering of responses.
                     if (result_buf)
                     {
                         nuraft::buffer_serializer bs(result_buf);
                         auto log_idx = bs.get_u64();
 
                         /// if timeout happened set error responses for the requests
+                        asdqwe make seen log idx a field assigned next to get(), instead of looking at result_buf only here;
                         if (!keeper_context->waitCommittedUpto(log_idx, coordination_settings[CoordinationSetting::operation_timeout_ms].totalMilliseconds()))
                             addErrorResponses(prev_batch, Coordination::Error::ZOPERATIONTIMEOUT);
 
@@ -991,7 +1009,7 @@ void KeeperDispatcher::finishSession(int64_t session_id)
     }
 }
 
-void KeeperDispatcher::addErrorResponses(const KeeperRequestsForSessions & requests_for_sessions, Coordination::Error error)
+void KeeperDispatcher::addErrorResponses(const KeeperRequestsForSessions & requests_for_sessions, Coordination::Error error, bool may_have_dependent_reads)
 {
     for (const auto & request_for_session : requests_for_sessions)
     {
@@ -1007,6 +1025,11 @@ void KeeperDispatcher::addErrorResponses(const KeeperRequestsForSessions & reque
                 response->xid,
                 response->zxid,
                 error);
+
+        if (may_have_dependent_reads)
+        {
+            //asdqwe
+        }
     }
 }
 

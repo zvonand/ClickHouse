@@ -104,7 +104,9 @@ private:
 
     /// Add error responses for requests to responses queue.
     /// Clears requests.
-    void addErrorResponses(const KeeperRequestsForSessions & requests_for_sessions, Coordination::Error error);
+    /// If may_have_dependent_reads is true, also looks at read_request_queue and adds error
+    /// responses for any reads that were piggy-backed to these requests.
+    void addErrorResponses(const KeeperRequestsForSessions & requests_for_sessions, Coordination::Error error, bool may_have_dependent_reads = true);
 
     /// Forcefully wait for result and sets errors if something when wrong.
     /// Clears both arguments

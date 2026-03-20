@@ -324,7 +324,8 @@
 \
     M(KeeperRequestRejectedDueToSoftMemoryLimitCount) \
     M(KeeperStaleRequestsSkipped) \
-    M(KeeperFinishedSessionsCacheEvictions) \
+    M(KeeperLiveSessionsLockWaitMicroseconds) \
+    M(KeeperLiveSessionsLockHoldMicroseconds) \
 
 namespace ProfileEvents
 {

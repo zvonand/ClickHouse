@@ -9,7 +9,6 @@
 #include <Common/ConcurrentBoundedQueue.h>
 #include <Poco/Util/AbstractConfiguration.h>
 #include <functional>
-#include <deque>
 #include <unordered_set>
 #include <Coordination/KeeperServer.h>
 #include <Coordination/Keeper4LWInfo.h>
@@ -44,13 +43,8 @@ private:
     /// More than 1k updates is definitely misconfiguration.
     ClusterUpdateQueue cluster_update_queue{1000};
 
-    mutable std::mutex finished_sessions_mutex;
-    std::unordered_set<int64_t> finished_sessions;
-    std::deque<int64_t> finished_sessions_order; /// Tracks insertion order for FIFO eviction.
-
-    /// Insert session_id into `finished_sessions`, evicting the oldest entry if the cache is full.
-    /// Called from both the Close commit callback (all nodes) and `finishSession` (session expiry and client disconnect).
-    void trackFinishedSession(int64_t session_id);
+    mutable std::mutex live_sessions_mutex;
+    std::unordered_set<int64_t> live_sessions;
 
     mutable std::mutex session_to_response_callback_mutex;
     /// These two maps looks similar, but serves different purposes.

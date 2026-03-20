@@ -985,8 +985,9 @@ The server successfully detected this situation and will download merged part fr
     M(KeeperRemoveWatchRequest, "Number of remove watches requests", ValueType::Number) \
     M(KeeperCheckWatchRequest, "Number of remove watches requests", ValueType::Number) \
     M(KeeperRequestRejectedDueToSoftMemoryLimitCount, "Number requests that have been rejected due to soft memory limit exceeded", ValueType::Number) \
-    M(KeeperStaleRequestsSkipped, "Number of Keeper requests skipped because the session was already finished", ValueType::Number) \
-    M(KeeperFinishedSessionsCacheEvictions, "Number of times a finished session entry was evicted from the cache to make room for a new entry", ValueType::Number) \
+    M(KeeperStaleRequestsSkipped, "Number of Keeper requests skipped because the session is no longer live", ValueType::Number) \
+    M(KeeperLiveSessionsLockWaitMicroseconds, "Time spent waiting to acquire Keeper live sessions lock", ValueType::Microseconds) \
+    M(KeeperLiveSessionsLockHoldMicroseconds, "Time spent holding Keeper live sessions lock", ValueType::Microseconds) \
     \
     M(OverflowBreak, "Number of times, data processing was cancelled by query complexity limitation with setting '*_overflow_mode' = 'break' and the result is incomplete.", ValueType::Number) \
     M(OverflowThrow, "Number of times, data processing was cancelled by query complexity limitation with setting '*_overflow_mode' = 'throw' and exception was thrown.", ValueType::Number) \

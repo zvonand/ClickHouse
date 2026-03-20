@@ -30,7 +30,6 @@
 #include <Interpreters/TablesStatus.h>
 #include <Interpreters/executeQuery.h>
 #include <Interpreters/Context.h>
-#include <Interpreters/ProcessList.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ASTInsertQuery.h>
 #include <Server/TCPServer.h>
@@ -2711,14 +2710,6 @@ void TCPHandler::processCancel(QueryState & state)
 
     state.read_all_data = true;
     state.stop_query = true;
-
-    /// Cancel through the ProcessListElement so that all pipelines (including those
-    /// running during analysis, e.g. scalar subqueries) see the cancellation.
-    if (state.query_context)
-    {
-        if (auto process_list_element = state.query_context->getProcessListElement())
-            process_list_element->cancelQuery(CancelReason::CANCELLED_BY_USER);
-    }
 
     throw Exception(ErrorCodes::QUERY_WAS_CANCELLED_BY_CLIENT, "Received 'Cancel' packet from the client, canceling the query.");
 }

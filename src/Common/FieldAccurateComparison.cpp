@@ -27,6 +27,9 @@ static Float64 decimalFieldToFloat64(const DecimalField<T> & decimal)
 /** More precise comparison, used for index.
   * Differs from Field::operator< and Field::operator== in that it also compares values of different types.
   * Comparison rules are same as in FunctionsComparison (to be consistent with expression evaluation in query).
+  *
+  * NaN policy: NaN == NaN is true (for same-type), NaN != any non-NaN value (for cross-type).
+  * This is consistent with ClickHouse sort order where NaN has a defined position.
   */
 class FieldVisitorAccurateEquals : public StaticVisitor<bool>
 {
@@ -54,8 +57,6 @@ public:
             {
                 if constexpr (std::is_floating_point_v<T>)
                 {
-                    /// NaN should be treated as equal to NaN for index range analysis
-                    /// (consistent with ClickHouse sort order where NaN has a defined position).
                     static constexpr int nan_direction_hint = 1;
                     return FloatCompareHelper<T>::equals(l, r, nan_direction_hint);
                 }
@@ -65,30 +66,30 @@ public:
 
             if constexpr (is_arithmetic_v<T> && is_arithmetic_v<U>)
             {
-                /// NaN is not equal to any non-NaN value in cross-type comparisons.
                 if constexpr (std::is_floating_point_v<T>)
-                {
                     if (isNaN(l)) return false;
-                }
                 if constexpr (std::is_floating_point_v<U>)
-                {
                     if (isNaN(r)) return false;
-                }
                 return accurate::equalsOp(l, r);
             }
 
             if constexpr (is_decimal_field<T> && is_decimal_field<U>)
                 return l == r;
 
-            /// When comparing Decimal with float types, convert both to Float64.
-            /// This follows the same approach as FunctionsComparison.
+            /// Decimal vs Float: convert both to Float64 (same approach as FunctionsComparison).
             if constexpr (is_decimal_field<T> && is_floating_point<U>)
+            {
+                if (isNaN(r)) return false;
                 return accurate::equalsOp(decimalFieldToFloat64(l), static_cast<Float64>(r));
+            }
 
             if constexpr (is_floating_point<T> && is_decimal_field<U>)
+            {
+                if (isNaN(l)) return false;
                 return accurate::equalsOp(static_cast<Float64>(l), decimalFieldToFloat64(r));
+            }
 
-            /// When comparing Decimal with Integer, convert integer to Decimal256 for precise comparison.
+            /// Decimal vs Integer: convert integer to Decimal256 for precise comparison.
             if constexpr (is_decimal_field<T> && is_integer<U>)
                 return l == DecimalField<Decimal256>(Decimal256(r), 0);
 
@@ -118,6 +119,9 @@ public:
 };
 
 
+/** Less-than comparison with NaN policy: NaN is greater than all values (nan_direction_hint = 1).
+  * This is consistent with ClickHouse sort order and prevents Range::intersectsRange breakage.
+  */
 class FieldVisitorAccurateLess : public StaticVisitor<bool>
 {
 public:
@@ -150,8 +154,6 @@ public:
             {
                 if constexpr (std::is_floating_point_v<T>)
                 {
-                    /// NaN should be treated as greater than all normal values (consistent with ClickHouse sort order).
-                    /// Plain IEEE 754 `<` makes NaN incomparable, which breaks Range::intersectsRange.
                     static constexpr int nan_direction_hint = 1;
                     return FloatCompareHelper<T>::less(l, r, nan_direction_hint);
                 }
@@ -161,31 +163,30 @@ public:
 
             if constexpr (is_arithmetic_v<T> && is_arithmetic_v<U>)
             {
-                /// For cross-type comparisons involving NaN, treat NaN as greater than all values
-                /// (consistent with ClickHouse sort order, nan_direction_hint = 1).
                 if constexpr (std::is_floating_point_v<T>)
-                {
                     if (isNaN(l)) return false; /// NaN is not less than anything
-                }
                 if constexpr (std::is_floating_point_v<U>)
-                {
                     if (isNaN(r)) return true; /// everything is less than NaN
-                }
                 return accurate::lessOp(l, r);
             }
 
             if constexpr (is_decimal_field<T> && is_decimal_field<U>)
                 return l < r;
 
-            /// When comparing Decimal with float types, convert both to Float64.
-            /// This follows the same approach as FunctionsComparison.
+            /// Decimal vs Float: convert both to Float64 (same approach as FunctionsComparison).
             if constexpr (is_decimal_field<T> && is_floating_point<U>)
+            {
+                if (isNaN(r)) return true;  /// decimal is less than NaN
                 return accurate::lessOp(decimalFieldToFloat64(l), static_cast<Float64>(r));
+            }
 
             if constexpr (is_floating_point<T> && is_decimal_field<U>)
+            {
+                if (isNaN(l)) return false; /// NaN is not less than anything
                 return accurate::lessOp(static_cast<Float64>(l), decimalFieldToFloat64(r));
+            }
 
-            /// When comparing Decimal with Integer, convert integer to Decimal256 for precise comparison.
+            /// Decimal vs Integer: convert integer to Decimal256 for precise comparison.
             if constexpr (is_decimal_field<T> && is_integer<U>)
                 return l < DecimalField<Decimal256>(Decimal256(r), 0);
 
@@ -221,8 +222,7 @@ public:
     template <typename T, typename U>
     bool operator()(const T & l, const U & r) const
     {
-        auto less_cmp = FieldVisitorAccurateLess();
-        return !less_cmp(r, l);
+        return !FieldVisitorAccurateLess()(r, l);
     }
 };
 

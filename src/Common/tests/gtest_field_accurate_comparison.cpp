@@ -38,3 +38,36 @@ TEST(FieldAccurateComparisonTest, DecimalVsFloat64)
     EXPECT_FALSE(accurateEquals(decimal_neg_33_30, float_neg_44_40));
     EXPECT_FALSE(accurateLessOrEqual(decimal_neg_33_30, float_neg_44_40));
 }
+
+/// Test Decimal vs NaN comparisons
+/// NaN should be treated as greater than all values (nan_direction_hint = 1).
+/// This is critical for range analysis consistency.
+TEST(FieldAccurateComparisonTest, DecimalVsNaN)
+{
+    Field decimal_val = DecimalField<Decimal64>(4440, 2);
+    Field float_nan = Float64(std::numeric_limits<double>::quiet_NaN());
+
+    /// equals: NaN is not equal to anything
+    EXPECT_FALSE(accurateEquals(decimal_val, float_nan));
+    EXPECT_FALSE(accurateEquals(float_nan, decimal_val));
+    EXPECT_TRUE(accurateEquals(float_nan, float_nan));   /// same-type NaN: FloatCompareHelper treats NaN == NaN as true
+
+    /// less: NaN is greater than all values
+    EXPECT_TRUE(accurateLess(decimal_val, float_nan));   /// decimal < NaN
+    EXPECT_FALSE(accurateLess(float_nan, decimal_val));  /// NaN is not less than decimal
+
+    /// lessOrEqual: derived from less as !less(r, l)
+    EXPECT_TRUE(accurateLessOrEqual(decimal_val, float_nan));   /// decimal <= NaN
+    EXPECT_FALSE(accurateLessOrEqual(float_nan, decimal_val));  /// NaN <= decimal is false
+
+    /// Negative decimal vs NaN
+    Field decimal_neg = DecimalField<Decimal64>(-4440, 2);
+    EXPECT_TRUE(accurateLess(decimal_neg, float_nan));
+    EXPECT_FALSE(accurateLess(float_nan, decimal_neg));
+
+    /// Zero decimal vs NaN
+    Field decimal_zero = DecimalField<Decimal64>(0, 2);
+    EXPECT_TRUE(accurateLess(decimal_zero, float_nan));
+    EXPECT_FALSE(accurateLess(float_nan, decimal_zero));
+    EXPECT_FALSE(accurateEquals(decimal_zero, float_nan));
+}

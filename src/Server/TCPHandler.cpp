@@ -30,6 +30,7 @@
 #include <Interpreters/TablesStatus.h>
 #include <Interpreters/executeQuery.h>
 #include <Interpreters/Context.h>
+#include <Interpreters/ProcessList.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ASTInsertQuery.h>
 #include <Server/TCPServer.h>
@@ -797,10 +798,8 @@ void TCPHandler::runImpl()
                         getFormatSettings(query_state->query_context));
                 });
 
-            /// Helper lambda to create cancel callbacks with optional progress sending
-            auto make_cancel_callback = [this, &query_state](bool send_progress)
-            {
-                return [this, &query_state, send_progress]()
+            query_state->query_context->setInteractiveCancelCallback(
+                [this, &query_state]()
                 {
                     std::lock_guard lock(*callback_mutex);
 
@@ -810,20 +809,11 @@ void TCPHandler::runImpl()
                     if (query_state->stop_read_return_partial_result)
                         return true;
 
-                    if (send_progress)
-                        sendProgress(*query_state);
+                    sendProgress(*query_state);
                     sendSelectProfileEvents(*query_state);
                     sendLogs(*query_state);
                     return false;
-                };
-            };
-
-            /// Full callback with progress sending for main query execution
-            query_state->query_context->setInteractiveCancelCallback(make_cancel_callback(true));
-
-            /// Lightweight callback without progress sending for subquery execution
-            /// (avoids resetting progress counters during scalar subquery execution)
-            query_state->query_context->setSubqueryCancelCallback(make_cancel_callback(false));
+                });
 
             if (client_tcp_protocol_version < DBMS_MIN_REVISION_WITH_OUT_OF_ORDER_BUCKETS_IN_AGGREGATION)
                 query_state->query_context->setSetting("enable_producing_buckets_out_of_order_in_aggregation", false);
@@ -2722,6 +2712,14 @@ void TCPHandler::processCancel(QueryState & state)
     state.read_all_data = true;
     state.stop_query = true;
 
+    /// Cancel through the ProcessListElement so that all pipelines (including those
+    /// running during analysis, e.g. scalar subqueries) see the cancellation.
+    if (state.query_context)
+    {
+        if (auto process_list_element = state.query_context->getProcessListElement())
+            process_list_element->cancelQuery(CancelReason::CANCELLED_BY_USER);
+    }
+
     throw Exception(ErrorCodes::QUERY_WAS_CANCELLED_BY_CLIENT, "Received 'Cancel' packet from the client, canceling the query.");
 }
 
@@ -2915,11 +2913,26 @@ void TCPHandler::updateProgress(QueryState & state, const Progress & value)
 
 void TCPHandler::sendProgress(QueryState & state)
 {
-    writeVarUInt(Protocol::Server::Progress, *out);
-    auto increment = state.progress.fetchValuesAndResetPiecewiseAtomically();
+    auto current = state.progress.getValues();
+
+    ProgressValues increment;
+    increment.read_rows = current.read_rows - state.sent_progress.read_rows;
+    increment.read_bytes = current.read_bytes - state.sent_progress.read_bytes;
+    increment.total_rows_to_read = current.total_rows_to_read - state.sent_progress.total_rows_to_read;
+    increment.total_bytes_to_read = current.total_bytes_to_read - state.sent_progress.total_bytes_to_read;
+    increment.written_rows = current.written_rows - state.sent_progress.written_rows;
+    increment.written_bytes = current.written_bytes - state.sent_progress.written_bytes;
+    increment.result_rows = current.result_rows - state.sent_progress.result_rows;
+    increment.result_bytes = current.result_bytes - state.sent_progress.result_bytes;
+    increment.memory_usage = current.memory_usage;
+
     UInt64 current_elapsed_ns = state.watch.elapsedNanoseconds();
     increment.elapsed_ns = current_elapsed_ns - state.prev_elapsed_ns;
     state.prev_elapsed_ns = current_elapsed_ns;
+
+    state.sent_progress = current;
+
+    writeVarUInt(Protocol::Server::Progress, *out);
     increment.write(*out, client_tcp_protocol_version);
 
     out->finishChunk();

@@ -43,7 +43,6 @@ namespace Setting
 namespace ErrorCodes
 {
     extern const int INCORRECT_RESULT_OF_SCALAR_SUBQUERY;
-    extern const int QUERY_WAS_CANCELLED_BY_CLIENT;
 }
 
 
@@ -211,36 +210,32 @@ void ExecuteScalarSubqueriesMatcher::visit(const ASTSubquery & subquery, ASTPtr 
         else
         {
             auto io = interpreter->execute();
-            auto raw_cancel_callback = data.getContext()->hasQueryContext() ? data.getContext()->getQueryContext()->getSubqueryCancelCallback() : nullptr;
-
-            /// Wrap the cancel callback to check return value and throw exception if cancelled
-            std::function<bool()> cancel_callback;
-            if (raw_cancel_callback)
-            {
-                cancel_callback = [raw_cancel_callback]()
-                {
-                    if (raw_cancel_callback())
-                        throw Exception(ErrorCodes::QUERY_WAS_CANCELLED_BY_CLIENT, "Received 'Cancel' packet from the client, canceling the query.");
-                    return false;
-                };
-            }
-
+            auto cancel_callback = data.getContext()->hasQueryContext() ? data.getContext()->getQueryContext()->getInteractiveCancelCallback() : nullptr;
             const UInt64 interactive_delay_ms = std::max(UInt64(100), data.getContext()->getSettingsRef()[Setting::interactive_delay] / 1000);
 
             PullingAsyncPipelineExecutor executor(io.pipeline);
             io.pipeline.setProgressCallback(data.getContext()->getProgressCallback());
             io.pipeline.setConcurrencyControl(data.getContext()->getSettingsRef()[Setting::use_concurrency_control]);
-            if (cancel_callback)
+
+            /// Pull blocks until a non-empty one is found. When a cancel callback is available,
+            /// periodically poll for Cancel packets. The callback return value is not checked:
+            /// `processCancel` cancels through the ProcessListElement, so the next `pull` terminates the loop.
+            auto pull_until_non_empty = [&](Block & target_block)
             {
-                while (block.rows() == 0 && executor.pull(block, interactive_delay_ms))
-                    cancel_callback();
-            }
-            else
-            {
-                while (block.rows() == 0 && executor.pull(block))
+                if (cancel_callback)
                 {
+                    while (target_block.rows() == 0 && executor.pull(target_block, interactive_delay_ms))
+                        cancel_callback();
                 }
-            }
+                else
+                {
+                    while (target_block.rows() == 0 && executor.pull(target_block))
+                    {
+                    }
+                }
+            };
+
+            pull_until_non_empty(block);
 
             if (block.rows() == 0)
             {
@@ -277,17 +272,7 @@ void ExecuteScalarSubqueriesMatcher::visit(const ASTSubquery & subquery, ASTPtr 
                 throw Exception(ErrorCodes::INCORRECT_RESULT_OF_SCALAR_SUBQUERY, "Scalar subquery returned more than one row");
 
             Block tmp_block;
-            if (cancel_callback)
-            {
-                while (tmp_block.rows() == 0 && executor.pull(tmp_block, interactive_delay_ms))
-                    cancel_callback();
-            }
-            else
-            {
-                while (tmp_block.rows() == 0 && executor.pull(tmp_block))
-                {
-                }
-            }
+            pull_until_non_empty(tmp_block);
 
             if (tmp_block.rows() != 0)
                 throw Exception(ErrorCodes::INCORRECT_RESULT_OF_SCALAR_SUBQUERY, "Scalar subquery returned more than one row");

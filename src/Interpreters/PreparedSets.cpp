@@ -44,7 +44,6 @@ namespace Setting
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
-    extern const int QUERY_WAS_CANCELLED_BY_CLIENT;
 }
 
 SizeLimits PreparedSets::getSizeLimitsForSet(const Settings & settings)
@@ -315,17 +314,8 @@ void FutureSetFromSubquery::buildSetInplace(const ContextPtr & context)
     CompletedPipelineExecutor executor(pipeline);
     if (context->hasQueryContext())
     {
-        if (auto raw_cancel_callback = context->getQueryContext()->getSubqueryCancelCallback())
-        {
-            /// Wrap the cancel callback to check return value and throw exception if cancelled
-            auto cancel_callback = [raw_cancel_callback]()
-            {
-                if (raw_cancel_callback())
-                    throw Exception(ErrorCodes::QUERY_WAS_CANCELLED_BY_CLIENT, "Received 'Cancel' packet from the client, canceling the query.");
-                return false;
-            };
+        if (auto cancel_callback = context->getQueryContext()->getInteractiveCancelCallback())
             executor.setCancelCallback(std::move(cancel_callback), std::max(UInt64(100), context->getSettingsRef()[Setting::interactive_delay] / 1000));
-        }
     }
     executor.execute();
 }
@@ -369,17 +359,8 @@ SetPtr FutureSetFromSubquery::buildOrderedSetInplace(const ContextPtr & context)
     CompletedPipelineExecutor executor(pipeline);
     if (context->hasQueryContext())
     {
-        if (auto raw_cancel_callback = context->getQueryContext()->getSubqueryCancelCallback())
-        {
-            /// Wrap the cancel callback to check return value and throw exception if cancelled
-            auto cancel_callback = [raw_cancel_callback]()
-            {
-                if (raw_cancel_callback())
-                    throw Exception(ErrorCodes::QUERY_WAS_CANCELLED_BY_CLIENT, "Received 'Cancel' packet from the client, canceling the query.");
-                return false;
-            };
+        if (auto cancel_callback = context->getQueryContext()->getInteractiveCancelCallback())
             executor.setCancelCallback(std::move(cancel_callback), std::max(UInt64(100), context->getSettingsRef()[Setting::interactive_delay] / 1000));
-        }
     }
     executor.execute();
 

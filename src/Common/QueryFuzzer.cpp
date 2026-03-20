@@ -301,7 +301,7 @@ Field QueryFuzzer::fuzzField(Field field)
     if (type == Field::Types::String)
     {
         auto & str = field.safeGet<std::string>();
-        const UInt64 action = fuzz_rand() % 12;
+        const UInt64 action = fuzz_rand() % 15;
         switch (action)
         {
             case 0:
@@ -313,6 +313,13 @@ Field QueryFuzzer::fuzzField(Field field)
             case 2:
                 str = str + str + str + str;
                 break;
+            case 3: {
+                /// Boundary typed strings (date, time, UUID, IP, JSON) — stress parsing paths
+                const Field f = getRandomField(3 + fuzz_rand() % 7);
+                if (f.getType() == Field::Types::String)
+                    str = f.safeGet<String>();
+            }
+            break;
             case 4:
                 if (!str.empty())
                 {
@@ -337,6 +344,59 @@ Field QueryFuzzer::fuzzField(Field field)
                     }
                 }
                 break;
+            case 8:
+                /// Null byte as full string — stresses functions that use strlen internally
+                str = std::string("\0", 1);
+                break;
+            case 9: {
+                /// SQL/regex metacharacters — stresses match(), extract(), LIKE, escaping
+                static const Strings vals = {"'", "\\'", "\\", "\"", ";--", "%", "_", "/**/", ".*", "[a-z]", "^$", "(?i)"};
+                str = vals[fuzz_rand() % vals.size()];
+                break;
+            }
+            case 10: {
+                /// Numeric strings — stresses implicit cast / toInt / toFloat paths
+                const Field f = getRandomField(fuzz_rand() % 3);
+                switch (f.getType())
+                {
+                    case Field::Types::Int64:
+                        str = std::to_string(f.safeGet<Int64>());
+                        break;
+                    case Field::Types::UInt64:
+                        str = std::to_string(f.safeGet<UInt64>());
+                        break;
+                    case Field::Types::Float64: {
+                        const double v = f.safeGet<Float64>();
+                        if (std::isnan(v))
+                            str = "nan";
+                        else if (std::isinf(v))
+                            str = v > 0 ? "inf" : "-inf";
+                        else
+                            str = std::to_string(v);
+                        break;
+                    }
+                    case Field::Types::Decimal64: {
+                        const auto & d = f.safeGet<DecimalField<Decimal64>>();
+                        str = std::to_string(d.getValue().value);
+                        break;
+                    }
+                    default:
+                        break;
+                }
+                break;
+            }
+            case 11: {
+                /// Unicode edge cases — BOM, zero-width space, overlong encoding, RTL override
+                static const Strings vals = {
+                    "\xEF\xBB\xBF", /// UTF-8 BOM
+                    "\xE2\x80\x8B", /// zero-width space
+                    "\xE2\x80\xAE", /// RTL override
+                    "\xC0\xAF", /// overlong encoding of '/'
+                    "\xED\xA0\x80", /// surrogate half (invalid UTF-8)
+                };
+                str = vals[fuzz_rand() % vals.size()];
+                break;
+            }
             default:
                 /// Do nothing
                 break;

@@ -715,8 +715,13 @@ void MutationsInterpreter::prepare(bool dry_run)
     std::vector<String> read_columns;
 
     /// Columns that are being cleared and need default values in the pipeline
-    /// for correct projection rebuild (instead of passing through original values).
+    /// for correct projection/materialized-column rebuild (instead of passing
+    /// through original values).
     NameSet cleared_columns_for_projections;
+
+    /// Whether any MATERIALIZED column depends on a cleared column and needs
+    /// to be recalculated with the type-default value.
+    bool need_recalculate_materialized_for_clear = false;
 
     if (has_lightweight_delete_materialization || has_rewrite_parts)
     {
@@ -1152,6 +1157,38 @@ void MutationsInterpreter::prepare(bool dry_run)
                     materialized_projections.insert(projection.name);
                 }
             }
+
+            /// When clearing a column, any MATERIALIZED column whose expression
+            /// depends on the cleared column must be recalculated so its stored
+            /// data stays consistent with the new (default) value.
+            if (!need_recalculate_materialized_for_clear)
+            {
+                for (const auto & column : columns_desc)
+                {
+                    if (column.default_desc.kind != ColumnDefaultKind::Materialized
+                        || !available_columns_set.contains(column.name))
+                        continue;
+
+                    auto query = column.default_desc.expression->clone();
+                    replaceSubcolumnsToGetSubcolumnFunctionInQuery(query, all_columns);
+                    auto syntax_result = TreeRewriter(context).analyze(query, all_columns);
+                    for (const auto & dep : syntax_result->requiredSourceColumns())
+                    {
+                        if (dep == command.column_name)
+                        {
+                            need_recalculate_materialized_for_clear = true;
+                            /// Ensure the cleared column enters the readonly stage
+                            /// with its default value so the materialized expression
+                            /// evaluates correctly.
+                            dependencies.emplace(command.column_name, ColumnDependency::PROJECTION);
+                            cleared_columns_for_projections.insert(command.column_name);
+                            break;
+                        }
+                    }
+                    if (need_recalculate_materialized_for_clear)
+                        break;
+                }
+            }
         }
         /// The following mutations handled separately:
         else if (command.type == MutationCommand::APPLY_DELETED_MASK
@@ -1246,6 +1283,32 @@ void MutationsInterpreter::prepare(bool dry_run)
                     stages.back().column_to_updated.emplace(
                         column, make_intrusive<ASTIdentifier>(column));
                 }
+            }
+        }
+    }
+
+    /// Recalculate all MATERIALIZED columns when at least one of them depends
+    /// on a cleared column.  This mirrors the logic used for UPDATE (see the
+    /// `affected_materialized` block above): we re-evaluate *every*
+    /// MATERIALIZED expression so that transitive dependencies are covered.
+    if (need_recalculate_materialized_for_clear)
+    {
+        stages.emplace_back(context);
+        for (const auto & column : columns_desc)
+        {
+            if (column.default_desc.kind == ColumnDefaultKind::Materialized)
+            {
+                auto type_literal = make_intrusive<ASTLiteral>(column.type->getName());
+
+                ASTPtr materialized_column = makeASTFunction("_CAST",
+                    column.default_desc.expression->clone(),
+                    type_literal);
+
+                replaceSubcolumnsToGetSubcolumnFunctionInQuery(materialized_column, all_columns);
+
+                stages.back().column_to_updated.emplace(
+                    column.name,
+                    materialized_column);
             }
         }
     }

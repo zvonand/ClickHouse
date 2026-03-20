@@ -13,7 +13,6 @@
 #include <Common/ProfiledLocks.h>
 #include <Coordination/ReadBufferFromNuraftBuffer.h>
 #include <Coordination/WriteBufferFromNuraftBuffer.h>
-#include <Disks/DiskLocal.h>
 #include <boost/noncopyable.hpp>
 #include <IO/ReadBufferFromFileBase.h>
 #include <IO/ReadHelpers.h>
@@ -86,7 +85,6 @@ namespace ErrorCodes
 }
 
 /// nuraft::snapshot holds only Raft metadata (last_log_idx, last_log_term, size, cluster_config).
-/// It is non-copyable, so serialize+deserialize is used as a deep clone.
 static nuraft::ptr<nuraft::snapshot> cloneSnapshotMeta(nuraft::snapshot & s)
 {
     auto buf = s.serialize();
@@ -136,15 +134,6 @@ KeeperStateMachine<Storage>::KeeperStateMachine(
 {
 }
 
-namespace
-{
-
-bool isLocalDisk(const IDisk & disk)
-{
-    return dynamic_cast<const DiskLocal *>(&disk) != nullptr;
-}
-
-}
 
 template<typename Storage>
 void KeeperStateMachine<Storage>::init()
@@ -871,17 +860,17 @@ void KeeperStateMachine<Storage>::create_snapshot(nuraft::snapshot & s, nuraft::
                         /// we rely on the fact that the snapshot disk cannot be changed during runtime
                         if (isLocalDisk(*keeper_context->getLatestSnapshotDisk()))
                         {
-                            auto local_snapshot_info = snapshot_manager.serializeSnapshotToDisk(*snapshot);
-                            latest_snapshot_info = std::move(local_snapshot_info);
+                            latest_snapshot_info = snapshot_manager.serializeSnapshotToDisk(*snapshot);
                         }
                         else
                         {
                             auto snapshot_buf = snapshot_manager.serializeSnapshotToBuffer(*snapshot);
-                            auto local_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(
+                            auto snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(
                                 *snapshot_buf, snapshot->snapshot_meta->get_last_log_idx());
-                            latest_snapshot_info = std::move(local_snapshot_info);
+                            latest_snapshot_info = std::move(snapshot_info);
                         }
                         snapshot_loader_info.reset();
+                        cancelIfHasUnfinishedSnapshotReceive();
 
                         ProfileEvents::increment(ProfileEvents::KeeperSnapshotCreations);
                         LOG_DEBUG(
@@ -954,129 +943,112 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
 {
     LOG_DEBUG(log, "Saving snapshot {} obj_id {}", s.get_last_log_idx(), obj_id);
 
-    std::shared_ptr<SnapshotFileInfo> completed_local_snapshot_info;
+    std::lock_guard lock(snapshots_lock);
+    try
     {
-        std::lock_guard lock(snapshots_lock);
-        try
+
+        if (is_first_obj && is_last_obj)
+        {
+            /// If there is non-finalized state from previous call - clean it up.
+            cancelIfHasUnfinishedSnapshotReceive();
+            latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(data, s.get_last_log_idx());
+            ++obj_id;
+        }
+        else
         {
             if (is_first_obj)
-                LOG_DEBUG(
-                    log,
-                    "Receiving snapshot {} to {} disk",
-                    s.get_last_log_idx(),
-                    isLocalDisk(*keeper_context->getSnapshotDisk()) ? "local" : "remote");
-
-            if (is_first_obj && is_last_obj)
             {
                 /// If there is non-finalized state from previous call - clean it up.
                 cancelIfHasUnfinishedSnapshotReceive();
-                /// Single-chunk transfer, write all data at once.
-                latest_snapshot_info = snapshot_manager.serializeSnapshotBufferToDisk(data, s.get_last_log_idx());
-                latest_snapshot_meta = cloneSnapshotMeta(s);
-                /// Reset snapshot loader if present, it is needed only on leader
-                snapshot_loader_info.reset();
-                ++obj_id;
-                ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotObject);
+                snapshot_receive_ctx = snapshot_manager.beginSnapshotReceiveToDisk(s.get_last_log_idx());
             }
-            else
-            {
-                if (is_first_obj)
-                {
-                    /// If there is non-finalized state from previous call - clean it up.
-                    cancelIfHasUnfinishedSnapshotReceive();
-                    snapshot_receive_ctx = snapshot_manager.beginSnapshotReceiveToDisk(s.get_last_log_idx());
-                }
 
-                if (!snapshot_receive_ctx || snapshot_receive_ctx->log_idx != s.get_last_log_idx())
+            if (!snapshot_receive_ctx || snapshot_receive_ctx->log_idx != s.get_last_log_idx())
+            {
+                /// Stale context — ask leader to restart.
+                LOG_WARNING(
+                    log,
+                    "Snapshot receive context is missing or stale for snapshot {} obj_id {} "
+                    "(context log_idx: {}). Resetting to obj_id=0 to restart transfer.",
+                    s.get_last_log_idx(),
+                    obj_id,
+                    snapshot_receive_ctx ? snapshot_receive_ctx->log_idx : 0);
+                cancelIfHasUnfinishedSnapshotReceive();
+                obj_id = 0;
+                return;
+            }
+
+            if (!is_first_obj && obj_id != snapshot_receive_ctx->expected_obj_id)
+            {
+                if (obj_id < snapshot_receive_ctx->expected_obj_id)
                 {
-                    /// Stale context — ask leader to restart.
+                    /// Duplicate — skip, advance leader.
                     LOG_WARNING(
                         log,
-                        "Snapshot receive context is missing or stale for snapshot {} obj_id {} "
-                        "(context log_idx: {}). Resetting to obj_id=0 to restart transfer.",
+                        "Snapshot {} received duplicate chunk {} (expected {}), skipping.",
                         s.get_last_log_idx(),
                         obj_id,
-                        snapshot_receive_ctx ? snapshot_receive_ctx->log_idx : 0);
-                    cancelIfHasUnfinishedSnapshotReceive();
+                        snapshot_receive_ctx->expected_obj_id);
+                    obj_id = snapshot_receive_ctx->expected_obj_id;
+                }
+                else
+                {
+                    /// Gap — restart.
+                    LOG_WARNING(
+                        log,
+                        "Snapshot {} received out-of-order chunk {} (expected {}), restarting.",
+                        s.get_last_log_idx(),
+                        obj_id,
+                        snapshot_receive_ctx->expected_obj_id);
                     obj_id = 0;
-                    return;
                 }
-
-                if (!is_first_obj && obj_id != snapshot_receive_ctx->expected_obj_id)
-                {
-                    if (obj_id < snapshot_receive_ctx->expected_obj_id)
-                    {
-                        /// Duplicate — skip, advance leader.
-                        LOG_WARNING(
-                            log,
-                            "Snapshot {} received duplicate chunk {} (expected {}), skipping.",
-                            s.get_last_log_idx(),
-                            obj_id,
-                            snapshot_receive_ctx->expected_obj_id);
-                        obj_id = snapshot_receive_ctx->expected_obj_id;
-                    }
-                    else
-                    {
-                        /// Gap — restart.
-                        LOG_WARNING(
-                            log,
-                            "Snapshot {} received out-of-order chunk {} (expected {}), restarting.",
-                            s.get_last_log_idx(),
-                            obj_id,
-                            snapshot_receive_ctx->expected_obj_id);
-                        obj_id = 0;
-                    }
-                    if (!obj_id)
-                        cancelIfHasUnfinishedSnapshotReceive();
-                    return;
-                }
-
-                ReadBufferFromNuraftBuffer reader(data);
-                copyData(reader, *snapshot_receive_ctx->write_buf);
-                /// Advance obj_id to the next chunk we want; NuRaft forwards it to the leader as the next offset.
-                obj_id = ++snapshot_receive_ctx->expected_obj_id;
-                ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotObject);
-
-                if (!is_first_obj && !is_last_obj)
-                    FailPointInjection::pauseFailPoint(FailPoints::keeper_save_snapshot_pause_mid_transfer);
-
-                if (is_last_obj)
-                {
-                    latest_snapshot_info = snapshot_manager.finalizeSnapshotReceiveToDisk(*snapshot_receive_ctx);
-                    latest_snapshot_meta = cloneSnapshotMeta(s);
-                    snapshot_receive_ctx.reset();
-                    /// Reset snapshot loader if present, it is needed only on leader
-                    snapshot_loader_info.reset();
-                }
+                if (!obj_id)
+                    cancelIfHasUnfinishedSnapshotReceive();
+                return;
             }
+
+            ReadBufferFromNuraftBuffer reader(data);
+            copyData(reader, *snapshot_receive_ctx->write_buf);
+            /// Advance obj_id to the next chunk we want; NuRaft forwards it to the leader as the next offset.
+            obj_id = ++snapshot_receive_ctx->expected_obj_id;
+
+            if (!is_first_obj && !is_last_obj)
+                FailPointInjection::pauseFailPoint(FailPoints::keeper_save_snapshot_pause_mid_transfer);
 
             if (is_last_obj)
-            {
-                ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshot);
-                completed_local_snapshot_info = latest_snapshot_info;
-            }
+                latest_snapshot_info = snapshot_manager.finalizeSnapshotReceiveToDisk(*snapshot_receive_ctx);
         }
-        catch (...)
+
+        ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotObject);
+        if (is_last_obj)
         {
-            cancelIfHasUnfinishedSnapshotReceive();
-            tryLogCurrentException(log);
-            ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotFailed);
+            latest_snapshot_meta = cloneSnapshotMeta(s);
+            snapshot_receive_ctx.reset();
+            snapshot_loader_info.reset();
+
+            uint64_t snp_size = 0;
+            try
+            {
+                if (latest_snapshot_info)
+                {
+                    snp_size = latest_snapshot_info->disk->getFileSize(latest_snapshot_info->path);
+                    latest_snapshot_size.store(snp_size, std::memory_order_relaxed);
+                }
+            }
+            catch (...)
+            {
+                tryLogCurrentException(log, "Failed to get snapshot size after save");
+            }
+
+            ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshot);
+            LOG_DEBUG(log, "Saved snapshot {} ({} chunks, {} bytes)", s.get_last_log_idx(), obj_id, snp_size);
         }
     }
-
-    if (completed_local_snapshot_info)
+    catch (...)
     {
-        uint64_t snp_size = 0;
-        try
-        {
-            snp_size = completed_local_snapshot_info->disk->getFileSize(completed_local_snapshot_info->path);
-            latest_snapshot_size.store(snp_size, std::memory_order_relaxed);
-        }
-        catch (...)
-        {
-            tryLogCurrentException(log, "Failed to get snapshot size after save");
-        }
-        LOG_DEBUG(log, "Saved snapshot {} ({} chunks, {} bytes)", s.get_last_log_idx(), obj_id, snp_size);
+        cancelIfHasUnfinishedSnapshotReceive();
+        tryLogCurrentException(log);
+        ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotFailed);
     }
 }
 
@@ -1103,7 +1075,7 @@ struct ISnapshotLoader
 /// Remote disk loader: reads the snapshot file from remote storage into a shared in-memory buffer,
 /// serving chunks to concurrent followers without re-reading from remote storage.
 /// All fields are protected by load_mutex; init() and getChunk() acquire it internally.
-struct RemoteSnapshotLoader : ISnapshotLoader
+struct RemoteSnapshotLoader : public ISnapshotLoader
 {
     uint64_t snapshot_id = 0;
     uint64_t file_size = 0;
@@ -1164,6 +1136,7 @@ struct RemoteSnapshotLoader : ISnapshotLoader
             chassert(reader != nullptr);
             try
             {
+                LOG_TEST(log_, "Loading at offset {} size {}", offset, length);
                 reader->readStrict(
                     reinterpret_cast<char *>(buf->data_begin()) + loaded_bytes,
                     needed - loaded_bytes);
@@ -1180,6 +1153,8 @@ struct RemoteSnapshotLoader : ISnapshotLoader
                 reader.reset();
             }
         }
+        else
+            LOG_TEST(log_, "Snapshot at offset {} is already loaded", offset);
         return buf->data_begin() + offset;
     }
 };
@@ -1287,7 +1262,6 @@ int IKeeperStateMachine::read_logical_snp_obj(
     });
 
     std::optional<SnapshotFileInfo> snapshot_info;
-    /// Shared remote loader; copied under snapshots_lock so init() needs no second lock acquisition.
     std::shared_ptr<ISnapshotLoader> remote_loader;
     const uint64_t configured_chunk_size = keeper_context->getCoordinationSettings()[CoordinationSetting::snapshot_transfer_chunk_size];
 

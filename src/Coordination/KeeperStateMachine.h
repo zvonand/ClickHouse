@@ -21,7 +21,7 @@ using SnapshotsQueue = ConcurrentBoundedQueue<CreateSnapshotTask>;
 
 struct KeeperStorageStats;
 
-struct ISnapshotLoader; /// defined in KeeperStateMachine.cpp
+struct ISnapshotLoader;
 
 class IKeeperStateMachine : public nuraft::state_machine
 {
@@ -127,14 +127,18 @@ public:
 
 protected:
     CommitCallback commit_callback;
+
+    /// Latest snapshot metadata, stored on both leader/follower.
     SnapshotMetadataPtr latest_snapshot_meta TSA_GUARDED_BY(snapshots_lock) = nullptr;
     std::shared_ptr<SnapshotFileInfo> latest_snapshot_info TSA_GUARDED_BY(snapshots_lock);
 
+    /// Follower snapshot receive context.
+    /// Kept for the duration of snapshot transfer, reset on completion/error.
     std::unique_ptr<SnapshotReceiveCtx> snapshot_receive_ctx TSA_GUARDED_BY(snapshots_lock);
 
-    /// Cached loader for serving the latest snapshot to lagging followers over a remote disk.
-    /// Shared across concurrent followers transferring the same snapshot; reset when a new snapshot is created
-    /// or when the loader encounters an error.
+    /// Leader snapshot loader info, stored only in case of remote disk.
+    /// Shared across concurrent followers transferring the same snapshot.
+    /// Reset when a new snapshot is created or when the loader encounters an error.
     std::shared_ptr<ISnapshotLoader> snapshot_loader_info TSA_GUARDED_BY(snapshots_lock);
 
     /// Cached size of the latest snapshot file, updated atomically after each snapshot

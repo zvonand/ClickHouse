@@ -107,3 +107,18 @@ class CoverageExporter:
             rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=True)
             if rc != 0:
                 raise RuntimeError(f"Failed to export coverage table to file: {table}")
+
+        # Export indirect call observations if any were collected.
+        if not self.to_file:
+            ic_query = (
+                f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_indirect_calls', '{self.dest.user}', '{self.dest.pwd}') "
+                f"SELECT '{self.check_start_time}' AS check_start_time, "
+                f"'{self.job_name}' AS check_name, "
+                "test_name, caller_name_hash, caller_func_hash, callee_offset, call_count "
+                "FROM system.coverage_indirect_calls FINAL "
+                "WHERE notEmpty(test_name)"
+            )
+            ic_cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{ic_query}" {command_args_post}'
+            rc_ic, _, stderr_ic = Shell.get_res_stdout_stderr(ic_cmd, verbose=False)
+            if rc_ic != 0:
+                print(f"WARNING: Failed to export indirect calls (non-fatal): {stderr_ic[:200]}")

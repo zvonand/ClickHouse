@@ -234,12 +234,66 @@ private:
         return res;
     }
 
-    /// Per-row format string execution: parse and execute format for each row individually.
+    /// Call fmt::sprintf on a single format specifier segment with the scalar value
+    /// extracted from the argument column at the given row.
+    template <typename T>
+    static bool trySprintfNumber(std::string_view spec, const IColumn & col, size_t row, String & out)
+    {
+        const auto * concrete = checkAndGetColumn<ColumnVector<T>>(&col);
+        if (!concrete)
+            return false;
+        out = fmt::sprintf(spec, static_cast<NearestFieldType<T>>(concrete->getData()[row]));
+        return true;
+    }
+
+    static String sprintfOneArg(std::string_view spec, const ColumnWithTypeAndName & arg, size_t row)
+    {
+        const IColumn * col = arg.column.get();
+        size_t actual_row = row;
+
+        /// Unwrap ColumnConst
+        if (const auto * const_col = checkAndGetColumn<ColumnConst>(col))
+        {
+            col = &const_col->getDataColumn();
+            actual_row = 0;
+        }
+
+        String result;
+        WhichDataType which(arg.type);
+        if (which.isNativeNumber()
+            && (trySprintfNumber<UInt8>(spec, *col, actual_row, result)
+                || trySprintfNumber<UInt16>(spec, *col, actual_row, result)
+                || trySprintfNumber<UInt32>(spec, *col, actual_row, result)
+                || trySprintfNumber<UInt64>(spec, *col, actual_row, result)
+                || trySprintfNumber<Int8>(spec, *col, actual_row, result)
+                || trySprintfNumber<Int16>(spec, *col, actual_row, result)
+                || trySprintfNumber<Int32>(spec, *col, actual_row, result)
+                || trySprintfNumber<Int64>(spec, *col, actual_row, result)
+                || trySprintfNumber<Float32>(spec, *col, actual_row, result)
+                || trySprintfNumber<Float64>(spec, *col, actual_row, result)))
+        {
+            return result;
+        }
+
+        if (which.isStringOrFixedString())
+        {
+            auto val = col->getDataAt(actual_row);
+            return fmt::sprintf(spec, val);
+        }
+
+        throw Exception(
+            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+            "The argument type of function {} is {}, but native numeric or string type is expected",
+            FunctionPrintf::name,
+            arg.type->getName());
+    }
+
+    /// Per-row format string execution: invoke fmt::sprintf directly per segment,
+    /// avoiding the buildInstructions/concat pipeline overhead.
     ColumnPtr executeDynamicFormat(const ColumnsWithTypeAndName & arguments, size_t input_rows_count) const
     {
-        /// No convertToFullColumnIfConst — this path is only reached when the column is already non-const.
-        const auto * format_string_col = checkAndGetColumn<ColumnString>(arguments[0].column.get());
-        if (!format_string_col)
+        const auto * format_col = checkAndGetColumn<ColumnString>(arguments[0].column.get());
+        if (!format_col)
             throw Exception(ErrorCodes::ILLEGAL_COLUMN, "First argument of function {} must be a String column", getName());
 
         auto result_col = ColumnString::create();
@@ -247,51 +301,100 @@ private:
         auto & result_offsets = result_col->getOffsets();
         result_offsets.resize(input_rows_count);
 
-        /// Pre-allocate reusable containers outside the loop to reduce per-row allocations.
-        ColumnsWithTypeAndName row_args(arguments.size());
-        auto result_type = std::make_shared<DataTypeString>();
-
+        String row_result;
         size_t curr_offset = 0;
+
         for (size_t row = 0; row < input_rows_count; ++row)
         {
-            std::string_view format = format_string_col->getDataAt(row);
-
-            /// Build single-row argument columns for this row.
-            /// row_args[0] is not used by buildInstructions for data — only for index range checks.
-            row_args[0] = arguments[0];
-            for (size_t i = 1; i < arguments.size(); ++i)
-            {
-                auto single_val_col = arguments[i].column->cut(row, 1);
-                row_args[i] = {single_val_col, arguments[i].type, arguments[i].name};
-            }
+            std::string_view format = format_col->getDataAt(row);
+            row_result.clear();
 
             try
             {
-                auto instructions = buildInstructions(format, row_args, 1);
-                ColumnsWithTypeAndName concat_args(instructions.size());
-                for (size_t j = 0; j < instructions.size(); ++j)
-                    concat_args[j] = instructions[j].execute();
+                /// Walk the format string, splitting at each unescaped '%' specifier.
+                /// For each segment, either append the literal (via fmt::sprintf to handle %%)
+                /// or format one argument with fmt::sprintf directly.
+                ///
+                /// arg_idx mirrors the indexing in buildInstructions: it starts at 0
+                /// and every segment (both literal and specifier) advances it by 1.
+                /// arguments[0] is the format string column — the first segment
+                /// "consumes" it (literals ignore the value, specifiers skip it via
+                /// the is_first ++arg_idx).
+                const char * begin = format.data();
+                const char * end = begin + format.size();
+                const char * curr = begin;
+                size_t arg_idx = 0;
 
-                auto row_result = function_concat->build(concat_args)->execute(
-                    concat_args, result_type, 1, false);
+                while (curr < end)
+                {
+                    const char * seg_start = curr;
+                    bool is_first = (curr == begin);
+                    bool is_literal = false;
 
-                std::string_view val = row_result->getDataAt(0);
-                result_chars.resize(curr_offset + val.size());
-                if (!val.empty())
-                    memcpy(&result_chars[curr_offset], val.data(), val.size());
-                curr_offset += val.size();
+                    if (is_first)
+                    {
+                        if (*curr != '%')
+                            is_literal = true;
+                        else if (curr + 1 < end && *(curr + 1) == '%')
+                            is_literal = true;
+                        else
+                            ++arg_idx; /// First segment is a format specifier — skip format arg
+                    }
+
+                    if (!is_literal)
+                        ++curr;
+
+                    while (curr < end)
+                    {
+                        if (*curr != '%')
+                            ++curr;
+                        else if (curr + 1 < end && *(curr + 1) == '%')
+                            curr += 2;
+                        else
+                            break;
+                    }
+
+                    std::string_view segment(seg_start, curr - seg_start);
+
+                    if (segment.size() > 1 && segment[0] == '%' && segment[1] != '%')
+                    {
+                        /// Format specifier segment — sprintf with the corresponding argument
+                        if (arg_idx >= arguments.size())
+                            throw Exception(
+                                ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
+                                "Number of arguments for function {} doesn't match: passed {}, but format is {}",
+                                getName(), arguments.size(), format);
+                        row_result += sprintfOneArg(segment, arguments[arg_idx], row);
+                    }
+                    else
+                    {
+                        /// Literal segment — use fmt::sprintf to handle %% escaping
+                        row_result += fmt::sprintf(segment);
+                    }
+
+                    /// Every segment consumes one argument slot, matching buildInstructions
+                    ++arg_idx;
+                }
+
+                /// Check that all arguments were consumed
+                if (arg_idx != arguments.size())
+                    throw Exception(
+                        ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
+                        "Number of arguments for function {} doesn't match: passed {}, but format is {}",
+                        getName(), arguments.size(), format);
             }
             catch (const fmt::v12::format_error & e)
             {
                 throw Exception(
                     ErrorCodes::BAD_ARGUMENTS,
                     "Bad format '{}' in function {} at row {}, reason: {}",
-                    format,
-                    getName(),
-                    row,
-                    e.what());
+                    format, getName(), row, e.what());
             }
 
+            result_chars.resize(curr_offset + row_result.size());
+            if (!row_result.empty())
+                memcpy(&result_chars[curr_offset], row_result.data(), row_result.size());
+            curr_offset += row_result.size();
             result_offsets[row] = curr_offset;
         }
 

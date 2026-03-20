@@ -611,6 +611,7 @@ public:
                 /// pool may assume 30s).
                 if (isStale(*it))
                 {
+                    it->markAsExpired();
                     expired_connections.push_back(it);
                     ProfileEvents::increment(getMetrics().expired, 1);
                     CurrentMetrics::sub(getMetrics().stored_count, 1);

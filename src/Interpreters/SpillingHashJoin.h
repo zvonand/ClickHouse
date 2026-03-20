@@ -140,7 +140,7 @@ private:
     /// ConcurrentHashJoin for multi-thread path (mutually exclusive with hash_join).
     std::shared_ptr<ConcurrentHashJoin> concurrent_join;
 
-    /// GraceHashJoin created during overflow (concurrent mode). Also assigned to chosen_join.
+    /// GraceHashJoin created during overflow. Also assigned to chosen_join.
     std::shared_ptr<GraceHashJoin> grace_join;
 
     /// The real join, created when switching out of COLLECTING state.

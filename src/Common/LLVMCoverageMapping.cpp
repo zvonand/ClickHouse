@@ -487,6 +487,7 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
                 /// ClickHouse source file is ~30 000 lines (QueryAnalyzer.cpp); 50 000 is a
                 /// generous cutoff that eliminates all overflow artifacts while keeping everything real.
                 if (line_start > 50000) return;
+                if (line_end > 50000) return;
                 /// Also reject wrap-around artifacts where line_end < line_start.
                 if (line_end < line_start) return;
                 const uint32_t counter_id = static_cast<uint32_t>(counter_enc >> 2);

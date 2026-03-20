@@ -138,7 +138,7 @@ std::vector<FilenameTable> parseCovMapFilenames(
         /// relative to the compressed/raw input (a 16× expansion factor is already very liberal).
         static constexpr uint64_t kMaxUncompressedLen = 256u * 1024u * 1024u;
         if (uncompressed_len > kMaxUncompressedLen
-            || uncompressed_len > filenames_size * 16)
+            || uncompressed_len > static_cast<uint64_t>(filenames_size) * 16)
             continue;
 
         std::string uncompressed;
@@ -324,7 +324,7 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
     ///   int64_t  NameRef        [0..7]   MD5 hash of the mangled function name
     ///   uint32_t DataSize       [8..11]  byte length of the inline CoverageMapping
     ///   uint64_t FuncHash       [12..19] function body hash
-    ///   uint64_t FilenamesRef   [20..27] byte offset of the filename table in __llvm_covmap
+    ///   uint64_t FilenamesRef   [20..27] MD5 hash of the filename blob in __llvm_covmap (format v5+)
     ///   uint8_t  CoverageMapping[DataSize] inline region encoding
     ///
     /// The inline CoverageMapping encoding (all ULEB128):
@@ -457,7 +457,8 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
         static constexpr uint64_t kMCDCDecisionKind  = 5u;
         static constexpr uint64_t kMCDCBranchKind    = 6u;
 
-        for (uint64_t fmi = 0; fmi < num_file_mappings; ++fmi)
+        bool abort_function = false;
+        for (uint64_t fmi = 0; fmi < num_file_mappings && !abort_function; ++fmi)
         {
             const uint64_t num_regions = readULEB128(cur, mend, ok);
             if (!ok) break;
@@ -541,15 +542,17 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
             cur_line += static_cast<uint32_t>(line_delta);
 
             /// MCDCDecisionRegion (kind=5) and MCDCBranchRegion (kind=6): LLVM 17+ MCDC.
-            /// These have extra fields after the 4 standard position fields.
-            /// Exact field count varies by LLVM version; we skip them conservatively
-            /// by breaking out of the region loop for this function (safest to avoid
-            /// cursor misalignment from wrong field counts).
+            /// These have extra fields after the 4 standard position fields whose count
+            /// varies by LLVM version.  Set abort_function so the fmi loop also stops —
+            /// continuing with a misaligned cursor would corrupt all subsequent file mappings.
             if (tag == 0 && !(encoded & kExpansionBit))
             {
                 const uint64_t kind = encoded >> kKindShift;
                 if (kind == kMCDCDecisionKind || kind == kMCDCBranchKind)
-                    break; /// stop parsing this function's regions safely
+                {
+                    abort_function = true;
+                    break;
+                }
             }
 
             /// Only store direct-counter code regions (tag == 1).

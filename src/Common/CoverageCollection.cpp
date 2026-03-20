@@ -95,10 +95,6 @@ void collectAndInsertCoverage(
     const std::vector<IndirectCallEntry> & indirect_calls,
     ContextPtr context)
 {
-    LOG_INFO(getLogger("CoverageCollection"),
-        "Flushing test '{}': {} covered counters, coverage map size {}",
-        test_name, name_refs.size(), g_coverage_map.size());
-
     if (name_refs.empty())
     {
         auto msg = fmt::format("CoverageCollection: No covered counters for test '{}', skipping", test_name);
@@ -108,6 +104,10 @@ void collectAndInsertCoverage(
     }
 
     ensureCoverageMapLoaded();
+
+    LOG_INFO(getLogger("CoverageCollection"),
+        "Flushing test '{}': {} covered counters, coverage map size {}",
+        test_name, name_refs.size(), g_coverage_map.size());
 
     /// Collect unique (file, line_start, line_end) triples.
     struct LineKey

@@ -118,7 +118,7 @@ static std::atomic<uint32_t> * g_xray_min_depth = nullptr;
 static uint32_t                g_xray_depth_size = 0;
 
 /// Per-thread call depth, reset when generation changes (same as before).
-static uint32_t               g_xray_generation = 0;
+static std::atomic<uint32_t>  g_xray_generation{0};
 thread_local uint32_t         g_tls_xray_generation = UINT32_MAX;
 thread_local uint32_t         g_tls_xray_depth = 0;
 thread_local uint32_t         g_tls_xray_baseline = 0;
@@ -170,10 +170,11 @@ static void xrayHandler(int32_t func_id, XRayEntryType type)
 {
     if (type == XRayEntryType::ENTRY || type == XRayEntryType::LOG_ARGS_ENTRY)
     {
-        if (g_tls_xray_generation != g_xray_generation) [[unlikely]]
+        const uint32_t cur_gen = g_xray_generation.load(std::memory_order_relaxed);
+        if (g_tls_xray_generation != cur_gen) [[unlikely]]
         {
             g_tls_xray_baseline    = g_tls_xray_depth;
-            g_tls_xray_generation  = g_xray_generation;
+            g_tls_xray_generation  = cur_gen;
         }
         const uint32_t abs = ++g_tls_xray_depth;
         const uint32_t rel = (abs > g_tls_xray_baseline) ? abs - g_tls_xray_baseline : 0u;
@@ -374,7 +375,7 @@ void setCoverageTest(std::string_view test_name)
 
 #ifdef CLICKHOUSE_XRAY_INSTRUMENT_COVERAGE
         /// Bump XRay generation so every thread resets its depth baseline on next call.
-        ++g_xray_generation;
+        g_xray_generation.fetch_add(1, std::memory_order_relaxed);
         /// Reset per-function min-depth array.
         for (uint32_t i = 0; i < g_xray_depth_size; ++i)
             g_xray_min_depth[i].store(UINT32_MAX, std::memory_order_relaxed);

@@ -180,52 +180,31 @@ void collectAndInsertCoverage(
     if (files.empty())
         return;
 
-    /// Build the INSERT query as a VALUES literal.
-    /// Schema: coverage_log (time DateTime, test_name String, files Array(String),
-    ///                        line_starts Array(UInt32), line_ends Array(UInt32),
-    ///                        min_depths Array(UInt8), branch_flags Array(UInt8))
+    /// Build the INSERT query: flat schema, one row per region.
+    /// Schema: coverage_log (time, test_name, file, line_start, line_end, min_depth, branch_flag)
     WriteBufferFromOwnString query_buf;
     writeString(
         "INSERT INTO system.coverage_log"
-        " (time, test_name, files, line_starts, line_ends, min_depths, branch_flags)"
-        " VALUES (now(), ", query_buf);
-    writeQuotedString(test_name, query_buf);
-    writeString(", [", query_buf);
+        " (time, test_name, file, line_start, line_end, min_depth, branch_flag)"
+        " VALUES ", query_buf);
     for (size_t i = 0; i < files.size(); ++i)
     {
         if (i > 0)
             writeChar(',', query_buf);
+        writeString("(now(),", query_buf);
+        writeQuotedString(test_name, query_buf);
+        writeChar(',', query_buf);
         writeQuotedString(files[i], query_buf);
-    }
-    writeString("], [", query_buf);
-    for (size_t i = 0; i < line_starts.size(); ++i)
-    {
-        if (i > 0)
-            writeChar(',', query_buf);
+        writeChar(',', query_buf);
         writeIntText(line_starts[i], query_buf);
-    }
-    writeString("], [", query_buf);
-    for (size_t i = 0; i < line_ends.size(); ++i)
-    {
-        if (i > 0)
-            writeChar(',', query_buf);
+        writeChar(',', query_buf);
         writeIntText(line_ends[i], query_buf);
-    }
-    writeString("], [", query_buf);
-    for (size_t i = 0; i < min_depths.size(); ++i)
-    {
-        if (i > 0)
-            writeChar(',', query_buf);
+        writeChar(',', query_buf);
         writeIntText(static_cast<uint32_t>(min_depths[i]), query_buf);
-    }
-    writeString("], [", query_buf);
-    for (size_t i = 0; i < branch_flags.size(); ++i)
-    {
-        if (i > 0)
-            writeChar(',', query_buf);
+        writeChar(',', query_buf);
         writeIntText(static_cast<uint32_t>(branch_flags[i]), query_buf);
+        writeChar(')', query_buf);
     }
-    writeString("])", query_buf);
 
     const std::string query = query_buf.str();
 

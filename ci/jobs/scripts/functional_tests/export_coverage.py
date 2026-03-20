@@ -57,8 +57,8 @@ class CoverageExporter:
 
         stats_query = (
             f"SELECT count() AS rows, countIf(notEmpty(test_name)) AS rows_with_test, "
-            f"uniqExact(test_name) AS tests, uniqExact(arrayJoin(files)) AS files, "
-            f"round(avg(arrayAvg(arrayMap((d)->toUInt32(d), min_depths)))) AS avg_min_depth "
+            f"uniqExact(test_name) AS tests, uniqExact(file) AS files, "
+            f"round(avg(toUInt32(min_depth))) AS avg_min_depth "
             f"FROM system.{table} FINAL"
         )
         stats_cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{stats_query}" {command_args_post}'
@@ -83,14 +83,9 @@ class CoverageExporter:
                 "SELECT file, line_start, line_end, "
                 f"'{self.check_start_time}' AS check_start_time, "
                 f"'{self.job_name}' AS check_name, "
-                "test_name, "
-                "min(min_depth) AS min_depth, "
-                "any(branch_flag) AS branch_flag "
+                "test_name, min_depth, branch_flag "
                 f"FROM system.{table} FINAL "
-                "ARRAY JOIN files AS file, line_starts AS line_start, line_ends AS line_end, "
-                "min_depths AS min_depth, branch_flags AS branch_flag "
-                "WHERE notEmpty(test_name) AND notEmpty(file) "
-                "GROUP BY file, line_start, line_end, test_name"
+                "WHERE notEmpty(test_name) AND notEmpty(file)"
             )
             cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{query}" {command_args_post}'
             rc, stdout, stderr = Shell.get_res_stdout_stderr(cmd, verbose=True)
@@ -102,16 +97,9 @@ class CoverageExporter:
                 raise RuntimeError(f"Failed to export coverage table: {table}")
         else:
             query = (
-                "SELECT "
-                "time, "
-                "test_name, "
-                "file, "
-                "line_start, "
-                "line_end, "
-                "min_depth "
+                "SELECT time, test_name, file, line_start, line_end, min_depth, branch_flag "
                 f"FROM system.{table} FINAL "
-                "ARRAY JOIN files AS file, line_starts AS line_start, "
-                "line_ends AS line_end, min_depths AS min_depth "
+                "WHERE notEmpty(test_name) AND notEmpty(file) "
                 f"INTO OUTFILE '{temp_dir}/system_tables/{table}.tsv' "
                 "FORMAT TSVWithNamesAndTypes"
             )

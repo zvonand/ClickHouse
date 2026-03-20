@@ -4241,16 +4241,18 @@ def main(args):
             args,
             """CREATE TABLE IF NOT EXISTS system.coverage_log
             (
-                time DateTime,
-                test_name String,
-                files Array(String),
-                line_starts Array(UInt32),
-                line_ends Array(UInt32),
-                min_depths Array(UInt8) DEFAULT arrayWithConstant(length(files), 255),
-                branch_flags Array(UInt8) DEFAULT arrayWithConstant(length(files), 0)
+                time        DateTime,
+                test_name   LowCardinality(String),
+                file        LowCardinality(String),
+                line_start  UInt32,
+                line_end    UInt32,
+                min_depth   UInt8 DEFAULT 255,
+                branch_flag UInt8 DEFAULT 0,
+                INDEX file_bloom  file       TYPE bloom_filter GRANULARITY 1,
+                INDEX line_minmax line_start TYPE minmax        GRANULARITY 1
             )
             ENGINE = ReplacingMergeTree(time)
-            ORDER BY test_name
+            ORDER BY (test_name, file, line_start, line_end)
             COMMENT 'Contains information about per-test coverage from the CI, but used only for exporting to the CI cluster'""",
         )
         clickhouse_execute(

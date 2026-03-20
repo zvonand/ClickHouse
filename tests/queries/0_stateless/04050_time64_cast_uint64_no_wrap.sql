@@ -14,3 +14,6 @@ SELECT CAST(360000::UInt64, 'Time64');
 SELECT CAST(90001::UInt32, 'Time64') = CAST(90001::UInt64, 'Time64');
 
 SELECT CAST((3600 * 25) + 1, 'Time');
+
+SELECT CAST(18446744073709551615::UInt64, 'Time64') SETTINGS date_time_overflow_behavior='saturate';
+SELECT CAST(9223372036854775808::UInt64, 'Time64') SETTINGS date_time_overflow_behavior='saturate';

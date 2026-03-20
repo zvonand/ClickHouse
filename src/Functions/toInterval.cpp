@@ -1,4 +1,5 @@
 #include <Functions/IFunction.h>
+#include <Functions/IFunctionAdaptors.h>
 #include <Columns/ColumnConst.h>
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnsNumber.h>
@@ -16,14 +17,15 @@ namespace ErrorCodes
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
 }
 
+namespace
+{
+
 class FunctionToInterval : public IFunction
 {
 public:
     static constexpr auto name = "toInterval";
 
-    explicit FunctionToInterval(ContextPtr context_) : context(context_) {}
-
-    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionToInterval>(context); }
+    FunctionToInterval(ContextPtr context_, IntervalKind kind_) : context(context_), kind(kind_) {}
 
     String getName() const override { return name; }
     bool isSuitableForShortCircuitArgumentsExecution(const DataTypesWithConstInfo & /*arguments*/) const override { return true; }
@@ -38,25 +40,8 @@ public:
         return { .is_monotonic = true, .is_always_monotonic = true };
     }
 
-    DataTypePtr getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const override
+    DataTypePtr getReturnTypeImpl(const ColumnsWithTypeAndName & /*arguments*/) const override
     {
-        if (arguments.size() != 2)
-            throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Function {} must be 2 arguments", getName());
-
-        /// The second argument is a constant string with the name of interval kind.
-        String interval_kind;
-        const ColumnConst * kind_column = checkAndGetColumnConst<ColumnString>(arguments[1].column.get());
-        if (!kind_column)
-            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Second argument for function {} must be constant string: "
-                "unit of interval", getName());
-
-        interval_kind = Poco::toLower(kind_column->getValue<String>());
-        if (interval_kind.empty())
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Second argument (unit) for function {} cannot be empty", getName());
-
-        if (!IntervalKind::tryParseString(interval_kind, kind.kind))
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "{} doesn't look like an interval unit in {}", interval_kind, getName());
-
         return std::make_shared<DataTypeInterval>(kind);
     }
 
@@ -73,8 +58,64 @@ public:
 
 private:
     ContextPtr context;
-    mutable IntervalKind kind = IntervalKind::Kind::Second;
+    IntervalKind kind;
 };
+
+class FunctionToIntervalOverloadResolver : public IFunctionOverloadResolver
+{
+public:
+    static constexpr auto name = "toInterval";
+
+    explicit FunctionToIntervalOverloadResolver(ContextPtr context_) : context(context_) {}
+
+    static FunctionOverloadResolverPtr create(ContextPtr context) { return std::make_unique<FunctionToIntervalOverloadResolver>(context); }
+
+    String getName() const override { return name; }
+    size_t getNumberOfArguments() const override { return 2; }
+    ColumnNumbers getArgumentsThatAreAlwaysConstant() const override { return {1}; }
+
+    DataTypePtr getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const override
+    {
+        if (arguments.size() != 2)
+            throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Function {} must be 2 arguments", getName());
+
+        const ColumnConst * kind_column = checkAndGetColumnConst<ColumnString>(arguments[1].column.get());
+        if (!kind_column)
+            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Second argument for function {} must be constant string: "
+                "unit of interval", getName());
+
+        String interval_kind = Poco::toLower(kind_column->getValue<String>());
+        if (interval_kind.empty())
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Second argument (unit) for function {} cannot be empty", getName());
+
+        IntervalKind kind;
+        if (!IntervalKind::tryParseString(interval_kind, kind.kind))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "{} doesn't look like an interval unit in {}", interval_kind, getName());
+
+        return std::make_shared<DataTypeInterval>(kind);
+    }
+
+    FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type) const override
+    {
+        const ColumnConst * kind_column = checkAndGetColumnConst<ColumnString>(arguments[1].column.get());
+        String interval_kind = Poco::toLower(kind_column->getValue<String>());
+        IntervalKind kind;
+        IntervalKind::tryParseString(interval_kind, kind.kind);
+
+        auto function = std::make_shared<FunctionToInterval>(context, kind);
+
+        DataTypes data_types(arguments.size());
+        for (size_t i = 0; i < arguments.size(); ++i)
+            data_types[i] = arguments[i].type;
+
+        return std::make_unique<FunctionToFunctionBaseAdaptor>(function, data_types, result_type);
+    }
+
+private:
+    ContextPtr context;
+};
+
+}
 
 REGISTER_FUNCTION(ToInterval)
 {
@@ -136,7 +177,7 @@ FROM numbers(5)
     FunctionDocumentation::Category category = FunctionDocumentation::Category::TypeConversion;
     FunctionDocumentation documentation = {description, syntax, arguments, {}, returned_value, examples, introduced_in, category};
 
-    factory.registerFunction<FunctionToInterval>(documentation);
+    factory.registerFunction<FunctionToIntervalOverloadResolver>(documentation);
 }
 
 }

@@ -12,6 +12,16 @@ class TC:
     comment: str
 
 
+# Tests that are too slow to run under LLVM coverage instrumentation.
+# They either timeout (900s per-test or 7200s session) or cause ClickHouse
+# to get stuck during shutdown while writing .profraw coverage data.
+LLVM_COVERAGE_SKIP_PREFIXES = [
+    "test_storage_s3_queue/test_6.py",
+    "test_named_collections_encrypted2/",
+    "test_multiple_disks/",
+    "test_ytsaurus/",
+]
+
 TEST_CONFIGS = [
     TC("test_dns_cache/", True, "no idea why i'm sequential"),
     TC("test_global_overcommit_tracker/", True, "no idea why i'm sequential"),
@@ -64,7 +74,7 @@ WITH per_run_suite AS (
         check_start_time,
         sum(test_duration_ms) AS suite_duration_ms
     FROM checks
-    WHERE check_name LIKE 'Integration tests (amd_asan%'
+    WHERE check_name LIKE 'Integration tests (amd_asan_ubsan%'
       AND check_start_time > now() - INTERVAL 2 DAYS
       AND test_duration_ms != 0
       AND head_ref = 'master'

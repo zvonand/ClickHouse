@@ -20,6 +20,7 @@
 #include <DataTypes/DataTypeMap.h>
 #include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeFixedString.h>
+#include <DataTypes/DataTypeUUID.h>
 #include <Processors/Formats/IOutputFormat.h>
 #include <Processors/Formats/Impl/ArrowBufferedStreams.h>
 #include <Processors/Port.h>
@@ -83,7 +84,7 @@ namespace DB
         {"Float32", arrow::float32()},
         {"Float64", arrow::float64()},
 
-        {"Date", arrow::uint16()},      /// uint16 is used instead of date32, because Apache Arrow cannot correctly serialize Date32Array.
+        {"Date", arrow::date32()},
         {"DateTime", arrow::uint32()},  /// uint32 is used instead of date64, because we don't need milliseconds.
         {"Date32", arrow::date32()},
 
@@ -228,6 +229,50 @@ namespace DB
                 status = builder.Append(value);
                 checkStatus(status, write_column->getName(), format_name);
             }
+        }
+    }
+
+    static void fillArrowArrayWithUUIDColumnData(
+        const ColumnPtr & column,
+        const PaddedPODArray<UInt8> * null_bytemap,
+        const String & format_name,
+        arrow::ArrayBuilder * array_builder,
+        size_t start,
+        size_t end)
+    {
+        const auto * col_uuid = assert_cast<const ColumnVector<UUID> *>(column.get());
+
+        if (array_builder->type()->id() != arrow::Type::FIXED_SIZE_BINARY)
+            throw Exception(ErrorCodes::LOGICAL_ERROR,
+                "Cannot fill arrow array with {} data for format {}", column->getName(), format_name);
+
+        auto * fixed_builder = assert_cast<arrow::FixedSizeBinaryBuilder *>(array_builder);
+        const auto & uuid_data = col_uuid->getData();
+
+        for (size_t i = start; i < end; ++i)
+        {
+            if (null_bytemap && (*null_bytemap)[i])
+            {
+                arrow::Status status = fixed_builder->AppendNull();
+                checkStatus(status, column->getName(), format_name);
+                continue;
+            }
+
+            UUID res = uuid_data[i];
+            auto * bytes = reinterpret_cast<uint8_t *>(&res);
+
+            if constexpr (std::endian::native == std::endian::little)
+            {
+                std::reverse(bytes, bytes + 8);
+                std::reverse(bytes + 8, bytes + 16);
+            }
+            else
+            {
+                std::swap_ranges(bytes, bytes + 8, bytes + 8);
+            }
+
+            arrow::Status status = fixed_builder->Append(reinterpret_cast<const uint8_t *>(&res));
+            checkStatus(status, column->getName(), format_name);
         }
     }
 
@@ -622,27 +667,57 @@ namespace DB
         const String & format_name,
         arrow::ArrayBuilder* array_builder,
         size_t start,
-        size_t end)
+        size_t end,
+        bool as_uint16)
     {
         const PaddedPODArray<UInt16> & internal_data = assert_cast<const ColumnVector<UInt16> &>(*write_column).getData();
-        arrow::UInt16Builder & builder = assert_cast<arrow::UInt16Builder &>(*array_builder);
-        arrow::Status status;
 
-        if (null_bytemap)
+        if (as_uint16)
         {
-            for (size_t value_i = start; value_i < end; ++value_i)
+            arrow::UInt16Builder & builder = assert_cast<arrow::UInt16Builder &>(*array_builder);
+            arrow::Status status;
+
+            if (null_bytemap)
             {
-                if ((*null_bytemap)[value_i])
-                    status = builder.AppendNull();
-                else
-                    status = builder.Append(internal_data[value_i]);
+                for (size_t value_i = start; value_i < end; ++value_i)
+                {
+                    if ((*null_bytemap)[value_i])
+                        status = builder.AppendNull();
+                    else
+                        status = builder.Append(internal_data[value_i]);
+                    checkStatus(status, write_column->getName(), format_name);
+                }
+            }
+            else
+            {
+                status = builder.AppendValues(internal_data.data() + start, end - start);
                 checkStatus(status, write_column->getName(), format_name);
             }
         }
         else
         {
-            status = builder.AppendValues(internal_data.data() + start, end - start);
-            checkStatus(status, write_column->getName(), format_name);
+            arrow::Date32Builder & builder = assert_cast<arrow::Date32Builder &>(*array_builder);
+            arrow::Status status;
+
+            if (null_bytemap)
+            {
+                for (size_t value_i = start; value_i < end; ++value_i)
+                {
+                    if ((*null_bytemap)[value_i])
+                        status = builder.AppendNull();
+                    else
+                        status = builder.Append(static_cast<Int32>(internal_data[value_i]));
+                    checkStatus(status, write_column->getName(), format_name);
+                }
+            }
+            else
+            {
+                for (size_t value_i = start; value_i < end; ++value_i)
+                {
+                    status = builder.Append(static_cast<Int32>(internal_data[value_i]));
+                    checkStatus(status, write_column->getName(), format_name);
+                }
+            }
         }
     }
 
@@ -817,7 +892,7 @@ namespace DB
                 fillArrowArrayWithIPv4ColumnData(column, null_bytemap, format_name, array_builder, start, end);
                 break;
             case TypeIndex::Date:
-                fillArrowArrayWithDateColumnData(column, null_bytemap, format_name, array_builder, start, end);
+                fillArrowArrayWithDateColumnData(column, null_bytemap, format_name, array_builder, start, end, settings.output_date_as_uint16);
                 break;
             case TypeIndex::DateTime:
                 fillArrowArrayWithDateTimeColumnData(column, null_bytemap, format_name, array_builder, start, end);
@@ -881,6 +956,9 @@ namespace DB
                 break;
             case TypeIndex::UInt256:
                 fillArrowArrayWithBigIntegerColumnData<ColumnUInt256>(column, null_bytemap, format_name, array_builder, start, end);
+                break;
+            case TypeIndex::UUID:
+                fillArrowArrayWithUUIDColumnData(column, null_bytemap, format_name, array_builder, start, end);
                 break;
 #define DISPATCH(CPP_NUMERIC_TYPE, ARROW_BUILDER_TYPE) \
             case TypeIndex::CPP_NUMERIC_TYPE: \
@@ -1050,6 +1128,12 @@ namespace DB
         if (isIPv4(column_type))
             return arrow::uint32();
 
+        if (isUUID(column_type))
+            return arrow::fixed_size_binary(sizeof(UUID));
+
+        if (isDate(column_type) && settings.output_date_as_uint16)
+            return arrow::uint16();
+
         const std::string type_name = column_type->getFamilyName();
         if (const auto * arrow_type_it = std::find_if(
                 internal_type_to_arrow_type.begin(),
@@ -1125,13 +1209,27 @@ namespace DB
                 format_name,
                 settings,
                 &is_column_nullable);
+
+            std::shared_ptr<arrow::KeyValueMetadata> field_metadata = nullptr;
+
             if (column_to_field_id && column_to_field_id->contains(header_column.name))
             {
                 Int64 field_id = column_to_field_id->at(header_column.name);
-                auto key_value_metadata = arrow::key_value_metadata({"PARQUET:field_id"},
-                            {std::to_string(field_id)});
-                arrow_fields.emplace_back(std::make_shared<arrow::Field>(header_column.name, arrow_type, is_column_nullable, key_value_metadata));
+                field_metadata = arrow::key_value_metadata({"PARQUET:field_id"}, {std::to_string(field_id)});
             }
+
+            // Inject our UUID metadata if it's a root UUID column
+            if (isUUID(removeNullable(header_column.type)))
+            {
+                auto ext_metadata = arrow::key_value_metadata(
+                    {"ARROW:extension:name", "ARROW:extension:metadata", "PARQUET:logical_type"},
+                    {"arrow.uuid", "", "UUID"}
+                );
+                field_metadata = field_metadata ? field_metadata->Merge(*ext_metadata) : ext_metadata;
+            }
+
+            if (field_metadata)
+                arrow_fields.emplace_back(std::make_shared<arrow::Field>(header_column.name, arrow_type, is_column_nullable, field_metadata));
             else
                 arrow_fields.emplace_back(std::make_shared<arrow::Field>(header_column.name, arrow_type, is_column_nullable));
         }

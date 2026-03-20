@@ -726,7 +726,7 @@ void ReadFromRemote::addPipe(
                 priority_func);
             remote_query_executor->setLogger(log);
             remote_query_executor->setPoolMode(PoolMode::GET_ONE);
-            remote_query_executor->setDistributedFanout(shards.size());
+            remote_query_executor->setDistributedFanout(shards.size() * shard.shard_info.per_replica_pools.size());
             remote_query_executor->setUnavailableShardTracker(unavailable_shard_tracker);
 
             if (!table_func_ptr)
@@ -1056,7 +1056,7 @@ Pipe ReadFromParallelRemoteReplicasStep::createPipeForSingeReplica(
 
     remote_query_executor->setLogger(log);
     remote_query_executor->setMainTable(storage_id);
-    remote_query_executor->setDistributedFanout(pools_to_use.size());
+    remote_query_executor->setDistributedFanout(pools_to_use.size() - (exclude_pool_index.has_value() ? 1 : 0));
 
     Pipe pipe
         = createRemoteSourcePipe(std::move(remote_query_executor), add_agg_info, add_totals, add_extremes, async_read, async_query_sending, parallel_marshalling_threads);

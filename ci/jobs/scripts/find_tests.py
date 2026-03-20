@@ -313,8 +313,9 @@ class Targeting:
                         changed.append((current_file, ln))
         return changed
 
-    # Depth threshold: functions called within this many frames of the test entry
-    # point are considered "direct" callers and get a depth tier bonus.
+    # min_depth stores the raw entry-counter call count (capped at 254; 255 = not tracked).
+    # A low call count means the function was called rarely during the test → more specific.
+    # Tests where a function was called ≤ this many times get the "direct" tier bonus.
     DIRECT_CALL_MAX_DEPTH = 3
 
     def get_most_relevant_tests(self):

@@ -9,11 +9,11 @@
 #if WITH_COVERAGE
 
 #include <algorithm>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <utility>
 #include <vector>
 
@@ -71,104 +71,18 @@ namespace
     CoverageFlushCallback g_flush_callback;
 }
 
-/// ── Shadow call-stack depth tracking ─────────────────────────────────────────
-///
-/// When the binary is built with -finstrument-functions-after-inlining, the
-/// compiler inserts calls to __cyg_profile_func_enter / __cyg_profile_func_exit
-/// at every (non-inlined) function entry and exit.  We use these to maintain:
-///
-///   g_current_depth   — per-thread depth counter, incremented on entry.
-///   g_func_min_depth  — per-function minimum depth seen since the last
-///                       counter reset.  One atomic<uint32_t> slot per
-///                       LLVMProfileData record.  UINT32_MAX = never entered.
-///   g_funcptr_lookup  — sorted array of (FunctionPointer, profile_data_index)
-///                       pairs for O(log n) lookup in the enter hook.
-///
-/// All three are initialised lazily on first __cyg_profile_func_enter call.
-/// g_func_min_depth is reset to UINT32_MAX in resetDepthTracking(), which is
-/// called from setCoverageTest() alongside __llvm_profile_reset_counters().
-
-thread_local uint32_t g_current_depth = 0;
-
-/// Raw array of atomics — std::vector<std::atomic> is not usable because atomic is not moveable.
-static std::atomic<uint32_t> * g_func_min_depth = nullptr;
-static uint32_t g_func_min_depth_size = 0;
-static std::vector<std::pair<uintptr_t, uint32_t>> g_funcptr_lookup; /// sorted by first
-static std::once_flag g_depth_init_once;
-
-/// __attribute__((no_instrument_function)) prevents the compiler from
-/// instrumenting these functions themselves, which would cause infinite recursion.
-
-static void initDepthTracking() __attribute__((no_instrument_function));
-static void initDepthTracking()
-{
-    std::call_once(g_depth_init_once, []
-    {
-        const LLVMProfileData * begin = __llvm_profile_begin_data(); // NOLINT
-        const LLVMProfileData * end   = __llvm_profile_end_data();   // NOLINT
-        const uint32_t n = static_cast<uint32_t>(end - begin);
-
-        /// Initialise min-depth slots (atomic, so can't use assign directly).
-        g_func_min_depth = new std::atomic<uint32_t>[n]; // NOLINT
-        g_func_min_depth_size = n;
-        for (uint32_t j = 0; j < n; ++j)
-            g_func_min_depth[j].store(UINT32_MAX, std::memory_order_relaxed);
-
-        /// Build sorted lookup table: (FunctionPointer → profile_data_index).
-        g_funcptr_lookup.reserve(n);
-        for (uint32_t i = 0; i < n; ++i)
-        {
-            const auto fp = reinterpret_cast<uintptr_t>(begin[i].FunctionPointer);
-            if (fp != 0)
-                g_funcptr_lookup.emplace_back(fp, i);
-        }
-        std::sort(g_funcptr_lookup.begin(), g_funcptr_lookup.end(),
-                  [](const auto & a, const auto & b) { return a.first < b.first; });
-    });
-}
-
-static void resetDepthTracking() __attribute__((no_instrument_function));
-static void resetDepthTracking()
-{
-    for (uint32_t i = 0; i < g_func_min_depth_size; ++i)
-        g_func_min_depth[i].store(UINT32_MAX, std::memory_order_relaxed);
-}
-
-/// Called by the compiler at every (non-inlined) function entry.
-extern "C" void __cyg_profile_func_enter(void * fn, void *) __attribute__((no_instrument_function));
-void __cyg_profile_func_enter(void * fn, void *)
-{
-    const uint32_t depth = ++g_current_depth;
-
-    if (!g_func_min_depth) [[unlikely]]
-        initDepthTracking();
-
-    if (!g_func_min_depth)
-        return;
-
-    /// Binary-search for the function pointer in the lookup table.
-    const auto fp = reinterpret_cast<uintptr_t>(fn);
-    const auto it = std::lower_bound(
-        g_funcptr_lookup.begin(), g_funcptr_lookup.end(), fp,
-        [](const auto & entry, uintptr_t v) { return entry.first < v; });
-
-    if (it == g_funcptr_lookup.end() || it->first != fp)
-        return;
-
-    /// Atomic compare-and-swap loop to store the minimum depth seen.
-    auto & slot = g_func_min_depth[it->second];
-    uint32_t old = slot.load(std::memory_order_relaxed);
-    while (old > depth
-           && !slot.compare_exchange_weak(old, depth, std::memory_order_relaxed))
-    {
-    }
-}
+/// The __cyg_profile_func_enter / __cyg_profile_func_exit hooks are provided so
+/// the binary can be built with -finstrument-functions-after-inlining without
+/// link errors.  The shadow-stack depth approach was abandoned because
+/// LLVMProfileData::FunctionPointer is always NULL in PIE builds — there is no
+/// runtime text-address → profile-index mapping available.
+/// min_depth in CovCounter is instead computed from the entry counter call count
+/// in getCurrentCoveredNameRefs (see below).
+extern "C" void __cyg_profile_func_enter(void *, void *) __attribute__((no_instrument_function));
+void __cyg_profile_func_enter(void *, void *) {}
 
 extern "C" void __cyg_profile_func_exit(void *, void *) __attribute__((no_instrument_function));
-void __cyg_profile_func_exit(void *, void *)
-{
-    --g_current_depth;
-}
+void __cyg_profile_func_exit(void *, void *) {}
 
 
 std::vector<CovCounter> getCurrentCoveredNameRefs()
@@ -207,13 +121,10 @@ std::vector<CovCounter> getCurrentCoveredNameRefs()
         if (*entry_counter == 0)
             continue;
 
-        /// Read the minimum call depth at which this function was entered.
-        /// Cap at 255 (uint8_t max); 255 also serves as "not tracked" sentinel
-        /// when the binary was built without -finstrument-functions.
-        const uint8_t min_depth = (g_func_min_depth && idx < g_func_min_depth_size)
-            ? static_cast<uint8_t>(std::min<uint32_t>(
-                  g_func_min_depth[idx].load(std::memory_order_relaxed), 255u))
-            : 255u;
+        /// Store the raw entry-counter call count (capped at 254) as min_depth.
+        /// 255 is reserved as "not tracked".  A lower value means the function was
+        /// called fewer times during this test → more likely a specific code path.
+        const uint8_t min_depth = static_cast<uint8_t>(std::min<uint64_t>(*entry_counter, 254u));
 
         /// Emit one entry per non-zero counter.  Counter 0 is the function entry;
         /// counters 1…N are individual basic-block/branch counters that map to
@@ -256,7 +167,6 @@ void setCoverageTest(std::string_view test_name)
         }
 
         __llvm_profile_reset_counters(); // NOLINT
-        resetDepthTracking();
 
         g_current_test_name = std::string(test_name);
     }

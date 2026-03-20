@@ -22,8 +22,8 @@ Test 11: Zero float to int (should succeed)
 0
 Test 12: Negative whole float to int (should succeed)
 -50
-Test 13: NaN to int (converts to INT32_MIN)
--2147483648
+Test 13: NaN to int
+OK
 Test 14: Infinity to int
 OK
 Test 15: Int 1 to Bool (should succeed)

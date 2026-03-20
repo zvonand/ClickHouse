@@ -131,15 +131,14 @@ static void convertAndInsert(Column & column, Source value, TypeIndex type_index
 
     if constexpr (std::is_floating_point_v<Source>)
     {
-        // Float-to-integer and float-to-float overflow are UB - must check
+        // Float-to-integer, float-to-float overflow, and casting NaN to integer are UB - must check
         Target converted;
-        if (!accurate::convertNumeric<Source, Target, /* strict= */ false>(value, converted))
+        if ((!std::is_floating_point_v<Target> && isNaN(value)) ||
+         !accurate::convertNumeric<Source, Target, /* strict= */ false>(value, converted))
         {
             throw Exception(
                 ErrorCodes::VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE,
-                "Cannot convert Avro value {} to {}",
-                value,
-                magic_enum::enum_name(type_index));
+                "Cannot convert Avro value {} to {}", value, magic_enum::enum_name(type_index));
         }
         insert(converted);
     }

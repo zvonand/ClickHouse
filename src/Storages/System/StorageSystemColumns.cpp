@@ -146,8 +146,10 @@ protected:
 
                 auto metadata_snapshot = storage->tryGetInMemoryMetadataPtr().value_or(std::make_shared<StorageInMemoryMetadata>());
                 columns = metadata_snapshot->getColumns();
-                if (auto hints = storage->tryGetSerializationHints())
-                    serialization_hints = std::move(*hints);
+                /// serialization_hint column (index 21) is only populated on demand.
+                if (columns_mask[21])
+                    if (auto hints = storage->tryGetSerializationHints())
+                        serialization_hints = std::move(*hints);
 
                 /// Certain information about a table - should be calculated only when the corresponding columns are queried.
                 if (columns_mask[7] || columns_mask[8] || columns_mask[9])

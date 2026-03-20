@@ -471,12 +471,10 @@ tar -czf ./ci/tmp/logs.tar.gz \
 
     if args.count:
         repeat_option = f"--count {args.count} --random-order"
-    elif is_flaky_check:
-        # Run tests in module scope: the module_repeat_cnt loop repeats entire modules,
-        # preserving module-scoped fixtures (cluster setup/teardown per module, not per function).
-        repeat_option = f"--count {FLAKY_CHECK_TEST_REPEAT_COUNT} --random-order --repeat-scope=module"
     elif is_targeted_check:
         repeat_option = f"--count 10 --random-order"
+    # For is_flaky_check: no --count here. The module_repeat_cnt loop re-runs the entire
+    # pytest session so each repetition is fully isolated (separate process, separate cluster).
 
     if args.workers:
         workers = args.workers

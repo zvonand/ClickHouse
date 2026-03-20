@@ -494,6 +494,44 @@ def test_single_log_file(started_cluster, use_delta_kernel, storage_type):
     )
 
 
+def test_single_log_file_azure_connection_string(started_cluster):
+    """Test DeltaLakeAzure with connection string authentication and delta kernel enabled."""
+    instance = started_cluster.instances["node1"]
+    spark = started_cluster.spark_session
+    TABLE_NAME = randomize_table_name("test_single_log_file_azure_cs")
+
+    inserted_data = "SELECT number as a, toString(number + 1) as b FROM numbers(100)"
+    parquet_data_path = create_initial_data_file(
+        started_cluster, instance, inserted_data, TABLE_NAME, node_name=instance.name
+    )
+
+    delta_path = f"/{TABLE_NAME}"
+    write_delta_from_file(spark, parquet_data_path, delta_path)
+
+    files = default_upload_directory(
+        started_cluster,
+        "azure",
+        delta_path,
+        "",
+    )
+
+    assert len(files) == 2  # 1 metadata file + 1 data file
+
+    connection_string = started_cluster.env_variables["AZURITE_CONNECTION_STRING"]
+    instance.query(
+        f"""
+        DROP TABLE IF EXISTS {TABLE_NAME};
+        CREATE TABLE {TABLE_NAME}
+        ENGINE=DeltaLakeAzure('{connection_string}', '{started_cluster.azure_container_name}', '{TABLE_NAME}', Parquet)
+        """
+    )
+
+    assert int(instance.query(f"SELECT count() FROM {TABLE_NAME}")) == 100
+    assert instance.query(f"SELECT * FROM {TABLE_NAME}") == instance.query(
+        inserted_data
+    )
+
+
 @pytest.mark.parametrize(
     "use_delta_kernel, storage_type",
     [("1", "s3"), ("0", "s3"), ("0", "azure"), ("1", "azure"), ("1", "local")],

@@ -485,6 +485,13 @@ Endpoint processEndpoint(const Poco::Util::AbstractConfiguration & config, const
             {
                 container_name = endpoint.substr(cont_pos_begin + 1);
             }
+
+            /// When the account name is not embedded in the endpoint path, read it
+            /// from the explicit `account_name` config key if provided.
+            /// It will not be appended to service/container URLs (add_account_name_to_url = false),
+            /// but is stored for use by external systems such as delta-kernel-rs.
+            if (config.has(config_prefix + ".account_name"))
+                account_name = config.getString(config_prefix + ".account_name");
         }
         if (config.has(config_prefix + ".endpoint_subpath"))
         {
@@ -508,6 +515,12 @@ Endpoint processEndpoint(const Poco::Util::AbstractConfiguration & config, const
         storage_url = config.getString(config_prefix + ".storage_account_url");
         validateStorageAccountUrl(storage_url);
         container_name = get_container_name();
+
+        /// The account name is not part of the URL here; read it from config if provided.
+        /// It will not be appended to service/container URLs (add_account_name_to_url defaults
+        /// to false for this path), but is stored for use by external systems such as delta-kernel-rs.
+        if (config.has(config_prefix + ".account_name"))
+            account_name = config.getString(config_prefix + ".account_name");
     }
     else
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Expected either `storage_account_url` or `connection_string` or `endpoint` in config");

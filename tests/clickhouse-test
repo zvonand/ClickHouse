@@ -1084,6 +1084,7 @@ class FailureReason(enum.Enum):
         f"Test runs too long (> {TEST_MAX_RUN_TIME_IN_SECONDS}s). Make it faster."
     )
     INTERNAL_QUERY_FAIL = "Internal query (CREATE/DROP DATABASE) failed:"
+    CONNECTION_ERROR = "Connection error: "
 
     # SKIPPED reasons
     NOT_SUPPORTED = "not supported"
@@ -3011,7 +3012,7 @@ class TestCase:
             return TestResult(
                 self.name,
                 TestStatus.FAIL,
-                FailureReason.EXIT_CODE,
+                FailureReason.CONNECTION_ERROR,
                 total_time,
                 exc_description,
             )

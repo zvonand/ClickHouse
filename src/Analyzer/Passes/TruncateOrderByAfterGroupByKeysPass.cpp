@@ -7,18 +7,30 @@
 #include <Analyzer/InDepthQueryTreeVisitor.h>
 #include <Analyzer/QueryNode.h>
 #include <Analyzer/SortNode.h>
+#include <Core/Settings.h>
 
 namespace DB
 {
 
+namespace Setting
+{
+    extern const SettingsBool optimize_truncate_order_by_after_group_by_keys;
+}
+
 namespace
 {
 
-class TruncateOrderByAfterGroupByKeysVisitor : public InDepthQueryTreeVisitor<TruncateOrderByAfterGroupByKeysVisitor>
+class TruncateOrderByAfterGroupByKeysVisitor : public InDepthQueryTreeVisitorWithContext<TruncateOrderByAfterGroupByKeysVisitor>
 {
 public:
-    void visitImpl(QueryTreeNodePtr & node)
+    using Base = InDepthQueryTreeVisitorWithContext<TruncateOrderByAfterGroupByKeysVisitor>;
+    using Base::Base;
+
+    void enterImpl(QueryTreeNodePtr & node)
     {
+        if (!getSettings()[Setting::optimize_truncate_order_by_after_group_by_keys])
+            return;
+
         auto * query = node->as<QueryNode>();
         if (!query)
             return;
@@ -107,9 +119,9 @@ private:
 
 }
 
-void TruncateOrderByAfterGroupByKeysPass::run(QueryTreeNodePtr & query_tree_node, ContextPtr /*context*/)
+void TruncateOrderByAfterGroupByKeysPass::run(QueryTreeNodePtr & query_tree_node, ContextPtr context)
 {
-    TruncateOrderByAfterGroupByKeysVisitor visitor;
+    TruncateOrderByAfterGroupByKeysVisitor visitor(std::move(context));
     visitor.visit(query_tree_node);
 }
 

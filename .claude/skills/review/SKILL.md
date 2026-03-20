@@ -98,7 +98,7 @@ WHAT TO REVIEW VS WHAT TO IGNORE
 - Report all typos found with suggested corrections.
 - Check that error messages are clear, informative, and help the user understand what went wrong and how to fix it.
 - Review PR template changelog quality: `Changelog category` must match the change, and `Changelog entry` (when required by the PR template) must be present, specific, and user-readable.
-- Apply changelog-entry standards from `clickhouse-pr-description`: avoid vague text (e.g. "fix bug"), describe the exact affected feature/behavior, and for backward-incompatible changes explain old behavior, new behavior, and how to preserve old behavior when possible.
+- Read the changelog-entry standards from `clickhouse-pr-description` and apply them: avoid vague text (e.g. "fix bug"), describe the exact affected feature/behavior, and for backward-incompatible changes explain old behavior, new behavior, and how to preserve old behavior when possible.
 
 **Explicitly ignore (do not comment on these unless they indicate a bug):**
 - Commented debugging code (completely ignore for draft PR, no more than one message in total)
@@ -228,7 +228,7 @@ SEVERITY MODEL – WHAT DESERVES A COMMENT
 REQUESTED OUTPUT FORMAT
 Respond with the following sections. Be terse but specific. Include code suggestions as minimal diffs/patches where helpful.
 Focus on problems — do not describe what was checked and found to be fine. Use emojis (❌ ⚠️ ✅ 💡) to make findings scannable.
-**Omit any section entirely if there is nothing notable to report in it** — do not include a section just to say "looks good" or "no concerns". The only mandatory sections are Summary, ClickHouse Compliance, and Final Verdict.
+**Omit any section entirely if there is nothing notable to report in it** — do not include a section just to say "looks good" or "no concerns". The only mandatory sections are Summary, ClickHouse Rules, and Final Verdict.
 
 **Summary**
 - One paragraph explaining what the PR does and your high-level verdict.
@@ -252,7 +252,7 @@ Focus on problems — do not describe what was checked and found to be fine. Use
   - Suggested fix.
 - **💡 Nits**
   - `[File:Line(s)]` Issue + quick fix.
-  - Use this section for changelog-template quality issues (`Changelog category` mismatch, missing/unclear required `Changelog entry`).
+  - Use this section for changelog-template quality issues (`Changelog category` mismatch, missing/unclear required `Changelog entry`, or low-quality user-facing `Changelog entry` that is too vague).
 
 
 **Tests** (omit if adequate)

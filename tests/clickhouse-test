@@ -3819,19 +3819,21 @@ def collect_build_flags(args):
     value = clickhouse_execute(
         args, "SELECT value FROM system.build_options WHERE name = 'CXX_FLAGS'"
     )
-    if b"-fsanitize=thread" in value:
-        result.append(BuildFlags.THREAD)
-        SANITIZED = True
-    elif b"-fsanitize=address" in value:
-        result.append(BuildFlags.ADDRESS)
-        SANITIZED = True
-    elif b"-fsanitize=undefined" in value:
-        result.append(BuildFlags.UNDEFINED)
-        SANITIZED = True
-    elif b"-fsanitize=memory" in value:
-        result.append(BuildFlags.MEMORY)
-        SANITIZED = True
-    elif b"-DSANITIZE_COVERAGE=1" in value:
+    sanitize_flag_map = {
+        b"thread": BuildFlags.THREAD,
+        b"address": BuildFlags.ADDRESS,
+        b"undefined": BuildFlags.UNDEFINED,
+        b"memory": BuildFlags.MEMORY,
+    }
+    import re as _re
+    m = _re.search(rb"-fsanitize=([\w,]+)", value)
+    if m:
+        for san in m.group(1).split(b","):
+            flag = sanitize_flag_map.get(san)
+            if flag is not None:
+                result.append(flag)
+        SANITIZED = bool(result)
+    if b"-DSANITIZE_COVERAGE=1" in value:
         result.append(BuildFlags.SANITIZE_COVERAGE)
 
     value = clickhouse_execute(

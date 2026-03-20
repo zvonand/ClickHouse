@@ -35,6 +35,12 @@ and all values of a column are sent together as a single array.
 
 Each column in a block contains a header similar to [RowBinaryWithNamesAndTypes](../formats/RowBinary/RowBinaryWithNamesAndTypes.md).
 
+:::note
+When using the native TCP binary protocol (or when the HTTP endpoint receives `?client_protocol_version=<n>`),
+a `BlockInfo` structure is written before the column and row counts. The examples in this section use
+the plain HTTP interface without a protocol version, which omits `BlockInfo`.
+:::
+
 ### Block structure {#block-structure}
 
 The following query returns two columns, `number` and `str`, with three rows:
@@ -79,7 +85,7 @@ const data = new Uint8Array([
 ])
 ```
 
-### Multiple blocks
+### Multiple blocks {#multiple-blocks}
 
 However, in many cases, the data will not fit into a single block, and ClickHouse will send the data as multiple blocks.
 Consider the following query that fetches two rows with reduced block size to force splitting the data as one row per block:
@@ -96,17 +102,17 @@ const data = new Uint8Array([
   // ----- Block 1 ----- 
   0x02,                   // 2 columns
   0x01,                   // 1 row
-  0x06,                   // LEB128 - column name str has 6 bytes
+  0x06,                   // LEB128 - column name 'number' has 6 bytes
   0x6E, 0x75, 0x6D, 
   0x62, 0x65, 0x72,       // column name: 'number' 
-  0x06,                   // LEB128 - column type str has 6 bytes
+  0x06,                   // LEB128 - column type 'UInt64' has 6 bytes
   0x55, 0x49, 0x6E, 
   0x74, 0x36, 0x34,       // 'UInt64' 
   0x00, 0x00, 0x00, 0x00, 
   0x00, 0x00, 0x00, 0x00, // 0 as UInt64
-  0x03,                   // LEB128 - column name str has 3 bytes
+  0x03,                   // LEB128 - column name 'str' has 3 bytes
   0x73, 0x74, 0x72,       // column name: 'str'
-  0x06,                   // LEB128 - column type str has 6 bytes
+  0x06,                   // LEB128 - column type 'String' has 6 bytes
   0x53, 0x74, 0x72, 
   0x69, 0x6E, 0x67,       // 'String'
   0x01,                   // LEB128 - the string has 1 byte
@@ -115,21 +121,22 @@ const data = new Uint8Array([
   // ----- Block 2 -----
   0x02,                   // 2 columns
   0x01,                   // 1 row
-  0x06,                   // LEB128 - column name str has 6 bytes
+  0x06,                   // LEB128 - column name 'number' has 6 bytes
   0x6E, 0x75, 0x6D,  
   0x62, 0x65, 0x72,       // column name: 'number'
-  0x06,                   // LEB128 - column type str has 6 bytes
+  0x06,                   // LEB128 - column type 'UInt64' has 6 bytes
   0x55, 0x49, 0x6E,  
   0x74, 0x36, 0x34,       // 'UInt64'
   0x01, 0x00, 0x00, 0x00,  
   0x00, 0x00, 0x00, 0x00, // 1 as UInt64
-  0x03,                   // LEB128 - column name str has 3 bytes
+  0x03,                   // LEB128 - column name 'str' has 3 bytes
   0x73, 0x74, 0x72,       // column name: 'str'
-  0x06,                   // LEB128 - column type str has 6 bytes
+  0x06,                   // LEB128 - column type 'String' has 6 bytes
   0x53, 0x74, 0x72,  
   0x69, 0x6E, 0x67,       // 'String'
   0x01,                   // LEB128 - the string has 1 byte
   0x31,                   // '1' as String
+])
 ```
 
 ### Simple data types
@@ -218,7 +225,10 @@ const data = new Uint8Array([
 ]);
 ```
 
-It works similarly with `Nullable(String)`; in that case, a `String` that is `NULL` will have 0 as LEB128 length. For example, the following query:
+It works similarly with `Nullable(String)`. The null indicator always comes from the nullable mask byte —
+a mask value of `0x01` means the row is `NULL` regardless of the string content. For `NULL` rows,
+the underlying string is stored as an empty string (LEB128 length `0`). Note that a non-`NULL` empty
+string also has LEB128 length `0`, so only the mask byte distinguishes the two cases. For example, the following query:
 
 ```bash
 curl -XPOST "http://localhost:8123?default_format=Native" \  --data-binary "SELECT if(number % 2 = 0, toString(number), NULL) :: Nullable(String) AS maybe_str                 FROM system.numbers LIMIT 5" \  > out.bin

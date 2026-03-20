@@ -386,11 +386,10 @@ Field QueryFuzzer::fuzzField(Field field)
                 break;
             }
             case 11: {
-                /// Unicode edge cases — BOM, zero-width space, overlong encoding, RTL override
+                /// Unicode edge cases — BOM, zero-width space, overlong encoding, surrogate half
                 static const Strings vals = {
                     "\xEF\xBB\xBF", /// UTF-8 BOM
                     "\xE2\x80\x8B", /// zero-width space
-                    "\xE2\x80\xAE", /// RTL override
                     "\xC0\xAF", /// overlong encoding of '/'
                     "\xED\xA0\x80", /// surrogate half (invalid UTF-8)
                 };

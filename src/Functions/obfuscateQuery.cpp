@@ -118,8 +118,6 @@ ColumnPtr ObfuscateQueryFunction::execute(const ColumnsWithTypeAndName & argumen
     else if (const ColumnConst * col_query_const = checkAndGetColumnConst<ColumnString>(col_query.get()))
     {
         const String & const_query = col_query_const->getValue<String>();
-        const UInt64 const_query_hash = hashStringToUInt64(std::string_view(const_query));
-
         for (size_t i = 0; i < input_rows_count; ++i)
         {
             UInt64 seed_value = 0;

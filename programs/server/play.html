@@ -2293,9 +2293,10 @@ async function postImpl(posted_request_num, query)
     /// But we don't use cached results, so the results that we get here, are always fresh.
     url += '&use_query_cache=1&enable_reads_from_query_cache=0&enable_writes_to_query_cache=1&query_cache_ttl=600&query_cache_nondeterministic_function_handling=save&query_cache_system_table_handling=ignore';
 
-    /// Add query parameter values.
-    const paramValues = getParamValues();
-    for (const [name, value] of Object.entries(paramValues))
+    /// Add query parameter values. Capture the snapshot before fetch so that
+    /// edits made while the request is in flight do not affect history/download.
+    const paramValuesSnapshot = getParamValues();
+    for (const [name, value] of Object.entries(paramValuesSnapshot))
     {
         url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
     }
@@ -2434,6 +2435,7 @@ async function postImpl(posted_request_num, query)
     document.getElementById('download-div').style.display = 'block';
     document.getElementById('copy-div').style.display = is_raw ? 'block' : 'none';
     last_query_for_download = query;
+    last_params_for_download = paramValuesSnapshot;
 
     if (is_raw) {
         resultEl.elapsedNs = 1e6 * (performance.now() - last_query_start);
@@ -2457,7 +2459,7 @@ async function postImpl(posted_request_num, query)
             ok: response.ok,
             data: reply.length > 100000 ? null : reply, /// Lower than the browser's limit.
             elapsed_ns: elapsed_ns,
-            params: getParamValues(),
+            params: paramValuesSnapshot,
         };
         const title = "ClickHouse Query: " + query;
 
@@ -2469,8 +2471,7 @@ async function postImpl(posted_request_num, query)
             /// Save server's address in URL if it's not identical to the address of the play UI.
             history_url += '&url=' + encodeURIComponent(server_address);
         }
-        const historyParamValues = getParamValues();
-        for (const [name, value] of Object.entries(historyParamValues))
+        for (const [name, value] of Object.entries(paramValuesSnapshot))
         {
             history_url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
         }
@@ -2904,6 +2905,7 @@ async function getQueryUnderCursor() {
 
 let queryParamsContainer = document.getElementById('query-params');
 let currentQueryParams = [];
+let updateQueryParamsGeneration = 0;
 
 function extractQueryParams(tokens)
 {
@@ -2978,7 +2980,9 @@ async function updateQueryParams()
         return;
     }
 
+    const generation = ++updateQueryParamsGeneration;
     const tokens = await tokenize(query);
+    if (generation !== updateQueryParamsGeneration) { return; }
     const params = extractQueryParams(tokens);
 
     if (JSON.stringify(params) === JSON.stringify(currentQueryParams))
@@ -3130,6 +3134,7 @@ document.getElementById('copy-div').addEventListener('click', function() {
 
 // Download functionality
 let last_query_for_download = '';
+let last_params_for_download = {};
 
 // Toggle download dropdown
 document.getElementById('download-div').addEventListener('click', function(e) {
@@ -3210,8 +3215,7 @@ document.getElementById('download-button').addEventListener('click', async funct
     if (user) url += '&user=' + encodeURIComponent(user);
     if (password) url += '&password=' + encodeURIComponent(password);
 
-    const downloadParamValues = getParamValues();
-    for (const [name, value] of Object.entries(downloadParamValues))
+    for (const [name, value] of Object.entries(last_params_for_download))
     {
         url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
     }

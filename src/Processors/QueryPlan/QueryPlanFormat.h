@@ -41,27 +41,16 @@ namespace QueryPlanFormat
     void formatOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
     void formatJoinOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
 
-    String formatNodePretty(const ActionsDAG::Node * node, int parent_precedence = 0);
-    String formatNamePrettyIfPossible(const ActionsDAG & dag, const String & name);
+    String formatNodePretty(
+        const ActionsDAG::Node * node,
+        const std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names,
+        int parent_precedence = 0);
     String formatColumnPretty(const String & column_name, const ExplainFormatSettings & settings);
 
     void buildPrettyNamesMap(
         const QueryPlan & plan,
         std::unordered_map<String, String> & pretty_names,
         std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names);
-
-    String formatFilterColumn(const ActionsDAG & dag, const String & column_name, bool pretty);
-
-    const RuntimeFilterInfo * findRuntimeFilter(const String & filter_id, const ExplainFormatSettings & settings);
-
-    void describeSourceFilter(
-        WriteBuffer & out,
-        const String & label,
-        const ActionsDAG & dag,
-        const String & column_name,
-        bool remove_column,
-        const ExplainFormatSettings & settings,
-        const String & prefix);
 }
 
 }

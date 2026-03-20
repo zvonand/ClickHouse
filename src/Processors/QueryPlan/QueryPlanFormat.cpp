@@ -11,7 +11,6 @@
 #include <IO/WriteBufferFromString.h>
 #include <Interpreters/ActionsDAG.h>
 #include <Interpreters/Aggregator.h>
-#include <Interpreters/ExpressionActions.h>
 #include <Processors/QueryPlan/AggregatingStep.h>
 #include <Processors/QueryPlan/CubeStep.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
@@ -21,7 +20,10 @@
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <Processors/QueryPlan/BuildRuntimeFilterStep.h>
+#include <Processors/QueryPlan/ReadFromMergeTree.h>
 #include <Processors/QueryPlan/RollupStep.h>
+#include <Processors/QueryPlan/SourceStepWithFilter.h>
+#include <Processors/QueryPlan/TotalsHavingStep.h>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -136,6 +138,41 @@ namespace QueryPlanFormat
         out << '\n';
     }
 
+    String formatFilterPretty(
+        const ActionsDAG & dag,
+        const String & column_name,
+        const std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names)
+    {
+        const auto * root = dag.tryFindInOutputs(column_name);
+        if (!root)
+            return trimColumnIdentifier(column_name);
+    
+        auto atoms = ActionsDAG::extractConjunctionAtoms(root);
+    
+        std::vector<String> user_parts;
+        std::vector<String> rf_parts;
+        for (const auto * atom : atoms)
+        {
+            if (atom->type == ActionsDAG::ActionType::FUNCTION
+                && atom->function_base
+                && atom->function_base->getName() == "__applyFilter")
+                rf_parts.push_back(formatNodePretty(atom, runtime_filter_names, 4));
+            else
+                user_parts.push_back(formatNodePretty(atom, runtime_filter_names, 4));
+        }
+    
+        String result;
+        if (!user_parts.empty())
+            result = fmt::format(" {}", fmt::join(user_parts, " AND "));
+        if (!rf_parts.empty())
+        {
+            result += fmt::format("\nRuntime filters: {}", fmt::join(rf_parts, " AND "));
+        }
+        if (result.empty())
+            result = fmt::format(" {}", trimColumnIdentifier(column_name));
+        return result;
+    }
+
     namespace
     {
         struct OperatorInfo
@@ -204,9 +241,19 @@ namespace QueryPlanFormat
             node->column->get(0, value);
             return applyVisitor(FieldVisitorToString(), value);
         }
+
+        String getRuntimeFilterId(const ActionsDAG::Node * node)
+        {
+            Field value;
+            node->children[0]->column->get(0, value);
+            return value.safeGet<String>();
+        }
     }
 
-    String formatNodePretty(const ActionsDAG::Node * node, int parent_precedence)
+    String formatNodePretty(
+        const ActionsDAG::Node * node,
+        const std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names,
+        int parent_precedence)
     {
         using ActionType = ActionsDAG::ActionType;
 
@@ -219,18 +266,31 @@ namespace QueryPlanFormat
                 return formatConstant(node);
 
             case ActionType::ALIAS:
-                return formatNodePretty(node->children.front(), parent_precedence);
+                return formatNodePretty(node->children.front(), runtime_filter_names, parent_precedence);
 
             case ActionType::ARRAY_JOIN:
-                return "arrayJoin(" + formatNodePretty(node->children.front()) + ")";
+                return "arrayJoin(" + formatNodePretty(node->children.front(), runtime_filter_names) + ")";
 
             case ActionType::FUNCTION:
             {
                 auto func_name = node->function_base->getName();
 
+                if (func_name == "__applyFilter")
+                {
+                    String filter_id = getRuntimeFilterId(node);
+                    String probe_column = trimColumnIdentifier(node->children[1]->result_name);
+                    if (auto it = runtime_filter_names.find(filter_id); it != runtime_filter_names.end())
+                    {
+                        const auto & pretty_filter_name = it->second.pretty_name;
+                        const auto & build_column = it->second.build_column_name;
+                        return fmt::format("{}({}, {})", pretty_filter_name, probe_column, build_column);
+                    }
+                    return fmt::format("{}({})", filter_id, probe_column);
+                }
+
                 if ((func_name == "_CAST" || func_name == "CAST") && node->children.size() == 2)
                 {
-                    auto inner = formatNodePretty(node->children[0]);
+                    auto inner = formatNodePretty(node->children[0], runtime_filter_names);
                     Field type_field;
                     node->children[1]->column->get(0, type_field);
                     return "CAST(" + inner + " AS " + type_field.safeGet<String>() + ")";
@@ -240,7 +300,7 @@ namespace QueryPlanFormat
 
                 if (func_name == "not" && node->children.size() == 1)
                 {
-                    String result = "NOT " + formatNodePretty(node->children[0], op_info->precedence);
+                    String result = "NOT " + formatNodePretty(node->children[0], runtime_filter_names, op_info->precedence);
                     if (op_info->precedence < parent_precedence)
                         result = "(" + std::move(result) + ")";
                     return result;
@@ -248,17 +308,17 @@ namespace QueryPlanFormat
 
                 if (func_name == "negate" && node->children.size() == 1)
                 {
-                    String result = "-" + formatNodePretty(node->children[0], op_info->precedence);
+                    String result = "-" + formatNodePretty(node->children[0], runtime_filter_names, op_info->precedence);
                     if (op_info->precedence < parent_precedence)
                         result = "(" + std::move(result) + ")";
                     return result;
                 }
 
                 if (func_name == "isNull" && node->children.size() == 1)
-                    return formatNodePretty(node->children[0], op_info->precedence) + " IS NULL";
+                    return formatNodePretty(node->children[0], runtime_filter_names, op_info->precedence) + " IS NULL";
 
                 if (func_name == "isNotNull" && node->children.size() == 1)
-                    return formatNodePretty(node->children[0], op_info->precedence) + " IS NOT NULL";
+                    return formatNodePretty(node->children[0], runtime_filter_names, op_info->precedence) + " IS NOT NULL";
 
                 if ((func_name == "and" || func_name == "or") && node->children.size() >= 2)
                 {
@@ -266,7 +326,7 @@ namespace QueryPlanFormat
                     std::vector<String> parts;
                     parts.reserve(node->children.size());
                     for (const auto * child : node->children)
-                        parts.push_back(formatNodePretty(child, op_info->precedence));
+                        parts.push_back(formatNodePretty(child, runtime_filter_names, op_info->precedence));
 
                     String result = fmt::format("{}", fmt::join(parts, separator));
                     if (op_info->precedence < parent_precedence)
@@ -276,24 +336,24 @@ namespace QueryPlanFormat
 
                 if (func_name == "arrayElement" && node->children.size() == 2)
                 {
-                    auto arr = formatNodePretty(node->children[0], op_info->precedence);
-                    auto idx = formatNodePretty(node->children[1]);
+                    auto arr = formatNodePretty(node->children[0], runtime_filter_names, op_info->precedence);
+                    auto idx = formatNodePretty(node->children[1], runtime_filter_names);
                     return arr + "[" + idx + "]";
                 }
 
                 if (func_name == "tupleElement" && node->children.size() == 2)
                 {
-                    auto tup = formatNodePretty(node->children[0], op_info->precedence);
-                    auto elem = formatNodePretty(node->children[1]);
+                    auto tup = formatNodePretty(node->children[0], runtime_filter_names, op_info->precedence);
+                    auto elem = formatNodePretty(node->children[1], runtime_filter_names);
                     return tup + "." + elem;
                 }
 
                 if (op_info && !op_info->symbol.empty() && node->children.size() == 2)
                 {
                     String result = fmt::format("{} {} {}",
-                        formatNodePretty(node->children[0], op_info->precedence),
+                        formatNodePretty(node->children[0], runtime_filter_names, op_info->precedence),
                         op_info->symbol,
-                        formatNodePretty(node->children[1], op_info->precedence));
+                        formatNodePretty(node->children[1], runtime_filter_names, op_info->precedence));
                     if (op_info->precedence < parent_precedence)
                         result = "(" + std::move(result) + ")";
                     return result;
@@ -302,7 +362,7 @@ namespace QueryPlanFormat
                 std::vector<String> args;
                 args.reserve(node->children.size());
                 for (const auto * child : node->children)
-                    args.push_back(formatNodePretty(child));
+                    args.push_back(formatNodePretty(child, runtime_filter_names));
 
                 return func_name + "(" + fmt::format("{}", fmt::join(args, ", ")) + ")";
             }
@@ -310,12 +370,6 @@ namespace QueryPlanFormat
             default:
                 return node->result_name;
         }
-    }
-
-    String formatNamePrettyIfPossible(const ActionsDAG & dag, const String & name)
-    {
-        const auto * node = dag.tryFindInOutputs(name);
-        return node ? QueryPlanFormat::formatNodePretty(node) : name;
     }
 
     String formatColumnPretty(const String & column_name, const ExplainFormatSettings & settings)
@@ -354,8 +408,8 @@ namespace QueryPlanFormat
         std::unordered_map<String, String> & pretty_names,
         std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names)
     {
-        for (const auto * child : node->children)
-            buildPrettyNamesForNode(child, pretty_names, runtime_filter_names);
+        for (auto it = node->children.rbegin(); it != node->children.rend(); ++it)
+            buildPrettyNamesForNode(*it, pretty_names, runtime_filter_names);
 
         const auto & step = node->step;
         const auto & step_name = step->getName();
@@ -365,14 +419,14 @@ namespace QueryPlanFormat
             const auto & dag = static_cast<const ExpressionStep *>(step.get())->getExpression();
             for (const auto * output : dag.getOutputs())
                 if (output->type != ActionsDAG::ActionType::INPUT)
-                    pretty_names[output->result_name] = formatNodePretty(output);
+                    pretty_names[output->result_name] = formatNodePretty(output, runtime_filter_names);
         }
         else if (step_name == "Filter")
         {
             const auto & dag = static_cast<const FilterStep *>(step.get())->getExpression();
             for (const auto * output : dag.getOutputs())
                 if (output->type != ActionsDAG::ActionType::INPUT)
-                    pretty_names[output->result_name] = formatNodePretty(output);
+                    pretty_names[output->result_name] = formatNodePretty(output, runtime_filter_names);
         }
         else if (step_name == "Aggregating" || step_name == "AggregatingProjection")
         {
@@ -390,13 +444,59 @@ namespace QueryPlanFormat
         {
             addAggregatesPrettyNames(static_cast<const CubeStep *>(step.get())->getParams(), pretty_names);
         }
+        else if (step_name == "TotalsHaving")
+        {
+            const auto * having_step = static_cast<const TotalsHavingStep *>(step.get());
+            if (const auto * dag = having_step->getActions())
+            {
+                for (const auto * output : dag->getOutputs())
+                    if (output->type != ActionsDAG::ActionType::INPUT)
+                        pretty_names[output->result_name] = formatNodePretty(output, runtime_filter_names);
+            }
+        }
         else if (step_name == "BuildRuntimeFilter")
         {
             const auto * rf_step = static_cast<const BuildRuntimeFilterStep *>(step.get());
-            size_t rf_index = runtime_filter_names.size() + 1;
-            String pretty = fmt::format("RF{}", rf_index);
-            String build_col = trimColumnIdentifier(rf_step->getFilterColumnName());
-            runtime_filter_names[rf_step->getFilterName()] = {std::move(pretty), std::move(build_col)};
+            String pretty_name = fmt::format("RF{}", runtime_filter_names.size() + 1);
+            String build_column = trimColumnIdentifier(rf_step->getFilterColumnName());
+            runtime_filter_names.try_emplace(rf_step->getFilterName(), RuntimeFilterInfo{std::move(pretty_name), std::move(build_column)});
+        }
+
+        if (const auto * source = dynamic_cast<const SourceStepWithFilter *>(step.get()))
+        {
+            if (auto prewhere = source->getPrewhereInfo())
+            {
+                pretty_names[prewhere->prewhere_column_name] = formatFilterPretty(
+                    prewhere->prewhere_actions,
+                    prewhere->prewhere_column_name,
+                    runtime_filter_names);
+            }
+            if (auto row_level = source->getRowLevelFilter())
+            {
+                pretty_names[row_level->column_name] = formatFilterPretty(
+                    row_level->actions,
+                    row_level->column_name,
+                    runtime_filter_names);
+            }
+
+            if (step_name == "ReadFromMergeTree")
+            {
+                const auto * read_from_merge_tree_step = static_cast<const ReadFromMergeTree *>(step.get());
+                if (auto deferred_row_level_filter = read_from_merge_tree_step->getDeferredRowLevelFilter())
+                {
+                    pretty_names[deferred_row_level_filter->column_name] = formatFilterPretty(
+                        deferred_row_level_filter->actions,
+                        deferred_row_level_filter->column_name,
+                        runtime_filter_names);
+                }
+                if (auto deferred_prewhere = read_from_merge_tree_step->getDeferredPrewhereInfo())
+                {
+                    pretty_names[deferred_prewhere->prewhere_column_name] = formatFilterPretty(
+                        deferred_prewhere->prewhere_actions,
+                        deferred_prewhere->prewhere_column_name,
+                        runtime_filter_names);
+                }
+            }
         }
     }
 
@@ -407,135 +507,6 @@ namespace QueryPlanFormat
     {
         if (plan.getRootNode())
             buildPrettyNamesForNode(plan.getRootNode(), pretty_names, runtime_filter_names);
-    }
-
-    namespace
-    {
-        bool isRuntimeFilterNode(const ActionsDAG::Node * node)
-        {
-            return node->type == ActionsDAG::ActionType::FUNCTION
-                && node->function_base
-                && node->function_base->getName() == "__applyFilter";
-        }
-
-        String getRuntimeFilterId(const ActionsDAG::Node * node)
-        {
-            Field value;
-            node->children[0]->column->get(0, value);
-            return value.safeGet<String>();
-        }
-
-        struct SplitResult
-        {
-            ActionsDAG::NodeRawConstPtrs user_atoms;
-            ActionsDAG::NodeRawConstPtrs rf_atoms;
-        };
-
-        SplitResult splitByRuntimeFilters(const ActionsDAG & dag, const String & column_name)
-        {
-            SplitResult result;
-            const auto * node = dag.tryFindInOutputs(column_name);
-            if (!node)
-                return result;
-
-            auto atoms = ActionsDAG::extractConjunctionAtoms(node);
-            for (const auto * atom : atoms)
-            {
-                if (isRuntimeFilterNode(atom))
-                    result.rf_atoms.push_back(atom);
-                else
-                    result.user_atoms.push_back(atom);
-            }
-            return result;
-        }
-
-        void writeRuntimeFilters(
-            WriteBuffer & out,
-            const ActionsDAG::NodeRawConstPtrs & rf_atoms,
-            const std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names,
-            const String & prefix)
-        {
-            out << prefix << "Runtime filters: ";
-            bool first = true;
-            for (const auto * atom : rf_atoms)
-            {
-                if (!first)
-                    out << ", ";
-                first = false;
-
-                String filter_id = getRuntimeFilterId(atom);
-                String probe_col = trimColumnIdentifier(atom->children[1]->result_name);
-
-                if (auto it = runtime_filter_names.find(filter_id); it != runtime_filter_names.end())
-                    out << it->second.pretty_name << ": " << probe_col << " = " << it->second.build_column_name;
-                else
-                    out << filter_id << ": " << probe_col;
-            }
-            out << '\n';
-        }
-
-        void writeFilterAtoms(
-            WriteBuffer & out,
-            const ActionsDAG::NodeRawConstPtrs & atoms,
-            const String & label,
-            const String & prefix)
-        {
-            out << prefix << label << " column: ";
-            for (size_t i = 0; i < atoms.size(); ++i)
-            {
-                if (i > 0)
-                    out << " AND ";
-                out << formatNodePretty(atoms[i], 4);
-            }
-            out << '\n';
-        }
-    }
-
-    String formatFilterColumn(const ActionsDAG & dag, const String & column_name, bool pretty)
-    {
-        return pretty ? formatNamePrettyIfPossible(dag, column_name) : column_name;
-    }
-
-    const RuntimeFilterInfo * findRuntimeFilter(const String & filter_id, const ExplainFormatSettings & settings)
-    {
-        if (auto it = settings.runtime_filter_names.find(filter_id); it != settings.runtime_filter_names.end())
-            return &it->second;
-        return nullptr;
-    }
-
-    void describeSourceFilter(
-        WriteBuffer & out,
-        const String & label,
-        const ActionsDAG & dag,
-        const String & column_name,
-        bool remove_column,
-        const ExplainFormatSettings & settings,
-        const String & prefix)
-    {
-        if (settings.pretty)
-        {
-            auto split = splitByRuntimeFilters(dag, column_name);
-
-            if (!split.user_atoms.empty())
-                writeFilterAtoms(out, split.user_atoms, label, prefix);
-
-            if (!split.rf_atoms.empty())
-                writeRuntimeFilters(out, split.rf_atoms, settings.runtime_filter_names, prefix);
-        }
-        else
-        {
-            out << prefix << label << '\n';
-            out << prefix << label << " column: " << column_name;
-            if (remove_column)
-                out << " (removed)";
-            out << '\n';
-        }
-        
-        if (!settings.compact)
-        {
-            auto expression = std::make_shared<ExpressionActions>(dag.clone());
-            expression->describeActions(out, prefix);
-        }
     }
 
 }

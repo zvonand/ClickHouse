@@ -196,8 +196,8 @@ void BuildRuntimeFilterStep::describeActions(FormatSettings & format_settings) c
 
     if (format_settings.pretty)
     {
-        if (const auto * rf = QueryPlanFormat::findRuntimeFilter(filter_name, format_settings))
-            format_settings.out << prefix << "Filter: " << rf->pretty_name << ": " << rf->build_column_name << '\n';
+        if (auto it = format_settings.runtime_filter_names.find(filter_name); it != format_settings.runtime_filter_names.end())
+            format_settings.out << prefix << "Filter: " << it->second.pretty_name << ": " << it->second.build_column_name << '\n';
     }
     else
     {

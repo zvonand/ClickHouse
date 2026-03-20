@@ -116,7 +116,7 @@ void TotalsHavingStep::describeActions(FormatSettings & settings) const
 
     settings.out << prefix << "Filter column: ";
 
-    settings.out << (settings.pretty && actions_dag ? QueryPlanFormat::formatNamePrettyIfPossible(actions_dag.value(), filter_column_name) : filter_column_name);
+    settings.out << QueryPlanFormat::formatColumnPretty(filter_column_name, settings);
 
     if (!settings.pretty && remove_filter)
         settings.out << " (removed)";

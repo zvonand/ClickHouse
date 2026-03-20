@@ -66,10 +66,10 @@ namespace
         if (it == headers.end())
             return std::nullopt;
 
-        const std::string basic_prefix = "Basic ";
+        const std::string basic_prefix = "basic ";
         const auto & auth_str = it->second;
 
-        if (!auth_str.starts_with(basic_prefix))
+        if (!Poco::toLower(std::string(auth_str)).starts_with(basic_prefix))
             return std::nullopt;
 
         auto credentials = base64Decode(std::string(auth_str.substr(basic_prefix.size())));
@@ -87,10 +87,10 @@ namespace
         if (it == headers.end())
             return std::nullopt;
 
-        const std::string bearer_prefix = "Bearer ";
+        const std::string bearer_prefix = "bearer ";
         const auto & auth_str = it->second;
 
-        if (!auth_str.starts_with(bearer_prefix))
+        if (!Poco::toLower(std::string(auth_str)).starts_with(bearer_prefix))
             return std::nullopt;
 
         return std::string(auth_str.substr(bearer_prefix.size()));

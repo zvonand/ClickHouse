@@ -242,6 +242,10 @@ public:
       * Sometimes, functions are "deterministic" in scope of single query
       *  (even for distributed query), but not deterministic it general.
       * Example: now(). Another example: functions that work with periodically updated dictionaries.
+      *
+      * Also means that the function cannot return different values depending on
+      * the constness of arguments (same value, different constness => same result).
+      * Counterexamples: `isConstant`, `toColumnTypeName`.
       */
 
     virtual bool isDeterministic() const { return true; }

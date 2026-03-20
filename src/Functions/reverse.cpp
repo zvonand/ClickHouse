@@ -130,11 +130,7 @@ public:
     String getName() const override { return name; }
     size_t getNumberOfArguments() const override { return 1; }
 
-    bool isInjective(const ColumnsWithTypeAndName & arguments) const override
-    {
-        /// When the argument is not an array, reverse operates on strings and is injective.
-        return !arguments.empty() && !isArray(arguments.at(0).type);
-    }
+    bool isInjective(const ColumnsWithTypeAndName &) const override { return true; }
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {

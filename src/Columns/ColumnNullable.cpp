@@ -656,11 +656,12 @@ void ColumnNullable::updatePermutationImpl(IColumn::PermutationSortDirection dir
                 --read_idx;
             }
 
-            /// We have a range [write_idx+1, last) of non-NULL values
+            /// We have a range [write_idx+1, last) of non-NULL values.
+            /// Only emit ranges with >= 2 elements (single-element ranges are already sorted).
             if (write_idx + 1 + 1 < static_cast<ssize_t>(last))
                 new_ranges.emplace_back(write_idx + 1, last);
 
-            /// We have a range [first, write_idx+1) of NULL values
+            /// We have a range [first, write_idx+1) of NULL values.
             if (static_cast<ssize_t>(first) + 1 < write_idx + 1)
                 null_ranges.emplace_back(first, write_idx + 1);
         }

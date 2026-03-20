@@ -153,7 +153,7 @@ std::pair<String, String> problemInfo(Problem p)
         case P_LATE_TYPECHECK: return {"late_typecheck",
             "type error throws from IExecutableFunction::execute (instead of IFunctionOverloadResolver::build)"};
         case P_EXCEPTION_IN_PREPARE: return {"exception_in_prepare",
-            "exception in IFunctionBase::prepare (instead of IFunctionOverloadResolver::build"};
+            "exception in IFunctionBase::prepare (instead of IFunctionOverloadResolver::build)"};
         case P_CONST_DEPENDENT_CHECKS: return {"const_dependent_checks",
             "function failed after making some arguments const"};
         case P_DATA_DEPENDENT_CONST: return {"data_dependent_const",
@@ -309,29 +309,18 @@ const std::unordered_set<std::string_view> excluded_functions = {
     "currentProfiles",
     "defaultProfiles",
     "enabledProfiles",
-    "cutToFirstSignificantSubdomain",
+    "__filterContains",
+    "generateSerialID",
+    "zookeeperSessionUptime",
+    "lemmatize",
+
+    /// These need custom TLD list config.
     "cutToFirstSignificantSubdomainCustom",
     "cutToFirstSignificantSubdomainCustomRFC",
     "cutToFirstSignificantSubdomainCustomWithWWW",
     "cutToFirstSignificantSubdomainCustomWithWWWRFC",
-    "cutToFirstSignificantSubdomainRFC",
-    "cutToFirstSignificantSubdomainWithWWW",
-    "cutToFirstSignificantSubdomainWithWWWRFC",
-    "domain",
-    "domainRFC",
-    "domainWithoutWWW",
-    "domainWithoutWWWRFC",
-    "firstSignificantSubdomain",
     "firstSignificantSubdomainCustom",
     "firstSignificantSubdomainCustomRFC",
-    "firstSignificantSubdomainRFC",
-    "topLevelDomain",
-    "topLevelDomainRFC",
-    "__filterContains",
-    "generateSerialID",
-    "zookeeperSessionUptime",
-    "cutToFirstSignificantSubdomainCustomWithWWW",
-    "lemmatize",
     "fuzzQuery",
 
     /// H3 functions can read out of bounds of global arrays in the H3 contrib library
@@ -773,7 +762,7 @@ public:
 
 private:
     std::array<Int64, S_COUNT> counters {};
-    /// If the problem occurred at least once, ths String has an error message from one of the occurrences.
+    /// If the problem occurred at least once, this String has an error message from one of the occurrences.
     /// Otherwise the String is empty.
     std::array<String, P_COUNT> problems {};
 

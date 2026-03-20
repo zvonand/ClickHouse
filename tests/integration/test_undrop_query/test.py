@@ -1,4 +1,5 @@
 # ci: trigger flaky check
+import random
 import logging
 import time
 import uuid
@@ -23,6 +24,8 @@ def started_cluster():
 
 
 def test_undrop_drop_and_undrop_loop(started_cluster):
+    if random.random() < 0.5:
+        raise AssertionError("Injected random failure to test flaky check detection")
     uuid_list = []
 
     for i in range(4):

@@ -471,10 +471,9 @@ tar -czf ./ci/tmp/logs.tar.gz \
 
     if args.count:
         repeat_option = f"--count {args.count} --random-order"
-    elif is_targeted_check:
-        repeat_option = f"--count 10 --random-order"
-    # For is_flaky_check: no --count here. The module_repeat_cnt loop re-runs the entire
-    # pytest session so each repetition is fully isolated (separate process, separate cluster).
+    # For flaky/targeted checks, --count is not used. Instead, --dist=each runs N workers
+    # each executing all modules independently with their own isolated Docker cluster
+    # (ClickHouseCluster appends PYTEST_XDIST_WORKER to project_name for isolation).
 
     if args.workers:
         workers = args.workers
@@ -554,7 +553,7 @@ tar -czf ./ci/tmp/logs.tar.gz \
 
     if is_bugfix_validation or is_flaky_check:
         assert (
-            changed_test_modules
+            changed_test_modules or (info.is_local_run and args.test)
         ), "No changed test modules found, either job must be skipped or bug in changed test search logic"
 
     Shell.check(f"chmod +x {clickhouse_path}", verbose=True, strict=True)
@@ -676,11 +675,21 @@ tar -czf ./ci/tmp/logs.tar.gz \
         except Exception as ex:
             print(f"Failed to clear dmesg before integration tests: {ex}")
 
+    if is_flaky_check or is_targeted_check:
+        # Each xdist worker runs all modules independently with its own isolated Docker cluster.
+        # ClickHouseCluster appends PYTEST_XDIST_WORKER to the project name, so clusters
+        # from different workers never interfere. --dist=each sends all tests to every worker.
+        parallel_dist = "--dist=each"
+        parallel_workers = FLAKY_CHECK_TEST_REPEAT_COUNT if is_flaky_check else 10
+    else:
+        parallel_dist = "--dist=loadfile"
+        parallel_workers = workers
+
     if parallel_test_modules:
         for attempt in range(module_repeat_cnt):
             log_file = f"{temp_path}/pytest_parallel.log"
             test_result_parallel = run_pytest_and_collect_results(
-                command=f"{' '.join(parallel_test_modules)} --report-log-exclude-logs-on-passed-tests -n {workers} --dist=loadfile --tb=short {repeat_option} --session-timeout={session_timeout_parallel}",
+                command=f"{' '.join(parallel_test_modules)} --report-log-exclude-logs-on-passed-tests -n {parallel_workers} {parallel_dist} --tb=short {repeat_option} --session-timeout={session_timeout_parallel}",
                 env=test_env,
                 report_name="parallel",
                 timeout=session_timeout_parallel + 600,
@@ -699,10 +708,9 @@ tar -czf ./ci/tmp/logs.tar.gz \
             failed_tests_files.extend(test_result_parallel.files)
         if test_result_parallel.is_error():
             if not is_targeted_check:
-                # In targeted checks we may overload the run with many or heavy tests
-                # (--count N is used). In this mode, a session-timeout is an expected risk
-                # rather than an infrastructure problem, so we do not treat such errors as job-level
-                # failures and avoid setting the error flag for targeted runs.
+                # In targeted checks we may overload the run with many heavy tests running
+                # in parallel. A session-timeout is an expected risk rather than an
+                # infrastructure problem, so we do not treat such errors as job-level failures.
                 has_error = True
                 error_info.append(test_result_parallel.info)
 
@@ -710,7 +718,7 @@ tar -czf ./ci/tmp/logs.tar.gz \
     if sequential_test_modules and fail_num < MAX_FAILS_BEFORE_DROP and not has_error:
         for attempt in range(module_repeat_cnt):
             test_result_sequential = run_pytest_and_collect_results(
-                command=f"{' '.join(sequential_test_modules)} --report-log-exclude-logs-on-passed-tests --tb=short {repeat_option} -n 1 --dist=loadfile --session-timeout={session_timeout_sequential}",
+                command=f"{' '.join(sequential_test_modules)} --report-log-exclude-logs-on-passed-tests --tb=short {repeat_option} -n {parallel_workers} {parallel_dist} --session-timeout={session_timeout_sequential}",
                 env=test_env,
                 report_name="sequential",
                 timeout=session_timeout_sequential + 600,
@@ -730,10 +738,9 @@ tar -czf ./ci/tmp/logs.tar.gz \
             failed_tests_files.extend(test_result_sequential.files)
         if test_result_sequential.is_error():
             if not is_targeted_check:
-                # In targeted checks we may overload the run with many or heavy tests
-                # (--count N is used). In this mode, a session-timeout is an expected risk
-                # rather than an infrastructure problem, so we do not treat such errors as job-level
-                # failures and avoid setting the error flag for targeted runs.
+                # In targeted checks we may overload the run with many heavy tests running
+                # in parallel. A session-timeout is an expected risk rather than an
+                # infrastructure problem, so we do not treat such errors as job-level failures.
                 has_error = True
                 error_info.append(test_result_sequential.info)
 

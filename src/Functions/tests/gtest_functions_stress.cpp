@@ -179,7 +179,14 @@ std::pair<String, String> problemInfo(Problem p)
 struct Options
 {
     int num_threads = -1;
+
+    /// Under sanitizers, everything is ~10-20x slower, so reduce default duration
+    /// to avoid CI timeouts (the gtest CI job has a 45-minute hard limit).
+#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER) || defined(ADDRESS_SANITIZER)
+    int duration_seconds = 10;
+#else
     int duration_seconds = 60;
+#endif
 
     size_t rows_per_batch = 32;
 

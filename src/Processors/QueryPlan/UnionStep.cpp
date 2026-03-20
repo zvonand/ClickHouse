@@ -28,8 +28,9 @@ static SharedHeader checkHeaders(const SharedHeaders & input_headers)
     return res;
 }
 
-UnionStep::UnionStep(SharedHeaders input_headers_, size_t max_threads_)
+UnionStep::UnionStep(SharedHeaders input_headers_, size_t max_threads_, size_t max_streams_)
     : max_threads(max_threads_)
+    , max_streams(max_streams_)
 {
     updateInputHeaders(std::move(input_headers_));
 }
@@ -81,6 +82,15 @@ QueryPipelineBuilderPtr UnionStep::updatePipeline(QueryPipelineBuilders pipeline
     }
 
     *pipeline = QueryPipelineBuilder::unitePipelines(std::move(pipelines), new_max_threads, &processors);
+
+    if (max_streams && pipeline->getNumStreams() > max_streams)
+    {
+        QueryPipelineProcessorsCollector collector(*pipeline, this);
+        pipeline->narrow(max_streams);
+        auto added_processors = collector.detachProcessors();
+        processors.insert(processors.end(), added_processors.begin(), added_processors.end());
+    }
+
     return pipeline;
 }
 

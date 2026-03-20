@@ -119,6 +119,8 @@ namespace Setting
     extern const SettingsUInt64 max_subquery_depth;
     extern const SettingsUInt64 max_rows_in_distinct;
     extern const SettingsMaxThreads max_threads;
+    extern const SettingsUInt64 max_streams_for_union_step;
+    extern const SettingsFloat max_streams_for_union_step_to_max_threads_ratio;
     extern const SettingsBool parallel_replicas_allow_in_with_subquery;
     extern const SettingsString parallel_replicas_custom_key;
     extern const SettingsUInt64 parallel_replicas_min_number_of_rows_per_replica;
@@ -1729,7 +1731,13 @@ void Planner::buildPlanForUnionNode()
 
     if (union_mode == SelectUnionMode::UNION_ALL || union_mode == SelectUnionMode::UNION_DISTINCT)
     {
-        auto union_step = std::make_unique<UnionStep>(std::move(query_plans_headers), max_threads);
+        size_t max_streams = settings[Setting::max_streams_for_union_step];
+        size_t max_streams_from_ratio = static_cast<size_t>(static_cast<double>(max_threads) * settings[Setting::max_streams_for_union_step_to_max_threads_ratio]);
+        if (max_streams && max_streams_from_ratio)
+            max_streams = std::min(max_streams, max_streams_from_ratio);
+        else if (!max_streams)
+            max_streams = max_streams_from_ratio;
+        auto union_step = std::make_unique<UnionStep>(std::move(query_plans_headers), max_threads, max_streams);
         query_plan.unitePlans(std::move(union_step), std::move(query_plans));
     }
     else if (union_mode == SelectUnionMode::INTERSECT_ALL || union_mode == SelectUnionMode::INTERSECT_DISTINCT

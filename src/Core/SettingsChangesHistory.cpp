@@ -41,7 +41,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         /// Note: please check if the key already exists to prevent duplicate entries.
         addSettingsChanges(settings_changes_history, "26.4",
         {
-
+            {"max_streams_for_union_step", 0, 0, "New setting to limit the number of simultaneously active data streams in a UNION ALL step to reduce peak memory usage."},
+            {"max_streams_for_union_step_to_max_threads_ratio", 0, 8, "New setting: ratio applied to max_threads to compute the default max_streams_for_union_step when that setting is 0."},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {

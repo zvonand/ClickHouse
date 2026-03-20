@@ -420,7 +420,7 @@ public:
         std::lock_guard lock{mutex};
         auto it = tickets.find(ticket);
         if (it == tickets.end())
-            return; /// The ticked has been already cancelled.
+            return; /// The ticket has been already cancelled.
         LOG_DEBUG(log, "Cancelling ticket {}", ticket);
         auto info = it->second;
         tickets.erase(it);
@@ -642,7 +642,7 @@ public:
                 it->second = new_info;
                 return true;
             }
-            return false; /// The poll descriptor is being evaluating in another thread, we need to wait.
+            return false; /// The poll descriptor is being evaluated in another thread, we need to wait.
         });
         return res;
     }

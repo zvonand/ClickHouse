@@ -276,8 +276,7 @@ public:
     {
         if constexpr (std::is_same_v<DictionaryAttributeType, Array>)
         {
-            auto non_nullable_type = removeNullable(dictionary_attribute.type);
-            if (const auto * array_type = typeid_cast<const DataTypeArray *>(non_nullable_type.get()))
+            if (const auto * array_type = typeid_cast<const DataTypeArray *>(dictionary_attribute.type.get()))
             {
                 auto nested_column = array_type->getNestedType()->createColumn();
                 return ColumnArray::create(std::move(nested_column));
@@ -287,18 +286,23 @@ public:
         }
         if constexpr (std::is_same_v<DictionaryAttributeType, Map>)
         {
-            auto non_nullable_type = removeNullable(dictionary_attribute.type);
-            if (const auto * map_type = typeid_cast<const DataTypeMap *>(non_nullable_type.get()))
+            if (const auto * map_type = typeid_cast<const DataTypeMap *>(dictionary_attribute.type.get()))
             {
                 auto key_column = map_type->getKeyType()->createColumn();
                 auto value_column = map_type->getValueType()->createColumn();
+
                 MutableColumns tuple_columns;
                 tuple_columns.push_back(std::move(key_column));
                 tuple_columns.push_back(std::move(value_column));
+
                 auto tuple_column = ColumnTuple::create(std::move(tuple_columns));
-                // ColumnMap requires ColumnArray containing ColumnTuple
+
+                /// ColumnMap stores data as Array(Tuple(key, value)).
                 auto array_column = ColumnArray::create(std::move(tuple_column));
-                return ColumnMap::create(std::move(array_column));
+
+                /// Construct ColumnMap explicitly so that the returned pointer type
+                /// is ColumnMap::MutablePtr, matching ColumnType::MutablePtr.
+                return ColumnMap::create(array_column->assumeMutable());
             }
 
             throw Exception(ErrorCodes::TYPE_MISMATCH, "Unsupported Map attribute type.");
@@ -308,17 +312,17 @@ public:
             auto non_nullable_type = removeNullable(dictionary_attribute.type);
             if (const auto * object_type = typeid_cast<const DataTypeObject *>(non_nullable_type.get()))
             {
-                // Create shared_data: ColumnArray containing ColumnTuple with two ColumnString columns (paths and values)
-                MutableColumns paths_and_values;
-                paths_and_values.emplace_back(ColumnString::create());
-                paths_and_values.emplace_back(ColumnString::create());
-                auto shared_data = ColumnArray::create(ColumnTuple::create(std::move(paths_and_values)));
+                /// Keep typed JSON paths from the declared `DataTypeObject`.
+                /// Dictionary subcolumn access (for example `dictGet(...).name`) relies on
+                /// typed paths being present in `ColumnObject` even for an empty column.
+                std::unordered_map<String, MutableColumnPtr> typed_path_columns; // STYLE_CHECK_ALLOW_STD_CONTAINERS
+                typed_path_columns.reserve(object_type->getTypedPaths().size());
+                for (const auto & [path, type] : object_type->getTypedPaths())
+                    typed_path_columns.emplace(path, type->createColumn());
 
+                /// Construct `ColumnObject` with typed paths and empty dynamic/shared data.
                 return ColumnObject::create(
-                    std::unordered_map<String, MutableColumnPtr>{},  // STYLE_CHECK_ALLOW_STD_CONTAINERS
-                    std::unordered_map<String, MutableColumnPtr>{},  // STYLE_CHECK_ALLOW_STD_CONTAINERS
-                    std::move(shared_data),
-                    object_type->getMaxDynamicPaths(),
+                    std::move(typed_path_columns),
                     object_type->getMaxDynamicPaths(),
                     object_type->getMaxDynamicTypes());
             }

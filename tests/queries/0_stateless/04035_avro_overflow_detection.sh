@@ -81,7 +81,7 @@ ${CLICKHOUSE_LOCAL} -q "SELECT -50.0::Float64 AS x FORMAT Avro" | \
 
 echo "Test 13: NaN to int"
 ${CLICKHOUSE_LOCAL} -q "SELECT nan::Float64 AS x FORMAT Avro" | \
-    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Int32' -q "SELECT * FROM table"
+    ${CLICKHOUSE_LOCAL} --input-format Avro -S 'x Int32' -q "SELECT * FROM table" 2>&1 | \
     expect_error "VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE"
 
 echo "Test 14: Infinity to int"

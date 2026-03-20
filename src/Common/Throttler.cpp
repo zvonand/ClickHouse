@@ -27,7 +27,7 @@ namespace ErrorCodes
 /// Just 10^9.
 static constexpr auto NS = 1000000000UL;
 
-Throttler::Throttler(std::string_view throttler_name_, size_t max_speed_, const ThrottlerPtr & parent_,
+Throttler::Throttler(const char * throttler_name_, size_t max_speed_, const ThrottlerPtr & parent_,
         ProfileEvents::Event event_amount_,
         ProfileEvents::Event event_sleep_us_)
     : throttler_name(throttler_name_)
@@ -40,13 +40,13 @@ Throttler::Throttler(std::string_view throttler_name_, size_t max_speed_, const 
     , event_sleep_us(event_sleep_us_)
 {}
 
-Throttler::Throttler(std::string_view throttler_name_, size_t max_speed_,
+Throttler::Throttler(const char * throttler_name_, size_t max_speed_,
         ProfileEvents::Event event_amount_,
         ProfileEvents::Event event_sleep_us_)
     : Throttler(throttler_name_, max_speed_, nullptr, event_amount_, event_sleep_us_)
 {}
 
-Throttler::Throttler(std::string_view throttler_name_, size_t max_speed_, size_t limit_, const char * limit_exceeded_exception_message_, const ThrottlerPtr & parent_)
+Throttler::Throttler(const char * throttler_name_, size_t max_speed_, size_t limit_, const char * limit_exceeded_exception_message_, const ThrottlerPtr & parent_)
     : throttler_name(throttler_name_)
     , max_speed(max_speed_)
     , max_burst(max_speed_ * default_burst_seconds)

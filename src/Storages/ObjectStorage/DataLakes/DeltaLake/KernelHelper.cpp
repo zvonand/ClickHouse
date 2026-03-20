@@ -234,6 +234,9 @@ public:
                     set_option("azure_client_secret", *connection_params.raw_client_secret);
                 if (connection_params.raw_tenant_id.has_value())
                     set_option("azure_tenant_id", *connection_params.raw_tenant_id);
+                const auto & name = endpoint.account_name.empty() ? get_account_name() : endpoint.account_name;
+                if (!name.empty())
+                    set_option("azure_storage_account_name", name);
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::WorkloadIdentityCredential>>)
             {

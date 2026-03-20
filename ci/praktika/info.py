@@ -232,6 +232,9 @@ class Info:
             print(f"ERROR: Exception, while reading workflow input [{e}]")
         return None
 
+    def set_pr_labels(self, labels, reset=False):
+        self.env.set_pr_labels(labels, reset=reset)
+
     def store_kv_data(self, key, value):
         print(f"Store workflow kv data: key [{key}], value [{value}]")
         self.env.JOB_KV_DATA[key] = value

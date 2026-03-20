@@ -256,20 +256,23 @@ def check_labels(category, info):
         print(f"Add labels [{pr_labels_to_add}]")
         for label in pr_labels_to_add:
             cmd += f" --add-label '{label}'"
-            if label in info.pr_labels:
-                info.pr_labels.append(label)
-            info.dump()
 
     if pr_labels_to_remove:
         print(f"Remove labels [{pr_labels_to_remove}]")
         for label in pr_labels_to_remove:
             cmd += f" --remove-label '{label}'"
-            if label in info.pr_labels:
-                info.pr_labels.remove(label)
-            info.dump()
 
     if pr_labels_to_remove or pr_labels_to_add:
         Shell.check(cmd, verbose=True, strict=True, retries=5)
+
+    final_labels = list(labels)
+    for label in pr_labels_to_add:
+        if label not in final_labels:
+            final_labels.append(label)
+    for label in pr_labels_to_remove:
+        if label in final_labels:
+            final_labels.remove(label)
+    info.set_pr_labels(final_labels)
 
 
 if __name__ == "__main__":

@@ -42,3 +42,24 @@ INSERT INTO records_04046 from INFILE '$CURDIR/data_protobuf/RecordInfo' SETTING
 INSERT INTO records_04046 from INFILE '$CURDIR/data_protobuf/RecordClear' SETTINGS format_schema='$SCHEMADIR/04046_record.proto:Record' FORMAT ProtobufSingle;
 SELECT * FROM records_04046 ORDER BY id Format PrettyMonoBlock;
 EOF
+
+# syntax = "proto3";
+# message Empty {}
+# message Record {
+#   oneof type {
+#     Empty nothing = 1;
+#     Empty nothing2 = 2;
+#   }
+# }
+$CLICKHOUSE_CLIENT <<EOF
+SET input_format_protobuf_oneof_presence=true;
+DROP TABLE IF EXISTS empty_records_04046;
+SELECT '>> empty records';
+CREATE TABLE empty_records_04046
+(
+    type Enum8('unknown' = 0, 'nothing' = 1, 'nothing2' = 2)
+)
+ENGINE = MergeTree;
+INSERT INTO empty_records_04046 from INFILE '$CURDIR/data_protobuf/RecordTotallyEmpty' SETTINGS format_schema='$SCHEMADIR/04046_empty_record.proto:Record' FORMAT ProtobufSingle;
+SELECT * FROM empty_records_04046 ORDER BY type Format PrettyMonoBlock;
+EOF

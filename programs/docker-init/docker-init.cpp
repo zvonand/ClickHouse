@@ -507,6 +507,95 @@ bool manageClickHouseUser(
     return true;
 }
 
+/// Returns false on first error (fail-fast, matches shell `set -e`).
+static bool createClickHouseDatabase(
+    const std::vector<std::string> & client_base,
+    const std::string & clickhouse_db)
+{
+    if (clickhouse_db.empty())
+        return true;
+    if (!isValidIdentifier(clickhouse_db))
+    {
+        std::cerr << "docker-init: error: CLICKHOUSE_DB '" << clickhouse_db
+                  << "' contains characters not safe for use in SQL; "
+                     "use only alphanumeric characters and underscores\n";
+        return false;
+    }
+    std::cerr << "docker-init: create database '" << clickhouse_db << "'\n";
+    std::vector<std::string> args = client_base;
+    args.insert(args.end(), {"-q", "CREATE DATABASE IF NOT EXISTS " + clickhouse_db});
+    if (runCommand(args) != 0)
+    {
+        std::cerr << "docker-init: error: failed to create database '" << clickhouse_db << "'\n";
+        return false;
+    }
+    return true;
+}
+
+/// Returns false on first script failure (fail-fast, matches shell `set -e`).
+static bool runInitScripts(const std::vector<std::string> & client_base)
+{
+    std::error_code ec;
+    if (!fs::is_directory("/docker-entrypoint-initdb.d", ec))
+        return true;
+    std::vector<fs::path> init_files;
+    for (const auto & entry : fs::directory_iterator("/docker-entrypoint-initdb.d", ec))
+        init_files.push_back(entry.path());
+    std::sort(init_files.begin(), init_files.end());
+
+    for (const auto & path : init_files)
+    {
+        std::string filename = path.filename().string();
+
+        if (filename.ends_with(".sql") && !filename.ends_with(".sql.gz"))
+        {
+            std::cerr << "docker-init: running " << path << "\n";
+            std::vector<std::string> args = client_base;
+            args.emplace_back("--queries-file");
+            args.push_back(path.string());
+            if (runCommand(args) != 0)
+            {
+                std::cerr << "docker-init: error: init script " << path << " failed\n";
+                return false;
+            }
+        }
+        else if (filename.ends_with(".sql.gz"))
+        {
+            std::cerr << "docker-init: running " << path << " (decompressing)\n";
+            /// Decompress via clickhouse-local (auto-detects .gz) and pipe to clickhouse-client.
+            /// Escape single quotes in the path to prevent SQL injection via crafted filenames.
+            std::string escaped_path;
+            for (char c : path.string())
+            {
+                if (c == '\'')
+                    escaped_path += "''";
+                else
+                    escaped_path += c;
+            }
+            std::vector<std::string> decompress_args = {
+                g_clickhouse_binary, "local",
+                "--query",
+                "SELECT * FROM file('" + escaped_path + "', RawBLOB) FORMAT RawBLOB",
+            };
+            if (runPipeline(decompress_args, client_base) != 0)
+            {
+                std::cerr << "docker-init: error: init script " << path << " failed\n";
+                return false;
+            }
+        }
+        else if (filename.ends_with(".sh"))
+        {
+            std::cerr << "docker-init: WARNING: shell scripts cannot run in a distroless "
+                         "environment, skipping " << path << "\n";
+        }
+        else
+        {
+            std::cerr << "docker-init: ignoring " << path << "\n";
+        }
+    }
+    return true;
+}
+
 /// Start a temporary ClickHouse server, run init scripts, then stop it.
 bool initClickHouseDB(
     const std::string & config_file,
@@ -659,103 +748,17 @@ bool initClickHouseDB(
         "--password", clickhouse_password,
     };
 
-    bool init_ok = true;
+    const bool ok = createClickHouseDatabase(client_base, clickhouse_db)
+                 && runInitScripts(client_base);
 
-    /// Create default database if CLICKHOUSE_DB is set.
-    if (!clickhouse_db.empty())
-    {
-        if (!isValidIdentifier(clickhouse_db))
-        {
-            std::cerr << "docker-init: error: CLICKHOUSE_DB '" << clickhouse_db
-                      << "' contains characters not safe for use in SQL; "
-                         "use only alphanumeric characters and underscores\n";
-            init_ok = false;
-        }
-        else
-        {
-            std::cerr << "docker-init: create database '" << clickhouse_db << "'\n";
-            std::vector<std::string> create_db_args = client_base;
-            create_db_args.insert(create_db_args.end(), {
-                "-q", "CREATE DATABASE IF NOT EXISTS " + clickhouse_db,
-            });
-            if (runCommand(create_db_args) != 0)
-            {
-                std::cerr << "docker-init: error: failed to create database '" << clickhouse_db << "'\n";
-                init_ok = false;
-            }
-        }
-    }
-
-    /// Process init scripts in sorted order.
-    if (init_ok && fs::is_directory("/docker-entrypoint-initdb.d", ec))
-    {
-        std::vector<fs::path> init_files;
-        for (const auto & entry : fs::directory_iterator("/docker-entrypoint-initdb.d", ec))
-            init_files.push_back(entry.path());
-        std::sort(init_files.begin(), init_files.end());
-
-        for (const auto & path : init_files)
-        {
-            std::string filename = path.filename().string();
-
-            if (filename.ends_with(".sql") && !filename.ends_with(".sql.gz"))
-            {
-                std::cerr << "docker-init: running " << path << "\n";
-                std::vector<std::string> args = client_base;
-                args.emplace_back("--queries-file");
-                args.push_back(path.string());
-                if (runCommand(args) != 0)
-                {
-                    std::cerr << "docker-init: error: init script " << path << " failed\n";
-                    init_ok = false;
-                    break;
-                }
-            }
-            else if (filename.ends_with(".sql.gz"))
-            {
-                std::cerr << "docker-init: running " << path << " (decompressing)\n";
-                /// Decompress via clickhouse-local (auto-detects .gz) and pipe to clickhouse-client.
-                /// Escape single quotes in the path to prevent SQL injection via crafted filenames.
-                std::string escaped_path;
-                for (char c : path.string())
-                {
-                    if (c == '\'')
-                        escaped_path += "''";
-                    else
-                        escaped_path += c;
-                }
-                std::vector<std::string> decompress_args = {
-                    g_clickhouse_binary, "local",
-                    "--query",
-                    "SELECT * FROM file('" + escaped_path + "', RawBLOB) FORMAT RawBLOB",
-                };
-                if (runPipeline(decompress_args, client_base) != 0)
-                {
-                    std::cerr << "docker-init: error: init script " << path << " failed\n";
-                    init_ok = false;
-                    break;
-                }
-            }
-            else if (filename.ends_with(".sh"))
-            {
-                std::cerr << "docker-init: WARNING: shell scripts cannot run in a distroless "
-                             "environment, skipping " << path << "\n";
-            }
-            else
-            {
-                std::cerr << "docker-init: ignoring " << path << "\n";
-            }
-        }
-    }
-
-    /// Stop the temporary server.
+    /// Always stop the temporary server regardless of init result.
     kill(server_pid, SIGTERM);
     int server_status = 0;
     while (waitpid(server_pid, &server_status, 0) < 0 && errno == EINTR) {}
     g_init_server_pid = 0;
     if (!WIFEXITED(server_status) || WEXITSTATUS(server_status) != 0)
         std::cerr << "docker-init: warning: init server did not exit cleanly\n";
-    return init_ok;
+    return ok;
 }
 
 } // anonymous namespace

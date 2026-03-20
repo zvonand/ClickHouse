@@ -606,11 +606,9 @@ public:
                 stored_connections.pop();
 
                 /// Check if the server has already closed this connection (sent FIN/RST).
-                /// An idle keep-alive connection should have no data pending on the socket.
-                /// If poll(SELECT_READ) returns true with zero timeout, the remote end has
-                /// closed the connection. This catches the case where the server's actual
-                /// keep-alive timeout is shorter than what the pool assumes (e.g. S3 closes
-                /// idle connections after ~10-20s while our pool may assume 30s).
+                /// This catches the case where the server's actual keep-alive timeout is shorter
+                /// than what the pool assumes (e.g. S3 closes idle connections after ~5s while our
+                /// pool may assume 30s).
                 if (isStale(*it))
                 {
                     expired_connections.push_back(it);

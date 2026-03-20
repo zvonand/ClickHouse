@@ -53,7 +53,7 @@ curl -XPOST "http://localhost:8123?default_format=Native" \
 
 The output data fits into a single ClickHouse block, and it will look like this:
 
-```tsx
+```js
 const data = new Uint8Array([
   // --- Block Header ---
   0x02,                   // 2 columns
@@ -91,12 +91,12 @@ However, in many cases, the data will not fit into a single block, and ClickHous
 Consider the following query that fetches two rows with reduced block size to force splitting the data as one row per block:
 
 ```bash
-curl -XPOST "http://localhost:8123?default_format=Native" \  --data-binary "SELECT number, toString(number) AS str                 FROM system.numbers LIMIT 2                 SETTINGS max_block_size=1" \  > out.bin
+curl -XPOST "http://localhost:8123?default_format=Native" --data-binary "SELECT number, toString(number) AS str                FROM system.numbers LIMIT 2                 SETTINGS max_block_size=1" \  > out.bin
 ```
 
 The output:
 
-```tsx
+```js
 const data = new Uint8Array([
  
   // ----- Block 1 ----- 
@@ -181,7 +181,7 @@ curl -XPOST "http://localhost:8123?default_format=Native" \  --data-binary "SELE
 
 The output will look like this:
 
-```tsx
+```js
 const data = new Uint8Array([
   // --- Block Header ---
   0x01,                         // LEB128 - 1 column
@@ -236,7 +236,7 @@ curl -XPOST "http://localhost:8123?default_format=Native" \  --data-binary "SELE
 
 The output will look like this:
 
-```tsx
+```js
 const data = new Uint8Array([
   // --- Block Header ---
   0x01, // LEB128 - 1 column
@@ -301,7 +301,7 @@ A column can be defined as `LowCardinality(Nullable(T))`, but it is not possible
 
 The version prefix is a `UInt64(LE)` with value `1`, written once per column. Then, per block, the following is written:
 
-- `UInt64(LE)` — `IndexesSerializationType` bitfield. Bits 0–7 encode the index width (0 = UInt8, 1 = UInt16, 2 = UInt32, 3 = UInt64). Bit 9 indicates dictionary keys are present. Bit 10 indicates the dictionary should be reset.
+- `UInt64(LE)` — `IndexesSerializationType` bitfield. Bits 0–7 encode the index width (0 = UInt8, 1 = UInt16, 2 = UInt32, 3 = UInt64). Bit 8 (`NeedGlobalDictionaryBit`) is never set in Native format (the server throws an exception if it is encountered). Bit 9 indicates additional dictionary keys are present. Bit 10 indicates the dictionary should be reset.
 - `UInt64(LE)` — number of dictionary keys, followed by the keys bulk-serialized using the inner type encoding.
 - `UInt64(LE)` — number of rows, followed by index values bulk-serialized using the appropriate UInt width.
 
@@ -417,7 +417,7 @@ As with RowBinary, the types in the definition are always sorted alphabetically,
 
 A `Variant` column is encoded as:
 
-- `UInt64(LE)` discriminators mode prefix (always `0` in Native format).
+- `UInt64(LE)` discriminators mode prefix (`0` = BASIC, `1` = COMPACT). Native format output typically uses BASIC (`0`); COMPACT mode may appear when reading data stored with `use_compact_variant_discriminators_serialization` enabled.
 - N `UInt8` discriminators, one per row.
 - Each variant type's data as a separate bulk column containing only the matching rows, in discriminant order.
 

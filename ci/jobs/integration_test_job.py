@@ -705,7 +705,7 @@ tar -czf ./ci/tmp/logs.tar.gz \
     fail_num = len([r for r in test_results if not r.is_ok()])
     if sequential_test_modules and fail_num < MAX_FAILS_BEFORE_DROP and not has_error:
         test_result_sequential = run_pytest_and_collect_results(
-            command=f"{' '.join(sequential_test_modules)} --report-log-exclude-logs-on-passed-tests --tb=short {repeat_option} -n {parallel_workers} {parallel_dist} --session-timeout={session_timeout_sequential}",
+            command=f"{' '.join(sequential_test_modules)} --report-log-exclude-logs-on-passed-tests --tb=short {repeat_option} -n 1 --dist=loadfile --session-timeout={session_timeout_sequential}",
             env=test_env,
             report_name="sequential",
             timeout=session_timeout_sequential + 600,

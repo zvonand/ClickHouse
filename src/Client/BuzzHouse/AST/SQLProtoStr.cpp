@@ -2,6 +2,8 @@
 #include <cctype>
 #include <cstdint>
 
+#include <fmt/format.h>
+
 #include <Client/BuzzHouse/AST/SQLProtoStr.h>
 #include <Client/BuzzHouse/Utils/HugeInt.h>
 #include <Client/BuzzHouse/Utils/UHugeInt.h>
@@ -2554,6 +2556,34 @@ CONV_FN(TableFunction, tf)
     }
 }
 
+CONV_FN(SampleClause, sc)
+{
+    ret += " SAMPLE ";
+    if (sc.has_ratio())
+    {
+        /// Format ratio as decimal (e.g., 0.1)
+        ret += fmt::format("{:.6f}", sc.ratio());
+    }
+    else if (sc.has_num_rows())
+    {
+        /// Format as number of rows
+        ret += std::to_string(sc.num_rows());
+    }
+    /// Add OFFSET if present
+    if (sc.has_offset_ratio() || sc.has_offset_rows())
+    {
+        ret += " OFFSET ";
+        if (sc.has_offset_ratio())
+        {
+            ret += fmt::format("{:.6f}", sc.offset_ratio());
+        }
+        else
+        {
+            ret += std::to_string(sc.offset_rows());
+        }
+    }
+}
+
 CONV_FN(JoinedTableOrFunction, jtf)
 {
     const TableOrFunction & tof = jtf.tof();
@@ -2580,6 +2610,10 @@ CONV_FN(JoinedTableOrFunction, jtf)
     if (jtf.final())
     {
         ret += " FINAL";
+    }
+    if (jtf.has_sample())
+    {
+        SampleClauseToString(ret, jtf.sample());
     }
 }
 

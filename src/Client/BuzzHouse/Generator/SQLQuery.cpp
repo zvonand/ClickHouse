@@ -1226,6 +1226,40 @@ void StatementGenerator::generateFromElement(RandomGenerator & rg, const uint32_
 
     jtof->mutable_table_alias()->set_table(name);
     jtof->set_final(joinedTableOrFunction(rg, name, allowed_clauses, false, jtof->mutable_tof()));
+    /// Occasionally add SAMPLE clause (~30% probability) for MergeTree tables
+    if (this->allow_not_deterministic && rg.nextMediumNumber() < 6)
+    {
+        SampleClause * sc = jtof->mutable_sample();
+
+        if (rg.nextBool())
+        {
+            /// SAMPLE with ratio (0.001 to 1.0)
+            const double ratio = static_cast<double>(rg.randomInt<uint32_t>(1, 1000)) / 1000.0;
+            sc->set_ratio(ratio);
+        }
+        else
+        {
+            /// SAMPLE with number of rows (1000 to 100000000)
+            const uint64_t num_rows = static_cast<uint64_t>(rg.randomInt<uint32_t>(1, 100000)) * 1000;
+            sc->set_num_rows(num_rows);
+        }
+        /// Occasionally add OFFSET
+        if (rg.nextSmallNumber() < 4)
+        {
+            if (rg.nextBool())
+            {
+                /// OFFSET with ratio (0 to 0.5)
+                const double offset_ratio = static_cast<double>(rg.randomInt<uint32_t>(0, 500)) / 1000.0;
+                sc->set_offset_ratio(offset_ratio);
+            }
+            else
+            {
+                /// OFFSET with number of rows (0 to 50000000)
+                const uint64_t offset_rows = static_cast<uint64_t>(rg.randomInt<uint32_t>(0, 50000)) * 1000;
+                sc->set_offset_rows(offset_rows);
+            }
+        }
+    }
 }
 
 static const std::unordered_map<BinaryOperator, SQLFunc> binopToFunc{

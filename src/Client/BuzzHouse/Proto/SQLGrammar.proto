@@ -2863,11 +2863,23 @@ message TableFunction {
     }
 }
 
+message SampleClause {
+    oneof sample_type {
+        double ratio = 1;      // SAMPLE 0.1 (between 0 and 1)
+        uint64 num_rows = 2;   // SAMPLE 1000000 (absolute number of rows)
+    }
+    oneof offset_type {
+        double offset_ratio = 3;   // OFFSET 0.05 (between 0 and 1)
+        uint64 offset_rows = 4;    // OFFSET 500000 (absolute number of rows)
+    }
+}
+
 message JoinedTableOrFunction {
     required TableOrFunction tof = 1;
     optional Table table_alias = 2;
     repeated Column col_aliases = 3;
     optional bool final = 4;
+    optional SampleClause sample = 5;
 }
 
 message TableOrSubquery {

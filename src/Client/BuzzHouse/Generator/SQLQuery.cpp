@@ -666,7 +666,7 @@ String StatementGenerator::getNextHTTPURL(RandomGenerator & rg, const bool secur
                                               : fmt::format("http{}://{}", secure ? "s" : "", rg.pickRandomly(servers));
 }
 
-bool StatementGenerator::joinedTableOrFunction(
+StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
     RandomGenerator & rg, const String & rel_name, const uint32_t allowed_clauses, const bool under_remote, TableOrFunction * tof)
 {
     const SQLTable * t = nullptr;
@@ -1215,8 +1215,10 @@ bool StatementGenerator::joinedTableOrFunction(
         }
         break;
     }
-    return (t && t->supportsFinal() && (this->enforce_final || rg.nextSmallNumber() < 3))
+    const bool supports_final = (t && t->supportsFinal() && (this->enforce_final || rg.nextSmallNumber() < 3))
         || (v && v->supportsFinal() && (this->enforce_final || rg.nextSmallNumber() < 3)) || rg.nextLargeNumber() < 4;
+    const bool supports_sample = t && t->isMergeTreeFamily();
+    return {supports_final, supports_sample};
 }
 
 void StatementGenerator::generateFromElement(RandomGenerator & rg, const uint32_t allowed_clauses, TableOrSubquery * tos)
@@ -1225,9 +1227,10 @@ void StatementGenerator::generateFromElement(RandomGenerator & rg, const uint32_
     const String name = fmt::format("t{}d{}", this->levels[this->current_level].rels.size(), this->current_level);
 
     jtof->mutable_table_alias()->set_table(name);
-    jtof->set_final(joinedTableOrFunction(rg, name, allowed_clauses, false, jtof->mutable_tof()));
-    /// Occasionally add SAMPLE clause (~30% probability) for MergeTree tables
-    if (this->allow_not_deterministic && rg.nextMediumNumber() < 6)
+    const auto src = joinedTableOrFunction(rg, name, allowed_clauses, false, jtof->mutable_tof());
+    jtof->set_final(src.supports_final);
+    /// SAMPLE is only valid for MergeTree-family tables
+    if (src.supports_sample && this->allow_not_deterministic && rg.nextMediumNumber() < 6)
     {
         SampleClause * sc = jtof->mutable_sample();
 

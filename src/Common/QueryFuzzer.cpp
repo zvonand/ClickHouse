@@ -1108,8 +1108,37 @@ void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
             {
                 if (value_ast->as<ASTLiteral>() && fuzz_rand() % 5 == 0)
                 {
-                    /// Swap between no-arg string-form tokenizers.
-                    value_ast = make_intrusive<ASTLiteral>(pickRandomly(fuzz_rand, simple_tokenizers));
+                    /// Swap between no-arg string-form tokenizers or create parametrized ones.
+                    if (fuzz_rand() % 3 == 0)
+                    {
+                        /// Create ngrams(size) function: ngram_size >= 1
+                        auto args = make_intrusive<ASTExpressionList>();
+                        args->children.push_back(make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 8 + 1)));
+                        auto ngrams_fn = make_intrusive<ASTFunction>();
+                        ngrams_fn->name = "ngrams";
+                        ngrams_fn->arguments = args;
+                        value_ast = ngrams_fn;
+                    }
+                    else if (fuzz_rand() % 2 == 0)
+                    {
+                        /// Create sparseGrams(min_length, max_length, min_cutoff_length) function
+                        auto args = make_intrusive<ASTExpressionList>();
+                        auto min_len = UInt64(fuzz_rand() % 8 + 3);
+                        auto max_len = std::min(min_len + UInt64(fuzz_rand() % 20 + 1), UInt64(100));
+                        auto cutoff = min_len + UInt64(fuzz_rand() % (max_len - min_len + 1));
+                        args->children.push_back(make_intrusive<ASTLiteral>(min_len));
+                        args->children.push_back(make_intrusive<ASTLiteral>(max_len));
+                        args->children.push_back(make_intrusive<ASTLiteral>(cutoff));
+                        auto sparse_fn = make_intrusive<ASTFunction>();
+                        sparse_fn->name = "sparseGrams";
+                        sparse_fn->arguments = args;
+                        value_ast = sparse_fn;
+                    }
+                    else
+                    {
+                        /// Swap between simple string-form tokenizers
+                        value_ast = make_intrusive<ASTLiteral>(pickRandomly(fuzz_rand, simple_tokenizers));
+                    }
                 }
                 else if (auto * tok_fn = value_ast->as<ASTFunction>())
                 {

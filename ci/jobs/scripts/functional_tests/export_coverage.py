@@ -59,7 +59,7 @@ class CoverageExporter:
             f"SELECT count() AS rows, countIf(notEmpty(test_name)) AS rows_with_test, "
             f"uniqExact(test_name) AS tests, uniqExact(arrayJoin(files)) AS files, "
             f"round(avg(arrayAvg(arrayMap((d)->toUInt32(d), min_depths)))) AS avg_min_depth "
-            f"FROM system.{table}"
+            f"FROM system.{table} FINAL"
         )
         stats_cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{stats_query}" {command_args_post}'
         rc_stats, stdout_stats, stderr_stats = Shell.get_res_stdout_stderr(stats_cmd, verbose=True)
@@ -86,7 +86,7 @@ class CoverageExporter:
                 "test_name, "
                 "min(min_depth) AS min_depth, "
                 "any(branch_flag) AS branch_flag "
-                f"FROM system.{table} "
+                f"FROM system.{table} FINAL "
                 "ARRAY JOIN files AS file, line_starts AS line_start, line_ends AS line_end, "
                 "min_depths AS min_depth, branch_flags AS branch_flag "
                 "WHERE notEmpty(test_name) AND notEmpty(file) "
@@ -109,7 +109,7 @@ class CoverageExporter:
                 "line_start, "
                 "line_end, "
                 "min_depth "
-                f"FROM system.{table} "
+                f"FROM system.{table} FINAL "
                 "ARRAY JOIN files AS file, line_starts AS line_start, "
                 "line_ends AS line_end, min_depths AS min_depth "
                 f"INTO OUTFILE '{temp_dir}/system_tables/{table}.tsv' "

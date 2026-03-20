@@ -4249,7 +4249,7 @@ def main(args):
                 min_depths Array(UInt8) DEFAULT arrayWithConstant(length(files), 255),
                 branch_flags Array(UInt8) DEFAULT arrayWithConstant(length(files), 0)
             )
-            ENGINE = MergeTree
+            ENGINE = ReplacingMergeTree(time)
             ORDER BY test_name
             COMMENT 'Contains information about per-test coverage from the CI, but used only for exporting to the CI cluster'""",
         )
@@ -4283,7 +4283,7 @@ def main(args):
         selftest_rows = int(
             clickhouse_execute(
                 args,
-                "SELECT count() FROM system.coverage_log WHERE test_name = '_selftest'",
+                "SELECT count() FROM system.coverage_log FINAL WHERE test_name = '_selftest'",
             )
             or 0
         )
@@ -4466,8 +4466,8 @@ def main(args):
             clickhouse_execute(args, "SYSTEM SET COVERAGE TEST ''")
         except Exception as e:
             print("Cannot flush final coverage: ", str(e))
-        cov_rows = int(clickhouse_execute(args, "SELECT count() FROM system.coverage_log") or 0)
-        cov_tests = int(clickhouse_execute(args, "SELECT uniq(test_name) FROM system.coverage_log") or 0)
+        cov_rows = int(clickhouse_execute(args, "SELECT count() FROM system.coverage_log FINAL") or 0)
+        cov_tests = int(clickhouse_execute(args, "SELECT uniq(test_name) FROM system.coverage_log FINAL") or 0)
         print(f"system.coverage_log: {cov_rows} rows, {cov_tests} distinct tests")
 
     if int(clickhouse_execute(args, "EXISTS system.trace_log")):

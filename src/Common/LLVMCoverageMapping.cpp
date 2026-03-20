@@ -481,6 +481,13 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
             {
                 if ((counter_enc & kTagMask) != 1) return;
                 if (line_start == 0) return;
+                /// Reject regions with implausibly large line numbers — these are cursor-overflow
+                /// artifacts from MCDCDecisionRegion/MCDCBranchRegion misalignment.  The largest
+                /// ClickHouse source file is ~30 000 lines (QueryAnalyzer.cpp); 50 000 is a
+                /// generous cutoff that eliminates all overflow artifacts while keeping everything real.
+                if (line_start > 50000) return;
+                /// Also reject wrap-around artifacts where line_end < line_start.
+                if (line_end < line_start) return;
                 const uint32_t counter_id = static_cast<uint32_t>(counter_enc >> 2);
                 CoverageRegion region;
                 region.name_hash      = name_hash;

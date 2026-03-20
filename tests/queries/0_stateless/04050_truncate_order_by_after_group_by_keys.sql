@@ -40,4 +40,10 @@ SELECT count()
 FROM (EXPLAIN QUERY TREE SELECT sum(b), a, sum(c) FROM t GROUP BY a ORDER BY sum(b), a, sum(c))
 WHERE explain LIKE '%SORT id:%';
 
+-- COLLATE: distinct GROUP BY values may compare equal under the collation,
+-- so tiebreakers must be preserved — no truncation should happen.
+SELECT count()
+FROM (EXPLAIN QUERY TREE SELECT a, sum(b) FROM t GROUP BY a ORDER BY a COLLATE 'en_US', sum(b))
+WHERE explain LIKE '%SORT id:%';
+
 DROP TABLE t;

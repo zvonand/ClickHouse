@@ -568,8 +568,11 @@ struct ToStartOfInterval<IntervalKind::Kind::Microsecond>
         else if (scale_multiplier > 1000000)
         {
             Int64 scale_diff = scale_multiplier / static_cast<Int64>(1000000);
+            Int64 microseconds_scaled = 0;
+            if (common::mulOverflow(microseconds, scale_diff, microseconds_scaled))
+                throw DB::Exception(ErrorCodes::DECIMAL_OVERFLOW, "Numeric overflow");
             if (t >= 0) [[likely]] /// When we divide the `t` value we should round the result
-                return (t + scale_diff / 2) / (microseconds * scale_diff) * microseconds;
+                return (t + scale_diff / 2) / microseconds_scaled * microseconds;
             else
                 return ((t + 1) / microseconds / scale_diff - 1) * microseconds;
         }
@@ -611,8 +614,11 @@ struct ToStartOfInterval<IntervalKind::Kind::Millisecond>
         else if (scale_multiplier > 1000)
         {
             Int64 scale_diff = scale_multiplier / static_cast<Int64>(1000);
+            Int64 milliseconds_scaled = 0;
+            if (common::mulOverflow(milliseconds, scale_diff, milliseconds_scaled))
+                throw DB::Exception(ErrorCodes::DECIMAL_OVERFLOW, "Numeric overflow");
             if (t >= 0) [[likely]]  /// When we divide the `t` value we should round the result
-                return (t + scale_diff / 2) / (milliseconds * scale_diff) * milliseconds;
+                return (t + scale_diff / 2) / milliseconds_scaled * milliseconds;
             else
                 return ((t + 1) / milliseconds / scale_diff - 1) * milliseconds;
         }

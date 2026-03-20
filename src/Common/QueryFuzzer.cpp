@@ -22,6 +22,7 @@
 
 #include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromOStream.h>
+#include <IO/WriteHelpers.h>
 
 #include <Access/Common/SQLSecurityDefs.h>
 #include <Parsers/ASTAlterQuery.h>
@@ -92,6 +93,35 @@ namespace DB
 namespace ErrorCodes
 {
 extern const int TOO_DEEP_RECURSION;
+}
+
+static String fieldToNumericString(const Field & f)
+{
+    switch (f.getType())
+    {
+        case Field::Types::Int64:
+            return std::to_string(f.safeGet<Int64>());
+        case Field::Types::UInt64:
+            return std::to_string(f.safeGet<UInt64>());
+        case Field::Types::Float64: {
+            const double v = f.safeGet<Float64>();
+            if (std::isnan(v))
+                return "nan";
+            if (std::isinf(v))
+                return v > 0 ? "inf" : "-inf";
+            return std::to_string(v);
+        }
+        case Field::Types::Decimal64: {
+            const auto & d = f.safeGet<DecimalField<Decimal64>>();
+            WriteBufferFromOwnString wb;
+            writeText(d.getValue(), d.getScale(), wb);
+            return wb.str();
+        }
+        case Field::Types::String:
+            return f.safeGet<String>();
+        default:
+            return "0";
+    }
 }
 
 void QueryFuzzer::getRandomSettings(SettingsChanges & settings_changes)
@@ -354,37 +384,10 @@ Field QueryFuzzer::fuzzField(Field field)
                 str = vals[fuzz_rand() % vals.size()];
                 break;
             }
-            case 10: {
+            case 10:
                 /// Numeric strings — stresses implicit cast / toInt / toFloat paths
-                const Field f = getRandomField(fuzz_rand() % 3);
-                switch (f.getType())
-                {
-                    case Field::Types::Int64:
-                        str = std::to_string(f.safeGet<Int64>());
-                        break;
-                    case Field::Types::UInt64:
-                        str = std::to_string(f.safeGet<UInt64>());
-                        break;
-                    case Field::Types::Float64: {
-                        const double v = f.safeGet<Float64>();
-                        if (std::isnan(v))
-                            str = "nan";
-                        else if (std::isinf(v))
-                            str = v > 0 ? "inf" : "-inf";
-                        else
-                            str = std::to_string(v);
-                        break;
-                    }
-                    case Field::Types::Decimal64: {
-                        const auto & d = f.safeGet<DecimalField<Decimal64>>();
-                        str = std::to_string(d.getValue().value);
-                        break;
-                    }
-                    default:
-                        break;
-                }
+                str = fieldToNumericString(getRandomField(fuzz_rand() % 3));
                 break;
-            }
             case 11: {
                 /// Unicode edge cases — BOM, zero-width space, overlong encoding, surrogate half
                 static const Strings vals = {
@@ -4075,33 +4078,6 @@ String QueryFuzzer::generateParamValue()
     if (fuzz_rand() % 20 == 0)
         return "\\N"; /// Null value for nullable parameters
 
-    const auto scalar = [this]() -> String
-    {
-        const Field f = getRandomField(fuzz_rand() % 10);
-        switch (f.getType())
-        {
-            case Field::Types::Int64:
-                return std::to_string(f.safeGet<Int64>());
-            case Field::Types::UInt64:
-                return std::to_string(f.safeGet<UInt64>());
-            case Field::Types::Float64: {
-                const double v = f.safeGet<Float64>();
-                if (std::isnan(v))
-                    return "nan";
-                if (std::isinf(v))
-                    return v > 0 ? "inf" : "-inf";
-                return std::to_string(v);
-            }
-            case Field::Types::Decimal64: {
-                const auto & d = f.safeGet<DecimalField<Decimal64>>();
-                return std::to_string(d.getValue().value);
-            }
-            case Field::Types::String:
-                return f.safeGet<String>();
-            default:
-                return "0";
-        }
-    };
     const auto collection = [&](char open, char close) -> String
     {
         const size_t n = fuzz_rand() % 4;
@@ -4110,7 +4086,7 @@ String QueryFuzzer::generateParamValue()
         {
             if (i > 0)
                 s += ",";
-            s += scalar();
+            s += fieldToNumericString(getRandomField(fuzz_rand() % 10));
         }
         s += close;
         return s;
@@ -4123,14 +4099,13 @@ String QueryFuzzer::generateParamValue()
         {
             if (i > 0)
                 s += ",";
-            s += scalar();
+            s += fieldToNumericString(getRandomField(fuzz_rand() % 10));
             s += ":";
-            s += scalar();
+            s += fieldToNumericString(getRandomField(fuzz_rand() % 10));
         }
         s += "}";
         return s;
     };
-
     switch (fuzz_rand() % 10)
     {
         case 0:
@@ -4140,7 +4115,7 @@ String QueryFuzzer::generateParamValue()
         case 2:
             return map_literal(); /// Map(K, V)
         default:
-            return scalar();
+            return fieldToNumericString(getRandomField(fuzz_rand() % 10));
     }
 }
 

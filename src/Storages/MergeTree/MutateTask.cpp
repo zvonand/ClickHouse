@@ -476,7 +476,7 @@ static void splitAndModifyMutationCommands(
                     part_columns.rename(command.column_name, command.rename_to);
 
                 /// CLEAR COLUMN must also go to the interpreter, because we might have projections/indexes/materialized
-                /// columns that depends on this column and should be rebuilt.
+                /// columns that depend on this column and should be rebuilt.
                 if (command.type == MutationCommand::Type::DROP_COLUMN && command.clear)
                     for_interpreter.push_back(command);
 

@@ -236,7 +236,6 @@ def merge_profraw_files(llvm_profdata_cmd: str, job_params: list):
 
 
 FLAKY_CHECK_TEST_REPEAT_COUNT = 3
-FLAKY_CHECK_MODULE_REPEAT_COUNT = 2
 
 
 def get_parallel_sequential_tests_to_run(
@@ -661,10 +660,6 @@ tar -czf ./ci/tmp/logs.tar.gz \
 
     error_info = []
 
-    module_repeat_cnt = 1
-    if is_flaky_check:
-        module_repeat_cnt = FLAKY_CHECK_MODULE_REPEAT_COUNT
-
     failed_test_cases = []
 
     # Clear dmesg to avoid false OOM detection from previous CI jobs on the same host.
@@ -686,19 +681,13 @@ tar -czf ./ci/tmp/logs.tar.gz \
         parallel_workers = workers
 
     if parallel_test_modules:
-        for attempt in range(module_repeat_cnt):
-            log_file = f"{temp_path}/pytest_parallel.log"
-            test_result_parallel = run_pytest_and_collect_results(
-                command=f"{' '.join(parallel_test_modules)} --report-log-exclude-logs-on-passed-tests -n {parallel_workers} {parallel_dist} --tb=short {repeat_option} --session-timeout={session_timeout_parallel}",
-                env=test_env,
-                report_name="parallel",
-                timeout=session_timeout_parallel + 600,
-            )
-            if is_flaky_check and not test_result_parallel.is_ok():
-                print(
-                    f"Flaky check: Test run fails after attempt [{attempt+1}/{module_repeat_cnt}] - break"
-                )
-                break
+        log_file = f"{temp_path}/pytest_parallel.log"
+        test_result_parallel = run_pytest_and_collect_results(
+            command=f"{' '.join(parallel_test_modules)} --report-log-exclude-logs-on-passed-tests -n {parallel_workers} {parallel_dist} --tb=short {repeat_option} --session-timeout={session_timeout_parallel}",
+            env=test_env,
+            report_name="parallel",
+            timeout=session_timeout_parallel + 600,
+        )
         test_results.extend(test_result_parallel.results)
         _mark_infrastructure_errors(test_result_parallel.results)
         failed_test_cases.extend(
@@ -716,19 +705,12 @@ tar -czf ./ci/tmp/logs.tar.gz \
 
     fail_num = len([r for r in test_results if not r.is_ok()])
     if sequential_test_modules and fail_num < MAX_FAILS_BEFORE_DROP and not has_error:
-        for attempt in range(module_repeat_cnt):
-            test_result_sequential = run_pytest_and_collect_results(
-                command=f"{' '.join(sequential_test_modules)} --report-log-exclude-logs-on-passed-tests --tb=short {repeat_option} -n {parallel_workers} {parallel_dist} --session-timeout={session_timeout_sequential}",
-                env=test_env,
-                report_name="sequential",
-                timeout=session_timeout_sequential + 600,
-            )
-
-            if is_flaky_check and not test_result_sequential.is_ok():
-                print(
-                    f"Flaky check: Test run fails after attempt [{attempt+1}/{module_repeat_cnt}] - break"
-                )
-                break
+        test_result_sequential = run_pytest_and_collect_results(
+            command=f"{' '.join(sequential_test_modules)} --report-log-exclude-logs-on-passed-tests --tb=short {repeat_option} -n {parallel_workers} {parallel_dist} --session-timeout={session_timeout_sequential}",
+            env=test_env,
+            report_name="sequential",
+            timeout=session_timeout_sequential + 600,
+        )
         test_results.extend(test_result_sequential.results)
         _mark_infrastructure_errors(test_result_sequential.results)
         failed_test_cases.extend(

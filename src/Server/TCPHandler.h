@@ -119,10 +119,8 @@ struct QueryState
 
     ProfileEvents::ThreadIdToCountersSnapshot last_sent_snapshots;
 
-    /// Total accumulated progress. Never reset — used for final statistics.
+    /// To output progress, the difference after the previous sending of progress.
     Progress progress;
-    /// What was already sent to the client via Progress packets, for computing deltas.
-    ProgressValues sent_progress;
     Stopwatch watch;
     UInt64 prev_elapsed_ns = 0;
 

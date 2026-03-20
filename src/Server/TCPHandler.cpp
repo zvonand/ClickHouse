@@ -2913,26 +2913,11 @@ void TCPHandler::updateProgress(QueryState & state, const Progress & value)
 
 void TCPHandler::sendProgress(QueryState & state)
 {
-    auto current = state.progress.getValues();
-
-    ProgressValues increment;
-    increment.read_rows = current.read_rows - state.sent_progress.read_rows;
-    increment.read_bytes = current.read_bytes - state.sent_progress.read_bytes;
-    increment.total_rows_to_read = current.total_rows_to_read - state.sent_progress.total_rows_to_read;
-    increment.total_bytes_to_read = current.total_bytes_to_read - state.sent_progress.total_bytes_to_read;
-    increment.written_rows = current.written_rows - state.sent_progress.written_rows;
-    increment.written_bytes = current.written_bytes - state.sent_progress.written_bytes;
-    increment.result_rows = current.result_rows - state.sent_progress.result_rows;
-    increment.result_bytes = current.result_bytes - state.sent_progress.result_bytes;
-    increment.memory_usage = current.memory_usage;
-
+    writeVarUInt(Protocol::Server::Progress, *out);
+    auto increment = state.progress.fetchValuesAndResetPiecewiseAtomically();
     UInt64 current_elapsed_ns = state.watch.elapsedNanoseconds();
     increment.elapsed_ns = current_elapsed_ns - state.prev_elapsed_ns;
     state.prev_elapsed_ns = current_elapsed_ns;
-
-    state.sent_progress = current;
-
-    writeVarUInt(Protocol::Server::Progress, *out);
     increment.write(*out, client_tcp_protocol_version);
 
     out->finishChunk();

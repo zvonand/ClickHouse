@@ -148,11 +148,10 @@ void LocalConnection::sendQuery(
     query_context->setCurrentQueryId(query_id);
     query_context->setClientInterface(ClientInfo::Interface::LOCAL);
 
-    if (send_progress)
-    {
-        query_context->setProgressCallback([this] (const Progress & value) { this->updateProgress(value); });
-        query_context->setFileProgressCallback([this](const FileProgress & value) { this->updateProgress(Progress(value)); });
-    }
+    /// Always track progress so that output formats (e.g. JSON) can report accurate statistics.
+    /// The send_progress flag only controls the client-side progress bar, not progress tracking.
+    query_context->setProgressCallback([this](const Progress & value) { this->updateProgress(value); });
+    query_context->setFileProgressCallback([this](const FileProgress & value) { this->updateProgress(Progress(value)); });
 
     /// Switch the database to the desired one (set by the USE query)
     /// but don't attempt to do it if we are already in that database.
@@ -557,6 +556,13 @@ bool LocalConnection::poll(size_t)
         }
     }
 
+    if (state->is_finished && !state->sent_progress)
+    {
+        state->sent_progress = true;
+        next_packet_type = Protocol::Server::Progress;
+        return true;
+    }
+
     if (state->is_finished)
     {
         if (needSendLogs())
@@ -577,7 +583,7 @@ bool LocalConnection::poll(size_t)
 
 bool LocalConnection::needSendProgressOrMetrics()
 {
-    if (send_progress && (state->after_send_progress.elapsedMicroseconds() >= query_context->getSettingsRef()[Setting::interactive_delay]))
+    if (state->after_send_progress.elapsedMicroseconds() >= query_context->getSettingsRef()[Setting::interactive_delay])
     {
         state->after_send_progress.restart();
         next_packet_type = Protocol::Server::Progress;

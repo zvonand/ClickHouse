@@ -235,7 +235,7 @@ def merge_profraw_files(llvm_profdata_cmd: str, job_params: list):
         return None
 
 
-FLAKY_CHECK_TEST_REPEAT_COUNT = 3
+FLAKY_CHECK_TEST_REPEAT_COUNT = 6
 
 
 def get_parallel_sequential_tests_to_run(
@@ -675,7 +675,7 @@ tar -czf ./ci/tmp/logs.tar.gz \
         # ClickHouseCluster appends PYTEST_XDIST_WORKER to the project name, so clusters
         # from different workers never interfere. --dist=each sends all tests to every worker.
         parallel_dist = "--dist=each"
-        parallel_workers = FLAKY_CHECK_TEST_REPEAT_COUNT if is_flaky_check else 10
+        parallel_workers = FLAKY_CHECK_TEST_REPEAT_COUNT if is_flaky_check else 6
     else:
         parallel_dist = "--dist=loadfile"
         parallel_workers = workers

@@ -22,6 +22,7 @@
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/UnionStep.h>
 #include <QueryPipeline/QueryPipelineBuilder.h>
+#include <Common/NaNUtils.h>
 #include <Common/typeid_cast.h>
 
 #include <Interpreters/InDepthNodeVisitor.h>
@@ -50,6 +51,7 @@ namespace Setting
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
+    extern const int PARAMETER_OUT_OF_BOUND;
     extern const int UNION_ALL_RESULT_STRUCTURES_MISMATCH;
 }
 
@@ -347,7 +349,13 @@ void InterpreterSelectWithUnionQuery::buildQueryPlan(QueryPlan & query_plan)
 
         auto max_threads = settings[Setting::max_threads];
         size_t max_streams = settings[Setting::max_streams_for_union_step];
-        size_t max_streams_from_ratio = static_cast<size_t>(static_cast<double>(max_threads) * settings[Setting::max_streams_for_union_step_to_max_threads_ratio]);
+        auto streams_from_ratio = static_cast<double>(max_threads) * settings[Setting::max_streams_for_union_step_to_max_threads_ratio];
+        if (!canConvertTo<size_t>(streams_from_ratio))
+            throw Exception(ErrorCodes::PARAMETER_OUT_OF_BOUND,
+                "Invalid value for `max_streams_for_union_step_to_max_threads_ratio`. "
+                "Make sure that `max_threads * max_streams_for_union_step_to_max_threads_ratio` is in some reasonable boundaries, current value: {}",
+                streams_from_ratio);
+        size_t max_streams_from_ratio = static_cast<size_t>(streams_from_ratio);
         if (max_streams && max_streams_from_ratio)
             max_streams = std::min(max_streams, max_streams_from_ratio);
         else if (!max_streams)

@@ -10,6 +10,7 @@
 #include <Core/Settings.h>
 #include <Processors/QueryPlan/BlocksMarshallingStep.h>
 #include <Common/Exception.h>
+#include <Common/NaNUtils.h>
 #include <Common/FieldVisitorToString.h>
 #include <Common/FieldVisitors.h>
 #include <Common/ProfileEvents.h>
@@ -164,6 +165,7 @@ namespace ErrorCodes
     extern const int NOT_IMPLEMENTED;
     extern const int SUPPORT_IS_DISABLED;
     extern const int INVALID_LIMIT_EXPRESSION;
+    extern const int PARAMETER_OUT_OF_BOUND;
 }
 
 namespace
@@ -1732,7 +1734,13 @@ void Planner::buildPlanForUnionNode()
     if (union_mode == SelectUnionMode::UNION_ALL || union_mode == SelectUnionMode::UNION_DISTINCT)
     {
         size_t max_streams = settings[Setting::max_streams_for_union_step];
-        size_t max_streams_from_ratio = static_cast<size_t>(static_cast<double>(max_threads) * settings[Setting::max_streams_for_union_step_to_max_threads_ratio]);
+        auto streams_from_ratio = static_cast<double>(max_threads) * settings[Setting::max_streams_for_union_step_to_max_threads_ratio];
+        if (!canConvertTo<size_t>(streams_from_ratio))
+            throw Exception(ErrorCodes::PARAMETER_OUT_OF_BOUND,
+                "Invalid value for `max_streams_for_union_step_to_max_threads_ratio`. "
+                "Make sure that `max_threads * max_streams_for_union_step_to_max_threads_ratio` is in some reasonable boundaries, current value: {}",
+                streams_from_ratio);
+        size_t max_streams_from_ratio = static_cast<size_t>(streams_from_ratio);
         if (max_streams && max_streams_from_ratio)
             max_streams = std::min(max_streams, max_streams_from_ratio);
         else if (!max_streams)

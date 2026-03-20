@@ -2588,6 +2588,7 @@ enum JoinConst {
     J_SEMI = 3;
     J_ANTI = 4;
     J_ASOF = 5;
+    J_NATURAL = 6;
 }
 
 message JoinCore {

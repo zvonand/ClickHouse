@@ -728,7 +728,11 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
             }
             if (rg.nextBool())
             {
-                next_bucket_path += ".data";
+                /// Either a generic .data extension or a compression-recognized extension
+                /// (exercises ClickHouse's extension-based compression auto-detection)
+                static const DB::Strings comp_extensions
+                    = {"gz", "gzip", "bz2", "lz4", "xz", "zst", "zstd", "lzma", "br", "brotli", "deflate", "snappy", "7z"};
+                next_bucket_path += rg.nextSmallNumber() < 4 ? ".data" : ("." + rg.pickRandomly(comp_extensions));
             }
         }
         bucket_path = std::move(next_bucket_path);

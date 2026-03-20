@@ -8,10 +8,10 @@ namespace BuzzHouse
 {
 
 const std::unordered_map<JoinType, std::vector<JoinConst>> StatementGenerator::joinMappings
-    = {{J_LEFT, {J_ANY, J_ALL, J_SEMI, J_ANTI, J_ASOF}},
-       {J_INNER, {J_ANY, J_ALL, J_ASOF}},
-       {J_RIGHT, {J_ANY, J_ALL, J_SEMI, J_ANTI}},
-       {J_FULL, {J_ANY, J_ALL}},
+    = {{J_LEFT, {J_ANY, J_ALL, J_SEMI, J_ANTI, J_ASOF, J_NATURAL}},
+       {J_INNER, {J_ANY, J_ALL, J_ASOF, J_NATURAL}},
+       {J_RIGHT, {J_ANY, J_ALL, J_SEMI, J_ANTI, J_NATURAL}},
+       {J_FULL, {J_ANY, J_ALL, J_NATURAL}},
        {J_PASTE, {}},
        {J_CROSS, {}}};
 
@@ -2842,7 +2842,7 @@ void StatementGenerator::setBackupDestination(RandomGenerator & rg, BackupRestor
     backup_file += std::to_string(bout->backup_number());
     if (rg.nextSmallNumber() < 8)
     {
-        static const DB::Strings backupFormats = {"tar", "zip", "tzst", "tgz"};
+        static const DB::Strings backupFormats = {"tar", "zip", "zipx", "tzst", "tgz"};
         const String & nsuffix = rg.pickRandomly(backupFormats);
 
         backup_file += ".";

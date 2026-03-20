@@ -1787,8 +1787,10 @@ uint32_t StatementGenerator::generateFromStatement(RandomGenerator & rg, const u
             const auto & maps = StatementGenerator::joinMappings.at(jt);
             if (!maps.empty() && rg.nextSmallNumber() < 4)
             {
-                core->set_join_const(rg.pickRandomly(maps));
-                core->set_const_on_right(rg.nextBool());
+                const auto & join_const = rg.pickRandomly(maps);
+
+                core->set_join_const(join_const);
+                core->set_const_on_right(join_const != JoinConst::J_NATURAL && rg.nextBool());
             }
             generateFromElement(rg, allowed_clauses, core->mutable_tos());
             generateJoinConstraint(rg, core->mutable_join_constraint());

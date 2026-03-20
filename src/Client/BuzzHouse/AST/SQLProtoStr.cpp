@@ -1893,8 +1893,8 @@ CONV_FN(JoinConstraint, jc)
 
 CONV_FN(JoinCore, jcc)
 {
-    const bool has_cross_or_paste = jcc.join_op() > JoinType::J_FULL;
-    const bool has_join_const = !has_cross_or_paste && jcc.has_join_const();
+    const bool no_clause = (jcc.join_op() > JoinType::J_FULL) || (jcc.has_join_const() && jcc.join_const() == JoinConst::J_NATURAL);
+    const bool has_join_const = jcc.join_op() <= JoinType::J_FULL && jcc.has_join_const();
 
     if (jcc.global())
     {
@@ -1917,7 +1917,7 @@ CONV_FN(JoinCore, jcc)
     }
     ret += " JOIN ";
     TableOrSubqueryToString(ret, jcc.tos());
-    if (!has_cross_or_paste)
+    if (!no_clause)
     {
         JoinConstraintToString(ret, jcc.join_constraint());
     }

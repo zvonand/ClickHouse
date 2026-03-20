@@ -178,11 +178,13 @@ void FilterTransform::removeFilterIfNeed(Columns & columns) const
 void FilterTransform::transform(Chunk & chunk)
 {
     auto chunk_rows_before = chunk.getNumRows();
+    /// Remember whether this chunk will actually be filtered
+    bool will_filter = !on_totals && !isVirtualRow(chunk);
     doTransform(chunk);
     auto chunk_rows_after = chunk.getNumRows();
     if (rows_filtered)
         *rows_filtered += chunk_rows_before - chunk_rows_after;
-    if (collect_predicate_stats && chunk_rows_before > 0)
+    if (collect_predicate_stats && will_filter && chunk_rows_before > 0)
         collectPredicateStatistics(chunk_rows_before, chunk_rows_after, chunk);
 }
 
@@ -336,9 +338,9 @@ void FilterTransform::collectPredicateStatistics(size_t num_rows_before, size_t 
                 auto storage_id = db_and_table.second->getStorageID();
                 cached_database = storage_id.database_name;
                 cached_table = storage_id.table_name;
+                table_resolved = true;
             }
         }
-        table_resolved = true;
     }
 
     time_t now = time(nullptr);

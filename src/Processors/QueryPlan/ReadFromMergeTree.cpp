@@ -3295,7 +3295,14 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
     {
         const auto & stat = result.index_stats[i];
 
-        UInt64 total = (i == 0) ? stat.num_granules_after : prev_granules;
+        /// any filtering — record it as the baseline and skip it
+        if (stat.type == IndexType::None)
+        {
+            prev_granules = stat.num_granules_after;
+            continue;
+        }
+
+        UInt64 total = prev_granules;
         UInt64 after = stat.num_granules_after;
         Float64 selectivity = total > 0 ? static_cast<Float64>(after) / static_cast<Float64>(total) : 1.0;
 

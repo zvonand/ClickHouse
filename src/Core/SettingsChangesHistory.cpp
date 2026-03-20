@@ -41,7 +41,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         /// Note: please check if the key already exists to prevent duplicate entries.
         addSettingsChanges(settings_changes_history, "26.4",
         {
-
+            {"enable_materialized_cte", false, false, "New setting"},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {

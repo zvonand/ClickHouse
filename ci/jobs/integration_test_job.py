@@ -675,7 +675,7 @@ tar -czf ./ci/tmp/logs.tar.gz \
         # ClickHouseCluster appends PYTEST_XDIST_WORKER to the project name, so clusters
         # from different workers never interfere. --dist=each sends all tests to every worker.
         parallel_dist = "--dist=each"
-        parallel_workers = FLAKY_CHECK_TEST_REPEAT_COUNT if is_flaky_check else 6
+        parallel_workers = FLAKY_CHECK_TEST_REPEAT_COUNT if is_flaky_check else workers
     else:
         parallel_dist = "--dist=loadfile"
         parallel_workers = workers

@@ -46,9 +46,7 @@ the plain HTTP interface without a protocol version, which omits `BlockInfo`.
 The following query returns two columns, `number` and `str`, with three rows:
 
 ```bash
-curl -XPOST "http://localhost:8123?default_format=Native" \  
---data-binary "SELECT number, toString(number) AS str 
-                FROM system.numbers LIMIT 3" \  > out.bin
+curl -XPOST "http://localhost:8123?default_format=Native" --data-binary "SELECT number, toString(number) AS str FROM system.numbers LIMIT 3" > out.bin
 ```
 
 The output data fits into a single ClickHouse block, and it will look like this:
@@ -136,7 +134,7 @@ const data = new Uint8Array([
   0x69, 0x6E, 0x67,       // 'String'
   0x01,                   // LEB128 - the string has 1 byte
   0x31,                   // '1' as String
-])
+]);
 ```
 
 ### Simple data types

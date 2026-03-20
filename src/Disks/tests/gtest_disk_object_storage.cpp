@@ -251,7 +251,7 @@ TEST_F(DiskObjectStorageTest, WriteListReadFile)
 
     std::vector<String> files;
     disk->listFiles(".", files);
-    std::erase_if(files, [](const String & f) { return f == "blobs_to_remove.log"; });
+    std::erase_if(files, [](const String & file) { return file == ".metadata"; });
 
     EXPECT_EQ(files.size(), 1);
     EXPECT_EQ(files, std::vector<String>{file_name});

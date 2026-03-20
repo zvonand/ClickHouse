@@ -154,6 +154,9 @@ void MetadataStorageFromDisk::startup()
     if (!persist_removal_queue)
         return;
 
+    if (!disk->existsDirectory(String(REMOVAL_LOG_DIR)))
+        disk->createDirectory(String(REMOVAL_LOG_DIR));
+
     std::lock_guard guard(removed_objects_mutex);
     loadRemovalLog();
     /// Compact on startup to remove stale REMOVED entries from the log file.
@@ -221,7 +224,7 @@ void MetadataStorageFromDisk::appendToRemovalLog(std::string_view prefix, const 
 
 void MetadataStorageFromDisk::compactRemovalLog()
 {
-    static constexpr std::string_view REMOVAL_LOG_TMP_FILE = "blobs_to_remove.log.tmp";
+    static constexpr std::string_view REMOVAL_LOG_TMP_FILE = ".metadata/blobs_to_remove.log.tmp";
 
     auto buf = disk->writeFile(String(REMOVAL_LOG_TMP_FILE), /* buf_size */ DBMS_DEFAULT_BUFFER_SIZE, WriteMode::Rewrite, /* settings */ {});
     for (const auto & blob : objects_to_remove)

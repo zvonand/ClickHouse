@@ -32,7 +32,8 @@ private:
     std::mutex removed_objects_mutex;
     StoredObjectSet objects_to_remove TSA_GUARDED_BY(removed_objects_mutex);
 
-    static constexpr std::string_view REMOVAL_LOG_FILE = "blobs_to_remove.log";
+    static constexpr std::string_view REMOVAL_LOG_DIR = ".metadata";
+    static constexpr std::string_view REMOVAL_LOG_FILE = ".metadata/blobs_to_remove.log";
     static constexpr std::string_view REMOVAL_LOG_ADD_PREFIX = "ADD";
     static constexpr std::string_view REMOVAL_LOG_REMOVED_PREFIX = "REMOVED";
     static constexpr size_t REMOVAL_LOG_COMPACTION_THRESHOLD = 1000;

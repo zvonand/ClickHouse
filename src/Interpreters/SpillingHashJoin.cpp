@@ -9,7 +9,7 @@
 
 namespace ProfileEvents
 {
-extern const Event JoinSpilledToDisk;
+extern const Event JoinSpillingHashJoinSwitchedToGraceJoin;
 }
 
 namespace DB
@@ -169,7 +169,7 @@ void SpillingHashJoin::switchToGraceHashJoin()
             if (state.load(std::memory_order_relaxed) != State::COLLECTING)
                 return;
 
-            ProfileEvents::increment(ProfileEvents::JoinSpilledToDisk);
+            ProfileEvents::increment(ProfileEvents::JoinSpillingHashJoinSwitchedToGraceJoin);
 
             print_limit_exceeded_log(concurrent_join, "ConcurrentHashJoin");
 
@@ -196,7 +196,7 @@ void SpillingHashJoin::switchToGraceHashJoin()
 
     print_limit_exceeded_log(hash_join, "HashJoin");
     /// Single-thread path: extract from HashJoin, feed to GraceHashJoin.
-    ProfileEvents::increment(ProfileEvents::JoinSpilledToDisk);
+    ProfileEvents::increment(ProfileEvents::JoinSpillingHashJoinSwitchedToGraceJoin);
     BlocksList right_blocks = hash_join->releaseJoinedBlocks(/*restructure=*/false);
 
     chosen_join = std::make_shared<GraceHashJoin>(

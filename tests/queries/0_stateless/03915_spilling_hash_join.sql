@@ -233,7 +233,7 @@ SELECT
     ProfileEvents['JoinNonJoinedTransformRowCount'] AS non_joined_rows,
     ProfileEvents['JoinDelayedJoinedTransformBlockCount'] > 0 AS has_delayed_blocks,
     ProfileEvents['JoinDelayedJoinedTransformRowCount'] > 0 AS has_delayed_rows,
-    ProfileEvents['JoinSpilledToDisk'] AS spilled_to_disk
+    ProfileEvents['JoinSpillingHashJoinSwitchedToGraceJoin'] AS spilled_to_disk
 FROM system.query_log
 WHERE log_comment LIKE 'query\_03915\_%' AND current_database = currentDatabase()
     AND type = 'QueryFinish' AND event_date >= yesterday()

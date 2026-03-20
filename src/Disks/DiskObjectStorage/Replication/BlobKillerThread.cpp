@@ -57,7 +57,7 @@ IMetadataStorage::BlobsToRemove findBlobsToRemove(
     size_t request_batch,
     const ClusterConfigurationPtr & cluster,
     const MetadataStoragePtr & metadata_storage,
-    const LoggerPtr & log)
+    const LoggerPtr & log) noexcept
 {
     try
     {
@@ -69,7 +69,7 @@ IMetadataStorage::BlobsToRemove findBlobsToRemove(
     {
         tryLogCurrentException(log);
         ProfileEvents::increment(ProfileEvents::BlobKillerThreadLockBlobsErrors);
-        throw;
+        return {};
     }
 }
 
@@ -148,7 +148,7 @@ std::vector<std::shared_ptr<ThreadPoolCallbackRunnerLocal<bool>::Task>> schedule
 void recordBlobsRemoval(
     StoredObjects removed_blobs,
     const MetadataStoragePtr & metadata_storage,
-    const LoggerPtr & log)
+    const LoggerPtr & log) noexcept
 {
     try
     {
@@ -159,7 +159,6 @@ void recordBlobsRemoval(
     {
         tryLogCurrentException(log);
         ProfileEvents::increment(ProfileEvents::BlobKillerThreadRecordBlobsErrors);
-        throw;
     }
 }
 
@@ -168,7 +167,7 @@ void removeBlobs(
     ThreadPoolCallbackRunnerLocal<bool> & remove_tasks_runner,
     const MetadataStoragePtr & metadata_storage,
     const ObjectStorageRouterPtr & object_storages,
-    const LoggerPtr & log)
+    const LoggerPtr & log) noexcept
 {
     if (blobs_to_remove.empty())
         return;
@@ -198,7 +197,7 @@ void removeBlobs(
     recordBlobsRemoval(std::move(blobs_removed_from_all_locations), metadata_storage, log);
 }
 
-bool executeBlobsCleanup(
+void executeBlobsCleanup(
     size_t max_to_remove,
     ThreadPoolCallbackRunnerLocal<bool> & remove_tasks_runner,
     const ClusterConfigurationPtr & cluster,
@@ -206,17 +205,9 @@ bool executeBlobsCleanup(
     const ObjectStorageRouterPtr & object_storages,
     const LoggerPtr & log) noexcept
 {
-    try
-    {
-        ProfileEvents::increment(ProfileEvents::BlobKillerThreadRuns);
-        auto blobs_to_remove = findBlobsToRemove(max_to_remove, cluster, metadata, log);
-        removeBlobs(std::move(blobs_to_remove), remove_tasks_runner, metadata, object_storages, log);
-        return true;
-    }
-    catch (...)
-    {
-        return false;
-    }
+    ProfileEvents::increment(ProfileEvents::BlobKillerThreadRuns);
+    auto blobs_to_remove = findBlobsToRemove(max_to_remove, cluster, metadata, log);
+    removeBlobs(std::move(blobs_to_remove), remove_tasks_runner, metadata, object_storages, log);
 }
 
 }
@@ -244,8 +235,7 @@ void BlobKillerThread::run()
     auto component_guard = Coordination::setCurrentComponent("BlobKillerThread::run");
     LOG_TEST(log, "Starting cleanup");
 
-    bool success = executeBlobsCleanup(metadata_request_batch.load(), remove_tasks_runner, cluster, metadata_storage, object_storages, log);
-    succeeded_rounds.fetch_add(success);
+    executeBlobsCleanup(metadata_request_batch.load(), remove_tasks_runner, cluster, metadata_storage, object_storages, log);
     finished_rounds.fetch_add(1);
     finished_rounds.notify_all();
 
@@ -276,14 +266,13 @@ void BlobKillerThread::shutdown()
     executeBlobsCleanup(/*max_to_remove=*/0, remove_tasks_runner, cluster, metadata_storage, object_storages, log);
 }
 
-bool BlobKillerThread::triggerAndWait()
+void BlobKillerThread::triggerAndWait()
 {
     if (!started || !enabled)
         throw Exception(ErrorCodes::INVALID_CONFIG_PARAMETER, "Blobs cleanup was not enabled for disk {}", disk_name);
 
     int64_t current_round = finished_rounds.load();
     int64_t expected_round = current_round + 1;
-    int64_t succeeded_before = succeeded_rounds.load();
 
     task->schedule();
 
@@ -293,8 +282,6 @@ bool BlobKillerThread::triggerAndWait()
         finished_rounds.wait(current_round);
         current_round = finished_rounds.load();
     }
-
-    return succeeded_rounds.load() > succeeded_before;
 }
 
 void BlobKillerThread::applyNewSettings(const Poco::Util::AbstractConfiguration & config, const std::string & config_prefix)

@@ -23,7 +23,7 @@ public:
 
     void startup();
     void shutdown();
-    bool triggerAndWait();
+    void triggerAndWait();
     void applyNewSettings(const Poco::Util::AbstractConfiguration & config, const std::string & config_prefix);
 
 private:
@@ -36,7 +36,6 @@ private:
     std::atomic<bool> started{false};
     std::atomic<bool> enabled{true};
     std::atomic<int64_t> finished_rounds{0};
-    std::atomic<int64_t> succeeded_rounds{0};
     std::atomic<int64_t> reschedule_interval_sec{0};
     std::atomic<int64_t> metadata_request_batch{0};
     ThreadPool remove_tasks_pool;

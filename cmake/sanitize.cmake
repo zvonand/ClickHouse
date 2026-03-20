@@ -72,7 +72,11 @@ if (WITH_COVERAGE)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DWITH_COVERAGE=1")
 
     # But the actual coverage will be enabled on per-library basis: for ClickHouse code, but not for 3rd-party.
-    set (COVERAGE_FLAGS -fprofile-instr-generate -fcoverage-mapping)
+    # -mllvm -enable-value-profiling=true activates indirect-call value profiling so that
+    # __llvm_profile_instrument_target() records virtual-dispatch targets at runtime.
+    # Without this flag, LLVMProfileData::Values is always NULL and indirect-call data
+    # cannot be collected.
+    set (COVERAGE_FLAGS -fprofile-instr-generate -fcoverage-mapping -mllvm -enable-value-profiling=true)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate")
 
     if (WITH_COVERAGE_DEPTH)

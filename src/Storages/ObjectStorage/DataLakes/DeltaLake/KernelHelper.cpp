@@ -199,16 +199,9 @@ public:
                 /// Set the blob service endpoint URL (without SAS query parameters).
                 const auto & blob_url = parsed.BlobServiceUrl;
                 const auto & scheme = blob_url.GetScheme();
-                const auto & host = blob_url.GetHost();
-                if (!scheme.empty() && !host.empty())
-                {
-                    std::string blob_endpoint = scheme + "://" + host;
-                    if (const uint16_t port = blob_url.GetPort(); port != 0)
-                        blob_endpoint += ':' + std::to_string(port);
-                    set_option("azure_endpoint", blob_endpoint);
-                    if (scheme == "http")
-                        set_option("azure_allow_http", "true");
-                }
+                set_option("azure_endpoint", connection_params.getConnectionURL());
+                if (!scheme.empty() && scheme == "http")
+                    set_option("azure_allow_http", "true");
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Storage::StorageSharedKeyCredential>>)
             {
@@ -248,14 +241,14 @@ public:
         /// Azure builder defaults to https_only=true and would reject plain HTTP requests.
         if (!endpoint.storage_account_url.empty() && endpoint.storage_account_url.starts_with("http://"))
         {
-            set_option("azure_endpoint", endpoint.storage_account_url);
+            set_option("azure_endpoint", connection_params.getConnectionURL());
             set_option("azure_allow_http", "true");
         }
 
         LOG_TRACE(
             log,
-            "Using storage_account_url: {}, container: {}, data_path: {}",
-            endpoint.storage_account_url, endpoint.container_name, data_path);
+            "Using storage_account_url : {}, container: {}, data_path: {}",
+            connection_params.getConnectionURL(), endpoint.container_name, data_path);
 
         return builder;
     }

@@ -217,11 +217,13 @@ BlobKillerThread::BlobKillerThread(
     ContextPtr context,
     ClusterConfigurationPtr cluster_,
     MetadataStoragePtr metadata_storage_,
-    ObjectStorageRouterPtr object_storages_)
+    ObjectStorageRouterPtr object_storages_,
+    std::shared_ptr<BlobKillerThread> wrapped_blob_killer_)
     : disk_name(std::move(disk_name_))
     , cluster(std::move(cluster_))
     , metadata_storage(std::move(metadata_storage_))
     , object_storages(std::move(object_storages_))
+    , wrapped_blob_killer(std::move(wrapped_blob_killer_))
     , log(getLogger(fmt::format("{}::BlobKillerThread", disk_name)))
     , remove_tasks_pool(CurrentMetrics::BlobKillerThreads, CurrentMetrics::BlobKillerThreadsActive, CurrentMetrics::BlobKillerThreadsScheduled, 0, 0, 0)
     , remove_tasks_runner(remove_tasks_pool, ThreadName::BLOB_KILLER_TASK)
@@ -266,7 +268,7 @@ void BlobKillerThread::shutdown()
     executeBlobsCleanup(/*max_to_remove=*/0, remove_tasks_runner, cluster, metadata_storage, object_storages, log);
 }
 
-void BlobKillerThread::triggerAndWait()
+int64_t BlobKillerThread::trigger()
 {
     if (!started || !enabled)
         throw Exception(ErrorCodes::INVALID_CONFIG_PARAMETER, "Blobs cleanup was not enabled for disk {}", disk_name);
@@ -276,12 +278,27 @@ void BlobKillerThread::triggerAndWait()
 
     task->schedule();
 
-    /// Wait at least one task run
+    return expected_round;
+}
+
+void BlobKillerThread::waitRound(int64_t expected_round)
+{
+    int64_t current_round = finished_rounds.load();
     while (current_round < expected_round)
     {
         finished_rounds.wait(current_round);
         current_round = finished_rounds.load();
     }
+}
+
+void BlobKillerThread::triggerAndWait()
+{
+    int64_t expected_round = trigger();
+
+    if (wrapped_blob_killer)
+        wrapped_blob_killer->triggerAndWait();
+
+    waitRound(expected_round);
 }
 
 void BlobKillerThread::applyNewSettings(const Poco::Util::AbstractConfiguration & config, const std::string & config_prefix)

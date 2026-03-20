@@ -69,15 +69,17 @@ DiskObjectStorage::DiskObjectStorage(
     ClusterConfigurationPtr cluster_,
     MetadataStoragePtr metadata_storage_,
     ObjectStorageRouterPtr object_storages_,
+    DiskObjectStorageConstPtr wrapped_disk_,
     const Poco::Util::AbstractConfiguration & config,
     const String & config_prefix,
     bool use_fake_transaction_)
     : IDisk(name_, config, config_prefix)
+    , wrapped_disk(std::move(wrapped_disk_))
     , log(getLogger("DiskObjectStorage(" + name + ")"))
     , cluster(std::move(cluster_))
     , metadata_storage(std::move(metadata_storage_))
     , object_storages(std::move(object_storages_))
-    , blob_killer(std::make_shared<BlobKillerThread>(name, Context::getGlobalContextInstance(), cluster, metadata_storage, object_storages))
+    , blob_killer(std::make_shared<BlobKillerThread>(name, Context::getGlobalContextInstance(), cluster, metadata_storage, object_storages, wrapped_disk ? wrapped_disk->blob_killer : nullptr))
     , blob_copier(std::make_shared<BlobCopierThread>(name, Context::getGlobalContextInstance(), cluster, metadata_storage, object_storages))
     , read_resource_name_from_config(config.getString(config_prefix + ".read_resource", ""))
     , write_resource_name_from_config(config.getString(config_prefix + ".write_resource", ""))

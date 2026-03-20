@@ -36,6 +36,7 @@ public:
         ClusterConfigurationPtr cluster_,
         MetadataStoragePtr metadata_storage_,
         ObjectStorageRouterPtr object_storages_,
+        DiskObjectStorageConstPtr wrapped_disk_,
         const Poco::Util::AbstractConfiguration & config,
         const String & config_prefix,
         bool use_fake_transaction_ = true);

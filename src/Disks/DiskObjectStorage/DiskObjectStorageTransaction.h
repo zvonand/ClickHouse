@@ -29,11 +29,18 @@ protected:
     std::vector<std::function<void(MetadataTransactionPtr tx)>> operations_to_execute;
     std::unordered_map<Location, StoredObjects> written_blobs;
 
+    /// Resource names for IO scheduling (workload scheduling). Set from disk configuration.
+    /// Used to enrich WriteSettings with resource links in writeFileImpl.
+    String read_resource_name;
+    String write_resource_name;
+
 public:
     DiskObjectStorageTransaction(
         ClusterConfigurationPtr cluster_,
         MetadataStoragePtr metadata_storage_,
-        ObjectStorageRouterPtr object_storages_);
+        ObjectStorageRouterPtr object_storages_,
+        String read_resource_name_ = {},
+        String write_resource_name_ = {});
 
     void commit() override;
     TransactionCommitOutcomeVariant tryCommit(const TransactionCommitOptionsVariant & options) override;

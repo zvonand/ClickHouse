@@ -705,7 +705,7 @@ private:
         {
             return connection.socket().poll(Poco::Timespan(0), Poco::Net::Socket::SELECT_READ);
         }
-        catch (...)
+        catch (Poco::IOException &)
         {
             return true;
         }

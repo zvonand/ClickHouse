@@ -320,6 +320,16 @@ class _Environment(MetaClasses.Serializable):
                     self.PR_LABELS.append(label)
         self.dump()
 
+    def add_pr_label(self, label: str) -> None:
+        if label not in self.PR_LABELS:
+            self.PR_LABELS.append(label)
+            self.dump()
+
+    def remove_pr_label(self, label: str) -> None:
+        if label in self.PR_LABELS:
+            self.PR_LABELS.remove(label)
+            self.dump()
+
     @staticmethod
     def get_needs_statuses():
         if Path(Settings.WORKFLOW_STATUS_FILE).is_file():

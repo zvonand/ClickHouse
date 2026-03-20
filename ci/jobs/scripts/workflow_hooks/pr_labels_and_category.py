@@ -265,14 +265,10 @@ def check_labels(category, info):
     if pr_labels_to_remove or pr_labels_to_add:
         Shell.check(cmd, verbose=True, strict=True, retries=5)
 
-    final_labels = list(labels)
     for label in pr_labels_to_add:
-        if label not in final_labels:
-            final_labels.append(label)
+        info.add_pr_label(label)
     for label in pr_labels_to_remove:
-        if label in final_labels:
-            final_labels.remove(label)
-    info.set_pr_labels(final_labels)
+        info.remove_pr_label(label)
 
 
 if __name__ == "__main__":

@@ -675,9 +675,13 @@ tar -czf ./ci/tmp/logs.tar.gz \
         # from different workers never interfere. --dist=each sends all tests to every worker.
         parallel_dist = "--dist=each"
         parallel_workers = workers
+        # Sequential tests cannot run in parallel, so we loop over them instead.
+        # Run at least 3 times to have meaningful flakiness signal, at most workers times.
+        sequential_repeat_cnt = max(3, workers)
     else:
         parallel_dist = "--dist=loadfile"
         parallel_workers = workers
+        sequential_repeat_cnt = 1
 
     if parallel_test_modules:
         log_file = f"{temp_path}/pytest_parallel.log"
@@ -704,26 +708,33 @@ tar -czf ./ci/tmp/logs.tar.gz \
 
     fail_num = len([r for r in test_results if not r.is_ok()])
     if sequential_test_modules and fail_num < MAX_FAILS_BEFORE_DROP and not has_error:
-        test_result_sequential = run_pytest_and_collect_results(
-            command=f"{' '.join(sequential_test_modules)} --report-log-exclude-logs-on-passed-tests --tb=short {repeat_option} -n 1 --dist=loadfile --session-timeout={session_timeout_sequential}",
-            env=test_env,
-            report_name="sequential",
-            timeout=session_timeout_sequential + 600,
-        )
-        test_results.extend(test_result_sequential.results)
-        _mark_infrastructure_errors(test_result_sequential.results)
-        failed_test_cases.extend(
-            [t.name for t in test_result_sequential.results if t.is_failure()]
-        )
-        if test_result_sequential.files:
-            failed_tests_files.extend(test_result_sequential.files)
-        if test_result_sequential.is_error():
-            if not is_targeted_check:
-                # In targeted checks we may overload the run with many heavy tests running
-                # in parallel. A session-timeout is an expected risk rather than an
-                # infrastructure problem, so we do not treat such errors as job-level failures.
-                has_error = True
-                error_info.append(test_result_sequential.info)
+        for attempt in range(sequential_repeat_cnt):
+            test_result_sequential = run_pytest_and_collect_results(
+                command=f"{' '.join(sequential_test_modules)} --report-log-exclude-logs-on-passed-tests --tb=short {repeat_option} -n 1 --dist=loadfile --session-timeout={session_timeout_sequential}",
+                env=test_env,
+                report_name="sequential",
+                timeout=session_timeout_sequential + 600,
+            )
+            test_results.extend(test_result_sequential.results)
+            _mark_infrastructure_errors(test_result_sequential.results)
+            failed_test_cases.extend(
+                [t.name for t in test_result_sequential.results if t.is_failure()]
+            )
+            if test_result_sequential.files:
+                failed_tests_files.extend(test_result_sequential.files)
+            if test_result_sequential.is_error():
+                if not is_targeted_check:
+                    # In targeted checks we may overload the run with many heavy tests running
+                    # sequentially. A session-timeout is an expected risk rather than an
+                    # infrastructure problem, so we do not treat such errors as job-level failures.
+                    has_error = True
+                    error_info.append(test_result_sequential.info)
+                break
+            if (is_flaky_check or is_targeted_check) and not test_result_sequential.is_ok():
+                print(
+                    f"Flaky/targeted check: sequential test run fails after attempt [{attempt+1}/{sequential_repeat_cnt}] - break"
+                )
+                break
 
     # Collect logs before re-run
     attached_files = []

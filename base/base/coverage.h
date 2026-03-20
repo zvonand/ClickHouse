@@ -52,9 +52,29 @@ using CovCounter = std::tuple<uint64_t, uint64_t, uint32_t, uint8_t>;
 /// so a function with 8 non-zero counters contributes 8 entries.
 std::vector<CovCounter> getCurrentCoveredNameRefs();
 
+/// One indirect-call observation: caller identified by (name_hash, func_hash),
+/// callee by its load-relative text offset (stable across ASLR restarts for the
+/// same binary) and call count.  The callee offset is resolved to a name_hash
+/// by CoverageCollection using dladdr() at flush time.
+struct IndirectCallEntry
+{
+    uint64_t caller_name_hash;
+    uint64_t caller_func_hash;
+    uint64_t callee_offset;   /// callee text address − binary load base
+    uint64_t call_count;
+};
+
+/// Return all indirect-call observations accumulated since the last counter reset.
+/// Only populated when -fprofile-instr-generate value profiling is active
+/// (NumValueSites[0] > 0 in __llvm_profile_data records).
+std::vector<IndirectCallEntry> getCurrentIndirectCalls();
+
 /// Callback invoked by setCoverageTest when flushing coverage for the previous test.
-/// Arguments: (test_name, covered_counters).
-using CoverageFlushCallback = std::function<void(std::string_view, const std::vector<CovCounter> &)>;
+/// Arguments: (test_name, covered_counters, indirect_calls).
+using CoverageFlushCallback = std::function<void(
+    std::string_view,
+    const std::vector<CovCounter> &,
+    const std::vector<IndirectCallEntry> &)>;
 
 /// Register a callback that is called by setCoverageTest before resetting counters.
 /// Only one callback can be registered at a time; a second call overwrites the first.

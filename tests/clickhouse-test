@@ -4246,11 +4246,26 @@ def main(args):
                 files Array(String),
                 line_starts Array(UInt32),
                 line_ends Array(UInt32),
-                min_depths Array(UInt8) DEFAULT arrayWithConstant(length(files), 255)
+                min_depths Array(UInt8) DEFAULT arrayWithConstant(length(files), 255),
+                branch_flags Array(UInt8) DEFAULT arrayWithConstant(length(files), 0)
             )
             ENGINE = MergeTree
             ORDER BY test_name
             COMMENT 'Contains information about per-test coverage from the CI, but used only for exporting to the CI cluster'""",
+        )
+        clickhouse_execute(
+            args,
+            """CREATE TABLE IF NOT EXISTS system.coverage_indirect_calls
+            (
+                test_name String,
+                caller_name_hash UInt64,
+                caller_func_hash UInt64,
+                callee_offset UInt64,
+                call_count UInt64
+            )
+            ENGINE = MergeTree
+            ORDER BY (test_name, caller_name_hash)
+            COMMENT 'Indirect (virtual/function-pointer) call observations per test for coverage-based test selection'""",
         )
         # Self-test: verify the coverage collection pipeline works end-to-end.
         clickhouse_execute(args, "SYSTEM SET COVERAGE TEST '_selftest'")

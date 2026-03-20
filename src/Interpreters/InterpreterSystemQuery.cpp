@@ -1038,16 +1038,19 @@ BlockIO InterpreterSystemQuery::execute()
                 /// and so that the callback is available even on the very first call.
                 ContextPtr global_ctx = getContext()->getGlobalContext();
                 registerCoverageFlushCallback(
-                    [global_ctx](std::string_view prev_test, const std::vector<CovCounter> & name_refs)
+                    [global_ctx](std::string_view prev_test,
+                                 const std::vector<CovCounter> & name_refs,
+                                 const std::vector<IndirectCallEntry> & indirect_calls)
                     {
                         LOG_INFO(getLogger("CoverageCollection"),
-                            "Flushing coverage for test '{}': {} covered counters",
-                            prev_test, name_refs.size());
+                            "Flushing coverage for test '{}': {} covered counters, {} indirect calls",
+                            prev_test, name_refs.size(), indirect_calls.size());
 #if defined(__ELF__) && !defined(OS_FREEBSD)
-                        DB::collectAndInsertCoverage(prev_test, name_refs, global_ctx);
+                        DB::collectAndInsertCoverage(prev_test, name_refs, indirect_calls, global_ctx);
 #else
                         (void)prev_test;
                         (void)name_refs;
+                        (void)indirect_calls;
                         (void)global_ctx;
 #endif
                     });

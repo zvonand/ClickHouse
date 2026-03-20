@@ -58,6 +58,11 @@ option(WITH_COVERAGE "Instrumentation for code coverage with default implementat
 
 option(WITH_COVERAGE_DEPTH "Shadow call-stack depth tracking via -finstrument-functions-after-inlining (requires WITH_COVERAGE)" OFF)
 
+option(WITH_COVERAGE_XRAY
+    "Use XRay instrumentation for exact call-depth tracking (requires WITH_COVERAGE and ENABLE_XRAY). "
+    "Builds with -DCLICKHOUSE_XRAY_INSTRUMENT_COVERAGE=1; XRay maps runtime function text addresses "
+    "to LLVM profile records, solving the PIE FunctionPointer=0 limitation." OFF)
+
 if (WITH_COVERAGE)
     message (STATUS "Enabled instrumentation for code coverage")
 
@@ -72,11 +77,14 @@ if (WITH_COVERAGE)
 
     if (WITH_COVERAGE_DEPTH)
         message (STATUS "Enabled call-depth shadow stack via -finstrument-functions-after-inlining")
-        # Applied globally so that every (non-inlined) function gets entry/exit hooks.
-        # The hooks are implemented in base/base/coverage.cpp and maintain a thread-local
-        # depth counter used to score test relevance in find_tests.py.
         set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finstrument-functions-after-inlining")
         set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -finstrument-functions-after-inlining")
+    endif()
+
+    if (WITH_COVERAGE_XRAY)
+        message (STATUS "Enabled XRay-based exact call-depth tracking for coverage")
+        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCLICKHOUSE_XRAY_INSTRUMENT_COVERAGE=1")
+        set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -DCLICKHOUSE_XRAY_INSTRUMENT_COVERAGE=1")
     endif()
 
     set (WITHOUT_COVERAGE_FLAGS "-fno-profile-instr-generate -fno-coverage-mapping")

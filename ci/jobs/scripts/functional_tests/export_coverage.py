@@ -84,10 +84,11 @@ class CoverageExporter:
                 f"'{self.check_start_time}' AS check_start_time, "
                 f"'{self.job_name}' AS check_name, "
                 "test_name, "
-                "min(min_depth) AS min_depth "
+                "min(min_depth) AS min_depth, "
+                "any(branch_flag) AS branch_flag "
                 f"FROM system.{table} "
                 "ARRAY JOIN files AS file, line_starts AS line_start, line_ends AS line_end, "
-                "min_depths AS min_depth "
+                "min_depths AS min_depth, branch_flags AS branch_flag "
                 "WHERE notEmpty(test_name) AND notEmpty(file) "
                 "GROUP BY file, line_start, line_end, test_name"
             )

@@ -11,9 +11,11 @@ namespace DB
 
 struct CoverageRegion
 {
-    uint64_t name_hash;   /// Matches __llvm_profile_data::NameRef
-    uint64_t func_hash;   /// Matches __llvm_profile_data::FuncHash (from CovMapFunctionRecordV3 at offset 12)
-    uint32_t counter_id;  /// Index into the function's counter array; 0 = entry counter
+    uint64_t name_hash;    /// Matches __llvm_profile_data::NameRef
+    uint64_t func_hash;    /// Matches __llvm_profile_data::FuncHash
+    uint32_t counter_id;   /// Index into the function's counter array; 0 = entry counter
+    bool is_branch;        /// True for BranchRegion (one side of an if/switch condition)
+    bool is_true_branch;   /// When is_branch: true = taken when condition is true
     std::string file;
     uint32_t line_start;
     uint32_t line_end;

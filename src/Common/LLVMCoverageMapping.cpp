@@ -457,52 +457,75 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
         static constexpr uint64_t kTagMask      = 3u;   /// Counter::EncodingTagMask
         static constexpr uint64_t kExpansionBit = 4u;   /// EncodingExpansionRegionBit
         static constexpr uint64_t kKindShift    = 4u;   /// EncodingCounterTagAndExpansionRegionTagBits
+        static constexpr uint64_t kBranchKind   = 4u;   /// CounterMappingRegion::BranchRegion = 4
 
         uint32_t cur_line = 0;  /// tracks delta-encoded absolute line position
 
+        auto emit_region = [&](uint64_t counter_enc, uint32_t line_start, uint32_t line_end,
+                                bool is_branch, bool is_true_branch)
+        {
+            if ((counter_enc & kTagMask) != 1)
+                return; /// skip expression/zero counters
+            if (line_start == 0)
+                return;
+            const uint32_t counter_id = static_cast<uint32_t>(counter_enc >> 2);
+            CoverageRegion region;
+            region.name_hash     = name_hash;
+            region.func_hash     = func_hash;
+            region.counter_id    = counter_id;
+            region.is_branch     = is_branch;
+            region.is_true_branch = is_true_branch;
+            region.file          = filename;
+            region.line_start    = line_start;
+            region.line_end      = line_end;
+            result.push_back(std::move(region));
+        };
+
         for (uint64_t ri = 0; ri < num_regions; ++ri)
         {
-            const uint64_t encoded        = readULEB128(cur, mend, ok);
+            const uint64_t encoded = readULEB128(cur, mend, ok);
+            if (!ok) break;
+
+            const uint64_t tag = encoded & kTagMask;
+
+            /// BranchRegion: tag=0, not expansion, kind=kBranchKind.
+            /// Format: [kind_marker] [true_counter] [false_counter] [line_delta] [col] [num_lines] [col_end]
+            if (tag == 0 && !(encoded & kExpansionBit) && (encoded >> kKindShift) == kBranchKind)
+            {
+                const uint64_t true_enc  = readULEB128(cur, mend, ok);
+                const uint64_t false_enc = readULEB128(cur, mend, ok);
+                const uint64_t line_delta = readULEB128(cur, mend, ok);
+                /* col_start = */           readULEB128(cur, mend, ok);
+                const uint64_t num_lines  = readULEB128(cur, mend, ok);
+                /* col_end = */             readULEB128(cur, mend, ok);
+                if (!ok) break;
+                cur_line += static_cast<uint32_t>(line_delta);
+                const uint32_t ls = cur_line;
+                const uint32_t le = cur_line + static_cast<uint32_t>(num_lines);
+                emit_region(true_enc,  ls, le, /*is_branch=*/true,  /*is_true=*/true);
+                emit_region(false_enc, ls, le, /*is_branch=*/true,  /*is_true=*/false);
+                continue;
+            }
+
+            /// CodeRegion or other: read line/col normally.
             const uint64_t line_delta     = readULEB128(cur, mend, ok);
             /* col_start = */               readULEB128(cur, mend, ok);
             const uint64_t num_lines      = readULEB128(cur, mend, ok);
             /* col_end_combined = */        readULEB128(cur, mend, ok);
-            if (!ok)
-                break;
+            if (!ok) break;
 
             cur_line += static_cast<uint32_t>(line_delta);
 
-            const uint64_t tag = encoded & kTagMask;
-
             /// Only store direct-counter code regions (tag == 1).
-            /// tag==0: zero/skipped/gap — no counter associated, skip.
-            /// tag==2/3: expression (sum/difference of two counters) — we can't
-            ///           cheaply evaluate expressions without the expression table,
-            ///           so skip for now.  The entry counter (counter_id=0, tag=1)
-            ///           is always a direct reference, so function-level coverage
-            ///           is always retained.
+            /// tag==0 non-branch: zero/skipped/gap/expansion — skip.
+            /// tag==2/3: expression counters — skip (no direct counter id).
             if (tag != 1)
                 continue;
+            if (encoded & kExpansionBit)
+                continue; /// expansion into another file
 
-            /// Verify it's actually a code region, not an expansion into another file.
-            if ((encoded & kExpansionBit) || ((encoded >> kKindShift) != 0 && tag == 0))
-                continue;
-
-            if (cur_line == 0)
-                continue;
-
-            const uint32_t line_start  = cur_line;
-            const uint32_t line_end    = cur_line + static_cast<uint32_t>(num_lines);
-            const uint32_t counter_id  = static_cast<uint32_t>(encoded >> 2);
-
-            CoverageRegion region;
-            region.name_hash  = name_hash;
-            region.func_hash  = func_hash;
-            region.counter_id = counter_id;
-            region.file       = filename;
-            region.line_start = line_start;
-            region.line_end   = line_end;
-            result.push_back(std::move(region));
+            emit_region(encoded, cur_line, cur_line + static_cast<uint32_t>(num_lines),
+                        /*is_branch=*/false, /*is_true=*/false);
         }
     }
 

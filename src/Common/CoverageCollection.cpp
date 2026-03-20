@@ -69,11 +69,12 @@ void ensureCoverageMapLoaded()
             auto [it, inserted] = g_coverage_map.emplace(key, r);
             if (!inserted)
             {
-                /// Keep the narrowest region for this counter — it gives the most
-                /// precise attribution when the same counter covers multiple regions.
+                /// Keep the narrowest region for this counter.  Prefer branch regions
+                /// over code regions of the same width — they carry directional info.
                 const uint32_t existing_width = it->second.line_end - it->second.line_start;
                 const uint32_t new_width      = r.line_end - r.line_start;
-                if (new_width < existing_width)
+                if (new_width < existing_width
+                    || (new_width == existing_width && r.is_branch && !it->second.is_branch))
                     it->second = r;
             }
         }
@@ -91,6 +92,7 @@ void ensureCoverageMapLoaded()
 void collectAndInsertCoverage(
     std::string_view test_name,
     const std::vector<CovCounter> & name_refs,
+    const std::vector<IndirectCallEntry> & indirect_calls,
     ContextPtr context)
 {
     LOG_INFO(getLogger("CoverageCollection"),
@@ -130,9 +132,8 @@ void collectAndInsertCoverage(
         }
     };
 
-    /// Per (file, line_start, line_end) key: output array index + min depth seen.
-    /// This lets us update min_depth cheaply when a shallower counter is found.
-    struct SeenEntry { size_t idx; uint8_t min_depth; };
+    /// Per (file, line_start, line_end) key: output array index + min depth + branch flag.
+    struct SeenEntry { size_t idx; uint8_t min_depth; uint8_t branch_flag; };
     std::unordered_map<LineKey, SeenEntry, LineKeyHash> seen;
     seen.reserve(name_refs.size());
 
@@ -140,6 +141,8 @@ void collectAndInsertCoverage(
     std::vector<uint32_t> line_starts;
     std::vector<uint32_t> line_ends;
     std::vector<uint8_t> min_depths;
+    /// branch_flags: 0 = code region, 1 = true branch, 2 = false branch.
+    std::vector<uint8_t> branch_flags;
 
     for (const auto & [name_hash, func_hash, counter_id, min_depth] : name_refs)
     {
@@ -151,18 +154,20 @@ void collectAndInsertCoverage(
         if (region.file.empty() || region.line_start == 0)
             continue;
 
+        const uint8_t bflag = region.is_branch ? (region.is_true_branch ? 1u : 2u) : 0u;
+
         LineKey key{region.file, region.line_start, region.line_end};
-        const auto [sit, inserted] = seen.emplace(key, SeenEntry{files.size(), min_depth});
+        const auto [sit, inserted] = seen.emplace(key, SeenEntry{files.size(), min_depth, bflag});
         if (inserted)
         {
             files.push_back(region.file);
             line_starts.push_back(region.line_start);
             line_ends.push_back(region.line_end);
             min_depths.push_back(min_depth);
+            branch_flags.push_back(bflag);
         }
         else if (min_depth < sit->second.min_depth)
         {
-            /// A shallower counter covers the same region — update in place.
             sit->second.min_depth = min_depth;
             min_depths[sit->second.idx] = min_depth;
         }
@@ -178,11 +183,11 @@ void collectAndInsertCoverage(
     /// Build the INSERT query as a VALUES literal.
     /// Schema: coverage_log (time DateTime, test_name String, files Array(String),
     ///                        line_starts Array(UInt32), line_ends Array(UInt32),
-    ///                        min_depths Array(UInt8))
+    ///                        min_depths Array(UInt8), branch_flags Array(UInt8))
     WriteBufferFromOwnString query_buf;
     writeString(
         "INSERT INTO system.coverage_log"
-        " (time, test_name, files, line_starts, line_ends, min_depths)"
+        " (time, test_name, files, line_starts, line_ends, min_depths, branch_flags)"
         " VALUES (now(), ", query_buf);
     writeQuotedString(test_name, query_buf);
     writeString(", [", query_buf);
@@ -212,6 +217,13 @@ void collectAndInsertCoverage(
         if (i > 0)
             writeChar(',', query_buf);
         writeIntText(static_cast<uint32_t>(min_depths[i]), query_buf);
+    }
+    writeString("], [", query_buf);
+    for (size_t i = 0; i < branch_flags.size(); ++i)
+    {
+        if (i > 0)
+            writeChar(',', query_buf);
+        writeIntText(static_cast<uint32_t>(branch_flags[i]), query_buf);
     }
     writeString("])", query_buf);
 
@@ -254,6 +266,43 @@ void collectAndInsertCoverage(
             test_name);
         LOG_WARNING(getLogger("CoverageCollection"), "{}", msg);
         std::cerr << msg << "\n";
+    }
+
+    /// Insert indirect-call observations into system.coverage_indirect_calls.
+    /// Schema: (test_name String, caller_name_hash UInt64, caller_func_hash UInt64,
+    ///          callee_offset UInt64, call_count UInt64)
+    if (!indirect_calls.empty())
+    {
+        try
+        {
+            WriteBufferFromOwnString ic_buf;
+            writeString(
+                "INSERT INTO system.coverage_indirect_calls"
+                " (test_name, caller_name_hash, caller_func_hash, callee_offset, call_count)"
+                " VALUES ", ic_buf);
+            bool first = true;
+            for (const auto & ic : indirect_calls)
+            {
+                if (!first)
+                    writeChar(',', ic_buf);
+                first = false;
+                writeChar('(', ic_buf);
+                writeQuotedString(test_name, ic_buf);
+                writeChar(',', ic_buf); writeIntText(ic.caller_name_hash, ic_buf);
+                writeChar(',', ic_buf); writeIntText(ic.caller_func_hash, ic_buf);
+                writeChar(',', ic_buf); writeIntText(ic.callee_offset, ic_buf);
+                writeChar(',', ic_buf); writeIntText(ic.call_count, ic_buf);
+                writeChar(')', ic_buf);
+            }
+            auto ic_context = Context::createCopy(context->getGlobalContext());
+            ic_context->makeQueryContext();
+            ic_context->setCurrentQueryId({});
+            ic_context->setSetting("max_query_size", Field{0ULL});
+            ic_context->setSetting("async_insert", Field{0ULL});
+            auto ic_bio = executeQuery(ic_buf.str(), ic_context, QueryFlags{.internal = true}).second;
+            executeTrivialBlockIO(ic_bio, ic_context);
+        }
+        catch (...) {} /// best-effort; indirect call data is supplementary
     }
 }
 

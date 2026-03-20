@@ -11,9 +11,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <mutex>
 #include <string>
-#include <utility>
 #include <utility>
 #include <vector>
 
@@ -71,13 +71,137 @@ namespace
     CoverageFlushCallback g_flush_callback;
 }
 
-/// The __cyg_profile_func_enter / __cyg_profile_func_exit hooks are provided so
-/// the binary can be built with -finstrument-functions-after-inlining without
-/// link errors.  The shadow-stack depth approach was abandoned because
-/// LLVMProfileData::FunctionPointer is always NULL in PIE builds — there is no
-/// runtime text-address → profile-index mapping available.
-/// min_depth in CovCounter is instead computed from the entry counter call count
-/// in getCurrentCoveredNameRefs (see below).
+/// ── XRay call-depth tracking ─────────────────────────────────────────────────
+///
+/// XRay injects nop sleds at every function entry/exit that can be patched at
+/// runtime to call a user-supplied handler.  Unlike -finstrument-functions, XRay
+/// provides real runtime text addresses for each function (via
+/// __xray_function_address), allowing us to build the text_address →
+/// profile_data_index mapping that LLVMProfileData::FunctionPointer (always NULL
+/// in PIE builds) cannot provide.
+///
+/// Flow:
+///   setCoverageTest('name')  → __xray_patch() + register handler
+///   ... test runs, handler records min call depth per function_id ...
+///   setCoverageTest('')       → __xray_unpatch(), flush depths
+///
+/// After depth collection, __xray_function_address(id) + dladdr() resolves each
+/// function_id to a demangled symbol name, whose FNV64 hash is matched against
+/// LLVMProfileData::NameRef to write g_func_min_depth[profile_index].
+
+#ifdef CLICKHOUSE_XRAY_INSTRUMENT_COVERAGE
+
+#include <xray/xray_interface.h>
+#include <dlfcn.h>
+#include <atomic>
+
+namespace
+{
+
+/// FNV-64 hash matching LLVM's IndexedInstrProf::ComputeHash / __llvm_profile_str2hash.
+static uint64_t fnv64(const char * s) __attribute__((xray_never_instrument));
+static uint64_t fnv64(const char * s)
+{
+    uint64_t h = 0xcbf29ce484222325ULL;
+    for (; *s; ++s) { h ^= static_cast<uint8_t>(*s); h *= 0x100000001b3ULL; }
+    return h;
+}
+
+/// Map from XRay function_id → profile_data_index.
+/// Built once when XRay is first activated.
+static uint32_t *      g_xray_to_profile = nullptr; /// array indexed by xray func_id
+static int32_t         g_xray_max_id = 0;
+static std::once_flag  g_xray_map_once;
+
+/// Per-function minimum call depth (indexed by profile_data_index), reset per test.
+static std::atomic<uint32_t> * g_xray_min_depth = nullptr;
+static uint32_t                g_xray_depth_size = 0;
+
+/// Per-thread call depth, reset when generation changes (same as before).
+static uint32_t               g_xray_generation = 0;
+thread_local uint32_t         g_tls_xray_generation = UINT32_MAX;
+thread_local uint32_t         g_tls_xray_depth = 0;
+thread_local uint32_t         g_tls_xray_baseline = 0;
+
+static void buildXRayProfileMap() __attribute__((xray_never_instrument));
+static void buildXRayProfileMap()
+{
+    std::call_once(g_xray_map_once, []
+    {
+        const int32_t max_id = __xray_max_function_id();
+        if (max_id <= 0) return;
+        g_xray_max_id = max_id;
+
+        /// Build NameRef → profile_data_index map first.
+        const LLVMProfileData * begin = __llvm_profile_begin_data(); // NOLINT
+        const LLVMProfileData * end   = __llvm_profile_end_data();   // NOLINT
+        const uint32_t n = static_cast<uint32_t>(end - begin);
+        std::unordered_map<uint64_t, uint32_t> name_hash_to_idx;
+        name_hash_to_idx.reserve(n);
+        for (uint32_t i = 0; i < n; ++i)
+            name_hash_to_idx.emplace(begin[i].NameRef, i);
+
+        /// Allocate depth array.
+        g_xray_depth_size = n;
+        g_xray_min_depth = new std::atomic<uint32_t>[n]; // NOLINT
+        for (uint32_t i = 0; i < n; ++i)
+            g_xray_min_depth[i].store(UINT32_MAX, std::memory_order_relaxed);
+
+        /// For each XRay function_id, resolve to profile_data_index via symbol name hash.
+        g_xray_to_profile = new uint32_t[static_cast<size_t>(max_id) + 1]; // NOLINT
+        std::fill(g_xray_to_profile, g_xray_to_profile + max_id + 1, UINT32_MAX);
+
+        for (int32_t id = 1; id <= max_id; ++id)
+        {
+            const void * addr = reinterpret_cast<const void *>(__xray_function_address(id));
+            if (!addr) continue;
+            Dl_info info;
+            if (!dladdr(addr, &info) || !info.dli_sname) continue;
+            const uint64_t h = fnv64(info.dli_sname);
+            const auto it = name_hash_to_idx.find(h);
+            if (it != name_hash_to_idx.end())
+                g_xray_to_profile[id] = it->second;
+        }
+    });
+}
+
+static void xrayHandler(int32_t func_id, XRayEntryType type) __attribute__((xray_never_instrument));
+static void xrayHandler(int32_t func_id, XRayEntryType type)
+{
+    if (type == XRayEntryType::ENTRY || type == XRayEntryType::LOG_ARGS_ENTRY)
+    {
+        if (g_tls_xray_generation != g_xray_generation) [[unlikely]]
+        {
+            g_tls_xray_baseline    = g_tls_xray_depth;
+            g_tls_xray_generation  = g_xray_generation;
+        }
+        const uint32_t abs = ++g_tls_xray_depth;
+        const uint32_t rel = (abs > g_tls_xray_baseline) ? abs - g_tls_xray_baseline : 0u;
+        const uint32_t depth = (rel < 255u) ? rel : 254u;
+
+        if (g_xray_to_profile && func_id >= 1 && func_id <= g_xray_max_id)
+        {
+            const uint32_t idx = g_xray_to_profile[func_id];
+            if (idx < g_xray_depth_size)
+            {
+                auto & slot = g_xray_min_depth[idx];
+                uint32_t old = slot.load(std::memory_order_relaxed);
+                while (old > depth && !slot.compare_exchange_weak(old, depth, std::memory_order_relaxed)) {}
+            }
+        }
+    }
+    else if (type == XRayEntryType::EXIT || type == XRayEntryType::TAIL)
+    {
+        --g_tls_xray_depth;
+    }
+}
+
+} // anonymous namespace
+
+#endif // CLICKHOUSE_XRAY_INSTRUMENT_COVERAGE
+
+/// Stubs for -finstrument-functions (kept for link compatibility with builds that
+/// add the flag without XRay).
 extern "C" void __cyg_profile_func_enter(void *, void *) __attribute__((no_instrument_function));
 void __cyg_profile_func_enter(void *, void *) {}
 
@@ -121,10 +245,22 @@ std::vector<CovCounter> getCurrentCoveredNameRefs()
         if (*entry_counter == 0)
             continue;
 
-        /// Store the raw entry-counter call count (capped at 254) as min_depth.
-        /// 255 is reserved as "not tracked".  A lower value means the function was
-        /// called fewer times during this test → more likely a specific code path.
-        const uint8_t min_depth = static_cast<uint8_t>(std::min<uint64_t>(*entry_counter, 254u));
+        /// min_depth: prefer XRay call depth (exact, built via text_addr→profile mapping)
+        /// over the call-count proxy.  XRay depth is populated only when the binary is
+        /// built with -DCLICKHOUSE_XRAY_INSTRUMENT_COVERAGE=1 and XRay is activated.
+        uint8_t min_depth;
+#ifdef CLICKHOUSE_XRAY_INSTRUMENT_COVERAGE
+        if (g_xray_min_depth && idx < g_xray_depth_size)
+        {
+            const uint32_t xray_d = g_xray_min_depth[idx].load(std::memory_order_relaxed);
+            min_depth = (xray_d < 255u) ? static_cast<uint8_t>(xray_d) : 255u;
+        }
+        else
+#endif
+        {
+            /// Fallback: raw entry-counter call count (lower = more specific).
+            min_depth = static_cast<uint8_t>(std::min<uint64_t>(*entry_counter, 254u));
+        }
 
         /// Emit one entry per non-zero counter.  Counter 0 is the function entry;
         /// counters 1…N are individual basic-block/branch counters that map to
@@ -133,6 +269,72 @@ std::vector<CovCounter> getCurrentCoveredNameRefs()
         {
             if (entry_counter[i] > 0)
                 result.emplace_back(data->NameRef, data->FuncHash, i, min_depth);
+        }
+    }
+
+    return result;
+}
+
+
+/// LLVM value-profiling node: records one (value, count) pair for indirect calls.
+/// Matches compiler-rt's ValueProfNode layout.
+struct ValueProfNode
+{
+    uint64_t value; /// Absolute runtime address of the callee
+    uint64_t count;
+    ValueProfNode * next;
+};
+
+std::vector<IndirectCallEntry> getCurrentIndirectCalls()
+{
+    std::vector<IndirectCallEntry> result;
+
+    /// Compute load base from /proc/self/maps: the r-xp mapping for the main binary.
+    /// We use this to turn absolute callee addresses into load-relative offsets that
+    /// are stable across ASLR restarts (same binary = same offset, different run = same value).
+    uintptr_t load_base = 0;
+    if (FILE * f = std::fopen("/proc/self/maps", "r"))
+    {
+        char line[512];
+        while (std::fgets(line, sizeof(line), f))
+        {
+            uintptr_t start = 0, end = 0, offset = 0;
+            char perms[8] = {};
+            // Parse: start-end perms offset dev inode path
+            if (std::sscanf(line, "%zx-%zx %4s %zx", &start, &end, perms, &offset) == 4
+                && perms[0] == 'r' && perms[2] == 'x' && offset == 0)
+            {
+                load_base = start;
+                break;
+            }
+        }
+        std::fclose(f);
+    }
+
+    const LLVMProfileData * begin = __llvm_profile_begin_data(); // NOLINT
+    const LLVMProfileData * end   = __llvm_profile_end_data();   // NOLINT
+
+    for (const LLVMProfileData * data = begin; data != end; ++data)
+    {
+        /// IPVK_IndirectCallTarget is kind 0; NumValueSites[0] is the number of
+        /// indirect-call sites instrumented in this function.
+        if (data->NumValueSites[0] == 0 || !data->Values)
+            continue;
+
+        /// Values → array of ValueProfNode* heads, one per indirect-call site.
+        auto * const sites = static_cast<ValueProfNode * const *>(data->Values);
+
+        for (uint16_t s = 0; s < data->NumValueSites[0]; ++s)
+        {
+            for (const ValueProfNode * node = sites[s]; node; node = node->next)
+            {
+                if (node->count == 0 || node->value == 0)
+                    continue;
+                const uint64_t offset = (load_base && node->value > load_base)
+                                        ? node->value - load_base
+                                        : node->value;
+                result.push_back({data->NameRef, data->FuncHash, offset, node->count});
+            }
         }
     }
 
@@ -153,6 +355,7 @@ void setCoverageTest(std::string_view test_name)
     /// the callback (which may do heavy DB work and must not hold the mutex).
     std::string prev_test_name;
     std::vector<CovCounter> name_refs;
+    std::vector<IndirectCallEntry> indirect_calls;
     CoverageFlushCallback cb;
 
     {
@@ -160,13 +363,34 @@ void setCoverageTest(std::string_view test_name)
 
         if (!g_current_test_name.empty() && g_flush_callback)
         {
-            /// Collect covered NameRefs before resetting counters.
-            name_refs = getCurrentCoveredNameRefs();
+            /// Collect covered NameRefs and indirect-call observations before reset.
+            name_refs      = getCurrentCoveredNameRefs();
+            indirect_calls = getCurrentIndirectCalls();
             prev_test_name = g_current_test_name;
             cb = g_flush_callback;
         }
 
         __llvm_profile_reset_counters(); // NOLINT
+
+#ifdef CLICKHOUSE_XRAY_INSTRUMENT_COVERAGE
+        /// Bump XRay generation so every thread resets its depth baseline on next call.
+        ++g_xray_generation;
+        /// Reset per-function min-depth array.
+        for (uint32_t i = 0; i < g_xray_depth_size; ++i)
+            g_xray_min_depth[i].store(UINT32_MAX, std::memory_order_relaxed);
+        if (!g_current_test_name.empty())
+        {
+            /// Deactivate XRay after collecting the previous test's data.
+            __xray_unpatch();
+        }
+        if (!test_name.empty())
+        {
+            /// Build the XRay→profile map lazily on first test start.
+            buildXRayProfileMap();
+            __xray_set_handler(xrayHandler);
+            __xray_patch();
+        }
+#endif
 
         g_current_test_name = std::string(test_name);
     }
@@ -174,7 +398,7 @@ void setCoverageTest(std::string_view test_name)
     /// Invoke the callback outside the lock so the DB layer can look up
     /// source locations and insert into system.coverage_log without risking deadlock.
     if (cb)
-        cb(prev_test_name, name_refs);
+        cb(prev_test_name, name_refs, indirect_calls);
 }
 
 void resetCoverage()

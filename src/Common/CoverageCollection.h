@@ -23,6 +23,7 @@ namespace DB
 void collectAndInsertCoverage(
     std::string_view test_name,
     const std::vector<CovCounter> & name_refs,
+    const std::vector<IndirectCallEntry> & indirect_calls,
     ContextPtr context);
 
 /// Returns the number of entries in the lazily-loaded coverage map.

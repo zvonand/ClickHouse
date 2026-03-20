@@ -192,8 +192,9 @@ class Targeting:
             file,
             line_start,
             line_end,
-            groupArray(DISTINCT test_name) AS tests,
-            groupArray(min_depth) AS depths
+            groupArray(test_name) AS tests,
+            groupArray(min_depth) AS depths,
+            uniqExact(test_name) AS region_test_count
         FROM checks_coverage_lines
         WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
@@ -207,23 +208,25 @@ class Targeting:
         raw = cidb.query(query, log_level="")
         print(f"[find_tests] CIDB query: {time.monotonic()-t_query:.2f}s, response={len(raw)} bytes")
 
-        # Parse TSV: file \t line_start \t line_end \t ['test1',...] \t [depth1,...]
-        # depths array is parallel to tests array: depths[i] is the min_depth for tests[i].
-        # Falls back gracefully if the column is absent (old CIDB schema: depth=255).
+        # Parse TSV: file \t line_start \t line_end \t [tests] \t [depths] \t region_test_count
+        # region_test_count: how many distinct tests cover this region (ownership denominator).
+        # Falls back gracefully when columns are absent (old CIDB schema).
         coverage_ranges: list = []
         for row in raw.strip().splitlines():
             if not row:
                 continue
-            parts = row.split("\t", 4)
+            parts = row.split("\t", 5)
             if len(parts) < 4:
                 continue
             file_, line_start_s, line_end_s, tests_raw = parts[:4]
-            depths_raw = parts[4] if len(parts) == 5 else None
+            depths_raw = parts[4] if len(parts) >= 5 else None
+            count_raw  = parts[5] if len(parts) >= 6 else None
             try:
                 line_start = int(line_start_s)
                 line_end = int(line_end_s)
                 tests = ast.literal_eval(tests_raw.strip())
                 depths = ast.literal_eval(depths_raw.strip()) if depths_raw else None
+                region_test_count = int(count_raw.strip()) if count_raw else len(tests) if isinstance(tests, list) else 1
                 if not isinstance(tests, list):
                     continue
                 # Pair each test with its min_depth (255 = not available).
@@ -231,31 +234,33 @@ class Targeting:
                     test_depths = [(t, int(d)) for t, d in zip(tests, depths)]
                 else:
                     test_depths = [(t, 255) for t in tests]
-                coverage_ranges.append((file_, line_start, line_end, test_depths))
+                coverage_ranges.append((file_, line_start, line_end, test_depths, region_test_count))
             except (ValueError, SyntaxError):
                 print(f"Failed to parse coverage row: {row[:100]}")
 
-        # Map each input (filename, line_no) to (test_name, region_width, min_depth) triples.
-        # The CIDB query returned all ranges for the touched files; now filter
-        # in Python to only ranges that actually overlap a changed line.
+        # Map each input (filename, line_no) to (test_name, region_width, min_depth,
+        # region_test_count) 4-tuples.  The CIDB query returned all ranges for the
+        # touched files; now filter to ranges that actually overlap a changed line.
         result: dict = {}
         for filename, line_no in changed_lines:
             stored = self._stored_path(filename)
             matched: list = []
-            for file_, line_start, line_end, test_depths in coverage_ranges:
+            for file_, line_start, line_end, test_depths, region_test_count in coverage_ranges:
                 if file_ == stored and line_start <= line_no <= line_end:
                     width = line_end - line_start + 1
                     for t, depth in test_depths:
-                        matched.append((t, width, depth))
-            # Deduplicate: for each test keep narrowest width and shallowest depth.
-            by_test: dict = {}  # test -> (min_width, min_depth)
-            for t, w, d in matched:
+                        matched.append((t, width, depth, region_test_count))
+            # Deduplicate: keep lowest width, depth, and region_test_count per test.
+            by_test: dict = {}  # test -> (min_width, min_depth, min_region_test_count)
+            for t, w, d, rc in matched:
                 if t not in by_test:
-                    by_test[t] = (w, d)
+                    by_test[t] = (w, d, rc)
                 else:
-                    ow, od = by_test[t]
-                    by_test[t] = (min(ow, w), min(od, d))
-            result[(filename, line_no)] = [(t, w, d) for t, (w, d) in sorted(by_test.items())]
+                    ow, od, orc = by_test[t]
+                    by_test[t] = (min(ow, w), min(od, d), min(orc, rc))
+            result[(filename, line_no)] = [
+                (t, w, d, rc) for t, (w, d, rc) in sorted(by_test.items())
+            ]
 
         total_unique_tests = len({t for pairs in result.values() for t, _ in pairs})
         lines_with_tests = sum(1 for pairs in result.values() if pairs)
@@ -336,13 +341,21 @@ class Targeting:
         line_to_tests = self.get_tests_by_changed_lines(changed_lines)
 
         # Accumulate per-test scores across all changed lines.
-        # line_to_tests values are lists of (test_name, region_width, min_depth).
-        width_score: dict = {}    # test -> sum(1/width) across covered changed lines
-        has_narrow_hit: dict = {} # test -> bool: any covering region is narrow
-        min_depth_seen: dict = {} # test -> minimum call depth across all hits
-        for triples in line_to_tests.values():
-            for t, width, depth in triples:
-                width_score[t] = width_score.get(t, 0.0) + 1.0 / width
+        # line_to_tests values are lists of (test_name, region_width, min_depth, region_test_count).
+        #
+        # Scoring combines three signals:
+        #   width         — narrow regions (few lines) are more precise → weight 1/width
+        #   region_test_count — regions covered by few tests are more specific → weight 1/region_test_count
+        #   min_depth     — low call count means this test specifically exercised this path
+        #
+        # Final score = sum(1 / (width × region_test_count)) across all matched changed lines.
+        width_score: dict = {}    # test -> sum(1/(width×region_test_count))
+        has_narrow_hit: dict = {} # test -> bool: any covering region is narrow AND exclusive
+        min_depth_seen: dict = {} # test -> minimum call count across all hits
+        for quads in line_to_tests.values():
+            for t, width, depth, region_test_count in quads:
+                rc = max(1, region_test_count)
+                width_score[t] = width_score.get(t, 0.0) + 1.0 / (width * rc)
                 has_narrow_hit[t] = has_narrow_hit.get(t, False) or (
                     width <= self.NARROW_REGION_MAX_LINES
                 )
@@ -467,29 +480,29 @@ if __name__ == "__main__":
             continue
         print(f"{file}:{line} -> NOT FOUND")
 
-    # triples is list of (test_name, region_width, min_depth)
-    all_tests: dict = {}  # test -> (min_width, min_depth)
-    for triples in line_to_tests.values():
-        for t, w, d in triples:
+    # quads is list of (test_name, region_width, min_depth, region_test_count)
+    all_tests: dict = {}  # test -> (min_width, min_depth, min_region_test_count)
+    for quads in line_to_tests.values():
+        for t, w, d, rc in quads:
             if t not in all_tests:
-                all_tests[t] = (w, d)
+                all_tests[t] = (w, d, rc)
             else:
-                ow, od = all_tests[t]
-                all_tests[t] = (min(ow, w), min(od, d))
+                ow, od, orc = all_tests[t]
+                all_tests[t] = (min(ow, w), min(od, d), min(orc, rc))
 
     print("\nTests found for lines:")
-    for (file, line), triples in line_to_tests.items():
-        if not triples:
+    for (file, line), quads in line_to_tests.items():
+        if not quads:
             continue
         print(f"{file}:{line}:")
-        for test, width, depth in triples:
+        for test, width, depth, rc in quads:
             narrow_tag = "narrow" if width <= Targeting.NARROW_REGION_MAX_LINES else f"width={width}"
             depth_tag = f"depth={depth}" if depth < 255 else "depth=?"
             print(f" - {test}  [{narrow_tag}, {depth_tag}]")
 
     print(f"\nAll selected tests ({len(all_tests)}):")
     for test in sorted(all_tests):
-        w, d = all_tests[test]
+        w, d, rc = all_tests[test]
         narrow_tag = "narrow" if w <= Targeting.NARROW_REGION_MAX_LINES else f"width={w}"
         depth_tag = f"depth={d}" if d < 255 else "depth=?"
-        print(f" {test}  [{narrow_tag}, {depth_tag}]")
+        print(f" {test}  [{narrow_tag}, {depth_tag}, tests={rc}]")

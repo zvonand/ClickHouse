@@ -56,6 +56,8 @@ endif()
 # Default coverage instrumentation (dumping the coverage map on exit)
 option(WITH_COVERAGE "Instrumentation for code coverage with default implementation" OFF)
 
+option(WITH_COVERAGE_DEPTH "Shadow call-stack depth tracking via -finstrument-functions-after-inlining (requires WITH_COVERAGE)" OFF)
+
 if (WITH_COVERAGE)
     message (STATUS "Enabled instrumentation for code coverage")
 
@@ -67,6 +69,15 @@ if (WITH_COVERAGE)
     # But the actual coverage will be enabled on per-library basis: for ClickHouse code, but not for 3rd-party.
     set (COVERAGE_FLAGS -fprofile-instr-generate -fcoverage-mapping)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate")
+
+    if (WITH_COVERAGE_DEPTH)
+        message (STATUS "Enabled call-depth shadow stack via -finstrument-functions-after-inlining")
+        # Applied globally so that every (non-inlined) function gets entry/exit hooks.
+        # The hooks are implemented in base/base/coverage.cpp and maintain a thread-local
+        # depth counter used to score test relevance in find_tests.py.
+        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finstrument-functions-after-inlining")
+        set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -finstrument-functions-after-inlining")
+    endif()
 
     set (WITHOUT_COVERAGE_FLAGS "-fno-profile-instr-generate -fno-coverage-mapping")
     set (WITHOUT_COVERAGE_FLAGS_LIST -fno-profile-instr-generate -fno-coverage-mapping)

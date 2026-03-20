@@ -56,7 +56,9 @@ class CoverageExporter:
         path_arg = f" --path {self.src.run_path0}"
 
         stats_query = (
-            f"SELECT count() AS rows, countIf(notEmpty(test_name)) AS rows_with_test, uniqExact(test_name) AS tests, uniqExact(arrayJoin(files)) AS files "
+            f"SELECT count() AS rows, countIf(notEmpty(test_name)) AS rows_with_test, "
+            f"uniqExact(test_name) AS tests, uniqExact(arrayJoin(files)) AS files, "
+            f"round(avg(arrayAvg(arrayMap((d)->toUInt32(d), min_depths)))) AS avg_min_depth "
             f"FROM system.{table}"
         )
         stats_cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{stats_query}" {command_args_post}'
@@ -81,9 +83,11 @@ class CoverageExporter:
                 "SELECT file, line_start, line_end, "
                 f"'{self.check_start_time}' AS check_start_time, "
                 f"'{self.job_name}' AS check_name, "
-                "test_name "
+                "test_name, "
+                "min(min_depth) AS min_depth "
                 f"FROM system.{table} "
-                "ARRAY JOIN files AS file, line_starts AS line_start, line_ends AS line_end "
+                "ARRAY JOIN files AS file, line_starts AS line_start, line_ends AS line_end, "
+                "min_depths AS min_depth "
                 "WHERE notEmpty(test_name) AND notEmpty(file) "
                 "GROUP BY file, line_start, line_end, test_name"
             )
@@ -102,9 +106,11 @@ class CoverageExporter:
                 "test_name, "
                 "file, "
                 "line_start, "
-                "line_end "
+                "line_end, "
+                "min_depth "
                 f"FROM system.{table} "
-                "ARRAY JOIN files AS file, line_starts AS line_start, line_ends AS line_end "
+                "ARRAY JOIN files AS file, line_starts AS line_start, "
+                "line_ends AS line_end, min_depths AS min_depth "
                 f"INTO OUTFILE '{temp_dir}/system_tables/{table}.tsv' "
                 "FORMAT TSVWithNamesAndTypes"
             )

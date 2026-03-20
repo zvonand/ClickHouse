@@ -192,7 +192,8 @@ class Targeting:
             file,
             line_start,
             line_end,
-            groupArray(DISTINCT test_name) AS tests
+            groupArray(DISTINCT test_name) AS tests,
+            groupArray(min_depth) AS depths
         FROM checks_coverage_lines
         WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
@@ -206,42 +207,55 @@ class Targeting:
         raw = cidb.query(query, log_level="")
         print(f"[find_tests] CIDB query: {time.monotonic()-t_query:.2f}s, response={len(raw)} bytes")
 
-        # Parse TSV: file \t line_start \t line_end \t ['test1','test2',...]
+        # Parse TSV: file \t line_start \t line_end \t ['test1',...] \t [depth1,...]
+        # depths array is parallel to tests array: depths[i] is the min_depth for tests[i].
+        # Falls back gracefully if the column is absent (old CIDB schema: depth=255).
         coverage_ranges: list = []
         for row in raw.strip().splitlines():
             if not row:
                 continue
-            parts = row.split("\t", 3)
-            if len(parts) != 4:
+            parts = row.split("\t", 4)
+            if len(parts) < 4:
                 continue
-            file_, line_start_s, line_end_s, tests_raw = parts
+            file_, line_start_s, line_end_s, tests_raw = parts[:4]
+            depths_raw = parts[4] if len(parts) == 5 else None
             try:
                 line_start = int(line_start_s)
                 line_end = int(line_end_s)
                 tests = ast.literal_eval(tests_raw.strip())
-                if isinstance(tests, list):
-                    coverage_ranges.append((file_, line_start, line_end, tests))
+                depths = ast.literal_eval(depths_raw.strip()) if depths_raw else None
+                if not isinstance(tests, list):
+                    continue
+                # Pair each test with its min_depth (255 = not available).
+                if isinstance(depths, list) and len(depths) == len(tests):
+                    test_depths = [(t, int(d)) for t, d in zip(tests, depths)]
+                else:
+                    test_depths = [(t, 255) for t in tests]
+                coverage_ranges.append((file_, line_start, line_end, test_depths))
             except (ValueError, SyntaxError):
                 print(f"Failed to parse coverage row: {row[:100]}")
 
-        # Map each input (filename, line_no) to (test_name, region_width) pairs.
+        # Map each input (filename, line_no) to (test_name, region_width, min_depth) triples.
         # The CIDB query returned all ranges for the touched files; now filter
         # in Python to only ranges that actually overlap a changed line.
         result: dict = {}
         for filename, line_no in changed_lines:
             stored = self._stored_path(filename)
             matched: list = []
-            for file_, line_start, line_end, tests in coverage_ranges:
+            for file_, line_start, line_end, test_depths in coverage_ranges:
                 if file_ == stored and line_start <= line_no <= line_end:
                     width = line_end - line_start + 1
-                    for t in tests:
-                        matched.append((t, width))
-            # Deduplicate: keep the narrowest region width seen for each test.
-            by_test: dict = {}
-            for t, w in matched:
-                if t not in by_test or w < by_test[t]:
-                    by_test[t] = w
-            result[(filename, line_no)] = sorted(by_test.items())
+                    for t, depth in test_depths:
+                        matched.append((t, width, depth))
+            # Deduplicate: for each test keep narrowest width and shallowest depth.
+            by_test: dict = {}  # test -> (min_width, min_depth)
+            for t, w, d in matched:
+                if t not in by_test:
+                    by_test[t] = (w, d)
+                else:
+                    ow, od = by_test[t]
+                    by_test[t] = (min(ow, w), min(od, d))
+            result[(filename, line_no)] = [(t, w, d) for t, (w, d) in sorted(by_test.items())]
 
         total_unique_tests = len({t for pairs in result.values() for t, _ in pairs})
         lines_with_tests = sum(1 for pairs in result.values() if pairs)
@@ -299,41 +313,57 @@ class Targeting:
                         changed.append((current_file, ln))
         return changed
 
+    # Depth threshold: functions called within this many frames of the test entry
+    # point are considered "direct" callers and get a depth tier bonus.
+    DIRECT_CALL_MAX_DEPTH = 3
+
     def get_most_relevant_tests(self):
         """
         1. Gets changed lines from the PR diff.
         2. Queries `checks_coverage_lines` for tests covering those lines.
-        3. Ranks tests by a composite score:
-             - Tier (idea 4): tests with at least one narrow-region hit rank above
-               tests that only appear in wide regions.
-             - Width score (ideas 1+3): each (changed_line, test) hit contributes
-               1 / region_width to the score.  Narrow regions (high precision)
-               outweigh broad ones (e.g. an entire function body), so tests that
-               cover the specific changed lines rather than incidentally passing
-               through a large surrounding region rank higher.
+        3. Ranks tests by a composite score with three tiers:
+             - Tier A (best):  narrow-region hit AND shallow call depth (≤ DIRECT_CALL_MAX_DEPTH)
+             - Tier B:         narrow-region hit, deep call path
+             - Tier C (worst): only broad-region hits
+           Within each tier tests are ordered by width_score = sum(1/region_width),
+           which rewards tests that cover many of the changed lines through narrow regions.
+           The min_depth for each test is the shallowest call depth seen across all
+           coverage entries for that test (255 = depth not tracked; treated as deep).
         4. Returns the ranked list and a `Result` with info about the findings.
         """
         changed_lines = self.get_changed_lines_from_diff()
         line_to_tests = self.get_tests_by_changed_lines(changed_lines)
 
         # Accumulate per-test scores across all changed lines.
-        # line_to_tests values are lists of (test_name, region_width).
-        width_score: dict = {}   # test -> sum(1/width) across covered changed lines
-        has_narrow_hit: dict = {}  # test -> bool: any covering region is narrow
-        for pairs in line_to_tests.values():
-            for t, width in pairs:
+        # line_to_tests values are lists of (test_name, region_width, min_depth).
+        width_score: dict = {}    # test -> sum(1/width) across covered changed lines
+        has_narrow_hit: dict = {} # test -> bool: any covering region is narrow
+        min_depth_seen: dict = {} # test -> minimum call depth across all hits
+        for triples in line_to_tests.values():
+            for t, width, depth in triples:
                 width_score[t] = width_score.get(t, 0.0) + 1.0 / width
                 has_narrow_hit[t] = has_narrow_hit.get(t, False) or (
                     width <= self.NARROW_REGION_MAX_LINES
                 )
+                if depth < min_depth_seen.get(t, 256):
+                    min_depth_seen[t] = depth
 
-        # Sort: narrow-hit tier first, then by width score descending.
-        ranked = sorted(
-            width_score,
-            key=lambda t: (not has_narrow_hit[t], -width_score[t]),
-        )[:1000]
+        def sort_key(t):
+            narrow = has_narrow_hit[t]
+            depth = min_depth_seen.get(t, 255)
+            direct = narrow and depth <= self.DIRECT_CALL_MAX_DEPTH
+            # Tier A: direct narrow hit → 0; Tier B: indirect narrow → 1; Tier C: broad → 2
+            tier = 0 if direct else (1 if narrow else 2)
+            return (tier, -width_score[t])
+
+        # Sort: tier first (A < B < C), then by width score descending within tier.
+        ranked = sorted(width_score, key=sort_key)[:1000]
 
         narrow_count = sum(1 for t in ranked if has_narrow_hit[t])
+        direct_count = sum(
+            1 for t in ranked
+            if has_narrow_hit[t] and min_depth_seen.get(t, 255) <= self.DIRECT_CALL_MAX_DEPTH
+        )
         broad_count = len(ranked) - narrow_count
 
         info = "Tests found for lines:\n"
@@ -343,11 +373,17 @@ class Targeting:
             for (file_, line_), pairs in line_to_tests.items():
                 if pairs:
                     info += f"  {file_}:{line_} -> {len(pairs)} tests\n"
-        info += f"Total unique tests: {len(ranked)} ({narrow_count} narrow, {broad_count} broad)\n"
+        info += (
+            f"Total unique tests: {len(ranked)} "
+            f"({direct_count} direct-narrow, {narrow_count - direct_count} indirect-narrow, "
+            f"{broad_count} broad)\n"
+        )
         if ranked:
             top = ranked[0]
-            tier = "narrow" if has_narrow_hit[top] else "broad"
-            info += f"Top test: {top} (score={width_score[top]:.3f}, {tier})\n"
+            d = min_depth_seen.get(top, 255)
+            tier = ("direct-narrow" if has_narrow_hit[top] and d <= self.DIRECT_CALL_MAX_DEPTH
+                    else "narrow" if has_narrow_hit[top] else "broad")
+            info += f"Top test: {top} (score={width_score[top]:.3f}, {tier}, depth={d})\n"
 
         return ranked, Result(
             name="tests found by coverage", status=Result.StatusExtended.OK, info=info
@@ -430,24 +466,29 @@ if __name__ == "__main__":
             continue
         print(f"{file}:{line} -> NOT FOUND")
 
-    # pairs is list of (test_name, region_width)
-    all_tests: dict = {}  # test -> min region_width seen
-    for pairs in line_to_tests.values():
-        for t, w in pairs:
-            if t not in all_tests or w < all_tests[t]:
-                all_tests[t] = w
+    # triples is list of (test_name, region_width, min_depth)
+    all_tests: dict = {}  # test -> (min_width, min_depth)
+    for triples in line_to_tests.values():
+        for t, w, d in triples:
+            if t not in all_tests:
+                all_tests[t] = (w, d)
+            else:
+                ow, od = all_tests[t]
+                all_tests[t] = (min(ow, w), min(od, d))
 
     print("\nTests found for lines:")
-    for (file, line), pairs in line_to_tests.items():
-        if not pairs:
+    for (file, line), triples in line_to_tests.items():
+        if not triples:
             continue
         print(f"{file}:{line}:")
-        for test, width in pairs:
-            tag = "narrow" if width <= Targeting.NARROW_REGION_MAX_LINES else f"width={width}"
-            print(f" - {test}  [{tag}]")
+        for test, width, depth in triples:
+            narrow_tag = "narrow" if width <= Targeting.NARROW_REGION_MAX_LINES else f"width={width}"
+            depth_tag = f"depth={depth}" if depth < 255 else "depth=?"
+            print(f" - {test}  [{narrow_tag}, {depth_tag}]")
 
     print(f"\nAll selected tests ({len(all_tests)}):")
     for test in sorted(all_tests):
-        w = all_tests[test]
-        tag = "narrow" if w <= Targeting.NARROW_REGION_MAX_LINES else f"width={w}"
-        print(f" {test}  [{tag}]")
+        w, d = all_tests[test]
+        narrow_tag = "narrow" if w <= Targeting.NARROW_REGION_MAX_LINES else f"width={w}"
+        depth_tag = f"depth={d}" if d < 255 else "depth=?"
+        print(f" {test}  [{narrow_tag}, {depth_tag}]")

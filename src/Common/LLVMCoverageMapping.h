@@ -13,14 +13,18 @@ struct CoverageRegion
 {
     uint64_t name_hash;   /// Matches __llvm_profile_data::NameRef
     uint64_t func_hash;   /// Matches __llvm_profile_data::FuncHash (from CovMapFunctionRecordV3 at offset 12)
+    uint32_t counter_id;  /// Index into the function's counter array; 0 = entry counter
     std::string file;
     uint32_t line_start;
     uint32_t line_end;
 };
 
 /// Parse `__llvm_covfun` and `__llvm_covmap` ELF sections from the binary at binary_path.
-/// Returns one CoverageRegion per function (using the function's entry region).
-/// Only includes code regions (region_kind == 0), not gap/branch regions.
+/// Returns one CoverageRegion per (function, counter_id) pair for all code regions
+/// that use a direct counter reference (tag==1 in LLVM counter encoding).
+/// Expression-based counters (add/sub of two counters) are skipped.
+/// Multiple regions may share the same counter_id; for each (name_hash, func_hash, counter_id)
+/// key the narrowest region (smallest line range) is kept.
 std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path);
 
 }

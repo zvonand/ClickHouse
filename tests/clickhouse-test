@@ -4245,7 +4245,8 @@ def main(args):
                 test_name String,
                 files Array(String),
                 line_starts Array(UInt32),
-                line_ends Array(UInt32)
+                line_ends Array(UInt32),
+                min_depths Array(UInt8) DEFAULT arrayWithConstant(length(files), 255)
             )
             ENGINE = MergeTree
             ORDER BY test_name

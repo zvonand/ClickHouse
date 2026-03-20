@@ -26,18 +26,18 @@ namespace DB
 namespace
 {
 
-/// Key for the coverage map: (NameRef, FuncHash) pair.
-/// Using both fields ensures uniqueness when the same function name hash
-/// appears with different body hashes (e.g. overloads or template specialisations
-/// that happen to collide on the name hash).
+/// Key for the coverage map: (NameRef, FuncHash, CounterId) triple.
+/// The counter_id identifies a specific basic-block region within the function,
+/// giving statement-level granularity instead of function-level.
 struct CoverageKey
 {
     uint64_t name_hash;
     uint64_t func_hash;
+    uint32_t counter_id;
 
     bool operator==(const CoverageKey & o) const
     {
-        return name_hash == o.name_hash && func_hash == o.func_hash;
+        return name_hash == o.name_hash && func_hash == o.func_hash && counter_id == o.counter_id;
     }
 };
 
@@ -45,14 +45,15 @@ struct CoverageKeyHash
 {
     std::size_t operator()(const CoverageKey & k) const
     {
-        /// Mix the two hashes using a multiplicative constant to spread bits.
-        return k.name_hash ^ (k.func_hash * 0x9e3779b97f4a7c15ULL);
+        std::size_t h = k.name_hash ^ (k.func_hash * 0x9e3779b97f4a7c15ULL);
+        h ^= static_cast<std::size_t>(k.counter_id) * 0x517cc1b727220a95ULL;
+        return h;
     }
 };
 
-/// Lazily-loaded map from (NameRef, FuncHash) → CoverageRegion.
-/// Populated on the first call to collectAndInsertCoverage by reading
-/// `/proc/self/exe`'s `__llvm_covmap` and `__llvm_covfun` ELF sections.
+/// Lazily-loaded map from (NameRef, FuncHash, CounterId) → CoverageRegion.
+/// When multiple regions share the same counter_id within a function, the
+/// narrowest one (smallest line range) is kept for maximum precision.
 std::unordered_map<CoverageKey, CoverageRegion, CoverageKeyHash> g_coverage_map;
 std::once_flag g_coverage_map_once;
 
@@ -63,12 +64,24 @@ void ensureCoverageMapLoaded()
         const auto regions = readLLVMCoverageMapping("/proc/self/exe");
         g_coverage_map.reserve(regions.size());
         for (const CoverageRegion & r : regions)
-            g_coverage_map.emplace(CoverageKey{r.name_hash, r.func_hash}, r);
+        {
+            const CoverageKey key{r.name_hash, r.func_hash, r.counter_id};
+            auto [it, inserted] = g_coverage_map.emplace(key, r);
+            if (!inserted)
+            {
+                /// Keep the narrowest region for this counter — it gives the most
+                /// precise attribution when the same counter covers multiple regions.
+                const uint32_t existing_width = it->second.line_end - it->second.line_start;
+                const uint32_t new_width      = r.line_end - r.line_start;
+                if (new_width < existing_width)
+                    it->second = r;
+            }
+        }
 
         LOG_INFO(
             getLogger("CoverageCollection"),
-            "Loaded {} function regions from LLVM coverage mapping",
-            g_coverage_map.size());
+            "Loaded {} counter regions from LLVM coverage mapping ({} raw regions)",
+            g_coverage_map.size(), regions.size());
     });
 }
 
@@ -77,16 +90,16 @@ void ensureCoverageMapLoaded()
 
 void collectAndInsertCoverage(
     std::string_view test_name,
-    const std::vector<std::pair<uint64_t, uint64_t>> & name_refs,
+    const std::vector<CovCounter> & name_refs,
     ContextPtr context)
 {
     LOG_INFO(getLogger("CoverageCollection"),
-        "Flushing test '{}': {} covered NameRefs, coverage map size {}",
+        "Flushing test '{}': {} covered counters, coverage map size {}",
         test_name, name_refs.size(), g_coverage_map.size());
 
     if (name_refs.empty())
     {
-        auto msg = fmt::format("CoverageCollection: No covered NameRefs for test '{}', skipping", test_name);
+        auto msg = fmt::format("CoverageCollection: No covered counters for test '{}', skipping", test_name);
         LOG_INFO(getLogger("CoverageCollection"), "{}", msg);
         std::cerr << msg << "\n";
         return;
@@ -117,16 +130,20 @@ void collectAndInsertCoverage(
         }
     };
 
-    std::unordered_map<LineKey, bool, LineKeyHash> seen;
+    /// Per (file, line_start, line_end) key: output array index + min depth seen.
+    /// This lets us update min_depth cheaply when a shallower counter is found.
+    struct SeenEntry { size_t idx; uint8_t min_depth; };
+    std::unordered_map<LineKey, SeenEntry, LineKeyHash> seen;
     seen.reserve(name_refs.size());
 
     std::vector<std::string> files;
     std::vector<uint32_t> line_starts;
     std::vector<uint32_t> line_ends;
+    std::vector<uint8_t> min_depths;
 
-    for (const auto & [name_hash, func_hash] : name_refs)
+    for (const auto & [name_hash, func_hash, counter_id, min_depth] : name_refs)
     {
-        const auto it = g_coverage_map.find(CoverageKey{name_hash, func_hash});
+        const auto it = g_coverage_map.find(CoverageKey{name_hash, func_hash, counter_id});
         if (it == g_coverage_map.end())
             continue;
 
@@ -135,16 +152,24 @@ void collectAndInsertCoverage(
             continue;
 
         LineKey key{region.file, region.line_start, region.line_end};
-        if (!seen.emplace(key, true).second)
-            continue;
-
-        files.push_back(region.file);
-        line_starts.push_back(region.line_start);
-        line_ends.push_back(region.line_end);
+        const auto [sit, inserted] = seen.emplace(key, SeenEntry{files.size(), min_depth});
+        if (inserted)
+        {
+            files.push_back(region.file);
+            line_starts.push_back(region.line_start);
+            line_ends.push_back(region.line_end);
+            min_depths.push_back(min_depth);
+        }
+        else if (min_depth < sit->second.min_depth)
+        {
+            /// A shallower counter covers the same region — update in place.
+            sit->second.min_depth = min_depth;
+            min_depths[sit->second.idx] = min_depth;
+        }
     }
 
     LOG_INFO(getLogger("CoverageCollection"),
-        "Test '{}': {} NameRefs resolved to {} unique (file, line) pairs (map_size={})",
+        "Test '{}': {} counters resolved to {} unique (file, line) pairs (map_size={})",
         test_name, name_refs.size(), files.size(), g_coverage_map.size());
 
     if (files.empty())
@@ -152,9 +177,13 @@ void collectAndInsertCoverage(
 
     /// Build the INSERT query as a VALUES literal.
     /// Schema: coverage_log (time DateTime, test_name String, files Array(String),
-    ///                        line_starts Array(UInt32), line_ends Array(UInt32))
+    ///                        line_starts Array(UInt32), line_ends Array(UInt32),
+    ///                        min_depths Array(UInt8))
     WriteBufferFromOwnString query_buf;
-    writeString("INSERT INTO system.coverage_log (time, test_name, files, line_starts, line_ends) VALUES (now(), ", query_buf);
+    writeString(
+        "INSERT INTO system.coverage_log"
+        " (time, test_name, files, line_starts, line_ends, min_depths)"
+        " VALUES (now(), ", query_buf);
     writeQuotedString(test_name, query_buf);
     writeString(", [", query_buf);
     for (size_t i = 0; i < files.size(); ++i)
@@ -176,6 +205,13 @@ void collectAndInsertCoverage(
         if (i > 0)
             writeChar(',', query_buf);
         writeIntText(line_ends[i], query_buf);
+    }
+    writeString("], [", query_buf);
+    for (size_t i = 0; i < min_depths.size(); ++i)
+    {
+        if (i > 0)
+            writeChar(',', query_buf);
+        writeIntText(static_cast<uint32_t>(min_depths[i]), query_buf);
     }
     writeString("])", query_buf);
 
@@ -227,12 +263,12 @@ size_t getCoverageMapSize()
     return g_coverage_map.size();
 }
 
-size_t countCoverageMatches(const std::vector<std::pair<uint64_t, uint64_t>> & name_refs)
+size_t countCoverageMatches(const std::vector<CovCounter> & name_refs)
 {
     ensureCoverageMapLoaded();
     size_t count = 0;
-    for (const auto & [name_hash, func_hash] : name_refs)
-        if (g_coverage_map.count(CoverageKey{name_hash, func_hash}))
+    for (const auto & [name_hash, func_hash, counter_id, min_depth] : name_refs)
+        if (g_coverage_map.count(CoverageKey{name_hash, func_hash, counter_id}))
             ++count;
     return count;
 }
@@ -247,14 +283,14 @@ uint64_t getFirstCoverageMapKey()
 
 /// Returns (non_empty_file_count, zero_line_count, first_file_hash)
 /// among matched regions for diagnostic purposes.
-std::tuple<size_t, size_t, uint64_t> diagCoverageRegions(const std::vector<std::pair<uint64_t, uint64_t>> & name_refs)
+std::tuple<size_t, size_t, uint64_t> diagCoverageRegions(const std::vector<CovCounter> & name_refs)
 {
     ensureCoverageMapLoaded();
     size_t non_empty = 0, zero_line = 0;
     uint64_t first_file_hash = 0;
-    for (const auto & [name_hash, func_hash] : name_refs)
+    for (const auto & [name_hash, func_hash, counter_id, min_depth] : name_refs)
     {
-        auto it = g_coverage_map.find(CoverageKey{name_hash, func_hash});
+        auto it = g_coverage_map.find(CoverageKey{name_hash, func_hash, counter_id});
         if (it == g_coverage_map.end()) continue;
         const CoverageRegion & r = it->second;
         if (!r.file.empty())
@@ -305,9 +341,9 @@ CurrentCoverageRegions getCurrentCoverageRegions()
     seen.reserve(name_refs.size());
 
     CurrentCoverageRegions out;
-    for (const auto & [name_hash, func_hash] : name_refs)
+    for (const auto & [name_hash, func_hash, counter_id, min_depth] : name_refs)
     {
-        const auto it = g_coverage_map.find(CoverageKey{name_hash, func_hash});
+        const auto it = g_coverage_map.find(CoverageKey{name_hash, func_hash, counter_id});
         if (it == g_coverage_map.end())
             continue;
 

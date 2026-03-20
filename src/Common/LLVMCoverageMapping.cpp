@@ -424,56 +424,6 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
         if (!ok || cur >= mend)
             continue;
 
-        /// Step 3: read first file's regions to get line start/end
-        const uint64_t num_regions = readULEB128(cur, mend, ok);
-        if (!ok || num_regions == 0)
-            continue;
-
-        /// First region: EncodedCounterAndRegion (counter/kind), then line/col.
-        /// The counter field doubles as the region kind when tag == Zero.
-        const uint64_t encoded = readULEB128(cur, mend, ok);
-        if (!ok) continue;
-
-        /// Check if this is a non-code region (kind != CodeRegion).
-        /// Counter::EncodingTagMask == 3; EncodingCounterTagAndExpansionRegionTagBits == 4
-        /// If tag != 0 (non-zero counter), it's a code region.
-        /// If tag == 0 AND bit[2] is set, it's an expansion region.
-        /// If tag == 0 AND bits[31:4] encode a region kind != 0, skip.
-        static constexpr uint64_t kTagMask          = 3u;           /// Counter::EncodingTagMask
-        static constexpr uint64_t kExpansionBit     = 4u;           /// EncodingExpansionRegionBit
-        static constexpr uint64_t kKindShift        = 4u;           /// EncodingCounterTagAndExpansionRegionTagBits
-        const uint64_t tag = encoded & kTagMask;
-        bool is_code_region = true;
-        if (tag == 0)
-        {
-            if (encoded & kExpansionBit)
-                is_code_region = false;  /// expansion region
-            else
-            {
-                uint64_t kind = encoded >> kKindShift;
-                /// CodeRegion = 0, SkippedRegion = 1, BranchRegion = 2, ...
-                if (kind != 0)
-                    is_code_region = false;
-            }
-        }
-
-        if (!is_code_region)
-            continue;
-
-        /// Read line start delta, col start, num lines, col end
-        const uint64_t line_start_delta = readULEB128(cur, mend, ok);
-        if (!ok) continue;
-        /* col_start = */ readULEB128(cur, mend, ok);
-        if (!ok) continue;
-        const uint64_t num_lines = readULEB128(cur, mend, ok);
-        if (!ok) continue;
-
-        const uint32_t line_start = static_cast<uint32_t>(line_start_delta);  /// delta from 0 for first region
-        const uint32_t line_end   = line_start + static_cast<uint32_t>(num_lines);
-
-        if (line_start == 0)
-            continue;
-
         /// Resolve the filename table using FilenamesRef = MD5Hash of the covmap filename blob.
         auto it = hash_to_table.find(filenames_ref);
         if (it == hash_to_table.end())
@@ -484,13 +434,76 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
         if (file_idx >= filenames.size())
             continue;
 
-        CoverageRegion region;
-        region.name_hash  = name_hash;
-        region.func_hash  = func_hash;
-        region.file       = filenames[file_idx];
-        region.line_start = line_start;
-        region.line_end   = line_end;
-        result.push_back(std::move(region));
+        const std::string & filename = filenames[file_idx];
+
+        /// Step 3: iterate ALL regions of the first file mapping.
+        ///
+        /// Region encoding (each field is a ULEB128):
+        ///   encoded          — counter/kind: tag=bits[1:0], counter_id=bits[63:2]
+        ///                        tag==0: zero or special region (skipped/expansion/gap/branch)
+        ///                        tag==1: direct counter reference (counter_id = encoded >> 2)
+        ///                        tag==2/3: expression (add/sub) — skip, no direct counter
+        ///   line_start_delta — absolute line for first region; delta from previous line_start after that
+        ///   col_start        — column start (discarded, we only need lines)
+        ///   num_lines        — line_end = line_start + num_lines
+        ///   col_end_combined — column end packed with extra kind bits (discarded)
+        ///
+        /// The line position is delta-encoded: each region's line_start =
+        /// previous region's line_start + line_start_delta (0 for first region).
+        const uint64_t num_regions = readULEB128(cur, mend, ok);
+        if (!ok || num_regions == 0)
+            continue;
+
+        static constexpr uint64_t kTagMask      = 3u;   /// Counter::EncodingTagMask
+        static constexpr uint64_t kExpansionBit = 4u;   /// EncodingExpansionRegionBit
+        static constexpr uint64_t kKindShift    = 4u;   /// EncodingCounterTagAndExpansionRegionTagBits
+
+        uint32_t cur_line = 0;  /// tracks delta-encoded absolute line position
+
+        for (uint64_t ri = 0; ri < num_regions; ++ri)
+        {
+            const uint64_t encoded        = readULEB128(cur, mend, ok);
+            const uint64_t line_delta     = readULEB128(cur, mend, ok);
+            /* col_start = */               readULEB128(cur, mend, ok);
+            const uint64_t num_lines      = readULEB128(cur, mend, ok);
+            /* col_end_combined = */        readULEB128(cur, mend, ok);
+            if (!ok)
+                break;
+
+            cur_line += static_cast<uint32_t>(line_delta);
+
+            const uint64_t tag = encoded & kTagMask;
+
+            /// Only store direct-counter code regions (tag == 1).
+            /// tag==0: zero/skipped/gap — no counter associated, skip.
+            /// tag==2/3: expression (sum/difference of two counters) — we can't
+            ///           cheaply evaluate expressions without the expression table,
+            ///           so skip for now.  The entry counter (counter_id=0, tag=1)
+            ///           is always a direct reference, so function-level coverage
+            ///           is always retained.
+            if (tag != 1)
+                continue;
+
+            /// Verify it's actually a code region, not an expansion into another file.
+            if ((encoded & kExpansionBit) || ((encoded >> kKindShift) != 0 && tag == 0))
+                continue;
+
+            if (cur_line == 0)
+                continue;
+
+            const uint32_t line_start  = cur_line;
+            const uint32_t line_end    = cur_line + static_cast<uint32_t>(num_lines);
+            const uint32_t counter_id  = static_cast<uint32_t>(encoded >> 2);
+
+            CoverageRegion region;
+            region.name_hash  = name_hash;
+            region.func_hash  = func_hash;
+            region.counter_id = counter_id;
+            region.file       = filename;
+            region.line_start = line_start;
+            region.line_end   = line_end;
+            result.push_back(std::move(region));
+        }
     }
 
     cleanup();

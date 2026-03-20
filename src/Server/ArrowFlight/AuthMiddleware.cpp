@@ -131,9 +131,10 @@ String AuthMiddlewareFactory::TokenStorage::getToken(std::string username, std::
     unsafeCleanupExpiredTokens();
 
     auto token = toString(UUIDHelpers::generateV4());
-    token_to_credentials[token] = {username, password};
     auto expiration_time = std::chrono::steady_clock::now() + std::chrono::seconds(config.getInt("default_session_timeout", 60));
-    token_expiration_list_index[token] = token_expiration_list.insert({expiration_time, token});
+    auto exp_iter = token_expiration_list.insert({expiration_time, token});
+    token_expiration_list_index[token] = exp_iter;
+    token_to_credentials[token] = {username, password};
 
     return token;
 }

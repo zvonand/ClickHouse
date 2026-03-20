@@ -1,4 +1,6 @@
 #include <type_traits>
+#include <IO/ReadHelpers.h>
+#include <IO/WriteHelpers.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Processors/QueryPlan/UnionStep.h>
 #include <Processors/QueryPlan/QueryPlanStepRegistry.h>
@@ -101,12 +103,19 @@ void UnionStep::describePipeline(FormatSettings & settings) const
 
 void UnionStep::serialize(Serialization & ctx) const
 {
-    (void)ctx;
+    writeVarUInt(max_threads, ctx.out);
+    writeVarUInt(max_streams, ctx.out);
 }
 
 QueryPlanStepPtr UnionStep::deserialize(Deserialization & ctx)
 {
-    return std::make_unique<UnionStep>(ctx.input_headers);
+    UInt64 max_threads_ = 0;
+    UInt64 max_streams_ = 0;
+
+    readVarUInt(max_threads_, ctx.in);
+    readVarUInt(max_streams_, ctx.in);
+
+    return std::make_unique<UnionStep>(ctx.input_headers, max_threads_, max_streams_);
 }
 
 void registerUnionStep(QueryPlanStepRegistry & registry)

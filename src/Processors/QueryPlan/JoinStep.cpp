@@ -1,4 +1,6 @@
+#include <Formats/FormatSettings.h>
 #include <IO/Operators.h>
+#include <IO/WriteHelpers.h>
 #include <Interpreters/IJoin.h>
 #include <Interpreters/TableJoin.h>
 #include <Interpreters/ExpressionActions.h>
@@ -23,20 +25,36 @@ namespace ErrorCodes
 namespace
 {
 
-std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join)
+std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join, bool pretty = false)
 {
     std::vector<std::pair<String, String>> description;
     const auto & table_join = join->getTableJoin();
 
-    description.emplace_back("Type", toString(table_join.kind()));
-    description.emplace_back("Strictness", toString(table_join.strictness()));
+    auto toLower = [](String & s)
+    {
+        std::transform(s.begin(), s.end(), s.begin(),
+            [](unsigned char c) { return std::tolower(c); });
+    };
+
+    String kind = toString(table_join.kind());
+    String strictness = toString(table_join.strictness());
+
+    if (pretty)
+    {
+        toLower(kind);
+        toLower(strictness);
+    }
+
+    description.emplace_back("Type", kind);
+    description.emplace_back("Strictness", strictness);
     description.emplace_back("Algorithm", join->getName());
 
     if (table_join.strictness() == JoinStrictness::Asof)
         description.emplace_back("ASOF inequality", toString(table_join.getAsofInequality()));
 
+    std::string_view join_conditions_label = pretty ? "Join conditions" : "Clauses";
     if (!table_join.getClauses().empty())
-        description.emplace_back("Clauses", TableJoin::formatClauses(table_join.getClauses(), true /*short_format*/));
+        description.emplace_back(join_conditions_label, TableJoin::formatClauses(table_join.getClauses(), true /*short_format*/));
 
     if (const auto & mixed_expression = table_join.getMixedJoinExpression())
         description.emplace_back("Residual filter", mixed_expression->getSampleBlock().dumpNames());
@@ -215,7 +233,7 @@ void JoinStep::describeActions(FormatSettings & settings) const
 {
     const String & prefix = settings.detail_prefix;
 
-    auto description = describeJoinActions(join);
+    auto description = describeJoinActions(join, settings.pretty);
     const size_t inline_count = settings.pretty ? 3 : 0;
 
     if (settings.pretty)
@@ -228,13 +246,13 @@ void JoinStep::describeActions(FormatSettings & settings) const
         {
             if (i > 0)
                 settings.out << " | ";
-            const auto & [name, value] = description[i];
+            auto [name, value] = description[i];
             settings.out << name << ": " << value;
         }
         settings.out << '\n';
 
         if (result_rows_estimation)
-            settings.out << prefix << "ResultRows: " << toString(*result_rows_estimation) << '\n';
+            settings.out << prefix << "Result rows: " << toString(*result_rows_estimation) << '\n';
 
         if (locality != JoinLocality::Unspecified)
             settings.out << prefix << "Locality: " << toString(locality) << '\n';

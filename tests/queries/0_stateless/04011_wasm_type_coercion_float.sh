@@ -61,7 +61,7 @@ SELECT wasm_rb_f64(toFloat64(-2.5));
 SELECT wasm_rb_f64(toFloat64(0.0));
 
 -- Multiple rows.
-SELECT wasm_rb_f64(toFloat64(n)) FROM numbers(4);
+SELECT wasm_rb_f64(toFloat64(number)) FROM numbers(4);
 
 DROP FUNCTION wasm_raw_f32;
 DROP FUNCTION wasm_raw_f64;

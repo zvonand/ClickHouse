@@ -57,7 +57,7 @@ SELECT wasm_rb_i64(toUInt64(42));
 SELECT wasm_rb_i64(toInt32(1)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 -- Multiple rows.
-SELECT wasm_rb_i64(toInt64(n)) FROM numbers(4);
+SELECT wasm_rb_i64(toInt64(number)) FROM numbers(4);
 
 DROP FUNCTION wasm_raw_i64;
 DROP FUNCTION wasm_rb_i64;

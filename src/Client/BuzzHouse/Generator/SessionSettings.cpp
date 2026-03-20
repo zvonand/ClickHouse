@@ -170,8 +170,8 @@ String getNextIcebergExpireTimestamp(RandomGenerator & rg, FuzzConfig & fc)
         auto secs = static_cast<time_t>(duration_cast<std::chrono::seconds>(now.time_since_epoch()).count());
 
         secs -= rg.pickRandomly(offsets_sec);
-        localtime_r(&secs, &tm_buf);
-        strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_buf);
+        if (!localtime_r(&secs, &tm_buf) || strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_buf))
+            return {};
         return buf;
     }
 }

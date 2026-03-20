@@ -12,6 +12,7 @@
 #include <Core/Settings.h>
 #include <Common/Macros.h>
 #include <Common/OptimizedRegularExpression.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/ZooKeeper/ZooKeeperRetries.h>
 #include <Common/typeid_cast.h>
 #include <Common/logger_useful.h>
@@ -392,6 +393,7 @@ static StoragePtr create(const StorageFactory::Arguments & args)
         *  - Additional MergeTreeSettings in the SETTINGS clause;
         */
 
+    auto component_guard = Coordination::setCurrentComponent("registerStorageMergeTree::create");
     bool is_extended_storage_def = args.engine_args.empty() || isExtendedStorageDef(args.query);
 
     const Settings & local_settings = args.getLocalContext()->getSettingsRef();
@@ -678,7 +680,7 @@ static StoragePtr create(const StorageFactory::Arguments & args)
             args.storage_def->order_by->ptr(), metadata.columns, context, merging_param_key_arg);
 
         if (!local_settings[Setting::allow_suspicious_primary_key] && args.mode <= LoadingStrictnessLevel::CREATE)
-            MergeTreeData::verifySortingKey(metadata.sorting_key, merging_params);
+            MergeTreeData::verifySortingKey(metadata.sorting_key);
 
         /// If primary key explicitly defined, than get it from AST
         if (args.storage_def->primary_key)
@@ -734,10 +736,23 @@ static StoragePtr create(const StorageFactory::Arguments & args)
 
                 auto using_auto_minmax_index = metadata.add_minmax_index_for_numeric_columns || metadata.add_minmax_index_for_string_columns
                     || metadata.add_minmax_index_for_temporal_columns;
-                if (args.mode <= LoadingStrictnessLevel::CREATE && using_auto_minmax_index
-                    && index_name.starts_with(IMPLICITLY_ADDED_MINMAX_INDEX_PREFIX))
+                if (using_auto_minmax_index && index_name.starts_with(IMPLICITLY_ADDED_MINMAX_INDEX_PREFIX))
                 {
-                    throw Exception(ErrorCodes::BAD_ARGUMENTS, "Cannot create table because index {} uses a reserved index name", index_name);
+                    if (args.mode <= LoadingStrictnessLevel::CREATE)
+                        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Cannot create table because index {} uses a reserved index name", index_name);
+
+                    /// Backward compatibility: older versions (before 25.12) stored implicit indices
+                    /// on disk as regular indices. Re-mark them so `explicitToString` excludes them.
+                    auto & added = metadata.secondary_indices.back();
+                    String col_name = index_name.substr(strlen(IMPLICITLY_ADDED_MINMAX_INDEX_PREFIX));
+                    if (columns.has(col_name))
+                    {
+                        const auto & col_type = columns.get(col_name).type;
+                        if ((metadata.add_minmax_index_for_numeric_columns && isNumber(col_type))
+                            || (metadata.add_minmax_index_for_string_columns && isString(col_type))
+                            || (metadata.add_minmax_index_for_temporal_columns && isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(col_type)))
+                            added.is_implicitly_created = true;
+                    }
                 }
             }
         }
@@ -759,8 +774,21 @@ static StoragePtr create(const StorageFactory::Arguments & args)
         {
             for (auto & projection_ast : args.query.columns_list->projections->children)
             {
-                auto projection = ProjectionDescription::getProjectionFromAST(projection_ast, columns, context);
-                metadata.projections.add(std::move(projection));
+                try
+                {
+                    auto projection = ProjectionDescription::getProjectionFromAST(projection_ast, columns, context);
+                    metadata.projections.add(std::move(projection));
+                }
+                catch (...)
+                {
+                    if (args.mode < LoadingStrictnessLevel::FORCE_ATTACH)
+                        throw;
+                    tryLogCurrentException(__PRETTY_FUNCTION__, fmt::format(
+                        "Cannot parse projection {} during server startup, skipping it. "
+                        "It may be caused by a dependency on a dropped dictionary or a missing object. "
+                        "Consider recreating the projection or dropping and recreating the table.",
+                        projection_ast->formatForErrorMessage()));
+                }
             }
         }
 
@@ -806,7 +834,7 @@ static StoragePtr create(const StorageFactory::Arguments & args)
             = KeyDescription::getSortingKeyFromAST(engine_args[arg_num], metadata.columns, context, merging_param_key_arg);
 
         if (!local_settings[Setting::allow_suspicious_primary_key] && args.mode <= LoadingStrictnessLevel::CREATE)
-            MergeTreeData::verifySortingKey(metadata.sorting_key, merging_params);
+            MergeTreeData::verifySortingKey(metadata.sorting_key);
 
         /// In old syntax primary_key always equals to sorting key.
         metadata.primary_key = KeyDescription::getKeyFromAST(engine_args[arg_num], metadata.columns, context);

@@ -12,6 +12,7 @@
 #include <base/scope_guard.h>
 #include <Common/Exception.h>
 #include <Common/CurrentThread.h>
+#include <Common/OvercommitTracker.h>
 #include <Common/Scheduler/Workload/IWorkloadEntityStorage.h>
 #include <Common/Scheduler/IResourceManager.h>
 #include <Common/logger_useful.h>
@@ -357,9 +358,9 @@ ProcessList::EntryPtr ProcessList::insert(
             increaseQueryKindAmount(query_kind);
         }
 
-        CancellationChecker::getInstance().appendTask(query, query_context->getSettingsRef()[Setting::max_execution_time].totalMilliseconds(), query_context->getSettingsRef()[Setting::timeout_overflow_mode]);
+        bool registered_in_cancellation_checker = CancellationChecker::getInstance().appendTask(query, query_context->getSettingsRef()[Setting::max_execution_time].totalMilliseconds(), query_context->getSettingsRef()[Setting::timeout_overflow_mode]);
 
-        res = std::make_shared<Entry>(*this, process_it);
+        res = std::make_shared<Entry>(*this, process_it, registered_in_cancellation_checker);
 
         (*process_it)->setUserProcessList(&user_process_list);
         (*process_it)->setProcessListEntry(res);
@@ -397,7 +398,14 @@ ProcessList::EntryPtr ProcessList::insert(
 
 ProcessListEntry::~ProcessListEntry()
 {
-    CancellationChecker::getInstance().appendDoneTasks(*it);
+    if (registered_in_cancellation_checker)
+    {
+        /// We need to block the overcommit tracker here to avoid lock inversion because OvercommitTracker takes a lock on the ProcessList::mutex.
+        /// When task is added, we lock the ProcessList::mutex, and then the CancellationChecker mutex.
+        OvercommitTrackerBlockerInThread blocker;
+        CancellationChecker::getInstance().appendDoneTasks(*it);
+    }
+
     LockAndOverCommitTrackerBlocker<std::unique_lock, ProcessList::Mutex> lock(parent.getMutex());
 
     const String user = (*it)->getClientInfo().current_user;
@@ -628,6 +636,13 @@ void QueryStatus::throwQueryWasCancelled() const
         throw Exception(ErrorCodes::QUERY_WAS_CANCELLED, "Query was cancelled");
 }
 
+void QueryStatus::throwIfKilled()
+{
+    if (!is_killed.load())
+        return;
+    throwProperExceptionIfNeeded(limits.max_execution_time.totalMilliseconds(), 0);
+}
+
 bool QueryStatus::checkTimeLimitSoft()
 {
     if (is_killed.load())
@@ -764,6 +779,25 @@ void ProcessList::killAllQueries()
     for (auto & cancelled_process : cancelled_processes)
         cancelled_process->cancelQuery(CancelReason::CANCELLED_BY_USER);
 
+}
+
+bool QueryStatus::updateProgressIn(const Progress & value)
+{
+    CurrentThread::updateProgressIn(value);
+    progress_in.incrementPiecewiseAtomically(value);
+
+    if (priority_handle)
+        priority_handle->waitIfNeed();
+
+    return !is_killed.load(std::memory_order_relaxed);
+}
+
+bool QueryStatus::updateProgressOut(const Progress & value)
+{
+    CurrentThread::updateProgressOut(value);
+    progress_out.incrementPiecewiseAtomically(value);
+
+    return !is_killed.load(std::memory_order_relaxed);
 }
 
 

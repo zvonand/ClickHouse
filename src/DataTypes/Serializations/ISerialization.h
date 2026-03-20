@@ -17,10 +17,10 @@
 namespace DB
 {
 
-namespace ErrorCodes
-{
-    extern const int LOGICAL_ERROR;
-}
+class ISerialization;
+
+[[noreturn]] void throwEmptySerializationState(const ISerialization * serialization);
+[[noreturn]] void throwInvalidSerializationState(const ISerialization * serialization, const std::type_info & expected, const std::type_info & got);
 
 class IDataType;
 
@@ -322,6 +322,9 @@ public:
         size_t object_shared_data_buckets = 1;
         /// Type of MergeTree data part we serialize/deserialize data from if any.
         MergeTreeDataPartType data_part_type = MergeTreeDataPartType::Unknown;
+
+        /// Current level of array. Needed to differentiate stream names of nested array offsets.
+        size_t array_level = 0;
     };
 
     virtual void enumerateStreams(
@@ -613,8 +616,8 @@ public:
     static String getFileNameForRenamedColumnStream(const NameAndTypePair & column_from, const NameAndTypePair & column_to, const String & file_name);
     static String getFileNameForRenamedColumnStream(const String & name_from, const String & name_to, const String & file_name);
 
-    static String getSubcolumnNameForStream(const SubstreamPath & path, bool encode_sparse_stream = false);
-    static String getSubcolumnNameForStream(const SubstreamPath & path, size_t prefix_len, bool encode_sparse_stream = false);
+    static String getSubcolumnNameForStream(const SubstreamPath & path, bool encode_sparse_stream = false, size_t initial_array_level = 0);
+    static String getSubcolumnNameForStream(const SubstreamPath & path, size_t prefix_len, bool encode_sparse_stream = false, size_t initial_array_level = 0);
 
     static void addColumnWithNumReadRowsToSubstreamsCache(SubstreamsCache * cache, const SubstreamPath & path, ColumnPtr column, size_t num_read_rows);
     static std::optional<std::pair<ColumnPtr, size_t>> getColumnWithNumReadRowsFromSubstreamsCache(SubstreamsCache * cache, const SubstreamPath & path);
@@ -626,7 +629,8 @@ public:
 
     static bool isSpecialCompressionAllowed(const SubstreamPath & path);
 
-    static size_t getArrayLevel(const SubstreamPath & path);
+    static size_t getArrayLevel(const SubstreamPath & path, size_t prefix_len);
+    static size_t getArrayLevel(const SubstreamPath & path) { return getArrayLevel(path, path.size()); }
     static bool hasSubcolumnForPath(const SubstreamPath & path, size_t prefix_len);
     static SubstreamData createFromPath(const SubstreamPath & path, size_t prefix_len);
 
@@ -684,18 +688,13 @@ template <typename State, typename StatePtr>
 State * ISerialization::checkAndGetState(const StatePtr & state, const ISerialization * serialization)
 {
     if (!state)
-        throw Exception(ErrorCodes::LOGICAL_ERROR,
-            "Got empty state for {}", demangle(typeid(*serialization).name()));
+        throwEmptySerializationState(serialization);
 
     auto * state_concrete = typeid_cast<State *>(state.get());
     if (!state_concrete)
     {
         auto & state_ref = *state;
-        throw Exception(ErrorCodes::LOGICAL_ERROR,
-            "Invalid State for {}. Expected: {}, got {}",
-                demangle(typeid(*serialization).name()),
-                demangle(typeid(State).name()),
-                demangle(typeid(state_ref).name()));
+        throwInvalidSerializationState(serialization, typeid(State), typeid(state_ref));
     }
 
     return state_concrete;

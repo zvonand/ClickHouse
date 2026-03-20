@@ -88,6 +88,17 @@ def test_read_only(start_cluster):
 
 def test_dirctory_missing_after_stop(start_cluster):
     # Test that RocksDB handles a missing directory after node restart.
+    # Restart to flush any stale RocksDB handles left by previous runs (e.g. in flaky check).
+    # DROP TABLE does not synchronously release the rocksdb::DB lock, so a restart is needed.
+    node.query("DROP TABLE IF EXISTS test_missing;")
+    node.restart_clickhouse()
+    node.exec_in_container(
+        [
+            "bash",
+            "-c",
+            "rm -rf /var/lib/clickhouse/user_files/test_rocksdb_read_only_missing",
+        ]
+    )
     # for read_only = false
     node.query(
         """

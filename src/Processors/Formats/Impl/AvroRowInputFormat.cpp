@@ -58,7 +58,7 @@
 #include <Poco/Net/HTTPResponse.h>
 #include <Poco/URI.h>
 
-#include <magic_enum.hpp>
+#include <base/EnumReflection.h>
 
 
 namespace CurrentMetrics

@@ -1497,7 +1497,7 @@ struct FunctionsStressTestThread
             }
         }
 
-        if (!res.column)
+        if (res.column)
             checkAndFixupColumn(res.column, res.type.get(), options.rows_per_batch, nullptr);
 
         return res;

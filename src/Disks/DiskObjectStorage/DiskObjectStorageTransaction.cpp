@@ -518,7 +518,8 @@ void DiskObjectStorageTransaction::commit()
         {
             auto submitted = metadata_transaction->getSubmittedForRemovalBlobs();
             while (metadata_storage->hasPendingRemovalBlobs(submitted))
-                blob_killer->triggerAndWait();
+                if (!blob_killer->triggerAndWait())
+                    break;
         }
         catch (...)
         {
@@ -603,7 +604,8 @@ TransactionCommitOutcomeVariant DiskObjectStorageTransaction::tryCommit(const Tr
         {
             auto submitted = metadata_transaction->getSubmittedForRemovalBlobs();
             while (metadata_storage->hasPendingRemovalBlobs(submitted))
-                blob_killer->triggerAndWait();
+                if (!blob_killer->triggerAndWait())
+                    break;
         }
         catch (...)
         {

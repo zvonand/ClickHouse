@@ -241,7 +241,8 @@ void BlobKillerThread::run()
     finished_rounds.fetch_add(1);
     finished_rounds.notify_all();
 
-    const int64_t schedule_after_ms = DelayWithJitter(reschedule_interval_sec.load() * 1000).getDelayWithJitter(-500, 500);
+    const int64_t interval = reschedule_interval_sec.load();
+    const int64_t schedule_after_ms = DelayWithJitter(interval * 1000).getDelayWithJitter(-500, 500);
     task->scheduleAfter(schedule_after_ms);
     LOG_TEST(log, "Scheduled after: {} ms", schedule_after_ms);
 }

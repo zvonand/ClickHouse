@@ -508,7 +508,7 @@ bool manageClickHouseUser(
 }
 
 /// Returns false on first error (fail-fast, matches shell `set -e`).
-static bool createClickHouseDatabase(
+bool createClickHouseDatabase(
     const std::vector<std::string> & client_base,
     const std::string & clickhouse_db)
 {
@@ -533,7 +533,7 @@ static bool createClickHouseDatabase(
 }
 
 /// Returns false on first script failure (fail-fast, matches shell `set -e`).
-static bool runInitScripts(const std::vector<std::string> & client_base)
+bool runInitScripts(const std::vector<std::string> & client_base)
 {
     std::error_code ec;
     if (!fs::is_directory("/docker-entrypoint-initdb.d", ec))

@@ -6078,7 +6078,7 @@ MergeTreeData::DataPartsVector MergeTreeData::getVisibleDataPartsVectorInPartiti
 
             if (txn)
             {
-                DataPartStateAndPartitionID outdated_parts{MergeTreeDataPartState::Active, partition_id};
+                DataPartStateAndPartitionID outdated_parts{MergeTreeDataPartState::Outdated, partition_id};
 
                 insertAtEnd(
                     res,

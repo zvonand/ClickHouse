@@ -162,6 +162,24 @@ public:
         /// https://github.com/apache/arrow-rs-object-store/blob/main/src/azure/builder.rs#L390
         set_option("azure_container_name", endpoint.container_name);
 
+        /// Extracts the storage account name from the hostname of storage_account_url.
+        /// Standard Azure Blob endpoints have the form https://<account>.blob.core.windows.net,
+        /// so the subdomain before the first '.' is the account name.
+        auto get_account_name = [&]() -> std::string
+        {
+            const auto & url = endpoint.storage_account_url;
+            auto scheme_end = url.find("://");
+            if (scheme_end == std::string::npos)
+                return {};
+
+            auto host_start = scheme_end + 3;
+            auto dot_pos = url.find('.', host_start);
+            if (dot_pos == std::string::npos)
+                return {};
+
+            return url.substr(host_start, dot_pos - host_start);
+        };
+
         std::visit([&](const auto & auth)
         {
             using T = std::decay_t<decltype(auth)>;
@@ -206,8 +224,7 @@ public:
             else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Storage::StorageSharedKeyCredential>>)
             {
                 set_option("azure_storage_account_name", auth->AccountName);
-                if (connection_params.raw_account_key.has_value())
-                    set_option("azure_storage_account_key", *connection_params.raw_account_key);
+                set_option("azure_storage_account_key", connection_params.endpoint.account_key);
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::ClientSecretCredential>>)
             {
@@ -221,13 +238,15 @@ public:
             else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::WorkloadIdentityCredential>>)
             {
                 set_option("azure_use_workload_identity", "true");
-                if (!endpoint.account_name.empty())
-                    set_option("azure_storage_account_name", endpoint.account_name);
+                const auto & name = endpoint.account_name.empty() ? get_account_name() : endpoint.account_name;
+                if (!name.empty())
+                    set_option("azure_storage_account_name", name);
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::ManagedIdentityCredential>>)
             {
-                if (!endpoint.account_name.empty())
-                    set_option("azure_storage_account_name", endpoint.account_name);
+                const auto & name = endpoint.account_name.empty() ? get_account_name() : endpoint.account_name;
+                if (!name.empty())
+                    set_option("azure_storage_account_name", name);
             }
             // StaticCredential and other variants are not supported by delta-kernel-rs;
             // no options are set and the builder will use default credential discovery.

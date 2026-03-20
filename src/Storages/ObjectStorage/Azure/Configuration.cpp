@@ -147,7 +147,6 @@ AzureBlobStorage::ConnectionParams getAzureConnectionParams(
         connection_params.endpoint.add_account_name_to_url = false;
         LOG_INFO(getLogger("getAzureConnectionParams"), "Using account key authentication for Azure Blob Storage with account name '{}'", *account_name);
         connection_params.auth_method = std::make_shared<Azure::Storage::StorageSharedKeyCredential>(*account_name, *account_key);
-        connection_params.raw_account_key = *account_key;
     }
 
     if (connection_params.auth_method.index() == 0)

@@ -54,6 +54,7 @@ SETTINGS use_statistics_cache = 0, log_comment = 'nouse-agg' FORMAT Null;
 
 SYSTEM FLUSH LOGS query_log;
 
+-- Load time is 0 because no where condition
 SELECT toUInt8(ProfileEvents['LoadedStatisticsMicroseconds'] = 0)
 FROM system.query_log
 WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'nouse-agg'
@@ -87,6 +88,7 @@ SETTINGS use_statistics_cache = 0, log_comment = 'cm-lc-load' FORMAT Null;
 
 SYSTEM FLUSH LOGS query_log;
 
+-- Load time is 0 because where condition is not CNF 
 SELECT toUInt8(ProfileEvents['LoadedStatisticsMicroseconds'] > 0)
 FROM system.query_log
 WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'cm-lc-load'
@@ -127,6 +129,7 @@ FORMAT Null;
 
 SYSTEM FLUSH LOGS query_log;
 
+-- Load time > 0 because join will load uniq stats
 SELECT toUInt8(ProfileEvents['LoadedStatisticsMicroseconds'] > 0)
 FROM system.query_log
 WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'join-load'

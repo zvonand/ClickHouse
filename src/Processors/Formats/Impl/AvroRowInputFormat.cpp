@@ -121,7 +121,8 @@ size_t AvroInputStreamReadBufferAdapter::byteCount() const
 template <typename Source, typename Target, typename Column, bool is_ipv4 = false>
 static void convertAndInsert(Column & column, Source value, TypeIndex type_index)
 {
-    auto insert = [&](Target value_to_insert) {
+    auto insert = [&](Target value_to_insert)
+    {
         if constexpr (is_ipv4)
             column.insertValue(IPv4(value_to_insert));
         else

@@ -717,7 +717,7 @@ void MutationsInterpreter::prepare(bool dry_run)
     /// Columns that are being cleared and need default values in the pipeline
     /// for correct projection/materialized-column rebuild (instead of passing
     /// through original values).
-    NameSet cleared_columns_for_projections;
+    NameSet cleared_columns_with_dependencies;
 
     /// Whether any MATERIALIZED column depends on a cleared column and needs
     /// to be recalculated with the type-default value.
@@ -1153,7 +1153,7 @@ void MutationsInterpreter::prepare(bool dry_run)
                 {
                     for (const auto & col : projection_cols)
                         dependencies.emplace(col, ColumnDependency::PROJECTION);
-                    cleared_columns_for_projections.insert(command.column_name);
+                    cleared_columns_with_dependencies.insert(command.column_name);
                     materialized_projections.insert(projection.name);
                 }
             }
@@ -1161,33 +1161,39 @@ void MutationsInterpreter::prepare(bool dry_run)
             /// When clearing a column, any MATERIALIZED column whose expression
             /// depends on the cleared column must be recalculated so its stored
             /// data stays consistent with the new (default) value.
-            if (!need_recalculate_materialized_for_clear)
+            /// We must check every CLEAR COLUMN command (not short-circuit after the
+            /// first match) so that all cleared columns used by materialized
+            /// expressions are registered in `cleared_columns_with_dependencies`.
+            bool has_dependent_materialized = false;
+            for (const auto & column : columns_desc)
             {
-                for (const auto & column : columns_desc)
-                {
-                    if (column.default_desc.kind != ColumnDefaultKind::Materialized
-                        || !available_columns_set.contains(column.name))
-                        continue;
+                if (column.default_desc.kind != ColumnDefaultKind::Materialized
+                    || !available_columns_set.contains(column.name))
+                    continue;
 
-                    auto query = column.default_desc.expression->clone();
-                    replaceSubcolumnsToGetSubcolumnFunctionInQuery(query, all_columns);
-                    auto syntax_result = TreeRewriter(context).analyze(query, all_columns);
-                    for (const auto & dep : syntax_result->requiredSourceColumns())
+                auto query = column.default_desc.expression->clone();
+                replaceSubcolumnsToGetSubcolumnFunctionInQuery(query, all_columns);
+                auto syntax_result = TreeRewriter(context).analyze(query, all_columns);
+                for (const auto & dep : syntax_result->requiredSourceColumns())
+                {
+                    if (dep == command.column_name)
                     {
-                        if (dep == command.column_name)
-                        {
-                            need_recalculate_materialized_for_clear = true;
-                            /// Ensure the cleared column enters the readonly stage
-                            /// with its default value so the materialized expression
-                            /// evaluates correctly.
-                            dependencies.emplace(command.column_name, ColumnDependency::PROJECTION);
-                            cleared_columns_for_projections.insert(command.column_name);
-                            break;
-                        }
-                    }
-                    if (need_recalculate_materialized_for_clear)
+                        has_dependent_materialized = true;
                         break;
+                    }
                 }
+                if (has_dependent_materialized)
+                    break;
+            }
+
+            if (has_dependent_materialized)
+            {
+                need_recalculate_materialized_for_clear = true;
+                /// Ensure the cleared column enters the readonly stage
+                /// with its default value so the materialized expression
+                /// evaluates correctly.
+                dependencies.emplace(command.column_name, ColumnDependency::PROJECTION);
+                cleared_columns_with_dependencies.insert(command.column_name);
             }
         }
         /// The following mutations handled separately:
@@ -1267,7 +1273,7 @@ void MutationsInterpreter::prepare(bool dry_run)
             stages.back().is_readonly = true;
             for (const auto & column : unchanged_columns)
             {
-                if (cleared_columns_for_projections.contains(column))
+                if (cleared_columns_with_dependencies.contains(column))
                 {
                     /// For columns being cleared, provide the type default value
                     /// instead of the original value from the source part.

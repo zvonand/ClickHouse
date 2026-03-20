@@ -156,3 +156,29 @@ ALTER TABLE test_combined CLEAR COLUMN c1;
 SELECT 'combined', count() FROM test_combined WHERE c1 = 0 SETTINGS optimize_use_projections = 1;
 SELECT 'combined', sum(c2) FROM test_combined;
 DROP TABLE test_combined;
+
+-- ============================================================
+-- 5. Multi-column clear: a single ALTER clears two columns that
+--    both feed the same MATERIALIZED expression.  Both must get
+--    default values in the readonly stage.
+-- ============================================================
+
+DROP TABLE IF EXISTS test_multi_clear;
+CREATE TABLE test_multi_clear
+(
+    c0 Int32,
+    c1 Int32,
+    c2 Int32,
+    m Int32 MATERIALIZED c1 + c2
+)
+ENGINE = MergeTree() ORDER BY c0
+SETTINGS index_granularity = 1, min_bytes_for_wide_part = 1;
+
+INSERT INTO test_multi_clear (c0, c1, c2) SELECT number, number, number * 10 FROM numbers(5);
+-- m = c1 + c2 = 0+0, 1+10, 2+20, 3+30, 4+40 => sum = 0+11+22+33+44 = 110
+SELECT 'multi_clear_before', sum(m) FROM test_multi_clear;
+
+ALTER TABLE test_multi_clear CLEAR COLUMN c1, CLEAR COLUMN c2;
+-- After clearing both: c1 = 0, c2 = 0, m should be recalculated to 0 + 0 = 0.
+SELECT 'multi_clear_after', sum(m) FROM test_multi_clear;
+DROP TABLE test_multi_clear;

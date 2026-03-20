@@ -551,67 +551,6 @@ def test_failed_commit(started_cluster):
     )
 
 
-def test_failed_commit_after_success(started_cluster):
-    """
-    Test "failed after operation": the ZK multi-op succeeds but the connection is lost
-    before the client receives the confirmation. On retry the commit fails with `ZNONODE`
-    (processing node already removed). Without the fix the server aborts on a `chassert`
-    in `~ObjectStorageQueueIFileMetadata`. With the fix the `uncertain_commit` flag makes
-    the destructor check ownership instead of asserting; the file stays processed in ZK
-    and is skipped on the next background iteration.
-    """
-    node = started_cluster.instances["instance"]
-
-    table_name = f"test_failed_commit_after_success_{generate_random_string()}"
-    dst_table_name = f"{table_name}_dst"
-    keeper_path = f"/clickhouse/test_{table_name}"
-    files_path = f"{table_name}_data"
-
-    create_table(
-        started_cluster,
-        node,
-        table_name,
-        "unordered",
-        files_path,
-        additional_settings={
-            "keeper_path": keeper_path,
-        },
-    )
-    generate_random_files(started_cluster, files_path, 1, start_ind=0, row_num=2)
-
-    node.query(f"SYSTEM ENABLE FAILPOINT object_storage_queue_fail_commit_after_success")
-    create_mv(node, table_name, dst_table_name)
-
-    # Wait for the failpoint to trigger; commit fails but server must survive.
-    commit_failed = False
-    for _ in range(100):
-        if node.contains_in_log(
-            f"StorageS3Queue (default.{table_name}): Failed to process data"
-        ):
-            commit_failed = True
-            break
-        time.sleep(1)
-
-    assert commit_failed, "Failpoint was not triggered"
-
-    # Server must still be alive (no fatal assertion).
-    assert node.query("SELECT 1").strip() == "1"
-
-    # Data was inserted before the commit failed.
-    assert 2 == int(node.query(f"SELECT count() FROM {dst_table_name}"))
-
-    # Add a second file and wait for it to be processed — this confirms a new background
-    # iteration ran. The total must be 4, not 6, meaning the first file was not re-processed.
-    generate_random_files(started_cluster, files_path, 1, start_ind=1, row_num=2)
-    for _ in range(100):
-        if 4 == int(node.query(f"SELECT count() FROM {dst_table_name}")):
-            break
-        time.sleep(1)
-    assert 4 == int(node.query(f"SELECT count() FROM {dst_table_name}")), (
-        "File was re-processed (duplicate rows inserted)"
-    )
-
-
 def test_failure_in_the_middle(started_cluster):
     node = started_cluster.instances["instance"]
 
@@ -2014,4 +1953,65 @@ def test_deduplication_with_multiple_chunks(started_cluster, mode):
 
     assert files_num * num_rows == int(
         node.query(f"SELECT count() FROM {dst_table_name}")
+    )
+
+
+def test_failed_commit_after_success(started_cluster):
+    """
+    Test "failed after operation": the ZK multi-op succeeds but the connection is lost
+    before the client receives the confirmation. On retry the commit fails with `ZNONODE`
+    (processing node already removed). Without the fix the server aborts on a `chassert`
+    in `~ObjectStorageQueueIFileMetadata`. With the fix the `uncertain_commit` flag makes
+    the destructor check ownership instead of asserting; the file stays processed in ZK
+    and is skipped on the next background iteration.
+    """
+    node = started_cluster.instances["instance"]
+
+    table_name = f"test_failed_commit_after_success_{generate_random_string()}"
+    dst_table_name = f"{table_name}_dst"
+    keeper_path = f"/clickhouse/test_{table_name}"
+    files_path = f"{table_name}_data"
+
+    create_table(
+        started_cluster,
+        node,
+        table_name,
+        "unordered",
+        files_path,
+        additional_settings={
+            "keeper_path": keeper_path,
+        },
+    )
+    generate_random_files(started_cluster, files_path, 1, start_ind=0, row_num=2)
+
+    node.query(f"SYSTEM ENABLE FAILPOINT object_storage_queue_fail_commit_after_success")
+    create_mv(node, table_name, dst_table_name)
+
+    # Wait for the failpoint to trigger; commit fails but server must survive.
+    commit_failed = False
+    for _ in range(100):
+        if node.contains_in_log(
+            f"StorageS3Queue (default.{table_name}): Failed to process data"
+        ):
+            commit_failed = True
+            break
+        time.sleep(1)
+
+    assert commit_failed, "Failpoint was not triggered"
+
+    # Server must still be alive (no fatal assertion).
+    assert node.query("SELECT 1").strip() == "1"
+
+    # Data was inserted before the commit failed.
+    assert 2 == int(node.query(f"SELECT count() FROM {dst_table_name}"))
+
+    # Add a second file and wait for it to be processed — this confirms a new background
+    # iteration ran. The total must be 4, not 6, meaning the first file was not re-processed.
+    generate_random_files(started_cluster, files_path, 1, start_ind=1, row_num=2)
+    for _ in range(100):
+        if 4 == int(node.query(f"SELECT count() FROM {dst_table_name}")):
+            break
+        time.sleep(1)
+    assert 4 == int(node.query(f"SELECT count() FROM {dst_table_name}")), (
+        "File was re-processed (duplicate rows inserted)"
     )

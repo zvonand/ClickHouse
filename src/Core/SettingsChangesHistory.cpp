@@ -41,7 +41,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         /// Note: please check if the key already exists to prevent duplicate entries.
         addSettingsChanges(settings_changes_history, "26.4",
         {
-
+            {"use_statistics_for_part_pruning", false, true, "New setting to use statistics for part pruning during query execution."},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {
@@ -64,7 +64,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"webassembly_udf_max_instances", 32, 32, "New setting to limit the number of parallel WebAssembly UDF instances per function."},
             {"mysql_datatypes_support_level", "", "decimal,datetime64,date2Date32", "Enable modern MySQL type mappings by default."},
             {"allow_experimental_json_lazy_type_hints", false, false, "New experimental setting for lazy JSON type hints"},
-            {"use_statistics_for_part_pruning", false, true, "New setting to use statistics for part pruning during query execution."},
             {"allow_statistics", false, true, "Column statistics are now GA"},
             {"allow_experimental_statistics", false, true, "Column statistics are now GA"},
             {"allow_experimental_expire_snapshots", false, false, "New setting."},

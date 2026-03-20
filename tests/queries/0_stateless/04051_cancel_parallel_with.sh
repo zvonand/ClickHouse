@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Tags: no-fasttest
 # Test that PARALLEL WITH queries can be cancelled via Ctrl+C (SIGINT).
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

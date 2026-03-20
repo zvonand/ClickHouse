@@ -397,19 +397,23 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
         const uint8_t * cur = mp;
         bool ok = true;
 
-        /// Step 1: virtual file mapping
+        /// Step 1: virtual file mapping.
+        /// Collect ALL file indices — the format has one region-block per file mapping entry,
+        /// so regions for inlined code are attributed to the correct source file, not always
+        /// the function's primary file.
         const uint64_t num_file_mappings = readULEB128(cur, mend, ok);
         if (!ok || num_file_mappings == 0)
             continue;
 
-        uint64_t first_filename_idx = 0;
+        std::vector<uint64_t> file_mapping_indices;
+        file_mapping_indices.reserve(static_cast<size_t>(num_file_mappings));
         for (uint64_t fi = 0; fi < num_file_mappings; ++fi)
         {
             const uint64_t fname_idx = readULEB128(cur, mend, ok);
             if (!ok) break;
-            if (fi == 0) first_filename_idx = fname_idx;
+            file_mapping_indices.push_back(fname_idx);
         }
-        if (!ok)
+        if (!ok || file_mapping_indices.empty())
             continue;
 
         /// Step 2: skip expressions
@@ -430,58 +434,65 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
             continue;
 
         const std::vector<std::string> & filenames = it->second->names;
-        const size_t file_idx = static_cast<size_t>(first_filename_idx);
-        if (file_idx >= filenames.size())
-            continue;
 
-        const std::string & filename = filenames[file_idx];
-
-        /// Step 3: iterate ALL regions of the first file mapping.
+        /// Step 3: iterate ALL file mappings.  Each mapping entry has its own NumRegions
+        /// block so that regions for inlined functions are attributed to the correct file.
+        /// LLVM encodes: for each file in the mapping [NumRegions][region_0]...[region_n]
+        /// with line positions delta-encoded independently per file (cur_line resets to 0).
         ///
         /// Region encoding (each field is a ULEB128):
         ///   encoded          — counter/kind: tag=bits[1:0], counter_id=bits[63:2]
-        ///                        tag==0: zero or special region (skipped/expansion/gap/branch)
-        ///                        tag==1: direct counter reference (counter_id = encoded >> 2)
-        ///                        tag==2/3: expression (add/sub) — skip, no direct counter
-        ///   line_start_delta — absolute line for first region; delta from previous line_start after that
-        ///   col_start        — column start (discarded, we only need lines)
-        ///   num_lines        — line_end = line_start + num_lines
-        ///   col_end_combined — column end packed with extra kind bits (discarded)
-        ///
-        /// The line position is delta-encoded: each region's line_start =
-        /// previous region's line_start + line_start_delta (0 for first region).
-        const uint64_t num_regions = readULEB128(cur, mend, ok);
-        if (!ok || num_regions == 0)
-            continue;
+        ///                        tag==1: direct counter (counter_id = encoded >> 2)
+        ///                        tag==0, kBranchKind: BranchRegion (true+false counters follow)
+        ///                        tag==0, kMCDCDecisionKind/kMCDCBranchKind: MCDC — break, unneeded
+        ///                        tag==0, other: gap/skipped/expansion — skip, 4 fields
+        ///                        tag==2/3: expression counter — skip, 4 fields
+        ///   line_start_delta — delta from previous region's line_start within this file block
+        ///   col_start, num_lines, col_end_combined — discarded (only lines needed)
 
-        static constexpr uint64_t kTagMask           = 3u;  /// Counter::EncodingTagMask
-        static constexpr uint64_t kExpansionBit      = 4u;  /// EncodingExpansionRegionBit
-        static constexpr uint64_t kKindShift         = 4u;  /// EncodingCounterTagAndExpansionRegionTagBits
-        static constexpr uint64_t kBranchKind        = 4u;  /// CounterMappingRegion::BranchRegion
-        static constexpr uint64_t kMCDCDecisionKind  = 5u;  /// CounterMappingRegion::MCDCDecisionRegion (LLVM 17+)
-        static constexpr uint64_t kMCDCBranchKind    = 6u;  /// CounterMappingRegion::MCDCBranchRegion  (LLVM 17+)
+        static constexpr uint64_t kTagMask           = 3u;
+        static constexpr uint64_t kExpansionBit      = 4u;
+        static constexpr uint64_t kKindShift         = 4u;
+        static constexpr uint64_t kBranchKind        = 4u;
+        static constexpr uint64_t kMCDCDecisionKind  = 5u;
+        static constexpr uint64_t kMCDCBranchKind    = 6u;
 
-        uint32_t cur_line = 0;  /// tracks delta-encoded absolute line position
-
-        auto emit_region = [&](uint64_t counter_enc, uint32_t line_start, uint32_t line_end,
-                                bool is_branch, bool is_true_branch)
+        for (uint64_t fmi = 0; fmi < num_file_mappings; ++fmi)
         {
-            if ((counter_enc & kTagMask) != 1)
-                return; /// skip expression/zero counters
-            if (line_start == 0)
-                return;
-            const uint32_t counter_id = static_cast<uint32_t>(counter_enc >> 2);
-            CoverageRegion region;
-            region.name_hash     = name_hash;
-            region.func_hash     = func_hash;
-            region.counter_id    = counter_id;
-            region.is_branch     = is_branch;
-            region.is_true_branch = is_true_branch;
-            region.file          = filename;
-            region.line_start    = line_start;
-            region.line_end      = line_end;
-            result.push_back(std::move(region));
-        };
+            const uint64_t num_regions = readULEB128(cur, mend, ok);
+            if (!ok) break;
+            if (num_regions == 0) continue;
+
+            /// Resolve filename for this specific file mapping entry.
+            const size_t f_idx = static_cast<size_t>(file_mapping_indices[fmi]);
+            if (f_idx >= filenames.size())
+            {
+                /// Unknown file index — break rather than attempt to skip with potentially wrong
+                /// field counts (which would corrupt the cursor for subsequent file blocks).
+                break;
+            }
+            const std::string & cur_filename = filenames[f_idx];
+
+            /// Line positions delta-encoded independently per file block.
+            uint32_t cur_line = 0;
+
+            auto emit_region = [&](uint64_t counter_enc, uint32_t line_start, uint32_t line_end,
+                                    bool is_branch, bool is_true_branch)
+            {
+                if ((counter_enc & kTagMask) != 1) return;
+                if (line_start == 0) return;
+                const uint32_t counter_id = static_cast<uint32_t>(counter_enc >> 2);
+                CoverageRegion region;
+                region.name_hash      = name_hash;
+                region.func_hash      = func_hash;
+                region.counter_id     = counter_id;
+                region.is_branch      = is_branch;
+                region.is_true_branch = is_true_branch;
+                region.file           = cur_filename;
+                region.line_start     = line_start;
+                region.line_end       = line_end;
+                result.push_back(std::move(region));
+            };
 
         for (uint64_t ri = 0; ri < num_regions; ++ri)
         {
@@ -544,8 +555,9 @@ std::vector<CoverageRegion> readLLVMCoverageMapping(const char * binary_path)
 
             emit_region(encoded, cur_line, cur_line + static_cast<uint32_t>(num_lines),
                         /*is_branch=*/false, /*is_true=*/false);
-        }
-    }
+        }     /// end ri loop
+        }     /// end fmi loop
+    }         /// end while (p < end)
 
     cleanup();
     return result;

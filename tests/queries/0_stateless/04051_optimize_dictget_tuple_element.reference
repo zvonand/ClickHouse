@@ -1,0 +1,59 @@
+optimization enabled
+QUERY id: 0
+  PROJECTION COLUMNS
+    tupleElement(dictGet(\'default.test_dict\', (\'country\', \'city\', \'population\'), id), 1) String
+  PROJECTION
+    LIST id: 1, nodes: 1
+      FUNCTION id: 2, function_name: dictGet, function_type: ordinary, result_type: String
+        ARGUMENTS
+          LIST id: 3, nodes: 3
+            CONSTANT id: 4, constant_value: \'default.test_dict\', constant_value_type: String
+            CONSTANT id: 5, constant_value: \'country\', constant_value_type: String
+            COLUMN id: 6, column_name: id, result_type: UInt64, source_id: 7
+  JOIN TREE
+    TABLE id: 7, alias: __table1, table_name: default.test_keys
+  SETTINGS optimize_dictget_tuple_element=1
+optimization disabled
+QUERY id: 0
+  PROJECTION COLUMNS
+    tupleElement(dictGet(\'default.test_dict\', (\'country\', \'city\', \'population\'), id), 1) String
+  PROJECTION
+    LIST id: 1, nodes: 1
+      FUNCTION id: 2, function_name: tupleElement, function_type: ordinary, result_type: String
+        ARGUMENTS
+          LIST id: 3, nodes: 2
+            FUNCTION id: 4, function_name: dictGet, function_type: ordinary, result_type: Tuple(country String, city String, population UInt64)
+              ARGUMENTS
+                LIST id: 5, nodes: 3
+                  CONSTANT id: 6, constant_value: \'default.test_dict\', constant_value_type: String
+                  CONSTANT id: 7, constant_value: Tuple_(\'country\', \'city\', \'population\'), constant_value_type: Tuple(String, String, String)
+                  COLUMN id: 8, column_name: id, result_type: UInt64, source_id: 9
+            CONSTANT id: 10, constant_value: UInt64_1, constant_value_type: UInt8
+  JOIN TREE
+    TABLE id: 9, alias: __table1, table_name: default.test_keys
+  SETTINGS optimize_dictget_tuple_element=0
+dictGet index access
+US
+FR
+JP
+New York
+Paris
+Tokyo
+all three attributes by index
+US	New York	8336000
+FR	Paris	2161000
+JP	Tokyo	13960000
+named access
+US
+FR
+JP
+New York
+Paris
+Tokyo
+dictGetOrDefault
+US
+FR
+JP
+New York
+Paris
+Tokyo

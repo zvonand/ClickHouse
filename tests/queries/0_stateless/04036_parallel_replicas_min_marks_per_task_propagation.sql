@@ -1,6 +1,7 @@
--- Tags: no-fasttest, no-random-settings, no-random-mergetree-settings
+-- Tags: no-fasttest, no-random-settings, no-random-mergetree-settings, long
 -- no-fasttest: requires s3 storage
 -- no-random-settings, no-random-mergetree-settings: a lot of settings influence task sizes, so it is simpler to disable randomization completely
+-- long: times out in private
 
 -- Test that per-part `min_marks_per_task` is propagated from the initiator to follower replicas
 -- via the coordinator.

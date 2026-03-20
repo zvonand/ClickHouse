@@ -233,7 +233,7 @@ Focus on problems — do not describe what was checked and found to be fine. Use
 **Summary**
 - One paragraph explaining what the PR does and your high-level verdict.
 
-**PR Metadata**
+**PR Metadata** (omit if no issues found)
 - State whether `Changelog category` is correct for the actual change.
 - State whether `Changelog entry` is required by the chosen category, and whether the provided entry satisfies that requirement.
 - Evaluate `Changelog entry` quality using `clickhouse-pr-description` criteria (specific change, user impact, and migration guidance for backward-incompatible changes).

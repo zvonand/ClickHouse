@@ -4301,6 +4301,32 @@ def main(args):
             f"Coverage self-test: coverage_log rows for _selftest = {selftest_rows} "
             f"({'OK' if selftest_rows > 0 else 'EMPTY - coverage mapping not working'})"
         )
+        # Validate that the coverage mapping parser produced no bogus line numbers.
+        # line_end > 50000 or line_end < line_start indicate cursor-misalignment bugs
+        # in the LLVM coverage region decoder (e.g. wrong kKindShift for BranchRegion).
+        try:
+            bogus_rows = int(
+                clickhouse_execute(
+                    args,
+                    "SELECT count() FROM system.coverage_log FINAL"
+                    " WHERE test_name = '_selftest'"
+                    "   AND (line_end > 50000 OR line_end < line_start)",
+                )
+                or 0
+            )
+            status = "OK" if bogus_rows == 0 else "BAD - coverage mapping parser has bugs"
+            print(f"Coverage region quality: bogus line numbers = {bogus_rows} ({status})")
+            if bogus_rows > 0:
+                sample = clickhouse_execute(
+                    args,
+                    "SELECT file, line_start, line_end FROM system.coverage_log FINAL"
+                    " WHERE test_name = '_selftest'"
+                    "   AND (line_end > 50000 OR line_end < line_start)"
+                    " LIMIT 5",
+                ).decode(errors="replace").strip()
+                print(f"Coverage bogus rows sample:\n{sample}")
+        except Exception as e:
+            print(f"Coverage region quality check failed: {e}")
         clickhouse_execute(
             args, "DELETE FROM system.coverage_log WHERE test_name = '_selftest'"
         )

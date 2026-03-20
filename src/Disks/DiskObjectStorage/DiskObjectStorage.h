@@ -275,7 +275,7 @@ private:
     std::atomic_bool enable_distributed_cache;
 
     const bool use_fake_transaction;
-    bool wait_blob_removal;
+    std::atomic<bool> wait_blob_removal;
     UInt64 remove_shared_recursive_file_limit;
 };
 

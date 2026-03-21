@@ -99,10 +99,9 @@ BlockIO InterpreterDeleteQuery::execute()
         mut_command.predicate = delete_query.predicate;
 
         mutation_commands.emplace_back(mut_command);
+        mutation_commands.validate(table->getInMemoryMetadata(), table, getContext());
 
         table->checkMutationIsPossible(mutation_commands, getContext()->getSettingsRef());
-        MutationsInterpreter::Settings mutation_settings(false);
-        MutationsInterpreter(table, metadata_snapshot, mutation_commands, getContext(), mutation_settings).validate();
         table->mutate(mutation_commands, getContext());
         return {};
     }

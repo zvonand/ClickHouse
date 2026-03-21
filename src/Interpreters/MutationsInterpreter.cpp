@@ -1633,44 +1633,6 @@ QueryPipelineBuilder MutationsInterpreter::addStreamsForLaterStages(const std::v
     return pipeline;
 }
 
-void MutationsInterpreter::validate()
-{
-    /// For Replicated* storages mutations cannot employ non-deterministic functions
-    /// because that produces inconsistencies between replicas
-    if (startsWith(source.getStorage()->getName(), "Replicated") && !context->getSettingsRef()[Setting::allow_nondeterministic_mutations])
-    {
-        for (const auto & command : commands)
-        {
-            const auto nondeterministic_func_data = findFirstNonDeterministicFunction(command, context);
-            if (nondeterministic_func_data.subquery)
-                throw Exception(ErrorCodes::BAD_ARGUMENTS, "ALTER UPDATE/ALTER DELETE statement with subquery may be nondeterministic, "
-                                                           "see allow_nondeterministic_mutations setting");
-
-            if (nondeterministic_func_data.nondeterministic_function_name)
-                throw Exception(ErrorCodes::BAD_ARGUMENTS,
-                    "The source storage is replicated so ALTER UPDATE/ALTER DELETE statements must use only deterministic functions. "
-                    "Function '{}' is non-deterministic", *nondeterministic_func_data.nondeterministic_function_name);
-        }
-    }
-
-    // Make sure the mutation query is valid
-    if (context->getSettingsRef()[Setting::validate_mutation_query])
-    {
-        if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
-            prepareQueryAffectedQueryTree(commands, source.getStorage(), context);
-        else
-        {
-            ASTPtr select_query = prepareQueryAffectedAST(commands, source.getStorage(), context);
-            InterpreterSelectQuery(select_query, context, source.getStorage(), metadata_snapshot);
-        }
-    }
-
-    QueryPlan plan;
-
-    initQueryPlan(stages.front(), plan);
-    auto pipeline = addStreamsForLaterStages(stages, plan);
-}
-
 QueryPipelineBuilder MutationsInterpreter::execute()
 {
     if (!settings.can_execute)

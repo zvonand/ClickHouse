@@ -86,7 +86,6 @@ public:
         ContextPtr context_,
         Settings settings_);
 
-    void validate();
     size_t evaluateCommandsSize();
 
     /// The resulting stream will return blocks containing only changed columns and columns, that we need to recalculate indices.

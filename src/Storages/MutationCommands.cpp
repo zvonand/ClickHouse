@@ -1,3 +1,4 @@
+#include <Interpreters/MutationsNonDeterministicHelpers.h>
 #include <Storages/ColumnsDescription.h>
 #include <Storages/MutationCommands.h>
 #include <Storages/IStorage.h>
@@ -10,6 +11,12 @@
 #include <Parsers/ASTStatisticsDeclaration.h>
 #include <Parsers/ASTFunction.h>
 #include <Parsers/ASTIdentifier.h>
+#include <Parsers/ASTSelectQuery.h>
+#include <Parsers/ASTTablesInSelectQuery.h>
+#include <Analyzer/Passes/QueryAnalysisPass.h>
+#include <Analyzer/QueryNode.h>
+#include <Analyzer/QueryTreeBuilder.h>
+#include <Analyzer/TableNode.h>
 #include <Common/typeid_cast.h>
 #include <Common/quoteString.h>
 #include <Core/Defines.h>
@@ -24,6 +31,8 @@ namespace DB
 namespace Setting
 {
     extern const SettingsBool allow_statistics;
+    extern const SettingsBool allow_nondeterministic_mutations;
+    extern const SettingsBool validate_mutation_query;
 }
 
 namespace ErrorCodes
@@ -31,6 +40,53 @@ namespace ErrorCodes
     extern const int UNKNOWN_MUTATION_COMMAND;
     extern const int MULTIPLE_ASSIGNMENTS_TO_COLUMN;
     extern const int LOGICAL_ERROR;
+    extern const int INCORRECT_QUERY;
+    extern const int NOT_FOUND_COLUMN_IN_BLOCK;
+    extern const int BAD_ARGUMENTS;
+}
+
+namespace
+{
+
+void validatePredicateColumns(const ASTPtr & predicate, const StoragePtr & storage, ContextPtr context)
+{
+    auto select = make_intrusive<ASTSelectQuery>();
+    {
+        auto filter = predicate->clone();
+        select->setExpression(ASTSelectQuery::Expression::WHERE, std::move(filter));
+
+        auto projection = make_intrusive<ASTExpressionList>();
+        projection->children.push_back(makeASTFunction("count"));
+        select->setExpression(ASTSelectQuery::Expression::SELECT, std::move(projection));
+
+        auto tables = make_intrusive<ASTTablesInSelectQuery>();
+        auto table = make_intrusive<ASTTablesInSelectQueryElement>();
+        auto table_exp = make_intrusive<ASTTableExpression>();
+        table_exp->database_and_table_name = make_intrusive<ASTTableIdentifier>(storage->getStorageID());
+        table_exp->children.emplace_back(table_exp->database_and_table_name);
+        table->table_expression = table_exp;
+        tables->children.push_back(table);
+        select->setExpression(ASTSelectQuery::Expression::TABLES, std::move(tables));
+    }
+
+    auto query_tree = buildQueryTree(select, context);
+    QueryAnalysisPass query_analysis_pass;
+    query_analysis_pass.run(query_tree, context);
+}
+
+void validateDeterministicFunctions(const MutationCommand & command, ContextPtr context)
+{
+    const auto nondeterministic_func_data = findFirstNonDeterministicFunction(command, context);
+    if (nondeterministic_func_data.subquery)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "ALTER UPDATE/ALTER DELETE statement with subquery may be nondeterministic, "
+                                                    "see allow_nondeterministic_mutations setting");
+
+    if (nondeterministic_func_data.nondeterministic_function_name)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS,
+            "The source storage is replicated so ALTER UPDATE/ALTER DELETE statements must use only deterministic functions. "
+            "Function '{}' is non-deterministic", *nondeterministic_func_data.nondeterministic_function_name);
+}
+
 }
 
 bool MutationCommand::isBarrierCommand() const
@@ -244,6 +300,143 @@ std::optional<MutationCommand> MutationCommand::parse(const ASTAlterCommand & co
     return res;
 }
 
+void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const StoragePtr & table, ContextPtr context) const
+{
+    const auto & settings = context->getSettingsRef();
+    const auto & table_name = table->getStorageID().getNameForLogs();
+    const auto virtuals = table->getVirtualsPtr();
+
+    for (const auto & command : *this)
+    {
+        switch (command.type)
+        {
+            case MutationCommand::DELETE:
+            {
+                if (settings[Setting::allow_nondeterministic_mutations])
+                    if (table->supportsReplication())
+                        validateDeterministicFunctions(command, context);
+
+                if (settings[Setting::validate_mutation_query])
+                    if (command.predicate)
+                        validatePredicateColumns(command.predicate, table, context);
+
+                break;
+            }
+
+            case MutationCommand::UPDATE:
+            {
+                if (settings[Setting::allow_nondeterministic_mutations])
+                    if (table->supportsReplication())
+                        validateDeterministicFunctions(command, context);
+
+                if (settings[Setting::validate_mutation_query])
+                    if (command.predicate)
+                        validatePredicateColumns(command.predicate, table, context);
+
+                for (const auto & [column_name, _] : command.column_to_update_expression)
+                    if (!metadata.columns.has(column_name) && !virtuals->has(column_name))
+                        throw Exception(
+                            ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
+                            "Cannot UPDATE column {}: column does not exist in table {}",
+                            backQuote(column_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::MATERIALIZE_INDEX:
+            {
+                if (!metadata.getSecondaryIndices().has(command.index_name))
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Index {} does not exist in table {}",
+                        backQuote(command.index_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::DROP_INDEX:
+            {
+                if (!metadata.getSecondaryIndices().has(command.column_name))
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Index {} does not exist in table {}",
+                        backQuote(command.column_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::MATERIALIZE_PROJECTION:
+            {
+                if (!metadata.getProjections().has(command.projection_name))
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Projection {} does not exist in table {}",
+                        backQuote(command.projection_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::DROP_PROJECTION:
+            {
+                if (!metadata.getProjections().has(command.column_name))
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Projection {} does not exist in table {}",
+                        backQuote(command.column_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::MATERIALIZE_STATISTICS:
+            case MutationCommand::DROP_STATISTICS:
+            {
+                if (!context->getSettingsRef()[Setting::allow_statistics])
+                    throw Exception(ErrorCodes::INCORRECT_QUERY, "Alter table with statistics is disabled. Turn on allow_statistics");
+
+                for (const auto & column_name : command.statistics_columns)
+                    if (!metadata.columns.has(column_name))
+                        throw Exception(
+                            ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
+                            "Cannot MATERIALIZE STATISTICS for column {}: column does not exist in table {}",
+                            backQuote(column_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::READ_COLUMN:
+            case MutationCommand::DROP_COLUMN:
+            case MutationCommand::RENAME_COLUMN:
+            case MutationCommand::MATERIALIZE_COLUMN:
+            {
+                if (!metadata.columns.has(command.column_name))
+                    throw Exception(
+                        ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
+                        "Column {} does not exist in table {}",
+                        backQuote(command.column_name), table_name);
+                break;
+            }
+
+            case MutationCommand::MATERIALIZE_TTL:
+            {
+                if (!metadata.hasAnyTTL())
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Cannot MATERIALIZE TTL as there is no TTL set for table {}",
+                        table_name);
+
+                break;
+            }
+
+            case MutationCommand::EMPTY:
+            case MutationCommand::REWRITE_PARTS:
+            case MutationCommand::APPLY_DELETED_MASK:
+            case MutationCommand::APPLY_PATCHES:
+            case MutationCommand::ALTER_WITHOUT_MUTATION:
+                break;
+        }
+    }
+}
+
 boost::intrusive_ptr<ASTExpressionList> MutationCommands::ast(bool with_pure_metadata_commands) const
 {
     auto res = make_intrusive<ASTExpressionList>();
@@ -280,6 +473,7 @@ void MutationCommands::readText(ReadBuffer & in, bool with_pure_metadata_command
         push_back(std::move(*command));
     }
 }
+
 
 std::string MutationCommands::toString(bool with_pure_metadata_commands) const
 {

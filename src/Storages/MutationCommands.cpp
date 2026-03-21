@@ -33,7 +33,6 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int INCORRECT_QUERY;
     extern const int NOT_FOUND_COLUMN_IN_BLOCK;
-    extern const int ILLEGAL_COLUMN;
 }
 
 

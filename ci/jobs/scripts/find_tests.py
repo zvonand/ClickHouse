@@ -160,9 +160,9 @@ class Targeting:
         tuples, where `region_width = line_end - line_start + 1`.  The region width is
         used by the caller to weight test scores (narrow regions = high signal).
 
-        The hard per-region test-count cap is replaced by width-based scoring in
-        `get_most_relevant_tests`, so all regions are returned regardless of how many
-        tests cover them.
+        Regions with `region_test_count > MAX_TESTS_PER_LINE` are excluded: such lines
+        are infrastructure code (e.g. `Settings.cpp` entry points) that all tests touch
+        and therefore carry no signal for targeted test selection.
         """
         import time
         t0 = time.monotonic()
@@ -229,7 +229,7 @@ class Targeting:
             groupArray(min_depth) AS depths,
             uniqExact(test_name) AS region_test_count
         FROM checks_coverage_lines
-        WHERE check_start_time > now() - interval 3 days
+        WHERE check_start_time > now() - interval 7 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND notEmpty(test_name)
           AND ({per_file_conds})
@@ -276,11 +276,18 @@ class Targeting:
         # touched files; now filter to ranges that actually overlap a changed line.
         # Start from base_result which already has empty entries for non-tracked files.
         result: dict = dict(base_result)
+        capped_regions = 0
         for filename, line_no in coverage_lines:
             stored = self._stored_path(filename)
             matched: list = []
             for file_, line_start, line_end, test_depths, region_test_count in coverage_ranges:
                 if file_ == stored and line_start <= line_no <= line_end:
+                    # Skip regions covered by too many tests — these are
+                    # infrastructure entry points (e.g. Settings.cpp) that are
+                    # exercised by essentially every test and carry no targeting signal.
+                    if region_test_count > self.MAX_TESTS_PER_LINE:
+                        capped_regions += 1
+                        continue
                     width = line_end - line_start + 1
                     for t, depth in test_depths:
                         matched.append((t, width, depth, region_test_count))
@@ -323,10 +330,11 @@ class Targeting:
 
         total_unique_tests = len({t for pairs in result.values() for t, *_ in pairs})
         lines_with_tests = sum(1 for (f, _), pairs in result.items() if pairs and any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES))
+        capped_msg = f", {capped_regions} line-region pairs capped (>{self.MAX_TESTS_PER_LINE} tests)" if capped_regions else ""
         print(
             f"[find_tests] done in {time.monotonic()-t0:.2f}s: "
             f"{lines_with_tests}/{len(coverage_lines)} lines matched, "
-            f"{total_unique_tests} unique tests selected"
+            f"{total_unique_tests} unique tests selected{capped_msg}"
         )
         return result
 
@@ -463,7 +471,7 @@ class Targeting:
         query = f"""
         SELECT DISTINCT test_name
         FROM checks_coverage_lines
-        WHERE check_start_time > now() - interval 3 days
+        WHERE check_start_time > now() - interval 7 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND notEmpty(test_name)
           AND test_name NOT IN ({escaped_primary})
@@ -473,7 +481,7 @@ class Targeting:
           AND file IN (
               SELECT DISTINCT file
               FROM checks_coverage_lines
-              WHERE check_start_time > now() - interval 3 days
+              WHERE check_start_time > now() - interval 7 days
                 AND test_name IN ({escaped_primary})
                 AND ({dir_conds})
                 AND ({not_changed})

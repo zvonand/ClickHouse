@@ -312,7 +312,7 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
         {
             case MutationCommand::DELETE:
             {
-                if (settings[Setting::allow_nondeterministic_mutations])
+                if (!settings[Setting::allow_nondeterministic_mutations])
                     if (table->supportsReplication())
                         validateDeterministicFunctions(command, context);
 
@@ -325,7 +325,7 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
 
             case MutationCommand::UPDATE:
             {
-                if (settings[Setting::allow_nondeterministic_mutations])
+                if (!settings[Setting::allow_nondeterministic_mutations])
                     if (table->supportsReplication())
                         validateDeterministicFunctions(command, context);
 

@@ -3,17 +3,17 @@
 namespace DB
 {
 
-void InMemoryRemovalQueue::submitForRemoval(const StoredObjects & objects)
+void InMemoryRemovalQueue::submitForRemoval(const StoredObjects & blobs)
 {
     std::lock_guard guard(mutex);
-    for (const auto & obj : objects)
+    for (const auto & blob : blobs)
     {
-        if (index.contains(obj))
+        if (index.contains(blob))
             continue;
 
         int64_t slot = next_slot++;
-        queue.emplace(slot, obj);
-        index.emplace(obj, slot);
+        queue.emplace(slot, blob);
+        index.emplace(blob, slot);
     }
 }
 

@@ -16,7 +16,7 @@ class InMemoryRemovalQueue
 {
 public:
     /// Enqueue blobs that are not already present, preserving FIFO order.
-    void submitForRemoval(const StoredObjects & objects);
+    void submitForRemoval(const StoredObjects & blobs);
 
     /// Return up to `max_count` oldest blobs (0 means unlimited).
     StoredObjects takeFirst(int64_t max_count) const;

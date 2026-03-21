@@ -74,12 +74,16 @@ namespace
 
     using TransformCachePtr = std::shared_ptr<const TransformCache>;
 
+    /// Forward declaration; defined after FunctionTransform.
+    TransformCachePtr initializeTransformCache(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type);
+
     class FunctionTransform : public IFunction
     {
     public:
         static constexpr auto name = "transform";
 
         explicit FunctionTransform(TransformCachePtr cache_) : cache(std::move(cache_)) {}
+        FunctionTransform() = default;
 
         String getName() const override { return name; }
 
@@ -161,6 +165,11 @@ namespace
 
         ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const override
         {
+            /// If cache was not initialized at build time (e.g. columns were not available during analysis),
+            /// initialize it now from the actual arguments.
+            if (!cache)
+                cache = initializeTransformCache(arguments, result_type);
+
             const auto * in = arguments[0].column.get();
 
             if (isColumnConst(*in))
@@ -656,7 +665,7 @@ namespace
             }
         }
 
-        TransformCachePtr cache;
+        mutable TransformCachePtr cache;
 
     public:
         static void checkAllowedType(const DataTypePtr & type)
@@ -893,8 +902,18 @@ namespace
 
         FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
         {
-            auto cache = initializeTransformCache(arguments, return_type);
-            auto function = std::make_shared<FunctionTransform>(std::move(cache));
+            /// Check if constant columns are available. During analysis passes (e.g. IfTransformStringsToEnumPass),
+            /// columns may not be populated yet. In that case, defer cache initialization to execution time.
+            const ColumnArray * array_from = arguments.size() > 1 && arguments[1].column
+                ? checkAndGetColumnConstData<ColumnArray>(arguments[1].column.get()) : nullptr;
+            const ColumnArray * array_to = arguments.size() > 2 && arguments[2].column
+                ? checkAndGetColumnConstData<ColumnArray>(arguments[2].column.get()) : nullptr;
+
+            std::shared_ptr<FunctionTransform> function;
+            if (array_from && array_to)
+                function = std::make_shared<FunctionTransform>(initializeTransformCache(arguments, return_type));
+            else
+                function = std::make_shared<FunctionTransform>();
 
             DataTypes data_types(arguments.size());
             for (size_t i = 0; i < arguments.size(); ++i)

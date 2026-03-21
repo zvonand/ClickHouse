@@ -319,7 +319,6 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
             }
 
             case MutationCommand::MATERIALIZE_INDEX:
-            case MutationCommand::DROP_INDEX:
             {
                 if (!metadata.getSecondaryIndices().has(command.index_name))
                     throw Exception(
@@ -330,14 +329,35 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
                 break;
             }
 
+            case MutationCommand::DROP_INDEX:
+            {
+                if (!metadata.getSecondaryIndices().has(command.column_name))
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Index {} does not exist in table {}",
+                        backQuote(command.column_name), table_name);
+
+                break;
+            }
+
             case MutationCommand::MATERIALIZE_PROJECTION:
-            case MutationCommand::DROP_PROJECTION:
             {
                 if (!metadata.getProjections().has(command.projection_name))
                     throw Exception(
                         ErrorCodes::INCORRECT_QUERY,
                         "Projection {} does not exist in table {}",
                         backQuote(command.projection_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::DROP_PROJECTION:
+            {
+                if (!metadata.getProjections().has(command.column_name))
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Projection {} does not exist in table {}",
+                        backQuote(command.column_name), table_name);
 
                 break;
             }

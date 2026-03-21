@@ -31,7 +31,7 @@ TEST_CONFIGS = [
         "uses fixed internal ports (gRPC/MySQL/PostgreSQL) within isolated Docker container",
     ),
     TC("test_random_inserts/", False, "standard replicated inserts test; cluster is fully isolated"),
-    TC("test_server_overload/", False, "uses taskset to pin ClickHouse to CPU 0/1; 60-iteration retry loop tolerates background load"),
+    TC("test_server_overload/", True, "uses taskset to pin ClickHouse to specific CPU cores; sensitive to concurrent CPU load"),
     TC("test_storage_kafka/", False, "each cluster has its own Kafka container and Docker network"),
     TC("test_storage_kerberized_kafka/", False, "each cluster has its own Kafka container and Docker network"),
     TC(

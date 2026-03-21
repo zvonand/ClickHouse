@@ -46,11 +46,13 @@ using namespace DB;
 
 
 static std::atomic_bool is_crashed = false;
+static_assert(std::atomic_bool::is_always_lock_free, "is_crashed must be lock-free for use in signal handlers");
 bool isCrashed() { return is_crashed.load(std::memory_order_relaxed); }
 
 /// After re-raising the signal, the siginfo recorded in the core dump shows SI_TKILL with no si_addr,
 /// so we need to preserve the address for core dump analysis.
 static std::atomic<uintptr_t> saved_fault_address{0};
+static_assert(std::atomic<uintptr_t>::is_always_lock_free, "saved_fault_address must be lock-free for use in signal handlers");
 
 
 void call_default_signal_handler(int sig)

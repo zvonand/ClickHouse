@@ -146,6 +146,11 @@ class Targeting:
     # Regions wider than this are considered "broad" (low signal).
     NARROW_REGION_MAX_LINES = 20
 
+    # Synthetic width assigned to tests found via same-directory sibling file
+    # expansion (secondary pass).  Must be >> NARROW_REGION_MAX_LINES so they
+    # never get the narrow-tier bonus and always rank below direct hits.
+    SIBLING_DIR_WIDTH = 10000
+
     def get_tests_by_changed_lines(self, changed_lines: list) -> dict:
         """
         Query `checks_coverage_lines` for tests that cover each (filename, line_no) pair.
@@ -262,6 +267,31 @@ class Targeting:
                 (t, w, d, rc) for t, (w, d, rc) in sorted(by_test.items())
             ]
 
+        # --- Secondary pass: sibling files in the same source directory ----
+        # For each changed C++ file under src/, find tests that cover OTHER files
+        # in the same directory.  These tests are added as very broad hits
+        # (SIBLING_DIR_WIDTH) so they rank below direct hits but are not silently
+        # dropped.  This catches, e.g., Arrow-reader tests when the Arrow writer
+        # is changed — the reader and writer live side-by-side and a writer change
+        # may break reader round-trips that the direct coverage query misses because
+        # those tests never call the writer code path directly.
+        sibling_tests = self._query_sibling_dir_tests(files_to_lines, result)
+        if sibling_tests:
+            # Inject into every changed line so the scorer can accumulate width_score.
+            # Use the actual region_test_count from the sibling query so heavily-shared
+            # sibling tests are penalised the same way as direct broad hits.
+            for key in result:
+                fname, _ = key
+                stored = self._stored_path(fname)
+                dir_path = stored.rsplit("/", 1)[0] + "/"
+                if not stored.startswith("./src/"):
+                    continue
+                for t, rc in sibling_tests.get(dir_path, {}).items():
+                    # Skip tests already found by the primary query for this line.
+                    existing = {e[0] for e in result[key]}
+                    if t not in existing:
+                        result[key].append((t, self.SIBLING_DIR_WIDTH, 255, max(1, rc)))
+
         total_unique_tests = len({t for pairs in result.values() for t, *_ in pairs})
         lines_with_tests = sum(1 for pairs in result.values() if pairs)
         print(
@@ -270,6 +300,176 @@ class Targeting:
             f"{total_unique_tests} unique tests selected"
         )
         return result
+
+    @staticmethod
+    def _extract_domain_keywords(filename: str) -> list:
+        """
+        Extract domain-specific CamelCase words from a source filename.
+        These words are used to filter sibling files so we only expand to
+        files in the same functional domain (e.g. "Arrow" for Arrow I/O files)
+        rather than all files in the directory.
+
+        Returns a list of significant words (length > 4, not architectural).
+        Empty list means no filtering (expand to all sibling files, but this
+        is unusual and typically indicates a very generic filename).
+        """
+        import re as _re
+        import os as _os
+        base = _os.path.splitext(_os.path.basename(filename))[0]
+        # Split CamelCase: "CHColumnToArrowColumn" → ['Column', 'To', 'Arrow', 'Column']
+        # Also split on underscores for snake_case names
+        words = _re.findall(r"[A-Z][a-z0-9]+|[a-z][a-z0-9]+", base)
+        # Architectural / ubiquitous words that appear in most files in a directory.
+        # Keeping this list generous avoids keywords that are too common to be useful.
+        COMMON = {
+            # Generic C++ / ClickHouse infrastructure words
+            "block", "input", "output", "format", "column", "stream",
+            "storage", "table", "query", "parser", "writer", "reader",
+            "buffer", "default", "base", "impl", "merge", "tree",
+            "row", "file", "data", "info", "type", "list", "map",
+            "with", "from", "into",
+            # MergeTree-specific architectural words (appear in almost every MergeTree file)
+            "condition", "granularity", "selector", "partition", "replica",
+            "transaction", "virtual", "local", "remote", "range", "level",
+        }
+        # Lower length threshold to 4 to catch short domain words like "Text", "Avro", "Orc"
+        specific = [w for w in words if len(w) >= 4 and w.lower() not in COMMON]
+        return specific
+
+    def _query_sibling_dir_tests(self, files_to_lines: dict, primary_result: dict) -> dict:
+        """
+        Secondary pass: find tests that are likely related to the changed files
+        by co-coverage proximity.
+
+        For each changed C++ source file under src/ we:
+          1. Identify which sibling files (same directory, different name) the
+             PRIMARY tests also cover.  These are files with a natural code
+             relationship to the changed file (e.g. Arrow reader ↔ writer).
+          2. Find tests that cover those same sibling files but were NOT already
+             selected by the primary query.  These are tests that exercise the
+             same functional area from a different entry point.
+
+        Because we only expand through files that the primary tests already touch,
+        we avoid the false positives that come from querying the whole directory
+        (which would mix in unrelated format tests, HTTP tests, etc.).
+
+        Returns {dir_path -> {test_name -> SIBLING_RC}}.
+        """
+        import time
+
+        # Collect source directories of changed C++ files.
+        src_dirs: dict = {}  # dir_path -> list of changed files in that dir
+        for f in files_to_lines:
+            if f.startswith("./src/") and (f.endswith(".cpp") or f.endswith(".h")):
+                dir_path = f.rsplit("/", 1)[0] + "/"
+                src_dirs.setdefault(dir_path, []).append(f)
+
+        if not src_dirs:
+            return {}
+
+        # Collect primary tests (those already found by the direct-coverage query).
+        primary_tests = {t for pairs in primary_result.values() for t, *_ in pairs}
+        if not primary_tests:
+            return {}
+
+        changed_files = set(files_to_lines.keys())
+        escaped_primary = ", ".join(
+            f"'{self._escape_sql_string(t)}'" for t in sorted(primary_tests)
+        )
+        dir_conds = " OR ".join(
+            f"file LIKE '{self._escape_sql_string(d)}%'"
+            for d in sorted(src_dirs)
+        )
+        not_changed = " AND ".join(
+            f"file != '{self._escape_sql_string(f)}'"
+            for f in sorted(changed_files)
+        )
+
+        # Extract domain keywords from changed C++ SOURCE filenames only (not
+        # test files, which would add misleading keywords like "uuid" or "parquet").
+        # E.g. "Arrow" from CHColumnToArrowColumn.cpp ensures we only look at
+        # Arrow-related siblings, not every file in the directory.
+        all_keywords: list = []
+        for f in sorted(changed_files):
+            if f.startswith("./src/") and (f.endswith(".cpp") or f.endswith(".h")):
+                all_keywords.extend(self._extract_domain_keywords(f.split("/")[-1]))
+        # Deduplicate, keep unique keywords only (not repeated across changed files)
+        unique_kws = list(dict.fromkeys(all_keywords))
+
+        # Build keyword filter for sibling filenames.
+        # With a single keyword (e.g. "Arrow") use LIKE '%Arrow%'.
+        # With multiple keywords (e.g. "Index"+"Text") use AND so we only
+        # match files containing ALL keywords — this avoids matching broad
+        # architectural files that share only one word with the changed file
+        # (e.g. MergeTreeIndexGranularity.cpp shares "Index" with
+        # MergeTreeIndexConditionText.cpp but is unrelated to text indexing).
+        if unique_kws:
+            kws = unique_kws[:4]  # cap to avoid overly long queries
+            if len(kws) == 1:
+                kw_cond = f"file LIKE '%{self._escape_sql_string(kws[0])}%'"
+            else:
+                # AND: sibling file must contain every keyword
+                kw_cond = " AND ".join(
+                    f"file LIKE '%{self._escape_sql_string(kw)}%'"
+                    for kw in kws
+                )
+            sibling_file_filter = f"AND ({kw_cond})"
+        else:
+            # No specific keywords — fall back to all sibling files (rare)
+            sibling_file_filter = ""
+
+        # Step 1 + 2 combined: find tests covering sibling files in the same
+        # functional domain as the changed file.  The inner SELECT identifies
+        # sibling files with the right domain keywords that the primary tests
+        # already touch; the outer SELECT finds new tests for those same files.
+        query = f"""
+        SELECT DISTINCT test_name
+        FROM checks_coverage_lines
+        WHERE check_start_time > now() - interval 3 days
+          AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+          AND notEmpty(test_name)
+          AND test_name NOT IN ({escaped_primary})
+          AND ({dir_conds})
+          AND ({not_changed})
+          {sibling_file_filter}
+          AND file IN (
+              SELECT DISTINCT file
+              FROM checks_coverage_lines
+              WHERE check_start_time > now() - interval 3 days
+                AND test_name IN ({escaped_primary})
+                AND ({dir_conds})
+                AND ({not_changed})
+                {sibling_file_filter}
+          )
+        LIMIT 200
+        """
+
+        try:
+            from ci.praktika.cidb import CIDB
+            from ci.praktika.settings import Settings
+            cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+            t0 = time.monotonic()
+            raw = cidb.query(query, log_level="")
+            print(
+                f"[find_tests] sibling-dir query: {time.monotonic()-t0:.2f}s, "
+                f"response={len(raw)} bytes"
+            )
+        except Exception as e:
+            print(f"[find_tests] sibling-dir query failed (non-fatal): {e}")
+            return {}
+
+        # Parse TSV: test_name (single column).
+        SIBLING_RC = 500
+        sibling_test_names: dict = {}
+        for row in raw.strip().splitlines():
+            test_name = row.strip()
+            if test_name:
+                sibling_test_names[test_name] = SIBLING_RC
+
+        total = len(sibling_test_names)
+        print(f"[find_tests] sibling-dir: {total} additional test candidates")
+        # Return the same set for every changed src dir.
+        return {d: dict(sibling_test_names) for d in src_dirs}
 
     def get_changed_or_new_tests_with_info(self):
         tests = self.get_changed_tests()

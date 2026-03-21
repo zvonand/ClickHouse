@@ -146,6 +146,12 @@ class Targeting:
     # Regions wider than this are considered "broad" (low signal).
     NARROW_REGION_MAX_LINES = 20
 
+    # Synthetic width for tests found via indirect-call (virtual dispatch) co-occurrence.
+    # Lower than SIBLING_DIR_WIDTH (10000) because callee co-occurrence is a stronger
+    # signal than directory proximity: tests that call the same vtable slots as primary
+    # tests are exercising the same interface, not merely a related file.
+    INDIRECT_CALL_WIDTH = 3000
+
     # Synthetic width assigned to tests found via same-directory sibling file
     # expansion (secondary pass).  Must be >> NARROW_REGION_MAX_LINES so they
     # never get the narrow-tier bonus and always rank below direct hits.
@@ -328,6 +334,18 @@ class Targeting:
                     if t not in existing:
                         result[key].append((t, self.SIBLING_DIR_WIDTH, 255, max(1, rc)))
 
+
+        # --- Tertiary pass: indirect-call (virtual dispatch) co-occurrence ------
+        # Find tests calling the same vtable/function-pointer callees as primary
+        # tests. Ranked between direct and sibling hits (INDIRECT_CALL_WIDTH=3000).
+        indirect_tests = self._query_indirect_call_tests(result)
+        if indirect_tests:
+            for key in result:
+                existing = {e[0] for e in result[key]}
+                for t in indirect_tests:
+                    if t not in existing:
+                        result[key].append((t, self.INDIRECT_CALL_WIDTH, 255, 1))
+
         total_unique_tests = len({t for pairs in result.values() for t, *_ in pairs})
         lines_with_tests = sum(1 for (f, _), pairs in result.items() if pairs and any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES))
         capped_msg = f", {capped_regions} line-region pairs capped (>{self.MAX_TESTS_PER_LINE} tests)" if capped_regions else ""
@@ -381,6 +399,81 @@ class Targeting:
         # Lower length threshold to 4 to catch short domain words like "Text", "Avro", "Orc"
         specific = [w for w in words if len(w) >= 4 and w.lower() not in COMMON]
         return specific
+
+    def _query_indirect_call_tests(self, primary_result: dict) -> dict:
+        """
+        Tertiary pass: find tests that call the same virtual / function-pointer
+        callees as the primary tests (those directly covering changed files).
+
+        Semantic: if primary test A covers changed file F and calls virtual
+        callee C (recorded via LLVM value profiling), then any other test B
+        that also calls callee C is exercising the same interface — even if B
+        never directly calls code in F.  This catches tests that reach changed
+        implementations only via vtable dispatch or function pointers.
+
+        Uses only the existing `checks_coverage_indirect_calls` CIDB table;
+        no new tables are required.  The join is:
+          primary tests → their callee_offsets → other tests with same callees.
+        The cap (< MAX_TESTS_PER_LINE unique tests per callee) filters out
+        ubiquitous callees like `operator new` or `malloc` that every test calls.
+
+        Degrades gracefully when the table is empty (e.g. first nightly run).
+        """
+        import time
+
+        primary_tests = {t for pairs in primary_result.values() for t, *_ in pairs}
+        if not primary_tests:
+            return {}
+
+        escaped_primary = ", ".join(
+            f"'{self._escape_sql_string(t)}'" for t in sorted(primary_tests)
+        )
+
+        # Self-join on callee_offset: find tests that share indirect callees with
+        # the primary set, filtered by specificity (< MAX_TESTS_PER_LINE tests
+        # per callee to avoid universal callees like allocators).
+        query = f"""
+        SELECT DISTINCT ic2.test_name
+        FROM checks_coverage_indirect_calls ic1
+        JOIN checks_coverage_indirect_calls ic2 ON ic1.callee_offset = ic2.callee_offset
+        WHERE ic1.check_start_time > now() - interval 3 days
+          AND ic2.check_start_time > now() - interval 3 days
+          AND ic1.check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+          AND ic2.check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+          AND ic1.test_name IN ({escaped_primary})
+          AND ic2.test_name NOT IN ({escaped_primary})
+          AND ic1.callee_offset IN (
+              SELECT callee_offset
+              FROM checks_coverage_indirect_calls
+              WHERE check_start_time > now() - interval 3 days
+              GROUP BY callee_offset
+              HAVING uniqExact(test_name) < {self.MAX_TESTS_PER_LINE}
+          )
+        LIMIT 200
+        """
+
+        try:
+            from ci.praktika.cidb import CIDB
+            from ci.praktika.settings import Settings
+            cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+            t0 = time.monotonic()
+            raw = cidb.query(query, log_level="")
+            elapsed = time.monotonic() - t0
+        except Exception as e:
+            print(f"[find_tests] indirect-call query failed (non-fatal): {e}")
+            return {}
+
+        tests = [row.strip() for row in raw.strip().splitlines() if row.strip()]
+        if not tests:
+            return {}
+
+        print(
+            f"[find_tests] indirect-call query: {elapsed:.2f}s, "
+            f"{len(tests)} additional test candidates via callee co-occurrence"
+        )
+        # Return as a flat dict {test_name -> INDIRECT_CALL_RC} where RC is the
+        # number of shared callees (approximated as 1 here since we SELECT DISTINCT).
+        return {t: 1 for t in tests}
 
     def _query_sibling_dir_tests(self, files_to_lines: dict, primary_result: dict) -> dict:
         """

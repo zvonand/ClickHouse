@@ -323,11 +323,15 @@ std::vector<IndirectCallEntry> getCurrentIndirectCalls()
             continue;
 
         /// Values → array of ValueProfNode* heads, one per indirect-call site.
+        /// Cast away const: we zero each node's count after reading so the next
+        /// test starts fresh.  __llvm_profile_reset_counters() only resets the
+        /// regular counter array, NOT the value-profiling linked lists, so without
+        /// this manual reset every test would accumulate all prior indirect calls.
         auto * const sites = static_cast<ValueProfNode * const *>(data->Values);
 
         for (uint16_t s = 0; s < data->NumValueSites[0]; ++s)
         {
-            for (const ValueProfNode * node = sites[s]; node; node = node->next)
+            for (ValueProfNode * node = const_cast<ValueProfNode *>(sites[s]); node; node = node->next)
             {
                 if (node->count == 0 || node->value == 0)
                     continue;
@@ -335,6 +339,7 @@ std::vector<IndirectCallEntry> getCurrentIndirectCalls()
                                         ? node->value - load_base
                                         : node->value;
                 result.push_back({data->NameRef, data->FuncHash, offset, node->count});
+                node->count = 0; /// reset for next test — prevents cross-test accumulation
             }
         }
     }

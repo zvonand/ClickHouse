@@ -4434,14 +4434,14 @@ def main(args):
             args,
             """CREATE TABLE IF NOT EXISTS system.coverage_indirect_calls
             (
-                test_name String,
+                test_name LowCardinality(String),
+                callee_offset UInt64,
                 caller_name_hash UInt64,
                 caller_func_hash UInt64,
-                callee_offset UInt64,
                 call_count UInt64
             )
-            ENGINE = MergeTree
-            ORDER BY (test_name, caller_name_hash)
+            ENGINE = ReplacingMergeTree(call_count)
+            ORDER BY (test_name, callee_offset)
             COMMENT 'Indirect (virtual/function-pointer) call observations per test for coverage-based test selection'""",
         )
         # Self-test: verify the coverage collection pipeline works end-to-end.
@@ -4672,6 +4672,35 @@ def main(args):
         cov_rows = int(clickhouse_execute(args, "SELECT count() FROM system.coverage_log FINAL") or 0)
         cov_tests = int(clickhouse_execute(args, "SELECT uniq(test_name) FROM system.coverage_log FINAL") or 0)
         print(f"system.coverage_log: {cov_rows} rows, {cov_tests} distinct tests")
+        try:
+            ic_rows = int(
+                clickhouse_execute(
+                    args,
+                    "SELECT count() FROM system.coverage_indirect_calls FINAL",
+                )
+                or 0
+            )
+            ic_tests = int(
+                clickhouse_execute(
+                    args,
+                    "SELECT uniq(test_name) FROM system.coverage_indirect_calls FINAL",
+                )
+                or 0
+            )
+            ic_callees = int(
+                clickhouse_execute(
+                    args,
+                    "SELECT uniqExact(callee_offset) FROM system.coverage_indirect_calls FINAL",
+                )
+                or 0
+            )
+            ic_status = "OK" if ic_rows > 0 else "EMPTY - indirect call value profiling inactive"
+            print(
+                f"system.coverage_indirect_calls: {ic_rows} rows, {ic_tests} tests, "
+                f"{ic_callees} unique callees ({ic_status})"
+            )
+        except Exception as e:
+            print(f"Coverage indirect calls stats check failed: {e}")
 
     if int(clickhouse_execute(args, "EXISTS system.trace_log")):
         try:

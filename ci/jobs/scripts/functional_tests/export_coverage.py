@@ -109,16 +109,40 @@ class CoverageExporter:
                 raise RuntimeError(f"Failed to export coverage table to file: {table}")
 
         # Export indirect call observations if any were collected.
+        # Note: uses ReplacingMergeTree with ORDER BY (test_name, callee_offset) so FINAL
+        # correctly deduplicates; plain MergeTree would reject FINAL with error 181.
         if not self.to_file:
-            ic_query = (
-                f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_indirect_calls', '{self.dest.user}', '{self.dest.pwd}') "
-                f"SELECT '{self.check_start_time}' AS check_start_time, "
-                f"'{self.job_name}' AS check_name, "
-                "test_name, caller_name_hash, caller_func_hash, callee_offset, call_count "
-                "FROM system.coverage_indirect_calls FINAL "
-                "WHERE notEmpty(test_name)"
+            ic_stats_query = (
+                "SELECT count() AS rows, uniqExact(test_name) AS tests, "
+                "uniqExact(callee_offset) AS unique_callees "
+                "FROM system.coverage_indirect_calls FINAL WHERE notEmpty(test_name)"
             )
-            ic_cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{ic_query}" {command_args_post}'
-            rc_ic, _, stderr_ic = Shell.get_res_stdout_stderr(ic_cmd, verbose=False)
-            if rc_ic != 0:
-                print(f"WARNING: Failed to export indirect calls (non-fatal): {stderr_ic[:200]}")
+            ic_stats_cmd = (
+                f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} '
+                f'--query "{ic_stats_query}" {command_args_post}'
+            )
+            rc_s, stdout_s, _ = Shell.get_res_stdout_stderr(ic_stats_cmd, verbose=False)
+            if rc_s == 0 and stdout_s.strip():
+                print(f"Indirect calls statistics: {stdout_s.strip()}")
+                ic_count = int(stdout_s.strip().split("\t")[0])
+            else:
+                ic_count = 0
+
+            if ic_count > 0:
+                ic_query = (
+                    f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_indirect_calls', '{self.dest.user}', '{self.dest.pwd}') "
+                    f"SELECT '{self.check_start_time}' AS check_start_time, "
+                    f"'{self.job_name}' AS check_name, "
+                    "test_name, caller_name_hash, caller_func_hash, callee_offset, call_count "
+                    "FROM system.coverage_indirect_calls FINAL "
+                    "WHERE notEmpty(test_name)"
+                )
+                ic_cmd = f'cd {self.src.run_path0} && clickhouse local {command_args} {path_arg} --query "{ic_query}" {command_args_post}'
+                rc_ic, _, stderr_ic = Shell.get_res_stdout_stderr(ic_cmd, verbose=True)
+                if rc_ic != 0:
+                    raise RuntimeError(
+                        f"Failed to export indirect calls to CIDB: {stderr_ic[:400]}"
+                    )
+                print(f"Exported {ic_count} indirect call rows to CIDB")
+            else:
+                print("No indirect call data to export (value profiling inactive or no calls recorded)")

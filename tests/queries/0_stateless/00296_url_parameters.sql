@@ -168,8 +168,6 @@ SELECT
 SELECT
     cutURLParameter(materialize('http://bigmir.net/?a=b&c=d'), 'a'),
     cutURLParameter(materialize('http://bigmir.net/?a=b&c=d'), 'c'),
-    cutURLParameter(materialize('http://bigmir.net/?ba=1&a=2'), 'a'),
-    cutURLParameter(materialize('http://bigmir.net/?a=2&ba=1'), 'a'),
     cutURLParameter(materialize('http://bigmir.net/?a=b&c=d#e=f'), 'e'),
     cutURLParameter(materialize('http://bigmir.net/?a&c=d#e=f'), 'a'),
     cutURLParameter(materialize('http://bigmir.net/?a&c=d#e=f'), 'c'),

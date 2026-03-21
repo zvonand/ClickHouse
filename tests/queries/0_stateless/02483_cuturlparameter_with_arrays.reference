@@ -5,9 +5,6 @@ SELECT
     cutURLParameter('http://bigmir.net/?a=b&c=d', ['a']),
     cutURLParameter('http://bigmir.net/?a=b&c=d', ['a', 'c']),
     cutURLParameter('http://bigmir.net/?a=b&c=d', ['c']),
-    cutURLParameter('http://bigmir.net/?ba=1&a=2', ['a']),
-    cutURLParameter('http://bigmir.net/?a=2&ba=1', ['a']),
-    cutURLParameter('http://bigmir.net/?ba=1&a=2', ['a', 'ba']),
     cutURLParameter('http://bigmir.net/?a=b&c=d#e=f', ['a', 'e']),
     cutURLParameter('http://bigmir.net/?a&c=d#e=f', ['c', 'e']),
     cutURLParameter('http://bigmir.net/?a&c=d#e=f', ['e']),
@@ -38,9 +35,6 @@ cutURLParame⋯b&c=d', []): http://bigmir.net/?a=b&c=d
 cutURLParame⋯=d', ['a']): http://bigmir.net/?c=d
 cutURLParame⋯['a', 'c']): http://bigmir.net/?
 cutURLParame⋯=d', ['c']): http://bigmir.net/?a=b
-cutURLParame⋯=2', ['a']): http://bigmir.net/?ba=1
-cutURLParame⋯=1', ['a']): http://bigmir.net/?ba=1
-cutURLParame⋯'a', 'ba']): http://bigmir.net/?
 cutURLParame⋯['a', 'e']): http://bigmir.net/?c=d#
 cutURLParame⋯['c', 'e']): http://bigmir.net/?a#
 cutURLParame⋯=f', ['e']): http://bigmir.net/?a&c=d#

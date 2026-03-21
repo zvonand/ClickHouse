@@ -229,7 +229,7 @@ class Targeting:
             groupArray(min_depth) AS depths,
             uniqExact(test_name) AS region_test_count
         FROM checks_coverage_lines
-        WHERE check_start_time > now() - interval 7 days
+        WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND notEmpty(test_name)
           AND ({per_file_conds})
@@ -471,7 +471,7 @@ class Targeting:
         query = f"""
         SELECT DISTINCT test_name
         FROM checks_coverage_lines
-        WHERE check_start_time > now() - interval 7 days
+        WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND notEmpty(test_name)
           AND test_name NOT IN ({escaped_primary})
@@ -481,7 +481,7 @@ class Targeting:
           AND file IN (
               SELECT DISTINCT file
               FROM checks_coverage_lines
-              WHERE check_start_time > now() - interval 7 days
+              WHERE check_start_time > now() - interval 3 days
                 AND test_name IN ({escaped_primary})
                 AND ({dir_conds})
                 AND ({not_changed})

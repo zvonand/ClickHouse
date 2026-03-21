@@ -149,10 +149,7 @@ std::optional<MutationCommand> MutationCommand::parse(const ASTAlterCommand & co
             const auto & assignment = assignment_ast->as<ASTAssignment &>();
             auto insertion = res.column_to_update_expression.emplace(assignment.column_name, assignment.expression());
             if (!insertion.second)
-                throw Exception(
-                    ErrorCodes::MULTIPLE_ASSIGNMENTS_TO_COLUMN,
-                    "Multiple assignments in the single statement to column {}",
-                    backQuote(assignment.column_name));
+                throw Exception(ErrorCodes::MULTIPLE_ASSIGNMENTS_TO_COLUMN, "Multiple assignments in the single statement to column {}", backQuote(assignment.column_name));
         }
         return res;
     }
@@ -335,10 +332,7 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
 
                 for (const auto & [column_name, _] : command.column_to_update_expression)
                     if (!metadata.columns.has(column_name) && !virtuals->has(column_name))
-                        throw Exception(
-                            ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
-                            "Cannot UPDATE column {}: column does not exist in table {}",
-                            backQuote(column_name), table_name);
+                        throw Exception(ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK, "Cannot UPDATE column {}: column does not exist in table {}", backQuote(column_name), table_name);
 
                 break;
             }
@@ -346,10 +340,7 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
             case MutationCommand::MATERIALIZE_INDEX:
             {
                 if (!metadata.getSecondaryIndices().has(command.index_name))
-                    throw Exception(
-                        ErrorCodes::INCORRECT_QUERY,
-                        "Index {} does not exist in table {}",
-                        backQuote(command.index_name), table_name);
+                    throw Exception(ErrorCodes::INCORRECT_QUERY, "Index {} does not exist in table {}", backQuote(command.index_name), table_name);
 
                 break;
             }
@@ -357,10 +348,7 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
             case MutationCommand::DROP_INDEX:
             {
                 if (!metadata.getSecondaryIndices().has(command.column_name))
-                    throw Exception(
-                        ErrorCodes::INCORRECT_QUERY,
-                        "Index {} does not exist in table {}",
-                        backQuote(command.column_name), table_name);
+                    throw Exception(ErrorCodes::INCORRECT_QUERY, "Index {} does not exist in table {}", backQuote(command.column_name), table_name);
 
                 break;
             }
@@ -368,10 +356,7 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
             case MutationCommand::MATERIALIZE_PROJECTION:
             {
                 if (!metadata.getProjections().has(command.projection_name))
-                    throw Exception(
-                        ErrorCodes::INCORRECT_QUERY,
-                        "Projection {} does not exist in table {}",
-                        backQuote(command.projection_name), table_name);
+                    throw Exception(ErrorCodes::INCORRECT_QUERY, "Projection {} does not exist in table {}", backQuote(command.projection_name), table_name);
 
                 break;
             }
@@ -379,10 +364,7 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
             case MutationCommand::DROP_PROJECTION:
             {
                 if (!metadata.getProjections().has(command.column_name))
-                    throw Exception(
-                        ErrorCodes::INCORRECT_QUERY,
-                        "Projection {} does not exist in table {}",
-                        backQuote(command.column_name), table_name);
+                    throw Exception(ErrorCodes::INCORRECT_QUERY, "Projection {} does not exist in table {}", backQuote(command.column_name), table_name);
 
                 break;
             }
@@ -395,10 +377,7 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
 
                 for (const auto & column_name : command.statistics_columns)
                     if (!metadata.columns.has(column_name))
-                        throw Exception(
-                            ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
-                            "Cannot MATERIALIZE STATISTICS for column {}: column does not exist in table {}",
-                            backQuote(column_name), table_name);
+                        throw Exception(ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK, "Column {} does not exist in table {}", backQuote(column_name), table_name);
 
                 break;
             }
@@ -409,20 +388,14 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
             case MutationCommand::MATERIALIZE_COLUMN:
             {
                 if (!metadata.columns.has(command.column_name))
-                    throw Exception(
-                        ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
-                        "Column {} does not exist in table {}",
-                        backQuote(command.column_name), table_name);
+                    throw Exception(ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK, "Column {} does not exist in table {}", backQuote(command.column_name), table_name);
                 break;
             }
 
             case MutationCommand::MATERIALIZE_TTL:
             {
                 if (!metadata.hasAnyTTL())
-                    throw Exception(
-                        ErrorCodes::INCORRECT_QUERY,
-                        "Cannot MATERIALIZE TTL as there is no TTL set for table {}",
-                        table_name);
+                    throw Exception(ErrorCodes::INCORRECT_QUERY, "Cannot MATERIALIZE TTL as there is no TTL set for table {}", table_name);
 
                 break;
             }

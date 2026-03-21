@@ -181,11 +181,14 @@ public:
             for (const auto & [begin, end] : cuts)
             {
                 size_t copy_size = std::max(begin, prev_cut_end) - prev_cut_end;
-                res_data.resize(cur_res_offset + copy_size);
 
-                memcpySmallAllowReadWriteOverflow15(&res_data[cur_res_offset], &data[prev_offset + prev_cut_end], copy_size);
+                if (copy_size > 0)
+                {
+                    res_data.resize(cur_res_offset + copy_size);
+                    memcpySmallAllowReadWriteOverflow15(&res_data[cur_res_offset], &data[prev_offset + prev_cut_end], copy_size);
+                    cur_res_offset += copy_size;
+                }
 
-                cur_res_offset += copy_size;
                 prev_cut_end = std::max(end, prev_cut_end);
             }
 

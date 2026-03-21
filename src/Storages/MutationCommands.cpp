@@ -31,8 +31,6 @@ namespace ErrorCodes
     extern const int UNKNOWN_MUTATION_COMMAND;
     extern const int MULTIPLE_ASSIGNMENTS_TO_COLUMN;
     extern const int LOGICAL_ERROR;
-    extern const int INCORRECT_QUERY;
-    extern const int NOT_FOUND_COLUMN_IN_BLOCK;
 }
 
 bool MutationCommand::isBarrierCommand() const

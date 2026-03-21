@@ -59,9 +59,8 @@ option(WITH_COVERAGE "Instrumentation for code coverage with default implementat
 option(WITH_COVERAGE_DEPTH "Shadow call-stack depth tracking via -finstrument-functions-after-inlining (requires WITH_COVERAGE)" OFF)
 
 option(WITH_COVERAGE_XRAY
-    "Use XRay instrumentation for exact call-depth tracking (requires WITH_COVERAGE and ENABLE_XRAY). "
-    "Builds with -DCLICKHOUSE_XRAY_INSTRUMENT_COVERAGE=1; XRay maps runtime function text addresses "
-    "to LLVM profile records, solving the PIE FunctionPointer=0 limitation." OFF)
+    "Use XRay instrumentation for exact call-depth tracking (requires WITH_COVERAGE and ENABLE_XRAY). Builds with -DCLICKHOUSE_XRAY_INSTRUMENT_COVERAGE=1. XRay maps runtime function text addresses to LLVM profile records, solving the PIE FunctionPointer=0 limitation."
+    OFF)
 
 if (WITH_COVERAGE)
     message (STATUS "Enabled instrumentation for code coverage")

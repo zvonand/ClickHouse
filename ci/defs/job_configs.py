@@ -279,9 +279,9 @@ class JobConfigs:
     )
     coverage_build_jobs = common_build_job_config.parametrize(
         Job.ParamSet(
-            parameter=BuildTypes.AMD_COVERAGE,
+            parameter=BuildTypes.LLVM_COVERAGE_BUILD,
             provides=[
-                ArtifactNames.CH_COV_BIN,
+                ArtifactNames.CH_AMD_LLVM_COVERAGE_BUILD,
             ],
             runs_on=RunnerLabels.AMD_LARGE,
         ),

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Common/PODArray.h>
+#include <IO/SeekableReadBuffer.h>
 #include <Processors/Formats/Impl/Parquet/ReadCommon.h>
 
 #include <span>
@@ -130,6 +131,11 @@ private:
         ///       the range in parallel (into subranges of one buffer). E.g. if there's a big column
         ///       chunk with no offset index, and we're reading over network.
         PaddedPODArray<char> buf;
+
+        /// When the underlying read buffer supports zero-copy cached reads, the data is stored
+        /// in retained cache cells instead of `buf`. Each region is a contiguous piece of an
+        /// in-memory cache block; together they cover [offset, offset+length) without gaps.
+        std::vector<SeekableReadBuffer::CachedRegion> cached_regions;
 
         std::atomic<State> state {State::Scheduled};
         /// How many RequestState-s in HasTask state point to this Task.

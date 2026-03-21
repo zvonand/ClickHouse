@@ -400,7 +400,10 @@ void Prefetcher::decreaseTaskRefcount(Task * task, size_t amount)
         return;
 
     if (task->state.exchange(Task::State::Deallocated) != Task::State::Running)
+    {
         task->buf = {};
+        task->cached_regions = {};
+    }
 }
 
 void Prefetcher::scheduleTask(Task * task)
@@ -442,6 +445,53 @@ std::span<const char> Prefetcher::getRangeData(const PrefetchHandle & request)
     if (s == Task::State::Exception)
         rethrowException(task);
     chassert(s == Task::State::Done);
+
+    if (!task->cached_regions.empty())
+    {
+        /// Zero-copy path: serve data directly from cache cells.
+        size_t req_file_offset = task->offset + req->task_offset;
+
+        /// Find the first region that contains req_file_offset.
+        /// Regions are sorted by file_offset and cover the task range contiguously.
+        size_t region_idx = 0;
+        for (; region_idx < task->cached_regions.size(); ++region_idx)
+        {
+            const auto & r = task->cached_regions[region_idx];
+            if (r.file_offset + r.size > req_file_offset)
+                break;
+        }
+        chassert(region_idx < task->cached_regions.size());
+        const auto & first_region = task->cached_regions[region_idx];
+        chassert(first_region.file_offset <= req_file_offset);
+
+        size_t offset_in_region = req_file_offset - first_region.file_offset;
+        size_t available_in_first = first_region.size - offset_in_region;
+
+        if (req->length <= available_in_first)
+        {
+            /// Fast path: request fits entirely within one cache block — true zero-copy.
+            return std::span(first_region.data + offset_in_region, req->length);
+        }
+
+        /// Slow path: request spans multiple cache blocks. Assemble into task->buf.
+        /// This is rare for typical Parquet reads but must be handled correctly.
+        if (task->buf.empty())
+            task->buf.resize(task->length);
+
+        size_t copied = 0;
+        char * dest = task->buf.data() + req->task_offset;
+        for (size_t i = region_idx; i < task->cached_regions.size() && copied < req->length; ++i)
+        {
+            const auto & r = task->cached_regions[i];
+            size_t skip = (i == region_idx) ? offset_in_region : 0;
+            size_t to_copy = std::min(r.size - skip, req->length - copied);
+            memcpy(dest + copied, r.data + skip, to_copy);
+            copied += to_copy;
+        }
+        chassert(copied == req->length);
+        return std::span(dest, req->length);
+    }
+
     chassert(req->task_offset + req->length <= task->buf.size());
     return std::span(task->buf.data() + req->task_offset, req->length);
 }
@@ -454,8 +504,18 @@ Prefetcher::Task::State Prefetcher::runTask(Task * task)
     auto final_state = Task::State::Done;
     try
     {
-        task->buf.resize(task->length);
-        readSync(task->buf.data(), task->length, task->offset);
+        /// When the reader supports zero-copy cached reads, get retained cache cells
+        /// instead of allocating a buffer and copying data into it.
+        if (read_mode == ReadMode::RandomRead && reader->supportsReadAtRetainCells())
+        {
+            task->cached_regions = reader->readBigAtRetainCells(task->length, task->offset);
+            ProfileEvents::increment(ProfileEvents::ParquetPrefetcherReadRandomRead);
+        }
+        else
+        {
+            task->buf.resize(task->length);
+            readSync(task->buf.data(), task->length, task->offset);
+        }
     }
     catch (...)
     {
@@ -473,6 +533,7 @@ Prefetcher::Task::State Prefetcher::runTask(Task * task)
     {
         chassert(s == Task::State::Deallocated);
         task->buf = {};
+        task->cached_regions = {};
     }
 
     task->completion.notify();

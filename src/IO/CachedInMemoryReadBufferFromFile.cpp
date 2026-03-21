@@ -272,6 +272,55 @@ size_t CachedInMemoryReadBufferFromFile::readBigAt(char * to, size_t n, size_t o
     return bytes_copied;
 }
 
+std::vector<SeekableReadBuffer::CachedRegion> CachedInMemoryReadBufferFromFile::readBigAtRetainCells(size_t n, size_t offset) const
+{
+    size_t block_size = settings.page_cache_block_size;
+    size_t end_offset = std::min(offset + n, file_size.value());
+    std::vector<CachedRegion> regions;
+
+    SipHash base_hash = cache_key.baseHash();
+
+    size_t current_offset = offset;
+    while (current_offset < end_offset)
+    {
+        size_t block_start = current_offset / block_size * block_size;
+        size_t block_data_size = std::min(block_size, file_size.value() - block_start);
+
+        UInt128 key_hash = PageCacheKey::hashForBlock(base_hash, block_start, block_data_size);
+
+        auto cell = cache->getOrSet(key_hash,
+            [&]() -> PageCacheKey
+            {
+                return PageCacheKey{cache_key.path, cache_key.file_version, block_start, block_data_size};
+            },
+            settings.read_from_page_cache_if_exists_otherwise_bypass_cache,
+            settings.page_cache_inject_eviction,
+            [&](const auto & c)
+            {
+                size_t bytes_read = in->readBigAt(c->data(), c->size(), block_start, nullptr);
+                if (bytes_read < c->size())
+                    throw Exception(ErrorCodes::UNEXPECTED_END_OF_FILE, "File {} ended after {} bytes, but we expected {}",
+                        cache_key.path, block_start + bytes_read, file_size.value());
+            });
+
+        size_t offset_in_block = current_offset - block_start;
+        size_t usable = std::min(block_data_size - offset_in_block, end_offset - current_offset);
+
+        const char * data_ptr = cell->data() + offset_in_block;
+        regions.push_back(CachedRegion{
+            .handle = std::move(cell),
+            .data = data_ptr,
+            .size = usable,
+            .file_offset = current_offset,
+        });
+
+        current_offset += usable;
+        ProfileEvents::increment(ProfileEvents::PageCacheReadBytes, usable);
+    }
+
+    return regions;
+}
+
 bool CachedInMemoryReadBufferFromFile::isContentCached(size_t offset, size_t /*size*/)
 {
     /// Usually this is called immediately after seek()ing to `offset`.

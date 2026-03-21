@@ -10,6 +10,7 @@
 #include <Interpreters/ActionsDAG.h>
 #include <Parsers/ASTExpressionList.h>
 #include <Storages/IStorage_fwd.h>
+#include <Storages/StorageInMemoryMetadata.h>
 
 namespace DB
 {
@@ -96,6 +97,8 @@ struct MutationCommand
 class MutationCommands : public std::vector<MutationCommand>
 {
 public:
+    void validate(const StorageInMemoryMetadata & metadata, const StoragePtr & table, ContextPtr context) const;
+
     boost::intrusive_ptr<ASTExpressionList> ast(bool with_pure_metadata_commands = false) const;
 
     void writeText(WriteBuffer & out, bool with_pure_metadata_commands) const;

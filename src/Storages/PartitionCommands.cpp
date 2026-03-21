@@ -1,7 +1,11 @@
 #include <Columns/IColumn.h>
+#include <Common/quoteString.h>
+#include <Disks/StoragePolicy.h>
 #include <Storages/PartitionCommands.h>
 #include <Storages/IStorage.h>
 #include <Storages/DataDestinationType.h>
+#include <Storages/StorageAlias.h>
+#include <Storages/StorageMaterializedView.h>
 #include <Parsers/ASTAlterQuery.h>
 #include <Core/ColumnWithTypeAndName.h>
 #include <DataTypes/DataTypeString.h>
@@ -16,6 +20,51 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
+    extern const int INCORRECT_QUERY;
+    extern const int NOT_IMPLEMENTED;
+}
+
+namespace
+{
+
+/// Unwrap wrapper storages (Alias, MaterializedView) to get the underlying table.
+StoragePtr getUnderlyingTable(const StoragePtr & table)
+{
+    if (const auto * alias = dynamic_cast<const StorageAlias *>(table.get()))
+        return getUnderlyingTable(alias->getTargetTable());
+
+    if (const auto * mv = dynamic_cast<const StorageMaterializedView *>(table.get()))
+        return getUnderlyingTable(mv->getTargetTable());
+
+    return table;
+}
+
+void validateMoveDestination(
+    const PartitionCommand & command,
+    const StoragePolicyPtr & storage_policy,
+    const String & table_name)
+{
+    if (!storage_policy)
+        return;
+
+    if (command.move_destination_type == PartitionCommand::MoveDestinationType::DISK)
+    {
+        if (!storage_policy->tryGetDiskByName(command.move_destination_name))
+            throw Exception(
+                ErrorCodes::INCORRECT_QUERY,
+                "Disk {} is not defined in the storage policy of table {}",
+                backQuote(command.move_destination_name), table_name);
+    }
+    else if (command.move_destination_type == PartitionCommand::MoveDestinationType::VOLUME)
+    {
+        if (!storage_policy->tryGetVolumeByName(command.move_destination_name))
+            throw Exception(
+                ErrorCodes::INCORRECT_QUERY,
+                "Volume {} is not defined in the storage policy of table {}",
+                backQuote(command.move_destination_name), table_name);
+    }
+}
+
 }
 
 std::optional<PartitionCommand> PartitionCommand::parse(const ASTAlterCommand * command_ast)
@@ -176,6 +225,58 @@ std::string PartitionCommand::typeToString() const
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Uninitialized partition command");
     }
 }
+
+void PartitionCommands::validate(const StorageInMemoryMetadata & /*metadata*/, const StoragePtr & table, ContextPtr /*context*/) const
+{
+    if (empty())
+        return;
+
+    auto underlying = getUnderlyingTable(table);
+    if (!underlying->isMergeTree())
+        throw Exception(
+            ErrorCodes::NOT_IMPLEMENTED,
+            "Table {} does not support partition operations",
+            underlying->getStorageID().getNameForLogs());
+
+    auto storage_policy = underlying->getStoragePolicy();
+    const auto & table_name = underlying->getStorageID().getNameForLogs();
+
+    for (const auto & command : *this)
+    {
+        switch (command.type)
+        {
+            case PartitionCommand::MOVE_PARTITION:
+            {
+                validateMoveDestination(command, storage_policy, table_name);
+                break;
+            }
+
+            case PartitionCommand::FORGET_PARTITION:
+            {
+                if (!underlying->supportsReplication())
+                    throw Exception(
+                        ErrorCodes::NOT_IMPLEMENTED,
+                        "Table {} does not support {}, only Replicated/Shared MergeTree tables support this operation",
+                        table_name, command.typeToString());
+
+                break;
+            }
+
+            case PartitionCommand::FREEZE_ALL_PARTITIONS:
+            case PartitionCommand::FREEZE_PARTITION:
+            case PartitionCommand::UNFREEZE_ALL_PARTITIONS:
+            case PartitionCommand::UNFREEZE_PARTITION:
+            case PartitionCommand::UNKNOWN:
+            case PartitionCommand::ATTACH_PARTITION:
+            case PartitionCommand::DROP_PARTITION:
+            case PartitionCommand::DROP_DETACHED_PARTITION:
+            case PartitionCommand::FETCH_PARTITION:
+            case PartitionCommand::REPLACE_PARTITION:
+                break;
+        }
+    }
+}
+
 
 Pipe convertCommandsResultToSource(const PartitionCommandsResultInfo & commands_result)
 {

@@ -1,4 +1,6 @@
 #include <Storages/MutationCommands.h>
+#include <Storages/IStorage.h>
+#include <Interpreters/IdentifierSemantic.h>
 #include <IO/WriteHelpers.h>
 #include <IO/ReadHelpers.h>
 #include <Parsers/ParserAlterQuery.h>
@@ -11,19 +13,61 @@
 #include <Common/typeid_cast.h>
 #include <Common/quoteString.h>
 #include <Core/Defines.h>
+#include <Core/Settings.h>
+#include <Interpreters/Context.h>
 #include <DataTypes/DataTypeFactory.h>
 
 
 namespace DB
 {
 
+namespace Setting
+{
+    extern const SettingsBool allow_statistics;
+}
+
 namespace ErrorCodes
 {
     extern const int UNKNOWN_MUTATION_COMMAND;
     extern const int MULTIPLE_ASSIGNMENTS_TO_COLUMN;
     extern const int LOGICAL_ERROR;
+    extern const int INCORRECT_QUERY;
+    extern const int NOT_FOUND_COLUMN_IN_BLOCK;
+    extern const int ILLEGAL_COLUMN;
 }
 
+
+namespace
+{
+
+void validatePredicateColumns(
+    const ASTPtr & predicate,
+    const ColumnsDescription & columns,
+    const VirtualsDescriptionPtr & virtuals,
+    const String & table_name)
+{
+    auto identifiers = IdentifiersCollector::collect(predicate);
+    for (const auto * identifier : identifiers)
+    {
+        auto column_name = IdentifierSemantic::getColumnName(*identifier);
+        if (!column_name)
+            continue;
+
+        if (virtuals->tryGet(*column_name))
+            throw Exception(
+                ErrorCodes::ILLEGAL_COLUMN,
+                "Cannot use virtual column {} in predicate",
+                backQuote(*column_name));
+
+        if (!columns.has(*column_name))
+            throw Exception(
+                ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
+                "Column {} used in predicate does not exist in table {}",
+                backQuote(*column_name), table_name);
+    }
+}
+
+}
 
 bool MutationCommand::isBarrierCommand() const
 {
@@ -234,6 +278,121 @@ std::optional<MutationCommand> MutationCommand::parse(const ASTAlterCommand & co
 
     res.type = ALTER_WITHOUT_MUTATION;
     return res;
+}
+
+
+void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const StoragePtr & table, ContextPtr context) const
+{
+    const auto & table_name = table->getStorageID().getNameForLogs();
+    const auto virtuals = table->getVirtualsPtr();
+
+    for (const auto & command : *this)
+    {
+        switch (command.type)
+        {
+            case MutationCommand::DELETE:
+            {
+                if (command.predicate)
+                    validatePredicateColumns(command.predicate, metadata.columns, virtuals, table_name);
+
+                break;
+            }
+
+            case MutationCommand::UPDATE:
+            {
+                if (command.predicate)
+                    validatePredicateColumns(command.predicate, metadata.columns, virtuals, table_name);
+
+                for (const auto & [column_name, _] : command.column_to_update_expression)
+                {
+                    if (virtuals->tryGet(column_name))
+                        throw Exception(
+                            ErrorCodes::ILLEGAL_COLUMN,
+                            "Cannot UPDATE virtual column {}",
+                            backQuote(column_name));
+
+                    if (!metadata.columns.has(column_name))
+                        throw Exception(
+                            ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
+                            "Cannot UPDATE column {}: column does not exist in table {}",
+                            backQuote(column_name), table_name);
+                }
+
+                break;
+            }
+
+            case MutationCommand::MATERIALIZE_INDEX:
+            case MutationCommand::DROP_INDEX:
+            {
+                if (!metadata.getSecondaryIndices().has(command.index_name))
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Index {} does not exist in table {}",
+                        backQuote(command.index_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::MATERIALIZE_PROJECTION:
+            case MutationCommand::DROP_PROJECTION:
+            {
+                if (!metadata.getProjections().has(command.projection_name))
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Projection {} does not exist in table {}",
+                        backQuote(command.projection_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::MATERIALIZE_STATISTICS:
+            case MutationCommand::DROP_STATISTICS:
+            {
+                if (!context->getSettingsRef()[Setting::allow_statistics])
+                    throw Exception(ErrorCodes::INCORRECT_QUERY, "Alter table with statistics is disabled. Turn on allow_statistics");
+
+                for (const auto & column_name : command.statistics_columns)
+                    if (!metadata.columns.has(column_name))
+                        throw Exception(
+                            ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
+                            "Cannot MATERIALIZE STATISTICS for column {}: column does not exist in table {}",
+                            backQuote(column_name), table_name);
+
+                break;
+            }
+
+            case MutationCommand::READ_COLUMN:
+            case MutationCommand::DROP_COLUMN:
+            case MutationCommand::RENAME_COLUMN:
+            case MutationCommand::MATERIALIZE_COLUMN:
+            {
+                if (!metadata.columns.has(command.column_name))
+                    throw Exception(
+                        ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
+                        "Column {} does not exist in table {}",
+                        backQuote(command.column_name), table_name);
+                break;
+            }
+
+            case MutationCommand::MATERIALIZE_TTL:
+            {
+                if (!metadata.hasAnyTTL())
+                    throw Exception(
+                        ErrorCodes::INCORRECT_QUERY,
+                        "Cannot MATERIALIZE TTL as there is no TTL set for table {}",
+                        table_name);
+
+                break;
+            }
+
+            case MutationCommand::EMPTY:
+            case MutationCommand::REWRITE_PARTS:
+            case MutationCommand::APPLY_DELETED_MASK:
+            case MutationCommand::APPLY_PATCHES:
+            case MutationCommand::ALTER_WITHOUT_MUTATION:
+                break;
+        }
+    }
 }
 
 

@@ -87,7 +87,7 @@ public:
     static FunctionPtr create(ContextPtr context)
     {
         return std::make_shared<FunctionReadWKB<ReturnDataTypeName, Geometry, Serializer, NameHolder>>(
-            static_cast<UInt32>(context->getSettingsRef()[Setting::max_wkb_geometry_elements]));
+            static_cast<UInt32>(std::min<UInt64>(context->getSettingsRef()[Setting::max_wkb_geometry_elements], MAX_WKB_GEOMETRY_ELEMENTS_HARD_LIMIT)));
     }
 
 private:
@@ -227,7 +227,7 @@ public:
     static FunctionPtr create(ContextPtr context)
     {
         return std::make_shared<FunctionReadWKBCommon>(
-            static_cast<UInt32>(context->getSettingsRef()[Setting::max_wkb_geometry_elements]));
+            static_cast<UInt32>(std::min<UInt64>(context->getSettingsRef()[Setting::max_wkb_geometry_elements], MAX_WKB_GEOMETRY_ELEMENTS_HARD_LIMIT)));
     }
 
 private:

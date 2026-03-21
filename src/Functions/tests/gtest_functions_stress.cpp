@@ -1148,7 +1148,7 @@ struct FunctionsStressTestThread
     }
 
     /// Randomize settings that affect function behavior to increase test coverage.
-    void randomizeSettings()
+    void randomizeSettings() const
     {
         /// Only randomize occasionally to amortize the cost.
         if (thread_local_rng() % 10 != 0)

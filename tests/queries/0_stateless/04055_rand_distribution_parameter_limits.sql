@@ -21,17 +21,17 @@ SELECT randFisherF(1e7, 1); -- { serverError BAD_ARGUMENTS }
 SELECT randFisherF(1, 1e7); -- { serverError BAD_ARGUMENTS }
 
 -- randExponential: lambda must be positive
-SELECT randExponential(0); -- { serverError BAD_ARGUMENTS }
-SELECT randExponential(-1); -- { serverError BAD_ARGUMENTS }
+SELECT randExponential(toFloat64(0)); -- { serverError BAD_ARGUMENTS }
+SELECT randExponential(toFloat64(-1)); -- { serverError BAD_ARGUMENTS }
 
 -- randUniform: min > max
-SELECT randUniform(10, 5); -- { serverError BAD_ARGUMENTS }
+SELECT randUniform(toFloat64(10), toFloat64(5)); -- { serverError BAD_ARGUMENTS }
 
 -- randNormal: negative stddev
-SELECT randNormal(0, -1); -- { serverError BAD_ARGUMENTS }
+SELECT randNormal(toFloat64(0), toFloat64(-1)); -- { serverError BAD_ARGUMENTS }
 
 -- randLogNormal: negative stddev
-SELECT randLogNormal(0, -1); -- { serverError BAD_ARGUMENTS }
+SELECT randLogNormal(toFloat64(0), toFloat64(-1)); -- { serverError BAD_ARGUMENTS }
 
 -- Valid calls still work (just check they don't throw; ignore the random output)
 SELECT count() FROM (SELECT randBinomial(100, 0.5) FROM numbers(10));

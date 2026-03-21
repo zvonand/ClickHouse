@@ -262,7 +262,7 @@ class Targeting:
                 (t, w, d, rc) for t, (w, d, rc) in sorted(by_test.items())
             ]
 
-        total_unique_tests = len({t for pairs in result.values() for t, _ in pairs})
+        total_unique_tests = len({t for pairs in result.values() for t, *_ in pairs})
         lines_with_tests = sum(1 for pairs in result.values() if pairs)
         print(
             f"[find_tests] done in {time.monotonic()-t0:.2f}s: "

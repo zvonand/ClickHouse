@@ -257,7 +257,15 @@ AggregateFunctionPtr createAggregateFunctionEstimateCompressionRatio(
 
             UInt64 new_block_size_bytes = param.safeGet<UInt64>();
             if (new_block_size_bytes == 0)
-                throw Exception(ErrorCodes::BAD_QUERY_PARAMETER, "block_size_bytes should be greater then 0");
+                throw Exception(ErrorCodes::BAD_QUERY_PARAMETER, "block_size_bytes should be greater than 0");
+
+            /// Limit to 256 MiB to prevent absurd memory allocations from fuzzed queries
+            static constexpr UInt64 max_block_size_bytes = 256 * 1024 * 1024;
+            if (new_block_size_bytes > max_block_size_bytes)
+                throw Exception(
+                    ErrorCodes::BAD_QUERY_PARAMETER,
+                    "block_size_bytes ({}) is too large, maximum is {}",
+                    new_block_size_bytes, max_block_size_bytes);
 
             block_size_bytes = new_block_size_bytes;
         }

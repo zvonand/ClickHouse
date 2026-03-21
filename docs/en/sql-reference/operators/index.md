@@ -214,7 +214,7 @@ The `part` parameter specifies which part of the date to retrieve. The following
 
 The `part` parameter is case-insensitive.
 
-The `date` parameter specifies the date or the time to process. Either [Date](../../sql-reference/data-types/date.md) or [DateTime](../../sql-reference/data-types/datetime.md) type is supported.
+The `date` parameter specifies the date or the time to process. The [Date](../../sql-reference/data-types/date.md), [Date32](../../sql-reference/data-types/date32.md), [DateTime](../../sql-reference/data-types/datetime.md), and [DateTime64](../../sql-reference/data-types/datetime64.md) types are supported.
 
 Examples:
 

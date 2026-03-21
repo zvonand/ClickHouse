@@ -429,7 +429,7 @@ class ArtifactNames:
 
 
 LLVM_FT_NUM_BATCHES = 3
-LLVM_IT_NUM_BATCHES = 7
+LLVM_IT_NUM_BATCHES = 5
 LLVM_FT_ARTIFACTS_LIST = [
     # default.profdata files for 3 batches from Stateless(Functional) tests
     ArtifactNames.LLVM_COVERAGE_FILE + f"_ft_{batch}"

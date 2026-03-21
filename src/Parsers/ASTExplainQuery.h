@@ -132,10 +132,8 @@ protected:
             /// consumed by the inner SELECT during re-parsing.
             /// For inner ASTQueryWithOutput queries (like CREATE TABLE), the flag propagates
             /// through the frame and is handled by each query's own `formatQueryImpl`.
-            /// INSERT queries also don't need wrapping: the INSERT parser does not consume
-            /// FORMAT/SETTINGS/INTO OUTFILE at its boundary, so they remain safely on
-            /// the EXPLAIN. Wrapping INSERT in parens would produce `(INSERT ...)` which
-            /// cannot be parsed back.
+            /// INSERT queries also don't need wrapping: wrapping INSERT in parens would
+            /// produce `(INSERT ...)` which cannot be parsed back.
             bool need_parens = frame.has_trailing_output_options
                 && !dynamic_cast<const ASTQueryWithOutput *>(query.get())
                 && query->getQueryKind() != QueryKind::Insert

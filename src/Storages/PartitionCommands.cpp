@@ -6,6 +6,7 @@
 #include <Storages/DataDestinationType.h>
 #include <Storages/StorageAlias.h>
 #include <Storages/StorageMaterializedView.h>
+#include <Storages/StorageProxy.h>
 #include <Parsers/ASTAlterQuery.h>
 #include <Core/ColumnWithTypeAndName.h>
 #include <DataTypes/DataTypeString.h>
@@ -35,6 +36,9 @@ StoragePtr getUnderlyingTable(const StoragePtr & table)
 
     if (const auto * mv = dynamic_cast<const StorageMaterializedView *>(table.get()))
         return getUnderlyingTable(mv->getTargetTable());
+
+    if (const auto * proxy = dynamic_cast<const StorageProxy *>(table.get()))
+        return getUnderlyingTable(proxy->getNested());
 
     return table;
 }

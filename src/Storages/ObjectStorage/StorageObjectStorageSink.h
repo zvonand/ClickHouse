@@ -54,6 +54,9 @@ public:
 
     SinkPtr createSinkForPartition(const String & partition_id) override;
 
+    /// Returns the path of the last object written by `createSinkForPartition`.
+    const String & getLastWrittenPartitionId() const { return last_written_partition_id; }
+
 private:
     ObjectStoragePtr object_storage;
     StorageObjectStorageConfigurationPtr configuration;
@@ -62,6 +65,7 @@ private:
     const std::optional<FormatSettings> format_settings;
     SharedHeader sample_block;
     const ContextPtr context;
+    String last_written_partition_id;
 };
 
 }

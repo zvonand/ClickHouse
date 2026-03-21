@@ -108,6 +108,13 @@ def test_source_revocation_blocks_table_engine():
 
     instance.query("DROP TABLE test.table1")
 
+    instance.query("REVOKE READ, WRITE ON URL FROM A")
+
+    assert "Not enough privileges" in instance.query_and_get_error(
+        "CREATE TABLE test.table1(a Integer) engine=URL('http://localhost:65535/dummy', 'CSV')",
+        user="A",
+    )
+
 
 def test_grant_table_engine_option():
     instance.query("DROP USER IF EXISTS A, B")

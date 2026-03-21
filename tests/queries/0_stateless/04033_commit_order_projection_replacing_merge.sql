@@ -1,3 +1,5 @@
+-- Tags: no-parallel-replicas
+
 set enable_analyzer = 1;
 
 DROP TABLE IF EXISTS mt_replacing_test SYNC;

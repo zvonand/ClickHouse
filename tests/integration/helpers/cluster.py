@@ -3346,6 +3346,14 @@ class ClickHouseCluster:
             logging.warning(
                 "Instance directory already exists. Did you call cluster.start() for second time?"
             )
+            # Remove and recreate so that create_dir() gets a clean slate.
+            # This happens when --dist=each causes module-scoped fixtures to be torn down
+            # and re-set-up within the same pytest session (e.g. tests from different modules
+            # interleave on the same xdist worker). cluster.shutdown() does not remove
+            # instances_dir, and ClickHouseCluster.__init__ only removes it at import time,
+            # so without this cleanup create_dir() would fail with FileExistsError.
+            shutil.rmtree(self.instances_dir, ignore_errors=True)
+            os.mkdir(self.instances_dir)
         logging.debug(f"Cluster start called. is_up={self.is_up}")
         self.print_all_docker_pieces()
 

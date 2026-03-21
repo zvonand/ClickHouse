@@ -188,6 +188,14 @@ find $ROOT_PATH/tests/queries -name '*.sh' |
     xargs grep -l -F 'timeout' &&
     echo ".sh tests cannot use the 'timeout' command, because it leads to race conditions, when the timeout is expired, and waiting for the command is done, but the server still runs some queries"
 
+# Check for timeout with --signal but without --kill-after in .sh tests.
+# Without --kill-after, if the process ignores the signal, timeout hangs
+# indefinitely, causing the test to hit the hard timeout limit.
+find $ROOT_PATH/tests/queries -name '*.sh' -print0 |
+    xargs -0 grep -l -P 'timeout\s+.*(-s|--signal)[\s=]' |
+    xargs grep -LP 'kill-after' &&
+    echo "Tests using 'timeout --signal' must also use '--kill-after' to ensure the process is killed if it ignores the signal"
+
 find $ROOT_PATH/tests/queries -iname '*.sql' -or -iname '*.sh' -or -iname '*.py' -or -iname '*.j2' | xargs grep --with-filename -i -E -e 'system\s*flush\s*logs\s*(;|$|")' && echo "Please use SYSTEM FLUSH LOGS log_name over global SYSTEM FLUSH LOGS"
 
 # Tests with SYSTEM DROP should have no-parallel tag, because SYSTEM DROP commands

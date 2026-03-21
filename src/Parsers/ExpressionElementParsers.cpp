@@ -215,6 +215,8 @@ bool ParserSubquery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         values_func->name = "values";
         values_func->arguments = args;
         values_func->children.push_back(values_func->arguments);
+        /// Mark as SQL standard VALUES syntax for experimental setting gate
+        values_func->setPreferSubqueryToFunctionFormatting(true);
 
         result_node = buildSelectFromTableFunction(values_func);
     }

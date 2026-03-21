@@ -8,7 +8,9 @@
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/getLeastSupertype.h>
 
+#include <Core/Settings.h>
 #include <Parsers/ASTExpressionList.h>
+#include <Parsers/ASTFunction.h>
 #include <Parsers/ASTLiteral.h>
 
 #include <TableFunctions/TableFunctionFactory.h>
@@ -23,10 +25,16 @@
 namespace DB
 {
 
+namespace Setting
+{
+    extern const SettingsBool allow_experimental_sql_standard_values_clause;
+}
+
 namespace ErrorCodes
 {
     extern const int BAD_ARGUMENTS;
     extern const int LOGICAL_ERROR;
+    extern const int SUPPORT_IS_DISABLED;
     extern const int TOO_FEW_ARGUMENTS_FOR_FUNCTION;
     extern const int CANNOT_EXTRACT_TABLE_STRUCTURE;
 }
@@ -110,6 +118,14 @@ DataTypes TableFunctionValues::getTypesFromArgument(const ASTPtr & arg, ContextP
 
 void TableFunctionValues::parseArguments(const ASTPtr & ast_function, ContextPtr context)
 {
+    /// Check if this was created from SQL standard VALUES clause syntax
+    const auto * func = ast_function->as<ASTFunction>();
+    if (func && func->preferSubqueryToFunctionFormatting()
+        && !context->getSettingsRef()[Setting::allow_experimental_sql_standard_values_clause])
+        throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
+            "SQL standard VALUES clause syntax is experimental. "
+            "Set `allow_experimental_sql_standard_values_clause` setting to enable it");
+
     ASTs & args_func = ast_function->children;
 
     if (args_func.size() != 1)

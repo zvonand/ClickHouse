@@ -197,7 +197,12 @@ ClickHouse also supports the SQL standard `VALUES` clause as a table expression
 in `FROM`, as used in PostgreSQL, MySQL, DuckDB, and SQL Server. This syntax is
 rewritten internally to use the `values` table function described above.
 
+:::note
+This feature is experimental. To enable it, set `allow_experimental_sql_standard_values_clause = 1`.
+:::
+
 ```sql title="Query"
+SET allow_experimental_sql_standard_values_clause = 1;
 SELECT * FROM (VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, val);
 ```
 

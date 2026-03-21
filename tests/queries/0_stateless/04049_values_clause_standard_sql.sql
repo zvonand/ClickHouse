@@ -2,6 +2,7 @@
 -- https://github.com/ClickHouse/ClickHouse/issues/99605
 
 SET enable_analyzer = 1;
+SET allow_experimental_sql_standard_values_clause = 1;
 
 -- Basic VALUES with column aliases
 SELECT * FROM (VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, val) ORDER BY id;

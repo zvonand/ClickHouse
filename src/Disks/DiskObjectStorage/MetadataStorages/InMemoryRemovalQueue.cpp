@@ -8,6 +8,9 @@ void InMemoryRemovalQueue::submitForRemoval(const StoredObjects & objects)
     std::lock_guard guard(mutex);
     for (const auto & obj : objects)
     {
+        if (index.contains(obj))
+            continue;
+
         int64_t slot = next_slot++;
         queue.emplace(slot, obj);
         index.emplace(obj, slot);

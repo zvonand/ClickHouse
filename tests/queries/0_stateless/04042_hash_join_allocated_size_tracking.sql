@@ -1,3 +1,5 @@
+SET enable_analyzer = 1;
+
 CREATE TABLE test__fuzz_1 (`id` Nullable(UInt64), `d` Dynamic(max_types = 133)) ENGINE = Memory;
 
 INSERT INTO test__fuzz_1 SETTINGS min_insert_block_size_rows = 50000 SELECT number, number FROM numbers(100000) SETTINGS min_insert_block_size_rows = 50000;

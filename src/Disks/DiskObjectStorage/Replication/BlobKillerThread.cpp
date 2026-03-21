@@ -51,7 +51,7 @@ namespace
 constexpr int64_t DEFAULT_RESCHEDULE_INTERVAL_SEC = 1;
 constexpr int64_t DEFAULT_METADATA_REQUEST_SIZE = 1000;
 constexpr int64_t DEFAULT_THREADS_COUNT = 16;
-constexpr int64_t MAX_BLOBS_IN_TASK = 100;
+constexpr int64_t DEFAULT_MAX_BLOBS_IN_TASK = 100;
 
 IMetadataStorage::BlobsToRemove findBlobsToRemove(
     size_t request_batch,
@@ -74,7 +74,8 @@ IMetadataStorage::BlobsToRemove findBlobsToRemove(
 }
 
 std::vector<std::pair<Location, StoredObjects>> sliceIntoRemoveTasks(
-    const IMetadataStorage::BlobsToRemove & blobs_to_remove) noexcept
+    const IMetadataStorage::BlobsToRemove & blobs_to_remove,
+    size_t max_blobs_in_task) noexcept
 {
     std::vector<std::pair<Location, StoredObjects>> tasks;
 
@@ -86,7 +87,7 @@ std::vector<std::pair<Location, StoredObjects>> sliceIntoRemoveTasks(
             auto & incomplete_task_blobs = incomplete_tasks[location];
             incomplete_task_blobs.push_back(blob);
 
-            if (incomplete_task_blobs.size() >= MAX_BLOBS_IN_TASK)
+            if (incomplete_task_blobs.size() >= max_blobs_in_task)
                 tasks.emplace_back(location, std::exchange(incomplete_task_blobs, {}));
         }
     }
@@ -164,6 +165,7 @@ void recordBlobsRemoval(
 
 void removeBlobs(
     IMetadataStorage::BlobsToRemove blobs_to_remove,
+    size_t max_blobs_in_task,
     ThreadPoolCallbackRunnerLocal<bool> & remove_tasks_runner,
     const MetadataStoragePtr & metadata_storage,
     const ObjectStorageRouterPtr & object_storages,
@@ -172,7 +174,7 @@ void removeBlobs(
     if (blobs_to_remove.empty())
         return;
 
-    auto tasks = sliceIntoRemoveTasks(blobs_to_remove);
+    auto tasks = sliceIntoRemoveTasks(blobs_to_remove, max_blobs_in_task);
     ProfileEvents::increment(ProfileEvents::BlobKillerThreadRemoveTasks, tasks.size());
     LOG_TRACE(log, "Distributed removal of {} blobs into {} tasks", blobs_to_remove.size(), tasks.size());
 
@@ -199,6 +201,7 @@ void removeBlobs(
 
 void executeBlobsCleanup(
     size_t max_to_remove,
+    size_t max_blobs_in_task,
     ThreadPoolCallbackRunnerLocal<bool> & remove_tasks_runner,
     const ClusterConfigurationPtr & cluster,
     const MetadataStoragePtr & metadata,
@@ -207,7 +210,7 @@ void executeBlobsCleanup(
 {
     ProfileEvents::increment(ProfileEvents::BlobKillerThreadRuns);
     auto blobs_to_remove = findBlobsToRemove(max_to_remove, cluster, metadata, log);
-    removeBlobs(std::move(blobs_to_remove), remove_tasks_runner, metadata, object_storages, log);
+    removeBlobs(std::move(blobs_to_remove), max_blobs_in_task, remove_tasks_runner, metadata, object_storages, log);
 }
 
 }
@@ -237,7 +240,7 @@ void BlobKillerThread::run()
     auto component_guard = Coordination::setCurrentComponent("BlobKillerThread::run");
     LOG_TEST(log, "Starting cleanup");
 
-    executeBlobsCleanup(metadata_request_batch.load(), remove_tasks_runner, cluster, metadata_storage, object_storages, log);
+    executeBlobsCleanup(metadata_request_batch.load(), max_blobs_in_task.load(), remove_tasks_runner, cluster, metadata_storage, object_storages, log);
     finished_rounds.fetch_add(1);
     finished_rounds.notify_all();
 
@@ -266,7 +269,7 @@ void BlobKillerThread::shutdown()
     task->deactivate();
 
     /// We need to execute it here explicitly because some blobs may be in the metadata storage queue.
-    executeBlobsCleanup(/*max_to_remove=*/0, remove_tasks_runner, cluster, metadata_storage, object_storages, log);
+    executeBlobsCleanup(/*max_to_remove=*/0, max_blobs_in_task.load(), remove_tasks_runner, cluster, metadata_storage, object_storages, log);
 }
 
 int64_t BlobKillerThread::trigger()
@@ -307,6 +310,7 @@ void BlobKillerThread::applyNewSettings(const Poco::Util::AbstractConfiguration 
     enabled = config.getBool(config_prefix + ".enabled", true);
     reschedule_interval_sec = config.getUInt64(config_prefix + ".interval_sec", DEFAULT_RESCHEDULE_INTERVAL_SEC);
     metadata_request_batch = config.getUInt64(config_prefix + ".metadata_request_size", DEFAULT_METADATA_REQUEST_SIZE);
+    max_blobs_in_task = config.getUInt64(config_prefix + ".max_blobs_in_task", DEFAULT_MAX_BLOBS_IN_TASK);
     remove_tasks_pool.setMaxThreads(config.getUInt64(config_prefix + ".threads_count", DEFAULT_THREADS_COUNT));
 
     LOG_INFO(log, "Applying new settings: Enabled: {}, Started: {}", enabled.load(), started.load());

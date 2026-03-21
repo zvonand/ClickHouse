@@ -43,6 +43,7 @@ private:
     std::atomic<int64_t> finished_rounds{0};
     std::atomic<int64_t> reschedule_interval_sec{0};
     std::atomic<int64_t> metadata_request_batch{0};
+    std::atomic<int64_t> max_blobs_in_task{0};
     ThreadPool remove_tasks_pool;
     ThreadPoolCallbackRunnerLocal<bool> remove_tasks_runner;
 

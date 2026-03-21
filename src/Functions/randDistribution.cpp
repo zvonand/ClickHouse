@@ -31,8 +31,8 @@ namespace
 {
 /// Reasonable upper bound for distribution parameters to prevent hangs
 /// (e.g. randBinomial with trials=44988101480975 takes effectively forever).
-static constexpr UInt64 MAX_DISTRIBUTION_TRIALS = 1'000'000'000;
-static constexpr Float64 MAX_DISTRIBUTION_PARAM = 1e6;
+constexpr UInt64 MAX_DISTRIBUTION_TRIALS = 1'000'000'000;
+constexpr Float64 MAX_DISTRIBUTION_PARAM = 1e6;
 
 struct UniformDistribution
 {

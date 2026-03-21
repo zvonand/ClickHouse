@@ -14,4 +14,4 @@ SELECT kql_array_sort_desc([]::Array(UInt64), []::Array(Int8));
 SELECT kql_array_sort_desc([1]::Array(UInt64), []::Array(Int8));
 
 -- Multiple arrays with varying lengths across rows
-SELECT kql_array_sort_asc(a, b) FROM (SELECT [3, 1, 2] AS a, [10, 20, 30] AS b UNION ALL SELECT [5, 4] AS a, [100] AS b);
+SELECT kql_array_sort_asc(a, b) FROM (SELECT [3, 1, 2] AS a, [10, 20, 30] AS b UNION ALL SELECT [5, 4] AS a, [100] AS b) ORDER BY length(a);

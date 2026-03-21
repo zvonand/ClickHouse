@@ -148,15 +148,16 @@ public:
 
         size_t element_index = *maybe_index;
 
-        /// Replace the tuple of attribute names with a single attribute name
-        dict_get_args[1] = std::make_shared<ConstantNode>(attribute_names[element_index]);
+        /// Prepare the new attribute name argument
+        auto new_attr_arg = std::make_shared<ConstantNode>(attribute_names[element_index]);
 
-        /// For dictGetOrDefault, the default value argument is the last one.
-        /// If it's a tuple, extract the corresponding element.
+        /// For dictGetOrDefault, prepare the new default value argument before mutating anything.
+        /// If we can't extract it, bail out without touching the tree.
+        QueryTreeNodePtr new_default_arg;
         if (is_dict_get_or_default)
         {
             size_t default_arg_idx = dict_get_args.size() - 1;
-            auto & default_arg = dict_get_args[default_arg_idx];
+            const auto & default_arg = dict_get_args[default_arg_idx];
 
             if (const auto * default_constant = default_arg->as<ConstantNode>())
             {
@@ -165,22 +166,31 @@ public:
                 {
                     const auto & default_tuple = default_value.safeGet<Tuple>();
                     if (element_index < default_tuple.size())
-                        dict_get_args[default_arg_idx] = std::make_shared<ConstantNode>(default_tuple[element_index]);
+                        new_default_arg = std::make_shared<ConstantNode>(default_tuple[element_index]);
                     else
                         return; /// Cannot optimize — index out of range
                 }
             }
-            else if (auto * default_function = default_arg->as<FunctionNode>())
+            else if (const auto * default_function = default_arg->as<FunctionNode>())
             {
                 if (default_function->getFunctionName() == "tuple")
                 {
-                    auto & default_tuple_args = default_function->getArguments().getNodes();
+                    const auto & default_tuple_args = default_function->getArguments().getNodes();
                     if (element_index < default_tuple_args.size())
-                        dict_get_args[default_arg_idx] = default_tuple_args[element_index];
+                        new_default_arg = default_tuple_args[element_index];
                     else
                         return; /// Cannot optimize — index out of range
                 }
             }
+        }
+
+        /// Now apply all mutations atomically
+        dict_get_args[1] = std::move(new_attr_arg);
+
+        if (is_dict_get_or_default && new_default_arg)
+        {
+            size_t default_arg_idx = dict_get_args.size() - 1;
+            dict_get_args[default_arg_idx] = std::move(new_default_arg);
         }
 
         /// Re-resolve the dictGet function with the modified arguments

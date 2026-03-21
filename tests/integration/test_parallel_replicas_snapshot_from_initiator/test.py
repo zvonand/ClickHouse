@@ -22,6 +22,10 @@ def start_cluster():
 
 
 def _create_tables(table_name):
+    # Restart replicated sends that may have been stopped by a previous run
+    for node in nodes:
+        node.query("SYSTEM START REPLICATED SENDS")
+
     for idx, node in enumerate(nodes):
         node.query(
             f"DROP TABLE IF EXISTS {table_name}",

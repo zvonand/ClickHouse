@@ -1,3 +1,4 @@
+#include <string_view>
 #include <Processors/QueryPlan/BuildRuntimeFilterStep.h>
 #include <Processors/QueryPlan/QueryPlanStepRegistry.h>
 #include <Processors/QueryPlan/QueryPlanSerializationSettings.h>
@@ -194,17 +195,17 @@ void BuildRuntimeFilterStep::describeActions(FormatSettings & format_settings) c
 {
     const std::string & prefix = format_settings.detail_prefix;
 
+    std::string_view filter_id_view = filter_name;
     if (format_settings.pretty)
     {
         if (auto it = format_settings.runtime_filter_names.find(filter_name); it != format_settings.runtime_filter_names.end())
-            format_settings.out << prefix << "Filter: " << it->second.pretty_name << ": " << it->second.build_column_name << '\n';
+            filter_id_view = it->second.pretty_name;
     }
-    else
-    {
-        format_settings.out
-            << prefix << "Filter id: " << filter_name << '\n'
-            << prefix << "Allow not exact filter: " << allow_to_use_not_exact_filter << '\n';
-    }
+
+    format_settings.out << prefix << "Filter id: " << filter_id_view << '\n';
+
+    if (!format_settings.pretty)
+        format_settings.out << prefix << "Allow not exact filter: " << allow_to_use_not_exact_filter << '\n';
 }
 
 void registerBuildRuntimeFilterStep(QueryPlanStepRegistry & registry)

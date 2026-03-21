@@ -138,17 +138,17 @@ namespace QueryPlanFormat
         out << '\n';
     }
 
-    String formatFilterPretty(
+    PrettyColumnName formatFilterPretty(
         const ActionsDAG & dag,
         const String & column_name,
         const std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names)
     {
         const auto * root = dag.tryFindInOutputs(column_name);
         if (!root)
-            return trimColumnIdentifier(column_name);
-    
+            return PrettyColumnName(trimColumnIdentifier(column_name));
+
         auto atoms = ActionsDAG::extractConjunctionAtoms(root);
-    
+
         std::vector<String> user_parts;
         std::vector<String> rf_parts;
         for (const auto * atom : atoms)
@@ -160,17 +160,18 @@ namespace QueryPlanFormat
             else
                 user_parts.push_back(formatNodePretty(atom, runtime_filter_names, 4));
         }
-    
-        String result;
+
+        String expression;
         if (!user_parts.empty())
-            result = fmt::format(" {}", fmt::join(user_parts, " AND "));
+            expression = fmt::format(" {}", fmt::join(user_parts, " AND "));
+        if (expression.empty() && rf_parts.empty())
+            expression = fmt::format(" {}", trimColumnIdentifier(column_name));
+
+        String annotation;
         if (!rf_parts.empty())
-        {
-            result += fmt::format("\nRuntime filters: {}", fmt::join(rf_parts, " AND "));
-        }
-        if (result.empty())
-            result = fmt::format(" {}", trimColumnIdentifier(column_name));
-        return result;
+            annotation = fmt::format("Runtime filters: {}", fmt::join(rf_parts, " AND "));
+
+        return {std::move(expression), std::move(annotation)};
     }
 
     namespace
@@ -375,11 +376,18 @@ namespace QueryPlanFormat
     String formatColumnPretty(const String & column_name, const ExplainFormatSettings & settings)
     {
         if (auto it = settings.pretty_names.find(column_name); it != settings.pretty_names.end())
-            return it->second;
+            return it->second.expression;
         return trimColumnIdentifier(column_name);
     }
 
-    static void addAggregatesPrettyNames(const Aggregator::Params & params, std::unordered_map<String, String> & pretty_names)
+    std::string_view getColumnAnnotation(const String & column_name, const ExplainFormatSettings & settings)
+    {
+        if (auto it = settings.pretty_names.find(column_name); it != settings.pretty_names.end())
+            return it->second.annotation;
+        return {};
+    }
+
+    static void addAggregatesPrettyNames(const Aggregator::Params & params, std::unordered_map<String, PrettyColumnName> & pretty_names)
     {
         for (const auto & agg : params.aggregates)
         {
@@ -394,18 +402,18 @@ namespace QueryPlanFormat
                     pretty += ", ";
                 first = false;
                 if (auto it = pretty_names.find(arg); it != pretty_names.end())
-                    pretty += it->second;
+                    pretty += it->second.expression;
                 else
                     pretty += trimColumnIdentifier(arg);
             }
             pretty += ')';
-            pretty_names[agg.column_name] = std::move(pretty);
+            pretty_names[agg.column_name] = PrettyColumnName(std::move(pretty));
         }
     }
 
     static void buildPrettyNamesForNode(
         const QueryPlan::Node * node,
-        std::unordered_map<String, String> & pretty_names,
+        std::unordered_map<String, PrettyColumnName> & pretty_names,
         std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names)
     {
         for (auto it = node->children.rbegin(); it != node->children.rend(); ++it)
@@ -419,14 +427,14 @@ namespace QueryPlanFormat
             const auto & dag = static_cast<const ExpressionStep *>(step.get())->getExpression();
             for (const auto * output : dag.getOutputs())
                 if (output->type != ActionsDAG::ActionType::INPUT)
-                    pretty_names[output->result_name] = formatNodePretty(output, runtime_filter_names);
+                    pretty_names[output->result_name] = PrettyColumnName(formatNodePretty(output, runtime_filter_names));
         }
         else if (step_name == "Filter")
         {
             const auto & dag = static_cast<const FilterStep *>(step.get())->getExpression();
             for (const auto * output : dag.getOutputs())
                 if (output->type != ActionsDAG::ActionType::INPUT)
-                    pretty_names[output->result_name] = formatNodePretty(output, runtime_filter_names);
+                    pretty_names[output->result_name] = PrettyColumnName(formatNodePretty(output, runtime_filter_names));
         }
         else if (step_name == "Aggregating" || step_name == "AggregatingProjection")
         {
@@ -451,7 +459,7 @@ namespace QueryPlanFormat
             {
                 for (const auto * output : dag->getOutputs())
                     if (output->type != ActionsDAG::ActionType::INPUT)
-                        pretty_names[output->result_name] = formatNodePretty(output, runtime_filter_names);
+                        pretty_names[output->result_name] = PrettyColumnName(formatNodePretty(output, runtime_filter_names));
             }
         }
         else if (step_name == "BuildRuntimeFilter")
@@ -502,7 +510,7 @@ namespace QueryPlanFormat
 
     void buildPrettyNamesMap(
         const QueryPlan & plan,
-        std::unordered_map<String, String> & pretty_names,
+        std::unordered_map<String, PrettyColumnName> & pretty_names,
         std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names)
     {
         if (plan.getRootNode())

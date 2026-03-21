@@ -20,6 +20,20 @@ struct RuntimeFilterInfo
     String build_column_name;
 };
 
+struct PrettyColumnName
+{
+    String expression;
+    String annotation;
+
+    PrettyColumnName() = default;
+
+    explicit PrettyColumnName(String expression_)
+        : expression(std::move(expression_)) {}
+
+    PrettyColumnName(String expression_, String annotation_)
+        : expression(std::move(expression_)), annotation(std::move(annotation_)) {}
+};
+
 struct ExplainFormatSettings
 {
     WriteBuffer & out;
@@ -31,7 +45,7 @@ struct ExplainFormatSettings
     const bool write_header = false;
     bool compact = false;
     bool pretty = false;
-    std::unordered_map<String, String> pretty_names;
+    std::unordered_map<String, PrettyColumnName> pretty_names;
     std::unordered_map<String, RuntimeFilterInfo> runtime_filter_names;
 };
 
@@ -46,10 +60,11 @@ namespace QueryPlanFormat
         const std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names,
         int parent_precedence = 0);
     String formatColumnPretty(const String & column_name, const ExplainFormatSettings & settings);
+    std::string_view getColumnAnnotation(const String & column_name, const ExplainFormatSettings & settings);
 
     void buildPrettyNamesMap(
         const QueryPlan & plan,
-        std::unordered_map<String, String> & pretty_names,
+        std::unordered_map<String, PrettyColumnName> & pretty_names,
         std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names);
 }
 

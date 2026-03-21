@@ -116,11 +116,24 @@ void SourceStepWithFilter::describeActions(FormatSettings & format_settings) con
 
     if (query_info.prewhere_info)
     {
-        format_settings.out << prefix << "Prewhere filter" << '\n';
-        format_settings.out << prefix << "Prewhere filter column: " << (format_settings.pretty ? QueryPlanFormat::formatColumnPretty(query_info.prewhere_info->prewhere_column_name, format_settings) : query_info.prewhere_info->prewhere_column_name);
-        if (!format_settings.pretty && query_info.prewhere_info->remove_prewhere_column)
-            format_settings.out << " (removed)";
-        format_settings.out << '\n';
+        const auto pretty_expression = format_settings.pretty
+            ? QueryPlanFormat::formatColumnPretty(query_info.prewhere_info->prewhere_column_name, format_settings) : String{};
+
+        if (!format_settings.pretty || !pretty_expression.empty())
+        {
+            format_settings.out << prefix << "Prewhere filter" << '\n';
+            format_settings.out << prefix << "Prewhere filter column: " << (format_settings.pretty ? pretty_expression : query_info.prewhere_info->prewhere_column_name);
+            if (!format_settings.pretty && query_info.prewhere_info->remove_prewhere_column)
+                format_settings.out << " (removed)";
+            format_settings.out << '\n';
+        }
+
+        if (format_settings.pretty)
+        {
+            const auto annotation = QueryPlanFormat::getColumnAnnotation(query_info.prewhere_info->prewhere_column_name, format_settings);
+            if (!annotation.empty())
+                format_settings.out << prefix << annotation << '\n';
+        }
 
         if (!format_settings.compact)
         {
@@ -131,11 +144,24 @@ void SourceStepWithFilter::describeActions(FormatSettings & format_settings) con
 
     if (query_info.row_level_filter)
     {
-        format_settings.out << prefix << "Row level filter" << '\n';
-        format_settings.out << prefix << "Row level filter column: " << (format_settings.pretty ? QueryPlanFormat::formatColumnPretty(query_info.row_level_filter->column_name, format_settings) : query_info.row_level_filter->column_name);
-        if (!format_settings.pretty && query_info.row_level_filter->do_remove_column)
-            format_settings.out << " (removed)";
-        format_settings.out << '\n';
+        const auto pretty_expression = format_settings.pretty
+            ? QueryPlanFormat::formatColumnPretty(query_info.row_level_filter->column_name, format_settings) : String{};
+
+        if (!format_settings.pretty || !pretty_expression.empty())
+        {
+            format_settings.out << prefix << "Row level filter" << '\n';
+            format_settings.out << prefix << "Row level filter column: " << (format_settings.pretty ? pretty_expression : query_info.row_level_filter->column_name);
+            if (!format_settings.pretty && query_info.row_level_filter->do_remove_column)
+                format_settings.out << " (removed)";
+            format_settings.out << '\n';
+        }
+
+        if (format_settings.pretty)
+        {
+            const auto annotation = QueryPlanFormat::getColumnAnnotation(query_info.row_level_filter->column_name, format_settings);
+            if (!annotation.empty())
+                format_settings.out << prefix << annotation << '\n';
+        }
 
         if (!format_settings.compact)
         {

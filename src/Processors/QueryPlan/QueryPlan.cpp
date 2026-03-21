@@ -358,6 +358,14 @@ static void explainStep(
     const auto & prefix = settings.detail_prefix;
 
     auto description = step.getStepDescription();
+    
+    String pretty_description;
+    if (settings.pretty)
+    {
+        pretty_description = QueryPlanFormat::trimColumnIdentifier(description);
+        description = pretty_description;
+    }
+
     if (max_description_length)
         description = description.substr(0, max_description_length);
     if (options.description && !description.empty())

@@ -51,7 +51,7 @@ namespace
 constexpr int64_t DEFAULT_RESCHEDULE_INTERVAL_SEC = 1;
 constexpr int64_t DEFAULT_METADATA_REQUEST_SIZE = 1000;
 constexpr int64_t DEFAULT_THREADS_COUNT = 16;
-constexpr int64_t MAX_BLOBS_IN_TASK = 1000;
+constexpr int64_t MAX_BLOBS_IN_TASK = 100;
 
 IMetadataStorage::BlobsToRemove findBlobsToRemove(
     size_t request_batch,

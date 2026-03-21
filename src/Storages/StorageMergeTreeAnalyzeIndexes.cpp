@@ -117,9 +117,17 @@ protected:
 
     RangesInDataParts getIndexAnalysis()
     {
-        const auto & context = getContext();
+        auto context_copy = Context::createCopy(context);
 
-        auto reader_settings = MergeTreeReaderSettings::createForQuery(context, *table_settings, query_info);
+        /// Disable parallel replicas and distributed index analysis to avoid
+        /// O(N^2) spawned queries in case when predicate has a subquery
+        /// because this table function is usually used for distributed index analysis
+        /// TODO: correctly handle subqueries on coordinator, similarly to how distributed_product_mode is handled.
+        context_copy->setSetting("enable_parallel_blocks_marshalling", false);
+        context_copy->setSetting("enable_parallel_replicas", false);
+        context_copy->setSetting("distributed_index_analysis", false);
+
+        auto reader_settings = MergeTreeReaderSettings::createForQuery(context_copy, *table_settings, query_info);
 
         StorageMetadataPtr metadata_snapshot = storage->getInMemoryMetadataPtr();
         const auto * merge_tree_data = dynamic_cast<const MergeTreeData *>(storage.get());
@@ -129,19 +137,16 @@ protected:
         std::optional<ActionsDAG> filter_dag;
         if (predicate)
         {
-            auto execution_context = Context::createCopy(context);
-            execution_context->setSetting("enable_parallel_blocks_marshalling", false);
-
-            auto expression = buildQueryTree(predicate, execution_context);
+            auto expression = buildQueryTree(predicate, context_copy);
 
             auto dummy_storage = std::make_shared<StorageDummy>(StorageID{"dummy", "dummy"}, metadata_snapshot->getColumns());
-            QueryTreeNodePtr fake_table_expression = std::make_shared<TableNode>(dummy_storage, execution_context);
+            QueryTreeNodePtr fake_table_expression = std::make_shared<TableNode>(dummy_storage, context_copy);
 
             QueryAnalyzer analyzer(false);
-            analyzer.resolveConstantExpression(expression, fake_table_expression, execution_context);
+            analyzer.resolveConstantExpression(expression, fake_table_expression, context_copy);
 
             GlobalPlannerContextPtr global_planner_context = std::make_shared<GlobalPlannerContext>(nullptr, nullptr, FiltersForTableExpressionMap{});
-            auto planner_context = std::make_shared<PlannerContext>(execution_context, global_planner_context, SelectQueryOptions{});
+            auto planner_context = std::make_shared<PlannerContext>(context_copy, global_planner_context, SelectQueryOptions{});
 
             collectSourceColumns(expression, planner_context, /*keep_alias_columns=*/ false);
             collectSets(expression, *planner_context);
@@ -174,7 +179,7 @@ protected:
 
         const auto & parts_ranges = RangesInDataParts{data_parts};
 
-        const StorageSnapshotPtr storage_snapshot = storage->getStorageSnapshot(metadata_snapshot, context);
+        const StorageSnapshotPtr storage_snapshot = storage->getStorageSnapshot(metadata_snapshot, context_copy);
         const auto & snapshot_data = assert_cast<const MergeTreeData::SnapshotData &>(*storage_snapshot->data);
 
         std::optional<ReadFromMergeTree::Indexes> indexes;
@@ -185,7 +190,7 @@ protected:
             parts_ranges,
             vector_search_parameters,
             /*top_k_filter_info=*/ std::nullopt,
-            context,
+            context_copy,
             query_info,
             metadata_snapshot);
 
@@ -199,7 +204,7 @@ protected:
             .metadata_snapshot = metadata_snapshot,
             .mutations_snapshot = snapshot_data.mutations_snapshot,
             .query_info = query_info,
-            .context = context,
+            .context = context_copy,
             .indexes = *indexes,
             .top_k_filter_info = std::nullopt,
             .reader_settings = reader_settings,

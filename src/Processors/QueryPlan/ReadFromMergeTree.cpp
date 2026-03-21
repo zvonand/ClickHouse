@@ -2508,11 +2508,16 @@ ReadFromMergeTree::AnalysisResultPtr ReadFromMergeTree::selectRangesToRead(
         bool final_second_pass = indexes->use_skip_indexes_if_final_exact_mode;
         UInt64 distributed_index_analysis_min_parts_to_activate = (*data_settings_)[MergeTreeSetting::distributed_index_analysis_min_parts_to_activate];
         UInt64 distributed_index_analysis_min_indexes_bytes_to_activate = (*data_settings_)[MergeTreeSetting::distributed_index_analysis_min_indexes_bytes_to_activate];
+
         bool distributed_index_analysis_enabled = !final_second_pass
             && settings[Setting::distributed_index_analysis]
             && (settings[Setting::distributed_index_analysis_for_non_shared_merge_tree] || data.isSharedStorage())
             && (total_parts >= distributed_index_analysis_min_parts_to_activate)
-            && (!distributed_index_analysis_min_indexes_bytes_to_activate || get_indexes_size(data) >= distributed_index_analysis_min_indexes_bytes_to_activate);
+            && (!distributed_index_analysis_min_indexes_bytes_to_activate || get_indexes_size(data) >= distributed_index_analysis_min_indexes_bytes_to_activate)
+            /// Only the coordinator (initial query) should perform distributed index analysis.
+            /// On follower replicas, subqueries (e.g. IN (SELECT ...)) would otherwise each
+            /// independently trigger distributed index analysis, causing O(N^2) queries.
+            && context_->getClientInfo().query_kind == ClientInfo::QueryKind::INITIAL_QUERY;
 
         if (!distributed_index_analysis_enabled)
         {
@@ -2544,6 +2549,7 @@ ReadFromMergeTree::AnalysisResultPtr ReadFromMergeTree::selectRangesToRead(
                 vector_search_parameters,
                 local_index_analysis_callback,
                 context_);
+
             IndexAnalysisPartsRanges analyzed_parts_ranges;
 
             /// Index stats

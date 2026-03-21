@@ -203,7 +203,7 @@ The `part` parameter specifies which part of the date to retrieve. The following
 - `MONTH` — The number of a month. Possible values: 1–12.
 - `QUARTER` — The quarter. Possible values: 1–4.
 - `YEAR` — The year.
-- `EPOCH` — The Unix timestamp (seconds since 1970-01-01 00:00:00 UTC).
+- `EPOCH` — The Unix timestamp (seconds since 1970-01-01 00:00:00 UTC). Note: for `DateTime64`, the subsecond part is truncated.
 - `DOW` — The day of the week (PostgreSQL-compatible). 0 = Sunday, 6 = Saturday.
 - `DOY` — The day of the year. Possible values: 1–366.
 - `ISODOW` — The ISO day of the week. 1 = Monday, 7 = Sunday.

@@ -3,6 +3,7 @@
 -- EPOCH: seconds since 1970-01-01
 SELECT EXTRACT(EPOCH FROM toDateTime('2024-01-15 12:30:45', 'UTC'));
 SELECT EXTRACT(EPOCH FROM toDate('2024-01-15'));
+SELECT EXTRACT(EPOCH FROM toDateTime64('2024-01-15 12:30:45.123456', 6, 'UTC')); -- Note: returns integer seconds (subsecond part is truncated)
 
 -- DOW: day of week, 0 = Sunday, 6 = Saturday
 SELECT EXTRACT(DOW FROM toDate('2024-01-15')); -- Monday = 1
@@ -40,3 +41,13 @@ SELECT EXTRACT(DECADE FROM toDate('1999-12-31')); -- 199
 SELECT EXTRACT(MILLENNIUM FROM toDate('2024-01-01')); -- 3
 SELECT EXTRACT(MILLENNIUM FROM toDate('2000-06-15')); -- 2
 SELECT EXTRACT(MILLENNIUM FROM toDate('2001-01-01')); -- 3
+
+-- Case-insensitive
+SELECT EXTRACT(epoch FROM toDateTime('2024-01-15 12:30:45', 'UTC'));
+SELECT EXTRACT(dow FROM toDate('2024-01-15'));
+SELECT EXTRACT(isodow FROM toDate('2024-01-15'));
+
+-- DateTime64 with other units
+SELECT EXTRACT(DOW FROM toDateTime64('2024-01-15 12:30:45.123', 3));
+SELECT EXTRACT(DOY FROM toDateTime64('2024-01-15 12:30:45.123', 3));
+SELECT EXTRACT(ISOYEAR FROM toDateTime64('2024-01-15 12:30:45.123', 3));

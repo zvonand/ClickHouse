@@ -240,7 +240,7 @@ RemoveOrphanFilesResult removeOrphanFiles(
     ContextPtr context,
     ObjectStoragePtr object_storage,
     const DataLakeStorageSettings & data_lake_settings,
-    PersistentTableComponents & persistent_table_components)
+    const PersistentTableComponents & persistent_table_components)
 {
     auto log = getLogger("IcebergRemoveOrphanFiles");
 
@@ -277,7 +277,7 @@ Pipe executeRemoveOrphanFiles(
     ContextPtr context,
     ObjectStoragePtr object_storage,
     const DataLakeStorageSettings & data_lake_settings,
-    PersistentTableComponents & persistent_components)
+    const PersistentTableComponents & persistent_components)
 {
     auto parsed = makeSchema().parse(args);
 

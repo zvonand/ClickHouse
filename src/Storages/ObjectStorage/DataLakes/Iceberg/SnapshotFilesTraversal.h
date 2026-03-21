@@ -29,7 +29,7 @@ struct SnapshotReferencedFiles
 SnapshotReferencedFiles collectSnapshotReferencedFiles(
     const Poco::JSON::Array::Ptr & snapshots,
     ObjectStoragePtr object_storage,
-    PersistentTableComponents & persistent_table_components,
+    const PersistentTableComponents & persistent_table_components,
     ContextPtr context,
     LoggerPtr log,
     Int32 current_schema_id);
@@ -41,7 +41,7 @@ SnapshotReferencedFiles collectSnapshotReferencedFiles(
 /// statistics files, and the version-hint file.
 std::unordered_set<String> collectReachableFiles(
     ObjectStoragePtr object_storage,
-    PersistentTableComponents & persistent_table_components,
+    const PersistentTableComponents & persistent_table_components,
     const DataLakeStorageSettings & data_lake_settings,
     ContextPtr context,
     LoggerPtr log);

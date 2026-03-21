@@ -17,7 +17,7 @@ Pipe executeRemoveOrphanFiles(
     ContextPtr context,
     ObjectStoragePtr object_storage,
     const DataLakeStorageSettings & data_lake_settings,
-    PersistentTableComponents & persistent_components);
+    const PersistentTableComponents & persistent_components);
 
 }
 

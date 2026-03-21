@@ -120,7 +120,7 @@ Pipe executeExpireSnapshots(
     ContextPtr context,
     ObjectStoragePtr object_storage,
     const DataLakeStorageSettings & data_lake_settings,
-    PersistentTableComponents & persistent_components,
+    const PersistentTableComponents & persistent_components,
     const String & write_format,
     std::shared_ptr<DataLake::ICatalog> catalog,
     const String & blob_storage_type_name,

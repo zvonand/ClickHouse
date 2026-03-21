@@ -935,67 +935,6 @@ static std::pair<std::set<Int64>, Strings> applyRetentionPolicy(
     return {retained, expired_ref_names};
 }
 
-static void collectAllFilePaths(
-    const Iceberg::ManifestFileIterator::ManifestFileEntriesHandle & entries_handle,
-    std::set<String> & out)
-{
-    for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
-        out.insert(entry->file_path);
-    for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
-        out.insert(entry->file_path);
-    for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
-        out.insert(entry->file_path);
-}
-
-/// Collect all file paths (manifest lists, manifests, data/delete files)
-/// referenced by retained snapshots.
-///
-/// NOTE: We only collect files with status ADDED/EXISTING (via getFilesWithoutDeleted).
-/// Files with status DELETED are being removed by that snapshot and don't need retention
-/// from it. A DELETED entry's data file was ADDED in an earlier snapshot — if that snapshot
-/// is retained, the file is in the retained set from there; if expired, it will be collected
-/// for cleanup from that snapshot's ADDED/EXISTING entries.
-///
-/// TODO: To handle partially-failed prior expire_snapshots (where the ADDED snapshot
-/// was removed but its data files were not cleaned up), we could also traverse DELETED
-/// entries in expired manifests. This requires extending ManifestFileIterator to expose
-/// DELETED entries.
-static void collectRetainedFiles(
-    const Poco::JSON::Array::Ptr & retained_snapshots,
-    ObjectStoragePtr object_storage,
-    const PersistentTableComponents & persistent_table_components,
-    ContextPtr context,
-    LoggerPtr log,
-    Int32 current_schema_id,
-    std::set<String> & retained_manifest_paths,
-    std::set<String> & retained_data_file_paths,
-    std::set<String> & retained_manifest_list_paths)
-{
-    for (UInt32 i = 0; i < retained_snapshots->size(); ++i)
-    {
-        auto snapshot = retained_snapshots->getObject(i);
-        if (!snapshot->has(Iceberg::f_manifest_list))
-            continue;
-
-        String manifest_list_path = snapshot->getValue<String>(Iceberg::f_manifest_list);
-        retained_manifest_list_paths.insert(manifest_list_path);
-
-        String storage_manifest_list_path = getProperFilePathFromMetadataInfo(
-            manifest_list_path, persistent_table_components.table_path, persistent_table_components.table_location);
-
-        auto manifest_keys = getManifestList(
-            object_storage, persistent_table_components, context, storage_manifest_list_path, log);
-
-        for (const auto & mf_key : manifest_keys)
-        {
-            retained_manifest_paths.insert(mf_key.manifest_file_path);
-            auto entries_handle = getManifestFileEntriesHandle(
-                object_storage, persistent_table_components, context, log,
-                mf_key, current_schema_id);
-            collectAllFilePaths(entries_handle, retained_data_file_paths);
-        }
-    }
-}
 struct ExpiredFiles
 {
     Strings all_paths;

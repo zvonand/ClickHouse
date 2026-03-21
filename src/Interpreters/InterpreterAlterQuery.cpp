@@ -140,24 +140,47 @@ CommandSegments parseAlterCommandSegments(const ASTAlterQuery & alter, const Con
 
 void prepareAndValidateCommandSegments(CommandSegments & segments, const StoragePtr & table, const ContextPtr & context)
 {
+    size_t partition_commands_count = 0;
+    size_t partition_commands_segments_count = 0;
+    size_t execute_commands_count = 0;
     auto metadata = table->getInMemoryMetadata();
     for (auto & segment : segments)
     {
-        if (auto * ac = std::get_if<AlterCommands>(&segment))
+        if (auto * alter_commands = std::get_if<AlterCommands>(&segment))
         {
-            ac->validate(metadata, table, context);
-            ac->prepare(metadata);
-            ac->apply(metadata, context);
+            alter_commands->validate(metadata, table, context);
+            alter_commands->prepare(metadata);
+            alter_commands->apply(metadata, context);
         }
-        else if (auto * mc = std::get_if<MutationCommands>(&segment))
+        else if (auto * mutation_commands = std::get_if<MutationCommands>(&segment))
         {
-            mc->validate(metadata, table, context);
+            if (mutation_commands->hasNonEmptyMutationCommands())
+            {
+                MutationsInterpreter::Settings mutation_settings(false);
+                MutationsInterpreter(table, std::make_shared<StorageInMemoryMetadata>(metadata), *mutation_commands, context, mutation_settings).validate();
+            }
         }
-        else if (auto * pc = std::get_if<PartitionCommands>(&segment))
+        else if (auto * partition_commands = std::get_if<PartitionCommands>(&segment))
         {
-            pc->validate(metadata, table, context);
+            partition_commands_count += partition_commands->size();
+            partition_commands_segments_count += 1;
+        }
+        else if (auto * execute_commands = std::get_if<ExecuteCommands>(&segment))
+        {
+            execute_commands_count += execute_commands->size();
         }
     }
+
+    if (partition_commands_count != 0 && execute_commands_count != 0)
+        throw Exception(ErrorCodes::QUERY_IS_PROHIBITED, "Partition and Execute commands can not be used together");
+
+    if (partition_commands_count != 0)
+        if (partition_commands_segments_count != 1)
+            throw Exception(ErrorCodes::QUERY_IS_PROHIBITED, "Partition commands must be sequential in alter query");
+
+    if (execute_commands_count > 0)
+        if (execute_commands_count != 1)
+            throw Exception(ErrorCodes::QUERY_IS_PROHIBITED, "Execute commands should not be combined");
 }
 
 void validateMutationsAllowed(const CommandSegments & segments, const DatabasePtr & database, const ContextPtr & context)
@@ -170,8 +193,8 @@ void validateMutationsAllowed(const CommandSegments & segments, const DatabasePt
 
     for (const auto & segment : segments)
     {
-        if (const auto * mc = std::get_if<MutationCommands>(&segment))
-            if (mc->hasNonEmptyMutationCommands())
+        if (const auto * mutation_commands = std::get_if<MutationCommands>(&segment))
+            if (mutation_commands->hasNonEmptyMutationCommands())
                 throw Exception(ErrorCodes::QUERY_IS_PROHIBITED, "Mutations are prohibited");
 
         if (std::holds_alternative<PartitionCommands>(segment))
@@ -189,19 +212,19 @@ void validateReplicatedDatabaseSegments(const CommandSegments & segments, const 
             "For Replicated databases it's not allowed to execute ALTERs of different types in single query");
 
     for (const auto & segment : segments)
-        if (const auto * ac = std::get_if<AlterCommands>(&segment))
-            if (ac->hasNonReplicatedAlterCommand() && !ac->areNonReplicatedAlterCommands())
+        if (const auto * alter_commands = std::get_if<AlterCommands>(&segment))
+            if (alter_commands->hasNonReplicatedAlterCommand() && !alter_commands->areNonReplicatedAlterCommands())
                 throw Exception(ErrorCodes::NOT_IMPLEMENTED,
                     "For Replicated databases it's not allowed "
                     "to execute ALTERs of different types (replicated and non replicated) in single query");
 }
 
-std::optional<BlockIO> tryExecuteAsLightweightUpdate(CommandSegments & segments, const StoragePtr & table, const ContextPtr & context, const ASTPtr & query_ptr)
+std::optional<BlockIO> tryRewriteToLightweightUpdate(CommandSegments & segments, const StoragePtr & table, const ContextPtr & context, const ASTPtr & query_ptr)
 {
     bool has_update_commands = false;
     for (const auto & segment : segments)
-        if (const auto * mc = std::get_if<MutationCommands>(&segment))
-            has_update_commands |= mc->hasAnyUpdateCommand();
+        if (const auto * mutation_commands = std::get_if<MutationCommands>(&segment))
+            has_update_commands |= mutation_commands->hasAnyUpdateCommand();
 
     if (!has_update_commands)
         return std::nullopt;
@@ -245,29 +268,26 @@ std::optional<BlockIO> tryExecuteAsLightweightUpdate(CommandSegments & segments,
     return res;
 }
 
-BlockIO executeCommandSegments(CommandSegments & segments, const StoragePtr & table, const ContextPtr & context)
+BlockIO runCommandSegments(CommandSegments & segments, const StoragePtr & table, const ContextPtr & context)
 {
     BlockIO res;
     const auto & settings = context->getSettingsRef();
 
     for (auto & segment : segments)
     {
-        if (auto * ac = std::get_if<AlterCommands>(&segment))
+        if (auto * alter_commands = std::get_if<AlterCommands>(&segment))
         {
             auto alter_lock = table->lockForAlter(settings[Setting::lock_acquire_timeout]);
             StorageInMemoryMetadata metadata = table->getInMemoryMetadata();
-            table->checkAlterIsPossible(*ac, context);
-            table->alter(*ac, context, alter_lock);
+            table->checkAlterIsPossible(*alter_commands, context);
+            table->alter(*alter_commands, context, alter_lock);
         }
-        else if (auto * mc = std::get_if<MutationCommands>(&segment))
+        else if (auto * mutation_commands = std::get_if<MutationCommands>(&segment))
         {
-            if (mc->hasNonEmptyMutationCommands())
+            if (mutation_commands->hasNonEmptyMutationCommands())
             {
-                auto metadata_snapshot = table->getInMemoryMetadataPtr();
-                table->checkMutationIsPossible(*mc, settings);
-                MutationsInterpreter::Settings mutation_settings(false);
-                MutationsInterpreter(table, metadata_snapshot, *mc, context, mutation_settings).validate();
-                table->mutate(*mc, context);
+                table->checkMutationIsPossible(*mutation_commands, settings);
+                table->mutate(*mutation_commands, context);
             }
         }
         else if (auto * pc = std::get_if<PartitionCommands>(&segment))
@@ -298,7 +318,6 @@ BlockIO executeCommandSegments(CommandSegments & segments, const StoragePtr & ta
 InterpreterAlterQuery::InterpreterAlterQuery(const ASTPtr & query_ptr_, ContextMutablePtr context_) : WithMutableContext(context_), query_ptr(query_ptr_)
 {
 }
-
 
 BlockIO InterpreterAlterQuery::execute()
 {
@@ -404,17 +423,20 @@ BlockIO InterpreterAlterQuery::executeToTable(const ASTAlterQuery & alter)
     ASTPtr command_list_ptr = alter.command_list->ptr();
     visitor.visit(command_list_ptr);
 
-    auto segments = parseAlterCommandSegments(alter, getContext());
-    prepareAndValidateCommandSegments(segments, table, getContext());
-    validateMutationsAllowed(segments, database, getContext());
+    /// Use the database where storage was created to resolve nested identifiers
+    ContextMutablePtr alter_context = Context::createCopy(getContext());
+    alter_context->setCurrentDatabase(database->getDatabaseName());
+
+    auto segments = parseAlterCommandSegments(alter, alter_context);
+    prepareAndValidateCommandSegments(segments, table, alter_context);
+    validateMutationsAllowed(segments, database, alter_context);
     validateReplicatedDatabaseSegments(segments, database);
 
-    if (auto lightweight_result = tryExecuteAsLightweightUpdate(segments, table, getContext(), query_ptr))
+    if (auto lightweight_result = tryRewriteToLightweightUpdate(segments, table, alter_context, query_ptr))
         return std::move(lightweight_result.value());
 
-    return executeCommandSegments(segments, table, getContext());
+    return runCommandSegments(segments, table, alter_context);
 }
-
 
 BlockIO InterpreterAlterQuery::executeToDatabase(const ASTAlterQuery & alter)
 {
@@ -487,7 +509,6 @@ AccessRightsElements InterpreterAlterQuery::getRequiredAccess() const
 
     return required_access;
 }
-
 
 AccessRightsElements InterpreterAlterQuery::getRequiredAccessForCommand(const ASTAlterCommand & command, const String & database, const String & table)
 {

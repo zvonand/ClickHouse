@@ -50,7 +50,7 @@ bool isCrashed() { return is_crashed.load(std::memory_order_relaxed); }
 
 /// After re-raising the signal, the siginfo recorded in the core dump shows SI_TKILL with no si_addr,
 /// so we need to preserve the address for core dump analysis.
-static volatile uintptr_t fault_address_for_coredump = 0;
+static std::atomic<uintptr_t> saved_fault_address{0};
 
 
 void call_default_signal_handler(int sig)
@@ -113,7 +113,7 @@ static void signalHandler(int sig, siginfo_t * info, void * context)
     auto saved_errno = errno;   /// We must restore previous value of errno in signal handler.
 
     if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE)
-        fault_address_for_coredump = reinterpret_cast<uintptr_t>(info->si_addr);
+        saved_fault_address.store(reinterpret_cast<uintptr_t>(info->si_addr), std::memory_order_relaxed);
 
     if (sig != SIGTSTP)
         is_crashed.store(true, std::memory_order_relaxed);

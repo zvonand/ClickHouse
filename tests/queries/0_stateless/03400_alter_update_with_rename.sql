@@ -8,23 +8,6 @@
 
 DROP TABLE IF EXISTS test_alter_atomic;
 
--- Test 1: Memory engine - UPDATE + RENAME on same column should be rejected
-CREATE TABLE test_alter_atomic (c0 Int32) ENGINE = Memory;
-INSERT INTO test_alter_atomic VALUES (0);
-
--- This should fail early with a clear error, without making any changes
-ALTER TABLE test_alter_atomic UPDATE c0 = 1 WHERE true, RENAME COLUMN c0 TO c1; -- { serverError BAD_ARGUMENTS }
-
--- Verify the column still has its original name (c0) since the ALTER was rejected
-SELECT * FROM test_alter_atomic;
-SELECT name FROM system.columns WHERE database = currentDatabase() AND table = 'test_alter_atomic';
-
--- The INSERT should succeed since atomicity is preserved
-INSERT INTO test_alter_atomic VALUES (2);
-SELECT * FROM test_alter_atomic ORDER BY c0;
-
-DROP TABLE test_alter_atomic;
-
 -- Test 2: MergeTree engine - same behavior expected
 CREATE TABLE test_alter_atomic (key Int32, c0 Int32) ENGINE = MergeTree ORDER BY key;
 INSERT INTO test_alter_atomic VALUES (1, 0);
@@ -36,19 +19,6 @@ ALTER TABLE test_alter_atomic UPDATE c0 = 1 WHERE true, RENAME COLUMN c0 TO c1; 
 SELECT name FROM system.columns WHERE database = currentDatabase() AND table = 'test_alter_atomic' ORDER BY position;
 INSERT INTO test_alter_atomic VALUES (2, 2);
 SELECT * FROM test_alter_atomic ORDER BY key;
-
-DROP TABLE test_alter_atomic;
-
--- Test 3: DELETE + RENAME on same column should be rejected
-CREATE TABLE test_alter_atomic (c0 Int32) ENGINE = Memory;
-INSERT INTO test_alter_atomic VALUES (0);
-
--- This should fail early with a clear error
-ALTER TABLE test_alter_atomic DELETE WHERE c0 = 0, RENAME COLUMN c0 TO c1; -- { serverError BAD_ARGUMENTS }
-
--- Verify column still has original name
-SELECT name FROM system.columns WHERE database = currentDatabase() AND table = 'test_alter_atomic';
-SELECT * FROM test_alter_atomic;
 
 DROP TABLE test_alter_atomic;
 

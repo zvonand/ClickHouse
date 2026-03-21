@@ -52,6 +52,11 @@ private:
 
     PageCache::MappedPtr chunk;
 
+    /// Ensures all cache blocks covering [offset, offset+n) are populated.
+    /// Returns a vector of MappedPtr, one per block. Consecutive misses are fetched
+    /// from the underlying reader in a single coalesced request.
+    std::vector<PageCache::MappedPtr> populateBlockRange(size_t offset, size_t n) const;
+
     bool nextImpl() override;
 };
 

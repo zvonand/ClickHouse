@@ -1,4 +1,5 @@
 #include <IO/CachedInMemoryReadBufferFromFile.h>
+#include <Common/PODArray.h>
 #include <base/scope_guard.h>
 #include <Common/ProfileEvents.h>
 
@@ -217,50 +218,97 @@ bool CachedInMemoryReadBufferFromFile::supportsReadAt()
     return in->supportsReadAt();
 }
 
-size_t CachedInMemoryReadBufferFromFile::readBigAt(char * to, size_t n, size_t offset, const std::function<bool(size_t m)> & progress_callback) const
+std::vector<PageCache::MappedPtr> CachedInMemoryReadBufferFromFile::populateBlockRange(size_t offset, size_t n) const
 {
-    /// This method is called from multiple threads in parallel (e.g. by the Parquet reader's
-    /// prefetcher via Arrow's ReadAsync). Each call creates independent S3 requests through
-    /// in->readBigAt(), enabling parallel downloads. The page cache is thread-safe.
-
     size_t block_size = settings.page_cache_block_size;
     size_t end_offset = std::min(offset + n, file_size.value());
-    size_t bytes_copied = 0;
 
-    /// Precompute the base hash from path + file_version once. Per-block lookups then only
-    /// need to fold in offset + size (two integers), avoiding repeated string hashing and
-    /// the string copies that constructing a full PageCacheKey per block would require.
+    size_t first_block_start = offset / block_size * block_size;
+    size_t num_blocks = (end_offset - first_block_start + block_size - 1) / block_size;
+
     SipHash base_hash = cache_key.baseHash();
 
-    while (offset + bytes_copied < end_offset)
+    bool detached_if_missing = settings.read_from_page_cache_if_exists_otherwise_bypass_cache;
+    bool inject_eviction = settings.page_cache_inject_eviction;
+
+    /// Phase 1: probe cache for all blocks, record hits.
+    std::vector<PageCache::MappedPtr> cells(num_blocks);
+    for (size_t i = 0; i < num_blocks; ++i)
     {
-        size_t current_offset = offset + bytes_copied;
-        size_t block_start = current_offset / block_size * block_size;
+        size_t block_start = first_block_start + i * block_size;
         size_t block_data_size = std::min(block_size, file_size.value() - block_start);
-
-        size_t offset_in_block = current_offset - block_start;
-        size_t to_copy = std::min(block_data_size - offset_in_block, end_offset - current_offset);
-
         UInt128 key_hash = PageCacheKey::hashForBlock(base_hash, block_start, block_data_size);
+        cells[i] = cache->get(key_hash, inject_eviction);
+    }
 
-        auto cell = cache->getOrSet(key_hash,
-            [&]() -> PageCacheKey
-            {
-                /// Only called on cache miss — construct the full key lazily.
-                return PageCacheKey{cache_key.path, cache_key.file_version, block_start, block_data_size};
-            },
-            settings.read_from_page_cache_if_exists_otherwise_bypass_cache,
-            settings.page_cache_inject_eviction,
-            [&](const auto & c)
-            {
-                /// Download the whole block using positional read (thread-safe, creates independent HTTP request).
-                size_t bytes_read = in->readBigAt(c->data(), c->size(), block_start, nullptr);
-                if (bytes_read < c->size())
-                    throw Exception(ErrorCodes::UNEXPECTED_END_OF_FILE, "File {} ended after {} bytes, but we expected {}",
-                        cache_key.path, block_start + bytes_read, file_size.value());
-            });
+    /// Phase 2: coalesce consecutive misses into single fetches.
+    size_t i = 0;
+    while (i < num_blocks)
+    {
+        if (cells[i])
+        {
+            ++i;
+            continue;
+        }
 
-        memcpy(to + bytes_copied, cell->data() + offset_in_block, to_copy);
+        /// Scan ahead to find the extent of consecutive misses.
+        size_t miss_begin = i;
+        while (i < num_blocks && !cells[i])
+            ++i;
+        size_t miss_end = i; /// exclusive
+
+        size_t range_start = first_block_start + miss_begin * block_size;
+        size_t range_end = std::min(first_block_start + miss_end * block_size, file_size.value());
+        size_t range_size = range_end - range_start;
+
+        /// Fetch the entire miss range in one request.
+        PODArray<char> buf(range_size);
+        size_t bytes_read = in->readBigAt(buf.data(), range_size, range_start, nullptr);
+        if (bytes_read < range_size)
+            throw Exception(ErrorCodes::UNEXPECTED_END_OF_FILE, "File {} ended after {} bytes, but we expected {}",
+                cache_key.path, range_start + bytes_read, file_size.value());
+
+        /// Distribute the fetched data into individual cache cells.
+        for (size_t j = miss_begin; j < miss_end; ++j)
+        {
+            size_t block_start = first_block_start + j * block_size;
+            size_t block_data_size = std::min(block_size, file_size.value() - block_start);
+            size_t buf_offset = block_start - range_start;
+            UInt128 key_hash = PageCacheKey::hashForBlock(base_hash, block_start, block_data_size);
+
+            cells[j] = cache->getOrSet(key_hash,
+                [&]() -> PageCacheKey
+                {
+                    return PageCacheKey{cache_key.path, cache_key.file_version, block_start, block_data_size};
+                },
+                detached_if_missing, inject_eviction,
+                [&](const auto & c)
+                {
+                    memcpy(c->data(), buf.data() + buf_offset, block_data_size);
+                });
+        }
+    }
+
+    return cells;
+}
+
+size_t CachedInMemoryReadBufferFromFile::readBigAt(char * to, size_t n, size_t offset, const std::function<bool(size_t m)> & progress_callback) const
+{
+    size_t block_size = settings.page_cache_block_size;
+    size_t end_offset = std::min(offset + n, file_size.value());
+    size_t first_block_start = offset / block_size * block_size;
+
+    auto cells = populateBlockRange(offset, n);
+
+    size_t bytes_copied = 0;
+    for (size_t i = 0; i < cells.size() && offset + bytes_copied < end_offset; ++i)
+    {
+        size_t block_start = first_block_start + i * block_size;
+        size_t block_data_size = std::min(block_size, file_size.value() - block_start);
+        size_t offset_in_block = (offset + bytes_copied > block_start) ? offset + bytes_copied - block_start : 0;
+        size_t to_copy = std::min(block_data_size - offset_in_block, end_offset - (offset + bytes_copied));
+
+        memcpy(to + bytes_copied, cells[i]->data() + offset_in_block, to_copy);
         bytes_copied += to_copy;
 
         ProfileEvents::increment(ProfileEvents::PageCacheReadBytes, to_copy);
@@ -276,39 +324,22 @@ std::vector<SeekableReadBuffer::CachedRegion> CachedInMemoryReadBufferFromFile::
 {
     size_t block_size = settings.page_cache_block_size;
     size_t end_offset = std::min(offset + n, file_size.value());
+    size_t first_block_start = offset / block_size * block_size;
+
+    auto cells = populateBlockRange(offset, n);
+
     std::vector<CachedRegion> regions;
-
-    SipHash base_hash = cache_key.baseHash();
-
     size_t current_offset = offset;
-    while (current_offset < end_offset)
+    for (size_t i = 0; i < cells.size() && current_offset < end_offset; ++i)
     {
-        size_t block_start = current_offset / block_size * block_size;
+        size_t block_start = first_block_start + i * block_size;
         size_t block_data_size = std::min(block_size, file_size.value() - block_start);
-
-        UInt128 key_hash = PageCacheKey::hashForBlock(base_hash, block_start, block_data_size);
-
-        auto cell = cache->getOrSet(key_hash,
-            [&]() -> PageCacheKey
-            {
-                return PageCacheKey{cache_key.path, cache_key.file_version, block_start, block_data_size};
-            },
-            settings.read_from_page_cache_if_exists_otherwise_bypass_cache,
-            settings.page_cache_inject_eviction,
-            [&](const auto & c)
-            {
-                size_t bytes_read = in->readBigAt(c->data(), c->size(), block_start, nullptr);
-                if (bytes_read < c->size())
-                    throw Exception(ErrorCodes::UNEXPECTED_END_OF_FILE, "File {} ended after {} bytes, but we expected {}",
-                        cache_key.path, block_start + bytes_read, file_size.value());
-            });
-
-        size_t offset_in_block = current_offset - block_start;
+        size_t offset_in_block = (current_offset > block_start) ? current_offset - block_start : 0;
         size_t usable = std::min(block_data_size - offset_in_block, end_offset - current_offset);
 
-        const char * data_ptr = cell->data() + offset_in_block;
+        const char * data_ptr = cells[i]->data() + offset_in_block;
         regions.push_back(CachedRegion{
-            .handle = std::move(cell),
+            .handle = std::move(cells[i]),
             .data = data_ptr,
             .size = usable,
             .file_offset = current_offset,

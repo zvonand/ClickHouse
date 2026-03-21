@@ -54,10 +54,7 @@ void validatePredicateColumns(
             continue;
 
         if (virtuals->tryGet(*column_name))
-            throw Exception(
-                ErrorCodes::ILLEGAL_COLUMN,
-                "Cannot use virtual column {} in predicate",
-                backQuote(*column_name));
+            continue;
 
         if (!columns.has(*column_name))
             throw Exception(

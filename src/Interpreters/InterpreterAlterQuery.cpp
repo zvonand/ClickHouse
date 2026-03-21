@@ -139,21 +139,22 @@ CommandSegments parseAlterCommandSegments(const ASTAlterQuery & alter, const Con
     return std::move(segments_holder.segments);
 }
 
-void validateCommandSegments(const CommandSegments & segments, const StoragePtr & table, const ContextPtr & context)
+void prepareAndValidateCommandSegments(CommandSegments & segments, const StoragePtr & table, const ContextPtr & context)
 {
     auto metadata = table->getInMemoryMetadata();
-    for (const auto & segment : segments)
+    for (auto & segment : segments)
     {
-        if (const auto * ac = std::get_if<AlterCommands>(&segment))
+        if (auto * ac = std::get_if<AlterCommands>(&segment))
         {
             ac->validate(metadata, table, context);
+            ac->prepare(metadata);
             ac->apply(metadata, context);
         }
-        else if (const auto * mc = std::get_if<MutationCommands>(&segment))
+        else if (auto * mc = std::get_if<MutationCommands>(&segment))
         {
             mc->validate(metadata, table, context);
         }
-        else if (const auto * pc = std::get_if<PartitionCommands>(&segment))
+        else if (auto * pc = std::get_if<PartitionCommands>(&segment))
         {
             pc->validate(metadata, table, context);
         }
@@ -186,7 +187,7 @@ void validateReplicatedDatabaseSegments(const CommandSegments & segments, const 
 
     if (segments.size() != 1)
         throw Exception(ErrorCodes::NOT_IMPLEMENTED,
-            "For Replicated databases it's not allowed to execute ALTERs of different types");
+            "For Replicated databases it's not allowed to execute ALTERs of different types in single query");
 
     for (const auto & segment : segments)
         if (const auto * ac = std::get_if<AlterCommands>(&segment))
@@ -196,7 +197,7 @@ void validateReplicatedDatabaseSegments(const CommandSegments & segments, const 
                     "to execute ALTERs of different types (replicated and non replicated) in single query");
 }
 
-std::optional<BlockIO> tryExecuteAsLightweightUpdate(const CommandSegments & segments, const StoragePtr & table, const ContextPtr & context, const ASTPtr & query_ptr)
+std::optional<BlockIO> tryExecuteAsLightweightUpdate(CommandSegments & segments, const StoragePtr & table, const ContextPtr & context, const ASTPtr & query_ptr)
 {
     bool has_update_commands = false;
     for (const auto & segment : segments)
@@ -222,7 +223,7 @@ std::optional<BlockIO> tryExecuteAsLightweightUpdate(const CommandSegments & seg
         return std::nullopt;
     };
 
-    if (hasCommands<AlterCommands>(segments) || hasCommands<PartitionCommands>(segments))
+    if (hasCommands<AlterCommands>(segments) || hasCommands<PartitionCommands>(segments) || hasCommands<ExecuteCommands>(segments))
         return throw_if_needed("Not only update commands were passed to alter");
 
     chassert(segments.size() == 1);
@@ -245,8 +246,6 @@ std::optional<BlockIO> tryExecuteAsLightweightUpdate(const CommandSegments & seg
     return res;
 }
 
-/// Executes command segments in order: alter, then mutation, then partition, then execute.
-/// After each alter segment, refreshes metadata so subsequent segments see updated schema.
 BlockIO executeCommandSegments(CommandSegments & segments, const StoragePtr & table, const ContextPtr & context)
 {
     BlockIO res;
@@ -258,7 +257,6 @@ BlockIO executeCommandSegments(CommandSegments & segments, const StoragePtr & ta
         {
             auto alter_lock = table->lockForAlter(settings[Setting::lock_acquire_timeout]);
             StorageInMemoryMetadata metadata = table->getInMemoryMetadata();
-            ac->prepare(metadata);
             table->checkAlterIsPossible(*ac, context);
             table->alter(*ac, context, alter_lock);
         }
@@ -408,7 +406,7 @@ BlockIO InterpreterAlterQuery::executeToTable(const ASTAlterQuery & alter)
     visitor.visit(command_list_ptr);
 
     auto segments = parseAlterCommandSegments(alter, getContext());
-    validateCommandSegments(segments, table, getContext());
+    prepareAndValidateCommandSegments(segments, table, getContext());
     validateMutationsAllowed(segments, database, getContext());
     validateReplicatedDatabaseSegments(segments, database);
 

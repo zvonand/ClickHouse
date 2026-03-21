@@ -1788,7 +1788,7 @@ void AlterCommands::validate(const StorageInMemoryMetadata & metadata, const Sto
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Table doesn't have SAMPLE BY, cannot remove");
         }
 
-        if (command.type == AlterCommand::ADD_STATISTICS || command.type == AlterCommand::DROP_STATISTICS)
+        if (command.type == AlterCommand::ADD_STATISTICS || command.type == AlterCommand::DROP_STATISTICS || command.type == AlterCommand::MODIFY_STATISTICS)
             if (!context->getSettingsRef()[Setting::allow_statistics])
                 throw Exception(ErrorCodes::INCORRECT_QUERY, "Alter table with statistics is disabled. Turn on allow_statistics");
 

@@ -7,7 +7,7 @@ if (OS_LINUX)
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -faddrsig")
 endif ()
 
-if (SANITIZE STREQUAL "undefined")
+if (SANITIZE STREQUAL "undefined" OR SANITIZE STREQUAL "address,undefined")
     # 3rd-party libraries usually not intended to work with UBSan.
     add_compile_options(-fno-sanitize=undefined)
 endif()

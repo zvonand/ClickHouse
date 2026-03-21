@@ -4,6 +4,7 @@
 #include <Common/CacheBase.h>
 #include <Common/CacheLine.h>
 #include <Common/HashTable/Hash.h>
+#include <Common/SipHash.h>
 #include <Common/thread_local_rng.h>
 
 /// "Userspace page cache"
@@ -44,6 +45,15 @@ struct PageCacheKey
     size_t size = 0;
 
     UInt128 hash() const;
+
+    /// Returns a SipHash state with path and file_version already hashed.
+    /// This can be copied cheaply and then finalized with offset+size per block,
+    /// avoiding repeated string hashing and string copies in hot loops.
+    SipHash baseHash() const;
+
+    /// Computes full hash from a precomputed base hash state and block offset+size.
+    static UInt128 hashForBlock(SipHash base, size_t block_offset, size_t block_size);
+
     std::string toString() const;
     size_t capacity() const { return path.capacity() + file_version.capacity(); }
 };
@@ -124,9 +134,19 @@ public:
     /// will be just a standalone PageCacheCell not connected to the cache.
     MappedPtr getOrSet(const PageCacheKey & key, bool detached_if_missing, bool inject_eviction, std::function<void(const MappedPtr &)> load);
 
+    /// Same as above, but accepts a precomputed hash and a key factory.
+    /// The key factory is only called on cache miss, avoiding string copies on cache hits.
+    MappedPtr getOrSet(UInt128 key_hash, std::function<PageCacheKey()> make_key, bool detached_if_missing, bool inject_eviction, std::function<void(const MappedPtr &)> load);
+
     MappedPtr get(const PageCacheKey & key, bool inject_eviction);
 
+    /// Lookup by precomputed hash. Avoids constructing a PageCacheKey.
+    MappedPtr get(UInt128 key_hash, bool inject_eviction);
+
     bool contains(const PageCacheKey & key, bool inject_eviction) const;
+
+    /// Lookup by precomputed hash. Avoids constructing a PageCacheKey.
+    bool contains(UInt128 key_hash, bool inject_eviction) const;
 
     /// Make the cache smaller by `memory_limit - memory_usage` bytes.
     /// Returns true if succeeded, false if cache size was reduced as much as possible but it wasn't enough.

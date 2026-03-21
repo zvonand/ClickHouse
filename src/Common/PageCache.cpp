@@ -36,12 +36,26 @@ template class CacheBase<UInt128, PageCacheCell, UInt128TrivialHash, PageCacheWe
 
 UInt128 PageCacheKey::hash() const
 {
-    SipHash hash(offset);
-    hash.update(size);
-    hash.update(path.data(), path.size());
-    hash.update("\0", 1);
-    hash.update(file_version.data(), file_version.size());
-    return hash.get128();
+    SipHash h = baseHash();
+    h.update(offset);
+    h.update(size);
+    return h.get128();
+}
+
+SipHash PageCacheKey::baseHash() const
+{
+    SipHash h;
+    h.update(path.data(), path.size());
+    h.update("\0", 1);
+    h.update(file_version.data(), file_version.size());
+    return h;
+}
+
+UInt128 PageCacheKey::hashForBlock(SipHash base, size_t block_offset, size_t block_size)
+{
+    base.update(block_offset);
+    base.update(block_size);
+    return base.get128();
 }
 
 std::string PageCacheKey::toString() const
@@ -132,6 +146,61 @@ PageCache::MappedPtr PageCache::getOrSet(const PageCacheKey & key, bool detached
     return result;
 }
 
+PageCache::MappedPtr PageCache::getOrSet(UInt128 key_hash, std::function<PageCacheKey()> make_key, bool detached_if_missing, bool inject_eviction, std::function<void(const MappedPtr &)> load)
+{
+    MemoryTrackerBlockerInThread blocker(VariableContext::Global);
+
+    Shard & shard = *shards[getShardIdx(key_hash)];
+
+    if (inject_eviction && thread_local_rng() % 10 == 0)
+        shard.remove(key_hash);
+
+    MappedPtr result;
+    bool miss = false;
+    if (detached_if_missing)
+    {
+        result = shard.get(key_hash);
+        if (!result)
+        {
+            blocker.reset();
+
+            miss = true;
+            result = std::make_shared<PageCacheCell>(make_key(), /*temporary*/ true);
+            load(result);
+        }
+    }
+    else
+    {
+        std::tie(result, miss) = shard.getOrSet(key_hash, [&]() -> MappedPtr
+        {
+            blocker.reset();
+
+            MappedPtr cell;
+            try
+            {
+                cell = std::make_shared<PageCacheCell>(make_key(), /*temporary*/ false);
+                load(cell);
+            }
+            catch (...)
+            {
+                blocker = MemoryTrackerBlockerInThread(VariableContext::Global);
+                throw;
+            }
+
+            blocker = MemoryTrackerBlockerInThread(VariableContext::Global);
+            return cell;
+        });
+    }
+    chassert(result);
+
+    if (miss)
+        ProfileEvents::increment(ProfileEvents::PageCacheMisses);
+    else
+        ProfileEvents::increment(ProfileEvents::PageCacheHits);
+
+    return result;
+}
+
 PageCache::MappedPtr PageCache::get(const PageCacheKey & key, bool inject_eviction)
 {
     MemoryTrackerBlockerInThread blocker(VariableContext::Global);
@@ -149,6 +218,33 @@ PageCache::MappedPtr PageCache::get(const PageCacheKey & key, bool inject_evicti
         ProfileEvents::increment(ProfileEvents::PageCacheHits);
 
     return result;
+}
+
+PageCache::MappedPtr PageCache::get(UInt128 key_hash, bool inject_eviction)
+{
+    MemoryTrackerBlockerInThread blocker(VariableContext::Global);
+
+    if (inject_eviction && thread_local_rng() % 10 == 0)
+        return nullptr;
+
+    Shard & shard = *shards[getShardIdx(key_hash)];
+
+    const auto result = shard.get(key_hash);
+
+    if (result)
+        ProfileEvents::increment(ProfileEvents::PageCacheHits);
+
+    return result;
+}
+
+bool PageCache::contains(UInt128 key_hash, bool inject_eviction) const
+{
+    DENY_ALLOCATIONS_IN_SCOPE;
+
+    if (inject_eviction && thread_local_rng() % 10 == 0)
+        return false;
+    const Shard & shard = *shards[getShardIdx(key_hash)];
+    return shard.contains(key_hash);
 }
 
 bool PageCache::contains(const PageCacheKey & key, bool inject_eviction) const

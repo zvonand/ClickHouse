@@ -149,16 +149,22 @@ bool CachedInMemoryReadBufferFromFile::nextImpl()
                     if (inner_read_until_position < cache_key.offset + cache_key.size ||
                         inner_read_until_position > lookahead_block_end)
                     {
-                        PageCacheKey temp_key = cache_key;
+                        /// Use precomputed base hash to probe lookahead blocks without
+                        /// constructing full PageCacheKey objects (avoids string copies).
+                        SipHash base = cache_key.baseHash();
+                        size_t probe_offset = cache_key.offset;
+                        size_t probe_size = cache_key.size;
                         do
                         {
-                            temp_key.offset += temp_key.size;
-                            temp_key.size = std::min(block_size, file_size.value() - temp_key.offset);
-                            chassert(temp_key.offset <= lookahead_block_end);
+                            probe_offset += probe_size;
+                            probe_size = std::min(block_size, file_size.value() - probe_offset);
+                            chassert(probe_offset <= lookahead_block_end);
                         }
-                        while (temp_key.offset < lookahead_block_end
-                            && !cache->contains(temp_key, settings.page_cache_inject_eviction));
-                        inner_read_until_position = temp_key.offset;
+                        while (probe_offset < lookahead_block_end
+                            && !cache->contains(
+                                PageCacheKey::hashForBlock(base, probe_offset, probe_size),
+                                settings.page_cache_inject_eviction));
+                        inner_read_until_position = probe_offset;
                         in->setReadUntilPosition(inner_read_until_position);
                     }
 
@@ -221,6 +227,11 @@ size_t CachedInMemoryReadBufferFromFile::readBigAt(char * to, size_t n, size_t o
     size_t end_offset = std::min(offset + n, file_size.value());
     size_t bytes_copied = 0;
 
+    /// Precompute the base hash from path + file_version once. Per-block lookups then only
+    /// need to fold in offset + size (two integers), avoiding repeated string hashing and
+    /// the string copies that constructing a full PageCacheKey per block would require.
+    SipHash base_hash = cache_key.baseHash();
+
     while (offset + bytes_copied < end_offset)
     {
         size_t current_offset = offset + bytes_copied;
@@ -230,20 +241,24 @@ size_t CachedInMemoryReadBufferFromFile::readBigAt(char * to, size_t n, size_t o
         size_t offset_in_block = current_offset - block_start;
         size_t to_copy = std::min(block_data_size - offset_in_block, end_offset - current_offset);
 
-        PageCacheKey key;
-        key.path = cache_key.path;
-        key.file_version = cache_key.file_version;
-        key.offset = block_start;
-        key.size = block_data_size;
+        UInt128 key_hash = PageCacheKey::hashForBlock(base_hash, block_start, block_data_size);
 
-        auto cell = cache->getOrSet(key, settings.read_from_page_cache_if_exists_otherwise_bypass_cache, settings.page_cache_inject_eviction, [&](const auto & c)
-        {
-            /// Download the whole block using positional read (thread-safe, creates independent HTTP request).
-            size_t bytes_read = in->readBigAt(c->data(), c->size(), block_start, nullptr);
-            if (bytes_read < c->size())
-                throw Exception(ErrorCodes::UNEXPECTED_END_OF_FILE, "File {} ended after {} bytes, but we expected {}",
-                    cache_key.path, block_start + bytes_read, file_size.value());
-        });
+        auto cell = cache->getOrSet(key_hash,
+            [&]() -> PageCacheKey
+            {
+                /// Only called on cache miss — construct the full key lazily.
+                return PageCacheKey{cache_key.path, cache_key.file_version, block_start, block_data_size};
+            },
+            settings.read_from_page_cache_if_exists_otherwise_bypass_cache,
+            settings.page_cache_inject_eviction,
+            [&](const auto & c)
+            {
+                /// Download the whole block using positional read (thread-safe, creates independent HTTP request).
+                size_t bytes_read = in->readBigAt(c->data(), c->size(), block_start, nullptr);
+                if (bytes_read < c->size())
+                    throw Exception(ErrorCodes::UNEXPECTED_END_OF_FILE, "File {} ended after {} bytes, but we expected {}",
+                        cache_key.path, block_start + bytes_read, file_size.value());
+            });
 
         memcpy(to + bytes_copied, cell->data() + offset_in_block, to_copy);
         bytes_copied += to_copy;
@@ -273,7 +288,9 @@ bool CachedInMemoryReadBufferFromFile::isContentCached(size_t offset, size_t /*s
 
     /// Use get() instead of contains() to populate `chunk`, so the subsequent nextImpl() call
     /// can reuse it without a second cache lookup.
-    chunk = cache->get(cache_key, settings.page_cache_inject_eviction);
+    /// Use hash-based lookup to avoid recomputing hash from the full key.
+    UInt128 key_hash = PageCacheKey::hashForBlock(cache_key.baseHash(), cache_key.offset, cache_key.size);
+    chunk = cache->get(key_hash, settings.page_cache_inject_eviction);
 
     return chunk != nullptr;
 }

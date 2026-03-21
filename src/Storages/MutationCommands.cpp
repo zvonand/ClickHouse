@@ -301,19 +301,11 @@ void MutationCommands::validate(const StorageInMemoryMetadata & metadata, const 
                     validatePredicateColumns(command.predicate, metadata.columns, virtuals, table_name);
 
                 for (const auto & [column_name, _] : command.column_to_update_expression)
-                {
-                    if (virtuals->tryGet(column_name))
-                        throw Exception(
-                            ErrorCodes::ILLEGAL_COLUMN,
-                            "Cannot UPDATE virtual column {}",
-                            backQuote(column_name));
-
-                    if (!metadata.columns.has(column_name))
+                    if (!metadata.columns.has(column_name) && !virtuals->has(column_name))
                         throw Exception(
                             ErrorCodes::NOT_FOUND_COLUMN_IN_BLOCK,
                             "Cannot UPDATE column {}: column does not exist in table {}",
                             backQuote(column_name), table_name);
-                }
 
                 break;
             }

@@ -42,7 +42,7 @@ public:
     static const size_t minimum_step = 64;
     static constexpr auto name = "arrayReduceInRanges";
 
-    FunctionArrayReduceInRanges(AggregateFunctionPtr aggregate_function_)
+    explicit FunctionArrayReduceInRanges(AggregateFunctionPtr aggregate_function_)
         : aggregate_function(std::move(aggregate_function_)) {}
 
     String getName() const override { return name; }

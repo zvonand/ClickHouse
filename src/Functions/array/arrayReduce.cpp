@@ -40,7 +40,7 @@ class FunctionArrayReduce : public IFunction
 public:
     static constexpr auto name = "arrayReduce";
 
-    FunctionArrayReduce(AggregateFunctionPtr aggregate_function_)
+    explicit FunctionArrayReduce(AggregateFunctionPtr aggregate_function_)
         : aggregate_function(std::move(aggregate_function_)) {}
 
     String getName() const override { return name; }

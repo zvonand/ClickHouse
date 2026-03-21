@@ -28,7 +28,7 @@ class FunctionGetScalar : public IFunction
 public:
     static constexpr auto name = "__getScalar";
 
-    FunctionGetScalar(ColumnWithTypeAndName scalar_) : scalar(std::move(scalar_)) {}
+    explicit FunctionGetScalar(ColumnWithTypeAndName scalar_) : scalar(std::move(scalar_)) {}
 
     String getName() const override
     {
@@ -91,6 +91,8 @@ public:
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
+        if (arguments.size() != 1 || !isString(arguments[0].type) || !arguments[0].column || !isColumnConst(*arguments[0].column))
+            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Function {} accepts one const string argument", getName());
         auto scalar_name = assert_cast<const ColumnConst &>(*arguments[0].column).getValue<String>();
         ContextPtr query_context = getContext()->hasQueryContext() ? getContext()->getQueryContext() : getContext();
         auto scalar = query_context->getScalar(scalar_name).getByPosition(0);

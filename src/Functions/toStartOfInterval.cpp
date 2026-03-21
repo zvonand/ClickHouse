@@ -50,7 +50,7 @@ private:
 public:
     static constexpr auto name = "toStartOfInterval";
 
-    FunctionToStartOfInterval(ToStartOfIntervalOverload overload_)
+    explicit FunctionToStartOfInterval(ToStartOfIntervalOverload overload_)
         : overload(overload_)
     {
     }

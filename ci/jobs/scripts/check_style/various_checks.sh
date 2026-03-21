@@ -191,10 +191,14 @@ find $ROOT_PATH/tests/queries -name '*.sh' |
 # Check for timeout with --signal but without --kill-after in .sh tests.
 # Without --kill-after, if the process ignores the signal, timeout hangs
 # indefinitely, causing the test to hit the hard timeout limit.
-find $ROOT_PATH/tests/queries -name '*.sh' -print0 |
-    xargs -0 grep -l -P 'timeout\s+.*(-s|--signal)[\s=]' |
-    xargs grep -LP 'kill-after' &&
-    echo "Tests using 'timeout --signal' must also use '--kill-after' to ensure the process is killed if it ignores the signal"
+tests_with_timeout_signal=( $(
+    find $ROOT_PATH/tests/queries -name '*.sh' -print0 |
+        xargs -0 grep -lP 'timeout\s+.*(-s|--signal)[\s=]' |
+        sort -u
+) )
+for test_case in "${tests_with_timeout_signal[@]}"; do
+    grep -qP 'kill-after' "$test_case" || echo "Test using 'timeout --signal' without '--kill-after' will hang if the process ignores the signal: $test_case"
+done
 
 find $ROOT_PATH/tests/queries -iname '*.sql' -or -iname '*.sh' -or -iname '*.py' -or -iname '*.j2' | xargs grep --with-filename -i -E -e 'system\s*flush\s*logs\s*(;|$|")' && echo "Please use SYSTEM FLUSH LOGS log_name over global SYSTEM FLUSH LOGS"
 

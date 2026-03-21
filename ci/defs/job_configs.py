@@ -285,6 +285,13 @@ class JobConfigs:
             ],
             runs_on=RunnerLabels.AMD_LARGE,
         ),
+        Job.ParamSet(
+            parameter=BuildTypes.PER_TEST_COVERAGE,
+            provides=[
+                ArtifactNames.CH_AMD_PER_TEST_COVERAGE_BUILD,
+            ],
+            runs_on=RunnerLabels.AMD_LARGE,
+        ),
     )
     release_build_jobs = common_build_job_config.set_post_hooks(
         post_hooks=[
@@ -675,9 +682,9 @@ class JobConfigs:
     functional_tests_jobs_coverage = common_ft_job_config.parametrize(
         *[
             Job.ParamSet(
-                parameter=f"{BuildTypes.LLVM_COVERAGE_BUILD}, per_test_coverage, {batch}/{total_batches}",
+                parameter=f"{BuildTypes.PER_TEST_COVERAGE}, per_test_coverage, {batch}/{total_batches}",
                 runs_on=RunnerLabels.AMD_SMALL,
-                requires=[ArtifactNames.CH_AMD_LLVM_COVERAGE_BUILD],
+                requires=[ArtifactNames.CH_AMD_PER_TEST_COVERAGE_BUILD],
             )
             for total_batches in (8,)
             for batch in range(1, total_batches + 1)

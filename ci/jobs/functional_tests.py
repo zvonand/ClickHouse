@@ -188,7 +188,7 @@ def main():
             is_flaky_check = True
         elif "BugfixValidation" in to:
             is_bugfix_validation = True
-        elif "amd_llvm_coverage" in to:
+        elif to.startswith("amd_") and "coverage" in to:
             is_llvm_coverage = True
         if "per_test_coverage" in to:
             is_per_test_coverage = True

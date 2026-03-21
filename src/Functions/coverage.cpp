@@ -158,7 +158,8 @@ REGISTER_FUNCTION(CoverageLines)
     factory.registerFunction("coverageDiag", [](ContextPtr){ return std::make_shared<FunctionCoverageDiag>(); },
         FunctionDocumentation
         {
-            .description = R"(Returns [name_refs_count, coverage_map_size] for diagnostics.)",
+            .description = R"(Returns diagnostic counters for the LLVM coverage system as an `Array(UInt64)`: `[name_refs_count, coverage_map_size, matches, non_empty_file_regions, zero_line_regions, first_file_info]`. Only available in `WITH_COVERAGE=1` builds.)",
+            .syntax = "coverageDiag()",
             .introduced_in = {25, 6},
             .category = FunctionDocumentation::Category::Introspection
         });
@@ -173,6 +174,7 @@ Returns an `Array(String)` of source file paths covered since the last `SYSTEM S
 
 Use together with `coverageCurrentLineStarts` and `coverageCurrentLineEnds` to get the covered line ranges.
 )",
+            .syntax = "coverageCurrentFiles()",
             .introduced_in = {25, 6},
             .category = FunctionDocumentation::Category::Introspection
         });
@@ -185,6 +187,7 @@ This function is only available if ClickHouse was built with the `WITH_COVERAGE=
 
 Returns an `Array(UInt32)` of line start numbers parallel to `coverageCurrentFiles`.
 )",
+            .syntax = "coverageCurrentLineStarts()",
             .introduced_in = {25, 6},
             .category = FunctionDocumentation::Category::Introspection
         });
@@ -197,6 +200,7 @@ This function is only available if ClickHouse was built with the `WITH_COVERAGE=
 
 Returns an `Array(UInt32)` of line end numbers parallel to `coverageCurrentFiles`.
 )",
+            .syntax = "coverageCurrentLineEnds()",
             .introduced_in = {25, 6},
             .category = FunctionDocumentation::Category::Introspection
         });

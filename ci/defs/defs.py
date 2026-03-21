@@ -305,6 +305,7 @@ class BuildTypes(metaclass=MetaClasses.WithIter):
     ARM_ASAN = "arm_asan"
     ARM_TSAN = "arm_tsan"
     LLVM_COVERAGE_BUILD = "amd_llvm_coverage"
+    PER_TEST_COVERAGE = "amd_per_test_coverage"
     AMD_COVERAGE = "amd_coverage"
     ARM_BINARY = "arm_binary"
     AMD_TIDY = "amd_tidy"
@@ -375,6 +376,9 @@ class ArtifactNames:
     CH_AMD_DEBUG = "CH_AMD_DEBUG"
     CH_AMD_LLVM_COVERAGE_BUILD = (
         "CH_AMD_LLVM_COVERAGE_BUILD"  # build with LLVM coverage enabled
+    )
+    CH_AMD_PER_TEST_COVERAGE_BUILD = (
+        "CH_AMD_PER_TEST_COVERAGE_BUILD"  # build with LLVM coverage + per-test depth instrumentation
     )
     LLVM_COVERAGE_FILE = "LLVM_COVERAGE_FILE"  # .profdata file
     LLVM_COVERAGE_INFO_FILE = "LLVM_COVERAGE_INFO_FILE"  # .info file generated from .profdata, used for debugging coverage results
@@ -485,6 +489,7 @@ class ArtifactConfigs:
         names=[
             ArtifactNames.CH_AMD_DEBUG,
             ArtifactNames.CH_AMD_LLVM_COVERAGE_BUILD,
+            ArtifactNames.CH_AMD_PER_TEST_COVERAGE_BUILD,
             ArtifactNames.CH_AMD_RELEASE,
             ArtifactNames.CH_AMD_ASAN,
             ArtifactNames.CH_AMD_TSAN,

@@ -170,16 +170,44 @@ class Targeting:
         if not changed_lines:
             return {fl: [] for fl in changed_lines}
 
+        # Filter to files that are actually tracked in checks_coverage_lines.
+        # Coverage is only collected for compiled C++ sources (src/, programs/,
+        # utils/ etc.).  Querying test scripts, docs, CI configs, or contrib files
+        # always returns zero rows and wastes CIDB quota — skip them up front.
+        COVERAGE_TRACKED_PREFIXES = ("src/", "programs/", "utils/", "base/")
+        coverage_lines = [
+            (f, ln)
+            for f, ln in changed_lines
+            if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
+        ]
+        skipped = len(changed_lines) - len(coverage_lines)
+        if skipped:
+            print(
+                f"[find_tests] skipping {skipped} lines in non-tracked files "
+                f"(test scripts, docs, CI, contrib)"
+            )
+
+        # Return the original (full) key-set in the result dict so that
+        # callers always get one entry per input line (with empty list for
+        # non-tracked files).
+        non_tracked_keys = {(f, ln) for f, ln in changed_lines if (f, ln) not in set(coverage_lines)}
+        base_result: dict = {k: [] for k in non_tracked_keys}
+
+        if not coverage_lines:
+            print("[find_tests] no coverage-tracked files changed — skipping CIDB query")
+            base_result.update({(f, ln): [] for f, ln in changed_lines})
+            return base_result
+
         # Group changed lines by file so we query with `file IN (…)` instead of
         # one condition per line.  A PR touching 13 files but 1000+ lines would
         # otherwise generate a URL too long for the CIDB HTTP endpoint.
         files_to_lines: dict = {}
-        for f, ln in changed_lines:
+        for f, ln in coverage_lines:
             files_to_lines.setdefault(self._stored_path(f), set()).add(ln)
 
         unique_files = sorted(files_to_lines)
         print(
-            f"[find_tests] querying coverage for {len(changed_lines)} changed lines "
+            f"[find_tests] querying coverage for {len(coverage_lines)} changed lines "
             f"across {len(unique_files)} files"
         )
 
@@ -246,8 +274,9 @@ class Targeting:
         # Map each input (filename, line_no) to (test_name, region_width, min_depth,
         # region_test_count) 4-tuples.  The CIDB query returned all ranges for the
         # touched files; now filter to ranges that actually overlap a changed line.
-        result: dict = {}
-        for filename, line_no in changed_lines:
+        # Start from base_result which already has empty entries for non-tracked files.
+        result: dict = dict(base_result)
+        for filename, line_no in coverage_lines:
             stored = self._stored_path(filename)
             matched: list = []
             for file_, line_start, line_end, test_depths, region_test_count in coverage_ranges:
@@ -293,10 +322,10 @@ class Targeting:
                         result[key].append((t, self.SIBLING_DIR_WIDTH, 255, max(1, rc)))
 
         total_unique_tests = len({t for pairs in result.values() for t, *_ in pairs})
-        lines_with_tests = sum(1 for pairs in result.values() if pairs)
+        lines_with_tests = sum(1 for (f, _), pairs in result.items() if pairs and any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES))
         print(
             f"[find_tests] done in {time.monotonic()-t0:.2f}s: "
-            f"{lines_with_tests}/{len(changed_lines)} lines matched, "
+            f"{lines_with_tests}/{len(coverage_lines)} lines matched, "
             f"{total_unique_tests} unique tests selected"
         )
         return result
@@ -316,9 +345,12 @@ class Targeting:
         import re as _re
         import os as _os
         base = _os.path.splitext(_os.path.basename(filename))[0]
-        # Split CamelCase: "CHColumnToArrowColumn" → ['Column', 'To', 'Arrow', 'Column']
-        # Also split on underscores for snake_case names
-        words = _re.findall(r"[A-Z][a-z0-9]+|[a-z][a-z0-9]+", base)
+        # Split CamelCase and all-caps acronyms:
+        #   "CHColumnToArrowColumn" → ['CH', 'Column', 'To', 'Arrow', 'Column']
+        #   "LDAPClient"            → ['LDAP', 'Client']
+        #   "PostgreSQLDictionary"  → ['Postgre', 'SQL', 'Dictionary']
+        # Pattern: acronym-run-before-TitleCase | TitleCase-word | lowercase-word
+        words = _re.findall(r"[A-Z]+(?=[A-Z][a-z])|[A-Z][a-z0-9]+|[A-Z]{2,}|[a-z][a-z0-9]+", base)
         # Architectural / ubiquitous words that appear in most files in a directory.
         # Keeping this list generous avoids keywords that are too common to be useful.
         COMMON = {
@@ -331,6 +363,12 @@ class Targeting:
             # MergeTree-specific architectural words (appear in almost every MergeTree file)
             "condition", "granularity", "selector", "partition", "replica",
             "transaction", "virtual", "local", "remote", "range", "level",
+            # ClickHouse architectural nouns that appear in many places but are not
+            # specific enough to pin to a test domain.
+            "handler", "manager", "source", "access", "control",
+            "service", "server", "client", "external", "internal",
+            "settings", "setting", "config", "context", "result",
+            "state", "status", "entry", "record", "update", "create",
         }
         # Lower length threshold to 4 to catch short domain words like "Text", "Avro", "Orc"
         specific = [w for w in words if len(w) >= 4 and w.lower() not in COMMON]
@@ -471,6 +509,162 @@ class Targeting:
         # Return the same set for every changed src dir.
         return {d: dict(sibling_test_names) for d in src_dirs}
 
+    # Synthetic width for keyword-fallback tests (broader than sibling-dir tests
+    # since we have no coverage signal at all — just filename matching).
+    KEYWORD_FALLBACK_WIDTH = 50000
+
+    def _get_keyword_fallback_tests(self, changed_src_files: list) -> list:
+        """
+        Last-resort fallback: when coverage gives zero results for one or more C++
+        source files, try to find stateless tests whose *filename* contains domain
+        keywords extracted from the changed source files.
+
+        This handles cases like `Parquet/Decoding.cpp` where the file may not appear
+        in the coverage database (e.g. the changed code path is rarely executed by
+        existing tests), but there clearly exist stateless tests named
+        `*parquet*.sql` / `*parquet*.sh` that should be run.
+
+        Returns a list of `(test_name, width, depth, region_test_count)` tuples
+        using KEYWORD_FALLBACK_WIDTH so they always rank below any direct or
+        sibling hit.
+        """
+        import glob as _glob
+
+        if not changed_src_files:
+            return []
+
+        # Collect domain keywords from ALL changed source files.
+        # Include the *parent directory name* in keyword extraction so that
+        # generic filenames like `Decoding.cpp` inside `Parquet/` still yield
+        # "Parquet" as a keyword and match `*parquet*.sh` tests.
+        all_keywords: list = []
+        # Top-level src subdirectories whose names are too generic to use as
+        # test-name keywords (they appear in thousands of test files).
+        GENERIC_DIRS = frozenset({
+            "src", "programs", "utils", "base",
+            "Storages", "Interpreters", "Processors", "Functions",
+            "Common", "Server", "Parsers", "Analyzer", "Formats",
+            "Access", "IO", "Disks", "Columns", "DataTypes", "Core",
+            "Databases", "Backups", "Coordination", "Client",
+            "Daemon", "Compression", "AggregateFunctions",
+            "TableFunctions", "Dictionaries", "QueryPipeline",
+            # Sub-directories that are generic groupings (not domain names)
+            "Impl", "Sources", "Transforms", "Sinks",
+            "Utils", "Tests", "tests",
+        })
+
+        dir_keywords: list = []  # keywords from path components (directory names)
+        for f in changed_src_files:
+            # Keywords from basename (e.g. "CHColumnToArrowColumn.cpp" → "Arrow")
+            kws = self._extract_domain_keywords(f.split("/")[-1])
+            all_keywords.extend(kws)
+            # Keywords from ALL path components that are specific enough.
+            # e.g. src/Processors/Formats/Impl/Parquet/Decoding.cpp → "Parquet" from the
+            # 4th component (skipping "src", "Processors", "Formats", "Impl").
+            parts = f.replace("\\", "/").split("/")
+            for part in parts[:-1]:  # all path components except the filename
+                if part in GENERIC_DIRS:
+                    continue
+                part_kws = self._extract_domain_keywords(part + ".cpp")
+                for pk in part_kws:
+                    if pk not in dir_keywords:
+                        dir_keywords.append(pk)
+        # Directory keywords are prepended so they are considered first (they tend to
+        # be better test-name prefixes than generic filename decompositions).
+        for dk in dir_keywords:
+            if dk not in all_keywords:
+                all_keywords.insert(0, dk)
+        unique_kws = list(dict.fromkeys(all_keywords))
+
+        if not unique_kws:
+            return []
+
+        # Find the 0_stateless test directory relative to the repo root.
+        test_dir = Path("tests/queries/0_stateless")
+        if not test_dir.is_dir():
+            return []
+
+        # Pre-build list of (sql+sh) test filenames for quick iteration.
+        all_test_files = [
+            f.name for f in test_dir.iterdir()
+            if f.name.endswith(".sql") or f.name.endswith(".sh")
+        ]
+
+        # For each candidate keyword, count how many tests it matches.
+        # Keywords matching too many tests (too generic) or zero tests
+        # (no signal) are discarded.
+        # We use two tiers:
+        #   Specific tier (1–50 hits): high confidence, domain-specific keyword.
+        #   Broad tier  (51–150 hits): lower confidence, include only if no
+        #                               specific keyword is available.
+        SPECIFIC_MAX = 50
+        BROAD_MAX = 150
+
+        def count_hits(kw_lower: str) -> int:
+            return sum(1 for f in all_test_files if kw_lower in f.lower())
+
+        specific_kws = []  # (hits, -len, kw) — few hits, long name preferred
+        broad_kws = []
+        for kw in unique_kws:
+            if len(kw) < 4:
+                continue
+            hits = count_hits(kw.lower())
+            if 1 <= hits <= SPECIFIC_MAX:
+                specific_kws.append((hits, -len(kw), kw))
+            elif SPECIFIC_MAX < hits <= BROAD_MAX:
+                broad_kws.append((hits, -len(kw), kw))
+        specific_kws.sort()
+        broad_kws.sort()
+
+        # Strategy: prefer directory-origin keywords (they directly name the domain,
+        # e.g. "Parquet" from src/.../Parquet/Decoding.cpp).
+        # Directory keywords come first in unique_kws (prepended above).
+        # We use at most one keyword to keep the test set focused.
+        dir_kw_set = set(dir_keywords)
+
+        # Split into directory-origin and filename-origin, each sorted by hit count.
+        all_ranked = specific_kws + [(h, l, kw) for h, l, kw in broad_kws]
+        all_ranked.sort()  # fewest hits first, longer name preferred
+
+        dir_ranked  = [(h, l, kw) for h, l, kw in all_ranked if kw in  dir_kw_set]
+        file_ranked = [(h, l, kw) for h, l, kw in all_ranked if kw not in dir_kw_set]
+
+        if dir_ranked:
+            # Use the best directory keyword.  If there is also a specific (≤50 hits)
+            # filename keyword, combine them so we narrow the result further.
+            candidate_kws = [dir_ranked[0][2]]
+            if file_ranked and file_ranked[0][0] <= SPECIFIC_MAX:
+                candidate_kws.append(file_ranked[0][2])
+        elif file_ranked:
+            # No directory keyword available; use at most one filename keyword from the
+            # specific tier.  Broad filename keywords are too noisy on their own.
+            file_specific = [x for x in file_ranked if x[0] <= SPECIFIC_MAX]
+            if not file_specific:
+                return []
+            candidate_kws = [file_specific[0][2]]
+        else:
+            return []
+
+        # Collect test names (without extension) matching ANY of the keywords.
+        # We do case-insensitive substring matching on the filename.
+        matched_tests: set = set()
+        for kw in candidate_kws:
+            kw_lower = kw.lower()
+            for fname in all_test_files:
+                if kw_lower in fname.lower():
+                    base = os.path.splitext(fname)[0]
+                    matched_tests.add(base + ".")
+
+        if matched_tests:
+            print(
+                f"[find_tests] keyword-fallback: {len(matched_tests)} tests "
+                f"matching keywords {candidate_kws}"
+            )
+        return [
+            (t, self.KEYWORD_FALLBACK_WIDTH, 255, 1)
+            for t in sorted(matched_tests)
+        ]
+
     def get_changed_or_new_tests_with_info(self):
         tests = self.get_changed_tests()
         info = f"Found {len(tests)} changed or new tests:\n"
@@ -539,6 +733,35 @@ class Targeting:
         """
         changed_lines = self.get_changed_lines_from_diff()
         line_to_tests = self.get_tests_by_changed_lines(changed_lines)
+
+        # Keyword-based fallback: if no coverage results were found for any
+        # C++ source file, try to find tests by matching the source filename
+        # against stateless test names.  This catches files that are rarely
+        # (or never) reached by the current coverage suite — e.g.
+        # Parquet/Decoding.cpp when the change is a new edge-case code path.
+        # The fallback is only activated when the primary coverage query returned
+        # zero tests for a C++ file so it does not dilute high-confidence hits.
+        COVERAGE_TRACKED_PREFIXES = ("src/", "programs/", "utils/", "base/")
+        cpp_with_zero_coverage = [
+            f for f, ln in changed_lines
+            if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
+            and (f.endswith(".cpp") or f.endswith(".h"))
+            and not any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
+        ]
+        # Deduplicate file list.
+        cpp_with_zero_coverage = list(dict.fromkeys(cpp_with_zero_coverage))
+        if cpp_with_zero_coverage:
+            fallback_quads = self._get_keyword_fallback_tests(cpp_with_zero_coverage)
+            if fallback_quads:
+                # Inject fallback tests into the first line of each zero-coverage
+                # C++ file so the scorer sees them without duplication.
+                injected: set = set()
+                for f in cpp_with_zero_coverage:
+                    for (ff, ln), pairs in line_to_tests.items():
+                        if ff == f and (ff, ln) not in injected:
+                            pairs.extend(fallback_quads)
+                            injected.add((ff, ln))
+                            break
 
         # Accumulate per-test scores across all changed lines.
         # line_to_tests values are lists of (test_name, region_width, min_depth, region_test_count).
@@ -671,8 +894,18 @@ if __name__ == "__main__":
 
     info = InfoLocalTest()
     targeting = Targeting(info)
+
+    # Run the full ranking pipeline once (avoids double CIDB query).
+    # This includes: changed test detection, keyword fallback, sibling expansion.
     changed_lines = targeting.get_changed_lines_from_diff()
     line_to_tests = targeting.get_tests_by_changed_lines(changed_lines)
+
+    # Detect changed test files directly — same as the in-CI path.
+    changed_test_files = targeting.get_changed_tests()
+    if changed_test_files:
+        print(f"\nChanged test files ({len(changed_test_files)}):")
+        for t in changed_test_files:
+            print(f"  {t}")
 
     print("\nNo tests found for lines:")
     for (file, line), pairs in line_to_tests.items():
@@ -680,15 +913,26 @@ if __name__ == "__main__":
             continue
         print(f"{file}:{line} -> NOT FOUND")
 
-    # quads is list of (test_name, region_width, min_depth, region_test_count)
-    all_tests: dict = {}  # test -> (min_width, min_depth, min_region_test_count)
-    for quads in line_to_tests.values():
-        for t, w, d, rc in quads:
-            if t not in all_tests:
-                all_tests[t] = (w, d, rc)
-            else:
-                ow, od, orc = all_tests[t]
-                all_tests[t] = (min(ow, w), min(od, d), min(orc, rc))
+    # Apply the keyword fallback for zero-coverage C++ files (same logic as
+    # get_most_relevant_tests, but reusing the already-fetched line_to_tests).
+    COVERAGE_TRACKED_PREFIXES = ("src/", "programs/", "utils/", "base/")
+    cpp_with_zero_coverage = list(dict.fromkeys(
+        f for f, ln in changed_lines
+        if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
+        and (f.endswith(".cpp") or f.endswith(".h"))
+        and not any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
+    ))
+    fallback_quads: list = []
+    if cpp_with_zero_coverage:
+        fallback_quads = targeting._get_keyword_fallback_tests(cpp_with_zero_coverage)
+        if fallback_quads:
+            injected: set = set()
+            for f in cpp_with_zero_coverage:
+                for (ff, ln), pairs in line_to_tests.items():
+                    if ff == f and (ff, ln) not in injected:
+                        pairs.extend(fallback_quads)
+                        injected.add((ff, ln))
+                        break
 
     print("\nTests found for lines:")
     for (file, line), quads in line_to_tests.items():
@@ -699,6 +943,21 @@ if __name__ == "__main__":
             narrow_tag = "narrow" if width <= Targeting.NARROW_REGION_MAX_LINES else f"width={width}"
             depth_tag = f"depth={depth}" if depth < 255 else "depth=?"
             print(f" - {test}  [{narrow_tag}, {depth_tag}]")
+
+    # quads is list of (test_name, region_width, min_depth, region_test_count)
+    all_tests: dict = {}  # test -> (min_width, min_depth, min_region_test_count)
+
+    # Seed with changed test files using perfect-signal sentinel values.
+    for t in changed_test_files:
+        all_tests[t] = (1, 0, 1)  # width=1, depth=0, rc=1 → always top-ranked
+
+    for quads in line_to_tests.values():
+        for t, w, d, rc in quads:
+            if t not in all_tests:
+                all_tests[t] = (w, d, rc)
+            else:
+                ow, od, orc = all_tests[t]
+                all_tests[t] = (min(ow, w), min(od, d), min(orc, rc))
 
     print(f"\nAll selected tests ({len(all_tests)}):")
     for test in sorted(all_tests):

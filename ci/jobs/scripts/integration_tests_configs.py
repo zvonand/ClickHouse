@@ -67,161 +67,176 @@ IMAGES_ENV = {
 
 
 # collect long-running test suites from CIDB
-"""
-WITH per_run_suite AS (
-    SELECT
-        splitByString('::', test_name)[1] AS test_suite,
-        check_start_time,
-        sum(test_duration_ms) AS suite_duration_ms
-    FROM checks
-    WHERE check_name LIKE 'Integration tests (amd_asan_ubsan%'
-      AND check_start_time > now() - INTERVAL 2 DAYS
-      AND test_duration_ms != 0
-      AND head_ref = 'master'
-    GROUP BY
-        test_suite,
-        check_start_time
-)
-
-SELECT
-    test_suite,
-    round(median(suite_duration_ms)) AS dur
-FROM per_run_suite
-WHERE test_suite != ''
-GROUP BY test_suite
-HAVING dur > 300000
-ORDER BY dur DESC;
-"""
+# clickhouse client --host play.clickhouse.com --secure --user play --query "
+# SELECT file, round(sum(med_dur)) AS file_duration_ms
+# FROM (
+#     SELECT splitByString('::', test_name)[1] AS file, median(test_duration_ms) AS med_dur
+#     FROM checks
+#     WHERE check_name LIKE 'Integration tests%amd_asan_ubsan%'
+#       AND check_start_time >= now() - INTERVAL 14 DAY
+#       AND head_ref = 'master' AND startsWith(head_repo, 'ClickHouse/')
+#       AND file != '' AND test_status NOT IN ('SKIPPED', 'FAIL')
+#     GROUP BY test_name
+# )
+# GROUP BY file HAVING file_duration_ms >= 100000
+# ORDER BY file_duration_ms DESC FORMAT TabSeparated"
 
 RAW_TEST_DURATIONS = """
-test_storage_s3_queue/test_6.py	1348867
-test_storage_kafka/test_batch_fast.py	1105644
-test_ttl_move/test.py	1059950
-test_scheduler_cpu_preemptive/test.py	1048093
-test_storage_s3/test.py	948320
-test_replicated_database/test.py	871818
-test_storage_s3_queue/test_5.py	859414
-test_storage_delta/test.py	846630
-test_storage_azure_blob_storage/test.py	722964
-test_storage_s3_queue/test_migration.py	682930
-test_database_replicated_settings/test.py	624918
-test_storage_iceberg_with_spark/test_cluster_table_function.py	616172
-test_backup_restore_s3/test.py	615552
-test_s3_aws_sdk_has_slightly_unreliable_behaviour/test.py	606699
-test_multiple_disks/test.py	599070
-test_max_bytes_ratio_before_external_order_group_by_for_server/test.py	570263
-test_backup_restore_on_cluster/test_concurrency.py	552817
-test_backup_restore_new/test.py	509909
-test_dictionaries_all_layouts_separate_sources/test_mongo.py	496567
-test_refreshable_mat_view/test.py	484532
-test_storage_s3_queue/test_2.py	472704
-test_restore_db_replica/test.py	439916
-test_throttling/test.py	419826
-test_database_delta/test.py	404054
-test_checking_s3_blobs_paranoid/test.py	371771
-test_storage_s3_queue/test_1.py	369390
-test_lost_part_during_startup/test.py	350364
-test_async_load_databases/test.py	323270
-test_dictionaries_redis/test.py	317047
-test_dictionaries_all_layouts_separate_sources/test_mysql.py	315748
-test_kafka_bad_messages/test.py	314352
-test_executable_table_function/test.py	313174
-test_dictionaries_all_layouts_separate_sources/test_clickhouse_remote.py	310634
-test_dictionaries_all_layouts_separate_sources/test_clickhouse_local.py	309966
-test_dictionaries_all_layouts_separate_sources/test_https.py	304298
-test_dictionaries_all_layouts_separate_sources/test_http.py	304270
-test_distributed_ddl/test.py	300385
-test_backward_compatibility/test_aggregate_function_state.py	296785
-test_storage_kafka/test_batch_slow_2.py	293444
-test_concurrent_ttl_merges/test.py	290490
-test_ytsaurus/test_tables.py	286747
-test_storage_kafka/test_batch_slow_1.py	282959
-test_refreshable_mv/test.py	273591
-test_drop_is_lock_free/test.py	270124
-test_storage_s3_queue/test_0.py	266331
-test_storage_kafka/test_batch_slow_4.py	260415
-test_mysql_protocol/test.py	260203
-test_distributed_load_balancing/test.py	259334
-test_mysql_database_engine/test.py	258626
-test_ttl_replicated/test.py	255752
-test_named_collections/test.py	250270
-test_storage_iceberg_with_spark/test_partition_pruning.py	244465
-test_storage_iceberg_schema_evolution/test_evolved_schema_simple.py	243718
-test_dns_cache/test.py	241286
-test_storage_kafka/test_batch_slow_5.py	236022
-test_storage_kafka/test_compression_codec.py	232051
-test_mask_sensitive_info/test.py	230150
-test_log_query_probability/test.py	229649
-test_merge_tree_s3/test.py	228373
-test_storage_s3_queue/test_3.py	225169
-test_parallel_replicas_insert_select/test.py	223528
-test_storage_kafka/test_batch_slow_6.py	218509
-test_scheduler/test.py	212796
-test_mysql57_database_engine/test.py	209785
-test_backup_restore_on_cluster/test.py	208915
-test_dictionaries_dependency/test.py	206446
-test_hedged_requests/test.py	190700
-test_postgresql_replica_database_engine/test_1.py	182890
-test_storage_kerberized_kafka/test.py	182778
-test_postpone_failed_tasks/test.py	179248
-test_postgresql_replica_database_engine/test_2.py	174787
-test_storage_iceberg_with_spark/test_position_deletes.py	171534
-test_dictionaries_ddl/test.py	170020
-test_s3_plain_rewritable/test.py	166186
-test_postgresql_database_engine/test.py	165342
-test_http_failover/test.py	165148
-test_keeper_two_nodes_cluster/test.py	164012
-test_storage_kafka/test_batch_slow_0.py	162968
-test_row_policy/test.py	162954
-test_lost_part/test.py	160701
-test_backup_restore_new/test_cancel_backup.py	160272
-test_postgresql_replica_database_engine/test_3.py	158957
-test_storage_postgresql/test.py	151862
-test_backup_restore_on_cluster/test_cancel_backup.py	151324
-test_version_update_after_mutation/test.py	150068
-test_refreshable_mat_view_replicated/test.py	149513
-test_storage_iceberg_no_spark/test_writes_statistics_by_minmax_pruning.py	147778
-test_dictionaries_all_layouts_separate_sources/test_file.py	146601
-test_plain_rewritable_backward_compatibility/test.py	146256
-test_storage_iceberg_with_spark/test_system_iceberg_metadata.py	146113
-test_storage_iceberg_with_spark/test_minmax_pruning.py	145728
-test_storage_iceberg_schema_evolution/test_array_evolved_nested.py	145614
-test_distributed_directory_monitor_split_batch_on_failure/test.py	145567
-test_system_logs/test_system_logs.py	144064
-test_backward_compatibility/test_convert_ordinary.py	142496
-test_storage_s3_queue/test_4.py	141403
-test_restore_replica/test.py	140820
-test_http_handlers_config/test.py	139500
-test_library_bridge/test.py	138565
-test_parallel_replicas_invisible_parts/test.py	136468
-test_dictionaries_update_and_reload/test.py	136458
-test_replicated_mutations/test.py	135833
-test_database_iceberg/test.py	135477
-test_postgresql_replica_database_engine/test_0.py	133609
-test_storage_iceberg_with_spark/test_writes_create_partitioned_table.py	131564
-test_disk_over_web_server/test.py	129670
-test_database_hms/test.py	128435
-test_host_regexp_multiple_ptr_records/test.py	127346
-test_statistics_cache/test.py	126704
-test_keeper_zookeeper_converter/test.py	126419
-test_storage_iceberg_concurrent/test_concurrent_reads.py	125498
-test_ytsaurus/test_dictionaries.py	120319
-test_polymorphic_parts/test.py	120290
-test_storage_mongodb/test.py	120193
-test_server_reload/test.py	120128
-test_parallel_replicas_over_distributed/test.py	116560
-test_insert_distributed_async_send/test.py	113710
-test_broken_projections/test.py	113704
-test_storage_mysql/test.py	112116
-test_replicated_fetches_bandwidth/test.py	111901
-test_dictionaries_all_layouts_separate_sources/test_mongo_uri.py	110580
-test_jbod_balancer/test.py	110084
-test_s3_plain_rewritable_rotate_tables/test.py	109296
-test_replicated_merge_tree_compatibility/test.py	108052
-test_dictionaries_all_layouts_separate_sources/test_executable_hashed.py	105838
-test_ddl_worker_replicas/test.py	101903
-test_distributed_index_analysis/test.py	101900
-test_recompression_ttl/test.py	100070
+test_storage_s3_queue/test_6.py	1538520
+test_scheduler_cpu_preemptive/test.py	1349570
+test_storage_s3_queue/test_5.py	1161329
+test_storage_kafka/test_batch_fast.py	1141249
+test_storage_delta/test.py	1085863
+test_replicated_database/test.py	1080691
+test_storage_azure_blob_storage/test.py	972973
+test_database_replicated_settings/test.py	943054
+test_storage_s3/test.py	857565
+test_multiple_disks/test.py	786368
+test_ttl_replicated/test.py	771670
+test_dictionaries_all_layouts_separate_sources/test_mongo.py	748632
+test_backup_restore_new/test.py	681261
+test_backup_restore_on_cluster/test_concurrency.py	642060
+test_refreshable_mat_view/test.py	627426
+test_storage_iceberg_with_spark/test_cluster_table_function.py	618549
+test_backup_restore_s3/test.py	606755
+test_named_collections/test.py	602227
+test_max_bytes_ratio_before_external_order_group_by_for_server/test.py	601928
+test_storage_s3_queue/test_migration.py	478435
+test_dictionaries_all_layouts_separate_sources/test_clickhouse_remote.py	478268
+test_dictionaries_all_layouts_separate_sources/test_clickhouse_local.py	477059
+test_dictionaries_all_layouts_separate_sources/test_mysql.py	475807
+test_dictionaries_redis/test.py	463010
+test_dictionaries_all_layouts_separate_sources/test_https.py	462339
+test_dictionaries_all_layouts_separate_sources/test_http.py	460872
+test_ttl_move/test.py	456727
+test_async_load_databases/test.py	446296
+test_s3_aws_sdk_has_slightly_unreliable_behaviour/test.py	426681
+test_storage_s3_queue/test_0.py	412840
+test_storage_iceberg_with_spark/test_minmax_pruning.py	406980
+test_distributed_load_balancing/test.py	384362
+test_storage_s3_queue/test_2.py	380983
+test_checking_s3_blobs_paranoid/test.py	365294
+test_restore_db_replica/test.py	352690
+test_lost_part_during_startup/test.py	352222
+test_distributed_ddl/test.py	346430
+test_statistics_cache/test.py	343661
+test_kafka_bad_messages/test.py	342460
+test_log_query_probability/test.py	340109
+test_executable_table_function/test.py	336419
+test_concurrent_ttl_merges/test.py	335528
+test_storage_s3_queue/test_1.py	334635
+test_merge_tree_s3/test.py	334024
+test_mysql57_database_engine/test.py	329155
+test_ytsaurus/test_tables.py	325947
+test_mask_sensitive_info/test.py	323296
+test_parallel_replicas_insert_select/test.py	309834
+test_storage_kafka/test_batch_slow_2.py	303939
+test_mysql_database_engine/test.py	301067
+test_storage_iceberg_schema_evolution/test_evolved_schema_simple.py	301003
+test_storage_kafka/test_batch_slow_4.py	292787
+test_backup_restore_on_cluster/test.py	288161
+test_dictionaries_all_layouts_separate_sources/test_file.py	287705
+test_refreshable_mv/test.py	287144
+test_dns_cache/test.py	287050
+test_scheduler/test.py	284613
+test_named_collections_encrypted2/test.py	284255
+test_drop_is_lock_free/test.py	279611
+test_database_delta/test.py	274309
+test_storage_iceberg_with_spark/test_expire_snapshots.py	272432
+test_storage_kafka/test_batch_slow_1.py	261982
+test_storage_kafka/test_batch_slow_5.py	260869
+test_dictionaries_dependency/test.py	258080
+test_dictionaries_ddl/test.py	256850
+test_postgresql_replica_database_engine/test_2.py	250477
+test_crash_log/test.py	248388
+test_mysql_protocol/test.py	238997
+test_row_policy/test.py	235980
+test_distributed_directory_monitor_split_batch_on_failure/test.py	231382
+test_storage_kafka/test_compression_codec.py	229530
+test_storage_kafka/test_batch_slow_6.py	229314
+test_postpone_failed_tasks/test.py	219136
+test_migration_deduplication_hash/test.py	219055
+test_storage_postgresql/test.py	218055
+test_storage_iceberg_with_spark/test_system_iceberg_metadata.py	215843
+test_storage_s3_queue/test_3.py	213101
+test_refreshable_mat_view_replicated/test.py	212388
+test_postgresql_replica_database_engine/test_3.py	210875
+test_storage_iceberg_with_spark/test_partition_pruning.py	206857
+test_storage_mongodb/test.py	206842
+test_postgresql_replica_database_engine/test_1.py	206440
+test_s3_plain_rewritable/test.py	204315
+test_backward_compatibility/test_aggregate_function_state.py	197285
+test_parallel_replicas_invisible_parts/test.py	196384
+test_hedged_requests/test.py	192701
+test_postgresql_replica_database_engine/test_0.py	191221
+test_filesystem_split_cache/test.py	186692
+test_storage_kafka/test_batch_slow_0.py	186298
+test_storage_s3_queue/test_4.py	184654
+test_postgresql_database_engine/test.py	180576
+test_backup_restore_on_cluster/test_cancel_backup.py	173355
+test_insert_distributed_async_send/test.py	172319
+test_storage_kerberized_kafka/test.py	170940
+test_jbod_balancer/test.py	170314
+test_keeper_two_nodes_cluster/test.py	170221
+test_http_failover/test.py	168479
+test_polymorphic_parts/test.py	167319
+test_lost_part/test.py	166215
+test_backup_restore_new/test_cancel_backup.py	165131
+test_implicit_index_upgrade/test.py	164869
+test_broken_projections/test.py	162878
+test_ytsaurus/test_dictionaries.py	162678
+test_storage_iceberg_with_spark/test_position_deletes.py	161917
+test_parallel_replicas_over_distributed/test.py	161068
+test_dictionaries_all_layouts_separate_sources/test_executable_hashed.py	160301
+test_storage_iceberg_schema_evolution/test_array_evolved_nested.py	157454
+test_plain_rewritable_backward_compatibility/test.py	155354
+test_dictionaries_all_layouts_separate_sources/test_mongo_uri.py	153332
+test_backward_compatibility/test_convert_ordinary.py	152555
+test_distributed_frozen_replica/test.py	150657
+test_system_logs/test_system_logs.py	147489
+test_replicated_mutations/test.py	147108
+test_stop_insert_when_disk_close_to_full/test.py	142798
+test_library_bridge/test.py	142652
+test_merge_tree_azure_blob_storage/test.py	142481
+test_dictionaries_update_and_reload/test.py	140901
+test_system_clusters_actual_information/test.py	136676
+test_quota/test.py	135378
+test_http_handlers_config/test.py	135097
+test_disk_over_web_server/test.py	135091
+test_dictionaries_all_layouts_separate_sources/test_executable_cache.py	131362
+test_replicated_users/test.py	129576
+test_distributed_index_analysis/test.py	129189
+test_keeper_zookeeper_converter/test.py	128775
+test_storage_iceberg_concurrent/test_concurrent_reads.py	127703
+test_replicated_fetches_bandwidth/test.py	127414
+test_manipulate_statistics/test.py	126874
+test_grant_and_revoke/test_with_table_engine_grant.py	126678
+test_storage_iceberg_no_spark/test_writes_statistics_by_minmax_pruning.py	125242
+test_storage_iceberg_with_spark/test_writes_mutate_delete.py	124641
+test_s3_plain_rewritable_rotate_tables/test.py	124004
+test_parallel_replicas_custom_key_failover/test.py	122461
+test_drop_database_replica/test.py	122292
+test_encrypted_disk/test.py	121948
+test_distributed_inter_server_secret/test.py	118716
+test_restore_replica/test.py	118197
+test_role/test.py	116841
+test_storage_kafka/test_produce_http_interface.py	116350
+test_distributed_ddl_parallel/test.py	115498
+test_ddl_worker_replicas/test.py	114280
+test_keeper_map/test.py	114093
+test_backward_compatibility/test_aggregate_function_state_tuple_return_type.py	113451
+test_database_glue/test.py	113117
+test_system_logs_recreate/test.py	111257
+test_storage_mysql/test.py	110483
+test_recompression_ttl/test.py	110002
+test_mutations_hardlinks/test.py	108893
+test_storage_iceberg_schema_evolution/test_tuple_evolved_nested.py	106969
+test_server_reload/test.py	106481
+test_refreshable_mv_skip_old_temp_table_ddls/test.py	106453
+test_attach_without_fetching/test.py	104045
+test_system_merges/test.py	102579
+test_keeper_internal_secure/test.py	100812
+test_quorum_inserts/test.py	100237
 """
 
 

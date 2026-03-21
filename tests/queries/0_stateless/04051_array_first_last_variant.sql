@@ -1,3 +1,5 @@
+SET enable_analyzer = 1;
+
 -- arrayFirst should preserve Variant discriminator (not reinterpret Date as Bool)
 SELECT 'arrayFirst';
 SELECT

@@ -1,9 +1,7 @@
-#include <type_traits>
-#include <IO/ReadHelpers.h>
-#include <IO/WriteHelpers.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Processors/QueryPlan/UnionStep.h>
 #include <Processors/QueryPlan/QueryPlanStepRegistry.h>
+#include <Processors/QueryPlan/QueryPlanSerializationSettings.h>
 #include <Processors/QueryPlan/Serialization.h>
 #include <Processors/Sources/NullSource.h>
 #include <Processors/Transforms/ExpressionTransform.h>
@@ -12,6 +10,11 @@
 
 namespace DB
 {
+
+namespace QueryPlanSerializationSetting
+{
+    extern const QueryPlanSerializationSettingsUInt64 max_streams_for_union_step;
+}
 
 namespace ErrorCodes
 {
@@ -101,21 +104,22 @@ void UnionStep::describePipeline(FormatSettings & settings) const
     IQueryPlanStep::describePipeline(processors, settings);
 }
 
+void UnionStep::serializeSettings(QueryPlanSerializationSettings & settings) const
+{
+    settings[QueryPlanSerializationSetting::max_streams_for_union_step] = max_streams;
+}
+
 void UnionStep::serialize(Serialization & ctx) const
 {
-    writeVarUInt(max_threads, ctx.out);
-    writeVarUInt(max_streams, ctx.out);
+    (void)ctx;
 }
 
 QueryPlanStepPtr UnionStep::deserialize(Deserialization & ctx)
 {
-    UInt64 max_threads_ = 0;
-    UInt64 max_streams_ = 0;
-
-    readVarUInt(max_threads_, ctx.in);
-    readVarUInt(max_streams_, ctx.in);
-
-    return std::make_unique<UnionStep>(ctx.input_headers, max_threads_, max_streams_);
+    return std::make_unique<UnionStep>(
+        ctx.input_headers,
+        /* max_threads_ = */ 0,
+        /* max_streams_ = */ ctx.settings[QueryPlanSerializationSetting::max_streams_for_union_step]);
 }
 
 void registerUnionStep(QueryPlanStepRegistry & registry)

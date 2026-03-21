@@ -98,9 +98,14 @@ public:
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type) const override
     {
         const ColumnConst * kind_column = checkAndGetColumnConst<ColumnString>(arguments[1].column.get());
+        if (!kind_column)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Second argument for function {} must be constant string: "
+                "name of interval kind", getName());
+
         String interval_kind = Poco::toLower(kind_column->getValue<String>());
         IntervalKind kind;
-        IntervalKind::tryParseString(interval_kind, kind.kind);
+        if (!IntervalKind::tryParseString(interval_kind, kind.kind))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "{} doesn't look like an interval unit in {}", interval_kind, getName());
 
         auto function = std::make_shared<FunctionToInterval>(context, kind);
 

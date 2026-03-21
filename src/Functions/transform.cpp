@@ -1,3 +1,4 @@
+#include <mutex>
 #include <base/bit_cast.h>
 
 #include <Columns/ColumnArray.h>
@@ -168,7 +169,11 @@ namespace
             /// If cache was not initialized at build time (e.g. columns were not available during analysis),
             /// initialize it now from the actual arguments.
             if (!cache)
-                cache = initializeTransformCache(arguments, result_type);
+            {
+                std::lock_guard lock(cache_mutex);
+                if (!cache)
+                    cache = initializeTransformCache(arguments, result_type);
+            }
 
             const auto * in = arguments[0].column.get();
 
@@ -666,6 +671,7 @@ namespace
         }
 
         mutable TransformCachePtr cache;
+        mutable std::mutex cache_mutex;
 
     public:
         static void checkAllowedType(const DataTypePtr & type)

@@ -218,9 +218,14 @@ public:
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
         const ColumnConst * datepart_column = checkAndGetColumnConst<ColumnString>(arguments[0].column.get());
+        if (!datepart_column)
+            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "First argument for function {} must be constant string: "
+                "name of datepart", getName());
+
         String datepart_param = Poco::toLower(datepart_column->getValue<String>());
         IntervalKind::Kind datepart_kind;
-        IntervalKind::tryParseString(datepart_param, datepart_kind);
+        if (!IntervalKind::tryParseString(datepart_param, datepart_kind))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "{} doesn't look like datepart name in {}", datepart_param, getName());
 
         auto function = std::make_shared<FunctionDateTrunc>(context, datepart_kind);
 

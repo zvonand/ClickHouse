@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 personal_ws-1.1 en 3600
+=======
+personal_ws-1.1 en 3599
+>>>>>>> 920c8f9ce26470877b57138ae92e4103e158eb85
 AArch
 ABIs
 ACLs

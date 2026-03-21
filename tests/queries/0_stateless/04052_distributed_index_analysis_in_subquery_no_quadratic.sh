@@ -70,6 +70,9 @@ $CLICKHOUSE_CLIENT -q "
         AND type = 'QueryFinish'
         AND query_kind = 'Select'
         AND initial_query_id = '$query_id'
+        -- Bypass style check. Database name is 'default' for queries on workers.
+        -- Database name is embedded in the query_id.
+        AND (current_database = currentDatabase() OR 1)
 "
 
 $CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS test_in_dia"

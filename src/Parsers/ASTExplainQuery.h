@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Parsers/ASTInsertQuery.h>
 #include <Parsers/ASTQueryWithOutput.h>
 
 
@@ -139,7 +138,8 @@ protected:
             /// cannot be parsed back.
             bool need_parens = frame.has_trailing_output_options
                 && !dynamic_cast<const ASTQueryWithOutput *>(query.get())
-                && !dynamic_cast<const ASTInsertQuery *>(query.get());
+                && query->getQueryKind() != QueryKind::Insert
+                && query->getQueryKind() != QueryKind::AsyncInsertFlush;
             if (need_parens)
                 ostr << "(";
             query->format(ostr, settings, state, frame);

@@ -32,7 +32,7 @@ SET force_index_by_date
 ## SET TIME ZONE {#set-time-zone}
 
 ```sql
-SET TIME ZONE 'timezone'
+SET TIME ZONE [=] 'timezone'
 ```
 
 Sets the session time zone. This is an alias for `SET session_timezone = 'timezone'`, provided for compatibility with PostgreSQL and other SQL databases.

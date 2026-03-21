@@ -19,7 +19,11 @@ namespace DB
 namespace ErrorCodes
 {
 extern const int BAD_ARGUMENTS;
+extern const int TOO_LARGE_ARRAY_SIZE;
 }
+
+/// Sanity limit to prevent huge memory allocations when parsing random/malformed WKB data.
+static constexpr UInt32 MAX_WKB_ELEMENT_COUNT = 1'000'000;
 
 namespace
 {
@@ -55,6 +59,9 @@ inline LineString<CartesianPoint> readLineWKB(ReadBuffer & in_buffer, std::endia
     UInt32 num_points;
     readBinaryEndian(num_points, in_buffer, endian_to_read);
 
+    if (num_points > MAX_WKB_ELEMENT_COUNT)
+        throw Exception(ErrorCodes::TOO_LARGE_ARRAY_SIZE, "Too many points in WKB LineString: {}", num_points);
+
     LineString<CartesianPoint> line;
     line.reserve(num_points);
 
@@ -70,6 +77,9 @@ inline Ring<CartesianPoint> readRingWKB(ReadBuffer & in_buffer, std::endian endi
     UInt32 num_points;
     readBinaryEndian(num_points, in_buffer, endian_to_read);
 
+    if (num_points > MAX_WKB_ELEMENT_COUNT)
+        throw Exception(ErrorCodes::TOO_LARGE_ARRAY_SIZE, "Too many points in WKB Ring: {}", num_points);
+
     Ring<CartesianPoint> ring;
     ring.reserve(num_points);
 
@@ -84,6 +94,9 @@ inline Polygon<CartesianPoint> readPolygonWKB(ReadBuffer & in_buffer, std::endia
 {
     UInt32 num_rings;
     readBinaryEndian(num_rings, in_buffer, endian_to_read);
+
+    if (num_rings > MAX_WKB_ELEMENT_COUNT)
+        throw Exception(ErrorCodes::TOO_LARGE_ARRAY_SIZE, "Too many rings in WKB Polygon: {}", num_rings);
 
     Polygon<CartesianPoint> polygon;
     if (num_rings > 1)
@@ -107,6 +120,9 @@ MultiLineString<CartesianPoint> readMultiLineStringWKB(ReadBuffer & in_buffer, s
     UInt32 num_rings;
     readBinaryEndian(num_rings, in_buffer, endian_to_read);
 
+    if (num_rings > MAX_WKB_ELEMENT_COUNT)
+        throw Exception(ErrorCodes::TOO_LARGE_ARRAY_SIZE, "Too many line strings in WKB MultiLineString: {}", num_rings);
+
     multiline.reserve(num_rings);
     for (UInt32 i = 0; i < num_rings; ++i)
     {
@@ -124,6 +140,9 @@ MultiPolygon<CartesianPoint> readMultiPolygonWKB(ReadBuffer & in_buffer, std::en
 
     UInt32 num_polygons;
     readBinaryEndian(num_polygons, in_buffer, endian_to_read);
+
+    if (num_polygons > MAX_WKB_ELEMENT_COUNT)
+        throw Exception(ErrorCodes::TOO_LARGE_ARRAY_SIZE, "Too many polygons in WKB MultiPolygon: {}", num_polygons);
 
     multipolygon.reserve(num_polygons);
     for (UInt32 i = 0; i < num_polygons; ++i)

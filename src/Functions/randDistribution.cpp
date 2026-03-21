@@ -29,6 +29,11 @@ namespace ErrorCodes
 
 namespace
 {
+/// Reasonable upper bound for distribution parameters to prevent hangs
+/// (e.g. randBinomial with trials=44988101480975 takes effectively forever).
+static constexpr UInt64 MAX_DISTRIBUTION_TRIALS = 1'000'000'000;
+static constexpr Float64 MAX_DISTRIBUTION_PARAM = 1e6;
+
 struct UniformDistribution
 {
     using ReturnType = DataTypeFloat64;
@@ -37,6 +42,9 @@ struct UniformDistribution
 
     static void generate(Float64 min, Float64 max, ColumnFloat64::Container & container)
     {
+        if (min > max)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument min ({}) of function {} should not be greater than max ({})", min, getName(), max);
+
         auto distribution = std::uniform_real_distribution<>(min, max);
         for (auto & elem : container)
             elem = distribution(thread_local_rng);
@@ -51,6 +59,9 @@ struct NormalDistribution
 
     static void generate(Float64 mean, Float64 stddev, ColumnFloat64::Container & container)
     {
+        if (stddev < 0)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument stddev of function {} should be non-negative", getName());
+
         auto distribution = std::normal_distribution<>(mean, stddev);
         for (auto & elem : container)
             elem = distribution(thread_local_rng);
@@ -65,6 +76,9 @@ struct LogNormalDistribution
 
     static void generate(Float64 mean, Float64 stddev, ColumnFloat64::Container & container)
     {
+        if (stddev < 0)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument stddev of function {} should be non-negative", getName());
+
         auto distribution = std::lognormal_distribution<>(mean, stddev);
         for (auto & elem : container)
             elem = distribution(thread_local_rng);
@@ -79,6 +93,9 @@ struct ExponentialDistribution
 
     static void generate(Float64 lambda, ColumnFloat64::Container & container)
     {
+        if (lambda <= 0)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (lambda) of function {} should be greater than zero", getName());
+
         auto distribution = std::exponential_distribution<>(lambda);
         for (auto & elem : container)
             elem = distribution(thread_local_rng);
@@ -95,6 +112,8 @@ struct ChiSquaredDistribution
     {
         if (degree_of_freedom <= 0)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (degrees of freedom) of function {} should be greater than zero", getName());
+        if (degree_of_freedom > MAX_DISTRIBUTION_PARAM)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (degrees of freedom) of function {} is too large: {}", getName(), degree_of_freedom);
 
         auto distribution = std::chi_squared_distribution<>(degree_of_freedom);
         for (auto & elem : container)
@@ -112,6 +131,8 @@ struct StudentTDistribution
     {
         if (degree_of_freedom <= 0)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (degrees of freedom) of function {} should be greater than zero", getName());
+        if (degree_of_freedom > MAX_DISTRIBUTION_PARAM)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (degrees of freedom) of function {} is too large: {}", getName(), degree_of_freedom);
 
         auto distribution = std::student_t_distribution<>(degree_of_freedom);
         for (auto & elem : container)
@@ -129,6 +150,8 @@ struct FisherFDistribution
     {
         if (d1 <= 0 || d2 <= 0)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (degrees of freedom) of function {} should be greater than zero", getName());
+        if (d1 > MAX_DISTRIBUTION_PARAM || d2 > MAX_DISTRIBUTION_PARAM)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (degrees of freedom) of function {} is too large", getName());
 
         auto distribution = std::fisher_f_distribution<>(d1, d2);
         for (auto & elem : container)
@@ -163,6 +186,8 @@ struct BinomialDistribution
     {
         if (p < 0.0f || p > 1.0f)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument of function {} should be inside [0, 1] because it is a probability", getName());
+        if (t > MAX_DISTRIBUTION_TRIALS)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (number of experiments) of function {} is too large: {}", getName(), t);
 
         auto distribution = std::binomial_distribution<UInt64>(t, p);
         for (auto & elem : container)
@@ -180,6 +205,8 @@ struct NegativeBinomialDistribution
     {
         if (p < 0.0f || p > 1.0f)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument of function {} should be inside [0, 1] because it is a probability", getName());
+        if (t > MAX_DISTRIBUTION_TRIALS)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (number of experiments) of function {} is too large: {}", getName(), t);
 
         auto distribution = std::negative_binomial_distribution<UInt64>(t, p);
         for (auto & elem : container)
@@ -195,6 +222,9 @@ struct PoissonDistribution
 
     static void generate(UInt64 n, ColumnUInt64::Container & container)
     {
+        if (n > MAX_DISTRIBUTION_TRIALS)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (mean) of function {} is too large: {}", getName(), n);
+
         auto distribution = std::poisson_distribution<UInt64>(static_cast<double>(n));
         for (auto & elem : container)
             elem = static_cast<UInt64>(distribution(thread_local_rng));

@@ -1,4 +1,4 @@
-#include "config.h"
+#include <Functions/h3Common.h>
 
 #if USE_H3
 
@@ -11,8 +11,6 @@
 #include <Common/typeid_cast.h>
 #include <IO/WriteHelpers.h>
 #include <base/range.h>
-#include <constants.h>
-#include <h3api.h>
 
 
 namespace DB
@@ -31,7 +29,11 @@ class FunctionH3GetDestinationIndexFromUnidirectionalEdge : public IFunction
 public:
     static constexpr auto name = "h3GetDestinationIndexFromUnidirectionalEdge";
 
-    static FunctionPtr create(ContextPtr) { return std::make_shared<FunctionH3GetDestinationIndexFromUnidirectionalEdge>(); }
+    H3Validator validator;
+
+    explicit FunctionH3GetDestinationIndexFromUnidirectionalEdge(const ContextPtr & context) : validator(context) {}
+
+    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3GetDestinationIndexFromUnidirectionalEdge>(context); }
 
     std::string getName() const override { return name; }
 
@@ -80,7 +82,9 @@ public:
         for (size_t row = 0; row < input_rows_count; ++row)
         {
             const UInt64 edge = data_hindex_edge[row];
-            const UInt64 res = getDirectedEdgeDestination(edge);
+            UInt64 res = 0;
+            if (validator.validateEdge(edge))
+                res = getDirectedEdgeDestination(edge);
             dst_data[row] = res;
         }
 

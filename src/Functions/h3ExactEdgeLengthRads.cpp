@@ -1,4 +1,4 @@
-#include "config.h"
+#include <Functions/h3Common.h>
 
 #if USE_H3
 
@@ -7,8 +7,6 @@
 #include <Functions/FunctionFactory.h>
 #include <Functions/IFunction.h>
 #include <IO/WriteHelpers.h>
-
-#include <h3api.h>
 
 
 namespace DB
@@ -27,7 +25,11 @@ class FunctionH3ExactEdgeLengthRads : public IFunction
 public:
     static constexpr auto name = "h3ExactEdgeLengthRads";
 
-    static FunctionPtr create(ContextPtr) { return std::make_shared<FunctionH3ExactEdgeLengthRads>(); }
+    H3Validator validator;
+
+    explicit FunctionH3ExactEdgeLengthRads(const ContextPtr & context) : validator(context) {}
+
+    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3ExactEdgeLengthRads>(context); }
 
     std::string getName() const override { return name; }
 
@@ -76,7 +78,9 @@ public:
         for (size_t row = 0; row < input_rows_count; ++row)
         {
             const UInt64 index = data[row];
-            Float64 res = exactEdgeLengthRads(index);
+            Float64 res = 0;
+            if (validator.validateEdge(index))
+                res = exactEdgeLengthRads(index);
             dst_data[row] = res;
         }
 

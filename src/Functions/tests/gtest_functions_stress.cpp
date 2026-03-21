@@ -323,72 +323,6 @@ const std::unordered_set<std::string_view> excluded_functions = {
     "firstSignificantSubdomainCustomRFC",
     "fuzzQuery",
 
-    /// H3 functions can read out of bounds of global arrays in the H3 contrib library
-    /// when given invalid H3 indexes (found by ASan).
-    "geoToH3",
-    "h3CellAreaM2",
-    "h3CellAreaRads2",
-    "h3Distance",
-    "h3EdgeAngle",
-    "h3EdgeLengthKm",
-    "h3EdgeLengthM",
-    "h3ExactEdgeLengthKm",
-    "h3ExactEdgeLengthM",
-    "h3ExactEdgeLengthRads",
-    "h3GetBaseCell",
-    "h3GetDestinationIndexFromUnidirectionalEdge",
-    "h3GetFaces",
-    "h3GetIndexesFromUnidirectionalEdge",
-    "h3GetOriginIndexFromUnidirectionalEdge",
-    "h3GetPentagonIndexes",
-    "h3GetRes0Indexes",
-    "h3GetResolution",
-    "h3GetUnidirectionalEdge",
-    "h3GetUnidirectionalEdgeBoundary",
-    "h3GetUnidirectionalEdgesFromHexagon",
-    "h3HexAreaKm2",
-    "h3HexAreaM2",
-    "h3HexRing",
-    "h3IndexesAreNeighbors",
-    "h3IsPentagon",
-    "h3IsResClassIII",
-    "h3IsValid",
-    "h3Line",
-    "h3NumHexagons",
-    "h3PolygonToCells",
-    "h3ToCenterChild",
-    "h3ToChildren",
-    "h3ToGeo",
-    "h3ToGeoBoundary",
-    "h3ToParent",
-    "h3ToString",
-    "h3UnidirectionalEdgeIsValid",
-    "h3kRing",
-    "stringToH3",
-
-    /// readWKB functions can try to allocate huge amounts of memory on random input
-    /// (no bounds checking on polygon counts in WKB parsing).
-    "readWKB",
-    "readWKBPoint",
-    "readWKBLineString",
-    "readWKBMultiLineString",
-    "readWKBPolygon",
-    "readWKBMultiPolygon",
-
-    /// Random distribution functions can hang with extreme parameters
-    /// (e.g. randBinomial with trials=44988101480975, or randChiSquared with df=3e307).
-    "randUniform",
-    "randNormal",
-    "randLogNormal",
-    "randExponential",
-    "randChiSquared",
-    "randStudentT",
-    "randFisherF",
-    "randBernoulli",
-    "randBinomial",
-    "randNegativeBinomial",
-    "randPoisson",
-
     /// Avoid aggregate functions (for no strong reason).
     "initializeAggregation",
     "finalizeAggregation",
@@ -1213,6 +1147,40 @@ struct FunctionsStressTestThread
         return std::unique_lock(mutex);
     }
 
+    /// Randomize settings that affect function behavior to increase test coverage.
+    void randomizeSettings()
+    {
+        /// Only randomize occasionally to amortize the cost.
+        if (thread_local_rng() % 10 != 0)
+            return;
+
+        /// Boolean settings to randomize.
+        static constexpr std::array<std::string_view, 15> bool_settings = {{
+            "decimal_check_overflow",
+            "enable_extended_results_for_datetime_functions",
+            "allow_nonconst_timezone_arguments",
+            "use_legacy_to_time",
+            "function_locate_has_mysql_compatible_argument_order",
+            "allow_simdjson",
+            "splitby_max_substrings_includes_remaining_string",
+            "least_greatest_legacy_null_behavior",
+            "cast_keep_nullable",
+            "cast_ipv4_ipv6_default_on_conversion_error",
+            "enable_named_columns_in_function_tuple",
+            "function_json_value_return_type_allow_nullable",
+            "function_json_value_return_type_allow_complex",
+            "use_variant_as_common_type",
+            "geo_distance_returns_float64_on_float64_arguments",
+        }};
+
+        for (auto setting : bool_settings)
+            context->setSetting(setting, static_cast<UInt64>(thread_local_rng() % 2));
+
+        /// Enum-like settings.
+        context->setSetting("function_visible_width_behavior", static_cast<UInt64>(thread_local_rng() % 2));
+        context->setSetting("date_time_overflow_behavior", static_cast<UInt64>(thread_local_rng() % 3));
+    }
+
     void run()
     {
         thread_status.emplace();
@@ -1233,9 +1201,11 @@ struct FunctionsStressTestThread
 
         while (!thread_should_stop.load(std::memory_order_relaxed))
         {
-            /// Pick random function.
-            /// TODO: bias
-            size_t function_idx = thread_local_rng() % testable_functions.size();
+            /// Pick random function, biased toward less-tested functions.
+            /// Pick two random candidates and choose the one with fewer iterations.
+            size_t a = thread_local_rng() % testable_functions.size();
+            size_t b = thread_local_rng() % testable_functions.size();
+            size_t function_idx = function_stats[a].get(S_OVERLOAD_ATTEMPTS) <= function_stats[b].get(S_OVERLOAD_ATTEMPTS) ? a : b;
             FunctionStats & stats = function_stats[function_idx];
 
             {
@@ -1249,6 +1219,8 @@ struct FunctionsStressTestThread
             thread_status->memory_tracker.resetCounters(); // reset the peak
             thread_status->memory_tracker.setHardLimit(MEMORY_LIMIT_BYTES_PER_THREAD);
             thread_status->untracked_memory = 0;
+
+            randomizeSettings();
 
             auto handle_unexpected_exception = [&]
             {
@@ -2094,13 +2066,6 @@ void __tsan_on_report(void * /*report*/) // NOLINT(bugprone-reserved-identifier,
 
 TEST(FunctionsStress, stress)
 {
-#if defined(MEMORY_SANITIZER)
-    /// Under MSan, the stress test finds uninitialized-memory reads in functions
-    /// that are hard to debug without a local MSan build. Disable for now.
-    /// TODO: Fix the underlying MSan issues and re-enable.
-    GTEST_SKIP() << "Disabled under MSan";
-#endif
-
     chassert(!logger);
     logger = getLogger("stress");
 
@@ -2203,5 +2168,3 @@ TEST(FunctionsStress, stress)
 // * maybe fix SerializationMap outputting invalid SQL: {k: v} instead of map(k, v)
 // * maybe fix SerializationTuple outputting non-tuple SQL for single-element tuples: (x) instead of tuple(x) or (x,)
 // * investigate memory tracker imbalance
-// * run with sanitizers
-// * randomize settings: decimal_check_overflow, cast_string_to_date_time_mode, enable_extended_results_for_datetime_functions, allow_nonconst_timezone_arguments, use_legacy_to_time, function_locate_has_mysql_compatible_argument_order, allow_simdjson, splitby_max_substrings_includes_remaining_string, least_greatest_legacy_null_behavior, h3togeo_lon_lat_result_order, geotoh3_argument_order, cast_keep_nullable, cast_ipv4_ipv6_default_on_conversion_error, enable_named_columns_in_function_tuple, function_visible_width_behavior, function_json_value_return_type_allow_nullable, function_json_value_return_type_allow_complex, use_variant_as_common_type, geo_distance_returns_float64_on_float64_arguments, session_timezone, function_date_trunc_return_type_behavior, date_time_input_format, date_time_output_format, date_time_overflow_behavior

@@ -1,4 +1,4 @@
-#include "config.h"
+#include <Functions/h3Common.h>
 
 #if USE_H3
 
@@ -9,8 +9,6 @@
 #include <Functions/IFunction.h>
 #include <Common/typeid_cast.h>
 #include <base/range.h>
-
-#include <h3api.h>
 
 
 namespace DB
@@ -28,7 +26,11 @@ class FunctionH3GetBaseCell : public IFunction
 public:
     static constexpr auto name = "h3GetBaseCell";
 
-    static FunctionPtr create(ContextPtr) { return std::make_shared<FunctionH3GetBaseCell>(); }
+    H3Validator validator;
+
+    explicit FunctionH3GetBaseCell(const ContextPtr & context) : validator(context) {}
+
+    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3GetBaseCell>(context); }
 
     std::string getName() const override { return name; }
 
@@ -77,7 +79,9 @@ public:
         {
             const UInt64 hindex = data[row];
 
-            auto res = static_cast<UInt8>(getBaseCellNumber(hindex));
+            UInt8 res = 0;
+            if (validator.validateCell(hindex))
+                res = static_cast<UInt8>(getBaseCellNumber(hindex));
 
             dst_data[row] = res;
         }

@@ -1,4 +1,4 @@
-#include "config.h"
+#include <Functions/h3Common.h>
 
 #if USE_H3
 
@@ -12,7 +12,6 @@
 #include <Functions/IFunction.h>
 #include <Common/typeid_cast.h>
 #include <IO/WriteHelpers.h>
-#include <h3api.h>
 
 
 namespace DB
@@ -31,7 +30,11 @@ class FunctionH3GetUnidirectionalEdgeBoundary : public IFunction
 public:
     static constexpr auto name = "h3GetUnidirectionalEdgeBoundary";
 
-    static FunctionPtr create(ContextPtr) { return std::make_shared<FunctionH3GetUnidirectionalEdgeBoundary>(); }
+    H3Validator validator;
+
+    explicit FunctionH3GetUnidirectionalEdgeBoundary(const ContextPtr & context) : validator(context) {}
+
+    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionH3GetUnidirectionalEdgeBoundary>(context); }
 
     std::string getName() const override { return name; }
 
@@ -79,17 +82,21 @@ public:
         for (size_t row = 0; row < input_rows_count; ++row)
         {
             H3Index edge = data_hindex_edge[row];
-            CellBoundary boundary{};
 
-            directedEdgeToBoundary(edge, &boundary);
-
-            for (int vert = 0; vert < boundary.numVerts; ++vert)
+            if (validator.validateEdge(edge))
             {
-                latitude->getData().push_back(radsToDegs(boundary.verts[vert].lat));
-                longitude->getData().push_back(radsToDegs(boundary.verts[vert].lng));
+                CellBoundary boundary{};
+                directedEdgeToBoundary(edge, &boundary);
+
+                for (int vert = 0; vert < boundary.numVerts; ++vert)
+                {
+                    latitude->getData().push_back(radsToDegs(boundary.verts[vert].lat));
+                    longitude->getData().push_back(radsToDegs(boundary.verts[vert].lng));
+                }
+
+                current_offset += boundary.numVerts;
             }
 
-            current_offset += boundary.numVerts;
             offsets->insert(current_offset);
         }
 

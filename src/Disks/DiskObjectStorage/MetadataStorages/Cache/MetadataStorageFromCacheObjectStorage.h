@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Disks/DiskObjectStorage/MetadataStorages/IMetadataStorage.h>
+#include <Disks/DiskObjectStorage/MetadataStorages/InMemoryRemovalQueue.h>
 
 namespace DB
 {
@@ -83,8 +84,7 @@ public:
 private:
     const MetadataStoragePtr underlying;
 
-    mutable std::mutex removed_objects_mutex;
-    StoredObjectSet objects_to_remove TSA_GUARDED_BY(removed_objects_mutex);
+    InMemoryRemovalQueue objects_to_remove;
 };
 
 class MetadataStorageFromCacheObjectStorageTransaction : public IMetadataTransaction

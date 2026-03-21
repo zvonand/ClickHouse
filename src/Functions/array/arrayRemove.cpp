@@ -132,7 +132,7 @@ ColumnPtr FunctionArrayRemove::executeImpl(
 
     /// The filter can end up as ColumnConst or ColumnNullable when comparing tuples
     /// with NULL components during constant folding. Normalize to a plain ColumnUInt8.
-    filter_col = filter_col->convertToFullColumnIfConst();
+    filter_col = filter_col->convertToFullIfNeeded();
     if (const auto * nullable_filter = checkAndGetColumn<ColumnNullable>(filter_col.get()))
     {
         /// NULL in filter means comparison was indeterminate (e.g., tuple with NULL component).

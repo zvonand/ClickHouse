@@ -42,6 +42,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         addSettingsChanges(settings_changes_history, "26.4",
         {
             {"enable_materialized_cte", false, false, "New setting"},
+            {"max_threads_min_free_memory_per_thread", 0, 1073741824, "New setting to limit the number of threads based on available free memory"},
+            {"max_insert_threads_min_free_memory_per_thread", 0, 4294967296, "New setting to limit the number of insert threads based on available free memory"},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {

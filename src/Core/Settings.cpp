@@ -290,6 +290,12 @@ Without SMT (e.g. Intel HyperThreading), this corresponds to the number of CPU c
 For ClickHouse Cloud users, the default value will display as `auto(N)` where N matches the vCPU size of your service e.g. 2vCPU/8GiB, 4vCPU/16GiB etc.
 See the settings tab in the Cloud console for a list of all service sizes.
 )", 0) \
+    DECLARE(UInt64, max_threads_min_free_memory_per_thread, 1_GiB, R"(
+If the amount of free memory (the server's `max_server_memory_usage` minus the currently tracked memory) is less than `max_threads` multiplied by this value, the number of threads will be lowered to fit in memory, down to a minimum of 1. Set to zero to disable this limit.
+)", 0) \
+    DECLARE(UInt64, max_insert_threads_min_free_memory_per_thread, 4_GiB, R"(
+If the amount of free memory (the server's `max_server_memory_usage` minus the currently tracked memory) is less than `max_insert_threads` multiplied by this value, the number of insert threads will be lowered to fit in memory, down to a minimum of 1. Set to zero to disable this limit.
+)", 0) \
     DECLARE(Bool, use_concurrency_control, true, R"(
 Respect the server's concurrency control (see the `concurrent_threads_soft_limit_num` and `concurrent_threads_soft_limit_ratio_to_cores` global server settings). If disabled, it allows using a larger number of threads even if the server is overloaded (not recommended for normal usage, and needed mostly for tests).
 

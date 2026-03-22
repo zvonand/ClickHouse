@@ -81,6 +81,20 @@ const ValueSizeMap & IMergeTreeReader::getAvgValueSizeHints() const
     return avg_value_size_hints;
 }
 
+bool IMergeTreeReader::isColumnDroppedByPendingMutation(size_t pos) const
+{
+    /// Projection parts use a fake data_version of 0 (FAKE_RESULT_PART_FOR_PROJECTION),
+    /// which causes all mutations to appear as "pending" even if the parent part
+    /// has already had them applied. Skip the dropped-column check for projection parts
+    /// to avoid incorrectly discarding valid column data during projection merges.
+    /// This is consistent with `injectRequiredColumns` in MergeTreeBlockReadUtils.cpp
+    /// which also skips alter_conversions for projection parts.
+    if (data_part_info_for_read->isProjectionPart())
+        return false;
+
+    return alter_conversions && alter_conversions->isColumnDropped(columns_to_read[pos].getNameInStorage());
+}
+
 void IMergeTreeReader::fillVirtualColumns(Columns & columns, size_t rows) const
 {
     chassert(columns.size() == getColumns().size());

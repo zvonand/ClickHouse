@@ -157,6 +157,15 @@ class Targeting:
     # never get the narrow-tier bonus and always rank below direct hits.
     SIBLING_DIR_WIDTH = 10000
 
+    # Per-pass score multipliers applied on top of the 1/(width×rc) signal.
+    # Pass 1 (direct line coverage) is the baseline.  Passes 2 and 3 use
+    # secondary signals and are discounted so that even a weak direct hit
+    # outranks the strongest indirect or sibling hit.
+    PASS_WEIGHT_DIRECT   = 1.0   # Pass 1: test directly covers changed lines
+    PASS_WEIGHT_INDIRECT = 0.3   # Pass 3: test shares virtual-dispatch callees with primary tests
+    PASS_WEIGHT_SIBLING  = 0.1   # Pass 2: test covers a sibling file in the same source directory
+    PASS_WEIGHT_KEYWORD  = 0.05  # Fallback: test filename contains domain keywords from changed files
+
     def get_tests_by_changed_lines(self, changed_lines: list) -> dict:
         """
         Query `checks_coverage_lines` for tests that cover each (filename, line_no) pair.
@@ -306,7 +315,7 @@ class Targeting:
                     ow, od, orc = by_test[t]
                     by_test[t] = (min(ow, w), min(od, d), min(orc, rc))
             result[(filename, line_no)] = [
-                (t, w, d, rc) for t, (w, d, rc) in sorted(by_test.items())
+                (t, w, d, rc, self.PASS_WEIGHT_DIRECT) for t, (w, d, rc) in sorted(by_test.items())
             ]
 
         # --- Secondary pass: sibling files in the same source directory ----
@@ -332,7 +341,7 @@ class Targeting:
                     # Skip tests already found by the primary query for this line.
                     existing = {e[0] for e in result[key]}
                     if t not in existing:
-                        result[key].append((t, self.SIBLING_DIR_WIDTH, 255, max(1, rc)))
+                        result[key].append((t, self.SIBLING_DIR_WIDTH, 255, max(1, rc), self.PASS_WEIGHT_SIBLING))
 
 
         # --- Tertiary pass: indirect-call (virtual dispatch) co-occurrence ------
@@ -341,10 +350,13 @@ class Targeting:
         indirect_tests = self._query_indirect_call_tests(result)
         if indirect_tests:
             for key in result:
+                fname, _ = key
+                if not any(fname.startswith(p) for p in COVERAGE_TRACKED_PREFIXES):
+                    continue
                 existing = {e[0] for e in result[key]}
                 for t in indirect_tests:
                     if t not in existing:
-                        result[key].append((t, self.INDIRECT_CALL_WIDTH, 255, 1))
+                        result[key].append((t, self.INDIRECT_CALL_WIDTH, 255, 1, self.PASS_WEIGHT_INDIRECT))
 
         total_unique_tests = len({t for pairs in result.values() for t, *_ in pairs})
         lines_with_tests = sum(1 for (f, _), pairs in result.items() if pairs and any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES))
@@ -695,11 +707,13 @@ class Targeting:
         # Keywords matching too many tests (too generic) or zero tests
         # (no signal) are discarded.
         # We use two tiers:
-        #   Specific tier (1–50 hits): high confidence, domain-specific keyword.
-        #   Broad tier  (51–150 hits): lower confidence, include only if no
+        #   Specific tier (1–100 hits): high confidence, domain-specific keyword.
+        #     At 100 we include domain words like "Arrow" (54), "Parquet" (99),
+        #     "text_index" (86), "Variant" (64) while still excluding broad words.
+        #   Broad tier  (101–200 hits): lower confidence, include only if no
         #                               specific keyword is available.
-        SPECIFIC_MAX = 50
-        BROAD_MAX = 150
+        SPECIFIC_MAX = 100
+        BROAD_MAX = 200
 
         def count_hits(kw_lower: str) -> int:
             return sum(1 for f in all_test_files if kw_lower in f.lower())
@@ -731,14 +745,14 @@ class Targeting:
         file_ranked = [(h, l, kw) for h, l, kw in all_ranked if kw not in dir_kw_set]
 
         if dir_ranked:
-            # Use the best directory keyword.  If there is also a specific (≤50 hits)
+            # Use the best directory keyword.  If there is also a specific (≤SPECIFIC_MAX hits)
             # filename keyword, combine them so we narrow the result further.
             candidate_kws = [dir_ranked[0][2]]
             if file_ranked and file_ranked[0][0] <= SPECIFIC_MAX:
                 candidate_kws.append(file_ranked[0][2])
         elif file_ranked:
             # No directory keyword available; use at most one filename keyword from the
-            # specific tier.  Broad filename keywords are too noisy on their own.
+            # specific tier.  Keywords in the broad tier alone are too noisy.
             file_specific = [x for x in file_ranked if x[0] <= SPECIFIC_MAX]
             if not file_specific:
                 return []
@@ -762,7 +776,7 @@ class Targeting:
                 f"matching keywords {candidate_kws}"
             )
         return [
-            (t, self.KEYWORD_FALLBACK_WIDTH, 255, 1)
+            (t, self.KEYWORD_FALLBACK_WIDTH, 255, 1, self.PASS_WEIGHT_KEYWORD)
             for t in sorted(matched_tests)
         ]
 
@@ -864,22 +878,53 @@ class Targeting:
                             injected.add((ff, ln))
                             break
 
+        # Supplementary keyword pass: even for C++ files WITH direct coverage,
+        # add tests whose *filename* contains domain keywords from the changed
+        # file.  This catches broad regression tests (e.g. 01273_arrow.sh for
+        # CHColumnToArrowColumn.cpp) that exercise the same domain through
+        # higher-level call paths not captured in line coverage — the same tests
+        # the old symbol-based algo found via checks_coverage_inverted.
+        # Uses PASS_WEIGHT_KEYWORD (lowest weight) so they rank below all
+        # coverage-backed hits but are still present for the scorer.
+        cpp_with_coverage = list(dict.fromkeys(
+            f for f, ln in changed_lines
+            if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
+            and (f.endswith(".cpp") or f.endswith(".h"))
+            and f not in cpp_with_zero_coverage
+            and any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
+        ))
+        if cpp_with_coverage:
+            supplement_quads = self._get_keyword_fallback_tests(cpp_with_coverage)
+            if supplement_quads:
+                injected_s: set = set()
+                for f in cpp_with_coverage:
+                    for (ff, ln), pairs in line_to_tests.items():
+                        if ff == f and (ff, ln) not in injected_s:
+                            existing = {q[0] for q in pairs}
+                            pairs.extend(
+                                q for q in supplement_quads if q[0] not in existing
+                            )
+                            injected_s.add((ff, ln))
+                            break
+
         # Accumulate per-test scores across all changed lines.
-        # line_to_tests values are lists of (test_name, region_width, min_depth, region_test_count).
+        # line_to_tests values are lists of
+        #   (test_name, region_width, min_depth, region_test_count, pass_weight).
         #
-        # Scoring combines three signals:
+        # Scoring combines four signals:
+        #   pass_weight   — per-pass multiplier (1.0 direct, 0.3 indirect, 0.1 sibling, 0.05 keyword)
         #   width         — narrow regions (few lines) are more precise → weight 1/width
         #   region_test_count — regions covered by few tests are more specific → weight 1/region_test_count
         #   min_depth     — low call count means this test specifically exercised this path
         #
-        # Final score = sum(1 / (width × region_test_count)) across all matched changed lines.
-        width_score: dict = {}    # test -> sum(1/(width×region_test_count))
+        # Final score = sum(pass_weight / (width × region_test_count)) across all matched changed lines.
+        width_score: dict = {}    # test -> sum(pass_weight/(width×region_test_count))
         has_narrow_hit: dict = {} # test -> bool: any covering region is narrow AND exclusive
         min_depth_seen: dict = {} # test -> minimum call count across all hits
         for quads in line_to_tests.values():
-            for t, width, depth, region_test_count in quads:
+            for t, width, depth, region_test_count, pass_weight in quads:
                 rc = max(1, region_test_count)
-                width_score[t] = width_score.get(t, 0.0) + 1.0 / (width * rc)
+                width_score[t] = width_score.get(t, 0.0) + pass_weight / (width * rc)
                 has_narrow_hit[t] = has_narrow_hit.get(t, False) or (
                     width <= self.NARROW_REGION_MAX_LINES
                 )
@@ -1035,17 +1080,37 @@ if __name__ == "__main__":
                         injected.add((ff, ln))
                         break
 
+    # Supplementary keyword pass for C++ files WITH coverage (mirrors get_most_relevant_tests).
+    cpp_with_coverage = list(dict.fromkeys(
+        f for f, ln in changed_lines
+        if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
+        and (f.endswith(".cpp") or f.endswith(".h"))
+        and f not in cpp_with_zero_coverage
+        and any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
+    ))
+    if cpp_with_coverage:
+        supplement_quads = targeting._get_keyword_fallback_tests(cpp_with_coverage)
+        if supplement_quads:
+            injected_s: set = set()
+            for f in cpp_with_coverage:
+                for (ff, ln), pairs in line_to_tests.items():
+                    if ff == f and (ff, ln) not in injected_s:
+                        existing = {q[0] for q in pairs}
+                        pairs.extend(q for q in supplement_quads if q[0] not in existing)
+                        injected_s.add((ff, ln))
+                        break
+
     print("\nTests found for lines:")
     for (file, line), quads in line_to_tests.items():
         if not quads:
             continue
         print(f"{file}:{line}:")
-        for test, width, depth, rc in quads:
+        for test, width, depth, rc, pw in quads:
             narrow_tag = "narrow" if width <= Targeting.NARROW_REGION_MAX_LINES else f"width={width}"
             depth_tag = f"depth={depth}" if depth < 255 else "depth=?"
-            print(f" - {test}  [{narrow_tag}, {depth_tag}]")
+            print(f" - {test}  [{narrow_tag}, {depth_tag}, pw={pw}]")
 
-    # quads is list of (test_name, region_width, min_depth, region_test_count)
+    # quads is list of (test_name, region_width, min_depth, region_test_count, pass_weight)
     all_tests: dict = {}  # test -> (min_width, min_depth, min_region_test_count)
 
     # Seed with changed test files using perfect-signal sentinel values.
@@ -1053,7 +1118,7 @@ if __name__ == "__main__":
         all_tests[t] = (1, 0, 1)  # width=1, depth=0, rc=1 → always top-ranked
 
     for quads in line_to_tests.values():
-        for t, w, d, rc in quads:
+        for t, w, d, rc, _pw in quads:
             if t not in all_tests:
                 all_tests[t] = (w, d, rc)
             else:

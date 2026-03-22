@@ -198,7 +198,10 @@ ReturnType parseDateTimeBestEffortImpl(
                 if (fractional && !in.eof() && *in.position() == '.')
                 {
                     ++in.position();
-                    fractional->digits = static_cast<UInt8>(readDigits(digits, sizeof(digits), in));
+                    using FractionalType = typename std::decay_t<decltype(fractional->value)>;
+                    fractional->digits = static_cast<UInt8>(std::min(
+                        static_cast<size_t>(std::numeric_limits<FractionalType>::digits10),
+                        readDigits(digits, sizeof(digits), in)));
                     readDecimalNumber(fractional->value, fractional->digits, digits);
                 }
                 return ReturnType(true);
@@ -213,7 +216,10 @@ ReturnType parseDateTimeBestEffortImpl(
                 if (fractional && !in.eof() && *in.position() == '.')
                 {
                     ++in.position();
-                    fractional->digits = static_cast<UInt8>(readDigits(digits, sizeof(digits), in));
+                    using FractionalType = typename std::decay_t<decltype(fractional->value)>;
+                    fractional->digits = static_cast<UInt8>(std::min(
+                        static_cast<size_t>(std::numeric_limits<FractionalType>::digits10),
+                        readDigits(digits, sizeof(digits), in)));
                     readDecimalNumber(fractional->value, fractional->digits, digits);
                 }
                 return ReturnType(true);

@@ -139,8 +139,9 @@ class Targeting:
         p = path.replace("\\", "/").lstrip("./")
         return "./" + p
 
-    # Absolute cap: a line covering more than this many tests is excluded
-    # (too common code — carries no signal for targeted test selection).
+    # Threshold for filtering ubiquitous indirect callees (operator new, malloc, etc.)
+    # that every test calls and carry no targeting signal for the indirect-call pass.
+    # Not used as a cap on direct line coverage any more.
     MAX_TESTS_PER_LINE = 200
 
     # Regions wider than this are considered "broad" (low signal).
@@ -291,18 +292,11 @@ class Targeting:
         # touched files; now filter to ranges that actually overlap a changed line.
         # Start from base_result which already has empty entries for non-tracked files.
         result: dict = dict(base_result)
-        capped_regions = 0
         for filename, line_no in coverage_lines:
             stored = self._stored_path(filename)
             matched: list = []
             for file_, line_start, line_end, test_depths, region_test_count in coverage_ranges:
                 if file_ == stored and line_start <= line_no <= line_end:
-                    # Skip regions covered by too many tests — these are
-                    # infrastructure entry points (e.g. Settings.cpp) that are
-                    # exercised by essentially every test and carry no targeting signal.
-                    if region_test_count > self.MAX_TESTS_PER_LINE:
-                        capped_regions += 1
-                        continue
                     width = line_end - line_start + 1
                     for t, depth in test_depths:
                         matched.append((t, width, depth, region_test_count))
@@ -354,17 +348,23 @@ class Targeting:
                 if not any(fname.startswith(p) for p in COVERAGE_TRACKED_PREFIXES):
                     continue
                 existing = {e[0] for e in result[key]}
-                for t in indirect_tests:
+                for t, shared_count in indirect_tests.items():
                     if t not in existing:
-                        result[key].append((t, self.INDIRECT_CALL_WIDTH, 255, 1, self.PASS_WEIGHT_INDIRECT))
+                        # Scale effective width inversely with shared_callees so that
+                        # tests sharing more callees with the primary set rank higher.
+                        # Floor at NARROW_REGION_MAX_LINES+1 to stay in the broad tier.
+                        effective_width = max(
+                            self.NARROW_REGION_MAX_LINES + 1,
+                            self.INDIRECT_CALL_WIDTH // max(1, shared_count),
+                        )
+                        result[key].append((t, effective_width, 255, 1, self.PASS_WEIGHT_INDIRECT))
 
         total_unique_tests = len({t for pairs in result.values() for t, *_ in pairs})
         lines_with_tests = sum(1 for (f, _), pairs in result.items() if pairs and any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES))
-        capped_msg = f", {capped_regions} line-region pairs capped (>{self.MAX_TESTS_PER_LINE} tests)" if capped_regions else ""
         print(
             f"[find_tests] done in {time.monotonic()-t0:.2f}s: "
             f"{lines_with_tests}/{len(coverage_lines)} lines matched, "
-            f"{total_unique_tests} unique tests selected{capped_msg}"
+            f"{total_unique_tests} unique tests selected"
         )
         return result
 
@@ -464,11 +464,12 @@ class Targeting:
             f"'{self._escape_sql_string(t)}'" for t in sorted(primary_tests)
         )
 
-        # Self-join on callee_offset: find tests that share indirect callees with
-        # the primary set, filtered by specificity (< MAX_TESTS_PER_LINE tests
-        # per callee to avoid universal callees like allocators).
+        # Self-join on callee_offset: count how many distinct callees each candidate
+        # test shares with the primary set.  More shared callees = stronger signal.
+        # Ubiquitous callees (operator new, malloc, etc.) are filtered out via the
+        # HAVING clause so they don't inflate counts for every test.
         query = f"""
-        SELECT DISTINCT ic2.test_name
+        SELECT ic2.test_name, count(DISTINCT ic1.callee_offset) AS shared_callees
         FROM checks_coverage_indirect_calls ic1
         JOIN checks_coverage_indirect_calls ic2 ON ic1.callee_offset = ic2.callee_offset
         WHERE ic1.check_start_time > now() - interval 3 days
@@ -484,7 +485,8 @@ class Targeting:
               GROUP BY callee_offset
               HAVING uniqExact(test_name) < {self.MAX_TESTS_PER_LINE}
           )
-        LIMIT 200
+        GROUP BY ic2.test_name
+        ORDER BY shared_callees DESC
         """
 
         try:
@@ -498,17 +500,24 @@ class Targeting:
             print(f"[find_tests] indirect-call query failed (non-fatal): {e}")
             return {}
 
-        tests = [row.strip() for row in raw.strip().splitlines() if row.strip()]
-        if not tests:
+        # Parse TSV: test_name \t shared_callees
+        result_map: dict = {}
+        for row in raw.strip().splitlines():
+            parts = row.split("\t", 1)
+            if len(parts) == 2 and parts[0].strip():
+                try:
+                    result_map[parts[0].strip()] = int(parts[1].strip())
+                except ValueError:
+                    pass
+        if not result_map:
             return {}
 
         print(
             f"[find_tests] indirect-call query: {elapsed:.2f}s, "
-            f"{len(tests)} additional test candidates via callee co-occurrence"
+            f"{len(result_map)} additional test candidates via callee co-occurrence "
+            f"(top shared={max(result_map.values())})"
         )
-        # Return as a flat dict {test_name -> INDIRECT_CALL_RC} where RC is the
-        # number of shared callees (approximated as 1 here since we SELECT DISTINCT).
-        return {t: 1 for t in tests}
+        return result_map
 
     def _query_sibling_dir_tests(self, files_to_lines: dict, primary_result: dict) -> dict:
         """

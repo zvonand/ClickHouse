@@ -2180,7 +2180,14 @@ try
             size_t max_server_memory_usage = new_server_settings[ServerSetting::max_server_memory_usage];
             const double max_server_memory_usage_to_ram_ratio = new_server_settings[ServerSetting::max_server_memory_usage_to_ram_ratio];
             const size_t current_physical_server_memory = getMemoryAmount(); /// With cgroups, the amount of memory available to the server can be changed dynamically.
-            const size_t default_max_server_memory_usage = static_cast<size_t>(static_cast<double>(current_physical_server_memory) * max_server_memory_usage_to_ram_ratio);
+            size_t default_max_server_memory_usage = static_cast<size_t>(static_cast<double>(current_physical_server_memory) * max_server_memory_usage_to_ram_ratio);
+
+            /// On low-memory systems, ensure at least 300 MiB of headroom for the OS, kernel structures,
+            /// and jemalloc metadata. The percentage-based ratio (default 0.9) doesn't leave enough
+            /// absolute headroom when total RAM is small (e.g., 2 GiB * 0.1 = only 200 MiB).
+            constexpr size_t min_os_overhead = 300 * 1024 * 1024; /// 300 MiB
+            if (current_physical_server_memory > min_os_overhead)
+                default_max_server_memory_usage = std::min(default_max_server_memory_usage, current_physical_server_memory - min_os_overhead);
 
             if (max_server_memory_usage == 0)
             {

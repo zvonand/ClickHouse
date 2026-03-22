@@ -99,7 +99,6 @@ void collectAndInsertCoverage(
     {
         auto msg = fmt::format("CoverageCollection: No covered counters for test '{}', skipping", test_name);
         LOG_INFO(getLogger("CoverageCollection"), "{}", msg);
-        std::cerr << msg << "\n";
         return;
     }
 
@@ -226,25 +225,19 @@ void collectAndInsertCoverage(
         /// alone only resets the pipeline without running it — data would be lost.
         /// executeTrivialBlockIO executes the pipeline first, then finalises.
         executeTrivialBlockIO(block_io, query_context);
-        std::cerr << fmt::format(
-            "CoverageCollection: Inserted coverage for test '{}': {} regions\n",
-            test_name, files.size());
+        LOG_INFO(getLogger("CoverageCollection"), "Inserted coverage for test '{}': {} regions", test_name, files.size());
     }
     catch (const Exception & e)
     {
-        auto msg = fmt::format(
-            "CoverageCollection: Failed to insert coverage for test '{}': code={} msg={}",
+        LOG_WARNING(getLogger("CoverageCollection"),
+            "Failed to insert coverage for test '{}': code={} msg={}",
             test_name, e.code(), e.message());
-        LOG_WARNING(getLogger("CoverageCollection"), "{}", msg);
-        std::cerr << msg << "\n";
     }
     catch (...)
     {
-        auto msg = fmt::format(
-            "CoverageCollection: Failed to insert coverage for test '{}': unknown exception",
+        LOG_WARNING(getLogger("CoverageCollection"),
+            "Failed to insert coverage for test '{}': unknown exception",
             test_name);
-        LOG_WARNING(getLogger("CoverageCollection"), "{}", msg);
-        std::cerr << msg << "\n";
     }
 
     /// Insert indirect-call observations into system.coverage_indirect_calls.
@@ -281,7 +274,7 @@ void collectAndInsertCoverage(
             auto ic_bio = executeQuery(ic_buf.str(), ic_context, QueryFlags{.internal = true}).second;
             executeTrivialBlockIO(ic_bio, ic_context);
         }
-        catch (...) {} /// best-effort; indirect call data is supplementary
+        catch (...) {} /// Ok: best-effort; indirect call data is supplementary, failure is non-fatal
     }
 }
 

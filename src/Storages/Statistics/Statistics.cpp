@@ -513,6 +513,7 @@ void removeImplicitStatistics(ColumnsDescription & columns)
         auto default_kind = column.default_desc.kind;
         if (default_kind == ColumnDefaultKind::Alias || default_kind == ColumnDefaultKind::Ephemeral)
             continue;
+
         columns.modify(column.name, [&](ColumnDescription & column_desc)
         {
             auto & stats = column_desc.statistics.types_to_desc;

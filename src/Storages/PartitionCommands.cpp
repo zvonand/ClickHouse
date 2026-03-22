@@ -1,12 +1,7 @@
 #include <Columns/IColumn.h>
-#include <Common/quoteString.h>
-#include <Disks/StoragePolicy.h>
 #include <Storages/PartitionCommands.h>
 #include <Storages/IStorage.h>
 #include <Storages/DataDestinationType.h>
-#include <Storages/StorageAlias.h>
-#include <Storages/StorageMaterializedView.h>
-#include <Storages/StorageProxy.h>
 #include <Parsers/ASTAlterQuery.h>
 #include <Core/ColumnWithTypeAndName.h>
 #include <DataTypes/DataTypeString.h>

@@ -66,6 +66,7 @@ namespace Setting
     extern const SettingsNonZeroUInt64 max_block_size;
     extern const SettingsBool use_concurrency_control;
     extern const SettingsBool validate_mutation_query;
+    extern const SettingsBool allow_statistics;
 }
 
 namespace MergeTreeSetting
@@ -947,6 +948,9 @@ void MutationsInterpreter::prepare(bool dry_run)
         }
         else if (command.type == MutationCommand::MATERIALIZE_STATISTICS)
         {
+            if (!context->getSettingsRef()[Setting::allow_statistics])
+                throw Exception(ErrorCodes::INCORRECT_QUERY, "Alter table with statistics is disabled. Turn on allow_statistics");
+
             mutation_kind.set(MutationKind::MUTATE_INDEX_STATISTICS_PROJECTION);
             /// if we execute `ALTER TABLE ... MATERIALIZE STATISTICS ALL`, we materalize all the statistics in this table.
             if (command.statistics_columns.empty())
@@ -992,6 +996,9 @@ void MutationsInterpreter::prepare(bool dry_run)
         }
         else if (command.type == MutationCommand::DROP_STATISTICS)
         {
+            if (!context->getSettingsRef()[Setting::allow_statistics])
+                throw Exception(ErrorCodes::INCORRECT_QUERY, "Alter table with statistics is disabled. Turn on allow_statistics");
+
             mutation_kind.set(MutationKind::MUTATE_INDEX_STATISTICS_PROJECTION);
 
             if (command.clear && command.statistics_columns.empty())

@@ -40,53 +40,6 @@ namespace ErrorCodes
     extern const int UNKNOWN_MUTATION_COMMAND;
     extern const int MULTIPLE_ASSIGNMENTS_TO_COLUMN;
     extern const int LOGICAL_ERROR;
-    extern const int INCORRECT_QUERY;
-    extern const int NOT_FOUND_COLUMN_IN_BLOCK;
-    extern const int BAD_ARGUMENTS;
-}
-
-namespace
-{
-
-void validatePredicateColumns(const ASTPtr & predicate, const StoragePtr & storage, ContextPtr context)
-{
-    auto select = make_intrusive<ASTSelectQuery>();
-    {
-        auto filter = predicate->clone();
-        select->setExpression(ASTSelectQuery::Expression::WHERE, std::move(filter));
-
-        auto projection = make_intrusive<ASTExpressionList>();
-        projection->children.push_back(makeASTFunction("count"));
-        select->setExpression(ASTSelectQuery::Expression::SELECT, std::move(projection));
-
-        auto tables = make_intrusive<ASTTablesInSelectQuery>();
-        auto table = make_intrusive<ASTTablesInSelectQueryElement>();
-        auto table_exp = make_intrusive<ASTTableExpression>();
-        table_exp->database_and_table_name = make_intrusive<ASTTableIdentifier>(storage->getStorageID());
-        table_exp->children.emplace_back(table_exp->database_and_table_name);
-        table->table_expression = table_exp;
-        tables->children.push_back(table);
-        select->setExpression(ASTSelectQuery::Expression::TABLES, std::move(tables));
-    }
-
-    auto query_tree = buildQueryTree(select, context);
-    QueryAnalysisPass query_analysis_pass;
-    query_analysis_pass.run(query_tree, context);
-}
-
-void validateDeterministicFunctions(const MutationCommand & command, ContextPtr context)
-{
-    const auto nondeterministic_func_data = findFirstNonDeterministicFunction(command, context);
-    if (nondeterministic_func_data.subquery)
-        throw Exception(ErrorCodes::BAD_ARGUMENTS, "ALTER UPDATE/ALTER DELETE statement with subquery may be nondeterministic, "
-                                                    "see allow_nondeterministic_mutations setting");
-
-    if (nondeterministic_func_data.nondeterministic_function_name)
-        throw Exception(ErrorCodes::BAD_ARGUMENTS,
-            "The source storage is replicated so ALTER UPDATE/ALTER DELETE statements must use only deterministic functions. "
-            "Function '{}' is non-deterministic", *nondeterministic_func_data.nondeterministic_function_name);
-}
-
 }
 
 bool MutationCommand::isBarrierCommand() const

@@ -1,3 +1,5 @@
+SET enable_analyzer = 1;
+
 -- Regression tests for fuzz-found issues reported against obsolete versions.
 -- These were fixed by the time of current master.
 

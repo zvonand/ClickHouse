@@ -3750,6 +3750,38 @@ BoolMask KeyCondition::checkInRange(
     });
 }
 
+/// Check if the function preserves the Field value representation when it's monotonic on the given range.
+/// For example, CAST between UInt8/16/32/64 types all store as UInt64 in Field, so when the CAST is
+/// monotonic (value fits in the target type), the Field value doesn't change.
+/// Similarly for Int8/16/32/64 (all stored as Int64) and Float32/64 (both stored as Float64).
+/// In such cases we can skip the expensive function application (which creates columns and executes
+/// the function via the full column execution machinery) and just keep the original Field value.
+static bool functionPreservesFieldRepresentation(const DataTypePtr & from_type, const DataTypePtr & to_type)
+{
+    auto from_id = from_type->getTypeId();
+    auto to_id = to_type->getTypeId();
+
+    auto is_unsigned_int = [](TypeIndex id)
+    {
+        return id == TypeIndex::UInt8 || id == TypeIndex::UInt16 || id == TypeIndex::UInt32 || id == TypeIndex::UInt64;
+    };
+
+    auto is_signed_int = [](TypeIndex id)
+    {
+        return id == TypeIndex::Int8 || id == TypeIndex::Int16 || id == TypeIndex::Int32 || id == TypeIndex::Int64;
+    };
+
+    /// Unsigned integer types all use UInt64 as their Field representation.
+    if (is_unsigned_int(from_id) && is_unsigned_int(to_id))
+        return true;
+
+    /// Signed integer types all use Int64 as their Field representation.
+    if (is_signed_int(from_id) && is_signed_int(to_id))
+        return true;
+
+    return false;
+}
+
 std::optional<Range> KeyCondition::applyMonotonicFunctionsChainToRange(
     Range key_range,
     const MonotonicFunctionsChain & functions,
@@ -3769,24 +3801,45 @@ std::optional<Range> KeyCondition::applyMonotonicFunctionsChainToRange(
             return {};
         }
 
-        /// If we apply function to open interval, we can get empty intervals in result.
-        /// E.g. for ('2020-01-03', '2020-01-20') after applying 'toYYYYMM' we will get ('202001', '202001').
-        /// To avoid this we make range left and right included.
-        /// Any function that treats NULL specially is not monotonic.
-        /// Thus we can safely use isNull() as an -Inf/+Inf indicator here.
-        if (!key_range.left.isNull())
+        auto result_type = func->getResultType();
+
+        /// For functions like CAST between integer types that share the same Field representation
+        /// (e.g., UInt16 and UInt64 both use UInt64 in Field), when the function is monotonic
+        /// on the given range, the Field values are guaranteed to be unchanged.
+        /// We can skip the expensive function application that creates columns and executes the function.
+        /// The monotonicity check already verified that the values fit in the target type.
+        bool skip_apply = functionPreservesFieldRepresentation(current_type, result_type);
+
+        if (!skip_apply)
         {
-            key_range.left = applyFunction(func, current_type, key_range.left);
-            key_range.left_included = true;
+            /// If we apply function to open interval, we can get empty intervals in result.
+            /// E.g. for ('2020-01-03', '2020-01-20') after applying 'toYYYYMM' we will get ('202001', '202001').
+            /// To avoid this we make range left and right included.
+            /// Any function that treats NULL specially is not monotonic.
+            /// Thus we can safely use isNull() as an -Inf/+Inf indicator here.
+            if (!key_range.left.isNull())
+            {
+                key_range.left = applyFunction(func, current_type, key_range.left);
+                key_range.left_included = true;
+            }
+
+            if (!key_range.right.isNull())
+            {
+                key_range.right = applyFunction(func, current_type, key_range.right);
+                key_range.right_included = true;
+            }
+        }
+        else
+        {
+            /// Even though we skip the function application, we still need to make bounds included
+            /// (the function could map open bounds to the same point).
+            if (!key_range.left.isNull())
+                key_range.left_included = true;
+            if (!key_range.right.isNull())
+                key_range.right_included = true;
         }
 
-        if (!key_range.right.isNull())
-        {
-            key_range.right = applyFunction(func, current_type, key_range.right);
-            key_range.right_included = true;
-        }
-
-        current_type = func->getResultType();
+        current_type = result_type;
 
         if (!monotonicity.is_positive)
             key_range.invert();
@@ -4180,13 +4233,16 @@ BoolMask KeyCondition::checkInHyperrectangle(
                                 hyperrectangle.size(), key_column, element.toString());
             }
 
-            Range key_range = hyperrectangle[key_column];
+            /// Avoid copying Range when there is no monotonic function chain (the common case).
+            const Range * key_range_ptr = &hyperrectangle[key_column];
+            std::optional<Range> key_range_storage;
 
             /// The case when the column is wrapped in a chain of possibly monotonic functions.
             if (!element.monotonic_functions_chain.empty())
             {
+                key_range_storage = hyperrectangle[key_column];
                 std::optional<Range> new_range = applyMonotonicFunctionsChainToRange(
-                    key_range,
+                    *key_range_storage,
                     element.monotonic_functions_chain,
                     data_types[key_column],
                     single_point
@@ -4197,8 +4253,11 @@ BoolMask KeyCondition::checkInHyperrectangle(
                     rpn_stack.emplace_back(true, true);
                     continue;
                 }
-                key_range = *new_range;
+                key_range_storage = *new_range;
+                key_range_ptr = &*key_range_storage;
             }
+
+            const Range & key_range = *key_range_ptr;
 
             bool intersects = element.range.intersectsRange(key_range);
             bool contains = element.range.containsRange(key_range);

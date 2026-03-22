@@ -27,6 +27,29 @@
 
 namespace DB
 {
+
+namespace
+{
+
+/// Check if any step in the query plan tree contains correlated expressions (PLACEHOLDER nodes).
+/// Such plans cannot be executed standalone — they require decorrelation first.
+bool hasCorrelatedExpressions(const QueryPlan::Node * node)
+{
+    if (!node)
+        return false;
+
+    if (node->step->hasCorrelatedExpressions())
+        return true;
+
+    for (const auto * child : node->children)
+        if (hasCorrelatedExpressions(child))
+            return true;
+
+    return false;
+}
+
+}
+
 namespace Setting
 {
     extern const SettingsUInt64 max_bytes_in_set;
@@ -297,6 +320,11 @@ void FutureSetFromSubquery::buildSetInplace(const ContextPtr & context)
     if (external_table_set)
         external_table_set->buildSetInplace(context);
 
+    /// Correlated subqueries contain PLACEHOLDER actions that cannot be executed standalone.
+    /// They will be decorrelated and executed as part of the outer query instead.
+    if (source && hasCorrelatedExpressions(source->getRootNode()))
+        return;
+
     const auto & settings = context->getSettingsRef();
     SizeLimits network_transfer_limits(settings[Setting::max_rows_to_transfer], settings[Setting::max_bytes_to_transfer], settings[Setting::transfer_overflow_mode]);
     auto prepared_sets_cache = context->getPreparedSetsCache();
@@ -336,6 +364,11 @@ SetPtr FutureSetFromSubquery::buildOrderedSetInplace(const ContextPtr & context)
             return set_and_key->set;
         }
     }
+
+    /// Correlated subqueries contain PLACEHOLDER actions that cannot be executed standalone.
+    /// They will be decorrelated and executed as part of the outer query instead.
+    if (source && hasCorrelatedExpressions(source->getRootNode()))
+        return nullptr;
 
     const auto & settings = context->getSettingsRef();
     SizeLimits network_transfer_limits(settings[Setting::max_rows_to_transfer], settings[Setting::max_bytes_to_transfer], settings[Setting::transfer_overflow_mode]);

@@ -117,8 +117,11 @@ ColumnPtr FunctionArrayRemove::executeImpl(
         // then: and(isNull(arr), isNull(elem))
         auto then_col = BuildAndExecuteFunction("and", {is_arr_null_arg, is_elem_null_arg}, context, arr_elements_count);
 
-        auto else_col = removeNullable(BuildAndExecuteFunction(
-            "equals", {{arr_data_col, arr_data_type, "arr"}, {replicated_elem_col, elem_type, "elem"}}, context, arr_elements_count));
+        auto equals_result = BuildAndExecuteFunction(
+            "equals", {{arr_data_col, arr_data_type, "arr"}, {replicated_elem_col, elem_type, "elem"}}, context, arr_elements_count);
+        /// equals() on tuples with nullable components may return ColumnConst(Nullable(UInt8)).
+        /// convertToFullIfNeeded() unwraps ColumnConst so removeNullable can strip the Nullable layer.
+        auto else_col = removeNullable(equals_result->convertToFullIfNeeded());
 
         auto cond_arg = ColumnWithTypeAndName{cond_col, std::make_shared<DataTypeUInt8>(), "cond"};
         auto then_arg = ColumnWithTypeAndName{then_col, std::make_shared<DataTypeUInt8>(), "then"};

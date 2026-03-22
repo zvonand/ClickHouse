@@ -3,6 +3,7 @@
 #include <Interpreters/InterpreterSelectWithUnionQuery.h>
 #include <Interpreters/InterpreterSelectQueryAnalyzer.h>
 #include <Interpreters/NormalizeSelectWithUnionQueryVisitor.h>
+#include <Interpreters/SelectIntersectExceptQueryVisitor.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Interpreters/Context.h>
 #include <DataTypes/DataTypeLowCardinality.h>
@@ -146,6 +147,16 @@ StorageView::StorageView(
     SelectQueryDescription description;
 
     description.inner_query = query.select->ptr();
+
+    /// Resolve INTERSECT/EXCEPT precedence before normalizing UNION.
+    /// Without this, NormalizeSelectWithUnionQueryVisitor does not understand
+    /// INTERSECT/EXCEPT modes and may incorrectly drop SELECT branches.
+    /// This is needed when the AST is freshly parsed from stored metadata
+    /// (e.g. during ATTACH) and has not been through executeQuery's visitors.
+    {
+        SelectIntersectExceptQueryVisitor::Data data{SetOperationMode::DISTINCT, SetOperationMode::DISTINCT};
+        SelectIntersectExceptQueryVisitor{data}.visit(description.inner_query);
+    }
 
     NormalizeSelectWithUnionQueryVisitor::Data data{SetOperationMode::Unspecified};
     NormalizeSelectWithUnionQueryVisitor{data}.visit(description.inner_query);

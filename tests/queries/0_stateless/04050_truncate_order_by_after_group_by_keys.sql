@@ -1,3 +1,4 @@
+-- Tags: no-fasttest
 -- When there is GROUP BY and ORDER BY, trailing ORDER BY elements after
 -- all GROUP BY keys are covered are removed as an optimization.
 -- This also applies when GROUP BY ALL and ORDER BY ALL are used together.

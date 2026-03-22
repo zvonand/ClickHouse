@@ -3750,14 +3750,28 @@ BoolMask KeyCondition::checkInRange(
     });
 }
 
-/// Check if the function preserves the Field value representation when it's monotonic on the given range.
+/// Check if a type conversion function preserves the Field value when it's monotonic on the given range.
 /// For example, CAST between UInt8/16/32/64 types all store as UInt64 in Field, so when the CAST is
 /// monotonic (value fits in the target type), the Field value doesn't change.
-/// Similarly for Int8/16/32/64 (all stored as Int64) and Float32/64 (both stored as Float64).
+/// Similarly for Int8/16/32/64 (all stored as Int64).
 /// In such cases we can skip the expensive function application (which creates columns and executes
 /// the function via the full column execution machinery) and just keep the original Field value.
-static bool functionPreservesFieldRepresentation(const DataTypePtr & from_type, const DataTypePtr & to_type)
+///
+/// IMPORTANT: This must only return true for pure type conversion functions (_CAST, toUInt*, toInt*),
+/// NOT for arithmetic or other functions that happen to have compatible integer types on input/output.
+static bool functionIsIntegerCastPreservingFieldRepresentation(
+    const FunctionBasePtr & func, const DataTypePtr & from_type, const DataTypePtr & to_type)
 {
+    /// Only type conversion functions preserve Field values across integer type boundaries.
+    /// Arithmetic functions like plus/minus change the value even with same-family types.
+    const auto & name = func->getName();
+    bool is_cast = (name == "_CAST" || name == "CAST"
+        || name == "toUInt8" || name == "toUInt16" || name == "toUInt32" || name == "toUInt64"
+        || name == "toInt8" || name == "toInt16" || name == "toInt32" || name == "toInt64");
+
+    if (!is_cast)
+        return false;
+
     auto from_id = from_type->getTypeId();
     auto to_id = to_type->getTypeId();
 
@@ -3808,7 +3822,7 @@ std::optional<Range> KeyCondition::applyMonotonicFunctionsChainToRange(
         /// on the given range, the Field values are guaranteed to be unchanged.
         /// We can skip the expensive function application that creates columns and executes the function.
         /// The monotonicity check already verified that the values fit in the target type.
-        bool skip_apply = functionPreservesFieldRepresentation(current_type, result_type);
+        bool skip_apply = functionIsIntegerCastPreservingFieldRepresentation(func, current_type, result_type);
 
         if (!skip_apply)
         {

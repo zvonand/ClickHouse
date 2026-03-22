@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tags: long
+# Tags: long, no-sanitizers, no-flaky-check
 # Test for https://github.com/ClickHouse/ClickHouse/issues/32465
 # Enormously large query is slow when run from a Merge table with many underlying tables.
 # The query tree gets cloned for each underlying table, so planning time is O(N * query_complexity).

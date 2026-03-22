@@ -669,6 +669,21 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
 
     auto logger = getLogger("StorageMerge");
 
+    /** Cache getModifiedQueryInfo results per column structure.
+      * For tables with identical columns, getModifiedQueryInfo produces functionally identical results
+      * (same cloned query tree, same aliases, same column names). The only differences are the table
+      * reference and storage pointer, which are handled separately by createPlanForTable.
+      * This avoids O(N * query_tree_size) cloning for N tables with the same structure.
+      */
+    struct CachedModifiedQueryInfo
+    {
+        SelectQueryInfo query_info;
+        Names column_names_as_aliases;
+        bool is_smallest_column_requested = false;
+        Aliases aliases;
+    };
+    std::unordered_map<String, CachedModifiedQueryInfo> query_info_cache;
+
     /// Settings will be modified when planning children tables.
     for (const auto & table : selected_tables)
     {
@@ -733,8 +748,33 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
                 row_policy_data_opt->extendNames(real_column_names);
             }
 
-            auto modified_query_info
-                = getModifiedQueryInfo(modified_context, table, nested_storage_snapshot, real_column_names, column_names_as_aliases, is_smallest_column_requested, aliases);
+            SelectQueryInfo modified_query_info;
+
+            /// Try to reuse cached modified_query_info for tables with the same column structure.
+            /// Row policies may extend real_column_names differently, so skip caching in that case.
+            auto structure_key = row_policy_data_opt ? String{} : storage_metadata_snapshot->getColumns().toString(false);
+            auto cache_it = !structure_key.empty() ? query_info_cache.find(structure_key) : query_info_cache.end();
+
+            if (cache_it != query_info_cache.end())
+            {
+                /// Reuse cached query info. The shallow copy shares the query_tree
+                /// (which references the representative table), but that is fine: all tables
+                /// in the group have identical column structure, so filter/prewhere/key
+                /// conditions built from the shared query tree apply equally to every table.
+                auto & cached = cache_it->second;
+                modified_query_info = cached.query_info;
+                column_names_as_aliases = cached.column_names_as_aliases;
+                is_smallest_column_requested = cached.is_smallest_column_requested;
+                aliases = cached.aliases;
+            }
+            else
+            {
+                modified_query_info
+                    = getModifiedQueryInfo(modified_context, table, nested_storage_snapshot, real_column_names, column_names_as_aliases, is_smallest_column_requested, aliases);
+
+                if (!structure_key.empty())
+                    query_info_cache[structure_key] = {modified_query_info, column_names_as_aliases, is_smallest_column_requested, aliases};
+            }
 
             if (!context->getSettingsRef()[Setting::allow_experimental_analyzer])
             {

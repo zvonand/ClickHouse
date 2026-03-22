@@ -52,6 +52,7 @@ constexpr int64_t DEFAULT_RESCHEDULE_INTERVAL_SEC = 1;
 constexpr int64_t DEFAULT_METADATA_REQUEST_SIZE = 1000;
 constexpr int64_t DEFAULT_THREADS_COUNT = 16;
 constexpr int64_t DEFAULT_MAX_BLOBS_IN_TASK = 100;
+constexpr int64_t BLOBS_IN_TASK_HARDWARE_LIMIT = 1000; /// S3 API prevents deletion if the value exceeds this limit
 
 IMetadataStorage::BlobsToRemove findBlobsToRemove(
     size_t request_batch,
@@ -310,7 +311,7 @@ void BlobKillerThread::applyNewSettings(const Poco::Util::AbstractConfiguration 
     enabled = config.getBool(config_prefix + ".enabled", true);
     reschedule_interval_sec = config.getUInt64(config_prefix + ".interval_sec", DEFAULT_RESCHEDULE_INTERVAL_SEC);
     metadata_request_batch = config.getUInt64(config_prefix + ".metadata_request_size", DEFAULT_METADATA_REQUEST_SIZE);
-    max_blobs_in_task = config.getUInt64(config_prefix + ".max_blobs_in_task", DEFAULT_MAX_BLOBS_IN_TASK);
+    max_blobs_in_task = std::min<int64_t>(config.getUInt64(config_prefix + ".max_blobs_in_task", DEFAULT_MAX_BLOBS_IN_TASK), BLOBS_IN_TASK_HARDWARE_LIMIT);
     remove_tasks_pool.setMaxThreads(config.getUInt64(config_prefix + ".threads_count", DEFAULT_THREADS_COUNT));
 
     LOG_INFO(log, "Applying new settings: Enabled: {}, Started: {}", enabled.load(), started.load());

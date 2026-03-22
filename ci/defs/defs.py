@@ -29,7 +29,7 @@ class RunnerLabels:
     ARM_SMALL = ["self-hosted", "arm-small"]
     AMD_SMALL_MEM = ["self-hosted", "amd-small-mem"]
     ARM_SMALL_MEM = ["self-hosted", "arm-small-mem"]
-    MACOS_ARM_SMALL = ["self-hosted", "arm_macos_small"]
+    MACOS_ARM_SMALL = ["self-hosted", "macos_m2"]
     MACOS_AMD_SMALL = ["self-hosted", "amd_macos_m1"]
     STYLE_CHECK_AMD = ["self-hosted", "style-checker"]
     STYLE_CHECK_ARM = ["self-hosted", "style-checker-aarch64"]
@@ -297,13 +297,12 @@ class BuildTypes(metaclass=MetaClasses.WithIter):
     AMD_DEBUG = "amd_debug"
     AMD_RELEASE = "amd_release"
     AMD_BINARY = "amd_binary"
-    AMD_ASAN = "amd_asan"
+    AMD_ASAN_UBSAN = "amd_asan_ubsan"
     AMD_TSAN = "amd_tsan"
     AMD_MSAN = "amd_msan"
-    AMD_UBSAN = "amd_ubsan"
     ARM_RELEASE = "arm_release"
     ARM_DEBUG = "arm_debug"
-    ARM_ASAN = "arm_asan"
+    ARM_ASAN_UBSAN = "arm_asan_ubsan"
     ARM_TSAN = "arm_tsan"
     ARM_MSAN = "arm_msan"
     ARM_UBSAN = "arm_ubsan"
@@ -382,14 +381,13 @@ class ArtifactNames:
     LLVM_COVERAGE_FILE = "LLVM_COVERAGE_FILE"  # .profdata file
     LLVM_COVERAGE_INFO_FILE = "LLVM_COVERAGE_INFO_FILE"  # .info file generated from .profdata, used for debugging coverage results
     CH_AMD_RELEASE = "CH_AMD_RELEASE"
-    CH_AMD_ASAN = "CH_AMD_ASAN"
+    CH_AMD_ASAN_UBSAN = "CH_AMD_ASAN_UBSAN"
     CH_AMD_TSAN = "CH_AMD_TSAN"
     CH_AMD_MSAN = "CH_AMD_MSAN"
-    CH_AMD_UBSAN = "CH_AMD_UBSAN"
     CH_AMD_BINARY = "CH_AMD_BINARY"
     CH_ARM_RELEASE = "CH_ARM_RELEASE"
     CH_ARM_DEBUG = "CH_ARM_DEBUG"
-    CH_ARM_ASAN = "CH_ARM_ASAN"
+    CH_ARM_ASAN_UBSAN = "CH_ARM_ASAN_UBSAN"
     CH_ARM_TSAN = "CH_ARM_TSAN"
     CH_ARM_MSAN = "CH_ARM_MSAN"
     CH_ARM_UBSAN = "CH_ARM_UBSAN"
@@ -409,21 +407,19 @@ class ArtifactNames:
     CH_LOONGARCH64 = "CH_LOONGARCH64_BIN"
 
     FAST_TEST = "FAST_TEST"
-    UNITTEST_AMD_ASAN = "UNITTEST_AMD_ASAN"
+    UNITTEST_AMD_ASAN_UBSAN = "UNITTEST_AMD_ASAN_UBSAN"
     UNITTEST_AMD_TSAN = "UNITTEST_AMD_TSAN"
     UNITTEST_AMD_MSAN = "UNITTEST_AMD_MSAN"
-    UNITTEST_AMD_UBSAN = "UNITTEST_AMD_UBSAN"
     UNITTEST_LLVM_COVERAGE = "UNITTEST_LLVM_COVERAGE"
 
     DEB_AMD_DEBUG = "DEB_AMD_DEBUG"
     DEB_AMD_RELEASE = "DEB_AMD_RELEASE"
-    DEB_AMD_ASAN = "DEB_AMD_ASAN"
+    DEB_AMD_ASAN_UBSAN = "DEB_AMD_ASAN_UBSAN"
     DEB_AMD_TSAN = "DEB_AMD_TSAN"
     DEB_AMD_MSAN = "DEB_AMD_MSAN"
-    DEB_AMD_UBSAN = "DEB_AMD_UBSAN"
     DEB_ARM_RELEASE = "DEB_ARM_RELEASE"
     DEB_ARM_DEBUG = "DEB_ARM_DEBUG"
-    DEB_ARM_ASAN = "DEB_ARM_ASAN"
+    DEB_ARM_ASAN_UBSAN = "DEB_ARM_ASAN_UBSAN"
     DEB_ARM_TSAN = "DEB_ARM_TSAN"
     DEB_ARM_MSAN = "DEB_ARM_MSAN"
     DEB_ARM_UBSAN = "DEB_ARM_UBSAN"
@@ -475,14 +471,13 @@ LLVM_ARTIFACTS_LIST = (
 BINARIES_WITH_LONG_RETENTION = [
     ArtifactNames.CH_AMD_DEBUG,
     ArtifactNames.CH_AMD_RELEASE,
-    ArtifactNames.CH_AMD_ASAN,
+    ArtifactNames.CH_AMD_ASAN_UBSAN,
     ArtifactNames.CH_AMD_TSAN,
     ArtifactNames.CH_AMD_MSAN,
-    ArtifactNames.CH_AMD_UBSAN,
     ArtifactNames.CH_AMD_BINARY,
     ArtifactNames.CH_ARM_RELEASE,
     ArtifactNames.CH_ARM_DEBUG,
-    ArtifactNames.CH_ARM_ASAN,
+    ArtifactNames.CH_ARM_ASAN_UBSAN,
     ArtifactNames.CH_ARM_TSAN,
     ArtifactNames.CH_ARM_MSAN,
     ArtifactNames.CH_ARM_UBSAN,
@@ -499,14 +494,13 @@ class ArtifactConfigs:
             ArtifactNames.CH_AMD_DEBUG,
             ArtifactNames.CH_AMD_LLVM_COVERAGE_BUILD,
             ArtifactNames.CH_AMD_RELEASE,
-            ArtifactNames.CH_AMD_ASAN,
+            ArtifactNames.CH_AMD_ASAN_UBSAN,
             ArtifactNames.CH_AMD_TSAN,
             ArtifactNames.CH_AMD_MSAN,
-            ArtifactNames.CH_AMD_UBSAN,
             ArtifactNames.CH_AMD_BINARY,
             ArtifactNames.CH_ARM_RELEASE,
             ArtifactNames.CH_ARM_DEBUG,
-            ArtifactNames.CH_ARM_ASAN,
+            ArtifactNames.CH_ARM_ASAN_UBSAN,
             ArtifactNames.CH_ARM_TSAN,
             ArtifactNames.CH_ARM_MSAN,
             ArtifactNames.CH_ARM_UBSAN,
@@ -546,13 +540,12 @@ class ArtifactConfigs:
         names=[
             ArtifactNames.DEB_AMD_RELEASE,
             ArtifactNames.DEB_AMD_DEBUG,
-            ArtifactNames.DEB_AMD_ASAN,
+            ArtifactNames.DEB_AMD_ASAN_UBSAN,
             ArtifactNames.DEB_AMD_TSAN,
             ArtifactNames.DEB_AMD_MSAN,
-            ArtifactNames.DEB_AMD_UBSAN,
             ArtifactNames.DEB_ARM_RELEASE,
             ArtifactNames.DEB_ARM_DEBUG,
-            ArtifactNames.DEB_ARM_ASAN,
+            ArtifactNames.DEB_ARM_ASAN_UBSAN,
             ArtifactNames.DEB_ARM_TSAN,
             ArtifactNames.DEB_ARM_MSAN,
             ArtifactNames.DEB_ARM_UBSAN,
@@ -585,10 +578,9 @@ class ArtifactConfigs:
         compress_zst=True,
     ).parametrize(
         names=[
-            ArtifactNames.UNITTEST_AMD_ASAN,
+            ArtifactNames.UNITTEST_AMD_ASAN_UBSAN,
             ArtifactNames.UNITTEST_AMD_TSAN,
             ArtifactNames.UNITTEST_AMD_MSAN,
-            ArtifactNames.UNITTEST_AMD_UBSAN,
             ArtifactNames.UNITTEST_LLVM_COVERAGE,
         ]
     )

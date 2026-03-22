@@ -238,6 +238,7 @@ def main():
     if (
         not is_flaky_check
         and not is_llvm_coverage
+        and not is_bugfix_validation
         and "--no-random-settings" not in runner_options
     ):
         runner_options += " --repeat-newly-modified-tests"

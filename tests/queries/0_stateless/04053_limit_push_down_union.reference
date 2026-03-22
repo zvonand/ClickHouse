@@ -1,0 +1,36 @@
+Expression (Project names)
+  Limit (preliminary LIMIT)
+    Union
+      Limit
+        Expression ((Projection + (Change column names to column identifiers + (Project names + (Projection + Change column names to column identifiers)))))
+          ReadFromSystemNumbers
+      Limit
+        Expression ((Projection + (Change column names to column identifiers + (Project names + (Projection + Change column names to column identifiers)))))
+          ReadFromSystemNumbers
+---
+Expression (Project names)
+  Limit (preliminary LIMIT)
+    Union
+      Limit
+        Expression ((Projection + (Change column names to column identifiers + (Project names + (Projection + Change column names to column identifiers)))))
+          ReadFromSystemNumbers
+      Limit
+        Expression ((Projection + (Change column names to column identifiers + (Project names + (Projection + Change column names to column identifiers)))))
+          ReadFromSystemNumbers
+---
+Expression (Project names)
+  Limit (preliminary LIMIT)
+    Union
+      Limit
+        Expression ((Projection + (Change column names to column identifiers + (Project names + (Projection + Change column names to column identifiers)))))
+          ReadFromSystemNumbers
+      Limit
+        Expression ((Projection + (Change column names to column identifiers + (Project names + (Projection + Change column names to column identifiers)))))
+          ReadFromSystemNumbers
+      Limit
+        Expression ((Projection + (Change column names to column identifiers + (Project names + (Projection + Change column names to column identifiers)))))
+          ReadFromSystemNumbers
+---
+5
+---
+3

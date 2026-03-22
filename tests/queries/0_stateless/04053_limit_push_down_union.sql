@@ -64,3 +64,29 @@ SELECT count() FROM
     )
     LIMIT 3 OFFSET 2
 );
+
+SELECT '---';
+
+-- WITH TIES must not be pushed down (requires ORDER BY, so Sorting sits between Limit and Union).
+EXPLAIN PLAN header=0
+SELECT * FROM
+(
+    SELECT number FROM numbers(100)
+    UNION ALL
+    SELECT number FROM numbers(200)
+)
+ORDER BY number
+LIMIT 5 WITH TIES;
+
+SELECT '---';
+
+-- WITH FILL must not be pushed down (FillingStep sits between Limit and Union).
+EXPLAIN PLAN header=0
+SELECT * FROM
+(
+    SELECT number FROM numbers(100)
+    UNION ALL
+    SELECT number FROM numbers(200)
+)
+ORDER BY number WITH FILL
+LIMIT 5;

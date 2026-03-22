@@ -263,7 +263,7 @@ BlockIO runCommandSegments(CommandSegments & segments, const StoragePtr & table,
         if (auto * alter_commands = std::get_if<AlterCommands>(&segment))
         {
             auto alter_lock = table->lockForAlter(settings[Setting::lock_acquire_timeout]);
-            auto metadata_snapshot = table->getInMemoryMetadataPtr();
+            auto metadata_snapshot = table->getInMemoryMetadataPtr(/*bypass_metadata_cache=*/true);
             alter_commands->validate(table, context);
             alter_commands->prepare(*metadata_snapshot);
             table->checkAlterIsPossible(*alter_commands, context);
@@ -273,15 +273,16 @@ BlockIO runCommandSegments(CommandSegments & segments, const StoragePtr & table,
         {
             if (mutation_commands->hasNonEmptyMutationCommands())
             {
+                auto metadata_snapshot = table->getInMemoryMetadataPtr(/*bypass_metadata_cache=*/true);
                 table->checkMutationIsPossible(*mutation_commands, settings);
                 MutationsInterpreter::Settings mutation_settings(false);
-                MutationsInterpreter(table, table->getInMemoryMetadataPtr(), *mutation_commands, context, mutation_settings).validate();
+                MutationsInterpreter(table, metadata_snapshot, *mutation_commands, context, mutation_settings).validate();
                 table->mutate(*mutation_commands, context);
             }
         }
         else if (auto * partition_commands = std::get_if<PartitionCommands>(&segment))
         {
-            auto metadata_snapshot = table->getInMemoryMetadataPtr();
+            auto metadata_snapshot = table->getInMemoryMetadataPtr(/*bypass_metadata_cache=*/true);
             table->checkAlterPartitionIsPossible(*partition_commands, metadata_snapshot, settings, context);
             auto partition_commands_pipe = table->alterPartition(metadata_snapshot, *partition_commands, context);
             if (!partition_commands_pipe.empty())

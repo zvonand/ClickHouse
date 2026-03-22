@@ -291,17 +291,17 @@ BlockIO runCommandSegments(CommandSegments & segments, const StoragePtr & table,
                 table->mutate(*mutation_commands, context);
             }
         }
-        else if (auto * pc = std::get_if<PartitionCommands>(&segment))
+        else if (auto * partition_commands = std::get_if<PartitionCommands>(&segment))
         {
             auto metadata_snapshot = table->getInMemoryMetadataPtr();
-            table->checkAlterPartitionIsPossible(*pc, metadata_snapshot, settings, context);
-            auto partition_commands_pipe = table->alterPartition(metadata_snapshot, *pc, context);
+            table->checkAlterPartitionIsPossible(*partition_commands, metadata_snapshot, settings, context);
+            auto partition_commands_pipe = table->alterPartition(metadata_snapshot, *partition_commands, context);
             if (!partition_commands_pipe.empty())
                 res.pipeline = QueryPipeline(std::move(partition_commands_pipe));
         }
-        else if (auto * ec = std::get_if<ExecuteCommands>(&segment))
+        else if (auto * execute_commands = std::get_if<ExecuteCommands>(&segment))
         {
-            for (const auto * execute_command : *ec)
+            for (const auto * execute_command : *execute_commands)
             {
                 ASTPtr args_ast = execute_command->execute_args ? execute_command->execute_args->ptr() : nullptr;
                 auto execute_pipe = table->executeCommand(execute_command->execute_command_name, args_ast, context);

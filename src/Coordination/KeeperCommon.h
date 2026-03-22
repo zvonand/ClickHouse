@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Common/Logger.h>
-#include <Disks/DiskLocal.h>
 
 #include <functional>
 
@@ -22,10 +21,8 @@ namespace DB
 class IDisk;
 using DiskPtr = std::shared_ptr<IDisk>;
 
-inline bool isLocalDisk(const IDisk & disk)
-{
-    return dynamic_cast<const DiskLocal *>(&disk) != nullptr;
-}
+bool isLocalDisk(const IDisk & disk);
+
 class KeeperContext;
 using KeeperContextPtr = std::shared_ptr<KeeperContext>;
 

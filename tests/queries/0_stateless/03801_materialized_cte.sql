@@ -10,12 +10,16 @@ INSERT INTO users VALUES (8888, 'Alice', 50);
 SELECT
     REGEXP_REPLACE(
         REGEXP_REPLACE(
-            explain,
-            '_temporary_and_external_tables._tmp_\\w+\\-\\w+\\-\\w+\\-\\w+\\-\\w+',
-            '_temporary_and_external_tables._tmp_UNIQ_ID'
+            REGEXP_REPLACE(
+                explain,
+                '_temporary_and_external_tables._tmp_\\w+\\-\\w+\\-\\w+\\-\\w+\\-\\w+',
+                '_temporary_and_external_tables._tmp_UNIQ_ID'
+            ),
+            '_materialized_cte_\\w+\\_\\w+',
+            '_materialized_cte_UNIQ_ID'
         ),
-        '_materialized_cte_\\w+\\_\\w+',
-        '_materialized_cte_UNIQ_ID'
+        '(\\bid|source_id): \\d+',
+        '\\1: N'
     )
 FROM
 (
@@ -29,12 +33,16 @@ FROM
 SELECT
     REGEXP_REPLACE(
         REGEXP_REPLACE(
-            explain,
-            '_temporary_and_external_tables._tmp_\\w+\\-\\w+\\-\\w+\\-\\w+\\-\\w+',
-            '_temporary_and_external_tables._tmp_UNIQ_ID'
+            REGEXP_REPLACE(
+                explain,
+                '_temporary_and_external_tables._tmp_\\w+\\-\\w+\\-\\w+\\-\\w+\\-\\w+',
+                '_temporary_and_external_tables._tmp_UNIQ_ID'
+            ),
+            '_materialized_cte_\\w+\\_\\w+',
+            '_materialized_cte_UNIQ_ID'
         ),
-        '_materialized_cte_\\w+\\_\\w+',
-        '_materialized_cte_UNIQ_ID'
+        '(\\bid|source_id): \\d+',
+        '\\1: N'
     )
 FROM
 (
@@ -47,12 +55,16 @@ FROM
 SELECT
     REGEXP_REPLACE(
         REGEXP_REPLACE(
-            explain,
-            '_temporary_and_external_tables._tmp_\\w+\\-\\w+\\-\\w+\\-\\w+\\-\\w+',
-            '_temporary_and_external_tables._tmp_UNIQ_ID'
+            REGEXP_REPLACE(
+                explain,
+                '_temporary_and_external_tables._tmp_\\w+\\-\\w+\\-\\w+\\-\\w+\\-\\w+',
+                '_temporary_and_external_tables._tmp_UNIQ_ID'
+            ),
+            '_materialized_cte_\\w+\\_\\w+',
+            '_materialized_cte_UNIQ_ID'
         ),
-        '_materialized_cte_\\w+\\_\\w+',
-        '_materialized_cte_UNIQ_ID'
+        '(\\bid|source_id): \\d+',
+        '\\1: N'
     )
 FROM
 (

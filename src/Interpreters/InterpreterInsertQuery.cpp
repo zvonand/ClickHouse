@@ -468,7 +468,7 @@ QueryPipeline InterpreterInsertQuery::addInsertToSelectPipeline(ASTInsertQuery &
                 size_t min_block_size_bytes = table->prefersLargeBlocks() ? context->getSettingsRef()[Setting::min_insert_block_size_bytes] : 0ULL;
                 /// On low-memory systems, cap squashing block size to avoid accumulating too much data.
                 if (auto memory_limit = total_memory_tracker.getHardLimit(); memory_limit > 0)
-                    min_block_size_bytes = std::min<size_t>(min_block_size_bytes, memory_limit / 8);
+                    min_block_size_bytes = std::min<size_t>(min_block_size_bytes, static_cast<size_t>(static_cast<double>(memory_limit) * 0.9) / 8);
                 return std::make_shared<PlanSquashingTransform>(
                     in_header,
                     table->prefersLargeBlocks() ? context->getSettingsRef()[Setting::min_insert_block_size_rows] : context->getSettingsRef()[Setting::max_block_size],
@@ -745,7 +745,7 @@ QueryPipeline InterpreterInsertQuery::buildInsertPipeline(ASTInsertQuery & query
         size_t min_block_size_bytes = table_prefers_large_blocks ? settings[Setting::min_insert_block_size_bytes] : 0ULL;
         /// On low-memory systems, cap squashing block size to avoid accumulating too much data.
         if (auto memory_limit = total_memory_tracker.getHardLimit(); memory_limit > 0)
-            min_block_size_bytes = std::min<size_t>(min_block_size_bytes, memory_limit / 8);
+            min_block_size_bytes = std::min<size_t>(min_block_size_bytes, static_cast<size_t>(static_cast<double>(memory_limit) * 0.9) / 8);
         auto planing = std::make_shared<PlanSquashingTransform>(
             chain.getInputSharedHeader(),
             table_prefers_large_blocks ? settings[Setting::min_insert_block_size_rows] : settings[Setting::max_block_size],

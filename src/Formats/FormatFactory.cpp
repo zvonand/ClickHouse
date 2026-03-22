@@ -214,8 +214,15 @@ FormatSettings getFormatSettings(const ContextPtr & context, const Settings & se
     format_settings.parquet.memory_low_watermark = settings[Setting::input_format_parquet_memory_low_watermark];
     format_settings.parquet.memory_high_watermark = settings[Setting::input_format_parquet_memory_high_watermark];
     if (auto memory_limit = total_memory_tracker.getHardLimit(); memory_limit > 0)
+    {
+        /// Use 90% of the hard limit as the budget for computing caps. This ensures the pipeline's
+        /// natural consumption stays below the hard limit, leaving headroom for spikes and overhead.
+        size_t budget = static_cast<size_t>(static_cast<double>(memory_limit) * 0.9);
         format_settings.parquet.memory_high_watermark = std::min<size_t>(
-            format_settings.parquet.memory_high_watermark, memory_limit / 8);
+            format_settings.parquet.memory_high_watermark, budget / 8);
+        format_settings.parquet.prefer_block_bytes = std::min<size_t>(
+            format_settings.parquet.prefer_block_bytes, budget / 64);
+    }
     format_settings.parquet.allow_missing_columns = settings[Setting::input_format_parquet_allow_missing_columns];
     format_settings.parquet.skip_columns_with_unsupported_types_in_schema_inference = settings[Setting::input_format_parquet_skip_columns_with_unsupported_types_in_schema_inference];
     format_settings.parquet.output_string_as_string = settings[Setting::output_format_parquet_string_as_string];

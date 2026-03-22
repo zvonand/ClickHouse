@@ -8,6 +8,7 @@
 #include <Common/logger_useful.h>
 #include <Common/Macros.h>
 #include <Common/Throttler.h>
+#include <Common/HTTPHeaderFilter.h>
 #include <Common/ProxyConfigurationResolverProvider.h>
 #include <Core/Settings.h>
 #include <Core/ServerSettings.h>
@@ -243,6 +244,8 @@ getClient(const S3::URI & url, const S3Settings & settings, ContextPtr context, 
             }
         }
     }
+    context->getHTTPHeaderFilter().checkAndNormalizeHeaders(headers);
+
     return S3::ClientFactory::instance().create(
         client_configuration,
         client_settings,

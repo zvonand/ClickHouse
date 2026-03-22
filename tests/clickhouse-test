@@ -3444,6 +3444,8 @@ class TestSuite:
                 [
                     "git",
                     "log",
+                    "-n",
+                    "1000",
                     "--format=",
                     "--name-only",
                     "--diff-filter=ACMR",
@@ -3452,11 +3454,15 @@ class TestSuite:
                 ],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=60,
             )
             if result.returncode != 0:
+                print(
+                    f"git log failed with code {result.returncode}: {result.stderr.strip()}"
+                )
                 return {}
-        except Exception:
+        except Exception as e:
+            print(f"git log failed with exception: {e}")
             return {}
 
         test_set = set(all_tests)
@@ -3478,6 +3484,9 @@ class TestSuite:
             if count <= 1:
                 break
             runs[test] = count
+
+        for test, count in runs.items():
+            print(f"  {test}: {count} runs")
 
         return runs
 

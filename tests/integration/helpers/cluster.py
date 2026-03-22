@@ -3340,6 +3340,12 @@ class ClickHouseCluster:
     def start(self, connection_timeout=None):
         pytest_xdist_logging_to_separate_files.setup()
         logging.info("Running tests in {}".format(self.base_path))
+        logging.debug(f"Cluster start called. is_up={self.is_up}")
+        self.print_all_docker_pieces()
+
+        if self.is_up:
+            return
+
         if not os.path.exists(self.instances_dir):
             os.mkdir(self.instances_dir)
         else:
@@ -3354,11 +3360,6 @@ class ClickHouseCluster:
             # so without this cleanup create_dir() would fail with FileExistsError.
             shutil.rmtree(self.instances_dir, ignore_errors=True)
             os.mkdir(self.instances_dir)
-        logging.debug(f"Cluster start called. is_up={self.is_up}")
-        self.print_all_docker_pieces()
-
-        if self.is_up:
-            return
 
         if self.with_net_trics:
             # Tests might share same subnet, check file docker_compose_net.yml

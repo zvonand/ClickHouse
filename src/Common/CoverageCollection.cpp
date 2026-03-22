@@ -168,8 +168,13 @@ void collectAndInsertCoverage(
         }
         else if (min_depth < sit->second.min_depth)
         {
+            /// Keep branch_flag in sync with the min_depth record: they must describe
+            /// the same region.  Without this, branch_flag would belong to whichever
+            /// region was inserted first, while min_depth came from a different region.
             sit->second.min_depth = min_depth;
+            sit->second.branch_flag = bflag;
             min_depths[sit->second.idx] = min_depth;
+            branch_flags[sit->second.idx] = bflag;
         }
     }
 

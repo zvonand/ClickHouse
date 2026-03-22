@@ -290,27 +290,18 @@ std::vector<IndirectCallEntry> getCurrentIndirectCalls()
 {
     std::vector<IndirectCallEntry> result;
 
-    /// Compute load base from /proc/self/maps: the r-xp mapping for the main binary.
-    /// We use this to turn absolute callee addresses into load-relative offsets that
-    /// are stable across ASLR restarts (same binary = same offset, different run = same value).
-    uintptr_t load_base = 0;
-    if (FILE * f = std::fopen("/proc/self/maps", "r"))
-    {
-        char line[512];
-        while (std::fgets(line, sizeof(line), f))
-        {
-            uintptr_t start = 0, end = 0, offset = 0;
-            char perms[8] = {};
-            // Parse: start-end perms offset dev inode path
-            if (std::sscanf(line, "%zx-%zx %4s %zx", &start, &end, perms, &offset) == 4
-                && perms[0] == 'r' && perms[2] == 'x' && offset == 0)
-            {
-                load_base = start;
-                break;
-            }
-        }
-        std::fclose(f);
-    }
+    /// Use the __executable_start linker symbol to get the binary's ELF load address.
+    /// This is defined by the default linker script on Linux and equals the virtual
+    /// address at which the binary is loaded — identical to what ASLR assigns.
+    /// It is always available (no parsing required) and is more reliable than reading
+    /// /proc/self/maps, which can fail in containers, be stale, or match an unrelated
+    /// r-xp mapping before the main binary's text segment.
+    ///
+    /// With a correct load_base, callee_offset = callee_address - load_base is a
+    /// stable file-relative offset that stays constant across ASLR restarts for the
+    /// same binary build, enabling cross-run joins in the coverage database.
+    extern char __executable_start; // NOLINT — linker-defined symbol
+    const uintptr_t load_base = reinterpret_cast<uintptr_t>(&__executable_start);
 
     const LLVMProfileData * begin = __llvm_profile_begin_data(); // NOLINT
     const LLVMProfileData * end   = __llvm_profile_end_data();   // NOLINT

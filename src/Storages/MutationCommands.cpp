@@ -1,7 +1,4 @@
-#include <Interpreters/MutationsNonDeterministicHelpers.h>
-#include <Storages/ColumnsDescription.h>
 #include <Storages/MutationCommands.h>
-#include <Storages/IStorage.h>
 #include <IO/WriteHelpers.h>
 #include <IO/ReadHelpers.h>
 #include <Parsers/ParserAlterQuery.h>
@@ -11,29 +8,14 @@
 #include <Parsers/ASTStatisticsDeclaration.h>
 #include <Parsers/ASTFunction.h>
 #include <Parsers/ASTIdentifier.h>
-#include <Parsers/ASTSelectQuery.h>
-#include <Parsers/ASTTablesInSelectQuery.h>
-#include <Analyzer/Passes/QueryAnalysisPass.h>
-#include <Analyzer/QueryNode.h>
-#include <Analyzer/QueryTreeBuilder.h>
-#include <Analyzer/TableNode.h>
 #include <Common/typeid_cast.h>
 #include <Common/quoteString.h>
 #include <Core/Defines.h>
-#include <Core/Settings.h>
-#include <Interpreters/Context.h>
 #include <DataTypes/DataTypeFactory.h>
 
 
 namespace DB
 {
-
-namespace Setting
-{
-    extern const SettingsBool allow_statistics;
-    extern const SettingsBool allow_nondeterministic_mutations;
-    extern const SettingsBool validate_mutation_query;
-}
 
 namespace ErrorCodes
 {
@@ -41,6 +23,7 @@ namespace ErrorCodes
     extern const int MULTIPLE_ASSIGNMENTS_TO_COLUMN;
     extern const int LOGICAL_ERROR;
 }
+
 
 bool MutationCommand::isBarrierCommand() const
 {
@@ -102,7 +85,10 @@ std::optional<MutationCommand> MutationCommand::parse(const ASTAlterCommand & co
             const auto & assignment = assignment_ast->as<ASTAssignment &>();
             auto insertion = res.column_to_update_expression.emplace(assignment.column_name, assignment.expression());
             if (!insertion.second)
-                throw Exception(ErrorCodes::MULTIPLE_ASSIGNMENTS_TO_COLUMN, "Multiple assignments in the single statement to column {}", backQuote(assignment.column_name));
+                throw Exception(
+                    ErrorCodes::MULTIPLE_ASSIGNMENTS_TO_COLUMN,
+                    "Multiple assignments in the single statement to column {}",
+                    backQuote(assignment.column_name));
         }
         return res;
     }
@@ -250,6 +236,7 @@ std::optional<MutationCommand> MutationCommand::parse(const ASTAlterCommand & co
     return res;
 }
 
+
 boost::intrusive_ptr<ASTExpressionList> MutationCommands::ast(bool with_pure_metadata_commands) const
 {
     auto res = make_intrusive<ASTExpressionList>();
@@ -286,7 +273,6 @@ void MutationCommands::readText(ReadBuffer & in, bool with_pure_metadata_command
         push_back(std::move(*command));
     }
 }
-
 
 std::string MutationCommands::toString(bool with_pure_metadata_commands) const
 {

@@ -38,7 +38,7 @@ struct Settings;
 class AlterCommands;
 class MutationCommands;
 struct PartitionCommand;
-class PartitionCommands;
+using PartitionCommands = std::vector<PartitionCommand>;
 
 class IProcessor;
 using ProcessorPtr = std::shared_ptr<IProcessor>;

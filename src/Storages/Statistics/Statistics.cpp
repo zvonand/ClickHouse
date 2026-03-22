@@ -23,9 +23,6 @@
 
 #include "config.h" /// USE_DATASKETCHES
 
-#include <fmt/format.h>
-#include <fmt/ranges.h>
-
 namespace DB
 {
 
@@ -509,43 +506,25 @@ static ColumnStatisticsDescription::StatisticsTypeDescMap parseColumnStatisticsF
     return result;
 }
 
-Strings removeImplicitStatistics(ColumnsDescription & columns)
+void removeImplicitStatistics(ColumnsDescription & columns)
 {
-    Strings removed_implicit_statistics;
-
     for (const auto & column : columns)
     {
         auto default_kind = column.default_desc.kind;
         if (default_kind == ColumnDefaultKind::Alias || default_kind == ColumnDefaultKind::Ephemeral)
             continue;
-
         columns.modify(column.name, [&](ColumnDescription & column_desc)
         {
             auto & stats = column_desc.statistics.types_to_desc;
             for (auto it = stats.begin(); it != stats.end();)
             {
                 if (it->second.is_implicit)
-                {
-                    removed_implicit_statistics.push_back(statisticsTypeToString(it->second.type));
                     it = stats.erase(it);
-                }
                 else
-                {
                     ++it;
-                }
             }
         });
     }
-
-    return removed_implicit_statistics;
-}
-
-void addImplicitStatistics(ColumnsDescription & columns, const Strings & statistics)
-{
-    if (statistics.empty())
-        return;
-
-    addImplicitStatistics(columns, fmt::format("{}", fmt::join(statistics, ",")));
 }
 
 void addImplicitStatistics(ColumnsDescription & columns, const String & statistics_types_str)

@@ -10,7 +10,6 @@
 #include <Interpreters/ActionsDAG.h>
 #include <Parsers/ASTExpressionList.h>
 #include <Storages/IStorage_fwd.h>
-#include <Storages/StorageInMemoryMetadata.h>
 
 namespace DB
 {

@@ -31,7 +31,6 @@
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTExpressionList.h>
 #include <Parsers/ASTSelectQuery.h>
-#include <Parsers/ASTTablesInSelectQuery.h>
 #include <IO/WriteHelpers.h>
 #include <Processors/QueryPlan/CreatingSetsStep.h>
 #include <DataTypes/NestedUtils.h>
@@ -1667,7 +1666,15 @@ void MutationsInterpreter::validate()
 
     // Make sure the mutation query is valid
     if (context->getSettingsRef()[Setting::validate_mutation_query])
-        prepareQueryAffectedQueryTree(commands, source.getStorage(), context);
+    {
+        if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
+            prepareQueryAffectedQueryTree(commands, source.getStorage(), context);
+        else
+        {
+            ASTPtr select_query = prepareQueryAffectedAST(commands, source.getStorage(), context);
+            InterpreterSelectQuery(select_query, context, source.getStorage(), metadata_snapshot);
+        }
+    }
 
     QueryPlan plan;
 

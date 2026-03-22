@@ -60,7 +60,6 @@ namespace Setting
     extern const SettingsBool allow_experimental_analyzer;
     extern const SettingsBool allow_experimental_codecs;
     extern const SettingsBool allow_experimental_json_lazy_type_hints;
-    extern const SettingsBool allow_statistics;
     extern const SettingsBool allow_suspicious_codecs;
     extern const SettingsBool allow_suspicious_ttl_expressions;
     extern const SettingsBool flatten_nested;
@@ -76,7 +75,6 @@ namespace ErrorCodes
     extern const int DUPLICATE_COLUMN;
     extern const int NOT_IMPLEMENTED;
     extern const int ALTER_OF_COLUMN_IS_FORBIDDEN;
-    extern const int INCORRECT_QUERY;
 }
 
 namespace
@@ -509,8 +507,6 @@ std::optional<AlterCommand> AlterCommand::parse(const ASTAlterCommand * command_
 
 void AlterCommand::apply(StorageInMemoryMetadata & metadata, ContextPtr context) const
 {
-    auto removed_implicit_statistics = removeImplicitStatistics(metadata.columns);
-
     /// Helper function for column existence check with IF EXISTS
     auto should_skip_column_operation = [&]() -> bool {
         return if_exists && !metadata.columns.has(column_name);
@@ -1008,8 +1004,6 @@ void AlterCommand::apply(StorageInMemoryMetadata & metadata, ContextPtr context)
         metadata.setSQLSecurity(sql_security->as<ASTSQLSecurity &>());
     else
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Wrong parameter type in ALTER query");
-
-    addImplicitStatistics(metadata.columns, removed_implicit_statistics);
 }
 
 namespace
@@ -1459,8 +1453,9 @@ void AlterCommands::prepare(const StorageInMemoryMetadata & metadata)
 }
 
 
-void AlterCommands::validate(const StorageInMemoryMetadata & metadata, const StoragePtr & table, ContextPtr context) const
+void AlterCommands::validate(const StoragePtr & table, ContextPtr context) const
 {
+    const auto & metadata = table->getInMemoryMetadata();
     auto virtuals = table->getVirtualsPtr();
 
     auto all_columns = metadata.columns;
@@ -1791,10 +1786,6 @@ void AlterCommands::validate(const StorageInMemoryMetadata & metadata, const Sto
         {
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Table doesn't have SAMPLE BY, cannot remove");
         }
-
-        if (command.type == AlterCommand::ADD_STATISTICS || command.type == AlterCommand::DROP_STATISTICS || command.type == AlterCommand::MODIFY_STATISTICS)
-            if (!context->getSettingsRef()[Setting::allow_statistics])
-                throw Exception(ErrorCodes::INCORRECT_QUERY, "Alter table with statistics is disabled. Turn on allow_statistics");
 
         /// Collect default expressions for MODIFY and ADD commands
         if (command.type == AlterCommand::MODIFY_COLUMN || command.type == AlterCommand::ADD_COLUMN)

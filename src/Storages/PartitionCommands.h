@@ -80,11 +80,7 @@ struct PartitionCommand
     std::string typeToString() const;
 };
 
-class PartitionCommands : public std::vector<PartitionCommand>
-{
-public:
-    void validate(const StorageInMemoryMetadata & metadata, const StoragePtr & table, ContextPtr context) const;
-};
+using PartitionCommands = std::vector<PartitionCommand>;
 
 /// Result of executing of a single partition commands. Partition commands quite
 /// different, so some fields will be empty for some commands. Currently used in

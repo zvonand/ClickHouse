@@ -100,7 +100,6 @@ BlockIO InterpreterDeleteQuery::execute()
 
         mutation_commands.emplace_back(mut_command);
 
-        IStorage::AlterLockHolder alter_lock = table->lockForAlter(settings[Setting::lock_acquire_timeout]);
         table->checkMutationIsPossible(mutation_commands, getContext()->getSettingsRef());
         MutationsInterpreter::Settings mutation_settings(false);
         MutationsInterpreter(table, metadata_snapshot, mutation_commands, getContext(), mutation_settings).validate();

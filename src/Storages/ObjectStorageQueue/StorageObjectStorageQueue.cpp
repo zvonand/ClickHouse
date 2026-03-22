@@ -8,6 +8,7 @@
 #include <IO/CompressionMethod.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/DatabaseCatalog.h>
+#include <Interpreters/ProcessList.h>
 #include <Interpreters/InterpreterInsertQuery.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ASTFunction.h>
@@ -21,7 +22,9 @@
 #include <QueryPipeline/QueryPipelineBuilder.h>
 #include <Storages/AlterCommands.h>
 #include <Storages/ObjectStorage/Utils.h>
+#include <Storages/ObjectStorageQueue/ObjectStorageQueueIFileMetadata.h>
 #include <Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.h>
+#include <Storages/ObjectStorageQueue/ObjectStorageQueueOrderedFileMetadata.h>
 #include <Storages/StreamingStorageRegistry.h>
 #include <Storages/ObjectStorageQueue/ObjectStorageQueueSettings.h>
 #include <Storages/ObjectStorageQueue/ObjectStorageQueueTableMetadata.h>
@@ -34,11 +37,15 @@
 #include <Common/FailPoint.h>
 #include <Common/Macros.h>
 #include <Common/ProfileEvents.h>
+#include <Common/ZooKeeper/IKeeper.h>
+#include <Common/ZooKeeper/ZooKeeper.h>
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/ZooKeeper/ZooKeeperRetries.h>
+#include <Common/ZooKeeper/ZooKeeperWithFaultInjection.h>
 #include <Common/randomSeed.h>
 
 #include <filesystem>
+#include <Poco/Event.h>
 
 #include <fmt/ranges.h>
 
@@ -129,6 +136,7 @@ namespace ObjectStorageQueueSetting
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
+    extern const int ABORTED;
     extern const int BAD_ARGUMENTS;
     extern const int BAD_QUERY_PARAMETER;
     extern const int QUERY_NOT_ALLOWED;
@@ -136,6 +144,7 @@ namespace ErrorCodes
     extern const int NOT_IMPLEMENTED;
     extern const int FAULT_INJECTED;
     extern const int KEEPER_EXCEPTION;
+    extern const int QUERY_WAS_CANCELLED;
 }
 
 namespace
@@ -1702,6 +1711,143 @@ String StorageObjectStorageQueue::chooseZooKeeperPath(
     if (result_zookeeper_name)
         *result_zookeeper_name = zkutil::extractZooKeeperName(result_zk_path);
     return zkutil::extractZooKeeperPath(result_zk_path, true);
+}
+
+void StorageObjectStorageQueue::waitForPathToBeProcessed(
+    const std::string & path,
+    ContextPtr local_context) const
+{
+    auto component_guard = Coordination::setCurrentComponent("StorageObjectStorageQueue::waitForPathToBeProcessed");
+
+    /// for the following cases, fail fast.
+
+    if (!startup_finished || streaming_tasks.empty())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS,
+            "Cannot wait for path to be processed: background streaming for {} "
+            "has not started yet",
+            getStorageID().getNameForLogs());
+
+    if (getDependencies() == 0)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS,
+            "Cannot wait for path to be processed: table {} has no attached "
+            "materialized views and will not consume any files",
+            getStorageID().getNameForLogs());
+
+    if (getContext()->getS3QueueDisableStreaming())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS,
+            "Cannot wait for path to be processed: streaming is disabled for {}",
+            getStorageID().getNameForLogs());
+
+    const auto node_name = ObjectStorageQueueIFileMetadata::getNodeName(path);
+
+    /// Determine the Keeper paths we need to watch.
+    /// For unordered mode each file gets its own node under processed/ and failed/.
+    /// For ordered mode the processed pointer is a shared node whose *data* is updated,
+    /// while the failed node is still per-file.
+    const bool is_ordered = files_metadata->getTableMetadata().getMode() == ObjectStorageQueueMode::ORDERED;
+    const bool uses_buckets = files_metadata->useBucketsForProcessing();
+
+    std::string processed_node_path;
+    if (is_ordered)
+    {
+        const size_t effective_buckets = uses_buckets ? files_metadata->getBucketsNum() : 1;
+        const auto bucket = ObjectStorageQueueOrderedFileMetadata::getBucketForPath(
+            path,
+            effective_buckets,
+            files_metadata->getBucketingMode(),
+            files_metadata->getPartitioningMode(),
+            files_metadata->getFilenameParser());
+        processed_node_path = uses_buckets
+            ? (zk_path / "buckets" / toString(bucket) / "processed").string()
+            : (zk_path / "processed").string();
+    }
+    else
+    {
+        processed_node_path = (zk_path / "processed" / node_name).string();
+    }
+
+    const auto failed_node_path = (zk_path / "failed" / node_name).string();
+
+    /// For ordered mode with HIVE/REGEX partitioning the processed pointer is stored
+    /// under a partition (child) of the processed node, not in the node itself.
+    /// A ZooKeeper watch on a parent node does NOT fire when a child is created or
+    /// modified, so we must watch the child directly.
+    std::string effective_processed_watch_path = processed_node_path;
+    if (is_ordered)
+    {
+        const auto partition_key = ObjectStorageQueueOrderedFileMetadata::getPartitionKey(
+            path, files_metadata->getPartitioningMode(), files_metadata->getFilenameParser());
+        if (!partition_key.empty())
+            effective_processed_watch_path = (fs::path(processed_node_path) / partition_key).string();
+    }
+
+    LOG_DEBUG(log, "Waiting for path '{}' to be processed by {}", path, getStorageID().getNameForLogs());
+
+    auto event = std::make_shared<Poco::Event>();
+    bool need_arm = true;
+
+    while (true)
+    {
+        if (shutdown_called || table_is_being_dropped)
+            throw Exception(ErrorCodes::QUERY_WAS_CANCELLED,
+                "Table {} is being dropped or server is shutting down",
+                getStorageID().getNameForLogs());
+
+        if (auto query_status = local_context->getProcessListElementSafe())
+            query_status->checkTimeLimit();
+
+        if (need_arm)
+        {
+            ObjectStorageQueueMetadata::getKeeperRetriesControl(log).retryLoop([&]
+            {
+                auto zk = files_metadata->getZooKeeper()->getKeeper();
+
+                if (is_ordered)
+                {
+                    /// The ordered processed pointer may or may not exist yet:
+                    /// - Exists   → tryGetWatch registers a data-change watch.
+                    /// - Missing  → fall back to existsWatch so we are notified
+                    ///              when the node is first created.
+                    std::string dummy_data;
+                    Coordination::Stat dummy_stat{};
+                    const bool node_exists = zk->tryGetWatch(effective_processed_watch_path, dummy_data, &dummy_stat, event);
+                    if (!node_exists)
+                        zk->existsWatch(effective_processed_watch_path, nullptr, event);
+                }
+                else
+                {
+                    /// Unordered: each file gets its own processed node; watch for its creation.
+                    zk->existsWatch(processed_node_path, nullptr, event);
+                }
+
+                /// Per-file failed node: watch for creation regardless of mode.
+                zk->existsWatch(failed_node_path, nullptr, event);
+            });
+            need_arm = false;
+        }
+
+        std::string failure_message;
+        const auto state = files_metadata->getPathState(path, failure_message);
+
+        if (state == ObjectStorageQueueMetadata::PathState::Processed)
+        {
+            LOG_DEBUG(log, "Path '{}' has been processed by {}", path, getStorageID().getNameForLogs());
+            return;
+        }
+        if (state == ObjectStorageQueueMetadata::PathState::Failed)
+        {
+            throw Exception(ErrorCodes::ABORTED,
+                "Path '{}' failed to be processed by {}: {}",
+                path, getStorageID().getNameForLogs(), failure_message);
+        }
+
+        constexpr UInt64 watch_timeout_ms = 1000;
+        if (event->tryWait(watch_timeout_ms))
+        {
+            event->reset();
+            need_arm = true;
+        }
+    }
 }
 
 }

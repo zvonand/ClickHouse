@@ -47,6 +47,7 @@ namespace ErrorCodes
     extern const int REPLICA_ALREADY_EXISTS;
     extern const int SUPPORT_IS_DISABLED;
     extern const int TIMEOUT_EXCEEDED;
+    extern const int UNEXPECTED_ZOOKEEPER_ERROR;
 }
 
 namespace Setting
@@ -224,6 +225,100 @@ void ObjectStorageQueueMetadata::shutdown()
         cleanup_task->deactivate();
     if (update_registry_thread && update_registry_thread->joinable())
         update_registry_thread->join();
+}
+
+ObjectStorageQueueMetadata::PathState ObjectStorageQueueMetadata::getPathState(
+    const std::string & path,
+    std::string & failure_message) const
+{
+    auto component_guard = Coordination::setCurrentComponent("ObjectStorageQueueMetadata::getPathState");
+
+    /// node_name is SipHash64(path) used as a single-component Keeper node name,
+    /// because raw file paths contain '/' and cannot be used directly.
+    const auto node_name = ObjectStorageQueueIFileMetadata::getNodeName(path);
+    const auto failed_node_path = (zookeeper_path / "failed" / node_name).string();
+
+    if (mode == ObjectStorageQueueMode::ORDERED)
+    {
+        /// Ordered mode does not write a per-file processed node.  Instead it
+        /// maintains a shared monotonic "last processed path" pointer.  A file
+        /// is considered processed when path <= last_processed_path.
+        ///
+        /// The pointer location depends on the queue configuration:
+        ///   - no buckets  → zk_path/processed
+        ///   - with buckets → zk_path/buckets/<bucket>/processed  (one per bucket)
+        ///   - HIVE/REGEX partitioning → a per-partition child of the pointer node
+
+        const size_t effective_buckets = useBucketsForProcessing() ? buckets_num : 1;
+        const auto bucket = ObjectStorageQueueOrderedFileMetadata::getBucketForPath(
+            path, effective_buckets, bucketing_mode, partitioning_mode, filename_parser.get());
+        const auto processed_node_path = useBucketsForProcessing()
+            ? (zookeeper_path / "buckets" / toString(bucket) / "processed").string()
+            : (zookeeper_path / "processed").string();
+
+        /// In HIVE/REGEX mode the pointer is stored under a partition-key child
+        /// (e.g. processed/date=2021-01-01_city=NYC) rather than in the node itself.
+        std::optional<std::string> partition_processed_path;
+        const auto partition_key = ObjectStorageQueueOrderedFileMetadata::getPartitionKey(
+            path, partitioning_mode, filename_parser.get());
+        if (!partition_key.empty())
+            partition_processed_path = (fs::path(processed_node_path) / partition_key).string();
+
+        auto state = ObjectStorageQueueOrderedFileMetadata::getProcessingStateFromKeeper(
+            nullptr,
+            processed_node_path,
+            path,
+            partition_processed_path,
+            failed_node_path,
+            log,
+            zookeeper_name);
+
+        if (state.is_failed)
+        {
+            failure_message = state.failure_message;
+            return PathState::Failed;
+        }
+        if (state.is_processed)
+            return PathState::Processed;
+    }
+    else
+    {
+        /// Unordered mode writes a dedicated node for every processed or failed
+        /// file.  Fetch both in a single batched round-trip.
+        const auto processed_node_path = (zookeeper_path / "processed" / node_name).string();
+        const std::vector<std::string> paths = {processed_node_path, failed_node_path};
+
+        zkutil::ZooKeeper::MultiTryGetResponse responses;
+        getKeeperRetriesControl(log).retryLoop([&]
+        {
+            responses = getZooKeeper()->tryGet(paths);
+        });
+
+        if (responses.size() != paths.size())
+            throw Exception(ErrorCodes::UNEXPECTED_ZOOKEEPER_ERROR,
+                "Unexpected size of Keeper response: expected {}, got {}",
+                paths.size(), responses.size());
+
+        /// Any error other than ZOK / ZNONODE is unexpected — surface it immediately.
+        for (size_t i = 0; i < responses.size(); ++i)
+        {
+            const auto err = responses[i].error;
+            if (err != Coordination::Error::ZOK && err != Coordination::Error::ZNONODE)
+                throw zkutil::KeeperException::fromPath(err, paths[i]);
+        }
+
+        if (responses[0].error == Coordination::Error::ZOK)
+            return PathState::Processed;
+
+        if (responses[1].error == Coordination::Error::ZOK)
+        {
+            if (!responses[1].data.empty())
+                failure_message = ObjectStorageQueueIFileMetadata::NodeMetadata::fromString(responses[1].data).last_exception;
+            return PathState::Failed;
+        }
+    }
+
+    return PathState::Unknown;
 }
 
 ObjectStorageQueueMetadata::FileMetadataPtr ObjectStorageQueueMetadata::getFileMetadata(

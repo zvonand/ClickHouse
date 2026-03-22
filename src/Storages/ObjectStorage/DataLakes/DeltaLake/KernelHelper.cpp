@@ -238,8 +238,7 @@ public:
             default:
                 ///Other variants are not supported yet
                 throw DB::Exception(DB::ErrorCodes::NOT_IMPLEMENTED,
-                                "Unsupported authentication type for azure: {}", configuration->getType());
-                break;
+                                "Unsupported authentication type for azure: {}", connection_params.auth_method.index());
         }
 
         if (!endpoint.sas_auth.empty())

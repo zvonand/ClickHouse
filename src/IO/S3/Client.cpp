@@ -1133,8 +1133,10 @@ void ClientCacheRegistry::unregisterClient(ClientCache * client)
 
 std::shared_ptr<ClientCache> ClientCacheRegistry::getOrCreateCacheForKey(const std::string & endpoint, const std::string & bucket)
 {
-    static constexpr char key_sep = '\1';  // delimiter guaranteed to be invalid for endpoint/bucket
-    std::string key = endpoint + key_sep + bucket;
+    SipHash hash;
+    hash.update(endpoint);
+    hash.update(bucket);
+    UInt128 key = hash.get128();
     {
         std::lock_guard lock(cache_by_key_mutex);
         if (auto it = cache_by_endpoint_bucket.find(key); it != cache_by_endpoint_bucket.end())

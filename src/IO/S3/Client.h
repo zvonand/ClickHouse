@@ -32,6 +32,8 @@ struct ServerSideEncryptionKMSConfig
 #include <IO/S3/PocoHTTPClient.h>
 #include <IO/S3/Credentials.h>
 #include <IO/S3/ProviderType.h>
+#include <Common/SipHash.h>
+#include <Common/HashTable/Hash.h>
 
 #include <aws/core/Aws.h>
 #include <aws/core/client/DefaultRetryStrategy.h>
@@ -85,7 +87,7 @@ private:
     std::mutex clients_mutex;
     std::unordered_map<ClientCache *, std::pair<std::weak_ptr<ClientCache>, size_t>> client_caches TSA_GUARDED_BY(clients_mutex);
     std::mutex cache_by_key_mutex;
-    std::unordered_map<std::string, std::weak_ptr<ClientCache>> cache_by_endpoint_bucket TSA_GUARDED_BY(cache_by_key_mutex);
+    std::unordered_map<UInt128, std::weak_ptr<ClientCache>, UInt128Hash> cache_by_endpoint_bucket TSA_GUARDED_BY(cache_by_key_mutex);
 };
 
 bool isS3ExpressEndpoint(const std::string & endpoint);

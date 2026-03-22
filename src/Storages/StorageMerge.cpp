@@ -751,18 +751,16 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
             SelectQueryInfo modified_query_info;
 
             /// Try to reuse cached modified_query_info for tables with the same column structure.
-            /// The cache key includes database name (because `_database` virtual column value is baked
-            /// into the query tree) and engine name (because different engines have different capabilities
-            /// like PREWHERE support). We skip caching for tables with row policies (they extend
-            /// real_column_names differently), and for Merge/Distributed/View storages which need
-            /// their own query routing and nested plan building.
+            /// Skip caching for:
+            ///  - tables with row policies (they extend real_column_names differently);
+            ///  - Merge/Distributed/View storages (they interpret table_expression for
+            ///    query routing and nested plan building, so sharing a representative's
+            ///    table_expression would route reads to the wrong table).
             bool can_cache = !row_policy_data_opt
                 && !std::dynamic_pointer_cast<StorageMerge>(storage)
                 && !std::dynamic_pointer_cast<StorageDistributed>(storage)
                 && !storage->isView();
-            String structure_key;
-            if (can_cache)
-                structure_key = database_name + "\0" + storage->getName() + "\0" + storage_metadata_snapshot->getColumns().toString(false);
+            auto structure_key = can_cache ? storage_metadata_snapshot->getColumns().toString(false) : String{};
             auto cache_it = can_cache ? query_info_cache.find(structure_key) : query_info_cache.end();
 
             if (cache_it != query_info_cache.end())

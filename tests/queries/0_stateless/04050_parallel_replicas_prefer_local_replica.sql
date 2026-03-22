@@ -1,7 +1,7 @@
 -- Tags: replica
 
--- Verify that parallel_replicas_prefer_local_replica controls whether parallel replicas
--- are used when max_parallel_replicas = 1.
+-- Verify that `parallel_replicas_prefer_local_replica` controls whether parallel replicas
+-- are used when `max_parallel_replicas` = 1.
 
 DROP TABLE IF EXISTS t;
 
@@ -9,10 +9,13 @@ CREATE TABLE t(key UInt64, value String) ENGINE = MergeTree ORDER BY key;
 
 INSERT INTO t SELECT number, toString(number) FROM numbers(1000);
 
--- With prefer_local_replica = 0 and max_parallel_replicas = 1, the query should
+-- Use `count(), min(key)` instead of bare `count()` to avoid the trivial count optimization
+-- which would bypass the parallel replicas code path entirely.
+
+-- With `prefer_local_replica` = 0 and `max_parallel_replicas` = 1, the query should
 -- use the parallel replicas path (the query is sent to a replica selected
 -- by load balancing, not necessarily the local one).
-SELECT count()
+SELECT count(), min(key)
 FROM t
 SETTINGS
     enable_parallel_replicas = 1,
@@ -22,9 +25,9 @@ SETTINGS
     parallel_replicas_for_non_replicated_merge_tree = 1,
     log_comment = '04050_prefer_local_0_max_1';
 
--- With prefer_local_replica = 0 and max_parallel_replicas = 2, the query should
+-- With `prefer_local_replica` = 0 and `max_parallel_replicas` = 2, the query should
 -- also work and use 2 replicas (but local is not guaranteed to be among them).
-SELECT count()
+SELECT count(), min(key)
 FROM t
 SETTINGS
     enable_parallel_replicas = 1,
@@ -34,9 +37,9 @@ SETTINGS
     parallel_replicas_for_non_replicated_merge_tree = 1,
     log_comment = '04050_prefer_local_0_max_2';
 
--- Default behavior (prefer_local_replica = 1) with max_parallel_replicas = 1
+-- Default behavior (`prefer_local_replica` = 1) with `max_parallel_replicas` = 1
 -- should NOT use parallel replicas (backward compatibility).
-SELECT count()
+SELECT count(), min(key)
 FROM t
 SETTINGS
     enable_parallel_replicas = 1,
@@ -48,7 +51,7 @@ SETTINGS
 
 SYSTEM FLUSH LOGS query_log;
 
--- Verify: prefer_local = 0, max_replicas = 1 should use parallel replicas
+-- Verify: `prefer_local` = 0, `max_replicas` = 1 should use parallel replicas
 SELECT ProfileEvents['ParallelReplicasUsedCount'] > 0
 FROM system.query_log
 WHERE event_date >= yesterday()
@@ -59,7 +62,7 @@ WHERE event_date >= yesterday()
 ORDER BY event_time DESC
 LIMIT 1;
 
--- Verify: prefer_local = 0, max_replicas = 2 should use parallel replicas
+-- Verify: `prefer_local` = 0, `max_replicas` = 2 should use parallel replicas
 SELECT ProfileEvents['ParallelReplicasUsedCount'] > 0
 FROM system.query_log
 WHERE event_date >= yesterday()
@@ -70,7 +73,7 @@ WHERE event_date >= yesterday()
 ORDER BY event_time DESC
 LIMIT 1;
 
--- Verify: prefer_local = 1, max_replicas = 1 should NOT use parallel replicas
+-- Verify: `prefer_local` = 1, `max_replicas` = 1 should NOT use parallel replicas
 SELECT ProfileEvents['ParallelReplicasUsedCount'] > 0
 FROM system.query_log
 WHERE event_date >= yesterday()

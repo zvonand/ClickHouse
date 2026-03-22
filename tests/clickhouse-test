@@ -3440,6 +3440,15 @@ class TestSuite:
         Tests with 1 or fewer computed repetitions are skipped.
         """
         try:
+            # Determine the repository root from suite_path to mark it as safe.
+            # CI may run tests as a different user than the repo owner.
+            repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(self.suite_path)))
+            subprocess.run(
+                ["git", "config", "--global", "--add", "safe.directory", repo_dir],
+                capture_output=True,
+                timeout=5,
+            )
+
             result = subprocess.run(
                 [
                     "git",

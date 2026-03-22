@@ -55,6 +55,7 @@ struct RemoveOrphanFilesResult
     Int64 deleted_metadata_files_count = 0;
     Int64 deleted_statistics_files_count = 0;
     Int64 skipped_missing_metadata_count = 0;
+    Int64 failed_deletions_count = 0;
 };
 
 struct OrphanScanResult
@@ -87,6 +88,9 @@ ExecuteCommandArgs makeSchema()
 String resolveScanPath(const String & table_path, const RemoveOrphanFilesParams & params)
 {
     String scan_path = table_path;
+    if (!scan_path.ends_with('/'))
+        scan_path += '/';
+
     if (params.location.has_value())
     {
         String loc = *params.location;
@@ -96,8 +100,6 @@ String resolveScanPath(const String & table_path, const RemoveOrphanFilesParams 
         while (loc.starts_with("./"))
             loc = loc.substr(2);
 
-        if (!scan_path.ends_with('/'))
-            scan_path += '/';
         scan_path += loc;
 
         if (!scan_path.ends_with('/'))
@@ -150,12 +152,18 @@ OrphanScanResult findOrphanFiles(
 // Orphan file deletion
 // ---------------------------------------------------------------------------
 
-std::vector<String> deleteOrphanFiles(
+struct DeleteOrphanResult
+{
+    std::vector<String> deleted_paths;
+    Int64 failed_count = 0;
+};
+
+DeleteOrphanResult deleteOrphanFiles(
     const std::vector<String> & orphan_paths,
     ObjectStoragePtr object_storage,
     LoggerPtr log)
 {
-    std::vector<String> deleted_paths;
+    DeleteOrphanResult result;
 
     for (const auto & path : orphan_paths)
     {
@@ -163,15 +171,16 @@ std::vector<String> deleteOrphanFiles(
         {
             object_storage->removeObjectIfExists(StoredObject(path));
             LOG_DEBUG(log, "Deleted orphan file {}", path);
-            deleted_paths.push_back(path);
+            result.deleted_paths.push_back(path);
         }
         catch (...)
         {
+            ++result.failed_count;
             LOG_WARNING(log, "Failed to delete orphan file {}: {}", path, getCurrentExceptionMessage(false));
         }
     }
 
-    return deleted_paths;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,6 +234,7 @@ Pipe resultToPipe(const RemoveOrphanFilesResult & result)
     add("deleted_metadata_files_count", result.deleted_metadata_files_count);
     add("deleted_statistics_files_count", result.deleted_statistics_files_count);
     add("skipped_missing_metadata_count", result.skipped_missing_metadata_count);
+    add("failed_deletions_count", result.failed_deletions_count);
 
     const size_t rows = columns[0]->size();
     Chunk chunk(std::move(columns), rows);
@@ -259,10 +269,13 @@ RemoveOrphanFilesResult removeOrphanFiles(
     if (params.dry_run || scan.orphan_paths.empty())
         return tallyByCategory(scan.orphan_paths, scan.skipped_missing_metadata);
 
-    auto deleted = deleteOrphanFiles(scan.orphan_paths, object_storage, log);
-    LOG_INFO(log, "Deleted {}/{} orphan files", deleted.size(), scan.orphan_paths.size());
+    auto delete_result = deleteOrphanFiles(scan.orphan_paths, object_storage, log);
+    LOG_INFO(log, "Deleted {}/{} orphan files ({} failed)",
+        delete_result.deleted_paths.size(), scan.orphan_paths.size(), delete_result.failed_count);
 
-    return tallyByCategory(deleted, scan.skipped_missing_metadata);
+    auto result = tallyByCategory(delete_result.deleted_paths, scan.skipped_missing_metadata);
+    result.failed_deletions_count = delete_result.failed_count;
+    return result;
 }
 
 }

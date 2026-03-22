@@ -61,6 +61,12 @@ class OrphanTestEnv:
                 ["bash", "-c",
                  f"mkdir -p {target_dir} && echo 'orphan_data' > {target_dir}/{filename}"]
             )
+        elif self.storage_type == "azure":
+            blob_path = f"/var/lib/clickhouse/user_files/iceberg_data/default/{self.table_name}/{subdir}/{filename}"
+            blob_client = self.cluster.blob_service_client.get_blob_client(
+                self.cluster.azure_container_name, blob_path,
+            )
+            blob_client.upload_blob(b"orphan_data", overwrite=True)
         else:
             key = f"{S3_TABLE_PREFIX}/{self.table_name}/{subdir}/{filename}"
             data = b"orphan_data"
@@ -80,6 +86,16 @@ class OrphanTestEnv:
                 ["bash", "-c", f"test -f {path} && echo 'exists' || echo 'missing'"]
             ).strip()
             return ret == "exists"
+        elif self.storage_type == "azure":
+            blob_path = f"/var/lib/clickhouse/user_files/iceberg_data/default/{self.table_name}/{subdir}/{filename}"
+            blob_client = self.cluster.blob_service_client.get_blob_client(
+                self.cluster.azure_container_name, blob_path,
+            )
+            try:
+                blob_client.get_blob_properties()
+                return True
+            except Exception:
+                return False
         else:
             key = f"{S3_TABLE_PREFIX}/{self.table_name}/{subdir}/{filename}"
             try:
@@ -95,6 +111,12 @@ class OrphanTestEnv:
                 ["bash", "-c", f"find {table_dir} -type f 2>/dev/null | sort"]
             ).strip()
             return output.split("\n") if output else []
+        elif self.storage_type == "azure":
+            prefix = f"/var/lib/clickhouse/user_files/iceberg_data/default/{self.table_name}/"
+            container_client = self.cluster.blob_service_client.get_container_client(
+                self.cluster.azure_container_name,
+            )
+            return sorted(b.name for b in container_client.list_blobs(name_starts_with=prefix))
         else:
             prefix = f"{S3_TABLE_PREFIX}/{self.table_name}/"
             return sorted(
@@ -163,7 +185,7 @@ def test_remove_orphan_files_basic(started_cluster_iceberg_with_spark, storage_t
     assert any("orphan-data-002.parquet" in f for f in files_before)
 
     counts = env.remove_orphans(older_than=env.now_ts())
-    assert len(counts) == 8, f"Expected 8 metrics, got {counts}"
+    assert len(counts) == 9, f"Expected 9 metrics, got {counts}"
     assert counts["deleted_data_files_count"] >= 2, f"Expected >= 2 deleted data files, got {counts}"
 
     assert not env.exists("data", "orphan-data-001.parquet")
@@ -353,12 +375,21 @@ def test_remove_orphan_files_location_validation(started_cluster_iceberg_with_sp
 
 @pytest.mark.parametrize("storage_type", ["azure"])
 def test_remove_orphan_files_azure(started_cluster_iceberg_with_spark, storage_type):
-    """Basic orphan removal smoke test on Azure (Azurite) backend."""
+    """Orphan removal on Azure (Azurite) backend: create orphans, verify deletion."""
     env = make_env(started_cluster_iceberg_with_spark, storage_type, "test_orphan_azure")
     env.populate(2)
+
+    env.add_orphan("data", "orphan-azure-001.parquet")
+    env.add_orphan("data", "orphan-azure-002.parquet")
     time.sleep(2)
 
+    assert env.exists("data", "orphan-azure-001.parquet")
+    assert env.exists("data", "orphan-azure-002.parquet")
+
     counts = env.remove_orphans(older_than=env.now_ts())
-    assert len(counts) == 8, f"Expected 8 metrics, got {counts}"
-    assert all(v >= 0 for v in counts.values())
+    assert len(counts) == 9, f"Expected 9 metrics, got {counts}"
+    assert counts["deleted_data_files_count"] >= 2, f"Expected >= 2 deleted data files, got {counts}"
+
+    assert not env.exists("data", "orphan-azure-001.parquet")
+    assert not env.exists("data", "orphan-azure-002.parquet")
     env.assert_data_intact()

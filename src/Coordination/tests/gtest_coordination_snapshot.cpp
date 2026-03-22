@@ -52,6 +52,25 @@ public:
     }
 };
 
+std::pair<std::shared_ptr<DB::DiskObjectStorage>, std::shared_ptr<TestLocalObjectStorage>>
+createLocalObjectStorageDisk(const std::string & meta_path, const std::string & obj_path)
+{
+    auto obj_storage = std::make_shared<TestLocalObjectStorage>(
+        DB::LocalObjectStorageSettings("SnapshotDisk", obj_path, false));
+    auto cluster = std::make_shared<DB::ClusterConfiguration>(
+        std::unordered_map<DB::Location, DB::LocationInfo>{
+            {"main", {.enabled = true, .local = true, .config_prefix = ""}}});
+    auto router = std::make_shared<DB::ObjectStorageRouter>(
+        std::unordered_map<DB::Location, DB::ObjectStoragePtr>{{"main", obj_storage}});
+    auto meta_disk = std::make_shared<DB::DiskLocal>("SnapshotMetaDisk", meta_path);
+    auto metadata_storage = std::make_shared<DB::MetadataStorageFromDisk>(
+        meta_disk, "", obj_storage->createKeyGenerator());
+    Poco::AutoPtr<Poco::Util::MapConfiguration> config_ptr(new Poco::Util::MapConfiguration);
+    auto disk = std::make_shared<DB::DiskObjectStorage>(
+        "SnapshotDisk", cluster, metadata_storage, router, *config_ptr, "", /*use_fake_transaction=*/true);
+    return {disk, obj_storage};
+}
+
 struct IntNode
 {
     int value;
@@ -637,7 +656,7 @@ static DB::KeeperContextPtr makeFollowerContext(int idx)
 }
 
 template <typename Storage>
-static std::string runFollower(int idx, DB::IKeeperStateMachine & leader, nuraft::snapshot & s, bool enable_compression)
+static std::string runFollower(int idx, DB::IKeeperStateMachine & leader, nuraft::snapshot & s)
 {
     fs::create_directory(fmt::format("./snapshots_{}", idx));
     fs::create_directory(fmt::format("./rocksdb_{}", idx));
@@ -650,6 +669,7 @@ static std::string runFollower(int idx, DB::IKeeperStateMachine & leader, nuraft
     DB::ResponsesQueue queue(std::numeric_limits<size_t>::max());
     DB::SnapshotsQueue snapshots_queue{1};
     auto follower = std::make_shared<DB::KeeperStateMachine<Storage>>(queue, snapshots_queue, ctx, nullptr);
+    follower->init();
 
     void * user_snp_ctx = nullptr;
     uint64_t obj_id = 0;
@@ -660,17 +680,19 @@ static std::string runFollower(int idx, DB::IKeeperStateMachine & leader, nuraft
         bool is_first = (obj_id == 0);
         if (leader.read_logical_snp_obj(s, user_snp_ctx, obj_id, data_out, is_last) < 0)
             break;
+        std::this_thread::yield(); /// let other follower threads read from the already-loaded part
         follower->save_logical_snp_obj(s, obj_id, *data_out, is_first, is_last);
     }
     leader.free_user_snp_ctx(user_snp_ctx);
 
-    DB::KeeperSnapshotManager<Storage> verify_manager(3, ctx, enable_compression);
-    auto deser_result = verify_manager.restoreFromLatestSnapshot();
-    if (deser_result.storage)
-        return std::string(deser_result.storage->container.getValue("/hello").getData());
-    return {};
+    EXPECT_TRUE(follower->apply_snapshot(s));
+    return std::string(follower->getStorageUnsafe().container.getValue("/hello").getData());
 }
 
+/// Verify that concurrent snapshot transfers from a leader with a remote snapshot disk work correctly.
+/// A remote disk causes `RemoteSnapshotLoader` to be used, which loads the snapshot into memory once
+/// and serves all concurrent followers from the same buffer. The test checks that all followers
+/// receive correct data and that the snapshot file is read from disk exactly once.
 TYPED_TEST(CoordinationTest, TestReadSnapshotParallelMultiChunk)
 {
     getContext(); /// needed for DiskObjectStorage background threads
@@ -693,19 +715,7 @@ TYPED_TEST(CoordinationTest, TestReadSnapshotParallelMultiChunk)
     leader_ctx->setRocksDBDisk(std::make_shared<DB::DiskLocal>("RocksDisk", "./rocksdb"));
     leader_ctx->setRocksDBOptions();
 
-    auto obj_storage = std::make_shared<TestLocalObjectStorage>(
-        DB::LocalObjectStorageSettings("SnapshotDisk", "./snapshots_obj/", false));
-    auto cluster = std::make_shared<DB::ClusterConfiguration>(
-        std::unordered_map<DB::Location, DB::LocationInfo>{
-            {"main", {.enabled = true, .local = true, .config_prefix = ""}}});
-    auto router = std::make_shared<DB::ObjectStorageRouter>(
-        std::unordered_map<DB::Location, DB::ObjectStoragePtr>{{"main", obj_storage}});
-    auto meta_disk = std::make_shared<DB::DiskLocal>("SnapshotMetaDisk", "./snapshots");
-    auto metadata_storage = std::make_shared<DB::MetadataStorageFromDisk>(
-        meta_disk, "", obj_storage->createKeyGenerator());
-    Poco::AutoPtr<Poco::Util::MapConfiguration> config_ptr(new Poco::Util::MapConfiguration);
-    auto snap_disk = std::make_shared<DB::DiskObjectStorage>(
-        "SnapshotDisk", cluster, metadata_storage, router, *config_ptr, "", /*use_fake_transaction=*/true);
+    auto [snap_disk, obj_storage] = createLocalObjectStorageDisk("./snapshots", "./snapshots_obj/");
     leader_ctx->setSnapshotDisk(snap_disk);
 
     DB::KeeperSnapshotManager<Storage> manager(3, leader_ctx, this->enable_compression);
@@ -731,7 +741,7 @@ TYPED_TEST(CoordinationTest, TestReadSnapshotParallelMultiChunk)
         std::vector<std::thread> threads;
         threads.reserve(num_threads);
         for (int i = 0; i < num_threads; ++i)
-            threads.emplace_back([&, i] { loaded_data[i] = runFollower<Storage>(i, *leader, s, this->enable_compression); });
+            threads.emplace_back([&, i] { loaded_data[i] = runFollower<Storage>(i, *leader, s); });
         for (auto & t : threads)
             t.join();
     }

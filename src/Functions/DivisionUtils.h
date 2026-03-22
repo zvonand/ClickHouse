@@ -225,13 +225,32 @@ struct PositiveModuloImpl : ModuloImpl<A, B>
         {
             if (res < 0)
             {
-                if constexpr (is_unsigned_v<B>)
-                    res += static_cast<OriginResultType>(b);
+                if constexpr (std::is_integral_v<OriginResultType>)
+                {
+                    /// The mathematical result of res + |b| is always in [0, |b|) and fits in the result type,
+                    /// but the intermediate addition can overflow signed arithmetic when b is large.
+                    /// Perform the addition in unsigned arithmetic to avoid undefined behavior.
+                    using UnsignedResult = make_unsigned_t<OriginResultType>;
+                    if constexpr (is_unsigned_v<B>)
+                        res = static_cast<OriginResultType>(static_cast<UnsignedResult>(res) + static_cast<UnsignedResult>(b));
+                    else
+                    {
+                        if (b == std::numeric_limits<B>::lowest())
+                            throw Exception(ErrorCodes::ILLEGAL_DIVISION, "Division by the most negative number");
+                        auto abs_b = static_cast<UnsignedResult>(b >= 0 ? b : -b);
+                        res = static_cast<OriginResultType>(static_cast<UnsignedResult>(res) + abs_b);
+                    }
+                }
                 else
                 {
-                    if (b == std::numeric_limits<B>::lowest())
-                        throw Exception(ErrorCodes::ILLEGAL_DIVISION, "Division by the most negative number");
-                    res += b >= 0 ? static_cast<OriginResultType>(b) : static_cast<OriginResultType>(-b);
+                    if constexpr (is_unsigned_v<B>)
+                        res += static_cast<OriginResultType>(b);
+                    else
+                    {
+                        if (b == std::numeric_limits<B>::lowest())
+                            throw Exception(ErrorCodes::ILLEGAL_DIVISION, "Division by the most negative number");
+                        res += b >= 0 ? static_cast<OriginResultType>(b) : static_cast<OriginResultType>(-b);
+                    }
                 }
             }
         }

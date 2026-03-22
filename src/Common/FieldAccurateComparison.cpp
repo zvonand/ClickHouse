@@ -229,7 +229,10 @@ bool accurateEquals(const Field & left, const Field & right)
                 return l == r;
             }
             case Field::Types::Null:
-                return left.isNull() == right.isNull();
+                /// Null encodes three distinct sentinels: NULL, -Inf, +Inf.
+                /// Must compare their infinity flags to keep them distinct.
+                return left.isNegativeInfinity() == right.isNegativeInfinity()
+                    && left.isPositiveInfinity() == right.isPositiveInfinity();
             default:
                 break;
         }
@@ -313,17 +316,22 @@ bool accurateLessOrEqual(const Field & left, const Field & right)
                 return l <= r;
             }
             case Field::Types::Null:
-                return true; /// Null <= Null
+                /// Null encodes -Inf, +Inf, and NULL. Only +Inf <= -Inf is false.
+                return !(right.isNegativeInfinity() && left.isPositiveInfinity());
             default:
                 break;
         }
     }
     else
     {
+        /// lessOrEqual(left, right) = !less(right, left).
+        /// For Null (infinity) sentinels:
+        ///   left is Null, right is non-Null: !less(right, left) = !left.isPositiveInfinity()
+        ///   right is Null, left is non-Null: !less(right, left) = !right.isNegativeInfinity()
         if (lt == Field::Types::Null)
-            return left.isNegativeInfinity();
+            return !left.isPositiveInfinity();
         if (rt == Field::Types::Null)
-            return right.isPositiveInfinity();
+            return !right.isNegativeInfinity();
     }
 
     return applyVisitor(FieldVisitorAccurateLessOrEqual(), left, right);

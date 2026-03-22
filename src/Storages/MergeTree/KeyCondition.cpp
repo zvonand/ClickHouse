@@ -76,6 +76,13 @@ static String extractFixedPrefixFromRegularExpression(const String & regexp)
     const char * pos = begin;
     const char * end = regexp.data() + regexp.size();
 
+    /// Track parenthesis depth so we can skip plain groups as no-ops.
+    /// Also remember the prefix length at each opening '(' so that if the
+    /// group turns out to be optional (followed by '?', '*', or '{') we can
+    /// truncate the prefix back to that point.
+    int paren_depth = 0;
+    std::vector<size_t> prefix_length_at_open;
+
     while (pos < end)
     {
         switch (*pos)
@@ -118,11 +125,56 @@ static String extractFixedPrefixFromRegularExpression(const String & regexp)
                 break;
             }
 
+            case '(':
+            {
+                /// Special groups like (?i), (?:...), (?=...), (?!...) etc.
+                /// are too complex to handle — bail out.
+                if (pos + 1 < end && *(pos + 1) == '?')
+                {
+                    pos = end;
+                    break;
+                }
+                prefix_length_at_open.push_back(fixed_prefix.size());
+                ++paren_depth;
+                ++pos;
+                break;
+            }
+
+            case ')':
+            {
+                if (paren_depth <= 0)
+                {
+                    /// Unmatched ')' — bail out.
+                    pos = end;
+                    break;
+                }
+                --paren_depth;
+                ++pos;
+
+                /// If the group is followed by a quantifier that allows zero
+                /// occurrences, everything captured inside is not guaranteed
+                /// to appear — truncate the prefix to where the group started.
+                if (pos < end && (*pos == '?' || *pos == '*' || *pos == '{'))
+                {
+                    if (!prefix_length_at_open.empty())
+                    {
+                        fixed_prefix.resize(prefix_length_at_open.back());
+                        prefix_length_at_open.pop_back();
+                    }
+                    pos = end;
+                }
+                else
+                {
+                    if (!prefix_length_at_open.empty())
+                        prefix_length_at_open.pop_back();
+                }
+                break;
+            }
+
             /// non-trivial cases
             case '|':
                 fixed_prefix.clear();
             [[fallthrough]];
-            case '(':
             case '[':
             case '^':
             case '$':

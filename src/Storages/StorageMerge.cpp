@@ -751,9 +751,19 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
             SelectQueryInfo modified_query_info;
 
             /// Try to reuse cached modified_query_info for tables with the same column structure.
-            /// Row policies may extend real_column_names differently, so skip caching in that case.
-            auto structure_key = row_policy_data_opt ? String{} : storage_metadata_snapshot->getColumns().toString(false);
-            auto cache_it = !structure_key.empty() ? query_info_cache.find(structure_key) : query_info_cache.end();
+            /// The cache key includes database name (because `_database` virtual column value is baked
+            /// into the query tree) and engine name (because different engines have different capabilities
+            /// like PREWHERE support). We skip caching for tables with row policies (they extend
+            /// real_column_names differently), and for Merge/Distributed/View storages which need
+            /// their own query routing and nested plan building.
+            bool can_cache = !row_policy_data_opt
+                && !std::dynamic_pointer_cast<StorageMerge>(storage)
+                && !std::dynamic_pointer_cast<StorageDistributed>(storage)
+                && !storage->isView();
+            String structure_key;
+            if (can_cache)
+                structure_key = database_name + "\0" + storage->getName() + "\0" + storage_metadata_snapshot->getColumns().toString(false);
+            auto cache_it = can_cache ? query_info_cache.find(structure_key) : query_info_cache.end();
 
             if (cache_it != query_info_cache.end())
             {
@@ -772,7 +782,7 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
                 modified_query_info
                     = getModifiedQueryInfo(modified_context, table, nested_storage_snapshot, real_column_names, column_names_as_aliases, is_smallest_column_requested, aliases);
 
-                if (!structure_key.empty())
+                if (can_cache)
                     query_info_cache[structure_key] = {modified_query_info, column_names_as_aliases, is_smallest_column_requested, aliases};
             }
 

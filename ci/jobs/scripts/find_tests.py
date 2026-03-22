@@ -388,7 +388,19 @@ class Targeting:
         #   "LDAPClient"            → ['LDAP', 'Client']
         #   "PostgreSQLDictionary"  → ['Postgre', 'SQL', 'Dictionary']
         # Pattern: acronym-run-before-TitleCase | TitleCase-word | lowercase-word
-        words = _re.findall(r"[A-Z]+(?=[A-Z][a-z])|[A-Z][a-z0-9]+|[A-Z]{2,}|[a-z][a-z0-9]+", base)
+        # The trailing [A-Z] alternative captures single uppercase chars that
+        # the other patterns miss (e.g. the "K" in "TopK" or "N" in "MergeN").
+        words = _re.findall(r"[A-Z]+(?=[A-Z][a-z])|[A-Z][a-z0-9]+|[A-Z]{2,}|[a-z][a-z0-9]+|[A-Z]", base)
+        # Merge a lone trailing uppercase letter into the previous word so that
+        # compound names like "TopK" or "MergeN" are kept whole instead of losing
+        # the suffix.
+        merged: list = []
+        for w in words:
+            if len(w) == 1 and w.isupper() and merged:
+                merged[-1] = merged[-1] + w
+            else:
+                merged.append(w)
+        words = merged
         # Architectural / ubiquitous words that appear in most files in a directory.
         # Keeping this list generous avoids keywords that are too common to be useful.
         COMMON = {
@@ -408,8 +420,19 @@ class Targeting:
             "settings", "setting", "config", "context", "result",
             "state", "status", "entry", "record", "update", "create",
         }
-        # Lower length threshold to 4 to catch short domain words like "Text", "Avro", "Orc"
-        specific = [w for w in words if len(w) >= 4 and w.lower() not in COMMON]
+        # Allow 3-char all-uppercase acronyms (CSV, ORC, URL, JWT, KQL, etc.) in addition
+        # to words ≥ 4 chars.  Generic acronyms like "API", "SQL", "DDL", "DML" are added
+        # to COMMON below so they don't generate false matches.
+        COMMON_ACRONYMS = {"api", "sql", "ddl", "dml", "ids", "uid", "abi", "cpu", "gpu", "ram",
+                           "tcp", "udp", "tls", "ssl", "rpc", "ttl", "log", "tag", "row", "set"}
+        specific = [
+            w for w in words
+            if w.lower() not in COMMON
+            and (
+                (len(w) >= 4)
+                or (len(w) == 3 and w.isupper() and w.lower() not in COMMON_ACRONYMS)
+            )
+        ]
         return specific
 
     def _query_indirect_call_tests(self, primary_result: dict) -> dict:
@@ -744,21 +767,40 @@ class Targeting:
         dir_ranked  = [(h, l, kw) for h, l, kw in all_ranked if kw in  dir_kw_set]
         file_ranked = [(h, l, kw) for h, l, kw in all_ranked if kw not in dir_kw_set]
 
+        # Pre-count actual test-file hits so we can detect zero-hit keywords and skip them.
+        def has_hits(kw: str) -> bool:
+            kw_lower = kw.lower()
+            return any(kw_lower in f.lower() for f in all_test_files)
+
         if dir_ranked:
-            # Use the best directory keyword.  If there is also a specific (≤SPECIFIC_MAX hits)
-            # filename keyword, combine them so we narrow the result further.
-            candidate_kws = [dir_ranked[0][2]]
-            if file_ranked and file_ranked[0][0] <= SPECIFIC_MAX:
-                candidate_kws.append(file_ranked[0][2])
-        elif file_ranked:
-            # No directory keyword available; use at most one filename keyword from the
-            # specific tier.  Keywords in the broad tier alone are too noisy.
-            file_specific = [x for x in file_ranked if x[0] <= SPECIFIC_MAX]
-            if not file_specific:
+            # Use the best directory keyword.  Skip any that match zero tests (e.g.
+            # "Coordination" for KeeperStorage.cpp — no test names contain "coordination").
+            # Fall back through the list until one has hits; if none do, continue to
+            # file_ranked below.
+            usable_dir = [(h, l, kw) for h, l, kw in dir_ranked if has_hits(kw)]
+            if usable_dir:
+                candidate_kws = [usable_dir[0][2]]
+                # Also add a specific file keyword to narrow results further.
+                if file_ranked and file_ranked[0][0] <= SPECIFIC_MAX:
+                    candidate_kws.append(file_ranked[0][2])
+            else:
+                # All directory keywords have 0 test hits; fall through to file_ranked.
+                dir_ranked = []
+
+        if not dir_ranked:
+            if not file_ranked:
                 return []
-            candidate_kws = [file_specific[0][2]]
-        else:
-            return []
+            # No useful directory keyword; use the most specific file keyword available.
+            # Prefer the specific tier (≤SPECIFIC_MAX), but fall back to the broad tier
+            # (≤BROAD_MAX) when nothing specific exists — e.g. "Keeper" (156 hits) is
+            # still a meaningful domain signal for KeeperStorage.cpp changes.
+            file_specific = [x for x in file_ranked if x[0] <= SPECIFIC_MAX]
+            if file_specific:
+                candidate_kws = [file_specific[0][2]]
+            elif broad_kws:
+                candidate_kws = [broad_kws[0][2]]
+            else:
+                return []
 
         # Collect test names (without extension) matching ANY of the keywords.
         # We do case-insensitive substring matching on the filename.
@@ -866,7 +908,13 @@ class Targeting:
         # Deduplicate file list.
         cpp_with_zero_coverage = list(dict.fromkeys(cpp_with_zero_coverage))
         if cpp_with_zero_coverage:
-            fallback_quads = self._get_keyword_fallback_tests(cpp_with_zero_coverage)
+            # Run per-file so each file's domain keywords are matched independently.
+            seen_fb: set = set()
+            fallback_quads: list = []
+            for f in cpp_with_zero_coverage:
+                for q in self._get_keyword_fallback_tests([f]):
+                    if q[0] not in seen_fb:
+                        seen_fb.add(q[0]); fallback_quads.append(q)
             if fallback_quads:
                 # Inject fallback tests into the first line of each zero-coverage
                 # C++ file so the scorer sees them without duplication.
@@ -894,15 +942,27 @@ class Targeting:
             and any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
         ))
         if cpp_with_coverage:
-            supplement_quads = self._get_keyword_fallback_tests(cpp_with_coverage)
-            if supplement_quads:
+            # Run keyword fallback per changed file so each file's domain keywords
+            # are matched independently.  Calling with all files at once collapses
+            # to a single "best" keyword and silently drops domains from other files
+            # (e.g. for a PR touching ArrowColumnToCHColumn.cpp + MsgPackRowInputFormat.cpp
+            # the combined call picks "Pack" as more specific, missing all Arrow tests).
+            seen_supplement: set = set()
+            all_supplement_quads: list = []
+            for f in cpp_with_coverage:
+                per_file_quads = self._get_keyword_fallback_tests([f])
+                for q in per_file_quads:
+                    if q[0] not in seen_supplement:
+                        seen_supplement.add(q[0])
+                        all_supplement_quads.append(q)
+            if all_supplement_quads:
                 injected_s: set = set()
                 for f in cpp_with_coverage:
                     for (ff, ln), pairs in line_to_tests.items():
                         if ff == f and (ff, ln) not in injected_s:
                             existing = {q[0] for q in pairs}
                             pairs.extend(
-                                q for q in supplement_quads if q[0] not in existing
+                                q for q in all_supplement_quads if q[0] not in existing
                             )
                             injected_s.add((ff, ln))
                             break
@@ -1070,7 +1130,11 @@ if __name__ == "__main__":
     ))
     fallback_quads: list = []
     if cpp_with_zero_coverage:
-        fallback_quads = targeting._get_keyword_fallback_tests(cpp_with_zero_coverage)
+        seen_fb2: set = set()
+        for f in cpp_with_zero_coverage:
+            for q in targeting._get_keyword_fallback_tests([f]):
+                if q[0] not in seen_fb2:
+                    seen_fb2.add(q[0]); fallback_quads.append(q)
         if fallback_quads:
             injected: set = set()
             for f in cpp_with_zero_coverage:
@@ -1081,6 +1145,7 @@ if __name__ == "__main__":
                         break
 
     # Supplementary keyword pass for C++ files WITH coverage (mirrors get_most_relevant_tests).
+    # Run per-file to preserve each file's domain keywords independently.
     cpp_with_coverage = list(dict.fromkeys(
         f for f, ln in changed_lines
         if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
@@ -1089,14 +1154,19 @@ if __name__ == "__main__":
         and any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
     ))
     if cpp_with_coverage:
-        supplement_quads = targeting._get_keyword_fallback_tests(cpp_with_coverage)
-        if supplement_quads:
+        seen_s: set = set()
+        all_supplement: list = []
+        for f in cpp_with_coverage:
+            for q in targeting._get_keyword_fallback_tests([f]):
+                if q[0] not in seen_s:
+                    seen_s.add(q[0]); all_supplement.append(q)
+        if all_supplement:
             injected_s: set = set()
             for f in cpp_with_coverage:
                 for (ff, ln), pairs in line_to_tests.items():
                     if ff == f and (ff, ln) not in injected_s:
                         existing = {q[0] for q in pairs}
-                        pairs.extend(q for q in supplement_quads if q[0] not in existing)
+                        pairs.extend(q for q in all_supplement if q[0] not in existing)
                         injected_s.add((ff, ln))
                         break
 

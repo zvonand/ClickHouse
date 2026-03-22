@@ -1,3 +1,4 @@
+-- Tags: long, no-flaky-check, no-sanitizers
 -- https://github.com/ClickHouse/ClickHouse/issues/47713
 -- Verify that CTE with LEFT JOIN runs quickly and does not hang.
 

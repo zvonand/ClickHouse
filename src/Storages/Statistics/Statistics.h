@@ -157,7 +157,8 @@ private:
     Creators creators;
 };
 
-void removeImplicitStatistics(ColumnsDescription & columns);
+Strings removeImplicitStatistics(ColumnsDescription & columns);
+void addImplicitStatistics(ColumnsDescription & columns, const Strings & statistics);
 void addImplicitStatistics(ColumnsDescription & columns, const String & statistics_types_str);
 
 }

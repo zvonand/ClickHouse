@@ -509,6 +509,8 @@ std::optional<AlterCommand> AlterCommand::parse(const ASTAlterCommand * command_
 
 void AlterCommand::apply(StorageInMemoryMetadata & metadata, ContextPtr context) const
 {
+    auto removed_implicit_statistics = removeImplicitStatistics(metadata.columns);
+
     /// Helper function for column existence check with IF EXISTS
     auto should_skip_column_operation = [&]() -> bool {
         return if_exists && !metadata.columns.has(column_name);
@@ -1006,6 +1008,8 @@ void AlterCommand::apply(StorageInMemoryMetadata & metadata, ContextPtr context)
         metadata.setSQLSecurity(sql_security->as<ASTSQLSecurity &>());
     else
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Wrong parameter type in ALTER query");
+
+    addImplicitStatistics(metadata.columns, removed_implicit_statistics);
 }
 
 namespace

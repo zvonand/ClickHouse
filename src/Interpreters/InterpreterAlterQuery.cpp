@@ -269,7 +269,7 @@ std::optional<BlockIO> tryRewriteToLightweightUpdate(CommandSegments & segments,
     return res;
 }
 
-BlockIO runCommandSegments(CommandSegments & segments, const StoragePtr & table, const ContextPtr & context)
+BlockIO runCommandSegments(CommandSegments & segments, IStorage::AlterLockHolder & alter_lock, const StoragePtr & table, const ContextPtr & context)
 {
     BlockIO res;
     const auto & settings = context->getSettingsRef();
@@ -278,7 +278,6 @@ BlockIO runCommandSegments(CommandSegments & segments, const StoragePtr & table,
     {
         if (auto * alter_commands = std::get_if<AlterCommands>(&segment))
         {
-            auto alter_lock = table->lockForAlter(settings[Setting::lock_acquire_timeout]);
             StorageInMemoryMetadata metadata = table->getInMemoryMetadata();
             table->checkAlterIsPossible(*alter_commands, context);
             table->alter(*alter_commands, context, alter_lock);
@@ -424,6 +423,8 @@ BlockIO InterpreterAlterQuery::executeToTable(const ASTAlterQuery & alter)
     ASTPtr command_list_ptr = alter.command_list->ptr();
     visitor.visit(command_list_ptr);
 
+    IStorage::AlterLockHolder alter_lock = table->lockForAlter(settings[Setting::lock_acquire_timeout]);
+
     /// Use the database where storage was created to resolve nested identifiers
     ContextMutablePtr alter_context = Context::createCopy(getContext());
     alter_context->setCurrentDatabase(database->getDatabaseName());
@@ -436,7 +437,7 @@ BlockIO InterpreterAlterQuery::executeToTable(const ASTAlterQuery & alter)
     if (auto lightweight_result = tryRewriteToLightweightUpdate(segments, table, alter_context, query_ptr))
         return std::move(lightweight_result.value());
 
-    return runCommandSegments(segments, table, alter_context);
+    return runCommandSegments(segments, alter_lock, table, alter_context);
 }
 
 BlockIO InterpreterAlterQuery::executeToDatabase(const ASTAlterQuery & alter)

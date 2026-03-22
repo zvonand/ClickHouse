@@ -103,15 +103,6 @@ ASTPtr prepareQueryAffectedAST(const std::vector<MutationCommand> & commands, co
     auto count_func = makeASTFunction("count");
     select->select()->children.push_back(count_func);
 
-    auto tables = make_intrusive<ASTTablesInSelectQuery>();
-    auto table = make_intrusive<ASTTablesInSelectQueryElement>();
-    auto table_exp = make_intrusive<ASTTableExpression>();
-    table_exp->database_and_table_name = make_intrusive<ASTTableIdentifier>(storage->getStorageID());
-    table_exp->children.emplace_back(table_exp->database_and_table_name);
-    table->table_expression = table_exp;
-    tables->children.push_back(table);
-    select->setExpression(ASTSelectQuery::Expression::TABLES, std::move(tables));
-
     ASTs conditions;
     for (const MutationCommand & command : commands)
     {
@@ -1676,15 +1667,7 @@ void MutationsInterpreter::validate()
 
     // Make sure the mutation query is valid
     if (context->getSettingsRef()[Setting::validate_mutation_query])
-    {
-        if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
-            prepareQueryAffectedQueryTree(commands, source.getStorage(), context);
-        else
-        {
-            ASTPtr select_query = prepareQueryAffectedAST(commands, source.getStorage(), context);
-            InterpreterSelectQuery(select_query, context, source.getStorage(), metadata_snapshot);
-        }
-    }
+        prepareQueryAffectedQueryTree(commands, source.getStorage(), context);
 
     QueryPlan plan;
 

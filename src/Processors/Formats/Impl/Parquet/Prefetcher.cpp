@@ -467,29 +467,15 @@ std::span<const char> Prefetcher::getRangeData(const PrefetchHandle & request)
         size_t offset_in_region = req_file_offset - first_region.file_offset;
         size_t available_in_first = first_region.size - offset_in_region;
 
-        if (req->length <= available_in_first)
+        if (req->length <= available_in_first && task->buf.empty())
         {
             /// Fast path: request fits entirely within one cache block — true zero-copy.
             return std::span(first_region.data + offset_in_region, req->length);
         }
 
-        /// Slow path: request spans multiple cache blocks. Assemble into task->buf.
-        /// This is rare for typical Parquet reads but must be handled correctly.
-        if (task->buf.empty())
-            task->buf.resize(task->length);
-
-        size_t copied = 0;
-        char * dest = task->buf.data() + req->task_offset;
-        for (size_t i = region_idx; i < task->cached_regions.size() && copied < req->length; ++i)
-        {
-            const auto & r = task->cached_regions[i];
-            size_t skip = (i == region_idx) ? offset_in_region : 0;
-            size_t to_copy = std::min(r.size - skip, req->length - copied);
-            memcpy(dest + copied, r.data + skip, to_copy);
-            copied += to_copy;
-        }
-        chassert(copied == req->length);
-        return std::span(dest, req->length);
+        /// Multi-region path: task->buf was pre-populated in runTask to avoid data races.
+        chassert(!task->buf.empty());
+        return std::span(task->buf.data() + req->task_offset, req->length);
     }
 
     chassert(req->task_offset + req->length <= task->buf.size());
@@ -509,6 +495,22 @@ Prefetcher::Task::State Prefetcher::runTask(Task * task)
         if (read_mode == ReadMode::RandomRead && reader->supportsReadAtRetainCells())
         {
             task->cached_regions = reader->readBigAtRetainCells(task->length, task->offset);
+
+            /// If the data spans multiple cache blocks, pre-assemble it into task->buf now
+            /// (on the single-threaded producer side) to avoid a data race in getRangeData,
+            /// where multiple consumer threads could try to lazily populate task->buf concurrently.
+            if (task->cached_regions.size() > 1)
+            {
+                task->buf.resize(task->length);
+                size_t copied = 0;
+                for (const auto & region : task->cached_regions)
+                {
+                    memcpy(task->buf.data() + copied, region.data, region.size);
+                    copied += region.size;
+                }
+                chassert(copied == task->length);
+            }
+
             ProfileEvents::increment(ProfileEvents::ParquetPrefetcherReadRandomRead);
         }
         else

@@ -260,13 +260,14 @@ Names filterTupleColumnsToRead(NamesAndTypesList & requested_columns)
 
 ReadFromFormatInfo updateFormatPrewhereInfo(const ReadFromFormatInfo & info, const FilterDAGInfoPtr & row_level_filter, const PrewhereInfoPtr & prewhere_info)
 {
-    chassert(prewhere_info);
+    chassert(prewhere_info || row_level_filter);
 
     if (info.prewhere_info || info.row_level_filter)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "updateFormatPrewhereInfo called more than once");
 
     ReadFromFormatInfo new_info;
     new_info.prewhere_info = prewhere_info;
+    new_info.row_level_filter = row_level_filter;
 
     /// Removes columns that are only used as prewhere input.
     /// Adds prewhere outputs (the actual prewhere filter column is only added if

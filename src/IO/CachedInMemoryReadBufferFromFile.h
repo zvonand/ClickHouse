@@ -31,10 +31,10 @@ public:
     void setReadUntilEnd() override;
 
     size_t readBigAt(char * to, size_t n, size_t offset, const std::function<bool(size_t m)> & progress_callback) const override;
-    bool supportsReadAt() override;
+    bool supportsReadAt() override { return inner_supports_read_at; }
 
     std::vector<CachedRegion> readBigAtRetainCells(size_t n, size_t offset) const override;
-    bool supportsReadAtRetainCells() const override { return in->supportsReadAt(); }
+    bool supportsReadAtRetainCells() const override { return inner_supports_read_at; }
 
     PageCache::MappedPtr getPageCacheCell() const { return chunk; }
     PageCachePtr getPageCache() const { return cache; }
@@ -51,6 +51,9 @@ private:
     size_t inner_read_until_position;
 
     PageCache::MappedPtr chunk;
+
+    /// Precomputed from in->supportsReadAt() to avoid calling it from multiple threads.
+    bool inner_supports_read_at;
 
     /// Ensures all cache blocks covering [offset, offset+n) are populated.
     /// Returns a vector of MappedPtr, one per block. Consecutive misses are fetched

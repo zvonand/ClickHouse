@@ -25,6 +25,7 @@ CachedInMemoryReadBufferFromFile::CachedInMemoryReadBufferFromFile(
     , settings(settings_)
     , in(std::move(in_)), read_until_position(file_size.value())
     , inner_read_until_position(read_until_position)
+    , inner_supports_read_at(in->supportsReadAt())
 {
     cache_key.offset = 0;
 }
@@ -213,13 +214,11 @@ bool CachedInMemoryReadBufferFromFile::nextImpl()
     return true;
 }
 
-bool CachedInMemoryReadBufferFromFile::supportsReadAt()
-{
-    return in->supportsReadAt();
-}
-
 std::vector<PageCache::MappedPtr> CachedInMemoryReadBufferFromFile::populateBlockRange(size_t offset, size_t n) const
 {
+    if (n == 0 || offset >= file_size.value())
+        return {};
+
     size_t block_size = settings.page_cache_block_size;
     size_t end_offset = std::min(offset + n, file_size.value());
 

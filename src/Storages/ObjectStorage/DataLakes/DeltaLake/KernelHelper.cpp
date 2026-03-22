@@ -180,11 +180,11 @@ public:
             return url.substr(host_start, dot_pos - host_start);
         };
 
-        std::visit([&](const auto & auth)
+        switch (connection_params.auth_method.index())
         {
-            using T = std::decay_t<decltype(auth)>;
-            if constexpr (std::is_same_v<T, DB::AzureBlobStorage::ConnectionString>)
+            case 0: /// ConnectionString
             {
+                const auto & auth = std::get<DB::AzureBlobStorage::ConnectionString>(connection_params.auth_method);
                 /// delta-kernel-rs does not support azure_storage_connection_string directly.
                 /// Parse the connection string into individual components instead.
                 auto parsed = Azure::Storage::_internal::ParseConnectionString(auth.toUnderType());
@@ -220,40 +220,27 @@ public:
                 set_option("azure_endpoint", connection_params.getConnectionURL());
                 if (!scheme.empty() && scheme == "http")
                     set_option("azure_allow_http", "true");
+                break;
             }
-            else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Storage::StorageSharedKeyCredential>>)
-            {
-                set_option("azure_storage_account_name", auth->AccountName);
-                set_option("azure_storage_account_key", connection_params.endpoint.account_key);
-            }
-            else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::ClientSecretCredential>>)
-            {
-                if (connection_params.raw_client_id.has_value())
-                    set_option("azure_client_id", *connection_params.raw_client_id);
-                if (connection_params.raw_client_secret.has_value())
-                    set_option("azure_client_secret", *connection_params.raw_client_secret);
-                if (connection_params.raw_tenant_id.has_value())
-                    set_option("azure_tenant_id", *connection_params.raw_tenant_id);
-                const auto & name = endpoint.account_name.empty() ? get_account_name() : endpoint.account_name;
-                if (!name.empty())
-                    set_option("azure_storage_account_name", name);
-            }
-            else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::WorkloadIdentityCredential>>)
-            {
-                set_option("azure_use_workload_identity", "true");
-                const auto & name = endpoint.account_name.empty() ? get_account_name() : endpoint.account_name;
-                if (!name.empty())
-                    set_option("azure_storage_account_name", name);
-            }
-            else if constexpr (std::is_same_v<T, std::shared_ptr<Azure::Identity::ManagedIdentityCredential>>)
+            case 2: /// StorageSharedKeyCredential
+            case 4: /// ManagedIdentityCredential
             {
                 const auto & name = endpoint.account_name.empty() ? get_account_name() : endpoint.account_name;
                 if (!name.empty())
                     set_option("azure_storage_account_name", name);
+                if (!connection_params.endpoint.account_key.empty())
+                    set_option("azure_storage_account_key", connection_params.endpoint.account_key);
+                break;
             }
-            // StaticCredential and other variants are not supported by delta-kernel-rs;
-            // no options are set and the builder will use default credential discovery.
-        }, connection_params.auth_method);
+            case 1: /// ClientSecretCredential
+            case 3: /// WorkloadIdentityCredential
+            case 5: /// StaticCredential
+            default:
+                ///Other variants are not supported yet
+                throw DB::Exception(DB::ErrorCodes::NOT_IMPLEMENTED,
+                                "Unsupported authentication type for azure: {}", configuration->getType());
+                break;
+        }
 
         if (!endpoint.sas_auth.empty())
             set_option("azure_storage_sas_key", endpoint.sas_auth);

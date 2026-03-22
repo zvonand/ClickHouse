@@ -872,9 +872,6 @@ void StorageAzureConfiguration::fromAST(ASTs & engine_args, ContextPtr context, 
             onelake_client_id,
             onelake_client_secret
         );
-        parsed_arguments.connection_params.raw_client_id = onelake_client_id;
-        parsed_arguments.connection_params.raw_client_secret = onelake_client_secret;
-        parsed_arguments.connection_params.raw_tenant_id = onelake_tenant_id;
     }
     else
     {

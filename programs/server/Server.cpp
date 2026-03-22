@@ -2185,8 +2185,8 @@ try
             /// actual OS overhead in anonymous pages is small (~50 MiB for jemalloc metadata). Use a higher
             /// ratio (0.95) to leave only 5% headroom, giving more memory to the server.
             double effective_ratio = max_server_memory_usage_to_ram_ratio;
-            if (current_physical_server_memory < (4ul << 30) && effective_ratio < 0.98)
-                effective_ratio = 0.98;
+            if (current_physical_server_memory < (4ul << 30) && effective_ratio < 0.99)
+                effective_ratio = 0.99;
             const size_t default_max_server_memory_usage = static_cast<size_t>(static_cast<double>(current_physical_server_memory) * effective_ratio);
 
             if (max_server_memory_usage == 0)
@@ -2215,7 +2215,13 @@ try
 
             size_t merges_mutations_memory_usage_soft_limit = new_server_settings[ServerSetting::merges_mutations_memory_usage_soft_limit];
 
-            size_t default_merges_mutations_server_memory_usage = static_cast<size_t>(static_cast<double>(current_physical_server_memory) * new_server_settings[ServerSetting::merges_mutations_memory_usage_to_ram_ratio]);
+            double merges_mutations_ratio = new_server_settings[ServerSetting::merges_mutations_memory_usage_to_ram_ratio];
+            /// On low-memory systems, limit merge memory to 10% of RAM instead of 50%.
+            /// Merges compete with queries for the same memory budget; giving merges half
+            /// the memory leaves too little for INSERT/SELECT on small systems.
+            if (current_physical_server_memory < (4ul << 30) && merges_mutations_ratio > 0.1)
+                merges_mutations_ratio = 0.1;
+            size_t default_merges_mutations_server_memory_usage = static_cast<size_t>(static_cast<double>(current_physical_server_memory) * merges_mutations_ratio);
             if (merges_mutations_memory_usage_soft_limit == 0)
             {
                 merges_mutations_memory_usage_soft_limit = default_merges_mutations_server_memory_usage;
@@ -2223,7 +2229,7 @@ try
                     " ({} available * {:.2f} merges_mutations_memory_usage_to_ram_ratio)",
                     formatReadableSizeWithBinarySuffix(merges_mutations_memory_usage_soft_limit),
                     formatReadableSizeWithBinarySuffix(current_physical_server_memory),
-                    new_server_settings[ServerSetting::merges_mutations_memory_usage_to_ram_ratio].value);
+                    merges_mutations_ratio);
             }
             else if (merges_mutations_memory_usage_soft_limit > default_merges_mutations_server_memory_usage)
             {
@@ -2232,7 +2238,7 @@ try
                     " ({} available * {:.2f} merges_mutations_memory_usage_to_ram_ratio)",
                     formatReadableSizeWithBinarySuffix(merges_mutations_memory_usage_soft_limit),
                     formatReadableSizeWithBinarySuffix(current_physical_server_memory),
-                    new_server_settings[ServerSetting::merges_mutations_memory_usage_to_ram_ratio].value);
+                    merges_mutations_ratio);
             }
 
             LOG_INFO(log, "Merges and mutations memory limit is set to {}",

@@ -17,6 +17,7 @@
 #include <Common/Macros.h>
 #include <Common/EventNotifier.h>
 #include <Common/getNumberOfCPUCoresToUse.h>
+#include <base/getMemoryAmount.h>
 #include <Common/Stopwatch.h>
 #include <Common/formatReadable.h>
 #include <Common/Throttler.h>
@@ -7252,6 +7253,26 @@ void Context::initializeBackgroundExecutorsIfNeeded()
     const ServerSettings & server_settings = shared->server_settings;
     size_t background_pool_size = server_settings[ServerSetting::background_pool_size];
     auto background_merges_mutations_concurrency_ratio = server_settings[ServerSetting::background_merges_mutations_concurrency_ratio];
+
+    /// On low-memory systems, limit concurrent merges to avoid OOM.
+    /// Each merge can use 40-80 MiB; with the default pool_size=16 and ratio=2,
+    /// 32 concurrent merges would need 1.3-2.6 GiB just for merge buffers.
+    size_t available_memory = getMemoryAmount();
+    if (available_memory > 0 && available_memory < (4ul << 30))
+    {
+        size_t max_pool = std::max<size_t>(1, available_memory / (1ul << 30)); /// 1 per GiB
+        if (background_pool_size > max_pool)
+        {
+            LOG_INFO(getLogger("Context"),
+                "Lowered background_pool_size from {} to {} because the system has limited RAM ({})",
+                background_pool_size, max_pool, formatReadableSizeWithBinarySuffix(available_memory));
+            background_pool_size = max_pool;
+            background_merges_mutations_concurrency_ratio = 1;
+            /// Update shared settings so the MergeTree sanity check sees the lowered values.
+            shared->server_settings.set("background_pool_size", max_pool);
+            shared->server_settings.set("background_merges_mutations_concurrency_ratio", 1.0f);
+        }
+    }
     size_t background_pool_max_tasks_count = static_cast<size_t>(static_cast<double>(background_pool_size) * background_merges_mutations_concurrency_ratio);
     String background_merges_mutations_scheduling_policy = server_settings[ServerSetting::background_merges_mutations_scheduling_policy];
     size_t background_move_pool_size = server_settings[ServerSetting::background_move_pool_size];

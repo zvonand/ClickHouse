@@ -2279,7 +2279,8 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
     }
 
 
-    if (number_of_free_entries_in_pool_to_execute_mutation > background_pool_tasks)
+    if (number_of_free_entries_in_pool_to_execute_mutation > background_pool_tasks
+        && number_of_free_entries_in_pool_to_execute_mutation.changed)
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of 'number_of_free_entries_in_pool_to_execute_mutation' setting"
             " ({}) (default values are defined in <merge_tree> section of config.xml"
@@ -2291,7 +2292,8 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
             background_pool_tasks);
     }
 
-    if (number_of_free_entries_in_pool_to_lower_max_size_of_merge > background_pool_tasks)
+    if (number_of_free_entries_in_pool_to_lower_max_size_of_merge > background_pool_tasks
+        && number_of_free_entries_in_pool_to_lower_max_size_of_merge.changed)
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of 'number_of_free_entries_in_pool_to_lower_max_size_of_merge' setting"
             " ({}) (default values are defined in <merge_tree> section of config.xml"
@@ -2303,7 +2305,8 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
             background_pool_tasks);
     }
 
-    if (number_of_free_entries_in_pool_to_execute_optimize_entire_partition > background_pool_tasks)
+    if (number_of_free_entries_in_pool_to_execute_optimize_entire_partition > background_pool_tasks
+        && number_of_free_entries_in_pool_to_execute_optimize_entire_partition.changed)
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of 'number_of_free_entries_in_pool_to_execute_optimize_entire_partition' setting"
             " ({}) (default values are defined in <merge_tree> section of config.xml"

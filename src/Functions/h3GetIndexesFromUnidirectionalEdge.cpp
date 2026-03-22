@@ -116,7 +116,7 @@ Returns the origin and destination hexagon indexes from the given unidirectional
         {"edge", "Hexagon index number that represents a unidirectional edge.", {"UInt64"}}
     };
     FunctionDocumentation::ReturnedValue returned_value = {
-        "Returns a tuple containing the origin and destination hexagon indices from the unidirectional edge, or `(0,0)` if the input is not valid.",
+        "Returns a tuple containing the origin and destination hexagon indices from the unidirectional edge. Throws an exception if the input is not a valid directed edge (controlled by the `functions_h3_default_if_invalid` setting).",
         {"Tuple(UInt64, UInt64)"}
     };
     FunctionDocumentation::Examples examples = {

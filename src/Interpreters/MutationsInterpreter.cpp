@@ -31,6 +31,7 @@
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTExpressionList.h>
 #include <Parsers/ASTSelectQuery.h>
+#include <Parsers/ASTTablesInSelectQuery.h>
 #include <IO/WriteHelpers.h>
 #include <Processors/QueryPlan/CreatingSetsStep.h>
 #include <DataTypes/NestedUtils.h>
@@ -85,6 +86,7 @@ namespace ErrorCodes
     extern const int CANNOT_UPDATE_COLUMN;
     extern const int UNEXPECTED_EXPRESSION;
     extern const int ILLEGAL_STATISTICS;
+    extern const int INCORRECT_QUERY;
 }
 
 ASTPtr prepareQueryAffectedAST(const std::vector<MutationCommand> & commands, const StoragePtr & storage, ContextPtr context)
@@ -99,6 +101,15 @@ ASTPtr prepareQueryAffectedAST(const std::vector<MutationCommand> & commands, co
     select->setExpression(ASTSelectQuery::Expression::SELECT, make_intrusive<ASTExpressionList>());
     auto count_func = makeASTFunction("count");
     select->select()->children.push_back(count_func);
+
+    auto tables = make_intrusive<ASTTablesInSelectQuery>();
+    auto table = make_intrusive<ASTTablesInSelectQueryElement>();
+    auto table_exp = make_intrusive<ASTTableExpression>();
+    table_exp->database_and_table_name = make_intrusive<ASTTableIdentifier>(storage->getStorageID());
+    table_exp->children.emplace_back(table_exp->database_and_table_name);
+    table->table_expression = table_exp;
+    tables->children.push_back(table);
+    select->setExpression(ASTSelectQuery::Expression::TABLES, std::move(tables));
 
     ASTs conditions;
     for (const MutationCommand & command : commands)
@@ -1004,6 +1015,9 @@ void MutationsInterpreter::prepare(bool dry_run)
         }
         else if (command.type == MutationCommand::MATERIALIZE_TTL)
         {
+            if (command.type == MutationCommand::MATERIALIZE_TTL && !metadata_snapshot->hasAnyTTL())
+                throw Exception(ErrorCodes::INCORRECT_QUERY, "Cannot MATERIALIZE TTL as there is no TTL set for table {}", source.getStorage()->getStorageID().getNameForLogs());
+
             mutation_kind.set(MutationKind::MUTATE_OTHER);
             bool suitable_for_ttl_optimization = (*source.getMergeTreeData()->getSettings())[MergeTreeSetting::ttl_only_drop_parts]
                 && metadata_snapshot->hasOnlyRowsTTL();
@@ -1631,6 +1645,44 @@ QueryPipelineBuilder MutationsInterpreter::addStreamsForLaterStages(const std::v
     });
 
     return pipeline;
+}
+
+void MutationsInterpreter::validate()
+{
+    /// For Replicated* storages mutations cannot employ non-deterministic functions
+    /// because that produces inconsistencies between replicas
+    if (startsWith(source.getStorage()->getName(), "Replicated") && !context->getSettingsRef()[Setting::allow_nondeterministic_mutations])
+    {
+        for (const auto & command : commands)
+        {
+            const auto nondeterministic_func_data = findFirstNonDeterministicFunction(command, context);
+            if (nondeterministic_func_data.subquery)
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "ALTER UPDATE/ALTER DELETE statement with subquery may be nondeterministic, "
+                                                           "see allow_nondeterministic_mutations setting");
+
+            if (nondeterministic_func_data.nondeterministic_function_name)
+                throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                    "The source storage is replicated so ALTER UPDATE/ALTER DELETE statements must use only deterministic functions. "
+                    "Function '{}' is non-deterministic", *nondeterministic_func_data.nondeterministic_function_name);
+        }
+    }
+
+    // Make sure the mutation query is valid
+    if (context->getSettingsRef()[Setting::validate_mutation_query])
+    {
+        if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
+            prepareQueryAffectedQueryTree(commands, source.getStorage(), context);
+        else
+        {
+            ASTPtr select_query = prepareQueryAffectedAST(commands, source.getStorage(), context);
+            InterpreterSelectQuery(select_query, context, source.getStorage(), metadata_snapshot);
+        }
+    }
+
+    QueryPlan plan;
+
+    initQueryPlan(stages.front(), plan);
+    auto pipeline = addStreamsForLaterStages(stages, plan);
 }
 
 QueryPipelineBuilder MutationsInterpreter::execute()

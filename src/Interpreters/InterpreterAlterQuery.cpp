@@ -154,7 +154,11 @@ void prepareAndValidateCommandSegments(CommandSegments & segments, const Storage
         }
         else if (auto * mutation_commands = std::get_if<MutationCommands>(&segment))
         {
-            mutation_commands->validate(metadata, table, context);
+            if (mutation_commands->hasNonEmptyMutationCommands())
+            {
+                MutationsInterpreter::Settings mutation_settings(false);
+                MutationsInterpreter(table, std::make_shared<StorageInMemoryMetadata>(metadata), *mutation_commands, context, mutation_settings).validate();
+            }
         }
         else if (auto * partition_commands = std::get_if<PartitionCommands>(&segment))
         {

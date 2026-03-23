@@ -17,7 +17,6 @@ settings
     index_granularity=200,
     min_bytes_for_wide_part=0,
     index_granularity_bytes=10e6,
-    compress_primary_key=1,
     distributed_index_analysis_min_parts_to_activate=0,
     distributed_index_analysis_min_indexes_bytes_to_activate=200000;
 

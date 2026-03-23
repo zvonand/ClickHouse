@@ -157,6 +157,15 @@ class Targeting:
     # tests are exercising the same interface, not merely a related file.
     INDIRECT_CALL_WIDTH = 3000
 
+    # Synthetic width for tests found via symbol-level coverage (checks_coverage_inverted).
+    # Used as a fallback when line-level coverage returns no results for a file.
+    # Ranked between indirect-call and sibling-dir because it signals that the test
+    # exercised a function defined in the changed file.
+    SYMBOL_FALLBACK_WIDTH = 5000
+
+    # Pass weight for symbol-level fallback (between indirect and sibling).
+    PASS_WEIGHT_SYMBOL = 0.2
+
     # Synthetic width assigned to tests found via same-directory sibling file
     # expansion (secondary pass).  Must be >> NARROW_REGION_MAX_LINES so they
     # never get the narrow-tier bonus and always rank below direct hits.
@@ -233,12 +242,33 @@ class Targeting:
         # Build one condition per file: file='X' AND line_end >= min_changed AND line_start <= max_changed.
         # This pre-filters to regions that *could* overlap any changed line in that file,
         # avoiding a full table scan per file while keeping the query size O(files) not O(lines).
-        per_file_conds = " OR ".join(
-            f"(file = '{self._escape_sql_string(f)}'"
-            f" AND line_end >= {min(lines)} AND line_start <= {max(lines)})"
-            for f, lines in sorted(files_to_lines.items())
-        )
+        #
+        # For header files (.h), we expand the line range to the entire file because
+        # headers typically define a single class and a change to any method affects
+        # the class semantics.  Tests covering OTHER methods in the same header are
+        # highly relevant.  This mirrors the old symbol-level algo which matched all
+        # symbols in the same translation unit.
+        per_file_conds_parts = []
+        for f, lines in sorted(files_to_lines.items()):
+            if f.endswith(".h"):
+                # For headers: fetch ALL regions in the file (no line range filter)
+                per_file_conds_parts.append(
+                    f"(file = '{self._escape_sql_string(f)}')"
+                )
+            else:
+                per_file_conds_parts.append(
+                    f"(file = '{self._escape_sql_string(f)}'"
+                    f" AND line_end >= {min(lines)} AND line_start <= {max(lines)})"
+                )
+        per_file_conds = " OR ".join(per_file_conds_parts)
 
+        # Two-tier query: primary (narrow, <= MAX_TESTS_PER_LINE tests per
+        # region) and broad (> MAX, <= BROAD_REGION_HARD_CAP).  Broad regions
+        # are included so infrastructure files (Context.cpp, RemoteQueryExecutor,
+        # etc.) are not completely invisible — the scoring formula already
+        # penalises them via the 1/region_test_count denominator.  Only truly
+        # ubiquitous regions (> HARD_CAP) are dropped to keep response size sane.
+        BROAD_REGION_HARD_CAP = 2000  # regions with more tests are infrastructure noise
         query = f"""
         SELECT
             file,
@@ -253,7 +283,7 @@ class Targeting:
           AND notEmpty(test_name)
           AND ({per_file_conds})
         GROUP BY file, line_start, line_end
-        HAVING region_test_count <= {self.MAX_TESTS_PER_LINE}
+        HAVING region_test_count <= {BROAD_REGION_HARD_CAP}
         """
 
         cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
@@ -295,20 +325,29 @@ class Targeting:
         # region_test_count) 4-tuples.  The CIDB query returned all ranges for the
         # touched files; now filter to ranges that actually overlap a changed line.
         # Start from base_result which already has empty entries for non-tracked files.
+        # Pre-index coverage_ranges by file for faster lookup.
+        ranges_by_file: dict = {}
+        for entry in coverage_ranges:
+            ranges_by_file.setdefault(entry[0], []).append(entry)
+
         result: dict = dict(base_result)
         for filename, line_no in coverage_lines:
             stored = self._stored_path(filename)
             matched: list = []
-            for file_, line_start, line_end, test_depths, region_test_count in coverage_ranges:
-                if file_ == stored and line_start <= line_no <= line_end:
-                    # Skip regions covered by too many tests — these are infrastructure
-                    # lines (e.g. Context.cpp, SignalHandlers.cpp) that are touched by
-                    # nearly every test and provide no useful test-selection signal.
-                    if region_test_count > self.MAX_TESTS_PER_LINE:
-                        continue
+            is_header = filename.endswith(".h")
+            for file_, line_start, line_end, test_depths, region_test_count in ranges_by_file.get(stored, []):
+                overlaps = line_start <= line_no <= line_end
+                if overlaps:
                     width = line_end - line_start + 1
                     for t, depth in test_depths:
                         matched.append((t, width, depth, region_test_count))
+                elif is_header:
+                    # For header files: include non-overlapping regions from
+                    # the same file with SIBLING_DIR_WIDTH penalty.  These are
+                    # other methods in the same class, still relevant but with
+                    # weaker signal than a direct line overlap.
+                    for t, depth in test_depths:
+                        matched.append((t, self.SIBLING_DIR_WIDTH, 255, region_test_count))
             # Deduplicate: keep lowest width, depth, and region_test_count per test.
             by_test: dict = {}  # test -> (min_width, min_depth, min_region_test_count)
             for t, w, d, rc in matched:
@@ -367,6 +406,40 @@ class Targeting:
                             self.INDIRECT_CALL_WIDTH // max(1, shared_count),
                         )
                         result[key].append((t, effective_width, 255, 1, self.PASS_WEIGHT_INDIRECT))
+
+        # --- Quaternary pass: symbol-level fallback via checks_coverage_inverted ---
+        # Only run when line-level coverage returned fewer than 50 unique tests
+        # (indicates infrastructure files where most regions are above the cap)
+        # or when some C++ files had zero coverage.  Skip otherwise to save the
+        # ~10s query cost.
+        current_unique = len({t for pairs in result.values() for t, *_ in pairs})
+        has_zero_coverage_files = any(
+            not pairs
+            for (f, _), pairs in result.items()
+            if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
+            and (f.endswith(".cpp") or f.endswith(".h"))
+        )
+        run_symbol_fallback = current_unique < 50 or has_zero_coverage_files
+        symbol_tests = (
+            self._query_symbol_fallback_tests(files_to_lines, result)
+            if run_symbol_fallback
+            else {}
+        )
+        if symbol_tests:
+            for key in result:
+                fname, _ = key
+                if not any(fname.startswith(p) for p in COVERAGE_TRACKED_PREFIXES):
+                    continue
+                existing = {e[0] for e in result[key]}
+                for t, matched_symbols in symbol_tests.items():
+                    if t not in existing:
+                        effective_width = max(
+                            self.NARROW_REGION_MAX_LINES + 1,
+                            self.SYMBOL_FALLBACK_WIDTH // max(1, matched_symbols),
+                        )
+                        result[key].append(
+                            (t, effective_width, 255, 1, self.PASS_WEIGHT_SYMBOL)
+                        )
 
         total_unique_tests = len({t for pairs in result.values() for t, *_ in pairs})
         lines_with_tests = sum(1 for (f, _), pairs in result.items() if pairs and any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES))
@@ -444,6 +517,114 @@ class Targeting:
         ]
         return specific
 
+    def _query_symbol_fallback_tests(
+        self, files_to_lines: dict, primary_result: dict
+    ) -> dict:
+        """
+        Symbol-level fallback: query `checks_coverage_inverted` for tests that
+        exercise functions defined in the changed files.  This complements the
+        line-level coverage query for files where many regions exceed the
+        MAX_TESTS_PER_LINE threshold (infrastructure-heavy files) or where
+        line-level coverage data is absent.
+
+        The symbol table stores mangled C++ names like `DB::RemoteQueryExecutor::cancel`.
+        We extract the class/struct name from the changed filename (e.g.
+        "RemoteQueryExecutor" from "RemoteQueryExecutor.cpp") and search for
+        symbols containing that class name.
+
+        Returns {test_name -> symbol_match_count} for tests NOT already in
+        primary_result.
+        """
+        import time
+
+        primary_tests = {t for pairs in primary_result.values() for t, *_ in pairs}
+
+        # Extract class names from changed C++ filenames.
+        class_names: list = []
+        for f in sorted(files_to_lines):
+            if not (f.endswith(".cpp") or f.endswith(".h")):
+                continue
+            basename = f.rsplit("/", 1)[-1]
+            stem = basename.rsplit(".", 1)[0]
+            # Skip very short names and generic filenames
+            if len(stem) < 4 or stem.lower() in (
+                "main", "config", "common", "utils", "types", "defines",
+                "settings", "context", "block", "column", "field",
+            ):
+                continue
+            class_names.append(stem)
+
+        if not class_names:
+            return {}
+
+        # Build LIKE conditions for symbol names: symbol LIKE '%ClassName%'
+        # Limit to 8 class names to keep query size reasonable.
+        class_names = list(dict.fromkeys(class_names))[:8]
+        symbol_conds = " OR ".join(
+            f"symbol LIKE '%{self._escape_sql_string(cn)}%'"
+            for cn in class_names
+        )
+
+        # Build NOT IN exclusion for primary tests, but cap at 500 to prevent
+        # HTTP field-length errors.
+        primary_for_exclusion = set()
+        for pairs in primary_result.values():
+            for entry in pairs:
+                t = entry[0]
+                rc = entry[3] if len(entry) > 3 else 1
+                pw = entry[4] if len(entry) > 4 else 1.0
+                if rc <= self.MAX_TESTS_PER_LINE and pw >= self.PASS_WEIGHT_INDIRECT:
+                    primary_for_exclusion.add(t)
+        if len(primary_for_exclusion) > 500:
+            primary_for_exclusion = set(sorted(primary_for_exclusion)[:500])
+
+        if primary_for_exclusion:
+            escaped_primary = ", ".join(
+                f"'{self._escape_sql_string(t)}'" for t in sorted(primary_for_exclusion)
+            )
+            not_primary = f"AND test_name NOT IN ({escaped_primary})"
+        else:
+            not_primary = ""
+
+        query = f"""
+        SELECT test_name, count(DISTINCT symbol) AS matched_symbols
+        FROM checks_coverage_inverted
+        WHERE check_start_time > now() - interval 3 days
+          AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+          AND notEmpty(test_name)
+          AND ({symbol_conds})
+          {not_primary}
+        GROUP BY test_name
+        ORDER BY matched_symbols DESC
+        LIMIT 200
+        """
+
+        try:
+            cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+            t0 = time.monotonic()
+            raw = cidb.query(query, log_level="")
+            elapsed = time.monotonic() - t0
+        except Exception as e:
+            print(f"[find_tests] symbol-fallback query failed (non-fatal): {e}")
+            return {}
+
+        result_map: dict = {}
+        for row in raw.strip().splitlines():
+            parts = row.split("\t", 1)
+            if len(parts) == 2 and parts[0].strip():
+                try:
+                    result_map[parts[0].strip()] = int(parts[1].strip())
+                except ValueError:
+                    pass
+
+        if result_map:
+            print(
+                f"[find_tests] symbol-fallback query: {elapsed:.2f}s, "
+                f"{len(result_map)} additional test candidates via symbol matching "
+                f"(classes={class_names}, top matched={max(result_map.values())})"
+            )
+        return result_map
+
     def _query_indirect_call_tests(self, primary_result: dict) -> dict:
         """
         Tertiary pass: find tests that call the same virtual / function-pointer
@@ -465,9 +646,24 @@ class Targeting:
         """
         import time
 
-        primary_tests = {t for pairs in primary_result.values() for t, *_ in pairs}
+        # Use only high-confidence primary tests (from regions with
+        # <= MAX_TESTS_PER_LINE) for the indirect-call join.  Including all
+        # tests from broad regions (e.g. 1000+) would make the IN-list too
+        # large for the CIDB HTTP endpoint ("Field value too long").
+        primary_tests = set()
+        for pairs in primary_result.values():
+            for entry in pairs:
+                t = entry[0]
+                rc = entry[3] if len(entry) > 3 else 1
+                pw = entry[4] if len(entry) > 4 else 1.0
+                if rc <= self.MAX_TESTS_PER_LINE and pw >= self.PASS_WEIGHT_INDIRECT:
+                    primary_tests.add(t)
         if not primary_tests:
             return {}
+
+        # Cap at 500 tests to prevent HTTP field-length errors.
+        if len(primary_tests) > 500:
+            primary_tests = set(sorted(primary_tests)[:500])
 
         escaped_primary = ", ".join(
             f"'{self._escape_sql_string(t)}'" for t in sorted(primary_tests)
@@ -568,10 +764,24 @@ class Targeting:
         if not src_dirs:
             return {}
 
-        # Collect primary tests (those already found by the direct-coverage query).
-        primary_tests = {t for pairs in primary_result.values() for t, *_ in pairs}
+        # Collect high-confidence primary tests (from narrow or moderately-broad
+        # regions) for the sibling-dir expansion.  Using all primary tests
+        # (including those from very broad regions) would make the IN-list
+        # too large for the CIDB HTTP endpoint.
+        primary_tests = set()
+        for pairs in primary_result.values():
+            for entry in pairs:
+                t = entry[0]
+                rc = entry[3] if len(entry) > 3 else 1
+                pw = entry[4] if len(entry) > 4 else 1.0
+                if rc <= self.MAX_TESTS_PER_LINE and pw >= self.PASS_WEIGHT_INDIRECT:
+                    primary_tests.add(t)
         if not primary_tests:
             return {}
+
+        # Cap at 500 tests to prevent HTTP field-length errors.
+        if len(primary_tests) > 500:
+            primary_tests = set(sorted(primary_tests)[:500])
 
         changed_files = set(files_to_lines.keys())
         escaped_primary = ", ".join(

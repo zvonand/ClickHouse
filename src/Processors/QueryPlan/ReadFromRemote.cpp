@@ -812,9 +812,22 @@ static ASTPtr makeExplain(const ExplainPlanOptions & options, ASTPtr query)
 {
     auto explain_settings = make_intrusive<ASTSetQuery>();
     explain_settings->is_standalone = false;
-    explain_settings->changes =  options.toSettingsChanges();
+    explain_settings->changes = options.toSettingsChanges();
 
     auto explain_query = make_intrusive<ASTExplainQuery>(ASTExplainQuery::ExplainKind::QueryPlan);
+    explain_query->setExplainedQuery(query);
+    explain_query->setSettings(explain_settings);
+
+    return explain_query;
+}
+
+static ASTPtr makeExplainPipeline(bool header, ASTPtr query)
+{
+    auto explain_settings = make_intrusive<ASTSetQuery>();
+    explain_settings->is_standalone = false;
+    explain_settings->changes.emplace_back("header", int(header));
+
+    auto explain_query = make_intrusive<ASTExplainQuery>(ASTExplainQuery::ExplainKind::QueryPipeline);
     explain_query->setExplainedQuery(query);
     explain_query->setSettings(explain_settings);
 
@@ -861,6 +874,22 @@ void ReadFromRemote::describeDistributedPlan(FormatSettings & settings, const Ex
             shard_copy.header = header;
             shard_copy.query = makeExplain(options, shard.query);
         }
+    }
+
+    formatExplain(settings, addPipes(used_shards, header));
+}
+
+void ReadFromRemote::describeDistributedPipeline(FormatSettings & settings)
+{
+    auto header = std::make_shared<const Block>(
+        Block{ColumnWithTypeAndName{ColumnString::create(), std::make_shared<DataTypeString>(), "explain"}});
+    ClusterProxy::SelectStreamFactory::Shards used_shards;
+
+    for (const auto & shard : shards)
+    {
+        auto & shard_copy = used_shards.emplace_back(shard);
+        shard_copy.header = header;
+        shard_copy.query = makeExplainPipeline(settings.write_header, shard.query);
     }
 
     formatExplain(settings, addPipes(used_shards, header));
@@ -1075,4 +1104,12 @@ void ReadFromParallelRemoteReplicasStep::describeDistributedPlan(FormatSettings 
     }
 }
 
+void ReadFromParallelRemoteReplicasStep::describeDistributedPipeline(FormatSettings & settings)
+{
+    auto header = std::make_shared<const Block>(
+        Block{ColumnWithTypeAndName{ColumnString::create(), std::make_shared<DataTypeString>(), "explain"}});
+
+    auto explain_query = makeExplainPipeline(settings.write_header, query_ast);
+    formatExplain(settings, addPipes(explain_query, header));
+}
 }

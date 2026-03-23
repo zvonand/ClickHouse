@@ -6,7 +6,7 @@ from ci.defs.defs import BASE_BRANCH, DOCKERS, SECRETS, ArtifactConfigs, Artifac
 from ci.defs.job_configs import JobConfigs, common_build_job_config
 
 w_schedule = Workflow.Config(
-    name="NightlyCoverage",
+    name="NightlyEnabling",
     event=Workflow.Event.SCHEDULE,
     branches=[BASE_BRANCH],
     jobs=[

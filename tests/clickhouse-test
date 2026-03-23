@@ -4662,6 +4662,7 @@ def main(args):
             exit_code.value = 1
 
         processlist = ""
+        hung_check_failed = False
         if hung_count > 0:
             try:
                 processlist = get_processlist_with_stacktraces(args)
@@ -4685,6 +4686,7 @@ def main(args):
                         )
                     )
                     exit_code.value = 1
+                    hung_check_failed = True
                 else:
                     print(
                         " queries finished while collecting stacktraces, not a hang"
@@ -4701,7 +4703,7 @@ def main(args):
 
             print_stacktraces()
             exit_code.value = 1
-        else:
+        elif not hung_check_failed:
             print(colored("\nNo queries hung.", args, "green", attrs=["bold"]))
 
     if len(restarted_tests) > 0:

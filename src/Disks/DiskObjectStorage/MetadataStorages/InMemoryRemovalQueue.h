@@ -8,13 +8,10 @@
 namespace DB
 {
 
-/// Thread-safe FIFO queue of StoredObject for scheduling blob removal.
-/// Older blobs are returned first by `takeFirst`, reducing tail latency
-/// when consumers process blobs in batches.
 class InMemoryRemovalQueue
 {
 public:
-    /// Enqueue blobs that are not already present, preserving FIFO order.
+    /// Enqueue blobs that are not already present.
     void submitForRemoval(const StoredObjects & blobs);
 
     /// Return up to `max_count` oldest blobs (0 means unlimited).

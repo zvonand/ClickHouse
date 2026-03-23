@@ -4,9 +4,9 @@
 
 # Verify that distributed index analysis with parallel replicas does not produce
 # a quadratic number of queries when the predicate contains an IN subquery.
-# The fix disables `enable_parallel_replicas` and `distributed_index_analysis`
-# when resolving predicates, preventing the IN subquery from recursively
-# spawning distributed queries (which would cause O(N^2) queries).
+# The `distributed_index_analysis_only_on_coordinator` setting restricts distributed
+# index analysis to the coordinator and disables `enable_parallel_replicas` for the
+# remote index analysis queries, preventing O(N^2) recursive spawning.
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -50,6 +50,7 @@ $CLICKHOUSE_CLIENT --query_id $query_id -q "
         distributed_index_analysis_for_non_shared_merge_tree = 1,
         enable_parallel_replicas = 1,
         distributed_index_analysis = 1,
+        distributed_index_analysis_only_on_coordinator = 1,
         cluster_for_parallel_replicas = 'parallel_replicas',
         send_logs_level = 'error';
 "

@@ -413,19 +413,15 @@ BlockIO InterpreterAlterQuery::executeToTable(const ASTAlterQuery & alter)
     ASTPtr command_list_ptr = alter.command_list->ptr();
     visitor.visit(command_list_ptr);
 
-    /// Use the database where storage was created to resolve nested identifiers
-    ContextMutablePtr alter_context = Context::createCopy(getContext());
-    alter_context->setCurrentDatabase(database->getDatabaseName());
-
-    auto segments = parseAlterCommandSegments(alter, alter_context);
+    auto segments = parseAlterCommandSegments(alter, getContext());
     validateSegmentsCombination(segments);
-    validateMutationsAllowed(segments, database, alter_context);
+    validateMutationsAllowed(segments, database, getContext());
     validateReplicatedDatabaseSegments(segments, database);
 
-    if (auto lightweight_result = tryRewriteToLightweightUpdate(segments, table, alter_context, query_ptr))
+    if (auto lightweight_result = tryRewriteToLightweightUpdate(segments, table, getContext(), query_ptr))
         return std::move(lightweight_result.value());
 
-    return runCommandSegments(segments, table, alter_context);
+    return runCommandSegments(segments, table, getContext());
 }
 
 BlockIO InterpreterAlterQuery::executeToDatabase(const ASTAlterQuery & alter)

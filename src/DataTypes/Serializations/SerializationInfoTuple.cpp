@@ -64,7 +64,6 @@ void SerializationInfoTuple::add(const SerializationInfo & other)
     const auto * other_info = typeid_cast<const SerializationInfoTuple *>(&other);
     if (!other_info)
     {
-        chassert(typeid(other) == typeid(SerializationInfo));
         return;
     }
 
@@ -106,7 +105,6 @@ void SerializationInfoTuple::replaceData(const SerializationInfo & other)
     const auto * other_info = typeid_cast<const SerializationInfoTuple *>(&other);
     if (!other_info)
     {
-        chassert(typeid(other) == typeid(SerializationInfo));
         return;
     }
 

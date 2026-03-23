@@ -4065,6 +4065,7 @@ class ClickHouseCluster:
         for instance in list(self.instances.values()):
             instance.docker_client = None
             instance.ip_address = None
+            instance.ipv6_address = None
             instance.client = None
 
         if sanitizer_assert_instance is not None:
@@ -5833,7 +5834,7 @@ class ClickHouseInstance:
             if self.ipv4_address is not None:
                 ipv4_address = "ipv4_address: " + self.ipv4_address
             if self.ipv6_address is not None:
-                ipv6_address = "ipv6_address: " + self.ipv6_address
+                ipv6_address = f'ipv6_address: "{self.ipv6_address}"'
             if self.hostname != self.name:
                 net_aliases = "aliases:"
                 net_alias1 = "- " + self.hostname

@@ -360,6 +360,17 @@ class Targeting:
                 (t, w, d, rc, self.PASS_WEIGHT_DIRECT) for t, (w, d, rc) in sorted(by_test.items())
             ]
 
+        # Record which C++ files had zero direct coverage BEFORE secondary passes
+        # inject additional tests.  This is used later to decide whether to run
+        # the symbol-level fallback.
+        zero_direct_coverage_files = {
+            f
+            for (f, _), pairs in result.items()
+            if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
+            and (f.endswith(".cpp") or f.endswith(".h"))
+            and not pairs
+        }
+
         # --- Secondary pass: sibling files in the same source directory ----
         # For each changed C++ file under src/, find tests that cover OTHER files
         # in the same directory.  These tests are added as very broad hits
@@ -413,13 +424,10 @@ class Targeting:
         # or when some C++ files had zero coverage.  Skip otherwise to save the
         # ~10s query cost.
         current_unique = len({t for pairs in result.values() for t, *_ in pairs})
-        has_zero_coverage_files = any(
-            not pairs
-            for (f, _), pairs in result.items()
-            if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
-            and (f.endswith(".cpp") or f.endswith(".h"))
-        )
-        run_symbol_fallback = current_unique < 50 or has_zero_coverage_files
+        # Use the pre-secondary-pass zero-coverage set (recorded above).
+        # Secondary passes (sibling, indirect) inject tests into ALL lines,
+        # masking which files had no direct line-level coverage.
+        run_symbol_fallback = current_unique < 50 or bool(zero_direct_coverage_files)
         symbol_tests = (
             self._query_symbol_fallback_tests(files_to_lines, result)
             if run_symbol_fallback

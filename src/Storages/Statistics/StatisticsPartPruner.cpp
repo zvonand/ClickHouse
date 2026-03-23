@@ -43,18 +43,26 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
         return Range::createWholeUniverseWithoutNull();
     };
 
-    /// If min > max, the part has all NULL values.
-    /// We use POSITIVE_INFINITY to represent NULL, following the NULLS_LAST approach.
+    /// If min > max, the part may have all NULL values.
+    /// For nullable columns with the exact sentinel pair (max, lowest), this indicates
+    /// an all-NULL part. We use POSITIVE_INFINITY to represent NULL, following the NULLS_LAST approach.
     /// This is consistent with MergeTree's NULL handling:
     /// - MergeTreeIndexMinMax.cpp (minmax_idx deserialization)
     /// - IMergeTreeDataPart.cpp (partition minmax_idx loading)
     /// - PartitionPruner.cpp (partition value handling)
     /// The NULLS_LAST principle applies to ORDER BY and primary key sorting (see docs/en/engines/table-engines/mergetree-family/mergetree.md:203).
+    ///
+    /// For any other case where min > max (corrupted/inconsistent stats, non-nullable columns),
+    /// we defensively return whole-universe to avoid incorrect pruning.
     if (min_value > max_value)
     {
-        chassert(min_value == std::numeric_limits<Float64>::max());
-        chassert(max_value == std::numeric_limits<Float64>::lowest());
-        return Range(POSITIVE_INFINITY);
+        if (is_nullable
+            && min_value == std::numeric_limits<Float64>::max()
+            && max_value == std::numeric_limits<Float64>::lowest())
+        {
+            return Range(POSITIVE_INFINITY);
+        }
+        return make_whole_universe();
     }
 
     /// For Decimal, check if precision > 15 - skip statistics entirely.

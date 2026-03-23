@@ -3,6 +3,8 @@
 #include <Disks/DiskObjectStorage/MetadataStorages/IMetadataStorage.h>
 #include <Disks/DiskObjectStorage/MetadataStorages/InMemoryRemovalQueue.h>
 
+#include <base/defines.h>
+
 namespace DB
 {
 
@@ -84,7 +86,8 @@ public:
 private:
     const MetadataStoragePtr underlying;
 
-    InMemoryRemovalQueue objects_to_remove;
+    std::mutex removed_objects_mutex;
+    InMemoryRemovalQueue objects_to_remove TSA_GUARDED_BY(removed_objects_mutex);
 };
 
 class MetadataStorageFromCacheObjectStorageTransaction : public IMetadataTransaction

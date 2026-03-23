@@ -191,6 +191,8 @@ bool MetadataStorageFromCacheObjectStorage::supportWritingWithAppend() const
 
 IMetadataStorage::BlobsToRemove MetadataStorageFromCacheObjectStorage::getBlobsToRemove(const ClusterConfigurationPtr & cluster, int64_t max_count)
 {
+    std::lock_guard guard(removed_objects_mutex);
+
     BlobsToRemove blobs_to_remove;
     for (const auto & blob : objects_to_remove.takeFirst(max_count))
         blobs_to_remove[blob] = {cluster->getLocalLocation()};
@@ -200,6 +202,7 @@ IMetadataStorage::BlobsToRemove MetadataStorageFromCacheObjectStorage::getBlobsT
 
 int64_t MetadataStorageFromCacheObjectStorage::recordAsRemoved(const StoredObjects & blobs)
 {
+    std::lock_guard guard(removed_objects_mutex);
     return objects_to_remove.markAsRemoved(blobs);
 }
 
@@ -208,6 +211,7 @@ bool MetadataStorageFromCacheObjectStorage::hasPendingRemovalBlobs(const StoredO
     if (underlying->hasPendingRemovalBlobs(blobs))
         return true;
 
+    std::lock_guard guard(removed_objects_mutex);
     return objects_to_remove.containsAny(blobs);
 }
 
@@ -261,7 +265,10 @@ void MetadataStorageFromCacheObjectStorageTransaction::commit(const TransactionC
 {
     underlying->commit(options);
 
-    metadata_storage.objects_to_remove.submitForRemoval(underlying->getSubmittedForRemovalBlobs());
+    {
+        std::lock_guard guard(metadata_storage.removed_objects_mutex);
+        metadata_storage.objects_to_remove.submitForRemoval(underlying->getSubmittedForRemovalBlobs());
+    }
 }
 
 TransactionCommitOutcomeVariant MetadataStorageFromCacheObjectStorageTransaction::tryCommit(const TransactionCommitOptionsVariant & options)
@@ -269,7 +276,10 @@ TransactionCommitOutcomeVariant MetadataStorageFromCacheObjectStorageTransaction
     auto result = underlying->tryCommit(options);
 
     if (isSuccessfulOutcome(result))
+    {
+        std::lock_guard guard(metadata_storage.removed_objects_mutex);
         metadata_storage.objects_to_remove.submitForRemoval(underlying->getSubmittedForRemovalBlobs());
+    }
 
     return result;
 }

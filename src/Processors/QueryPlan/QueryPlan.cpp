@@ -572,10 +572,6 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
         if (frame.next_child < frame.node->children.size())
         {
             size_t child_idx = frame.next_child;
-            bool is_join = frame.node->step->getName() == "Join"
-                        || frame.node->step->getName() == "JoinLogical";
-            if (is_join)
-                child_idx = frame.node->children.size() - 1 - frame.next_child;
 
             bool is_last = (frame.next_child + 1) == (frame.node->children.size());
             /// Skip the expression steps if we are in the compact mode

@@ -204,6 +204,25 @@ FROM
     UNION ALL SELECT 4, toNullable(toFloat64(3))
 );
 
+-- Nullable + If combined (tests setSmallestNotNullIf/setGreatestNotNullIf with both maps)
+SELECT 'Nullable + If combined';
+SELECT
+    minIf(x, assumeNotNull(x) > 0),
+    maxIf(x, assumeNotNull(x) > 0)
+FROM (SELECT arrayJoin([toNullable(toFloat64(nan)), toNullable(toFloat64(1)), NULL, toNullable(toFloat64(3)), toNullable(toFloat64(nan))]) AS x);
+
+SELECT
+    argMinIf(id, x, assumeNotNull(x) > 0),
+    argMaxIf(id, x, assumeNotNull(x) > 0)
+FROM
+(
+    SELECT 1 AS id, toNullable(toFloat64(nan)) AS x
+    UNION ALL SELECT 2, toNullable(toFloat64(1))
+    UNION ALL SELECT 3, NULL
+    UNION ALL SELECT 4, toNullable(toFloat64(3))
+    UNION ALL SELECT 5, toNullable(toFloat64(nan))
+);
+
 -- ===========================================================================
 -- Section 7: Float32 specifically (separate SIMD path)
 -- ===========================================================================

@@ -486,7 +486,7 @@ void SingleValueDataFixed<T>::setSmallestNotNullIf(
         else
         {
             auto final_flags = mergeIfAndNullFlags(null_map, if_map, row_begin, row_end);
-            opt = findExtremeMinIf(vec.getData().data(), if_map, row_begin, row_end);
+            opt = findExtremeMinIf(vec.getData().data(), final_flags.get(), row_begin, row_end);
         }
 
         if (opt.has_value())
@@ -541,7 +541,7 @@ void SingleValueDataFixed<T>::setGreatestNotNullIf(
         else
         {
             auto final_flags = mergeIfAndNullFlags(null_map, if_map, row_begin, row_end);
-            opt = findExtremeMaxIf(vec.getData().data(), if_map, row_begin, row_end);
+            opt = findExtremeMaxIf(vec.getData().data(), final_flags.get(), row_begin, row_end);
         }
 
         if (opt.has_value())

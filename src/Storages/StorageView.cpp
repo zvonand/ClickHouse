@@ -138,12 +138,12 @@ ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage
     view_settings[Setting::max_result_rows] = 0;
     view_settings[Setting::max_result_bytes] = 0;
     view_settings[Setting::extremes] = false;
-    view_settings[Setting::enable_positional_arguments] = true;
+
+    const auto & view_client_info =view_context->getClientInfo();
+    if (view_client_info.query_kind == ClientInfo::QueryKind::SECONDARY_QUERY)
+        view_settings[Setting::enable_positional_arguments] = true;
 
     view_context->setSettings(view_settings);
-    auto view_client_info =view_context->getClientInfo();
-    view_client_info.query_kind = ClientInfo::QueryKind::INITIAL_QUERY;
-    view_context->setClientInfo(view_client_info);
     return view_context;
 }
 

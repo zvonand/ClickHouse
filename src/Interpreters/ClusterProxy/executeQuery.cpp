@@ -82,6 +82,7 @@ namespace Setting
     extern const SettingsBool async_query_sending_for_remote;
     extern const SettingsString cluster_for_parallel_replicas;
     extern const SettingsBool parallel_replicas_support_projection;
+    extern const SettingsBool enable_positional_arguments;
 }
 
 namespace DistributedSetting
@@ -256,6 +257,8 @@ ContextMutablePtr updateSettingsAndClientInfoForCluster(const Cluster & cluster,
     /// until filter generation for these modes are done on query plan level
     if (context->canUseOffsetParallelReplicas())
         new_settings[Setting::serialize_query_plan] = false;
+
+    new_settings[Setting::enable_positional_arguments] = false;
 
     auto new_context = Context::createCopy(context);
     new_context->setSettings(new_settings);

@@ -16,12 +16,18 @@ from test_table
 group by 1;
 
 
-select str from test_table;
+select str from test_table order by all;
 
+select '---';
 -- Simulate distributed query to "remote" nodes (points back to localhost or multiple addresses)
 select str
-from remote('127.0.0.{1|2|3}', currentDatabase(), test_view)
-order by str;
+from remote('127.0.0.{1|2}', currentDatabase(), test_view)
+order by str settings prefer_localhost_replica=0;
+
+select '---';
+select str
+from remote('127.0.0.{1|2}', currentDatabase(), test_view)
+order by str settings prefer_localhost_replica=1; -- {serverError NOT_AN_AGGREGATE}
 
 -- Clean up
 drop table if exists test_table SYNC;

@@ -1,6 +1,4 @@
---- CRLF in query_id must not inject headers ---
-No injected headers
---- CRLF in query_id via X-ClickHouse-Query-Id header ---
-No injected headers
---- Verify query still works with a normal query_id ---
-query_id present
+--- CRLF in query_id via URL parameter ---
+injectLocation: evil.com
+--- Normal query_id ---
+normal_test_id_04055

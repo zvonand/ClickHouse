@@ -20,6 +20,8 @@ namespace DB
 /// 2. Commit metadata transaction.
 struct DiskObjectStorageTransaction : public IDiskTransaction, public std::enable_shared_from_this<DiskObjectStorageTransaction>
 {
+    void waitBlobRemoval(const StoredObjects & blobs) const;
+
 protected:
     const ClusterConfigurationPtr cluster;
     const MetadataStoragePtr metadata_storage;

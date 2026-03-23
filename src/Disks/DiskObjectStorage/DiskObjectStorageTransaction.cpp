@@ -14,17 +14,24 @@
 #include <Disks/WriteMode.h>
 #include <Disks/IDisk.h>
 
+#include <Common/ElapsedTimeProfileEventIncrement.h>
 #include <Common/Logger.h>
 #include <Common/checkStackSize.h>
 #include <Common/logger_useful.h>
 #include <Common/Exception.h>
 #include <Common/FailPoint.h>
+#include <Common/ProfileEvents.h>
 #include <base/defines.h>
 
 #include <cstddef>
 #include <memory>
 #include <ranges>
 #include <vector>
+
+namespace ProfileEvents
+{
+    extern const Event DiskObjectStorageWaitBlobRemovalMicroseconds;
+}
 
 namespace DB
 {
@@ -41,6 +48,25 @@ namespace ErrorCodes
     extern const int NOT_IMPLEMENTED;
     extern const int FAULT_INJECTED;
     extern const int LOGICAL_ERROR;
+}
+
+void DiskObjectStorageTransaction::waitBlobRemoval(const StoredObjects & blobs) const
+{
+    try
+    {
+        ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::DiskObjectStorageWaitBlobRemovalMicroseconds);
+        for (size_t i = 0; i < 100 && metadata_storage->hasPendingRemovalBlobs(blobs); ++i)
+            blob_killer->triggerAndWait();
+
+        if (watch.elapsed() > 1'000'000)
+            LOG_WARNING(getLogger("DiskObjectStorageTransaction"), "Waiting for blob removal took {} ms", watch.elapsed() / 1000);
+        else if (watch.elapsed() > 100'000)
+            LOG_TRACE(getLogger("DiskObjectStorageTransaction"), "Waiting for blob removal took {} ms", watch.elapsed() / 1000);
+    }
+    catch (...)
+    {
+        tryLogCurrentException(getLogger("DiskObjectStorageTransaction"));
+    }
 }
 
 DiskObjectStorageTransaction::DiskObjectStorageTransaction(
@@ -513,18 +539,7 @@ void DiskObjectStorageTransaction::commit()
     }
 
     if (wait_blob_removal)
-    {
-        try
-        {
-            auto submitted = metadata_transaction->getSubmittedForRemovalBlobs();
-            for (size_t i = 0; i < 100 && metadata_storage->hasPendingRemovalBlobs(submitted); ++i)
-                blob_killer->triggerAndWait();
-        }
-        catch (...)
-        {
-            tryLogCurrentException(getLogger("DiskObjectStorageTransaction"));
-        }
-    }
+        waitBlobRemoval(metadata_transaction->getSubmittedForRemovalBlobs());
 
     operations_to_execute.clear();
     written_blobs.clear();
@@ -598,18 +613,7 @@ TransactionCommitOutcomeVariant DiskObjectStorageTransaction::tryCommit(const Tr
     }
 
     if (wait_blob_removal)
-    {
-        try
-        {
-            auto submitted = metadata_transaction->getSubmittedForRemovalBlobs();
-            for (size_t i = 0; i < 100 && metadata_storage->hasPendingRemovalBlobs(submitted); ++i)
-                blob_killer->triggerAndWait();
-        }
-        catch (...)
-        {
-            tryLogCurrentException(getLogger("DiskObjectStorageTransaction"));
-        }
-    }
+        waitBlobRemoval(metadata_transaction->getSubmittedForRemovalBlobs());
 
     operations_to_execute.clear();
     written_blobs.clear();
@@ -620,14 +624,16 @@ TransactionCommitOutcomeVariant DiskObjectStorageTransaction::tryCommit(const Tr
 
 void DiskObjectStorageTransaction::undo() noexcept
 {
-    try
+    for (const auto & [location, blobs] : written_blobs)
     {
-        for (const auto & [location, blobs] : written_blobs)
+        try
+        {
             object_storages->takePointingTo(location)->removeObjectsIfExist(blobs);
-    }
-    catch (...)
-    {
-        tryLogCurrentException(getLogger("DiskObjectStorageTransaction"), "An error occurred during transaction cleanup");
+        }
+        catch (...)
+        {
+            tryLogCurrentException(getLogger("DiskObjectStorageTransaction"), fmt::format("An error occurred during transaction cleanup from location '{}'", location));
+        }
     }
 
     operations_to_execute.clear();

@@ -3551,8 +3551,6 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         for (auto & c : set->changes)
             if (fuzz_rand() % 50 == 0)
                 c.value = fuzzField(c.value);
-        /// Inject new settings from the BuzzHouse performance-settings pool.
-        getRandomSettings(set->changes);
     }
     else if (auto * param = typeid_cast<ASTQueryParameter *>(ast.get()))
     {

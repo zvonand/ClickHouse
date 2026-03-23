@@ -469,9 +469,6 @@ tar -czf ./ci/tmp/logs.tar.gz \
 
     if args.count:
         repeat_option = f"--count {args.count} --random-order"
-    # For flaky/targeted checks, --count is not used. Instead, --dist=each runs N workers
-    # each executing all modules independently with their own isolated Docker cluster
-    # (ClickHouseCluster appends PYTEST_XDIST_WORKER to project_name for isolation).
 
     if args.workers:
         workers = args.workers
@@ -670,13 +667,16 @@ tar -czf ./ci/tmp/logs.tar.gz \
             print(f"Failed to clear dmesg before integration tests: {ex}")
 
     if is_flaky_check or is_targeted_check:
-        # Each xdist worker runs all modules independently with its own isolated Docker cluster.
-        # ClickHouseCluster appends PYTEST_XDIST_WORKER to the project name, so clusters
-        # from different workers never interfere. --dist=each sends all tests to every worker.
+        # --dist=each sends all tests to every xdist worker. Each worker runs all modules
+        # independently with its own isolated Docker cluster (ClickHouseCluster appends
+        # PYTEST_XDIST_WORKER to the project name for isolation). --count repeats each
+        # test within each worker's session to catch per-function flakiness as well.
+        if not repeat_option:
+            repeat_option = f"--count {max(3, workers)} --random-order"
         parallel_dist = "--dist=each"
         parallel_workers = workers
         # Sequential tests cannot run in parallel, so we loop over them instead.
-        # Run at least 3 times to have meaningful flakiness signal, at most workers times.
+        # Run at least 4 times to have meaningful flakiness signal, at most workers times.
         sequential_repeat_cnt = max(4, workers)
     else:
         parallel_dist = "--dist=loadfile"

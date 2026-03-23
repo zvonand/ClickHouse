@@ -763,14 +763,28 @@ std::unique_ptr<SnapshotReceiveCtx> KeeperSnapshotManager<Storage>::beginSnapsho
     LOG_DEBUG(log, "Receiving snapshot {} to {} disk", up_to_log_idx, isLocalDisk(*disk) ? "local" : "remote");
     auto snapshot_file_name = getSnapshotFileName(up_to_log_idx, compress_snapshots_zstd);
 
+    const auto tmp_snapshot_file_name = "tmp_" + snapshot_file_name;
+
     /// Create an empty tmp_ marker file. On restart, if both tmp_<name> and <name> exist,
     /// the snapshot is treated as incomplete and both are removed (see constructor).
     {
-        auto buf = disk->writeFile("tmp_" + snapshot_file_name);
+        auto buf = disk->writeFile(tmp_snapshot_file_name);
         buf->finalize();
     }
 
-    auto write_buf = disk->writeFile(snapshot_file_name);
+    std::unique_ptr<WriteBuffer> write_buf;
+    try
+    {
+        write_buf = disk->writeFile(snapshot_file_name);
+    }
+    catch (...)
+    {
+        /// Remove the marker so we don't leave a stale tmp_ file that could cause
+        /// a valid existing snapshot to be deleted on the next restart.
+        disk->removeFileIfExists(tmp_snapshot_file_name);
+        throw;
+    }
+
     return std::make_unique<SnapshotReceiveCtx>(std::move(write_buf), disk, std::move(snapshot_file_name), up_to_log_idx);
 }
 

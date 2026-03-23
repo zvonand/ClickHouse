@@ -1,4 +1,5 @@
 #include <Databases/DatabaseMemory.h>
+#include <IO/SharedThreadPools.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Interpreters/executeQuery.h>
 #include <Interpreters/Context.h>
@@ -131,6 +132,8 @@ extern "C" int LLVMFuzzerInitialize(const int * argc, char *** argv)
     context->setTemporaryStoragePath((fs::temp_directory_path() / "clickhouse_fuzzer_tmp" / "").string(), 0);
 
     MainThreadStatus::getInstance();
+
+    getActivePartsLoadingThreadPool().initialize(4, 0, 100);
 
     registerInterpreters();
     registerFunctions();

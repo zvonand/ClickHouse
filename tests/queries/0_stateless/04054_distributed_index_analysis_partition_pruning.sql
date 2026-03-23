@@ -1,3 +1,6 @@
+-- Tags: long
+-- - long - slow in private
+
 -- Test that `distributed_index_analysis_min_indexes_bytes_to_activate` threshold
 -- is evaluated against index sizes of parts surviving partition pruning,
 -- not the total index size across all parts in the table.

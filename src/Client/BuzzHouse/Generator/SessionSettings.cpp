@@ -381,7 +381,7 @@ std::unordered_map<String, CHSetting> performanceSettings
                 static const DB::Strings choices = {"'lz4'", "'none'"};
                 return rg.pickRandomly(choices);
             },
-            {},
+            {"'lz4'", "'none'"},
             false)},
        {"use_concurrency_control", trueOrFalseSetting},
        {"use_iceberg_partition_pruning", trueOrFalseSetting},

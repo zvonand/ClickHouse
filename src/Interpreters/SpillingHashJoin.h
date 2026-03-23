@@ -19,8 +19,6 @@ class HashJoin;
 class GraceHashJoin;
 class ConcurrentHashJoin;
 
-// TODO(antaljanosbenjamin): Disable SpillingHashJoin when totals are used.
-
 /// An IJoin wrapper that automatically switches to GraceHashJoin to spill to disk when memory limits are exceeded.
 ///
 /// Operates in two modes depending on the constructor parameters:

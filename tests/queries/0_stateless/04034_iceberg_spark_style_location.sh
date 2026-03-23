@@ -21,7 +21,7 @@ ${CLICKHOUSE_CLIENT} --allow_experimental_insert_into_iceberg 1 -q "
 # Simulate Spark: change location to s3a://spark-bucket/warehouse/spark_table
 # and rewrite manifest-list paths to use the same Spark prefix.
 SPARK_LOCATION='s3a://spark-bucket/warehouse/db/spark_table'
-${CLICKHOUSE_CLIENT} -q "
+${CLICKHOUSE_CLIENT} --input_format_parallel_parsing 0 --output_format_parallel_formatting 0 -q "
     SELECT * FROM s3(s3_conn, filename='${TABLE_PATH}/metadata/v2.metadata.json', structure='line String', format='LineAsString')
 " | python3 -c "
 import json, sys

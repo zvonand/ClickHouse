@@ -17,14 +17,16 @@ extra_checksum=$(echo -n "${extra_content}" | md5sum | awk '{print $1}')
 extra_data_path="data/default/tbl_backup_traversal/extra_payload.bin"
 
 # Creates a backup, injects an extra file entry into its .backup metadata, and
-# attempts to restore. Expects INSECURE_PATH rejection.
+# attempts to restore. Expects the specified error.
 #   $1 - backup suffix
 #   $2 - injected <name> value
-#   $3 - (optional) injected <data_file> value; defaults to extra_data_path
+#   $3 - expected error code (e.g. INSECURE_PATH, BACKUP_DAMAGED)
+#   $4 - (optional) injected <data_file> value; defaults to extra_data_path
 inject_and_restore() {
     local suffix="$1"
     local injected_name="$2"
-    local injected_data_file="${3:-${extra_data_path}}"
+    local expected_error="$3"
+    local injected_data_file="${4:-${extra_data_path}}"
     local bname="${CLICKHOUSE_TEST_UNIQUE_NAME}_${suffix}"
 
     ${CLICKHOUSE_CLIENT} --query "BACKUP TABLE tbl_backup_traversal TO Disk('backups', '${bname}')" > /dev/null 2>&1
@@ -36,7 +38,7 @@ inject_and_restore() {
     sed -i "s|</contents>|<file><name>${injected_name}</name><size>${extra_size}</size><checksum>${extra_checksum}</checksum><data_file>${injected_data_file}</data_file></file></contents>|" "${bpath}/.backup"
 
     ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS tbl_backup_traversal"
-    ${CLICKHOUSE_CLIENT} -m -q "RESTORE TABLE tbl_backup_traversal FROM Disk('backups', '${bname}'); -- { serverError INSECURE_PATH }"
+    ${CLICKHOUSE_CLIENT} -m -q "RESTORE TABLE tbl_backup_traversal FROM Disk('backups', '${bname}'); -- { serverError ${expected_error} }"
 }
 
 # Helper to recreate the table between tests.
@@ -46,7 +48,7 @@ recreate_table() {
 }
 
 # Test 1: relative path traversal in <name>.
-inject_and_restore "rel" "data/default/tbl_backup_traversal/all_0_0_0/../../../../../../../tmp/backup_traversal_test_output.txt"
+inject_and_restore "rel" "data/default/tbl_backup_traversal/all_0_0_0/../../../../../../../tmp/backup_traversal_test_output.txt" INSECURE_PATH
 
 # Verify the file was NOT written outside the backup directory.
 if [ -f "/tmp/backup_traversal_test_output.txt" ]; then
@@ -58,11 +60,15 @@ fi
 
 # Test 2: absolute path in <name>.
 recreate_table
-inject_and_restore "abs" "/tmp/backup_absolute_path_test_output.xml"
+inject_and_restore "abs" "/tmp/backup_absolute_path_test_output.xml" INSECURE_PATH
 
 # Test 3: path traversal in <data_file> (source path for reading from the backup).
 recreate_table
-inject_and_restore "datafile" "data/default/tbl_backup_traversal/extra_payload.bin" "data/default/tbl_backup_traversal/all_0_0_0/../../../../../../../etc/passwd"
+inject_and_restore "datafile" "data/default/tbl_backup_traversal/extra_payload.bin" INSECURE_PATH "data/default/tbl_backup_traversal/all_0_0_0/../../../../../../../etc/passwd"
+
+# Test 4: empty <name> should be rejected as damaged.
+recreate_table
+inject_and_restore "empty" "" BACKUP_DAMAGED
 
 # Clean up.
 ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS tbl_backup_traversal"

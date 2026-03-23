@@ -70,5 +70,25 @@ inject_and_restore "datafile" "data/default/tbl_backup_traversal/extra_payload.b
 recreate_table
 inject_and_restore "empty" "" BACKUP_DAMAGED
 
+# Test 5: "." as <name> should be rejected as damaged.
+recreate_table
+inject_and_restore "dot" "." BACKUP_DAMAGED
+
+# Test 6: bare ".." as <name>.
+recreate_table
+inject_and_restore "dotdot" ".." INSECURE_PATH
+
+# Test 7: absolute path in <data_file>.
+recreate_table
+inject_and_restore "abs_datafile" "data/default/tbl_backup_traversal/extra_payload.bin" INSECURE_PATH "/etc/passwd"
+
+# Test 8: normal backup/restore still works after the validation was added.
+recreate_table
+normal_backup="${CLICKHOUSE_TEST_UNIQUE_NAME}_normal"
+${CLICKHOUSE_CLIENT} --query "BACKUP TABLE tbl_backup_traversal TO Disk('backups', '${normal_backup}')" > /dev/null 2>&1
+${CLICKHOUSE_CLIENT} --query "DROP TABLE tbl_backup_traversal"
+${CLICKHOUSE_CLIENT} --query "RESTORE TABLE tbl_backup_traversal FROM Disk('backups', '${normal_backup}')" > /dev/null 2>&1
+${CLICKHOUSE_CLIENT} --query "SELECT * FROM tbl_backup_traversal"
+
 # Clean up.
 ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS tbl_backup_traversal"

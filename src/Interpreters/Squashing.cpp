@@ -559,7 +559,7 @@ Squashing::PendingQueue::ConsumptionPlan Squashing::PendingQueue::planConsumptio
             chunk, simulated_offset, remaining_rows, remaining_bytes);
 
         chassert(rows_to_take > 0);
-        
+
         simulated_rows += rows_to_take;
         simulated_bytes += bytes_to_take;
 

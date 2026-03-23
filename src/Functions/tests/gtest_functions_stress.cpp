@@ -1,5 +1,9 @@
 #include <gtest/gtest.h>
 
+#if defined(MEMORY_SANITIZER)
+#include <sanitizer/msan_interface.h>
+#endif
+
 #include <absl/log/globals.h>
 #include <boost/program_options.hpp>
 #include <fmt/ranges.h>
@@ -2122,15 +2126,22 @@ void __tsan_on_report(void * /*report*/) // NOLINT(bugprone-reserved-identifier,
 #pragma clang diagnostic pop
 }
 
+#if defined(MEMORY_SANITIZER)
+static void msanDeathCallback()
+{
+    if (current_stress_thread)
+        current_stress_thread->got_sanitizer_error = true;
+}
+#endif
+
 TEST(FunctionsStress, stress)
 {
 #if defined(MEMORY_SANITIZER)
-    /// MSan aborts on the first use-of-uninitialized-value (halt_on_error=1 by default,
-    /// and there is no callback mechanism like TSan's __tsan_on_report to intercept errors).
-    /// Some third-party libraries (e.g. ulid-c, h3) read from partially-initialized buffers
-    /// when given random input, which is fine in practice but fatal under MSan.
-    /// Skip the stress test under MSan until those libraries are fixed or instrumented.
-    GTEST_SKIP() << "FunctionsStress is disabled under MSan (halt_on_error cannot be overridden)";
+    /// Allow the stress test to continue past MSan errors instead of aborting.
+    /// Errors are still reported to stderr, and the `got_sanitizer_error` flag
+    /// is set via the death callback so the test can track and report them.
+    __msan_set_keep_going(1);
+    __msan_set_death_callback(msanDeathCallback);
 #endif
 
     chassert(!logger);

@@ -1038,24 +1038,49 @@ class Targeting:
             else:
                 return []
 
-        # Collect test names (without extension) matching ANY of the keywords.
-        # We do case-insensitive substring matching on the filename.
-        matched_tests: set = set()
+        # Collect test names matching any of the selected keywords.
+        # Track the best (most specific) keyword that matched each test so we
+        # can weight by keyword specificity: rare keywords → narrow effective
+        # width → higher score.  Among ties, prefer newer tests (higher number).
+        #
+        # Scoring:  score = PASS_WEIGHT_KEYWORD / (KEYWORD_FALLBACK_WIDTH × kw_hits)
+        #   kw_hits=1  → width=50000   score=1e-6  (very specific)
+        #   kw_hits=10 → width=500000  score=1e-7
+        #   kw_hits=100→ width=5000000 score=1e-8  ≈ MIN_SCORE (barely survives)
+        # Tests from broad keywords (hits>100) score below MIN_SCORE and are
+        # dropped at the ranking stage — no hard per-keyword filter needed.
+        MAX_KEYWORD_TESTS = 30   # hard cap: keyword signal is weak, keep it tight
+        matched_tests: dict = {}  # normalised_name → (kw_hits, raw_name)
         for kw in candidate_kws:
             kw_lower = kw.lower()
+            kw_hits = count_hits(kw_lower)
             for fname in all_test_files:
                 if kw_lower in fname.lower():
                     base = os.path.splitext(fname)[0]
-                    matched_tests.add(base + ".")
+                    tname = base + "."
+                    if tname not in matched_tests or kw_hits < matched_tests[tname][0]:
+                        matched_tests[tname] = (kw_hits, kw)
 
-        if matched_tests:
-            print(
-                f"[find_tests] keyword-fallback: {len(matched_tests)} tests "
-                f"matching keywords {candidate_kws}"
-            )
+        if not matched_tests:
+            return []
+
+        # Sort: most-specific keyword first (fewest hits), then newest test first
+        # (higher 5-digit prefix tends to be closer to the recently changed code).
+        def _kw_sort(item):
+            tname, (kw_hits, _kw) = item
+            m = re.match(r'(\d{5})', os.path.basename(tname).lstrip('./'))
+            test_num = int(m.group(1)) if m else 0
+            return (kw_hits, -test_num)
+
+        sorted_tests = sorted(matched_tests.items(), key=_kw_sort)[:MAX_KEYWORD_TESTS]
+        kws_used = sorted({kw for _, (_, kw) in sorted_tests})
+        print(
+            f"[find_tests] keyword-fallback: {len(sorted_tests)} tests "
+            f"matching keywords {kws_used} (from {len(matched_tests)} candidates)"
+        )
         return [
-            (t, self.KEYWORD_FALLBACK_WIDTH, 255, 1, self.PASS_WEIGHT_KEYWORD)
-            for t in sorted(matched_tests)
+            (tname, self.KEYWORD_FALLBACK_WIDTH * kw_hits, 255, 1, self.PASS_WEIGHT_KEYWORD)
+            for tname, (kw_hits, _kw) in sorted_tests
         ]
 
     def get_changed_or_new_tests_with_info(self):

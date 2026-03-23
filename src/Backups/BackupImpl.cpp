@@ -573,8 +573,6 @@ void BackupImpl::readBackupMetadata()
                 if (info.size > info.base_size)
                 {
                     info.data_file_name = getString(file_config, "data_file", info.file_name);
-                    if (info.data_file_name != info.file_name)
-                        validateFileNameFromBackup(info.data_file_name, backup_name_for_logging);
                 }
                 info.encrypted_by_disk = getBool(file_config, "encrypted_by_disk", false);
             }

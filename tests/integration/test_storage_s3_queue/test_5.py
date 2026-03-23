@@ -2041,6 +2041,12 @@ def test_failed_commit_after_success_select(started_cluster):
         additional_settings={
             "keeper_path": keeper_path,
             "commit_on_select": 1,
+            # Disable hash-ring batching so the FileIterator does not hold an extra
+            # reference to the file metadata.  Without this, the metadata destructor
+            # runs after the error response is already sent to the client (the
+            # QueryPlan step keeps FileIterator alive until after the response), so
+            # the chassert fires silently and the test cannot detect it.
+            "enable_hash_ring_filtering": 0,
         },
     )
     generate_random_files(started_cluster, files_path, 1, start_ind=0, row_num=2)
@@ -2049,12 +2055,26 @@ def test_failed_commit_after_success_select(started_cluster):
     try:
         # SELECT triggers ObjectStorageQueueSource::commit; the failpoint fires after the
         # successful tryMulti, simulating connection loss before the response arrives.
+        # The exception from commit() may or may not reach the client depending on pipeline
+        # buffering — do not assert on that.  Instead, detect the failure via the server log.
         try:
             node.query(f"SELECT * FROM {table_name}")
         except Exception:
-            pass  # exception from KeeperMultiException on retry is expected
+            pass
 
-        # Server must still be alive (no fatal assertion).
+        # Wait for the failpoint to trigger (commit failure is logged at ERROR level).
+        commit_failed = False
+        for _ in range(30):
+            if node.contains_in_log(
+                f"StorageS3Queue (default.{table_name}): Failed to commit data"
+            ):
+                commit_failed = True
+                break
+            time.sleep(1)
+
+        assert commit_failed, "Failpoint was not triggered"
+
+        # Server must still be alive (no fatal assertion in debug build).
         assert node.query("SELECT 1").strip() == "1"
 
         # The file is processed in ZK; a second SELECT must return 0 rows (not re-process).

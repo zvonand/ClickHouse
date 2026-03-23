@@ -1003,7 +1003,17 @@ Chunk ObjectStorageQueueSource::generate()
     }
 
     if (!chunk && commit_once_processed)
-        commit(true);
+    {
+        try
+        {
+            commit(true);
+        }
+        catch (...)
+        {
+            LOG_ERROR(log, "Failed to commit data: {}", getCurrentExceptionMessage(false));
+            throw;
+        }
+    }
 
     return chunk;
 }
@@ -1574,6 +1584,9 @@ void ObjectStorageQueueSource::commit(bool insert_succeeded, const std::string &
         /* created_nodes */ nullptr,
         exception_message);
     preparePartitionProcessedRequests(requests, last_processed_file_per_partition);
+
+    if (requests.empty() && successful_objects.empty())
+        return;
 
     if (!successful_objects.empty()
         && files_metadata->getTableMetadata().after_processing != ObjectStorageQueueAction::KEEP)

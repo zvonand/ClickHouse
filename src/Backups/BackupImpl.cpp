@@ -28,6 +28,8 @@
 #include <Poco/Util/XMLConfiguration.h>
 #include <Poco/DOM/DOMParser.h>
 
+#include <filesystem>
+
 
 namespace ProfileEvents
 {
@@ -56,7 +58,10 @@ namespace ErrorCodes
     extern const int CANNOT_RESTORE_TO_NONENCRYPTED_DISK;
     extern const int FAILED_TO_SYNC_BACKUP_OR_RESTORE;
     extern const int LOGICAL_ERROR;
+    extern const int INSECURE_PATH;
 }
+
+namespace fs = std::filesystem;
 
 namespace
 {
@@ -90,6 +95,32 @@ namespace
         if (path.starts_with('/'))
             return path.substr(1);
         return path;
+    }
+
+    /// Validate that a file name from a backup does not contain path traversal sequences.
+    /// This prevents a corrupted or tampered backup from writing files outside the intended directories during restore.
+    void validateFileNameFromBackup(const String & file_name, const String & backup_name_for_logging)
+    {
+        /// Reject absolute paths.
+        if (file_name.starts_with('/'))
+            throw Exception(
+                ErrorCodes::INSECURE_PATH,
+                "Backup {}: Entry name {} is an absolute path, which is not allowed",
+                backup_name_for_logging,
+                quoteString(file_name));
+
+        /// Normalize the path and check that it does not escape the backup root.
+        auto normalized = fs::path(file_name).lexically_normal();
+        if (normalized.empty())
+            return;
+
+        /// After normalization, a path that escapes the root starts with "..".
+        if (*normalized.begin() == "..")
+            throw Exception(
+                ErrorCodes::INSECURE_PATH,
+                "Backup {}: Entry name {} resolves to a path outside the backup, which is not allowed",
+                backup_name_for_logging,
+                quoteString(file_name));
     }
 }
 
@@ -510,6 +541,7 @@ void BackupImpl::readBackupMetadata()
             const Poco::XML::Node * file_config = child;
             BackupFileInfo info;
             info.file_name = getString(file_config, "name");
+            validateFileNameFromBackup(info.file_name, backup_name_for_logging);
             info.object_key = getString(file_config, "object_key", "");
             info.size = getUInt64(file_config, "size");
             if (info.size)
@@ -541,6 +573,8 @@ void BackupImpl::readBackupMetadata()
                 if (info.size > info.base_size)
                 {
                     info.data_file_name = getString(file_config, "data_file", info.file_name);
+                    if (info.data_file_name != info.file_name)
+                        validateFileNameFromBackup(info.data_file_name, backup_name_for_logging);
                 }
                 info.encrypted_by_disk = getBool(file_config, "encrypted_by_disk", false);
             }

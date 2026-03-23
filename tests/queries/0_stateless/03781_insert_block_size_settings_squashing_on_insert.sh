@@ -20,6 +20,7 @@ $CLICKHOUSE_CLIENT \
     --min_insert_block_size_rows=0 \
     --min_insert_block_size_bytes=0 \
     --use_strict_insert_block_limits=1 \
+    --async_insert=0 \
     -q "INSERT INTO test_native_max_rows FORMAT Native"
 
 $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS part_log;"

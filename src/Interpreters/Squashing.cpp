@@ -127,6 +127,15 @@ bool Squashing::canGenerate()
 {
     if (squash_with_strict_limits)
     {
+        if (!accumulated.empty() && (allMinReached() || oneMaxReached()))
+        {
+            planned_generate_rows = 0;
+            return true;
+        }
+
+        if (pending.getRows() == 0)
+            return false;
+
         size_t remaining_max_rows = max_block_size_rows
             ? (accumulated.getRows() >= max_block_size_rows ? 0 : max_block_size_rows - accumulated.getRows())
             : 0;
@@ -168,7 +177,13 @@ Chunk Squashing::generate(bool flush_if_enough_size)
 
 Chunk Squashing::generateUsingStrictBounds()
 {
-    chassert(planned_generate_rows > 0 && planned_generate_rows <= pending.getRows());
+    /// This return happens when we had enough rows or bytes
+    /// in accumulated, and  canGenerate() returned true because
+    /// of it
+    if (planned_generate_rows == 0)
+        return convertToChunk();
+
+    chassert(planned_generate_rows <= pending.getRows());
 
     size_t rows_budget = planned_generate_rows;
     planned_generate_rows = 0;
@@ -503,7 +518,7 @@ Squashing::PendingQueue::ConsumptionPlan Squashing::PendingQueue::calculateConsu
     if (max_rows != 0)
         rows_to_take = std::min(max_rows, rows_to_take);
 
-    if (max_bytes != 0)
+    if (max_bytes != 0 && bytes_per_row > 0.)
     {
         size_t rows_by_bytes = static_cast<size_t>(static_cast<double>(max_bytes) / bytes_per_row);
 
@@ -530,11 +545,6 @@ Squashing::PendingQueue::ConsumptionPlan Squashing::PendingQueue::planConsumptio
 
     for (size_t i = 0; i < chunks.size();)
     {
-        if (simulated_rows >= min_rows && simulated_bytes >= min_bytes)
-            break;
-        if ((max_rows && simulated_rows >= max_rows) || (max_bytes && simulated_bytes >= max_bytes))
-            break;
-
         const Chunk & chunk = chunks[i];
         if (!chunk)
         {
@@ -548,6 +558,8 @@ Squashing::PendingQueue::ConsumptionPlan Squashing::PendingQueue::planConsumptio
         auto [rows_to_take, bytes_to_take] = calculateConsumable(
             chunk, simulated_offset, remaining_rows, remaining_bytes);
 
+        chassert(rows_to_take > 0);
+        
         simulated_rows += rows_to_take;
         simulated_bytes += bytes_to_take;
 
@@ -561,6 +573,11 @@ Squashing::PendingQueue::ConsumptionPlan Squashing::PendingQueue::planConsumptio
         {
             simulated_offset += rows_to_take;
         }
+
+        if (simulated_rows >= min_rows && simulated_bytes >= min_bytes)
+            break;
+        if ((max_rows && simulated_rows >= max_rows) || (max_bytes && simulated_bytes >= max_bytes))
+            break;
     }
 
     return {simulated_rows, simulated_bytes};

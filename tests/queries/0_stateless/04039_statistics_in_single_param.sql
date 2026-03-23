@@ -1,5 +1,6 @@
 -- Regression test: `IN` with a single literal value must not throw
 -- "Bad get: has String, requested Tuple" in ConditionSelectivityEstimator.
+
 SET allow_experimental_statistics = 1;
 SET use_statistics = 1;
 SET enable_analyzer = 0;

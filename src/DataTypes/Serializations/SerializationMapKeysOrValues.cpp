@@ -153,12 +153,12 @@ namespace
 /// Reassembles a single Array(key_type) or Array(value_type) column from per-bucket Array columns.
 /// Similar to `collectMapFromBuckets` in SerializationMap but works with a single Array column
 /// (keys or values) instead of a full Map(key, value).
-void collectMapKeysOrValuesFromBuckets(const std::vector<ColumnPtr> & keys_or_values_buckets, IColumn & keys_or_values_column)
+void collectMapKeysOrValuesFromBuckets(const VectorWithMemoryTracking<ColumnPtr> & keys_or_values_buckets, IColumn & keys_or_values_column)
 {
     if (keys_or_values_buckets.empty())
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Empty list of buckets provided");
 
-    std::vector<ColumnPtr> data_buckets(keys_or_values_buckets.size());
+    VectorWithMemoryTracking<ColumnPtr> data_buckets(keys_or_values_buckets.size());
     std::vector<const ColumnArray::Offsets *> offsets_buckets(keys_or_values_buckets.size());
     for (size_t bucket = 0; bucket != keys_or_values_buckets.size(); ++bucket)
     {
@@ -217,7 +217,7 @@ void SerializationMapKeysOrValues::deserializeBinaryBulkWithMultipleStreams(
     /// Multiple buckets. Deserialize each bucket, then reassemble into a single Array column.
     else
     {
-        std::vector<ColumnPtr> keys_or_values_buckets(buckets_info_state_concrete->buckets);
+        VectorWithMemoryTracking<ColumnPtr> keys_or_values_buckets(buckets_info_state_concrete->buckets);
         for (size_t bucket = 0; bucket != buckets_info_state_concrete->buckets; ++bucket)
         {
             settings.path.push_back(Substream::Bucket);

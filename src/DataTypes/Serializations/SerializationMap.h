@@ -157,8 +157,8 @@ private:
     template <typename ReturnType>
     ReturnType deserializeTextJSONImpl(IColumn & column, ReadBuffer & istr, const FormatSettings & settings) const;
 
-    std::vector<ColumnPtr> splitMapToBuckets(const IColumn & map_column, size_t start, size_t end, size_t buckets) const;
-    void collectMapFromBuckets(const std::vector<ColumnPtr> & map_buckets, IColumn & map_column) const;
+    VectorWithMemoryTracking<ColumnPtr> splitMapToBuckets(const IColumn & map_column, size_t start, size_t end, size_t buckets) const;
+    void collectMapFromBuckets(const VectorWithMemoryTracking<ColumnPtr> & map_buckets, IColumn & map_column) const;
 };
 
 }

@@ -236,7 +236,7 @@ public:
     void fixDynamicStructure() override { nested_column->fixDynamicStructure(); }
     bool dynamicStructureEquals(const IColumn & rhs) const override;
     bool hasStatistics() const override { return nested_column->hasStatistics(); }
-    void takeOrCalculateStatisticsFrom(const Columns & source_columns) override;
+    void takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<ColumnPtr> & source_columns) override;
 
 private:
     WrappedPtr nested_column;

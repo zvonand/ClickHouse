@@ -1450,12 +1450,12 @@ ColumnDynamic::StatisticsPtr ColumnDynamic::getOrCalculateStatistics() const
     return calculated_statistics;
 }
 
-void ColumnDynamic::takeOrCalculateStatisticsFrom(const Columns & source_columns)
+void ColumnDynamic::takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<ColumnPtr> & source_columns)
 {
     /// Assumes dynamic structure has already been set by `takeExactDynamicStructureFrom` or `chooseDynamicStructureForMerge`.
     Statistics new_statistics;
     /// Collect total sizes for variants that are not in our structure (candidates for shared variant statistics).
-    std::unordered_map<String, size_t> shared_variant_candidates;
+    UnorderedMapWithMemoryTracking<String, size_t> shared_variant_candidates;
     for (const auto & source_column : source_columns)
     {
         const auto & source_dynamic = assert_cast<const ColumnDynamic &>(*source_column);
@@ -1501,7 +1501,7 @@ void ColumnDynamic::takeOrCalculateStatisticsFrom(const Columns & source_columns
     statistics = std::make_shared<const Statistics>(std::move(new_statistics));
 
     /// Recursively update statistics for nested variants.
-    std::vector<Columns> variants_source_columns;
+    VectorWithMemoryTracking<VectorWithMemoryTracking<ColumnPtr>> variants_source_columns;
     variants_source_columns.resize(variant_info.variant_names.size());
     for (const auto & source_column : source_columns)
     {

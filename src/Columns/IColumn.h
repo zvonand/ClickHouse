@@ -824,7 +824,7 @@ public:
     /// Merges/takes statistics from source columns. For multiple sources, computes merged statistics.
     /// For ColumnObject/ColumnDynamic, must be called AFTER `chooseDynamicStructureForMerge` or `takeExactDynamicStructureFrom`,
     /// because statistics placement depends on the dynamic structure (e.g. which paths are dynamic vs shared).
-    virtual void takeOrCalculateStatisticsFrom(const std::vector<Ptr> & /*source_columns*/) {}
+    virtual void takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<Ptr> & /*source_columns*/) {}
 
 protected:
     template <typename Compare, typename Sort, typename PartialSort>

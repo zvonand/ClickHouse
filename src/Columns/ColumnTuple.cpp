@@ -912,11 +912,11 @@ bool ColumnTuple::hasStatistics() const
     return false;
 }
 
-void ColumnTuple::takeOrCalculateStatisticsFrom(const Columns & source_columns)
+void ColumnTuple::takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<ColumnPtr> & source_columns)
 {
     for (size_t i = 0; i != columns.size(); ++i)
     {
-        Columns elem_source_columns;
+        VectorWithMemoryTracking<ColumnPtr> elem_source_columns;
         elem_source_columns.reserve(source_columns.size());
         for (const auto & source_column : source_columns)
             elem_source_columns.push_back(assert_cast<const ColumnTuple &>(*source_column).columns[i]);

@@ -662,9 +662,9 @@ void ColumnReplicated::takeExactDynamicStructureFrom(const IColumn & source)
 }
 
 
-void ColumnReplicated::takeOrCalculateStatisticsFrom(const Columns & source_columns)
+void ColumnReplicated::takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<ColumnPtr> & source_columns)
 {
-    Columns nested_source_columns;
+    VectorWithMemoryTracking<ColumnPtr> nested_source_columns;
     nested_source_columns.reserve(source_columns.size());
     for (const auto & source_column : source_columns)
     {

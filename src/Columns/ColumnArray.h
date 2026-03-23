@@ -225,7 +225,7 @@ public:
     }
 
     bool hasStatistics() const override { return data->hasStatistics(); }
-    void takeOrCalculateStatisticsFrom(const Columns & source_columns) override;
+    void takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<ColumnPtr> & source_columns) override;
 
 private:
     WrappedPtr data;

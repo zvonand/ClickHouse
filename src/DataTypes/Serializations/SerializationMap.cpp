@@ -1028,9 +1028,9 @@ void splitMapToBucketsDispatch(
 /// one per bucket. Each key-value pair is assigned to a bucket by hashing the key via
 /// `getBucketForKeyImpl`. Uses two-level type dispatch (`splitMapToBucketsDispatch`) to
 /// devirtualize `insertFrom` and hash computation for common key/value column types.
-std::vector<ColumnPtr> SerializationMap::splitMapToBuckets(const IColumn & map_column, size_t start, size_t end, size_t buckets) const
+VectorWithMemoryTracking<ColumnPtr> SerializationMap::splitMapToBuckets(const IColumn & map_column, size_t start, size_t end, size_t buckets) const
 {
-    std::vector<ColumnPtr> map_buckets(buckets);
+    VectorWithMemoryTracking<ColumnPtr> map_buckets(buckets);
     std::vector<IColumn *> map_keys_buckets(buckets);
     std::vector<IColumn *> map_values_buckets(buckets);
     std::vector<ColumnArray::Offsets *> map_offsets_buckets(buckets);
@@ -1063,13 +1063,13 @@ std::vector<ColumnPtr> SerializationMap::splitMapToBuckets(const IColumn & map_c
 /// For each row, key-value pairs from all buckets are concatenated back into one map entry.
 /// Used during deserialization to reconstruct the original Map column from the bucketed
 /// on-disk representation.
-void SerializationMap::collectMapFromBuckets(const std::vector<ColumnPtr> & map_buckets, IColumn & map_column) const
+void SerializationMap::collectMapFromBuckets(const VectorWithMemoryTracking<ColumnPtr> & map_buckets, IColumn & map_column) const
 {
     if (map_buckets.empty())
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Empty list of buckets provided");
 
-    std::vector<ColumnPtr> map_keys_buckets(map_buckets.size());
-    std::vector<ColumnPtr> map_values_buckets(map_buckets.size());
+    VectorWithMemoryTracking<ColumnPtr> map_keys_buckets(map_buckets.size());
+    VectorWithMemoryTracking<ColumnPtr> map_values_buckets(map_buckets.size());
     std::vector<const ColumnArray::Offsets *> map_offsets_buckets(map_buckets.size());
     for (size_t bucket = 0; bucket != map_buckets.size(); ++bucket)
     {
@@ -1201,7 +1201,7 @@ void SerializationMap::deserializeBinaryBulkWithMultipleStreams(
     /// then reassemble them into a single column via `collectMapFromBuckets`.
     else
     {
-        std::vector<ColumnPtr> map_buckets(buckets_info_state->buckets);
+        VectorWithMemoryTracking<ColumnPtr> map_buckets(buckets_info_state->buckets);
         for (size_t bucket = 0; bucket != buckets_info_state->buckets; ++bucket)
         {
             settings.path.push_back(Substream::Bucket);

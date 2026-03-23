@@ -475,10 +475,10 @@ ColumnMap::StatisticsPtr ColumnMap::getOrCalculateStatistics() const
     return calculateStatisticsForRange(0, size());
 }
 
-void ColumnMap::takeOrCalculateStatisticsFrom(const Columns & source_columns)
+void ColumnMap::takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<ColumnPtr> & source_columns)
 {
     auto new_statistics = std::make_shared<Statistics>();
-    Columns nested_source_columns;
+    VectorWithMemoryTracking<ColumnPtr> nested_source_columns;
     nested_source_columns.reserve(source_columns.size());
     for (const auto & source_column : source_columns)
     {

@@ -1879,7 +1879,7 @@ ColumnObject::StatisticsPtr ColumnObject::getOrCalculateStatistics() const
     return calculated_statistics;
 }
 
-void ColumnObject::takeOrCalculateStatisticsFrom(const Columns & source_columns)
+void ColumnObject::takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<ColumnPtr> & source_columns)
 {
     /// Assumes dynamic structure has already been set by `takeExactDynamicStructureFrom` or `chooseDynamicStructureForMerge`.
     Statistics new_statistics;
@@ -1933,7 +1933,7 @@ void ColumnObject::takeOrCalculateStatisticsFrom(const Columns & source_columns)
     /// Recursively update statistics for nested dynamic paths.
     for (auto & [path, column] : dynamic_paths)
     {
-        Columns dynamic_path_source_columns;
+        VectorWithMemoryTracking<ColumnPtr> dynamic_path_source_columns;
         for (const auto & source_column : source_columns)
         {
             const auto & source_object = assert_cast<const ColumnObject &>(*source_column);
@@ -1948,7 +1948,7 @@ void ColumnObject::takeOrCalculateStatisticsFrom(const Columns & source_columns)
     /// Recursively update statistics for typed paths.
     for (auto & [path, column] : typed_paths)
     {
-        Columns typed_path_source_columns;
+        VectorWithMemoryTracking<ColumnPtr> typed_path_source_columns;
         typed_path_source_columns.reserve(source_columns.size());
         for (const auto & source_column : source_columns)
             typed_path_source_columns.push_back(assert_cast<const ColumnObject &>(*source_column).typed_paths.at(path));

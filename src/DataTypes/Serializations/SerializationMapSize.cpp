@@ -151,7 +151,7 @@ namespace
 /// Each bucket stores array offsets that were converted to sizes by the nested
 /// `SerializationArrayOffsets`. This function sums them element-wise to produce
 /// the final UInt64 size column.
-void collectMapSizeFromBuckets(const std::vector<ColumnPtr> & size_buckets, IColumn & size_column)
+void collectMapSizeFromBuckets(const VectorWithMemoryTracking<ColumnPtr> & size_buckets, IColumn & size_column)
 {
     if (size_buckets.empty())
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Empty list of buckets provided");
@@ -203,7 +203,7 @@ void SerializationMapSize::deserializeBinaryBulkWithMultipleStreams(
     /// Multiple buckets. Deserialize sizes from each bucket, then sum them per row.
     else
     {
-        std::vector<ColumnPtr> size_buckets(buckets_info_state_concrete->buckets);
+        VectorWithMemoryTracking<ColumnPtr> size_buckets(buckets_info_state_concrete->buckets);
         for (size_t bucket = 0; bucket != buckets_info_state_concrete->buckets; ++bucket)
         {
             settings.path.push_back(Substream::Bucket);

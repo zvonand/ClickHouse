@@ -3215,12 +3215,11 @@ bool ReadFromMergeTree::supportsSkipIndexesOnDataRead() const
     if (!indexes || !indexes->use_skip_indexes || indexes->skip_indexes.empty())
         return false;
 
-    /// Vector similarity indexes and indexes with dedicated read tasks are filtered out when building
-    /// the skip index reader (see initializePipeline).
+    /// Vector similarity indexes are "statically" analyzed.
     const bool will_have_skip_index_reader =
-        std::ranges::any_of(indexes->skip_indexes.useful_indices, [this](const auto & idx)
+        std::ranges::any_of(indexes->skip_indexes.useful_indices, [](const auto & idx)
         {
-            return !idx.index->isVectorSimilarityIndex() && !index_read_tasks.contains(idx.index->index.name);
+            return !idx.index->isVectorSimilarityIndex();
         });
     if (!will_have_skip_index_reader)
         return false;

@@ -29,4 +29,16 @@ SELECT count() FROM test_regex_pk WHERE match(id, '^(vector-abc-001|metrics-def-
 -- Multiple anchors without grouping: no optimization possible
 SELECT count() FROM test_regex_pk WHERE match(id, '^vector|^metrics') SETTINGS force_primary_key = 1; -- {serverError INDEX_NOT_USED}
 
+-- Plain group: ^(vector-abc-001) — extracts full prefix, matches exactly 1 row
+SELECT count() FROM test_regex_pk WHERE match(id, '^(vector-abc-001)') SETTINGS force_primary_key = 1, max_rows_to_read = 2;
+
+-- Group with quantifier inside: ^(vector-abc-00.*) — prefix "vector-abc-00", matches 2 rows
+SELECT count() FROM test_regex_pk WHERE match(id, '^(vector-abc-00.*)') SETTINGS force_primary_key = 1, max_rows_to_read = 3;
+
+-- Nested groups: ^((vector-abc-001)) — same as ^(vector-abc-001)
+SELECT count() FROM test_regex_pk WHERE match(id, '^((vector-abc-001))') SETTINGS force_primary_key = 1, max_rows_to_read = 2;
+
+-- Optional group: ^vector(-abc)? — prefix "vector", matches 2 rows
+SELECT count() FROM test_regex_pk WHERE match(id, '^vector(-abc)?') SETTINGS force_primary_key = 1, max_rows_to_read = 3;
+
 DROP TABLE test_regex_pk;

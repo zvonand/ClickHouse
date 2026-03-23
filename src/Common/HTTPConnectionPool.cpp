@@ -713,6 +713,11 @@ private:
         return connection->isKeepAliveExpired(0.8);
     }
 
+    /// Apply SO_RCVBUF/SO_SNDBUF to a connection socket.
+    /// Note: once setsockopt(SO_RCVBUF) is called on a socket, the kernel permanently
+    /// disables TCP autotuning for that socket. Changing the setting back to 0 will stop
+    /// calling setsockopt on new connections, but already-configured pooled connections
+    /// will retain their fixed buffer sizes until they expire naturally from the pool.
     static void applySocketBufferSizes(Session & connection, const HTTPConnectionPools::SocketBufferSizes & buf_sizes)
     {
         if (buf_sizes.rcvbuf > 0)

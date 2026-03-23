@@ -159,7 +159,7 @@ public:
     /// The decision should be done at latest in onBuildPhaseFinish, after that the returned value should not change.
     /// This is important for SpillingHashJoin, which can change algorithms runtime, and parallel non-joined blocks
     /// processing depends on the algorithm used.
-    virtual bool canProcessNonJoinedBlocksInParallel() const { return supportParallelNonJoinedBlocksProcessing(); }
+    virtual bool isParallelNonJoinedProcessingEnabled() const { return supportParallelNonJoinedBlocksProcessing(); }
 
     /// Get non-joined blocks for a specific stream partition
     /// stream_idx is in [0, num_streams), each stream must produce a disjoint subset of rows

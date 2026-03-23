@@ -124,8 +124,8 @@ IProcessor::Status JoiningTransform::prepare()
     {
         /// There is a big assumption here: if join supports parallel non-joined block processing, then it is
         /// assumed the query pipeline contains the appropriate `NonJoinedBlocksTransform` processors and we can
-        /// safely skip processing non-joined blocks depending on `canProcessNonJoinedBlocksInParallel()`.
-        if (process_non_joined && !(join->supportParallelNonJoinedBlocksProcessing() && join->canProcessNonJoinedBlocksInParallel()))
+        /// safely skip processing non-joined blocks depending on `isParallelNonJoinedProcessingEnabled()`.
+        if (process_non_joined && !(join->supportParallelNonJoinedBlocksProcessing() && join->isParallelNonJoinedProcessingEnabled()))
             return Status::Ready;
 
         output.finish();
@@ -602,7 +602,7 @@ NonJoinedBlocksTransform::NonJoinedBlocksTransform(
 
 Chunk NonJoinedBlocksTransform::generate()
 {
-    if (!join->canProcessNonJoinedBlocksInParallel())
+    if (!join->isParallelNonJoinedProcessingEnabled())
         return {};
 
     if (!non_joined_blocks)

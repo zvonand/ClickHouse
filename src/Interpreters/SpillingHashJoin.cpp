@@ -322,7 +322,7 @@ bool SpillingHashJoin::supportParallelNonJoinedBlocksProcessing() const
     return supports_parallel_non_joined_blocks_processing;
 }
 
-bool SpillingHashJoin::canProcessNonJoinedBlocksInParallel() const
+bool SpillingHashJoin::isParallelNonJoinedProcessingEnabled() const
 {
     return state == State::IN_MEMORY_JOIN && supports_parallel_non_joined_blocks_processing
         && chosen_join->supportParallelNonJoinedBlocksProcessing();

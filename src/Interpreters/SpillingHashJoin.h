@@ -86,7 +86,7 @@ public:
 
     bool supportParallelJoin() const override { return concurrent_join != nullptr; }
     bool supportParallelNonJoinedBlocksProcessing() const override;
-    bool canProcessNonJoinedBlocksInParallel() const override;
+    bool isParallelNonJoinedProcessingEnabled() const override;
 
     IBlocksStreamPtr
     getNonJoinedBlocks(const Block & left_sample_block, const Block & result_sample_block, UInt64 max_block_size) const override;

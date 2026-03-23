@@ -32,9 +32,9 @@ ALTER TABLE t_inject_columns_dangling_ref
     ADD COLUMN c15 UInt64 DEFAULT key + 15,
     ADD COLUMN c16 UInt64 DEFAULT key + 16;
 
-SELECT key, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16
+SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16
 FROM t_inject_columns_dangling_ref
-ORDER BY key
+ORDER BY c1
 LIMIT 5;
 
 DROP TABLE t_inject_columns_dangling_ref;

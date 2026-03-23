@@ -3215,6 +3215,16 @@ bool ReadFromMergeTree::supportsSkipIndexesOnDataRead() const
     if (!indexes || !indexes->use_skip_indexes || indexes->skip_indexes.empty())
         return false;
 
+    /// Vector similarity indexes and indexes with dedicated read tasks are filtered out when building
+    /// the skip index reader (see initializePipeline).
+    const bool will_have_skip_index_reader =
+        std::ranges::any_of(indexes->skip_indexes.useful_indices, [this](const auto & idx)
+        {
+            return !idx.index->isVectorSimilarityIndex() && !index_read_tasks.contains(idx.index->index.name);
+        });
+    if (!will_have_skip_index_reader)
+        return false;
+
     const auto & settings = context->getSettingsRef();
     if (!settings[Setting::use_skip_indexes_on_data_read])
         return false;
@@ -3334,9 +3344,12 @@ void ReadFromMergeTree::initializePipeline(QueryPipelineBuilder & pipeline, cons
 
     ProfileEvents::increment(ProfileEvents::SelectedParts, result.selected_parts);
     ProfileEvents::increment(ProfileEvents::SelectedPartsTotal, result.total_parts);
-    ProfileEvents::increment(ProfileEvents::SelectedRanges, result.selected_ranges);
-    ProfileEvents::increment(ProfileEvents::SelectedMarks, result.selected_marks);
     ProfileEvents::increment(ProfileEvents::SelectedMarksTotal, result.total_marks_pk);
+    if (!supportsSkipIndexesOnDataRead())
+    {
+        ProfileEvents::increment(ProfileEvents::SelectedRanges, result.selected_ranges);
+        ProfileEvents::increment(ProfileEvents::SelectedMarks, result.selected_marks);
+    }
 
     auto query_id_holder = result.checkLimits(*context, data, *data_settings);
 

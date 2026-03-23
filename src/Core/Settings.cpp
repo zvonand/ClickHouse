@@ -7130,7 +7130,7 @@ Uses replicas from cluster_for_parallel_replicas.
 - [distributed_index_analysis_min_indexes_bytes_to_activate](merge-tree-settings.md/#distributed_index_analysis_min_indexes_bytes_to_activate)
 )", EXPERIMENTAL) \
     DECLARE(Bool, distributed_index_analysis_only_on_coordinator, false, R"(
-If enabled, distributed index analysis runs only on the coordinator (the node that received the initial query).
+If enabled, distributed index analysis runs only on the coordinator.
 This prevents O(N^2) spawned queries when the predicate contains subqueries (e.g., `IN (SELECT ...)`),
 because each follower replica would otherwise independently trigger its own distributed index analysis,
 but makes distributed index analysis less efficient if large tables are used in the subqueries.

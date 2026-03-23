@@ -1103,6 +1103,7 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
         addSettingsChanges(merge_tree_settings_changes_history, "26.4",
         {
 
+            {"share_nested_offsets", true, true, "When set to false, Array columns with dotted names are treated as independent columns instead of sharing offset files as part of legacy Nested semantics"},
         });
         addSettingsChanges(merge_tree_settings_changes_history, "26.3",
         {

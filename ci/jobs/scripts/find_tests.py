@@ -168,6 +168,7 @@ class Targeting:
     # outranks the strongest indirect or sibling hit.
     PASS_WEIGHT_DIRECT   = 1.0   # Pass 1: test directly covers changed lines
     PASS_WEIGHT_INDIRECT = 0.3   # Pass 3: test shares virtual-dispatch callees with primary tests
+    PASS_WEIGHT_BROAD2   = 0.15  # Pass 4: test covers changed files via very-broad regions (rc 2001-8000)
     PASS_WEIGHT_SIBLING  = 0.1   # Pass 2: test covers a sibling file in the same source directory
     PASS_WEIGHT_KEYWORD  = 0.05  # Fallback: test filename contains domain keywords from changed files
 
@@ -366,9 +367,13 @@ class Targeting:
         # A test covering 100 broad regions scores 2e-5 (much higher than the
         # flat 2e-7 the old single-injection approach gave every test).
         BROAD_FALLBACK_WIDTH = 500  # synthetic width — broad but real coverage
-        # Use the midpoint of the rc range as the synthetic region_test_count.
-        BROAD_TIER2_RC = (BROAD_REGION_HARD_CAP + VERY_BROAD_REGION_CAP) // 2
-        PASS_WEIGHT_BROAD_TIER2 = 0.5  # between direct (1.0) and indirect (0.3)
+        # Synthetic region_test_count: set so that PASS_WEIGHT_BROAD2 / (BROAD_FALLBACK_WIDTH
+        # × BROAD_TIER2_RC) stays in the same absolute score range as before while correctly
+        # reflecting that broad-tier2 signal is weaker than indirect-call (0.15 < 0.30).
+        # With PASS_WEIGHT_BROAD2=0.15 and the same score target (1e-5 at cov_regions=50,
+        # effective_width=10): BROAD_TIER2_RC = 0.15 / (10 × 1e-5) = 1500.
+        BROAD_TIER2_RC = 1500
+        PASS_WEIGHT_BROAD_TIER2 = self.PASS_WEIGHT_BROAD2
 
         broad_tests: dict = {}   # test_name -> cov_regions count
         if run_broad_tier2:
@@ -1244,19 +1249,18 @@ class Targeting:
         # regions have high region_test_count and therefore low per-line
         # scores.  A minimum score threshold keeps the result set bounded
         # without an arbitrary count limit.
-        MIN_SCORE = 1e-8        # floor: tests with only ultra-broad coverage
-        MAX_OUTPUT_TESTS = 2000  # safety backstop
+        MIN_SCORE = 1e-8        # floor: tests scoring below this have negligible signal
+        MAX_OUTPUT_TESTS = 500   # hard cap: targeted runs must stay focused
         all_ranked = sorted(width_score, key=sort_key)
         ranked = [t for t in all_ranked if width_score[t] >= MIN_SCORE][:MAX_OUTPUT_TESTS]
 
-        # Broad-tier2 guarantee: append top-N broad-tier2 tests (by cov_regions)
-        # that were not already included in ranked.  These tests scored just below
-        # the MAX_OUTPUT_TESTS cutoff but have strong broad-region coverage of the
-        # changed files — they are genuinely relevant and should not be silently dropped.
+        # Broad-tier2 guarantee: if the cap cut off high-cov_regions broad-tier2 tests,
+        # append the top few (by cov_regions) that didn't make it — but only up to the cap.
         broad_guarantee = getattr(self, '_broad_tier2_guarantee', [])
-        if broad_guarantee:
+        if broad_guarantee and len(ranked) < MAX_OUTPUT_TESTS:
             ranked_set = set(ranked)
-            extra = [t for t in broad_guarantee if t not in ranked_set]
+            slots = MAX_OUTPUT_TESTS - len(ranked)
+            extra = [t for t in broad_guarantee if t not in ranked_set][:slots]
             if extra:
                 ranked = ranked + extra
                 print(f"[find_tests] broad-tier2 guarantee: +{len(extra)} high-cov_regions tests added")

@@ -1623,9 +1623,9 @@ bool StorageReplicatedMergeTree::removeTableNodesFromZooKeeper(zkutil::ZooKeeper
     if (code == Coordination::Error::ZNONODE)
     {
         /// It is possible if ZooKeeper session expired and ephemeral drop lock was deleted,
-        /// allowing another process to complete the removal. Return false so the caller retries.
+        /// allowing another process to complete the removal. The table is completely gone.
         LOG_WARNING(logger, "Table {} was already removed from ZooKeeper, looks like a concurrent operation removed it", zookeeper_path);
-        return completely_removed;
+        return true;
     }
 
     for (const auto & child : children)

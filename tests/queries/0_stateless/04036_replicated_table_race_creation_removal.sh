@@ -15,8 +15,9 @@
 #   A) Session expires before tryGetChildren: the path is gone → ZNONODE on tryGetChildren.
 #   B) Session expires before the final tryMulti: the path is gone → ZNONODE on tryMulti.
 #
-# Both are handled gracefully by returning `completely_removed = false` with a warning log
-# instead of throwing a LOGICAL_ERROR exception.
+# Both are handled gracefully with a warning log instead of throwing a LOGICAL_ERROR exception.
+# Case A returns true (completely removed — the root node is gone); case B returns false
+# (incomplete — only the ephemeral lock may be missing, not the root).
 
 set -e
 
@@ -39,7 +40,7 @@ cleanup
 # ===== Scenario A: ZNONODE on tryGetChildren =====
 # Simulates: ZooKeeper session expired after acquiring /dropped/lock but before tryGetChildren.
 # A concurrent process deletes the entire zookeeper_path.
-# The fix: return completely_removed=false with a warning instead of throwing LOGICAL_ERROR.
+# The fix: return true (completely removed) with a warning instead of throwing LOGICAL_ERROR.
 
 ${CLICKHOUSE_CLIENT} -q "
     CREATE TABLE race_test (a UInt64)

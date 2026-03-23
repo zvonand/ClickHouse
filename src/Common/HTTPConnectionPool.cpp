@@ -24,6 +24,7 @@
 #include <Poco/Net/NetException.h>
 #include <Poco/Timespan.h>
 
+#include <climits>
 #include <queue>
 
 #include "config.h"
@@ -91,6 +92,7 @@ namespace DB
 
 namespace ErrorCodes
 {
+    extern const int BAD_ARGUMENTS;
     extern const int SUPPORT_IS_DISABLED;
     extern const int UNSUPPORTED_URI_SCHEME;
     extern const int HTTP_CONNECTION_LIMIT_REACHED;
@@ -179,6 +181,20 @@ public:
         return limits;
     }
 
+    void setSocketBufferSizes(HTTPConnectionPools::SocketBufferSizes sizes)
+    {
+        std::lock_guard lock(mutex);
+        if (sizes.rcvbuf != socket_buffer_sizes.rcvbuf || sizes.sndbuf != socket_buffer_sizes.sndbuf)
+            LOG_DEBUG(log, "Socket buffer sizes updated for group {}: rcvbuf={}, sndbuf={}", type, sizes.rcvbuf, sizes.sndbuf);
+        socket_buffer_sizes = sizes;
+    }
+
+    HTTPConnectionPools::SocketBufferSizes getSocketBufferSizes() const
+    {
+        std::lock_guard lock(mutex);
+        return socket_buffer_sizes;
+    }
+
     bool isSoftLimitReached() const
     {
         std::lock_guard lock(mutex);
@@ -245,6 +261,7 @@ private:
     HTTPConnectionPools::Limits limits TSA_GUARDED_BY(mutex) = HTTPConnectionPools::Limits();
     size_t total_connections_in_group TSA_GUARDED_BY(mutex) = 0;
     size_t mute_warning_until TSA_GUARDED_BY(mutex) = 0;
+    HTTPConnectionPools::SocketBufferSizes socket_buffer_sizes TSA_GUARDED_BY(mutex);
 };
 
 
@@ -619,6 +636,7 @@ public:
                 }
 
                 setTimeouts(*it, timeouts);
+                applySocketBufferSizes(*it, group->getSocketBufferSizes());
 
                 ProfileEvents::increment(getMetrics().reused, 1);
                 CurrentMetrics::sub(getMetrics().stored_count, 1);
@@ -695,6 +713,22 @@ private:
         return connection->isKeepAliveExpired(0.8);
     }
 
+    static void applySocketBufferSizes(Session & connection, const HTTPConnectionPools::SocketBufferSizes & buf_sizes)
+    {
+        if (buf_sizes.rcvbuf > 0)
+        {
+            if (buf_sizes.rcvbuf > static_cast<size_t>(INT_MAX))
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "rcvbuf value {} exceeds maximum {}", buf_sizes.rcvbuf, INT_MAX);
+            connection.socket().setReceiveBufferSize(static_cast<int>(buf_sizes.rcvbuf));
+        }
+        if (buf_sizes.sndbuf > 0)
+        {
+            if (buf_sizes.sndbuf > static_cast<size_t>(INT_MAX))
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "sndbuf value {} exceeds maximum {}", buf_sizes.sndbuf, INT_MAX);
+            connection.socket().setSendBufferSize(static_cast<int>(buf_sizes.sndbuf));
+        }
+    }
+
     /// Detect connections that have been silently closed by the remote end.
     /// An idle keep-alive connection should have no data pending in the socket.
     /// If poll(SELECT_READ, 0) returns true on such a connection, it means the
@@ -732,6 +766,7 @@ private:
         {
             auto timer = CurrentThread::getProfileEvents().timer(getMetrics().elapsed_microseconds);
             connection->doConnect(connect_time);
+            applySocketBufferSizes(*connection, group->getSocketBufferSizes());
         }
         catch (...)
         {
@@ -906,6 +941,13 @@ public:
         http_group->setLimits(std::move(http));
     }
 
+    void setSocketBufferSizes(HTTPConnectionPools::SocketBufferSizes disk, HTTPConnectionPools::SocketBufferSizes storage, HTTPConnectionPools::SocketBufferSizes http)
+    {
+        disk_group->setSocketBufferSizes(std::move(disk));
+        storage_group->setSocketBufferSizes(std::move(storage));
+        http_group->setSocketBufferSizes(std::move(http));
+    }
+
     void dropCache()
     {
         std::lock_guard lock(mutex);
@@ -998,6 +1040,11 @@ HTTPConnectionPools & HTTPConnectionPools::instance()
 void HTTPConnectionPools::setLimits(HTTPConnectionPools::Limits disk, HTTPConnectionPools::Limits storage, HTTPConnectionPools::Limits http)
 {
     impl->setLimits(std::move(disk), std::move(storage), std::move(http));
+}
+
+void HTTPConnectionPools::setSocketBufferSizes(HTTPConnectionPools::SocketBufferSizes disk, HTTPConnectionPools::SocketBufferSizes storage, HTTPConnectionPools::SocketBufferSizes http)
+{
+    impl->setSocketBufferSizes(std::move(disk), std::move(storage), std::move(http));
 }
 
 void HTTPConnectionPools::dropCache()

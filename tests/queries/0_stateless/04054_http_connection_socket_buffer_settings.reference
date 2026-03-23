@@ -1,0 +1,6 @@
+disk_connections_rcvbuf	0	UInt64
+disk_connections_sndbuf	0	UInt64
+http_connections_rcvbuf	0	UInt64
+http_connections_sndbuf	0	UInt64
+storage_connections_rcvbuf	0	UInt64
+storage_connections_sndbuf	0	UInt64

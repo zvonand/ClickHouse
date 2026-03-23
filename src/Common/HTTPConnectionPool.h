@@ -72,6 +72,12 @@ public:
         static constexpr size_t warning_step = 100;
     };
 
+    struct SocketBufferSizes
+    {
+        size_t rcvbuf = 0;
+        size_t sndbuf = 0;
+    };
+
     HTTPConnectionPools(const HTTPConnectionPools &) = delete;
     HTTPConnectionPools & operator=(const HTTPConnectionPools &) = delete;
 
@@ -82,6 +88,7 @@ public:
     static HTTPConnectionPools & instance();
 
     void setLimits(Limits disk, Limits storage, Limits http);
+    void setSocketBufferSizes(SocketBufferSizes disk, SocketBufferSizes storage, SocketBufferSizes http);
     void dropCache();
 
     IHTTPConnectionPoolForEndpoint::Ptr getPool(HTTPConnectionGroupType type, const Poco::URI & uri, const ProxyConfiguration & proxy_configuration);

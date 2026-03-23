@@ -61,14 +61,20 @@ void SerializationInfoTuple::add(const SerializationInfo & other)
 {
     SerializationInfo::add(other);
 
-    const auto & other_info = assert_cast<const SerializationInfoTuple &>(other);
+    const auto * other_info = typeid_cast<const SerializationInfoTuple *>(&other);
+    if (!other_info)
+    {
+        chassert(typeid(other) == typeid(SerializationInfo));
+        return;
+    }
+
     for (const auto & [name, elem] : name_to_elem)
     {
-        auto it = other_info.name_to_elem.find(name);
-        if (it != other_info.name_to_elem.end())
+        auto it = other_info->name_to_elem.find(name);
+        if (it != other_info->name_to_elem.end())
             elem->add(*it->second);
         else
-            elem->addDefaults(other_info.getData().num_rows);
+            elem->addDefaults(other_info->getData().num_rows);
     }
 }
 
@@ -97,11 +103,17 @@ void SerializationInfoTuple::replaceData(const SerializationInfo & other)
 {
     SerializationInfo::replaceData(other);
 
-    const auto & other_info = assert_cast<const SerializationInfoTuple &>(other);
+    const auto * other_info = typeid_cast<const SerializationInfoTuple *>(&other);
+    if (!other_info)
+    {
+        chassert(typeid(other) == typeid(SerializationInfo));
+        return;
+    }
+
     for (const auto & [name, elem] : name_to_elem)
     {
-        auto it = other_info.name_to_elem.find(name);
-        if (it != other_info.name_to_elem.end())
+        auto it = other_info->name_to_elem.find(name);
+        if (it != other_info->name_to_elem.end())
             elem->replaceData(*it->second);
     }
 }

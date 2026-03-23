@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Interpreters/Context_fwd.h>
-#include <QueryPipeline/BlockIO.h>
 #include <base/types.h>
 
 #include <cstddef>
@@ -9,6 +8,8 @@
 
 namespace DB
 {
+
+struct BlockIO;
 
 /// Interface that defines the flush behavior for system log tables.
 class ISystemLogFlushPolicy

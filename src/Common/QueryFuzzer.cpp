@@ -127,7 +127,7 @@ static String fieldToNumericString(const Field & f)
 void QueryFuzzer::getRandomSettings(SettingsChanges & settings_changes)
 {
 #if USE_BUZZHOUSE
-    if (fuzz_rand() % 5 == 0)
+    if (!BuzzHouse::performanceSettings.empty() && fuzz_rand() % 5 == 0)
     {
         const uint32_t nsettings
             = (fuzz_rand() % std::min(static_cast<uint32_t>(BuzzHouse::performanceSettings.size()), UINT32_C(20))) + UINT32_C(1);

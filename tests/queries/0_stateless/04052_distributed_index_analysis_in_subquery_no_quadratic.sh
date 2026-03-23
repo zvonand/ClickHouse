@@ -65,7 +65,7 @@ $CLICKHOUSE_CLIENT -q "
     SYSTEM FLUSH LOGS query_log;
 
     -- Total query count must be bounded, not quadratic.
-    SELECT if (count() BETWEEN 3 AND 5, 'OK', format('Expected 3-5 queries, got {}', count())) AS result
+    SELECT if (count() BETWEEN 3 AND 4, 'OK', format('Expected 3-4 queries, got {}', count())) AS result
     FROM system.query_log
     WHERE
         event_date >= yesterday() AND event_time >= now() - 600

@@ -183,6 +183,11 @@ public:
 
     void setSocketBufferSizes(HTTPConnectionPools::SocketBufferSizes sizes)
     {
+        if (sizes.rcvbuf > static_cast<size_t>(INT_MAX))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "rcvbuf value {} exceeds maximum {}", sizes.rcvbuf, INT_MAX);
+        if (sizes.sndbuf > static_cast<size_t>(INT_MAX))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "sndbuf value {} exceeds maximum {}", sizes.sndbuf, INT_MAX);
+
         std::lock_guard lock(mutex);
         if (sizes.rcvbuf != socket_buffer_sizes.rcvbuf || sizes.sndbuf != socket_buffer_sizes.sndbuf)
             LOG_DEBUG(log, "Socket buffer sizes updated for group {}: rcvbuf={}, sndbuf={}", type, sizes.rcvbuf, sizes.sndbuf);
@@ -717,17 +722,9 @@ private:
     static void applySocketBufferSizes(Session & connection, const HTTPConnectionPools::SocketBufferSizes & buf_sizes)
     {
         if (buf_sizes.rcvbuf > 0)
-        {
-            if (buf_sizes.rcvbuf > static_cast<size_t>(INT_MAX))
-                throw Exception(ErrorCodes::BAD_ARGUMENTS, "rcvbuf value {} exceeds maximum {}", buf_sizes.rcvbuf, INT_MAX);
             connection.socket().setReceiveBufferSize(static_cast<int>(buf_sizes.rcvbuf));
-        }
         if (buf_sizes.sndbuf > 0)
-        {
-            if (buf_sizes.sndbuf > static_cast<size_t>(INT_MAX))
-                throw Exception(ErrorCodes::BAD_ARGUMENTS, "sndbuf value {} exceeds maximum {}", buf_sizes.sndbuf, INT_MAX);
             connection.socket().setSendBufferSize(static_cast<int>(buf_sizes.sndbuf));
-        }
     }
 
     /// Detect connections that have been silently closed by the remote end.

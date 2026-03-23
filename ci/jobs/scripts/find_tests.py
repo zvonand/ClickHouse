@@ -139,11 +139,6 @@ class Targeting:
         p = path.replace("\\", "/").lstrip("./")
         return "./" + p
 
-    # Threshold for filtering ubiquitous indirect callees (operator new, malloc, etc.)
-    # that every test calls and carry no targeting signal for the indirect-call pass.
-    # Not used as a cap on direct line coverage any more.
-    MAX_TESTS_PER_LINE = 200
-
     # Regions wider than this are considered "broad" (low signal).
     NARROW_REGION_MAX_LINES = 20
 
@@ -176,9 +171,8 @@ class Targeting:
         tuples, where `region_width = line_end - line_start + 1`.  The region width is
         used by the caller to weight test scores (narrow regions = high signal).
 
-        Regions with `region_test_count > MAX_TESTS_PER_LINE` are excluded: such lines
-        are infrastructure code (e.g. `Settings.cpp` entry points) that all tests touch
-        and therefore carry no signal for targeted test selection.
+        All matching regions are included; the scoring formula naturally penalises
+        regions covered by many tests via the `region_test_count` denominator.
         """
         import time
         t0 = time.monotonic()
@@ -449,8 +443,8 @@ class Targeting:
         Uses only the existing `checks_coverage_indirect_calls` CIDB table;
         no new tables are required.  The join is:
           primary tests → their callee_offsets → other tests with same callees.
-        The cap (< MAX_TESTS_PER_LINE unique tests per callee) filters out
-        ubiquitous callees like `operator new` or `malloc` that every test calls.
+        Shared-library callees (operator new, malloc, etc.) are excluded at
+        collection time in coverage.cpp, so no extra filter is needed here.
 
         Degrades gracefully when the table is empty (e.g. first nightly run).
         """
@@ -466,8 +460,8 @@ class Targeting:
 
         # Self-join on callee_offset: count how many distinct callees each candidate
         # test shares with the primary set.  More shared callees = stronger signal.
-        # Ubiquitous callees (operator new, malloc, etc.) are filtered out via the
-        # HAVING clause so they don't inflate counts for every test.
+        # Shared-library callees (glibc, libstdc++) are already excluded at
+        # collection time in coverage.cpp — only main-binary text offsets are stored.
         query = f"""
         SELECT ic2.test_name, count(DISTINCT ic1.callee_offset) AS shared_callees
         FROM checks_coverage_indirect_calls ic1
@@ -478,13 +472,6 @@ class Targeting:
           AND ic2.check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND ic1.test_name IN ({escaped_primary})
           AND ic2.test_name NOT IN ({escaped_primary})
-          AND ic1.callee_offset IN (
-              SELECT callee_offset
-              FROM checks_coverage_indirect_calls
-              WHERE check_start_time > now() - interval 3 days
-              GROUP BY callee_offset
-              HAVING uniqExact(test_name) < {self.MAX_TESTS_PER_LINE}
-          )
         GROUP BY ic2.test_name
         ORDER BY shared_callees DESC
         """

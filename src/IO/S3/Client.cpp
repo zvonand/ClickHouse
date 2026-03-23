@@ -1131,47 +1131,57 @@ void ClientCacheRegistry::unregisterClient(ClientCache * client)
         client_caches.erase(it);
 }
 
+void ClientCacheRegistry::pruneExpiredCachesLocked()
+{
+    std::erase_if(cache_by_endpoint_bucket, [](const auto & pair) { return pair.second.expired(); });
+}
+
 std::shared_ptr<ClientCache> ClientCacheRegistry::getOrCreateCacheForKey(const std::string & endpoint, const std::string & bucket)
 {
     SipHash hash;
     hash.update(endpoint);
     hash.update(bucket);
     UInt128 key = hash.get128();
+
+    std::lock_guard lock(cache_by_key_mutex);
+    if (auto it = cache_by_endpoint_bucket.find(key); it != cache_by_endpoint_bucket.end())
     {
-        std::lock_guard lock(cache_by_key_mutex);
-        if (auto it = cache_by_endpoint_bucket.find(key); it != cache_by_endpoint_bucket.end())
-        {
-            if (auto cached = it->second.lock(); cached)
-                return cached;
-            cache_by_endpoint_bucket.erase(it);
-        }
+        if (auto cached = it->second.lock(); cached)
+            return cached;
+        cache_by_endpoint_bucket.erase(it);
     }
     auto cache = std::make_shared<ClientCache>();
-    {
-        std::lock_guard lock(cache_by_key_mutex);
-        cache_by_endpoint_bucket[key] = cache;
-    }
+    cache_by_endpoint_bucket[key] = cache;
+
+    pruneExpiredCachesLocked();
+
     return cache;
 }
 
 void ClientCacheRegistry::clearCacheForAll()
 {
-    std::lock_guard lock(clients_mutex);
-
-    for (auto it = client_caches.begin(); it != client_caches.end();)
     {
-        if (auto locked_client = it->second.first.lock(); locked_client)
+        std::lock_guard lock(clients_mutex);
+
+        for (auto it = client_caches.begin(); it != client_caches.end();)
         {
-            locked_client->clearCache();
-            ++it;
-        }
-        else
-        {
-            LOG_INFO(getLogger("ClientCacheRegistry"), "Deleting leftover S3 client cache");
-            it = client_caches.erase(it);
+            if (auto locked_client = it->second.first.lock(); locked_client)
+            {
+                locked_client->clearCache();
+                ++it;
+            }
+            else
+            {
+                LOG_INFO(getLogger("ClientCacheRegistry"), "Deleting leftover S3 client cache");
+                it = client_caches.erase(it);
+            }
         }
     }
 
+    {
+        std::lock_guard lock(cache_by_key_mutex);
+        pruneExpiredCachesLocked();
+    }
 }
 
 ClientFactory::ClientFactory()

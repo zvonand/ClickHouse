@@ -84,6 +84,8 @@ public:
 private:
     ClientCacheRegistry() = default;
 
+    void pruneExpiredCachesLocked() TSA_REQUIRES(cache_by_key_mutex);
+
     std::mutex clients_mutex;
     std::unordered_map<ClientCache *, std::pair<std::weak_ptr<ClientCache>, size_t>> client_caches TSA_GUARDED_BY(clients_mutex);
     std::mutex cache_by_key_mutex;

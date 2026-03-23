@@ -127,12 +127,17 @@ void fillDataWithDatabasesTablesColumns(MutableColumns & res_columns, const Cont
         res_columns[1]->insert(DATABASE_CONTEXT);
         res_columns[2]->insertDefault();
 
+        const bool check_access_for_tables_in_db = check_access_for_tables
+            && !access->isGranted(AccessType::SHOW_TABLES, database_name);
+        const bool check_access_for_columns_in_db = check_access_for_columns
+            && !access->isGranted(AccessType::SHOW_COLUMNS, database_name);
+
         for (auto iterator = database_ptr->getTablesIterator(context); iterator->isValid(); iterator->next())
         {
             const auto & table_name = iterator->name();
             const auto & table = iterator->table();
             fillDataWithTableColumns(database_name, table_name, table, res_columns, context,
-                check_access_for_tables, check_access_for_columns);
+                check_access_for_tables_in_db, check_access_for_columns_in_db);
         }
     }
 

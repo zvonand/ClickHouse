@@ -58,9 +58,7 @@ void DiskObjectStorageTransaction::waitBlobRemoval(const StoredObjects & blobs) 
         for (size_t i = 0; i < 100 && metadata_storage->hasPendingRemovalBlobs(blobs); ++i)
             blob_killer->triggerAndWait();
 
-        if (watch.elapsed() > 1'000'000)
-            LOG_WARNING(getLogger("DiskObjectStorageTransaction"), "Waiting for blob removal took {} ms", watch.elapsed() / 1000);
-        else if (watch.elapsed() > 100'000)
+        if (watch.elapsed() > 100'000)
             LOG_TRACE(getLogger("DiskObjectStorageTransaction"), "Waiting for blob removal took {} ms", watch.elapsed() / 1000);
     }
     catch (...)

@@ -147,6 +147,18 @@ public:
 
     static DateTime64 decode(const UInt8 * data)
     {
+        /// Validate that all characters are ASCII before calling ulid_decode,
+        /// because the C library indexes a 256-entry lookup table using `(int)s[i]`,
+        /// which causes out-of-bounds read when char is signed and the value is > 127.
+        for (size_t i = 0; i < ULID_LENGTH; ++i)
+        {
+            if (data[i] > 127)
+                throw Exception(
+                    ErrorCodes::BAD_ARGUMENTS,
+                    "Cannot parse ULID: non-ASCII character at position {}",
+                    i);
+        }
+
         unsigned char buffer[16];
         int ret = ulid_decode(buffer, reinterpret_cast<const char *>(data));
         if (ret != 0)

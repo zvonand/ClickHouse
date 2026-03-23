@@ -1139,6 +1139,7 @@ void ClientCacheRegistry::pruneExpiredCachesLocked()
 std::shared_ptr<ClientCache> ClientCacheRegistry::getOrCreateCacheForKey(const std::string & endpoint, const std::string & bucket)
 {
     SipHash hash;
+    hash.update(endpoint.size());
     hash.update(endpoint);
     hash.update(bucket);
     UInt128 key = hash.get128();

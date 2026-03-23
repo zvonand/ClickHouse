@@ -552,6 +552,11 @@ TEST(IOTestAwsS3Client, ClientCacheRegistryGetOrCreateCacheForKey)
 
     std::shared_ptr<DB::S3::ClientCache> cache_e2 = registry.getOrCreateCacheForKey("endpoint2", "bucket1");
     EXPECT_NE(cache_ab1.get(), cache_e2.get()) << "Different endpoint should return different cache";
+
+    auto cache_concat1 = registry.getOrCreateCacheForKey("ab", "c");
+    auto cache_concat2 = registry.getOrCreateCacheForKey("a", "bc");
+    EXPECT_NE(cache_concat1.get(), cache_concat2.get())
+        << "Pairs with identical concatenation but different boundary must not share a cache";
 }
 
 TEST(IOTestAwsS3Client, ClientSharesCacheWithClone)

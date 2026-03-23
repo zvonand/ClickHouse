@@ -5,6 +5,8 @@ SET correlated_subqueries_default_join_kind = 'left';
 SET correlated_subqueries_use_in_memory_buffer = 0;
 SET enable_join_runtime_filters = 0;
 SET max_bytes_before_external_join = 0; -- Remove once spilling hash join is enabled by default
+SET query_plan_optimize_prewhere = 1;
+SET optimize_move_to_prewhere = 1;
 
 CREATE TABLE t(x Int, y Int) ORDER BY ()
 AS SELECT number as x, number % 2 as y FROM numbers(100);

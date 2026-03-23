@@ -142,6 +142,15 @@ class Targeting:
     # Regions wider than this are considered "broad" (low signal).
     NARROW_REGION_MAX_LINES = 20
 
+    # Regions covered by more tests than this are skipped from Pass 1 (direct line
+    # coverage).  Infrastructure files like SignalHandlers.cpp, Context.cpp, and
+    # Settings.cpp are touched by almost every test — a changed line in such a file
+    # has no diagnostic value for test selection.  Skipping regions with too many
+    # owners prevents these files from flooding primary_tests (which would then
+    # cause sibling/indirect queries to fail with HTTP form-field-too-long errors
+    # and inflate unique_tests to nearly the full suite).
+    MAX_TESTS_PER_LINE = 200
+
     # Synthetic width for tests found via indirect-call (virtual dispatch) co-occurrence.
     # Lower than SIBLING_DIR_WIDTH (10000) because callee co-occurrence is a stronger
     # signal than directory proximity: tests that call the same vtable slots as primary
@@ -244,6 +253,7 @@ class Targeting:
           AND notEmpty(test_name)
           AND ({per_file_conds})
         GROUP BY file, line_start, line_end
+        HAVING region_test_count <= {self.MAX_TESTS_PER_LINE}
         """
 
         cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
@@ -291,6 +301,11 @@ class Targeting:
             matched: list = []
             for file_, line_start, line_end, test_depths, region_test_count in coverage_ranges:
                 if file_ == stored and line_start <= line_no <= line_end:
+                    # Skip regions covered by too many tests — these are infrastructure
+                    # lines (e.g. Context.cpp, SignalHandlers.cpp) that are touched by
+                    # nearly every test and provide no useful test-selection signal.
+                    if region_test_count > self.MAX_TESTS_PER_LINE:
+                        continue
                     width = line_end - line_start + 1
                     for t, depth in test_depths:
                         matched.append((t, width, depth, region_test_count))
@@ -462,6 +477,13 @@ class Targeting:
         # test shares with the primary set.  More shared callees = stronger signal.
         # Shared-library callees (glibc, libstdc++) are already excluded at
         # collection time in coverage.cpp — only main-binary text offsets are stored.
+        #
+        # The callee_offset subquery filters out ubiquitous callees (those appearing
+        # in >= 200 tests): these are common infrastructure callees (logging, memory,
+        # query setup) that every test calls.  Including them would cause the join to
+        # return almost all 10000 tests, providing zero signal.  Only specific callees
+        # (unique to a narrow set of tests) are useful for this pass.
+        MAX_CALLEE_TEST_COUNT = 200  # callees in >= this many tests are ubiquitous
         query = f"""
         SELECT ic2.test_name, count(DISTINCT ic1.callee_offset) AS shared_callees
         FROM checks_coverage_indirect_calls ic1
@@ -472,8 +494,17 @@ class Targeting:
           AND ic2.check_name LIKE '{self._escape_sql_string(self.job_type)}%'
           AND ic1.test_name IN ({escaped_primary})
           AND ic2.test_name NOT IN ({escaped_primary})
+          AND ic1.callee_offset IN (
+              SELECT callee_offset
+              FROM checks_coverage_indirect_calls
+              WHERE check_start_time > now() - interval 3 days
+                AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+              GROUP BY callee_offset
+              HAVING uniqExact(test_name) < {MAX_CALLEE_TEST_COUNT}
+          )
         GROUP BY ic2.test_name
         ORDER BY shared_callees DESC
+        LIMIT 200
         """
 
         try:
@@ -592,6 +623,23 @@ class Targeting:
         # functional domain as the changed file.  The inner SELECT identifies
         # sibling files with the right domain keywords that the primary tests
         # already touch; the outer SELECT finds new tests for those same files.
+        #
+        # Two filters prevent broad infrastructure files from flooding the candidates:
+        #
+        # 1. INNER subquery min coverage: the sibling file must be covered by at
+        #    least MIN_SIBLING_COVERAGE primary tests.  This excludes files that are
+        #    only incidentally touched by primary tests (e.g. AggregatedDataVariants.cpp
+        #    being exercised by Variant tests through GROUP BY operations).
+        #
+        # 2. Global test count cap (NOT IN subquery): exclude sibling files that are
+        #    covered by more than MAX_SIBLING_TESTS distinct tests globally.  Very
+        #    broadly-covered files (like AggregatedDataVariants.cpp with 3400 tests,
+        #    or RewriteCountVariantsVisitor.cpp with 4250 tests) are infrastructure —
+        #    finding their tests adds noise rather than signal.  The threshold matches
+        #    MAX_TESTS_PER_LINE so we consistently exclude "too common" files.
+        MAX_SIBLING_FILE_TESTS = self.MAX_TESTS_PER_LINE  # same cap as direct coverage
+        n_primary = len(primary_tests)
+        min_sibling_coverage = max(2, n_primary // 5)
         query = f"""
         SELECT DISTINCT test_name
         FROM checks_coverage_lines
@@ -602,14 +650,26 @@ class Targeting:
           AND ({dir_conds})
           AND ({not_changed})
           {sibling_file_filter}
+          AND file NOT IN (
+              SELECT file
+              FROM checks_coverage_lines
+              WHERE check_start_time > now() - interval 3 days
+                AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+                AND ({dir_conds})
+                {sibling_file_filter}
+              GROUP BY file
+              HAVING uniqExact(test_name) > {MAX_SIBLING_FILE_TESTS}
+          )
           AND file IN (
-              SELECT DISTINCT file
+              SELECT file
               FROM checks_coverage_lines
               WHERE check_start_time > now() - interval 3 days
                 AND test_name IN ({escaped_primary})
                 AND ({dir_conds})
                 AND ({not_changed})
                 {sibling_file_filter}
+              GROUP BY file
+              HAVING uniqExact(test_name) >= {min_sibling_coverage}
           )
         LIMIT 200
         """

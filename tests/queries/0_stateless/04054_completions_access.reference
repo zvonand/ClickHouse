@@ -1,0 +1,13 @@
+=== Per-table grant user sees the permitted table ===
+visible_table
+=== Per-table grant user sees columns of the permitted table ===
+id
+name
+=== Per-table grant user does NOT see the hidden table ===
+0
+=== Per-db grant user sees the permitted database ===
+completions_access_db_04054
+=== Per-db grant user does NOT see other databases ===
+0
+=== Temporary table appears in completions ===
+tmp_completions_04054

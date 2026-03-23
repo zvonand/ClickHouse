@@ -48,7 +48,7 @@ def _post_review():
     """Post REVIEW_FILE as a PR comment. Raises on failure, failing the job."""
     subprocess.run(
         [
-            "python", "ci/praktika/gh.py",
+            sys.executable, "ci/praktika/gh.py",
             "post-or-update", "--tag", "review", "--file", REVIEW_FILE,
         ],
         check=True,

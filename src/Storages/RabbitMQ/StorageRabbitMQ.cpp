@@ -902,6 +902,9 @@ void StorageRabbitMQ::shutdown(bool)
     if (shutdown_called.exchange(true))
         return;
 
+    LOG_TRACE(log, "Deactivating init task");
+    deactivateTask(init_task, true, false);
+
     for (auto & consumer_weak : consumers_ref)
     {
         auto consumer = consumer_weak.lock();
@@ -910,14 +913,11 @@ void StorageRabbitMQ::shutdown(bool)
         consumer->stop();
     }
 
-    LOG_TRACE(log, "Deactivating background tasks");
-
-    /// In case it has not yet been able to setup connection;
-    deactivateTask(init_task, true, false);
-
     /// The order of deactivating tasks is important: wait for streamingToViews() func to finish and
     /// then wait for background event loop to finish.
+    LOG_TRACE(log, "Deactivating streaming task");
     deactivateTask(streaming_task, true, false);
+    LOG_TRACE(log, "Deactivating looping task");
     deactivateTask(looping_task, true, true);
 
     LOG_TRACE(log, "Cleaning up RabbitMQ after table usage");
@@ -942,6 +942,8 @@ void StorageRabbitMQ::shutdown(bool)
 
         for (size_t i = 0; i < num_created_consumers; ++i)
             popConsumer();
+
+        consumers_ref.clear();
     }
     catch (...)
     {

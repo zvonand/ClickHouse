@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Tags: no-parallel
-# Tag no-parallel: create user
 
 # Test that system.completions respects per-table grants correctly.
 # A user with only per-table SHOW TABLES/SHOW COLUMNS grants (no global grant)

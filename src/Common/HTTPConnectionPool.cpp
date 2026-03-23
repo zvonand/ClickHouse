@@ -628,15 +628,15 @@ public:
 
         if (reused_connection)
         {
+            ProfileEvents::increment(getMetrics().reused, 1);
+            CurrentMetrics::sub(getMetrics().stored_count, 1);
+
             setTimeouts(*reused_connection, timeouts);
 
             /// Apply socket buffer sizes outside the lock because applySocketBufferSizes
             /// can throw, and PooledConnection destructor during stack unwinding would
             /// try to re-lock this mutex, causing a deadlock.
             applySocketBufferSizes(*reused_connection, group->getSocketBufferSizes());
-
-            ProfileEvents::increment(getMetrics().reused, 1);
-            CurrentMetrics::sub(getMetrics().stored_count, 1);
 
             return reused_connection;
         }

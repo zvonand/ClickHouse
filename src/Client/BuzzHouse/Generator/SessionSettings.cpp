@@ -698,6 +698,19 @@ std::unordered_map<String, CHSetting> serverSettings = {
     {"http_wait_end_of_query", trueOrFalseSettingNoOracle},
     {"http_write_exception_in_output_format", trueOrFalseSettingNoOracle},
     {"iceberg_delete_data_on_drop", trueOrFalseSettingNoOracle},
+    {"iceberg_expire_default_max_ref_age_ms",
+     CHSetting(
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 300000)); },
+         {},
+         false)},
+    {"iceberg_expire_default_max_snapshot_age_ms",
+     CHSetting(
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 300000)); },
+         {},
+         false)},
+    {"iceberg_expire_default_min_snapshots_to_keep",
+     CHSetting(
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, 10)); }, {}, false)},
     {"iceberg_metadata_compression_method",
      CHSetting([](RandomGenerator & rg, FuzzConfig &) { return "'" + rg.pickRandomly(compressionMethods) + "'"; }, {}, false)},
     {"iceberg_metadata_log_level",
@@ -713,6 +726,11 @@ std::unordered_map<String, CHSetting> serverSettings = {
                     "'manifest_file_entry'"};
              return rg.pickRandomly(choices);
          },
+         {},
+         false)},
+    {"iceberg_metadata_staleness_ms",
+     CHSetting(
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 60000)); },
          {},
          false)},
     {"iceberg_snapshot_id",

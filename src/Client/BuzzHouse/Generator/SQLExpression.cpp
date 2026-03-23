@@ -657,7 +657,7 @@ void StatementGenerator::generatePredicate(RandomGenerator & rg, Expr * expr)
                 1, static_cast<uint32_t>(rg.nextLargeNumber() < 5 ? BinaryOperator_MAX : BinaryOperator::BINOP_LEEQGR));
 
             eany->set_op(static_cast<BinaryOperator>(op_range(rg.generator)));
-            eany->set_anyall(rg.nextBool());
+            eany->set_anyall(static_cast<AnyAllSome>(rg.randomInt<uint32_t>(1, static_cast<uint32_t>(AnyAllSome_MAX))));
             this->depth++;
             this->generateExpression(rg, eany->mutable_expr());
             this->width++;

@@ -321,6 +321,89 @@ class Targeting:
             except (ValueError, SyntaxError):
                 print(f"Failed to parse coverage row: {row[:100]}")
 
+        # --- Second tier: very broad regions (rc > BROAD_REGION_HARD_CAP) --------
+        # Infrastructure files (Context.cpp, ProcessList.cpp) have regions covered
+        # by 3000-8000+ tests.  These are dropped by the primary query to keep its
+        # response size manageable (groupArray would return thousands of names per
+        # region).  However, the tests covering these broad regions are still
+        # relevant — they just have low specificity.
+        #
+        # The second-tier query returns only DISTINCT test names (no per-region
+        # grouping) for regions above the primary cap.  This keeps the response
+        # size linear in the number of unique tests rather than quadratic in
+        # (regions × tests_per_region).  Tests found this way are assigned the
+        # BROAD_FALLBACK_WIDTH and a synthetic region_test_count equal to the
+        # average rc across all matching broad regions.
+        # Skip the broad-tier2 query if we've already consumed too much time.
+        elapsed_after_primary = time.monotonic() - t0
+        run_broad_tier2 = elapsed_after_primary < 8.0
+        if not run_broad_tier2:
+            print(f"[find_tests] skipping broad-tier2 query (elapsed={elapsed_after_primary:.1f}s)")
+
+        VERY_BROAD_REGION_CAP = 8000  # drop truly ubiquitous regions
+        # Query broad regions and count how many regions each test covers in the
+        # changed files.  Tests covering more regions get proportionally higher
+        # scores, so tests that genuinely exercise the changed code path (even via
+        # broad Context.cpp/ProcessList.cpp regions) rank above tests that merely
+        # touch one broad region.  ORDER BY cov_regions DESC + LIMIT ensures we
+        # prioritise the most-covering tests when truncating.
+        broad_query = f"""
+        SELECT test_name, count() AS cov_regions
+        FROM checks_coverage_lines
+        WHERE check_start_time > now() - interval 3 days
+          AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+          AND notEmpty(test_name)
+          AND ({per_file_conds})
+          AND (file, line_start, line_end) IN (
+              SELECT file, line_start, line_end
+              FROM checks_coverage_lines
+              WHERE check_start_time > now() - interval 3 days
+                AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+                AND ({per_file_conds})
+              GROUP BY file, line_start, line_end
+              HAVING uniqExact(test_name) > {BROAD_REGION_HARD_CAP}
+                 AND uniqExact(test_name) <= {VERY_BROAD_REGION_CAP}
+          )
+        GROUP BY test_name
+        ORDER BY cov_regions DESC
+        LIMIT 8000
+        """
+        # Broad-tier2 tests have real coverage but from regions shared by
+        # thousands of tests.  The effective score is:
+        #   cov_regions × PASS_WEIGHT_BROAD_TIER2 / (BROAD_FALLBACK_WIDTH × BROAD_TIER2_RC)
+        # = cov_regions × 2e-7
+        # A test covering 100 broad regions scores 2e-5 (much higher than the
+        # flat 2e-7 the old single-injection approach gave every test).
+        BROAD_FALLBACK_WIDTH = 500  # synthetic width — broad but real coverage
+        # Use the midpoint of the rc range as the synthetic region_test_count.
+        BROAD_TIER2_RC = (BROAD_REGION_HARD_CAP + VERY_BROAD_REGION_CAP) // 2
+        PASS_WEIGHT_BROAD_TIER2 = 0.5  # between direct (1.0) and indirect (0.3)
+
+        broad_tests: dict = {}   # test_name -> cov_regions count
+        if run_broad_tier2:
+            t_broad = time.monotonic()
+            try:
+                broad_raw = cidb.query(broad_query, log_level="")
+                broad_elapsed = time.monotonic() - t_broad
+                print(f"[find_tests] broad-tier2 query: {broad_elapsed:.2f}s, response={len(broad_raw)} bytes")
+            except Exception as e:
+                print(f"[find_tests] broad-tier2 query failed (non-fatal): {e}")
+                broad_raw = ""
+
+            # Parse broad-tier2 results: test_name \t cov_regions
+            for row in broad_raw.strip().splitlines():
+                parts = row.strip().split("\t", 1)
+                if parts[0]:
+                    count = int(parts[1]) if len(parts) == 2 and parts[1].isdigit() else 1
+                    broad_tests[parts[0]] = count
+            if broad_tests:
+                max_cov = max(broad_tests.values()) if broad_tests else 0
+                print(
+                    f"[find_tests] broad-tier2: {len(broad_tests)} additional tests from "
+                    f"regions with {BROAD_REGION_HARD_CAP} < rc <= {VERY_BROAD_REGION_CAP} "
+                    f"(top cov_regions={max_cov})"
+                )
+
         # Map each input (filename, line_no) to (test_name, region_width, min_depth,
         # region_test_count) 4-tuples.  The CIDB query returned all ranges for the
         # touched files; now filter to ranges that actually overlap a changed line.
@@ -361,8 +444,8 @@ class Targeting:
             ]
 
         # Record which C++ files had zero direct coverage BEFORE secondary passes
-        # inject additional tests.  This is used later to decide whether to run
-        # the symbol-level fallback.
+        # (broad-tier2, sibling, indirect) inject additional tests.  This is used
+        # later to decide whether to run the symbol-level fallback.
         zero_direct_coverage_files = {
             f
             for (f, _), pairs in result.items()
@@ -370,6 +453,29 @@ class Targeting:
             and (f.endswith(".cpp") or f.endswith(".h"))
             and not pairs
         }
+
+        # Inject broad-tier2 tests into coverage results.
+        # Tests are injected into the first coverage-tracked changed line only.
+        # The effective width is inversely proportional to cov_regions so that
+        # tests covering more of the changed files get lower width → higher score:
+        #   score = PASS_WEIGHT_BROAD_TIER2 / (effective_width × BROAD_TIER2_RC)
+        #         = 0.5 / (max(1, 500//cov_regions) × 5000)
+        # A test covering 100 regions: effective_width=5, score=0.5/(5×5000)=2e-5
+        # A test covering   1 region:  effective_width=500, score=0.5/(500×5000)=2e-7
+        # The 100x difference correctly reflects relative specificity.
+        if broad_tests:
+            for filename, line_no in coverage_lines:
+                if not any(filename.startswith(p) for p in COVERAGE_TRACKED_PREFIXES):
+                    continue
+                key = (filename, line_no)
+                existing = {e[0] for e in result.get(key, [])}
+                for tname, cov_regions in broad_tests.items():
+                    if tname not in existing:
+                        effective_width = max(1, BROAD_FALLBACK_WIDTH // max(1, cov_regions))
+                        result.setdefault(key, []).append(
+                            (tname, effective_width, 255, BROAD_TIER2_RC, PASS_WEIGHT_BROAD_TIER2)
+                        )
+                break  # inject into first tracked line only (score is cov_regions-weighted)
 
         # --- Secondary pass: sibling files in the same source directory ----
         # For each changed C++ file under src/, find tests that cover OTHER files
@@ -424,7 +530,13 @@ class Targeting:
         # or when some C++ files had zero coverage.  Skip otherwise to save the
         # ~10s query cost.  Also skip if we have already spent more than 10s to
         # stay within the 20s total budget.
-        current_unique = len({t for pairs in result.values() for t, *_ in pairs})
+        # Count unique tests excluding broad-tier2 injections so that the
+        # symbol-fallback trigger is not inflated by thousands of very-broad tests.
+        # Broad-tier2 tests use PASS_WEIGHT_BROAD_TIER2; exclude those.
+        current_unique = len({
+            t for pairs in result.values() for t, *rest in pairs
+            if len(rest) < 4 or rest[3] != PASS_WEIGHT_BROAD_TIER2
+        })
         elapsed_so_far = time.monotonic() - t0
         # Use the pre-secondary-pass zero-coverage set (recorded above).
         # Secondary passes (sibling, indirect) inject tests into ALL lines,
@@ -477,6 +589,16 @@ class Targeting:
             f"{lines_with_tests}/{len(coverage_lines)} lines matched, "
             f"{total_unique_tests} unique tests selected"
         )
+
+        # Store top broad-tier2 tests (by cov_regions) on self so that
+        # get_most_relevant_tests() can guarantee they make it through
+        # the MAX_OUTPUT_TESTS cap even if their scores fall below the cutoff.
+        n_guarantee = min(50, max(10, len(coverage_lines) // 5))
+        self._broad_tier2_guarantee = [
+            t
+            for t, _ in sorted(broad_tests.items(), key=lambda x: -x[1])
+        ][:n_guarantee] if broad_tests else []
+
         return result
 
     @staticmethod
@@ -1309,7 +1431,28 @@ class Targeting:
             return (tier, -width_score[t])
 
         # Sort: tier first (A < B < C), then by width score descending within tier.
-        ranked = sorted(width_score, key=sort_key)[:1000]
+        # Use score-based filtering instead of a hard count cap.  The old
+        # `[:1000]` cut threw away low-scoring but genuinely relevant tests
+        # from infrastructure files (Context.cpp, ProcessList.cpp) whose
+        # regions have high region_test_count and therefore low per-line
+        # scores.  A minimum score threshold keeps the result set bounded
+        # without an arbitrary count limit.
+        MIN_SCORE = 1e-8        # floor: tests with only ultra-broad coverage
+        MAX_OUTPUT_TESTS = 2000  # safety backstop
+        all_ranked = sorted(width_score, key=sort_key)
+        ranked = [t for t in all_ranked if width_score[t] >= MIN_SCORE][:MAX_OUTPUT_TESTS]
+
+        # Broad-tier2 guarantee: append top-N broad-tier2 tests (by cov_regions)
+        # that were not already included in ranked.  These tests scored just below
+        # the MAX_OUTPUT_TESTS cutoff but have strong broad-region coverage of the
+        # changed files — they are genuinely relevant and should not be silently dropped.
+        broad_guarantee = getattr(self, '_broad_tier2_guarantee', [])
+        if broad_guarantee:
+            ranked_set = set(ranked)
+            extra = [t for t in broad_guarantee if t not in ranked_set]
+            if extra:
+                ranked = ranked + extra
+                print(f"[find_tests] broad-tier2 guarantee: +{len(extra)} high-cov_regions tests added")
 
         narrow_count = sum(1 for t in ranked if has_narrow_hit[t])
         direct_count = sum(
@@ -1325,17 +1468,24 @@ class Targeting:
             for (file_, line_), pairs in line_to_tests.items():
                 if pairs:
                     info += f"  {file_}:{line_} -> {len(pairs)} tests\n"
+        scored_total = len(width_score)
+        filtered_out = scored_total - len(ranked)
         info += (
             f"Total unique tests: {len(ranked)} "
             f"({direct_count} direct-narrow, {narrow_count - direct_count} indirect-narrow, "
-            f"{broad_count} broad)\n"
+            f"{broad_count} broad"
         )
+        if filtered_out > 0:
+            info += f"; {filtered_out} below score threshold"
+        info += ")\n"
         if ranked:
             top = ranked[0]
             d = min_depth_seen.get(top, 255)
             tier = ("direct-narrow" if has_narrow_hit[top] and d <= self.DIRECT_CALL_MAX_DEPTH
                     else "narrow" if has_narrow_hit[top] else "broad")
-            info += f"Top test: {top} (score={width_score[top]:.3f}, {tier}, depth={d})\n"
+            info += f"Top test: {top} (score={width_score[top]:.6f}, {tier}, depth={d})\n"
+            bottom = ranked[-1]
+            info += f"Bottom test: {bottom} (score={width_score[bottom]:.6f})\n"
 
         return ranked, Result(
             name="tests found by coverage", status=Result.StatusExtended.OK, info=info

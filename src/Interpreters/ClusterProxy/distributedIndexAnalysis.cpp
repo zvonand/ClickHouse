@@ -866,10 +866,6 @@ DistributedIndexAnalysisPartsRanges distributedIndexAnalysisOnReplicas(
     /// Disable parallel replicas to avoid O(N^2) spawned queries when the predicate has a subquery,
     /// because each replica would independently spawn parallel replicas for the subquery.
     context_copy->setSetting("enable_parallel_replicas", false);
-    /// If the setting is enabled, also disable distributed index analysis on follower replicas
-    /// to prevent them from recursively triggering distributed index analysis for subqueries.
-    bool distributed_index_analysis_only_on_coordinator = context->getSettingsRef()[Setting::distributed_index_analysis_only_on_coordinator];
-    context_copy->setSetting("distributed_index_analysis", !distributed_index_analysis_only_on_coordinator);
 
     DistributedIndexAnalyzer analyzer(
         storage_id,

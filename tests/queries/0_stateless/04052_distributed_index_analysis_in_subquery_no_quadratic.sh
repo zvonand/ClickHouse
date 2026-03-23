@@ -38,42 +38,58 @@ $CLICKHOUSE_CLIENT -q "
 query_id="$RANDOM-$CLICKHOUSE_DATABASE"
 
 $CLICKHOUSE_CLIENT --query_id $query_id -q "
+    SET automatic_parallel_replicas_mode = 0;
+    SET parallel_replicas_for_non_replicated_merge_tree = 1;
+    SET parallel_replicas_index_analysis_only_on_coordinator = 1;
+    SET parallel_replicas_local_plan = 1;
+    SET use_query_condition_cache = 0;
+    SET distributed_index_analysis_for_non_shared_merge_tree = 1;
+    SET enable_parallel_replicas = 1;
+    SET distributed_index_analysis = 1;
+    SET distributed_index_analysis_only_on_coordinator = 1;
+    SET cluster_for_parallel_replicas = 'test_cluster_one_shard_two_replicas';
+    SET send_logs_level = 'error';
+
     SELECT sum(key)
     FROM test_in_dia
     WHERE key IN (SELECT key FROM test_in_dia WHERE key > 50000)
-    SETTINGS
-        automatic_parallel_replicas_mode = 0,
-        parallel_replicas_for_non_replicated_merge_tree = 1,
-        parallel_replicas_index_analysis_only_on_coordinator = 1,
-        parallel_replicas_local_plan = 1,
-        use_query_condition_cache = 0,
-        distributed_index_analysis_for_non_shared_merge_tree = 1,
-        enable_parallel_replicas = 1,
-        distributed_index_analysis = 1,
-        distributed_index_analysis_only_on_coordinator = 1,
-        cluster_for_parallel_replicas = 'parallel_replicas',
-        send_logs_level = 'error';
 "
 
 # Verify the total number of spawned queries is bounded (not quadratic).
-# For the parallel_replicas cluster:
-#   with fix: O(N) queries
-#   without fix: O(N^2) queries
+# With dynamic work distribution the local plan (zero network latency) may consume
+# all parts before the remote replica connects, causing the coordinator to cancel
+# the unused RemoteSource. In that case the worker data-reading query is never sent
+# and no query_log entry is created, so we only assert a bounded count and show
+# the deterministic queries (initial + index analysis).
 $CLICKHOUSE_CLIENT -q "
     SYSTEM FLUSH LOGS query_log;
 
-    SELECT
-        if (count() >= 3 AND count() <= 20, 'OK', format('Expected 3-20 queries, got {}', count())) AS queries_with_subqueries,
-        anyIf(ProfileEvents['DistributedIndexAnalysisScheduledReplicas'] > 0, is_initial_query) AS used_distributed_index_analysis
+    -- Total query count must be bounded, not quadratic.
+    SELECT if (count() BETWEEN 3 AND 5, 'OK', format('Expected 3-5 queries, got {}', count())) AS result
     FROM system.query_log
     WHERE
         event_date >= yesterday() AND event_time >= now() - 600
         AND type = 'QueryFinish'
         AND query_kind = 'Select'
         AND initial_query_id = '$query_id'
-        -- Bypass style check. Database name is 'default' for queries on workers.
-        -- Database name is embedded in the query_id.
+        AND (current_database = currentDatabase() OR 1);
+
+    -- Deterministic queries: the initial query and index analysis queries.
+    SELECT
+        count(),
+        sum(ProfileEvents['DistributedIndexAnalysisScheduledReplicas']) > 0,
+        replaceOne(trimRight(normalizeQuery(any(query))), '\`?\`.', 'default.') AS normalized_query
+    FROM system.query_log
+    WHERE
+        event_date >= yesterday() AND event_time >= now() - 600
+        AND type = 'QueryFinish'
+        AND query_kind = 'Select'
+        AND initial_query_id = '$query_id'
         AND (current_database = currentDatabase() OR 1)
+        AND (is_initial_query OR query LIKE '%mergeTreeAnalyzeIndexes%')
+    GROUP BY
+        normalized_query_hash
+    ORDER BY normalized_query;
 "
 
 $CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS test_in_dia"

@@ -39,8 +39,7 @@ Chunk Squashing::flush()
     if (squash_with_strict_limits && !pending.empty() && pending.peekFront())
     {
         size_t rows = pending.peekFront().getNumRows();
-        size_t bytes = pending.peekFront().bytes();
-        auto result = pending.consumeUpTo(rows, bytes);
+        auto result = pending.consumeUpTo(rows);
         accumulated.append(std::move(result.chunk), result.rows, result.bytes, result.offset);
     }
 
@@ -126,16 +125,39 @@ void Squashing::add(Chunk && input_chunk)
 
 bool Squashing::canGenerate()
 {
+    if (squash_with_strict_limits)
+    {
+        size_t remaining_max_rows = max_block_size_rows
+            ? (accumulated.getRows() >= max_block_size_rows ? 0 : max_block_size_rows - accumulated.getRows())
+            : 0;
+        size_t remaining_max_bytes = max_block_size_bytes
+            ? (accumulated.getBytes() >= max_block_size_bytes ? 0 : max_block_size_bytes - accumulated.getBytes())
+            : 0;
+        size_t remaining_min_rows = accumulated.getRows() >= min_block_size_rows
+            ? 0 : min_block_size_rows - accumulated.getRows();
+        size_t remaining_min_bytes = accumulated.getBytes() >= min_block_size_bytes
+            ? 0 : min_block_size_bytes - accumulated.getBytes();
+
+        auto plan = pending.planConsumption(
+            remaining_max_rows, remaining_max_bytes,
+            remaining_min_rows, remaining_min_bytes);
+
+        size_t total_rows = accumulated.getRows() + plan.rows;
+        size_t total_bytes = accumulated.getBytes() + plan.bytes;
+
+        if (allMinReached(total_rows, total_bytes) || oneMaxReached(total_rows, total_bytes))
+        {
+            planned_generate_rows = plan.rows;
+            return true;
+        }
+        return false;
+    }
+
     size_t total_rows = accumulated.getRows() + pending.getRows();
     size_t total_bytes = accumulated.getBytes() + pending.getBytes();
 
     if (total_rows == 0 && total_bytes == 0)
         return false;
-
-    if (squash_with_strict_limits)
-    {
-        return allMinReached(total_rows, total_bytes) || oneMaxReached(total_rows, total_bytes);
-    }
     return oneMinReached(total_rows, total_bytes);
 }
 
@@ -146,8 +168,12 @@ Chunk Squashing::generate(bool flush_if_enough_size)
 
 Chunk Squashing::generateUsingStrictBounds()
 {
-    /// Consumes partial chunks if needed to respect max limits
-    while (!pending.empty())
+    chassert(planned_generate_rows > 0 && planned_generate_rows <= pending.getRows());
+
+    size_t rows_budget = planned_generate_rows;
+    planned_generate_rows = 0;
+
+    while (rows_budget > 0 && !pending.empty())
     {
         if (!pending.peekFront())
         {
@@ -155,27 +181,12 @@ Chunk Squashing::generateUsingStrictBounds()
             continue;
         }
 
-        /// Calculate remaining capacity until max limits
-        size_t remaining_rows = max_block_size_rows;
-        if (remaining_rows)
-            remaining_rows = (accumulated.getRows() >= remaining_rows) ? 0 : remaining_rows - accumulated.getRows();
-
-        size_t remaining_bytes = max_block_size_bytes;
-        if (remaining_bytes)
-            remaining_bytes = (accumulated.getBytes() >= remaining_bytes) ? 0 : remaining_bytes - accumulated.getBytes();
-
-        auto result = pending.consumeUpTo(remaining_rows, remaining_bytes);
-
-        chassert(result.rows);
-        chassert(result.bytes);
-
+        auto result = pending.consumeUpTo(rows_budget);
+        rows_budget -= result.rows;
         accumulated.append(std::move(result.chunk), result.rows, result.bytes, result.offset);
-
-        if (allMinReached() || oneMaxReached())
-           return convertToChunk();
     }
 
-    return {};
+    return convertToChunk();
 }
 
 Chunk Squashing::generateUsingOneMinBound(bool flush_if_enough_size)
@@ -469,27 +480,23 @@ Chunk Squashing::PendingQueue::pullFront()
     return result;
 }
 
-std::pair<size_t, size_t> Squashing::PendingQueue::calculateConsumable(size_t max_rows, size_t max_bytes) const
+Squashing::PendingQueue::ConsumptionPlan Squashing::PendingQueue::calculateConsumable(const Chunk & chunk, size_t offset, size_t max_rows, size_t max_bytes)
 {
-    if (chunks.empty())
-        return {0, 0};
+    size_t total_rows_in_chunk = chunk.getNumRows();
+    size_t total_bytes_in_chunk = chunk.bytes();
 
-    const Chunk & chunk = chunks.front();
-    size_t total_rows_front = chunk.getNumRows();
-    size_t total_bytes_front = chunk.bytes();
+    if (offset == 0 &&
+        (!max_rows || total_rows_in_chunk <= max_rows) &&
+        (!max_bytes || total_bytes_in_chunk <= max_bytes))
+        return {total_rows_in_chunk, total_bytes_in_chunk};
 
-    if (offset_first == 0 && 
-        (!max_rows || total_rows_front <= max_rows) && 
-        (!max_bytes || total_bytes_front <= max_bytes))
-        return {total_rows_front, total_bytes_front};
+    double bytes_per_row = total_rows_in_chunk != 0 ? static_cast<double>(total_bytes_in_chunk) / static_cast<double>(total_rows_in_chunk) : 0.;
+    chassert(total_rows_in_chunk > offset);
+    size_t available_rows = total_rows_in_chunk - offset;
 
-    double bytes_per_row = total_rows_front != 0 ? static_cast<double>(total_bytes_front) / static_cast<double>(total_rows_front) : 0.;
-    chassert(total_rows_front > offset_first);
-    size_t available_rows = total_rows_front - offset_first;
-
-    /// No limits: return entire available front chunk
+    /// No limits: return entire available portion of the chunk
     if (max_rows == 0 && max_bytes == 0)
-        return {available_rows, static_cast<size_t>((static_cast<double>(available_rows) * bytes_per_row))};
+        return {available_rows, static_cast<size_t>(static_cast<double>(available_rows) * bytes_per_row)};
 
     size_t rows_to_take = available_rows;
 
@@ -500,7 +507,6 @@ std::pair<size_t, size_t> Squashing::PendingQueue::calculateConsumable(size_t ma
     {
         size_t rows_by_bytes = static_cast<size_t>(static_cast<double>(max_bytes) / bytes_per_row);
 
-        /// Allow at least one row if empty and cannot add anymore bytes
         if (rows_by_bytes == 0 && max_bytes > 0)
             rows_by_bytes = 1;
 
@@ -509,39 +515,84 @@ std::pair<size_t, size_t> Squashing::PendingQueue::calculateConsumable(size_t ma
 
     auto bytes_to_take = static_cast<size_t>(static_cast<double>(rows_to_take) * bytes_per_row);
 
-    if (bytes_to_take == 0 && rows_to_take > 0 && total_bytes_front > 0)
+    if (bytes_to_take == 0 && rows_to_take > 0 && total_bytes_in_chunk > 0)
         bytes_to_take = 1;
 
     return {rows_to_take, bytes_to_take};
 }
 
-Squashing::PendingQueue::ConsumeResult Squashing::PendingQueue::consumeUpTo(size_t max_rows, size_t max_bytes)
+Squashing::PendingQueue::ConsumptionPlan Squashing::PendingQueue::planConsumption(
+    size_t max_rows, size_t max_bytes, size_t min_rows, size_t min_bytes) const
 {
-    /// Consume up to max_rows/max_bytes from the front chunk, respecting offset_first.
-    /// May return a partial chunk if limits are hit or offset is non-zero.
+    size_t simulated_rows = 0;
+    size_t simulated_bytes = 0;
+    size_t simulated_offset = offset_first;
 
-    auto [rows_to_take, bytes_to_take] = calculateConsumable(max_rows, max_bytes);
+    for (size_t i = 0; i < chunks.size(); )
+    {
+        if (simulated_rows >= min_rows && simulated_bytes >= min_bytes)
+            break;
+        if ((max_rows && simulated_rows >= max_rows) || (max_bytes && simulated_bytes >= max_bytes))
+            break;
 
+        const Chunk & chunk = chunks[i];
+        if (!chunk)
+        {
+            ++i;
+            continue;
+        }
+
+        size_t remaining_rows = max_rows ? max_rows - simulated_rows : 0;
+        size_t remaining_bytes = max_bytes ? max_bytes - simulated_bytes : 0;
+
+        auto [rows_to_take, bytes_to_take] = calculateConsumable(
+            chunk, simulated_offset, remaining_rows, remaining_bytes);
+
+        simulated_rows += rows_to_take;
+        simulated_bytes += bytes_to_take;
+
+        size_t available = chunk.getNumRows() - simulated_offset;
+        if (rows_to_take == available)
+        {
+            simulated_offset = 0;
+            ++i;
+        }
+        else
+        {
+            simulated_offset += rows_to_take;
+        }
+    }
+
+    return {simulated_rows, simulated_bytes};
+}
+
+Squashing::PendingQueue::ConsumeResult Squashing::PendingQueue::consumeUpTo(size_t rows_budget)
+{
     Chunk & front = chunks.front();
     size_t rows_in_front = front.getNumRows();
     chassert(rows_in_front);
     size_t available_rows = rows_in_front - offset_first;
-    chassert(available_rows >= rows_to_take);
-    bool exhaust_chunk = (available_rows == rows_to_take);
 
-    Chunk result_chunk;
+    size_t rows_to_take = std::min(rows_budget, available_rows);
+    bool exhaust_chunk = (rows_to_take == available_rows);
 
-    if (exhaust_chunk)
-    {
-        /// Optimization: take the whole chunk without cloning
-        result_chunk = pullFront();
-    }
+    size_t bytes_to_take;
+    if (exhaust_chunk && offset_first == 0)
+        bytes_to_take = front.bytes();
     else
     {
-       result_chunk = front.clone();
+        double bytes_per_row = static_cast<double>(front.bytes()) / static_cast<double>(rows_in_front);
+        bytes_to_take = static_cast<size_t>(rows_to_take * bytes_per_row);
     }
 
+    Chunk result_chunk;
     size_t offset_old = offset_first;
+
+    if (exhaust_chunk)
+        result_chunk = pullFront();
+    else
+        result_chunk = front.clone();
+
     offset_first = (offset_first + rows_to_take) % rows_in_front;
 
     return {std::move(result_chunk), rows_to_take, bytes_to_take, offset_old};

@@ -102,6 +102,12 @@ private:
         };
 
     public:
+        struct ConsumptionPlan
+        {
+            size_t rows = 0;
+            size_t bytes = 0;
+        };
+
         explicit PendingQueue(bool strict_limits_ = false) : strict_limits(strict_limits_) {}
 
         size_t getRows() const { return total_rows - offset_first; }
@@ -112,8 +118,9 @@ private:
         void pushBack(Chunk && chunk);
         size_t getOffset() const { return offset_first; }
         bool empty() const { return chunks.empty(); }
-        std::pair<size_t, size_t> calculateConsumable(size_t max_rows, size_t max_bytes) const;
-        ConsumeResult consumeUpTo(size_t max_rows, size_t max_bytes);
+        static ConsumptionPlan calculateConsumable(const Chunk & chunk, size_t offset, size_t max_rows, size_t max_bytes);
+        ConsumeResult consumeUpTo(size_t rows_budget);
+        ConsumptionPlan planConsumption(size_t max_rows, size_t max_bytes, size_t min_rows, size_t min_bytes) const;
 
     private:
 
@@ -132,7 +139,14 @@ private:
     const size_t min_block_size_bytes;
     const size_t max_block_size_rows;
     const size_t max_block_size_bytes;
+
+    /// When true, blocks are generated with both min and max size bounds enforced.
+    /// Strict mode requires the canGenerate:
+    ///     1. canGenerate pre-computes the exact row budget
+    //      2. generate consumes it.
+    /// Calling generate without a prior canGenerate is not supported in strict mode.
     const bool squash_with_strict_limits;
+    size_t planned_generate_rows = 0;
 
     Chunk generateUsingStrictBounds();
     Chunk generateUsingOneMinBound(bool flush_if_enough_size);

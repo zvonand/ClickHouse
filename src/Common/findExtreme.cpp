@@ -1,5 +1,6 @@
 #include <DataTypes/IDataType.h>
 #include <base/Decimal.h>
+#include <Common/NaNUtils.h>
 #include <Common/TargetSpecific.h>
 #include <Common/findExtreme.h>
 
@@ -152,46 +153,91 @@ findExtreme(const T * __restrict ptr, const UInt8 * __restrict condition_map [[m
     return std::nullopt;
 }
 
+/// The SIMD loop uses std::min/std::max which have broken NaN semantics:
+/// if the accumulator is NaN, it "sticks" (NaN < x is false, so NaN is never replaced).
+/// This post-processing fixes up a NaN result by rescanning for the actual non-NaN extreme.
+/// It only triggers when the SIMD result is NaN, which happens only when the first valid element was NaN.
+template <typename T, bool is_min, bool add_all_elements, bool add_if_cond_zero>
+static std::optional<T> fixupNaNResult(
+    std::optional<T> opt,
+    const T * __restrict ptr,
+    const UInt8 * __restrict condition_map [[maybe_unused]],
+    size_t start,
+    size_t end)
+{
+    if constexpr (!is_floating_point<T>)
+        return opt;
+    else
+    {
+        if (!opt.has_value() || !isNaN(*opt))
+            return opt;
+
+        /// SIMD returned NaN — find the actual extreme skipping NaN values
+        std::optional<T> result;
+        for (size_t i = start; i < end; ++i)
+        {
+            if constexpr (!add_all_elements)
+            {
+                if (!condition_map[i] != add_if_cond_zero)
+                    continue;
+            }
+            if (isNaN(ptr[i]))
+                continue;
+            if (!result.has_value()
+                || (is_min ? ptr[i] < *result : ptr[i] > *result))
+                result = ptr[i];
+        }
+        /// If no non-NaN found, return NaN (all values are NaN)
+        return result.has_value() ? result : opt;
+    }
+}
+
 template <typename T>
 requires(has_find_extreme_implementation<T> || underlying_has_find_extreme_implementation<T>)
 std::optional<T> findExtremeMin(const T * __restrict ptr, size_t start, size_t end)
 {
-    return findExtreme<T, MinComparator<T>, true, false>(ptr, nullptr, start, end);
+    auto opt = findExtreme<T, MinComparator<T>, true, false>(ptr, nullptr, start, end);
+    return fixupNaNResult<T, true, true, false>(opt, ptr, nullptr, start, end);
 }
 
 template <typename T>
 requires(has_find_extreme_implementation<T> || underlying_has_find_extreme_implementation<T>)
 std::optional<T> findExtremeMinNotNull(const T * __restrict ptr, const UInt8 * __restrict condition_map, size_t start, size_t end)
 {
-    return findExtreme<T, MinComparator<T>, false, true>(ptr, condition_map, start, end);
+    auto opt = findExtreme<T, MinComparator<T>, false, true>(ptr, condition_map, start, end);
+    return fixupNaNResult<T, true, false, true>(opt, ptr, condition_map, start, end);
 }
 
 template <typename T>
 requires(has_find_extreme_implementation<T> || underlying_has_find_extreme_implementation<T>)
 std::optional<T> findExtremeMinIf(const T * __restrict ptr, const UInt8 * __restrict condition_map, size_t start, size_t end)
 {
-    return findExtreme<T, MinComparator<T>, false, false>(ptr, condition_map, start, end);
+    auto opt = findExtreme<T, MinComparator<T>, false, false>(ptr, condition_map, start, end);
+    return fixupNaNResult<T, true, false, false>(opt, ptr, condition_map, start, end);
 }
 
 template <typename T>
 requires(has_find_extreme_implementation<T> || underlying_has_find_extreme_implementation<T>)
 std::optional<T> findExtremeMax(const T * __restrict ptr, size_t start, size_t end)
 {
-    return findExtreme<T, MaxComparator<T>, true, false>(ptr, nullptr, start, end);
+    auto opt = findExtreme<T, MaxComparator<T>, true, false>(ptr, nullptr, start, end);
+    return fixupNaNResult<T, false, true, false>(opt, ptr, nullptr, start, end);
 }
 
 template <typename T>
 requires(has_find_extreme_implementation<T> || underlying_has_find_extreme_implementation<T>)
 std::optional<T> findExtremeMaxNotNull(const T * __restrict ptr, const UInt8 * __restrict condition_map, size_t start, size_t end)
 {
-    return findExtreme<T, MaxComparator<T>, false, true>(ptr, condition_map, start, end);
+    auto opt = findExtreme<T, MaxComparator<T>, false, true>(ptr, condition_map, start, end);
+    return fixupNaNResult<T, false, false, true>(opt, ptr, condition_map, start, end);
 }
 
 template <typename T>
 requires(has_find_extreme_implementation<T> || underlying_has_find_extreme_implementation<T>)
 std::optional<T> findExtremeMaxIf(const T * __restrict ptr, const UInt8 * __restrict condition_map, size_t start, size_t end)
 {
-    return findExtreme<T, MaxComparator<T>, false, false>(ptr, condition_map, start, end);
+    auto opt = findExtreme<T, MaxComparator<T>, false, false>(ptr, condition_map, start, end);
+    return fixupNaNResult<T, false, false, false>(opt, ptr, condition_map, start, end);
 }
 
 template <typename T>

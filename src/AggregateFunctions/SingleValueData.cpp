@@ -3,6 +3,7 @@
 #include <IO/ReadHelpers.h>
 #include <IO/WriteHelpers.h>
 #include <Common/Arena.h>
+#include <Common/NaNUtils.h>
 #include <Common/assert_cast.h>
 #include <Common/findExtreme.h>
 
@@ -219,69 +220,184 @@ void SingleValueDataFixed<T>::set(const SingleValueDataFixed<T> & to, Arena *)
 template <typename T>
 bool SingleValueDataFixed<T>::setIfSmaller(const T & to)
 {
-    if (!has_value || to < value)
+    if constexpr (is_floating_point<T>)
     {
-        has_value = true;
-        value = to;
-        return true;
+        if (isNaN(to))
+        {
+            /// Accept NaN only as the first value (so all-NaN produces NaN, not default)
+            if (!has_value) { has_value = true; value = to; return true; }
+            return false;
+        }
+        if (!has_value || isNaN(value) || to < value)
+        {
+            has_value = true;
+            value = to;
+            return true;
+        }
+        return false;
     }
-    return false;
+    else
+    {
+        if (!has_value || to < value)
+        {
+            has_value = true;
+            value = to;
+            return true;
+        }
+        return false;
+    }
 }
 
 template <typename T>
 bool SingleValueDataFixed<T>::setIfGreater(const T & to)
 {
-    if (!has_value || to > value)
+    if constexpr (is_floating_point<T>)
     {
-        has_value = true;
-        value = to;
-        return true;
+        if (isNaN(to))
+        {
+            if (!has_value) { has_value = true; value = to; return true; }
+            return false;
+        }
+        if (!has_value || isNaN(value) || to > value)
+        {
+            has_value = true;
+            value = to;
+            return true;
+        }
+        return false;
     }
-    return false;
+    else
+    {
+        if (!has_value || to > value)
+        {
+            has_value = true;
+            value = to;
+            return true;
+        }
+        return false;
+    }
 }
 
 template <typename T>
 bool SingleValueDataFixed<T>::setIfSmaller(const SingleValueDataFixed<T> & to, Arena * arena)
 {
-    if (to.has() && (!has() || to.value < value))
+    if constexpr (is_floating_point<T>)
     {
-        set(to, arena);
-        return true;
+        if (!to.has())
+            return false;
+        if (isNaN(to.value))
+        {
+            if (!has()) { set(to, arena); return true; }
+            return false;
+        }
+        if (!has() || isNaN(value) || to.value < value)
+        {
+            set(to, arena);
+            return true;
+        }
+        return false;
     }
-    return false;
+    else
+    {
+        if (to.has() && (!has() || to.value < value))
+        {
+            set(to, arena);
+            return true;
+        }
+        return false;
+    }
 }
 
 template <typename T>
 bool SingleValueDataFixed<T>::setIfGreater(const SingleValueDataFixed<T> & to, Arena * arena)
 {
-    if (to.has() && (!has() || to.value > value))
+    if constexpr (is_floating_point<T>)
     {
-        set(to, arena);
-        return true;
+        if (!to.has())
+            return false;
+        if (isNaN(to.value))
+        {
+            if (!has()) { set(to, arena); return true; }
+            return false;
+        }
+        if (!has() || isNaN(value) || to.value > value)
+        {
+            set(to, arena);
+            return true;
+        }
+        return false;
     }
-    return false;
+    else
+    {
+        if (to.has() && (!has() || to.value > value))
+        {
+            set(to, arena);
+            return true;
+        }
+        return false;
+    }
 }
 
 template <typename T>
 bool SingleValueDataFixed<T>::setIfSmaller(const IColumn & column, size_t row_num, Arena * arena)
 {
-    if (!has() || assert_cast<const ColVecType &>(column).getData()[row_num] < value)
+    if constexpr (is_floating_point<T>)
     {
-        set(column, row_num, arena);
-        return true;
+        T candidate = assert_cast<const ColVecType &>(column).getData()[row_num];
+        if (unlikely(!has_value))
+        {
+            set(column, row_num, arena);
+            return true;
+        }
+        /// Use IEEE 754: !(value <= candidate) is true when candidate < value OR value is NaN.
+        /// Combined with !isNaN(candidate), this gives "non-NaN candidate beats current value (even if NaN)"
+        /// with a single isNaN check instead of two.
+        if (!isNaN(candidate) && !(value <= candidate))
+        {
+            value = candidate;
+            return true;
+        }
+        return false;
     }
-    return false;
+    else
+    {
+        if (!has() || assert_cast<const ColVecType &>(column).getData()[row_num] < value)
+        {
+            set(column, row_num, arena);
+            return true;
+        }
+        return false;
+    }
 }
 
 template <typename T>
 bool SingleValueDataFixed<T>::setIfGreater(const IColumn & column, size_t row_num, Arena * arena)
 {
-    if (!has() || assert_cast<const ColVecType &>(column).getData()[row_num] > value)
+    if constexpr (is_floating_point<T>)
     {
-        set(column, row_num, arena);
-        return true;
+        T candidate = assert_cast<const ColVecType &>(column).getData()[row_num];
+        if (unlikely(!has_value))
+        {
+            set(column, row_num, arena);
+            return true;
+        }
+        /// !(value >= candidate) is true when candidate > value OR value is NaN.
+        if (!isNaN(candidate) && !(value >= candidate))
+        {
+            value = candidate;
+            return true;
+        }
+        return false;
     }
-    return false;
+    else
+    {
+        if (!has() || assert_cast<const ColVecType &>(column).getData()[row_num] > value)
+        {
+            set(column, row_num, arena);
+            return true;
+        }
+        return false;
+    }
 }
 
 template <typename T>
@@ -295,7 +411,19 @@ void SingleValueDataFixed<T>::setSmallest(const IColumn & column, size_t row_beg
     {
         std::optional<T> opt = findExtremeMin(vec.getData().data(), row_begin, row_end);
         if (opt.has_value())
+        {
+            if constexpr (is_floating_point<T>)
+            {
+                /// All values are NaN — setIfSmaller would reject NaN, so set directly
+                if (isNaN(*opt) && !has_value)
+                {
+                    has_value = true;
+                    value = *opt;
+                    return;
+                }
+            }
             setIfSmaller(*opt);
+        }
     }
     else
     {
@@ -315,7 +443,19 @@ void SingleValueDataFixed<T>::setGreatest(const IColumn & column, size_t row_beg
     {
         std::optional<T> opt = findExtremeMax(vec.getData().data(), row_begin, row_end);
         if (opt.has_value())
+        {
+            if constexpr (is_floating_point<T>)
+            {
+                /// All values are NaN — setIfGreater would reject NaN, so set directly
+                if (isNaN(*opt) && !has_value)
+                {
+                    has_value = true;
+                    value = *opt;
+                    return;
+                }
+            }
             setIfGreater(*opt);
+        }
     }
     else
     {
@@ -350,7 +490,18 @@ void SingleValueDataFixed<T>::setSmallestNotNullIf(
         }
 
         if (opt.has_value())
+        {
+            if constexpr (is_floating_point<T>)
+            {
+                if (isNaN(*opt) && !has_value)
+                {
+                    has_value = true;
+                    value = *opt;
+                    return;
+                }
+            }
             setIfSmaller(*opt);
+        }
     }
     else
     {
@@ -394,7 +545,18 @@ void SingleValueDataFixed<T>::setGreatestNotNullIf(
         }
 
         if (opt.has_value())
+        {
+            if constexpr (is_floating_point<T>)
+            {
+                if (isNaN(*opt) && !has_value)
+                {
+                    has_value = true;
+                    value = *opt;
+                    return;
+                }
+            }
             setIfGreater(*opt);
+        }
     }
     else
     {
@@ -426,9 +588,23 @@ std::optional<size_t> SingleValueDataFixed<T>::getSmallestIndex(const IColumn & 
     else
     {
         size_t index = row_begin;
-        for (size_t i = index + 1; i < row_end; i++)
-            if (vec.getData()[i] < vec.getData()[index])
-                index = i;
+        if constexpr (is_floating_point<T>)
+        {
+            /// Skip leading NaN values to find a non-NaN starting point
+            while (index < row_end && isNaN(vec.getData()[index]))
+                ++index;
+            if (index >= row_end)
+                return {row_begin}; /// All NaN, return first
+            for (size_t i = index + 1; i < row_end; i++)
+                if (!isNaN(vec.getData()[i]) && vec.getData()[i] < vec.getData()[index])
+                    index = i;
+        }
+        else
+        {
+            for (size_t i = index + 1; i < row_end; i++)
+                if (vec.getData()[i] < vec.getData()[index])
+                    index = i;
+        }
         return index;
     }
 }
@@ -447,9 +623,22 @@ std::optional<size_t> SingleValueDataFixed<T>::getGreatestIndex(const IColumn & 
     else
     {
         size_t index = row_begin;
-        for (size_t i = index + 1; i < row_end; i++)
-            if (vec.getData()[i] > vec.getData()[index])
-                index = i;
+        if constexpr (is_floating_point<T>)
+        {
+            while (index < row_end && isNaN(vec.getData()[index]))
+                ++index;
+            if (index >= row_end)
+                return {row_begin};
+            for (size_t i = index + 1; i < row_end; i++)
+                if (!isNaN(vec.getData()[i]) && vec.getData()[i] > vec.getData()[index])
+                    index = i;
+        }
+        else
+        {
+            for (size_t i = index + 1; i < row_end; i++)
+                if (vec.getData()[i] > vec.getData()[index])
+                    index = i;
+        }
         return index;
     }
 }
@@ -542,9 +731,34 @@ std::optional<size_t> SingleValueDataFixed<T>::getSmallestIndexNotNullIf(
         if (index >= row_end)
             return std::nullopt;
 
-        for (size_t i = index + 1; i < row_end; i++)
-            if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0) && (vec_data[i] < vec_data[index]))
-                index = i;
+        if constexpr (is_floating_point<T>)
+        {
+            /// Skip NaN values in the initial position
+            while (index < row_end && isNaN(vec_data[index]))
+            {
+                index++;
+                while (index < row_end && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
+                    index++;
+            }
+            if (index >= row_end)
+            {
+                /// All valid elements are NaN — return the first valid element
+                index = row_begin;
+                while ((index < row_end) && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
+                    index++;
+                return (index < row_end) ? std::optional<size_t>{index} : std::nullopt;
+            }
+            for (size_t i = index + 1; i < row_end; i++)
+                if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0)
+                    && !isNaN(vec_data[i]) && (vec_data[i] < vec_data[index]))
+                    index = i;
+        }
+        else
+        {
+            for (size_t i = index + 1; i < row_end; i++)
+                if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0) && (vec_data[i] < vec_data[index]))
+                    index = i;
+        }
         return {index};
     }
 }
@@ -636,9 +850,32 @@ std::optional<size_t> SingleValueDataFixed<T>::getGreatestIndexNotNullIf(
         if (index >= row_end)
             return std::nullopt;
 
-        for (size_t i = index + 1; i < row_end; i++)
-            if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0) && (vec_data[i] > vec_data[index]))
-                index = i;
+        if constexpr (is_floating_point<T>)
+        {
+            while (index < row_end && isNaN(vec_data[index]))
+            {
+                index++;
+                while (index < row_end && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
+                    index++;
+            }
+            if (index >= row_end)
+            {
+                index = row_begin;
+                while ((index < row_end) && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
+                    index++;
+                return (index < row_end) ? std::optional<size_t>{index} : std::nullopt;
+            }
+            for (size_t i = index + 1; i < row_end; i++)
+                if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0)
+                    && !isNaN(vec_data[i]) && (vec_data[i] > vec_data[index]))
+                    index = i;
+        }
+        else
+        {
+            for (size_t i = index + 1; i < row_end; i++)
+                if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0) && (vec_data[i] > vec_data[index]))
+                    index = i;
+        }
         return {index};
     }
 }
@@ -830,6 +1067,17 @@ void SingleValueDataFixed<T>::compileMinMax(llvm::IRBuilderBase & builder, llvm:
             should_change_after_comparison = b.CreateFCmpOGT(value_to_check, value);
     }
 
+    /// For floating point: NaN should never win the comparison.
+    /// should_change = !isNaN(value_to_check) && (isNaN(current_value) || ordered_comparison)
+    if constexpr (is_floating_point<T>)
+    {
+        auto * value_to_check_is_nan = b.CreateFCmpUNO(value_to_check, value_to_check);
+        auto * current_is_nan = b.CreateFCmpUNO(value, value);
+        should_change_after_comparison = b.CreateAnd(
+            b.CreateNot(value_to_check_is_nan),
+            b.CreateOr(current_is_nan, should_change_after_comparison));
+    }
+
     b.CreateCondBr(b.CreateOr(b.CreateNot(has_value_value), should_change_after_comparison), if_should_change, join_block);
 
     b.SetInsertPoint(if_should_change);
@@ -876,6 +1124,15 @@ void SingleValueDataFixed<T>::compileMinMaxMerge(
                     value_src, value_dst);
         else
             should_change_after_comparison = b.CreateFCmpOGT(value_src, value_dst);
+    }
+
+    if constexpr (is_floating_point<T>)
+    {
+        auto * src_is_nan = b.CreateFCmpUNO(value_src, value_src);
+        auto * dst_is_nan = b.CreateFCmpUNO(value_dst, value_dst);
+        should_change_after_comparison = b.CreateAnd(
+            b.CreateNot(src_is_nan),
+            b.CreateOr(dst_is_nan, should_change_after_comparison));
     }
 
     b.CreateCondBr(

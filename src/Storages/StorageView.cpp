@@ -139,7 +139,7 @@ ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage
     view_settings[Setting::max_result_bytes] = 0;
     view_settings[Setting::extremes] = false;
 
-    const auto & view_client_info =view_context->getClientInfo();
+    const auto & view_client_info = view_context->getClientInfo();
     if (view_client_info.query_kind == ClientInfo::QueryKind::SECONDARY_QUERY)
         view_settings[Setting::enable_positional_arguments] = true;
 

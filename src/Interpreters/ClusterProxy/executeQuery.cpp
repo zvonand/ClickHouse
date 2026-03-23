@@ -258,6 +258,8 @@ ContextMutablePtr updateSettingsAndClientInfoForCluster(const Cluster & cluster,
     if (context->canUseOffsetParallelReplicas())
         new_settings[Setting::serialize_query_plan] = false;
 
+    /// Disable positional arguments since they are already resolved for the query except views.
+    /// Views on remote nodes handle this on their own
     new_settings[Setting::enable_positional_arguments] = false;
 
     auto new_context = Context::createCopy(context);

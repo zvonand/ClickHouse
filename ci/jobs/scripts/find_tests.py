@@ -157,15 +157,6 @@ class Targeting:
     # tests are exercising the same interface, not merely a related file.
     INDIRECT_CALL_WIDTH = 3000
 
-    # Synthetic width for tests found via symbol-level coverage (checks_coverage_inverted).
-    # Used as a fallback when line-level coverage returns no results for a file.
-    # Ranked between indirect-call and sibling-dir because it signals that the test
-    # exercised a function defined in the changed file.
-    SYMBOL_FALLBACK_WIDTH = 5000
-
-    # Pass weight for symbol-level fallback (between indirect and sibling).
-    PASS_WEIGHT_SYMBOL = 0.2
-
     # Synthetic width assigned to tests found via same-directory sibling file
     # expansion (secondary pass).  Must be >> NARROW_REGION_MAX_LINES so they
     # never get the narrow-tier bonus and always rank below direct hits.
@@ -443,17 +434,6 @@ class Targeting:
                 (t, w, d, rc, self.PASS_WEIGHT_DIRECT) for t, (w, d, rc) in sorted(by_test.items())
             ]
 
-        # Record which C++ files had zero direct coverage BEFORE secondary passes
-        # (broad-tier2, sibling, indirect) inject additional tests.  This is used
-        # later to decide whether to run the symbol-level fallback.
-        zero_direct_coverage_files = {
-            f
-            for (f, _), pairs in result.items()
-            if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
-            and (f.endswith(".cpp") or f.endswith(".h"))
-            and not pairs
-        }
-
         # Inject broad-tier2 tests into coverage results.
         # Tests are injected into the first coverage-tracked changed line only.
         # The effective width is inversely proportional to cov_regions so that
@@ -523,64 +503,6 @@ class Targeting:
                             self.INDIRECT_CALL_WIDTH // max(1, shared_count),
                         )
                         result[key].append((t, effective_width, 255, 1, self.PASS_WEIGHT_INDIRECT))
-
-        # --- Quaternary pass: symbol-level fallback via checks_coverage_inverted ---
-        # Only run when line-level coverage returned fewer than 50 unique tests
-        # (indicates infrastructure files where most regions are above the cap)
-        # or when some C++ files had zero coverage.  Skip otherwise to save the
-        # ~10s query cost.  Also skip if we have already spent more than 10s to
-        # stay within the 20s total budget.
-        # Count unique tests excluding broad-tier2 injections so that the
-        # symbol-fallback trigger is not inflated by thousands of very-broad tests.
-        # Broad-tier2 tests use PASS_WEIGHT_BROAD_TIER2; exclude those.
-        current_unique = len({
-            t for pairs in result.values() for t, *rest in pairs
-            if len(rest) < 4 or rest[3] != PASS_WEIGHT_BROAD_TIER2
-        })
-        elapsed_so_far = time.monotonic() - t0
-        # Use the pre-secondary-pass zero-coverage set (recorded above).
-        # Secondary passes (sibling, indirect) inject tests into ALL lines,
-        # masking which files had no direct line-level coverage.
-        # Run symbol-fallback only when line-level coverage is sparse:
-        # either fewer than 50 unique tests total, or some C++ files had
-        # zero direct coverage AND we don't already have abundant tests.
-        # When current_unique >= 50 and zero-coverage files exist, the line-level
-        # coverage from other files already provides sufficient signal — the 10s
-        # symbol query cost is not justified.
-        need_symbol = current_unique < 50 or (
-            bool(zero_direct_coverage_files) and current_unique < 200
-        )
-        run_symbol_fallback = need_symbol and elapsed_so_far < 10.0
-        if not run_symbol_fallback and need_symbol:
-            print(f"[find_tests] skipping symbol-fallback (elapsed={elapsed_so_far:.1f}s > 10s budget)")
-        elif not run_symbol_fallback and (current_unique < 50 or bool(zero_direct_coverage_files)):
-            print(f"[find_tests] skipping symbol-fallback (current_unique={current_unique} >= 200, enough coverage)")
-        # Pass zero_direct_coverage_files so the symbol query only searches
-        # class names from files without line-level coverage — avoids expensive
-        # broad queries for files like Client.cpp that already have good coverage.
-        symbol_tests = (
-            self._query_symbol_fallback_tests(
-                files_to_lines, result,
-                zero_coverage_files=zero_direct_coverage_files or None,
-            )
-            if run_symbol_fallback
-            else {}
-        )
-        if symbol_tests:
-            for key in result:
-                fname, _ = key
-                if not any(fname.startswith(p) for p in COVERAGE_TRACKED_PREFIXES):
-                    continue
-                existing = {e[0] for e in result[key]}
-                for t, matched_symbols in symbol_tests.items():
-                    if t not in existing:
-                        effective_width = max(
-                            self.NARROW_REGION_MAX_LINES + 1,
-                            self.SYMBOL_FALLBACK_WIDTH // max(1, matched_symbols),
-                        )
-                        result[key].append(
-                            (t, effective_width, 255, 1, self.PASS_WEIGHT_SYMBOL)
-                        )
 
         total_unique_tests = len({t for pairs in result.values() for t, *_ in pairs})
         lines_with_tests = sum(1 for (f, _), pairs in result.items() if pairs and any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES))
@@ -667,121 +589,6 @@ class Targeting:
             )
         ]
         return specific
-
-    def _query_symbol_fallback_tests(
-        self, files_to_lines: dict, primary_result: dict,
-        zero_coverage_files: set | None = None,
-    ) -> dict:
-        """
-        Symbol-level fallback: query `checks_coverage_inverted` for tests that
-        exercise functions defined in the changed files.  This complements the
-        line-level coverage query for files where many regions exceed the
-        MAX_TESTS_PER_LINE threshold (infrastructure-heavy files) or where
-        line-level coverage data is absent.
-
-        The symbol table stores mangled C++ names like `DB::RemoteQueryExecutor::cancel`.
-        We extract the class/struct name from the changed filename (e.g.
-        "RemoteQueryExecutor" from "RemoteQueryExecutor.cpp") and search for
-        symbols containing that class name.
-
-        When `zero_coverage_files` is provided, only those files are used for
-        class name extraction — this avoids querying broad symbols for files
-        that already have good line-level coverage.
-
-        Returns {test_name -> symbol_match_count} for tests NOT already in
-        primary_result.
-        """
-        import time
-
-        primary_tests = {t for pairs in primary_result.values() for t, *_ in pairs}
-
-        # Extract class names from changed C++ filenames.
-        # When zero_coverage_files is given, restrict to only those files.
-        target_files = zero_coverage_files if zero_coverage_files else set(files_to_lines)
-        class_names: list = []
-        for f in sorted(target_files):
-            if not (f.endswith(".cpp") or f.endswith(".h")):
-                continue
-            basename = f.rsplit("/", 1)[-1]
-            stem = basename.rsplit(".", 1)[0]
-            # Skip very short names and generic filenames
-            if len(stem) < 4 or stem.lower() in (
-                "main", "config", "common", "utils", "types", "defines",
-                "settings", "context", "block", "column", "field",
-            ):
-                continue
-            class_names.append(stem)
-
-        if not class_names:
-            return {}
-
-        # Build LIKE conditions for symbol names: symbol LIKE '%ClassName%'
-        # Limit to 8 class names to keep query size reasonable.
-        class_names = list(dict.fromkeys(class_names))[:8]
-        symbol_conds = " OR ".join(
-            f"symbol LIKE '%{self._escape_sql_string(cn)}%'"
-            for cn in class_names
-        )
-
-        # Build NOT IN exclusion for primary tests, but cap at 500 to prevent
-        # HTTP field-length errors.
-        primary_for_exclusion = set()
-        for pairs in primary_result.values():
-            for entry in pairs:
-                t = entry[0]
-                rc = entry[3] if len(entry) > 3 else 1
-                pw = entry[4] if len(entry) > 4 else 1.0
-                if rc <= self.MAX_TESTS_PER_LINE and pw >= self.PASS_WEIGHT_INDIRECT:
-                    primary_for_exclusion.add(t)
-        if len(primary_for_exclusion) > 500:
-            primary_for_exclusion = set(sorted(primary_for_exclusion)[:500])
-
-        if primary_for_exclusion:
-            escaped_primary = ", ".join(
-                f"'{self._escape_sql_string(t)}'" for t in sorted(primary_for_exclusion)
-            )
-            not_primary = f"AND test_name NOT IN ({escaped_primary})"
-        else:
-            not_primary = ""
-
-        query = f"""
-        SELECT test_name, count(DISTINCT symbol) AS matched_symbols
-        FROM checks_coverage_inverted
-        WHERE check_start_time > now() - interval 3 days
-          AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
-          AND notEmpty(test_name)
-          AND ({symbol_conds})
-          {not_primary}
-        GROUP BY test_name
-        ORDER BY matched_symbols DESC
-        LIMIT 200
-        """
-
-        try:
-            cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
-            t0 = time.monotonic()
-            raw = cidb.query(query, log_level="")
-            elapsed = time.monotonic() - t0
-        except Exception as e:
-            print(f"[find_tests] symbol-fallback query failed (non-fatal): {e}")
-            return {}
-
-        result_map: dict = {}
-        for row in raw.strip().splitlines():
-            parts = row.split("\t", 1)
-            if len(parts) == 2 and parts[0].strip():
-                try:
-                    result_map[parts[0].strip()] = int(parts[1].strip())
-                except ValueError:
-                    pass
-
-        if result_map:
-            print(
-                f"[find_tests] symbol-fallback query: {elapsed:.2f}s, "
-                f"{len(result_map)} additional test candidates via symbol matching "
-                f"(classes={class_names}, top matched={max(result_map.values())})"
-            )
-        return result_map
 
     def _query_indirect_call_tests(self, primary_result: dict) -> dict:
         """

@@ -301,7 +301,9 @@ std::vector<IndirectCallEntry> getCurrentIndirectCalls()
     /// stable file-relative offset that stays constant across ASLR restarts for the
     /// same binary build, enabling cross-run joins in the coverage database.
     extern char __executable_start; // NOLINT — linker-defined symbol
-    const uintptr_t load_base = reinterpret_cast<uintptr_t>(&__executable_start);
+    extern char __etext;            // NOLINT — linker-defined end-of-text symbol
+    const uintptr_t load_base  = reinterpret_cast<uintptr_t>(&__executable_start);
+    const uintptr_t text_end   = reinterpret_cast<uintptr_t>(&__etext);
 
     const LLVMProfileData * begin = __llvm_profile_begin_data(); // NOLINT
     const LLVMProfileData * end   = __llvm_profile_end_data();   // NOLINT
@@ -326,11 +328,17 @@ std::vector<IndirectCallEntry> getCurrentIndirectCalls()
             {
                 if (node->count == 0 || node->value == 0)
                     continue;
-                const uint64_t offset = (load_base && node->value > load_base)
-                                        ? node->value - load_base
-                                        : node->value;
-                result.push_back({data->NameRef, data->FuncHash, offset, node->count});
                 node->count = 0; /// reset for next test — prevents cross-test accumulation
+                /// Only record callees that lie within the main binary's text segment.
+                /// Shared-library callees (glibc, libstdc++, etc.) have ASLR addresses
+                /// that differ across machines and restarts, making them useless as join
+                /// keys in the coverage database.  Skipping them also avoids storing
+                /// ubiquitous functions like operator new or pthread_mutex_lock that
+                /// match every test and carry no targeting signal.
+                if (node->value < load_base || node->value >= text_end)
+                    continue;
+                const uint64_t offset = node->value - load_base;
+                result.push_back({data->NameRef, data->FuncHash, offset, node->count});
             }
         }
     }

@@ -25,6 +25,7 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PersistentTableComponents.h>
 #include <base/getThreadId.h>
 #include <base/types.h>
+#include <boost/algorithm/string/trim.hpp>
 #include <Poco/Dynamic/Var.h>
 #include <Poco/JSON/Array.h>
 #include <Poco/JSON/Object.h>
@@ -273,6 +274,7 @@ bool writeMetadataFileAndVersionHint(
             {
                 auto [object_data, object_metadata] = object_storage->readSmallObjectAndGetObjectMetadata(object_info, context->getReadSettings(), MAX_HINT_FILE_SIZE);
                 version_hint_value = object_data;
+                boost::algorithm::trim(version_hint_value);
                 etag = object_metadata.etag;
                 write_if_none_match.clear();
             }

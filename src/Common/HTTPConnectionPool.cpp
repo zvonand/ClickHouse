@@ -619,26 +619,10 @@ public:
 
             wipeExpiredImpl(expired_connections);
 
-            while (!stored_connections.empty())
+            if (!stored_connections.empty())
             {
-                auto it = stored_connections.top();
+                reused_connection = stored_connections.top();
                 stored_connections.pop();
-
-                /// Check if the server has already closed this connection (sent FIN/RST).
-                /// This catches the case where the server's actual keep-alive timeout is shorter
-                /// than what the pool assumes (e.g. S3 closes idle connections after ~5s while our
-                /// pool may assume 30s).
-                if (isStale(*it))
-                {
-                    it->markAsExpired();
-                    expired_connections.push_back(it);
-                    ProfileEvents::increment(getMetrics().expired, 1);
-                    CurrentMetrics::sub(getMetrics().stored_count, 1);
-                    continue;
-                }
-
-                reused_connection = it;
-                break;
             }
         }
 
@@ -695,7 +679,7 @@ public:
         {
             auto connection = stored_connections.top();
 
-            if (!isExpired(connection, isSoftLimitReached))
+            if (!isExpired(connection, isSoftLimitReached) && !isStale(*connection))
                 return stored_connections.size();
 
             stored_connections.pop();

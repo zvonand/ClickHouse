@@ -1214,7 +1214,8 @@ std::optional<MutationCommand> AlterCommand::tryConvertToMutationCommand(Storage
         /// Even though this command doesn't require a mutation, we still need to apply it
         /// to the metadata so that subsequent commands see the updated state. For example,
         /// ADD COLUMN followed by RENAME COLUMN needs the new column to be visible.
-        apply(metadata, context);
+        if (!ignore)
+            apply(metadata, context);
         return {};
     }
 
@@ -1874,6 +1875,11 @@ static MutationCommand createMaterializeTTLCommand()
 
 MutationCommands AlterCommands::getMutationCommands(StorageInMemoryMetadata metadata, bool materialize_ttl, ContextPtr context, bool with_alters) const
 {
+    /// Save a copy of the original metadata before applying commands.
+    /// We need it for isTTLAlter check below, because apply() updates TTL in metadata,
+    /// making it impossible to detect TTL changes afterwards.
+    const StorageInMemoryMetadata original_metadata = metadata;
+
     MutationCommands result;
     for (const auto & alter_cmd : *this)
     {
@@ -1891,7 +1897,7 @@ MutationCommands AlterCommands::getMutationCommands(StorageInMemoryMetadata meta
     {
         for (const auto & alter_cmd : *this)
         {
-            if (alter_cmd.isTTLAlter(metadata))
+            if (alter_cmd.isTTLAlter(original_metadata))
             {
                 result.push_back(createMaterializeTTLCommand());
                 break;

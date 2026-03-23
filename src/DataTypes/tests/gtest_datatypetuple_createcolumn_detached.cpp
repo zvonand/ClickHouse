@@ -25,7 +25,7 @@ TEST(DataTypeTupleCreateColumn, HandlesSerializationDetached)
     auto tuple_type = std::make_shared<DataTypeTuple>(DataTypes{int32_type, int32_type});
 
     auto default_serialization = tuple_type->getDefaultSerialization();
-    auto detached_serialization = std::make_shared<SerializationDetached>(default_serialization);
+    auto detached_serialization = SerializationDetached::create(default_serialization);
 
     /// Before the fix this threw LOGICAL_ERROR (abort in debug/ASan builds).
     /// After the fix it calls createColumn(*nested) and returns a valid Tuple column.

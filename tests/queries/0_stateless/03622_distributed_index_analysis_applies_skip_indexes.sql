@@ -17,6 +17,8 @@ set use_statistics_for_part_pruning=0;
 -- Parallel replicas changes EXPLAIN output
 set allow_experimental_parallel_reading_from_replicas=0;
 set allow_experimental_analyzer=1;
+set query_plan_optimize_prewhere=1;
+set optimize_move_to_prewhere=1;
 
 -- { echo }
 explain indexes=1 select * from test_1m where value > 800_000*100 settings distributed_index_analysis=0;

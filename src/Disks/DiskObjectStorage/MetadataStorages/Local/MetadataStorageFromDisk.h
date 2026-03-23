@@ -30,7 +30,8 @@ private:
     const std::string compatible_key_prefix;
     const ObjectStorageKeyGeneratorPtr key_generator;
 
-    InMemoryRemovalQueue objects_to_remove;
+    std::mutex removed_objects_mutex;
+    InMemoryRemovalQueue objects_to_remove TSA_GUARDED_BY(removed_objects_mutex);
 
 public:
     MetadataStorageFromDisk(DiskPtr disk_, String compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_);

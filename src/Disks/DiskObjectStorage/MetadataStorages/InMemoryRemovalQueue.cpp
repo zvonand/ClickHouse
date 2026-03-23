@@ -5,7 +5,6 @@ namespace DB
 
 void InMemoryRemovalQueue::submitForRemoval(const StoredObjects & blobs)
 {
-    std::lock_guard guard(mutex);
     for (const auto & blob : blobs)
     {
         if (index.contains(blob))
@@ -19,8 +18,6 @@ void InMemoryRemovalQueue::submitForRemoval(const StoredObjects & blobs)
 
 StoredObjects InMemoryRemovalQueue::takeFirst(int64_t max_count) const
 {
-    std::lock_guard guard(mutex);
-
     StoredObjects result;
     for (const auto & [slot, blob] : queue)
     {
@@ -35,8 +32,6 @@ StoredObjects InMemoryRemovalQueue::takeFirst(int64_t max_count) const
 
 int64_t InMemoryRemovalQueue::markAsRemoved(const StoredObjects & blobs)
 {
-    std::lock_guard guard(mutex);
-
     int64_t count = 0;
     for (const auto & blob : blobs)
     {
@@ -53,8 +48,6 @@ int64_t InMemoryRemovalQueue::markAsRemoved(const StoredObjects & blobs)
 
 bool InMemoryRemovalQueue::containsAny(const StoredObjects & blobs) const
 {
-    std::lock_guard guard(mutex);
-
     for (const auto & blob : blobs)
         if (index.contains(blob))
             return true;

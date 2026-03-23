@@ -147,6 +147,8 @@ uint32_t MetadataStorageFromDisk::getHardlinkCount(const std::string & path) con
 
 IMetadataStorage::BlobsToRemove MetadataStorageFromDisk::getBlobsToRemove(const ClusterConfigurationPtr & cluster, int64_t max_count)
 {
+    std::lock_guard guard(removed_objects_mutex);
+
     BlobsToRemove blobs_to_remove;
     for (const auto & blob : objects_to_remove.takeFirst(max_count))
         blobs_to_remove[blob] = {cluster->getLocalLocation()};
@@ -156,11 +158,13 @@ IMetadataStorage::BlobsToRemove MetadataStorageFromDisk::getBlobsToRemove(const 
 
 int64_t MetadataStorageFromDisk::recordAsRemoved(const StoredObjects & blobs)
 {
+    std::lock_guard guard(removed_objects_mutex);
     return objects_to_remove.markAsRemoved(blobs);
 }
 
 bool MetadataStorageFromDisk::hasPendingRemovalBlobs(const StoredObjects & blobs) const
 {
+    std::lock_guard guard(removed_objects_mutex);
     return objects_to_remove.containsAny(blobs);
 }
 
@@ -181,7 +185,10 @@ void MetadataStorageFromDiskTransaction::commit(const TransactionCommitOptionsVa
 
     operations.finalize();
 
-    metadata_storage.objects_to_remove.submitForRemoval(objects_to_remove);
+    {
+        std::lock_guard guard(metadata_storage.removed_objects_mutex);
+        metadata_storage.objects_to_remove.submitForRemoval(objects_to_remove);
+    }
 }
 
 TransactionCommitOutcomeVariant MetadataStorageFromDiskTransaction::tryCommit(const TransactionCommitOptionsVariant & options)

@@ -3,7 +3,6 @@
 #include <Disks/DiskObjectStorage/ObjectStorages/StoredObject.h>
 
 #include <map>
-#include <mutex>
 #include <unordered_map>
 
 namespace DB
@@ -28,7 +27,6 @@ public:
     bool containsAny(const StoredObjects & blobs) const;
 
 private:
-    mutable std::mutex mutex;
     int64_t next_slot = 0;
     std::map<int64_t, StoredObject> queue;
     std::unordered_map<StoredObject, int64_t> index;

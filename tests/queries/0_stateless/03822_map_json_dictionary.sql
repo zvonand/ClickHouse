@@ -730,8 +730,50 @@ SOURCE(CLICKHOUSE(
 LAYOUT(FLAT())
 LIFETIME(MIN 0 MAX 0);
 
--- Q4. Test dictionary queries with `Nullable(JSON)`
-SELECT '=== Testing Nullable(JSON) Dictionary ===' as test;
+-- Q4. Create `HASHED_ARRAY` dictionary with `Nullable(JSON)`
+CREATE DICTIONARY IF NOT EXISTS nullable_json_test_hashed_array
+(
+    id UInt64,
+    name String,
+    profile Nullable(JSON),
+    email Nullable(String)
+)
+PRIMARY KEY id
+SOURCE(CLICKHOUSE(
+    HOST '127.0.0.1'
+    PORT tcpPort()
+    USER 'default'
+    PASSWORD ''
+    DB currentDatabase()
+    TABLE 'nullable_json_test_source'
+))
+LAYOUT(HASHED_ARRAY())
+LIFETIME(MIN 0 MAX 0);
+
+-- Q5. Create `RANGE_HASHED` dictionary with `Nullable(JSON)`
+CREATE DICTIONARY IF NOT EXISTS nullable_json_test_range_hashed
+(
+    id UInt64,
+    start_date Date,
+    end_date Date,
+    name String,
+    profile Nullable(JSON)
+)
+PRIMARY KEY id
+SOURCE(CLICKHOUSE(
+    HOST '127.0.0.1'
+    PORT tcpPort()
+    USER 'default'
+    PASSWORD ''
+    DB currentDatabase()
+    TABLE 'mixed_test_source'
+))
+LAYOUT(RANGE_HASHED())
+LIFETIME(MIN 0 MAX 0)
+RANGE(MIN start_date MAX end_date);
+
+-- Q6. Test dictionary queries with `Nullable(JSON)` (`FLAT`)
+SELECT '=== Testing Nullable(JSON) Dictionary - FLAT ===' as test;
 SELECT
     number AS id,
     dictGet('nullable_json_test_flat', 'name', number) AS name,
@@ -740,14 +782,44 @@ SELECT
 FROM numbers(1, 4)
 ORDER BY id;
 
--- Q5. Test NULL value detection
-SELECT '=== Testing NULL Value Detection ===' as test;
+-- Q7. Test NULL value detection (`FLAT`)
+SELECT '=== Testing NULL Value Detection - FLAT ===' as test;
 SELECT
     number AS id,
     dictGet('nullable_json_test_flat', 'name', number) AS name,
     isNull(dictGet('nullable_json_test_flat', 'profile', number)) AS profile_is_null,
     isNull(dictGet('nullable_json_test_flat', 'email', number)) AS email_is_null
 FROM numbers(1, 4)
+ORDER BY id;
+
+-- Q8. Test NULL value detection (`HASHED_ARRAY`) including missing key materialization
+SELECT '=== Testing NULL Value Detection - HASHED_ARRAY ===' as test;
+SELECT
+    number AS id,
+    isNull(dictGet('nullable_json_test_hashed_array', 'profile', number)) AS profile_is_null,
+    toTypeName(dictGet('nullable_json_test_hashed_array', 'profile', number)) AS profile_type
+FROM numbers(1, 5)
+ORDER BY id;
+
+-- Q9. Test NULL value detection (`RANGE_HASHED`) including missing key materialization
+SELECT '=== Testing NULL Value Detection - RANGE_HASHED ===' as test;
+SELECT
+    id,
+    isNull(value) AS profile_is_null,
+    toTypeName(value) AS profile_type
+FROM
+(
+    SELECT
+        id,
+        dictGet('nullable_json_test_range_hashed', 'profile', id, dt) AS value
+    FROM
+    (
+        SELECT 1 AS id, toDate('2024-01-15') AS dt
+        UNION ALL SELECT 2, toDate('2024-02-15')
+        UNION ALL SELECT 3, toDate('2024-03-15')
+        UNION ALL SELECT 999, toDate('2024-03-15')
+    )
+)
 ORDER BY id;
 
 -- ============================================
@@ -840,6 +912,8 @@ DROP DICTIONARY IF EXISTS ip_trie_test_combined;
 DROP DICTIONARY IF EXISTS deep_json_test_flat;
 DROP DICTIONARY IF EXISTS deep_json_test_hashed;
 DROP DICTIONARY IF EXISTS nullable_json_test_flat;
+DROP DICTIONARY IF EXISTS nullable_json_test_hashed_array;
+DROP DICTIONARY IF EXISTS nullable_json_test_range_hashed;
 
 DROP TABLE IF EXISTS mixed_test_source;
 DROP TABLE IF EXISTS typed_json_dict_test_source;

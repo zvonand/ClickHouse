@@ -268,7 +268,7 @@ class Targeting:
         # etc.) are not completely invisible — the scoring formula already
         # penalises them via the 1/region_test_count denominator.  Only truly
         # ubiquitous regions (> HARD_CAP) are dropped to keep response size sane.
-        BROAD_REGION_HARD_CAP = 2000  # regions with more tests are infrastructure noise
+        BROAD_REGION_HARD_CAP = 2000  # scoring handles broad regions; very ubiquitous dropped
         query = f"""
         SELECT
             file,
@@ -422,14 +422,35 @@ class Targeting:
         # Only run when line-level coverage returned fewer than 50 unique tests
         # (indicates infrastructure files where most regions are above the cap)
         # or when some C++ files had zero coverage.  Skip otherwise to save the
-        # ~10s query cost.
+        # ~10s query cost.  Also skip if we have already spent more than 10s to
+        # stay within the 20s total budget.
         current_unique = len({t for pairs in result.values() for t, *_ in pairs})
+        elapsed_so_far = time.monotonic() - t0
         # Use the pre-secondary-pass zero-coverage set (recorded above).
         # Secondary passes (sibling, indirect) inject tests into ALL lines,
         # masking which files had no direct line-level coverage.
-        run_symbol_fallback = current_unique < 50 or bool(zero_direct_coverage_files)
+        # Run symbol-fallback only when line-level coverage is sparse:
+        # either fewer than 50 unique tests total, or some C++ files had
+        # zero direct coverage AND we don't already have abundant tests.
+        # When current_unique >= 50 and zero-coverage files exist, the line-level
+        # coverage from other files already provides sufficient signal — the 10s
+        # symbol query cost is not justified.
+        need_symbol = current_unique < 50 or (
+            bool(zero_direct_coverage_files) and current_unique < 200
+        )
+        run_symbol_fallback = need_symbol and elapsed_so_far < 10.0
+        if not run_symbol_fallback and need_symbol:
+            print(f"[find_tests] skipping symbol-fallback (elapsed={elapsed_so_far:.1f}s > 10s budget)")
+        elif not run_symbol_fallback and (current_unique < 50 or bool(zero_direct_coverage_files)):
+            print(f"[find_tests] skipping symbol-fallback (current_unique={current_unique} >= 200, enough coverage)")
+        # Pass zero_direct_coverage_files so the symbol query only searches
+        # class names from files without line-level coverage — avoids expensive
+        # broad queries for files like Client.cpp that already have good coverage.
         symbol_tests = (
-            self._query_symbol_fallback_tests(files_to_lines, result)
+            self._query_symbol_fallback_tests(
+                files_to_lines, result,
+                zero_coverage_files=zero_direct_coverage_files or None,
+            )
             if run_symbol_fallback
             else {}
         )
@@ -526,7 +547,8 @@ class Targeting:
         return specific
 
     def _query_symbol_fallback_tests(
-        self, files_to_lines: dict, primary_result: dict
+        self, files_to_lines: dict, primary_result: dict,
+        zero_coverage_files: set | None = None,
     ) -> dict:
         """
         Symbol-level fallback: query `checks_coverage_inverted` for tests that
@@ -540,6 +562,10 @@ class Targeting:
         "RemoteQueryExecutor" from "RemoteQueryExecutor.cpp") and search for
         symbols containing that class name.
 
+        When `zero_coverage_files` is provided, only those files are used for
+        class name extraction — this avoids querying broad symbols for files
+        that already have good line-level coverage.
+
         Returns {test_name -> symbol_match_count} for tests NOT already in
         primary_result.
         """
@@ -548,8 +574,10 @@ class Targeting:
         primary_tests = {t for pairs in primary_result.values() for t, *_ in pairs}
 
         # Extract class names from changed C++ filenames.
+        # When zero_coverage_files is given, restrict to only those files.
+        target_files = zero_coverage_files if zero_coverage_files else set(files_to_lines)
         class_names: list = []
-        for f in sorted(files_to_lines):
+        for f in sorted(target_files):
             if not (f.endswith(".cpp") or f.endswith(".h")):
                 continue
             basename = f.rsplit("/", 1)[-1]
@@ -1108,7 +1136,14 @@ class Targeting:
         )
 
     def get_previously_failed_tests_with_info(self):
-        tests = self.get_previously_failed_tests()
+        try:
+            tests = self.get_previously_failed_tests()
+        except Exception as e:
+            print(
+                f"WARNING: Failed to get previously failed tests (best effort): {e}",
+                file=sys.stderr,
+            )
+            tests = []
         # TODO: add job name to the result.info
         info = f"Found {len(tests)} previously failed tests:\n"
         for test in tests[:200]:
@@ -1360,7 +1395,7 @@ class Targeting:
 
 
 if __name__ == "__main__":
-    # local run tests
+    # local run: use the same pipeline as CI (get_all_relevant_tests_with_info)
     parser = argparse.ArgumentParser(
         description="List tests covering changed lines for a PR by querying the coverage database."
     )
@@ -1375,103 +1410,9 @@ if __name__ == "__main__":
     info = InfoLocalTest()
     targeting = Targeting(info)
 
-    # Run the full ranking pipeline once (avoids double CIDB query).
-    # This includes: changed test detection, keyword fallback, sibling expansion.
-    changed_lines = targeting.get_changed_lines_from_diff()
-    line_to_tests = targeting.get_tests_by_changed_lines(changed_lines)
+    ranked, result = targeting.get_all_relevant_tests_with_info()
 
-    # Detect changed test files directly — same as the in-CI path.
-    changed_test_files = targeting.get_changed_tests()
-    if changed_test_files:
-        print(f"\nChanged test files ({len(changed_test_files)}):")
-        for t in changed_test_files:
-            print(f"  {t}")
-
-    print("\nNo tests found for lines:")
-    for (file, line), pairs in line_to_tests.items():
-        if pairs:
-            continue
-        print(f"{file}:{line} -> NOT FOUND")
-
-    # Apply the keyword fallback for zero-coverage C++ files (same logic as
-    # get_most_relevant_tests, but reusing the already-fetched line_to_tests).
-    COVERAGE_TRACKED_PREFIXES = ("src/", "programs/", "utils/", "base/")
-    cpp_with_zero_coverage = list(dict.fromkeys(
-        f for f, ln in changed_lines
-        if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
-        and (f.endswith(".cpp") or f.endswith(".h"))
-        and not any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
-    ))
-    fallback_quads: list = []
-    if cpp_with_zero_coverage:
-        seen_fb2: set = set()
-        for f in cpp_with_zero_coverage:
-            for q in targeting._get_keyword_fallback_tests([f]):
-                if q[0] not in seen_fb2:
-                    seen_fb2.add(q[0]); fallback_quads.append(q)
-        if fallback_quads:
-            injected: set = set()
-            for f in cpp_with_zero_coverage:
-                for (ff, ln), pairs in line_to_tests.items():
-                    if ff == f and (ff, ln) not in injected:
-                        pairs.extend(fallback_quads)
-                        injected.add((ff, ln))
-                        break
-
-    # Supplementary keyword pass for C++ files WITH coverage (mirrors get_most_relevant_tests).
-    # Run per-file to preserve each file's domain keywords independently.
-    cpp_with_coverage = list(dict.fromkeys(
-        f for f, ln in changed_lines
-        if any(f.startswith(p) for p in COVERAGE_TRACKED_PREFIXES)
-        and (f.endswith(".cpp") or f.endswith(".h"))
-        and f not in cpp_with_zero_coverage
-        and any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
-    ))
-    if cpp_with_coverage:
-        seen_s: set = set()
-        all_supplement: list = []
-        for f in cpp_with_coverage:
-            for q in targeting._get_keyword_fallback_tests([f]):
-                if q[0] not in seen_s:
-                    seen_s.add(q[0]); all_supplement.append(q)
-        if all_supplement:
-            injected_s: set = set()
-            for f in cpp_with_coverage:
-                for (ff, ln), pairs in line_to_tests.items():
-                    if ff == f and (ff, ln) not in injected_s:
-                        existing = {q[0] for q in pairs}
-                        pairs.extend(q for q in all_supplement if q[0] not in existing)
-                        injected_s.add((ff, ln))
-                        break
-
-    print("\nTests found for lines:")
-    for (file, line), quads in line_to_tests.items():
-        if not quads:
-            continue
-        print(f"{file}:{line}:")
-        for test, width, depth, rc, pw in quads:
-            narrow_tag = "narrow" if width <= Targeting.NARROW_REGION_MAX_LINES else f"width={width}"
-            depth_tag = f"depth={depth}" if depth < 255 else "depth=?"
-            print(f" - {test}  [{narrow_tag}, {depth_tag}, pw={pw}]")
-
-    # quads is list of (test_name, region_width, min_depth, region_test_count, pass_weight)
-    all_tests: dict = {}  # test -> (min_width, min_depth, min_region_test_count)
-
-    # Seed with changed test files using perfect-signal sentinel values.
-    for t in changed_test_files:
-        all_tests[t] = (1, 0, 1)  # width=1, depth=0, rc=1 → always top-ranked
-
-    for quads in line_to_tests.values():
-        for t, w, d, rc, _pw in quads:
-            if t not in all_tests:
-                all_tests[t] = (w, d, rc)
-            else:
-                ow, od, orc = all_tests[t]
-                all_tests[t] = (min(ow, w), min(od, d), min(orc, rc))
-
-    print(f"\nAll selected tests ({len(all_tests)}):")
-    for test in sorted(all_tests):
-        w, d, rc = all_tests[test]
-        narrow_tag = "narrow" if w <= Targeting.NARROW_REGION_MAX_LINES else f"width={w}"
-        depth_tag = f"depth={d}" if d < 255 else "depth=?"
-        print(f" {test}  [{narrow_tag}, {depth_tag}, tests={rc}]")
+    print(f"\nAll selected tests ({len(ranked)}):")
+    for test in ranked:
+        print(f" {test}")
+    print(f"\n{result.info}")

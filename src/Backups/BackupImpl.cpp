@@ -98,11 +98,13 @@ namespace
     }
 
     /// Validate that a file name from a backup does not contain path traversal sequences.
-    /// This prevents a corrupted or tampered backup from writing files outside the intended directories during restore.
+    /// This prevents a corrupted or tampered backup from accessing files outside the intended directories during restore.
     void validateFileNameFromBackup(const String & file_name, const String & backup_name_for_logging)
     {
-        /// Reject absolute paths.
-        if (file_name.starts_with('/'))
+        fs::path path(file_name);
+
+        /// Reject absolute or rooted paths.
+        if (path.is_absolute() || path.has_root_name() || path.has_root_directory())
             throw Exception(
                 ErrorCodes::INSECURE_PATH,
                 "Backup {}: Entry name {} is an absolute path, which is not allowed",
@@ -110,9 +112,15 @@ namespace
                 quoteString(file_name));
 
         /// Normalize the path and check that it does not escape the backup root.
-        auto normalized = fs::path(file_name).lexically_normal();
-        if (normalized.empty())
-            return;
+        auto normalized = path.lexically_normal();
+
+        /// Reject empty or degenerate paths.
+        if (normalized.empty() || normalized == fs::path("."))
+            throw Exception(
+                ErrorCodes::BACKUP_DAMAGED,
+                "Backup {}: Entry name {} is empty or invalid",
+                backup_name_for_logging,
+                quoteString(file_name));
 
         /// After normalization, a path that escapes the root starts with "..".
         if (*normalized.begin() == "..")
@@ -573,6 +581,8 @@ void BackupImpl::readBackupMetadata()
                 if (info.size > info.base_size)
                 {
                     info.data_file_name = getString(file_config, "data_file", info.file_name);
+                    if (info.data_file_name != info.file_name)
+                        validateFileNameFromBackup(info.data_file_name, backup_name_for_logging);
                 }
                 info.encrypted_by_disk = getBool(file_config, "encrypted_by_disk", false);
             }

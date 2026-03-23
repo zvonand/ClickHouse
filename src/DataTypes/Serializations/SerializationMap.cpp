@@ -1,3 +1,4 @@
+#include <Common/SipHash.h>
 #include <DataTypes/Serializations/SerializationMap.h>
 
 #include <DataTypes/DataTypeMap.h>
@@ -24,7 +25,6 @@
 #include <Common/SipHash.h>
 #include <Common/assert_cast.h>
 
-
 namespace DB
 {
 
@@ -34,6 +34,15 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int TOO_LARGE_ARRAY_SIZE;
     extern const int INCORRECT_DATA;
+}
+
+UInt128 SerializationMap::getHash(const SerializationPtr & nested_, MergeTreeMapSerializationVersion serialization_version_)
+{
+    SipHash hash;
+    hash.update("Map");
+    hash.update(nested_->getHash());
+    hash.update(static_cast<UInt8>(serialization_version_));
+    return hash.get128();
 }
 
 SerializationMap::SerializationMap(
@@ -139,6 +148,17 @@ void SerializationMap::readMapSafe(DB::IColumn & column, std::function<void()> &
 
         throw;
     }
+}
+
+SerializationPtr SerializationMap::create(
+    const SerializationPtr & key_serialization_,
+    const SerializationPtr & value_serialization_,
+    const SerializationPtr & nested_serialization_,
+    MergeTreeMapSerializationVersion serialization_version_)
+{
+    if (!nested_serialization_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationMap(key_serialization_, value_serialization_, nested_serialization_, serialization_version_));
+    return ISerialization::pooled(getHash(nested_serialization_, serialization_version_), [&] { return new SerializationMap(key_serialization_, value_serialization_, nested_serialization_, serialization_version_); });
 }
 
 template <typename KeyWriter, typename ValueWriter>
@@ -555,7 +575,7 @@ struct KeysOrValuesSubcolumnCreator : public ISerialization::ISubcolumnCreator
     ColumnPtr create(const ColumnPtr & prev) const override { return nested_creator->create(prev); }
     SerializationPtr create(const SerializationPtr & prev, const DataTypePtr & type) const override
     {
-        return std::make_shared<SerializationMapKeysOrValues>(nested_creator->create(prev, type), serialization_version);
+        return SerializationMapKeysOrValues::create(nested_creator->create(prev, type), serialization_version);
     }
 };
 
@@ -600,8 +620,8 @@ void SerializationMap::enumerateStreams(
         /// and sums them to produce the total map size per row.
         settings.path.push_back(Substream::ArraySizes);
         auto subcolumn_name = "size" + std::to_string(settings.array_level);
-        auto array_size_serialization = std::make_shared<SerializationNamed>(std::make_shared<SerializationArrayOffsets>(), subcolumn_name, SubstreamType::NamedOffsets);
-        auto map_size_serialization = std::make_shared<SerializationMapSize>(array_size_serialization, serialization_version);
+        auto array_size_serialization = SerializationNamed::create(SerializationArrayOffsets::create(), subcolumn_name, SubstreamType::NamedOffsets);
+        auto map_size_serialization = SerializationMapSize::create(array_size_serialization, serialization_version);
         settings.path.back().data = SubstreamData(map_size_serialization)
             .withType(map_type ? std::make_shared<DataTypeUInt64>() : nullptr)
             .withColumn(map_column ? map_column->getNestedColumn().getOffsetsPtr() : nullptr);

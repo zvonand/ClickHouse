@@ -1,6 +1,7 @@
 #include <DataTypes/Serializations/SerializationMapSize.h>
 #include <DataTypes/Serializations/SerializationMap.h>
 #include <Columns/ColumnsNumber.h>
+#include <Common/SipHash.h>
 
 namespace DB
 {
@@ -16,6 +17,22 @@ SerializationMapSize::SerializationMapSize(
     : size_serialization(size_serialization_)
     , serialization_version(serialization_version_)
 {
+}
+
+UInt128 SerializationMapSize::getHash(const SerializationPtr & size_serialization_, MergeTreeMapSerializationVersion serialization_version_)
+{
+    SipHash hash;
+    hash.update("MapSize");
+    hash.update(size_serialization_->getHash());
+    hash.update(static_cast<UInt8>(serialization_version_));
+    return hash.get128();
+}
+
+SerializationPtr SerializationMapSize::create(const SerializationPtr & size_serialization_, MergeTreeMapSerializationVersion serialization_version_)
+{
+    if (!size_serialization_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationMapSize(size_serialization_, serialization_version_));
+    return ISerialization::pooled(getHash(size_serialization_, serialization_version_), [&] { return new SerializationMapSize(size_serialization_, serialization_version_); });
 }
 
 /// Deserialization state for the bucketed Map size subcolumn.

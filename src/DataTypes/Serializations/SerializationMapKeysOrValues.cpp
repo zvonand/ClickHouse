@@ -1,6 +1,7 @@
 #include <DataTypes/Serializations/SerializationMapKeysOrValues.h>
 #include <DataTypes/Serializations/SerializationMap.h>
 #include <Columns/ColumnArray.h>
+#include <Common/SipHash.h>
 
 namespace DB
 {
@@ -16,6 +17,22 @@ SerializationMapKeysOrValues::SerializationMapKeysOrValues(
     : keys_or_values_serialization(keys_or_values_serialization_)
     , serialization_version(serialization_version_)
 {
+}
+
+UInt128 SerializationMapKeysOrValues::getHash(const SerializationPtr & keys_or_values_serialization_, MergeTreeMapSerializationVersion serialization_version_)
+{
+    SipHash hash;
+    hash.update("MapKeysOrValues");
+    hash.update(keys_or_values_serialization_->getHash());
+    hash.update(static_cast<UInt8>(serialization_version_));
+    return hash.get128();
+}
+
+SerializationPtr SerializationMapKeysOrValues::create(const SerializationPtr & keys_or_values_serialization_, MergeTreeMapSerializationVersion serialization_version_)
+{
+    if (!keys_or_values_serialization_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationMapKeysOrValues(keys_or_values_serialization_, serialization_version_));
+    return ISerialization::pooled(getHash(keys_or_values_serialization_, serialization_version_), [&] { return new SerializationMapKeysOrValues(keys_or_values_serialization_, serialization_version_); });
 }
 
 /// Deserialization state for the bucketed Map keys/values subcolumn.

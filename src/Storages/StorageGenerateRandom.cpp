@@ -481,17 +481,15 @@ ColumnPtr fillColumnWithRandomData(
                 if (fuzzy)
                 {
                     appendFuzzyRandomString(data_to, max_string_length, rng);
-                    data_to.push_back('\0'); /// ColumnString requires null terminator after each string.
                     offset = data_to.size();
                 }
                 else
                 {
                     size_t length = rng() % (max_string_length + 1);    /// Slow
 
-                    IColumn::Offset next_offset = offset + length + 1;
+                    IColumn::Offset next_offset = offset + length;
                     data_to.resize(next_offset);
                     fillBufferWithRandomPrintableASCIIBytes(reinterpret_cast<char *>(data_to.data() + offset), length, rng);
-                    data_to[next_offset - 1] = 0; /// ColumnString requires null terminator after each string.
                     offset = next_offset;
                 }
                 offsets_to[row_num] = offset;

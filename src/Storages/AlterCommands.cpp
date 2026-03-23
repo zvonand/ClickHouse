@@ -1214,7 +1214,11 @@ std::optional<MutationCommand> AlterCommand::tryConvertToMutationCommand(Storage
         /// Even though this command doesn't require a mutation, we still need to apply it
         /// to the metadata so that subsequent commands see the updated state. For example,
         /// ADD COLUMN followed by RENAME COLUMN needs the new column to be visible.
-        apply(metadata, context);
+        /// We only apply column-affecting commands here to avoid side effects from other
+        /// command types (e.g. ADD STATISTICS may throw if the statistics type already
+        /// exists due to `auto_statistics_types`).
+        if (!ignore && (type == ADD_COLUMN || type == DROP_COLUMN || type == MODIFY_COLUMN))
+            apply(metadata, context);
         return {};
     }
 

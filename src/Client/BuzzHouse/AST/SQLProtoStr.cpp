@@ -2954,9 +2954,8 @@ CONV_FN(CTEquery, cteq)
     }
     TableToString(ret, false, cteq.table());
     ret += " AS ";
-    if (cteq.has_is_materialized())
+    if (cteq.is_materialized())
     {
-        ret += cteq.is_materialized() ? "" : "NOT ";
         ret += "MATERIALIZED ";
     }
     ret += "(";

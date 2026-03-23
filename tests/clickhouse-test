@@ -1880,6 +1880,191 @@ class TestCase:
 
         return description + "\n"
 
+    def _run_with_settings(self, args, suite, client_options, settings, mt_settings):
+        """Re-run this test with specific effective settings, returning the TestResult."""
+        saved_settings = self.effective_settings
+        saved_mt_settings = self.effective_merge_tree_settings
+        saved_runs_count = self.runs_count
+        self.effective_settings = settings
+        self.effective_merge_tree_settings = mt_settings
+        try:
+            result = self.run(args, suite, client_options)
+            # Don't let diagnosis reruns trigger further retries
+            result.need_retry = False
+            return result
+        finally:
+            self.effective_settings = saved_settings
+            self.effective_merge_tree_settings = saved_mt_settings
+            self.runs_count = saved_runs_count
+
+    def diagnose_random_settings(self, args, suite, client_options):
+        """Diagnose which randomized settings caused a test failure.
+
+        Algorithm:
+        1. Re-run with the same settings to confirm reproducibility.
+        2. Re-run without any randomization to confirm the failure is settings-related.
+        3. If step 1 fails and step 2 passes, minimize the settings via binary search
+           (delta debugging) to find the minimal set that triggers the failure.
+
+        Returns a diagnosis string to append to the test description.
+        """
+        failed_settings = dict(self.effective_settings)
+        failed_mt_settings = dict(self.effective_merge_tree_settings)
+
+        if not failed_settings and not failed_mt_settings:
+            return ""
+
+        diagnosis_lines = ["\n\n--- Randomized settings diagnosis ---"]
+
+        # Step 1: Re-run with the same settings
+        diagnosis_lines.append("Step 1: Re-running with the same randomized settings...")
+        result_same = self._run_with_settings(
+            args, suite, client_options, failed_settings, failed_mt_settings
+        )
+        if result_same.status != TestStatus.FAIL:
+            diagnosis_lines.append(
+                "Result: PASSED. The failure is not reproducible with the same settings (likely a transient issue)."
+            )
+            return "\n".join(diagnosis_lines) + "\n"
+
+        diagnosis_lines.append("Result: FAILED (failure is reproducible).")
+
+        # Step 2: Re-run without any randomization
+        diagnosis_lines.append("Step 2: Re-running without randomized settings...")
+        result_no_rand = self._run_with_settings(args, suite, client_options, {}, {})
+        if result_no_rand.status == TestStatus.FAIL:
+            diagnosis_lines.append(
+                "Result: FAILED. The test fails even without randomized settings (not a randomization issue)."
+            )
+            return "\n".join(diagnosis_lines) + "\n"
+
+        diagnosis_lines.append(
+            "Result: PASSED. Confirmed: the failure is caused by randomized settings."
+        )
+
+        # Step 3: Minimize settings via delta debugging
+        diagnosis_lines.append("Step 3: Minimizing settings to find the culprit(s)...")
+
+        culprit_settings = {}
+        culprit_mt_settings = {}
+
+        # Minimize regular settings
+        if failed_settings:
+            culprit_settings = self._minimize_settings(
+                args, suite, client_options,
+                failed_settings, failed_mt_settings,
+                is_merge_tree=False,
+            )
+
+        # Minimize MergeTree settings
+        if failed_mt_settings:
+            culprit_mt_settings = self._minimize_settings(
+                args, suite, client_options,
+                failed_settings, failed_mt_settings,
+                is_merge_tree=True,
+            )
+
+        if culprit_settings or culprit_mt_settings:
+            if culprit_settings:
+                diagnosis_lines.append(
+                    f"Culprit settings: {self.cli_format_settings(culprit_settings)}"
+                )
+            if culprit_mt_settings:
+                diagnosis_lines.append(
+                    f"Culprit MergeTree settings: {self.cli_format_settings(culprit_mt_settings)}"
+                )
+        else:
+            # Could not isolate — the failure requires the full combination
+            diagnosis_lines.append(
+                "Could not isolate individual culprit settings — the failure may require "
+                "the full combination of randomized settings."
+            )
+            if failed_settings:
+                diagnosis_lines.append(
+                    f"All randomized settings: {self.cli_format_settings(failed_settings)}"
+                )
+            if failed_mt_settings:
+                diagnosis_lines.append(
+                    f"All randomized MergeTree settings: {self.cli_format_settings(failed_mt_settings)}"
+                )
+
+        return "\n".join(diagnosis_lines) + "\n"
+
+    def _run_with_settings_for_category(
+        self, args, suite, client_options, settings, is_merge_tree,
+    ):
+        """Helper: run test with the given settings dict applied to the right category."""
+        if is_merge_tree:
+            return self._run_with_settings(args, suite, client_options, {}, settings)
+        else:
+            return self._run_with_settings(args, suite, client_options, settings, {})
+
+    def _minimize_settings(
+        self, args, suite, client_options,
+        all_settings, all_mt_settings, is_merge_tree,
+    ):
+        """Delta-debugging minimization for one settings category.
+
+        Uses a binary-search approach: split the settings in half, test each half,
+        then recurse into the failing half(s). When the set is small enough (<=4),
+        test each setting individually to find the exact culprit(s).
+
+        The other category (regular or MergeTree) is kept empty during minimization
+        to test each category independently.
+        """
+        target = dict(all_mt_settings if is_merge_tree else all_settings)
+
+        if not target:
+            return {}
+
+        keys = list(target.keys())
+
+        # Base case: small enough set — test each individually
+        if len(keys) <= 4:
+            culprits = {}
+            for key in keys:
+                single = {key: target[key]}
+                result = self._run_with_settings_for_category(
+                    args, suite, client_options, single, is_merge_tree,
+                )
+                if result.status == TestStatus.FAIL:
+                    culprits[key] = target[key]
+            return culprits
+
+        # Binary split
+        mid = len(keys) // 2
+        first_half = {k: target[k] for k in keys[:mid]}
+        second_half = {k: target[k] for k in keys[mid:]}
+
+        result_first = self._run_with_settings_for_category(
+            args, suite, client_options, first_half, is_merge_tree,
+        )
+        result_second = self._run_with_settings_for_category(
+            args, suite, client_options, second_half, is_merge_tree,
+        )
+
+        result = {}
+        if result_first.status == TestStatus.FAIL:
+            result.update(
+                self._minimize_settings(
+                    args, suite, client_options,
+                    first_half if not is_merge_tree else {},
+                    first_half if is_merge_tree else {},
+                    is_merge_tree,
+                )
+            )
+        if result_second.status == TestStatus.FAIL:
+            result.update(
+                self._minimize_settings(
+                    args, suite, client_options,
+                    second_half if not is_merge_tree else {},
+                    second_half if is_merge_tree else {},
+                    is_merge_tree,
+                )
+            )
+
+        return result
+
     def apply_random_settings_limits(self, random_settings):
         for setting in random_settings:
             if setting in self.random_settings_limits:
@@ -3703,6 +3888,20 @@ def run_tests_array(
                     break
                 restarted_tests.append(test_result)
 
+            # Diagnose which randomized settings caused the failure
+            if (
+                test_result
+                and test_result.status == TestStatus.FAIL
+                and args.diagnose_random_settings
+                and (test_case.effective_settings or test_case.effective_merge_tree_settings)
+                and test_result.reason != FailureReason.SERVER_DIED
+            ):
+                diagnosis = test_case.diagnose_random_settings(
+                    args, test_suite, client_options
+                )
+                if diagnosis:
+                    test_result.description += diagnosis
+
             # First print the description, than invoke the check result logic
             description += test_result.description
 
@@ -5064,6 +5263,12 @@ def parse_args():
         action="store_true",
         default=False,
         help="Disable MergeTree settings randomization",
+    )
+    parser.add_argument(
+        "--diagnose-random-settings",
+        action="store_true",
+        default=False,
+        help="When a test fails with randomized settings, diagnose which specific settings caused the failure",
     )
     parser.add_argument(
         "--llvm-coverage",

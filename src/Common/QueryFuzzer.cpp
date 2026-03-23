@@ -886,10 +886,16 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
                "allow_summing_columns_in_partition_or_order_key",
                "allow_suspicious_indices",
                "allow_vertical_merges_from_compact_to_wide_parts",
+               "compress_marks",
+               "compress_primary_key",
                "enable_block_number_column",
                "enable_block_offset_column",
+               "enable_mixed_granularity_parts",
                "enable_vertical_merge_algorithm",
-               "ttl_only_drop_parts"};
+               "prewarm_mark_cache",
+               "prewarm_primary_key_cache",
+               "ttl_only_drop_parts",
+               "use_primary_key_cache"};
 
         auto fuzz_setting = [&](const String & name, Field value)
         {
@@ -920,11 +926,15 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
         if (fuzz_rand() % 20 == 0)
             fuzz_setting("merge_max_block_size", UInt64(1) << (fuzz_rand() % 14));
         if (fuzz_rand() % 20 == 0)
+            fuzz_setting("merge_max_block_size_bytes", UInt64(1) << (fuzz_rand() % 14));
+        if (fuzz_rand() % 20 == 0)
             fuzz_setting("merge_with_ttl_timeout", Int64(fuzz_rand() % 7200));
         if (fuzz_rand() % 20 == 0)
             fuzz_setting("min_bytes_for_full_part_storage", UInt64(1) << (fuzz_rand() % 14));
         if (fuzz_rand() % 20 == 0)
             fuzz_setting("min_bytes_for_wide_part", UInt64(fuzz_rand() % 2));
+        if (fuzz_rand() % 20 == 0)
+            fuzz_setting("min_rows_for_wide_part", UInt64(fuzz_rand() % 2));
         if (fuzz_rand() % 20 == 0)
             fuzz_setting("nullable_serialization_version", String(fuzz_rand() % 2 == 0 ? "basic" : "allow_sparse"));
         if (fuzz_rand() % 20 == 0)
@@ -1235,24 +1245,33 @@ void QueryFuzzer::fuzzColumnDeclaration(ASTColumnDeclaration & column)
         if (codec_fn && codec_fn->name == "CODEC" && codec_fn->arguments && fuzz_rand() % 5 == 0)
         {
             codec_fn->arguments->children.clear();
+            /// No-argument codecs — select uniformly, then fall through to a compression codec.
+            static const Strings simple_codecs = {"NONE", "LZ4", "DoubleDelta", "Gorilla", "T64", "FPC", "GCD"};
             switch (fuzz_rand() % 4)
             {
                 case 0:
-                    codec_fn->arguments->children.push_back(makeASTFunction("NONE"));
+                    codec_fn->arguments->children.push_back(makeASTFunction(pickRandomly(fuzz_rand, simple_codecs)));
                     break;
                 case 1:
-                    codec_fn->arguments->children.push_back(makeASTFunction("LZ4"));
-                    break;
-                case 2:
                     codec_fn->arguments->children.push_back(
                         makeASTFunction("ZSTD", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 22 + 1))));
                     break;
-                case 3:
+                case 2:
                     codec_fn->arguments->children.push_back(
                         makeASTFunction("LZ4HC", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 12 + 1))));
                     break;
+                case 3:
+                    /// Delta(N): N in {1,2,4,8} bytes; no argument = auto-detect
+                    if (fuzz_rand() % 2 == 0)
+                        codec_fn->arguments->children.push_back(makeASTFunction("Delta"));
+                    else
+                    {
+                        static const UInt64 delta_sizes[] = {1, 2, 4, 8};
+                        codec_fn->arguments->children.push_back(
+                            makeASTFunction("Delta", make_intrusive<ASTLiteral>(delta_sizes[fuzz_rand() % 4])));
+                    }
+                    break;
                 default:
-                    /// Do nothing
                     break;
             }
         }
@@ -2321,7 +2340,19 @@ ASTPtr QueryFuzzer::generatePredicate()
                     }
                     next_condition = makeASTFunction(in_tuple_variants[fuzz_rand() % in_tuple_variants.size()], expression_1, tuple_func);
                 }
-                /// Fall back to a column comparison if no subquery was available (case 1) or for nprob >= 3
+                else if (nprob == 3 && !column_like.empty())
+                {
+                    /// col BETWEEN lo AND hi (as greaterOrEquals(col, lo) AND lessOrEquals(col, hi))
+                    ASTPtr lo = column_like[fuzz_rand() % column_like.size()].second->clone();
+                    ASTPtr hi = column_like[fuzz_rand() % column_like.size()].second->clone();
+                    lo = setIdentifierAliasOrNot(lo);
+                    hi = setIdentifierAliasOrNot(hi);
+                    next_condition = makeASTFunction(
+                        "and",
+                        makeASTFunction("greaterOrEquals", expression_1->clone(), lo),
+                        makeASTFunction("lessOrEquals", expression_1, hi));
+                }
+                /// Fall back to a column comparison if no subquery was available (case 1) or for nprob >= 4
                 if (!next_condition)
                 {
                     /// Pick any other column reference
@@ -2486,11 +2517,13 @@ void QueryFuzzer::fuzzJoinType(ASTTableJoin * table_join)
         if (table_join->is_natural)
         {
             auto & ch = table_join->children;
-            ch.erase(std::remove_if(ch.begin(), ch.end(), [&](const ASTPtr & c)
-            {
-                return c.get() == table_join->using_expression_list.get()
-                    || c.get() == table_join->on_expression.get();
-            }), ch.end());
+            ch.erase(
+                std::remove_if(
+                    ch.begin(),
+                    ch.end(),
+                    [&](const ASTPtr & c)
+                    { return c.get() == table_join->using_expression_list.get() || c.get() == table_join->on_expression.get(); }),
+                ch.end());
             table_join->using_expression_list.reset();
             table_join->on_expression.reset();
         }
@@ -2705,28 +2738,56 @@ ASTPtr QueryFuzzer::addArrayJoinClause()
 }
 
 static const std::map<size_t, Strings> swapAggrs
-    = {{1, {"any",          "anyHeavy",
-            "anyLast",      "anyRespectNulls",
-            "avg",          "count",
-            "deltaSum",     "entropy",
-            "first_value",  "groupArray",
-            "groupBitAnd",  "groupBitOr",
-            "groupBitXor",  "groupUniqArray",
-            "kurtPop",      "kurtSamp",
-            "last_value",   "max",
-            "median",       "min",
-            "rankCorr",     "singleValueOrNull",
-            "skewPop",      "skewSamp",
-            "stddevPop",    "stddevPopStable",
-            "stddevSamp",   "stddevSampStable",
-            "sum",          "sumCount",
-            "sumKahan",     "sumWithOverflow",
-            "topK",         "uniq",
-            "uniqCombined", "uniqCombined64",
-            "uniqExact",    "uniqHLL12",
-            "uniqTheta",    "varPop",
-            "varPopStable", "varSamp",
-            "varSampStable"}},
+    = {{1,
+        {"any",
+         "anyHeavy",
+         "anyLast",
+         "anyRespectNulls",
+         "avg",
+         "count",
+         "deltaSum",
+         "entropy",
+         "first_value",
+         "groupArray",
+         "groupBitAnd",
+         "groupBitOr",
+         "groupBitXor",
+         "groupUniqArray",
+         "kurtPop",
+         "kurtSamp",
+         "last_value",
+         "max",
+         "median",
+         "min",
+         "rankCorr",
+         "singleValueOrNull",
+         "skewPop",
+         "skewSamp",
+         "stddevPop",
+         "stddevPopStable",
+         "stddevSamp",
+         "stddevSampStable",
+         "sum",
+         "sumCount",
+         "sumKahan",
+         "sumWithOverflow",
+         "topK",
+         "uniq",
+         "uniqCombined",
+         "uniqCombined64",
+         "uniqExact",
+         "uniqHLL12",
+         "uniqTheta",
+         "varPop",
+         "varPopStable",
+         "varSamp",
+         "varSampStable",
+         "groupArrayIntersect",
+         "groupArrayLast",
+         "groupBitmapAnd",
+         "groupBitmapOr",
+         "groupBitmapXor",
+         "quantile"}},
        {2,
         {"argMax",
          "argMin",
@@ -2751,7 +2812,8 @@ static const std::map<size_t, Strings> swapAggrs
          "theilsU",
          "topKWeighted",
          "uniq",
-         "welchTTest"}}};
+         "welchTTest",
+         "simpleLinearRegression"}}};
 
 static const std::vector<std::unordered_set<String>> & swapFuncs
     = { /// String pattern matching operators
@@ -2761,7 +2823,7 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// Null predicate and conversion functions
         {"assumeNotNull", "isNotNull", "isNull", "isNullable", "isZeroOrNull", "toNullable"},
         /// Value selection / clamping / null-coalescing
-        {"clamp", "coalesce", "firstNonDefault", "greatest", "ifNull", "least"},
+        {"clamp", "coalesce", "firstNonDefault", "greatest", "ifNull", "least", "nullIf"},
         /// Comparison operators
         {"equals", "notEquals", "greater", "greaterOrEquals", "less", "lessOrEquals", "isNotDistinctFrom"},
         /// Arithmetic and string operators
@@ -2851,7 +2913,25 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// Floating-point type casts
         {"toBFloat16", "toFloat32", "toFloat64"},
         /// Date/datetime type casts
-        {"toDate", "toDate32", "toDateTime", "toDateTime32", "toDateTime64", "toTime", "toTime64"},
+        {"toDate",
+         "toDate32",
+         "toDateTime",
+         "toDateTime32",
+         "toDateTime64",
+         "toTime",
+         "toTime64",
+         "toDateOrNull",
+         "toDateOrZero",
+         "toDate32OrNull",
+         "toDate32OrZero",
+         "toDateTimeOrNull",
+         "toDateTimeOrZero",
+         "toTimeOrNull",
+         "toTimeOrZero",
+         "toDateOrDefault",
+         "toDate32OrDefault",
+         "toDateTimeOrDefault",
+         "toTimeOrDefault"},
         /// Rounding functions (number → number)
         {"ceil", "floor", "round", "roundBankers", "roundDown", "trunc"},
         /// Bitwise binary operators
@@ -2904,6 +2984,8 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
          "endsWithCaseInsensitiveUTF8"},
         /// Vector distance metrics
         {"cosineDistance", "L1Distance", "L2Distance", "L2SquaredDistance", "LinfDistance"},
+        /// Vector norms (single array → Float64)
+        {"L1Norm", "L2Norm", "L2SquaredNorm", "LinfNorm"},
         /// Array scalar reductions (array → scalar)
         {"arrayMin", "arrayMax", "arraySum", "arrayProduct", "arrayAvg", "arrayUniq"},
         /// Array transform functions (array → array)
@@ -2999,7 +3081,23 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         {"bitmapAnd", "bitmapOr", "bitmapXor", "bitmapAndnot"},
         /// IP address type casts (String → IPv4/IPv6)
         {"toIPv4", "toIPv4OrNull", "toIPv4OrZero"},
-        {"toIPv6", "toIPv6OrNull", "toIPv6OrZero"}};
+        {"toIPv6", "toIPv6OrNull", "toIPv6OrZero"},
+        /// Best-effort datetime parsers (string → DateTime/DateTime64; all accept 1 arg)
+        {"parseDateTimeBestEffort",
+         "parseDateTimeBestEffortOrNull",
+         "parseDateTimeBestEffortOrZero",
+         "parseDateTimeBestEffortUS",
+         "parseDateTimeBestEffortUSOrNull",
+         "parseDateTimeBestEffortUSOrZero",
+         "parseDateTime32BestEffort",
+         "parseDateTime32BestEffortOrNull",
+         "parseDateTime32BestEffortOrZero",
+         "parseDateTime64BestEffort",
+         "parseDateTime64BestEffortUS",
+         "parseDateTime64BestEffortOrNull",
+         "parseDateTime64BestEffortOrZero",
+         "parseDateTime64BestEffortUSOrNull",
+         "parseDateTime64BestEffortUSOrZero"}};
 
 void QueryFuzzer::fuzz(ASTPtr & ast)
 {

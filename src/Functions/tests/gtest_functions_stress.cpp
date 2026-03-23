@@ -1,9 +1,5 @@
 #include <gtest/gtest.h>
 
-#if defined(MEMORY_SANITIZER)
-#include <sanitizer/msan_interface.h>
-#endif
-
 #include <absl/log/globals.h>
 #include <boost/program_options.hpp>
 #include <fmt/ranges.h>
@@ -2126,24 +2122,8 @@ void __tsan_on_report(void * /*report*/) // NOLINT(bugprone-reserved-identifier,
 #pragma clang diagnostic pop
 }
 
-#if defined(MEMORY_SANITIZER)
-static void msanDeathCallback()
-{
-    if (current_stress_thread)
-        current_stress_thread->got_sanitizer_error = true;
-}
-#endif
-
 TEST(FunctionsStress, stress)
 {
-#if defined(MEMORY_SANITIZER)
-    /// Allow the stress test to continue past MSan errors instead of aborting.
-    /// Errors are still reported to stderr, and the `got_sanitizer_error` flag
-    /// is set via the death callback so the test can track and report them.
-    __msan_set_keep_going(1);
-    __msan_set_death_callback(msanDeathCallback);
-#endif
-
     chassert(!logger);
     logger = getLogger("stress");
 

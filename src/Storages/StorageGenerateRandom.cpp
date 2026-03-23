@@ -272,14 +272,16 @@ void appendFuzzyRandomString(ColumnString::Chars & out, size_t max_length, pcg64
         }
         case 3: // IPv4
         {
-            WriteBufferFromVector<ColumnString::Chars> buf(out);
+            WriteBufferFromVector<ColumnString::Chars> buf(out, AppendModeTag{});
             writeIPv4Text(IPv4(fuzzyRandomInteger<UInt32>(rng)), buf);
+            buf.finalize();
             break;
         }
         case 4: // IPv6
         {
-            WriteBufferFromVector<ColumnString::Chars> buf(out);
+            WriteBufferFromVector<ColumnString::Chars> buf(out, AppendModeTag{});
             writeIPv6Text(IPv6(fuzzyRandomInteger<UInt128>(rng)), buf);
+            buf.finalize();
             break;
         }
         case 5: // type name
@@ -479,15 +481,17 @@ ColumnPtr fillColumnWithRandomData(
                 if (fuzzy)
                 {
                     appendFuzzyRandomString(data_to, max_string_length, rng);
+                    data_to.push_back('\0'); /// ColumnString requires null terminator after each string.
                     offset = data_to.size();
                 }
                 else
                 {
                     size_t length = rng() % (max_string_length + 1);    /// Slow
 
-                    IColumn::Offset next_offset = offset + length;
+                    IColumn::Offset next_offset = offset + length + 1;
                     data_to.resize(next_offset);
                     fillBufferWithRandomPrintableASCIIBytes(reinterpret_cast<char *>(data_to.data() + offset), length, rng);
+                    data_to[next_offset - 1] = 0; /// ColumnString requires null terminator after each string.
                     offset = next_offset;
                 }
                 offsets_to[row_num] = offset;

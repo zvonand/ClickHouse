@@ -127,7 +127,7 @@ static String fieldToNumericString(const Field & f)
 void QueryFuzzer::getRandomSettings(SettingsChanges & settings_changes)
 {
 #if USE_BUZZHOUSE
-    if (fuzz_rand() % 2 == 0)
+    if (fuzz_rand() % 5 == 0)
     {
         const uint32_t nsettings
             = (fuzz_rand() % std::min(static_cast<uint32_t>(BuzzHouse::performanceSettings.size()), UINT32_C(20))) + UINT32_C(1);
@@ -805,6 +805,7 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
             if (auto * column = ast->as<ASTColumnDeclaration>())
             {
                 fuzzColumnDeclaration(*column);
+                fuzz(ast);
             }
         }
     }
@@ -981,6 +982,19 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
         }
     }
 
+    /// Fuzz the SELECT body of a view definition or CREATE TABLE ... AS SELECT.
+    if (create.select)
+    {
+        for (auto & child : create.children)
+        {
+            if (child.get() == create.select)
+            {
+                fuzz(child);
+                break;
+            }
+        }
+    }
+
     /// Fuzz CREATE DICTIONARY: swap layout type and fuzz lifetime
     if (create.is_dictionary && create.dictionary)
     {
@@ -991,6 +1005,24 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
             create.dictionary->layout->layout_type = simple_layouts[fuzz_rand() % simple_layouts.size()];
         }
 
+        /// Fuzz layout parameters (e.g. size_in_cells for cache, max_stored_keys for ssd_cache).
+        /// Parameters are stored as ASTExpressionList of ASTPair(key, ASTLiteral value).
+        if (create.dictionary->layout && create.dictionary->layout->parameters)
+        {
+            for (auto & param_child : create.dictionary->layout->parameters->children)
+            {
+                if (auto * pair = param_child->as<ASTPair>())
+                {
+                    if (pair->second)
+                    {
+                        if (auto * lit = pair->second->as<ASTLiteral>())
+                            if (fuzz_rand() % 5 == 0)
+                                lit->value = fuzzField(lit->value);
+                    }
+                }
+            }
+        }
+
         /// Fuzz lifetime bounds
         if (create.dictionary->lifetime && fuzz_rand() % 5 == 0)
         {
@@ -999,9 +1031,21 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
             create.dictionary->lifetime->min_sec = new_min;
             create.dictionary->lifetime->max_sec = new_max;
         }
+
+        /// Fuzz RANGE bounds for range_hashed dictionaries: swap min/max attribute names
+        if (create.dictionary->range && fuzz_rand() % 10 == 0)
+            std::swap(create.dictionary->range->min_attr_name, create.dictionary->range->max_attr_name);
+
+        /// Fuzz dictionary-level SETTINGS values
+        if (create.dictionary->dict_settings)
+        {
+            for (auto & change : create.dictionary->dict_settings->changes)
+                if (fuzz_rand() % 5 == 0)
+                    change.value = fuzzField(change.value);
+        }
     }
 
-    /// Fuzz dictionary attribute flags and default values
+    /// Fuzz dictionary attribute flags, default values, and expressions
     if (create.is_dictionary && create.dictionary_attributes_list)
     {
         for (auto & child : create.dictionary_attributes_list->children)
@@ -1022,17 +1066,25 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
             if (attr->hierarchical && fuzz_rand() % 10 == 0)
                 attr->bidirectional = !attr->bidirectional;
 
+            /// Toggle is_object_id (MongoDB ObjectID attribute)
+            if (fuzz_rand() % 50 == 0)
+                attr->is_object_id = !attr->is_object_id;
+
             /// Fuzz default value literal
             if (attr->default_value && fuzz_rand() % 5 == 0)
             {
                 if (auto * lit = attr->default_value->as<ASTLiteral>())
                     lit->value = fuzzField(lit->value);
             }
+
+            /// Fuzz EXPRESSION — computed attribute expression, previously unvisited
+            if (attr->expression)
+                fuzz(attr->expression);
         }
     }
 
     /// Toggle CREATE ↔ CREATE OR REPLACE
-    if (fuzz_rand() % 100 == 0)
+    if (fuzz_rand() % 30 == 0)
         create.create_or_replace = !create.create_or_replace;
 
 
@@ -1058,6 +1110,57 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
         /// PARTITION BY removal is rarer — changes table sharding fundamentally
         if (fuzz_rand() % 100 == 0)
             drop_storage_clause(create.storage->partition_by);
+        /// Introduce DESC on individual MergeTree ORDER BY key columns.
+        /// The parser strips ASTStorageOrderByElement wrappers when all directions are ASC
+        /// (all-or-nothing rule: KeyDescription expects either all wrapped or none).
+        /// So for the common all-ASC case there are no ASTStorageOrderByElement nodes and the
+        /// arm in fuzz() that toggles direction never fires.  Wrap the tuple children here to
+        /// let the fuzzer produce mixed-direction keys from scratch.
+        if (create.storage->order_by && fuzz_rand() % 5 == 0)
+        {
+            auto * tuple_fn = create.storage->order_by->as<ASTFunction>();
+            if (tuple_fn && tuple_fn->name == "tuple" && tuple_fn->arguments)
+            {
+                bool any_wrapped = false;
+                for (const auto & child : tuple_fn->arguments->children)
+                    if (child->as<ASTStorageOrderByElement>())
+                    {
+                        any_wrapped = true;
+                        break;
+                    }
+
+                if (!any_wrapped)
+                {
+                    for (auto & child : tuple_fn->arguments->children)
+                    {
+                        auto elem = make_intrusive<ASTStorageOrderByElement>();
+                        elem->direction = (fuzz_rand() % 2 == 0) ? 1 : -1;
+                        elem->children.push_back(child);
+                        child = elem;
+                    }
+                }
+            }
+        }
+
+        /// Fuzz the expressions inside ORDER BY, PARTITION BY, PRIMARY KEY, SAMPLE BY and TTL
+        for (auto & child : create.storage->children)
+        {
+            if (child.get() == create.storage->engine)
+                continue;
+            fuzz(child);
+        }
+    }
+    /// Fuzz the AS table_function(...) argument list for CREATE TABLE ... AS <function>.
+    if (create.as_table_function)
+    {
+        for (auto & child : create.children)
+        {
+            if (child.get() == create.as_table_function)
+            {
+                fuzz(child);
+                break;
+            }
+        }
     }
 
     /// Fuzz or drop existing projections
@@ -1177,6 +1280,21 @@ void QueryFuzzer::fuzzColumnDeclaration(ASTColumnDeclaration & column)
                 break;
         }
     }
+
+    /// Toggle NULL / NOT NULL modifier
+    if (fuzz_rand() % 20 == 0)
+    {
+        if (!column.null_modifier.has_value())
+            column.null_modifier = (fuzz_rand() % 2 == 0);
+        else if (fuzz_rand() % 3 == 0)
+            column.null_modifier.reset();
+        else
+            column.null_modifier = !*column.null_modifier;
+    }
+
+    /// Toggle inline PRIMARY KEY specifier (column-level PRIMARY KEY declaration)
+    if (fuzz_rand() % 50 == 0)
+        column.primary_key_specifier = !column.primary_key_specifier;
 }
 
 void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
@@ -1304,6 +1422,12 @@ void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
                 index_type->arguments->children.clear();
         }
     }
+
+    /// Fuzz the indexed expression (e.g. lower(col), col1 + col2).
+    /// children[0] is always the expression; children[1] is the type.
+    /// Previously only the type and granularity were mutated — the expression itself was never touched.
+    if (!index.children.empty())
+        fuzz(index.children[0]);
 }
 
 void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projection)
@@ -2354,6 +2478,24 @@ void QueryFuzzer::addOrReplacePredicate(ASTSelectQuery * sel, const ASTSelectQue
 
 void QueryFuzzer::fuzzJoinType(ASTTableJoin * table_join)
 {
+    /// Toggle NATURAL JOIN: derives the join condition from common column names automatically.
+    /// When switching to natural, clear any explicit ON / USING clause — they are incompatible.
+    if (fuzz_rand() % 50 == 0)
+    {
+        table_join->is_natural = !table_join->is_natural;
+        if (table_join->is_natural)
+        {
+            auto & ch = table_join->children;
+            ch.erase(std::remove_if(ch.begin(), ch.end(), [&](const ASTPtr & c)
+            {
+                return c.get() == table_join->using_expression_list.get()
+                    || c.get() == table_join->on_expression.get();
+            }), ch.end());
+            table_join->using_expression_list.reset();
+            table_join->on_expression.reset();
+        }
+    }
+
     if (table_join->kind < JoinKind::Cross)
     {
         static const std::vector<JoinLocality> locality_values = {JoinLocality::Unspecified, JoinLocality::Local, JoinLocality::Global};
@@ -2995,6 +3137,13 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
     {
         fuzzExpressionList(*expr_list);
     }
+    else if (auto * storage_order_by_element = typeid_cast<ASTStorageOrderByElement *>(ast.get()))
+    {
+        /// Toggle ASC ↔ DESC on individual MergeTree ORDER BY key columns
+        if (fuzz_rand() % 10 == 0)
+            storage_order_by_element->direction = -storage_order_by_element->direction;
+        fuzz(storage_order_by_element->children);
+    }
     else if (auto * order_by_element = typeid_cast<ASTOrderByElement *>(ast.get()))
     {
         fuzzOrderByElement(order_by_element);
@@ -3086,6 +3235,9 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         {
             aj->kind = aj->kind == ASTArrayJoin::Kind::Inner ? ASTArrayJoin::Kind::Left : ASTArrayJoin::Kind::Inner;
         }
+        /// fuzzColumnLikeExpressionList does not recurse into child expressions
+        if (aj->expression_list)
+            fuzz(aj->expression_list);
     }
     else if (auto * tj = typeid_cast<ASTTableJoin *>(ast.get()))
     {
@@ -3111,6 +3263,11 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                 }
             }
         }
+        /// Same as ASTArrayJoin above: the generic fallback is never reached, so recurse explicitly.
+        if (tj->using_expression_list)
+            fuzz(tj->using_expression_list);
+        else if (tj->on_expression)
+            fuzz(tj->on_expression);
     }
     else if (auto * select = typeid_cast<ASTSelectQuery *>(ast.get()))
     {
@@ -3390,10 +3547,12 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
     }
     else if (auto * set = typeid_cast<ASTSetQuery *>(ast.get()))
     {
-        /// Fuzz settings
+        /// Fuzz existing setting values
         for (auto & c : set->changes)
             if (fuzz_rand() % 50 == 0)
                 c.value = fuzzField(c.value);
+        /// Inject new settings from the BuzzHouse performance-settings pool.
+        getRandomSettings(set->changes);
     }
     else if (auto * param = typeid_cast<ASTQueryParameter *>(ast.get()))
     {
@@ -3700,6 +3859,10 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         {
             fuzz(optimize_query->deduplicate_by_columns);
         }
+        /// Recurse into the partition expression — the generic fallback is never reached for
+        /// ASTOptimizeQuery, so partition sub-expressions would otherwise go unfuzzed.
+        if (optimize_query->partition)
+            fuzz(optimize_query->partition);
     }
     else if (auto * explain_query = typeid_cast<ASTExplainQuery *>(ast.get()))
     {
@@ -3726,6 +3889,9 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         /// Occasionally rename the CTE to exercise unresolved-reference paths
         if (fuzz_rand() % 200 == 0)
             with_elem->name = "cte_" + std::to_string(fuzz_rand() % 10);
+        /// Toggle MATERIALIZED: makes the CTE evaluate once and cache the result
+        if (fuzz_rand() % 10 == 0)
+            with_elem->is_materialized = !with_elem->is_materialized;
         fuzz(with_elem->children);
     }
     else if (auto * interpolate_elem = typeid_cast<ASTInterpolateElement *>(ast.get()))

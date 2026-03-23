@@ -674,12 +674,12 @@ public:
             ProfileEvents::increment(getMetrics().expired, expired_connections.size());
         });
 
-        auto isSoftLimitReached = group->isSoftLimitReached();
+        auto is_soft_limit_reached = group->isSoftLimitReached();
         while (!stored_connections.empty())
         {
             auto connection = stored_connections.top();
 
-            if (!isExpired(connection, isSoftLimitReached) && !isStale(*connection))
+            if (!isExpired(connection, is_soft_limit_reached) && !isStale(*connection))
                 return stored_connections.size();
 
             stored_connections.pop();
@@ -751,9 +751,7 @@ private:
     ConnectionPtr prepareNewConnection(const ConnectionTimeouts & timeouts, UInt64 * connect_time)
     {
         auto connection = PooledConnection::create(this->getWeakFromThis(), group, getMetrics(), host, port);
-
         connection->setKeepAlive(true);
-        setTimeouts(*connection, timeouts);
 
         if (!proxy_configuration.isEmpty())
         {
@@ -765,9 +763,11 @@ private:
 
         try
         {
+            setTimeouts(*connection, timeouts);
+            applySocketBufferSizes(*connection, group->getSocketBufferSizes());
+
             auto timer = CurrentThread::getProfileEvents().timer(getMetrics().elapsed_microseconds);
             connection->doConnect(connect_time);
-            applySocketBufferSizes(*connection, group->getSocketBufferSizes());
         }
         catch (...)
         {
@@ -778,6 +778,7 @@ private:
         }
 
         ProfileEvents::increment(getMetrics().created);
+
         return connection;
     }
 

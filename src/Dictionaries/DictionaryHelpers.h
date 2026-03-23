@@ -315,7 +315,7 @@ public:
                 /// Keep typed JSON paths from the declared `DataTypeObject`.
                 /// Dictionary subcolumn access (for example `dictGet(...).name`) relies on
                 /// typed paths being present in `ColumnObject` even for an empty column.
-                std::unordered_map<String, MutableColumnPtr> typed_path_columns; // STYLE_CHECK_ALLOW_STD_CONTAINERS
+                UnorderedMapWithMemoryTracking<String, MutableColumnPtr> typed_path_columns;
                 typed_path_columns.reserve(object_type->getTypedPaths().size());
                 for (const auto & [path, type] : object_type->getTypedPaths())
                     typed_path_columns.emplace(path, type->createColumn());

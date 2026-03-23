@@ -582,7 +582,7 @@ Squashing::PendingQueue::ConsumeResult Squashing::PendingQueue::consumeUpTo(size
     else
     {
         double bytes_per_row = static_cast<double>(front.bytes()) / static_cast<double>(rows_in_front);
-        bytes_to_take = static_cast<size_t>(rows_to_take * bytes_per_row);
+        bytes_to_take = static_cast<size_t>(static_cast<double>(rows_to_take) * bytes_per_row);
     }
 
     Chunk result_chunk;

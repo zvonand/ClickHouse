@@ -1,3 +1,4 @@
+# ci: trigger flaky check
 """Quick tests, faster than 30 seconds"""
 
 from helpers.kafka.common_direct import *

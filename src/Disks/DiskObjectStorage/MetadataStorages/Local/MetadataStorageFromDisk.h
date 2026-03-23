@@ -30,7 +30,7 @@ private:
     const std::string compatible_key_prefix;
     const ObjectStorageKeyGeneratorPtr key_generator;
 
-    std::mutex removed_objects_mutex;
+    mutable std::mutex removed_objects_mutex;
     InMemoryRemovalQueue objects_to_remove TSA_GUARDED_BY(removed_objects_mutex);
 
 public:

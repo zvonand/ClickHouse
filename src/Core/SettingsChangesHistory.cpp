@@ -1103,7 +1103,8 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
     {
         addSettingsChanges(merge_tree_settings_changes_history, "26.4",
         {
-
+            {"replicated_fetches_min_part_level", 0, 0, "New setting"},
+            {"replicated_fetches_min_part_level_timeout_seconds", 300, 300, "New setting"},
         });
         addSettingsChanges(merge_tree_settings_changes_history, "26.3",
         {
@@ -1111,8 +1112,6 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
             {"shared_merge_tree_replica_set_max_lifetime_seconds", 300, 300, "New setting"},
             {"auto_statistics_types", "", "minmax, uniq", "Enable auto statistics by default"},
             {"table_readonly", false, false, "New setting to mark table as read-only, preventing inserts and modifications"},
-            {"replicated_fetches_min_part_level", 0, 0, "New setting"},
-            {"replicated_fetches_min_part_level_timeout_seconds", 300, 300, "New setting"},
             {"propagate_types_serialization_versions_to_nested_types", false, true, "Propagate data types serialization version to nested types by default"},
             {"shared_merge_tree_use_zookeeper_connection_pool", false, false, "New setting"},
         });

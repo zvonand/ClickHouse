@@ -1948,7 +1948,7 @@ class TestCase:
         culprit_settings = {}
         culprit_mt_settings = {}
 
-        # Minimize regular settings
+        # Minimize regular settings (keep all MT settings active during minimization)
         if failed_settings:
             culprit_settings = self._minimize_settings(
                 args, suite, client_options,
@@ -1956,11 +1956,13 @@ class TestCase:
                 is_merge_tree=False,
             )
 
-        # Minimize MergeTree settings
+        # Minimize MergeTree settings (keep found culprit regular settings active,
+        # or all regular settings if no culprits were isolated)
         if failed_mt_settings:
+            active_settings = culprit_settings if culprit_settings else failed_settings
             culprit_mt_settings = self._minimize_settings(
                 args, suite, client_options,
-                failed_settings, failed_mt_settings,
+                active_settings, failed_mt_settings,
                 is_merge_tree=True,
             )
 
@@ -1990,15 +1992,6 @@ class TestCase:
 
         return "\n".join(diagnosis_lines) + "\n"
 
-    def _run_with_settings_for_category(
-        self, args, suite, client_options, settings, is_merge_tree,
-    ):
-        """Helper: run test with the given settings dict applied to the right category."""
-        if is_merge_tree:
-            return self._run_with_settings(args, suite, client_options, {}, settings)
-        else:
-            return self._run_with_settings(args, suite, client_options, settings, {})
-
     def _minimize_settings(
         self, args, suite, client_options,
         all_settings, all_mt_settings, is_merge_tree,
@@ -2009,24 +2002,34 @@ class TestCase:
         then recurse into the failing half(s). When the set is small enough (<=4),
         test each setting individually to find the exact culprit(s).
 
-        The other category (regular or MergeTree) is kept empty during minimization
-        to test each category independently.
+        The other category's settings are kept intact during minimization so that
+        cross-category interactions are preserved.
         """
         target = dict(all_mt_settings if is_merge_tree else all_settings)
+        other_settings = all_settings if is_merge_tree else {}
+        other_mt_settings = all_mt_settings if not is_merge_tree else {}
 
         if not target:
             return {}
 
         keys = list(target.keys())
 
+        def run_with_subset(subset):
+            if is_merge_tree:
+                return self._run_with_settings(
+                    args, suite, client_options, other_settings, subset
+                )
+            else:
+                return self._run_with_settings(
+                    args, suite, client_options, subset, other_mt_settings
+                )
+
         # Base case: small enough set — test each individually
         if len(keys) <= 4:
             culprits = {}
             for key in keys:
                 single = {key: target[key]}
-                result = self._run_with_settings_for_category(
-                    args, suite, client_options, single, is_merge_tree,
-                )
+                result = run_with_subset(single)
                 if result.status == TestStatus.FAIL:
                     culprits[key] = target[key]
             return culprits
@@ -2036,20 +2039,16 @@ class TestCase:
         first_half = {k: target[k] for k in keys[:mid]}
         second_half = {k: target[k] for k in keys[mid:]}
 
-        result_first = self._run_with_settings_for_category(
-            args, suite, client_options, first_half, is_merge_tree,
-        )
-        result_second = self._run_with_settings_for_category(
-            args, suite, client_options, second_half, is_merge_tree,
-        )
+        result_first = run_with_subset(first_half)
+        result_second = run_with_subset(second_half)
 
         result = {}
         if result_first.status == TestStatus.FAIL:
             result.update(
                 self._minimize_settings(
                     args, suite, client_options,
-                    first_half if not is_merge_tree else {},
-                    first_half if is_merge_tree else {},
+                    first_half if not is_merge_tree else all_settings,
+                    first_half if is_merge_tree else all_mt_settings,
                     is_merge_tree,
                 )
             )
@@ -2057,8 +2056,8 @@ class TestCase:
             result.update(
                 self._minimize_settings(
                     args, suite, client_options,
-                    second_half if not is_merge_tree else {},
-                    second_half if is_merge_tree else {},
+                    second_half if not is_merge_tree else all_settings,
+                    second_half if is_merge_tree else all_mt_settings,
                     is_merge_tree,
                 )
             )

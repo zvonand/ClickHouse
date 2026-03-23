@@ -4,6 +4,7 @@
 #include <exception>
 #include <Coordination/CoordinationSettings.h>
 #include <Coordination/KeeperCommon.h>
+#include <Disks/IDisk.h>
 #include <Coordination/KeeperDispatcher.h>
 #include <Coordination/KeeperReconfiguration.h>
 #include <Common/ZooKeeper/KeeperSpans.h>

@@ -237,7 +237,7 @@ void addRequiredInputDependenciesIntoNodesSet(const ActionsDAG & dag, std::unord
     }
 }
 
-/// requred_outputs are outputs of ActionsDAG, however required_inputs are inputs corresponding to the step input header.
+/// required_outputs are outputs of ActionsDAG, however required_inputs are inputs corresponding to the step input header.
 SplitExpressionStepResult splitExpressionStep(const ExpressionStep & expression_step, const std::vector<bool> & required_outputs, const std::vector<bool> & required_inputs)
 {
     const auto & expression = expression_step.getExpression();
@@ -352,19 +352,6 @@ SplitFilterResult splitFilterStep(const FilterStep & filter_step, const std::vec
     filter_dag_info.do_remove_column = filter_step.removesFilterColumn();
 
     return { std::move(filter_dag_info), std::move(split_result.second), std::move(new_required_inputs) };
-}
-
-std::unique_ptr<LazilyReadFromMergeTree> removeUnusedColumnsFromReadingStep(ReadFromMergeTree & reading_step, const std::vector<bool> & required_output_positions)
-{
-    const auto & cols = reading_step.getOutputHeader()->getColumnsWithTypeAndName();
-    chassert(cols.size() == required_output_positions.size());
-
-    NameSet required_names;
-    for (size_t i = 0; i < cols.size(); ++i)
-        if (required_output_positions[i])
-            required_names.insert(cols[i].name);
-
-    return reading_step.keepOnlyRequiredColumnsAndCreateLazyReadStep(required_names);
 }
 
 ActionsDAG calculateGlobalOffset(ReadFromMergeTree & reading_step)

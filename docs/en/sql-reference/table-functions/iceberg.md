@@ -716,6 +716,7 @@ The command returns a table with `metric_name` and `metric_value` columns showin
 | deleted_metadata_files_count | 0 |
 | deleted_statistics_files_count | 0 |
 | skipped_missing_metadata_count | 0 |
+| failed_deletions_count | 0 |
 
 **Settings:**
 

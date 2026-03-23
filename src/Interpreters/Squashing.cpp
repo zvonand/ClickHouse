@@ -528,7 +528,7 @@ Squashing::PendingQueue::ConsumptionPlan Squashing::PendingQueue::planConsumptio
     size_t simulated_bytes = 0;
     size_t simulated_offset = offset_first;
 
-    for (size_t i = 0; i < chunks.size(); )
+    for (size_t i = 0; i < chunks.size();)
     {
         if (simulated_rows >= min_rows && simulated_bytes >= min_bytes)
             break;

@@ -1,4 +1,4 @@
-#include <Analyzer/Passes/AggregateFunctionsArithmericOperationsPass.h>
+#include <Analyzer/Passes/AggregateFunctionsArithmeticOperationsPass.h>
 
 #include <AggregateFunctions/AggregateFunctionFactory.h>
 

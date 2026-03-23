@@ -1,4 +1,3 @@
-# ci: trigger flaky check
 import logging
 import time
 import uuid

@@ -2495,12 +2495,14 @@ ReadFromMergeTree::AnalysisResultPtr ReadFromMergeTree::selectRangesToRead(
     {
         MergeTreeDataSelectExecutor::filterPartsByQueryConditionCache(res_parts, query_info_, vector_search_parameters, mutations_snapshot, context_, log);
 
-        auto get_indexes_size = [&](const MergeTreeData & data_) -> size_t
+        auto get_indexes_size = [&]() -> size_t
         {
             size_t res = 0;
-            for (const auto & [_, size] : data_.getSecondaryIndexSizes())
-                res += size.data_uncompressed;
-            res += data_.getPrimaryIndexSize().data_uncompressed;
+            for (const auto & part : res_parts)
+            {
+                res += part.data_part->getTotalSecondaryIndicesSize().data_uncompressed;
+                res += part.data_part->getIndexSizeFromFile().data_uncompressed;
+            }
             return res;
         };
 
@@ -2512,7 +2514,7 @@ ReadFromMergeTree::AnalysisResultPtr ReadFromMergeTree::selectRangesToRead(
             && settings[Setting::distributed_index_analysis]
             && (settings[Setting::distributed_index_analysis_for_non_shared_merge_tree] || data.isSharedStorage())
             && (total_parts >= distributed_index_analysis_min_parts_to_activate)
-            && (!distributed_index_analysis_min_indexes_bytes_to_activate || get_indexes_size(data) >= distributed_index_analysis_min_indexes_bytes_to_activate);
+            && (!distributed_index_analysis_min_indexes_bytes_to_activate || get_indexes_size() >= distributed_index_analysis_min_indexes_bytes_to_activate);
 
         if (!distributed_index_analysis_enabled)
         {

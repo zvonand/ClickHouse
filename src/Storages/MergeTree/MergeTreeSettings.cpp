@@ -21,6 +21,7 @@
 #include <Interpreters/Context.h>
 #include <Disks/DiskObjectStorage/DiskObjectStorage.h>
 
+#include <cmath>
 #include <boost/program_options.hpp>
 #include <fmt/ranges.h>
 #include <Poco/Util/AbstractConfiguration.h>
@@ -2438,6 +2439,14 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
             "The value of max_buckets_in_map setting ({}) exceeds the maximum allowed value of {}",
             max_buckets_in_map.value,
             max_allowed_buckets);
+    }
+
+    if (!std::isfinite(map_buckets_coefficient) || map_buckets_coefficient <= 0)
+    {
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "The value of map_buckets_coefficient setting ({}) must be positive and finite",
+            map_buckets_coefficient.value);
     }
 
     if (object_shared_data_buckets_for_compact_part > max_allowed_buckets)

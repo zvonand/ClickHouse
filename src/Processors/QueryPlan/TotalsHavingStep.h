@@ -32,6 +32,13 @@ public:
 
     const ActionsDAG * getActions() const { return actions_dag ? &*actions_dag : nullptr; }
 
+    bool hasCorrelatedExpressions() const override
+    {
+        if (actions_dag)
+            return actions_dag->hasCorrelatedColumns();
+        return false;
+    }
+
     void serializeSettings(QueryPlanSerializationSettings & settings) const override;
     void serialize(Serialization & ctx) const override;
     bool isSerializable() const override { return true; }

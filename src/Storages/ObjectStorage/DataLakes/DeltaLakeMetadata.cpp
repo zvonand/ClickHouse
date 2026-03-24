@@ -642,11 +642,11 @@ DataLakeMetadataPtr DeltaLakeMetadata::create(
 #if USE_DELTA_KERNEL_RS
     if (isDeltaKernelEnabled(local_context, configuration.lock()->getType()))
     {
-        LOG_INFO(getLogger("DeltaLakeMetadata"), "Delta Lake Kernel is enabled, using it to read metadata for table at path '{}'", configuration.lock()->getPathForRead().path);
+        LOG_TRACE(getLogger("DeltaLakeMetadata"), "Delta Lake Kernel is enabled, using it to read metadata for table at path '{}'", configuration.lock()->getPathForRead().path);
         return DeltaLakeMetadataDeltaKernel::create(object_storage, configuration);
     }
 #endif
-    LOG_INFO(getLogger("DeltaLakeMetadata"), "Delta Lake Kernel is disabled, using native implementation to read metadata for table at path '{}'", configuration.lock()->getPathForRead().path);
+    LOG_TRACE(getLogger("DeltaLakeMetadata"), "Delta Lake Kernel is disabled, using native implementation to read metadata for table at path '{}'", configuration.lock()->getPathForRead().path);
     return std::make_unique<DeltaLakeMetadata>(object_storage, configuration, local_context);
 }
 

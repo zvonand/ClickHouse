@@ -25,6 +25,7 @@
 #include <Poco/Timespan.h>
 
 #include <queue>
+#include <unordered_set>
 
 #include "config.h"
 
@@ -191,7 +192,7 @@ public:
         return total_connections_in_group >= limits.store_limit;
     }
 
-    void atConnectionCreate(std::string host, UInt16 port)
+    void atConnectionCreate(Poco::Net::HTTPClientSession * session, std::string host, UInt16 port)
     {
         std::lock_guard lock(mutex);
 
@@ -202,6 +203,7 @@ public:
                 host, port, limits.hard_limit, getType());
 
         ++total_connections_in_group;
+        live_connections.insert(session);
 
         if (total_connections_in_group >= limits.warning_limit && total_connections_in_group >= mute_warning_until)
         {
@@ -211,11 +213,12 @@ public:
         }
     }
 
-    void atConnectionDestroy() noexcept
+    void atConnectionDestroy(Poco::Net::HTTPClientSession * session) noexcept
     {
         std::lock_guard lock(mutex);
 
         --total_connections_in_group;
+        live_connections.erase(session);
 
         const size_t gap = 20;
         const size_t reduced_warning_limit = limits.warning_limit > gap ? limits.warning_limit - gap : 1;
@@ -229,6 +232,26 @@ public:
     HTTPConnectionGroupType getType() const { return type; }
 
     const IHTTPConnectionPoolForEndpoint::Metrics & getMetrics() const { return metrics; }
+
+    /// Collect file descriptors of all tracked connections.
+    /// The returned fds may become stale (closed/reused) by the time the caller uses them — this is expected.
+    std::vector<int> getSocketFDs() const
+    {
+        std::lock_guard lock(mutex);
+        std::vector<int> fds;
+        fds.reserve(live_connections.size());
+        for (auto * session : live_connections)
+        {
+            try
+            {
+                auto fd = session->socket().impl()->sockfd();
+                if (fd >= 0)
+                    fds.push_back(fd);
+            }
+            catch (...) {} // socket may not be connected yet
+        }
+        return fds;
+    }
 
 private:
     bool isHardLimitReached() const TSA_REQUIRES(mutex)
@@ -245,6 +268,7 @@ private:
     HTTPConnectionPools::Limits limits TSA_GUARDED_BY(mutex) = HTTPConnectionPools::Limits();
     size_t total_connections_in_group TSA_GUARDED_BY(mutex) = 0;
     size_t mute_warning_until TSA_GUARDED_BY(mutex) = 0;
+    std::unordered_set<Poco::Net::HTTPClientSession *> live_connections TSA_GUARDED_BY(mutex);
 };
 
 
@@ -482,7 +506,7 @@ private:
             Session::setSendThrottler();
             Session::setReceiveThrottler();
 
-            group->atConnectionDestroy();
+            group->atConnectionDestroy(this);
 
             if (!isExpired)
                 if (auto lock = pool.lock())
@@ -507,7 +531,7 @@ private:
         {
             // atConnectionCreate can throw. If it does, this object's constructor fails and its destructor won't be called,
             // so we must call atConnectionCreate before incrementing active_count to avoid leaking the metric increment.
-            group->atConnectionCreate(Session::getHost(), Session::getPort());
+            group->atConnectionCreate(this, Session::getHost(), Session::getPort());
             CurrentMetrics::add(metrics.active_count);
         }
 
@@ -912,6 +936,17 @@ public:
         endpoints_pool.clear();
     }
 
+    HTTPConnectionPools::PoolSocketFDs getSocketFDs()
+    {
+        /// ConnectionGroup has its own mutex, no need for Impl::mutex here.
+        /// The groups are created once in the constructor and never replaced.
+        return {
+            .disk = disk_group->getSocketFDs(),
+            .storage = storage_group->getSocketFDs(),
+            .http = http_group->getSocketFDs()
+        };
+    }
+
 protected:
     ConnectionGroup::Ptr & getGroup(HTTPConnectionGroupType type)
     {
@@ -1010,4 +1045,10 @@ HTTPConnectionPools::getPool(HTTPConnectionGroupType type, const Poco::URI & uri
 {
     return impl->getPool(type, uri, proxy_configuration);
 }
+
+HTTPConnectionPools::PoolSocketFDs HTTPConnectionPools::getSocketFDs()
+{
+    return impl->getSocketFDs();
+}
+
 }

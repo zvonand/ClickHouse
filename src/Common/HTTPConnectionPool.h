@@ -14,6 +14,7 @@
 
 #include <mutex>
 #include <memory>
+#include <vector>
 
 namespace DB
 {
@@ -72,6 +73,14 @@ public:
         static constexpr size_t warning_step = 100;
     };
 
+    /// File descriptors of live connections, grouped by connection pool type.
+    struct PoolSocketFDs
+    {
+        std::vector<int> disk;
+        std::vector<int> storage;
+        std::vector<int> http;
+    };
+
     HTTPConnectionPools(const HTTPConnectionPools &) = delete;
     HTTPConnectionPools & operator=(const HTTPConnectionPools &) = delete;
 
@@ -85,6 +94,10 @@ public:
     void dropCache();
 
     IHTTPConnectionPoolForEndpoint::Ptr getPool(HTTPConnectionGroupType type, const Poco::URI & uri, const ProxyConfiguration & proxy_configuration);
+
+    /// Collect file descriptors of all tracked HTTP connections, grouped by pool type.
+    /// The returned fds are a snapshot — some may become stale by the time the caller uses them.
+    PoolSocketFDs getSocketFDs();
 
 private:
     class Impl;

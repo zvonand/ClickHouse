@@ -15,6 +15,10 @@
 #include <IO/MMappedFileCache.h>
 #include <Common/PageCache.h>
 #include <Common/quoteString.h>
+#include <Common/HTTPConnectionPool.h>
+#include <Common/TCPSocketMemInfo.h>
+
+#include <sys/stat.h>
 
 #include "config.h"
 #if USE_AWS_S3
@@ -382,6 +386,67 @@ void ServerAsynchronousMetrics::updateImpl(TimePoint update_time, TimePoint curr
         auto keeper_dispatcher = getContext()->tryGetKeeperDispatcher();
         if (keeper_dispatcher)
             updateKeeperInformation(*keeper_dispatcher, new_values);
+    }
+#endif
+
+#if defined(OS_LINUX)
+    {
+        auto pool_fds = HTTPConnectionPools::instance().getSocketFDs();
+        auto meminfo_by_inode = getTCPSocketMemInfoByInode();
+
+        if (!meminfo_by_inode.empty())
+        {
+            auto compute_percentiles = [&](const std::vector<int> & fds, const char * group_name)
+            {
+                std::vector<uint32_t> rmem_values;
+                std::vector<uint32_t> wmem_values;
+                rmem_values.reserve(fds.size());
+                wmem_values.reserve(fds.size());
+
+                for (int fd : fds)
+                {
+                    struct stat st; // NOLINT(cppcoreguidelines-pro-type-member-init)
+                    if (fstat(fd, &st) != 0)
+                        continue;
+                    auto it = meminfo_by_inode.find(st.st_ino);
+                    if (it != meminfo_by_inode.end())
+                    {
+                        rmem_values.push_back(it->second.rmem);
+                        wmem_values.push_back(it->second.wmem);
+                    }
+                }
+
+                if (rmem_values.empty())
+                    return;
+
+                std::sort(rmem_values.begin(), rmem_values.end());
+                std::sort(wmem_values.begin(), wmem_values.end());
+
+                auto percentile = [](const std::vector<uint32_t> & sorted_values, double p) -> double
+                {
+                    size_t idx = static_cast<size_t>(p * static_cast<double>(sorted_values.size() - 1));
+                    return static_cast<double>(sorted_values[idx]);
+                };
+
+                static constexpr std::array<std::pair<const char *, double>, 4> quantiles = {{
+                    {"p50", 0.5}, {"p75", 0.75}, {"p90", 0.9}, {"p95", 0.95}
+                }};
+
+                for (auto [suffix, p] : quantiles)
+                {
+                    new_values[fmt::format("HTTPConnectionPool{}TCPRcvBufBytes_{}", group_name, suffix)]
+                        = {percentile(rmem_values, p),
+                           "Kernel TCP receive buffer memory (sk_rmem_alloc) for HTTP connection pool sockets."};
+                    new_values[fmt::format("HTTPConnectionPool{}TCPSndBufBytes_{}", group_name, suffix)]
+                        = {percentile(wmem_values, p),
+                           "Kernel TCP transmit buffer memory (sk_wmem_alloc) for HTTP connection pool sockets."};
+                }
+            };
+
+            compute_percentiles(pool_fds.disk, "Disk");
+            compute_percentiles(pool_fds.storage, "Storage");
+            compute_percentiles(pool_fds.http, "HTTP");
+        }
     }
 #endif
 

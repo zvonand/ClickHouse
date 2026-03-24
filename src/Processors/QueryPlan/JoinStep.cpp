@@ -30,7 +30,7 @@ std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join,
     std::vector<std::pair<String, String>> description;
     const auto & table_join = join->getTableJoin();
 
-    auto toLower = [](String & s)
+    auto to_lower = [](String & s)
     {
         std::transform(s.begin(), s.end(), s.begin(),
             [](unsigned char c) { return std::tolower(c); });
@@ -41,8 +41,8 @@ std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join,
 
     if (pretty)
     {
-        toLower(kind);
-        toLower(strictness);
+        to_lower(kind);
+        to_lower(strictness);
     }
 
     description.emplace_back("Type", kind);

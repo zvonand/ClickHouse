@@ -493,8 +493,8 @@ Endpoint processEndpoint(const Poco::Util::AbstractConfiguration & config, const
             /// but is stored for use by external systems such as delta-kernel-rs.
             if (config.has(config_prefix + ".account_name"))
                 account_name = config.getString(config_prefix + ".account_name");
-            if (config.has(config_prefix + ".account_name"))
-                account_name = config.getString(config_prefix + ".account_name");
+            if (config.has(config_prefix + ".account_key"))
+                account_key = config.getString(config_prefix + ".account_key");
 
         }
         if (config.has(config_prefix + ".endpoint_subpath"))
@@ -525,7 +525,7 @@ Endpoint processEndpoint(const Poco::Util::AbstractConfiguration & config, const
         /// to false for this path), but is stored for use by external systems such as delta-kernel-rs.
         if (config.has(config_prefix + ".account_name"))
             account_name = config.getString(config_prefix + ".account_name");
-        if (config.has(config_prefix + ".account_name"))
+        if (config.has(config_prefix + ".account_key"))
             account_key = config.getString(config_prefix + ".account_key");
     }
     else

@@ -4489,7 +4489,7 @@ def main(args):
                 INDEX line_minmax line_start TYPE minmax        GRANULARITY 1
             )
             ENGINE = ReplacingMergeTree(time)
-            ORDER BY (test_name, file, line_start, line_end)
+ORDER BY (test_name, file, line_start, line_end)
             COMMENT 'Contains information about per-test coverage from the CI, but used only for exporting to the CI cluster'""",
         )
         clickhouse_execute(
@@ -4503,7 +4503,7 @@ def main(args):
                 call_count UInt64
             )
             ENGINE = ReplacingMergeTree(call_count)
-            ORDER BY (test_name, callee_offset)
+ORDER BY (test_name, callee_offset)
             COMMENT 'Indirect (virtual/function-pointer) call observations per test for coverage-based test selection'""",
         )
         # Self-test: verify the coverage collection pipeline works end-to-end.

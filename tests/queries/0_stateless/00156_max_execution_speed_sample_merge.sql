@@ -5,11 +5,12 @@
 -- NOTE: This test uses simple synthetic data to validate the fact throttling was applied.
 -- If throttling works as expected - each execution will take >= 1 second, as we allow not more than {max_execution_speed} records/sec
 -- If it doesn't - each select will finish immediately, and the test will fail
--- NOTE: fuzzer and parallelism are disabled as it can fiddle behaviour of merge and cause the flakiness - we're checking the functional correctness here
+-- NOTE: randomizer and parallelism are disabled as they can fiddle behaviour of merge and cause flakiness - we're checking functional correctness here
+-- NOTE: sleep(0.001) per block ensures CLOCK_MONOTONIC_COARSE (ReadProgressCallback) ticks between reads - otherwise entire data can be read within a single ~10ms clock tick and skipping throttling
 
 SET max_execution_speed = 2;                      -- this is the parameter we're testing - execution to be throttled down to 2 records/sec
 SET timeout_before_checking_execution_speed = 0;  -- and to apply it immediately
-SET max_block_size = 1;                           -- this one needs to be tweaked to ensure only 1 record per block is written; otherwise we'll read everything at once, and throttling won't work
+SET max_block_size = 1;                           -- this one needs to be tweaked to ensure only 1 record per block is read; otherwise we'll read everything at once, and throttling won't work
 
 CREATE TEMPORARY TABLE times (t DateTime);
 
@@ -25,14 +26,14 @@ CREATE
 INSERT INTO t00156_max_execution_speed_sample_merge SELECT number FROM numbers(30);
 
 INSERT INTO times SELECT now();
-SELECT * FROM t00156_max_execution_speed_sample_merge SAMPLE 1/2 FORMAT Null;
+SELECT *, sleep(0.001) FROM t00156_max_execution_speed_sample_merge SAMPLE 1/2 FORMAT Null;
 INSERT INTO times SELECT now();
 
 SELECT max(t) - min(t) >= 1 FROM times;
 TRUNCATE TABLE times;
 
 INSERT INTO times SELECT now();
-SELECT * FROM merge('t00156_max_execution_speed_sample_merge') SAMPLE 1/2 FORMAT Null;
+SELECT *, sleep(0.001) FROM merge('t00156_max_execution_speed_sample_merge') SAMPLE 1/2 FORMAT Null;
 INSERT INTO times SELECT now();
 
 SELECT max(t) - min(t) >= 1 FROM times;

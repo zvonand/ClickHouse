@@ -43,6 +43,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         {
             {"paimon_target_snapshot_id", -1, -1, "New setting."},
             {"max_consume_snapshots", 0, 0, "New setting."},
+            {"allow_experimental_paimon_storage_engine", false, false, "New setting."},
             {"enable_materialized_cte", false, false, "New setting"},
         });
         addSettingsChanges(settings_changes_history, "26.3",

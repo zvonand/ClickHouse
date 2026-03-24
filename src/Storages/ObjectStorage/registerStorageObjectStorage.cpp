@@ -25,11 +25,13 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int BAD_ARGUMENTS;
+    extern const int SUPPORT_IS_DISABLED;
 }
 
 namespace Setting
 {
     extern const SettingsBool write_full_path_in_iceberg_metadata;
+    extern const SettingsBool allow_experimental_paimon_storage_engine;
 }
 
 namespace DataLakeStorageSetting
@@ -383,11 +385,23 @@ void registerStorageIceberg(StorageFactory & factory)
 
 void registerStoragePaimon(StorageFactory & factory)
 {
+    auto check_paimon_storage_engine_enabled = [](const StorageFactory::Arguments & args)
+    {
+        if (args.mode <= LoadingStrictnessLevel::CREATE
+            && !args.getLocalContext()->getSettingsRef()[Setting::allow_experimental_paimon_storage_engine])
+        {
+            throw Exception(
+                ErrorCodes::SUPPORT_IS_DISABLED,
+                "Paimon table engines are experimental. Set `allow_experimental_paimon_storage_engine` setting to enable them");
+        }
+    };
+
     /// Register default Paimon engine (auto-detect storage type based on disk)
     factory.registerStorage(
         PaimonDefinition::storage_engine_name,
         [&](const StorageFactory::Arguments & args)
         {
+            check_paimon_storage_engine_enabled(args);
             const auto storage_settings = getDataLakeStorageSettings(*args.storage_def);
             const auto disk_name = storage_settings && (*storage_settings)[DataLakeStorageSetting::disk].changed
                 ? (*storage_settings)[DataLakeStorageSetting::disk].value
@@ -448,6 +462,7 @@ void registerStoragePaimon(StorageFactory & factory)
         PaimonS3Definition::storage_engine_name,
         [&](const StorageFactory::Arguments & args)
         {
+            check_paimon_storage_engine_enabled(args);
             const auto storage_settings = getDataLakeStorageSettings(*args.storage_def);
             const auto disk_name = storage_settings && (*storage_settings)[DataLakeStorageSetting::disk].changed
                 ? (*storage_settings)[DataLakeStorageSetting::disk].value
@@ -489,6 +504,7 @@ void registerStoragePaimon(StorageFactory & factory)
         PaimonAzureDefinition::storage_engine_name,
         [&](const StorageFactory::Arguments & args)
         {
+            check_paimon_storage_engine_enabled(args);
             const auto storage_settings = getDataLakeStorageSettings(*args.storage_def);
             const auto disk_name = storage_settings && (*storage_settings)[DataLakeStorageSetting::disk].changed
                 ? (*storage_settings)[DataLakeStorageSetting::disk].value
@@ -530,6 +546,7 @@ void registerStoragePaimon(StorageFactory & factory)
         PaimonHDFSDefinition::storage_engine_name,
         [&](const StorageFactory::Arguments & args)
         {
+            check_paimon_storage_engine_enabled(args);
             const auto storage_settings = getDataLakeStorageSettings(*args.storage_def);
             auto configuration = std::make_shared<StorageHDFSPaimonConfiguration>(storage_settings);
             expandPaimonKeeperMacrosIfNeeded(args, storage_settings);
@@ -548,6 +565,7 @@ void registerStoragePaimon(StorageFactory & factory)
         PaimonLocalDefinition::storage_engine_name,
         [&](const StorageFactory::Arguments & args)
         {
+            check_paimon_storage_engine_enabled(args);
             const auto storage_settings = getDataLakeStorageSettings(*args.storage_def);
             const auto disk_name = storage_settings && (*storage_settings)[DataLakeStorageSetting::disk].changed
                 ? (*storage_settings)[DataLakeStorageSetting::disk].value

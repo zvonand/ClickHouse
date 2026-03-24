@@ -16,8 +16,11 @@ It supports snapshot reads, incremental reads, and basic partition pruning provi
 ## Create table {#create-table}
 
 Note that the Paimon table must already exist in the storage, this command does not take DDL parameters to create a new table.
+Creating `Paimon*` tables is gated by `allow_experimental_paimon_storage_engine` (disabled by default), so enable it before running `CREATE TABLE`.
 
 ```sql
+SET allow_experimental_paimon_storage_engine = 1;
+
 CREATE TABLE paimon_table_s3
     ENGINE = PaimonS3(url,  [, access_key_id, secret_access_key] [,format] [,structure] [,compression])
 
@@ -74,6 +77,7 @@ CREATE TABLE paimon_table ENGINE=PaimonS3(paimon_conf, filename = 'test_table')
 
 This engine uses the same settings as the corresponding object storage engines and adds Paimon-specific settings:
 
+- `allow_experimental_paimon_storage_engine` — enables creation of `Paimon`, `PaimonS3`, `PaimonAzure`, `PaimonHDFS`, and `PaimonLocal` table engines. Default: `0` (disabled).
 - `paimon_incremental_read` — enable incremental read mode.
 - `paimon_metadata_refresh_interval_sec` — background metadata refresh interval in seconds. When set to a value greater than 0, a background task periodically pulls the latest snapshot and schema from object storage. Default: 30.
 - `paimon_keeper_path` — Keeper path for incremental read state. Must be set and unique per table; supports macros such as `{database}`, `{table}`, `{uuid}`.
@@ -109,6 +113,8 @@ You can build an end-to-end pipeline that continuously syncs data from a Paimon 
 The example below uses `PaimonLocal`. Replace the engine with `PaimonS3`, `PaimonAzure`, `PaimonHDFS`, or the `Paimon` alias as appropriate for your storage backend:
 
 ```sql
+SET allow_experimental_paimon_storage_engine = 1;
+
 -- Local storage
 CREATE TABLE paimon_mv_source
 ENGINE = PaimonLocal('/path/to/paimon/table')

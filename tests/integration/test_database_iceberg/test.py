@@ -335,17 +335,18 @@ def test_check_database(started_cluster):
         f"CHECK DATABASE {CATALOG_NAME}"
     )
 
-    node.query(
-        f"SYSTEM ENABLE FAILPOINT check_database_datalake_negative"
-    )
-
-    assert "fault when checking database" in node.query_and_get_error(
-        f"CHECK DATABASE {CATALOG_NAME}"
-    )
-
-    node.query(
-        f"SYSTEM DISABLE FAILPOINT check_database_datalake_negative"
-    )
+    try:
+        node.query(
+            f"SYSTEM ENABLE FAILPOINT check_database_datalake_negative"
+        )
+    
+        assert "fault when checking database" in node.query_and_get_error(
+            f"CHECK DATABASE {CATALOG_NAME}"
+        )
+    finally:
+        node.query(
+            f"SYSTEM DISABLE FAILPOINT check_database_datalake_negative"
+        )
 
 
 def test_many_namespaces(started_cluster):

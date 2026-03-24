@@ -1172,10 +1172,8 @@ try
             if (!entry->isFinished())
             {
                 auto it = per_entry_write_results.find(entry.get());
-                if (it != per_entry_write_results.end())
-                    entry->finish(it->second);
-                else
-                    entry->finish();
+                chassert(it != per_entry_write_results.end());
+                entry->finish(it != per_entry_write_results.end() ? it->second : WriteResult{});
             }
         }
     };

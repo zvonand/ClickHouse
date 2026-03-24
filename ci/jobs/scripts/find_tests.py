@@ -639,21 +639,58 @@ class Targeting:
             f"'{self._escape_sql_string(t)}'" for t in sorted(primary_tests)
         )
 
-        # Self-join on callee_offset: count how many distinct callees each candidate
-        # test shares with the primary set.  More shared callees = stronger signal.
-        # Shared-library callees (glibc, libstdc++) are already excluded at
-        # collection time in coverage.cpp — only main-binary text offsets are stored.
+        # Self-join on callee_offset ranked by Jaccard-like specificity.
         #
-        # The callee_offset subquery filters out ubiquitous callees (those appearing
-        # in >= 200 tests): these are common infrastructure callees (logging, memory,
-        # query setup) that every test calls.  Including them would cause the join to
-        # return almost all 10000 tests, providing zero signal.  Only specific callees
-        # (unique to a narrow set of tests) are useful for this pass.
+        # Problem with raw shared_callees ordering: infrastructure tests (filesystem
+        # cache, S3) rank highest because they share many I/O virtual-dispatch callees
+        # with any MergeTree-reading primary test, even if they're completely unrelated
+        # to the changed code domain.
+        #
+        # Fix: rank by  shared / secondary_test_total_specific_callees  (Jaccard
+        # fraction).  A test whose callee set is mostly overlapping with the primary
+        # set is specifically exercising the same domain; a filesystem-cache test whose
+        # 200 specific callees all happen to be in the primary set gets lower rank than
+        # a DDL test whose 50 specific callees are 90% shared with the primary set.
+        #
+        # Additional guards:
+        #   MIN_SHARED       — require at least this many shared callees (eliminates
+        #                      accidental 1-2 callee overlaps).
+        #   MIN_SECONDARY    — secondary test must have at least this many specific
+        #                      callees; avoids 100%-Jaccard artifacts from tiny sets.
+        #   MAX_CALLEE_COUNT — exclude globally-ubiquitous callees (logging, malloc).
         MAX_CALLEE_TEST_COUNT = 200  # callees in >= this many tests are ubiquitous
+        # Thresholds scale with the primary set size so that small primary sets
+        # (e.g. 3 tests for a focused single-file PR) still find results while
+        # large primary sets use stricter filters to suppress infrastructure noise.
+        n_primary = len(primary_tests)
+        MIN_SHARED    = max(3, min(10, n_primary // 5))   # 3 for tiny, 10 for large
+        MIN_SECONDARY = max(20, min(50, n_primary * 3))   # 20 for tiny, 50 for large
         query = f"""
-        SELECT ic2.test_name, count(DISTINCT ic1.callee_offset) AS shared_callees
+        SELECT
+            ic2.test_name,
+            count(DISTINCT ic1.callee_offset) AS shared_callees,
+            ic2_tot.tot_callees,
+            count(DISTINCT ic1.callee_offset) * 100.0 / ic2_tot.tot_callees AS jaccard_pct
         FROM checks_coverage_indirect_calls ic1
         JOIN checks_coverage_indirect_calls ic2 ON ic1.callee_offset = ic2.callee_offset
+        JOIN (
+            -- Total number of specific (non-ubiquitous) callees each secondary test
+            -- uses.  Used as the Jaccard denominator.
+            SELECT test_name, count(DISTINCT callee_offset) AS tot_callees
+            FROM checks_coverage_indirect_calls
+            WHERE check_start_time > now() - interval 3 days
+              AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+              AND callee_offset IN (
+                  SELECT callee_offset
+                  FROM checks_coverage_indirect_calls
+                  WHERE check_start_time > now() - interval 3 days
+                    AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+                  GROUP BY callee_offset
+                  HAVING uniqExact(test_name) < {MAX_CALLEE_TEST_COUNT}
+              )
+            GROUP BY test_name
+            HAVING tot_callees >= {MIN_SECONDARY}
+        ) ic2_tot ON ic2.test_name = ic2_tot.test_name
         WHERE ic1.check_start_time > now() - interval 3 days
           AND ic2.check_start_time > now() - interval 3 days
           AND ic1.check_name LIKE '{self._escape_sql_string(self.job_type)}%'
@@ -668,8 +705,9 @@ class Targeting:
               GROUP BY callee_offset
               HAVING uniqExact(test_name) < {MAX_CALLEE_TEST_COUNT}
           )
-        GROUP BY ic2.test_name
-        ORDER BY shared_callees DESC
+        GROUP BY ic2.test_name, ic2_tot.tot_callees
+        HAVING shared_callees >= {MIN_SHARED}
+        ORDER BY jaccard_pct DESC, shared_callees DESC
         LIMIT 200
         """
 
@@ -684,11 +722,11 @@ class Targeting:
             print(f"[find_tests] indirect-call query failed (non-fatal): {e}")
             return {}
 
-        # Parse TSV: test_name \t shared_callees
+        # Parse TSV: test_name \t shared_callees \t tot_callees \t jaccard_pct
         result_map: dict = {}
         for row in raw.strip().splitlines():
-            parts = row.split("\t", 1)
-            if len(parts) == 2 and parts[0].strip():
+            parts = row.split("\t")
+            if len(parts) >= 2 and parts[0].strip():
                 try:
                     result_map[parts[0].strip()] = int(parts[1].strip())
                 except ValueError:
@@ -696,10 +734,19 @@ class Targeting:
         if not result_map:
             return {}
 
+        # Extract top Jaccard score from the raw output for logging
+        top_jaccard = 0.0
+        for row in raw.strip().splitlines():
+            parts = row.split("\t")
+            if len(parts) >= 4:
+                try:
+                    top_jaccard = max(top_jaccard, float(parts[3].strip()))
+                except ValueError:
+                    pass
         print(
             f"[find_tests] indirect-call query: {elapsed:.2f}s, "
             f"{len(result_map)} additional test candidates via callee co-occurrence "
-            f"(top shared={max(result_map.values())})"
+            f"(top jaccard={top_jaccard:.0f}%, top shared={max(result_map.values())})"
         )
         return result_map
 

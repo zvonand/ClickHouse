@@ -750,14 +750,16 @@ tar -czf ./ci/tmp/logs.tar.gz \
         sequential_test_modules = []
         assert not is_sequential
 
-    # Sort by module file so all tests from the same file are consecutive.
-    # With --dist=each, pytest preserves CLI argument order and uses it as the
-    # collection order. If tests from different modules interleave (e.g. CIDB
-    # returns them sorted by failure time), pytest finalizes and re-enters
-    # module-scoped fixtures between them, breaking tests that call
-    # cluster.add_instance() inside the fixture.
-    parallel_test_modules = sorted(parallel_test_modules, key=lambda t: t.split("::")[0])
-    sequential_test_modules = sorted(sequential_test_modules, key=lambda t: t.split("::")[0])
+    if is_flaky_check or is_targeted_check:
+        # Sort by module file so all tests from the same file are consecutive.
+        # With --dist=each, pytest preserves CLI argument order and uses it as the
+        # collection order. If tests from different modules interleave (e.g. CIDB
+        # returns them sorted by failure time), pytest finalizes and re-enters
+        # module-scoped fixtures between them, breaking tests that call
+        # cluster.add_instance() inside the fixture.
+        # For regular jobs, preserve the duration-aware ordering from get_optimal_test_batch.
+        parallel_test_modules = sorted(parallel_test_modules, key=lambda t: t.split("::")[0])
+        sequential_test_modules = sorted(sequential_test_modules, key=lambda t: t.split("::")[0])
 
     # Setup environment variables for tests
     for image_name, env_name in IMAGES_ENV.items():

@@ -253,6 +253,13 @@ ActionsDAG AggregatingStep::makeCreatingMissingKeysForGroupingSetDAG(
 
 void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings & settings)
 {
+    /// If the read step deliberately reduced the stream count (e.g. ReadFromMergeTree
+    /// chose fewer streams because data is small), don't expand beyond what was produced.
+    /// This avoids overhead from mostly-empty streams in subsequent steps.
+    const size_t max_threads = pipeline.getReadStreamCountWasReduced()
+        ? std::min(params.max_threads, pipeline.getNumStreams())
+        : params.max_threads;
+
     size_t new_merge_threads = merge_threads;
     size_t new_temporary_data_merge_threads = temporary_data_merge_threads;
     updateThreadsValues(new_merge_threads, new_temporary_data_merge_threads, params, settings);
@@ -396,7 +403,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
         /// After grouping sets aggregation, the stream count equals grouping_sets_size (typically 2-3),
         /// which is artificially low and unrelated to data volume. Expand to max_threads so that
         /// downstream steps (sorting, merging) can process the result in parallel.
-        pipeline.resize(params.max_threads);
+        pipeline.resize(max_threads);
 
         aggregating = collector.detachProcessors(0);
         return;
@@ -440,7 +447,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
             {
                 pipeline.addSimpleTransform([&](const SharedHeader & header)
                                             { return std::make_shared<FinalizeAggregatedTransform>(header, transform_params); });
-                pipeline.resize(std::min(params.max_threads, pipeline.getNumStreams()));
+                pipeline.resize(max_threads);
                 aggregating_in_order = collector.detachProcessors(0);
                 return;
             }
@@ -521,13 +528,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
                     dataflow_cache_updater);
             });
 
-        /// Don't expand beyond the number of aggregation streams.
-        /// The read step may have reduced the stream count for small data,
-        /// and expanding to max_threads creates overhead from mostly-empty streams
-        /// in subsequent steps (sorting, merging).
-        size_t post_aggregation_threads = should_produce_results_in_order_of_bucket_number
-            ? 1 : std::min(params.max_threads, pipeline.getNumStreams());
-        pipeline.resize(post_aggregation_threads, false, settings.min_outstreams_per_resize_after_split);
+        pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : max_threads, false, settings.min_outstreams_per_resize_after_split);
 
         aggregating = collector.detachProcessors(0);
     }
@@ -536,12 +537,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
         pipeline.addSimpleTransform([&](const SharedHeader & header)
                                     { return std::make_shared<AggregatingTransform>(header, transform_params, dataflow_cache_updater); });
 
-        /// When there is a single input stream (e.g. reading from `system.numbers` or a single file),
-        /// we still expand to max_threads after aggregation: the aggregation result can be large,
-        /// and downstream steps (sorting, merging) benefit from parallelism.
-        /// Unlike the multi-stream case above, a single stream was not specifically reduced
-        /// by the read step — it is the natural stream count of the source.
-        pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : params.max_threads);
+        pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : max_threads);
 
         aggregating = collector.detachProcessors(0);
     }

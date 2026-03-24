@@ -5,17 +5,17 @@
 namespace DB
 {
 
-/** Extract arithmeric operations from aggregate functions.
+/** Extract arithmetic operations from aggregate functions.
   *
   * Example: SELECT sum(a * 2);
   * Result: SELECT sum(a) * 2;
   */
-class AggregateFunctionsArithmericOperationsPass final : public IQueryTreePass
+class AggregateFunctionsArithmeticOperationsPass final : public IQueryTreePass
 {
 public:
-    String getName() override { return "AggregateFunctionsArithmericOperations"; }
+    String getName() override { return "AggregateFunctionsArithmeticOperations"; }
 
-    String getDescription() override { return "Extract arithmeric operations from aggregate functions."; }
+    String getDescription() override { return "Extract arithmetic operations from aggregate functions."; }
 
     void run(QueryTreeNodePtr & query_tree_node, ContextPtr context) override;
 

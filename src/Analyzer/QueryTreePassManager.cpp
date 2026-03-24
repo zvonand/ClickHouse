@@ -283,10 +283,10 @@ void addQueryTreePasses(QueryTreePassManager & manager, bool only_analyze)
 
     manager.addPass(std::make_unique<DistanceTransposedPartialReadsPass>());
 
-    /// should before AggregateFunctionsArithmericOperationsPass
+    /// should before AggregateFunctionsArithmeticOperationsPass
     manager.addPass(std::make_unique<AggregateFunctionOfGroupByKeysPass>());
 
-    manager.addPass(std::make_unique<AggregateFunctionsArithmericOperationsPass>());
+    manager.addPass(std::make_unique<AggregateFunctionsArithmeticOperationsPass>());
     manager.addPass(std::make_unique<UniqInjectiveFunctionsEliminationPass>());
 
     // Should run before optimization of GROUP BY keys to allow the removal of

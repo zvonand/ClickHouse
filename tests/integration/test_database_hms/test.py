@@ -210,4 +210,5 @@ def test_check_database(started_cluster):
         if "Invalid URL format" in str(e):
             pass
     finally:
+        node.query(f"SYSTEM DISABLE FAILPOINT check_database_datalake_negative")
         node.query("DROP DATABASE IF EXISTS test_hms_check_db")

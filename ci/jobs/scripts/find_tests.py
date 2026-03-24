@@ -707,6 +707,7 @@ class Targeting:
           )
         GROUP BY ic2.test_name, ic2_tot.tot_callees
         HAVING shared_callees >= {MIN_SHARED}
+           AND count(DISTINCT ic1.callee_offset) * 100.0 / ic2_tot.tot_callees >= 70
         ORDER BY jaccard_pct DESC, shared_callees DESC
         LIMIT 200
         """

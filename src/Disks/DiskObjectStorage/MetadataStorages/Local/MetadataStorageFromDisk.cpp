@@ -178,7 +178,15 @@ bool MetadataStorageFromDisk::loadRemovalLog()
 
     /// Read version header.
     UInt32 version = 0;
-    readBinaryLittleEndian(version, *buf);
+    try
+    {
+        readBinaryLittleEndian(version, *buf);
+    }
+    catch (...)
+    {
+        LOG_WARNING(log, "Truncated version header in {}, starting with empty queue: {}", REMOVAL_LOG_FILE, getCurrentExceptionMessage(false));
+        return true;
+    }
 
     if (version > REMOVAL_LOG_CURRENT_VERSION)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Unsupported removal log version: {}", version);

@@ -130,7 +130,6 @@ OPTIONS_TO_TEST_RUNNER_ARGUMENTS = {
     "parallel": "--no-sequential",
     "sequential": "--no-parallel",
     "flaky check": "--flaky-check",
-    "targeted": "--flaky-check",  # to disable tests not compatible with the thread fuzzer
 }
 
 
@@ -140,7 +139,6 @@ def main():
     batch_num, total_batches = 0, 0
     config_installs_args = ""
     is_flaky_check = False
-    is_targeted_check = False
     is_bugfix_validation = False
     is_s3_storage = False
     is_azure_storage = False
@@ -183,9 +181,7 @@ def main():
                     f"NOTE: Enabled test runner option [{OPTIONS_TO_TEST_RUNNER_ARGUMENTS[to]}]"
                 )
 
-        if "targeted" in to:
-            is_targeted_check = True
-        elif "flaky" in to:
+        if "flaky" in to:
             is_flaky_check = True
         elif "BugfixValidation" in to:
             is_bugfix_validation = True
@@ -258,9 +254,7 @@ def main():
         # The 45-min global time limit and 5-failure chain cap stop early if needed.
         print("Rerun count set to 50 for flaky check")
         rerun_count = 50
-    elif is_targeted_check:
-        print(f"Rerun count set to 5 for targeted check")
-        rerun_count = 5
+
 
     if not info.is_local_run:
         # TODO: find a way to work with Azure secret so it's ok for local tests as well, for now keep azure disabled
@@ -333,7 +327,6 @@ def main():
         is_flaky_check
         or is_per_test_coverage
         or is_bugfix_validation
-        or is_targeted_check
         or info.is_local_run
     ):
         stages.remove(JobStages.RETRIES)
@@ -418,17 +411,6 @@ def main():
                 status=Result.Status.SKIPPED, info="No tests to run"
             ).complete_job()
 
-    if is_targeted_check:
-        assert not args.test, "--test not supposed to be used for targeted check ???"
-        tests, results_with_info = targeter.get_all_relevant_tests_with_info()
-        results.append(results_with_info)
-        if not tests:
-            # early exit
-            Result.create_from(
-                status=Result.Status.SKIPPED,
-                info="No failed tests found from previous runs",
-            ).complete_job()
-
     stage = args.param or JobStages.INSTALL_CLICKHOUSE
     if stage:
         assert stage in JobStages, f"--param must be one of [{list(JobStages)}]"
@@ -475,7 +457,7 @@ def main():
             CH.set_random_timezone,
         ]
 
-        if is_flaky_check or is_targeted_check:
+        if is_flaky_check:
             commands.append(CH.enable_thread_fuzzer_config)
             sanitizers = ("asan", "tsan", "msan", "ubsan")
             if any(san in args.options for san in sanitizers):
@@ -549,22 +531,19 @@ def main():
         step_name = "Tests"
         print(step_name)
 
-        # For targeted and flaky checks, use N separate clickhouse-test invocations
+        # For flaky check, use N separate clickhouse-test invocations
         # (run_sets_cnt=N, rerun_count=1 each) so that every invocation creates fresh
         # TestCase objects with independently randomized settings.
         # A single invocation with --test-runs N reuses the same TestCase (and thus the
         # same random settings) for all N runs — not what we want for flakiness detection.
-        run_sets_cnt = rerun_count if (is_targeted_check or is_flaky_check) else 1
-        rerun_count = 1 if (is_targeted_check or is_flaky_check) else rerun_count
+        run_sets_cnt = rerun_count if is_flaky_check else 1
+        rerun_count = 1 if is_flaky_check else rerun_count
 
         ft_res_processor = FTResultsProcessor(wd=temp_dir)
 
         global_time_limit = 0
         if is_flaky_check:
             # Hard 45-minute wall-clock limit for the test runner.
-            # The combined targeted+flaky check runs each selected test once in
-            # parallel; 45 min is enough to cover the selected set while staying
-            # well within the job's overall hard timeout.
             FLAKY_CHECK_TIME_LIMIT = 45 * 60  # 45 min
             global_time_limit = max(
                 FLAKY_CHECK_TIME_LIMIT - int(stop_watch.duration), 0
@@ -574,40 +553,19 @@ def main():
                 f" (elapsed so far: {int(stop_watch.duration)}s,"
                 f" remaining: {global_time_limit}s)"
             )
-        elif is_targeted_check:
-            # Legacy targeted check: consume the remaining job time budget.
-            job_timeout = int(3600 * 2.5)
-            soft_limit_margin = 3600
-            global_time_limit = max(
-                job_timeout - soft_limit_margin - int(stop_watch.duration), 0
-            )
-            print(
-                f"Soft time limit for test runner: {global_time_limit}s"
-                f" (elapsed so far: {int(stop_watch.duration)}s)"
-            )
 
         # Track collected test results across multiple runs (only used when run_sets_cnt > 1)
         collected_test_results = []
         seen_test_names = set()
-        # Track accumulated run time per test for the targeted check per-test time cap
-        test_time_accumulated: dict[str, float] = {}
-        TIME_CAP_PER_TEST_SEC = 10 * 60
         tests_to_run = list(tests) if tests else tests
 
         for cnt in range(run_sets_cnt):
             # Recalculate the remaining time before each invocation of the test runner.
             if global_time_limit > 0 and run_sets_cnt > 1:
-                if is_flaky_check:
-                    FLAKY_CHECK_TIME_LIMIT = 45 * 60
-                    global_time_limit = max(
-                        FLAKY_CHECK_TIME_LIMIT - int(stop_watch.duration), 0
-                    )
-                elif is_targeted_check:
-                    job_timeout = int(3600 * 2.5)
-                    soft_limit_margin = 3600
-                    global_time_limit = max(
-                        job_timeout - soft_limit_margin - int(stop_watch.duration), 0
-                    )
+                FLAKY_CHECK_TIME_LIMIT = 45 * 60
+                global_time_limit = max(
+                    FLAKY_CHECK_TIME_LIMIT - int(stop_watch.duration), 0
+                )
                 if global_time_limit <= 0:
                     print(
                         "NOTE: Time limit exhausted; stopping before next iteration"
@@ -621,9 +579,7 @@ def main():
                 batch_total=total_batches if not tests_to_run else 0,
                 tests=tests_to_run,
                 extra_args=runner_options,
-                random_order=is_flaky_check
-                or is_targeted_check
-                or is_bugfix_validation,
+                random_order=is_flaky_check or is_bugfix_validation,
                 rerun_count=rerun_count,
                 global_time_limit=global_time_limit,
             )
@@ -633,27 +589,6 @@ def main():
             # or all results on the final attempt
             if run_sets_cnt > 1:
                 is_final_run = cnt == run_sets_cnt - 1
-
-                # Accumulate per-test run time and filter tests that exceeded the time cap
-                if is_targeted_check:
-                    for test_case_result in test_result.results:
-                        if test_case_result.duration is not None:
-                            test_time_accumulated[test_case_result.name] = (
-                                test_time_accumulated.get(test_case_result.name, 0.0)
-                                + test_case_result.duration
-                            )
-                    if not is_final_run:
-                        tests_to_run = [
-                            t
-                            for t in tests_to_run
-                            if test_time_accumulated.get(t, 0.0)
-                            < TIME_CAP_PER_TEST_SEC
-                        ]
-                        if not tests_to_run:
-                            print(
-                                "NOTE: All tests exceeded the time cap; stopping early"
-                            )
-                            is_final_run = True
 
                 for test_case_result in test_result.results:
                     # Only collect each test once (first failure or final result)

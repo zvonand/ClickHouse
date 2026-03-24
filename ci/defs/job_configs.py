@@ -472,9 +472,6 @@ class JobConfigs:
         ),
     )
     stateless_tests_flaky_pr_jobs = common_ft_job_config.parametrize(
-        # Combined targeted+flaky job: selects changed/previously-failed/coverage-relevant
-        # tests from the PR, then runs them with flaky-check execution (parallel,
-        # per-test randomized settings, 45-min time cap, stop on 5 failures).
         Job.ParamSet(
             parameter="arm_asan_ubsan, flaky check",
             runs_on=RunnerLabels.ARM_MEDIUM,
@@ -501,7 +498,6 @@ class JobConfigs:
             requires=[ArtifactNames.CH_AMD_DEBUG],
         ),
     )
-    stateless_tests_targeted_pr_jobs = []
     # --root/--privileged/--cgroupns=host is required for clickhouse-test --memory-limit
     bugfix_validation_ft_pr_job = Job.Config(
         name=JobNames.BUGFIX_VALIDATE_FT,

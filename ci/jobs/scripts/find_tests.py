@@ -1323,7 +1323,7 @@ class Targeting:
         # scores.  A minimum score threshold keeps the result set bounded
         # without an arbitrary count limit.
         MIN_SCORE = 1e-8        # floor: tests scoring below this have negligible signal
-        MAX_OUTPUT_TESTS = 500   # hard cap: targeted runs must stay focused
+        MAX_OUTPUT_TESTS = 500   # hard cap: flaky check runs must stay focused
         all_ranked = sorted(width_score, key=sort_key)
         ranked = [t for t in all_ranked if width_score[t] >= MIN_SCORE][:MAX_OUTPUT_TESTS]
 

@@ -3,11 +3,7 @@
 #include <base/hex.h>
 #include <Common/formatIPv6.h>
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-parameter"
-#pragma clang diagnostic ignored "-Wsign-compare"
-#include <dragonbox/dragonbox_to_chars.h>
-#pragma clang diagnostic pop
+#include <zmij.h>
 
 namespace DB
 {
@@ -153,13 +149,10 @@ size_t writeFloatTextFastPath(T x, char * buffer)
 
     if constexpr (std::is_same_v<T, Float64>)
     {
-        /// The library dragonbox has low performance on integers.
-        /// This workaround improves performance 6..10 times.
-
         if (DecomposedFloat64(x).isIntegerInRepresentableRange())
             result = itoa(Int64(x), buffer) - buffer;
         else
-            result = jkj::dragonbox::to_chars_n(x, buffer) - buffer;
+            result = zmij::detail::write(x, buffer) - buffer;
     }
     else if constexpr (std::is_same_v<T, Float32> || std::is_same_v<T, BFloat16>)
     {
@@ -167,7 +160,7 @@ size_t writeFloatTextFastPath(T x, char * buffer)
         if (DecomposedFloat32(f32).isIntegerInRepresentableRange())
             result = itoa(Int32(f32), buffer) - buffer;
         else
-            result = jkj::dragonbox::to_chars_n(f32, buffer) - buffer;
+            result = zmij::detail::write(f32, buffer) - buffer;
     }
 
     if (result <= 0)

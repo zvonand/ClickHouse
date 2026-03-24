@@ -237,6 +237,7 @@ def main():
 
     if (
         not is_flaky_check
+        and not is_targeted_check
         and not is_llvm_coverage
         and not is_bugfix_validation
         and not args.test

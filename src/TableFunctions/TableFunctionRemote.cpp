@@ -116,8 +116,10 @@ void TableFunctionRemote::parseArguments(const ASTPtr & ast_function, ContextPtr
         /// cluster('cluster_name')
         /// cluster('cluster_name', db.table)
         /// cluster('cluster_name', 'db', 'table')
+        /// cluster('cluster_name', table_function())
         /// cluster('cluster_name', db.table, sharding_key)
         /// cluster('cluster_name', 'db', 'table', sharding_key)
+        /// cluster('cluster_name', table_function(), sharding_key)
         ///
         /// clusterAllReplicas() - same as cluster()
 
@@ -169,6 +171,13 @@ void TableFunctionRemote::parseArguments(const ASTPtr & ast_function, ContextPtr
             {
                 remote_table_function_ptr = args[arg_num];
                 ++arg_num;
+
+                /// Cluster function may have sharding key for insert
+                if (is_cluster_function && arg_num < args.size())
+                {
+                    sharding_key = args[arg_num];
+                    ++arg_num;
+                }
             }
             else
             {

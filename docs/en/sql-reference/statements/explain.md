@@ -587,14 +587,12 @@ Join (JOIN FillRightFirst)
 │    Right: id, value
 │  Clauses: [(__table1.id) = (__table2.id)]
 ├──ReadFromMergeTree (default.t1)
-│     ReadType: Default
-│     Parts: 1
-│     Granules: 1
+│     Read type: Default
+│     Parts: 1 | Granules: 1
 │     Output: id, value
 └──ReadFromMergeTree (default.t2)
-      ReadType: Default
-      Parts: 1
-      Granules: 1
+      Read type: Default
+      Parts: 1 | Granules: 1
       Output: id, value
 ```
 

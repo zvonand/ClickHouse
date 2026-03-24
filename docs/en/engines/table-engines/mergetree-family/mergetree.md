@@ -633,10 +633,13 @@ Projections can be modified or dropped with the [ALTER](/sql-reference/statement
 
 ### Projection indexes {#projection-index}
 
-Projection indexes extend the projection subsystem by providing a lightweight, explicit way to define projection-level indexes. 
-Conceptually, a projection index is still a projection, but with simplified syntax and clearer intent: it defines an expression which is dedicated to filtering, rather than serving as materialized data.
+Projection indexes extend the projection subsystem by providing a lightweight, explicit way to define projection-level indexes.
+Externally, a projection index is still a projection, but with simplified syntax and clearer intent: it defines an expression which is dedicated to filtering, rather than serving as materialized data.
+Internally, a projection index does not materialize the original table in permuted row order like a regular permutation.
+Instead, the permutation is stored in the form of a numeric permutation column `_part_index`.
 
 #### Syntax {#projection-index-syntax}
+
 ```sql
 PROJECTION <name> INDEX <index_expr> TYPE <index_type>
 ````

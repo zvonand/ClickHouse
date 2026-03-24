@@ -30,15 +30,59 @@ void registerTableFunctionFilesystem(TableFunctionFactory & factory)
         {
             .description = R"(
 Provides access to file system to list files and return their metadata and contents. Recursively iterates directories.
-This table function provides access to filesystem of a server that runs a query.)",
+
+## Access control
+
+In server mode, the function is restricted to the `user_files` directory (controlled by the `user_files_path` server config).
+Paths are resolved relative to `user_files`. Symlinks that escape `user_files` are skipped.
+In `clickhouse-local` mode, any path on the local filesystem is accessible.
+
+The `FILE` source access type is required.
+
+## Arguments
+
+- With no arguments, the function lists all files under `user_files`.
+- With a single argument, it accepts an absolute or relative path. Relative paths are resolved against `user_files`.
+
+## Columns
+
+- `path` (`String`) — parent directory path.
+- `name` (`String`) — file name (aliased as `file`).
+- `type` (`Enum8`) — file type: `'none'`, `'not_found'`, `'regular'`, `'directory'`, `'symlink'`, `'block'`, `'character'`, `'fifo'`, `'socket'`, `'unknown'`.
+- `size` (`Nullable(UInt64)`) — file size in bytes (NULL for non-regular files).
+- `depth` (`UInt16`) — depth relative to the root path (0 for the root and its direct children).
+- `modification_time` (`Nullable(DateTime64(6))`) — last modification time with microsecond precision.
+- `is_symlink` (`Bool`) — whether the entry is a symbolic link.
+- `content` (`Nullable(String)`) — file content for regular files, NULL otherwise.
+- `owner_read`, `owner_write`, `owner_exec`, `group_read`, `group_write`, `group_exec`, `others_read`, `others_write`, `others_exec`, `set_gid`, `set_uid`, `sticky_bit` (`Bool`) — POSIX permission bits.
+
+## Optimizations
+
+- **Lazy content reading**: the `content` column is only read when explicitly selected.
+  Queries that do not select `content` avoid file I/O entirely.
+- **Predicate pushdown on metadata**: filters on cheap columns (`path`, `name`, `depth`, `type`, `is_symlink`)
+  are evaluated before reading file content, size, or modification time.
+- **Parallel traversal**: multiple threads traverse the directory tree concurrently via a shared bounded queue,
+  enabling fast scanning of large directory trees.
+- **Early LIMIT**: because results are streamed, `LIMIT` stops the traversal early.
+)",
             .examples
             {
-                {"Example", R"(Query:
+                {"List all files under user_files", R"(
+```sql
+SELECT name, size FROM filesystem()
 ```
-:) SELECT * FROM filesystem('/var/lib/clickhouse/user_files')
+)", ""},
+                {"List files with a relative path", R"(
+```sql
+SELECT name, size FROM filesystem('my_data')
 ```
-)", ""
-                }
+)", ""},
+                {"List files with an absolute path", R"(
+```sql
+SELECT * FROM filesystem('/var/lib/clickhouse/user_files')
+```
+)", ""},
             },
             .category = FunctionDocumentation::Category::TableFunction
         }, {}, TableFunctionFactory::Case::Insensitive);

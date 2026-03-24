@@ -580,7 +580,7 @@ Output: id, value, t2.id, t2.value
 
 Join (JOIN FillRightFirst)
 │  t1[100] ⋈ t2[100]
-│  Type: INNER | Strictness: ALL | Algorithm: ConcurrentHashJoin
+│  Type: inner | Strictness: all | Algorithm: ConcurrentHashJoin
 │  ResultRows: 100
 │  Output:
 │    Left:  id, value

@@ -3705,11 +3705,8 @@ template<typename Container>
 KeeperResponsesForSessions KeeperStorage<Container>::processRequest(
     const Coordination::ZooKeeperRequestPtr & zk_request,
     int64_t session_id,
-    std::optional<int64_t> new_last_zxid,
-    bool check_acl,
-    bool is_local)
+    std::optional<int64_t> new_last_zxid)
 {
-    const UInt64 start_time_us = ZooKeeperOpentelemetrySpans::now();
     Stopwatch watch;
     SCOPE_EXIT({
         watch.stop();
@@ -3759,7 +3756,6 @@ KeeperResponsesForSessions KeeperStorage<Container>::processRequest(
     }
 
     std::list<Delta> deltas;
-    if (!is_local)
     {
         std::lock_guard lock(uncommitted_state.deltas_mutex);
         auto it = uncommitted_state.deltas.begin();
@@ -3830,53 +3826,6 @@ KeeperResponsesForSessions KeeperStorage<Container>::processRequest(
         {
             Coordination::ZooKeeperResponsePtr response;
 
-            if (is_local)
-            {
-                chassert(zk_request->isReadRequest());
-                if (check_acl && !checkAuth(concrete_zk_request, *this, session_id, true))
-                {
-                    response = zk_request->makeResponse();
-                    /// Original ZooKeeper always throws no auth, even when user provided some credentials
-                    response->error = Coordination::Error::ZNOAUTH;
-                }
-                else
-                {
-                    const auto maybe_log_opentelemetery_span = [&](OpenTelemetry::SpanStatus status, const std::string & error_message)
-                    {
-
-                        ZooKeeperOpentelemetrySpans::maybeInitialize(
-                            concrete_zk_request.spans.read_process,
-                            concrete_zk_request.tracing_context,
-                            start_time_us);
-
-                        ZooKeeperOpentelemetrySpans::maybeFinalize(
-                            concrete_zk_request.spans.read_process,
-                            [&]
-                            {
-                                return std::vector<OpenTelemetry::SpanAttribute>{
-                                    {"keeper.operation", Coordination::opNumToString(concrete_zk_request.getOpNum())},
-                                    {"keeper.xid", std::to_string(concrete_zk_request.xid)},
-                                };
-                            },
-                            status,
-                            error_message);
-                    };
-
-                    try
-                    {
-                        std::shared_lock lock(storage_mutex);
-                        response = processLocal(concrete_zk_request, *this, deltas_range, session_id);
-                    }
-                    catch (...)
-                    {
-                        maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::ERROR, getCurrentExceptionMessage(true));
-                        throw;
-                    }
-
-                    maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::OK, "");
-                }
-            }
-            else
             {
                 std::lock_guard lock(storage_mutex);
                 response = process(concrete_zk_request, *this, deltas_range, session_id);
@@ -3885,56 +3834,7 @@ KeeperResponsesForSessions KeeperStorage<Container>::processRequest(
             }
 
             /// Watches for this requests are added to the watches lists
-            const auto update_watches = [&](const Coordination::ZooKeeperRequestPtr & req, const Coordination::ResponsePtr & resp)
-            {
-                if (resp->error == Coordination::Error::ZOK)
-                {
-                    static constexpr std::array list_requests{
-                        Coordination::OpNum::List, Coordination::OpNum::SimpleList, Coordination::OpNum::FilteredList, Coordination::OpNum::FilteredListWithStatsAndData};
-
-                    auto watch_type = std::ranges::contains(list_requests, req->getOpNum()) ? WatchType::LIST_WATCH : WatchType::WATCH;
-
-                    auto & watches_type = watch_type == WatchType::LIST_WATCH ? list_watches : watches;
-
-                    auto [watch_it, path_inserted] = watches_type.try_emplace(req->getPath());
-                    auto [path_it, session_inserted] = watch_it->second.emplace(session_id);
-                    if (session_inserted)
-                    {
-                        ++total_watches_count;
-                        sessions_and_watchers[session_id].emplace(WatchInfo{.path = watch_it->first, .type = watch_type});
-                    }
-                }
-                else if (resp->error == Coordination::Error::ZNONODE && req->getOpNum() == Coordination::OpNum::Exists)
-                {
-                    auto [watch_it, path_inserted] = watches.try_emplace(req->getPath());
-                    auto session_insert_info = watch_it->second.emplace(session_id);
-                    if (session_insert_info.second)
-                    {
-                        ++total_watches_count;
-                        sessions_and_watchers[session_id].emplace(WatchInfo{.path = watch_it->first, .type = WatchType::WATCH});
-                    }
-                }
-            };
-
-            if (zk_request->getOpNum() == Coordination::OpNum::MultiRead)
-            {
-                const auto * multi_read_request = dynamic_cast<const Coordination::ZooKeeperMultiRequest *>(zk_request.get());
-                const auto * multi_read_response = dynamic_cast<const Coordination::ZooKeeperMultiReadResponse *>(response.get());
-                chassert(multi_read_request != nullptr);
-                chassert(multi_read_response != nullptr);
-
-                for (const auto [subrequest, subresponse] : std::views::zip(multi_read_request->requests, multi_read_response->responses))
-                {
-                    if (subrequest->has_watch)
-                    {
-                        update_watches(subrequest, subresponse);
-                    }
-                }
-            }
-            else if (zk_request->has_watch)
-            {
-                update_watches(zk_request, response);
-            }
+            updateWatches(zk_request, response, session_id);
 
             /// If this requests processed successfully we need to check watches
             if (response->error == Coordination::Error::ZOK)
@@ -3966,6 +3866,129 @@ KeeperResponsesForSessions KeeperStorage<Container>::processRequest(
 
         zxid = commit_zxid;
     }
+
+    return results;
+}
+
+template <typename Container>
+KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
+    const KeeperRequestsForSessions & requests,
+    bool check_acl)
+{
+    const UInt64 start_time_us = ZooKeeperOpentelemetrySpans::now();
+    Stopwatch watch;
+    SCOPE_EXIT({
+        watch.stop();
+
+        const auto elapsed_us = watch.elapsedMicroseconds();
+        const auto elapsed_ms = watch.elapsedMilliseconds();
+
+        if (elapsed_ms > keeper_context->getCoordinationSettings()[CoordinationSetting::log_slow_cpu_threshold_ms])
+        {
+            LOG_INFO(
+                getLogger("KeeperStorage"),
+                "Processing a batch of local read requests took too long ({}ms for {} requests).\nFirst request info: {}",
+                elapsed_ms,
+                requests.size(),
+                requests.at(0).request->toString(/*short_format=*/true));
+        }
+
+        ProfileEvents::increment(ProfileEvents::KeeperProcessElapsedMicroseconds, elapsed_us);
+    });
+
+    if (!initialized)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "KeeperStorage system nodes are not initialized");
+
+    int64_t current_zxid;
+    {
+        std::lock_guard lock(transaction_mutex);
+        current_zxid = zxid;
+    }
+
+    std::list<Delta> empty_deltas;
+    KeeperStorageBase::DeltaRange deltas_range{.begin_it = empty_deltas.begin(), .end_it = empty_deltas.end()};
+
+    /// Read requests have exactly one response each (no watch notifications).
+    /// `requests` and `results` are parallel arrays.
+    KeeperResponsesForSessions results(requests.size());
+
+    int64_t prev_session_id = -1;
+    for (size_t request_idx = 0; request_idx < requests.size(); ++request_idx)
+    {
+        const auto & request_for_session = requests[request_idx];
+        int64_t session_id = request_for_session.session_id;
+        const Coordination::ZooKeeperRequestPtr & zk_request = request_for_session.request;
+
+        /// ZooKeeper updates session expiry for each request, not only for heartbeats
+        if (session_id != prev_session_id)
+        {
+            session_expiry_queue.addNewSessionOrUpdate(session_id, session_and_timeout[session_id]);
+            prev_session_id = session_id;
+        }
+
+        const auto process_request = [&]<std::derived_from<Coordination::ZooKeeperRequest> T>(T & concrete_zk_request)
+        {
+            chassert(zk_request->isReadRequest());
+
+            Coordination::ZooKeeperResponsePtr response;
+
+            if (check_acl && !checkAuth(concrete_zk_request, *this, session_id, true))
+            {
+                response = zk_request->makeResponse();
+                /// Original ZooKeeper always throws no auth, even when user provided some credentials
+                response->error = Coordination::Error::ZNOAUTH;
+            }
+            else
+            {
+                const auto maybe_log_opentelemetery_span = [&](OpenTelemetry::SpanStatus status, const std::string & error_message)
+                {
+                    ZooKeeperOpentelemetrySpans::maybeInitialize(
+                        concrete_zk_request.spans.read_process,
+                        concrete_zk_request.tracing_context,
+                        start_time_us);
+
+                    ZooKeeperOpentelemetrySpans::maybeFinalize(
+                        concrete_zk_request.spans.read_process,
+                        [&]
+                        {
+                            return std::vector<OpenTelemetry::SpanAttribute>{
+                                {"keeper.operation", Coordination::opNumToString(concrete_zk_request.getOpNum())},
+                                {"keeper.xid", std::to_string(concrete_zk_request.xid)},
+                            };
+                        },
+                        status,
+                        error_message);
+                };
+
+                try
+                {
+                    std::shared_lock lock(storage_mutex);
+                    response = processLocal(concrete_zk_request, *this, deltas_range, session_id);
+                }
+                catch (...)
+                {
+                    maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::ERROR, getCurrentExceptionMessage(true));
+                    throw;
+                }
+
+                maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::OK, "");
+            }
+
+            /// Watches for this request are added to the watches lists
+            updateWatches(zk_request, response, session_id);
+
+            asdqwe processWatches for SetWatches/SetWatches2?;
+
+            response->xid = zk_request->xid;
+            response->zxid = current_zxid;
+
+            results.at(request_idx) = KeeperResponseForSession{session_id, response, zk_request};
+        };
+
+        callOnConcreteRequestType(*zk_request, process_request);
+    }
+
+    updateStats();
 
     return results;
 }
@@ -4213,6 +4236,62 @@ void KeeperStorageBase::dumpSessionsAndEphemerals(WriteBufferFromOwnString & buf
     {
         buf << "0x" << getHexUIntLowercase(session_id) << "\n";
         write_str_set(ephemeral_paths);
+    }
+}
+
+template<typename Container>
+void KeeperStorage<Container>::updateWatches(
+    const Coordination::ZooKeeperRequestPtr & zk_request,
+    const Coordination::ZooKeeperResponsePtr & response,
+    int64_t session_id)
+{
+    const auto register_watch = [&](const Coordination::ZooKeeperRequestPtr & req, const Coordination::ResponsePtr & resp)
+    {
+        if (resp->error == Coordination::Error::ZOK)
+        {
+            static constexpr std::array list_requests{
+                Coordination::OpNum::List, Coordination::OpNum::SimpleList, Coordination::OpNum::FilteredList, Coordination::OpNum::FilteredListWithStatsAndData};
+
+            auto watch_type = std::ranges::contains(list_requests, req->getOpNum()) ? WatchType::LIST_WATCH : WatchType::WATCH;
+
+            auto & watches_type = watch_type == WatchType::LIST_WATCH ? list_watches : watches;
+
+            auto [watch_it, path_inserted] = watches_type.try_emplace(req->getPath());
+            auto [path_it, session_inserted] = watch_it->second.emplace(session_id);
+            if (session_inserted)
+            {
+                ++total_watches_count;
+                sessions_and_watchers[session_id].emplace(WatchInfo{.path = watch_it->first, .type = watch_type});
+            }
+        }
+        else if (resp->error == Coordination::Error::ZNONODE && req->getOpNum() == Coordination::OpNum::Exists)
+        {
+            auto [watch_it, path_inserted] = watches.try_emplace(req->getPath());
+            auto session_insert_info = watch_it->second.emplace(session_id);
+            if (session_insert_info.second)
+            {
+                ++total_watches_count;
+                sessions_and_watchers[session_id].emplace(WatchInfo{.path = watch_it->first, .type = WatchType::WATCH});
+            }
+        }
+    };
+
+    if (zk_request->getOpNum() == Coordination::OpNum::MultiRead)
+    {
+        const auto * multi_read_request = dynamic_cast<const Coordination::ZooKeeperMultiRequest *>(zk_request.get());
+        const auto * multi_read_response = dynamic_cast<const Coordination::ZooKeeperMultiReadResponse *>(response.get());
+        chassert(multi_read_request != nullptr);
+        chassert(multi_read_response != nullptr);
+
+        for (const auto [subrequest, subresponse] : std::views::zip(multi_read_request->requests, multi_read_response->responses))
+        {
+            if (subrequest->has_watch)
+                register_watch(subrequest, subresponse);
+        }
+    }
+    else if (zk_request->has_watch)
+    {
+        register_watch(zk_request, response);
     }
 }
 

@@ -1064,20 +1064,15 @@ void KeeperStateMachine<Storage>::processReadRequests(const KeeperRequestsForSes
     KEEPER_STORAGE_LOCK_SHARED(storage_lock);
     ProfiledMutexLock response_lock(process_and_responses_lock, ProfileEvents::KeeperProcessAndResponsesLockWaitMicroseconds, ProfileEvents::KeeperProcessAndResponsesLockHoldMicroseconds);
 
-    for (const auto & request_for_session : requests)
+    auto responses = storage->processLocalRequests(requests, /*check_acl=*/ true);
+
+    for (auto & response_for_session : responses)
     {
-        auto responses = storage->processRequest(
-            request_for_session.request, request_for_session.session_id, std::nullopt, true /*check_acl*/, true /*is_local*/);
-        for (auto & response_for_session : responses)
-        {
-            if (response_for_session.response->xid != Coordination::WATCH_XID)
-                response_for_session.request = request_for_session.request;
-            response_for_session.response->enqueue_ts = std::chrono::steady_clock::now();
-            if (response_for_session.request)
-                ZooKeeperOpentelemetrySpans::maybeInitialize(response_for_session.request->spans.dispatcher_responses_queue, response_for_session.request->tracing_context);
-            if (!responses_queue.push(response_for_session))
-                LOG_WARNING(log, "Failed to push response with session id {} to the queue, probably because of shutdown", response_for_session.session_id);
-        }
+        response_for_session.response->enqueue_ts = std::chrono::steady_clock::now();
+        chassert(response_for_session.request);
+        ZooKeeperOpentelemetrySpans::maybeInitialize(response_for_session.request->spans.dispatcher_responses_queue, response_for_session.request->tracing_context);
+        if (!responses_queue.push(response_for_session))
+            LOG_WARNING(log, "Failed to push response with session id {} to the queue, probably because of shutdown", response_for_session.session_id);
     }
 }
 

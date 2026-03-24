@@ -618,9 +618,12 @@ public:
     KeeperResponsesForSessions processRequest(
         const Coordination::ZooKeeperRequestPtr & request,
         int64_t session_id,
-        std::optional<int64_t> new_last_zxid,
-        bool check_acl = true,
-        bool is_local = false);
+        std::optional<int64_t> new_last_zxid);
+
+    /// Process a batch of local read requests (no deltas, no commit).
+    KeeperResponsesForSessions processLocalRequests(
+        const KeeperRequestsForSessions & requests,
+        bool check_acl = true);
     KeeperDigest preprocessRequest(
         const Coordination::ZooKeeperRequestPtr & request,
         int64_t session_id,
@@ -661,6 +664,12 @@ public:
     uint64_t getArenaDataSize() const;
 
     void updateStats();
+
+    /// Register watches from a request/response pair.
+    void updateWatches(
+        const Coordination::ZooKeeperRequestPtr & zk_request,
+        const Coordination::ZooKeeperResponsePtr & response,
+        int64_t session_id);
 
     void recalculateStats();
 private:

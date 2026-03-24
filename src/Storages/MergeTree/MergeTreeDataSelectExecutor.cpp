@@ -763,7 +763,7 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
     /// Used to report only indices that actually filtered something in query_log.skip_indices.
     std::vector<std::atomic<size_t>> index_dropped_granules(skip_indexes.useful_indices.size());
     for (auto & counter : index_dropped_granules)
-	counter.store(0, std::memory_order_relaxed);
+        counter.store(0, std::memory_order_relaxed);
 
     std::atomic<size_t> sum_marks_pk = 0;
     std::atomic<size_t> sum_parts_pk = 0;

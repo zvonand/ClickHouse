@@ -317,7 +317,7 @@ std::pair<String, String> splitPathAndDynamicTypeSubcolumn(std::string_view subc
 }
 
 /// Prefixed subcolumn in JSON path always looks like "<prefix>`some`.path.path"
-/// (e.g. "^`some`.path" for sub-object, "$`some`.path" for combined).
+/// (e.g. "^`some`.path" for sub-object, "@`some`.path" for combined).
 /// We back-quote the first path element after the prefix so we can distinguish
 /// prefixed subcolumns from regular path elements like "^path" or "$path".
 std::optional<String> tryGetPrefixedSubcolumn(std::string_view subcolumn_name, char prefix)
@@ -438,7 +438,7 @@ ColumnPtr extractCombinedColumn(
 
 /// Builds the sub-object type and serialization for a given path prefix.
 /// Returns a pair of (sub_object_type, sub_object_serialization), shared between
-/// the sub-object subcolumn (^) and the combined subcolumn ($) branches.
+/// the sub-object subcolumn (^) and the combined subcolumn (@) branches.
 std::pair<DataTypePtr, SerializationPtr> buildSubObjectTypeAndSerialization(
     const String & prefix,
     const std::unordered_map<String, DataTypePtr> & typed_paths,
@@ -451,8 +451,8 @@ std::pair<DataTypePtr, SerializationPtr> buildSubObjectTypeAndSerialization(
     const DataTypePtr & dynamic_type,
     const SerializationPtr & dynamic_serialization)
 {
-    UnorderedMapWithMemoryTracking<String, DataTypePtr> typed_sub_paths;
-    UnorderedMapWithMemoryTracking<String, SerializationPtr> typed_sub_paths_serializations;
+    std::unordered_map<String, DataTypePtr> typed_sub_paths;
+    std::unordered_map<String, SerializationPtr> typed_sub_paths_serializations;
     for (const auto & [path, type] : typed_paths)
     {
         if (path.starts_with(prefix))
@@ -551,7 +551,7 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
                 const auto & object_column = assert_cast<const ColumnObject &>(*data.column);
                 res->column = object_column.getTypedPaths().at(combined_path);
             }
-            res->serialization = std::make_shared<SerializationObjectTypedPath>(res->serialization, combined_path);
+            res->serialization = SerializationObjectTypedPath::create(res->serialization, combined_path);
             return res;
         }
 
@@ -562,9 +562,9 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
             prefix, typed_paths, typed_paths_serializations, schema_format, paths_to_skip, path_regexps_to_skip,
             max_dynamic_paths, max_dynamic_types, dynamic_result_type, dynamic_path_serialization);
 
-        auto literal_serialization = std::make_shared<SerializationObjectDynamicPath>(dynamic_path_serialization, combined_path, /*path_subcolumn=*/"", dynamic_result_type, dynamic_path_serialization, dynamic_result_type);
+        auto literal_serialization = SerializationObjectDynamicPath::create(dynamic_path_serialization, combined_path, /*path_subcolumn=*/"", dynamic_result_type, dynamic_path_serialization, dynamic_result_type);
 
-        auto res = std::make_unique<SubstreamData>(std::make_shared<SerializationObjectCombinedPath>(
+        auto res = std::make_unique<SubstreamData>(SerializationObjectCombinedPath::create(
             literal_serialization, sub_object_serialization, dynamic_result_type, sub_object_type));
         res->type = dynamic_result_type;
 

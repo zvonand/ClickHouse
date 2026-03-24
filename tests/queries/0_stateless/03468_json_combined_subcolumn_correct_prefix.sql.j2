@@ -15,18 +15,18 @@ insert into table test format JSONAsObject
 {"aa" : {"bb" : {"cc" : 1, "dd" : 2, "ee" : 3, "ff" : 4}}, "yy" : 42, "zz" : 42};
 
 -- Combined subcolumn for full path prefix
-select json.$aa from test;
-select json.$a from test;
-select json.$aa.bb from test;
-select json.$aa.b from test;
+select json.@aa from test;
+select json.@a from test;
+select json.@aa.bb from test;
+select json.@aa.b from test;
 
--- Compare combined ($) with sub-object (^) - when no scalar at path, $ returns sub-object cast to Dynamic
-select json.^aa, json.$aa from test;
-select json.^aa.bb, json.$aa.bb from test;
+-- Compare combined (@) with sub-object (^) - when no scalar at path, @ returns sub-object cast to Dynamic
+select json.^aa, json.@aa from test;
+select json.^aa.bb, json.@aa.bb from test;
 
 -- Combined subcolumn for paths not in the data
-select json.$xx from test;
-select json.$yy from test;
+select json.@xx from test;
+select json.@yy from test;
 
 drop table test;
 

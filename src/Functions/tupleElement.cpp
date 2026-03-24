@@ -153,7 +153,7 @@ public:
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Second argument of {} with {} first argument must be a constant String", getName(), input_type->getName());
 
             auto subcolumn_name = subcolumn_name_col->getValue<String>();
-            /// Use combined `$` subcolumn that merges literal value and sub-object.
+            /// Use combined `@` subcolumn that merges literal value and sub-object.
             auto combined_name = String(1, DataTypeObject::COMBINED_SUBCOLUMN_PREFIX) + "`" + subcolumn_name + "`";
             return wrapInArrays(object->getSubcolumnType(combined_name), count_arrays);
         }
@@ -382,7 +382,7 @@ private:
 
     ColumnPtr getObjectElement(const DataTypeObject & object_type, const ColumnPtr & object_column, const String & element_name) const
     {
-        /// Use combined `$` subcolumn that merges literal value and sub-object.
+        /// Use combined `@` subcolumn that merges literal value and sub-object.
         /// For rows with a literal at requested path we return the literal, for rows with a nested object
         /// we return the nested object as JSON column, so nested `tupleElement` calls can be applied to it.
         auto combined_name = String(1, DataTypeObject::COMBINED_SUBCOLUMN_PREFIX) + "`" + element_name + "`";

@@ -7,19 +7,35 @@
 namespace DB
 {
 
-/// Serialization of combined literal+sub-object Object subcolumns (the `$` subcolumn).
+/// Serialization of combined literal+sub-object Object subcolumns (the `@` subcolumn).
 /// For example, if we have type JSON and data {"a" : {"b" : {"c" : 42, "d" : "Hello"}}, "c" : [1, 2, 3]}
 /// this class will be responsible for reading combined path 'a' and will return a Dynamic column
 /// that contains the literal value at path 'a' (if present) or the sub-object at path 'a' (if not empty).
 /// This class is never used for typed paths - the typed-path check is done in `getDynamicSubcolumnData`.
 class SerializationObjectCombinedPath final : public SimpleTextSerialization
 {
-public:
+private:
     SerializationObjectCombinedPath(
         const SerializationPtr & literal_serialization_,
         const SerializationPtr & sub_object_serialization_,
         const DataTypePtr & dynamic_type_,
         const DataTypePtr & sub_object_type_);
+
+public:
+    static UInt128 getHash(
+        const SerializationPtr & literal_serialization_,
+        const SerializationPtr & sub_object_serialization_,
+        const DataTypePtr & dynamic_type_,
+        const DataTypePtr & sub_object_type_);
+
+    static SerializationPtr create(
+        const SerializationPtr & literal_serialization_,
+        const SerializationPtr & sub_object_serialization_,
+        const DataTypePtr & dynamic_type_,
+        const DataTypePtr & sub_object_type_);
+
+    size_t allocatedBytes() const override;
+    bool supportsPooling() const override;
 
     void enumerateStreams(
         EnumerateStreamsSettings & settings,

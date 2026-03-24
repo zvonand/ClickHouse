@@ -1,4 +1,5 @@
 #include <Columns/ColumnObject.h>
+#include <Common/SipHash.h>
 #include <DataTypes/DataTypeObject.h>
 #include <DataTypes/DataTypeDynamic.h>
 #include <DataTypes/Serializations/SerializationObjectCombinedPath.h>
@@ -22,6 +23,48 @@ SerializationObjectCombinedPath::SerializationObjectCombinedPath(
     , dynamic_type(dynamic_type_)
     , sub_object_type(sub_object_type_)
 {
+}
+
+UInt128 SerializationObjectCombinedPath::getHash(
+    const SerializationPtr & literal_serialization_,
+    const SerializationPtr & sub_object_serialization_,
+    const DataTypePtr & dynamic_type_,
+    const DataTypePtr & sub_object_type_)
+{
+    SipHash hash;
+    hash.update("ObjectCombinedPath");
+    hash.update(literal_serialization_->getHash());
+    hash.update(sub_object_serialization_->getHash());
+    auto dynamic_type_name = dynamic_type_->getName();
+    hash.update(dynamic_type_name.size());
+    hash.update(dynamic_type_name);
+    auto sub_object_type_name = sub_object_type_->getName();
+    hash.update(sub_object_type_name.size());
+    hash.update(sub_object_type_name);
+    return hash.get128();
+}
+
+SerializationPtr SerializationObjectCombinedPath::create(
+    const SerializationPtr & literal_serialization_,
+    const SerializationPtr & sub_object_serialization_,
+    const DataTypePtr & dynamic_type_,
+    const DataTypePtr & sub_object_type_)
+{
+    if (!literal_serialization_->supportsPooling() || !sub_object_serialization_->supportsPooling())
+        return std::shared_ptr<ISerialization>(new SerializationObjectCombinedPath(literal_serialization_, sub_object_serialization_, dynamic_type_, sub_object_type_));
+    return ISerialization::pooled(
+        getHash(literal_serialization_, sub_object_serialization_, dynamic_type_, sub_object_type_),
+        [&] { return new SerializationObjectCombinedPath(literal_serialization_, sub_object_serialization_, dynamic_type_, sub_object_type_); });
+}
+
+size_t SerializationObjectCombinedPath::allocatedBytes() const
+{
+    return sizeof(*this);
+}
+
+bool SerializationObjectCombinedPath::supportsPooling() const
+{
+    return literal_serialization->supportsPooling() && sub_object_serialization->supportsPooling();
 }
 
 struct DeserializeBinaryBulkStateObjectCombinedPath : public ISerialization::DeserializeBinaryBulkState

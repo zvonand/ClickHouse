@@ -327,7 +327,7 @@ When paths are stored in basic (`map`) [shared data](#shared-data-structure), re
 
 ## Reading JSON combined sub-columns {#reading-json-combined-sub-columns}
 
-The `JSON` type supports reading a path as a **combined sub-column** using the special syntax `json.$some.path`.
+The `JSON` type supports reading a path as a **combined sub-column** using the special syntax `json.@some.path`.
 A combined sub-column for a given path returns:
 - The literal value stored at that path as `Dynamic`, if the path has a literal value.
 - A JSON sub-object at that path as `Dynamic`, if the path has no literal value but has nested sub-paths.
@@ -357,22 +357,22 @@ SELECT
     dynamicType(json.a),
     json.^a,
     toTypeName(json.^a),
-    json.$a,
-    dynamicType(json.$a)
+    json.@a,
+    dynamicType(json.@a)
 FROM test;
 ```
 
 ```text title="Response"
-┌─json.a─┬─dynamicType(json.a)─┬─json.^a───────┬─toTypeName(json.^a)─┬─json.$a───────┬─dynamicType(json.$a)─┐
+┌─json.a─┬─dynamicType(json.a)─┬─json.^a───────┬─toTypeName(json.^a)─┬─json.@a───────┬─dynamicType(json.@a)─┐
 │ 42     │ Int64               │ {}            │ JSON                │ 42            │ Int64                │
 │ NULL   │ None                │ {"x":1,"y":2} │ JSON                │ {"x":1,"y":2} │ JSON                 │
 │ NULL   │ None                │ {}            │ JSON                │ NULL          │ None                 │
 └────────┴─────────────────────┴───────────────┴─────────────────────┴───────────────┴──────────────────────┘
 ```
 
-- Row 1: `a` holds a literal `42`. `json.a` returns it as `Dynamic(Int64)`, `json.^a` returns an empty sub-object `{}` (no nested keys under `a`), and `json.$a` returns the literal `42`.
-- Row 2: `a` holds a nested object. `json.a` returns `NULL` (no literal at that path), `json.^a` returns the sub-object as `JSON`, and `json.$a` also returns the sub-object as `Dynamic(JSON)`.
-- Row 3: `a` is absent entirely. Both `json.a` and `json.$a` return `NULL`, while `json.^a` returns an empty `{}`.
+- Row 1: `a` holds a literal `42`. `json.a` returns it as `Dynamic(Int64)`, `json.^a` returns an empty sub-object `{}` (no nested keys under `a`), and `json.@a` returns the literal `42`.
+- Row 2: `a` holds a nested object. `json.a` returns `NULL` (no literal at that path), `json.^a` returns the sub-object as `JSON`, and `json.@a` also returns the sub-object as `Dynamic(JSON)`.
+- Row 3: `a` is absent entirely. Both `json.a` and `json.@a` return `NULL`, while `json.^a` returns an empty `{}`.
 
 :::note
 When paths are stored in basic (`map`) [shared data](#shared-data-structure), reading combined sub-columns may be inefficient as it requires scanning the entire shared data structure. With `map_with_buckets` or `advanced` shared data serialization, reading sub-columns from shared data is highly optimized.

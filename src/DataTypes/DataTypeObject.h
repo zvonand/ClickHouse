@@ -24,8 +24,8 @@ public:
 
     /// Prefix character for sub-object subcolumns, e.g. "^`some`.path.path".
     static constexpr char SUB_OBJECT_SUBCOLUMN_PREFIX = '^';
-    /// Prefix character for combined literal+sub-object subcolumns, e.g. "$`some`.path.path".
-    static constexpr char COMBINED_SUBCOLUMN_PREFIX = '$';
+    /// Prefix character for combined literal+sub-object subcolumns, e.g. "@`some`.path.path".
+    static constexpr char COMBINED_SUBCOLUMN_PREFIX = '@';
 
     explicit DataTypeObject(
         const SchemaFormat & schema_format_,

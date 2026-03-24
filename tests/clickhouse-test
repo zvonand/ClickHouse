@@ -1399,6 +1399,7 @@ class SettingsRandomizer:
         # dpsize' - implements DPsize algorithm currently only for Inner joins. So it may not work in some tests.
         # That is why we use it with fallback to 'greedy'.
         "query_plan_optimize_join_order_algorithm": lambda: random.choice(['greedy', 'dpsize,greedy', 'greedy,dpsize']),
+        "query_plan_optimize_join_order_randomize": lambda: 1 if random.random() < 0.1 else random.randint(1, 1_000_000),
     }
 
     dependent_settings = {
@@ -1411,6 +1412,8 @@ class SettingsRandomizer:
         "optimize_use_implicit_projections": "optimize_use_projections",
         "optimize_use_projection_filtering": "optimize_use_projections",
     }
+
+    stress_test_only = {"query_plan_optimize_join_order_randomize"}
 
     @staticmethod
     def adjust_settings_for_autopr(args, tags, random_settings):
@@ -1433,6 +1436,8 @@ class SettingsRandomizer:
         random_settings = {}
         is_debug = BuildFlags.DEBUG in args.build_flags
         for setting, generator in SettingsRandomizer.settings.items():
+            if setting in SettingsRandomizer.stress_test_only and not args.stress:
+                continue
             if (
                 is_debug
                 and setting == "allow_prefetched_read_pool_for_remote_filesystem"
@@ -2043,7 +2048,7 @@ class TestCase:
             and not args.zookeeper
         ):
             return FailureReason.NO_ZOOKEEPER
-        
+
         if (
             tags
             and (("shard" in tags) or ("distributed" in tags) or ("global" in tags))
@@ -2064,7 +2069,7 @@ class TestCase:
         ):
             # Tests for races and deadlocks usually are run in a loop for a significant amount of time
             return FailureReason.NO_LONG
-        
+
         if (
             tags
             and ("no-llvm-coverage" in tags)
@@ -2072,7 +2077,7 @@ class TestCase:
         ):
             # Skip tests that are incompatible with LLVM coverage
             return FailureReason.NO_LLVM_COVERAGE
-        
+
         if tags and ("no-replicated-database" in tags) and args.replicated_database:
             return FailureReason.REPLICATED_DB
 

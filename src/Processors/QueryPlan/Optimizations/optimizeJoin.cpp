@@ -1,4 +1,5 @@
 #include <Common/logger_useful.h>
+#include <Common/randomSeed.h>
 #include <Common/safe_cast.h>
 
 #include <Core/Joins.h>
@@ -69,6 +70,7 @@ namespace Setting
 
 RelationStats getDummyStats(ContextPtr context, const String & table_name);
 RelationStats getDummyStats(const String & dummy_stats_str, const String & table_name);
+RelationStats getRandomizedStats(UInt64 seed, size_t relation_index, const String & table_name, const Block & header);
 
 namespace QueryPlanOptimizations
 {
@@ -476,6 +478,7 @@ struct QueryGraphBuilder
         JoinSettings join_settings;
         SortingStep::Settings sorting_settings;
         String dummy_stats;
+        UInt64 effective_randomize_seed = 0;
 
         BuilderContext(
             const QueryPlanOptimizationSettings & optimization_settings_,
@@ -486,7 +489,16 @@ struct QueryGraphBuilder
             , statistics_context(optimization_settings_, root_node)
             , join_settings(join_settings_)
             , sorting_settings(sorting_settings_)
-        {}
+        {
+            UInt64 seed = optimization_settings.query_plan_optimize_join_order_randomize;
+            if (seed == 1)
+            {
+                seed = randomSeed();
+                LOG_DEBUG(getLogger("optimizeJoin"),
+                    "query_plan_optimize_join_order_randomize = 1, using random seed {} (set this value to reproduce)", seed);
+            }
+            effective_randomize_seed = seed;
+        }
     };
 
     std::shared_ptr<BuilderContext> context;
@@ -621,6 +633,9 @@ size_t addChildQueryGraph(QueryGraphBuilder & graph, QueryPlan::Node * node, Que
 
     if (!label.empty())
         stats.table_name = label;
+
+    if (UInt64 seed = graph.context->effective_randomize_seed)
+        stats = getRandomizedStats(seed, graph.relation_stats.size(), stats.table_name, *node->step->getOutputHeader());
 
     LOG_TRACE(getLogger("optimizeJoin"), "Estimated statistics{} for {} {}",
         num_rows_from_cache.has_value() ? " (from cache)" : "",

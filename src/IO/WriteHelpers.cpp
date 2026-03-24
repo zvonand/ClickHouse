@@ -145,6 +145,8 @@ String fourSpaceIndent(size_t indent)
     return std::string(indent * 4, ' ');
 }
 
+namespace
+{
 /// When a floating-point number is an integer but its exponent exceeds the mantissa
 /// width, the ULP (unit in the last place) is greater than 1. This means multiple
 /// integers map to the same float. For example, Float32 with exp=25 has ULP=4, so
@@ -174,6 +176,7 @@ String fourSpaceIndent(size_t indent)
 ///   - IEEE 754 round-to-nearest-even tie-breaking: at the boundary midpoint, the
 ///     float with even mantissa "wins". Even mantissa → boundaries are inclusive;
 ///     odd mantissa → boundaries are exclusive.
+///
 /// Non-inlined slow path for Float32 exp 25-30: find the "roundest" integer
 /// (most trailing decimal zeros) within the valid dragonbox range, then format
 /// with itoa. Kept out-of-line to avoid bloating the hot path.
@@ -247,6 +250,8 @@ size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, char * buf
     return itoa(v, buffer) - buffer;
 }
 
+}
+
 template <typename T>
 requires is_floating_point<T>
 size_t writeFloatTextFastPath(T x, char * buffer)
@@ -281,16 +286,14 @@ size_t writeFloatTextFastPath(T x, char * buffer)
         ///
         ///   exp 25..30: ULP = 4..128. itoa gives the exact value, but dragonbox may
         ///               prefer a "rounder" decimal (more trailing zeros). We use
-        ///               roundToRoundest to adjust, matching dragonbox exactly.
-        ///               This is a separate non-inlined function to keep the hot path
-        ///               compact for icache.
+        ///               writeFloatTextFastPathFloat32Rounded to adjust, matching
+        ///               dragonbox exactly for all 2.1 billion positive Float32 values.
         ///
         /// exp < 0:     |value| < 1, not an integer.
         /// exp > 30:    |value| >= 2^31, overflows Int32.
 
         /// Most common fast path first: exp 0..24, exact integers.
-        if (exp >= 0 && exp <= 24
-            && (exp == 24 || (decomposed.mantissa() & ((1ULL << (23 - exp)) - 1)) == 0))
+        if (decomposed.isIntegerInRepresentableRange() || exp == 24)
             return itoa(Int32(f32), buffer) - buffer;
 
         /// Extended fast path: exp 25..30, round to "roundest" decimal then itoa.

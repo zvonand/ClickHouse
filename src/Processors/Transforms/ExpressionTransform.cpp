@@ -28,12 +28,12 @@ void ExpressionTransform::transform(Chunk & chunk)
     size_t num_rows = chunk.getNumRows();
     auto block = getInputPort().getHeader().cloneWithColumns(chunk.detachColumns());
 
-    expression->execute(block, num_rows);
+    expression->execute(block, num_rows, false, false, [this]() { return isCancelled(); });
 
     chunk.setColumns(block.getColumns(), num_rows);
 
     if (updater)
-        updater->recordOutputChunk(chunk, getOutputPort().getHeader());
+        updater->recordOutputChunk(chunk, block);
 }
 
 void ExpressionTransform::onCancel() noexcept

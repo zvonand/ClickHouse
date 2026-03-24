@@ -117,10 +117,6 @@ private:
     /// Do not allow user to do this as it achieves nothing and is very likely by mistake.
     constexpr inline static void checkValidValue(const ValueType & value)
     {
-        if (value < 0)
-        {
-            throw Exception(ErrorCodes::INCORRECT_DATA, "NumericIndexedVector does not support negative values");
-        }
         if constexpr (std::is_floating_point_v<ValueType>)
         {
             if (isnan(value))
@@ -303,7 +299,25 @@ public:
           *   maximum value of total_bit_num(integer_bit_num + fraction_bit_num) is 64, overflow may occur.
           */
         using ScaledValueType = std::conditional_t<std::is_floating_point_v<ValueType>, ValueType, UInt64>;
-        Int64 scaled_value = Int64(value * static_cast<ScaledValueType>(1ULL << fraction_bit_num));
+
+        Int64 scaled_value;
+        if constexpr (std::is_floating_point_v<ValueType>)
+        {
+            UInt64 scaling = 1ULL << fraction_bit_num;
+            constexpr Float64 lim = static_cast<Float64>(std::numeric_limits<Int64>::max());
+            if (fabs(value) > lim / static_cast<Float64>(scaling))
+                throw Exception(
+                    ErrorCodes::INCORRECT_DATA,
+                    "Value {} is out of range for BSI with integer_bit_num={} and fraction_bit_num={}",
+                    Float64(value),
+                    integer_bit_num,
+                    fraction_bit_num);
+            scaled_value = static_cast<Int64>(value * static_cast<ValueType>(scaling));
+        }
+        else
+        {
+            scaled_value = static_cast<Int64>(value * static_cast<ScaledValueType>(1ULL << fraction_bit_num));
+        }
         for (size_t i = 0; i < total_bit_num; ++i)
         {
             if (scaled_value & (1ULL << i))

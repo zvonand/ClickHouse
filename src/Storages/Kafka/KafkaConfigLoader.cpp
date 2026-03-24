@@ -10,6 +10,7 @@
 #include <Common/Exception.h>
 #include <Common/CurrentMetrics.h>
 #include <Common/NamedCollections/NamedCollectionsFactory.h>
+#include <Common/QueryProfiler.h>
 #include <Common/ThreadStatus.h>
 #include <Common/config_version.h>
 #include <Common/setThreadName.h>
@@ -103,8 +104,8 @@ KafkaInterceptors<TStorageKafka>::rdKafkaOnThreadStart(rd_kafka_t *, rd_kafka_th
 #ifdef OS_LINUX
     sigaddset(&mask, STACK_TRACE_SERVICE_SIGNAL);
 #endif
-    sigaddset(&mask, SIGUSR1);
-    sigaddset(&mask, SIGUSR2);
+    sigaddset(&mask, QueryProfilerReal::PAUSE_SIGNAL);
+    sigaddset(&mask, QueryProfilerCPU::PAUSE_SIGNAL);
     pthread_sigmask(SIG_UNBLOCK, &mask, nullptr);
 
     return RD_KAFKA_RESP_ERR_NO_ERROR;

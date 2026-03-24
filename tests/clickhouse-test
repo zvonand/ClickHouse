@@ -4472,10 +4472,12 @@ def main(args):
                   f"(name_refs, map_size, matches, non_empty_file_regions, zero_line_regions, first_file_len_and_line)")
         except Exception:
             pass
-        print(
-            f"Coverage self-test: coverage_log rows for _selftest = {selftest_rows} "
-            f"({'OK' if selftest_rows > 0 else 'EMPTY - coverage mapping not working'})"
-        )
+        if selftest_rows == 0:
+            raise Exception(
+                "Coverage self-test FAILED: coverage_log has 0 rows for _selftest — "
+                "coverage mapping is not working (binary built without WITH_COVERAGE_DEPTH?)"
+            )
+        print(f"Coverage self-test: coverage_log rows for _selftest = {selftest_rows} (OK)")
         # Validate that the coverage mapping parser produced no bogus line numbers.
         # line_end > 50000 or line_end < line_start indicate cursor-misalignment bugs
         # in the LLVM coverage region decoder (e.g. wrong kKindShift for BranchRegion).
@@ -4489,8 +4491,6 @@ def main(args):
                 )
                 or 0
             )
-            status = "OK" if bogus_rows == 0 else "BAD - coverage mapping parser has bugs"
-            print(f"Coverage region quality: bogus line numbers = {bogus_rows} ({status})")
             if bogus_rows > 0:
                 sample = clickhouse_execute(
                     args,
@@ -4499,7 +4499,12 @@ def main(args):
                     "   AND (line_end > 50000 OR line_end < line_start)"
                     " LIMIT 5",
                 ).decode(errors="replace").strip()
-                print(f"Coverage bogus rows sample:\n{sample}")
+                raise Exception(
+                    f"Coverage region quality FAILED: {bogus_rows} bogus line numbers "
+                    f"(line_end > 50000 or line_end < line_start) — "
+                    f"coverage mapping parser has bugs.\nSample:\n{sample}"
+                )
+            print(f"Coverage region quality: bogus line numbers = 0 (OK)")
         except Exception as e:
             print(f"Coverage region quality check failed: {e}")
         clickhouse_execute(

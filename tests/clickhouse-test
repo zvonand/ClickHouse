@@ -590,7 +590,7 @@ def kill_process_group(pgid, fatal_log):
     try:
         print(f"Processes left in process group {pgid}:")
         print(
-            shell_get_output(f"pgrep --pgroup {pgid} -a"),
+            '\n'.join(pgrep(pgid)),
         )
 
         if SANITIZED:
@@ -600,7 +600,7 @@ def kill_process_group(pgid, fatal_log):
         print(f"Killing process group {pgid}")
         print(f"Processes in process group {pgid}:")
         print(
-            shell_get_output(f"pgrep --pgroup {pgid} -a"),
+            '\n'.join(pgrep(pgid)),
         )
 
         if CAPTURE_CLIENT_STACKTRACE:
@@ -624,11 +624,7 @@ def kill_process_group(pgid, fatal_log):
                 print(f"Cannot read {fatal_log}. Ignoring.")
 
             if not client_printed_stacktrace:
-                pgrep = shell_get_output(f"pgrep --pgroup {pgid} clickhouse")
-                processes = pgrep.split("\n")
-                processes = map(lambda x: x.strip(), processes)
-                processes = filter(lambda x: len(x) > 0, processes)
-                processes = list(map(lambda x: int(x.strip()), processes))
+                processes = [p[0] for p in pgrep(pgid=pgid, command="clickhouse")]
                 for child in processes:
                     print(get_stacktraces_from_gdb(child))
         # NOTE: this still may leave some processes, that had been
@@ -665,18 +661,14 @@ def cleanup_child_processes(pid):
             return
         raise
     print(
-        shell_get_output(f"pgrep --parent {pid} -a"),
+        '\n'.join(pgrep(pgid)),
     )
     # Due to start_new_session=True, it is not enough to kill by PGID, we need
     # to look at children processes as well.
     # But we are hoping that nobody creates session in the tests (though it is
     # possible via timeout(), but we are assuming that they will be killed by
     # timeout).
-    pgrep = shell_get_output(f"pgrep --parent {pid}")
-    if pgrep == "":
-        return
-    proc_list = pgrep.split("\n")
-    processes = list(map(lambda x: int(x.strip()), proc_list))
+    processes = [p[0] for p in pgrep(parent=pid)]
     for child in processes:
         try:
             child_pgid = os.getpgid(child)
@@ -955,26 +947,24 @@ def get_stacktraces_from_clickhouse(args):
         print(f"Error occurred while receiving stack traces from client: {e}")
         return None
 
+def pgrep(parent: int = None, pgid: int = None, command: str = None) -> List[List[str]]:
+    ps = shell_get_output("ps -eo pid,ppid,pgid,command").splitlines()[1:]
+    ps = [p.split(None, 3) for p in ps]
+    ps = [[int(p[0]), int(p[1]), int(p[2]), p[3]] for p in ps]
+
+    if parent is not None:
+        ps = [p for p in ps if p[1] == parent]
+    if pgid is not None:
+        ps = [p for p in ps if p[2] == pgid]
+    if command is not None:
+        ps = [p for p in ps if command in p[3]]
+    return ps
 
 def get_all_server_pids():
     """Get PIDs of clickhouse-server processes belonging to the current process group.
-
-    Scoping to the process group avoids attaching gdb to unrelated servers on
-    shared runners where multiple test jobs may run concurrently.
     """
-    try:
-        pgid = os.getpgrp()
-        output = subprocess.check_output(
-            f"pgrep -g {pgid} -x clickhouse-server",
-            shell=True,
-            stderr=subprocess.DEVNULL,
-            universal_newlines=True,
-        ).strip()
-        if output:
-            return [int(p) for p in output.split()]
-    except Exception:
-        pass
-    return []
+    pgid = os.getpgrp()
+    return [p[0] for p in pgrep(pgid=pgid, command="clickhouse-server")]
 
 
 def is_asan_build():

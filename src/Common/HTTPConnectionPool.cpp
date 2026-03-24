@@ -184,13 +184,20 @@ public:
     void setSocketBufferSizes(HTTPConnectionPools::SocketBufferSizes sizes)
     {
         if (sizes.rcvbuf > static_cast<size_t>(INT_MAX))
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "rcvbuf value {} exceeds maximum {}", sizes.rcvbuf, INT_MAX);
+        {
+            LOG_ERROR(log, "rcvbuf value {} exceeds maximum {}, ignore buffer settings for {}", sizes.rcvbuf, INT_MAX, type);
+            return;
+        }
         if (sizes.sndbuf > static_cast<size_t>(INT_MAX))
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "sndbuf value {} exceeds maximum {}", sizes.sndbuf, INT_MAX);
+        {
+            LOG_ERROR(log, "sndbuf value {} exceeds maximum {}, ignore buffer settings for {}", sizes.rcvbuf, INT_MAX, type);
+            return;
+        }
 
         std::lock_guard lock(mutex);
         if (sizes.rcvbuf != socket_buffer_sizes.rcvbuf || sizes.sndbuf != socket_buffer_sizes.sndbuf)
             LOG_DEBUG(log, "Socket buffer sizes updated for group {}: rcvbuf={}, sndbuf={}", type, sizes.rcvbuf, sizes.sndbuf);
+
         socket_buffer_sizes = sizes;
     }
 

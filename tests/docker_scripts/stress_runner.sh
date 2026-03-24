@@ -63,6 +63,8 @@ clickhouse-client < /repo/tests/docker_scripts/create.sql
 bash /repo/tests/docker_scripts/create_tpcds.sh
 bash /repo/tests/docker_scripts/create_tpch.sh
 clickhouse-client --query "SHOW TABLES FROM datasets"
+clickhouse-client --query "SHOW TABLES FROM tpcds"
+clickhouse-client --query "SHOW TABLES FROM tpch"
 
 clickhouse-client --query "CREATE DATABASE IF NOT EXISTS test"
 
@@ -88,6 +90,8 @@ start_server || { echo "Failed to start server"; exit 1; }
 clickhouse-client --query "SYSTEM STOP THREAD FUZZER"
 
 clickhouse-client --query "SHOW TABLES FROM datasets"
+clickhouse-client --query "SHOW TABLES FROM tpcds"
+clickhouse-client --query "SHOW TABLES FROM tpch"
 clickhouse-client --query "SHOW TABLES FROM test"
 
 if [[ "$USE_S3_STORAGE_FOR_MERGE_TREE" == "1" ]]; then

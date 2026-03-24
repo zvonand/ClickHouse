@@ -139,7 +139,10 @@ void TableFunctionValues::parseArguments(const ASTPtr & ast_function, ContextPtr
     const auto & literal = args[0]->as<const ASTLiteral>();
     String value;
     String error;
-    if (args.size() > 1 && literal && literal->value.tryGet(value) && tryParseColumnsListFromString(value, structure, context, error))
+    /// When created from SQL standard VALUES clause, the first string argument
+    /// must never be interpreted as a column schema definition.
+    bool from_sql_standard = func && func->preferSubqueryToFunctionFormatting();
+    if (!from_sql_standard && args.size() > 1 && literal && literal->value.tryGet(value) && tryParseColumnsListFromString(value, structure, context, error))
     {
         has_structure_in_arguments = true;
         return;

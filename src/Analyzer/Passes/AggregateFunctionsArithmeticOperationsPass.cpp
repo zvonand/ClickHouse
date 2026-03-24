@@ -1,4 +1,4 @@
-#include <Analyzer/Passes/AggregateFunctionsArithmericOperationsPass.h>
+#include <Analyzer/Passes/AggregateFunctionsArithmeticOperationsPass.h>
 
 #include <AggregateFunctions/AggregateFunctionFactory.h>
 
@@ -56,10 +56,10 @@ Field zeroField(const Field & value)
   * TODO: Support `groupBitAnd`, `groupBitOr`, `groupBitXor` functions.
   * TODO: Support rewrite `f((2 * n) * n)` into '2 * f(n * n)'.
   */
-class AggregateFunctionsArithmericOperationsVisitor : public InDepthQueryTreeVisitorWithContext<AggregateFunctionsArithmericOperationsVisitor>
+class AggregateFunctionsArithmeticOperationsVisitor : public InDepthQueryTreeVisitorWithContext<AggregateFunctionsArithmeticOperationsVisitor>
 {
 public:
-    using Base = InDepthQueryTreeVisitorWithContext<AggregateFunctionsArithmericOperationsVisitor>;
+    using Base = InDepthQueryTreeVisitorWithContext<AggregateFunctionsArithmeticOperationsVisitor>;
     using Base::Base;
 
     void enterImpl(QueryTreeNodePtr & node)
@@ -187,9 +187,9 @@ private:
 
 }
 
-void AggregateFunctionsArithmericOperationsPass::run(QueryTreeNodePtr & query_tree_node, ContextPtr context)
+void AggregateFunctionsArithmeticOperationsPass::run(QueryTreeNodePtr & query_tree_node, ContextPtr context)
 {
-    AggregateFunctionsArithmericOperationsVisitor visitor(std::move(context));
+    AggregateFunctionsArithmeticOperationsVisitor visitor(std::move(context));
     visitor.visit(query_tree_node);
 }
 

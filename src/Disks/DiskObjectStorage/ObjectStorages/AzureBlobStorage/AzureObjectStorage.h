@@ -145,7 +145,7 @@ private:
 
     const String common_key_prefix;
 
-    const AzureBlobStorage::ConnectionParams connection_params;
+    AzureBlobStorage::ConnectionParams connection_params;
 
     LoggerPtr log;
 };

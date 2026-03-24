@@ -590,7 +590,7 @@ def kill_process_group(pgid, fatal_log):
     try:
         print(f"Processes left in process group {pgid}:")
         print(
-            '\n'.join(pgrep(pgid)),
+            '\n'.join(pgrep(pgid=pgid)),
         )
 
         if SANITIZED:
@@ -600,7 +600,7 @@ def kill_process_group(pgid, fatal_log):
         print(f"Killing process group {pgid}")
         print(f"Processes in process group {pgid}:")
         print(
-            '\n'.join(pgrep(pgid)),
+            '\n'.join(pgrep(pgid=pgid)),
         )
 
         if CAPTURE_CLIENT_STACKTRACE:
@@ -661,7 +661,7 @@ def cleanup_child_processes(pid):
             return
         raise
     print(
-        '\n'.join(pgrep(pgid)),
+        '\n'.join(pgrep(pgid=pgid)),
     )
     # Due to start_new_session=True, it is not enough to kill by PGID, we need
     # to look at children processes as well.

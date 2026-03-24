@@ -268,8 +268,8 @@ void registerTableFunctionValues(TableFunctionFactory & factory)
     factory.registerFunction<TableFunctionSQLStandardValues>({.description = R"(
 Internal table function used to implement SQL standard VALUES clause syntax.
 Created automatically by the parser when it encounters (VALUES (row1), (row2), ...) in a FROM clause.
-Requires the `allow_experimental_sql_standard_values_clause` setting to be enabled.
-)"}, {.allow_readonly = true});
+Requires the allow_experimental_sql_standard_values_clause setting to be enabled.
+)", .category = FunctionDocumentation::Category::Internal}, {.allow_readonly = true});
 }
 
 }

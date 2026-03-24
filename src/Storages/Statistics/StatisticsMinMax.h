@@ -12,6 +12,9 @@ class StatisticsMinMax : public IStatistics
 public:
     StatisticsMinMax(const SingleStatisticsDescription & statistics_description, const DataTypePtr & data_type_);
 
+    /// For tests only: construct with known min, max, row_count (no data_type needed for estimation).
+    StatisticsMinMax(Field min_, Field max_, UInt64 row_count_);
+
     void build(const ColumnPtr & column) override;
     void merge(const StatisticsPtr & other_stats) override;
 

@@ -19,6 +19,14 @@ StatisticsMinMax::StatisticsMinMax(const SingleStatisticsDescription & descripti
 {
 }
 
+StatisticsMinMax::StatisticsMinMax(Field min_, Field max_, UInt64 row_count_)
+    : IStatistics(SingleStatisticsDescription(StatisticsType::MinMax, nullptr, false))
+    , min(std::move(min_))
+    , max(std::move(max_))
+    , row_count(row_count_)
+{
+}
+
 void StatisticsMinMax::build(const ColumnPtr & column)
 {
     Field min_field;
@@ -85,6 +93,37 @@ void StatisticsMinMax::deserialize(ReadBuffer & buf)
     }
 }
 
+namespace
+{
+
+/// Maps each integer type to a wider type for safe subtraction without overflow.
+template <typename T> struct WiderIntType { using type = T; };
+template <> struct WiderIntType<UInt64>  { using type = UInt128; };
+template <> struct WiderIntType<Int64>   { using type = Int128; };
+template <> struct WiderIntType<UInt128> { using type = UInt256; };
+template <> struct WiderIntType<Int128>  { using type = Int256; };
+
+/// Computes (v - mn) / (mx - mn) * row_count as Float64.
+/// For integer types, widens to a larger type before subtracting to reduce precision
+/// loss when converting to Float64 (important for large integers like UInt64, Int64, etc.).
+/// Assumes mn <= v <= mx and mn < mx.
+template <typename T>
+Float64 interpolateLinear(Field val, Field min, Field max, UInt64 row_count)
+{
+    T v = val.safeGet<T>();
+    T mn = min.safeGet<T>();
+    T mx = max.safeGet<T>();
+    if (v < mn) return 0.0;
+    if (v > mx) return static_cast<Float64>(row_count);
+    if (mn == mx) return (v == mx) ? static_cast<Float64>(row_count) : 0.0;
+    using W = typename WiderIntType<T>::type;
+    return static_cast<Float64>(static_cast<W>(v) - static_cast<W>(mn))
+         / static_cast<Float64>(static_cast<W>(mx) - static_cast<W>(mn))
+         * static_cast<Float64>(row_count);
+}
+
+}
+
 std::optional<Float64> StatisticsMinMax::estimateLess(const Field & val) const
 {
     if (row_count == 0 || min.isNull() || max.isNull())
@@ -92,19 +131,30 @@ std::optional<Float64> StatisticsMinMax::estimateLess(const Field & val) const
 
     try
     {
+        /// If all three fields share the same numeric type, use native arithmetic to
+        /// preserve precision (especially important for large integers like UInt64, Int64).
+        if (val.getType() == min.getType() && val.getType() == max.getType())
+        {
+            switch (val.getType())
+            {
+                case Field::Types::UInt64:  return interpolateLinear<UInt64>(val, min, max, row_count);
+                case Field::Types::Int64:   return interpolateLinear<Int64>(val, min, max, row_count);
+                case Field::Types::UInt128: return interpolateLinear<UInt128>(val, min, max, row_count);
+                case Field::Types::Int128:  return interpolateLinear<Int128>(val, min, max, row_count);
+                case Field::Types::UInt256: return interpolateLinear<UInt256>(val, min, max, row_count);
+                case Field::Types::Int256:  return interpolateLinear<Int256>(val, min, max, row_count);
+                case Field::Types::Float64: return interpolateLinear<Float64>(val, min, max, row_count);
+                default: break;
+            }
+        }
+
+        /// Fallback: convert all values to Float64 (e.g. for mismatched types or Decimal)
         auto val_as_float = StatisticsUtils::tryConvertToFloat64(val, data_type);
         auto min_as_float = StatisticsUtils::tryConvertToFloat64(min, data_type);
         auto max_as_float = StatisticsUtils::tryConvertToFloat64(max, data_type);
         if (!val_as_float || !min_as_float || !max_as_float)
             return std::nullopt;
-
-        if (val_as_float < min_as_float)
-            return 0.0;
-        if (val_as_float > max_as_float)
-            return static_cast<Float64>(row_count);
-        if (min_as_float == max_as_float)
-            return (val_as_float != max_as_float) ? 0.0 : static_cast<Float64>(row_count);
-        return ((*val_as_float - *min_as_float) / (*max_as_float - *min_as_float)) * static_cast<Float64>(row_count);
+        return interpolateLinear<Float64>(*val_as_float, *min_as_float, *max_as_float, row_count);
     }
     catch (...)
     {

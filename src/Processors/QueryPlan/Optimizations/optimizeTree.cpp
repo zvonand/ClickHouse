@@ -288,7 +288,10 @@ void optimizeTreeSecondPass(
         [&](auto & frame_node)
         {
             if (optimization_settings.read_in_order)
+            {
                 optimizeReadInOrder(frame_node, nodes, optimization_settings);
+                optimizeMergingSortedBuffering(frame_node);
+            }
 
             if (optimization_settings.distinct_in_order)
                 optimizeDistinctInOrder(frame_node, nodes, optimization_settings);

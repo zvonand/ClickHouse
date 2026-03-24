@@ -1644,4 +1644,56 @@ size_t tryReuseStorageOrderingForWindowFunctions(QueryPlan::Node * parent_node, 
     return 0;
 }
 
+/// Enable buffering for MergingSorted steps that merge pre-sorted streams.
+/// This mirrors the logic in optimizeReadInOrder for Union children:
+/// if any child reads in order without a limit, buffering helps decouple
+/// the reader from the merger for better parallelism.
+void optimizeMergingSortedBuffering(QueryPlan::Node & node)
+{
+    if (node.children.size() != 1)
+        return;
+
+    auto * sorting = typeid_cast<SortingStep *>(node.step.get());
+    if (!sorting)
+        return;
+
+    if (sorting->getType() != SortingStep::Type::MergingSorted)
+        return;
+
+    auto * child_step = node.children.front()->step.get();
+
+    /// Check if the child is a Union step with sorted children.
+    auto * union_step = typeid_cast<UnionStep *>(child_step);
+    if (!union_step)
+        return;
+
+    bool has_sorted_child_without_limit = false;
+    for (const auto * child : node.children.front()->children)
+    {
+        auto * child_sorting = typeid_cast<SortingStep *>(child->step.get());
+        if (child_sorting
+            && child_sorting->getType() == SortingStep::Type::FinishSorting
+            && child_sorting->getUseBuffering()
+            && child_sorting->getLimit() == 0)
+        {
+            has_sorted_child_without_limit = true;
+            break;
+        }
+
+        /// Remote replicas produce sorted streams when the initiator has MergingSorted.
+        if (typeid_cast<ReadFromRemote *>(child->step.get())
+            || typeid_cast<ReadFromParallelRemoteReplicasStep *>(child->step.get()))
+        {
+            if (sorting->getLimit() == 0)
+            {
+                has_sorted_child_without_limit = true;
+                break;
+            }
+        }
+    }
+
+    if (has_sorted_child_without_limit)
+        sorting->enableBuffering();
+}
+
 }

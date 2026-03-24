@@ -914,7 +914,7 @@ ALWAYS_INLINE void addMergeSortingStep(QueryPlan & query_plan,
     auto merging_sorted = std::make_unique<SortingStep>(
         query_plan.getCurrentHeader(),
         sort_description,
-        settings[Setting::max_block_size],
+        SortingStep::Settings(settings),
         query_analysis_result.partial_sorting_limit,
         settings[Setting::exact_rows_before_limit]);
     merging_sorted->setStepDescription(description);

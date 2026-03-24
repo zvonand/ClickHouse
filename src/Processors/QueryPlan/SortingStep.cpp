@@ -222,7 +222,7 @@ SortingStep::SortingStep(
 SortingStep::SortingStep(
     const SharedHeader & input_header,
     SortDescription sort_description_,
-    size_t max_block_size_,
+    const Settings & settings_,
     UInt64 limit_,
     bool always_read_till_end_)
     : ITransformingStep(input_header, input_header, getTraits(limit_))
@@ -230,9 +230,8 @@ SortingStep::SortingStep(
     , result_description(std::move(sort_description_))
     , limit(limit_)
     , always_read_till_end(always_read_till_end_)
-    , sort_settings(max_block_size_)
+    , sort_settings(settings_)
 {
-    sort_settings.max_block_size = max_block_size_;
 }
 
 void SortingStep::updateOutputHeader()

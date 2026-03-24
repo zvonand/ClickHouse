@@ -47,9 +47,10 @@ public:
     virtual UInt64 estimateCardinality() const;
 
     /// Per-value estimations.
-    /// Throws if the statistics object is not able to do a meaningful estimation.
+    /// Returns std::nullopt when the statistics object cannot produce a meaningful estimate
+    /// (e.g. the value cannot be converted to the column type).
     virtual Float64 estimateEqual(const Field & val) const; /// cardinality of val in the column
-    virtual Float64 estimateLess(const Field & val) const;  /// summarized cardinality of values < val in the column
+    virtual std::optional<Float64> estimateLess(const Field & val) const;  /// summarized cardinality of values < val in the column
     virtual Float64 estimateRange(const Range & range) const;
     virtual String getNameForLogs() const = 0;
 
@@ -65,8 +66,8 @@ struct Estimate
     std::set<StatisticsType> types;
     UInt64 rows_count = 0;
     std::optional<UInt64> estimated_cardinality;
-    std::optional<Float64> estimated_min;
-    std::optional<Float64> estimated_max;
+    std::optional<Field> estimated_min;
+    std::optional<Field> estimated_max;
 };
 
 using Estimates = std::unordered_map<String, Estimate>;

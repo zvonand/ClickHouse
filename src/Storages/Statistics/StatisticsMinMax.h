@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Core/Field.h>
 #include <Storages/Statistics/Statistics.h>
 
 
@@ -17,14 +18,14 @@ public:
     void serialize(WriteBuffer & buf) override;
     void deserialize(ReadBuffer & buf) override;
 
-    Float64 getMin() const { return min; }
-    Float64 getMax() const { return max; }
+    const Field & getMin() const { return min; }
+    const Field & getMax() const { return max; }
 
-    Float64 estimateLess(const Field & val) const override;
+    std::optional<Float64> estimateLess(const Field & val) const override;
     String getNameForLogs() const override;
 private:
-    Float64 min = std::numeric_limits<Float64>::max();
-    Float64 max = std::numeric_limits<Float64>::lowest();
+    Field min; /// null Field means "not initialized"
+    Field max; /// null Field means "not initialized"
     UInt64 row_count = 0;
 
     DataTypePtr data_type;

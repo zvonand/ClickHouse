@@ -1,11 +1,13 @@
 #include <Storages/Statistics/StatisticsMinMax.h>
+#include <Common/Exception.h>
+#include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeNullable.h>
+#include <Interpreters/convertFieldToType.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteHelpers.h>
 #include <Common/FieldVisitorConvertToNumber.h>
-
-#include <algorithm>
+#include <Common/FieldVisitorToString.h>
 
 
 namespace DB
@@ -26,14 +28,14 @@ void StatisticsMinMax::build(const ColumnPtr & column)
 
     if (!min_field.isNull())
     {
-        Float64 current_min = applyVisitor(FieldVisitorConvertToNumber<Float64>(), min_field);
-        min = std::min(min, current_min);
+        if (min.isNull() || min_field < min)
+            min = min_field;
     }
 
     if (!max_field.isNull())
     {
-        Float64 current_max = applyVisitor(FieldVisitorConvertToNumber<Float64>(), max_field);
-        max = std::max(max, current_max);
+        if (max.isNull() || max_field > max)
+            max = max_field;
     }
 
     row_count += column->size();
@@ -42,48 +44,78 @@ void StatisticsMinMax::build(const ColumnPtr & column)
 void StatisticsMinMax::merge(const StatisticsPtr & other_stats)
 {
     const StatisticsMinMax * other = typeid_cast<const StatisticsMinMax *>(other_stats.get());
-    min = std::min(min, other->min);
-    max = std::max(max, other->max);
+    if (!other->min.isNull() && (min.isNull() || other->min < min))
+        min = other->min;
+    if (!other->max.isNull() && (max.isNull() || other->max > max))
+        max = other->max;
 }
 
 void StatisticsMinMax::serialize(WriteBuffer & buf)
 {
     writeIntBinary(row_count, buf);
-    writeFloatBinary(min, buf);
-    writeFloatBinary(max, buf);
+    writeStringBinary(data_type->getName(), buf);
+    writeFieldBinary(min, buf);
+    writeFieldBinary(max, buf);
 }
 
 void StatisticsMinMax::deserialize(ReadBuffer & buf)
 {
     readIntBinary(row_count, buf);
-    readFloatBinary(min, buf);
-    readFloatBinary(max, buf);
+
+    /// Type name followed by Field-typed min and max
+    String stored_type_name;
+    readStringBinary(stored_type_name, buf);
+    min = readFieldBinary(buf);
+    max = readFieldBinary(buf);
+
+    if (stored_type_name != data_type->getName())
+    {
+        /// Column type has changed — try to convert min/max to the new type
+        auto stored_type = DataTypeFactory::instance().get(stored_type_name);
+        if (!min.isNull())
+        {
+            Field converted = convertFieldToType(min, *data_type, stored_type.get());
+            min = std::move(converted); /// null on conversion failure → effectively resets the bound
+        }
+        if (!max.isNull())
+        {
+            Field converted = convertFieldToType(max, *data_type, stored_type.get());
+            max = std::move(converted);
+        }
+    }
 }
 
-Float64 StatisticsMinMax::estimateLess(const Field & val) const
+std::optional<Float64> StatisticsMinMax::estimateLess(const Field & val) const
 {
-    if (row_count == 0)
-        return 0;
+    if (row_count == 0 || min.isNull() || max.isNull())
+        return std::nullopt;
 
-    auto val_as_float = StatisticsUtils::tryConvertToFloat64(val, data_type);
-    if (!val_as_float.has_value())
-        return 0;
+    try
+    {
+        auto val_as_float = StatisticsUtils::tryConvertToFloat64(val, data_type);
+        auto min_as_float = StatisticsUtils::tryConvertToFloat64(min, data_type);
+        auto max_as_float = StatisticsUtils::tryConvertToFloat64(max, data_type);
+        if (!val_as_float || !min_as_float || !max_as_float)
+            return std::nullopt;
 
-    if (val_as_float < min)
-        return 0;
-
-    if (val_as_float > max)
-        return static_cast<Float64>(row_count);
-
-    if (min == max)
-        return (val_as_float != max) ? 0 : static_cast<Float64>(row_count);
-
-    return ((*val_as_float - min) / (max - min)) * static_cast<Float64>(row_count);
+        if (val_as_float < min_as_float)
+            return 0.0;
+        if (val_as_float > max_as_float)
+            return static_cast<Float64>(row_count);
+        if (min_as_float == max_as_float)
+            return (val_as_float != max_as_float) ? 0.0 : static_cast<Float64>(row_count);
+        return ((*val_as_float - *min_as_float) / (*max_as_float - *min_as_float)) * static_cast<Float64>(row_count);
+    }
+    catch (...)
+    {
+        tryLogCurrentException("StatisticsMinMax", "While estimating less-than selectivity", LogsLevel::warning);
+        return std::nullopt;
+    }
 }
 
 String StatisticsMinMax::getNameForLogs() const
 {
-    return fmt::format("MinMax: ({}, {})", min, max);
+    return fmt::format("MinMax: ({}, {})", applyVisitor(FieldVisitorToString(), min), applyVisitor(FieldVisitorToString(), max));
 }
 
 bool minMaxStatisticsValidator(const SingleStatisticsDescription & /*description*/, const DataTypePtr & data_type)

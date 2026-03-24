@@ -39,6 +39,7 @@ enum StatisticsFileVersion : UInt16
 {
     V0 = 0,
     V1 = 1, /// modify the format of uniq, https://github.com/ClickHouse/ClickHouse/pull/90311
+    V2 = 2, /// minmax statistics now serialize Field type and use Field instead of Float64
 };
 
 std::optional<Float64> StatisticsUtils::tryConvertToFloat64(const Field & value, const DataTypePtr & data_type)
@@ -123,9 +124,9 @@ Float64 IStatistics::estimateEqual(const Field & /*val*/) const
     throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Equality estimation is not implemented for this type of statistics");
 }
 
-Float64 IStatistics::estimateLess(const Field & /*val*/) const
+std::optional<Float64> IStatistics::estimateLess(const Field & /*val*/) const
 {
-    throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Less-than estimation is not implemented for this type of statistics");
+    return std::nullopt;
 }
 
 Float64 IStatistics::estimateRange(const Range & /*range*/) const
@@ -152,9 +153,11 @@ Float64 ColumnStatistics::estimateLess(const Field & val) const
         return 0;
 
     if (stats.contains(StatisticsType::TDigest))
-        return stats.at(StatisticsType::TDigest)->estimateLess(val);
+        if (auto result = stats.at(StatisticsType::TDigest)->estimateLess(val))
+            return *result;
     if (stats.contains(StatisticsType::MinMax))
-        return stats.at(StatisticsType::MinMax)->estimateLess(val);
+        if (auto result = stats.at(StatisticsType::MinMax)->estimateLess(val))
+            return *result;
     return static_cast<Float64>(rows) * ConditionSelectivityEstimator::default_cond_range_factor;
 }
 
@@ -254,8 +257,10 @@ Estimate ColumnStatistics::getEstimate() const
     if (stats.contains(StatisticsType::MinMax))
     {
         const auto & minmax_stats = assert_cast<const StatisticsMinMax &>(*stats.at(StatisticsType::MinMax));
-        info.estimated_min = minmax_stats.getMin();
-        info.estimated_max = minmax_stats.getMax();
+        if (!minmax_stats.getMin().isNull())
+            info.estimated_min = minmax_stats.getMin();
+        if (!minmax_stats.getMax().isNull())
+            info.estimated_max = minmax_stats.getMax();
     }
 
     return info;
@@ -263,7 +268,7 @@ Estimate ColumnStatistics::getEstimate() const
 
 void ColumnStatistics::serialize(WriteBuffer & buf) const
 {
-    writeIntBinary(V1, buf);
+    writeIntBinary(V2, buf);
 
     UInt64 stat_types_mask = 0;
     for (const auto & [type, _]: stats)
@@ -285,7 +290,7 @@ std::shared_ptr<ColumnStatistics> ColumnStatistics::deserialize(ReadBuffer & buf
     readIntBinary(version, buf);
 
     /// TODO: we should check the version of statistics format when we start clickhouse server, and do materialize statistics automatically.
-    if (version != V1)
+    if (version != V2)
         throw Exception(ErrorCodes::ILLEGAL_STATISTICS, "We try to read stale file format version: {}. Please run `ALTER TABLE [db.]table MATERIALIZE STATISTICS ALL` to regenerate the statistics", version);
 
     UInt64 stat_types_mask = 0;

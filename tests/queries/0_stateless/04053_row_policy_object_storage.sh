@@ -35,6 +35,9 @@ ${CLICKHOUSE_CLIENT} --user ${user} --query "SELECT * FROM ${db}.url_parquet ORD
 echo "--- Row policy with WHERE on URL Parquet table ---"
 ${CLICKHOUSE_CLIENT} --user ${user} --query "SELECT * FROM ${db}.url_parquet WHERE value = 'a' ORDER BY id"
 
+echo "--- Row policy count on URL Parquet table ---"
+${CLICKHOUSE_CLIENT} --user ${user} --query "SELECT count() FROM ${db}.url_parquet"
+
 ${CLICKHOUSE_CLIENT} <<EOF
 DROP ROW POLICY IF EXISTS rp_04053 ON ${db}.url_parquet;
 DROP USER IF EXISTS ${user};

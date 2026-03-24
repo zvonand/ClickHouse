@@ -262,7 +262,7 @@ ReadFromFormatInfo updateFormatPrewhereInfo(const ReadFromFormatInfo & info, con
 {
     chassert(prewhere_info || row_level_filter);
 
-    if (info.prewhere_info || info.row_level_filter)
+    if (info.prewhere_info)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "updateFormatPrewhereInfo called more than once");
 
     ReadFromFormatInfo new_info;
@@ -273,7 +273,10 @@ ReadFromFormatInfo updateFormatPrewhereInfo(const ReadFromFormatInfo & info, con
     /// Adds prewhere outputs (the actual prewhere filter column is only added if
     /// !remove_prewhere_column; but there may also be subexpressions computed by prewhere
     /// expression and preserved for use further down the query pipeline).
-    new_info.format_header = SourceStepWithFilter::applyPrewhereActions(info.format_header, row_level_filter, prewhere_info);
+    /// If row_level_filter was already applied in a previous call, don't re-apply it;
+    /// only apply the new prewhere_info on top.
+    new_info.format_header = SourceStepWithFilter::applyPrewhereActions(
+        info.format_header, info.row_level_filter ? nullptr : row_level_filter, prewhere_info);
 
     /// We assume that any format that supports prewhere also supports subset of subcolumns, so we
     /// don't need to replace subcolumns with their nested columns etc.

@@ -15,7 +15,7 @@ INSERT INTO t_alter_to_tuple VALUES ('(''foo'',''bar'')');
 -- Block mutations so the ALTER changes metadata but parts stay String-typed.
 SYSTEM ENABLE FAILPOINT mt_select_parts_to_mutate_max_part_size;
 
-ALTER TABLE t_alter_to_tuple MODIFY COLUMN col Tuple(String, String);
+ALTER TABLE t_alter_to_tuple MODIFY COLUMN col Tuple(String, String) SETTINGS alter_sync = 0;
 OPTIMIZE TABLE t_alter_to_tuple FINAL;
 
 SELECT level, count() FROM system.parts

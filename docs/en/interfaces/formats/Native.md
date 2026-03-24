@@ -137,7 +137,7 @@ const data = new Uint8Array([
 ]);
 ```
 
-### Simple data types
+### Simple data types {#simple-data-types}
 
 The wire format for an individual value of one of the simpler data types is similar to `RowBinary`/`RowBinaryWithNamesAndTypes`.
 The full list of types that match this description includes:
@@ -157,7 +157,7 @@ The full list of types that match this description includes:
 
 Refer to the descriptions of the types above in ["RowBinary data types wire format"](/interfaces/formats/RowBinary#data-types-wire-format) for more details.
 
-### Complex data types
+### Complex data types {#complex-data-types}
 
 The encoding of the following types differs from `RowBinary` and `RowBinaryWithNamesAndTypes`.
 
@@ -169,7 +169,7 @@ The encoding of the following types differs from `RowBinary` and `RowBinaryWithN
 - Dynamic
 - JSON
 
-#### Nullable
+#### Nullable {#nullable}
 
 In the `Native` format, a nullable column will have a number of bytes equal to the number of rows in the block before the actual data. Each of these bytes indicates whether the value is `NULL` or not. For example, with this query, each odd number will be `NULL` instead:
 
@@ -289,7 +289,7 @@ const data = new Uint8Array([
 ])
 ```
 
-#### LowCardinality
+#### LowCardinality {#lowcardinality}
 
 Unlike [RowBinary](RowBinary/RowBinary.md#lowcardinality) where `LowCardinality` is transparent, the Native format uses a dictionary-based columnar encoding. A column is encoded as a version prefix, then a dictionary of unique values, and an array of integer indexes into that dictionary.
 
@@ -337,7 +337,7 @@ With `LowCardinality(Nullable(String))`, index 0 is `NULL`:
 02 00 02 00 02              // indexes → "yes", NULL, "yes", NULL, "yes"
 ```
 
-#### Array
+#### Array {#array}
 
 Unlike [RowBinary](RowBinary/RowBinary.md#array) where each array is prefixed with a LEB128 element count, the Native format encodes arrays as two columnar sub-streams:
 
@@ -376,7 +376,7 @@ An empty array has the same offset as the previous row. For example, `Array(Stri
 01 32                       // "2"
 ```
 
-#### Map
+#### Map {#map}
 
 A `Map(K, V)` is encoded as `Array(Tuple(K, V))` — array offsets followed by all keys, then all values. This differs from [RowBinary](RowBinary/RowBinary.md#map) where keys and values are interleaved per entry.
 
@@ -405,7 +405,7 @@ For example, `Map(String, UInt64)` with 3 rows `[{'a':0,'b':10}, {'a':1,'b':11},
 0c 00 00 00 00 00 00 00    // 12
 ```
 
-#### Variant
+#### Variant {#variant}
 
 Unlike [RowBinary](RowBinary/RowBinary.md#variant) where each row carries its own discriminant byte followed by the value inline, the Native format separates discriminators from data.
 
@@ -434,7 +434,7 @@ For example, `Variant(String, UInt32)` with 5 rows `[0::UInt32, 'hello', NULL, 3
 03 00 00 00                 // 3
 ```
 
-#### Dynamic
+#### Dynamic {#dynamic}
 
 Unlike [RowBinary](RowBinary/RowBinary.md#dynamic) where each value is self-describing (type prefix + value), the Native format serializes `Dynamic` as a structure prefix followed by a [Variant](#variant) column.
 
@@ -461,7 +461,7 @@ For example, `Dynamic` with 5 rows `[0::UInt32, 'hello', NULL, 3::UInt32, 'hello
 03 00 00 00                 // UInt32: 3
 ```
 
-#### JSON
+#### JSON {#json}
 
 Unlike [RowBinary](RowBinary/RowBinary.md#json) where each row is self-describing with path names and values, the Native format serializes `JSON` in a columnar structure. The encoding is complex and version-dependent: it consists of a structure prefix with the serialization version, dynamic path names, and shared data layout, followed by typed paths (each as a bulk column), dynamic paths (each as a [Dynamic](#dynamic) column), and shared data for overflow paths.
 

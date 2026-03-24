@@ -100,32 +100,15 @@ struct DecomposedFloat
         return isNegative() ? -mantissa() : mantissa();
     }
 
-    /// Check if the floating point value is an integer that fits in the corresponding
-    /// signed integer type (Int32 for Float32, Int64 for Float64).
-    /// Used to fast-path float-to-string conversion via `itoa`.
+    /// NOTE Probably floating point instructions can be better.
     bool isIntegerInRepresentableRange() const
     {
-        if (x_uint == 0)
-            return true;
-
-        auto exp = normalizedExponent();
-
-        if (exp < 0)
-            return false; /// |value| < 1
-
-        if (exp >= static_cast<int16_t>(Traits::bits - 1))
-            return false; /// |value| >= 2^(bits-1), overflows the signed integer type
-
-        if (exp <= static_cast<int16_t>(Traits::mantissa_bits))
-        {
-            /// Exponent is within the mantissa range. The value is an integer only if
-            /// the fractional mantissa bits (those below the binary point) are all zero.
-            return (mantissa() & ((1ULL << (Traits::mantissa_bits - exp)) - 1)) == 0;
-        }
-
-        /// exp > mantissa_bits: all mantissa bits contribute to the integer part,
-        /// so the value is always an integer (no fractional bits exist).
-        return true;
+        return x_uint == 0
+            || (normalizedExponent() >= 0  /// The number is not less than one
+                /// The number is inside the range where every integer has exact representation in float
+                && normalizedExponent() <= static_cast<int16_t>(Traits::mantissa_bits)
+                /// After multiplying by 2^exp, the fractional part becomes zero, means the number is integer
+                && ((mantissa() & ((1ULL << (Traits::mantissa_bits - normalizedExponent())) - 1)) == 0));
     }
 
     bool isFinite() const

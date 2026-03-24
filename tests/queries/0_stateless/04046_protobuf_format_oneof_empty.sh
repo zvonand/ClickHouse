@@ -63,3 +63,29 @@ ENGINE = MergeTree;
 INSERT INTO empty_records_04046 from INFILE '$CURDIR/data_protobuf/RecordTotallyEmpty' SETTINGS format_schema='$SCHEMADIR/04046_empty_record.proto:Record' FORMAT ProtobufSingle;
 SELECT * FROM empty_records_04046 ORDER BY type Format PrettyMonoBlock;
 EOF
+
+# syntax = "proto3";
+# message Empty {}
+# message InnerRecord {
+#   oneof type {
+#     Empty nothing = 1;
+#     Empty nothing2 = 2;
+#   }
+# }
+# message Record {
+#     int32 id = 1;
+# 		InnerRecord inner = 2;
+# }
+$CLICKHOUSE_CLIENT <<EOF
+SET input_format_protobuf_oneof_presence=true;
+DROP TABLE IF EXISTS empty_inner_records_04046;
+SELECT '>> empty records';
+CREATE TABLE empty_inner_records_04046
+(
+		id Int32,
+    inner_type Enum8('unknown' = 0, 'nothing' = 1, 'nothing2' = 2)
+)
+ENGINE = MergeTree;
+INSERT INTO empty_inner_records_04046 from INFILE '$CURDIR/data_protobuf/RecordInnerEmpty' SETTINGS format_schema='$SCHEMADIR/04046_inner_record.proto:Record' FORMAT ProtobufSingle;
+SELECT * FROM empty_inner_records_04046 ORDER BY id Format PrettyMonoBlock;
+EOF

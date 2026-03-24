@@ -3769,29 +3769,19 @@ namespace
                     const auto & field_descriptor = *message_descriptor.field(i);
                     const auto * oneof_descriptor = field_descriptor.containing_oneof();
 
-                    if (!oneof_descriptor)
+                    if (!oneof_descriptor || field_descriptors_in_use.contains(&field_descriptor)
+                        || field_descriptor.type() != FieldTypeId::TYPE_MESSAGE)
+                    {
                         continue;
+                    }
 
-                    if (field_descriptors_in_use.contains(&field_descriptor))
-                        continue;
-
-                    if (field_descriptor.type() != FieldTypeId::TYPE_MESSAGE)
-                        continue;
-
-                    const auto * message_type = field_descriptor.message_type();
-                    if (!message_type || message_type->field_count() != 0)
+                    if (const auto * message_type = field_descriptor.message_type(); !message_type || message_type->field_count() != 0)
                         continue;
 
                     std::unique_ptr<ProtobufSerializer> field_serializer = std::make_unique<ProtobufSerializerEmptyMessage>();
                     std::vector<size_t> idxs;
                     bool wrapped = maybe_add_oneof_wrapper(
-                        field_serializer,
-                        oneof_descriptor,
-                        field_descriptor.number(),
-                        num_columns,
-                        column_names,
-                        data_types,
-                        idxs);
+                        field_serializer, oneof_descriptor, field_descriptor.number(), num_columns, column_names, data_types, idxs);
 
                     if (wrapped)
                         add_field_serializer(field_descriptor.name(), std::move(idxs), field_descriptor, std::move(field_serializer));

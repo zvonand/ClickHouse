@@ -1,5 +1,4 @@
 #include <Storages/Statistics/StatisticsMinMax.h>
-#include <Common/Exception.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeNullable.h>
@@ -12,6 +11,7 @@
 
 namespace DB
 {
+
 
 StatisticsMinMax::StatisticsMinMax(const SingleStatisticsDescription & description, const DataTypePtr & data_type_)
     : IStatistics(description)
@@ -129,38 +129,31 @@ std::optional<Float64> StatisticsMinMax::estimateLess(const Field & val) const
     if (row_count == 0 || min.isNull() || max.isNull())
         return std::nullopt;
 
-    try
+    /// If all three fields share the same numeric type, use native arithmetic to
+    /// preserve precision (especially important for large integers like UInt64, Int64).
+    if (val.getType() == min.getType() && val.getType() == max.getType())
     {
-        /// If all three fields share the same numeric type, use native arithmetic to
-        /// preserve precision (especially important for large integers like UInt64, Int64).
-        if (val.getType() == min.getType() && val.getType() == max.getType())
+        switch (val.getType())
         {
-            switch (val.getType())
-            {
-                case Field::Types::UInt64:  return interpolateLinear<UInt64>(val, min, max, row_count);
-                case Field::Types::Int64:   return interpolateLinear<Int64>(val, min, max, row_count);
-                case Field::Types::UInt128: return interpolateLinear<UInt128>(val, min, max, row_count);
-                case Field::Types::Int128:  return interpolateLinear<Int128>(val, min, max, row_count);
-                case Field::Types::UInt256: return interpolateLinear<UInt256>(val, min, max, row_count);
-                case Field::Types::Int256:  return interpolateLinear<Int256>(val, min, max, row_count);
-                case Field::Types::Float64: return interpolateLinear<Float64>(val, min, max, row_count);
-                default: break;
-            }
+            case Field::Types::UInt64:  return interpolateLinear<UInt64>(val, min, max, row_count);
+            case Field::Types::Int64:   return interpolateLinear<Int64>(val, min, max, row_count);
+            case Field::Types::UInt128: return interpolateLinear<UInt128>(val, min, max, row_count);
+            case Field::Types::Int128:  return interpolateLinear<Int128>(val, min, max, row_count);
+            case Field::Types::UInt256: return interpolateLinear<UInt256>(val, min, max, row_count);
+            case Field::Types::Int256:  return interpolateLinear<Int256>(val, min, max, row_count);
+            case Field::Types::Float64: return interpolateLinear<Float64>(val, min, max, row_count);
+            default: break;
         }
+    }
 
-        /// Fallback: convert all values to Float64 (e.g. for mismatched types or Decimal)
-        auto val_as_float = StatisticsUtils::tryConvertToFloat64(val, data_type);
-        auto min_as_float = StatisticsUtils::tryConvertToFloat64(min, data_type);
-        auto max_as_float = StatisticsUtils::tryConvertToFloat64(max, data_type);
-        if (!val_as_float || !min_as_float || !max_as_float)
-            return std::nullopt;
-        return interpolateLinear<Float64>(*val_as_float, *min_as_float, *max_as_float, row_count);
-    }
-    catch (...)
-    {
-        tryLogCurrentException("StatisticsMinMax", "While estimating less-than selectivity", LogsLevel::warning);
+    /// Fallback: convert to Float64 (e.g. for mismatched types or Decimal).
+    /// tryConvertToFloat64 handles conversion errors internally and returns nullopt on failure.
+    auto val_as_float = StatisticsUtils::tryConvertToFloat64(val, data_type);
+    auto min_as_float = StatisticsUtils::tryConvertToFloat64(min, data_type);
+    auto max_as_float = StatisticsUtils::tryConvertToFloat64(max, data_type);
+    if (!val_as_float || !min_as_float || !max_as_float)
         return std::nullopt;
-    }
+    return interpolateLinear<Float64>(*val_as_float, *min_as_float, *max_as_float, row_count);
 }
 
 String StatisticsMinMax::getNameForLogs() const

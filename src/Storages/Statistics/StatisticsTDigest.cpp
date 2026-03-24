@@ -1,10 +1,10 @@
 #include <Storages/Statistics/StatisticsTDigest.h>
-#include <Common/Exception.h>
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeNullable.h>
 
 namespace DB
 {
+
 
 StatisticsTDigest::StatisticsTDigest(const SingleStatisticsDescription & description, const DataTypePtr & data_type_)
     : IStatistics(description)
@@ -42,18 +42,10 @@ void StatisticsTDigest::deserialize(ReadBuffer & buf)
 
 std::optional<Float64> StatisticsTDigest::estimateLess(const Field & val) const
 {
-    try
-    {
-        auto val_as_float = StatisticsUtils::tryConvertToFloat64(val, data_type);
-        if (!val_as_float)
-            return std::nullopt;
-        return t_digest.getCountLessThan(*val_as_float);
-    }
-    catch (...)
-    {
-        tryLogCurrentException("StatisticsTDigest", "While estimating less-than selectivity", LogsLevel::warning);
+    auto val_as_float = StatisticsUtils::tryConvertToFloat64(val, data_type);
+    if (!val_as_float)
         return std::nullopt;
-    }
+    return t_digest.getCountLessThan(*val_as_float);
 }
 
 Float64 StatisticsTDigest::estimateEqual(const Field & val) const

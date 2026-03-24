@@ -89,10 +89,10 @@ public:
     UInt64 estimateCardinality() const;
     UInt64 estimateDefaults() const;
 
-    Float64 estimateLess(const Field & val) const;
-    Float64 estimateGreater(const Field & val) const;
-    Float64 estimateEqual(const Field & val) const;
-    Float64 estimateRange(const Range & range) const;
+    std::optional<Float64> estimateLess(const Field & val) const;
+    std::optional<Float64> estimateGreater(const Field & val) const;
+    std::optional<Float64> estimateEqual(const Field & val) const;
+    std::optional<Float64> estimateRange(const Range & range) const;
 
     Estimate getEstimate() const;
     String getNameForLogs() const;

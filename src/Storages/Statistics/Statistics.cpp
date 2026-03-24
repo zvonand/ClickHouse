@@ -47,14 +47,22 @@ std::optional<Float64> StatisticsUtils::tryConvertToFloat64(const Field & value,
     if (!data_type->isValueRepresentedByNumber())
         return {};
 
-    auto column = data_type->createColumn();
-    column->insert(value);
-    ColumnsWithTypeAndName arguments({ColumnWithTypeAndName(std::move(column), data_type, "stats_const")});
+    try
+    {
+        auto column = data_type->createColumn();
+        column->insert(value);
+        ColumnsWithTypeAndName arguments({ColumnWithTypeAndName(std::move(column), data_type, "stats_const")});
 
-    auto cast_resolver = FunctionFactory::instance().get("toFloat64", nullptr);
-    auto cast_function = cast_resolver->build(arguments);
-    ColumnPtr result = cast_function->execute(arguments, std::make_shared<DataTypeFloat64>(), 1, false);
-    return result->getFloat64(0);
+        auto cast_resolver = FunctionFactory::instance().get("toFloat64", nullptr);
+        auto cast_function = cast_resolver->build(arguments);
+        ColumnPtr result = cast_function->execute(arguments, std::make_shared<DataTypeFloat64>(), 1, false);
+        return result->getFloat64(0);
+    }
+    catch (...)
+    {
+        tryLogCurrentException("StatisticsUtils", "Cannot convert field to Float64", LogsLevel::information);
+        return {};
+    }
 }
 
 IStatistics::IStatistics(const SingleStatisticsDescription & stat_)
@@ -146,7 +154,7 @@ Float64 IStatistics::estimateRange(const Range & /*range*/) const
 /// Sometimes, it is possible to combine multiple statistics in a clever way. For that reason, all estimation are performed in a central
 /// place (here), and we don't simply pass the predicate to the first statistics object that supports it natively.
 
-Float64 ColumnStatistics::estimateLess(const Field & val) const
+std::optional<Float64> ColumnStatistics::estimateLess(const Field & val) const
 {
     /// Comparisons with NaN are always false, so `x < NaN` has zero selectivity.
     if (val.isNaN())
@@ -158,19 +166,21 @@ Float64 ColumnStatistics::estimateLess(const Field & val) const
     if (stats.contains(StatisticsType::MinMax))
         if (auto result = stats.at(StatisticsType::MinMax)->estimateLess(val))
             return *result;
-    return static_cast<Float64>(rows) * ConditionSelectivityEstimator::default_cond_range_factor;
+    return std::nullopt;
 }
 
-Float64 ColumnStatistics::estimateGreater(const Field & val) const
+std::optional<Float64> ColumnStatistics::estimateGreater(const Field & val) const
 {
     /// Comparisons with NaN are always false, so `x > NaN` has zero selectivity.
     if (val.isNaN())
         return 0;
 
-    return static_cast<Float64>(rows) - estimateLess(val);
+    if (auto less = estimateLess(val))
+        return static_cast<Float64>(rows) - *less;
+    return std::nullopt;
 }
 
-Float64 ColumnStatistics::estimateEqual(const Field & val) const
+std::optional<Float64> ColumnStatistics::estimateEqual(const Field & val) const
 {
     /// Comparisons with NaN are always false, so `x = NaN` has zero selectivity.
     if (val.isNaN())
@@ -198,39 +208,31 @@ Float64 ColumnStatistics::estimateEqual(const Field & val) const
         return static_cast<Float64>(rows) / static_cast<Float64>(cardinality); /// assume uniform distribution
     }
 
-    return static_cast<Float64>(rows) * ConditionSelectivityEstimator::default_cond_equal_factor;
+    return std::nullopt;
 }
 
-Float64 ColumnStatistics::estimateRange(const Range & range) const
+std::optional<Float64> ColumnStatistics::estimateRange(const Range & range) const
 {
     if (range.empty())
-    {
         return 0;
-    }
 
     if (range.isInfinite())
-    {
         return static_cast<Float64>(rows);
-    }
 
     if (range.left == range.right)
-    {
         return estimateEqual(range.left);
-    }
 
     if (range.left.isNegativeInfinity())
-    {
         return estimateLess(range.right);
-    }
 
     if (range.right.isPositiveInfinity())
-    {
         return estimateGreater(range.left);
-    }
 
-    Float64 right_count = estimateLess(range.right);
-    Float64 left_count = estimateLess(range.left);
-    return right_count - left_count;
+    auto right_count = estimateLess(range.right);
+    auto left_count = estimateLess(range.left);
+    if (!right_count || !left_count)
+        return std::nullopt;
+    return *right_count - *left_count;
 }
 
 UInt64 ColumnStatistics::estimateCardinality() const

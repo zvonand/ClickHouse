@@ -714,9 +714,9 @@ llvm::Value * ColumnString::compileComparator(llvm::IRBuilderBase & b, llvm::Val
 
     llvm::Value * const_one = llvm::ConstantInt::get(size_type, 1);
 
-    auto load_offset = [&](llvm::Value * offset_aray, llvm::Value * index)
+    auto load_offset = [&](llvm::Value * offset_array, llvm::Value * index)
     {
-        auto * element_ptr = b.CreateInBoundsGEP(size_type, offset_aray, index);
+        auto * element_ptr = b.CreateInBoundsGEP(size_type, offset_array, index);
         return b.CreateLoad(size_type, element_ptr);
     };
     auto * lhs_prev_index = b.CreateSub(lhs_index, const_one);

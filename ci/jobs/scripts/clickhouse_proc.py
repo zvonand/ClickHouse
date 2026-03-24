@@ -755,7 +755,7 @@ clickhouse-client --query "SELECT count() FROM test.visits"
         else:
             return False
 
-    def run_test(self, cmd, timeout=7200):
+    def run_test(self, cmd, timeout=1800): #REMOVEME timeout 7200
         print(f"Run test: [{cmd}]")
         with open(self.test_output_file, "w") as f:
             process = subprocess.Popen(

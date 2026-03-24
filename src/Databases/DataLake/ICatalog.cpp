@@ -118,6 +118,15 @@ void TableMetadata::setLocation(const std::string & location_)
         /// Azure ABFSS format: extract container (before @) and account (after @)
         bucket = bucket_part.substr(0, at_pos);
         azure_account_with_suffix = bucket_part.substr(at_pos + 1);
+
+        /// Some catalogs (e.g., Apache Polaris) follow the ADLS Gen2 filesystem convention
+        /// of including the container name as the first segment of the path in abfss:// locations,
+        /// e.g. abfss://container@account.dfs.core.windows.net/container/actual/path.
+        /// Since the container is already captured in `bucket`, strip the redundant prefix
+        /// from `path` to avoid doubling the container name when constructing storage URLs.
+        if (path.starts_with(bucket + "/"))
+            path = path.substr(bucket.size() + 1);
+
         LOG_TEST(getLogger("TableMetadata"),
                  "Parsed Azure location - container: {}, account: {}, path: {}",
                  bucket, azure_account_with_suffix, path);
@@ -260,6 +269,29 @@ std::string TableMetadata::getMetadataLocation(const std::string & iceberg_metad
             data_location = data_location.substr(storage_type_str.size());
         else if (!endpoint.empty() && data_location.starts_with(endpoint))
             data_location = data_location.substr(endpoint.size());
+
+        /// For Azure ABFSS, some catalogs (e.g., Apache Polaris) include the container name
+        /// as the first segment of the path. The setLocation fix strips this from `path`, but
+        /// the metadata-location from the catalog may still include it. Strip it here too
+        /// so the prefix comparison below succeeds.
+        if (!azure_account_with_suffix.empty() && !bucket.empty())
+        {
+            /// The host part after stripping the protocol is: bucket@azure_account_with_suffix
+            std::string azure_host_prefix = bucket + "@" + azure_account_with_suffix + "/";
+            auto strip_container = [&](std::string & location_str)
+            {
+                if (location_str.starts_with(azure_host_prefix))
+                {
+                    std::string_view after_host = std::string_view(location_str).substr(azure_host_prefix.size());
+                    if (after_host.starts_with(bucket + "/"))
+                    {
+                        location_str = std::string(azure_host_prefix) + std::string(after_host.substr(bucket.size() + 1));
+                    }
+                }
+            };
+            strip_container(metadata_location);
+            strip_container(data_location);
+        }
 
         if (metadata_location.starts_with(data_location))
         {

@@ -861,7 +861,11 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
         }
 
         if (isCancelled())
+        {
+            block = sample_block.cloneEmpty();
+            num_rows = 0;
             return;
+        }
     }
 
     if (project_inputs)

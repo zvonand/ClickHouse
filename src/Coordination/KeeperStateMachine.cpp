@@ -217,13 +217,13 @@ void assertDigest(
     }
 }
 
-/// Macros to construct timed lock guards for storage_mutex with appropriate ProfileEvents.
+/// Macros to construct timed lock guards for state_machine_storage_mutex with appropriate ProfileEvents.
 /// We cannot use a factory function because TSA does not track lock ownership across function boundaries.
 #define KEEPER_STORAGE_LOCK_EXCLUSIVE(name) \
-    ProfiledExclusiveLock name(storage_mutex, ProfileEvents::KeeperStorageLockWaitMicroseconds, ProfileEvents::KeeperStorageLockHoldMicroseconds)
+    ProfiledExclusiveLock name(state_machine_storage_mutex, ProfileEvents::KeeperStorageLockWaitMicroseconds, ProfileEvents::KeeperStorageLockHoldMicroseconds)
 
 #define KEEPER_STORAGE_LOCK_SHARED(name) \
-    ProfiledSharedLock name(storage_mutex, ProfileEvents::KeeperStorageSharedLockWaitMicroseconds, ProfileEvents::KeeperStorageSharedLockHoldMicroseconds)
+    ProfiledSharedLock name(state_machine_storage_mutex, ProfileEvents::KeeperStorageSharedLockWaitMicroseconds, ProfileEvents::KeeperStorageSharedLockHoldMicroseconds)
 
 union XidHelper
 {
@@ -1058,12 +1058,14 @@ int IKeeperStateMachine::read_logical_snp_obj(
 }
 
 template<typename Storage>
-void KeeperStateMachine<Storage>::processReadRequest(const KeeperRequestForSession & request_for_session)
+void KeeperStateMachine<Storage>::processReadRequests(const KeeperRequestsForSessions & requests)
 {
-    /// Pure local request, just process it with storage
+    /// Pure local request, just process them with storage
+    KEEPER_STORAGE_LOCK_SHARED(storage_lock);
+    ProfiledMutexLock response_lock(process_and_responses_lock, ProfileEvents::KeeperProcessAndResponsesLockWaitMicroseconds, ProfileEvents::KeeperProcessAndResponsesLockHoldMicroseconds);
+
+    for (const auto & request_for_session : requests)
     {
-        KEEPER_STORAGE_LOCK_SHARED(storage_lock);
-        ProfiledMutexLock response_lock(process_and_responses_lock, ProfileEvents::KeeperProcessAndResponsesLockWaitMicroseconds, ProfileEvents::KeeperProcessAndResponsesLockHoldMicroseconds);
         auto responses = storage->processRequest(
             request_for_session.request, request_for_session.session_id, std::nullopt, true /*check_acl*/, true /*is_local*/);
         for (auto & response_for_session : responses)

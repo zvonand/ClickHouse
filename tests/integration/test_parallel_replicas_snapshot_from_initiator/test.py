@@ -26,12 +26,17 @@ def _create_tables(table_name):
     for node in nodes:
         node.query("SYSTEM START REPLICATED SENDS")
 
-    for idx, node in enumerate(nodes):
+    # Drop all replicas first so the ZK path is fully cleaned up
+    # before recreating. If we interleave DROP and CREATE in the same loop,
+    # a newly created replica will see stale replicas still in ZK and
+    # fetch their old data, causing accumulation across repeated runs.
+    for node in nodes:
         node.query(
             f"DROP TABLE IF EXISTS {table_name}",
             settings={"database_atomic_wait_for_drop_and_detach_synchronously": True},
         )
 
+    for idx, node in enumerate(nodes):
         node.query(
             f"""
             CREATE TABLE {table_name} (value Int64)

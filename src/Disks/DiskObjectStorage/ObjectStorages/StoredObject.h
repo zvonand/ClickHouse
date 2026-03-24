@@ -33,6 +33,7 @@ struct StoredObject
 };
 
 using StoredObjects = std::vector<StoredObject>;
+using StoredObjectSet = std::unordered_set<StoredObject>;
 using StoredObjectsSpan = std::span<const StoredObject>;
 
 size_t getTotalSize(const StoredObjects & objects);

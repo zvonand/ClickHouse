@@ -206,7 +206,25 @@ The server UI includes all tabs: Summary, Allocations, Arenas, Operations, Globa
 http://localhost:9182/jemalloc
 ```
 
-The Keeper UI is available on the HTTP control port (`keeper_server.http_control.port`). It provides the same visualizations as the server — Summary, Allocations, Arenas, Operations, Global Profiler, and Raw Output — except for the Query Profiler tab which requires SQL and `system.trace_log`.
+The Keeper UI is available on the HTTP control port. This port is **disabled by default** and must be explicitly enabled by setting `keeper_server.http_control.port` in the Keeper configuration:
+
+```xml
+<clickhouse>
+    <keeper_server>
+        <http_control>
+            <port>9182</port>
+        </http_control>
+    </keeper_server>
+</clickhouse>
+```
+
+Once enabled, the UI provides the same visualizations as the server — Summary, Allocations, Arenas, Operations, Global Profiler, and Raw Output — except for the Query Profiler tab which requires SQL and `system.trace_log`.
+
+:::warning Security
+The Keeper HTTP control port does not have application-level authentication. Unlike the ClickHouse Server jemalloc UI — where all data queries go through the SQL HTTP handler and require user/password credentials — the Keeper REST API endpoints are unauthenticated. This is consistent with other Keeper HTTP control endpoints (commands, storage, dashboard).
+
+Restrict access to this port using network-level controls: bind Keeper to localhost, use firewall rules, or place it behind a reverse proxy with authentication. When no `listen_host` is configured, Keeper defaults to listening on localhost only.
+:::
 
 Keeper also exposes REST API endpoints for programmatic access:
 

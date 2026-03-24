@@ -2667,48 +2667,52 @@ ASTPtr QueryFuzzer::addJoinClause()
             ntexp->database_and_table_name = ntexp->children.back();
         }
 
-        const int nconditions = (fuzz_rand() % 10) < 8 ? 1 : ((fuzz_rand() % 5) + 1);
-        for (int i = 0; i < nconditions; i++)
+        /// NATURAL JOIN does not take ON/USING — only attach a condition for non-natural joins.
+        if (!table_join->is_natural)
         {
-            /// Pick a random column
-            auto rand_col1 = colids.begin();
-            std::advance(rand_col1, fuzz_rand() % colids.size());
-            const auto * id1 = typeid_cast<ASTIdentifier *>(rand_col1->second.get());
-
-            /// Use another random column
-            /// Most of the times, search from the identifier list
-            const auto & to_search = fuzz_rand() % 10 == 0 ? column_like : colids;
-            auto rand_col2 = to_search.begin();
-            std::advance(rand_col2, fuzz_rand() % to_search.size());
-
-            const String id1_alias = id1->tryGetAlias();
-            const String & nidentifier = (id1_alias.empty() || (fuzz_rand() % 2 == 0)) ? id1->shortName() : id1_alias;
-            ASTPtr expression_1 = make_intrusive<ASTIdentifier>(Strings{next_alias, nidentifier});
-            ASTPtr expression_2 = rand_col2->second->clone();
-
-            expression_2 = setIdentifierAliasOrNot(expression_2);
-            if (fuzz_rand() % 3 == 0)
+            const int nconditions = (fuzz_rand() % 10) < 8 ? 1 : ((fuzz_rand() % 5) + 1);
+            for (int i = 0; i < nconditions; i++)
             {
-                /// Swap sides
-                auto expression_e = expression_1;
-                expression_1 = expression_2;
-                expression_2 = expression_e;
-            }
-            /// Run mostly equi-joins
-            ASTPtr next_condition = makeASTFunction(
-                comparison_comparators[(fuzz_rand() % 10 == 0) ? (fuzz_rand() % comparison_comparators.size()) : 0],
-                expression_1,
-                expression_2);
-            next_condition = tryNegateNextPredicate(next_condition, 30);
+                /// Pick a random column
+                auto rand_col1 = colids.begin();
+                std::advance(rand_col1, fuzz_rand() % colids.size());
+                const auto * id1 = typeid_cast<ASTIdentifier *>(rand_col1->second.get());
 
-            /// Sometimes use multiple conditions
-            join_condition
-                = join_condition ? makeASTFunction((fuzz_rand() % 10) == 0 ? "or" : "and", join_condition, next_condition) : next_condition;
-            join_condition = tryNegateNextPredicate(join_condition, 50);
+                /// Use another random column
+                /// Most of the times, search from the identifier list
+                const auto & to_search = fuzz_rand() % 10 == 0 ? column_like : colids;
+                auto rand_col2 = to_search.begin();
+                std::advance(rand_col2, fuzz_rand() % to_search.size());
+
+                const String id1_alias = id1->tryGetAlias();
+                const String & nidentifier = (id1_alias.empty() || (fuzz_rand() % 2 == 0)) ? id1->shortName() : id1_alias;
+                ASTPtr expression_1 = make_intrusive<ASTIdentifier>(Strings{next_alias, nidentifier});
+                ASTPtr expression_2 = rand_col2->second->clone();
+
+                expression_2 = setIdentifierAliasOrNot(expression_2);
+                if (fuzz_rand() % 3 == 0)
+                {
+                    /// Swap sides
+                    auto expression_e = expression_1;
+                    expression_1 = expression_2;
+                    expression_2 = expression_e;
+                }
+                /// Run mostly equi-joins
+                ASTPtr next_condition = makeASTFunction(
+                    comparison_comparators[(fuzz_rand() % 10 == 0) ? (fuzz_rand() % comparison_comparators.size()) : 0],
+                    expression_1,
+                    expression_2);
+                next_condition = tryNegateNextPredicate(next_condition, 30);
+
+                /// Sometimes use multiple conditions
+                join_condition = join_condition ? makeASTFunction((fuzz_rand() % 10) == 0 ? "or" : "and", join_condition, next_condition)
+                                                : next_condition;
+                join_condition = tryNegateNextPredicate(join_condition, 50);
+            }
+            chassert(join_condition);
+            table_join->children.push_back(join_condition);
+            table_join->on_expression = table_join->children.back();
         }
-        chassert(join_condition);
-        table_join->children.push_back(join_condition);
-        table_join->on_expression = table_join->children.back();
 
         auto table = make_intrusive<ASTTablesInSelectQueryElement>();
         table->table_join = table_join;

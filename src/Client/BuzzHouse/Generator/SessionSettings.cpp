@@ -445,7 +445,7 @@ std::unordered_map<String, CHSetting> serverSettings = {
     {"apply_patch_parts_join_cache_buckets",
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 1, 64)); },
-         {"0", "1", "2", "4", "16", "64"},
+         {"1", "2", "4", "16", "64"},
          false)},
     {"apply_prewhere_after_final", trueOrFalseSettingNoOracle},
     {"apply_row_policy_after_final", trueOrFalseSettingNoOracle},
@@ -584,7 +584,7 @@ std::unordered_map<String, CHSetting> serverSettings = {
          [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, 128)); }, {}, false)},
     {"distributed_plan_default_shuffle_join_bucket_count",
      CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, 128)); }, {}, false)},
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 1, 128)); }, {}, false)},
     {"distributed_plan_execute_locally", trueOrFalseSetting},
     {"distributed_plan_force_exchange_kind",
      CHSetting(
@@ -961,7 +961,7 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
     {"max_insert_threads", threadSetting},
     {"max_parallel_replicas",
      CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.2, 0, 5)); }, {}, false)},
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.2, 1, 5)); }, {}, false)},
     {"max_parsing_threads", threadSetting},
     {"max_parts_to_move",
      CHSetting(
@@ -1409,6 +1409,12 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
         serverSettings.insert({{"implicit_transaction", trueOrFalseSettingNoOracle}});
     }
 
+    /// NonZeroUInt64 byte-size settings — must not receive 0
+    DB::Strings nonzero_bytes_values
+        = {"delta_lake_insert_max_bytes_in_data_file",
+           "max_read_buffer_size",
+           "min_chunk_bytes_for_parallel_parsing",
+           "temporary_files_buffer_size"};
     DB::Strings max_bytes_values
         = {"aggregation_in_order_max_block_bytes",
            "archive_adaptive_buffer_max_size_bytes",
@@ -1417,7 +1423,6 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
            "azure_max_single_part_upload_size",
            "cross_join_min_bytes_to_compress",
            "default_max_bytes_in_join",
-           "delta_lake_insert_max_bytes_in_data_file",
            /// ClickHouse cloud setting
            "distributed_cache_alignment",
            /// ClickHouse cloud setting
@@ -1445,7 +1450,6 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
            "max_joined_block_size_bytes",
            "max_partition_size_to_drop",
            "max_partitions_per_insert_block",
-           "max_read_buffer_size",
            "max_read_buffer_size_local_fs",
            "max_read_buffer_size_remote_fs",
            "max_table_size_to_drop",
@@ -1460,7 +1464,6 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
            "merge_tree_min_bytes_per_task_for_remote_reading",
            "min_bytes_to_use_direct_io",
            "min_bytes_to_use_mmap_io",
-           "min_chunk_bytes_for_parallel_parsing",
            "min_external_table_block_size_bytes",
            "min_insert_block_size_bytes",
            "min_insert_block_size_bytes_for_materialized_views",
@@ -1474,13 +1477,14 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
            "prefetch_buffer_size",
            "query_cache_max_size_in_bytes",
            "remote_read_min_bytes_for_seek",
-           "temporary_files_buffer_size",
            /// ClickHouse cloud setting
            "write_through_distributed_cache_buffer_size"};
+    /// NonZeroUInt64 row-count settings — must not receive 0
+    DB::Strings nonzero_rows_values
+        = {"delta_lake_insert_max_rows_in_data_file", "merge_tree_min_read_task_size", "output_format_parquet_batch_size"};
     DB::Strings max_rows_values
         = {"cluster_table_function_buckets_batch_size",
            "cross_join_min_rows_to_compress",
-           "delta_lake_insert_max_rows_in_data_file",
            "distributed_plan_max_rows_to_broadcast",
            "external_storage_max_read_rows",
            "function_range_max_elements_in_block",
@@ -1500,7 +1504,6 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
            "max_rows_to_transfer",
            "max_streams_for_files_processing_in_cluster_functions",
            "merge_tree_max_rows_to_use_cache",
-           "merge_tree_min_read_task_size",
            "merge_tree_min_rows_for_concurrent_read",
            "merge_tree_min_rows_for_concurrent_read_for_remote_filesystem",
            "merge_tree_min_rows_for_seek",
@@ -1510,7 +1513,6 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
            "min_joined_block_size_rows",
            "min_outstreams_per_resize_after_split",
            "min_table_rows_to_use_projection_index",
-           "output_format_parquet_batch_size",
            "output_format_parquet_data_page_size",
            "output_format_parquet_row_group_size",
            "output_format_pretty_max_rows",
@@ -1519,11 +1521,10 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
            "parallel_hash_join_threshold",
            "partial_merge_join_rows_in_right_blocks",
            "query_plan_max_limit_for_lazy_materialization"};
-    DB::Strings max_block_sizes = {"input_format_parquet_max_block_size",
-            "join_runtime_filter_blocks_to_skip_before_reenabling",
-            "max_block_size",
+    /// NonZeroUInt64 block-size settings — must not receive 0
+    DB::Strings nonzero_block_sizes = {"input_format_parquet_max_block_size", "max_block_size", "max_insert_block_size"};
+    DB::Strings max_block_sizes = {"join_runtime_filter_blocks_to_skip_before_reenabling",
             "max_compress_block_size",
-            "max_insert_block_size",
             "min_compress_block_size"/*,
             "output_format_orc_compression_block_size" can give std::exception */};
     DB::Strings max_columns_values;
@@ -1614,16 +1615,34 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
         serverSettings.insert(
             {{entry, CHSetting(bytesRange, {"0", "1", "2", "4", "8", "16", "32", "1024", "2048", "4096", "16384"}, false)}});
     }
+    for (const auto & entry : nonzero_bytes_values)
+    {
+        performanceSettings.insert(
+            {{entry, CHSetting(bytesRangeNonZero, {"32768", "65536", "1048576", "4194304", "33554432", "'10M'"}, false)}});
+        serverSettings.insert(
+            {{entry, CHSetting(bytesRangeNonZero, {"1", "2", "4", "8", "16", "32", "1024", "2048", "4096", "16384"}, false)}});
+    }
     for (const auto & entry : max_rows_values)
     {
         performanceSettings.insert({{entry, CHSetting(rowsRange, {"0", "512", "1024", "2048", "4096", "16384", "'10M'"}, false)}});
         serverSettings.insert(
             {{entry, CHSetting(rowsRange, {"0", "1", "2", "4", "8", "16", "32", "1024", "2048", "4096", "16384"}, false)}});
     }
+    for (const auto & entry : nonzero_rows_values)
+    {
+        performanceSettings.insert({{entry, CHSetting(rowsRangeNonZero, {"1", "512", "1024", "2048", "4096", "16384", "'10M'"}, false)}});
+        serverSettings.insert(
+            {{entry, CHSetting(rowsRangeNonZero, {"1", "2", "4", "8", "16", "32", "1024", "2048", "4096", "16384"}, false)}});
+    }
     for (const auto & entry : max_block_sizes)
     {
         performanceSettings.insert({{entry, CHSetting(highRange, {"1024", "2048", "4096", "8192", "16384", "'10M'"}, false)}});
         serverSettings.insert({{entry, CHSetting(highRange, blockSizes, false)}});
+    }
+    for (const auto & entry : nonzero_block_sizes)
+    {
+        performanceSettings.insert({{entry, CHSetting(highRangeNonZero, {"1024", "2048", "4096", "8192", "16384"}, false)}});
+        serverSettings.insert({{entry, CHSetting(highRangeNonZero, blockSizes, false)}});
     }
     for (const auto & entry : max_columns_values)
     {

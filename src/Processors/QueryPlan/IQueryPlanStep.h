@@ -107,7 +107,7 @@ public:
     virtual void describeDistributedPlan(FormatSettings & /*settings*/, const ExplainPlanOptions & /*options*/) {}
 
     /// Get description of the distributed pipeline. Shown with option `distributed = 1` in EXPLAIN PIPELINE.
-    virtual void describeDistributedPipeline(FormatSettings & /*settings*/) {}
+    virtual void describeDistributedPipeline(FormatSettings & /*settings*/, bool /*distributed*/) {}
 
     /// Get description of processors added in current step. Should be called after updatePipeline().
     virtual void describePipeline(FormatSettings & /*settings*/) const {}

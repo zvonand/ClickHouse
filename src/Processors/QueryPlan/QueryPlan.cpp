@@ -598,7 +598,7 @@ static void explainPipelineStep(IQueryPlanStep & step, IQueryPlanStep::FormatSet
         settings.offset += settings.base_indent;
 
     if (distributed)
-        step.describeDistributedPipeline(settings);
+        step.describeDistributedPipeline(settings, distributed);
 }
 
 void QueryPlan::explainPipeline(WriteBuffer & buffer, const ExplainPipelineOptions & options) const

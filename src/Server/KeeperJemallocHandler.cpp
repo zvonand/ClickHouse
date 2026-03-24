@@ -1,0 +1,188 @@
+#include <Server/KeeperJemallocHandler.h>
+
+#if USE_NURAFT
+
+#include <IO/HTTPCommon.h>
+#include <IO/Operators.h>
+#include <Server/HTTP/WriteBufferFromHTTPServerResponse.h>
+
+#include <Poco/Net/HTTPServerRequest.h>
+#include <Poco/Net/HTTPServerResponse.h>
+#include <Poco/URI.h>
+
+#if USE_JEMALLOC
+#    include <Common/Jemalloc.h>
+#    include <IO/ReadBufferFromFile.h>
+#    include <IO/ReadHelpers.h>
+#    include <Poco/JSON/Object.h>
+#    include <Poco/JSON/Stringifier.h>
+#    include <base/scope_guard.h>
+#    include <filesystem>
+#endif
+
+/// Reuse the server's jemalloc HTML — the page auto-adapts via window.JEMALLOC_CONFIG.
+constexpr unsigned char resource_jemalloc_html[] =
+{
+#embed "../../programs/server/jemalloc.html"
+};
+
+namespace DB
+{
+
+void KeeperJemallocWebUIHandler::handleRequest(
+    HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event &)
+{
+    constexpr std::string_view config_script = "<script>window.JEMALLOC_CONFIG={mode:'keeper'}</script>";
+    std::string_view html(reinterpret_cast<const char *>(resource_jemalloc_html), std::size(resource_jemalloc_html));
+
+    response.setContentType("text/html; charset=UTF-8");
+    if (request.getVersion() == HTTPServerRequest::HTTP_1_1)
+        response.setChunkedTransferEncoding(true);
+
+    setResponseDefaultHeaders(response);
+    response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
+    auto wb = WriteBufferFromHTTPServerResponse(response, request.getMethod() == HTTPRequest::HTTP_HEAD);
+    wb.write(config_script.data(), config_script.size());
+    wb.write(html.data(), html.size());
+    wb.finalize();
+}
+
+#if USE_JEMALLOC
+
+void KeeperJemallocAPIHandler::handleRequest(
+    HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event &)
+try
+{
+    Poco::URI uri(request.getURI());
+    std::string path = uri.getPath();
+
+    if (path == "/jemalloc/profile")
+        handleProfile(request, response);
+    else if (path == "/jemalloc/stats")
+        handleStats(request, response);
+    else if (path == "/jemalloc/status")
+        handleStatus(request, response);
+    else
+    {
+        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_NOT_FOUND);
+        response.setContentType("text/plain");
+        *response.send() << "Not found\n";
+    }
+}
+catch (...)
+{
+    tryLogCurrentException("KeeperJemallocAPIHandler");
+
+    try
+    {
+        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+        if (!response.sent())
+            *response.send() << getCurrentExceptionMessage(false) << '\n';
+    }
+    catch (...)
+    {
+        LOG_ERROR(getLogger("KeeperJemallocAPIHandler"), "Cannot send exception to client");
+    }
+}
+
+void KeeperJemallocAPIHandler::handleProfile(
+    HTTPServerRequest & request, HTTPServerResponse & response)
+{
+    Poco::URI uri(request.getURI());
+    auto params = uri.getQueryParameters();
+
+    std::string format = "collapsed";
+    for (const auto & [key, value] : params)
+    {
+        if (key == "format")
+            format = value;
+    }
+
+    if (format != "collapsed" && format != "raw")
+    {
+        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
+        response.setContentType("text/plain");
+        *response.send() << "Unknown format: " << format << ". Supported: collapsed, raw\n";
+        return;
+    }
+
+    auto raw_file = std::string(Jemalloc::flushProfile("/tmp/jemalloc_keeper"));
+    SCOPE_EXIT({ std::error_code ec; std::filesystem::remove(raw_file, ec); });
+
+    std::string output;
+
+    if (format == "collapsed")
+    {
+        output = Jemalloc::heapProfileToCollapsedStacks(raw_file);
+    }
+    else
+    {
+        ReadBufferFromFile in(raw_file);
+        readStringUntilEOF(output, in);
+    }
+
+    setResponseDefaultHeaders(response);
+    response.setContentType("text/plain; charset=UTF-8");
+    response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
+    auto wb = WriteBufferFromHTTPServerResponse(response, request.getMethod() == HTTPRequest::HTTP_HEAD);
+    wb.write(output.data(), output.size());
+    wb.finalize();
+}
+
+void KeeperJemallocAPIHandler::handleStats(
+    HTTPServerRequest & request, HTTPServerResponse & response)
+{
+    auto stats = Jemalloc::getStats();
+
+    setResponseDefaultHeaders(response);
+    response.setContentType("text/plain; charset=UTF-8");
+    response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
+    auto wb = WriteBufferFromHTTPServerResponse(response, request.getMethod() == HTTPRequest::HTTP_HEAD);
+    wb.write(stats.data(), stats.size());
+    wb.finalize();
+}
+
+void KeeperJemallocAPIHandler::handleStatus(
+    HTTPServerRequest & request, HTTPServerResponse & response)
+{
+    bool prof_enabled = false;
+    bool prof_active = false;
+    bool thread_active_init = false;
+    size_t lg_sample = 0;
+
+    try
+    {
+        prof_enabled = Jemalloc::getValue<bool>("opt.prof");
+    }
+    catch (...) {} // NOLINT
+
+    if (prof_enabled)
+    {
+        try { prof_active = Jemalloc::getValue<bool>("prof.active"); } catch (...) {} // NOLINT
+        try { thread_active_init = Jemalloc::getThreadProfileInitMib().getValue(); } catch (...) {} // NOLINT
+        try { lg_sample = Jemalloc::getValue<size_t>("prof.lg_sample"); } catch (...) {} // NOLINT
+    }
+
+    Poco::JSON::Object json;
+    json.set("prof_enabled", prof_enabled);
+    json.set("prof_active", prof_active);
+    json.set("thread_active_init", thread_active_init);
+    json.set("lg_sample", static_cast<Poco::UInt64>(lg_sample));
+
+    std::ostringstream oss; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
+    oss.exceptions(std::ios::failbit);
+    Poco::JSON::Stringifier::stringify(json, oss);
+
+    setResponseDefaultHeaders(response);
+    response.setContentType("application/json");
+    response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
+    auto wb = WriteBufferFromHTTPServerResponse(response, request.getMethod() == HTTPRequest::HTTP_HEAD);
+    auto str = oss.str();
+    wb.write(str.data(), str.size());
+    wb.finalize();
+}
+
+#endif
+
+}
+#endif

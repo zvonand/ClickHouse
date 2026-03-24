@@ -6,9 +6,14 @@
 #    include <Common/FramePointers.h>
 #    include <Common/MemoryTracker.h>
 #    include <Common/StackTrace.h>
+#    include <Common/StringUtils.h>
 #    include <Common/Stopwatch.h>
 #    include <Common/TraceSender.h>
 #    include <Common/logger_useful.h>
+#    include <IO/ReadBufferFromFile.h>
+#    include <IO/ReadHelpers.h>
+#    include <base/hex.h>
+#    include <unordered_map>
 
 #    define STRINGIFY_HELPER(x) #x
 #    define STRINGIFY(x) STRINGIFY_HELPER(x)
@@ -92,6 +97,149 @@ void setProfileSamplingRate(size_t lg_prof_sample)
     je_mallctl("prof.reset", nullptr, nullptr, &lg_prof_sample, sizeof(lg_prof_sample));
 }
 
+
+std::string heapProfileToCollapsedStacks(const std::string & input_filename)
+{
+    ReadBufferFromFile in(input_filename);
+
+    struct StackEntry
+    {
+        std::vector<UInt64> addrs;
+        Int64 live_bytes = 0;
+    };
+    std::vector<StackEntry> entries;
+
+    std::string line;
+    while (!in.eof())
+    {
+        line.clear();
+        readStringUntilNewlineInto(line, in);
+        in.tryIgnore(1);
+
+        if (line.empty() || line[0] != '@')
+            continue;
+
+        StackEntry entry;
+
+        std::string_view sv(line.data() + 1, line.size() - 1);
+        bool first = true;
+        while (!sv.empty())
+        {
+            trimLeft(sv);
+            if (sv.empty())
+                break;
+
+            if (sv.size() >= 2 && sv[0] == '0' && (sv[1] == 'x' || sv[1] == 'X'))
+                sv.remove_prefix(2);
+
+            UInt64 addr = 0;
+            size_t processed = 0;
+            for (size_t i = 0; i < sv.size() && processed < 16; ++i)
+            {
+                char c = sv[i];
+                if (isHexDigit(c))
+                {
+                    addr = (addr << 4) | unhex(c);
+                    ++processed;
+                }
+                else
+                    break;
+            }
+            if (processed == 0)
+                break;
+            sv.remove_prefix(processed);
+
+            entry.addrs.push_back(first ? addr : addr - 1);
+            first = false;
+        }
+
+        if (!in.eof())
+        {
+            line.clear();
+            readStringUntilNewlineInto(line, in);
+            in.tryIgnore(1);
+
+            /// jemalloc heap dump format: "  t*: <curobjs>: <curbytes> [...]"
+            /// We need curbytes which is after the second colon.
+            auto first_colon = line.find(':');
+            if (first_colon != std::string::npos)
+            {
+                auto second_colon = line.find(':', first_colon + 1);
+                if (second_colon != std::string::npos)
+                {
+                    std::string_view after_colon(line.data() + second_colon + 1, line.size() - second_colon - 1);
+                    trimLeft(after_colon);
+                    Int64 bytes = 0;
+                    for (char c : after_colon)
+                    {
+                        if (c >= '0' && c <= '9')
+                            bytes = bytes * 10 + (c - '0');
+                        else
+                            break;
+                    }
+                    entry.live_bytes = bytes;
+                }
+            }
+        }
+
+        if (!entry.addrs.empty() && entry.live_bytes > 0)
+            entries.push_back(std::move(entry));
+    }
+
+    std::unordered_map<std::string, Int64> collapsed;
+
+    for (const auto & entry : entries)
+    {
+        std::string stack;
+        for (size_t i = entry.addrs.size(); i > 0; --i)
+        {
+            UInt64 addr = entry.addrs[i - 1];
+            FramePointers fp{};
+            fp[0] = reinterpret_cast<void *>(addr);
+
+            std::string symbol = "??";
+            StackTrace::forEachFrame(
+                fp, 0, 1,
+                [&](const StackTrace::Frame & frame)
+                {
+                    if (frame.symbol.has_value())
+                        symbol = *frame.symbol;
+                },
+                /* fatal= */ false);
+
+            if (!stack.empty())
+                stack += ';';
+            stack += symbol;
+        }
+        if (!stack.empty())
+            collapsed[stack] += entry.live_bytes;
+    }
+
+    std::string result;
+    for (const auto & [stack, bytes] : collapsed)
+    {
+        result += stack;
+        result += ' ';
+        result += std::to_string(bytes);
+        result += '\n';
+    }
+    return result;
+}
+
+std::string getStats()
+{
+    std::string result;
+    auto callback = [](void * opaque, const char * data)
+    {
+        auto * str = static_cast<std::string *>(opaque);
+        str->append(data);
+    };
+    size_t epoch = 1;
+    size_t sz = sizeof(epoch);
+    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+    je_malloc_stats_print(callback, &result, nullptr);
+    return result;
+}
 
 namespace
 {

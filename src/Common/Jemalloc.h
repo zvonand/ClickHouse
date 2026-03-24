@@ -122,6 +122,12 @@ void setCollectLocalProfileSamplesInTraceLog(bool value);
 
 std::string_view getLastFlushProfileForThread();
 
+/// Convert a jemalloc heap profile to FlameGraph-compatible collapsed stacks.
+/// Each output line has the format: "func1;func2;func3 <bytes>\n"
+std::string heapProfileToCollapsedStacks(const std::string & input_filename);
+
+/// Capture malloc_stats_print output as a string.
+std::string getStats();
 
 }
 

@@ -116,6 +116,28 @@ void addCommandsHandlersToFactory(
     factory.addHandler(commands_handler);
 }
 
+void addJemallocHandlersToFactory(KeeperHTTPRequestHandlerFactory & factory)
+{
+    auto web_ui_creator = []() -> std::unique_ptr<KeeperJemallocWebUIHandler>
+    { return std::make_unique<KeeperJemallocWebUIHandler>(); };
+
+    auto web_ui_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<KeeperJemallocWebUIHandler>>(web_ui_creator);
+    web_ui_handler->attachStrictPath("/jemalloc");
+    web_ui_handler->allowGetAndHeadRequest();
+    factory.addPathToHints("/jemalloc");
+    factory.addHandler(web_ui_handler);
+
+#if USE_JEMALLOC
+    auto api_creator = []() -> std::unique_ptr<KeeperJemallocAPIHandler>
+    { return std::make_unique<KeeperJemallocAPIHandler>(); };
+
+    auto api_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<KeeperJemallocAPIHandler>>(api_creator);
+    api_handler->attachNonStrictPath("/jemalloc/");
+    api_handler->allowGetAndHeadRequest();
+    factory.addHandler(api_handler);
+#endif
+}
+
 void addStorageHandlersToFactory(
     KeeperHTTPRequestHandlerFactory & factory,
     std::shared_ptr<KeeperDispatcher> keeper_dispatcher,
@@ -169,6 +191,7 @@ void addDefaultHandlersToFactory(
     addDashboardHandlersToFactory(factory, keeper_dispatcher);
     addCommandsHandlersToFactory(factory, keeper_dispatcher, keeper_client);
     addStorageHandlersToFactory(factory, keeper_dispatcher, keeper_client);
+    addJemallocHandlersToFactory(factory);
 }
 
 static auto createHandlersFactoryFromConfig(
@@ -211,6 +234,8 @@ static auto createHandlersFactoryFromConfig(
                 addCommandsHandlersToFactory(*main_handler_factory, keeper_dispatcher, keeper_client);
             else if (handler_type == "storage")
                 addStorageHandlersToFactory(*main_handler_factory, keeper_dispatcher, keeper_client);
+            else if (handler_type == "jemalloc")
+                addJemallocHandlersToFactory(*main_handler_factory);
             else
                 throw Exception(
                     ErrorCodes::INVALID_CONFIG_PARAMETER,

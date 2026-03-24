@@ -11,6 +11,7 @@
 #include <Server/HTTP/HTTPRequestHandlerFactory.h>
 #include <Server/HTTPPathHints.h>
 #include <Server/KeeperHTTPStorageHandler.h>
+#include <Server/KeeperJemallocHandler.h>
 
 namespace DB
 {

@@ -49,6 +49,24 @@ SETTINGS
     parallel_replicas_for_non_replicated_merge_tree = 1,
     log_comment = '04050_prefer_local_1_max_1';
 
+-- INSERT SELECT: with `prefer_local_replica` = 0 and `max_parallel_replicas` = 1,
+-- the INSERT SELECT should also use the parallel replicas path.
+DROP TABLE IF EXISTS t_dest;
+CREATE TABLE t_dest(key UInt64, value String) ENGINE = MergeTree ORDER BY key;
+
+INSERT INTO t_dest
+SELECT key, value
+FROM t
+SETTINGS
+    enable_parallel_replicas = 1,
+    max_parallel_replicas = 1,
+    cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost',
+    parallel_replicas_prefer_local_replica = 0,
+    parallel_replicas_for_non_replicated_merge_tree = 1,
+    log_comment = '04050_insert_select_prefer_local_0_max_1';
+
+SELECT count() FROM t_dest;
+
 SYSTEM FLUSH LOGS query_log;
 
 -- Verify: `prefer_local` = 0, `max_replicas` = 1 should use parallel replicas
@@ -84,4 +102,16 @@ WHERE event_date >= yesterday()
 ORDER BY event_time DESC
 LIMIT 1;
 
+-- Verify: INSERT SELECT with `prefer_local` = 0, `max_replicas` = 1 should use parallel replicas
+SELECT ProfileEvents['ParallelReplicasUsedCount'] > 0
+FROM system.query_log
+WHERE event_date >= yesterday()
+    AND type = 'QueryFinish'
+    AND log_comment = '04050_insert_select_prefer_local_0_max_1'
+    AND is_initial_query = 1
+    AND current_database = currentDatabase()
+ORDER BY event_time DESC
+LIMIT 1;
+
 DROP TABLE t;
+DROP TABLE t_dest;

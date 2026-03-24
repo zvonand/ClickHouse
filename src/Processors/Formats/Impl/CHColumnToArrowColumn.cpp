@@ -371,7 +371,7 @@ namespace DB
 
 
     static std::shared_ptr<arrow::DataType> getArrowType(
-        DataTypePtr column_type, ColumnPtr column, const std::string & column_name, const std::string & format_name, const CHColumnToArrowColumn::Settings & settings, bool * out_is_column_nullable);
+        DataTypePtr column_type, ColumnPtr column, const std::string & column_name, const std::string & format_name, const CHColumnToArrowColumn::Settings & settings, bool * out_is_column_nullable, bool for_builder = false);
 
 
     static std::shared_ptr<arrow::Array> buildArrowDenseUnionArrayWithVariantColumnData(
@@ -1359,7 +1359,7 @@ namespace DB
     }
 
     static std::shared_ptr<arrow::DataType> getArrowType(
-        DataTypePtr column_type, ColumnPtr column, const std::string & column_name, const std::string & format_name, const CHColumnToArrowColumn::Settings & settings, bool * out_is_column_nullable, bool for_builder = false)
+        DataTypePtr column_type, ColumnPtr column, const std::string & column_name, const std::string & format_name, const CHColumnToArrowColumn::Settings & settings, bool * out_is_column_nullable, bool for_builder)
     {
         if (column)
         {
@@ -1525,7 +1525,8 @@ namespace DB
                     variant ? variant->getName() : "variant",
                     format_name,
                     settings,
-                    &is_column_nullable);
+                    &is_column_nullable,
+                    for_builder);
 
                 std::string field_name = column_variant_type.getVariant(i)->getFamilyName();
                 fields.push_back(std::make_shared<arrow::Field>(field_name, arrow_type, is_column_nullable));
@@ -1681,7 +1682,7 @@ namespace DB
                     dictionary_values);
 
                 // Zero-copy cast to the extension-rich schema (handles infinite nesting)
-                auto target_type = arrow_schema->field(static_cast<int>(column_i))->type();
+                auto target_type = schema->field(static_cast<int>(column_i))->type();
                 if (!arrow_array->type()->Equals(*target_type))
                 {
                     auto view_result = arrow_array->View(target_type);

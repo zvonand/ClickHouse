@@ -391,7 +391,6 @@ void AzureObjectStorage::removeObjectsBatchIfExists(
     };
 
     StoredObjectsSpan rest_objects = objects;
-    std::exception_ptr rethrow_at_end;
     while (!rest_objects.empty())
     {
         auto object_batch = rest_objects.first(std::min(rest_objects.size(), AZURE_BATCH_MAX_SUBREQUESTS));
@@ -400,18 +399,10 @@ void AzureObjectStorage::removeObjectsBatchIfExists(
         Stopwatch watch;
         AzureBlobStorage::BlobContainerBatch requests = client_ptr->CreateBatch();
         std::vector<AzureBlobStorage::DeleteBlobResultResponse> responses;
-        try
-        {
-            for (const auto & object : object_batch)
-                responses.push_back(requests.DeleteBlob(client_ptr->GetBlobPath(object.remote_path)));
+        for (const auto & object : object_batch)
+            responses.push_back(requests.DeleteBlob(client_ptr->GetBlobPath(object.remote_path)));
 
-            client_ptr->SubmitBatch(requests);
-        }
-        catch (...)
-        {
-            tryLogCurrentException(log);
-            continue;
-        }
+        client_ptr->SubmitBatch(requests);
 
         ProfileEvents::increment(ProfileEvents::AzureDeleteObjects, object_batch.size());
         if (is_disk)
@@ -427,19 +418,14 @@ void AzureObjectStorage::removeObjectsBatchIfExists(
             catch (const Azure::Storage::StorageException & e)
             {
                 if (e.StatusCode != Azure::Core::Http::HttpStatusCode::NotFound)
-                {
                     add_log_entry(object, avg_elapsed_us, static_cast<Int32>(e.StatusCode), e.Message);
-                    rethrow_at_end = std::current_exception();
-                    continue;
-                }
+
+                throw;
             }
 
             add_log_entry(object, avg_elapsed_us);
         }
     }
-
-    if (rethrow_at_end)
-        std::rethrow_exception(rethrow_at_end);
 }
 
 void AzureObjectStorage::removeObjectsIfExist(const StoredObjects & objects)

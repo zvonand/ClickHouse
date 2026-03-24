@@ -20,7 +20,7 @@ class WaitForAsyncInsertSource : public ISource
 {
 public:
     WaitForAsyncInsertSource(
-        std::future<AsyncInsertWriteResult> insert_future_,
+        std::future<AsyncInsertProgress> insert_future_,
         size_t timeout_ms_,
         QueryStatusPtr process_list_elem_,
         ProgressCallback progress_callback_)
@@ -45,34 +45,25 @@ protected:
         if (status == std::future_status::timeout)
             throw Exception(ErrorCodes::TIMEOUT_EXCEEDED, "Wait for async insert timeout ({} ms) exceeded)", timeout_ms);
 
-        auto write_result = insert_future.get();
+        auto progress_result = insert_future.get();
 
         /// Report the written rows/bytes as progress so that query_log
         /// and HTTP X-ClickHouse-Summary reflect the actual insert stats.
         if (process_list_elem)
         {
-            Progress write_progress;
-            write_progress.written_rows = write_result.written_rows;
-            write_progress.written_bytes = write_result.written_bytes;
-            process_list_elem->updateProgressOut(write_progress);
-
-            /// For INSERT queries, read_rows/read_bytes should also reflect
-            /// the data that was parsed.
-            Progress read_progress;
-            read_progress.read_rows = write_result.written_rows;
-            read_progress.read_bytes = write_result.written_bytes;
-            process_list_elem->updateProgressIn(read_progress);
+            process_list_elem->updateProgressOut(Progress(WriteProgress(progress_result.rows, progress_result.bytes)));
+            process_list_elem->updateProgressIn(Progress(ReadProgress(progress_result.rows, progress_result.bytes)));
         }
 
         if (progress_callback)
         {
             Progress p;
-            p.written_rows = write_result.written_rows;
-            p.written_bytes = write_result.written_bytes;
-            p.read_rows = write_result.written_rows;
-            p.read_bytes = write_result.written_bytes;
-            p.result_rows = write_result.written_rows;
-            p.result_bytes = write_result.written_bytes;
+            p.written_rows = progress_result.rows;
+            p.written_bytes = progress_result.bytes;
+            p.read_rows = progress_result.rows;
+            p.read_bytes = progress_result.bytes;
+            p.result_rows = progress_result.rows;
+            p.result_bytes = progress_result.bytes;
             progress_callback(p);
         }
 
@@ -80,7 +71,7 @@ protected:
     }
 
 private:
-    std::future<AsyncInsertWriteResult> insert_future;
+    std::future<AsyncInsertProgress> insert_future;
     size_t timeout_ms;
     QueryStatusPtr process_list_elem;
     ProgressCallback progress_callback;

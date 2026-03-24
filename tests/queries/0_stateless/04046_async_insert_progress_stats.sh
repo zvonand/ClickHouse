@@ -48,7 +48,7 @@ ${CLICKHOUSE_CLIENT} --query "
     SELECT 'TCP data query log:', read_rows, read_bytes, written_rows, written_bytes, result_rows, result_bytes, interface
     FROM system.query_log
     WHERE current_database = currentDatabase()
-        AND query_id = '$query_tcp_values_id'
+        AND query_id = '$query_tcp_data_id'
         AND type = 'QueryFinish'
     ORDER BY event_time_microseconds DESC
     LIMIT 1"
@@ -57,7 +57,7 @@ ${CLICKHOUSE_CLIENT} --query "
     SELECT 'TCP values query log:', read_rows, read_bytes, written_rows, written_bytes, result_rows, result_bytes, interface
     FROM system.query_log
     WHERE current_database = currentDatabase()
-        AND query_id = '$query_tcp_data_id'
+        AND query_id = '$query_tcp_values_id'
         AND type = 'QueryFinish'
     ORDER BY event_time_microseconds DESC
     LIMIT 1"

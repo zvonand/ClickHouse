@@ -23,10 +23,10 @@ struct Settings;
 
 /// Statistics of a successfully flushed async insert entry,
 /// communicated back to the waiting client via the future.
-struct AsyncInsertWriteResult
+struct AsyncInsertProgress
 {
-    size_t written_rows = 0;
-    size_t written_bytes = 0;
+    size_t rows = 0;
+    size_t bytes = 0;
 };
 
 /// A queue, that stores data for insert queries and periodically flushes it to tables.
@@ -35,7 +35,7 @@ class AsynchronousInsertQueue : public WithContext
 {
 public:
     using Milliseconds = std::chrono::milliseconds;
-    using WriteResult = AsyncInsertWriteResult;
+    using ResultProgress = AsyncInsertProgress;
 
     AsynchronousInsertQueue(ContextPtr context_, size_t pool_size_, bool flush_on_shutdown_);
     ~AsynchronousInsertQueue();
@@ -52,7 +52,7 @@ public:
 
         /// Future that allows to wait until the query is flushed.
         /// On success, returns the number of rows/bytes actually written.
-        std::future<WriteResult> future{};
+        std::future<ResultProgress> future{};
 
         /// Read buffer that contains extracted
         /// from query data in case of too much data.
@@ -166,14 +166,14 @@ private:
                 MemoryTracker * user_memory_tracker_);
 
             void resetChunk();
-            void finish(WriteResult result = {});
+            void finish(ResultProgress result = {});
             void finish(std::exception_ptr exception_);
 
-            std::future<WriteResult> getFuture() { return promise.get_future(); }
+            std::future<ResultProgress> getFuture() { return promise.get_future(); }
             bool isFinished() const { return finished; }
 
         private:
-            std::promise<WriteResult> promise;
+            std::promise<ResultProgress> promise;
             std::atomic_bool finished = false;
         };
 

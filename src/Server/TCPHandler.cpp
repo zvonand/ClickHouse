@@ -1374,21 +1374,14 @@ void TCPHandler::processInsertQuery(QueryState & state)
                 if (wait_status == std::future_status::timeout)
                     throw Exception(ErrorCodes::TIMEOUT_EXCEEDED, "Wait for async insert timeout ({} ms) exceeded)", timeout_ms);
 
-                auto write_result = result.future.get();
+                auto progress_result = result.future.get();
 
                 /// Report the written rows/bytes as progress so that the client
                 /// and query_log reflect the actual insert stats.
                 if (auto process_list_elem = state.query_context->getProcessListElement())
                 {
-                    Progress write_progress;
-                    write_progress.written_rows = write_result.written_rows;
-                    write_progress.written_bytes = write_result.written_bytes;
-                    process_list_elem->updateProgressOut(write_progress);
-
-                    Progress read_progress;
-                    read_progress.read_rows = write_result.written_rows;
-                    read_progress.read_bytes = write_result.written_bytes;
-                    process_list_elem->updateProgressIn(read_progress);
+                    process_list_elem->updateProgressOut(Progress(WriteProgress(progress_result.rows, progress_result.bytes)));
+                    process_list_elem->updateProgressIn(Progress(ReadProgress(progress_result.rows, progress_result.bytes)));
                 }
             }
 

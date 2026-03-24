@@ -241,7 +241,7 @@ void AsynchronousInsertQueue::InsertData::Entry::resetChunk()
     chunk = {};
 }
 
-void AsynchronousInsertQueue::InsertData::Entry::finish(WriteResult result)
+void AsynchronousInsertQueue::InsertData::Entry::finish(ResultProgress result)
 {
     if (finished.exchange(true))
         return;
@@ -535,7 +535,7 @@ AsynchronousInsertQueue::PushResult AsynchronousInsertQueue::pushDataChunk(ASTPt
 
     InsertQuery key{query, query_context->getUserID(), query_context->getCurrentRoles(), settings, data_kind};
     InsertDataPtr data_to_process;
-    std::future<WriteResult> insert_future;
+    std::future<ResultProgress> progress_future;
 
     size_t shard_num = static_cast<size_t>(key.hash % pool_size);
     auto & shard = queue_shards[shard_num];
@@ -569,7 +569,7 @@ AsynchronousInsertQueue::PushResult AsynchronousInsertQueue::pushDataChunk(ASTPt
         data->size_in_bytes += entry_data_size;
         /// We rely on the fact that entries are being added to the list in order of creation time in `scheduleDataProcessingJob()`
         data->entries.emplace_back(entry);
-        insert_future = entry->getFuture();
+        progress_future = entry->getFuture();
 
         LOG_TRACE(log, "Have {} pending inserts in shard {} with total {} bytes of data for the async insert queries '{}'",
             data->entries.size(), size_t(shard_num), data->size_in_bytes, fmt::join(getInsertQueryIds(*data), ", "));
@@ -632,7 +632,7 @@ AsynchronousInsertQueue::PushResult AsynchronousInsertQueue::pushDataChunk(ASTPt
     return PushResult
     {
         .status = PushResult::OK,
-        .future = std::move(insert_future),
+        .future = std::move(progress_future),
         .insert_data_buffer = nullptr,
     };
 }
@@ -1047,7 +1047,7 @@ try
 
     /// Per-entry write stats, populated during parsing/preprocessing,
     /// used later to communicate results back to waiting clients.
-    std::unordered_map<InsertData::Entry *, WriteResult> per_entry_write_results;
+    std::unordered_map<InsertData::Entry *, ResultProgress> per_entry_progress_results;
 
     auto add_entry_to_asynchronous_insert_log = [&, query_by_format = NameToNameMap{}](
         const InsertData::EntryPtr & entry,
@@ -1057,7 +1057,7 @@ try
     {
         /// Track per-entry stats for reporting back to clients on success.
         if (parsing_exception.empty())
-            per_entry_write_results[entry.get()] = WriteResult{num_rows, num_bytes};
+            per_entry_progress_results[entry.get()] = ResultProgress{num_rows, num_bytes};
 
         if (!async_insert_log)
             return;
@@ -1171,9 +1171,9 @@ try
         {
             if (!entry->isFinished())
             {
-                auto it = per_entry_write_results.find(entry.get());
-                chassert(it != per_entry_write_results.end());
-                entry->finish(it != per_entry_write_results.end() ? it->second : WriteResult{});
+                auto it = per_entry_progress_results.find(entry.get());
+                chassert(it != per_entry_progress_results.end());
+                entry->finish(it != per_entry_progress_results.end() ? it->second : WriteResult{});
             }
         }
     };

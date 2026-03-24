@@ -121,8 +121,11 @@ bool hasJoin(const ASTSelectWithUnionQuery & ast)
 /** There are no limits on the maximum size of the result for the view.
   *  Since the result of the view is not the result of the entire query.
   *
-  * In addition, in the case of a view, positional arguments must be
-  * resolved only after the view has been expanded.
+  * Positional arguments are re-enabled here because they must be resolved
+  * after the view has been expanded. Distributed execution (both remote and
+  * local plan paths) disables `enable_positional_arguments` to prevent
+  * double-resolution on the already-rewritten outer query, but view
+  * definitions still need their own positional arguments resolved.
   */
 ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage_snapshot, const StorageView * view, const SelectQueryInfo & query_info)
 {
@@ -138,9 +141,7 @@ ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage
     view_settings[Setting::max_result_rows] = 0;
     view_settings[Setting::max_result_bytes] = 0;
     view_settings[Setting::extremes] = false;
-
     view_settings[Setting::enable_positional_arguments] = query_info.enable_positional_arguments_for_view;
-
     view_context->setSettings(view_settings);
     return view_context;
 }

@@ -21,4 +21,18 @@
 --- multiple groups ---
 1	[1]	['hello','world']	[100,200,300]	[0]
 --- immutability ---
+--- update with different sizes ---
+1	[100]	['x','y','z']
+2	[10,20,30]	['a']
+--- rename dotted columns ---
+1	[1,2,3]	['x','y']
+1	[1,2,3]	['x','y']
+--- missing defaults ---
+1	[1,2,3]	[]
+1	[1,2,3]	[]
+2	[]	['x','y']
+--- vertical merge ---
+1	[1,2,3]	['x']
+2	[10]	['a','b','c','d']
+3	[]	['only_b']
 --- done ---

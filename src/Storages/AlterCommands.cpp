@@ -77,6 +77,11 @@ namespace ErrorCodes
     extern const int ALTER_OF_COLUMN_IS_FORBIDDEN;
 }
 
+namespace MergeTreeSetting
+{
+    extern const MergeTreeSettingsBool share_nested_offsets;
+}
+
 namespace
 {
 
@@ -1760,6 +1765,17 @@ void AlterCommands::validate(const StoragePtr & table, ContextPtr context) const
             String to_nested_table_name = Nested::extractTableName(command.rename_to);
             bool from_nested = from_nested_table_name != command.column_name;
             bool to_nested = to_nested_table_name != command.rename_to;
+
+            /// When share_nested_offsets is disabled, dotted-name columns are independent
+            /// and not part of a Nested group, so they can be freely renamed.
+            if (auto * merge_tree = dynamic_cast<MergeTreeData *>(table.get()))
+            {
+                if (!(*merge_tree->getSettings())[MergeTreeSetting::share_nested_offsets])
+                {
+                    from_nested = false;
+                    to_nested = false;
+                }
+            }
 
             if (from_nested && to_nested)
             {

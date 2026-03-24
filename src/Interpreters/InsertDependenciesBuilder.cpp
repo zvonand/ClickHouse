@@ -656,12 +656,17 @@ private:
                 ActionsDAG::MatchColumnsMode::Name,
                 local_context);
 
+            bool inner_share_nested_offsets = true;
+            if (auto * merge_tree = dynamic_cast<MergeTreeData *>(inner_storage.get()))
+                inner_share_nested_offsets = (*merge_tree->getSettings())[MergeTreeSetting::share_nested_offsets];
+
             auto adding_missing_defaults_dag = addMissingDefaults(
                 Block(to_convert),
                 result_metadata->getSampleBlock().getNamesAndTypesList(),
                 result_metadata->getColumns(),
                 local_context,
-                insert_null_as_default);
+                insert_null_as_default,
+                inner_share_nested_offsets);
 
             auto extracting_subcolumns_dag = createSubcolumnsExtractionActions(
                 Block(to_convert),
@@ -1348,12 +1353,17 @@ Chain InsertDependenciesBuilder::createPreSink(StorageIDMaybeEmpty view_id) cons
     auto output_header = output_headers.at(view_id);
     auto insert_context = insert_contexts.at(view_id);
 
+    bool inner_share_nested_offsets = true;
+    if (auto * merge_tree = dynamic_cast<MergeTreeData *>(storages.at(inner_table_id).get()))
+        inner_share_nested_offsets = (*merge_tree->getSettings())[MergeTreeSetting::share_nested_offsets];
+
     auto adding_missing_defaults_dag = addMissingDefaults(
         *input_headers.at(view_id),
         output_header->getNamesAndTypesList(),
         inner_metadata->getColumns(),
         insert_context,
-        insert_null_as_default);
+        insert_null_as_default,
+        inner_share_nested_offsets);
 
     auto extracting_subcolumns_dag = createSubcolumnsExtractionActions(
         *input_headers.at(view_id),

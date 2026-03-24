@@ -2787,7 +2787,6 @@ static const std::map<size_t, Strings> swapAggrs
          "varSamp",
          "varSampStable",
          "groupArrayIntersect",
-         "groupArrayLast",
          "groupBitmapAnd",
          "groupBitmapOr",
          "groupBitmapXor",

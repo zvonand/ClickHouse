@@ -1,3 +1,4 @@
+#include <exception>
 #include <optional>
 #include <Disks/DiskObjectStorage/ObjectStorages/AzureBlobStorage/AzureObjectStorage.h>
 #include <Common/ObjectStorageKeyGenerator.h>
@@ -409,6 +410,7 @@ void AzureObjectStorage::removeObjectsBatchIfExists(
             ProfileEvents::increment(ProfileEvents::DiskAzureDeleteObjects, object_batch.size());
 
         size_t avg_elapsed_us = watch.elapsedMicroseconds() / object_batch.size();
+        std::exception_ptr throw_at_end;
         for (const auto [object, deferred_response] : std::views::zip(object_batch, responses))
         {
             try
@@ -418,13 +420,18 @@ void AzureObjectStorage::removeObjectsBatchIfExists(
             catch (const Azure::Storage::StorageException & e)
             {
                 if (e.StatusCode != Azure::Core::Http::HttpStatusCode::NotFound)
+                {
                     add_log_entry(object, avg_elapsed_us, static_cast<Int32>(e.StatusCode), e.Message);
-
-                throw;
+                    throw_at_end = std::current_exception();
+                    continue;
+                }
             }
 
             add_log_entry(object, avg_elapsed_us);
         }
+
+        if (throw_at_end)
+            std::rethrow_exception(throw_at_end);
     }
 }
 

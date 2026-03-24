@@ -183,12 +183,12 @@ StoragePtr TableFunctionValues::executeImpl(const ASTPtr & ast_function, Context
 }
 
 /// SQL standard VALUES clause: (VALUES (1, 'a'), (2, 'b'))
-/// Rewritten by the parser to sqlStandardValues(tuple(1, 'a'), tuple(2, 'b'))
+/// Rewritten by the parser to SQLStandardValues(tuple(1, 'a'), tuple(2, 'b'))
 /// This checks the experimental setting and never interprets the first arg as schema.
-class TableFunctionSqlStandardValues : public ITableFunction
+class TableFunctionSQLStandardValues : public ITableFunction
 {
 public:
-    static constexpr auto name = "sqlStandardValues";
+    static constexpr auto name = "SQLStandardValues";
     std::string getName() const override { return name; }
     bool hasStaticStructure() const override { return true; }
 private:
@@ -200,7 +200,7 @@ private:
     ColumnsDescription structure;
 };
 
-void TableFunctionSqlStandardValues::parseArguments(const ASTPtr & ast_function, ContextPtr context)
+void TableFunctionSQLStandardValues::parseArguments(const ASTPtr & ast_function, ContextPtr context)
 {
     if (!context->getSettingsRef()[Setting::allow_experimental_sql_standard_values_clause])
         throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
@@ -235,12 +235,12 @@ void TableFunctionSqlStandardValues::parseArguments(const ASTPtr & ast_function,
     structure = ColumnsDescription(names_and_types);
 }
 
-ColumnsDescription TableFunctionSqlStandardValues::getActualTableStructure(ContextPtr /*context*/, bool /*is_insert_query*/) const
+ColumnsDescription TableFunctionSQLStandardValues::getActualTableStructure(ContextPtr /*context*/, bool /*is_insert_query*/) const
 {
     return structure;
 }
 
-StoragePtr TableFunctionSqlStandardValues::executeImpl(const ASTPtr & ast_function, ContextPtr context, const std::string & table_name, ColumnsDescription /*cached_columns*/, bool is_insert_query) const
+StoragePtr TableFunctionSQLStandardValues::executeImpl(const ASTPtr & ast_function, ContextPtr context, const std::string & table_name, ColumnsDescription /*cached_columns*/, bool is_insert_query) const
 {
     auto columns = getActualTableStructure(context, is_insert_query);
 
@@ -265,7 +265,7 @@ StoragePtr TableFunctionSqlStandardValues::executeImpl(const ASTPtr & ast_functi
 void registerTableFunctionValues(TableFunctionFactory & factory)
 {
     factory.registerFunction<TableFunctionValues>({}, {.allow_readonly = true}, TableFunctionFactory::Case::Insensitive);
-    factory.registerFunction<TableFunctionSqlStandardValues>({}, {.allow_readonly = true});
+    factory.registerFunction<TableFunctionSQLStandardValues>({}, {.allow_readonly = true});
 }
 
 }

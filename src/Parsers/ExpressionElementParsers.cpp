@@ -223,7 +223,7 @@ bool ParserSubquery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         }
 
         auto values_func = make_intrusive<ASTFunction>();
-        values_func->name = "sqlStandardValues";
+        values_func->name = "SQLStandardValues";
         values_func->arguments = args;
         values_func->children.push_back(values_func->arguments);
 

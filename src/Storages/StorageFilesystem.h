@@ -6,6 +6,10 @@
 namespace DB
 {
 
+/** Storage for the `filesystem` table function.
+  * Recursively traverses a directory and exposes file metadata and contents as a table.
+  * In server mode, access is restricted to the `user_files` directory.
+  */
 class StorageFilesystem final : public IStorage
 {
 public:

@@ -61,7 +61,7 @@ ${CLICKHOUSE_CLIENT} -q "SYSTEM WAIT FAILPOINT replicated_table_remove_zk_before
 # Simulate another process completing the ZK cleanup: delete the entire path.
 ${CLICKHOUSE_KEEPER_CLIENT} -q "rmr '${ZK_PATH}'" 2>/dev/null ||:
 
-# Resume. tryGetChildren returns ZNONODE; with the fix we return false instead of throwing.
+# Resume. tryGetChildren returns ZNONODE; with the fix we return true (completely removed) instead of throwing.
 ${CLICKHOUSE_CLIENT} -q "SYSTEM NOTIFY FAILPOINT replicated_table_remove_zk_before_get_children"
 
 # If LOGICAL_ERROR is thrown (release build) or server crashes (debug build),

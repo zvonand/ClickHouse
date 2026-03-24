@@ -236,7 +236,7 @@ The function performs ASCII case-insensitive matching. If multiple search terms 
         )"
     }
     };
-    FunctionDocumentation::IntroducedIn introduced_in = {26, 3};
+    FunctionDocumentation::IntroducedIn introduced_in = {26, 4};
     FunctionDocumentation::Category category = FunctionDocumentation::Category::StringSearch;
     FunctionDocumentation documentation = {description, syntax, func_arguments, {}, returned_value, examples, introduced_in, category};
 

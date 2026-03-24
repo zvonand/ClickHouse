@@ -1,0 +1,24 @@
+index_mark_cache_size	1
+index_uncompressed_cache_size	1
+mark_cache_size	1
+mmap_cache_size	1
+primary_index_cache_size	1
+query_cache.max_size_in_bytes	1
+query_condition_cache_size	1
+text_index_header_cache_size	1
+text_index_postings_cache_size	1
+text_index_tokens_cache_size	1
+uncompressed_cache_size	1
+vector_similarity_index_cache_size	1
+index_mark_cache_size	1	1
+index_uncompressed_cache_size	1	1
+mark_cache_size	1	1
+mmap_cache_size	1	1
+primary_index_cache_size	1	1
+query_cache.max_size_in_bytes	1	1
+query_condition_cache_size	1	1
+text_index_header_cache_size	1	1
+text_index_postings_cache_size	1	1
+text_index_tokens_cache_size	1	1
+uncompressed_cache_size	1	1
+vector_similarity_index_cache_size	1	1

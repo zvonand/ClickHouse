@@ -254,10 +254,10 @@ def main():
         print(f"Rerun count set from --count: {args.count}")
         rerun_count = args.count
     elif is_flaky_check:
-        # Run each selected test at least 20 times to surface flakiness.
+        # Run each selected test 50 times to surface flakiness.
         # The 45-min global time limit and 5-failure chain cap stop early if needed.
-        print("Rerun count set to 20 for flaky check")
-        rerun_count = 20
+        print("Rerun count set to 50 for flaky check")
+        rerun_count = 50
     elif is_targeted_check:
         print(f"Rerun count set to 5 for targeted check")
         rerun_count = 5

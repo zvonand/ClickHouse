@@ -93,7 +93,7 @@ struct HighlightImpl
         {
             const size_t cur_size = haystack_offsets[i] - prev_haystack_offset;
 
-            if (cur_size == 0 || searchers.empty())
+            if (cur_size == 0)
             {
                 /// Fast path: empty row or no valid needles — copy as-is
                 if (cur_size > 0)

@@ -181,8 +181,8 @@ void removeDanglingNodes(ActionsDAG & dag)
 
 /// This function transitively adds ActionsDAG::Node into the set, if all the arguments are already in set (or constants).
 /// It's useful because the main branch of lazy materialization can return more columns than actually required.
-/// As an example, for the query `select a from table prewhere b > 0 order by c limit 1`, only columns `c` is required for ORDER BY,
-/// but the column `a` is returned as well (it's need for PREWHERE).
+/// As an example, for the query `select a from table prewhere b > 0 order by c limit 1`, only column `c` is required for ORDER BY,
+/// but the column `a` is returned as well (it's needed for PREWHERE).
 void addRequiredInputDependenciesIntoNodesSet(const ActionsDAG & dag, std::unordered_set<const ActionsDAG::Node *> & nodes)
 {
     std::unordered_set<const ActionsDAG::Node *> visited;
@@ -459,7 +459,7 @@ bool optimizeLazyMaterialization2(QueryPlan::Node & root, QueryPlan & query_plan
         if (const auto * expr_step = typeid_cast<ExpressionStep *>(step))
         {
             const auto & expr = expr_step->getExpression();
-            /// The number of DAG outputs can be less then the number of columns in the header.
+            /// The number of DAG outputs can be less than the number of columns in the header.
             step_to_split.required_positions.insert(step_to_split.required_positions.end(), required_columns.begin(), required_columns.begin() + expr.getOutputs().size());
             required_columns = getRequiredHeaderPositions(expr, *expr_step->getInputHeaders().front() , std::move(required_columns));
         }

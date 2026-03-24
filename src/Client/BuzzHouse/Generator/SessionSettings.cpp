@@ -428,7 +428,6 @@ std::unordered_map<String, CHSetting> serverSettings = {
     {"allow_unrestricted_reads_from_keeper", trueOrFalseSettingNoOracle},
     {"alter_move_to_space_execute_async", trueOrFalseSettingNoOracle},
     {"alter_partition_verbose_result", trueOrFalseSettingNoOracle},
-    {"alter_sync", CHSetting(zeroOneTwo, {}, false)},
     {"alter_update_mode",
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &)
@@ -914,7 +913,6 @@ std::unordered_map<String, CHSetting> serverSettings = {
          },
          {},
          false)},
-    {"lightweight_deletes_sync", CHSetting(zeroToThree, {}, false)},
     {"load_balancing",
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &)
@@ -984,7 +982,6 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
     {"multiple_joins_try_to_keep_original_names", trueOrFalseSetting},
     {"mutations_execute_nondeterministic_on_initiator", trueOrFalseSetting},
     {"mutations_execute_subqueries_on_initiator", trueOrFalseSetting},
-    {"mutations_sync", CHSetting(zeroToThree, {}, false)},
     {"mysql_datatypes_support_level",
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &)
@@ -1743,6 +1740,13 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
              {"max_memory_usage", memorySetting},
              {"max_memory_usage_for_user", memorySetting},
              {"max_server_memory_usage", memorySetting}});
+    }
+    if (fc.enable_sync_settings)
+    {
+        serverSettings.insert(
+            {{"alter_sync", CHSetting(zeroOneTwo, {}, false)},
+             {"lightweight_deletes_sync", CHSetting(zeroToThree, {}, false)},
+             {"mutations_sync", CHSetting(zeroToThree, {}, false)}});
     }
 
     /// Set hot settings

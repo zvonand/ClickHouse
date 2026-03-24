@@ -12,6 +12,9 @@
 namespace DB
 {
 
+namespace
+{
+
 UInt32 getDecimalPrecisionOrZero(const DataTypePtr & data_type)
 {
     const auto unwrapped = removeLowCardinalityAndNullable(data_type);
@@ -43,25 +46,19 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
         return Range::createWholeUniverseWithoutNull();
     };
 
-    /// If min > max, the part may have all NULL values.
-    /// For nullable columns with the exact sentinel pair (max, lowest), this indicates
-    /// an all-NULL part. We use POSITIVE_INFINITY to represent NULL, following the NULLS_LAST approach.
-    /// This is consistent with MergeTree's NULL handling:
-    /// - MergeTreeIndexMinMax.cpp (minmax_idx deserialization)
-    /// - IMergeTreeDataPart.cpp (partition minmax_idx loading)
-    /// - PartitionPruner.cpp (partition value handling)
-    /// The NULLS_LAST principle applies to ORDER BY and primary key sorting (see docs/en/engines/table-engines/mergetree-family/mergetree.md:203).
+    /// If min > max, the statistics are either:
+    /// 1. For nullable columns with the sentinel pair (max, lowest): indicates an all-NULL part.
+    ///    Since statistics don't track NULL existence, we can't safely prune - return whole-universe.
+    /// 2. Corrupted/inconsistent statistics for non-nullable columns.
+    ///    Conservatively return whole-universe to avoid incorrect pruning.
     ///
-    /// For any other case where min > max (corrupted/inconsistent stats, non-nullable columns),
-    /// we defensively return whole-universe to avoid incorrect pruning.
+    /// NOTE: We intentionally don't use Range(POSITIVE_INFINITY) for all-NULL parts because:
+    /// - POSITIVE_INFINITY is a Null-type Field that can cause issues in `checkInRange`
+    /// - `getMonotonicityForRange` may not correctly handle Null-type boundaries
+    /// - After `invert` for negative-monotonic functions, the range becomes unpredictable
+    /// - This can lead to "Invalid binary search result" errors in `MergeTreeSetIndex`
     if (min_value > max_value)
     {
-        if (is_nullable
-            && min_value == std::numeric_limits<Float64>::max()
-            && max_value == std::numeric_limits<Float64>::lowest())
-        {
-            return Range(POSITIVE_INFINITY);
-        }
         return make_whole_universe();
     }
 
@@ -145,6 +142,8 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
         return Range(left_bound.value(), true, right_bound.value(), true);
     }
 }
+
+} /// anonymous namespace
 
 StatisticsPartPruner::StatisticsPartPruner(const StorageMetadataPtr & metadata_, const ActionsDAG::Node & filter_node_, ContextPtr context_)
     : filter_dag(&filter_node_, context_)

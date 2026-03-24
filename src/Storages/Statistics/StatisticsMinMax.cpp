@@ -6,6 +6,7 @@
 #include <Common/FieldVisitorConvertToNumber.h>
 
 #include <algorithm>
+#include <cmath>
 
 
 namespace DB
@@ -27,13 +28,15 @@ void StatisticsMinMax::build(const ColumnPtr & column)
     if (!min_field.isNull())
     {
         Float64 current_min = applyVisitor(FieldVisitorConvertToNumber<Float64>(), min_field);
-        min = std::min(min, current_min);
+        if (!std::isnan(current_min))
+            min = std::min(min, current_min);
     }
 
     if (!max_field.isNull())
     {
         Float64 current_max = applyVisitor(FieldVisitorConvertToNumber<Float64>(), max_field);
-        max = std::max(max, current_max);
+        if (!std::isnan(current_max))
+            max = std::max(max, current_max);
     }
 
     row_count += column->size();
@@ -42,8 +45,10 @@ void StatisticsMinMax::build(const ColumnPtr & column)
 void StatisticsMinMax::merge(const StatisticsPtr & other_stats)
 {
     const StatisticsMinMax * other = typeid_cast<const StatisticsMinMax *>(other_stats.get());
-    min = std::min(min, other->min);
-    max = std::max(max, other->max);
+    if (!std::isnan(other->min))
+        min = std::min(min, other->min);
+    if (!std::isnan(other->max))
+        max = std::max(max, other->max);
 }
 
 void StatisticsMinMax::serialize(WriteBuffer & buf)

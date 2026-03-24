@@ -86,11 +86,12 @@ SELECT if((SELECT is_pr FROM has_pr), replaceRegexpOne(explain, '^    ', ''), ex
 SELECT count() FROM test_stats_pruning WHERE dt = '2025-01-11' AND value = 1000;
 
 -- =============================================================================
--- Test 6: Nullable column pruning - Part 3 (all NULL) should be pruned
+-- Test 6: Nullable column pruning - Part 3 (all NULL) should NOT be pruned
 -- =============================================================================
 -- Query: value_nullable >= 3000 AND value_nullable <= 3050
--- Due to missing info on actual NULL values within the column, only entirely-null parts can be pruned
-SELECT '-- Nullable column pruning, Part 3 has NULL values, should be pruned';
+-- All-NULL parts use whole-universe range for safety (to avoid issues with
+-- POSITIVE_INFINITY in checkInRange/getMonotonicityForRange/invert)
+SELECT '-- Nullable column pruning, Part 3 has NULL values, should NOT be pruned (whole-universe range for safety)';
 WITH has_pr AS (SELECT count() > 0 AS is_pr FROM (EXPLAIN indexes = 1 SELECT count() FROM test_stats_pruning WHERE value_nullable >= 3000 AND value_nullable <= 3050) WHERE explain LIKE '%ReadFromRemoteParallelReplicas%')
 SELECT if((SELECT is_pr FROM has_pr), replaceRegexpOne(explain, '^    ', ''), explain) FROM (EXPLAIN indexes = 1 SELECT count() FROM test_stats_pruning WHERE value_nullable >= 3000 AND value_nullable <= 3050) WHERE explain NOT LIKE '%MergingAggregated%' AND explain NOT LIKE '%Union%' AND explain NOT LIKE '%ReadFromRemoteParallelReplicas%';
 SELECT count() FROM test_stats_pruning WHERE value_nullable >= 3000 AND value_nullable <= 3050;

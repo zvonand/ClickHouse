@@ -735,9 +735,8 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByStatistics(
                 continue;
             }
         }
-        catch (...)
+        catch (const Exception &)
         {
-            /// Failed to load or use statistics for this part, treat it as non-prunable.
             tryLogCurrentException(log, fmt::format(
                 "Failed to use statistics for part {}, skipping statistics pruning for this part",
                 part.data_part->name), LogsLevel::debug);

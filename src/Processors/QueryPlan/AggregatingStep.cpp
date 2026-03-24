@@ -536,7 +536,12 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
         pipeline.addSimpleTransform([&](const SharedHeader & header)
                                     { return std::make_shared<AggregatingTransform>(header, transform_params, dataflow_cache_updater); });
 
-        pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : std::min(params.max_threads, pipeline.getNumStreams()));
+        /// When there is a single input stream (e.g. reading from `system.numbers` or a single file),
+        /// we still expand to max_threads after aggregation: the aggregation result can be large,
+        /// and downstream steps (sorting, merging) benefit from parallelism.
+        /// Unlike the multi-stream case above, a single stream was not specifically reduced
+        /// by the read step — it is the natural stream count of the source.
+        pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : params.max_threads);
 
         aggregating = collector.detachProcessors(0);
     }

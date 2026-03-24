@@ -6,6 +6,7 @@
 -- With the fix, getPathSample() expands the glob locally instead of creating a file iterator.
 
 SET max_threads = 1;
+SET use_hive_partitioning=1;
 
 SELECT * FROM s3('http://localhost:11111/test/{a,b,c}.tsv', 'test', 'testtest', 'TSV', 'c1 UInt64, c2 UInt64, c3 UInt64')
 ORDER BY c1, c2, c3;

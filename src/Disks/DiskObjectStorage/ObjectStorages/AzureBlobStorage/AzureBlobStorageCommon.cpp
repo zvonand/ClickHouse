@@ -412,6 +412,7 @@ Endpoint processEndpoint(const Poco::Util::AbstractConfiguration & config, const
 {
     String storage_url;
     String account_name;
+    String account_key;
     String container_name;
     String prefix;
     bool endpoint_contains_account_name = false;
@@ -492,6 +493,9 @@ Endpoint processEndpoint(const Poco::Util::AbstractConfiguration & config, const
             /// but is stored for use by external systems such as delta-kernel-rs.
             if (config.has(config_prefix + ".account_name"))
                 account_name = config.getString(config_prefix + ".account_name");
+            if (config.has(config_prefix + ".account_name"))
+                account_name = config.getString(config_prefix + ".account_name");
+
         }
         if (config.has(config_prefix + ".endpoint_subpath"))
         {
@@ -521,6 +525,8 @@ Endpoint processEndpoint(const Poco::Util::AbstractConfiguration & config, const
         /// to false for this path), but is stored for use by external systems such as delta-kernel-rs.
         if (config.has(config_prefix + ".account_name"))
             account_name = config.getString(config_prefix + ".account_name");
+        if (config.has(config_prefix + ".account_name"))
+            account_key = config.getString(config_prefix + ".account_key");
     }
     else
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Expected either `storage_account_url` or `connection_string` or `endpoint` in config");
@@ -532,8 +538,7 @@ Endpoint processEndpoint(const Poco::Util::AbstractConfiguration & config, const
     if (config.has(config_prefix + ".container_already_exists"))
         container_already_exists = {config.getBool(config_prefix + ".container_already_exists")};
 
-    /// Here we are passing empty account_key even when account_name is present in the endpoint, because here we are only processing endpoint and account_key is not provided.
-    return {storage_url, account_name, /* account_key */"", container_name, prefix, /* sas_auth */"", /* additional_params */"", container_already_exists, endpoint_contains_account_name};
+    return {storage_url, account_name, account_key, container_name, prefix, /* sas_auth */"", /* additional_params */"", container_already_exists, endpoint_contains_account_name};
 }
 
 std::unique_ptr<RequestSettings> getRequestSettings(const Settings & query_settings)

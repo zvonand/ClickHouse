@@ -73,18 +73,18 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
     /// via tryConvertFromFloat64 is lossless, so overflow handling is skipped.
     ///
     /// Cases:
-    /// 1. max <= -2^53: all data in negative overflow region -> (-inf, -2^53]
-    /// 2. min >= 2^53: all data in positive overflow region -> [2^53, +inf)
-    /// 3. min <= -2^53: left bound unreliable -> (-inf, max]
-    /// 4. max >= 2^53: right bound unreliable -> [min, +inf)
+    /// 1. max < -2^53: all data in negative overflow region -> (-inf, -2^53]
+    /// 2. min > 2^53: all data in positive overflow region -> [2^53, +inf)
+    /// 3. min < -2^53: left bound unreliable -> (-inf, max]
+    /// 4. max > 2^53: right bound unreliable -> [min, +inf)
     bool is_float_type = WhichDataType(removeLowCardinalityAndNullable(data_type)).isFloat();
 
-    bool min_in_negative_overflow = !is_float_type && min_value <= -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-    bool max_in_negative_overflow = !is_float_type && max_value <= -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-    bool min_in_positive_overflow = !is_float_type && min_value >= StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-    bool max_in_positive_overflow = !is_float_type && max_value >= StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
+    bool min_in_negative_overflow = !is_float_type && min_value < -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
+    bool max_in_negative_overflow = !is_float_type && max_value < -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
+    bool min_in_positive_overflow = !is_float_type && min_value > StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
+    bool max_in_positive_overflow = !is_float_type && max_value > StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
 
-    /// Case 1: max <= -2^53, use (-inf, -2^53] or whole universe for nullable
+    /// Case 1: max < -2^53, use (-inf, -2^53) or whole universe for nullable
     /// For nullable columns, we return whole universe because statistics don't track
     /// whether NULL values exist, and we must not prune parts that might contain NULLs.
     if (max_in_negative_overflow)
@@ -97,7 +97,7 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
         return Range::createRightBounded(boundary.value(), true, false);
     }
 
-    /// Case 2: min >= 2^53, use [2^53, +inf)
+    /// Case 2: min > 2^53, use [2^53, +inf)
     if (min_in_positive_overflow)
     {
         auto boundary = StatisticsUtils::tryConvertFromFloat64(StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER, data_type);
@@ -109,11 +109,11 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
     std::optional<Field> left_bound;
     std::optional<Field> right_bound;
 
-    /// Case 3: min <= -2^53, left bound is -inf
+    /// Case 3: min < -2^53, left bound is -inf
     if (!min_in_negative_overflow)
         left_bound = StatisticsUtils::tryConvertFromFloat64(min_value, data_type);
 
-    /// Case 4: max >= 2^53, right bound is +inf
+    /// Case 4: max > 2^53, right bound is +inf
     if (!max_in_positive_overflow)
         right_bound = StatisticsUtils::tryConvertFromFloat64(max_value, data_type);
 

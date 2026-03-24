@@ -7,6 +7,7 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
 #include <cstring>
@@ -44,7 +45,7 @@ bool sendDiagRequest(int nl_fd, uint8_t family)
 /// Receive and parse all netlink responses, extracting inode -> TCPSocketMemInfo.
 void recvDiagResponse(int nl_fd, std::unordered_map<uint64_t, TCPSocketMemInfo> & result)
 {
-    char buf[32768]; // NOLINT(modernize-avoid-c-arrays)
+    alignas(struct nlmsghdr) char buf[32768]; // NOLINT(modernize-avoid-c-arrays)
 
     while (true)
     {
@@ -89,7 +90,7 @@ std::unordered_map<uint64_t, TCPSocketMemInfo> getTCPSocketMemInfoByInode()
     if (nl_fd < 0)
         return result;
 
-    SCOPE_EXIT({ close(nl_fd); });
+    SCOPE_EXIT({ (void)close(nl_fd); });
 
     /// Bind to the kernel
     sockaddr_nl addr{};

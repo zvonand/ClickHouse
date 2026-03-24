@@ -424,7 +424,9 @@ void ServerAsynchronousMetrics::updateImpl(TimePoint update_time, TimePoint curr
 
                 auto percentile = [](const std::vector<uint32_t> & sorted_values, double p) -> double
                 {
-                    size_t idx = static_cast<size_t>(p * static_cast<double>(sorted_values.size() - 1));
+                    size_t n = sorted_values.size();
+                    size_t idx = static_cast<size_t>(std::ceil(p * static_cast<double>(n))) - 1;
+                    idx = std::min(idx, n - 1);
                     return static_cast<double>(sorted_values[idx]);
                 };
 

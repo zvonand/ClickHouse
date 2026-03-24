@@ -248,7 +248,9 @@ public:
                 if (fd >= 0)
                     fds.push_back(fd);
             }
-            catch (...) {} // socket may not be connected yet
+            catch (...) // NOLINT(bugprone-empty-catch) Ok: socket may not be connected yet
+            {
+            }
         }
         return fds;
     }
@@ -500,13 +502,15 @@ private:
                     response_stream_completed = false;
                 }
             }
+            /// Unregister from live_connections first, before tearing down session internals,
+            /// so that the async metrics thread cannot dereference a partially-destructed session.
+            group->atConnectionDestroy(this);
+
             response_stream = nullptr;
             Session::setSendDataHooks();
             Session::setReceiveDataHooks();
             Session::setSendThrottler();
             Session::setReceiveThrottler();
-
-            group->atConnectionDestroy(this);
 
             if (!isExpired)
                 if (auto lock = pool.lock())

@@ -400,7 +400,7 @@ void AzureObjectStorage::removeObjectsBatchIfExists(
 
         Stopwatch watch;
         AzureBlobStorage::BlobContainerBatch requests = client_ptr->CreateBatch();
-        std::vector<AzureBlobStorage::DeleteBlobResultResponse> responses;
+        std::vector<AzureBlobStorage::DeleteBlobResultDeferredResponse> responses;
         for (const auto & object : object_batch)
             responses.push_back(requests.DeleteBlob(client_ptr->GetBlobPath(object.remote_path)));
 

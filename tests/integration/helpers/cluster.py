@@ -2021,16 +2021,9 @@ class ClickHouseCluster:
             raise Exception("Can't add instance %s: cluster is already up!" % name)
 
         if name in self.instances:
-            # With --dist=each, pytest-xdist can interleave tests from different modules on
-            # the same worker, causing module-scoped fixtures to be torn down and re-set-up
-            # multiple times within a single session. Some tests call add_instance() inside
-            # the fixture (rather than at module level), so on the second setup cycle the
-            # instance already exists. Return the existing instance to make this idempotent.
-            logging.warning(
-                f"add_instance('{name}') called but instance already exists — returning existing instance. "
-                f"This is expected when module-scoped fixtures are set up more than once per session."
+            raise Exception(
+                f"Can't add instance '{name}': there is already an instance with the same name in [{self.instances.keys()}]"
             )
-            return self.instances[name]
 
         if tag is None:
             tag = DOCKER_BASE_TAG

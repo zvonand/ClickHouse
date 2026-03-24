@@ -27,6 +27,9 @@ USER_TEST_QUERY_B = "SELECT groupArray(number) FROM numbers(2500000) SETTINGS ma
 
 
 def test_user_overcommit():
+    if node.is_built_with_memory_sanitizer():
+        pytest.skip("MSan has ~3x memory overhead, making this probabilistic memory pressure test too unreliable")
+
     node.query("CREATE USER IF NOT EXISTS A")
     node.query("GRANT ALL ON *.* TO A")
 

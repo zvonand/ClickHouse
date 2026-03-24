@@ -119,6 +119,7 @@ public:
                     while (len > 0 && begin[len - 1] == 0)
                         --len;
                     str_chars.insert(begin, begin + len);
+                    str_chars.push_back(0);
                     str_offsets[i] = str_chars.size();
                 }
 

@@ -195,15 +195,8 @@ llvm::Value * ColumnFixedString::compileComparator(llvm::IRBuilderBase & b, llvm
     );
     auto * compare_result = b.CreateCall(memcmp_func, {lhs_current_ptr, n_value, rhs_current_ptr, n_value});
 
-    auto * lhs_greater_than_rhs_result = llvm::ConstantInt::getSigned(b.getInt8Ty(), 1);
-    auto * lhs_less_than_rhs_result = llvm::ConstantInt::getSigned(b.getInt8Ty(), -1);
-    auto * lhs_equals_rhs_result = llvm::ConstantInt::getSigned(b.getInt8Ty(), 0);
-
-    auto * is_greater = b.CreateICmpSGT(compare_result, b.getInt32(0));  // compare_result > 0
-    auto * is_less = b.CreateICmpSLT(compare_result, b.getInt32(0));     // compare_result < 0
-    auto * result_if_not_greater = b.CreateSelect(is_less, lhs_less_than_rhs_result, lhs_equals_rhs_result);
-    auto * final_result = b.CreateSelect(is_greater, lhs_greater_than_rhs_result, result_if_not_greater);
-    return final_result;
+    /// memcmpSmallAllowOverflow15 returns -1/0/1, so truncating i32 to i8 is safe
+    return b.CreateTrunc(compare_result, b.getInt8Ty());
 }
 #endif
 

@@ -21,11 +21,12 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-MetadataStorageFromDisk::MetadataStorageFromDisk(DiskPtr disk_, std::string compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_, bool persist_removal_queue_)
+MetadataStorageFromDisk::MetadataStorageFromDisk(DiskPtr disk_, std::string compatible_key_prefix_, ObjectStorageKeyGeneratorPtr key_generator_, bool persist_removal_queue_, size_t removal_log_compaction_threshold_)
     : disk(disk_)
     , compatible_key_prefix(std::move(compatible_key_prefix_))
     , key_generator(std::move(key_generator_))
     , persist_removal_queue(persist_removal_queue_)
+    , removal_log_compaction_threshold(removal_log_compaction_threshold_)
     , log(getLogger("MetadataStorageFromDisk"))
 {
 }
@@ -154,69 +155,96 @@ void MetadataStorageFromDisk::startup()
     if (!persist_removal_queue)
         return;
 
-    if (!disk->existsDirectory(String(REMOVAL_LOG_DIR)))
-        disk->createDirectory(String(REMOVAL_LOG_DIR));
+    if (!disk->existsDirectory(String(SYSTEM_METADATA_DIR)))
+        disk->createDirectory(String(SYSTEM_METADATA_DIR));
 
     std::lock_guard guard(removed_objects_mutex);
-    loadRemovalLog();
-    /// Compact on startup to remove stale REMOVED entries from the log file.
-    compactRemovalLog();
+    bool needs_compaction = loadRemovalLog();
+
+    if (needs_compaction)
+        compactRemovalLog();
+
     LOG_INFO(log, "Loaded {} blobs pending removal from {}", objects_to_remove.size(), REMOVAL_LOG_FILE);
 }
 
-void MetadataStorageFromDisk::loadRemovalLog()
+bool MetadataStorageFromDisk::loadRemovalLog()
 {
     const auto path = std::string(REMOVAL_LOG_FILE);
     auto buf = disk->readFileIfExists(path, ReadSettings{});
     if (!buf)
-        return;
+        return false;
+
+    bool needs_compaction = false;
+
+    /// Read version header.
+    UInt32 version = 0;
+    readBinaryLittleEndian(version, *buf);
+
+    if (version > REMOVAL_LOG_CURRENT_VERSION)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Unsupported removal log version: {}", version);
+
+    if (version != REMOVAL_LOG_CURRENT_VERSION)
+        needs_compaction = true;
 
     while (!buf->eof())
     {
         try
         {
-            /// Format: prefix \t remote_path \t local_path \t bytes_size \n
-            String prefix;
-            readString(prefix, *buf);
-            assertChar('\t', *buf);
+            /// Binary format (V0): entry_type (UInt8) | remote_path (binary string) | local_path (binary string) | bytes_size (UInt64 LE)
+            UInt8 entry_type = 0;
+            readBinaryLittleEndian(entry_type, *buf);
 
             StoredObject object;
-            readString(object.remote_path, *buf);
-            assertChar('\t', *buf);
-            readString(object.local_path, *buf);
-            assertChar('\t', *buf);
-            readIntText(object.bytes_size, *buf);
-            assertChar('\n', *buf);
+            readStringBinary(object.remote_path, *buf);
+            readStringBinary(object.local_path, *buf);
+            readBinaryLittleEndian(object.bytes_size, *buf);
 
-            if (prefix == REMOVAL_LOG_ADD_PREFIX)
+            if (entry_type == RemovalLogEntryType::ADD)
+            {
                 objects_to_remove.insert(std::move(object));
-            else if (prefix == REMOVAL_LOG_REMOVED_PREFIX)
+            }
+            else if (entry_type == RemovalLogEntryType::REMOVED)
+            {
                 objects_to_remove.erase(object);
+                ++removal_log_stale_entries;
+            }
             else
-                LOG_WARNING(log, "Skipping unknown prefix '{}' in {}", prefix, REMOVAL_LOG_FILE);
+            {
+                LOG_WARNING(log, "Skipping unknown entry type '{}' in {}", static_cast<UInt16>(entry_type), REMOVAL_LOG_FILE);
+            }
         }
         catch (...)
         {
-            LOG_WARNING(log, "Skipping malformed entry in {}: {}", REMOVAL_LOG_FILE, getCurrentExceptionMessage(false));
-            /// Skip to the next line.
-            skipToNextLineOrEOF(*buf);
+            /// Truncated entry from a partial write (e.g. crash mid-append). Stop reading — everything
+            /// loaded so far is valid. Compaction will rewrite the file cleanly.
+            LOG_WARNING(log, "Truncated entry in {}, stopping: {}", REMOVAL_LOG_FILE, getCurrentExceptionMessage(false));
+            needs_compaction = true;
+            break;
         }
     }
+
+    return needs_compaction;
 }
 
-void MetadataStorageFromDisk::appendToRemovalLog(std::string_view prefix, const StoredObjects & blobs)
+void MetadataStorageFromDisk::appendToRemovalLog(RemovalLogEntryType entry_type, const StoredObjects & blobs)
 {
+    bool file_exists = disk->existsFile(String(REMOVAL_LOG_FILE));
     auto buf = disk->writeFile(String(REMOVAL_LOG_FILE), /* buf_size */ DBMS_DEFAULT_BUFFER_SIZE, WriteMode::Append, /* settings */ {});
+
+    /// Write version header if this is a new file.
+    if (!file_exists)
+    {
+        UInt32 version = RemovalLogVersion::V0;
+        writeBinaryLittleEndian(version, *buf);
+    }
+
     for (const auto & blob : blobs)
     {
-        writeString(prefix, *buf);
-        writeChar('\t', *buf);
-        writeString(blob.remote_path, *buf);
-        writeChar('\t', *buf);
-        writeString(blob.local_path, *buf);
-        writeChar('\t', *buf);
-        writeIntText(blob.bytes_size, *buf);
-        writeChar('\n', *buf);
+        UInt8 type = entry_type;
+        writeBinaryLittleEndian(type, *buf);
+        writeStringBinary(blob.remote_path, *buf);
+        writeStringBinary(blob.local_path, *buf);
+        writeBinaryLittleEndian(blob.bytes_size, *buf);
     }
     buf->finalize();
     buf->sync();
@@ -227,16 +255,17 @@ void MetadataStorageFromDisk::compactRemovalLog()
     static constexpr std::string_view REMOVAL_LOG_TMP_FILE = ".metadata/blobs_to_remove.log.tmp";
 
     auto buf = disk->writeFile(String(REMOVAL_LOG_TMP_FILE), /* buf_size */ DBMS_DEFAULT_BUFFER_SIZE, WriteMode::Rewrite, /* settings */ {});
+
+    UInt32 version = RemovalLogVersion::V0;
+    writeBinaryLittleEndian(version, *buf);
+
     for (const auto & blob : objects_to_remove)
     {
-        writeString(REMOVAL_LOG_ADD_PREFIX, *buf);
-        writeChar('\t', *buf);
-        writeString(blob.remote_path, *buf);
-        writeChar('\t', *buf);
-        writeString(blob.local_path, *buf);
-        writeChar('\t', *buf);
-        writeIntText(blob.bytes_size, *buf);
-        writeChar('\n', *buf);
+        UInt8 type = RemovalLogEntryType::ADD;
+        writeBinaryLittleEndian(type, *buf);
+        writeStringBinary(blob.remote_path, *buf);
+        writeStringBinary(blob.local_path, *buf);
+        writeBinaryLittleEndian(blob.bytes_size, *buf);
     }
     buf->finalize();
     buf->sync();
@@ -272,10 +301,10 @@ int64_t MetadataStorageFromDisk::recordAsRemoved(const StoredObjects & blobs)
 
     if (persist_removal_queue && !actually_removed.empty())
     {
-        appendToRemovalLog(REMOVAL_LOG_REMOVED_PREFIX, actually_removed);
+        appendToRemovalLog(RemovalLogEntryType::REMOVED, actually_removed);
         removal_log_stale_entries += actually_removed.size();
 
-        if (removal_log_stale_entries >= REMOVAL_LOG_COMPACTION_THRESHOLD)
+        if (removal_log_stale_entries >= removal_log_compaction_threshold)
             compactRemovalLog();
     }
 
@@ -305,7 +334,6 @@ void MetadataStorageFromDiskTransaction::commit(const TransactionCommitOptionsVa
 
         try
         {
-
             metadata_storage.objects_to_remove.insert_range(objects_to_remove);
         }
         catch (...)
@@ -317,7 +345,7 @@ void MetadataStorageFromDiskTransaction::commit(const TransactionCommitOptionsVa
         {
             try
             {
-                metadata_storage.appendToRemovalLog(MetadataStorageFromDisk::REMOVAL_LOG_ADD_PREFIX, objects_to_remove);
+                metadata_storage.appendToRemovalLog(MetadataStorageFromDisk::RemovalLogEntryType::ADD, objects_to_remove);
             }
             catch (...)
             {

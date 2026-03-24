@@ -136,7 +136,8 @@ void registerMetadataStorageFromDisk(MetadataStorageFactory & factory)
         auto key_generator = local_object_storage->createKeyGenerator();
 
         bool metadata_persist_removal_queue = config.getBool(config_prefix + ".metadata_persist_removal_queue", false);
-        return std::make_shared<MetadataStorageFromDisk>(db_disk, std::move(key_compatibility_prefix), std::move(key_generator), metadata_persist_removal_queue);
+        size_t metadata_removal_log_compaction_threshold = config.getUInt64(config_prefix + ".metadata_removal_log_compaction_threshold", 1000);
+        return std::make_shared<MetadataStorageFromDisk>(db_disk, std::move(key_compatibility_prefix), std::move(key_generator), metadata_persist_removal_queue, metadata_removal_log_compaction_threshold);
     });
 }
 

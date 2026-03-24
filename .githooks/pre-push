@@ -20,11 +20,15 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
 
     for sha in $(git log --format='%H' $range); do
-        author=$(git log -1 --format='%an <%ae>' "$sha")
-        committer=$(git log -1 --format='%cn <%ce>' "$sha")
-        for identity in "$author" "$committer"; do
-            if echo "$identity" | grep -qiw -E "$blocked"; then
-                echo "ERROR: Commit $sha has a default/generic identity: $identity" >&2
+        author_name=$(git log -1 --format='%an' "$sha")
+        author_full=$(git log -1 --format='%an <%ae>' "$sha")
+        committer_name=$(git log -1 --format='%cn' "$sha")
+        committer_full=$(git log -1 --format='%cn <%ce>' "$sha")
+        for name_and_full in "$author_name|$author_full" "$committer_name|$committer_full"; do
+            name="${name_and_full%%|*}"
+            full="${name_and_full#*|}"
+            if echo "$name" | grep -qiw -E "$blocked"; then
+                echo "ERROR: Commit $sha has a default/generic identity: $full" >&2
                 failed=1
             fi
         done

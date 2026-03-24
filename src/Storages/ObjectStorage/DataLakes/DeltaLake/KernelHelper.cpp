@@ -274,7 +274,22 @@ private:
         auto path = blob_path;
         if (!path.empty() && path.front() == '/')
             path = path.substr(1);
-        return "az://" + params.endpoint.container_name + "/" + path;
+
+        const auto & prefix = params.endpoint.prefix;
+        std::string full_path;
+        if (!prefix.empty())
+        {
+            full_path = prefix;
+            if (!full_path.ends_with('/'))
+                full_path += '/';
+            full_path += path;
+        }
+        else
+        {
+            full_path = path;
+        }
+
+        return "az://" + params.endpoint.container_name + "/" + full_path;
     }
 };
 #endif

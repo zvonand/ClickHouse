@@ -190,11 +190,32 @@ ClickHouse provides a built-in web UI for viewing jemalloc memory statistics at 
 It displays live memory metrics with charts, including allocated, active, resident, and mapped memory, as well as per-arena and per-bin statistics.
 You can also fetch global and per-query heap profiles directly from the UI.
 
-To access it, open in your browser:
+<Tabs groupId="binary">
+<TabItem value="clickhouse" label="ClickHouse">
 
 ```text
 http://localhost:8123/jemalloc
 ```
+
+The server UI includes all tabs: Summary, Allocations, Arenas, Operations, Global Profiler, Query Profiler, and Raw Output.
+
+</TabItem>
+<TabItem value="keeper" label="Keeper">
+
+```text
+http://localhost:9182/jemalloc
+```
+
+The Keeper UI is available on the HTTP control port (`keeper_server.http_control.port`). It provides the same visualizations as the server — Summary, Allocations, Arenas, Operations, Global Profiler, and Raw Output — except for the Query Profiler tab which requires SQL and `system.trace_log`.
+
+Keeper also exposes REST API endpoints for programmatic access:
+
+- `GET /jemalloc/stats` — raw `malloc_stats_print` output
+- `GET /jemalloc/status` — profiling state as JSON (`prof_enabled`, `prof_active`, `thread_active_init`, `lg_sample`)
+- `GET /jemalloc/profile?format={collapsed|raw}` — flushes a heap profile with server-side symbolization, returns collapsed stacks suitable for flame graph rendering (default) or the raw jemalloc dump
+
+</TabItem>
+</Tabs>
 
 ## Fetching heap profiles from SQL {#fetching-heap-profiles-from-sql}
 

@@ -56,7 +56,7 @@ std::pair<Poco::Dynamic::Var, std::string> makeHTTPRequestAndReadJSON(
 {
     fiu_do_on(DB::FailPoints::check_database_datalake_negative,
     {
-        throw DB::Exception(DB::ErrorCodes::FAULT_INJECTED, "Injecting fault when checking database during catalog HTTP request");
+        throw DB::Exception(DB::ErrorCodes::FAULT_INJECTED, "Injecting fault when checking database");
     });
 
     auto buf = createReadBuffer(endpoint, context, credentials, params, headers, method, out_stream_callaback);

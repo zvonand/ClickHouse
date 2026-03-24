@@ -226,7 +226,7 @@ DB::HTTPHeaderEntries RestCatalog::getAuthHeaders(bool update_token) const
 {
     fiu_do_on(DB::FailPoints::check_database_datalake_negative,
     {
-        throw DB::Exception(DB::ErrorCodes::FAULT_INJECTED, "Injecting fault when checking database during catalog HTTP request");
+        throw DB::Exception(DB::ErrorCodes::FAULT_INJECTED, "Injecting fault when checking database");
     });
 
     /// Option 1: user specified auth header manually.

@@ -232,7 +232,7 @@ DB::Names GlueCatalog::getTablesForDatabase(const std::string & db_name, size_t 
 
     fiu_do_on(DB::FailPoints::check_database_datalake_negative,
     {
-        throw DB::Exception(DB::ErrorCodes::FAULT_INJECTED, "Injecting fault when checking database during catalog HTTP request");
+        throw DB::Exception(DB::ErrorCodes::FAULT_INJECTED, "Injecting fault when checking database");
     });
 
     std::string next_token;

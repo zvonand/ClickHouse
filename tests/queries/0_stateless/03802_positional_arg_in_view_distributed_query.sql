@@ -27,8 +27,8 @@ order by str settings prefer_localhost_replica=0;
 select '---';
 select str
 from remote('127.0.0.{1|2}', currentDatabase(), test_view)
-order by str settings prefer_localhost_replica=1; -- {serverError NOT_AN_AGGREGATE}
+order by str settings prefer_localhost_replica=1;
 
 -- Clean up
-drop table if exists test_table SYNC;
-drop view if exists test_view SYNC;
+-- drop table if exists test_table SYNC;
+-- drop view if exists test_view SYNC;

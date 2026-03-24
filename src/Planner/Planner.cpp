@@ -147,6 +147,7 @@ namespace Setting
     extern const SettingsBool serialize_string_in_memory_with_zero_byte;
     extern const SettingsString temporary_files_codec;
     extern const SettingsNonZeroUInt64 temporary_files_buffer_size;
+    extern const SettingsBool enable_positional_arguments;
 }
 
 namespace ServerSetting
@@ -1962,6 +1963,8 @@ void Planner::buildPlanForQueryNode()
 
     SelectQueryInfo select_query_info = buildSelectQueryInfo();
 
+    const auto & settings = query_context->getSettingsRef();
+
     StorageLimitsList current_storage_limits = storage_limits;
     select_query_info.local_storage_limits = buildStorageLimits(*query_context, select_query_options);
     current_storage_limits.push_back(select_query_info.local_storage_limits);
@@ -1971,6 +1974,8 @@ void Planner::buildPlanForQueryNode()
     select_query_info.has_aggregates = hasAggregateFunctionNodes(query_tree);
     select_query_info.need_aggregate = query_node.hasGroupBy() || select_query_info.has_aggregates;
     select_query_info.merge_tree_enable_remove_parts_from_snapshot_optimization = select_query_options.merge_tree_enable_remove_parts_from_snapshot_optimization;
+    select_query_info.enable_positional_arguments_for_view
+        = settings[Setting::enable_positional_arguments] || isWithMergeableState(select_query_options.to_stage);
 
     if (!select_query_info.has_window && query_node.hasQualify())
     {
@@ -1995,7 +2000,6 @@ void Planner::buildPlanForQueryNode()
     collectSets(query_tree, *planner_context);
     auto materialized_ctes = collectMaterializedCTEs(query_tree, select_query_options);
 
-    const auto & settings = query_context->getSettingsRef();
     if (query_context->canUseTaskBasedParallelReplicas())
     {
         if (!settings[Setting::parallel_replicas_allow_in_with_subquery] && planner_context->getPreparedSets().hasSubqueries())

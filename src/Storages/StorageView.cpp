@@ -124,7 +124,7 @@ bool hasJoin(const ASTSelectWithUnionQuery & ast)
   * In addition, in the case of a view, positional arguments must be
   * resolved only after the view has been expanded.
   */
-ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage_snapshot, const StorageView * view)
+ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage_snapshot, const StorageView * view, const SelectQueryInfo & query_info)
 {
     auto view_context = storage_snapshot->metadata->getSQLSecurityOverriddenContext(context);
     Settings view_settings = view_context->getSettingsCopy();
@@ -139,9 +139,7 @@ ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage
     view_settings[Setting::max_result_bytes] = 0;
     view_settings[Setting::extremes] = false;
 
-    const auto & view_client_info = view_context->getClientInfo();
-    if (view_client_info.query_kind == ClientInfo::QueryKind::SECONDARY_QUERY)
-        view_settings[Setting::enable_positional_arguments] = true;
+    view_settings[Setting::enable_positional_arguments] = query_info.enable_positional_arguments_for_view;
 
     view_context->setSettings(view_settings);
     return view_context;
@@ -341,7 +339,7 @@ void StorageView::readImpl(
 
     if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
     {
-        auto view_context = getViewContext(context, storage_snapshot, this);
+        auto view_context = getViewContext(context, storage_snapshot, this, query_info);
         InterpreterSelectQueryAnalyzer interpreter(
             current_inner_query, view_context, options, column_names, query_info.filter_actions_dag.get());
         interpreter.addStorageLimits(*query_info.storage_limits);
@@ -349,7 +347,7 @@ void StorageView::readImpl(
     }
     else
     {
-        auto view_context = getViewContext(context, storage_snapshot, this);
+        auto view_context = getViewContext(context, storage_snapshot, this, query_info);
         InterpreterSelectWithUnionQuery interpreter(current_inner_query, view_context, options, column_names);
         interpreter.addStorageLimits(*query_info.storage_limits);
         interpreter.buildQueryPlan(query_plan);

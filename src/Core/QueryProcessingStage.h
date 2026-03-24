@@ -64,6 +64,9 @@ namespace QueryProcessingStage
     /// - with_mergeable_state
     /// - with_mergeable_state_after_aggregation
     Enum fromString(const std::string & stage_string);
+
 }
+
+bool isWithMergeableState(QueryProcessingStage::Enum stage);
 
 }

@@ -34,4 +34,11 @@ namespace QueryProcessingStage
 
 }
 
+bool isWithMergeableState(QueryProcessingStage::Enum stage)
+{
+    return stage == QueryProcessingStage::Enum::WithMergeableState
+        || stage == QueryProcessingStage::Enum::WithMergeableStateAfterAggregation
+        || stage == QueryProcessingStage::Enum::WithMergeableStateAfterAggregationAndLimit;
+}
+
 }

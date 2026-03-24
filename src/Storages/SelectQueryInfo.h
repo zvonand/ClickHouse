@@ -221,5 +221,12 @@ struct SelectQueryInfo
     /// This function generates a map that maps the unique names to table column names,
     /// for the current table (`table_expression`).
     std::unordered_map<std::string, ColumnWithTypeAndName> buildNodeNameToInputNodeColumn() const;
+
+    // positional arguments for views currently requires special handling (until we switch to sending serialized plan instead of formatted queries)
+    // The positional arguments are resolved to real columns on initiator and we disable `enable_positional_arguments` setting for distributed queries
+    // But views are expanded only on remote nodes, therefore positional arguments can be resolved only on remote nodes.
+    // Also, building local plans for distributed queries should be considered i.e. `prefer_localhost_replicas` = 1.
+    // This flag is set during query planning
+    bool enable_positional_arguments_for_view = false;
 };
 }

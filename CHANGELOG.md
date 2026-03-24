@@ -16,7 +16,7 @@
 
 # 2026 Changelog
 
-### <a id="263"></a> ClickHouse release 26.3 LTS, 2026-03-26. [Presentation](https://presentations.clickhouse.com/), [Video](TODO)
+### <a id="263"></a> ClickHouse release 26.3 LTS, 2026-03-26. [Presentation](https://presentations.clickhouse.com/), Video (TODO)
 
 #### Backward Incompatible Change
 * Remove the `hypothesis` skip index type. It was an obscure, experimental feature with limited practical use. Creating tables with `INDEX ... TYPE hypothesis` will now produce an error. [#96874](https://github.com/ClickHouse/ClickHouse/pull/96874) ([Alexey Milovidov](https://github.com/alexey-milovidov)).
@@ -35,7 +35,7 @@
 * You can now use the natural sort key function as `naturalSortKey(s)`. [#90322](https://github.com/ClickHouse/ClickHouse/pull/90322) ([Nazarii Piontko](https://github.com/nazarii-piontko)).
 * You can now use native JSON/Object input for JSONExtract functions. Closes [#88370](https://github.com/ClickHouse/ClickHouse/issues/88370). [#96711](https://github.com/ClickHouse/ClickHouse/pull/96711) ([Fisnik Kastrati](https://github.com/fkastrati)).
 * If a query parameter has `Nullable` type and is not specified, we will assume that its value is `NULL`. [#93869](https://github.com/ClickHouse/ClickHouse/pull/93869) ([Vikash Kumar](https://github.com/vikashkumar2020)).
-* Support auxiliary zookeeper for `Replicated` database. [#95590](https://github.com/ClickHouse/ClickHouse/pull/95590) ([RinChanNOW](https://github.com/RinChanNOWWW)).
+* Support auxiliary ZooKeeper for `Replicated` database. [#95590](https://github.com/ClickHouse/ClickHouse/pull/95590) ([RinChanNOW](https://github.com/RinChanNOWWW)).
 * Support `has` function for JSON type to check path existence, similar to Map. [#96927](https://github.com/ClickHouse/ClickHouse/pull/96927) ([DQ](https://github.com/il9ue)).
 * Added the `mergeTreeTextIndex(database, table, index)` table function, which allows reading data directly from a text index. This function can be used for introspection or for performing aggregations on top of text index data. [#97003](https://github.com/ClickHouse/ClickHouse/pull/97003) ([Anton Popov](https://github.com/CurtizJ)).
 * Add `table_readonly` MergeTree setting to mark tables as read-only, preventing inserts and modifications. [#97652](https://github.com/ClickHouse/ClickHouse/pull/97652) ([Alexey Milovidov](https://github.com/alexey-milovidov)).
@@ -128,7 +128,7 @@
 * Support weights in concurrent bounded queue implementation. [#97962](https://github.com/ClickHouse/ClickHouse/pull/97962) ([Daniil Ivanik](https://github.com/divanik)).
 * Add sslmode to the allowed keys for PostgreSQL dictionary sources. Previously, sslmode was not in the dictionary_allowed_keys allowlist in PostgreSQLDictionarySource.cpp, making it impossible to configure SSL mode for PostgreSQL dictionary connections. This prevented dictionaries from connecting to PostgreSQL servers that require SSL (e.g., AWS RDS, which enforces SSL by default), as the connection would fail TLS negotiation and the server would reject the unencrypted fallback. [#98014](https://github.com/ClickHouse/ClickHouse/pull/98014) ([mcalfin](https://github.com/mcalfin)).
 * Show a clear "no such file" error when passing a non-existent file path to `clickhouse` or `clickhouse-local`, instead of a confusing generic message. [#98048](https://github.com/ClickHouse/ClickHouse/pull/98048) ([Raúl Marín](https://github.com/Algunenano)).
-* Text indexes can now be build on top of `Nullable([Fixed]String)` and `Array(Nullable([Fixed]String))` columns. [#98118](https://github.com/ClickHouse/ClickHouse/pull/98118) ([Jimmy Aguilar Mena](https://github.com/Ergus)).
+* Text indexes can now be built on top of `Nullable([Fixed]String)` and `Array(Nullable([Fixed]String))` columns. [#98118](https://github.com/ClickHouse/ClickHouse/pull/98118) ([Jimmy Aguilar Mena](https://github.com/Ergus)).
 * Avoid dropping named collections that are dependencies of dictionary sources. [#98127](https://github.com/ClickHouse/ClickHouse/pull/98127) ([Pablo Marcos](https://github.com/pamarcos)).
 * Enable `grace_hash` join algorithm for queries with totals. [#98144](https://github.com/ClickHouse/ClickHouse/pull/98144) ([János Benjamin Antal](https://github.com/antaljanosbenjamin)).
 * Cancel background merges early in DROP DATABASE for ordinary shared merge tree. [#98161](https://github.com/ClickHouse/ClickHouse/pull/98161) ([Shaohua Wang](https://github.com/tiandiwonder)).
@@ -208,7 +208,7 @@
 * Fixes a crash where querying files with a glob pattern (e.g., `file('dir/**', 'LineAsString')`) would throw an unhandled filesystem exception (`STD_EXCEPTION`) if the directory contained a dangling symlink. Dangling symlinks are now silently skipped, and the query returns results from all valid files. [#98143](https://github.com/ClickHouse/ClickHouse/pull/98143) ([Mark Andreev](https://github.com/mrk-andreev)).
 * Fix segfault in query plan optimization when converting outer join to inner join with `arrayJoin` in filter expression. [#98147](https://github.com/ClickHouse/ClickHouse/pull/98147) ([Alexey Milovidov](https://github.com/alexey-milovidov)).
 * Fix `ProtobufList` format not working with Kafka engine due to read state not being reset between messages. [#98151](https://github.com/ClickHouse/ClickHouse/pull/98151) ([Alexey Milovidov](https://github.com/alexey-milovidov)).
-* Fix logical error with analyzer_compatibility_join_using_top_level_identifier and ARRAY JOIN, close [#98164](https://github.com/ClickHouse/ClickHouse/issues/98164). [#98179](https://github.com/ClickHouse/ClickHouse/pull/98179) ([Vladimir Cherkasov](https://github.com/vdimir)).
+* Fix logical error with analyzer_compatibility_join_using_top_level_identifier and ARRAY JOIN, closes [#98164](https://github.com/ClickHouse/ClickHouse/issues/98164). [#98179](https://github.com/ClickHouse/ClickHouse/pull/98179) ([Vladimir Cherkasov](https://github.com/vdimir)).
 * Set `Watch` component for watch responses in `aggregated_zookeeper_log` instead of leaving it empty. [#98202](https://github.com/ClickHouse/ClickHouse/pull/98202) ([Antonio Andelic](https://github.com/antonio2368)).
 * If the partition key columns are not covered by the sorting key, then partition pruning could incorrectly skip partitions containing rows that should "win" during FINAL deduplication. [#98242](https://github.com/ClickHouse/ClickHouse/pull/98242) ([Yarik Briukhovetskyi](https://github.com/yariks5s)).
 * Fix logical error "Bad cast from type DB::ColumnConst to DB::ColumnArray" in `kql_array_sort_asc`/`kql_array_sort_desc` when called with constant array arguments. [#98251](https://github.com/ClickHouse/ClickHouse/pull/98251) ([Alexey Milovidov](https://github.com/alexey-milovidov)).

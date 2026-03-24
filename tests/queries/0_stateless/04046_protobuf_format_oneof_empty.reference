@@ -23,7 +23,7 @@
    ┡━━━━━━━━━━┩
 1. │ nothing2 │
    └──────────┘
->> empty records
+>> empty inner records
    ┏━━━━┳━━━━━━━━━━━━┓
    ┃ id ┃ inner_type ┃
    ┡━━━━╇━━━━━━━━━━━━┩

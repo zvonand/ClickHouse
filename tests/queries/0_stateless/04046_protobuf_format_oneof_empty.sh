@@ -79,7 +79,7 @@ EOF
 $CLICKHOUSE_CLIENT <<EOF
 SET input_format_protobuf_oneof_presence=true;
 DROP TABLE IF EXISTS empty_inner_records_04046;
-SELECT '>> empty records';
+SELECT '>> empty inner records';
 CREATE TABLE empty_inner_records_04046
 (
 		id Int32,

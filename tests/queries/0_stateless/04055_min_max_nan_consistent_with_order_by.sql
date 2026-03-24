@@ -134,11 +134,7 @@ SELECT 'argMin/argMax all NaN';
 SELECT
     argMin(id, x),
     argMax(id, x)
-FROM
-(
-    SELECT 1 AS id, toFloat64(nan) AS x
-    UNION ALL SELECT 2, toFloat64(nan)
-);
+FROM (SELECT number + 1 AS id, toFloat64(nan) AS x FROM numbers(2));
 
 -- argMin/argMax with GROUP BY (scalar path for index finding)
 SELECT 'argMin/argMax GROUP BY';

@@ -751,7 +751,6 @@ def test_table_functions_object_storage_cluster():
         table_functions += [
             f"paimonCluster('{ch_cluster}', '{s3_url}', '{s3_access_key_id}', '{s3_secret_access_key}')",
             f"paimonS3Cluster('{ch_cluster}', '{s3_url}', '{s3_access_key_id}', '{s3_secret_access_key}')",
-            f"paimonHDFSCluster('{ch_cluster}', '{s3_url}', '{s3_access_key_id}', '{s3_secret_access_key}')",
             f"paimonAzureCluster('{ch_cluster}', '{azure_storage_account_url}', 'test', 'test', '{azure_account_name}', '{azure_account_key}')",
         ]
 
@@ -790,7 +789,6 @@ def test_table_functions_object_storage_cluster():
         must_contain += [
             f"paimonCluster('{ch_cluster}', '{s3_url}', '{s3_access_key_id}', '[HIDDEN]')",
             f"paimonS3Cluster('{ch_cluster}', '{s3_url}', '{s3_access_key_id}', '[HIDDEN]')",
-            f"paimonHDFSCluster('{ch_cluster}', '{s3_url}', '{s3_access_key_id}', '[HIDDEN]')",
             f"paimonAzureCluster('{ch_cluster}', '{azure_storage_account_url}', 'test', 'test', '{azure_account_name}', '[HIDDEN]')",
         ]
 

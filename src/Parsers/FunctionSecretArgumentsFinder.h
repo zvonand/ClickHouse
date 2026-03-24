@@ -113,8 +113,7 @@ protected:
         else if ((function->name() == "s3Cluster") || (function ->name() == "hudiCluster") ||
                  (function ->name() == "deltaLakeCluster") || (function ->name() == "deltaLakeS3Cluster") ||
                  (function ->name() == "icebergS3Cluster") || (function ->name() == "icebergCluster") ||
-                 (function ->name() == "paimonCluster") || (function ->name() == "paimonS3Cluster") ||
-                 (function ->name() == "paimonHDFSCluster"))
+                 (function ->name() == "paimonCluster") || (function ->name() == "paimonS3Cluster"))
         {
             /// s3Cluster('cluster_name', 'url', 'aws_access_key_id', 'aws_secret_access_key', ...)
             findS3FunctionSecretArguments(/* is_cluster_function= */ true);

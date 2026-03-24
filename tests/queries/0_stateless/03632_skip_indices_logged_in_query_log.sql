@@ -56,6 +56,7 @@ ORDER BY `uid`
 SETTINGS index_granularity = 1;
 
 INSERT INTO `hello, world` VALUES (1, 30);
+INSERT INTO `hello, world` VALUES (2, 5); -- age=5 does not match WHERE age=30, causing the index to drop this granule
 
 SELECT * FROM `hello, world` WHERE age = 30 FORMAT Null SETTINGS log_comment='6', use_skip_indexes_on_data_read=1; -- my.favorite.index used
 

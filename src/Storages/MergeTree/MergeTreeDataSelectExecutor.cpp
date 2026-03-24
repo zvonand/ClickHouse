@@ -1106,7 +1106,7 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
             if (index_dropped_granules[idx].load(std::memory_order_relaxed) > 0)
                 query_context->addSkipIndexAccessInfo(
                     filter_context.storage_id.getFullTableName(),
-                    backQuoteIfNeed(skip_indexes.useful_indices[idx].index->index.name));
+                    skip_indexes.useful_indices[idx].index->index.name);
     }
 
     const auto part_stats_granularity = settings[Setting::per_part_index_stats] ? original_num_parts : 1;

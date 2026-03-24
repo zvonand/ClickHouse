@@ -843,7 +843,12 @@ void ExpressionActions::execute(
         }
 
         if (check_cancelled && check_cancelled())
-            break;
+        {
+            /// Return an empty block with the names and types of result columns
+            block = sample_block.cloneEmpty();
+            num_rows = 0;
+            return;
+        }
     }
 
     if (project_inputs)

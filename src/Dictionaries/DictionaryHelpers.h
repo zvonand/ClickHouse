@@ -288,21 +288,10 @@ public:
         {
             if (const auto * map_type = typeid_cast<const DataTypeMap *>(dictionary_attribute.type.get()))
             {
-                auto key_column = map_type->getKeyType()->createColumn();
-                auto value_column = map_type->getValueType()->createColumn();
-
-                MutableColumns tuple_columns;
-                tuple_columns.push_back(std::move(key_column));
-                tuple_columns.push_back(std::move(value_column));
-
-                auto tuple_column = ColumnTuple::create(std::move(tuple_columns));
-
-                /// ColumnMap stores data as Array(Tuple(key, value)).
-                auto array_column = ColumnArray::create(std::move(tuple_column));
-
-                /// Construct ColumnMap explicitly so that the returned pointer type
-                /// is ColumnMap::MutablePtr, matching ColumnType::MutablePtr.
-                return ColumnMap::create(array_column->assumeMutable());
+                auto base_column = map_type->createColumn();
+                ColumnPtr result;
+                result.reset(typeid_cast<ColumnType *>(base_column.get()));
+                return result;
             }
 
             throw Exception(ErrorCodes::TYPE_MISMATCH, "Unsupported Map attribute type.");
@@ -312,19 +301,10 @@ public:
             auto non_nullable_type = removeNullable(dictionary_attribute.type);
             if (const auto * object_type = typeid_cast<const DataTypeObject *>(non_nullable_type.get()))
             {
-                /// Keep typed JSON paths from the declared `DataTypeObject`.
-                /// Dictionary subcolumn access (for example `dictGet(...).name`) relies on
-                /// typed paths being present in `ColumnObject` even for an empty column.
-                UnorderedMapWithMemoryTracking<String, MutableColumnPtr> typed_path_columns;
-                typed_path_columns.reserve(object_type->getTypedPaths().size());
-                for (const auto & [path, type] : object_type->getTypedPaths())
-                    typed_path_columns.emplace(path, type->createColumn());
-
-                /// Construct `ColumnObject` with typed paths and empty dynamic/shared data.
-                return ColumnObject::create(
-                    std::move(typed_path_columns),
-                    object_type->getMaxDynamicPaths(),
-                    object_type->getMaxDynamicTypes());
+                auto base_column = object_type->createColumn();
+                ColumnPtr result;
+                result.reset(typeid_cast<ColumnType *>(base_column.get()));
+                return result;
             }
 
             throw Exception(ErrorCodes::TYPE_MISMATCH, "Unsupported Object attribute type.");

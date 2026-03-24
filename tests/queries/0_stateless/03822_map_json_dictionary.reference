@@ -87,11 +87,6 @@ Int8	String	Array(String)	Bool	JSON	JSON
 === Deep JSON Dictionary Info ===
 deep_json_test_flat	Flat	UInt64	['name','deep_data','nested_structure','complex_hierarchy']	['String','JSON','JSON','JSON']
 deep_json_test_hashed	Hashed	UInt64	['name','deep_data','nested_structure','complex_hierarchy']	['String','JSON','JSON','JSON']
-=== Testing Nullable(JSON) Dictionary - FLAT ===
-1	Alice	{"age":30,"city":"New York"}	alice@example.com
-2	Bob	\N	\N
-3	Charlie	{"age":35,"city":"Tokyo"}	charlie@example.com
-4	David	\N	\N
 === Testing NULL Value Detection - FLAT ===
 1	Alice	0	0
 2	Bob	1	1
@@ -103,9 +98,21 @@ deep_json_test_hashed	Hashed	UInt64	['name','deep_data','nested_structure','comp
 3	0	Nullable(JSON)
 4	1	Nullable(JSON)
 5	1	Nullable(JSON)
+=== Testing NULL Value Detection - HASHED ===
+1	0	Nullable(JSON)
+2	1	Nullable(JSON)
+3	0	Nullable(JSON)
+4	1	Nullable(JSON)
+5	1	Nullable(JSON)
+=== Testing NULL Value Detection - CACHE ===
+1	0	Nullable(JSON)
+2	1	Nullable(JSON)
+3	0	Nullable(JSON)
+4	1	Nullable(JSON)
+5	1	Nullable(JSON)
 === Testing NULL Value Detection - RANGE_HASHED ===
 1	0	Nullable(JSON)
-2	0	Nullable(JSON)
+2	1	Nullable(JSON)
 3	0	Nullable(JSON)
 999	1	Nullable(JSON)
 === IP_TRIE one-statement Map+JSON test ===

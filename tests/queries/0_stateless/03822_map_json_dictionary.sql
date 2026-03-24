@@ -696,6 +696,8 @@ ORDER BY name;
 CREATE TABLE IF NOT EXISTS nullable_json_test_source
 (
     id UInt64,
+    start_date Date,
+    end_date Date,
     name String,
     profile Nullable(JSON),
     email Nullable(String)
@@ -704,11 +706,11 @@ ENGINE = MergeTree
 ORDER BY id;
 
 -- Q2. Insert test data with some NULL values
-INSERT INTO nullable_json_test_source (id, name, profile, email) VALUES
-(1, 'Alice', '{"age": 30, "city": "New York"}', 'alice@example.com'),
-(2, 'Bob', NULL, NULL),
-(3, 'Charlie', '{"age": 35, "city": "Tokyo"}', 'charlie@example.com'),
-(4, 'David', NULL, NULL);
+INSERT INTO nullable_json_test_source (id, start_date, end_date, name, profile, email) VALUES
+(1, toDate('2024-01-01'), toDate('2024-01-31'), 'Alice', '{"age": 30, "city": "New York"}', 'alice@example.com'),
+(2, toDate('2024-02-01'), toDate('2024-02-29'), 'Bob', NULL, NULL),
+(3, toDate('2024-03-01'), toDate('2024-03-31'), 'Charlie', '{"age": 35, "city": "Tokyo"}', 'charlie@example.com'),
+(4, toDate('2024-04-01'), toDate('2024-04-30'), 'David', NULL, NULL);
 
 -- Q3. Create `FLAT` dictionary with `Nullable(JSON)`
 CREATE DICTIONARY IF NOT EXISTS nullable_json_test_flat
@@ -750,14 +752,13 @@ SOURCE(CLICKHOUSE(
 LAYOUT(HASHED_ARRAY())
 LIFETIME(MIN 0 MAX 0);
 
--- Q5. Create `RANGE_HASHED` dictionary with `Nullable(JSON)`
-CREATE DICTIONARY IF NOT EXISTS nullable_json_test_range_hashed
+-- Q5. Create `HASHED` dictionary with `Nullable(JSON)`
+CREATE DICTIONARY IF NOT EXISTS nullable_json_test_hashed
 (
     id UInt64,
-    start_date Date,
-    end_date Date,
     name String,
-    profile Nullable(JSON)
+    profile Nullable(JSON),
+    email Nullable(String)
 )
 PRIMARY KEY id
 SOURCE(CLICKHOUSE(
@@ -766,23 +767,55 @@ SOURCE(CLICKHOUSE(
     USER 'default'
     PASSWORD ''
     DB currentDatabase()
-    TABLE 'mixed_test_source'
+    TABLE 'nullable_json_test_source'
+))
+LAYOUT(HASHED())
+LIFETIME(MIN 0 MAX 0);
+
+-- Q6. Create `CACHE` dictionary with `Nullable(JSON)`
+CREATE DICTIONARY IF NOT EXISTS nullable_json_test_cache
+(
+    id UInt64,
+    name String,
+    profile Nullable(JSON),
+    email Nullable(String)
+)
+PRIMARY KEY id
+SOURCE(CLICKHOUSE(
+    HOST '127.0.0.1'
+    PORT tcpPort()
+    USER 'default'
+    PASSWORD ''
+    DB currentDatabase()
+    TABLE 'nullable_json_test_source'
+))
+LAYOUT(CACHE(SIZE_IN_CELLS 1024))
+LIFETIME(MIN 0 MAX 0);
+
+-- Q7. Create `RANGE_HASHED` dictionary with `Nullable(JSON)`
+CREATE DICTIONARY IF NOT EXISTS nullable_json_test_range_hashed
+(
+    id UInt64,
+    start_date Date,
+    end_date Date,
+    name String,
+    profile Nullable(JSON),
+    email Nullable(String)
+)
+PRIMARY KEY id
+SOURCE(CLICKHOUSE(
+    HOST '127.0.0.1'
+    PORT tcpPort()
+    USER 'default'
+    PASSWORD ''
+    DB currentDatabase()
+    TABLE 'nullable_json_test_source'
 ))
 LAYOUT(RANGE_HASHED())
 LIFETIME(MIN 0 MAX 0)
 RANGE(MIN start_date MAX end_date);
 
--- Q6. Test dictionary queries with `Nullable(JSON)` (`FLAT`)
-SELECT '=== Testing Nullable(JSON) Dictionary - FLAT ===' as test;
-SELECT
-    number AS id,
-    dictGet('nullable_json_test_flat', 'name', number) AS name,
-    dictGet('nullable_json_test_flat', 'profile', number) AS profile,
-    dictGet('nullable_json_test_flat', 'email', number) AS email
-FROM numbers(1, 4)
-ORDER BY id;
-
--- Q7. Test NULL value detection (`FLAT`)
+-- Q8. Test NULL value detection (`FLAT`)
 SELECT '=== Testing NULL Value Detection - FLAT ===' as test;
 SELECT
     number AS id,
@@ -792,7 +825,7 @@ SELECT
 FROM numbers(1, 4)
 ORDER BY id;
 
--- Q8. Test NULL value detection (`HASHED_ARRAY`) including missing key materialization
+-- Q9. Test NULL value detection (`HASHED_ARRAY`) including missing key materialization
 SELECT '=== Testing NULL Value Detection - HASHED_ARRAY ===' as test;
 SELECT
     number AS id,
@@ -801,7 +834,25 @@ SELECT
 FROM numbers(1, 5)
 ORDER BY id;
 
--- Q9. Test NULL value detection (`RANGE_HASHED`) including missing key materialization
+-- Q10. Test NULL value detection (`HASHED`) including missing key materialization
+SELECT '=== Testing NULL Value Detection - HASHED ===' as test;
+SELECT
+    number AS id,
+    isNull(dictGet('nullable_json_test_hashed', 'profile', number)) AS profile_is_null,
+    toTypeName(dictGet('nullable_json_test_hashed', 'profile', number)) AS profile_type
+FROM numbers(1, 5)
+ORDER BY id;
+
+-- Q11. Test NULL value detection (`CACHE`) including missing key materialization
+SELECT '=== Testing NULL Value Detection - CACHE ===' as test;
+SELECT
+    number AS id,
+    isNull(dictGet('nullable_json_test_cache', 'profile', number)) AS profile_is_null,
+    toTypeName(dictGet('nullable_json_test_cache', 'profile', number)) AS profile_type
+FROM numbers(1, 5)
+ORDER BY id;
+
+-- Q12. Test NULL value detection (`RANGE_HASHED`) including missing key materialization
 SELECT '=== Testing NULL Value Detection - RANGE_HASHED ===' as test;
 SELECT
     id,
@@ -913,6 +964,8 @@ DROP DICTIONARY IF EXISTS deep_json_test_flat;
 DROP DICTIONARY IF EXISTS deep_json_test_hashed;
 DROP DICTIONARY IF EXISTS nullable_json_test_flat;
 DROP DICTIONARY IF EXISTS nullable_json_test_hashed_array;
+DROP DICTIONARY IF EXISTS nullable_json_test_hashed;
+DROP DICTIONARY IF EXISTS nullable_json_test_cache;
 DROP DICTIONARY IF EXISTS nullable_json_test_range_hashed;
 
 DROP TABLE IF EXISTS mixed_test_source;

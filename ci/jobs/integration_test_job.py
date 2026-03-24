@@ -847,7 +847,7 @@ tar -czf ./ci/tmp/logs.tar.gz \
         parallel_workers = workers
         # Sequential tests cannot run in parallel, so we loop over them instead.
         # Run at least 3 times to have meaningful flakiness signal, at most workers times.
-        sequential_repeat_cnt = max(4, workers)
+        sequential_repeat_cnt = max(3, workers)
     else:
         parallel_dist = "--dist=loadfile"
         parallel_workers = workers

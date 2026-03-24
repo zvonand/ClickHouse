@@ -145,29 +145,49 @@ void KeeperJemallocAPIHandler::handleStats(
 void KeeperJemallocAPIHandler::handleStatus(
     HTTPServerRequest & request, HTTPServerResponse & response)
 {
-    bool prof_enabled = false;
+    Poco::JSON::Object json;
+    Poco::JSON::Array errors;
+
+    auto readMallctl = [&]<typename T>(const char * name, T default_value) -> T
+    {
+        try
+        {
+            return Jemalloc::getValue<T>(name);
+        }
+        catch (...)
+        {
+            tryLogCurrentException("KeeperJemallocAPIHandler", std::string("Failed to read mallctl '") + name + "'");
+            errors.add(std::string(name));
+            return default_value;
+        }
+    };
+
+    bool prof_enabled = readMallctl("opt.prof", false);
     bool prof_active = false;
     bool thread_active_init = false;
     size_t lg_sample = 0;
 
-    try
-    {
-        prof_enabled = Jemalloc::getValue<bool>("opt.prof");
-    }
-    catch (...) {} // NOLINT
-
     if (prof_enabled)
     {
-        try { prof_active = Jemalloc::getValue<bool>("prof.active"); } catch (...) {} // NOLINT
-        try { thread_active_init = Jemalloc::getThreadProfileInitMib().getValue(); } catch (...) {} // NOLINT
-        try { lg_sample = Jemalloc::getValue<size_t>("prof.lg_sample"); } catch (...) {} // NOLINT
+        prof_active = readMallctl("prof.active", false);
+        lg_sample = readMallctl("prof.lg_sample", size_t(0));
+        try
+        {
+            thread_active_init = Jemalloc::getThreadProfileInitMib().getValue();
+        }
+        catch (...)
+        {
+            tryLogCurrentException("KeeperJemallocAPIHandler", "Failed to read thread_active_init");
+            errors.add("thread.prof.active");
+        }
     }
 
-    Poco::JSON::Object json;
     json.set("prof_enabled", prof_enabled);
     json.set("prof_active", prof_active);
     json.set("thread_active_init", thread_active_init);
     json.set("lg_sample", static_cast<Poco::UInt64>(lg_sample));
+    if (errors.size() > 0)
+        json.set("errors", errors);
 
     std::ostringstream oss; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
     oss.exceptions(std::ios::failbit);

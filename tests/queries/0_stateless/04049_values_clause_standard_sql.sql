@@ -28,3 +28,10 @@ SELECT * FROM (VALUES (1, 3.14, 'text'), (2, 2.72, 'more')) AS t(id, fval, sval)
 
 -- Single row VALUES
 SELECT * FROM (VALUES (42, 'answer')) AS t(id, val);
+
+-- Edge case: first-row single-string literal must be treated as row data, not as values structure
+SELECT * FROM (VALUES ('x UInt8'), ('hello')) AS t(val) ORDER BY val;
+
+-- Edge case: syntax must be rejected when experimental setting is disabled
+SET allow_experimental_sql_standard_values_clause = 0;
+SELECT * FROM (VALUES (1, 'a'), (2, 'b')) AS t(id, val); -- { serverError SUPPORT_IS_DISABLED }

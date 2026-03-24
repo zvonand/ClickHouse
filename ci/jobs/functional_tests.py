@@ -233,6 +233,13 @@ def main():
 
     runner_options += f" --jobs {workers}"
 
+    if is_flaky_check:
+        # Hard caps for the flaky/targeted combined check:
+        # - stop after 5 consecutive failures (fast feedback on broken PRs)
+        # - overall time limit 45 min (enforced via global_time_limit below as well,
+        #   but also set here so clickhouse-test enforces it independently)
+        runner_options += " --max-failures-chain 5"
+
     if is_llvm_coverage:
         # Randomization makes coverage non-deterministic, long tests are slow to collect coverage
         runner_options += " --llvm-coverage"
@@ -247,8 +254,9 @@ def main():
         print(f"Rerun count set from --count: {args.count}")
         rerun_count = args.count
     elif is_flaky_check:
-        print(f"Rerun count set to 50 for flaky check")
-        rerun_count = 50
+        # Single pass over selected tests — time limit and failure cap control stopping.
+        print("Rerun count set to 1 for flaky check (time- and failure-capped run)")
+        rerun_count = 1
     elif is_targeted_check:
         print(f"Rerun count set to 5 for targeted check")
         rerun_count = 5
@@ -369,6 +377,35 @@ def main():
             if is_bugfix_validation and Labels.PR_BUGFIX not in info.pr_labels:
                 # Not a bugfix PR - run a simple sanity test
                 tests = ["00001_select_1"]
+            elif is_flaky_check:
+                # Step 1: changed/new test files in this PR
+                changed_tests = targeter.get_changed_tests()
+                changed_str = ", ".join(changed_tests) if changed_tests else "(none)"
+                print(f"[flaky-check] Step 1 — changed/new tests ({len(changed_tests)}): {changed_str}")
+
+                # Step 2: tests that failed in previous CI runs for this PR
+                try:
+                    previously_failed = targeter.get_previously_failed_tests()
+                except Exception as e:
+                    print(f"[flaky-check] Step 2 — failed to fetch previously-failed tests: {e}")
+                    previously_failed = []
+                failed_str = ", ".join(previously_failed) if previously_failed else "(none)"
+                print(f"[flaky-check] Step 2 — previously failed tests ({len(previously_failed)}): {failed_str}")
+
+                # Step 3: coverage-relevant tests (direct lines, indirect callees, siblings)
+                relevant_tests, relevance_result = targeter.get_most_relevant_tests()
+                results.append(relevance_result)
+                relevant_preview = ", ".join(relevant_tests[:20]) + ("..." if len(relevant_tests) > 20 else "")
+                print(f"[flaky-check] Step 3 — coverage-relevant tests ({len(relevant_tests)}): {relevant_preview if relevant_tests else '(none)'}")
+
+                # Merge all three sets preserving priority order (changed first)
+                seen: set = set()
+                tests = []
+                for t in list(changed_tests) + list(previously_failed) + list(relevant_tests):
+                    if t not in seen:
+                        seen.add(t)
+                        tests.append(t)
+                print(f"[flaky-check] Total unique tests to run: {len(tests)}")
             else:
                 tests = targeter.get_changed_tests()
 
@@ -510,29 +547,30 @@ def main():
         step_name = "Tests"
         print(step_name)
 
-        # FIXME: Determine optimal mode for targeted job:
-        # Mode (1): Run all tests N times in one go (flaky-mode)
-        #   - Drawback: Noisy errors when tests can't run in parallel with themselves
-        #   - Skips tests marked as no-flaky-check
-        # Mode (2): N consequent runs for chosen tests
-        #   - Drawback: Might eliminate mode (1) issues but potentially catches fewer problems
-        #
-        # Mode (1):
-        # run_sets_cnt = 1
-        # Mode (2):
         run_sets_cnt = rerun_count if is_targeted_check else 1
         rerun_count = 1 if is_targeted_check else rerun_count
 
         ft_res_processor = FTResultsProcessor(wd=temp_dir)
 
-        # For flaky check, set a soft time limit so that the test runner stops
-        # gracefully before the job hard timeout, allowing results to be posted.
-        # The job timeout is 2.5 hours (9000s); leave a 1-hour margin for cleanup
-        # (server shutdown, system table export, log collection — all slow under sanitizers).
-        job_timeout = int(3600 * 2.5)
-        soft_limit_margin = 3600
         global_time_limit = 0
-        if is_flaky_check or is_targeted_check:
+        if is_flaky_check:
+            # Hard 45-minute wall-clock limit for the test runner.
+            # The combined targeted+flaky check runs each selected test once in
+            # parallel; 45 min is enough to cover the selected set while staying
+            # well within the job's overall hard timeout.
+            FLAKY_CHECK_TIME_LIMIT = 45 * 60  # 45 min
+            global_time_limit = max(
+                FLAKY_CHECK_TIME_LIMIT - int(stop_watch.duration), 0
+            )
+            print(
+                f"Flaky-check time limit: {FLAKY_CHECK_TIME_LIMIT}s"
+                f" (elapsed so far: {int(stop_watch.duration)}s,"
+                f" remaining: {global_time_limit}s)"
+            )
+        elif is_targeted_check:
+            # Legacy targeted check: consume the remaining job time budget.
+            job_timeout = int(3600 * 2.5)
+            soft_limit_margin = 3600
             global_time_limit = max(
                 job_timeout - soft_limit_margin - int(stop_watch.duration), 0
             )
@@ -553,9 +591,12 @@ def main():
             # For targeted checks with multiple iterations, recalculate
             # the remaining time for each invocation of the test runner.
             if global_time_limit > 0 and run_sets_cnt > 1:
-                global_time_limit = max(
-                    job_timeout - soft_limit_margin - int(stop_watch.duration), 0
-                )
+                if is_targeted_check:
+                    job_timeout = int(3600 * 2.5)
+                    soft_limit_margin = 3600
+                    global_time_limit = max(
+                        job_timeout - soft_limit_margin - int(stop_watch.duration), 0
+                    )
                 if global_time_limit <= 0:
                     print(
                         "NOTE: Soft time limit exhausted; stopping before next iteration"

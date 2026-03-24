@@ -76,6 +76,7 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int UNKNOWN_TABLE;
     extern const int ALL_REPLICAS_ARE_STALE;
+    extern const int NOT_IMPLEMENTED;
 }
 
 namespace FailPoints

@@ -1489,7 +1489,7 @@ void ColumnDynamic::takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking
     }
     else
     {
-        std::vector<std::pair<size_t, std::string_view>> candidates_with_sizes;
+        VectorWithMemoryTracking<std::pair<size_t, std::string_view>> candidates_with_sizes;
         candidates_with_sizes.reserve(shared_variant_candidates.size());
         for (const auto & [variant_name, size] : shared_variant_candidates)
             candidates_with_sizes.emplace_back(size, variant_name);

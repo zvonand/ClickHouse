@@ -1,4 +1,3 @@
-#include <Common/SipHash.h>
 #include <DataTypes/Serializations/SerializationMap.h>
 
 #include <DataTypes/DataTypeMap.h>

@@ -1884,7 +1884,7 @@ void ColumnObject::takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<
     /// Assumes dynamic structure has already been set by `takeExactDynamicStructureFrom` or `chooseDynamicStructureForMerge`.
     Statistics new_statistics;
     /// Collect total sizes for paths that are not in our dynamic_paths (candidates for shared data statistics).
-    std::unordered_map<String, size_t> shared_data_candidates;
+    UnorderedMapWithMemoryTracking<String, size_t> shared_data_candidates;
     for (const auto & source_column : source_columns)
     {
         const auto & source_object = assert_cast<const ColumnObject &>(*source_column);
@@ -1919,7 +1919,7 @@ void ColumnObject::takeOrCalculateStatisticsFrom(const VectorWithMemoryTracking<
     }
     else
     {
-        std::vector<std::pair<size_t, std::string_view>> candidates_with_sizes;
+        VectorWithMemoryTracking<std::pair<size_t, std::string_view>> candidates_with_sizes;
         candidates_with_sizes.reserve(shared_data_candidates.size());
         for (const auto & [path, size] : shared_data_candidates)
             candidates_with_sizes.emplace_back(size, path);

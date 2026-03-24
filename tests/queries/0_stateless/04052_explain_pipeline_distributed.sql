@@ -18,3 +18,6 @@ select '----------';
 
 -- Verify that distributed + graph is not supported
 explain pipeline distributed=1, graph=1 select 1 from remote('127.0.0.{1,2}', numbers(1)); -- { serverError NOT_IMPLEMENTED }
+
+-- Verify that distributed pipeline is not supported with serialized query plan
+explain pipeline distributed=1 select sum(number) from remote('127.0.0.{1,2}', numbers(5)) settings serialize_query_plan=1; -- { serverError NOT_IMPLEMENTED }

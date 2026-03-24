@@ -894,6 +894,8 @@ void ReadFromRemote::describeDistributedPipeline(FormatSettings & settings, bool
     for (const auto & shard : shards)
     {
         if (shard.query_plan)
+            /// A serialized query plan is not suitable for building a pipeline locally
+            /// (e.g. ReadFromTableFunctionStep does not implement initializePipeline).
             throw Exception(ErrorCodes::NOT_IMPLEMENTED, "EXPLAIN PIPELINE distributed=1 is not supported with serialize_query_plan=1");
 
         auto & shard_copy = used_shards.emplace_back(shard);
@@ -1117,6 +1119,8 @@ void ReadFromParallelRemoteReplicasStep::describeDistributedPlan(FormatSettings 
 void ReadFromParallelRemoteReplicasStep::describeDistributedPipeline(FormatSettings & settings, bool distributed)
 {
     if (query_plan)
+        /// A serialized query plan is not suitable for building a pipeline locally
+        /// (e.g. ReadFromTableFunctionStep does not implement initializePipeline).
         throw Exception(ErrorCodes::NOT_IMPLEMENTED, "EXPLAIN PIPELINE distributed=1 is not supported with serialize_query_plan=1");
 
     auto header = std::make_shared<const Block>(

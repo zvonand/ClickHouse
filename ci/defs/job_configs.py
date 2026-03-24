@@ -93,6 +93,7 @@ common_ft_job_config = Job.Config(
             "./tests/config",
             "./tests/*.txt",
             "./ci/docker/stateless-test",
+            "./ci/jobs/scripts/functional_tests/setup_minio.sh",
         ],
     ),
     result_name_for_cidb="Tests",
@@ -166,8 +167,6 @@ class JobConfigs:
         name=JobNames.CODE_REVIEW,
         runs_on=RunnerLabels.STYLE_CHECK_ARM,
         command="python3 ./ci/jobs/copilot_review_job.py --pre",
-        allow_merge_on_failure=True,
-        enable_gh_auth=True,
     )
     ci_results_review = Job.Config(
         name=JobNames.CI_RESULTS_REVIEW,

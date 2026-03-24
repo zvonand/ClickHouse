@@ -26,6 +26,7 @@
 #include <Interpreters/InterpreterSelectQueryAnalyzer.h>
 #include <Interpreters/parseColumnsListForTableFunction.h>
 #include <Interpreters/Context.h>
+#include <Storages/Statistics/Statistics.h>
 #include <Storages/StorageView.h>
 #include <Storages/StorageDummy.h>
 #include <Parsers/ASTAlterQuery.h>
@@ -1214,10 +1215,7 @@ std::optional<MutationCommand> AlterCommand::tryConvertToMutationCommand(Storage
         /// Even though this command doesn't require a mutation, we still need to apply it
         /// to the metadata so that subsequent commands see the updated state. For example,
         /// ADD COLUMN followed by RENAME COLUMN needs the new column to be visible.
-        /// We only apply column-affecting commands here to avoid side effects from other
-        /// command types (e.g. ADD STATISTICS may throw if the statistics type already
-        /// exists due to `auto_statistics_types`).
-        if (!ignore && (type == ADD_COLUMN || type == DROP_COLUMN || type == MODIFY_COLUMN))
+        if (!ignore)
             apply(metadata, context);
         return {};
     }
@@ -1882,6 +1880,12 @@ MutationCommands AlterCommands::getMutationCommands(StorageInMemoryMetadata meta
     /// We need it for isTTLAlter check below, because apply() updates TTL in metadata,
     /// making it impossible to detect TTL changes afterwards.
     const StorageInMemoryMetadata original_metadata = metadata;
+
+    /// Remove implicit statistics before applying commands to the metadata copy.
+    /// This is needed because `getMutationCommands` may be called before `removeImplicitStatistics`
+    /// in the ALTER flow (e.g. in StorageMergeTree::alter), and applying ADD_STATISTICS
+    /// to metadata that already contains auto-added statistics would throw a duplicate error.
+    removeImplicitStatistics(metadata.columns);
 
     MutationCommands result;
     for (const auto & alter_cmd : *this)

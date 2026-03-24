@@ -204,8 +204,18 @@ void BuildRuntimeFilterStep::describeActions(FormatSettings & format_settings) c
 
     format_settings.out << prefix << "Filter id: " << filter_id_view << '\n';
 
-    if (!format_settings.pretty)
+    if (format_settings.pretty)
+    {
+        if (auto it = format_settings.runtime_filter_names.find(filter_name); it != format_settings.runtime_filter_names.end())
+        {
+            if (!it->second.build_table_name.empty())
+                format_settings.out << prefix << "Source table: " << it->second.build_table_name << '\n';
+        }
+    }
+    else
+    {
         format_settings.out << prefix << "Allow not exact filter: " << allow_to_use_not_exact_filter << '\n';
+    }
 }
 
 void registerBuildRuntimeFilterStep(QueryPlanStepRegistry & registry)

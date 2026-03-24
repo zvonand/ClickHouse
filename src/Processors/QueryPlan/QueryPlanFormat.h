@@ -2,6 +2,7 @@
 
 #include <Core/Names.h>
 #include <Interpreters/ActionsDAG.h>
+#include <Interpreters/PreparedSets.h>
 
 #include <string>
 #include <string_view>
@@ -18,6 +19,7 @@ struct RuntimeFilterInfo
 {
     String pretty_name;
     String build_column_name;
+    String build_table_name;
 };
 
 struct PrettyColumnName
@@ -57,7 +59,9 @@ namespace QueryPlanFormat
 
     String formatNodePretty(
         const ActionsDAG::Node * node,
+        const std::unordered_map<String, PrettyColumnName> & pretty_names,
         const std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names,
+        std::unordered_map<FutureSet::Hash, String, PreparedSets::Hashing> & subquery_set_names,
         int parent_precedence = 0);
     String formatColumnPretty(const String & column_name, const ExplainFormatSettings & settings);
     std::string_view getColumnAnnotation(const String & column_name, const ExplainFormatSettings & settings);
@@ -65,7 +69,8 @@ namespace QueryPlanFormat
     void buildPrettyNamesMap(
         const QueryPlan & plan,
         std::unordered_map<String, PrettyColumnName> & pretty_names,
-        std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names);
+        std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names,
+        std::unordered_map<FutureSet::Hash, String, PreparedSets::Hashing> & subquery_set_names);
 }
 
 }

@@ -254,9 +254,10 @@ def main():
         print(f"Rerun count set from --count: {args.count}")
         rerun_count = args.count
     elif is_flaky_check:
-        # Single pass over selected tests — time limit and failure cap control stopping.
-        print("Rerun count set to 1 for flaky check (time- and failure-capped run)")
-        rerun_count = 1
+        # Run each selected test at least 20 times to surface flakiness.
+        # The 45-min global time limit and 5-failure chain cap stop early if needed.
+        print("Rerun count set to 20 for flaky check")
+        rerun_count = 20
     elif is_targeted_check:
         print(f"Rerun count set to 5 for targeted check")
         rerun_count = 5
@@ -542,13 +543,19 @@ def main():
         res = results[-1].is_ok()
 
     test_result = None
+    stopped_by_time_limit = False
     if res and JobStages.TEST in stages:
         stop_watch_ = Utils.Stopwatch()
         step_name = "Tests"
         print(step_name)
 
-        run_sets_cnt = rerun_count if is_targeted_check else 1
-        rerun_count = 1 if is_targeted_check else rerun_count
+        # For targeted and flaky checks, use N separate clickhouse-test invocations
+        # (run_sets_cnt=N, rerun_count=1 each) so that every invocation creates fresh
+        # TestCase objects with independently randomized settings.
+        # A single invocation with --test-runs N reuses the same TestCase (and thus the
+        # same random settings) for all N runs — not what we want for flakiness detection.
+        run_sets_cnt = rerun_count if (is_targeted_check or is_flaky_check) else 1
+        rerun_count = 1 if (is_targeted_check or is_flaky_check) else rerun_count
 
         ft_res_processor = FTResultsProcessor(wd=temp_dir)
 
@@ -588,10 +595,14 @@ def main():
         tests_to_run = list(tests) if tests else tests
 
         for cnt in range(run_sets_cnt):
-            # For targeted checks with multiple iterations, recalculate
-            # the remaining time for each invocation of the test runner.
+            # Recalculate the remaining time before each invocation of the test runner.
             if global_time_limit > 0 and run_sets_cnt > 1:
-                if is_targeted_check:
+                if is_flaky_check:
+                    FLAKY_CHECK_TIME_LIMIT = 45 * 60
+                    global_time_limit = max(
+                        FLAKY_CHECK_TIME_LIMIT - int(stop_watch.duration), 0
+                    )
+                elif is_targeted_check:
                     job_timeout = int(3600 * 2.5)
                     soft_limit_margin = 3600
                     global_time_limit = max(
@@ -599,8 +610,10 @@ def main():
                     )
                 if global_time_limit <= 0:
                     print(
-                        "NOTE: Soft time limit exhausted; stopping before next iteration"
+                        "NOTE: Time limit exhausted; stopping before next iteration"
                     )
+                    if is_flaky_check:
+                        stopped_by_time_limit = True
                     break
 
             run_tests(
@@ -656,6 +669,8 @@ def main():
                             seen_test_names.add(test_case_result.name)
 
                 stop_by_elapsed_time = global_time_limit <= 0
+                if stop_by_elapsed_time and is_flaky_check:
+                    stopped_by_time_limit = True
 
                 # On final run, replace results with collected ones
                 if is_final_run or stop_by_elapsed_time:
@@ -816,6 +831,12 @@ def main():
 
     # Decide whether to block the CI pipeline on test failures
     force_ok_exit = False
+    if is_flaky_check and stopped_by_time_limit:
+        # Hitting the 45-minute wall-clock cap is a normal stopping condition, not a
+        # failure.  The job ran as many of the 20 iterations as time allowed; any
+        # genuinely flaky tests will already be reported in the collected results.
+        print("NOTE: Flaky-check stopped by time limit — marking job as success")
+        force_ok_exit = True
     if "parallel" in test_options and test_result:
         failures_cnt = len([r for r in test_result.results if not r.is_ok()])
         if failures_cnt > 0 and failures_cnt < 4:

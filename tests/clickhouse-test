@@ -1897,14 +1897,43 @@ class TestCase:
             self.effective_merge_tree_settings = saved_mt_settings
             self.runs_count = saved_runs_count
 
+    # Time budget (in seconds) for each diagnosis step.
+    # Each step runs as many reruns as possible within this budget.
+    DIAGNOSIS_TIME_BUDGET = 60
+
+    def _run_within_budget(self, args, suite, client_options, settings, mt_settings):
+        """Run the test repeatedly within the time budget.
+
+        Returns (fail_count, ok_count, other_count, total_runs).
+        """
+        fail_count = 0
+        ok_count = 0
+        other_count = 0
+        deadline = time() + self.DIAGNOSIS_TIME_BUDGET
+        while time() < deadline:
+            result = self._run_with_settings(
+                args, suite, client_options, settings, mt_settings
+            )
+            if result.status == TestStatus.FAIL:
+                fail_count += 1
+            elif result.status == TestStatus.OK:
+                ok_count += 1
+            else:
+                other_count += 1
+        total = fail_count + ok_count + other_count
+        return fail_count, ok_count, other_count, total
+
     def diagnose_random_settings(self, args, suite, client_options):
         """Diagnose which randomized settings caused a test failure.
+
+        Uses a time-budget approach: each step runs the test as many times as
+        possible within a time budget to handle sporadic failures reliably.
 
         Algorithm:
         1. Re-run with the same settings to confirm reproducibility.
         2. Re-run without any randomization to confirm the failure is settings-related.
-        3. If step 1 fails and step 2 passes, minimize the settings via binary search
-           (delta debugging) to find the minimal set that triggers the failure.
+        3. If step 1 has failures and step 2 does not, minimize the settings via
+           delta debugging to find the minimal set that triggers the failure.
 
         Returns a diagnosis string to append to the test description.
         """
@@ -1916,30 +1945,52 @@ class TestCase:
 
         diagnosis_lines = ["\n\n--- Randomized settings diagnosis ---"]
 
-        # Step 1: Re-run with the same settings
-        diagnosis_lines.append("Step 1: Re-running with the same randomized settings...")
-        result_same = self._run_with_settings(
+        # Step 1: Re-run with the same settings within the time budget
+        diagnosis_lines.append(
+            f"Step 1: Re-running with the same randomized settings (budget: {self.DIAGNOSIS_TIME_BUDGET}s)..."
+        )
+        fail1, ok1, other1, total1 = self._run_within_budget(
             args, suite, client_options, failed_settings, failed_mt_settings
         )
-        if result_same.status != TestStatus.FAIL:
-            diagnosis_lines.append(
-                "Result: PASSED. The failure is not reproducible with the same settings (likely a transient issue)."
-            )
+        diagnosis_lines.append(
+            f"  Runs: {total1}, Failed: {fail1}, Passed: {ok1}, Other: {other1}"
+        )
+        if fail1 == 0:
+            if ok1 > 0:
+                diagnosis_lines.append(
+                    "Result: All reruns passed. The failure is not reproducible (likely a transient issue)."
+                )
+            else:
+                diagnosis_lines.append(
+                    "Result: No failures, but no clean passes either. Inconclusive."
+                )
             return "\n".join(diagnosis_lines) + "\n"
 
-        diagnosis_lines.append("Result: FAILED (failure is reproducible).")
+        diagnosis_lines.append("Result: Failure is reproducible.")
 
-        # Step 2: Re-run without any randomization
-        diagnosis_lines.append("Step 2: Re-running without randomized settings...")
-        result_no_rand = self._run_with_settings(args, suite, client_options, {}, {})
-        if result_no_rand.status == TestStatus.FAIL:
+        # Step 2: Re-run without any randomization within the time budget
+        diagnosis_lines.append(
+            f"Step 2: Re-running without randomized settings (budget: {self.DIAGNOSIS_TIME_BUDGET}s)..."
+        )
+        fail2, ok2, other2, total2 = self._run_within_budget(
+            args, suite, client_options, {}, {}
+        )
+        diagnosis_lines.append(
+            f"  Runs: {total2}, Failed: {fail2}, Passed: {ok2}, Other: {other2}"
+        )
+        if fail2 > 0:
             diagnosis_lines.append(
-                "Result: FAILED. The test fails even without randomized settings (not a randomization issue)."
+                "Result: Test also fails without randomized settings (not a randomization issue)."
+            )
+            return "\n".join(diagnosis_lines) + "\n"
+        if ok2 == 0:
+            diagnosis_lines.append(
+                "Result: No failures, but no clean passes either. Inconclusive."
             )
             return "\n".join(diagnosis_lines) + "\n"
 
         diagnosis_lines.append(
-            "Result: PASSED. Confirmed: the failure is caused by randomized settings."
+            "Result: Passes without randomization. Confirmed: the failure is caused by randomized settings."
         )
 
         # Step 3: Minimize settings via delta debugging
@@ -1956,13 +2007,12 @@ class TestCase:
                 is_merge_tree=False,
             )
 
-        # Minimize MergeTree settings (keep found culprit regular settings active,
-        # or all regular settings if no culprits were isolated)
+        # Minimize MergeTree settings (keep full regular settings to preserve
+        # cross-category interactions)
         if failed_mt_settings:
-            active_settings = culprit_settings if culprit_settings else failed_settings
             culprit_mt_settings = self._minimize_settings(
                 args, suite, client_options,
-                active_settings, failed_mt_settings,
+                failed_settings, failed_mt_settings,
                 is_merge_tree=True,
             )
 

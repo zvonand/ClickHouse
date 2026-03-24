@@ -891,6 +891,9 @@ void ReadFromRemote::describeDistributedPipeline(FormatSettings & settings)
 
     for (const auto & shard : shards)
     {
+        if (shard.query_plan)
+            throw Exception(ErrorCodes::NOT_IMPLEMENTED, "EXPLAIN PIPELINE distributed=1 is not supported with serialize_query_plan=1");
+
         auto & shard_copy = used_shards.emplace_back(shard);
         shard_copy.header = header;
         shard_copy.query = makeExplainPipeline(settings.write_header, shard.query);

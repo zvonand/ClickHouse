@@ -33,6 +33,7 @@ void KeeperJemallocWebUIHandler::handleRequest(
     HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event &)
 {
     constexpr std::string_view config_script = "<script>window.JEMALLOC_CONFIG={mode:'keeper'}</script>";
+    constexpr std::string_view head_tag = "<head>";
     std::string_view html(reinterpret_cast<const char *>(resource_jemalloc_html), std::size(resource_jemalloc_html));
 
     response.setContentType("text/html; charset=UTF-8");
@@ -42,8 +43,19 @@ void KeeperJemallocWebUIHandler::handleRequest(
     setResponseDefaultHeaders(response);
     response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
     auto wb = WriteBufferFromHTTPServerResponse(response, request.getMethod() == HTTPRequest::HTTP_HEAD);
-    wb.write(config_script.data(), config_script.size());
-    wb.write(html.data(), html.size());
+
+    auto pos = html.find(head_tag);
+    if (pos != std::string_view::npos)
+    {
+        auto after_head = pos + head_tag.size();
+        wb.write(html.data(), after_head);
+        wb.write(config_script.data(), config_script.size());
+        wb.write(html.data() + after_head, html.size() - after_head);
+    }
+    else
+    {
+        wb.write(html.data(), html.size());
+    }
     wb.finalize();
 }
 
@@ -62,6 +74,10 @@ try
         handleStats(request, response);
     else if (path == "/jemalloc/status")
         handleStatus(request, response);
+    else if (path == "/jemalloc/")
+    {
+        response.redirect("/jemalloc", Poco::Net::HTTPResponse::HTTP_MOVED_PERMANENTLY);
+    }
     else
     {
         response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_NOT_FOUND);

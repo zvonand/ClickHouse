@@ -460,21 +460,6 @@ def test_kafka_consumer_hang(kafka_cluster):
     # from a user perspective: we expect no hanging 'drop' queries
     assert int(instance.query("select count() from system.processes where query_kind = 'Drop'")) == 0
 
-    # cleanup unread messages so kafka will not wait reading consumers to delete topic
-    instance.query(f"""
-            CREATE TABLE test.{kafka_table} (key UInt64)
-            ENGINE = Kafka
-            SETTINGS kafka_broker_list = 'kafka1:19092',
-                     kafka_topic_list = '{topic_name}',
-                     kafka_commit_on_select = 1,
-                     kafka_group_name = '{topic_name}',
-                     kafka_format = 'JSONEachRow',
-                     kafka_num_consumers = 8;
-    """)
-
-    num_read = int(instance.query(f"SELECT count() FROM test.{kafka_table}"))
-    logging.debug(f"read {num_read} from {topic_name} before delete")
-    instance.query(f"DROP TABLE test.{kafka_table}")
     k.kafka_delete_topic(admin_client, topic_name)
 
 

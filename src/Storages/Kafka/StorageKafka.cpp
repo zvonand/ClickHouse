@@ -347,15 +347,20 @@ void StorageKafka::cleanConsumers()
 
     {
         std::unique_lock lock(mutex);
-        /// Wait until all consumers will be released
-        cv.wait(lock, [&, this]()
+        /// Wait until all consumers will be released, with a timeout to avoid hanging forever
+        /// if a consumer is somehow stuck in-use.
+        if (!cv.wait_for(lock, std::chrono::seconds(KAFKA_CONSUMER_CLOSE_TIMEOUT_S), [&, this]()
         {
             auto it = std::find_if(consumers.begin(), consumers.end(), [](const auto & ptr)
             {
                 return ptr->isInUse();
             });
             return it == consumers.end();
-        });
+        }))
+        {
+            LOG_WARNING(log, "Timed out waiting for {} consumer(s) to be released, proceeding with shutdown",
+                std::count_if(consumers.begin(), consumers.end(), [](const auto & ptr) { return ptr->isInUse(); }));
+        }
 
         for (const auto & consumer : consumers)
         {

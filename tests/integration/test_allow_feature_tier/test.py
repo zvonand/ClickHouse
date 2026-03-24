@@ -1,3 +1,4 @@
+# ci: trigger flaky check
 import pytest
 
 from helpers.cluster import ClickHouseCluster

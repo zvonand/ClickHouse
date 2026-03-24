@@ -31,6 +31,7 @@
 * Change default `stderr_reaction` from `throw` to `log_last` for executable UDFs. UDFs that write warnings to stderr no longer fail when exit code is 0. Exit code exceptions now include stderr content. [#99232](https://github.com/ClickHouse/ClickHouse/pull/99232) ([Xu Jia](https://github.com/XuJia0210)).
 
 #### New Feature
+* Support materialized CTE. Allow evaluating CTEs only once during query execution and store their results in temporary tables. Closes [#53449](https://github.com/ClickHouse/ClickHouse/issues/53449). [#94849](https://github.com/ClickHouse/ClickHouse/pull/94849) ([Dmitry Novik](https://github.com/novikd)).
 * Allow certain SQL-standard functions without parentheses for compatibility, such as `NOW`. Closes [#52102](https://github.com/ClickHouse/ClickHouse/issues/52102). [#95949](https://github.com/ClickHouse/ClickHouse/pull/95949) ([Aly Kafoury](https://github.com/AlyHKafoury)).
 * You can now use the natural sort key function as `naturalSortKey(s)`. [#90322](https://github.com/ClickHouse/ClickHouse/pull/90322) ([Nazarii Piontko](https://github.com/nazarii-piontko)).
 * You can now use native JSON/Object input for JSONExtract functions. Closes [#88370](https://github.com/ClickHouse/ClickHouse/issues/88370). [#96711](https://github.com/ClickHouse/ClickHouse/pull/96711) ([Fisnik Kastrati](https://github.com/fkastrati)).

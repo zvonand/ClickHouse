@@ -300,23 +300,31 @@ int64_t MetadataStorageFromDisk::recordAsRemoved(const StoredObjects & blobs)
 {
     std::lock_guard guard(removed_objects_mutex);
 
-    StoredObjects actually_removed;
-    for (const auto & removed_blob : blobs)
+    StoredObjects to_remove;
+    for (const auto & blob : blobs)
     {
-        if (objects_to_remove.erase(removed_blob))
-            actually_removed.push_back(removed_blob);
+        if (objects_to_remove.contains(blob))
+            to_remove.push_back(blob);
     }
 
-    if (persist_removal_queue && !actually_removed.empty())
+    if (to_remove.empty())
+        return 0;
+
+    /// Persist REMOVED entries to WAL before erasing from in-memory set,
+    /// so that on WAL failure the blobs remain tracked and will be retried.
+    if (persist_removal_queue)
     {
-        appendToRemovalLog(RemovalLogEntryType::REMOVED, actually_removed);
-        removal_log_stale_entries += actually_removed.size();
+        appendToRemovalLog(RemovalLogEntryType::REMOVED, to_remove);
+        removal_log_stale_entries += to_remove.size();
 
         if (removal_log_stale_entries >= removal_log_compaction_threshold)
             compactRemovalLog();
     }
 
-    return static_cast<int64_t>(actually_removed.size());
+    for (const auto & blob : to_remove)
+        objects_to_remove.erase(blob);
+
+    return static_cast<int64_t>(to_remove.size());
 }
 
 MetadataStorageFromDiskTransaction::MetadataStorageFromDiskTransaction(MetadataStorageFromDisk & metadata_storage_)

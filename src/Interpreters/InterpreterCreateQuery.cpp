@@ -31,6 +31,7 @@
 
 #include <Parsers/ASTAsterisk.h>
 #include <Parsers/ASTColumnDeclaration.h>
+#include <Parsers/ASTColumnsMatcher.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTLiteral.h>
@@ -903,12 +904,14 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
 
                     auto & select_expressions = select_expression_list->children;
 
-                    /// Check for asterisks — we cannot set aliases on them at AST level.
+                    /// Check for asterisks and COLUMNS matchers — we cannot set aliases on them at AST level.
                     for (const auto & expr : select_expressions)
                     {
-                        if (expr->as<ASTAsterisk>() || expr->as<ASTQualifiedAsterisk>())
+                        if (expr->as<ASTAsterisk>() || expr->as<ASTQualifiedAsterisk>()
+                            || expr->as<ASTColumnsRegexpMatcher>() || expr->as<ASTColumnsListMatcher>()
+                            || expr->as<ASTQualifiedColumnsRegexpMatcher>() || expr->as<ASTQualifiedColumnsListMatcher>())
                             throw Exception(ErrorCodes::BAD_ARGUMENTS,
-                                "Cannot use column aliases with asterisk (*) in SELECT list of a view definition. "
+                                "Cannot use column aliases with asterisk (*) or COLUMNS matcher in SELECT list of a view definition. "
                                 "Please list the columns explicitly");
                     }
 

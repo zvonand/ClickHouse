@@ -155,11 +155,15 @@ void compileSortDescriptionIfNeeded(SortDescription & description, const DataTyp
     if (!description.compile_sort_description || sort_description_types.empty())
         return;
 
-    for (const auto & type : sort_description_types)
+    for (size_t i = 0; i < description.size(); ++i)
     {
-        auto nested_type = removeNullable(type);
-        if (!type->createColumn()->isComparatorCompilable() ||
-            (!canBeNativeType(*type) && !WhichDataType(nested_type).isString() && !WhichDataType(nested_type).isFixedString()))
+        auto nested_type = removeNullable(sort_description_types[i]);
+        if (!sort_description_types[i]->createColumn()->isComparatorCompilable() ||
+            (!canBeNativeType(*sort_description_types[i]) && !WhichDataType(nested_type).isString() && !WhichDataType(nested_type).isFixedString()))
+            return;
+
+        /// JIT comparator does not support collation-aware comparison
+        if (description[i].collator)
             return;
     }
 

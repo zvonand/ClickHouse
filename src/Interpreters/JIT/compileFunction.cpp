@@ -60,11 +60,18 @@ ColumnData getColumnData(const IColumn * column, size_t skip_rows)
         column = &nullable->getNestedColumn();
     }
     /// skip null key data for one nullable key optimization
-    result.data = column->getDataAt(skip_rows).data();
     if (WhichDataType(column->getDataType()).isString())
     {
+        /// For String columns, use base pointers to chars and offsets arrays directly.
+        /// The JIT comparator uses absolute row indices into these arrays, so both
+        /// pointers must be to the start of their respective arrays regardless of skip_rows.
         const auto * string_column = assert_cast<const ColumnString *>(column);
-        result.offset_data = reinterpret_cast<const char *>(&string_column->getOffsets()[skip_rows]);
+        result.data = reinterpret_cast<const char *>(string_column->getChars().data());
+        result.offset_data = reinterpret_cast<const char *>(string_column->getOffsets().data());
+    }
+    else
+    {
+        result.data = column->getDataAt(skip_rows).data();
     }
 
     return result;

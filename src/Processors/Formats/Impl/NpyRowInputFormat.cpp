@@ -12,6 +12,7 @@
 #include <DataTypes/IDataType.h>
 #include <IO/ReadBuffer.h>
 #include <IO/ReadHelpers.h>
+#include <IO/CompressedReadBufferWrapper.h>
 #include <IO/WithFileSize.h>
 
 #include <IO/ReadBufferFromString.h>
@@ -278,9 +279,8 @@ void NpyRowInputFormat::readPrefix()
             max_bytes_per_row);
 
     size_t total_elements = 1;
-    for (size_t i = 0; i < header.shape.size(); ++i)
+    for (size_t dim : header.shape)
     {
-        size_t dim = header.shape[i];
         if (dim != 0 && total_elements > std::numeric_limits<size_t>::max() / dim)
             throw Exception(
                 ErrorCodes::INCORRECT_DATA,
@@ -330,7 +330,11 @@ void NpyRowInputFormat::readPrefix()
     }
 
     /// If the file size is known, validate the shape against it.
-    auto file_size = tryGetFileSizeFromReadBuffer(*in);
+    /// Skip for compressed wrappers: tryGetFileSizeFromReadBuffer unwraps them and
+    /// returns the compressed source size, which is smaller than the uncompressed
+    /// payload we're comparing against.
+    bool is_compressed = dynamic_cast<CompressedReadBufferWrapper *>(in) != nullptr;
+    auto file_size = !is_compressed ? tryGetFileSizeFromReadBuffer(*in) : std::nullopt;
     if (file_size.has_value())
     {
         size_t header_bytes = in->count();

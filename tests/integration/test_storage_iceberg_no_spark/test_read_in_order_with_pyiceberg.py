@@ -1,4 +1,3 @@
-# ci: trigger flaky check
 #!/usr/bin/env python3
 
 from pyiceberg.catalog import load_catalog

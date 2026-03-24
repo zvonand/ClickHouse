@@ -195,28 +195,37 @@ bool ParserSubquery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     {
         /// SQL standard VALUES clause: (VALUES (1, 'a'), (2, 'b'))
         /// Rewrite as SELECT * FROM values((1, 'a'), (2, 'b'))
+        ///
+        /// Each row expression is wrapped in tuple() if it is not already a tuple,
+        /// to prevent the values() table function from misinterpreting a string
+        /// literal (e.g. 'x UInt8') as a column schema definition.
         auto args = make_intrusive<ASTExpressionList>();
         ParserExpression expr_parser;
+
+        auto wrap_in_tuple = [](ASTPtr expr) -> ASTPtr
+        {
+            if (const auto * func = expr->as<ASTFunction>(); func && func->name == "tuple")
+                return expr;
+            return makeASTFunction("tuple", std::move(expr));
+        };
 
         ASTPtr value_expr;
         if (!expr_parser.parse(pos, value_expr, expected))
             return false;
-        args->children.push_back(std::move(value_expr));
+        args->children.push_back(wrap_in_tuple(std::move(value_expr)));
 
         while (pos->type == TokenType::Comma)
         {
             ++pos;
             if (!expr_parser.parse(pos, value_expr, expected))
                 return false;
-            args->children.push_back(std::move(value_expr));
+            args->children.push_back(wrap_in_tuple(std::move(value_expr)));
         }
 
         auto values_func = make_intrusive<ASTFunction>();
-        values_func->name = "values";
+        values_func->name = "sqlStandardValues";
         values_func->arguments = args;
         values_func->children.push_back(values_func->arguments);
-        /// Mark as SQL standard VALUES syntax for experimental setting gate
-        values_func->setPreferSubqueryToFunctionFormatting(true);
 
         result_node = buildSelectFromTableFunction(values_func);
     }

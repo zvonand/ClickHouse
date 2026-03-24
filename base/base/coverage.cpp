@@ -300,10 +300,8 @@ std::vector<IndirectCallEntry> getCurrentIndirectCalls()
     /// With a correct load_base, callee_offset = callee_address - load_base is a
     /// stable file-relative offset that stays constant across ASLR restarts for the
     /// same binary build, enabling cross-run joins in the coverage database.
-    extern char __executable_start; // NOLINT — linker-defined symbol
-    extern char __etext;            // NOLINT — linker-defined end-of-text symbol
+    extern char __executable_start; // NOLINT — linker-defined symbol (available in both GNU ld and lld)
     const uintptr_t load_base  = reinterpret_cast<uintptr_t>(&__executable_start);
-    const uintptr_t text_end   = reinterpret_cast<uintptr_t>(&__etext);
 
     const LLVMProfileData * begin = __llvm_profile_begin_data(); // NOLINT
     const LLVMProfileData * end   = __llvm_profile_end_data();   // NOLINT
@@ -329,13 +327,12 @@ std::vector<IndirectCallEntry> getCurrentIndirectCalls()
                 if (node->count == 0 || node->value == 0)
                     continue;
                 node->count = 0; /// reset for next test — prevents cross-test accumulation
-                /// Only record callees that lie within the main binary's text segment.
-                /// Shared-library callees (glibc, libstdc++, etc.) have ASLR addresses
-                /// that differ across machines and restarts, making them useless as join
-                /// keys in the coverage database.  Skipping them also avoids storing
-                /// ubiquitous functions like operator new or pthread_mutex_lock that
-                /// match every test and carry no targeting signal.
-                if (node->value < load_base || node->value >= text_end)
+                /// Only record callees that lie above __executable_start (main binary).
+                /// Shared-library callees with ASLR addresses below the binary base are
+                /// filtered here; remaining ubiquitous callees (glibc, libstdc++) are
+                /// filtered at query time via HAVING uniqExact(test_name) < N.
+                /// Note: __etext is not exported by lld, so we skip the upper-bound check.
+                if (node->value < load_base)
                     continue;
                 const uint64_t offset = node->value - load_base;
                 result.push_back({data->NameRef, data->FuncHash, offset, node->count});

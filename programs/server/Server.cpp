@@ -2181,12 +2181,11 @@ try
             const double max_server_memory_usage_to_ram_ratio = new_server_settings[ServerSetting::max_server_memory_usage_to_ram_ratio];
             const size_t current_physical_server_memory = getMemoryAmount(); /// With cgroups, the amount of memory available to the server can be changed dynamically.
             /// On very small systems (< 4 GiB), the percentage-based headroom (default 10%) is too large
-            /// in absolute terms. Since we exclude kernel memory from RSS measurement on cgroups v2, the
-            /// actual OS overhead in anonymous pages is small (~50 MiB for jemalloc metadata). Use a higher
-            /// ratio (0.95) to leave only 5% headroom, giving more memory to the server.
+            /// in absolute terms. Use a higher ratio to leave only 5% headroom,
+            /// giving more memory to the server.
             double effective_ratio = max_server_memory_usage_to_ram_ratio;
-            if (current_physical_server_memory < (4ul << 30) && effective_ratio < 0.99)
-                effective_ratio = 0.99;
+            if (current_physical_server_memory < (4ul << 30) && effective_ratio < 0.95)
+                effective_ratio = 0.95;
             const size_t default_max_server_memory_usage = static_cast<size_t>(static_cast<double>(current_physical_server_memory) * effective_ratio);
 
             if (max_server_memory_usage == 0)
@@ -2196,7 +2195,7 @@ try
                     " ({} available memory * {:.2f} max_server_memory_usage_to_ram_ratio)",
                     formatReadableSizeWithBinarySuffix(max_server_memory_usage),
                     formatReadableSizeWithBinarySuffix(current_physical_server_memory),
-                    max_server_memory_usage_to_ram_ratio);
+                    effective_ratio);
             }
             else if (max_server_memory_usage > default_max_server_memory_usage)
             {
@@ -2206,7 +2205,7 @@ try
                     " calculated as {} available memory * {:.2f} max_server_memory_usage_to_ram_ratio",
                     formatReadableSizeWithBinarySuffix(max_server_memory_usage),
                     formatReadableSizeWithBinarySuffix(current_physical_server_memory),
-                    max_server_memory_usage_to_ram_ratio);
+                    effective_ratio);
             }
 
             total_memory_tracker.setHardLimit(max_server_memory_usage);

@@ -145,7 +145,7 @@ struct CgroupsV2Reader : ICgroupsReader
     {
         std::lock_guard lock(mutex);
         stat_buf.rewind();
-        return readMetricsFromStatFile(stat_buf, {"anon", "sock"}, {}, &warnings_printed);
+        return readMetricsFromStatFile(stat_buf, {"anon", "sock", "kernel"}, {"kernel"}, &warnings_printed);
     }
 
     std::string dumpAllStats() override
@@ -536,19 +536,16 @@ void MemoryWorker::purgeDirtyPagesThread()
     uint64_t default_dirty_decay_ms = dirty_decay_ms_mib.getValue();
     LOG_INFO(log, "Default dirty pages decay period: {}ms", default_dirty_decay_ms);
 
-    /// On low-memory systems (< 4 GiB), apply aggressive memory management:
-    /// 1. Disable jemalloc dirty page retention (dirty_decay_ms=0) to prevent RSS inflation.
-    /// 2. Enable memory tracker correction to prevent drift between tracked and actual memory.
+    /// On low-memory systems (< 4 GiB), disable jemalloc dirty page retention
+    /// (dirty_decay_ms=0) to prevent RSS inflation.
     {
         size_t available_memory = getMemoryAmount();
         if (available_memory > 0 && available_memory < (4ul << 30))
         {
-            LOG_INFO(log, "Low memory system detected ({}). Enabling aggressive memory management: "
-                "dirty_decay_ms=0, memory tracker correction",
+            LOG_INFO(log, "Low memory system detected ({}). Setting dirty_decay_ms=0",
                 formatReadableSizeWithBinarySuffix(available_memory));
             setDirtyDecayForAllArenas(0);
             default_dirty_decay_ms = 0;
-            correct_tracker = true;
         }
     }
     while (true)

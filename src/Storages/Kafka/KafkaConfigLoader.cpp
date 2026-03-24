@@ -5,6 +5,7 @@
 #include <Storages/Kafka/StorageKafka.h>
 #include <Storages/Kafka/StorageKafka2.h>
 #include <Storages/Kafka/parseSyslogLevel.h>
+#include <Storages/System/StorageSystemStackTrace.h>
 #include <boost/algorithm/string/replace.hpp>
 #include <Common/Exception.h>
 #include <Common/CurrentMetrics.h>
@@ -100,7 +101,7 @@ KafkaInterceptors<TStorageKafka>::rdKafkaOnThreadStart(rd_kafka_t *, rd_kafka_th
     sigset_t mask;
     sigemptyset(&mask);
 #ifdef OS_LINUX
-    sigaddset(&mask, SIGRTMIN);
+    sigaddset(&mask, STACK_TRACE_SERVICE_SIGNAL);
 #endif
     sigaddset(&mask, SIGUSR1);
     sigaddset(&mask, SIGUSR2);

@@ -73,12 +73,6 @@ namespace
 // Initialized in StorageSystemStackTrace's ctor and used in signalHandler.
 std::atomic<pid_t> server_pid;
 
-#ifdef OS_LINUX
-const int STACK_TRACE_SERVICE_SIGNAL = SIGRTMIN;
-#else
-const int STACK_TRACE_SERVICE_SIGNAL = SIGUSR1;
-#endif
-
 std::atomic<int> sequence_num = 0;    /// For messages sent via pipe.
 std::atomic<int> data_ready_num = 0;
 std::atomic<bool> signal_latch = false;   /// Only need for thread sanitizer.

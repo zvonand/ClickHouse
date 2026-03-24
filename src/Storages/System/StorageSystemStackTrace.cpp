@@ -309,7 +309,7 @@ bool isSignalBlocked(UInt64 tid, int signal)
 
         UInt64 sig_blk;
         if (parseHexNumber(line, sig_blk))
-            return sig_blk & signal;
+            return sig_blk & (1ULL << (signal - 1));
     }
     catch (const Exception & e)
     {

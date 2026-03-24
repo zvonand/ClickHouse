@@ -1,4 +1,6 @@
+#include <Formats/FormatSettings.h>
 #include <IO/Operators.h>
+#include <IO/WriteHelpers.h>
 #include <Interpreters/IJoin.h>
 #include <Interpreters/TableJoin.h>
 #include <Interpreters/ExpressionActions.h>
@@ -29,8 +31,23 @@ std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join,
     std::vector<std::pair<String, String>> description;
     const auto & table_join = join->getTableJoin();
 
-    description.emplace_back("Type", toString(table_join.kind()));
-    description.emplace_back("Strictness", toString(table_join.strictness()));
+    auto to_lower = [](String & s)
+    {
+        std::transform(s.begin(), s.end(), s.begin(),
+            [](unsigned char c) { return std::tolower(c); });
+    };
+
+    String kind = toString(table_join.kind());
+    String strictness = toString(table_join.strictness());
+
+    if (settings.pretty)
+    {
+        to_lower(kind);
+        to_lower(strictness);
+    }
+
+    description.emplace_back("Type", kind);
+    description.emplace_back("Strictness", strictness);
     description.emplace_back("Algorithm", join->getName());
 
     if (table_join.strictness() == JoinStrictness::Asof)
@@ -39,7 +56,7 @@ std::vector<std::pair<String, String>> describeJoinActions(const JoinPtr & join,
     if (!table_join.getClauses().empty())
     {
         if (settings.pretty)
-            description.emplace_back("Clauses", TableJoin::formatClausesPretty(table_join.getClauses(), settings));
+            description.emplace_back("Join conditions", TableJoin::formatClausesPretty(table_join.getClauses(), settings));
         else
             description.emplace_back("Clauses", TableJoin::formatClauses(table_join.getClauses(), true /*short_format*/));
     }
@@ -234,13 +251,13 @@ void JoinStep::describeActions(FormatSettings & settings) const
         {
             if (i > 0)
                 settings.out << " | ";
-            const auto & [name, value] = description[i];
+            auto [name, value] = description[i];
             settings.out << name << ": " << value;
         }
         settings.out << '\n';
 
         if (result_rows_estimation)
-            settings.out << prefix << "ResultRows: " << toString(*result_rows_estimation) << '\n';
+            settings.out << prefix << "Result rows: " << toString(*result_rows_estimation) << '\n';
 
         if (locality != JoinLocality::Unspecified)
             settings.out << prefix << "Locality: " << toString(locality) << '\n';

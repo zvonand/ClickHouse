@@ -8,8 +8,8 @@ SET use_statistics = 0;
 DROP TABLE IF EXISTS t1;
 DROP TABLE IF EXISTS t2;
 
-CREATE TABLE t1 (a UInt64, b String, c Float64) ENGINE = MergeTree ORDER BY a;
-CREATE TABLE t2 (x UInt64, y String) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE t1 (a UInt64, b String, c Float64) ENGINE = MergeTree ORDER BY a SETTINGS index_granularity = 8192, index_granularity_bytes = '10Mi';
+CREATE TABLE t2 (x UInt64, y String) ENGINE = MergeTree ORDER BY x SETTINGS index_granularity = 8192, index_granularity_bytes = '10Mi';
 
 INSERT INTO t1 SELECT number, toString(number), number * 1.5 FROM numbers(100);
 INSERT INTO t2 SELECT number, toString(number) FROM numbers(100);

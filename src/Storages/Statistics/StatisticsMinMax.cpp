@@ -56,6 +56,7 @@ void StatisticsMinMax::merge(const StatisticsPtr & other_stats)
         min = other->min;
     if (!other->max.isNull() && (max.isNull() || other->max > max))
         max = other->max;
+    row_count += other->row_count;
 }
 
 void StatisticsMinMax::serialize(WriteBuffer & buf)

@@ -162,10 +162,10 @@ std::optional<Float64> ColumnStatistics::estimateLess(const Field & val) const
 
     if (stats.contains(StatisticsType::TDigest))
         if (auto result = stats.at(StatisticsType::TDigest)->estimateLess(val))
-            return *result;
+            return result;
     if (stats.contains(StatisticsType::MinMax))
         if (auto result = stats.at(StatisticsType::MinMax)->estimateLess(val))
-            return *result;
+            return result;
     return std::nullopt;
 }
 

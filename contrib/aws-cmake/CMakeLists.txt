@@ -102,6 +102,7 @@ file(GLOB AWS_SDK_CORE_SRC
     "${AWS_SDK_CORE_DIR}/source/smithy/tracing/*.cpp"
     "${AWS_SDK_CORE_DIR}/source/utils/*.cpp"
     "${AWS_SDK_CORE_DIR}/source/utils/base64/*.cpp"
+    "${AWS_SDK_CORE_DIR}/source/utils/cbor/*.cpp"
     "${AWS_SDK_CORE_DIR}/source/utils/checksum/*.cpp"
     "${AWS_SDK_CORE_DIR}/source/utils/component-registry/*.cpp"
     "${AWS_SDK_CORE_DIR}/source/utils/crypto/*.cpp"
@@ -319,6 +320,7 @@ file(GLOB AWS_CRT_SRC
     "${AWS_CRT_DIR}/source/external/*.cpp"
     "${AWS_CRT_DIR}/source/http/*.cpp"
     "${AWS_CRT_DIR}/source/io/*.cpp"
+    "${AWS_CRT_DIR}/source/cbor/*.cpp"
     "${AWS_CRT_DIR}/source/checksum/*.cpp"
 )
 

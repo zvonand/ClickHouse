@@ -93,6 +93,7 @@ common_ft_job_config = Job.Config(
             "./tests/config",
             "./tests/*.txt",
             "./ci/docker/stateless-test",
+            "./ci/jobs/scripts/functional_tests/setup_minio.sh",
         ],
     ),
     result_name_for_cidb="Tests",

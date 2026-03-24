@@ -1,4 +1,4 @@
 [libfuzzer]
 timeout = 20
 dict = all.dict
-rss_limit_mb = 4096
+rss_limit_mb = 6144

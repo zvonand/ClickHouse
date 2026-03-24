@@ -3433,68 +3433,23 @@ class TestSuite:
         return all_tests
 
     def get_newly_modified_test_runs(self, all_tests):
-        """Get repetition counts for recently modified tests based on git history.
+        """Get repetition counts for recently added tests based on test name order.
 
-        Tests are ranked by their most recent git modification time (newest first).
-        Each test at rank r gets int(sqrt(100 / r)) repetitions.
-        Tests with 1 or fewer computed repetitions are skipped.
+        Tests are sorted by name in descending order (newest first, since test
+        names have numeric prefixes). Each test at rank r gets
+        int(sqrt(100 / r)) repetitions. Tests with 1 or fewer computed
+        repetitions are skipped.
         """
-        try:
-            # Determine the repository root from suite_path to mark it as safe.
-            # CI may run tests as a different user than the repo owner.
-            repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(self.suite_path)))
-            subprocess.run(
-                ["git", "config", "--global", "--add", "safe.directory", repo_dir],
-                capture_output=True,
-                timeout=5,
-            )
-
-            result = subprocess.run(
-                [
-                    "git",
-                    "log",
-                    "-n",
-                    "1000",
-                    "--format=",
-                    "--name-only",
-                    "--diff-filter=ACMR",
-                    "--",
-                    self.suite_path,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            if result.returncode != 0:
-                print(
-                    f"git log failed with code {result.returncode}: {result.stderr.strip()}"
-                )
-                return {}
-        except Exception as e:
-            print(f"git log failed with exception: {e}")
-            return {}
-
-        test_set = set(all_tests)
-        seen = set()
-        ordered_tests = []
-
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            basename = os.path.basename(line)
-            if basename in test_set and basename not in seen:
-                seen.add(basename)
-                ordered_tests.append(basename)
+        sorted_tests = sorted(all_tests, reverse=True)
 
         runs = {}
-        for rank, test in enumerate(ordered_tests, 1):
+        for rank, test in enumerate(sorted_tests, 1):
             count = int(math.sqrt(100.0 / rank))
             if count <= 1:
                 break
             runs[test] = count
 
-        for test, count in runs.items():
+        for test, count in sorted(runs.items(), reverse=True):
             print(f"  {test}: {count} runs")
 
         return runs
@@ -4999,8 +4954,8 @@ def parse_args():
         "--repeat-newly-modified-tests",
         action="store_true",
         default=False,
-        help="Repeat recently modified tests multiple times with different randomized settings. "
-        "Tests are ranked by git modification time; repetitions = int(sqrt(100 / rank)). "
+        help="Repeat recently added tests multiple times with different randomized settings. "
+        "Tests are sorted by name descending; repetitions = int(sqrt(100 / rank)). "
         "Only effective when randomized settings are enabled.",
     )
     parser.add_argument(

@@ -265,7 +265,11 @@ StoragePtr TableFunctionSQLStandardValues::executeImpl(const ASTPtr & ast_functi
 void registerTableFunctionValues(TableFunctionFactory & factory)
 {
     factory.registerFunction<TableFunctionValues>({}, {.allow_readonly = true}, TableFunctionFactory::Case::Insensitive);
-    factory.registerFunction<TableFunctionSQLStandardValues>({}, {.allow_readonly = true});
+    factory.registerFunction<TableFunctionSQLStandardValues>({.description = R"(
+Internal table function used to implement SQL standard VALUES clause syntax.
+Created automatically by the parser when it encounters (VALUES (row1), (row2), ...) in a FROM clause.
+Requires the `allow_experimental_sql_standard_values_clause` setting to be enabled.
+)"}, {.allow_readonly = true});
 }
 
 }

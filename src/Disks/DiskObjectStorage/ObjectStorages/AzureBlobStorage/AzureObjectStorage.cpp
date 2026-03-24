@@ -376,6 +376,7 @@ void AzureObjectStorage::removeObjectsBatchIfExists(
     const std::shared_ptr<const AzureBlobStorage::ContainerClient> & client_ptr,
     BlobStorageLogWriterPtr blob_storage_log)
 {
+    /// https://github.com/Azure/azure-sdk-for-python/issues/22821#issuecomment-1024753986
     static constexpr size_t AZURE_BATCH_MAX_SUBREQUESTS = 256;
 
     const String & container = connection_params.getContainer();

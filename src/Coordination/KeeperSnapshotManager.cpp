@@ -36,6 +36,7 @@ namespace DB
 
 namespace ErrorCodes
 {
+    extern const int KEEPER_EXCEPTION;
     extern const int UNKNOWN_FORMAT_VERSION;
     extern const int UNKNOWN_SNAPSHOT;
     extern const int LOGICAL_ERROR;
@@ -114,7 +115,13 @@ namespace
         if (version >= SnapshotVersion::V7)
             writeBinary(node.stats.seqNum(), out);
         else
-            writeBinary(static_cast<int32_t>(node.stats.seqNum()), out);
+        {
+            auto seq_num = node.stats.seqNum();
+            if (seq_num < std::numeric_limits<int32_t>::min() || seq_num > std::numeric_limits<int32_t>::max())
+                throw Exception(ErrorCodes::KEEPER_EXCEPTION,
+                    "Sequential node counter {} overflows int32, upgrade to snapshot version >= V7", seq_num);
+            writeBinary(static_cast<int32_t>(seq_num), out);
+        }
 
         if (version >= SnapshotVersion::V4 && version <= SnapshotVersion::V5)
             writeBinary(node.sizeInBytes(), out);

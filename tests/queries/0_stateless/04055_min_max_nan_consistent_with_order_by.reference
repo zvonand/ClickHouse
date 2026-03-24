@@ -265,6 +265,163 @@ SELECT min(x), max(x) FROM test_nan_f32;
 0	999
 DROP TABLE test_nan_f32;
 -- ===========================================================================
+-- Section 7b: Comprehensive SIMD batch path coverage
+-- Tests all functions x NaN positions x float types x conditional variants
+-- Uses 1000-row MergeTree tables to guarantee SIMD findExtreme* path
+-- ===========================================================================
+
+SELECT 'SIMD: min/max Float64 NaN positions';
+SIMD: min/max Float64 NaN positions
+DROP TABLE IF EXISTS test_simd;
+CREATE TABLE test_simd (x Float64) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_simd SELECT if(number = 0, nan, toFloat64(number)) FROM numbers(1000);
+SELECT 'first', min(x), max(x) FROM test_simd;
+first	1	999
+TRUNCATE TABLE test_simd;
+INSERT INTO test_simd SELECT if(number = 500, nan, toFloat64(number)) FROM numbers(1000);
+SELECT 'middle', min(x), max(x) FROM test_simd;
+middle	0	999
+TRUNCATE TABLE test_simd;
+INSERT INTO test_simd SELECT if(number = 999, nan, toFloat64(number)) FROM numbers(1000);
+SELECT 'last', min(x), max(x) FROM test_simd;
+last	0	998
+DROP TABLE test_simd;
+SELECT 'SIMD: min/max Float32 NaN positions';
+SIMD: min/max Float32 NaN positions
+DROP TABLE IF EXISTS test_simd_f32;
+CREATE TABLE test_simd_f32 (x Float32) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_simd_f32 SELECT if(number = 0, toFloat32(nan), toFloat32(number)) FROM numbers(1000);
+SELECT 'first', min(x), max(x) FROM test_simd_f32;
+first	1	999
+TRUNCATE TABLE test_simd_f32;
+INSERT INTO test_simd_f32 SELECT if(number = 500, toFloat32(nan), toFloat32(number)) FROM numbers(1000);
+SELECT 'middle', min(x), max(x) FROM test_simd_f32;
+middle	0	999
+TRUNCATE TABLE test_simd_f32;
+INSERT INTO test_simd_f32 SELECT if(number = 999, toFloat32(nan), toFloat32(number)) FROM numbers(1000);
+SELECT 'last', min(x), max(x) FROM test_simd_f32;
+last	0	998
+DROP TABLE test_simd_f32;
+SELECT 'SIMD: argMin/argMax Float64 NaN positions';
+SIMD: argMin/argMax Float64 NaN positions
+DROP TABLE IF EXISTS test_simd_arg;
+CREATE TABLE test_simd_arg (id UInt64, x Float64) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_simd_arg SELECT number, if(number = 0, nan, toFloat64(number)) FROM numbers(1000);
+SELECT 'first', argMin(id, x), argMax(id, x) FROM test_simd_arg;
+first	1	999
+TRUNCATE TABLE test_simd_arg;
+INSERT INTO test_simd_arg SELECT number, if(number = 500, nan, toFloat64(number)) FROM numbers(1000);
+SELECT 'middle', argMin(id, x), argMax(id, x) FROM test_simd_arg;
+middle	0	999
+TRUNCATE TABLE test_simd_arg;
+INSERT INTO test_simd_arg SELECT number, if(number = 999, nan, toFloat64(number)) FROM numbers(1000);
+SELECT 'last', argMin(id, x), argMax(id, x) FROM test_simd_arg;
+last	0	998
+DROP TABLE test_simd_arg;
+SELECT 'SIMD: minIf/maxIf Float64 NaN positions';
+SIMD: minIf/maxIf Float64 NaN positions
+DROP TABLE IF EXISTS test_simd_if;
+CREATE TABLE test_simd_if (x Float64, cond UInt8) ENGINE = MergeTree ORDER BY tuple();
+-- NaN first among active rows: even positions active, NaN at 0
+INSERT INTO test_simd_if SELECT if(number = 0, nan, toFloat64(number)), number % 2 = 0 FROM numbers(1000);
+SELECT 'first', minIf(x, cond), maxIf(x, cond) FROM test_simd_if;
+first	2	998
+TRUNCATE TABLE test_simd_if;
+-- NaN middle among active rows: even positions active, NaN at 500
+INSERT INTO test_simd_if SELECT if(number = 500, nan, toFloat64(number)), number % 2 = 0 FROM numbers(1000);
+SELECT 'middle', minIf(x, cond), maxIf(x, cond) FROM test_simd_if;
+middle	0	998
+TRUNCATE TABLE test_simd_if;
+-- NaN last among active rows: even positions active, NaN at 998
+INSERT INTO test_simd_if SELECT if(number = 998, nan, toFloat64(number)), number % 2 = 0 FROM numbers(1000);
+SELECT 'last', minIf(x, cond), maxIf(x, cond) FROM test_simd_if;
+last	0	996
+DROP TABLE test_simd_if;
+SELECT 'SIMD: Nullable min/max Float64 NaN positions';
+SIMD: Nullable min/max Float64 NaN positions
+DROP TABLE IF EXISTS test_simd_null;
+CREATE TABLE test_simd_null (x Nullable(Float64)) ENGINE = MergeTree ORDER BY tuple();
+-- NaN first among non-null rows: odd positions null, NaN at 0
+INSERT INTO test_simd_null SELECT if(number % 2 = 1, NULL, if(number = 0, nan, toFloat64(number))) FROM numbers(1000);
+SELECT 'first', min(x), max(x) FROM test_simd_null;
+first	2	998
+TRUNCATE TABLE test_simd_null;
+-- NaN middle: NaN at 500 (even, so non-null)
+INSERT INTO test_simd_null SELECT if(number % 2 = 1, NULL, if(number = 500, nan, toFloat64(number))) FROM numbers(1000);
+SELECT 'middle', min(x), max(x) FROM test_simd_null;
+middle	0	998
+TRUNCATE TABLE test_simd_null;
+-- NaN last: NaN at 998
+INSERT INTO test_simd_null SELECT if(number % 2 = 1, NULL, if(number = 998, nan, toFloat64(number))) FROM numbers(1000);
+SELECT 'last', min(x), max(x) FROM test_simd_null;
+last	0	996
+DROP TABLE test_simd_null;
+SELECT 'SIMD: Nullable+If combined Float64 NaN positions';
+SIMD: Nullable+If combined Float64 NaN positions
+DROP TABLE IF EXISTS test_simd_null_if;
+CREATE TABLE test_simd_null_if (x Nullable(Float64), cond UInt8) ENGINE = MergeTree ORDER BY tuple();
+-- NaN first among active non-null rows
+INSERT INTO test_simd_null_if SELECT if(number % 3 = 1, NULL, if(number = 0, nan, toFloat64(number))), number % 2 = 0 FROM numbers(1000);
+SELECT 'first', minIf(x, cond), maxIf(x, cond) FROM test_simd_null_if;
+first	2	998
+TRUNCATE TABLE test_simd_null_if;
+INSERT INTO test_simd_null_if SELECT if(number % 3 = 1, NULL, if(number = 500, nan, toFloat64(number))), number % 2 = 0 FROM numbers(1000);
+SELECT 'middle', minIf(x, cond), maxIf(x, cond) FROM test_simd_null_if;
+middle	0	998
+TRUNCATE TABLE test_simd_null_if;
+INSERT INTO test_simd_null_if SELECT if(number % 3 = 1, NULL, if(number = 996, nan, toFloat64(number))), number % 2 = 0 FROM numbers(1000);
+SELECT 'last', minIf(x, cond), maxIf(x, cond) FROM test_simd_null_if;
+last	0	998
+DROP TABLE test_simd_null_if;
+SELECT 'SIMD: argMinIf/argMaxIf Float64 NaN positions';
+SIMD: argMinIf/argMaxIf Float64 NaN positions
+DROP TABLE IF EXISTS test_simd_argif;
+CREATE TABLE test_simd_argif (id UInt64, x Float64, cond UInt8) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_simd_argif SELECT number, if(number = 0, nan, toFloat64(number)), number % 2 = 0 FROM numbers(1000);
+SELECT 'first', argMinIf(id, x, cond), argMaxIf(id, x, cond) FROM test_simd_argif;
+first	2	998
+TRUNCATE TABLE test_simd_argif;
+INSERT INTO test_simd_argif SELECT number, if(number = 500, nan, toFloat64(number)), number % 2 = 0 FROM numbers(1000);
+SELECT 'middle', argMinIf(id, x, cond), argMaxIf(id, x, cond) FROM test_simd_argif;
+middle	0	998
+TRUNCATE TABLE test_simd_argif;
+INSERT INTO test_simd_argif SELECT number, if(number = 998, nan, toFloat64(number)), number % 2 = 0 FROM numbers(1000);
+SELECT 'last', argMinIf(id, x, cond), argMaxIf(id, x, cond) FROM test_simd_argif;
+last	0	996
+DROP TABLE test_simd_argif;
+SELECT 'SIMD: Nullable argMin/argMax Float64 NaN positions';
+SIMD: Nullable argMin/argMax Float64 NaN positions
+DROP TABLE IF EXISTS test_simd_argnull;
+CREATE TABLE test_simd_argnull (id UInt64, x Nullable(Float64)) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_simd_argnull SELECT number, if(number % 2 = 1, NULL, if(number = 0, nan, toFloat64(number))) FROM numbers(1000);
+SELECT 'first', argMin(id, x), argMax(id, x) FROM test_simd_argnull;
+first	2	998
+TRUNCATE TABLE test_simd_argnull;
+INSERT INTO test_simd_argnull SELECT number, if(number % 2 = 1, NULL, if(number = 500, nan, toFloat64(number))) FROM numbers(1000);
+SELECT 'middle', argMin(id, x), argMax(id, x) FROM test_simd_argnull;
+middle	0	998
+TRUNCATE TABLE test_simd_argnull;
+INSERT INTO test_simd_argnull SELECT number, if(number % 2 = 1, NULL, if(number = 998, nan, toFloat64(number))) FROM numbers(1000);
+SELECT 'last', argMin(id, x), argMax(id, x) FROM test_simd_argnull;
+last	0	996
+DROP TABLE test_simd_argnull;
+SELECT 'SIMD: Nullable+If argMinIf/argMaxIf Float64 NaN positions';
+SIMD: Nullable+If argMinIf/argMaxIf Float64 NaN positions
+DROP TABLE IF EXISTS test_simd_argnullif;
+CREATE TABLE test_simd_argnullif (id UInt64, x Nullable(Float64), cond UInt8) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_simd_argnullif SELECT number, if(number % 3 = 1, NULL, if(number = 0, nan, toFloat64(number))), number % 2 = 0 FROM numbers(1000);
+SELECT 'first', argMinIf(id, x, cond), argMaxIf(id, x, cond) FROM test_simd_argnullif;
+first	2	998
+TRUNCATE TABLE test_simd_argnullif;
+INSERT INTO test_simd_argnullif SELECT number, if(number % 3 = 1, NULL, if(number = 500, nan, toFloat64(number))), number % 2 = 0 FROM numbers(1000);
+SELECT 'middle', argMinIf(id, x, cond), argMaxIf(id, x, cond) FROM test_simd_argnullif;
+middle	0	998
+TRUNCATE TABLE test_simd_argnullif;
+INSERT INTO test_simd_argnullif SELECT number, if(number % 3 = 1, NULL, if(number = 996, nan, toFloat64(number))), number % 2 = 0 FROM numbers(1000);
+SELECT 'last', argMinIf(id, x, cond), argMaxIf(id, x, cond) FROM test_simd_argnullif;
+last	0	998
+DROP TABLE test_simd_argnullif;
+-- ===========================================================================
 -- Section 8: ORDER BY LIMIT 1 optimization for floats
 -- ColumnVector::getPermutation with limit=1 should use findExtremeMinIndex/MaxIndex
 -- ===========================================================================

@@ -14,7 +14,7 @@ Each row represents one remote blob object associated with a data file.
 Columns:
 
 - `disk_name` ([String](../../sql-reference/data-types/string.md)) — Name of the remote disk as defined in the storage configuration.
-- `path` ([String](../../sql-reference/data-types/string.md)) — Path of the disk.
+- `path` ([String](../../sql-reference/data-types/string.md)) — Root path of the remote disk as configured in storage configuration.
 - `cache_base_path` ([String](../../sql-reference/data-types/string.md)) — Base directory for cache files associated with the remote disk.
 - `local_path` ([String](../../sql-reference/data-types/string.md)) — Local metadata file path relative to the ClickHouse data directory, pointing to the file that maps to the remote blob.
 - `remote_path` ([String](../../sql-reference/data-types/string.md)) — Blob path in the remote object storage that the local metadata file maps to.
@@ -24,7 +24,7 @@ Columns:
 
 **Settings**
 
-- [`traverse_shadow_remote_data_paths`](../../operations/settings/settings.md) — When enabled, the table also includes data from frozen partitions (the `shadow/` directory used by `ALTER TABLE ... FREEZE`). Disabled by default.
+- [`traverse_shadow_remote_data_paths`](../../operations/settings/settings.md#traverse_shadow_remote_data_paths) — When enabled, the table also includes data from frozen partitions (the `shadow/` directory used by `ALTER TABLE ... FREEZE`). Disabled by default.
 
 **Example**
 

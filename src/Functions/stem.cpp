@@ -91,6 +91,12 @@ public:
                 "but got: '{}'",
                 String(word));
 
+        if (std::any_of(word.begin(), word.end(), isUpperAlphaASCII))
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "Function stem requires lowercase input, but got: '{}'",
+                String(word));
+
         const sb_symbol * result = sb_stemmer_stem(
             handle,
             reinterpret_cast<const sb_symbol *>(word.data()),

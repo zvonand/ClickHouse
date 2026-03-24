@@ -126,6 +126,9 @@ DROP TABLE stem_test_lc;
 
 SELECT '- Negative tests.';
 
+SELECT '-- Uppercase input raises BAD_ARGUMENTS.';
+SELECT stem('Blessing', 'en'); -- { serverError BAD_ARGUMENTS }
+
 SELECT '-- Whitespace in a String input raises BAD_ARGUMENTS.';
 SELECT stem('hello world', 'en'); -- { serverError BAD_ARGUMENTS }
 

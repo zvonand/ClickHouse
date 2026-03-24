@@ -716,7 +716,9 @@ llvm::Value * ColumnString::compileComparator(llvm::IRBuilderBase & b, llvm::Val
 
     auto load_offset = [&](llvm::Value * offset_array, llvm::Value * index)
     {
-        auto * element_ptr = b.CreateInBoundsGEP(size_type, offset_array, index);
+        /// Not inbounds: for row 0 the index is -1 (wrapped unsigned), accessing
+        /// the PaddedPODArray padding element before the start of the array.
+        auto * element_ptr = b.CreateGEP(size_type, offset_array, index);
         return b.CreateLoad(size_type, element_ptr);
     };
     auto * lhs_prev_index = b.CreateSub(lhs_index, const_one);

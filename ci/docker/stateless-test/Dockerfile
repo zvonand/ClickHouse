@@ -61,7 +61,11 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "aws
     && ./aws/install \
     && rm awscliv2.zip
 
+<<<<<<< HEAD
 # Install Node.js 20 from NodeSource (azurite 3.34 fails with 24)
+=======
+# Install Node.js 20 from NodeSource (azurite 3.35 fails with 24)
+>>>>>>> master
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean \
@@ -106,7 +110,7 @@ ENV MINIO_ROOT_PASSWORD="clickhouse"
 RUN chmod 777 /home
 ENV HOME="/home"
 
-RUN npm install -g azurite@3.34.0 \
+RUN npm install -g azurite@3.35.0 \
     && npm install -g tslib
 
 # Install Redpanda (Kafka-compatible broker, no JVM required)

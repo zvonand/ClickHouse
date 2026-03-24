@@ -357,12 +357,14 @@ def process_results(result_path: Path):
                 if file_path_stdout.exists():
                     log_files.append(str(file_path_stdout))
 
-        # Collect all crash, timeout and trace files
+        # Collect all crash-, timeout-, slow-unit-, oom- and .trace files
         for file in list(fuzzer_result_dir.glob("crash-*")):
             log_files.append(str(file))
         for file in list(fuzzer_result_dir.glob("timeout-*")):
             log_files.append(str(file))
         for file in list(fuzzer_result_dir.glob("slow-unit-*")):
+            log_files.append(str(file))
+        for file in list(fuzzer_result_dir.glob("oom-*")):
             log_files.append(str(file))
 
         result.set_info("\n".join(raw_logs))

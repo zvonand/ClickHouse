@@ -109,6 +109,7 @@ echo "Generating HTML report..."
 genhtml --version
 
 html_escape() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'; }
+export -f html_escape
 
 HEADER_TITLE="ClickHouse coverage report"
 if [ -n "${PR_NUMBER}" ] && [ "${PR_NUMBER}" -gt 0 ]; then

@@ -187,11 +187,11 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
 
   const getStatusPriority = (status: string): number => {
     const statusLower = (status || '').toLowerCase()
-    // Priority order: errors/failures first, then warnings, then success, then others
-    if (statusLower.includes('error') || statusLower.includes('fail') || statusLower.includes('dropped')) return 0
-    if (statusLower.includes('pending') || statusLower.includes('running')) return 1
-    if (statusLower.includes('success') || statusLower === 'ok') return 2
-    return 3 // other statuses
+    if (statusLower.includes('error') || statusLower.includes('fail')) return 0
+    if (statusLower.includes('dropped')) return 1
+    if (statusLower.includes('pending') || statusLower.includes('running')) return 2
+    if (statusLower.includes('success') || statusLower === 'ok') return 3
+    return 4 // other statuses
   }
 
   const normalizeName = (name: string): string => {
@@ -515,7 +515,8 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
 
   const getLastPartOfUrl = (url: string): string => {
     const parts = url.split('/')
-    return parts[parts.length - 1] || url
+    const last = parts[parts.length - 1] || url
+    return last.split('?')[0] || last
   }
 
   const getStatusBadge = (status: string) => {
@@ -814,21 +815,23 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
           )}
           {result.ext?.run_url && (
             <Link href={result.ext.run_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', padding: '4px' }}>
-              <Logo name={theme === 'dark' ? 'github-dark' : 'github-light'} size="sm" />
+              <Logo name={'github'} size="sm" />
             </Link>
           )}
-          <div
-            onClick={copyUrlToClipboard}
-            style={{
-              cursor: 'pointer',
-              padding: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <Icon name="copy" size="md" />
-          </div>
+          {!result.status.toLowerCase().includes('skip') && (
+            <div
+              onClick={copyUrlToClipboard}
+              style={{
+                cursor: 'pointer',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Icon name="copy" size="md" />
+            </div>
+          )}
         </div>
       </Container>
     )
@@ -1181,7 +1184,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                       <>
                         <Text>|</Text>
                         <Link href={data.ext.run_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center' }}>
-                          <Logo name={theme === 'dark' ? 'github-dark' : 'github-light'} size="sm" />
+                          <Logo name={'github'} size="sm" />
                         </Link>
                       </>
                     )}
@@ -1252,7 +1255,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                 rel="noopener noreferrer"
                 style={{ display: 'flex', alignItems: 'center' }}
               >
-                <Logo name={theme === 'dark' ? 'clickhouse-dark' : 'clickhouse-light'} size="md" />
+                <Logo name={'clickhouse'} size="md" />
               </Link>
             </div>
           </div>

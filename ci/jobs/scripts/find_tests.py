@@ -1587,7 +1587,7 @@ class Targeting:
             name="tests found by coverage", status=Result.StatusExtended.OK, info=info
         )
 
-    def get_all_relevant_tests_with_info(self):
+    def get_all_relevant_tests_with_info(self, clickhouse_path=None):
         # Use a list to preserve insertion order and a seen set to deduplicate.
         # Priority: changed/new tests first, then previously failed, then
         # coverage-ranked tests (most changed lines covered first).

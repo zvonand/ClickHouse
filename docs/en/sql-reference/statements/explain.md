@@ -582,10 +582,10 @@ Join (JOIN FillRightFirst)
 │  t1[100] ⋈ t2[100]
 │  Type: inner | Strictness: all | Algorithm: ConcurrentHashJoin
 │  Result rows: 100
+│  Join conditions: [(__table1.id) = (__table2.id)]
 │  Output:
 │    Left:  id, value
 │    Right: id, value
-│  Join conditions: [(__table1.id) = (__table2.id)]
 ├──ReadFromMergeTree (default.t1)
 │     Read type: Default
 │     Parts: 1 | Granules: 1

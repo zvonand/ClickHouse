@@ -1914,7 +1914,7 @@ ASTPtr QueryFuzzer::reverseLiteralFuzzing(ASTPtr child)
         if (can_be_reverted.contains(function->name) && function->children.size() == 1)
         {
             if (fuzz_rand() % 7 == 0)
-                return function->children[0];
+                return function->children[0]->clone();
         }
     }
 
@@ -1982,9 +1982,9 @@ void QueryFuzzer::fuzzExpressionList(ASTExpressionList & expr_list)
                 {
                     const String & op = arith_ops[fuzz_rand() % arith_ops.size()];
                     if (fuzz_rand() % 2 == 0)
-                        new_child = makeASTFunction(op, child, other);
+                        new_child = makeASTFunction(op, child->clone(), other);
                     else
-                        new_child = makeASTFunction(op, other, child);
+                        new_child = makeASTFunction(op, other, child->clone());
                 }
             }
             else if (fuzz_rand() % 1000 == 0 && current_ast_depth < 80)
@@ -1995,9 +1995,9 @@ void QueryFuzzer::fuzzExpressionList(ASTExpressionList & expr_list)
                 if (cond && other)
                 {
                     if (fuzz_rand() % 2 == 0)
-                        new_child = makeASTFunction("if", cond, child, other);
+                        new_child = makeASTFunction("if", cond, child->clone(), other);
                     else
-                        new_child = makeASTFunction("if", cond, other, child);
+                        new_child = makeASTFunction("if", cond, other, child->clone());
                 }
             }
             else if (fuzz_rand() % 800 == 0 && current_ast_depth < 80)

@@ -7268,10 +7268,11 @@ void Context::initializeBackgroundExecutorsIfNeeded()
                 background_pool_size, max_pool, formatReadableSizeWithBinarySuffix(available_memory));
             background_pool_size = max_pool;
             /// Clamp the concurrency ratio to at most 1 to avoid increasing it beyond what the user configured.
-            background_merges_mutations_concurrency_ratio = std::min(background_merges_mutations_concurrency_ratio, 1.0);
+            double clamped_ratio = std::min(static_cast<double>(background_merges_mutations_concurrency_ratio), 1.0);
+            background_merges_mutations_concurrency_ratio = clamped_ratio;
             /// Update shared settings so the MergeTree sanity check sees the lowered values.
             shared->server_settings.set("background_pool_size", max_pool);
-            shared->server_settings.set("background_merges_mutations_concurrency_ratio", background_merges_mutations_concurrency_ratio);
+            shared->server_settings.set("background_merges_mutations_concurrency_ratio", clamped_ratio);
         }
     }
     size_t background_pool_max_tasks_count = static_cast<size_t>(static_cast<double>(background_pool_size) * background_merges_mutations_concurrency_ratio);

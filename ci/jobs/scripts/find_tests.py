@@ -65,7 +65,8 @@ class Targeting:
         changed_files = Shell.get_output(
             f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse --name-only"
         ).splitlines() if self.info.is_local_run else self.info.get_changed_files()
-        assert changed_files, "No changed files"
+        if not changed_files:
+            return result
 
         for fpath in changed_files:
             if re.match(r"tests/queries/0_stateless/\d{5}", fpath):
@@ -1311,7 +1312,7 @@ class Targeting:
         ]
 
     def get_changed_or_new_tests_with_info(self):
-        tests = self.get_changed_tests()
+        tests = sorted(self.get_changed_tests())
         info = f"Found {len(tests)} changed or new tests:\n"
         for test in tests[:200]:
             info += f" - {test}\n"

@@ -340,6 +340,27 @@ ALWAYS_INLINE inline unsigned __int128 divmod_1e18(unsigned __int128 n, uint64_t
     return q;
 }
 
+/// Extract up to 9 digit pairs from a u64 value into `two_values` starting at `pos`.
+ALWAYS_INLINE inline void extractDigitPairs(uint64_t remainder, uint8_t * two_values)
+{
+    for (int i = 0; i < max_multiple_of_hundred_blocks; ++i)
+    {
+        two_values[i] = uint8_t(remainder % 100);
+        remainder /= 100;
+    }
+}
+
+/// Write `count` digit pairs from `two_values` (in reverse order) to the output buffer.
+ALWAYS_INLINE inline char * writeDigitPairs(char * p, const uint8_t * two_values, int count)
+{
+    for (int i = count - 1; i >= 0; --i)
+    {
+        outTwoDigits(p, two_values[i]);
+        p += 2;
+    }
+    return p;
+}
+
 ALWAYS_INLINE inline char * writeUIntText(UInt128 _x, char * p)
 {
     /// If the highest 64-bit item is empty, we can print just the lowest item as u64.
@@ -350,37 +371,29 @@ ALWAYS_INLINE inline char * writeUIntText(UInt128 _x, char * p)
     using T = unsigned __int128;
     T x = (T(_x.items[UInt128::_impl::little(1)]) << 64) + T(_x.items[UInt128::_impl::little(0)]);
 
-    /// We accumulate blocks of 2 digits until the number fits in u64.
-    /// We divide by 10^18 (the largest multiple of 100 fitting in 64 bits)
-    /// using Barrett reduction instead of __udivti3, then extract digit pairs
-    /// from the u64 remainder. The loop runs at most twice for UInt128.
+    /// Split into blocks of up to 18 digits (10^18 per block) using Barrett reduction.
+    /// UInt128 max is ~3.4e38, so at most 2 divisions are needed.
+    /// Unrolled: first division always needed (x > uint64 max since high item != 0),
+    /// second division only if quotient still exceeds uint64 max.
+    uint8_t two_values[18] = {0};
+
+    uint64_t r1;
+    x = divmod_1e18(x, r1);
+    extractDigitPairs(r1, two_values);
+
     static const T largest_uint64 = std::numeric_limits<uint64_t>::max();
-    uint8_t two_values[20] = {0}; /// 39 max characters / 2
-
-    int current_block = 0;
-    while (x > largest_uint64)
+    if (x > largest_uint64)
     {
-        uint64_t u64_remainder;
-        x = divmod_1e18(x, u64_remainder);
+        uint64_t r2;
+        x = divmod_1e18(x, r2);
+        extractDigitPairs(r2, two_values + max_multiple_of_hundred_blocks);
 
-        int pos = current_block;
-        while (u64_remainder)
-        {
-            two_values[pos] = uint8_t(u64_remainder % 100);
-            pos++;
-            u64_remainder /= 100;
-        }
-        current_block += max_multiple_of_hundred_blocks;
+        char * out = jeaiii::to_text_from_integer(p, uint64_t(x));
+        return writeDigitPairs(out, two_values, 2 * max_multiple_of_hundred_blocks);
     }
 
-    char * highest_part_print = jeaiii::to_text_from_integer(p, uint64_t(x));
-    for (int i = 0; i < current_block; i++)
-    {
-        outTwoDigits(highest_part_print, two_values[current_block - 1 - i]);
-        highest_part_print += 2;
-    }
-
-    return highest_part_print;
+    char * out = jeaiii::to_text_from_integer(p, uint64_t(x));
+    return writeDigitPairs(out, two_values, max_multiple_of_hundred_blocks);
 }
 
 ALWAYS_INLINE inline char * writeUIntText(UInt256 _x, char * p)

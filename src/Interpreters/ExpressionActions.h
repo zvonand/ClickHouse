@@ -6,6 +6,8 @@
 #include <Interpreters/ActionsDAG.h>
 #include <Interpreters/ExpressionActionsSettings.h>
 
+#include <functional>
+
 namespace DB
 {
 

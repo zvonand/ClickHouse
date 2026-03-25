@@ -255,7 +255,7 @@ void HTTPHandler::processQuery(
 
     /// Sanitize query_id: remove ASCII control characters to prevent CRLF injection
     /// into HTTP response headers (the query_id is reflected in X-ClickHouse-Query-Id).
-    std::erase_if(query_id, isControlASCII);
+    std::erase_if(query_id, [](unsigned char c) { return isControlASCII(c) || c == 0x7F; });
 
     context->setCurrentQueryId(query_id);
 

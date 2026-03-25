@@ -111,13 +111,13 @@ genhtml --version
 HEADER_TITLE="ClickHouse coverage report"
 if [ -n "${PR_NUMBER}" ] && [ "${PR_NUMBER}" -gt 0 ]; then
   PR_URL="https://github.com/ClickHouse/ClickHouse/pull/${PR_NUMBER}"
-  HEADER_TITLE="<a href=\"${PR_URL}\">${PR_URL}</a>"
+  HEADER_TITLE="${HEADER_TITLE} &middot; <a href=\"${PR_URL}\">${PR_URL}</a>"
 elif [ -n "${CURRENT_COMMIT}" ]; then
   COMMIT_URL="https://github.com/ClickHouse/ClickHouse/commit/${CURRENT_COMMIT}"
   COMMIT_SHORT="${CURRENT_COMMIT:0:12}"
   COMMIT_MSG=$(git -C "$WORKSPACE_PATH" log -1 --format="%s" "${CURRENT_COMMIT}" 2>/dev/null | cut -c1-120 || true)
   COMMIT_DATE=$(git -C "$WORKSPACE_PATH" log -1 --format="%cs" "${CURRENT_COMMIT}" 2>/dev/null || true)
-  HEADER_TITLE="<a href=\"${COMMIT_URL}\"><code>${COMMIT_SHORT}</code></a>"
+  HEADER_TITLE="${HEADER_TITLE} &middot; <a href=\"${COMMIT_URL}\"><code>${COMMIT_SHORT}</code></a>"
   [ -n "${COMMIT_DATE}" ] && HEADER_TITLE="${HEADER_TITLE} &middot; ${COMMIT_DATE}"
   [ -n "${COMMIT_MSG}" ] && HEADER_TITLE="${HEADER_TITLE} &middot; ${COMMIT_MSG}"
 fi

@@ -62,7 +62,7 @@ def get_run_command(
 def _collect_targeted_queries(workspace_path: Path, info: Info) -> tuple[list[str], Result]:
     targeter = Targeting(info=info)
     targeter.job_type = Targeting.STATELESS_JOB_TYPE
-    tests, relevant_tests_result = targeter.get_all_relevant_tests_with_info(f"{cwd}/ci/tmp")
+    tests, relevant_tests_result = targeter.get_all_relevant_tests_with_info()
 
     logging.info("Found %d relevant tests for targeted AST fuzzer:", len(tests))
     for test in sorted(tests):

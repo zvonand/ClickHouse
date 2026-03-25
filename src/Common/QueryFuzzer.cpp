@@ -1214,8 +1214,6 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
         original_table_name_to_fuzzed[original_name].insert(new_name);
 }
 
-static const Strings stat_types = {"tdigest", "countmin", "minmax", "uniq"};
-
 void QueryFuzzer::fuzzColumnDeclaration(ASTColumnDeclaration & column)
 {
     if (auto type = column.getType())
@@ -1229,6 +1227,7 @@ void QueryFuzzer::fuzzColumnDeclaration(ASTColumnDeclaration & column)
 
     if (auto stats = column.getStatisticsDesc())
     {
+        static const Strings stat_types = {"tdigest", "countmin", "minmax", "uniq"};
         auto * stats_decl = stats->as<ASTStatisticsDeclaration>();
         if (stats_decl && stats_decl->types)
         {
@@ -2058,7 +2057,7 @@ ASTPtr QueryFuzzer::reverseLiteralFuzzing(ASTPtr child)
         if (can_be_reverted.contains(function->name) && function->children.size() == 1)
         {
             if (fuzz_rand() % 7 == 0)
-                return function->children[0]->clone();
+                return function->children[0];
         }
     }
 
@@ -2126,9 +2125,9 @@ void QueryFuzzer::fuzzExpressionList(ASTExpressionList & expr_list)
                 {
                     const String & op = arith_ops[fuzz_rand() % arith_ops.size()];
                     if (fuzz_rand() % 2 == 0)
-                        new_child = makeASTFunction(op, child->clone(), other);
+                        new_child = makeASTFunction(op, child, other);
                     else
-                        new_child = makeASTFunction(op, other, child->clone());
+                        new_child = makeASTFunction(op, other, child);
                 }
             }
             else if (fuzz_rand() % 1000 == 0 && current_ast_depth < 80)
@@ -2139,9 +2138,9 @@ void QueryFuzzer::fuzzExpressionList(ASTExpressionList & expr_list)
                 if (cond && other)
                 {
                     if (fuzz_rand() % 2 == 0)
-                        new_child = makeASTFunction("if", cond, child->clone(), other);
+                        new_child = makeASTFunction("if", cond, child, other);
                     else
-                        new_child = makeASTFunction("if", cond, other, child->clone());
+                        new_child = makeASTFunction("if", cond, other, child);
                 }
             }
             else if (fuzz_rand() % 800 == 0 && current_ast_depth < 80)
@@ -3868,8 +3867,9 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                     alter_cmd->if_exists = !alter_cmd->if_exists;
                 break;
             case ASTAlterCommand::ADD_STATISTICS:
-            case ASTAlterCommand::MODIFY_STATISTICS:
+            case ASTAlterCommand::MODIFY_STATISTICS: {
                 /// Fuzz stat types the same way fuzzColumnDeclaration does
+                static const Strings stat_types = {"tdigest", "countmin", "minmax", "uniq"};
                 if (alter_cmd->statistics_decl)
                     if (auto * stats = alter_cmd->statistics_decl->as<ASTStatisticsDeclaration>())
                         if (stats->types)
@@ -3877,6 +3877,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                                 if (auto * afn = type_ast->as<ASTFunction>(); afn && fuzz_rand() % 5 == 0)
                                     afn->name = pickRandomly(fuzz_rand, stat_types);
                 break;
+            }
             case ASTAlterCommand::DROP_STATISTICS:
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->clear_statistics = !alter_cmd->clear_statistics;

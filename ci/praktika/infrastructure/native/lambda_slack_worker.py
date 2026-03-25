@@ -215,7 +215,7 @@ def _post_dm(user_id: str, user_email: str, s3_path: str, text: str) -> None:
         print(f"chat.postMessage error: {e}")
 
 
-def format_event_text(event, pr_status, indent="", include_related_prs: bool = True):
+def format_event_text(event, pr_status, indent="", include_related_prs: bool = True, pr_to_event=None):
     """Format event text with optional indentation for linked events."""
     # PR status emoji
     pr_status_emoji = ":pr_open:" if pr_status == "open" else ":pr_merged:"
@@ -334,14 +334,25 @@ def format_event_text(event, pr_status, indent="", include_related_prs: bool = T
         # Add related PRs if available (only for parent events)
         if include_related_prs and not indent:
             related_prs = event.ext.get("related_prs", [])
+            # For merge commits (pr_number == 0), derive related_prs from linked_pr_number
+            if not related_prs and event.ext.get("pr_number", 0) == 0:
+                linked_pr_number = event.ext.get("linked_pr_number", 0)
+                if linked_pr_number:
+                    related_prs = [linked_pr_number]
             if related_prs:
                 event_text += "\n\n*Related PRs:*"
                 for pr_num in related_prs:
+                    # Look up related PR info: prefer live data from the feed, fall back to pre-stored ext
                     pr_info = {}
-                    if hasattr(event, "result") and event.result:
-                        result_ext = event.result.get("ext", {})
-                        related_pr_info = result_ext.get("related_pr_info", {})
-                        pr_info = related_pr_info.get(pr_num, {})
+                    if pr_to_event and pr_num in pr_to_event:
+                        related_event = pr_to_event[pr_num]
+                        pr_info = {
+                            "pr_title": related_event.ext.get("pr_title", ""),
+                            "change_url": related_event.ext.get("change_url", ""),
+                            "report_url": related_event.ext.get("report_url", ""),
+                        }
+                    else:
+                        pr_info = event.ext.get("related_pr_info", {}).get(pr_num, {})
 
                     pr_title = pr_info.get("pr_title", "")
                     pr_change_url = pr_info.get("change_url", "")
@@ -625,7 +636,7 @@ def publish_home_view(
                     break
 
             # Format parent event
-            event_text = format_event_text(root_event, pr_status, indent="")
+            event_text = format_event_text(root_event, pr_status, indent="", pr_to_event=pr_to_event)
 
             # Add parent event section
             blocks.append(

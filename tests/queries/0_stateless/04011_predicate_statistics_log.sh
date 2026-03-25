@@ -47,7 +47,7 @@ SELECT
 FROM system.predicate_statistics_log
 WHERE table = 'test_pred_stats' AND currentDatabase() = database
 GROUP BY column_name, predicate_class, function_name
-ORDER BY column_name, predicate_class, function_name;
+ORDER BY column_name, predicate_class, function_name SETTINGS enable_analyzer=1;
 
 DROP TABLE test_pred_stats;
 "

@@ -63,7 +63,7 @@ struct CRC32HashTest
 #endif
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleHashMap(int argc, char ** argv)
 {
     using namespace DB;
 

@@ -7,7 +7,7 @@
 
 
 #if defined(OS_LINUX)
-int main(int argc, char ** argv)
+int mainEntryExampleProcfsMetricsProviderPerf(int argc, char ** argv)
 {
     using namespace DB;
 

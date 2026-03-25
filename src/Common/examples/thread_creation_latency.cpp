@@ -69,7 +69,7 @@ void test(size_t n, const char * name, F && kernel)
 }
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleThreadCreationLatency(int argc, char ** argv)
 {
     size_t n = argc == 2 ? DB::parse<UInt64>(argv[1]) : 100000;
 

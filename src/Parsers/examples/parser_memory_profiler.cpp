@@ -227,7 +227,7 @@ void printProfilingStatus()
 }
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleParserMemoryProfiler(int argc, char ** argv)
 try
 {
     using namespace DB;

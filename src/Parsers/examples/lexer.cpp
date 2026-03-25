@@ -62,7 +62,7 @@ std::map<TokenType, const char *> hilite =
 };
 
 
-int main(int, char **)
+int mainEntryExampleLexer(int, char **)
 {
     String query;
     ReadBufferFromFileDescriptor in(STDIN_FILENO);

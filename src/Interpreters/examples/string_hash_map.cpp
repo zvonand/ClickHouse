@@ -20,7 +20,7 @@
 
 using namespace std;
 
-int main()
+int generateStringHashMapData()
 {
     std::string s;
     pcg64_fast rng{randomSeed()};
@@ -203,7 +203,7 @@ benchFromFile()
 */
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleStringHashMap(int argc, char ** argv)
 {
     if (argc < 3)
     {

@@ -277,7 +277,7 @@ struct Merger
 };
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleParallelAggregation2(int argc, char ** argv)
 {
     size_t n = std::stol(argv[1]);
     size_t num_threads = std::stol(argv[2]);

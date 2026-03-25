@@ -78,7 +78,7 @@ struct DecomposedFloat32
 };
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleDragonboxTest(int argc, char ** argv)
 {
     double x = argc > 1 ? std::stod(argv[1]) : 0;
     char buf[32];

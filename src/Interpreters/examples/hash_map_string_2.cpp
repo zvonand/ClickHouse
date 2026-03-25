@@ -605,7 +605,7 @@ void NO_INLINE bench(const std::vector<std::string_view> & data, const char * na
 }
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleHashMapString2(int argc, char ** argv)
 {
     if (argc < 3)
     {

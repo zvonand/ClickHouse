@@ -1565,7 +1565,7 @@ void mergeTwoLevelSwiss(MapTwoLevelSwiss * maps, size_t num_threads, size_t buck
 #endif
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleParallelAggregation(int argc, char ** argv)
 {
     size_t n = std::stol(argv[1]);
     size_t num_threads = std::stol(argv[2]);

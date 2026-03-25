@@ -156,7 +156,7 @@ static void NO_INLINE sort26(Key * data, size_t size, size_t limit)
 }
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleRadixSort(int argc, char ** argv)
 {
     pcg64 rng(randomSeed());
 

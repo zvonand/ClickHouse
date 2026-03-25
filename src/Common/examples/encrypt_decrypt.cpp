@@ -48,7 +48,7 @@ class EncryptDecryptApplication : public Poco::Util::Application
 {
 };
 
-int main(int argc, char ** argv)
+int mainEntryExampleEncryptDecrypt(int argc, char ** argv)
 {
     try
     {

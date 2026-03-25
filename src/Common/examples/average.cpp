@@ -549,7 +549,7 @@ Float NO_INLINE another_unrolled_x4(const PODArray<UInt8> & keys, const PODArray
     return map[0].result();
 }
 
-int main(int argc, char ** argv)
+int mainEntryExampleAverage(int argc, char ** argv)
 {
     size_t size = argc > 1 ? std::stoull(argv[1]) : 1000000000;
     size_t variant = argc > 2 ? std::stoull(argv[2]) : 1;

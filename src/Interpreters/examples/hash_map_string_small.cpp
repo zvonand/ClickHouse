@@ -93,7 +93,7 @@ struct DefaultHash<SmallStringView>
 using Value = UInt64;
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleHashMapStringSmall(int argc, char ** argv)
 {
     if (argc < 3)
     {

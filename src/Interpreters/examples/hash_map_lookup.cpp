@@ -87,7 +87,7 @@ void insert(Map & map, std::string_view & k)
     std::cout << map.find(k)->getMapped() << std::endl;
 }
 
-int main(int argc, char ** argv)
+int mainEntryExampleHashMapLookup(int argc, char ** argv)
 {
     if (argc < 3)
     {

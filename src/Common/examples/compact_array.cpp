@@ -251,7 +251,7 @@ static void runTests()
     TestSet<Generator3>::execute();
 }
 
-int main()
+int mainEntryExampleCompactArray(int, char **)
 {
     runTests();
     return 0;

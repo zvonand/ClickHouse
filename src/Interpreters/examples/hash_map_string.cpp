@@ -289,7 +289,7 @@ struct Grower : public HashTableGrower<>
 };
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleHashMapString(int argc, char ** argv)
 {
     if (argc < 3)
     {

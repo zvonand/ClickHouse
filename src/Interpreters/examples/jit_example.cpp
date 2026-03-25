@@ -13,7 +13,7 @@ void test_function()
     std::cerr << "Test function" << std::endl;
 }
 
-int main(int argc, char **argv)
+int mainEntryExampleJitExample(int argc, char **argv)
 {
     (void)(argc);
     (void)(argv);

@@ -174,7 +174,7 @@ cmp clickhouse-compressor clickhouse-compressor2 && echo "Ok." || echo "Fail."
 */
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleDecompressPerf(int argc, char ** argv)
 try
 {
     using namespace DB;

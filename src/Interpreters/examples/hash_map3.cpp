@@ -52,7 +52,7 @@ struct Grower : public HashTableGrower<2>
     }
 };
 
-int main(int, char **)
+int mainEntryExampleHashMap3(int, char **)
 {
     using Map = HashMapWithDump<
         std::string_view,

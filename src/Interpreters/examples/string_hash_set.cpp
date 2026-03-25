@@ -39,7 +39,7 @@ void NO_INLINE bench(const std::vector<std::string_view> & data, DB::Arena & poo
     }
 }
 
-int main(int argc, char ** argv)
+int mainEntryExampleStringHashSet(int argc, char ** argv)
 {
     if (argc < 3)
     {

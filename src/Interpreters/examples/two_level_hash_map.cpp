@@ -23,7 +23,7 @@ using Key = UInt64;
 using Value = UInt64;
 
 
-int main(int argc, char ** argv)
+int mainEntryExampleTwoLevelHashMap(int argc, char ** argv)
 {
     if (argc < 2)
     {

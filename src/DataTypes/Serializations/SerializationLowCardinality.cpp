@@ -37,6 +37,7 @@ namespace
 
 SerializationLowCardinality::SerializationLowCardinality(const DataTypePtr & dictionary_type_)
      : dictionary_type(dictionary_type_)
+     , nested_serialization(dictionary_type_->getDefaultSerialization())
      , dict_inner_serialization(removeNullable(dictionary_type_)->getDefaultSerialization())
 {
 }
@@ -842,7 +843,7 @@ void SerializationLowCardinality::serializeImpl(
 {
     const auto & low_cardinality_column = getColumnLowCardinality(column);
     size_t unique_row_number = low_cardinality_column.getIndexes().getUInt(row_num);
-    (dict_inner_serialization.get()->*func)(*low_cardinality_column.getDictionary().getNestedColumn(), unique_row_number, std::forward<Args>(args)...);
+    (nested_serialization.get()->*func)(*low_cardinality_column.getDictionary().getNestedColumn(), unique_row_number, std::forward<Args>(args)...);
 }
 
 template <typename... Params, typename... Args>
@@ -853,7 +854,7 @@ void SerializationLowCardinality::deserializeImpl(
     auto temp_column = low_cardinality_column.getDictionary().getNestedColumn()->cloneEmpty();
 
     auto serialization = dictionary_type->getDefaultSerialization();
-    (dict_inner_serialization.get()->*func)(*temp_column, std::forward<Args>(args)...);
+    (nested_serialization.get()->*func)(*temp_column, std::forward<Args>(args)...);
     low_cardinality_column.insertFromFullColumn(*temp_column, 0);
 }
 

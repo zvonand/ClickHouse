@@ -69,25 +69,12 @@ public:
     }
 
 private:
-    struct TypedPathInfo
+    struct PathInfo
     {
         std::string_view path;
         const IColumn * column;
         SerializationPtr serialization;
-    };
-
-    struct DynamicPathInfo
-    {
-        std::string_view path;
-        const IColumn * column;
-    };
-
-    /// We merge typed and dynamic paths into a single sorted list, tagged by kind.
-    struct PathEntry
-    {
-        std::string_view path;
-        bool is_typed;
-        size_t index; /// index into typed_infos or dynamic_infos
+        bool is_dynamic; /// dynamic paths need a null check before serialization
     };
 
     /// Cache entry for shared data types: avoids repeated createColumn and getDefaultSerialization calls.
@@ -111,37 +98,26 @@ private:
         const auto & typed_path_columns = column_object.getTypedPaths();
         const auto & dynamic_path_columns = column_object.getDynamicPaths();
 
-        std::vector<TypedPathInfo> typed_infos;
-        typed_infos.reserve(typed_path_types.size());
+        auto dynamic_serialization = SerializationDynamic::create();
+
+        std::vector<PathInfo> sorted_paths;
+        sorted_paths.reserve(typed_path_types.size() + dynamic_path_columns.size());
+
         for (const auto & [path, type] : typed_path_types)
         {
             auto it = typed_path_columns.find(path);
-            typed_infos.push_back({path, it->second.get(), type->getDefaultSerialization()});
+            sorted_paths.push_back({path, it->second.get(), type->getDefaultSerialization(), false});
         }
 
-        std::vector<DynamicPathInfo> dynamic_infos;
-        dynamic_infos.reserve(dynamic_path_columns.size());
-
         for (const auto & [path, column] : dynamic_path_columns)
-            dynamic_infos.push_back({path, column.get()});
-
-        std::vector<PathEntry> sorted_paths;
-        sorted_paths.reserve(typed_infos.size() + dynamic_infos.size());
-
-        for (size_t idx = 0; idx < typed_infos.size(); ++idx)
-            sorted_paths.push_back({typed_infos[idx].path, true, idx});
-
-        for (size_t idx = 0; idx < dynamic_infos.size(); ++idx)
-            sorted_paths.push_back({dynamic_infos[idx].path, false, idx});
+            sorted_paths.push_back({path, column.get(), dynamic_serialization, true});
 
         std::sort(sorted_paths.begin(), sorted_paths.end(),
-            [](const PathEntry & a, const PathEntry & b) { return a.path < b.path; });
-
-        auto dynamic_serialization = SerializationDynamic::create();
+            [](const PathInfo & a, const PathInfo & b) { return a.path < b.path; });
 
         /// Cache of reusable (data_type, serialization, column) structs keyed by type name,
         /// to avoid createColumn and getDefaultSerialization per shared data value.
-        std::unordered_map<String, CachedTypeInfo> type_cache;
+        std::unordered_map<String, CachedTypeInfo> shared_types_cache;
 
         const auto & shared_data_offsets = column_object.getSharedDataOffsets();
         const auto [shared_data_paths, shared_data_values] = column_object.getSharedDataPathsAndValues();
@@ -160,23 +136,18 @@ private:
                 /// Emit typed/dynamic paths that sort before this shared data path.
                 while (sorted_paths_index < sorted_paths.size() && sorted_paths[sorted_paths_index].path < shared_data_path)
                 {
-                    emitValue(sorted_paths[sorted_paths_index], i,
-                        typed_infos, dynamic_infos, dynamic_serialization,
-                        format_settings, result_data);
-
+                    emitValue(sorted_paths[sorted_paths_index], i, format_settings, result_data);
                     ++sorted_paths_index;
                 }
 
                 /// Emit the shared data value.
-                emitSharedDataValue(shared_data_values->getDataAt(j), format_settings, result_data, type_cache);
+                emitSharedDataValue(shared_data_values->getDataAt(j), format_settings, result_data, shared_types_cache);
             }
 
             /// Emit remaining typed/dynamic paths after all shared data for this row.
             for (; sorted_paths_index < sorted_paths.size(); ++sorted_paths_index)
             {
-                emitValue(sorted_paths[sorted_paths_index], i,
-                    typed_infos, dynamic_infos, dynamic_serialization,
-                    format_settings, result_data);
+                emitValue(sorted_paths[sorted_paths_index], i, format_settings, result_data);
             }
 
             offsets.push_back(result_data.size());
@@ -186,34 +157,22 @@ private:
     }
 
     static void emitValue(
-        const PathEntry & entry,
+        const PathInfo & entry,
         size_t row,
-        const std::vector<TypedPathInfo> & typed_infos,
-        const std::vector<DynamicPathInfo> & dynamic_infos,
-        const SerializationPtr & dynamic_serialization,
         const FormatSettings & format_settings,
         ColumnString & result_data)
     {
-        if (entry.is_typed)
-        {
-            const auto & info = typed_infos[entry.index];
-            serializeValueIntoResult(*info.serialization, *info.column, row, format_settings, result_data);
-        }
-        else
-        {
-            const auto & info = dynamic_infos[entry.index];
-            if (info.column->isNullAt(row))
-                return;
+        if (entry.is_dynamic && entry.column->isNullAt(row))
+            return;
 
-            serializeValueIntoResult(*dynamic_serialization, *info.column, row, format_settings, result_data);
-        }
+        serializeValueIntoResult(*entry.serialization, *entry.column, row, format_settings, result_data);
     }
 
     static void emitSharedDataValue(
         std::string_view value_data,
         const FormatSettings & format_settings,
         ColumnString & data,
-        std::unordered_map<String, CachedTypeInfo> & type_cache)
+        std::unordered_map<String, CachedTypeInfo> & shared_types_cache)
     {
         ReadBufferFromMemory buf(value_data);
         auto type = decodeDataType(buf);
@@ -222,7 +181,7 @@ private:
             return;
 
         auto type_name = type->getName();
-        auto [it, inserted] = type_cache.try_emplace(type_name);
+        auto [it, inserted] = shared_types_cache.try_emplace(type_name);
 
         if (inserted)
             it->second = CachedTypeInfo{type, type->getDefaultSerialization(), type->createColumn()};

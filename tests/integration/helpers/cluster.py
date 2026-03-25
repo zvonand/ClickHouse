@@ -694,7 +694,7 @@ class ClickHouseCluster:
         self.with_glue_catalog = False
         self._glue_catalog_port = None
         self.with_hms_catalog = False
-        self.hms_catalog_port = 9083
+        self._hms_catalog_port = None
 
         self.with_azurite = False
         self.azurite_container = "azurite-container"
@@ -1017,6 +1017,13 @@ class ClickHouseCluster:
             return self._glue_catalog_port
         self._glue_catalog_port = self.port_pool.get_port()
         return self._glue_catalog_port
+
+    @property
+    def hms_catalog_port(self):
+        if self._hms_catalog_port:
+            return self._hms_catalog_port
+        self._hms_catalog_port = self.port_pool.get_port()
+        return self._hms_catalog_port
 
     @property
     def redis_port(self):
@@ -1738,6 +1745,7 @@ class ClickHouseCluster:
 
     def setup_hms_catalog_cmd(self, instance, env_variables, docker_compose_yml_dir):
         self.with_hms_catalog = True
+        env_variables["HMS_CATALOG_PORT"] = str(self.hms_catalog_port)
         self.base_cmd.extend(
             [
                 "--file",

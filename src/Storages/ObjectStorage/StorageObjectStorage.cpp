@@ -61,8 +61,14 @@ String StorageObjectStorage::getPathSample(ContextPtr context)
 {
     const auto path = configuration->getRawPath();
 
+    /// When use_hive_partitioning is enabled, we need a real file path even in distributed mode
+    /// (not a path from the distributed task queue), so force distributed_processing to false.
+    bool local_distributed_processing = distributed_processing;
+    if (context->getSettingsRef()[Setting::use_hive_partitioning])
+        local_distributed_processing = false;
+
     /// For non-glob paths, return directly without any S3 API calls.
-    if (!configuration->isArchive() && !path.hasGlobs() && !distributed_processing)
+    if (!configuration->isArchive() && !path.hasGlobs() && !local_distributed_processing)
         return path.path;
 
     /// For pure brace-expansion globs like {a,b,c}.tsv (no wildcards * or ? involved),
@@ -82,10 +88,6 @@ String StorageObjectStorage::getPathSample(ContextPtr context)
     /// We don't want to throw an exception if there are no files with specified path.
     query_settings.throw_on_zero_files_match = false;
     query_settings.ignore_non_existent_file = true;
-
-    bool local_distributed_processing = distributed_processing;
-    if (context->getSettingsRef()[Setting::use_hive_partitioning])
-        local_distributed_processing = false;
 
     auto file_iterator = StorageObjectStorageSource::createFileIterator(
         configuration,

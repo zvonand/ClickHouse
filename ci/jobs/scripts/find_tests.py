@@ -1641,6 +1641,12 @@ if __name__ == "__main__":
         description="List tests covering changed lines for a PR by querying the coverage database."
     )
     parser.add_argument("pr", help="Pull request number")
+    parser.add_argument(
+        "--coverage-only",
+        action="store_true",
+        help="Run only the coverage-based pass (get_most_relevant_tests), skip changed-file "
+             "and previously-failed passes. Uses one fewer GitHub API call — useful for eval.",
+    )
     args = parser.parse_args()
 
     class InfoLocalTest:
@@ -1651,9 +1657,12 @@ if __name__ == "__main__":
     info = InfoLocalTest()
     targeting = Targeting(info)
 
-    ranked, result = targeting.get_all_relevant_tests_with_info()
+    if args.coverage_only:
+        ranked, result = targeting.get_most_relevant_tests()
+    else:
+        ranked, result = targeting.get_all_relevant_tests_with_info()
 
     print(f"\nAll selected tests ({len(ranked)}):")
     for test in ranked:
         print(f" {test}")
-    print(f"\n{result.info}")
+    print(f"\nFound {len(ranked)} relevant tests")

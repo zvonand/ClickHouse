@@ -434,14 +434,7 @@ ALWAYS_INLINE inline char * writeUIntText(UInt256 _x, char * p)
     {
         uint64_t u64_remainder = uint64_t(x % large_divisor);
         x /= large_divisor;
-
-        int pos = current_pos;
-        while (u64_remainder)
-        {
-            two_values[pos] = uint8_t(u64_remainder % 100);
-            pos++;
-            u64_remainder /= 100;
-        }
+        extractDigitPairs(u64_remainder, two_values + current_pos);
         current_pos += max_multiple_of_hundred_blocks;
     }
 
@@ -451,14 +444,8 @@ ALWAYS_INLINE inline char * writeUIntText(UInt256 _x, char * p)
     UInt128 pending{x.items[UInt256::_impl::little(0)], x.items[UInt256::_impl::little(1)]};
 #endif
 
-    char * highest_part_print = writeUIntText(pending, p);
-    for (int i = 0; i < current_pos; i++)
-    {
-        outTwoDigits(highest_part_print, two_values[current_pos - 1 - i]);
-        highest_part_print += 2;
-    }
-
-    return highest_part_print;
+    char * out = writeUIntText(pending, p);
+    return writeDigitPairs(out, two_values, current_pos);
 }
 
 ALWAYS_INLINE inline char * writeLeadingMinus(char * pos)

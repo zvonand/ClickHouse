@@ -182,7 +182,7 @@ ORDER BY (event_id);
 
 <summary>Creating a projection with explicit `_part_offset` field</summary>
 
-Projection indexes can alternatively be created using the followin syntax (not recommended):
+Projection indexes can alternatively be created using the following syntax (not recommended):
 
 ```sql
 CREATE TABLE events

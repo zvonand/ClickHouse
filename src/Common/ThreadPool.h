@@ -1,5 +1,6 @@
 #pragma once
 
+// ci: trigger llvm coverage
 #include <cstdint>
 #include <thread>
 #include <mutex>

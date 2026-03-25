@@ -79,6 +79,8 @@ public:
         std::vector<int> disk;
         std::vector<int> storage;
         std::vector<int> http;
+
+        bool empty() const { return disk.empty() && storage.empty() && http.empty(); }
     };
 
     HTTPConnectionPools(const HTTPConnectionPools &) = delete;

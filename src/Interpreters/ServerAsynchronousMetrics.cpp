@@ -54,6 +54,82 @@ void calculateMaxAndSum(Max & max, Sum & sum, T x)
 
 }
 
+#if defined(OS_LINUX)
+
+double percentile(const std::vector<uint32_t> & sorted, double p)
+{
+    size_t n = sorted.size();
+    size_t idx = static_cast<size_t>(std::ceil(p * static_cast<double>(n))) - 1;
+    idx = std::min(idx, n - 1);
+    return static_cast<double>(sorted[idx]);
+}
+
+/// Emit p50/p75/p90/p95 of kernel TCP buffer memory for one connection pool group.
+/// Resolves FDs to inodes via fstat, then looks up rmem/wmem from the netlink dump.
+void emitTCPBufferPercentiles(
+    const std::vector<int> & fds,
+    const char * group_name,
+    const std::unordered_map<uint64_t, TCPSocketMemInfo> & meminfo_by_inode,
+    AsynchronousMetricValues & new_values)
+{
+    std::vector<uint32_t> rmem_values;
+    std::vector<uint32_t> wmem_values;
+    rmem_values.reserve(fds.size());
+    wmem_values.reserve(fds.size());
+
+    for (int fd : fds)
+    {
+        struct stat st; // NOLINT(cppcoreguidelines-pro-type-member-init)
+        if (fstat(fd, &st) != 0)
+            continue;
+        if (auto it = meminfo_by_inode.find(st.st_ino); it != meminfo_by_inode.end())
+        {
+            rmem_values.push_back(it->second.rmem);
+            wmem_values.push_back(it->second.wmem);
+        }
+    }
+
+    if (rmem_values.empty())
+        return;
+
+    std::sort(rmem_values.begin(), rmem_values.end());
+    std::sort(wmem_values.begin(), wmem_values.end());
+
+    static constexpr std::array<std::pair<const char *, double>, 4> quantiles = {{
+        {"p50", 0.5}, {"p75", 0.75}, {"p90", 0.9}, {"p95", 0.95}
+    }};
+
+    for (auto [suffix, p] : quantiles)
+    {
+        new_values[fmt::format("HTTPConnectionPool{}TCPRcvBufBytes_{}", group_name, suffix)]
+            = {percentile(rmem_values, p),
+               "Kernel TCP receive buffer memory (sk_rmem_alloc) for HTTP connection pool sockets."};
+        new_values[fmt::format("HTTPConnectionPool{}TCPSndBufBytes_{}", group_name, suffix)]
+            = {percentile(wmem_values, p),
+               "Kernel TCP transmit buffer memory (sk_wmem_alloc) for HTTP connection pool sockets."};
+    }
+}
+
+/// Emit p50/p75/p90/p95 metrics for kernel TCP buffer memory of HTTP connection pool sockets.
+/// Queries sock_diag netlink to get per-socket rmem/wmem, then joins with pool FDs by inode.
+void updateHTTPConnectionPoolTCPBufferMetrics(
+    const HTTPConnectionPools::PoolSocketFDs & pool_fds,
+    AsynchronousMetricValues & new_values)
+{
+    if (pool_fds.empty())
+        return;
+
+    auto meminfo_by_inode = getTCPSocketMemInfoByInode();
+    if (meminfo_by_inode.empty())
+        return;
+
+    emitTCPBufferPercentiles(pool_fds.disk, "Disk", meminfo_by_inode, new_values);
+    emitTCPBufferPercentiles(pool_fds.storage, "Storage", meminfo_by_inode, new_values);
+    emitTCPBufferPercentiles(pool_fds.http, "HTTP", meminfo_by_inode, new_values);
+}
+
+#endif
+
 ServerAsynchronousMetrics::ServerAsynchronousMetrics(
     ContextPtr global_context_,
     unsigned update_period_seconds,
@@ -390,66 +466,7 @@ void ServerAsynchronousMetrics::updateImpl(TimePoint update_time, TimePoint curr
 #endif
 
 #if defined(OS_LINUX)
-    {
-        auto pool_fds = HTTPConnectionPools::instance().getSocketFDs();
-        auto meminfo_by_inode = getTCPSocketMemInfoByInode();
-
-        if (!meminfo_by_inode.empty())
-        {
-            auto compute_percentiles = [&](const std::vector<int> & fds, const char * group_name)
-            {
-                std::vector<uint32_t> rmem_values;
-                std::vector<uint32_t> wmem_values;
-                rmem_values.reserve(fds.size());
-                wmem_values.reserve(fds.size());
-
-                for (int fd : fds)
-                {
-                    struct stat st; // NOLINT(cppcoreguidelines-pro-type-member-init)
-                    if (fstat(fd, &st) != 0)
-                        continue;
-                    auto it = meminfo_by_inode.find(st.st_ino);
-                    if (it != meminfo_by_inode.end())
-                    {
-                        rmem_values.push_back(it->second.rmem);
-                        wmem_values.push_back(it->second.wmem);
-                    }
-                }
-
-                if (rmem_values.empty())
-                    return;
-
-                std::sort(rmem_values.begin(), rmem_values.end());
-                std::sort(wmem_values.begin(), wmem_values.end());
-
-                auto percentile = [](const std::vector<uint32_t> & sorted_values, double p) -> double
-                {
-                    size_t n = sorted_values.size();
-                    size_t idx = static_cast<size_t>(std::ceil(p * static_cast<double>(n))) - 1;
-                    idx = std::min(idx, n - 1);
-                    return static_cast<double>(sorted_values[idx]);
-                };
-
-                static constexpr std::array<std::pair<const char *, double>, 4> quantiles = {{
-                    {"p50", 0.5}, {"p75", 0.75}, {"p90", 0.9}, {"p95", 0.95}
-                }};
-
-                for (auto [suffix, p] : quantiles)
-                {
-                    new_values[fmt::format("HTTPConnectionPool{}TCPRcvBufBytes_{}", group_name, suffix)]
-                        = {percentile(rmem_values, p),
-                           "Kernel TCP receive buffer memory (sk_rmem_alloc) for HTTP connection pool sockets."};
-                    new_values[fmt::format("HTTPConnectionPool{}TCPSndBufBytes_{}", group_name, suffix)]
-                        = {percentile(wmem_values, p),
-                           "Kernel TCP transmit buffer memory (sk_wmem_alloc) for HTTP connection pool sockets."};
-                }
-            };
-
-            compute_percentiles(pool_fds.disk, "Disk");
-            compute_percentiles(pool_fds.storage, "Storage");
-            compute_percentiles(pool_fds.http, "HTTP");
-        }
-    }
+    updateHTTPConnectionPoolTCPBufferMetrics(HTTPConnectionPools::instance().getSocketFDs(), new_values);
 #endif
 
     if (update_heavy_metrics)

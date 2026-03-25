@@ -199,7 +199,9 @@ private:
         };
 
         char type_index;
-        buf.peek(type_index);
+        if (buf.peek(type_index))
+            return;
+
         const auto & cache = getSimpleDataTypeCache();
         auto binary_type_index = static_cast<BinaryTypeIndex>(type_index);
 

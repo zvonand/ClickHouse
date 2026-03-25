@@ -12,6 +12,7 @@
 #include <Common/Concepts.h>
 
 #include <base/defines.h>
+#include <memory>
 
 #include <Coordination/CompactChildrenSet.h>
 
@@ -608,6 +609,7 @@ public:
     bool checkACL(std::string_view path, int32_t permissions, int64_t session_id, bool is_local);
 
     KeeperStorage(int64_t tick_time_ms, const String & superdigest_, const KeeperContextPtr & keeper_context_, bool initialize_system_nodes = true);
+    ~KeeperStorage();
 
     void initializeSystemNodes() TSA_NO_THREAD_SAFETY_ANALYSIS;
 
@@ -675,6 +677,9 @@ public:
 private:
     void removeDigest(const Node & node, std::string_view path);
     void addDigest(const Node & node, std::string_view path);
+
+    struct KeeperReadThreadPool;
+    std::unique_ptr<KeeperReadThreadPool> read_thread_pool;
 };
 
 }

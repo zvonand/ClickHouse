@@ -27,6 +27,7 @@
 #include <Coordination/KeeperCommon.h>
 #include <Coordination/KeeperConstants.h>
 #include <Coordination/KeeperDispatcher.h>
+#include <Coordination/KeeperReadThreadPool.h>
 #include <Coordination/KeeperReconfiguration.h>
 #include <Coordination/KeeperStorage.h>
 
@@ -61,6 +62,9 @@ namespace CoordinationSetting
 {
     extern const CoordinationSettingsUInt64 log_slow_cpu_threshold_ms;
     extern const CoordinationSettingsBool check_node_acl_on_remove;
+    extern const CoordinationSettingsUInt64 parallel_read_threads;
+    extern const CoordinationSettingsUInt64 parallel_read_chunk_size;
+    extern const CoordinationSettingsUInt64 parallel_read_min_batch;
 }
 
 namespace ErrorCodes
@@ -677,6 +681,15 @@ KeeperStorageBase::KeeperStorageBase(int64_t tick_time_ms, const KeeperContextPt
 {}
 
 template <typename Container>
+struct KeeperStorage<Container>::KeeperReadThreadPool : public DB::KeeperReadThreadPool
+{
+    using DB::KeeperReadThreadPool::KeeperReadThreadPool;
+};
+
+template <typename Container>
+KeeperStorage<Container>::~KeeperStorage() = default;
+
+template <typename Container>
 KeeperStorage<Container>::KeeperStorage(
     int64_t tick_time_ms, const String & superdigest_, const KeeperContextPtr & keeper_context_, const bool initialize_system_nodes)
     : KeeperStorageBase(tick_time_ms, keeper_context_, superdigest_)
@@ -690,6 +703,10 @@ KeeperStorage<Container>::KeeperStorage(
 
     if (initialize_system_nodes)
         initializeSystemNodes();
+
+    size_t num_read_threads = keeper_context->getCoordinationSettings()[CoordinationSetting::parallel_read_threads];
+    if (num_read_threads > 0)
+        read_thread_pool = std::make_unique<KeeperReadThreadPool>(num_read_threads);
 }
 
 template<typename Container>
@@ -3908,23 +3925,20 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
     std::list<Delta> empty_deltas;
     KeeperStorageBase::DeltaRange deltas_range{.begin_it = empty_deltas.begin(), .end_it = empty_deltas.end()};
 
-    /// Read requests have exactly one response each (no watch notifications).
-    /// `requests` and `results` are parallel arrays.
+    /// Read requests have exactly one response each (no watch notifications from processWatches,
+    /// but SetWatches/SetWatches2 may produce watch notifications from setWatches).
+    /// For now, the parallel array stores only the primary response; watch notifications
+    /// from SetWatches are appended in the sequential phase.
     KeeperResponsesForSessions results(requests.size());
 
-    int64_t prev_session_id = -1;
-    for (size_t request_idx = 0; request_idx < requests.size(); ++request_idx)
+    /// Phase 1: Execute reads (checkAuth + processLocal + spans).
+    /// This is the parallelizable part — each request reads committed storage state
+    /// under shared_lock(storage_mutex) and writes to its own slot in `results`.
+    const auto process_one_read = [&](size_t request_idx)
     {
         const auto & request_for_session = requests[request_idx];
         int64_t session_id = request_for_session.session_id;
         const Coordination::ZooKeeperRequestPtr & zk_request = request_for_session.request;
-
-        /// ZooKeeper updates session expiry for each request, not only for heartbeats
-        if (session_id != prev_session_id)
-        {
-            session_expiry_queue.addNewSessionOrUpdate(session_id, session_and_timeout[session_id]);
-            prev_session_id = session_id;
-        }
 
         const auto process_request = [&]<std::derived_from<Coordination::ZooKeeperRequest> T>(T & concrete_zk_request)
         {
@@ -3974,18 +3988,72 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
                 maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::OK, "");
             }
 
-            /// Watches for this request are added to the watches lists
-            updateWatches(zk_request, response, session_id);
-
-            asdqwe processWatches for SetWatches/SetWatches2?;
-
             response->xid = zk_request->xid;
             response->zxid = current_zxid;
 
-            results.at(request_idx) = KeeperResponseForSession{session_id, response, zk_request};
+            results[request_idx] = KeeperResponseForSession{session_id, response, zk_request};
         };
 
         callOnConcreteRequestType(*zk_request, process_request);
+    };
+
+    const auto & coordination_settings = keeper_context->getCoordinationSettings();
+    size_t min_batch = coordination_settings[CoordinationSetting::parallel_read_min_batch];
+    bool use_parallel = read_thread_pool && requests.size() >= min_batch;
+
+    if (use_parallel)
+    {
+        size_t chunk_size = coordination_settings[CoordinationSetting::parallel_read_chunk_size];
+        if (chunk_size == 0)
+            chunk_size = 1;
+
+        read_thread_pool->execute(
+            requests.size(),
+            chunk_size,
+            [&](size_t begin, size_t end)
+            {
+                for (size_t i = begin; i < end; ++i)
+                    process_one_read(i);
+            });
+    }
+    else
+    {
+        for (size_t i = 0; i < requests.size(); ++i)
+            process_one_read(i);
+    }
+
+    /// Phase 2 (sequential): session expiry, watch registration, processWatches.
+    /// These mutate shared state (watches, sessions_and_watchers, total_watches_count)
+    /// and must run single-threaded.
+    int64_t prev_session_id = -1;
+    for (size_t request_idx = 0; request_idx < requests.size(); ++request_idx)
+    {
+        const auto & request_for_session = requests[request_idx];
+        int64_t session_id = request_for_session.session_id;
+        const Coordination::ZooKeeperRequestPtr & zk_request = request_for_session.request;
+
+        if (session_id != prev_session_id)
+        {
+            session_expiry_queue.addNewSessionOrUpdate(session_id, session_and_timeout[session_id]);
+            prev_session_id = session_id;
+        }
+
+        updateWatches(zk_request, results[request_idx].response, session_id);
+
+        /// SetWatches/SetWatches2 have specialized processWatches that call storage.setWatches.
+        /// Other read requests return {} from the default processWatches template.
+        const auto op = zk_request->getOpNum();
+        if (op == Coordination::OpNum::SetWatch || op == Coordination::OpNum::SetWatch2)
+        {
+            const auto run_process_watches = [&]<std::derived_from<Coordination::ZooKeeperRequest> T>(T & concrete_zk_request)
+            {
+                auto [watch_responses, removed_count] = processWatches(concrete_zk_request, deltas_range, *this, session_id);
+                total_watches_count -= removed_count;
+                for (auto & wr : watch_responses)
+                    results.push_back(std::move(wr));
+            };
+            callOnConcreteRequestType(*zk_request, run_process_watches);
+        }
     }
 
     updateStats();

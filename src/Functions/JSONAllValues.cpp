@@ -22,6 +22,7 @@ namespace ErrorCodes
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
     extern const int BAD_ARGUMENTS;
     extern const int ILLEGAL_TYPE_OF_ARGUMENT;
+    extern const int INCORRECT_DATA;
 }
 
 namespace
@@ -200,7 +201,7 @@ private:
 
         char type_index;
         if (!buf.peek(type_index))
-            return;
+            throw Exception(ErrorCodes::INCORRECT_DATA, "Cannot parse shared data value of JSON: no type index found");
 
         const auto & cache = getSimpleDataTypeCache();
         auto binary_type_index = static_cast<BinaryTypeIndex>(type_index);

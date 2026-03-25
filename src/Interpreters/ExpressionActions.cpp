@@ -845,7 +845,7 @@ void ExpressionActions::execute(
         if (check_cancelled && check_cancelled())
         {
             /// Return an empty block with the names and types of result columns
-            block = sample_block.cloneEmpty();
+            block = sample_block.cloneWithColumns(sample_block.cloneEmptyColumns());
             num_rows = 0;
             return;
         }

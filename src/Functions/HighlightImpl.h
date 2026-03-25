@@ -93,17 +93,7 @@ struct HighlightImpl
         {
             const size_t cur_size = haystack_offsets[i] - prev_haystack_offset;
 
-            if (cur_size == 0)
-            {
-                /// Fast path: empty row or no valid needles — copy as-is
-                if (cur_size > 0)
-                {
-                    res_data.resize(res_data.size() + cur_size);
-                    memcpy(&res_data[res_offset], &haystack_data[prev_haystack_offset], cur_size);
-                }
-                res_offset += cur_size;
-            }
-            else
+            if (cur_size > 0)
             {
                 const UInt8 * cur_data = &haystack_data[prev_haystack_offset];
 
@@ -114,9 +104,7 @@ struct HighlightImpl
                 if (intervals.empty())
                 {
                     /// No matches — copy as-is
-                    res_data.resize(res_data.size() + cur_size);
-                    memcpy(&res_data[res_offset], cur_data, cur_size);
-                    res_offset += cur_size;
+                    append(res_data, res_offset, cur_data, cur_size);
                 }
                 else
                 {

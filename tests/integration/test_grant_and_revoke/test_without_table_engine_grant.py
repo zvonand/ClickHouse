@@ -29,7 +29,7 @@ def cleanup_after_test():
     try:
         yield
     finally:
-        instance.query("DROP USER IF EXISTS A, B")
+        instance.query("DROP USER IF EXISTS A")
         instance.query("DROP TABLE IF EXISTS test.table1")
 
 

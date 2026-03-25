@@ -497,7 +497,7 @@ class Runner:
         Shell.run("df -h")
         if job.run_in_docker and not no_docker:
             Shell.run("docker system df") # REMOVEME
-            Shell.run("docker volume prune -f --all")
+            Shell.run("docker ps -a; docker docker container prune -f; docker volume prune -f --all")
             Shell.run("docker system df")
 
         # When running Docker containers as root (non-rootless mode), any files created

@@ -356,6 +356,9 @@ class Runner:
                     f"Docker container '{container_name}' is already running. "
                     f"Another instance of job [{job.name}] may be active in this worktree."
                 )
+            print("INFO: disk status before running docker:")
+            Shell.run("docker system df; df -h")
+            Shell.run("sudo du / | sort -nr | head -100") # REMOVEME
             if Shell.check(
                 f"docker ps -a --format '{{{{.Names}}}}' | grep -qx {container_name}",
                 verbose=False,

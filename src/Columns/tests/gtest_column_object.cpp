@@ -466,9 +466,20 @@ TEST(ColumnObject, TryInsertRestoresSortedDynamicPaths)
     ///   2. ColumnDynamic::tryInsert(1u) for "a_new" succeeds.
     ///   3. ColumnUInt32::tryInsert(String) for "b" returns false.
     ///   4. restore_sizes() is called.
-    ///      BUG: erases "a_new" from dynamic_paths (frees the key) but leaves the
-    ///           dangling string_view in sorted_dynamic_paths.
-    ///      FIX: erases from sorted_dynamic_paths first, then from dynamic_paths.
+    /// Fields are processed in alphabetical order ("a_new" before "b"), so:
+    ///   1. "a_new" is new → tryToAddNewDynamicPath succeeds, "a_new" is added to all
+    ///      three structures including sorted_dynamic_paths.
+    ///   2. ColumnDynamic::tryInsert(1u) for "a_new" succeeds.
+    ///   3. ColumnUInt32::tryInsert(String) for "b" returns false.
+    ///   4. restore_sizes() is called.
+    ///      BUG 1: new_dynamic_paths was never populated, so the loop that removes
+    ///             newly-added paths is a no-op — "a_new" is left in dynamic_paths,
+    ///             dynamic_paths_ptrs, and sorted_dynamic_paths with a rolled-back size.
+    ///      BUG 2: even after populating new_dynamic_paths, the old code erased from
+    ///             dynamic_paths before sorted_dynamic_paths, leaving a dangling view.
+    ///      FIX:   record the path in new_dynamic_paths immediately after
+    ///             tryToAddNewDynamicPath succeeds, and erase sorted_dynamic_paths
+    ///             before dynamic_paths.
     bool result = col_object.tryInsert(Object{{"a_new", Field{1u}}, {"b", Field{String("not_a_number")}}});
     ASSERT_FALSE(result);
 

@@ -582,6 +582,7 @@ bool ColumnObject::tryInsert(const Field & x)
         }
         else if (auto * dynamic_path_column = tryToAddNewDynamicPath(path))
         {
+            new_dynamic_paths.insert(String(path));
             if (!dynamic_path_column->tryInsert(value_field))
             {
                 restore_sizes();

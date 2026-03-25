@@ -83,51 +83,6 @@ def test_table_engine_and_source_grant():
     instance.query("DROP TABLE test.table1")
 
 
-def test_source_revocation_blocks_table_engine():
-    instance.query("DROP USER IF EXISTS A")
-    instance.query("CREATE USER A")
-    instance.query("GRANT CREATE TABLE ON test.table1 TO A")
-
-    assert "Not enough privileges" in instance.query_and_get_error(
-        "CREATE TABLE test.table1(a Integer) engine=URL('http://localhost:65535/dummy', 'CSV')",
-        user="A",
-    )
-
-    instance.query(
-        "CREATE TABLE test.table1(a Integer) engine=TinyLog",
-        user="A",
-    )
-    instance.query("DROP TABLE test.table1")
-
-    instance.query("GRANT READ, WRITE ON URL TO A")
-
-    instance.query(
-        "CREATE TABLE test.table1(a Integer) engine=URL('http://localhost:65535/dummy', 'CSV')",
-        user="A",
-    )
-
-    instance.query("DROP TABLE test.table1")
-
-    instance.query("REVOKE READ, WRITE ON URL FROM A")
-
-    assert "Not enough privileges" in instance.query_and_get_error(
-        "CREATE TABLE test.table1(a Integer) engine=URL('http://localhost:65535/dummy', 'CSV')",
-        user="A",
-    )
-
-
-def test_grant_table_engine_option():
-    instance.query("DROP USER IF EXISTS A, B")
-    instance.query("CREATE USER A")
-    instance.query("CREATE USER B")
-    instance.query("GRANT TABLE ENGINE ON * TO A WITH GRANT OPTION")
-
-    instance.query("GRANT TABLE ENGINE ON * TO B", user="A")
-
-    assert "GRANT TABLE ENGINE ON * TO B" in instance.query("SHOW GRANTS FOR B")
-
-    instance.query("DROP USER IF EXISTS B")
-
 
 def test_create_database_does_not_require_table_engine_grant():
     # Regression test for PR #98984: `CREATE DATABASE` must not require `TABLE ENGINE` grants

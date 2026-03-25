@@ -100,7 +100,7 @@ void recvDiagResponse(int nl_fd, std::unordered_map<uint64_t, TCPSocketMemInfo> 
                 {
                     inet_diag_meminfo mem;
                     memcpy(&mem, attr_ptr + RTA_LENGTH(0), sizeof(mem));
-                    result[inode] = {.rmem = mem.idiag_rmem, .wmem = mem.idiag_tmem};
+                    result[inode] = {.rmem = mem.idiag_rmem, .wmem = mem.idiag_wmem};
                 }
 
                 unsigned int advance = RTA_ALIGN(rta.rta_len);

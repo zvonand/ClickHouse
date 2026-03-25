@@ -516,9 +516,15 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
     {
         has_index_column = true;
         direct_read_mode = getHintOrNoneMode();
+        bool is_special_text_index_function = function_name == "hasAnyTokens" || function_name == "hasAllTokens";
 
-        value_field = serializeFieldAsText(value_field, value_type);
-        value_type = std::make_shared<DataTypeString>();
+        /// Convert non-string, values to their text representation to match the format produced by `JSONAllValues`.
+        /// Keep array values as-is for special text index functions.
+        if (!is_special_text_index_function && !WhichDataType(value_type).isStringOrFixedString())
+        {
+            value_field = serializeFieldAsText(value_field, value_type);
+            value_type = std::make_shared<DataTypeString>();
+        }
     }
 
     if (!has_index_column && !has_map_keys_column && !has_map_values_column)

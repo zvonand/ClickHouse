@@ -853,3 +853,21 @@ def test_source_grant_bridges_to_table_engine():
         "CREATE TABLE test.table1(a Integer) engine=URL('http://localhost:65535/dummy', 'CSV')",
         user="A",
     )
+
+
+def test_create_database_does_not_require_table_engine_grant():
+    # Regression test for PR #98984: `CREATE DATABASE` must not require `TABLE ENGINE` grants.
+    # Database engines (e.g. `Atomic`) are not table engines and must not be gated by
+    # `table_engines_require_grant`. Before the fix, `getAllStorages()` incorrectly included
+    # database engines in the grant check, causing `ACCESS_DENIED` on `CREATE DATABASE`.
+    instance.query("DROP USER IF EXISTS A")
+    instance.query("CREATE USER A")
+    instance.query("GRANT CREATE DATABASE ON *.* TO A")
+
+    # `CREATE DATABASE` with the default engine must succeed without any `TABLE ENGINE` grant.
+    instance.query("CREATE DATABASE test_user_db", user="A")
+    instance.query("DROP DATABASE test_user_db")
+
+    # Explicitly specifying `Atomic` must also succeed — it is a database engine, not a table engine.
+    instance.query("CREATE DATABASE test_user_db ENGINE = Atomic", user="A")
+    instance.query("DROP DATABASE test_user_db")

@@ -17,9 +17,9 @@ w_schedule = Workflow.Config(
             ],
         ).parametrize(
             Job.ParamSet(
-                parameter=BuildTypes.AMD_DARWIN,
-                provides=[ArtifactNames.CH_AMD_DARWIN_BIN],
-                runs_on=RunnerLabels.AMD_LARGE,
+                parameter=BuildTypes.ARM_DARWIN,
+                provides=[ArtifactNames.CH_ARM_DARWIN_BIN],
+                runs_on=RunnerLabels.ARM_LARGE,
             ),
         ),
         *JobConfigs.darwin_fast_test_jobs,

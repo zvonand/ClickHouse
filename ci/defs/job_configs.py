@@ -194,9 +194,9 @@ class JobConfigs:
         allow_merge_on_failure=True,
     ).parametrize(
         Job.ParamSet(
-            parameter=BuildTypes.AMD_DARWIN,
-            runs_on=RunnerLabels.MACOS_AMD_SMALL,
-            requires=[ArtifactNames.CH_AMD_DARWIN_BIN],
+            parameter=BuildTypes.ARM_DARWIN,
+            runs_on=RunnerLabels.MACOS_ARM_SMALL,
+            requires=[ArtifactNames.CH_ARM_DARWIN_BIN],
         ),
     )
     smoke_tests_macos = Job.Config(

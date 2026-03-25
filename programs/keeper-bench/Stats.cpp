@@ -31,6 +31,18 @@ void Stats::addOp(Coordination::OpNum op_num, uint64_t microseconds, size_t requ
     op_collectors[op_num].add(microseconds, requests_inc, bytes_inc);
 }
 
+void Stats::merge(Stats & from)
+{
+    /// (Hopefully no one will call a.merge(b) and b.merge(a) in parallel.)
+    std::lock_guard lock(mutex);
+    std::lock_guard shmock(from.mutex);
+
+    read_collector.merge(from.read_collector);
+    write_collector.merge(from.write_collector);
+    for (const auto & [op, s] : from.op_collectors)
+        op_collectors[op].merge(s);
+}
+
 void Stats::StatsCollector::clear()
 {
     requests = 0;
@@ -38,8 +50,16 @@ void Stats::StatsCollector::clear()
     sampler.clear();
 }
 
+void Stats::StatsCollector::merge(const StatsCollector & from)
+{
+    requests += from.requests;
+    requests_bytes += from.requests_bytes;
+    sampler.merge(from.sampler);
+}
+
 void Stats::clear()
 {
+    std::lock_guard lock(mutex);
     read_collector.clear();
     write_collector.clear();
     op_collectors.clear();

@@ -47,6 +47,12 @@ private:
 
 class Runner
 {
+private:
+    struct alignas(std::hardware_destructive_interference_size) ThreadState
+    {
+        Stats thread_info;
+    };
+
 public:
     Runner(
         std::optional<size_t> concurrency_,
@@ -59,7 +65,7 @@ public:
         std::optional<bool> continue_on_error_,
         std::optional<size_t> max_iterations_);
 
-    void thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookeepers);
+    void thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookeepers, ThreadState & thread_state);
 
     void printNumberOfRequestsExecuted(size_t num)
     {
@@ -97,16 +103,18 @@ private:
     std::vector<std::shared_ptr<Coordination::ZooKeeper>> refreshConnections();
     std::shared_ptr<Coordination::ZooKeeper> getConnection(const ConnectionInfo & connection_info, size_t connection_info_idx) const;
 
+    std::shared_ptr<Stats> mergeThreadInfos();
+
     std::string input_request_log;
     std::string setup_nodes_snapshot_path;
 
     size_t concurrency = 1;
-    size_t queue_depth = 1;
     size_t pipeline_depth = 1;
 
     std::optional<ThreadPool> pool;
 
-    std::optional<Generator> generator;
+    DB::ConfigurationPtr config_ptr;
+
     double max_time = 0;
     double delay = 1;
     bool continue_on_error = false;
@@ -127,10 +135,9 @@ private:
     Stopwatch total_watch;
     Stopwatch delay_watch;
 
-    std::mutex mutex;
+    std::vector<ThreadState> threads;
 
-    using Queue = ConcurrentBoundedQueue<ZooKeeperRequestWithCallbacks>;
-    std::optional<Queue> queue;
+    std::mutex mutex; // for writing to stdout
 
     std::mutex connection_mutex;
     ConnectionInfo default_connection_info;

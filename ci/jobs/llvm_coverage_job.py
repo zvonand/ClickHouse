@@ -329,6 +329,39 @@ if __name__ == "__main__":
             print("Local run, skipping CI DB update with coverage results")
     else:
         print("On master branch, skipping diff coverage generation")
+        if not is_local_run:
+            try:
+                m_line_cov, m_function_cov, m_branch_cov = get_lcov_summary_percentages(
+                    f"{TEMP_DIR}/llvm_coverage.info"
+                )
+                print(f"Master coverage: lines={m_line_cov:.2f}% functions={m_function_cov:.2f}% branches={m_branch_cov:.2f}%")
+                _s3_prefix = f"REFs/{branch}/{current_commit_sha}"
+                _s3_base = f"https://{S3_REPORT_BUCKET_HTTP_ENDPOINT}/{_s3_prefix}"
+                _master_data = {
+                    "check_start_time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                    "pull_request_number": 0,
+                    "commit_sha": current_commit_sha,
+                    "base_commit_sha": "",
+                    "branch": branch,
+                    "base_branch": base_branch,
+                    "status": gen_report_res.status,
+                    "b_line_cov": 0.0,
+                    "c_line_cov": m_line_cov,
+                    "b_function_cov": 0.0,
+                    "c_function_cov": m_function_cov,
+                    "b_branch_cov": 0.0,
+                    "c_branch_cov": m_branch_cov,
+                    "delta_line_cov": 0.0,
+                    "coverage_report_url": f"{_s3_base}/llvm_coverage/generate_llvm_coverage_report/index.html",
+                    "diff_coverage_report_url": "",
+                    "uncovered_code_url": "",
+                    "pr_changed_lines_info": "",
+                    "diff_url": "",
+                }
+                with open(f"{TEMP_DIR}/coverage_comment.json", "w") as f:
+                    json.dump(_master_data, f)
+            except Exception as e:
+                print(f"Warning: failed to compute master coverage stats: {e}")
 
     # Add direct S3 links to both HTML reports in the main job result.
     # HTML files are uploaded within the corresponding generate sub-result;

@@ -10,10 +10,6 @@ from ci.praktika.info import Info
 def check():
     info = Info()
 
-    if info.pr_number <= 0:
-        print("Not a PR run, skipping coverage comment")
-        return
-
     comment_file = Path("./ci/tmp/coverage_comment.json")
     if not comment_file.exists():
         print(f"Coverage comment data not found at {comment_file}, skipping")
@@ -30,18 +26,16 @@ def check():
         b_branch_cov = d["b_branch_cov"]
         c_branch_cov = d["c_branch_cov"]
         pr_changed_lines_info = d.get("pr_changed_lines_info", "")
-        diff_url = d["diff_url"]
-        uncovered_code_url = d["uncovered_code_url"]
+        diff_url = d.get("diff_url", "")
+        uncovered_code_url = d.get("uncovered_code_url", "")
 
-        pr_changed_lines_row = (
-            f"\n**PR changed lines:** {pr_changed_lines_info}"
-            if pr_changed_lines_info
-            else ""
-        )
-
-        GH.post_fresh_comment(
-            tag="llvm-coverage",
-            body=(
+        if info.pr_number > 0:
+            pr_changed_lines_row = (
+                f"\n**PR changed lines:** {pr_changed_lines_info}"
+                if pr_changed_lines_info
+                else ""
+            )
+            body = (
                 f"## LLVM Coverage Report\n"
                 f"| Metric | Baseline | Current | Δ |\n"
                 f"|--------|----------|---------|---|\n"
@@ -49,10 +43,14 @@ def check():
                 f"| Functions | {b_function_cov:.2f}% | {c_function_cov:.2f}% | {c_function_cov - b_function_cov:+.2f}% |\n"
                 f"| Branches | {b_branch_cov:.2f}% | {c_branch_cov:.2f}% | {c_branch_cov - b_branch_cov:+.2f}% |\n"
                 f"{pr_changed_lines_row}"
-                f"\n[Diff coverage report]({diff_url})"
-                f"\n[Uncovered code]({uncovered_code_url})"
-            ),
-        )
+            )
+            if diff_url:
+                body += f"\n[Diff coverage report]({diff_url})"
+            if uncovered_code_url:
+                body += f"\n[Uncovered code]({uncovered_code_url})"
+            GH.post_fresh_comment(tag="llvm-coverage", body=body)
+        else:
+            print("Not a PR run, skipping GitHub coverage comment")
 
         CIDBCluster().insert_json(
             table="coverage_ci.coverage_data",
@@ -72,7 +70,7 @@ def check():
                 "current_branch_cov": c_branch_cov,
                 "delta_line_cov": d["delta_line_cov"],
                 "coverage_report_url": d["coverage_report_url"],
-                "diff_coverage_report_url": d["diff_coverage_report_url"],
+                "diff_coverage_report_url": d.get("diff_coverage_report_url", ""),
                 "uncovered_code_url": uncovered_code_url,
             },
         )

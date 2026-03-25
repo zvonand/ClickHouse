@@ -340,7 +340,7 @@ ALWAYS_INLINE inline unsigned __int128 divmod_1e18(unsigned __int128 n, uint64_t
     return q;
 }
 
-/// Extract up to 9 digit pairs from a u64 value into `two_values` starting at `pos`.
+/// Extract up to 9 digit pairs from a u64 value into the provided output buffer.
 ALWAYS_INLINE inline void extractDigitPairs(uint64_t remainder, uint8_t * two_values)
 {
     for (int i = 0; i < max_multiple_of_hundred_blocks; ++i)
@@ -364,7 +364,8 @@ ALWAYS_INLINE inline char * writeDigitPairs(char * p, const uint8_t * two_values
 ALWAYS_INLINE inline char * writeUIntText(UInt128 _x, char * p)
 {
     /// If the highest 64-bit item is empty, we can print just the lowest item as u64.
-    if (_x.items[UInt128::_impl::little(1)] == 0)
+    /// Even though technically there are more numbers in the range where this isn't true, in real-life data this isn't the case
+    if (likely(_x.items[UInt128::_impl::little(1)] == 0))
         return jeaiii::to_text_from_integer(p, _x.items[UInt128::_impl::little(0)]);
 
     /// Doing operations using __int128 is faster and we already rely on this feature.
@@ -382,7 +383,7 @@ ALWAYS_INLINE inline char * writeUIntText(UInt128 _x, char * p)
     extractDigitPairs(r1, two_values);
 
     static const T largest_uint64 = std::numeric_limits<uint64_t>::max();
-    if (x > largest_uint64)
+    if (unlikely(x > largest_uint64))
     {
         uint64_t r2;
         x = divmod_1e18(x, r2);
@@ -399,7 +400,7 @@ ALWAYS_INLINE inline char * writeUIntText(UInt128 _x, char * p)
 ALWAYS_INLINE inline char * writeUIntText(UInt256 _x, char * p)
 {
     /// If possible, treat it as a smaller integer as they are much faster to print
-    if (_x.items[UInt256::_impl::little(3)] == 0 && _x.items[UInt256::_impl::little(2)] == 0)
+    if (likely(_x.items[UInt256::_impl::little(3)] == 0 && _x.items[UInt256::_impl::little(2)] == 0))
         return writeUIntText(UInt128{_x.items[UInt256::_impl::little(0)], _x.items[UInt256::_impl::little(1)]}, p);
 
     /// If available (x86) we transform from our custom class to _BitInt(256) which has better support in the compiler

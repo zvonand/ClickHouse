@@ -261,7 +261,7 @@ Nullable and LowCardinality variants of String and FixedString are supported.
          "Array(Nullable(String)), or Array(Nullable(FixedString)).",
          {"String", "FixedString", "Array(String)", "Array(FixedString)"}},
         {"language",
-         "Language whose stemming rules will be applied. A two-letter [ISO 639-1 code](https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes), e.g. 'en', 'de', 'fr', see .",
+         "Language whose stemming rules will be applied. Use the two-letter ISO 639-1 code (e.g. 'en', 'de', 'fr'), see https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes.",
          {"String"}},
     };
     FunctionDocumentation::ReturnedValue returned_value = {

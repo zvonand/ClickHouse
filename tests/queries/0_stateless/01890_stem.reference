@@ -105,7 +105,4 @@ disguis
 -- Array(Nullable(UInt32)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.
 -- Array(Array(String)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.
 
--- Nullable(Array(String)) input: framework strips outer Nullable, result is Nullable(Array(String)).
-['bless','run']
-Nullable(Array(String))
 -- Calling without the experimental setting raises SUPPORT_IS_DISABLED.

@@ -1,8 +1,13 @@
+#include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
+
 #include <Core/ServerSettings.h>
 #include <Core/Settings.h>
+
 #include <Interpreters/Cluster.h>
 #include <Interpreters/Context.h>
-#include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
+
+#include <Common/logger_useful.h>
+#include <Common/randomSeed.h>
 
 namespace DB
 {
@@ -145,6 +150,14 @@ QueryPlanOptimizationSettings::QueryPlanOptimizationSettings(
             "The value of the setting `query_plan_optimize_join_order_limit` is too large: {}, "
             "maximum allowed value is 64", query_plan_optimize_join_order_limit);
     query_plan_optimize_join_order_randomize = from[Setting::query_plan_optimize_join_order_randomize];
+    if (query_plan_optimize_join_order_randomize == 1)
+    {
+        query_plan_optimize_join_order_randomize = randomSeed();
+    }
+    if (query_plan_optimize_join_order_randomize)
+    {
+        LOG_DEBUG(getLogger("QueryPlanOptimizationSettings"), "Using random seed {} for randomizing join order optimizations", query_plan_optimize_join_order_randomize);
+    }
 
     join_swap_table = from[Setting::query_plan_join_swap_table].is_auto
         ? std::nullopt

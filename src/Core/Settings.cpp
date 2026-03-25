@@ -2331,7 +2331,7 @@ DECLARE(UInt64, query_plan_optimize_join_order_randomize, 0, R"(
 When non-zero, the join order optimizer uses randomly generated cardinalities and NDVs instead of real statistics.
 When set to 1, a random seed is generated, when set to a value > 1, that value is used as the seed directly.
 This is intended for testing to find errors caused by different join orderings.
-)", 0) \
+)", EXPERIMENTAL) \
     \
     DECLARE(Bool, query_plan_join_shard_by_pk_ranges, false, R"(
 Apply sharding for JOIN if join keys contain a prefix of PRIMARY KEY for both tables. Supported for hash, parallel_hash and full_sorting_merge algorithms. Usually does not speed up queries but may lower memory consumption.

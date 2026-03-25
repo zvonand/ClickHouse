@@ -1,5 +1,4 @@
 #include <Common/logger_useful.h>
-#include <Common/randomSeed.h>
 #include <Common/safe_cast.h>
 
 #include <Core/Joins.h>
@@ -489,15 +488,8 @@ struct QueryGraphBuilder
             , statistics_context(optimization_settings_, root_node)
             , join_settings(join_settings_)
             , sorting_settings(sorting_settings_)
+            , effective_randomize_seed(optimization_settings_.query_plan_optimize_join_order_randomize)
         {
-            UInt64 seed = optimization_settings.query_plan_optimize_join_order_randomize;
-            if (seed == 1)
-            {
-                seed = randomSeed();
-                LOG_DEBUG(getLogger("optimizeJoin"),
-                    "query_plan_optimize_join_order_randomize = 1, using random seed {} (set this value to reproduce)", seed);
-            }
-            effective_randomize_seed = seed;
         }
     };
 

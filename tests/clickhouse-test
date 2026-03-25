@@ -1413,7 +1413,7 @@ class SettingsRandomizer:
         "optimize_use_projection_filtering": "optimize_use_projections",
     }
 
-    stress_test_only = {"query_plan_optimize_join_order_randomize"}
+    stress_test_only_settings = {"query_plan_optimize_join_order_randomize"}
 
     @staticmethod
     def adjust_settings_for_autopr(args, tags, random_settings):
@@ -1436,7 +1436,7 @@ class SettingsRandomizer:
         random_settings = {}
         is_debug = BuildFlags.DEBUG in args.build_flags
         for setting, generator in SettingsRandomizer.settings.items():
-            if setting in SettingsRandomizer.stress_test_only and not args.stress:
+            if setting in SettingsRandomizer.stress_test_only_settings and not args.stress_tests:
                 continue
             if (
                 is_debug

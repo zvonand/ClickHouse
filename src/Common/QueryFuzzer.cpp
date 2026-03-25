@@ -1214,6 +1214,8 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
         original_table_name_to_fuzzed[original_name].insert(new_name);
 }
 
+static const Strings stat_types = {"tdigest", "countmin", "minmax", "uniq"};
+
 void QueryFuzzer::fuzzColumnDeclaration(ASTColumnDeclaration & column)
 {
     if (auto type = column.getType())
@@ -1227,7 +1229,6 @@ void QueryFuzzer::fuzzColumnDeclaration(ASTColumnDeclaration & column)
 
     if (auto stats = column.getStatisticsDesc())
     {
-        static const Strings stat_types = {"tdigest", "countmin", "minmax", "uniq"};
         auto * stats_decl = stats->as<ASTStatisticsDeclaration>();
         if (stats_decl && stats_decl->types)
         {
@@ -1441,12 +1442,6 @@ void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
                 index_type->arguments->children.clear();
         }
     }
-
-    /// Fuzz the indexed expression (e.g. lower(col), col1 + col2).
-    /// children[0] is always the expression; children[1] is the type.
-    /// Previously only the type and granularity were mutated — the expression itself was never touched.
-    if (!index.children.empty())
-        fuzz(index.children[0]);
 }
 
 void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projection)
@@ -3867,9 +3862,8 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                     alter_cmd->if_exists = !alter_cmd->if_exists;
                 break;
             case ASTAlterCommand::ADD_STATISTICS:
-            case ASTAlterCommand::MODIFY_STATISTICS: {
+            case ASTAlterCommand::MODIFY_STATISTICS:
                 /// Fuzz stat types the same way fuzzColumnDeclaration does
-                static const Strings stat_types = {"tdigest", "countmin", "minmax", "uniq"};
                 if (alter_cmd->statistics_decl)
                     if (auto * stats = alter_cmd->statistics_decl->as<ASTStatisticsDeclaration>())
                         if (stats->types)
@@ -3877,7 +3871,6 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                                 if (auto * afn = type_ast->as<ASTFunction>(); afn && fuzz_rand() % 5 == 0)
                                     afn->name = pickRandomly(fuzz_rand, stat_types);
                 break;
-            }
             case ASTAlterCommand::DROP_STATISTICS:
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->clear_statistics = !alter_cmd->clear_statistics;

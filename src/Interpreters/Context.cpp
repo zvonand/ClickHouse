@@ -7271,7 +7271,7 @@ void Context::initializeBackgroundExecutorsIfNeeded()
             background_pool_size = max_pool;
             /// Clamp the concurrency ratio to at most 1 to avoid increasing it beyond what the user configured.
             if (!server_settings[ServerSetting::background_merges_mutations_concurrency_ratio].changed)
-                background_merges_mutations_concurrency_ratio = std::min(static_cast<double>(background_merges_mutations_concurrency_ratio), 1.0);
+                background_merges_mutations_concurrency_ratio = std::min(static_cast<float>(background_merges_mutations_concurrency_ratio), 1.0f);
             /// Update shared settings so the MergeTree sanity check sees the lowered values.
             shared->server_settings.set("background_pool_size", max_pool);
             shared->server_settings.set("background_merges_mutations_concurrency_ratio", static_cast<double>(background_merges_mutations_concurrency_ratio));

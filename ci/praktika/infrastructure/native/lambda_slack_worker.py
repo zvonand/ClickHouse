@@ -322,16 +322,8 @@ def format_event_text(event, pr_status, indent="", include_related_prs: bool = T
         if skipped_cnt:
             parts.append(f"{skipped_cnt} skipped")
 
-        if parts:
-            summary = " · ".join(parts)
-            if report_url_text:
-                event_text += f"\n{indent}{summary} · {report_url_text}"
-            else:
-                event_text += f"\n{indent}{summary}"
-        elif report_url_text:
-            event_text += f"\n{indent}{report_url_text}"
-
-        # Add related PRs if available (only for parent events)
+        # Build related PR links to append inline (only for parent events, merge commits)
+        related_pr_links = ""
         if include_related_prs and not indent:
             related_prs = event.ext.get("related_prs", [])
             # For merge commits (pr_number == 0), derive related_prs from linked_pr_number
@@ -339,37 +331,31 @@ def format_event_text(event, pr_status, indent="", include_related_prs: bool = T
                 linked_pr_number = event.ext.get("linked_pr_number", 0)
                 if linked_pr_number:
                     related_prs = [linked_pr_number]
-            if related_prs:
-                event_text += "\n\n*Related PRs:*"
-                for pr_num in related_prs:
-                    # Look up related PR info: prefer live data from the feed, fall back to pre-stored ext
-                    pr_info = {}
-                    if pr_to_event and pr_num in pr_to_event:
-                        related_event = pr_to_event[pr_num]
-                        pr_info = {
-                            "pr_title": related_event.ext.get("pr_title", ""),
-                            "change_url": related_event.ext.get("change_url", ""),
-                            "report_url": related_event.ext.get("report_url", ""),
-                        }
-                    else:
-                        pr_info = event.ext.get("related_pr_info", {}).get(pr_num, {})
+            for pr_num in related_prs:
+                pr_info = {}
+                if pr_to_event and pr_num in pr_to_event:
+                    related_event = pr_to_event[pr_num]
+                    pr_info = {
+                        "change_url": related_event.ext.get("change_url", ""),
+                    }
+                else:
+                    pr_info = event.ext.get("related_pr_info", {}).get(pr_num, {})
+                pr_change_url = pr_info.get("change_url", "")
+                if pr_change_url:
+                    related_pr_links += f" · <{pr_change_url}|#{pr_num}>"
+                else:
+                    related_pr_links += f" · #{pr_num}"
 
-                    pr_title = pr_info.get("pr_title", "")
-                    pr_change_url = pr_info.get("change_url", "")
-                    pr_report_url = pr_info.get("report_url", "")
-
-                    if pr_change_url:
-                        pr_link_text = f"<{pr_change_url}|#{pr_num}>"
-                    else:
-                        pr_link_text = f"#{pr_num}"
-
-                    pr_line = f"\n  • {pr_link_text}"
-                    if pr_title:
-                        pr_line += f" - {pr_title}"
-                    if pr_report_url:
-                        pr_line += f" (<{pr_report_url}|report>)"
-
-                    event_text += pr_line
+        if parts:
+            summary = " · ".join(parts)
+            if report_url_text:
+                event_text += f"\n{indent}{summary} · {report_url_text}{related_pr_links}"
+            else:
+                event_text += f"\n{indent}{summary}{related_pr_links}"
+        elif report_url_text:
+            event_text += f"\n{indent}{report_url_text}{related_pr_links}"
+        elif related_pr_links:
+            event_text += f"\n{indent}{related_pr_links.lstrip(' · ')}"
 
     return event_text
 

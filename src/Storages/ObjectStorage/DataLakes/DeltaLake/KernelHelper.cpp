@@ -236,7 +236,7 @@ public:
             case 3: /// WorkloadIdentityCredential
             case 5: /// StaticCredential
             default:
-                ///Other variants are not supported yet
+                /// Other variants are not supported yet
                 throw DB::Exception(DB::ErrorCodes::NOT_IMPLEMENTED,
                                 "Unsupported authentication type for azure: {}", connection_params.auth_method.index());
         }

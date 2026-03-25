@@ -278,6 +278,8 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
                 const ColumnDescription * column_desc = metadata->getColumns().tryGet(column_name);
                 if (column_desc)
                     column_type = removeLowCardinalityAndNullable(column_desc->type);
+                else
+                    return false; /// Not a real column (e.g. a function expression like toDecimal64(a, 3)); skip.
             }
             /// In some cases we need to cast the type of const
             bool cast_not_needed = !column_type || !const_type ||

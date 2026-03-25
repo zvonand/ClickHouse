@@ -1372,7 +1372,7 @@ void TCPHandler::processInsertQuery(QueryState & state)
                     throw Exception(ErrorCodes::LOGICAL_ERROR, "Got future in deferred state");
 
                 if (wait_status == std::future_status::timeout)
-                    throw Exception(ErrorCodes::TIMEOUT_EXCEEDED, "Wait for async insert timeout ({} ms) exceeded)", timeout_ms);
+                    throw Exception(ErrorCodes::TIMEOUT_EXCEEDED, "Wait for async insert timeout ({} ms) exceeded", timeout_ms);
 
                 auto progress_result = result.future.get();
 

@@ -1222,6 +1222,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                 headers={headers}
                 rows={rows}
                 loading={loading}
+                mobileLayout="scroll"
               />
             </div>
           )}

@@ -64,7 +64,7 @@ ${CLICKHOUSE_CLIENT} -q "DROP TABLE ${TABLE1}"
 
 # ── Case 2: DateTime with explicit timezone ─────────────────────────────
 # The column's explicit timezone is used for parsing plain string literals.
-# plain string literals.
+# The column's explicit timezone is used for parsing plain string literals.
 TABLE2="test_async_tz_explicit_${CLICKHOUSE_DATABASE}"
 
 ${CLICKHOUSE_CLIENT} -q "DROP TABLE IF EXISTS ${TABLE2}"

@@ -3,6 +3,7 @@
 import argparse
 import functools
 import itertools
+import json
 import logging
 import math
 import os
@@ -158,6 +159,7 @@ args = parser.parse_args()
 reportStageEnd("start")
 
 test_name = os.path.splitext(os.path.basename(args.file[0].name))[0]
+xml_dir = os.path.dirname(os.path.abspath(args.file[0].name))
 
 tree = et.parse(args.file[0])
 root = tree.getroot()
@@ -201,11 +203,51 @@ def substitute_parameters(query_templates, other_templates=[]):
         return query_results
 
 
-# Build a list of test queries, substituting parameters to query templates,
+def first_keyword(sql):
+    """Return the first SQL keyword from a statement, skipping comments and whitespace."""
+    for line in sql.split("\n"):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("--"):
+            return stripped.split()[0].upper()
+    return ""
+
+
+def load_settings_file(xml_root, base_dir):
+    """Load settings from a JSON file referenced by <settings file="..."/> attribute."""
+    elem = xml_root.find("settings")
+    if elem is None or "file" not in elem.attrib:
+        return {}
+    path = os.path.join(base_dir, elem.attrib["file"])
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)["settings"]
+
+
+# Build a list of test queries, substituting parameters to query templates.
+# Queries can be specified inline or loaded from external files via the "file" attribute.
+# Multi-statement files (e.g. TPC-H Q15: CREATE VIEW; SELECT; DROP VIEW) are split:
+# CREATE/DROP become global setup/teardown queries, and only the SELECT becomes the timed test query. 
+# This is a simplification: the setup/teardown is shared across all queries, not per-query.
+# This works, but will break if two query files create views with the same name. 
+# Not worth fixing properly unless we have such scenario, the whole perf test suite needs a rewrite.
+extra_create_queries = []
+extra_drop_queries = []
 test_queries = []
 for e in root.findall("query"):
-    new_queries = substitute_parameters([e.text])
-    test_queries += new_queries
+    if "file" in e.attrib:
+        query_path = os.path.join(xml_dir, e.attrib["file"])
+        with open(query_path, "r", encoding="utf-8") as f:
+            full_text = f.read().strip()
+        statements = [s.strip() for s in full_text.split(";") if s.strip()]
+        for stmt in statements:
+            keyword = first_keyword(stmt)
+            if keyword in ("CREATE", "ALTER"):
+                extra_create_queries.append(stmt)
+            elif keyword in ("DROP", "TRUNCATE"):
+                extra_drop_queries.append(stmt)
+            else:
+                test_queries += substitute_parameters([stmt])
+    else:
+        test_queries += substitute_parameters([e.text])
 
 # If we're given a list of queries to run, check that it makes sense.
 for i in args.queries_to_run or []:
@@ -225,6 +267,10 @@ if args.print_queries:
 # for clickhouse-benchmark, so we print them as command line arguments, e.g.
 # '--max_memory_usage=10000000'.
 if args.print_settings:
+    # Settings from JSON file: <settings file="path/to/settings.json"/>
+    for key, value in load_settings_file(root, xml_dir).items():
+        print(f"--{key}={value}")
+    # Inline settings: <settings><key>value</key></settings> (can override file settings)
     for s in root.findall("settings/*"):
         print(f"--{s.tag}={s.text}")
 
@@ -266,6 +312,7 @@ if not args.use_existing_tables:
     # because clickhouse_driver disconnects on error (this is not configurable),
     # and the new connection loses the changes in settings.
     drop_query_templates = [q.text for q in root.findall("drop_query")]
+    drop_query_templates += extra_drop_queries
     drop_queries = substitute_parameters(drop_query_templates)
     for conn_index, c in enumerate(all_connections):
         for q in drop_queries:
@@ -277,12 +324,14 @@ if not args.use_existing_tables:
 
     reportStageEnd("drop-1")
 
-# Apply settings.
-settings = root.findall("settings/*")
+# First apply JSON settings (<settings file="..."/>), then inline (<settings><key>value</key></settings>).
+# Inline settings override file settings.
+file_settings = load_settings_file(root, xml_dir)
+inline_settings = root.findall("settings/*")
 for conn_index, c in enumerate(all_connections):
-    for s in settings:
-        # requires clickhouse-driver >= 1.1.5 to accept arbitrary new settings
-        # (https://github.com/mymarilyn/clickhouse-driver/pull/142)
+    for key, value in file_settings.items():
+        c.settings[key] = str(value)
+    for s in inline_settings:
         c.settings[s.tag] = s.text
     # We have to perform a query to make sure the settings work. Otherwise an
     # unknown setting will lead to failing precondition check, and we will skip
@@ -299,6 +348,7 @@ if not args.use_existing_tables:
     create_query_templates = [
         q.text for q in root.findall("./*") if q.tag in ("create_query", "fill_query")
     ]
+    create_query_templates += extra_create_queries
     create_queries = substitute_parameters(create_query_templates)
 
     # Disallow temporary tables, because the clickhouse_driver reconnects on

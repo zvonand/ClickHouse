@@ -191,23 +191,16 @@ def test_embedded_database_and_tables(started_cluster, use_delta_kernel):
 def test_multiple_schemes_tables(started_cluster):
     test_uuid = str(uuid.uuid4()).replace("-", "_")
     node1 = started_cluster.instances["node1"]
-    execute_multiple_spark_queries(
-        node1, [f"CREATE SCHEMA test_schema{test_uuid}{i}" for i in range(10)]
-    )
-    execute_multiple_spark_queries(
-        node1,
-        [
-            f"CREATE TABLE test_schema{test_uuid}{i}.test_table{test_uuid}{i} (col1 int, col2 double) using Delta location '/var/lib/clickhouse/user_files/tmp/test_schema{test_uuid}{i}/test_table{test_uuid}{i}'"
-            for i in range(10)
-        ],
-    )
-    execute_multiple_spark_queries(
-        node1,
-        [
-            f"INSERT INTO test_schema{test_uuid}{i}.test_table{test_uuid}{i} VALUES ({i}, {i}.0)"
-            for i in range(10)
-        ],
-    )
+    all_queries = [f"CREATE SCHEMA test_schema{test_uuid}{i}" for i in range(10)]
+    all_queries += [
+        f"CREATE TABLE test_schema{test_uuid}{i}.test_table{test_uuid}{i} (col1 int, col2 double) using Delta location '/var/lib/clickhouse/user_files/tmp/test_schema{test_uuid}{i}/test_table{test_uuid}{i}'"
+        for i in range(10)
+    ]
+    all_queries += [
+        f"INSERT INTO test_schema{test_uuid}{i}.test_table{test_uuid}{i} VALUES ({i}, {i}.0)"
+        for i in range(10)
+    ]
+    execute_multiple_spark_queries(node1, all_queries)
 
     node1.query(
         f"create database multi_schema_test{test_uuid} engine DataLakeCatalog('http://localhost:8080/api/2.1/unity-catalog') settings warehouse = 'unity', catalog_type='unity', vended_credentials=false",

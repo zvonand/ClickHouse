@@ -12,6 +12,7 @@
 #include <Formats/FormatSettings.h>
 #include <IO/ReadBufferFromMemory.h>
 #include <IO/WriteBufferFromString.h>
+#include <DataTypes/DataTypesCache.h>
 
 
 namespace DB
@@ -77,14 +78,6 @@ private:
         bool is_dynamic; /// dynamic paths need a null check before serialization
     };
 
-    /// Cache entry for shared data types: avoids repeated createColumn and getDefaultSerialization calls.
-    struct CachedTypeInfo
-    {
-        DataTypePtr type;
-        SerializationPtr serialization;
-        MutableColumnPtr column;
-    };
-
     ColumnPtr execute(const ColumnObject & column_object, const DataTypeObject & type_object) const
     {
         auto res = ColumnArray::create(ColumnString::create());
@@ -117,7 +110,8 @@ private:
 
         /// Cache of reusable (data_type, serialization, column) structs keyed by type name,
         /// to avoid createColumn and getDefaultSerialization per shared data value.
-        std::unordered_map<String, CachedTypeInfo> shared_types_cache;
+        std::unordered_map<String, SerializationPtr> shared_serializations_cache;
+        std::unordered_map<String, MutableColumnPtr> shared_columns_cache;
 
         const auto & shared_data_offsets = column_object.getSharedDataOffsets();
         const auto [shared_data_paths, shared_data_values] = column_object.getSharedDataPathsAndValues();
@@ -141,7 +135,7 @@ private:
                 }
 
                 /// Emit the shared data value.
-                emitSharedDataValue(shared_data_values->getDataAt(j), format_settings, result_data, shared_types_cache);
+                emitSharedDataValue(shared_data_values->getDataAt(j), format_settings, result_data, shared_serializations_cache, shared_columns_cache);
             }
 
             /// Emit remaining typed/dynamic paths after all shared data for this row.
@@ -172,25 +166,60 @@ private:
         std::string_view value_data,
         const FormatSettings & format_settings,
         ColumnString & data,
-        std::unordered_map<String, CachedTypeInfo> & shared_types_cache)
+        std::unordered_map<String, SerializationPtr> & shared_serializations_cache,
+        std::unordered_map<String, MutableColumnPtr> & shared_columns_cache)
     {
         ReadBufferFromMemory buf(value_data);
-        auto type = decodeDataType(buf);
 
-        if (isNothing(type))
-            return;
+        auto get_serialization_from_cache = [&](const String & type_name, const IDataType & type) -> const SerializationPtr &
+        {
+            auto [it, inserted] = shared_serializations_cache.try_emplace(type_name);
+            if (inserted)
+                it->second = type.getDefaultSerialization();
 
-        auto type_name = type->getName();
-        auto [it, inserted] = shared_types_cache.try_emplace(type_name);
+            return it->second;
+        };
 
-        if (inserted)
-            it->second = CachedTypeInfo{type, type->getDefaultSerialization(), type->createColumn()};
+        auto get_column_from_cache = [&](const String & type_name, const IDataType & type) -> const MutableColumnPtr &
+        {
+            auto [it, inserted] = shared_columns_cache.try_emplace(type_name);
+            if (inserted)
+                it->second = type.createColumn();
 
-        auto & entry = it->second;
-        entry.serialization->deserializeBinary(*entry.column, buf, format_settings);
+            return it->second;
+        };
 
-        serializeValueIntoResult(*entry.serialization, *entry.column, 0, format_settings, data);
-        entry.column->popBack(1);
+        auto serialize = [&](const IDataType & type, const ISerialization & serialization, IColumn & temp_column)
+        {
+            if (isNothing(type))
+                return;
+
+            serialization.deserializeBinary(temp_column, buf, format_settings);
+            serializeValueIntoResult(serialization, temp_column, 0, format_settings, data);
+            temp_column.popBack(1);
+        };
+
+        char type_index;
+        buf.peek(type_index);
+        const auto & cache = getSimpleDataTypeCache();
+        auto binary_type_index = static_cast<BinaryTypeIndex>(type_index);
+
+        if (cache.hasElement(binary_type_index))
+        {
+            ++buf.position();
+
+            const auto & element = cache.getElement(binary_type_index);
+            const auto & temp_column = get_column_from_cache(element.name, *element.type);
+            serialize(*element.type, *element.serialization, *temp_column);
+        }
+        else
+        {
+            auto type = decodeDataType(buf);
+            auto type_name = type->getName();
+            const auto & serialization = get_serialization_from_cache(type_name, *type);
+            const auto & temp_column = get_column_from_cache(type_name, *type);
+            serialize(*type, *serialization, *temp_column);
+        }
     }
 
     static void serializeValueIntoResult(

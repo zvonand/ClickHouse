@@ -1,5 +1,4 @@
 import json
-import re
 import traceback
 from pathlib import Path
 
@@ -40,9 +39,8 @@ def check():
                 f"| Branches | {b_branch_cov:.2f}% | {c_branch_cov:.2f}% | {c_branch_cov - b_branch_cov:+.2f}% |\n"
             )
             if pr_changed_lines_info:
-                # Strip ", N noise lines excluded" and the verbose "PR changed-lines coverage: " prefix.
-                changed = re.sub(r",\s*\d+ noise lines excluded", "", pr_changed_lines_info)
-                changed = re.sub(r"^PR changed-lines coverage:\s*", "", changed).strip()
+                # pr_changed_lines_info format: "PR changed-lines coverage: 78.50% (157/200)"
+                changed = pr_changed_lines_info.removeprefix("PR changed-lines coverage: ").strip()
                 changed_line = f"\n**Changed lines:** {changed}"
                 if uncovered_code_url:
                     changed_line += f" · [Uncovered code]({uncovered_code_url})"

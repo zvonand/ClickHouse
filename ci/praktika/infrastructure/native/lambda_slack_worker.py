@@ -215,7 +215,7 @@ def _post_dm(user_id: str, user_email: str, s3_path: str, text: str) -> None:
         print(f"chat.postMessage error: {e}")
 
 
-def format_event_text(event, pr_status, indent="", include_related_prs: bool = True):
+def format_event_text(event, pr_status, indent=""):
     """Format event text with optional indentation for linked events."""
     # PR status emoji
     pr_status_emoji = ":pr_open:" if pr_status == "open" else ":pr_merged:"
@@ -340,7 +340,7 @@ def _format_notification_text(event, notify_type: str) -> str:
     ext = getattr(event, "ext", {}) or {}
     pr_status = (ext.get("pr_status") or "").lower()
 
-    base = format_event_text(event, pr_status, indent="", include_related_prs=False)
+    base = format_event_text(event, pr_status, indent="")
 
     failed_names = []
     result = getattr(event, "result", None)

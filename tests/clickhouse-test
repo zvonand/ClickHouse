@@ -1429,11 +1429,6 @@ class SettingsRandomizer:
     conditional_settings = {
         "optimize_use_implicit_projections": "optimize_use_projections",
         "optimize_use_projection_filtering": "optimize_use_projections",
-        # skip-index sub-settings are meaningless when the master toggle is off
-        "use_skip_indexes_if_final": "use_skip_indexes",
-        "use_skip_indexes_on_data_read": "use_skip_indexes",
-        "use_skip_indexes_for_disjunctions": "use_skip_indexes",
-        "use_skip_indexes_for_top_k": "use_skip_indexes",
         # top-k dynamic filtering requires the top-k skip index path to be active
         "use_top_k_dynamic_filtering": "use_skip_indexes_for_top_k",
         # statistics cache is pointless when statistics are disabled

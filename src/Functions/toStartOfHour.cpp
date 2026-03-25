@@ -24,7 +24,7 @@ toStartOfHour(datetime)
         {"datetime", "A date with time to round.", {"DateTime", "DateTime64"}}
     };
     FunctionDocumentation::ReturnedValue returned_value =
-        {"Returns the date with time rounded down to the start of the hour.", {"DateTime"}};
+        {"Returns the date with time rounded down to the start of the hour.", {"DateTime", "DateTime64"}};
     FunctionDocumentation::Examples examples = {
         {"Round down to the start of the hour", R"(
 SELECT

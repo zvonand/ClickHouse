@@ -845,7 +845,9 @@ std::unique_ptr<ReadBufferFromFileBase> createReadBuffer(
         use_page_cache = false;
     }
 
-    auto modified_read_settings = effective_read_settings.adjustBufferSize(object_size);
+    auto modified_read_settings = is_size_known
+        ? effective_read_settings.adjustBufferSize(object_size)
+        : effective_read_settings;
     /// FIXME: Changing this setting to default value breaks something around parquet reading
     modified_read_settings.remote_read_min_bytes_for_seek = modified_read_settings.remote_fs_buffer_size;
     /// User's object may change, don't cache it.

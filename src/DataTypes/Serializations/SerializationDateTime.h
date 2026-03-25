@@ -12,6 +12,13 @@ class SerializationDateTime final : public SerializationNumber<UInt32>, public T
 private:
     explicit SerializationDateTime(const TimezoneMixin & time_zone_);
 
+    /// When the column has an explicit timezone (e.g. DateTime('UTC')), use it.
+    /// Otherwise, use the current session timezone via DateLUT::instance().
+    /// This ensures that session_timezone is respected for DateTime columns
+    /// without an explicit timezone, even when the serialization object was
+    /// created from table metadata with the server default timezone baked in.
+    const DateLUTImpl & getEffectiveTimeZone() const;
+
 public:
     static UInt128 getHash(const TimezoneMixin & time_zone_);
     static SerializationPtr create(const TimezoneMixin & time_zone_);

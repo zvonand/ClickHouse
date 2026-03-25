@@ -747,7 +747,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     }
 
     return (
-      <Container orientation='vertical' gap='sm' padding='md' style={{ maxWidth: '800px', maxHeight: '600px', overflow: 'auto' }}>
+      <Container orientation='vertical' gap='sm' padding='md' style={{ maxHeight: '600px', overflow: 'auto' }}>
         {result.info && (
           <Panel hasShadow padding='sm' orientation='vertical' gap='xs' alignItems='start' style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)' }}>
             <Text style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '12px' }}>
@@ -758,7 +758,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
         {result.results && result.results.length > 0 && (
           <Table
             headers={[
-              { label: 'Status' },
+              { label: 'Status', width: '100px' },
               { label: 'Name' },
             ]}
             rows={(sortByStatus
@@ -783,12 +783,11 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
           />
         )}
         {result.links && result.links.length > 0 && (
-          <Panel hasShadow padding='sm' fillWidth style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)' }}>
+          <Panel hasShadow padding='sm' style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', width: 'fit-content' }}>
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              display: 'flex',
+              flexDirection: 'column',
               gap: '8px',
-              width: '100%'
             }}>
               {result.links.map((link, linkIndex) => (
                 <Link

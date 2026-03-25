@@ -396,6 +396,8 @@ SnapshotVersion KeeperContext::getWriteSnapshotVersion() const
 
 void KeeperContext::dumpConfiguration(WriteBufferFromOwnString & buf) const
 {
+    getCoordinationSettings().dump(buf);
+
     auto dump_disk_info = [&](const std::string_view prefix, const IDisk & disk)
     {
         writeText(fmt::format("{}_path=", prefix), buf);

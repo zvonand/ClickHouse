@@ -138,24 +138,167 @@ void CoordinationSettings::loadFromConfig(const String & config_elem, const Poco
     impl->loadFromConfig(config_elem, config);
 }
 
-const String KeeperConfigurationAndSettings::DEFAULT_FOUR_LETTER_WORD_CMD =
+void CoordinationSettings::dump(WriteBufferFromOwnString & buf) const
+{
+    auto write_int = [&buf](int64_t value)
+    {
+        writeIntText(value, buf);
+        buf.write('\n');
+    };
+
+    auto write_bool = [&buf](bool value)
+    {
+        String str_val = value ? "true" : "false";
+        writeText(str_val, buf);
+        buf.write('\n');
+    };
+
+    const auto & s = *this;
+
+    writeText("min_session_timeout_ms=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::min_session_timeout_ms]));
+    writeText("session_timeout_ms=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::session_timeout_ms]));
+    writeText("operation_timeout_ms=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::operation_timeout_ms]));
+    writeText("dead_session_check_period_ms=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::dead_session_check_period_ms]));
+
+    writeText("heart_beat_interval_ms=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::heart_beat_interval_ms]));
+    writeText("election_timeout_lower_bound_ms=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::election_timeout_lower_bound_ms]));
+    writeText("election_timeout_upper_bound_ms=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::election_timeout_upper_bound_ms]));
+    writeText("leadership_expiry_ms=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::leadership_expiry_ms]));
+
+    writeText("reserved_log_items=", buf);
+    write_int(s[CoordinationSetting::reserved_log_items]);
+    writeText("snapshot_distance=", buf);
+    write_int(s[CoordinationSetting::snapshot_distance]);
+
+    writeText("auto_forwarding=", buf);
+    write_bool(s[CoordinationSetting::auto_forwarding]);
+    writeText("shutdown_timeout=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::shutdown_timeout]));
+    writeText("session_shutdown_timeout=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::session_shutdown_timeout]));
+    writeText("startup_timeout=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::startup_timeout]));
+    writeText("sleep_before_leader_change_ms=", buf);
+    write_int(static_cast<uint64_t>(s[CoordinationSetting::sleep_before_leader_change_ms]));
+
+    writeText("raft_logs_level=", buf);
+    writeText(s[CoordinationSetting::raft_logs_level].toString(), buf);
+    buf.write('\n');
+
+    writeText("snapshots_to_keep=", buf);
+    write_int(s[CoordinationSetting::snapshots_to_keep]);
+    writeText("rotate_log_storage_interval=", buf);
+    write_int(s[CoordinationSetting::rotate_log_storage_interval]);
+    writeText("stale_log_gap=", buf);
+    write_int(s[CoordinationSetting::stale_log_gap]);
+    writeText("fresh_log_gap=", buf);
+    write_int(s[CoordinationSetting::fresh_log_gap]);
+
+    writeText("max_requests_batch_size=", buf);
+    write_int(s[CoordinationSetting::max_requests_batch_size]);
+    writeText("max_requests_batch_bytes_size=", buf);
+    write_int(s[CoordinationSetting::max_requests_batch_bytes_size]);
+    writeText("max_request_size=", buf);
+    write_int(s[CoordinationSetting::max_request_size]);
+    writeText("max_requests_append_size=", buf);
+    write_int(s[CoordinationSetting::max_requests_append_size]);
+    writeText("max_requests_append_bytes_size=", buf);
+    write_int(s[CoordinationSetting::max_requests_append_bytes_size]);
+    writeText("max_flush_batch_size=", buf);
+    write_int(s[CoordinationSetting::max_flush_batch_size]);
+    writeText("max_request_queue_size=", buf);
+    write_int(s[CoordinationSetting::max_request_queue_size]);
+    writeText("max_requests_quick_batch_size=", buf);
+    write_int(s[CoordinationSetting::max_requests_quick_batch_size]);
+    writeText("quorum_reads=", buf);
+    write_bool(s[CoordinationSetting::quorum_reads]);
+    writeText("force_sync=", buf);
+    write_bool(s[CoordinationSetting::force_sync]);
+
+    writeText("compress_logs=", buf);
+    write_bool(s[CoordinationSetting::compress_logs]);
+    writeText("compress_snapshots_with_zstd_format=", buf);
+    write_bool(s[CoordinationSetting::compress_snapshots_with_zstd_format]);
+    writeText("configuration_change_tries_count=", buf);
+    write_int(s[CoordinationSetting::configuration_change_tries_count]);
+
+    writeText("max_log_file_size=", buf);
+    write_int(s[CoordinationSetting::max_log_file_size]);
+    writeText("log_file_overallocate_size=", buf);
+    write_int(s[CoordinationSetting::log_file_overallocate_size]);
+    writeText("min_request_size_for_cache=", buf);
+    write_int(s[CoordinationSetting::min_request_size_for_cache]);
+
+    writeText("raft_limits_reconnect_limit=", buf);
+    write_int(s[CoordinationSetting::raft_limits_reconnect_limit]);
+    writeText("raft_limits_response_limit=", buf);
+    write_int(s[CoordinationSetting::raft_limits_response_limit]);
+
+    writeText("async_replication=", buf);
+    write_bool(s[CoordinationSetting::async_replication]);
+
+    writeText("experimental_use_rocksdb=", buf);
+    write_bool(s[CoordinationSetting::experimental_use_rocksdb]);
+    writeText("rocksdb_load_batch_size=", buf);
+    write_int(s[CoordinationSetting::rocksdb_load_batch_size]);
+
+    writeText("latest_logs_cache_size_threshold=", buf);
+    write_int(s[CoordinationSetting::latest_logs_cache_size_threshold]);
+    writeText("latest_logs_cache_entry_count_threshold=", buf);
+    write_int(s[CoordinationSetting::latest_logs_cache_entry_count_threshold]);
+    writeText("commit_logs_cache_size_threshold=", buf);
+    write_int(s[CoordinationSetting::commit_logs_cache_size_threshold]);
+    writeText("commit_logs_cache_entry_count_threshold=", buf);
+    write_int(s[CoordinationSetting::commit_logs_cache_entry_count_threshold]);
+
+    writeText("disk_move_retries_wait_ms=", buf);
+    write_int(s[CoordinationSetting::disk_move_retries_wait_ms]);
+    writeText("disk_move_retries_during_init=", buf);
+    write_int(s[CoordinationSetting::disk_move_retries_during_init]);
+
+    writeText("log_slow_total_threshold_ms=", buf);
+    write_int(s[CoordinationSetting::log_slow_total_threshold_ms]);
+    writeText("log_slow_cpu_threshold_ms=", buf);
+    write_int(s[CoordinationSetting::log_slow_cpu_threshold_ms]);
+    writeText("log_slow_connection_operation_threshold_ms=", buf);
+    write_int(s[CoordinationSetting::log_slow_connection_operation_threshold_ms]);
+
+    writeText("use_xid_64=", buf);
+    write_bool(s[CoordinationSetting::use_xid_64]);
+    writeText("check_node_acl_on_remove=", buf);
+    write_bool(s[CoordinationSetting::check_node_acl_on_remove]);
+
+    writeText("write_snapshot_version=", buf);
+    write_int(s[CoordinationSetting::write_snapshot_version]);
+    writeText("nuraft_test_mode=", buf);
+    write_bool(s[CoordinationSetting::nuraft_test_mode]);
+}
+
+const String KeeperConfiguration::DEFAULT_FOUR_LETTER_WORD_CMD =
 #if USE_JEMALLOC
 "jmst,jmfp,jmep,jmdp,"
 #endif
 "conf,cons,crst,envi,ruok,srst,srvr,stat,wchs,dirs,mntr,isro,rcvr,apiv,csnp,lgif,rqld,rclc,clrs,ftfl,ydld,pfev,lgrq";
 
-KeeperConfigurationAndSettings::KeeperConfigurationAndSettings()
+KeeperConfiguration::KeeperConfiguration()
     : server_id(NOT_EXIST)
     , enable_ipv6(true)
     , tcp_port(NOT_EXIST)
     , tcp_port_secure(NOT_EXIST)
     , standalone_keeper(false)
-    , coordination_settings()
 {
 }
 
 
-void KeeperConfigurationAndSettings::dump(WriteBufferFromOwnString & buf) const
+void KeeperConfiguration::dump(WriteBufferFromOwnString & buf) const
 {
     auto write_int = [&buf](int64_t value)
     {
@@ -190,140 +333,12 @@ void KeeperConfigurationAndSettings::dump(WriteBufferFromOwnString & buf) const
     writeText("four_letter_word_allow_list=", buf);
     writeText(four_letter_word_allow_list, buf);
     buf.write('\n');
-
-    /// coordination_settings
-
-    writeText("min_session_timeout_ms=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::min_session_timeout_ms]));
-    writeText("session_timeout_ms=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::session_timeout_ms]));
-    writeText("operation_timeout_ms=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::operation_timeout_ms]));
-    writeText("dead_session_check_period_ms=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::dead_session_check_period_ms]));
-
-    writeText("heart_beat_interval_ms=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::heart_beat_interval_ms]));
-    writeText("election_timeout_lower_bound_ms=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::election_timeout_lower_bound_ms]));
-    writeText("election_timeout_upper_bound_ms=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::election_timeout_upper_bound_ms]));
-    writeText("leadership_expiry_ms=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::leadership_expiry_ms]));
-
-    writeText("reserved_log_items=", buf);
-    write_int(coordination_settings[CoordinationSetting::reserved_log_items]);
-    writeText("snapshot_distance=", buf);
-    write_int(coordination_settings[CoordinationSetting::snapshot_distance]);
-
-    writeText("auto_forwarding=", buf);
-    write_bool(coordination_settings[CoordinationSetting::auto_forwarding]);
-    writeText("shutdown_timeout=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::shutdown_timeout]));
-    writeText("session_shutdown_timeout=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::session_shutdown_timeout]));
-    writeText("startup_timeout=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::startup_timeout]));
-    writeText("sleep_before_leader_change_ms=", buf);
-    write_int(static_cast<uint64_t>(coordination_settings[CoordinationSetting::sleep_before_leader_change_ms]));
-
-    writeText("raft_logs_level=", buf);
-    writeText(coordination_settings[CoordinationSetting::raft_logs_level].toString(), buf);
-    buf.write('\n');
-
-    writeText("snapshots_to_keep=", buf);
-    write_int(coordination_settings[CoordinationSetting::snapshots_to_keep]);
-    writeText("rotate_log_storage_interval=", buf);
-    write_int(coordination_settings[CoordinationSetting::rotate_log_storage_interval]);
-    writeText("stale_log_gap=", buf);
-    write_int(coordination_settings[CoordinationSetting::stale_log_gap]);
-    writeText("fresh_log_gap=", buf);
-    write_int(coordination_settings[CoordinationSetting::fresh_log_gap]);
-
-    writeText("max_requests_batch_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::max_requests_batch_size]);
-    writeText("max_requests_batch_bytes_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::max_requests_batch_bytes_size]);
-    writeText("max_request_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::max_request_size]);
-    writeText("max_requests_append_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::max_requests_append_size]);
-    writeText("max_requests_append_bytes_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::max_requests_append_bytes_size]);
-    writeText("max_flush_batch_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::max_flush_batch_size]);
-    writeText("max_request_queue_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::max_request_queue_size]);
-    writeText("max_requests_quick_batch_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::max_requests_quick_batch_size]);
-    writeText("quorum_reads=", buf);
-    write_bool(coordination_settings[CoordinationSetting::quorum_reads]);
-    writeText("force_sync=", buf);
-    write_bool(coordination_settings[CoordinationSetting::force_sync]);
-
-    writeText("compress_logs=", buf);
-    write_bool(coordination_settings[CoordinationSetting::compress_logs]);
-    writeText("compress_snapshots_with_zstd_format=", buf);
-    write_bool(coordination_settings[CoordinationSetting::compress_snapshots_with_zstd_format]);
-    writeText("configuration_change_tries_count=", buf);
-    write_int(coordination_settings[CoordinationSetting::configuration_change_tries_count]);
-
-    writeText("max_log_file_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::max_log_file_size]);
-    writeText("log_file_overallocate_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::log_file_overallocate_size]);
-    writeText("min_request_size_for_cache=", buf);
-    write_int(coordination_settings[CoordinationSetting::min_request_size_for_cache]);
-
-    writeText("raft_limits_reconnect_limit=", buf);
-    write_int(coordination_settings[CoordinationSetting::raft_limits_reconnect_limit]);
-    writeText("raft_limits_response_limit=", buf);
-    write_int(coordination_settings[CoordinationSetting::raft_limits_response_limit]);
-
-    writeText("async_replication=", buf);
-    write_bool(coordination_settings[CoordinationSetting::async_replication]);
-
-    writeText("experimental_use_rocksdb=", buf);
-    write_bool(coordination_settings[CoordinationSetting::experimental_use_rocksdb]);
-    writeText("rocksdb_load_batch_size=", buf);
-    write_int(coordination_settings[CoordinationSetting::rocksdb_load_batch_size]);
-
-    writeText("latest_logs_cache_size_threshold=", buf);
-    write_int(coordination_settings[CoordinationSetting::latest_logs_cache_size_threshold]);
-    writeText("latest_logs_cache_entry_count_threshold=", buf);
-    write_int(coordination_settings[CoordinationSetting::latest_logs_cache_entry_count_threshold]);
-    writeText("commit_logs_cache_size_threshold=", buf);
-    write_int(coordination_settings[CoordinationSetting::commit_logs_cache_size_threshold]);
-    writeText("commit_logs_cache_entry_count_threshold=", buf);
-    write_int(coordination_settings[CoordinationSetting::commit_logs_cache_entry_count_threshold]);
-
-    writeText("disk_move_retries_wait_ms=", buf);
-    write_int(coordination_settings[CoordinationSetting::disk_move_retries_wait_ms]);
-    writeText("disk_move_retries_during_init=", buf);
-    write_int(coordination_settings[CoordinationSetting::disk_move_retries_during_init]);
-
-    writeText("log_slow_total_threshold_ms=", buf);
-    write_int(coordination_settings[CoordinationSetting::log_slow_total_threshold_ms]);
-    writeText("log_slow_cpu_threshold_ms=", buf);
-    write_int(coordination_settings[CoordinationSetting::log_slow_cpu_threshold_ms]);
-    writeText("log_slow_connection_operation_threshold_ms=", buf);
-    write_int(coordination_settings[CoordinationSetting::log_slow_connection_operation_threshold_ms]);
-
-    writeText("use_xid_64=", buf);
-    write_bool(coordination_settings[CoordinationSetting::use_xid_64]);
-    writeText("check_node_acl_on_remove=", buf);
-    write_bool(coordination_settings[CoordinationSetting::check_node_acl_on_remove]);
-
-    writeText("write_snapshot_version=", buf);
-    write_int(coordination_settings[CoordinationSetting::write_snapshot_version]);
-    writeText("nuraft_test_mode=", buf);
-    write_bool(coordination_settings[CoordinationSetting::nuraft_test_mode]);
 }
 
-KeeperConfigurationAndSettingsPtr
-KeeperConfigurationAndSettings::loadFromConfig(const Poco::Util::AbstractConfiguration & config, bool standalone_keeper_)
+KeeperConfigurationPtr
+KeeperConfiguration::loadFromConfig(const Poco::Util::AbstractConfiguration & config, bool standalone_keeper_)
 {
-    std::shared_ptr<KeeperConfigurationAndSettings> ret = std::make_shared<KeeperConfigurationAndSettings>();
+    auto ret = std::make_shared<KeeperConfiguration>();
 
     ret->server_id = config.getInt("keeper_server.server_id");
     ret->standalone_keeper = standalone_keeper_;
@@ -347,9 +362,6 @@ KeeperConfigurationAndSettings::loadFromConfig(const Poco::Util::AbstractConfigu
         "keeper_server.four_letter_word_allow_list",
         config.getString("keeper_server.four_letter_word_white_list",
                          DEFAULT_FOUR_LETTER_WORD_CMD));
-
-
-    ret->coordination_settings.loadFromConfig("keeper_server.coordination_settings", config);
 
     return ret;
 }

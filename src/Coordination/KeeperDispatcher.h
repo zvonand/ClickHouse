@@ -75,7 +75,7 @@ private:
 
     KeeperConnectionStats keeper_stats;
 
-    KeeperConfigurationAndSettingsPtr configuration_and_settings;
+    KeeperConfigurationPtr server_config;
 
     LoggerPtr log;
 
@@ -241,9 +241,9 @@ public:
         return *server->getKeeperStateMachine();
     }
 
-    const KeeperConfigurationAndSettingsPtr & getKeeperConfigurationAndSettings() const
+    const KeeperConfigurationPtr & getKeeperConfiguration() const
     {
-        return configuration_and_settings;
+        return server_config;
     }
 
     const KeeperContextPtr & getKeeperContext() const

@@ -241,14 +241,14 @@ int32_t getValueOrMaxInt32AndLogWarning(uint64_t value, const std::string & name
 }
 
 KeeperServer::KeeperServer(
-    const KeeperConfigurationAndSettingsPtr & configuration_and_settings_,
+    const KeeperConfigurationPtr & server_config,
     const Poco::Util::AbstractConfiguration & config,
     ResponsesQueue & responses_queue_,
     SnapshotsQueue & snapshots_queue_,
     KeeperContextPtr keeper_context_,
     KeeperSnapshotManagerS3 & snapshot_manager_s3,
     IKeeperStateMachine::CommitCallback commit_callback)
-    : server_id(configuration_and_settings_->server_id)
+    : server_id(server_config->server_id)
     , log(getLogger("KeeperServer"))
     , is_recovering(config.getBool("keeper_server.force_recovery", false))
     , keeper_context{std::move(keeper_context_)}
@@ -268,7 +268,7 @@ KeeperServer::KeeperServer(
             keeper_context,
             config.getBool("keeper_server.upload_snapshot_on_exit", false) ? &snapshot_manager_s3 : nullptr,
             commit_callback,
-            checkAndGetSuperdigest(configuration_and_settings_->super_digest));
+            checkAndGetSuperdigest(server_config->super_digest));
         LOG_WARNING(log, "Use RocksDB as Keeper backend storage.");
     }
     else
@@ -279,7 +279,7 @@ KeeperServer::KeeperServer(
             keeper_context,
             config.getBool("keeper_server.upload_snapshot_on_exit", false) ? &snapshot_manager_s3 : nullptr,
             commit_callback,
-            checkAndGetSuperdigest(configuration_and_settings_->super_digest));
+            checkAndGetSuperdigest(server_config->super_digest));
 
     state_manager = nuraft::cs_new<KeeperStateManager>(
         server_id,

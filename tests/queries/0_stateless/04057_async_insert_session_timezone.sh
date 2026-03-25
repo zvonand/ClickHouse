@@ -63,7 +63,7 @@ run_cases "${TABLE1}" "toUnixTimestamp(d)"
 ${CLICKHOUSE_CLIENT} -q "DROP TABLE ${TABLE1}"
 
 # ── Case 2: DateTime with explicit timezone ─────────────────────────────
-# session_timezone overrides the column's explicit timezone for parsing
+# The column's explicit timezone is used for parsing plain string literals.
 # plain string literals.
 TABLE2="test_async_tz_explicit_${CLICKHOUSE_DATABASE}"
 

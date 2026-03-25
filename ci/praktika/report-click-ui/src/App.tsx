@@ -776,11 +776,12 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                 id: `sub-${subindex}`,
                 items: [
                   { label: wrapWithPopover(getStatusBadge(subresult.status), subresult, undefined, namesPath) },
-                  { label: wrapWithPopover(subNameWithLabels, subresult, undefined, namesPath) },
+                  { label: wrapWithPopover(subNameWithLabels, subresult, undefined, namesPath), style: { overflow: 'visible' } },
                 ],
               }
             })}
             size="sm"
+            style={{ tableLayout: 'auto' }}
           />
         )}
         {result.links && result.links.length > 0 && (

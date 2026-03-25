@@ -230,6 +230,10 @@ void IcebergObjectSerializableInfo::deserializeForClusterFunctionProtocol(ReadBu
             readVarInt(value, in);
             record_count = value;
         }
+        else
+        {
+            record_count = std::nullopt;
+        }
         size_t has_file_size = 0;
         readVarUInt(has_file_size, in);
         if (has_file_size)
@@ -237,6 +241,10 @@ void IcebergObjectSerializableInfo::deserializeForClusterFunctionProtocol(ReadBu
             Int64 value = 0;
             readVarInt(value, in);
             file_size_in_bytes = value;
+        }
+        else
+        {
+            file_size_in_bytes = std::nullopt;
         }
     }
 }

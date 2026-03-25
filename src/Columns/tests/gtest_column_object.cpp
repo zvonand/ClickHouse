@@ -445,3 +445,45 @@ TEST(ColumnObject, RepairDuplicatesInDynamicPathsAndSharedData)
     ASSERT_EQ((*column_object)[2], (Object{{"b", Field(1u)}, {"c", Field(1u)}, {"d", Field(1u)}}));
     ASSERT_EQ((*column_object)[3], (Object{{"d", Field(1u)}}));
 }
+
+TEST(ColumnObject, TryInsertRestoresSortedDynamicPaths)
+{
+    /// "b" is a typed UInt32 path; everything else becomes a dynamic path.
+    auto type = DataTypeFactory::instance().get("JSON(max_dynamic_types=10, max_dynamic_paths=10, b UInt32)");
+    auto col = type->createColumn();
+    auto & col_object = assert_cast<ColumnObject &>(*col);
+    const auto & dynamic_paths = col_object.getDynamicPaths();
+
+    /// One valid row so we have something to serialize later.
+    col_object.insert(Object{{"b", Field{5u}}});
+    ASSERT_EQ(col_object.size(), 1u);
+    ASSERT_EQ(dynamic_paths.size(), 0u);
+
+    /// tryInsert with Object{"a_new": 1, "b": "not_a_number"}.
+    /// Fields are processed in alphabetical order ("a_new" before "b"), so:
+    ///   1. "a_new" is new → tryToAddNewDynamicPath succeeds, "a_new" is added to all
+    ///      three structures including sorted_dynamic_paths.
+    ///   2. ColumnDynamic::tryInsert(1u) for "a_new" succeeds.
+    ///   3. ColumnUInt32::tryInsert(String) for "b" returns false.
+    ///   4. restore_sizes() is called.
+    ///      BUG: erases "a_new" from dynamic_paths (frees the key) but leaves the
+    ///           dangling string_view in sorted_dynamic_paths.
+    ///      FIX: erases from sorted_dynamic_paths first, then from dynamic_paths.
+    bool result = col_object.tryInsert(Object{{"a_new", Field{1u}}, {"b", Field{String("not_a_number")}}});
+    ASSERT_FALSE(result);
+
+    ASSERT_EQ(col_object.size(), 1u);
+    ASSERT_EQ(dynamic_paths.size(), 0u);   /// "a_new" must be fully rolled back
+
+    /// serializeValueIntoArena iterates sorted_dynamic_paths.
+    /// Without the fix the stale "a_new" entry causes a crash here (see comment above).
+    Arena arena;
+    const char * begin = nullptr;
+    auto ref = col_object.serializeValueIntoArena(0, arena, begin);
+
+    /// Round-trip sanity check.
+    const char * pos = ref.data;
+    col_object.deserializeAndInsertFromArena(pos);
+    ASSERT_EQ(col_object.size(), 2u);
+    ASSERT_EQ(col_object[1], col_object[0]);
+}

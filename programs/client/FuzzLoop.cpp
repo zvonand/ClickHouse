@@ -648,12 +648,14 @@ bool Client::buzzHouse()
             /// The oracle uses "EXECUTE AS <oracleUser>" (allowed by the default
             /// access_control_improvements.allow_impersonate_user = true) to run sq1 with
             /// the row policy active.
-            for (const String & q : {
-                     "CREATE USER IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleUser + " IDENTIFIED WITH no_password;",
-                     "CREATE ROLE IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleRole + ";",
-                     "GRANT SELECT ON *.* TO " + BuzzHouse::FuzzConfig::oracleRole + ";",
-                     "GRANT " + BuzzHouse::FuzzConfig::oracleRole + " TO " + BuzzHouse::FuzzConfig::oracleUser + ";",
-                 })
+            static const DB::Strings queries = {
+                "CREATE USER IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleUser + " IDENTIFIED WITH no_password;",
+                "CREATE ROLE IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleRole + ";",
+                "GRANT SELECT ON *.* TO " + BuzzHouse::FuzzConfig::oracleRole + ";",
+                "GRANT " + BuzzHouse::FuzzConfig::oracleRole + " TO " + BuzzHouse::FuzzConfig::oracleUser + ";",
+            };
+
+            for (const String & q : queries)
             {
                 fuzz_config->outf << q << std::endl;
                 server_up &= processBuzzHouseQuery(q);

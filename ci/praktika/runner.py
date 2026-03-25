@@ -421,7 +421,7 @@ class Runner:
             cmd += f" --param {param}"
         if test:
             print(f"Custom --test [{test}] will be passed to job's script")
-            cmd += f" --test {test}"
+            cmd += f" --test '{test}'"
         if count is not None:
             print(f"Custom --count [{count}] will be passed to job's script")
             cmd += f" --count {count}"

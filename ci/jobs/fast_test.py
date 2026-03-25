@@ -303,7 +303,8 @@ def main():
 
         fast_test_command = f"cd {temp_dir} && clickhouse-test --hung-check --trace --capture-client-stacktrace --no-random-settings --no-random-merge-tree-settings --no-long --testname --shard --check-zookeeper-session --order random --report-logs-stats --fast-tests-only --no-stateful --jobs {nproc_fast}"
         if args.test:
-            fast_test_command += f" -- '{args.test}'"
+            test_pattern = "|".join(args.test.split())
+            fast_test_command += f" -- '{test_pattern}'"
 
         res = CH.run_test(fast_test_command)
 

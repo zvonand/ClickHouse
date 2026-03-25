@@ -3,7 +3,7 @@ name: cpu-profile
 description: Profile a ClickHouse query using the sampling query profiler and system.trace_log. Use when the user wants to find CPU hotspots, analyze where time is spent in a query, or investigate performance bottlenecks.
 argument-hint: [query_id or query text]
 disable-model-invocation: false
-allowed-tools: Agent, Bash, Read, Grep, Glob, AskUserQuestion
+allowed-tools: Task, Bash, Read, Grep, Glob, AskUserQuestion
 ---
 
 # CPU Profile Analysis Skill
@@ -44,28 +44,34 @@ SETTINGS allow_introspection_functions = 1
 
 ## Step 2 — Execute query with profiling
 
-Run the query with aggressive profiling settings (100us sampling = ~10,000 samples/sec):
+Generate a unique query ID and run the query with aggressive profiling settings (100us sampling = ~10,000 samples/sec).
 
-```sql
-SET query_profiler_cpu_time_period_ns = 100000;
-SET query_profiler_real_time_period_ns = 100000;
-SET allow_introspection_functions = 1;
--- <user's query here>
+Use `clickhouse-client` in non-interactive mode with an explicit `--query_id` to avoid any race with concurrent queries:
+
+```bash
+PROFILE_QID="cpu-profile-$(uuidgen)"
+clickhouse-client --query_id "$PROFILE_QID" -q "
+    SELECT ...
+    SETTINGS query_profiler_cpu_time_period_ns = 100000,
+             query_profiler_real_time_period_ns = 100000
+"
 ```
 
-After execution, extract the `query_id` from the output or `system.query_log`:
+Alternatively, if running interactively, parse the `Query id: <uuid>` line that `clickhouse-client` prints before each query.
+
+After execution, verify the query completed and collect metadata:
 ```sql
 SELECT query_id, query_duration_ms, formatReadableSize(memory_usage) AS peak_memory
 FROM system.query_log
-WHERE type = 'QueryFinish' AND event_date = today()
-ORDER BY event_time DESC LIMIT 1
+WHERE type = 'QueryFinish' AND query_id = '{query_id}'
+SETTINGS allow_introspection_functions = 1
 ```
 
 Wait 2 seconds for `trace_log` to flush, then proceed to Step 3.
 
 ## Step 3 — Collect and analyze trace data
 
-Run these analyses in parallel using Agent tool (3 agents):
+Run these analyses in parallel using Task tool (3 tasks):
 
 ### Agent A — Top functions by CPU samples
 

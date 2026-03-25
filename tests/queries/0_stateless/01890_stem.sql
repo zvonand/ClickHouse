@@ -37,6 +37,11 @@ SELECT stem('peuvent', 'fr');
 SELECT '-- FixedString input produces String output.';
 SELECT stem(toFixedString('blessing', 10), 'en'), toTypeName(stem(toFixedString('word', 10), 'en'));
 
+SELECT '-- String trailing \\0 bytes are binary-safe (not trimmed, unlike FixedString padding).';
+-- With the fix, snowball sees 'running\0' and the \0 prevents suffix removal, so the result differs from stem('running', 'en').
+-- Without the fix (trimRight applied to String), both would return 'run'.
+SELECT stem(concat('running', char(0)), 'en') != stem('running', 'en') AS zero_byte_preserved;
+
 SELECT '-- Nullable(String) input preserves nullability.';
 SELECT stem(toNullable('blessing'), 'en');
 SELECT stem(toNullable(NULL), 'en');

@@ -110,16 +110,17 @@ public:
 
     /// Stem all rows of a String or FixedString column into a new ColumnString.
     /// Rows where null_map[i] != 0 are skipped and emitted as empty strings.
-    /// getDataAt returns the string without the null terminator for ColumnString,
-    /// and with null-byte padding for ColumnFixedString; trimRight removes the padding in the latter case.
+    /// For FixedString, getDataAt returns the value with null-byte padding; trimRight removes it.
+    /// For String, trailing zero bytes are valid data and must not be trimmed.
     /// Snowball stemming never lengthens a word, so upper_bound bytes is a safe pre-allocation.
     MutableColumnPtr stemColumn(const IColumn & col, size_t input_rows_count, const NullMap * null_map = nullptr)
     {
         size_t upper_bound;
-        if (const auto * str = checkAndGetColumn<ColumnString>(&col))
-            upper_bound = str->getChars().size();
-        else if (const auto * fstr = checkAndGetColumn<ColumnFixedString>(&col))
-            upper_bound = fstr->getChars().size();
+        const bool is_fixed_string = checkAndGetColumn<ColumnFixedString>(&col) != nullptr;
+        if (const auto * col_str = checkAndGetColumn<ColumnString>(&col))
+            upper_bound = col_str->getChars().size();
+        else if (const auto * col_fixed_str = checkAndGetColumn<ColumnFixedString>(&col))
+            upper_bound = col_fixed_str->getChars().size();
         else
             throw Exception(
                 ErrorCodes::ILLEGAL_COLUMN,
@@ -143,7 +144,8 @@ public:
             }
 
             std::string_view word = col.getDataAt(i);
-            trimRight(word, '\0');
+            if (is_fixed_string)
+                trimRight(word, '\0');
             std::string_view stemmed = stem(word);
             chassert(data_size + stemmed.size() <= res_data.size());
 
@@ -212,7 +214,7 @@ public:
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const override
     {
         const ColumnConst * language_col = checkAndGetColumn<ColumnConst>(arguments[1].column.get());
-        assert(language_col);
+        chassert(language_col);
 
         Stemmer stemmer(language_col->getValue<String>());
 
@@ -249,7 +251,7 @@ REGISTER_FUNCTION(Stem)
 {
     FunctionDocumentation::Description description = R"(
 Performs stemming on a word or an array of words using the Snowball algorithms.
-Each input string must be a single word — strings containing whitespace cause an exception.
+Each input string must be a single, lowercase word — strings containing whitespace or uppercase characters cause an exception.
 Returns String for scalar inputs (including FixedString) and Array(String) for array inputs.
 Nullable and LowCardinality variants of String and FixedString are supported.
 )";

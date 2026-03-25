@@ -26,6 +26,8 @@ intens
 peuvent
 -- FixedString input produces String output.
 bless	String
+-- String trailing \\0 bytes are binary-safe (not trimmed, unlike FixedString padding).
+1
 -- Nullable(String) input preserves nullability.
 bless
 \N
@@ -104,5 +106,4 @@ disguis
 -- Array(UInt32) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.
 -- Array(Nullable(UInt32)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.
 -- Array(Array(String)) as first argument raises ILLEGAL_TYPE_OF_ARGUMENT.
-
 -- Calling without the experimental setting raises SUPPORT_IS_DISABLED.

@@ -1051,6 +1051,9 @@ void KeeperStateMachine<Storage>::save_logical_snp_obj(
         cancelIfHasUnfinishedSnapshotReceive();
         tryLogCurrentException(log);
         ProfileEvents::increment(ProfileEvents::KeeperSaveSnapshotFailed);
+        if (is_last_obj)
+            throw; /// NuRaft would call apply_snapshot regardless of obj_id; re-throw so it aborts instead.
+        obj_id = 0; /// Ask leader to restart the transfer from the beginning.
     }
 }
 
@@ -1083,7 +1086,7 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
     uint64_t file_size = 0;
     nuraft::ptr<nuraft::buffer> buf; /// pre-allocated full-size buffer; chunks are served from it
     std::unique_ptr<ReadBufferFromFileBase> reader; /// null until initialized, null again once fully loaded
-    uint64_t loaded_bytes = 0;
+    std::atomic<uint64_t> loaded_bytes = 0;
     mutable std::mutex load_mutex;
 
     bool init(uint64_t log_idx, const SnapshotFileInfo & info, LoggerPtr log_) override
@@ -1131,25 +1134,35 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
 
     nuraft::byte * getChunk(uint64_t offset, uint64_t length, LoggerPtr log_) override
     {
-        std::lock_guard lock(load_mutex);
         const uint64_t needed = offset + length;
-        if (loaded_bytes < needed)
+
+        /// Once bytes [0, needed) are written into buf they are never modified,
+        /// so an acquire-load of loaded_bytes is sufficient to observe them without the mutex.
+        if (loaded_bytes.load(std::memory_order_acquire) >= needed)
+        {
+            LOG_TEST(log_, "Snapshot at offset {} is already loaded (lock-free)", offset);
+            return buf->data_begin() + offset;
+        }
+
+        std::lock_guard lock(load_mutex);
+        const uint64_t current = loaded_bytes.load(std::memory_order_relaxed);
+        if (current < needed)
         {
             chassert(reader != nullptr);
             try
             {
                 LOG_TEST(log_, "Loading at offset {} size {}", offset, length);
                 reader->readStrict(
-                    reinterpret_cast<char *>(buf->data_begin()) + loaded_bytes,
-                    needed - loaded_bytes);
+                    reinterpret_cast<char *>(buf->data_begin()) + current,
+                    needed - current);
             }
             catch (...)
             {
                 tryLogCurrentException(log_);
                 return nullptr;
             }
-            loaded_bytes = needed;
-            if (loaded_bytes == file_size)
+            loaded_bytes.store(needed, std::memory_order_release);
+            if (needed == file_size)
             {
                 LOG_DEBUG(log_, "Snapshot {} fully loaded into memory, closing reader", snapshot_id);
                 reader.reset();

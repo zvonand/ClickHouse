@@ -758,7 +758,7 @@ TYPED_TEST(CoordinationTest, TestReadSnapshotParallelMultiChunk)
     DB::KeeperSnapshotManager<Storage> manager(3, leader_ctx, this->enable_compression);
     Storage storage(500, "", leader_ctx);
     addNode(storage, "/hello", "world");
-    DB::KeeperStorageSnapshot<Storage> snap(&storage, 50);
+    DB::KeeperStorageSnapshot<Storage> snap(&storage, 50, nullptr, leader_ctx->getWriteSnapshotVersion());
     auto snap_buf = manager.serializeSnapshotToBuffer(snap);
     manager.serializeSnapshotBufferToDisk(*snap_buf, 50);
 

@@ -379,7 +379,7 @@ TableFunctionRemote::TableFunctionRemote(const std::string & name_, bool secure_
         name,
         is_cluster_function ? 0 : 1,
         is_cluster_function ? 4 : 6,
-        is_cluster_function ? "[<cluster name or default if not specify>, <name of remote database>, <name of remote table>] [, sharding_key]"
+        is_cluster_function ? "[<cluster name or default if not specified>, [<database.table> | [<name of remote database>, <name of remote table>] | <table function>]] [, sharding_key]"
                             : "<addresses pattern> [, <name of remote database>, <name of remote table>] [, username[, password], sharding_key]");
 }
 

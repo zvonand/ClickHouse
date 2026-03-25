@@ -92,7 +92,6 @@ namespace DB
 
 namespace ErrorCodes
 {
-    extern const int BAD_ARGUMENTS;
     extern const int SUPPORT_IS_DISABLED;
     extern const int UNSUPPORTED_URI_SCHEME;
     extern const int HTTP_CONNECTION_LIMIT_REACHED;
@@ -190,7 +189,7 @@ public:
         }
         if (sizes.sndbuf > static_cast<size_t>(INT_MAX))
         {
-            LOG_ERROR(log, "sndbuf value {} exceeds maximum {}, ignore buffer settings for {}", sizes.rcvbuf, INT_MAX, type);
+            LOG_ERROR(log, "sndbuf value {} exceeds maximum {}, ignore buffer settings for {}", sizes.sndbuf, INT_MAX, type);
             return;
         }
 

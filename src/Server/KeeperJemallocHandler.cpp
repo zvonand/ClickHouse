@@ -46,7 +46,7 @@ void KeeperJemallocWebUIHandler::handleRequest(
     setResponseDefaultHeaders(response);
     response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
     auto wb = WriteBufferFromHTTPServerResponse(response, request.getMethod() == HTTPRequest::HTTP_HEAD);
-    wb.write(html.c_str(), html.size());
+    wb.write(html.data(), html.size());
     wb.finalize();
 }
 
@@ -67,10 +67,12 @@ try
         handleStatus(request, response);
     else if (path == "/jemalloc/")
     {
+        setResponseDefaultHeaders(response);
         response.redirect("/jemalloc", Poco::Net::HTTPResponse::HTTP_MOVED_PERMANENTLY);
     }
     else
     {
+        setResponseDefaultHeaders(response);
         response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_NOT_FOUND);
         response.setContentType("text/plain");
         *response.send() << "Not found\n";
@@ -107,6 +109,7 @@ void KeeperJemallocAPIHandler::handleProfile(
 
     if (format != "collapsed" && format != "raw")
     {
+        setResponseDefaultHeaders(response);
         response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
         response.setContentType("text/plain");
         *response.send() << "Unknown format: " << format << ". Supported: collapsed, raw\n";

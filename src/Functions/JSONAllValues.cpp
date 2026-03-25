@@ -199,7 +199,7 @@ private:
         };
 
         char type_index;
-        if (buf.peek(type_index))
+        if (!buf.peek(type_index))
             return;
 
         const auto & cache = getSimpleDataTypeCache();

@@ -1,5 +1,6 @@
--- Tags: no-fasttest
+-- Tags: no-fasttest, no-parallel-replicas
 -- Tag no-fasttest: Depends on AWS
+-- Tag no-parallel-replicas: test counts exact S3 API calls per query, which differs under parallel replicas
 
 -- Verify that reading from S3 with brace-expansion globs like {a,b,c}.tsv
 -- does not produce extra HeadObject requests for hive partitioning sample path resolution.

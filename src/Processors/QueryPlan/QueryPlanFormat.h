@@ -54,7 +54,7 @@ struct ExplainFormatSettings
 namespace QueryPlanFormat
 {
     String trimColumnIdentifier(std::string_view name);
-    void formatOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
+    void formatOutputColumns(const std::unordered_map<String, PrettyColumnName> & pretty_names, WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
     void formatJoinOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix);
 
     String formatNodePretty(

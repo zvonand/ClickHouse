@@ -566,7 +566,7 @@ void QueryPlan::explainPlan(WriteBuffer & buffer, const ExplainPlanOptions & opt
 
     if (settings.pretty)
     {
-        QueryPlanFormat::formatOutputColumns(settings.out, *root->step, settings.header_prefix);
+        QueryPlanFormat::formatOutputColumns(settings.pretty_names, settings.out, *root->step, settings.header_prefix);
         settings.out << '\n';
     }
 

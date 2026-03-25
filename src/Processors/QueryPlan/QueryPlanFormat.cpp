@@ -126,7 +126,7 @@ namespace QueryPlanFormat
         out << "\n";
     }
 
-    void formatOutputColumns(WriteBuffer & out, const IQueryPlanStep & step, const String & prefix)
+    void formatOutputColumns(const std::unordered_map<String, PrettyColumnName> & pretty_names, WriteBuffer & out, const IQueryPlanStep & step, const String & prefix)
     {
         if (!step.hasOutputHeader() || step.getOutputHeader()->empty())
         {
@@ -141,7 +141,10 @@ namespace QueryPlanFormat
             if (!first)
                 out << ", ";
             first = false;
-            out << trimColumnIdentifier(elem.name);
+            auto it = pretty_names.find(elem.name);
+            String pretty_name = it != pretty_names.end() ? it->second.expression : trimColumnIdentifier(elem.name);
+
+            out << pretty_name;
         }
         out << '\n';
     }

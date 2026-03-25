@@ -3659,7 +3659,7 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
     }
 
     if (format_settings.pretty)
-        QueryPlanFormat::formatOutputColumns(format_settings.out, *this, prefix);
+        QueryPlanFormat::formatOutputColumns(format_settings.pretty_names, format_settings.out, *this, prefix);
 
     if (query_info.prewhere_info || query_info.row_level_filter)
     {

@@ -1,0 +1,137 @@
+--- Simple aggregation ---
+Output: a, count()
+
+Aggregating
+│  Keys: a
+│  Aggregates: count()
+│  Skip merging: 0
+└──ReadFromMergeTree (default.t1)
+      Read type: Default
+      Parts: 1 | Granules: 1
+      Output: a
+--- Complex aggregation key ---
+Output: plus(a, 1), sum(c)
+
+Aggregating
+│  Keys: a + 1
+│  Aggregates: sum(c)
+│  Skip merging: 0
+└──ReadFromMergeTree (default.t1)
+      Read type: Default
+      Parts: 1 | Granules: 1
+      Output: a, c
+--- Multiple aggregates ---
+Output: a, count(), sum(c), avg(c)
+
+Aggregating
+│  Keys: a
+│  Aggregates: count(), sumCount(c)
+│  Skip merging: 0
+└──ReadFromMergeTree (default.t1)
+      Read type: Default
+      Parts: 1 | Granules: 1
+      Output: a, c
+--- Aggregate with expression argument ---
+Output: sum(multiply(a, c))
+
+Aggregating
+│  Keys:
+│  Aggregates: sum(a * c)
+│  Skip merging: 0
+└──ReadFromMergeTree (default.t1)
+      Read type: Default
+      Parts: 1 | Granules: 1
+      Output: a, c
+--- Sorting simple ---
+Output: a, b, c
+
+Sorting (Sorting for ORDER BY)
+│  Sorting: a ASC, b DESC
+│  Prefix sort description: a ASC
+│  Result sort description: a ASC, b DESC
+└──ReadFromMergeTree (default.t1)
+      Sorting: a ASC
+      Read type: InOrder
+      Parts: 1 | Granules: 1
+      Output: a, b, c
+--- Sorting with expression ---
+Output: a, b, c
+
+Sorting (Sorting for ORDER BY)
+│  Sorting: a + 1 ASC
+│  Sort description: a + 1 ASC
+└──ReadFromMergeTree (default.t1)
+      Read type: Default
+      Parts: 1 | Granules: 1
+      Output: a, b, c
+--- DISTINCT ---
+Output: a, b
+
+Distinct (DISTINCT)
+│  Columns: a, b
+└──Distinct (Preliminary DISTINCT)
+   │  Columns: a, b
+   └──ReadFromMergeTree (default.t1)
+         Read type: InOrder
+         Parts: 1 | Granules: 1
+         Output: a, b
+--- LIMIT BY ---
+Output: a, b, c
+
+LimitBy
+│  Columns: b
+│  Length 1
+│  Offset 0
+└──ReadFromMergeTree (default.t1)
+      Read type: Default
+      Parts: 1 | Granules: 1
+      Output: a, b, c
+--- HAVING ---
+Output: b, s
+
+Filter (HAVING)
+│  Filter column: sum(c) > 100
+└──Aggregating
+   │  Keys: b
+   │  Aggregates: sum(c)
+   │  Skip merging: 0
+   └──ReadFromMergeTree (default.t1)
+         Read type: Default
+         Parts: 1 | Granules: 1
+         Output: b, c
+--- Window function ---
+Output: a, rn
+
+Window (Window step for window \'PARTITION BY b ORDER BY a ASC\')
+│  Window: (PARTITION BY b ORDER BY a ASC)
+│  Functions: row_number() OVER (PARTITION BY b ORDER BY a ASC)
+└──Sorting (Sorting for window \'PARTITION BY b ORDER BY a ASC\')
+   │  Sort description: b ASC, a ASC
+   └──ReadFromMergeTree (default.t1)
+         Read type: Default
+         Parts: 1 | Granules: 1
+         Output: a, b
+--- Rollup ---
+Output: b, sum(c)
+
+Rollup
+└──Aggregating
+   │  Keys: b
+   │  Aggregates: sum(c)
+   │  Skip merging: 0
+   └──ReadFromMergeTree (default.t1)
+         Read type: Default
+         Parts: 1 | Granules: 1
+         Output: b, c
+--- Cube ---
+Output: b, sum(c)
+
+Cube
+└──Aggregating
+   │  Keys: b
+   │  Aggregates: sum(c)
+   │  Skip merging: 0
+   └──ReadFromMergeTree (default.t1)
+         Read type: Default
+         Parts: 1 | Granules: 1
+         Output: b, c

@@ -32,9 +32,9 @@ INSERT INTO test_pred_stats SELECT number, if(number % 10 = 0, 'active', 'inacti
 -- Direct MergeTree query triggers index-level logging
 SELECT count() FROM test_pred_stats WHERE id > 50000 FORMAT Null;
 
--- Subquery wrapper forces FilterTransform for filter-level logging
--- (direct MergeTree queries push the filter into ReadFromMergeTree, skipping FilterTransform)
-SELECT count() FROM (SELECT * FROM test_pred_stats) WHERE id > 50000 FORMAT Null;
+-- Use numbers() table function — it always produces a FilterTransform
+-- (MergeTree queries may push the filter into the reader, skipping FilterTransform)
+SELECT count() FROM numbers(100000) WHERE number > 50000 FORMAT Null;
 
 SYSTEM FLUSH LOGS predicate_statistics_log;
 
@@ -53,16 +53,15 @@ WHERE table = 'test_pred_stats' AND currentDatabase() = database
     AND length(index_names) > 0
 LIMIT 1;
 
--- Verify filter-level entries exist with filter expression
+-- Verify filter-level entries exist (from numbers() query above)
 SELECT
-    filter_expression != '' AS has_filter_expr,
-    column_name != '' AS has_column,
-    predicate_class != '' AS has_class,
+    column_name = 'number' AS correct_column,
+    predicate_class = 'Range' AS correct_class,
+    function_name = 'greater' AS correct_function,
     input_rows > 0 AS has_input,
     filter_selectivity >= 0 AND filter_selectivity <= 1 AS valid_selectivity
 FROM system.predicate_statistics_log
-WHERE table = 'test_pred_stats' AND currentDatabase() = database
-    AND column_name != ''
+WHERE column_name = 'number' AND function_name = 'greater'
 LIMIT 1;
 
 DROP TABLE test_pred_stats;

@@ -160,7 +160,7 @@ TEST_P(CgroupsMemoryUsageObserverFixture, ReadMemoryUsageTest)
     ASSERT_EQ(
         reader->readMemoryUsage(),
         version == ICgroupsReader::CgroupsVersion::V1 ? /* rss from memory.stat */ 2232029184
-                                                                  : /* anon+sock from memory.stat */ 10429403232);
+                                                                  : /* anon+sock+kernel from memory.stat */ 11967193184);
 }
 
 

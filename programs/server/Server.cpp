@@ -2183,8 +2183,10 @@ try
             /// On very small systems (< 4 GiB), the percentage-based headroom (default 10%) is too large
             /// in absolute terms. Use a higher ratio to leave only 5% headroom,
             /// giving more memory to the server.
+            /// Only apply this uplift when the user hasn't explicitly configured the ratio.
             double effective_ratio = max_server_memory_usage_to_ram_ratio;
-            if (current_physical_server_memory < (4ul << 30) && effective_ratio < 0.95)
+            if (current_physical_server_memory < (4ul << 30) && effective_ratio < 0.95
+                && !new_server_settings[ServerSetting::max_server_memory_usage_to_ram_ratio].changed)
                 effective_ratio = 0.95;
             const size_t default_max_server_memory_usage = static_cast<size_t>(static_cast<double>(current_physical_server_memory) * effective_ratio);
 
@@ -2218,7 +2220,9 @@ try
             /// On low-memory systems, limit merge memory to 10% of RAM instead of 50%.
             /// Merges compete with queries for the same memory budget; giving merges half
             /// the memory leaves too little for INSERT/SELECT on small systems.
-            if (current_physical_server_memory < (4ul << 30) && merges_mutations_ratio > 0.1)
+            /// Only apply this cap when the user hasn't explicitly configured the ratio.
+            if (current_physical_server_memory < (4ul << 30) && merges_mutations_ratio > 0.1
+                && !new_server_settings[ServerSetting::merges_mutations_memory_usage_to_ram_ratio].changed)
                 merges_mutations_ratio = 0.1;
             size_t default_merges_mutations_server_memory_usage = static_cast<size_t>(static_cast<double>(current_physical_server_memory) * merges_mutations_ratio);
             if (merges_mutations_memory_usage_soft_limit == 0)

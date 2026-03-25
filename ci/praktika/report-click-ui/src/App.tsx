@@ -1222,7 +1222,6 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                 headers={headers}
                 rows={rows}
                 loading={loading}
-                isResponsive={false}
               />
             </div>
           )}

@@ -43,13 +43,16 @@ def check():
                 # Strip ", N noise lines excluded" and the verbose "PR changed-lines coverage: " prefix.
                 changed = re.sub(r",\s*\d+ noise lines excluded", "", pr_changed_lines_info)
                 changed = re.sub(r"^PR changed-lines coverage:\s*", "", changed).strip()
-                body += f"\n**Changed lines:** {changed}\n"
+                changed_line = f"\n**Changed lines:** {changed}"
+                if uncovered_code_url:
+                    changed_line += f" · [Uncovered code]({uncovered_code_url})"
+                body += changed_line + "\n"
             links = []
             if coverage_report_url := d.get("coverage_report_url", ""):
                 links.append(f"[Full report]({coverage_report_url})")
             if diff_url:
                 links.append(f"[Diff report]({diff_url})")
-            if uncovered_code_url:
+            if not pr_changed_lines_info and uncovered_code_url:
                 links.append(f"[Uncovered code]({uncovered_code_url})")
             if links:
                 body += "\n" + " · ".join(links)

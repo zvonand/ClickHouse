@@ -1173,7 +1173,7 @@ try
             {
                 auto it = per_entry_progress_results.find(entry.get());
                 chassert(it != per_entry_progress_results.end());
-                entry->finish(it != per_entry_progress_results.end() ? it->second : WriteResult{});
+                entry->finish(it != per_entry_progress_results.end() ? it->second : ResultProgress{});
             }
         }
     };

@@ -52,7 +52,7 @@ protected:
         if (process_list_elem)
         {
             process_list_elem->updateProgressOut(Progress(WriteProgress(progress_result.rows, progress_result.bytes)));
-            process_list_elem->updateProgressIn(Progress(ReadProgress(progress_result.rows, progress_result.bytes)));
+            process_list_elem->updateProgressIn(Progress(DB::ReadProgress(progress_result.rows, progress_result.bytes)));
         }
 
         if (progress_callback)

@@ -12,7 +12,7 @@ extract_query_id() {
 }
 
 count_injected_headers() {
-    grep -ci "^< $1:" | sed 's/^0$/no injected headers/' | sed '/^[1-9]/s/.*/FAIL: injected header detected/'
+    grep -F -ci "< $1:" | sed 's/^0$/no injected headers/' | sed '/^[1-9]/s/.*/FAIL: injected header detected/'
 }
 
 echo "--- CRLF in query_id via URL parameter ---"

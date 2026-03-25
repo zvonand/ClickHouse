@@ -115,6 +115,80 @@ public:
         }
     }
 
+    /// Batch merge multiple UniqExactSet into the first one in parallel.
+    /// Each thread processes one bucket at a time across all hash tables,
+    /// reducing thread pool overhead from O(N) to O(1) compared to pairwise merge.
+    static void parallelizeMergeMulti(const std::vector<UniqExactSet *> & data_vec, ThreadPool & thread_pool, std::atomic<bool> & is_cancelled)
+    {
+        if (data_vec.size() <= 1)
+            return;
+
+        auto * first = data_vec[0];
+
+        /// If not all are two-level, fall back to pairwise merge with thread pool.
+        bool all_two_level = std::all_of(data_vec.begin(), data_vec.end(),
+            [](const UniqExactSet * s) { return s->isTwoLevel(); });
+
+        if (!all_two_level)
+        {
+            for (size_t j = 1; j < data_vec.size(); ++j)
+            {
+                if (is_cancelled.load(std::memory_order_seq_cst))
+                    return;
+                first->merge(*data_vec[j], &thread_pool, &is_cancelled);
+            }
+            return;
+        }
+
+        /// All sets are two-level, perform parallel bucket-wise merge.
+        auto & first_two_level = first->asTwoLevelChecked();
+        constexpr size_t NUM_BUCKETS = TwoLevelSet::NUM_BUCKETS;
+
+        /// Pre-fetch all two-level set pointers to avoid concurrent access to getTwoLevelSet().
+        std::vector<TwoLevelSet *> two_level_ptrs;
+        two_level_ptrs.reserve(data_vec.size());
+        for (auto * set : data_vec)
+            two_level_ptrs.emplace_back(&set->asTwoLevelChecked());
+
+        ThreadPoolCallbackRunnerLocal<void> runner(thread_pool, ThreadName::UNIQ_EXACT_MERGER);
+        try
+        {
+            auto next_bucket_to_merge = std::make_shared<std::atomic_uint32_t>(0);
+
+            auto thread_func = [&two_level_ptrs, &first_two_level, next_bucket_to_merge, &is_cancelled]()
+            {
+                while (true)
+                {
+                    if (is_cancelled.load(std::memory_order_seq_cst))
+                        return;
+
+                    const auto bucket = next_bucket_to_merge->fetch_add(1);
+                    if (bucket >= NUM_BUCKETS)
+                        return;
+
+                    for (size_t j = 1; j < two_level_ptrs.size(); ++j)
+                    {
+                        if (is_cancelled.load(std::memory_order_seq_cst))
+                            return;
+
+                        first_two_level.impls[bucket].merge(two_level_ptrs[j]->impls[bucket]);
+                    }
+                }
+            };
+
+            const size_t max_threads_to_enqueue = std::min<size_t>(thread_pool.getMaxThreads(), NUM_BUCKETS);
+            for (size_t i = 0; i < max_threads_to_enqueue
+                 && next_bucket_to_merge->load(std::memory_order_relaxed) < NUM_BUCKETS; ++i)
+                runner.enqueueAndKeepTrack(thread_func, Priority{});
+        }
+        catch (...)
+        {
+            is_cancelled.store(true);
+            throw;
+        }
+        runner.waitForAllToFinishAndRethrowFirstError();
+    }
+
     auto merge(const UniqExactSet & other, ThreadPool * thread_pool = nullptr, std::atomic<bool> * is_cancelled = nullptr)
     {
         if (size() == 0 && worthConvertingToTwoLevel(other.size()))

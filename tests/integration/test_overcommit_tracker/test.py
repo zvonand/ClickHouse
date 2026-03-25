@@ -57,6 +57,7 @@ def test_user_overcommit():
         if err == "":
             finished = True
 
+    assert overcommited_killed, "overcommited is not killed"
     assert finished, "all tasks are killed"
 
     node.query("DROP USER IF EXISTS A")

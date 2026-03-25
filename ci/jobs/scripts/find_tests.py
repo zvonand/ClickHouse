@@ -1257,6 +1257,19 @@ class Targeting:
             and f not in cpp_with_zero_coverage
             and any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
         ))
+        # Count unique tests found so far (direct + indirect + broad-tier2 + sibling +
+        # zero-coverage keyword fallback).  Skip the supplementary keyword pass when
+        # coverage already produced enough candidates: keyword signal is weak and
+        # adding broad filename-based tests to an already-large set dilutes ranking.
+        KEYWORD_SUPPLEMENT_MAX_PRIOR = 100
+        n_tests_before_keyword = len({q[0] for pairs in line_to_tests.values() for q in pairs})
+        if n_tests_before_keyword >= KEYWORD_SUPPLEMENT_MAX_PRIOR:
+            print(
+                f"[find_tests] skipping supplementary keyword pass "
+                f"({n_tests_before_keyword} tests already found)"
+            )
+            cpp_with_coverage = []
+
         if cpp_with_coverage:
             # Run keyword fallback per changed file so each file's domain keywords
             # are matched independently.  Calling with all files at once collapses
@@ -1324,8 +1337,18 @@ class Targeting:
         # without an arbitrary count limit.
         MIN_SCORE = 1e-8        # floor: tests scoring below this have negligible signal
         MAX_OUTPUT_TESTS = 500   # hard cap: flaky check runs must stay focused
+        # Dynamic ratio floor: drop tests whose score is more than MAX_SCORE_RATIO times
+        # weaker than the best evidence.  This supersedes per-pass suppression guards —
+        # when strong direct hits exist (e.g. rc=37 on a SAMPLE-specific line, score=0.027)
+        # weak signals like broad-tier2 (score=8e-7, ratio=34000x) or distant indirect-call
+        # results are naturally excluded without any explicit per-pass logic.
+        # A ratio of 1000 covers ~two jumps in signal quality (direct→indirect→keyword)
+        # while keeping genuinely related tests from weaker passes when direct is sparse.
+        MAX_SCORE_RATIO = 1000
+        top_score = max(width_score.values(), default=0.0)
+        effective_min = max(MIN_SCORE, top_score / MAX_SCORE_RATIO)
         all_ranked = sorted(width_score, key=sort_key)
-        ranked = [t for t in all_ranked if width_score[t] >= MIN_SCORE][:MAX_OUTPUT_TESTS]
+        ranked = [t for t in all_ranked if width_score[t] >= effective_min][:MAX_OUTPUT_TESTS]
 
         # Broad-tier2 guarantee: if the cap cut off high-cov_regions broad-tier2 tests,
         # append the top few (by cov_regions) that didn't make it — but only up to the cap.

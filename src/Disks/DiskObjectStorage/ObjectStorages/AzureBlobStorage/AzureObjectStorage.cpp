@@ -386,10 +386,17 @@ void AzureObjectStorage::removeObjectsBatchIfExists(
         if (!blob_storage_log)
             return;
 
-        blob_storage_log->addEvent(
-            BlobStorageLogElement::EventType::Delete,
-            container, object.remote_path, object.local_path, object.bytes_size,
-            elapsed_mu, error_code, error_message);
+        try
+        {
+            blob_storage_log->addEvent(
+                BlobStorageLogElement::EventType::Delete,
+                container, object.remote_path, object.local_path, object.bytes_size,
+                elapsed_mu, error_code, error_message);
+        }
+        catch (...)
+        {
+            tryLogCurrentException(log);
+        }
     };
 
     StoredObjectsSpan rest_objects = objects;
@@ -417,18 +424,24 @@ void AzureObjectStorage::removeObjectsBatchIfExists(
             try
             {
                 deferred_response.GetResponse();
+                add_log_entry(object, avg_elapsed_us);
             }
             catch (const Azure::Storage::StorageException & e)
             {
-                if (e.StatusCode != Azure::Core::Http::HttpStatusCode::NotFound)
+                if (e.StatusCode == Azure::Core::Http::HttpStatusCode::NotFound)
+                {
+                    add_log_entry(object, avg_elapsed_us);
+                }
+                else
                 {
                     add_log_entry(object, avg_elapsed_us, static_cast<Int32>(e.StatusCode), e.Message);
-                    throw_at_end = std::current_exception();
+
+                    if (!throw_at_end)
+                        throw_at_end = std::current_exception();
+
                     continue;
                 }
             }
-
-            add_log_entry(object, avg_elapsed_us);
         }
 
         if (throw_at_end)

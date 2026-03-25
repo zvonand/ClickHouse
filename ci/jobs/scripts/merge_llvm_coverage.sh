@@ -111,7 +111,7 @@ genhtml --version
 HEADER_TITLE="ClickHouse coverage report"
 if [ -n "${PR_NUMBER}" ] && [ "${PR_NUMBER}" -gt 0 ]; then
   PR_URL="https://github.com/ClickHouse/ClickHouse/pull/${PR_NUMBER}"
-  HEADER_TITLE="${HEADER_TITLE} &middot; <a href=\"${PR_URL}\">${PR_URL}</a>"
+  HEADER_TITLE="${HEADER_TITLE} &middot; <a href=\"${PR_URL}\">#${PR_NUMBER}</a>"
 elif [ -n "${CURRENT_COMMIT}" ]; then
   COMMIT_URL="https://github.com/ClickHouse/ClickHouse/commit/${CURRENT_COMMIT}"
   COMMIT_SHORT="${CURRENT_COMMIT:0:12}"

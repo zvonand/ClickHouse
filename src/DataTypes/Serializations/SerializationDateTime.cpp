@@ -27,6 +27,7 @@ UInt128 SerializationDateTime::getHash(const TimezoneMixin & time_zone_)
     auto tz = time_zone_.getTimeZone().getTimeZone();
     hash.update(tz.size());
     hash.update(tz);
+    hash.update(time_zone_.hasExplicitTimeZone());
     return hash.get128();
 }
 

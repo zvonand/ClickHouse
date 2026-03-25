@@ -11,6 +11,12 @@ class SerializationDateTime64 final : public SerializationDecimalBase<DateTime64
 private:
     SerializationDateTime64(UInt32 scale_, const TimezoneMixin & time_zone_);
 
+    /// Returns the effective timezone for text parsing and formatting.
+    /// When the column has an explicit timezone (e.g. DateTime64(3, 'UTC')),
+    /// use it. Otherwise, use DateLUT::instance() which respects session_timezone.
+    const DateLUTImpl & getInputTimeZone() const;
+    const DateLUTImpl & getOutputTimeZone() const;
+
 public:
     static UInt128 getHash(UInt32 scale_, const TimezoneMixin & time_zone_);
     static SerializationPtr create(UInt32 scale_, const TimezoneMixin & time_zone_);

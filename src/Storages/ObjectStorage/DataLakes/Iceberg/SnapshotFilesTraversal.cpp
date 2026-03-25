@@ -9,6 +9,7 @@
 #include <Common/logger_useful.h>
 
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Constant.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/StatelessMetadataFileGetter.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Utils.h>
 
@@ -24,6 +25,7 @@ SnapshotReferencedFiles collectSnapshotReferencedFiles(
     Int32 current_schema_id)
 {
     SnapshotReferencedFiles files;
+    const auto & resolver = persistent_table_components.path_resolver;
 
     for (UInt32 i = 0; i < snapshots->size(); ++i)
     {
@@ -31,29 +33,27 @@ SnapshotReferencedFiles collectSnapshotReferencedFiles(
         if (!snapshot->has(Iceberg::f_manifest_list))
             continue;
 
-        String manifest_list_path = snapshot->getValue<String>(Iceberg::f_manifest_list);
-        files.manifest_list_metadata_paths.insert(manifest_list_path);
-
-        String storage_manifest_list_path = getProperFilePathFromMetadataInfo(
-            manifest_list_path, persistent_table_components.table_path, persistent_table_components.table_location);
-        files.manifest_list_storage_paths.insert(storage_manifest_list_path);
+        String manifest_list_raw = snapshot->getValue<String>(Iceberg::f_manifest_list);
+        auto manifest_list_path = IcebergPathFromMetadata::deserialize(manifest_list_raw);
+        files.manifest_list_metadata_paths.insert(manifest_list_raw);
+        files.manifest_list_storage_paths.insert(resolver.resolve(manifest_list_path));
 
         auto manifest_keys = getManifestList(
-            object_storage, persistent_table_components, context, storage_manifest_list_path, log);
+            object_storage, persistent_table_components, context, manifest_list_path, log);
 
         for (const auto & mf_key : manifest_keys)
         {
-            files.manifest_paths.insert(mf_key.manifest_file_path);
+            files.manifest_paths.insert(resolver.resolve(mf_key.manifest_file_path));
 
             auto entries_handle = getManifestFileEntriesHandle(
                 object_storage, persistent_table_components, context, log, mf_key, current_schema_id);
 
             for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
-                files.data_file_paths.insert(entry->file_path);
+                files.data_file_paths.insert(resolver.resolve(entry->parsed_entry->file_path_key));
             for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
-                files.data_file_paths.insert(entry->file_path);
+                files.data_file_paths.insert(resolver.resolve(entry->parsed_entry->file_path_key));
             for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
-                files.data_file_paths.insert(entry->file_path);
+                files.data_file_paths.insert(resolver.resolve(entry->parsed_entry->file_path_key));
         }
     }
 
@@ -66,8 +66,7 @@ namespace
 void collectStatisticsPaths(
     const Poco::JSON::Object::Ptr & metadata,
     const char * field_name,
-    const String & table_path,
-    const String & table_location,
+    const IcebergPathResolver & resolver,
     std::unordered_set<String> & out)
 {
     if (!metadata->has(field_name))
@@ -81,7 +80,7 @@ void collectStatisticsPaths(
         if (entry->has(f_statistics_path))
         {
             String stat_path = entry->getValue<String>(f_statistics_path);
-            out.insert(getProperFilePathFromMetadataInfo(stat_path, table_path, table_location));
+            out.insert(resolver.resolve(IcebergPathFromMetadata::deserialize(stat_path)));
         }
     }
 }
@@ -93,7 +92,7 @@ void collectMetadataRootFiles(
     const String & metadata_path,
     const Poco::JSON::Object::Ptr & metadata,
     const String & table_path,
-    const String & table_location,
+    const IcebergPathResolver & resolver,
     std::unordered_set<String> & out)
 {
     out.insert(metadata_path);
@@ -109,14 +108,14 @@ void collectMetadataRootFiles(
                 if (entry->has(f_metadata_file))
                 {
                     String mf_path = entry->getValue<String>(f_metadata_file);
-                    out.insert(getProperFilePathFromMetadataInfo(mf_path, table_path, table_location));
+                    out.insert(resolver.resolve(IcebergPathFromMetadata::deserialize(mf_path)));
                 }
             }
         }
     }
 
-    collectStatisticsPaths(metadata, f_statistics, table_path, table_location, out);
-    collectStatisticsPaths(metadata, f_partition_statistics, table_path, table_location, out);
+    collectStatisticsPaths(metadata, f_statistics, resolver, out);
+    collectStatisticsPaths(metadata, f_partition_statistics, resolver, out);
 
     String version_hint = table_path;
     if (!version_hint.ends_with('/'))
@@ -142,7 +141,8 @@ std::unordered_set<String> collectReachableFiles(
         persistent_table_components.metadata_cache,
         context,
         log.get(),
-        persistent_table_components.table_uuid);
+        persistent_table_components.table_uuid,
+        persistent_table_components.metadata_compression_method);
 
     auto metadata = getMetadataJSONObject(
         metadata_path,
@@ -154,11 +154,12 @@ std::unordered_set<String> collectReachableFiles(
         persistent_table_components.table_uuid);
 
     std::unordered_set<String> reachable;
+    const auto & resolver = persistent_table_components.path_resolver;
 
     collectMetadataRootFiles(
         metadata_path, metadata,
         persistent_table_components.table_path,
-        persistent_table_components.table_location,
+        resolver,
         reachable);
 
     if (!metadata->has(f_snapshots))

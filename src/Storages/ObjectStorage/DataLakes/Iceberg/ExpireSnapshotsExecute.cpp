@@ -123,8 +123,6 @@ Pipe executeExpireSnapshots(
     const PersistentTableComponents & persistent_components,
     const String & write_format,
     std::shared_ptr<DataLake::ICatalog> catalog,
-    const String & blob_storage_type_name,
-    const String & blob_storage_namespace_name,
     const String & table_name)
 {
     auto parsed = makeSchema().parse(args);
@@ -138,8 +136,6 @@ Pipe executeExpireSnapshots(
         persistent_components,
         write_format,
         catalog,
-        blob_storage_type_name,
-        blob_storage_namespace_name,
         table_name);
 
     return resultToPipe(result);

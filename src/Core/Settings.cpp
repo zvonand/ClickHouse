@@ -7695,9 +7695,6 @@ Experimental table engine for integration with YTsaurus.
 DECLARE(Bool, allow_experimental_ytsaurus_dictionary_source, false, R"(
     Experimental dictionary source for integration with YTsaurus.
     )", EXPERIMENTAL) \
-    DECLARE(Bool, allow_experimental_sql_standard_values_clause, false, R"(
-Enables support for the SQL standard VALUES clause as a table expression in FROM, e.g. SELECT * FROM (VALUES (1, 'a'), (2, 'b')) AS t(id, val). Internally rewritten to the existing values table function.
-)", EXPERIMENTAL) \
     DECLARE(Bool, distributed_plan_force_shuffle_aggregation, false, R"(
 Use Shuffle aggregation strategy instead of PartialAggregation + Merge in distributed query plan.
 )", EXPERIMENTAL) \

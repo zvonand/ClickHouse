@@ -2,7 +2,6 @@
 -- https://github.com/ClickHouse/ClickHouse/issues/99605
 
 SET enable_analyzer = 1;
-SET allow_experimental_sql_standard_values_clause = 1;
 
 -- Basic VALUES with column aliases
 SELECT * FROM (VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, val) ORDER BY id;
@@ -31,7 +30,3 @@ SELECT * FROM (VALUES (42, 'answer')) AS t(id, val);
 
 -- Edge case: first-row single-string literal must be treated as row data, not as values structure
 SELECT * FROM (VALUES ('x UInt8'), ('hello')) AS t(val) ORDER BY val;
-
--- Edge case: syntax must be rejected when experimental setting is disabled
-SET allow_experimental_sql_standard_values_clause = 0;
-SELECT * FROM (VALUES (1, 'a'), (2, 'b')) AS t(id, val); -- { serverError SUPPORT_IS_DISABLED }

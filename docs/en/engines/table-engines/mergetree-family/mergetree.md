@@ -642,7 +642,6 @@ Instead, the permutation is stored in the form of a numeric permutation column `
 
 ```sql
 PROJECTION <name> INDEX <index_expr> TYPE <index_type>
-````
 
 Example:
 

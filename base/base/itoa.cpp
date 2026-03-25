@@ -292,30 +292,76 @@ const uint64_t max_multiple_of_hundred_that_fits_in_64_bits = 1'00'00'00'00'00'0
 const int max_multiple_of_hundred_blocks = 9;
 static_assert(max_multiple_of_hundred_that_fits_in_64_bits % 100 == 0);
 
+/// Divide a 128-bit unsigned integer by 10^18 using Barrett reduction.
+/// Returns the quotient and stores the remainder in `remainder`.
+/// This replaces the expensive `__udivti3` compiler runtime call with
+/// a few multiplications and one correction step.
+///
+/// Barrett reduction: q ≈ floor(n * M / 2^128) where M = floor(2^128 / 10^18).
+/// The approximation may be off by 1, corrected by checking the remainder.
+ALWAYS_INLINE inline unsigned __int128 divmod_1e18(unsigned __int128 n, uint64_t & remainder)
+{
+    /// M = floor(2^128 / 10^18) = 340282366920938463463 (69 bits)
+    /// Split as M_hi:M_lo where M = M_hi * 2^64 + M_lo.
+    static constexpr uint64_t M_lo = 0x725DD1D243ABA0E7ULL;
+    static constexpr uint64_t M_hi = 0x12ULL;
+
+    /// Compute q = (n * M) >> 128 using schoolbook 64-bit multiplication.
+    ///
+    /// n * M = (n_hi * 2^64 + n_lo) * (M_hi * 2^64 + M_lo)
+    ///       = n_hi*M_hi * 2^128 + (n_hi*M_lo + n_lo*M_hi) * 2^64 + n_lo*M_lo
+    ///
+    /// We need the bits at position 128 and above.
+    uint64_t n_lo = static_cast<uint64_t>(n);
+    uint64_t n_hi = static_cast<uint64_t>(n >> 64);
+
+    /// Carry from n_lo * M_lo (upper 64 bits of 128-bit product)
+    unsigned __int128 c = static_cast<unsigned __int128>(n_lo) * M_lo;
+    uint64_t c_hi = static_cast<uint64_t>(c >> 64);
+
+    /// Middle terms + carry, computed in 128 bits to capture overflow
+    unsigned __int128 mid = static_cast<unsigned __int128>(n_hi) * M_lo
+                          + static_cast<unsigned __int128>(n_lo) * M_hi
+                          + c_hi;
+
+    /// High part: n_hi * M_hi + carry from mid. This is the quotient approximation.
+    /// n_hi * M_hi can exceed 64 bits (up to 68 bits), so use 128-bit arithmetic.
+    unsigned __int128 q = static_cast<unsigned __int128>(n_hi) * M_hi
+                        + static_cast<uint64_t>(mid >> 64);
+
+    /// Correct: Barrett approximation may be off by 1.
+    unsigned __int128 r = n - q * max_multiple_of_hundred_that_fits_in_64_bits;
+    if (r >= max_multiple_of_hundred_that_fits_in_64_bits)
+    {
+        q++;
+        r -= max_multiple_of_hundred_that_fits_in_64_bits;
+    }
+    remainder = static_cast<uint64_t>(r);
+    return q;
+}
+
 ALWAYS_INLINE inline char * writeUIntText(UInt128 _x, char * p)
 {
-    /// If we the highest 64bit item is empty, we can print just the lowest item as u64
+    /// If the highest 64-bit item is empty, we can print just the lowest item as u64.
     if (_x.items[UInt128::_impl::little(1)] == 0)
         return jeaiii::to_text_from_integer(p, _x.items[UInt128::_impl::little(0)]);
 
-    /// Doing operations using __int128 is faster and we already rely on this feature
+    /// Doing operations using __int128 is faster and we already rely on this feature.
     using T = unsigned __int128;
     T x = (T(_x.items[UInt128::_impl::little(1)]) << 64) + T(_x.items[UInt128::_impl::little(0)]);
 
-    /// We are going to accumulate blocks of 2 digits to print until the number is small enough to be printed as u64
-    /// To do this we could do: x / 100, x % 100
-    /// But these would mean doing many iterations with long integers, so instead we divide by a much longer integer
-    /// multiple of 100 (100^9) and then get the blocks out of it (as u64)
-    /// Once we reach u64::max we can stop and use the fast method to print that in the front
-    static const T large_divisor = max_multiple_of_hundred_that_fits_in_64_bits;
+    /// We accumulate blocks of 2 digits until the number fits in u64.
+    /// We divide by 10^18 (the largest multiple of 100 fitting in 64 bits)
+    /// using Barrett reduction instead of __udivti3, then extract digit pairs
+    /// from the u64 remainder. The loop runs at most twice for UInt128.
     static const T largest_uint64 = std::numeric_limits<uint64_t>::max();
-    uint8_t two_values[20] = {0}; // 39 Max characters / 2
+    uint8_t two_values[20] = {0}; /// 39 max characters / 2
 
     int current_block = 0;
     while (x > largest_uint64)
     {
-        uint64_t u64_remainder = uint64_t(x % large_divisor);
-        x /= large_divisor;
+        uint64_t u64_remainder;
+        x = divmod_1e18(x, u64_remainder);
 
         int pos = current_block;
         while (u64_remainder)

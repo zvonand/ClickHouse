@@ -33,9 +33,7 @@ void Stats::addOp(Coordination::OpNum op_num, uint64_t microseconds, size_t requ
 
 void Stats::merge(Stats & from)
 {
-    /// (Hopefully no one will call a.merge(b) and b.merge(a) in parallel.)
-    std::lock_guard lock(mutex);
-    std::lock_guard shmock(from.mutex);
+    std::scoped_lock lock(mutex, from.mutex);
 
     read_collector.merge(from.read_collector);
     write_collector.merge(from.write_collector);

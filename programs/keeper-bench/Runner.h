@@ -2,6 +2,7 @@
 #include <Common/ZooKeeper/ZooKeeperArgs.h>
 #include <Common/ZooKeeper/ZooKeeperImpl.h>
 #include <Common/ZooKeeper/IKeeper.h>
+#include <Common/CacheLine.h>
 #include <Common/Config/ConfigProcessor.h>
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/Stopwatch.h>
@@ -48,7 +49,7 @@ private:
 class Runner
 {
 private:
-    struct alignas(std::hardware_destructive_interference_size) ThreadState
+    struct alignas(CH_CAHCE_LINE_SIZE) ThreadState
     {
         Stats thread_info;
     };
@@ -71,8 +72,6 @@ public:
     {
         std::cerr << "Requests executed: " << num << ".\n";
     }
-
-    bool tryPushRequestInteractively(ZooKeeperRequestWithCallbacks && request, DB::InterruptListener & interrupt_listener);
 
     void runBenchmark();
 

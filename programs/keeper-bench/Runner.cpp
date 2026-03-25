@@ -254,10 +254,8 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
         Coordination::ZooKeeperRequestPtr request;
     };
 
-    std::unique_lock lock(mutex); // Generator constructor writes to stderr
-    Generator generator(*config_ptr);
-    generator.startup(*zookeepers[0]);
-    lock.unlock();
+    Generator generator;
+    generator.startup(*config_ptr, *zookeepers[0], thread_state.thread_idx);
 
     /// Randomly choosing connection index
     pcg64 rng(randomSeed());
@@ -337,19 +335,22 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
         {
             handle_request_exception(slot.request);
         }
-
-        ++requests_executed;
     };
 
     while (true)
     {
-        if (shutdown || (max_iterations && requests_executed >= max_iterations))
+        if (shutdown)
         {
-            shutdown = true;
             /// Drain remaining in-flight requests
             for (auto & slot : in_flight)
                 collect_request(slot);
             return;
+        }
+        size_t iteration_idx = requests_started.fetch_add(1);
+        if (max_iterations && warmup_complete && iteration_idx >= max_iterations)
+        {
+            shutdown = true;
+            continue;
         }
 
         /// Wait for the oldest request if the pipeline is full
@@ -360,14 +361,6 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
         }
 
         ZooKeeperRequestWithCallbacks request_with_callbacks = generator.generate();
-
-        if (shutdown || (max_iterations && requests_executed >= max_iterations))
-        {
-            /// Drain remaining in-flight requests
-            for (auto & slot : in_flight)
-                collect_request(slot);
-            return;
-        }
 
         const auto connection_index = distribution(rng);
         auto & zk = zookeepers[connection_index];
@@ -426,7 +419,6 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
             for (const auto & cb : *failure_callbacks)
                 cb();
             handle_request_exception(slot.request);
-            ++requests_executed;
         }
     }
 }
@@ -1223,6 +1215,7 @@ void Runner::runBenchmarkWithGenerator()
     {
         for (size_t i = 0; i < concurrency; ++i)
         {
+            threads[i].thread_idx = i;
             auto thread_connections = connections;
             pool->scheduleOrThrowOnError([this, i, my_connections = std::move(thread_connections)]() mutable { thread(my_connections, threads.at(i)); });
         }
@@ -1260,7 +1253,7 @@ void Runner::runBenchmarkWithGenerator()
 
         if (delay > 0 && delay_watch.elapsedSeconds() > delay)
         {
-            printNumberOfRequestsExecuted(requests_executed);
+            printNumberOfRequestsExecuted(requests_started);
 
             std::lock_guard lock(mutex);
             mergeThreadInfos()->report();
@@ -1273,6 +1266,7 @@ void Runner::runBenchmarkWithGenerator()
             info->clear();
             for (auto & t : threads)
                 t.thread_info.clear();
+            requests_started = 0;
             warmup_complete = true;
             std::cerr << "Warmup complete, starting measurement" << std::endl;
             total_watch.restart();
@@ -1286,7 +1280,7 @@ void Runner::runBenchmarkWithGenerator()
     pool->wait();
     total_watch.stop();
 
-    printNumberOfRequestsExecuted(requests_executed);
+    printNumberOfRequestsExecuted(requests_started);
 
     std::lock_guard lock(mutex);
     auto merged_info = mergeThreadInfos();

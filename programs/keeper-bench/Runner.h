@@ -51,6 +51,7 @@ class Runner
 private:
     struct alignas(DB::CH_CACHE_LINE_SIZE) ThreadState
     {
+        size_t thread_idx;
         Stats thread_info;
     };
 
@@ -120,7 +121,8 @@ private:
     bool enable_tracing = false;
     size_t max_iterations = 0;
 
-    std::atomic<size_t> requests_executed = 0;
+    /// Iteration counter, excluding requests during warmup. This is what max_iterations limits.
+    std::atomic<size_t> requests_started = 0;
     std::atomic<bool> shutdown = false;
 
     double warmup_seconds = 0;

@@ -32,7 +32,7 @@ def check():
 
         if info.pr_number > 0:
             body = (
-                f"## LLVM Coverage Report\n\n"
+                f"### LLVM Coverage Report\n\n"
                 f"| Metric | Baseline | Current | Δ |\n"
                 f"|--------|----------|---------|---|\n"
                 f"| Lines | {b_line_cov:.2f}% | {c_line_cov:.2f}% | {c_line_cov - b_line_cov:+.2f}% |\n"

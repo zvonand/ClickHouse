@@ -1,3 +1,13 @@
+== DateTime (no explicit timezone) ==
+--- TCP sync
+946666800
+--- TCP async
+946666800
+--- HTTP sync
+946666800
+--- HTTP async
+946666800
+== DateTime('America/New_York') ==
 --- TCP sync
 946666800
 --- TCP async

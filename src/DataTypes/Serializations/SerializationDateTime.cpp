@@ -103,9 +103,15 @@ SerializationDateTime::SerializationDateTime(const TimezoneMixin & time_zone_)
 
 const DateLUTImpl & SerializationDateTime::getEffectiveTimeZone() const
 {
-    if (has_explicit_time_zone)
-        return time_zone;
-    return DateLUT::instance();
+    /// DateLUT::instance() returns session_timezone when set, server default otherwise.
+    /// When session_timezone is active, it takes precedence — the user's text literal
+    /// is in their session timezone regardless of column's explicit timezone.
+    /// When session_timezone is not set, use the column's timezone (which is either
+    /// the explicit one like DateTime('America/New_York') or the server default).
+    const auto & session_tz = DateLUT::instance();
+    if (&session_tz != &DateLUT::serverTimezoneInstance())
+        return session_tz;
+    return time_zone;
 }
 
 SerializationPtr SerializationDateTime::create(const TimezoneMixin & time_zone_)

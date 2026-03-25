@@ -20,7 +20,6 @@ public:
         : ReadBufferFromIStream(result_.GetBody(), size_), result(std::move(result_))
     {
         metadata.size_bytes = result->GetContentLength();
-        metadata.is_size_known = result->ContentLengthHasBeenSet();
         metadata.last_modified = Poco::Timestamp::fromEpochTime(result->GetLastModified().Seconds());
         metadata.etag = result->GetETag();
         metadata.attributes = result->GetMetadata();

@@ -9,6 +9,5 @@
         <use_delayed_remote_source/>
         <cluster_discovery_faults/>
         <check_table_query_delay_for_part/>
-        <remove_merge_tree_part_delay/>
     </fail_points_active>
 </clickhouse>

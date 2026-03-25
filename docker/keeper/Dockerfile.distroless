@@ -108,19 +108,20 @@ ARG DEFAULT_CONFIG_DIR="/etc/clickhouse-keeper"
 # Assemble the output directory tree.
 RUN mkdir -p \
         /output/usr/bin \
-        /output/etc/clickhouse-keeper \
-        /output/var/lib/clickhouse \
-        /output/var/log/clickhouse-keeper \
+        /output${DEFAULT_CONFIG_DIR} \
+        /output${DEFAULT_DATA_DIR} \
+        /output${DEFAULT_LOG_DIR} \
         /output/tmp \
     && cp /usr/bin/clickhouse /output/usr/bin/clickhouse \
     && for link in clickhouse-keeper clickhouse-keeper-client clickhouse-docker-init; do \
         ln -sf /usr/bin/clickhouse "/output/usr/bin/${link}" ; \
     done \
+    && if [ -d "${DEFAULT_CONFIG_DIR}" ]; then cp -rp "${DEFAULT_CONFIG_DIR}/." "/output${DEFAULT_CONFIG_DIR}/"; fi \
     && chown -R clickhouse:clickhouse \
-        /output/var/lib/clickhouse \
-        /output/var/log/clickhouse-keeper \
+        /output${DEFAULT_CONFIG_DIR} \
+        /output${DEFAULT_DATA_DIR} \
+        /output${DEFAULT_LOG_DIR} \
     && chmod 1777 /output/tmp \
-    && if [ -d /etc/clickhouse-keeper ]; then cp -rp /etc/clickhouse-keeper/. /output/etc/clickhouse-keeper/; fi \
     && { \
         printf 'root:x:0:0:root:/root:/sbin/nologin\n'; \
         printf 'nobody:x:65534:65534:nobody:/nonexistent:/sbin/nologin\n'; \

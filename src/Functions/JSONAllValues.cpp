@@ -14,7 +14,6 @@
 #include <IO/WriteBufferFromString.h>
 #include <DataTypes/DataTypesCache.h>
 
-
 namespace DB
 {
 
@@ -233,7 +232,7 @@ private:
         auto & result_offsets = result_data.getOffsets();
 
         {
-            WriteBufferFromVector<ColumnString::Chars> out(result_chars);
+            WriteBufferFromVector<ColumnString::Chars> out(result_chars, AppendModeTag());
             serialization.serializeText(source_column, row, out, format_settings);
         }
 

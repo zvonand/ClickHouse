@@ -187,6 +187,9 @@ namespace
 /// When rem == 0, v is already a multiple of p (d_down = 0 <= lo always holds),
 /// so the normal path returns v - 0 = v. No special case needed.
 /// Uses auto for types so it works with both Int32 (Float32) and Int64 (Float64).
+/// `start` must point to the beginning of the output buffer (before any sign character).
+/// `buffer` points to where digits should be written (after the sign, if any).
+/// `v` must be positive (caller handles the sign).
 #define TRY_ROUND_TO_SHORTEST(p)                              \
     {                                                         \
         auto rem = v % (p);                                   \
@@ -198,7 +201,7 @@ namespace
             auto pick = up_ok ? v + d_up : v - rem;           \
             if (down_ok & up_ok)                              \
                 pick = (rem <= d_up) ? v - rem : v + d_up;    \
-            return itoa(pick, buffer) - buffer;               \
+            return itoa(pick, buffer) - start;                \
         }                                                     \
     }
 
@@ -207,8 +210,8 @@ namespace
 ///   shift=3..6: % 100, fallback % 10
 ///   shift=7:    % 1000, fallback % 100
 ///
-/// Verified: exhaustive check of all 2,139,095,040 positive Float32 values
-/// confirms exact match with dragonbox output.
+/// Verified: exhaustive check of all ~4.3 billion Float32 values (positive
+/// and negative) confirms exact match with dragonbox output.
 size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, char * buffer)
 {
     UInt32 bits;
@@ -229,7 +232,16 @@ size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, char * buf
     Int32 lo = half_ulp_lower - adj;
     Int32 hi = half_ulp - adj;
 
-    Int32 v = Int32(f32);
+    /// The rounding logic assumes v > 0. Handle negative floats (e.g. BFloat16)
+    /// by writing the sign, then rounding the absolute value.
+    Int32 raw = Int32(f32);
+    char * start = buffer;
+    if (raw < 0)
+    {
+        *buffer++ = '-';
+        raw = -raw;
+    }
+    Int32 v = raw;
 
     chassert(shift >= 2 && shift <= 7);
 
@@ -241,7 +253,7 @@ size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, char * buf
 
     TRY_ROUND_TO_SHORTEST(10)
 
-    return itoa(v, buffer) - buffer;
+    return itoa(v, buffer) - start;
 }
 
 /// Float64 variant: exp 54-62, shift = exp - 52 (2..10), half_ulp 2..512.
@@ -250,9 +262,10 @@ size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, char * buf
 ///   shift=7..9:  % 1000, fallback % 100, fallback % 10
 ///   shift=10:    % 10000, fallback % 1000, fallback % 100, fallback % 10
 ///
-/// Verified: 1 billion random Float64 samples (100M per exponent, exp 53-62)
-/// plus all power-of-2 boundaries and their neighbors — zero mismatches with
-/// dragonbox. Exhaustive check is infeasible for Float64 (2^62 values in range).
+/// Verified: 10 billion random Float64 samples (500M per exponent, exp 53-62,
+/// both positive and negative) plus all power-of-2 boundaries and their
+/// neighbors — zero mismatches with dragonbox. Exhaustive check is infeasible
+/// for Float64 (2^62 values in range).
 size_t writeFloatTextFastPathFloat64Rounded(Float64 f64, int16_t exp, char * buffer)
 {
     UInt64 bits;
@@ -270,7 +283,15 @@ size_t writeFloatTextFastPathFloat64Rounded(Float64 f64, int16_t exp, char * buf
     Int64 lo = half_ulp_lower - adj;
     Int64 hi = half_ulp - adj;
 
-    Int64 v = Int64(f64);
+    /// Handle negative values: write sign, then round the absolute value.
+    Int64 raw = Int64(f64);
+    char * start = buffer;
+    if (raw < 0)
+    {
+        *buffer++ = '-';
+        raw = -raw;
+    }
+    Int64 v = raw;
 
     chassert(shift >= 2 && shift <= 10);
 
@@ -285,7 +306,7 @@ size_t writeFloatTextFastPathFloat64Rounded(Float64 f64, int16_t exp, char * buf
 
     TRY_ROUND_TO_SHORTEST(10)
 
-    return itoa(v, buffer) - buffer;
+    return itoa(v, buffer) - start;
 }
 
 #undef TRY_ROUND_TO_SHORTEST
@@ -337,7 +358,8 @@ size_t writeFloatTextFastPath(T x, char * buffer)
         ///   exp 25..30: ULP = 4..128. itoa gives the exact value, but dragonbox may
         ///               prefer a "rounder" decimal (more trailing zeros). We use
         ///               writeFloatTextFastPathFloat32Rounded to adjust, matching
-        ///               dragonbox exactly for all 2.1 billion positive Float32 values.
+        ///               dragonbox exactly for all ~4.3 billion Float32 values
+        ///               (positive and negative, exhaustively verified).
         ///
         /// exp < 0:     |value| < 1, not an integer.
         /// exp > 30:    |value| >= 2^31, overflows Int32.

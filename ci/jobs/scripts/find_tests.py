@@ -488,10 +488,126 @@ class Targeting:
                         result[key].append((t, self.SIBLING_DIR_WIDTH, 255, max(1, rc), self.PASS_WEIGHT_SIBLING))
 
 
+        # --- Tertiary pass: file-level expansion for ultra-sparse changed lines ---
+        # When ALL coverage regions overlapping a .cpp file's changed lines have
+        # rc ≤ SPARSE_FILE_THRESHOLD, the changed code is exercised by at most a
+        # handful of tests in nightly runs (e.g. a JSON-column method only called
+        # by one specific test).  The primary query finds those tests, but misses
+        # related tests that exercise the same class through *other* methods —
+        # exactly the gap the old DWARF "any symbol in the TU" approach filled.
+        # Fallback: fetch ALL regions in the sparse file with rc ≤ MAX_TESTS_PER_LINE
+        # so domain-specific tests (e.g. other JSON wide-part tests) get included.
+        SPARSE_FILE_THRESHOLD = 5   # trigger when max primary rc for a file ≤ this
+        PASS_WEIGHT_SPARSE_FILE = 0.2  # between direct (1.0) and sibling (0.1)
+        SPARSE_FILE_WIDTH = 500        # synthetic width: stronger than sibling (10000)
+
+        # Compute per-file max rc from the Python-filtered result dict (only regions
+        # that actually overlapped a changed line, not merely the SQL-fetched neighbourhood).
+        # coverage_ranges includes broader SQL hits (e.g. line 1236 rc=76 when the diff
+        # only touches 1173-1179), which would spuriously suppress the sparse-file pass.
+        file_max_primary_rc: dict = {}
+        for (fname, _), pairs in result.items():
+            stored = self._stored_path(fname)  # fname from coverage_lines (orig path)
+            for _, _, _, region_rc, pw in pairs:
+                if pw >= self.PASS_WEIGHT_INDIRECT:  # direct-pass entries only
+                    if region_rc > file_max_primary_rc.get(stored, 0):
+                        file_max_primary_rc[stored] = region_rc
+
+        # Files that appear in the primary SQL response (have coverage in CIDB at all).
+        # Used to distinguish "stale / no 3-day data" from "genuinely uncovered file".
+        files_in_coverage_ranges = {file_ for file_, *_ in coverage_ranges}
+
+        # files_to_lines keys are already stored-paths (./src/...) — no _stored_path needed.
+        sparse_cpp_files = [
+            f for f in files_to_lines
+            if not f.endswith(".h")
+            and f in files_in_coverage_ranges
+            and file_max_primary_rc.get(f, 0) <= SPARSE_FILE_THRESHOLD
+        ]
+
+        if sparse_cpp_files:
+            sparse_conds = " OR ".join(
+                f"file = '{self._escape_sql_string(f)}'"
+                for f in sparse_cpp_files
+            )
+            sparse_query = f"""
+            SELECT file, line_start, line_end,
+                   groupArray(test_name) AS tests,
+                   groupArray(min_depth) AS depths,
+                   uniqExact(test_name) AS region_test_count
+            FROM checks_coverage_lines
+            WHERE check_start_time > now() - interval 3 days
+              AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+              AND notEmpty(test_name)
+              AND ({sparse_conds})
+            GROUP BY file, line_start, line_end
+            HAVING region_test_count <= {self.MAX_TESTS_PER_LINE}
+            """
+            t_sparse = time.monotonic()
+            try:
+                sparse_raw = cidb.query(sparse_query, log_level="")
+                sparse_elapsed = time.monotonic() - t_sparse
+            except Exception as e:
+                print(f"[find_tests] sparse-file query failed (non-fatal): {e}")
+                sparse_raw = ""
+
+            # Collect per-test best (min width, min depth, min rc) across all regions.
+            sparse_file_tests: dict = {}  # test_name -> (width, depth, rc)
+            for row in sparse_raw.strip().splitlines():
+                if not row:
+                    continue
+                parts = row.split("\t", 5)
+                if len(parts) < 4:
+                    continue
+                file_, ls_s, le_s, tests_raw = parts[:4]
+                depths_raw = parts[4] if len(parts) >= 5 else None
+                count_raw  = parts[5] if len(parts) >= 6 else None
+                try:
+                    tests  = ast.literal_eval(tests_raw.strip())
+                    depths = ast.literal_eval(depths_raw.strip()) if depths_raw else None
+                    rc     = int(count_raw.strip()) if count_raw else (len(tests) if isinstance(tests, list) else 1)
+                    width  = max(1, int(le_s) - int(ls_s) + 1)
+                    if not isinstance(tests, list):
+                        continue
+                    for i, t in enumerate(tests):
+                        d = int(depths[i]) if isinstance(depths, list) and i < len(depths) else 255
+                        if t not in sparse_file_tests:
+                            sparse_file_tests[t] = (width, d, rc)
+                        else:
+                            ow, od, orc = sparse_file_tests[t]
+                            sparse_file_tests[t] = (min(ow, width), min(od, d), min(orc, rc))
+                except (ValueError, SyntaxError):
+                    pass
+
+            if sparse_file_tests:
+                print(
+                    f"[find_tests] sparse-file expansion: {len(sparse_file_tests)} tests "
+                    f"from {len(sparse_cpp_files)} ultra-sparse file(s) ({sparse_elapsed:.2f}s)"
+                )
+                # Inject into the first tracked changed line of each sparse file.
+                # sparse_cpp_files are already stored-paths; coverage_lines use orig paths
+                sparse_stored = set(sparse_cpp_files)
+                injected_sparse: set = set()
+                for fname, ln in coverage_lines:
+                    if not any(fname.startswith(p) for p in COVERAGE_TRACKED_PREFIXES):
+                        continue
+                    if self._stored_path(fname) not in sparse_stored:
+                        continue
+                    key = (fname, ln)
+                    if key in injected_sparse:
+                        continue
+                    existing = {e[0] for e in result.get(key, [])}
+                    for t, (width, depth, rc) in sparse_file_tests.items():
+                        if t not in existing:
+                            result.setdefault(key, []).append(
+                                (t, SPARSE_FILE_WIDTH, depth, rc, PASS_WEIGHT_SPARSE_FILE)
+                            )
+                    injected_sparse.add(key)
+
         # --- Tertiary pass: indirect-call (virtual dispatch) co-occurrence ------
         # Find tests calling the same vtable/function-pointer callees as primary
         # tests. Ranked between direct and sibling hits (INDIRECT_CALL_WIDTH=3000).
-        indirect_tests = self._query_indirect_call_tests(result)
+        indirect_tests = self._query_indirect_call_tests(result, sparse_cpp_files)
         if indirect_tests:
             for key in result:
                 fname, _ = key
@@ -595,7 +711,7 @@ class Targeting:
         ]
         return specific
 
-    def _query_indirect_call_tests(self, primary_result: dict) -> dict:
+    def _query_indirect_call_tests(self, primary_result: dict, sparse_files: list | None = None) -> dict:
         """
         Tertiary pass: find tests that call the same virtual / function-pointer
         callees as the primary tests (those directly covering changed files).
@@ -621,6 +737,7 @@ class Targeting:
         # tests from broad regions (e.g. 1000+) would make the IN-list too
         # large for the CIDB HTTP endpoint ("Field value too long").
         primary_tests = set()
+        seed_rcs: list = []
         for pairs in primary_result.values():
             for entry in pairs:
                 t = entry[0]
@@ -628,8 +745,70 @@ class Targeting:
                 pw = entry[4] if len(entry) > 4 else 1.0
                 if rc <= self.MAX_TESTS_PER_LINE and pw >= self.PASS_WEIGHT_INDIRECT:
                     primary_tests.add(t)
+                    seed_rcs.append(rc)
         if not primary_tests:
             return {}
+
+        # C. Supplement seeds from narrow regions (rc ≤ FILE_SEED_RC) anywhere in
+        # the sparse files.  When changed lines have rc=1 (only one test ever ran
+        # that path), the existing seeds are too few / too specific to find related
+        # tests via Jaccard.  Seeds from other narrow regions in the same file have
+        # broader callee coverage and higher overlap with domain-related tests.
+        FILE_SEED_RC = 20   # narrower than MAX_TESTS_PER_LINE; avoids pulling in broad seeds
+        if sparse_files:
+            from ci.praktika.cidb import CIDB
+            from ci.praktika.settings import Settings
+            _cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+            # sparse_files are already stored-paths (./src/...)
+            sparse_conds = " OR ".join(
+                f"file = '{self._escape_sql_string(f)}'"
+                for f in sparse_files
+            )
+            seed_query = f"""
+            SELECT file, line_start, line_end,
+                   groupArray(test_name) AS tests,
+                   uniqExact(test_name) AS rc
+            FROM checks_coverage_lines
+            WHERE check_start_time > now() - interval 3 days
+              AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+              AND notEmpty(test_name)
+              AND ({sparse_conds})
+            GROUP BY file, line_start, line_end
+            HAVING rc <= {FILE_SEED_RC}
+            """
+            try:
+                seed_raw = _cidb.query(seed_query, log_level="")
+                extra_seeds = 0
+                for row in seed_raw.strip().splitlines():
+                    parts = row.split("\t", 4)
+                    if len(parts) < 4:
+                        continue
+                    try:
+                        tests = ast.literal_eval(parts[3].strip())
+                        rc    = int(parts[4].strip()) if len(parts) >= 5 else len(tests)
+                        if isinstance(tests, list):
+                            for t in tests:
+                                if t not in primary_tests:
+                                    primary_tests.add(t)
+                                    seed_rcs.append(rc)
+                                    extra_seeds += 1
+                    except (ValueError, SyntaxError):
+                        pass
+                if extra_seeds:
+                    print(f"[find_tests] indirect seeds: +{extra_seeds} from narrow file regions")
+            except Exception as e:
+                print(f"[find_tests] seed enrichment query failed (non-fatal): {e}")
+
+        # B. Adaptive Jaccard threshold: when primary seeds come from very specific
+        # regions (low rc), the seed test's callee set is small and unique — it
+        # won't share 70% of its callees with any other test even if they exercise
+        # the same domain.  Lower the threshold proportionally to min seed rc.
+        #   rc=1   → 15%  (5 shared callees out of 34 is meaningful)
+        #   rc=50  → 25%
+        #   rc=100 → 40%
+        #   rc=200 → 70%  (unchanged default)
+        min_seed_rc = min(seed_rcs) if seed_rcs else 200
+        JACCARD_MIN_PCT = max(15, 70 - (200 - min(min_seed_rc, 200)) * 0.3)
 
         # Cap at 500 tests to prevent HTTP field-length errors.
         if len(primary_tests) > 500:
@@ -707,7 +886,7 @@ class Targeting:
           )
         GROUP BY ic2.test_name, ic2_tot.tot_callees
         HAVING shared_callees >= {MIN_SHARED}
-           AND count(DISTINCT ic1.callee_offset) * 100.0 / ic2_tot.tot_callees >= 70
+           AND count(DISTINCT ic1.callee_offset) * 100.0 / ic2_tot.tot_callees >= {JACCARD_MIN_PCT:.1f}
         ORDER BY jaccard_pct DESC, shared_callees DESC
         LIMIT 200
         """
@@ -1345,8 +1524,12 @@ class Targeting:
         # A ratio of 1000 covers ~two jumps in signal quality (direct→indirect→keyword)
         # while keeping genuinely related tests from weaker passes when direct is sparse.
         MAX_SCORE_RATIO = 1000
+        # Cap the floor so that rc=1 changed lines (top_score=1.0) don't push
+        # effective_min to 1e-3 and cut indirect / sparse-file expansion results.
+        # Equivalent to treating any top_score above 1/10 the same as 1/10.
+        MAX_EFFECTIVE_MIN = 1e-4
         top_score = max(width_score.values(), default=0.0)
-        effective_min = max(MIN_SCORE, top_score / MAX_SCORE_RATIO)
+        effective_min = min(MAX_EFFECTIVE_MIN, max(MIN_SCORE, top_score / MAX_SCORE_RATIO))
         all_ranked = sorted(width_score, key=sort_key)
         ranked = [t for t in all_ranked if width_score[t] >= effective_min][:MAX_OUTPUT_TESTS]
 

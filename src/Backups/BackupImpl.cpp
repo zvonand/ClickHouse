@@ -99,7 +99,7 @@ namespace
 
     /// Validate that a file name from a backup does not contain path traversal sequences.
     /// This prevents a corrupted or tampered backup from accessing files outside the intended directories during restore.
-    void validateFileNameFromBackup(const String & file_name, const String & backup_name_for_logging)
+    void validateFileNameFromBackup(const String & file_name, const String & field_name, const String & backup_name_for_logging)
     {
         fs::path path(file_name);
 
@@ -107,8 +107,9 @@ namespace
         if (path.is_absolute() || path.has_root_name() || path.has_root_directory())
             throw Exception(
                 ErrorCodes::INSECURE_PATH,
-                "Backup {}: Entry name {} is an absolute path, which is not allowed",
+                "Backup {}: <{}> {} is an absolute path, which is not allowed",
                 backup_name_for_logging,
+                field_name,
                 quoteString(file_name));
 
         /// Normalize the path and check that it does not escape the backup root.
@@ -118,16 +119,18 @@ namespace
         if (normalized.empty() || normalized == fs::path("."))
             throw Exception(
                 ErrorCodes::BACKUP_DAMAGED,
-                "Backup {}: Entry name {} is empty or invalid",
+                "Backup {}: <{}> {} is empty or invalid",
                 backup_name_for_logging,
+                field_name,
                 quoteString(file_name));
 
         /// After normalization, a path that escapes the root starts with "..".
         if (*normalized.begin() == "..")
             throw Exception(
                 ErrorCodes::INSECURE_PATH,
-                "Backup {}: Entry name {} resolves to a path outside the backup, which is not allowed",
+                "Backup {}: <{}> {} resolves to a path outside the backup, which is not allowed",
                 backup_name_for_logging,
+                field_name,
                 quoteString(file_name));
     }
 }
@@ -549,7 +552,7 @@ void BackupImpl::readBackupMetadata()
             const Poco::XML::Node * file_config = child;
             BackupFileInfo info;
             info.file_name = getString(file_config, "name");
-            validateFileNameFromBackup(info.file_name, backup_name_for_logging);
+            validateFileNameFromBackup(info.file_name, "name", backup_name_for_logging);
             info.object_key = getString(file_config, "object_key", "");
             info.size = getUInt64(file_config, "size");
             if (info.size)
@@ -582,7 +585,7 @@ void BackupImpl::readBackupMetadata()
                 {
                     info.data_file_name = getString(file_config, "data_file", info.file_name);
                     if (info.data_file_name != info.file_name)
-                        validateFileNameFromBackup(info.data_file_name, backup_name_for_logging);
+                        validateFileNameFromBackup(info.data_file_name, "data_file", backup_name_for_logging);
                 }
                 info.encrypted_by_disk = getBool(file_config, "encrypted_by_disk", false);
             }

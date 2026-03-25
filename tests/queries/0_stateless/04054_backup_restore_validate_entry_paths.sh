@@ -11,6 +11,11 @@ ${CLICKHOUSE_CLIENT} --query "INSERT INTO tbl_backup_traversal VALUES (1, 'hello
 
 backups_disk_root=$(${CLICKHOUSE_CLIENT} --query "SELECT path FROM system.disks WHERE name='backups'" 2>/dev/null)
 
+if [ -z "${backups_disk_root}" ]; then
+    echo "backups disk is not configured, skipping test"
+    exit 0
+fi
+
 extra_content="EXTRA_FILE_CONTENT_HERE"
 extra_size=${#extra_content}
 extra_checksum=$(echo -n "${extra_content}" | md5sum | awk '{print $1}')
@@ -92,3 +97,4 @@ ${CLICKHOUSE_CLIENT} --query "SELECT * FROM tbl_backup_traversal"
 
 # Clean up.
 ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS tbl_backup_traversal"
+rm -rf "${backups_disk_root:?}/${CLICKHOUSE_TEST_UNIQUE_NAME}"_* 2>/dev/null || true

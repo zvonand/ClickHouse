@@ -7257,8 +7257,10 @@ void Context::initializeBackgroundExecutorsIfNeeded()
     /// On low-memory systems, limit concurrent merges to avoid OOM.
     /// Each merge can use 40-80 MiB; with the default pool_size=16 and ratio=2,
     /// 32 concurrent merges would need 1.3-2.6 GiB just for merge buffers.
+    /// Only apply this cap when the user hasn't explicitly configured `background_pool_size`.
     size_t available_memory = getMemoryAmount();
-    if (available_memory > 0 && available_memory < (4ul << 30))
+    if (available_memory > 0 && available_memory < (4ul << 30)
+        && !server_settings[ServerSetting::background_pool_size].changed)
     {
         size_t max_pool = std::max<size_t>(1, available_memory / (1ul << 30)); /// 1 per GiB
         if (background_pool_size > max_pool)
@@ -7268,7 +7270,8 @@ void Context::initializeBackgroundExecutorsIfNeeded()
                 background_pool_size, max_pool, formatReadableSizeWithBinarySuffix(available_memory));
             background_pool_size = max_pool;
             /// Clamp the concurrency ratio to at most 1 to avoid increasing it beyond what the user configured.
-            background_merges_mutations_concurrency_ratio = std::min(background_merges_mutations_concurrency_ratio, 1.0);
+            if (!server_settings[ServerSetting::background_merges_mutations_concurrency_ratio].changed)
+                background_merges_mutations_concurrency_ratio = std::min(background_merges_mutations_concurrency_ratio, 1.0);
             /// Update shared settings so the MergeTree sanity check sees the lowered values.
             shared->server_settings.set("background_pool_size", max_pool);
             shared->server_settings.set("background_merges_mutations_concurrency_ratio", background_merges_mutations_concurrency_ratio);

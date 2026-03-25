@@ -692,7 +692,7 @@ class ClickHouseCluster:
         self.with_iceberg_catalog = False
         self._iceberg_rest_catalog_port = None
         self.with_glue_catalog = False
-        self.glue_catalog_port = 3000
+        self._glue_catalog_port = None
         self.with_hms_catalog = False
         self.hms_catalog_port = 9083
 
@@ -1010,6 +1010,13 @@ class ClickHouseCluster:
             return self._iceberg_rest_catalog_port
         self._iceberg_rest_catalog_port = self.port_pool.get_port()
         return self._iceberg_rest_catalog_port
+
+    @property
+    def glue_catalog_port(self):
+        if self._glue_catalog_port:
+            return self._glue_catalog_port
+        self._glue_catalog_port = self.port_pool.get_port()
+        return self._glue_catalog_port
 
     @property
     def redis_port(self):
@@ -1714,6 +1721,7 @@ class ClickHouseCluster:
 
     def setup_glue_catalog_cmd(self, instance, env_variables, docker_compose_yml_dir):
         self.with_glue_catalog = True
+        env_variables["GLUE_CATALOG_PORT"] = str(self.glue_catalog_port)
         self.base_cmd.extend(
             [
                 "--file",

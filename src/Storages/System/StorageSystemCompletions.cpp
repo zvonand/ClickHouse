@@ -83,9 +83,6 @@ void fillDataWithTableColumns(
     res_columns[1]->insert(TABLE_CONTEXT);
     res_columns[2]->insert(database_name);
 
-    if (check_access_for_columns && !access->isGranted(AccessType::SHOW_COLUMNS, database_name, table_name))
-        return;
-
     auto table_lock = table->tryLockForShare(context->getCurrentQueryId(), context->getSettingsRef()[Setting::lock_acquire_timeout]);
     if (table_lock == nullptr)
         return; // table was dropped while acquiring the lock

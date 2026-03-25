@@ -370,11 +370,7 @@ void QueryOracle::generateRowPolicyOracleQueries(RandomGenerator & rg, Statement
     // The execute_as field causes SQLProtoStr to prepend "EXECUTE AS 'oracleUser';\n"
     // so the session switches to the oracle user before the SELECT runs (row policy applies).
     sq1.CopyFrom(sq2);
-    {
-        ExplainQuery * eq1 = sq1.mutable_single_query()->mutable_explain();
-        eq1->set_execute_as(FuzzConfig::oracleUser);
-        eq1->mutable_inner_query()->mutable_select()->mutable_sel()->mutable_select_core()->clear_where();
-    }
+    sq1.mutable_single_query()->mutable_explain()->mutable_inner_query()->mutable_select()->mutable_sel()->mutable_select_core()->clear_where();
 
     gen.enforceFinal(false);
     gen.setAllowNotDetermistic(true);

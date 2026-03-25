@@ -159,7 +159,7 @@ String getNextIcebergExpireTimestamp(RandomGenerator & rg, FuzzConfig & fc)
     if (rg.nextBool())
     {
         /// Convert history ms timestamp to DateTime string that readDateTimeText can parse.
-        return fc.getRandomIcebergHistoryValue("toString(toDateTime(intDiv(\"made_current_at\", 1000)))");
+        return fc.getRandomIcebergHistoryValue("toString(toDateTime(\"made_current_at\"))");
     }
     else
     {

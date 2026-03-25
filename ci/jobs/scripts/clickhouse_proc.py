@@ -728,6 +728,7 @@ if [[ -n "$USE_S3_STORAGE_FOR_MERGE_TREE" ]] && [[ "$USE_S3_STORAGE_FOR_MERGE_TR
     clickhouse-client --max_estimated_execution_time 0 --max_execution_time "$MAX_EXECUTION_TIME" --max_memory_usage 25G --query "INSERT INTO test.visits SELECT * FROM datasets.visits_v1 SETTINGS enable_filesystem_cache_on_write_operations=0, max_insert_threads=16"
     clickhouse-client --query "DROP TABLE datasets.visits_v1 SYNC"
     clickhouse-client --query "DROP TABLE datasets.hits_v1 SYNC"
+    # Note: `tpcds` and `tpch` databases are NOT dropped here as they are used by stateful tests.
 else
     clickhouse-client --query "RENAME TABLE datasets.hits_v1 TO test.hits"
     clickhouse-client --query "RENAME TABLE datasets.visits_v1 TO test.visits"

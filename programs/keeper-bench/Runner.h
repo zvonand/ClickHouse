@@ -49,7 +49,7 @@ private:
 class Runner
 {
 private:
-    struct alignas(CH_CAHCE_LINE_SIZE) ThreadState
+    struct alignas(DB::CH_CACHE_LINE_SIZE) ThreadState
     {
         Stats thread_info;
     };

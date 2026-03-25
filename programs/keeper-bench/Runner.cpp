@@ -254,8 +254,10 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
         Coordination::ZooKeeperRequestPtr request;
     };
 
+    std::unique_lock lock(mutex); // Generator constructor writes to stderr
     Generator generator(*config_ptr);
     generator.startup(*zookeepers[0]);
+    lock.unlock();
 
     /// Randomly choosing connection index
     pcg64 rng(randomSeed());

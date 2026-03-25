@@ -210,7 +210,7 @@ clickhouse-client --max_execution_time 600 --max_memory_usage 30G --max_memory_u
 
 clickhouse-client --query "DROP TABLE datasets.visits_v1 SYNC"
 clickhouse-client --query "DROP TABLE datasets.hits_v1 SYNC"
-# Drop `tpch` before the storage policy switch below:. Its tables live on the `default` disk which becomes unavailable under
+# Drop `tpch` before the storage policy switch below. Its tables live on the `default` disk which becomes unavailable under
 # `azure_cache`/`s3_cache`, preventing the server from starting. `tpcds` is not dropped because web disk survives policy changes.
 clickhouse-client --query "DROP DATABASE IF EXISTS tpch SYNC"
 

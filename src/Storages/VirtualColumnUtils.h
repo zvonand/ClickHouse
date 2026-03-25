@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Columns/ColumnsNumber.h>
+#include <Core/NamesAndTypes.h>
 #include <Interpreters/Context_fwd.h>
 #include <Interpreters/StorageID.h>
 #include <Parsers/IAST_fwd.h>
@@ -15,7 +16,7 @@ namespace DB
 
 class Block;
 class Chunk;
-class NamesAndTypesList;
+class ColumnsDescription;
 
 class ExpressionActions;
 class IMergeTreeDataPart;
@@ -154,6 +155,11 @@ void addRequestedFileLikeStorageVirtualsToChunk(
 /// per-row information (e.g. _row_number). Such columns are incompatible with
 /// the "need only count" optimization that skips actual row parsing.
 bool hasRowDependentVirtualColumns(const NamesAndTypesList & requested_virtual_columns);
+
+/// Append virtual columns to a physical columns list for expression analysis.
+/// Virtual columns that already exist in the list are skipped.
+NamesAndTypesList getColumnsWithVirtualsForAnalysis(const NamesAndTypesList & columns, const NamesAndTypesList & virtual_columns);
+NamesAndTypesList getColumnsWithVirtualsForAnalysis(const ColumnsDescription & columns, const NamesAndTypesList & virtual_columns);
 
 /// Find hive partitioning part inside path
 /// /a/b/c/d=e/f=g/h.i => d=e/f=g

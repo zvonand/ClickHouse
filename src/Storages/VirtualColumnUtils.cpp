@@ -42,6 +42,7 @@
 #include <Functions/indexHint.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/WriteHelpers.h>
+#include <Storages/ColumnsDescription.h>
 #include <Storages/HivePartitioningUtils.h>
 #include <Storages/MergeTree/IMergeTreeDataPart.h>
 #include <Storages/StorageSnapshot.h>
@@ -746,6 +747,16 @@ Names filterVirtualColumns(
     return result;
 }
 
+NamesAndTypesList getColumnsWithVirtualsForAnalysis(const NamesAndTypesList & columns, const NamesAndTypesList & virtual_columns)
+{
+    auto result = columns;
+    for (const auto & col : virtual_columns)
+        if (!result.contains(col.name))
+            result.push_back(col);
+
+    return result;
+}
+
 std::pair<Names, Names> splitPhysicalAndVirtualColumnNames(const Names & column_names, const StorageSnapshotPtr & storage_snapshot)
 {
     Names physical_names;
@@ -770,6 +781,11 @@ std::pair<Names, Names> splitPhysicalAndVirtualColumnNames(const Names & column_
     }
 
     return {std::move(physical_names), std::move(virtual_names)};
+}
+
+NamesAndTypesList getColumnsWithVirtualsForAnalysis(const ColumnsDescription & columns, const NamesAndTypesList & virtual_columns)
+{
+    return getColumnsWithVirtualsForAnalysis(columns.get(GetColumnsOptions(GetColumnsOptions::Kind::AllPhysical).withSubcolumns()), virtual_columns);
 }
 
 }

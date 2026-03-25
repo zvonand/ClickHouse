@@ -43,9 +43,11 @@ bool sendDiagRequest(int nl_fd, uint8_t family)
 }
 
 /// Receive and parse all netlink responses, extracting inode -> TCPSocketMemInfo.
+/// Uses memcpy to read headers instead of casting raw buffer pointers, avoiding -Wcast-align
+/// warnings from NLMSG_NEXT / RTA_NEXT macros.
 void recvDiagResponse(int nl_fd, std::unordered_map<uint64_t, TCPSocketMemInfo> & result)
 {
-    alignas(struct nlmsghdr) char buf[32768]; // NOLINT(modernize-avoid-c-arrays)
+    char buf[32768]; // NOLINT(modernize-avoid-c-arrays)
 
     while (true)
     {
@@ -53,29 +55,66 @@ void recvDiagResponse(int nl_fd, std::unordered_map<uint64_t, TCPSocketMemInfo> 
         if (len <= 0)
             break;
 
-        for (auto * nlh = reinterpret_cast<nlmsghdr *>(buf);
-             NLMSG_OK(nlh, static_cast<size_t>(len));
-             nlh = NLMSG_NEXT(nlh, len))
+        size_t remaining = static_cast<size_t>(len);
+        char * ptr = buf;
+
+        while (remaining >= sizeof(nlmsghdr))
         {
-            if (nlh->nlmsg_type == NLMSG_DONE)
-                return;
-            if (nlh->nlmsg_type == NLMSG_ERROR)
+            nlmsghdr nlh;
+            memcpy(&nlh, ptr, sizeof(nlh));
+
+            if (nlh.nlmsg_len < sizeof(nlmsghdr) || nlh.nlmsg_len > remaining)
+                break;
+
+            if (nlh.nlmsg_type == NLMSG_DONE || nlh.nlmsg_type == NLMSG_ERROR)
                 return;
 
-            auto * diag_msg = static_cast<inet_diag_msg *>(NLMSG_DATA(nlh));
-            uint64_t inode = diag_msg->idiag_inode;
-
-            unsigned int attr_len = nlh->nlmsg_len - NLMSG_LENGTH(sizeof(*diag_msg));
-            for (auto * attr = reinterpret_cast<rtattr *>(diag_msg + 1);
-                 RTA_OK(attr, attr_len);
-                 attr = RTA_NEXT(attr, attr_len))
+            /// Guard against messages too short to contain inet_diag_msg.
+            size_t min_msg_len = NLMSG_LENGTH(sizeof(inet_diag_msg));
+            if (nlh.nlmsg_len < min_msg_len)
             {
-                if (attr->rta_type == INET_DIAG_MEMINFO)
-                {
-                    auto * mem = static_cast<inet_diag_meminfo *>(RTA_DATA(attr));
-                    result[inode] = {.rmem = mem->idiag_rmem, .wmem = mem->idiag_tmem};
-                }
+                size_t advance = NLMSG_ALIGN(nlh.nlmsg_len);
+                if (advance > remaining)
+                    break;
+                ptr += advance;
+                remaining -= advance;
+                continue;
             }
+
+            inet_diag_msg diag_msg;
+            memcpy(&diag_msg, ptr + NLMSG_HDRLEN, sizeof(diag_msg));
+            uint64_t inode = diag_msg.idiag_inode;
+
+            unsigned int attr_len = nlh.nlmsg_len - static_cast<unsigned int>(min_msg_len);
+            char * attr_ptr = ptr + min_msg_len;
+
+            while (attr_len >= sizeof(rtattr))
+            {
+                rtattr rta;
+                memcpy(&rta, attr_ptr, sizeof(rta));
+
+                if (rta.rta_len < sizeof(rtattr) || rta.rta_len > attr_len)
+                    break;
+
+                if (rta.rta_type == INET_DIAG_MEMINFO && rta.rta_len >= RTA_LENGTH(sizeof(inet_diag_meminfo)))
+                {
+                    inet_diag_meminfo mem;
+                    memcpy(&mem, attr_ptr + RTA_LENGTH(0), sizeof(mem));
+                    result[inode] = {.rmem = mem.idiag_rmem, .wmem = mem.idiag_tmem};
+                }
+
+                unsigned int advance = RTA_ALIGN(rta.rta_len);
+                if (advance > attr_len)
+                    break;
+                attr_ptr += advance;
+                attr_len -= advance;
+            }
+
+            size_t advance = NLMSG_ALIGN(nlh.nlmsg_len);
+            if (advance > remaining)
+                break;
+            ptr += advance;
+            remaining -= advance;
         }
     }
 }

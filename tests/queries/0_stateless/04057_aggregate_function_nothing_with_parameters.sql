@@ -12,3 +12,8 @@ SELECT medianIfArrayArray(0.5)([[NULL]], [[1]]);
 
 -- Non-null case must still return correct results
 SELECT quantileIfArrayArray(0.5)([[1,2,3]], [[1,1,1]]);
+
+-- Verify parameters are preserved in the aggregate function type name.
+-- Before the fix, AggregateFunctionNothing dropped parameters, producing
+-- 'nothingNullArrayArray' without '(0.5)'. This check works on release builds too.
+SELECT toTypeName(quantileIfArrayArrayState(0.5)([[NULL]], [[1]])) LIKE '%(0.5)%';

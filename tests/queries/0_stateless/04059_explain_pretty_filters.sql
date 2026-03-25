@@ -22,12 +22,12 @@ SELECT * FROM t1 WHERE a > 5;
 SELECT '--- Complex filter AND ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT * FROM t1 WHERE a > 1 AND b != 'x' AND c < 100;
+SELECT * FROM t1 WHERE a > 1 AND (b != 'x' OR b LIKE '%foo%') AND c + a * 2 < 100;
 
 SELECT '--- Filter with nested expression ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT * FROM t1 WHERE (a + 1) * 2 > 10;
+SELECT * FROM t1 WHERE ((a + 1) * 2 > 10 OR c / (a + 1) < 5) AND (a % 3 = 0 OR b != 'test');
 
 SELECT '--- Prewhere ---';
 

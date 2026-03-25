@@ -3677,7 +3677,7 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
     if (query_info.prewhere_info)
     {
         const auto pretty_expression = format_settings.pretty
-            ? QueryPlanFormat::formatColumnPretty(query_info.prewhere_info->prewhere_column_name, format_settings) : String{};
+            ? QueryPlanFormat::formatColumnPretty(query_info.prewhere_info->prewhere_column_name, format_settings.pretty_names) : String{};
 
         if (!format_settings.pretty || !pretty_expression.empty())
         {
@@ -3705,7 +3705,7 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
     if (query_info.row_level_filter)
     {
         const auto pretty_expression = format_settings.pretty
-            ? QueryPlanFormat::formatColumnPretty(query_info.row_level_filter->column_name, format_settings) : String{};
+            ? QueryPlanFormat::formatColumnPretty(query_info.row_level_filter->column_name, format_settings.pretty_names) : String{};
 
         if (!format_settings.pretty || !pretty_expression.empty())
         {
@@ -3736,7 +3736,7 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
         if (deferred_row_level_filter)
         {
             format_settings.out << prefix << "  Deferred row level filter column: "
-                << QueryPlanFormat::formatColumnPretty(deferred_row_level_filter->column_name, format_settings) << '\n';
+                << QueryPlanFormat::formatColumnPretty(deferred_row_level_filter->column_name, format_settings.pretty_names) << '\n';
             const auto annotation = QueryPlanFormat::getColumnAnnotation(deferred_row_level_filter->column_name, format_settings);
             if (!annotation.empty())
                 format_settings.out << prefix << "  " << annotation << '\n';
@@ -3744,7 +3744,7 @@ void ReadFromMergeTree::describeActions(FormatSettings & format_settings) const
         if (deferred_prewhere_info)
         {
             format_settings.out << prefix << "  Deferred prewhere filter column: "
-                << QueryPlanFormat::formatColumnPretty(deferred_prewhere_info->prewhere_column_name, format_settings) << '\n';
+                << QueryPlanFormat::formatColumnPretty(deferred_prewhere_info->prewhere_column_name, format_settings.pretty_names) << '\n';
             const auto annotation = QueryPlanFormat::getColumnAnnotation(deferred_prewhere_info->prewhere_column_name, format_settings);
             if (!annotation.empty())
                 format_settings.out << prefix << "  " << annotation << '\n';

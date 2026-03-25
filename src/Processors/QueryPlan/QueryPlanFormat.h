@@ -63,7 +63,7 @@ namespace QueryPlanFormat
         const std::unordered_map<String, RuntimeFilterInfo> & runtime_filter_names,
         std::unordered_map<FutureSet::Hash, String, PreparedSets::Hashing> & subquery_set_names,
         int parent_precedence = 0);
-    String formatColumnPretty(const String & column_name, const ExplainFormatSettings & settings);
+    String formatColumnPretty(const String & column_name, const std::unordered_map<String, PrettyColumnName> & pretty_names);
     std::string_view getColumnAnnotation(const String & column_name, const ExplainFormatSettings & settings);
 
     void buildPrettyNamesMap(

@@ -32,6 +32,7 @@
 #include <Processors/QueryPlan/RollupStep.h>
 #include <Processors/QueryPlan/SourceStepWithFilter.h>
 #include <Processors/QueryPlan/TotalsHavingStep.h>
+#include <Processors/QueryPlan/WindowStep.h>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -220,7 +221,6 @@ namespace QueryPlanFormat
             if (func_name == "notIn" || func_name == "globalNotIn"
                 || func_name == "notNullIn" || func_name == "globalNotNullIn")
                                                   return OperatorInfo{"NOT IN", 9};
-            if (func_name == "match")             return OperatorInfo{"REGEXP", 9};
             if (func_name == "concat")            return OperatorInfo{"||", 10};
             if (func_name == "plus")              return OperatorInfo{"+", 11};
             if (func_name == "minus")             return OperatorInfo{"-", 11};
@@ -484,9 +484,9 @@ namespace QueryPlanFormat
         }
     }
 
-    String formatColumnPretty(const String & column_name, const ExplainFormatSettings & settings)
+    String formatColumnPretty(const String & column_name, const std::unordered_map<String, PrettyColumnName> & pretty_names)
     {
-        if (auto it = settings.pretty_names.find(column_name); it != settings.pretty_names.end())
+        if (auto it = pretty_names.find(column_name); it != pretty_names.end())
             return it->second.expression;
         return trimColumnIdentifier(column_name);
     }
@@ -518,7 +518,70 @@ namespace QueryPlanFormat
                     pretty += trimColumnIdentifier(arg);
             }
             pretty += ')';
-            pretty_names[agg.column_name] = PrettyColumnName(std::move(pretty));
+            pretty_names.try_emplace(agg.column_name, PrettyColumnName(std::move(pretty)));
+        }
+    }
+
+    static void addWindowFunctionPrettyNames(const WindowDescription & window_description, std::unordered_map<String, PrettyColumnName> & pretty_names)
+    {
+        String spec = "(";
+
+        if (!window_description.partition_by.empty())
+        {
+            spec += "PARTITION BY ";
+            for (size_t i = 0; i < window_description.partition_by.size(); ++i)
+            {
+                if (i > 0)
+                    spec += ", ";
+                spec += formatColumnPretty(window_description.partition_by[i].column_name, pretty_names);
+            }
+        }
+
+        if (!window_description.partition_by.empty() && !window_description.order_by.empty())
+            spec += ' ';
+
+        if (!window_description.order_by.empty())
+        {
+            spec += "ORDER BY ";
+            for (size_t i = 0; i < window_description.order_by.size(); ++i)
+            {
+                if (i > 0)
+                    spec += ", ";
+                const auto & desc = window_description.order_by[i];
+                spec += formatColumnPretty(desc.column_name, pretty_names);
+                spec += desc.direction > 0 ? " ASC" : " DESC";
+                if (desc.with_fill)
+                    spec += " WITH FILL";
+            }
+        }
+
+        if (!window_description.frame.is_default)
+        {
+            if (!window_description.partition_by.empty() || !window_description.order_by.empty())
+                spec += ' ';
+            spec += window_description.frame.toString();
+        }
+
+        spec += ')';
+
+        for (const auto & func : window_description.window_functions)
+        {
+            String pretty;
+
+            if (func.aggregate_function)
+                pretty += func.aggregate_function->getName();
+
+            pretty += '(';
+            for (size_t i = 0; i < func.argument_names.size(); ++i)
+            {
+                if (i > 0)
+                    pretty += ", ";
+                pretty += formatColumnPretty(func.argument_names[i], pretty_names);
+            }
+            pretty += ") OVER ";
+            pretty += spec;
+
+            pretty_names[func.column_name] = PrettyColumnName(std::move(pretty));
         }
     }
 
@@ -579,14 +642,6 @@ namespace QueryPlanFormat
         {
             addAggregatesPrettyNames(static_cast<const MergingAggregatedStep *>(step.get())->getParams(), pretty_names);
         }
-        else if (step_name == "Rollup")
-        {
-            addAggregatesPrettyNames(static_cast<const RollupStep *>(step.get())->getParams(), pretty_names);
-        }
-        else if (step_name == "Cube")
-        {
-            addAggregatesPrettyNames(static_cast<const CubeStep *>(step.get())->getParams(), pretty_names);
-        }
         else if (step_name == "TotalsHaving")
         {
             const auto * having_step = static_cast<const TotalsHavingStep *>(step.get());
@@ -596,6 +651,11 @@ namespace QueryPlanFormat
                     if (output->type != ActionsDAG::ActionType::INPUT)
                         pretty_names[output->result_name] = PrettyColumnName(formatNodePretty(output, pretty_names, runtime_filter_names, subquery_set_names));
             }
+        }
+        else if (step_name == "Window")
+        {
+            const auto * window_step = static_cast<const WindowStep *>(step.get());
+            addWindowFunctionPrettyNames(window_step->getWindowDescription(), pretty_names);
         }
         else if (step_name == "BuildRuntimeFilter")
         {

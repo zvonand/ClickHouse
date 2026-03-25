@@ -58,7 +58,8 @@ SELECT b, sum(c) AS s FROM t1 GROUP BY b HAVING s > 100;
 SELECT '--- Window function ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT a, row_number() OVER (PARTITION BY b ORDER BY a) AS rn FROM t1;
+SELECT a, row_number() OVER (PARTITION BY b ORDER BY ((a * (2 + 1)) - 1)) AS rn FROM t1;
+
 
 SELECT '--- Rollup ---';
 

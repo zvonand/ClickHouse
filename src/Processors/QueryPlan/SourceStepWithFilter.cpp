@@ -117,7 +117,7 @@ void SourceStepWithFilter::describeActions(FormatSettings & format_settings) con
     if (query_info.prewhere_info)
     {
         const auto pretty_expression = format_settings.pretty
-            ? QueryPlanFormat::formatColumnPretty(query_info.prewhere_info->prewhere_column_name, format_settings) : String{};
+            ? QueryPlanFormat::formatColumnPretty(query_info.prewhere_info->prewhere_column_name, format_settings.pretty_names) : String{};
 
         if (!format_settings.pretty || !pretty_expression.empty())
         {
@@ -145,7 +145,7 @@ void SourceStepWithFilter::describeActions(FormatSettings & format_settings) con
     if (query_info.row_level_filter)
     {
         const auto pretty_expression = format_settings.pretty
-            ? QueryPlanFormat::formatColumnPretty(query_info.row_level_filter->column_name, format_settings) : String{};
+            ? QueryPlanFormat::formatColumnPretty(query_info.row_level_filter->column_name, format_settings.pretty_names) : String{};
 
         if (!format_settings.pretty || !pretty_expression.empty())
         {

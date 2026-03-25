@@ -71,7 +71,7 @@ void ArrayJoinStep::describeActions(FormatSettings & settings) const
         first = false;
 
 
-        settings.out << (settings.pretty ? QueryPlanFormat::formatColumnPretty(column, settings) : column);
+        settings.out << (settings.pretty ? QueryPlanFormat::formatColumnPretty(column, settings.pretty_names) : column);
     }
     settings.out << '\n';
 }

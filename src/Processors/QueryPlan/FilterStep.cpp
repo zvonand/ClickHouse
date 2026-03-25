@@ -213,7 +213,7 @@ void FilterStep::describeActions(FormatSettings & settings) const
     }
 
     settings.out << prefix << "Filter column: "
-        << QueryPlanFormat::formatColumnPretty(filter_column_name, settings);
+        << QueryPlanFormat::formatColumnPretty(filter_column_name, settings.pretty_names);
 
     if (!settings.pretty && remove_filter_column)
         settings.out << " (removed)";

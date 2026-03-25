@@ -36,7 +36,7 @@ void dumpSortDescription(const SortDescription & description, ExplainFormatSetti
             out << ", ";
         first = false;
 
-        out << (settings.pretty ? QueryPlanFormat::formatColumnPretty(desc.column_name, settings) : desc.column_name);
+        out << (settings.pretty ? QueryPlanFormat::formatColumnPretty(desc.column_name, settings.pretty_names) : desc.column_name);
 
         if (desc.direction > 0)
             out << " ASC";

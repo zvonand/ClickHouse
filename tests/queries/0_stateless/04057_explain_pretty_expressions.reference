@@ -1,21 +1,17 @@
---- Arithmetic operators in filter ---
-Output: a, b, c, d, dt
+--- Arithmetic operators ---
+Output: a + 1, a - 2, a * 3, a / 4, a % 5, a DIV 6
 
-Filter ((WHERE + Change column names to column identifiers))
-│  Filter column: a + 1 > 5 AND a - 2 < 100 AND a * 3 != 0 AND a / 2 > 1 AND a % 5 = 0 AND a DIV 6 > 0
-└──ReadFromMergeTree (default.t1)
-      Read type: Default
-      Parts: 1 | Granules: 1
-      Output: a, b, c, d, dt
---- Unary negate in filter ---
-Output: a, b, c, d, dt
+ReadFromMergeTree (default.t1)
+   Read type: Default
+   Parts: 1 | Granules: 1
+   Output: a
+--- Unary negate ---
+Output: -a
 
-Filter ((WHERE + Change column names to column identifiers))
-│  Filter column: -a < -5
-└──ReadFromMergeTree (default.t1)
-      Read type: Default
-      Parts: 1 | Granules: 1
-      Output: a, b, c, d, dt
+ReadFromMergeTree (default.t1)
+   Read type: Default
+   Parts: 1 | Granules: 1
+   Output: a
 --- Comparison operators ---
 Output: a, b, c, d, dt
 
@@ -89,50 +85,40 @@ Filter ((WHERE + Change column names to column identifiers))
 Output: a, b, c, d, dt
 
 Filter ((WHERE + Change column names to column identifiers))
-│  Filter column: b REGEXP \'^[0-9]+$\'
+│  Filter column: match(b, \'^[0-9]+$\')
 └──ReadFromMergeTree (default.t1)
       Read type: Default
       Parts: 1 | Granules: 1
       Output: a, b, c, d, dt
---- CAST in filter ---
-Output: a, b, c, d, dt
+--- CAST ---
+Output: CAST(a AS String)
 
-Filter ((WHERE + Change column names to column identifiers))
-│  Filter column: CAST(a AS String) = \'5\'
-└──ReadFromMergeTree (default.t1)
-      Read type: Default
-      Parts: 1 | Granules: 1
-      Output: a, b, c, d, dt
---- Concat || in filter ---
-Output: a, b, c, d, dt
+ReadFromMergeTree (default.t1)
+   Read type: Default
+   Parts: 1 | Granules: 1
+   Output: a
+--- Concat || ---
+Output: b || \'_suffix\'
 
-Filter ((WHERE + Change column names to column identifiers))
-│  Filter column: b || \'_suffix\' = \'5_suffix\'
-└──ReadFromMergeTree (default.t1)
-      Read type: Default
-      Parts: 1 | Granules: 1
-      Output: a, b, c, d, dt
---- tupleElement in GROUP BY ---
-Output: tupleElement((a, b), 1), count()
+ReadFromMergeTree (default.t1)
+   Read type: Default
+   Parts: 1 | Granules: 1
+   Output: b
+--- tupleElement dot access ---
+Output: tuple(a, b).1, tuple(a, b).2
 
-Aggregating
-│  Keys: tuple(a, b).1
-│  Aggregates: count()
-│  Skip merging: 0
-└──ReadFromMergeTree (default.t1)
-      Read type: Default
-      Parts: 1 | Granules: 1
-      Output: a, b
---- arrayElement in filter ---
-Output: a, b, c, d, dt
+ReadFromMergeTree (default.t1)
+   Read type: Default
+   Parts: 1 | Granules: 1
+   Output: a, b
+--- arrayElement subscript ---
+Output: array(a, a + 1)[1], array(a, a + 1)[2]
 
-Filter ((WHERE + Change column names to column identifiers))
-│  Filter column: array(a, c)[1] > 5
-└──ReadFromMergeTree (default.t1)
-      Read type: Default
-      Parts: 1 | Granules: 1
-      Output: a, b, c, d, dt
---- arrayJoin in GROUP BY ---
+ReadFromMergeTree (default.t1)
+   Read type: Default
+   Parts: 1 | Granules: 1
+   Output: a
+--- arrayJoin ---
 Output: count()
 
 Aggregating
@@ -143,7 +129,7 @@ Aggregating
       Read type: Default
       Parts: 1 | Granules: 1
       Output: a
---- DateTime constant in filter ---
+--- DateTime constant ---
 Output: a, b, c, d, dt
 
 Filter ((WHERE + Change column names to column identifiers))
@@ -152,12 +138,10 @@ Filter ((WHERE + Change column names to column identifiers))
       Read type: Default
       Parts: 1 | Granules: 1
       Output: a, b, c, d, dt
---- Nested arithmetic precedence in filter ---
-Output: a, b, c, d, dt
+--- Nested arithmetic precedence ---
+Output: (a + 1) * 2, a + 2
 
-Filter ((WHERE + Change column names to column identifiers))
-│  Filter column: (a + 1) * 2 > 10 AND a + 2 < 100
-└──ReadFromMergeTree (default.t1)
-      Read type: Default
-      Parts: 1 | Granules: 1
-      Output: a, b, c, d, dt
+ReadFromMergeTree (default.t1)
+   Read type: Default
+   Parts: 1 | Granules: 1
+   Output: a

@@ -11,15 +11,15 @@ DROP TABLE IF EXISTS t1;
 CREATE TABLE t1 (a UInt64, b String, c Float64, d Nullable(UInt64), dt DateTime) ENGINE = MergeTree ORDER BY a SETTINGS index_granularity = 8192, index_granularity_bytes = '10Mi';
 INSERT INTO t1 SELECT number, toString(number), number * 1.5, if(number % 3 = 0, NULL, number), '2024-06-15 12:00:00' FROM numbers(100);
 
-SELECT '--- Arithmetic operators in filter ---';
+SELECT '--- Arithmetic operators ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT * FROM t1 WHERE a + 1 > 5 AND a - 2 < 100 AND a * 3 != 0 AND a / 2 > 1 AND a % 5 = 0 AND intDiv(a, 6) > 0;
+SELECT a + 1, a - 2, a * 3, a / 4, a % 5, intDiv(a, 6) FROM t1;
 
-SELECT '--- Unary negate in filter ---';
+SELECT '--- Unary negate ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT * FROM t1 WHERE -a < -5;
+SELECT -a FROM t1;
 
 SELECT '--- Comparison operators ---';
 
@@ -29,7 +29,7 @@ SELECT * FROM t1 WHERE a > 5 AND a != 10 AND c <= 3.0;
 SELECT '--- Logical AND OR NOT ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT * FROM t1 WHERE (a > 1 OR a < 10) AND NOT (b = 'x');
+SELECT * FROM t1 WHERE (a > 1 OR a < 10) AND NOT b = 'x';
 
 SELECT '--- Precedence: OR inside AND needs parens ---';
 
@@ -60,39 +60,39 @@ SELECT '--- REGEXP ---';
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
 SELECT * FROM t1 WHERE match(b, '^[0-9]+$');
 
-SELECT '--- CAST in filter ---';
+SELECT '--- CAST ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT * FROM t1 WHERE CAST(a AS String) = '5';
+SELECT CAST(a AS String) FROM t1;
 
-SELECT '--- Concat || in filter ---';
-
-EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT * FROM t1 WHERE b || '_suffix' = '5_suffix';
-
-SELECT '--- tupleElement in GROUP BY ---';
+SELECT '--- Concat || ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT tuple(a, b).1, count() FROM t1 GROUP BY tuple(a, b).1;
+SELECT b || '_suffix' FROM t1;
 
-SELECT '--- arrayElement in filter ---';
+SELECT '--- tupleElement dot access ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT * FROM t1 WHERE [a, c][1] > 5;
+SELECT t.1, t.2 FROM (SELECT tuple(a, b) AS t FROM t1);
 
-SELECT '--- arrayJoin in GROUP BY ---';
+SELECT '--- arrayElement subscript ---';
+
+EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
+SELECT arr[1], arr[2] FROM (SELECT [a, a + 1] AS arr FROM t1);
+
+SELECT '--- arrayJoin ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
 SELECT count() FROM t1 GROUP BY arrayJoin([a, a + 1, a + 2]);
 
-SELECT '--- DateTime constant in filter ---';
+SELECT '--- DateTime constant ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
 SELECT * FROM t1 WHERE dt > '2024-01-01 00:00:00';
 
-SELECT '--- Nested arithmetic precedence in filter ---';
+SELECT '--- Nested arithmetic precedence ---';
 
 EXPLAIN PLAN actions = 1, compact = 1, pretty = 1
-SELECT * FROM t1 WHERE (a + 1) * 2 > 10 AND a + 1 * 2 < 100;
+SELECT (a + 1) * 2, a + 1 * 2 FROM t1;
 
 DROP TABLE t1;

@@ -15,7 +15,7 @@ ReadFromMergeTree (default.t1)
    Parts: 1 | Granules: 1
    Output: a, b, c
    Prewhere filter
-   Prewhere filter column:  a > 1 AND c < 100 AND b != \'x\'
+   Prewhere filter column:  a > 1 AND c + a * 2 < 100 AND (b != \'x\' OR b LIKE \'%foo%\')
 --- Filter with nested expression ---
 Output: a, b, c
 
@@ -24,7 +24,7 @@ ReadFromMergeTree (default.t1)
    Parts: 1 | Granules: 1
    Output: a, b, c
    Prewhere filter
-   Prewhere filter column:  (a + 1) * 2 > 10
+   Prewhere filter column:  (a % 3 = 0 OR b != \'test\') AND ((a + 1) * 2 > 10 OR c / (a + 1) < 5)
 --- Prewhere ---
 Output: a, b, c
 

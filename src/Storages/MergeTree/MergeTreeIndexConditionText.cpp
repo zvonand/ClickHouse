@@ -1,8 +1,11 @@
 #include <Storages/MergeTree/MergeTreeIndexConditionText.h>
 
 #include <Core/Settings.h>
+#include <DataTypes/DataTypeString.h>
+#include <DataTypes/NestedUtils.h>
 #include <Functions/IFunctionAdaptors.h>
 #include <Functions/hasAnyAllTokens.h>
+#include <IO/WriteBufferFromString.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/ITokenizer.h>
 #include <Interpreters/PreparedSets.h>
@@ -475,11 +478,22 @@ std::vector<String> MergeTreeIndexConditionText::stringLikeToTokens(const Field 
     return tokenizer->compactTokens(tokens);
 }
 
+/// Converts a Field value to its text representation using `serializeText`,
+/// matching the format produced by `JSONAllValues`.
+static String serializeFieldAsText(const Field & value, const DataTypePtr & type)
+{
+    auto column = type->createColumn();
+    column->insert(value);
+    WriteBufferFromOwnString buf;
+    type->getDefaultSerialization()->serializeText(*column, 0, buf, {});
+    return buf.str();
+}
+
 bool MergeTreeIndexConditionText::traverseFunctionNode(
     const RPNBuilderFunctionTreeNode & function_node,
     const RPNBuilderTreeNode & index_column_node,
-    const DataTypePtr & value_type,
-    const Field & value_field,
+    DataTypePtr value_type,
+    Field value_field,
     RPNElement & out) const
 {
     const String function_name = function_node.getFunctionName();
@@ -497,6 +511,14 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
         /// If we use index on `mapValues(m)` for `func(m['key'], 'value')`, we can use direct read only as a hint
         /// because we have to match the specific key to the value and therefore execute a real filter.
         direct_read_mode = getHintOrNoneMode();
+    }
+    else if (hasIndexForJSONSubcolumn(index_column_node))
+    {
+        has_index_column = true;
+        direct_read_mode = getHintOrNoneMode();
+
+        value_field = serializeFieldAsText(value_field, value_type);
+        value_type = std::make_shared<DataTypeString>();
     }
 
     if (!has_index_column && !has_map_keys_column && !has_map_values_column)
@@ -758,6 +780,33 @@ bool MergeTreeIndexConditionText::hasIndexForMapElementValue(const RPNBuilderTre
     return header.has(fmt::format("mapValues({})", column_name));
 }
 
+bool MergeTreeIndexConditionText::hasIndexForJSONSubcolumn(const RPNBuilderTreeNode & node) const
+{
+    auto has_index = [&](const String & column_name)
+    {
+        for (const auto & [storage_column_name, _] : Nested::getAllColumnAndSubcolumnPairs(column_name))
+        {
+            if (header.has(fmt::format("JSONAllValues({})", storage_column_name)))
+                return true;
+        }
+        return false;
+    };
+
+    /// Support direct access to the column (e.g. data.key1).
+    if (has_index(node.getColumnName()))
+        return true;
+
+    /// Support CAST (e.g. `data.key1::String`) by looking through to the inner column.
+    if (node.isFunction())
+    {
+        const auto function = node.toFunctionNode();
+        if (function.getFunctionName() == "CAST" && function.getArgumentsSize() >= 1)
+            return has_index(function.getArgumentAt(0).getColumnName());
+    }
+
+    return false;
+}
+
 bool MergeTreeIndexConditionText::traverseMapElementValueNode(const RPNBuilderTreeNode & index_column_node, const Field & const_value) const
 {
     /// Here we check whether we can use index defined for `mapValues(m)`
@@ -778,6 +827,13 @@ bool MergeTreeIndexConditionText::tryPrepareSetForTextSearch(
 {
     std::optional<size_t> set_key_position;
 
+    auto has_index = [&](const RPNBuilderTreeNode & node)
+    {
+        return header.has(node.getColumnName())
+            || hasIndexForMapElementValue(node)
+            || hasIndexForJSONSubcolumn(node);
+    };
+
     if (lhs.isFunction() && lhs.toFunctionNode().getFunctionName() == "tuple")
     {
         const auto function = lhs.toFunctionNode();
@@ -786,7 +842,8 @@ bool MergeTreeIndexConditionText::tryPrepareSetForTextSearch(
         for (size_t i = 0; i < arguments_size; ++i)
         {
             auto argument = function.getArgumentAt(i);
-            if (header.has(argument.getColumnName()) || hasIndexForMapElementValue(argument))
+
+            if (has_index(argument))
             {
                 /// Text index support only one index column.
                 if (set_key_position.has_value())
@@ -798,7 +855,7 @@ bool MergeTreeIndexConditionText::tryPrepareSetForTextSearch(
     }
     else
     {
-        if (header.has(lhs.getColumnName()) || hasIndexForMapElementValue(lhs))
+        if (has_index(lhs))
             set_key_position = 0;
     }
 

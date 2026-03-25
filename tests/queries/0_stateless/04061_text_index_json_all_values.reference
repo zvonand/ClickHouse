@@ -1,0 +1,56 @@
+-- equals with string value
+0
+-- equals with numeric value
+2
+-- like
+0
+2
+-- startsWith
+1
+-- endsWith
+0
+-- hasToken
+0
+2
+-- Check that the text index is used for equals
+Description: text GRANULARITY 100000000
+Parts: 1/4
+Granules: 1/4
+-- Check that the text index is used for numeric equals
+Description: text GRANULARITY 100000000
+Parts: 1/4
+Granules: 1/4
+-- Check that the text index is used for hasToken
+Description: text GRANULARITY 100000000
+Parts: 2/4
+Granules: 2/4
+-- CAST: hasAllTokens with ::String
+0
+-- CAST: equals with ::String
+0
+-- CAST: like with ::String
+0
+2
+-- CAST: startsWith with ::String
+1
+-- CAST: hasToken with ::String
+0
+2
+-- Check that the text index is used with CAST (hasAllTokens)
+Description: text GRANULARITY 100000000
+Parts: 1/4
+Granules: 1/4
+-- Check that the text index is used with CAST (equals)
+Description: text GRANULARITY 100000000
+Parts: 1/4
+Granules: 1/4
+-- Check that the text index is used with CAST (hasToken)
+Description: text GRANULARITY 100000000
+Parts: 2/4
+Granules: 2/4
+-- Nested JSON subcolumns
+0
+-- Check that the text index is used for nested subcolumn
+Description: text GRANULARITY 100000000
+Parts: 1/3
+Granules: 1/3

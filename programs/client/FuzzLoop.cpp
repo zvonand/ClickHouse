@@ -911,8 +911,10 @@ bool Client::buzzHouse()
                          server_up &= processBuzzHouseQuery(full_query);
                          qo.processSecondOracleQueryResult(error_code, *external_integrations, "Count distinct oracle");
                      }},
-                    {30 * static_cast<uint32_t>(fuzz_config->allow_client_restarts &&
-                             fuzz_config->allow_query_oracles && gen.collectionHas<BuzzHouse::SQLPolicy>(gen.row_policies_for_oracle)),
+                    {30
+                         * static_cast<uint32_t>(
+                             fuzz_config->allow_client_restarts && fuzz_config->allow_query_oracles
+                             && gen.collectionHas<BuzzHouse::SQLPolicy>(gen.row_policies_for_oracle)),
                      [&]()
                      {
                          /// Row policy oracle: an existing catalog row policy USING pred must be equivalent to WHERE pred.
@@ -933,23 +935,30 @@ bool Client::buzzHouse()
                          fuzz_config->outf << full_query << std::endl;
                          server_up &= processBuzzHouseQuery(full_query);
 
-                         /// Step 2: SELECT count() FROM db.t [FINAL] INTO OUTFILE — runs as oracle user (no WHERE; policy filters rows).
-                         full_query.resize(0);
-                         BuzzHouse::SQLQueryToString(full_query, sq1);
-                         fuzz_config->outf << full_query << std::endl;
-                         server_up &= processBuzzHouseQuery(full_query);
-                         qo.processFirstOracleQueryResult(error_code, *external_integrations);
+                         /// Only proceed if EXECUTE AS succeeded. If it failed, processBuzzHouseQuery
+                         /// already reconnected (resetting the session to admin), so no cleanup needed.
+                         /// Skipping avoids comparing two admin-user queries which would be a false oracle.
+                         if (!error_code)
+                         {
+                             /// Step 2: SELECT count() FROM db.t [FINAL] INTO OUTFILE — runs as oracle user (no WHERE; policy filters rows).
+                             full_query.resize(0);
+                             BuzzHouse::SQLQueryToString(full_query, sq1);
+                             fuzz_config->outf << full_query << std::endl;
+                             server_up &= processBuzzHouseQuery(full_query);
+                             qo.processFirstOracleQueryResult(error_code, *external_integrations);
 
-                         /// Step 3: Reconnect to reset session back to admin user before running the comparison query.
-                         fuzz_config->outf << restart_cmd << std::endl;
-                         server_up &= fuzzLoopReconnect();
+                             /// Step 3: Reconnect to reset session back to admin user before running the comparison query.
+                             fuzz_config->outf << restart_cmd << std::endl;
+                             server_up &= fuzzLoopReconnect();
 
-                         /// Step 4: SELECT count() FROM db.t [FINAL] WHERE pred INTO OUTFILE — admin user + explicit WHERE predicate.
-                         full_query.resize(0);
-                         BuzzHouse::SQLQueryToString(full_query, sq2);
-                         fuzz_config->outf << full_query << std::endl;
-                         server_up &= processBuzzHouseQuery(full_query);
-                         qo.processSecondOracleQueryResult(error_code, *external_integrations, "Row policy oracle");
+                             /// Step 4: SELECT count() FROM db.t [FINAL] WHERE pred INTO OUTFILE — admin user + explicit WHERE predicate.
+                             full_query.resize(0);
+                             BuzzHouse::SQLQueryToString(full_query, sq2);
+                             fuzz_config->outf << full_query << std::endl;
+                             server_up &= processBuzzHouseQuery(full_query);
+                             qo.processSecondOracleQueryResult(error_code, *external_integrations, "Row policy oracle");
+
+                         } /// if (!error_code) — EXECUTE AS succeeded
                      }},
                     {1 * static_cast<uint32_t>(fuzz_config->allow_client_restarts),
                      [&]()

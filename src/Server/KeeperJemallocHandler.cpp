@@ -32,9 +32,12 @@ namespace DB
 void KeeperJemallocWebUIHandler::handleRequest(
     HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event &)
 {
-    constexpr std::string_view config_script = "<script>window.JEMALLOC_CONFIG={mode:'keeper'}</script>";
-    constexpr std::string_view head_tag = "<head>";
-    std::string_view html(reinterpret_cast<const char *>(resource_jemalloc_html), std::size(resource_jemalloc_html));
+    std::string html(reinterpret_cast<const char *>(resource_jemalloc_html), std::size(resource_jemalloc_html));
+
+    constexpr std::string_view head_close = "<head>";
+    auto pos = html.find(head_close);
+    if (pos != std::string::npos)
+        html.insert(pos + head_close.size(), "<script>window.JEMALLOC_CONFIG={mode:'keeper'}</script>");
 
     response.setContentType("text/html; charset=UTF-8");
     if (request.getVersion() == HTTPServerRequest::HTTP_1_1)
@@ -43,19 +46,7 @@ void KeeperJemallocWebUIHandler::handleRequest(
     setResponseDefaultHeaders(response);
     response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
     auto wb = WriteBufferFromHTTPServerResponse(response, request.getMethod() == HTTPRequest::HTTP_HEAD);
-
-    auto pos = html.find(head_tag);
-    if (pos != std::string_view::npos)
-    {
-        auto after_head = pos + head_tag.size();
-        wb.write(html.data(), after_head);
-        wb.write(config_script.data(), config_script.size());
-        wb.write(html.data() + after_head, html.size() - after_head);
-    }
-    else
-    {
-        wb.write(html.data(), html.size());
-    }
+    wb.write(html.c_str(), html.size());
     wb.finalize();
 }
 
@@ -66,7 +57,7 @@ void KeeperJemallocAPIHandler::handleRequest(
 try
 {
     Poco::URI uri(request.getURI());
-    std::string path = uri.getPath();
+    const std::string & path = uri.getPath();
 
     if (path == "/jemalloc/profile")
         handleProfile(request, response);

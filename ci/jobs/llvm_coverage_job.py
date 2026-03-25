@@ -291,6 +291,9 @@ if __name__ == "__main__":
 
             _diff_url = f"{_s3_base}/llvm_coverage/generate_llvm_coverage_diff_report/index_diff.html"
             _pr_changed_lines_info = print_res.ext.get("comment", "")
+            _changed_lines_total = print_res.ext.get("changed_lines_total", 0)
+            _changed_lines_covered = print_res.ext.get("changed_lines_covered", 0)
+            _changed_lines_cov = print_res.ext.get("changed_lines_cov", 0.0)
 
             if _diff_ran:
                 # Write coverage data for the post-hook to pick up and post as a GitHub comment
@@ -305,6 +308,9 @@ if __name__ == "__main__":
                     "b_branch_cov": b_branch_cov,
                     "c_branch_cov": c_branch_cov,
                     "pr_changed_lines_info": _pr_changed_lines_info,
+                    "changed_lines_total": _changed_lines_total,
+                    "changed_lines_covered": _changed_lines_covered,
+                    "changed_lines_cov": _changed_lines_cov,
                     "diff_url": _diff_url,
                     "uncovered_code_url": uncovered_code_url,
                     # CIDB fields

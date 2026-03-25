@@ -205,4 +205,7 @@ if __name__ == "__main__":
         with_info_from_results=True,
     )
     r.set_comment(msg)
+    r.ext["changed_lines_total"] = total
+    r.ext["changed_lines_covered"] = covered
+    r.ext["changed_lines_cov"] = pct
     r.dump()

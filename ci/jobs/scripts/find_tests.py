@@ -810,6 +810,11 @@ class Targeting:
         #   rc=200 → 70%  (unchanged default)
         min_seed_rc = min(seed_rcs) if seed_rcs else 200
         JACCARD_MIN_PCT = max(15, 70 - (200 - min(min_seed_rc, 200)) * 0.3)
+        # Adaptive LIMIT: when direct evidence is strong (min_seed_rc is low),
+        # reduce the indirect cap so that specific PRs don't get 200 loosely-related
+        # tests.  At min_seed_rc=1 (rc=1 line, top_score=1.0): limit=20.
+        # At min_seed_rc=40 (rc=40 line): limit=200 (full).  Scales linearly between.
+        INDIRECT_LIMIT = max(20, min(200, int(200 * min_seed_rc / 40)))
 
         # Cap at 500 tests to prevent HTTP field-length errors.
         if len(primary_tests) > 500:
@@ -889,7 +894,7 @@ class Targeting:
         HAVING shared_callees >= {MIN_SHARED}
            AND count(DISTINCT ic1.callee_offset) * 100.0 / ic2_tot.tot_callees >= {JACCARD_MIN_PCT:.1f}
         ORDER BY jaccard_pct DESC, shared_callees DESC
-        LIMIT 200
+        LIMIT {INDIRECT_LIMIT}
         """
 
         try:
@@ -1647,6 +1652,12 @@ if __name__ == "__main__":
         help="Run only the coverage-based pass (get_most_relevant_tests), skip changed-file "
              "and previously-failed passes. Uses one fewer GitHub API call — useful for eval.",
     )
+    parser.add_argument(
+        "--diff-file",
+        default=None,
+        help="Path to a pre-fetched unified diff file. When provided, "
+             "get_changed_lines_from_diff reads from this file instead of calling gh.",
+    )
     args = parser.parse_args()
 
     class InfoLocalTest:
@@ -1656,6 +1667,29 @@ if __name__ == "__main__":
 
     info = InfoLocalTest()
     targeting = Targeting(info)
+
+    # If a pre-fetched diff file is provided, monkey-patch get_changed_lines_from_diff
+    # so it reads from the file rather than calling gh pr diff.
+    if args.diff_file:
+        import types
+        diff_text = Path(args.diff_file).read_text()
+        def _patched_get_changed_lines_from_diff(self):
+            changed: list = []
+            current_file = None
+            for line in diff_text.splitlines():
+                if line.startswith("+++ b/"):
+                    current_file = line[6:]
+                elif line.startswith("@@ ") and current_file:
+                    m = re.search(r"\+(\d+)(?:,(\d+))?", line)
+                    if m:
+                        start = int(m.group(1))
+                        count = int(m.group(2)) if m.group(2) is not None else 1
+                        for ln in range(start, start + count):
+                            changed.append((current_file, ln))
+            return changed
+        targeting.get_changed_lines_from_diff = types.MethodType(
+            _patched_get_changed_lines_from_diff, targeting
+        )
 
     if args.coverage_only:
         ranked, result = targeting.get_most_relevant_tests()

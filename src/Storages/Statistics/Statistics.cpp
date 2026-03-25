@@ -35,12 +35,6 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-enum StatisticsFileVersion : UInt16
-{
-    V0 = 0,
-    V1 = 1, /// modify the format of uniq, https://github.com/ClickHouse/ClickHouse/pull/90311
-    V2 = 2, /// minmax statistics now serialize Field type and use Field instead of Float64
-};
 
 std::optional<Float64> StatisticsUtils::tryConvertToFloat64(const Field & value, const DataTypePtr & data_type)
 {
@@ -270,7 +264,7 @@ Estimate ColumnStatistics::getEstimate() const
 
 void ColumnStatistics::serialize(WriteBuffer & buf) const
 {
-    writeIntBinary(V2, buf);
+    writeIntBinary(StatisticsFileVersion::V2, buf);
 
     UInt64 stat_types_mask = 0;
     for (const auto & [type, _]: stats)
@@ -288,12 +282,16 @@ void ColumnStatistics::serialize(WriteBuffer & buf) const
 
 std::shared_ptr<ColumnStatistics> ColumnStatistics::deserialize(ReadBuffer & buf, const DataTypePtr & data_type)
 {
-    UInt16 version;
-    readIntBinary(version, buf);
+    UInt16 version_raw;
+    readIntBinary(version_raw, buf);
+    auto version = static_cast<StatisticsFileVersion>(version_raw);
 
-    /// TODO: we should check the version of statistics format when we start clickhouse server, and do materialize statistics automatically.
-    if (version != V2)
-        throw Exception(ErrorCodes::ILLEGAL_STATISTICS, "We try to read stale file format version: {}. Please run `ALTER TABLE [db.]table MATERIALIZE STATISTICS ALL` to regenerate the statistics", version);
+    if (version != StatisticsFileVersion::V1 && version != StatisticsFileVersion::V2)
+        throw Exception(
+            ErrorCodes::ILLEGAL_STATISTICS,
+            "Tried to read statistics file with unsupported format version {}. "
+            "Please run `ALTER TABLE [db.]table MATERIALIZE STATISTICS ALL` to regenerate the statistics.",
+            version_raw);
 
     UInt64 stat_types_mask = 0;
     readIntBinary(stat_types_mask, buf);
@@ -314,7 +312,7 @@ std::shared_ptr<ColumnStatistics> ColumnStatistics::deserialize(ReadBuffer & buf
     readIntBinary(result->rows, buf);
 
     for (const auto & [_, desc] : result->stats)
-        desc->deserialize(buf);
+        desc->deserialize(buf, version);
 
     return result;
 }

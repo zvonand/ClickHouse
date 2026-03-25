@@ -35,7 +35,7 @@ void StatisticsTDigest::serialize(WriteBuffer & buf)
     t_digest.serialize(buf);
 }
 
-void StatisticsTDigest::deserialize(ReadBuffer & buf)
+void StatisticsTDigest::deserialize(ReadBuffer & buf, StatisticsFileVersion /*version*/)
 {
     t_digest.deserialize(buf);
 }

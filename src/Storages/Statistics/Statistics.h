@@ -13,6 +13,15 @@ namespace DB
 constexpr std::string_view STATS_FILE_PREFIX = "statistics_";
 constexpr std::string_view STATS_FILE_SUFFIX = ".stats";
 
+/// Version of the per-column statistics file format stored inside statistics.packed (or legacy statistics_<col>.stats).
+/// When adding a new version, bump the latest value and add a comment describing what changed.
+enum class StatisticsFileVersion : UInt16
+{
+    V0 = 0,
+    V1 = 1, /// modified the format of uniq, https://github.com/ClickHouse/ClickHouse/pull/90311
+    V2 = 2, /// minmax statistics now serialize Field type and use Field instead of Float64
+};
+
 class Field;
 class Block;
 
@@ -40,7 +49,7 @@ public:
     virtual void merge(const StatisticsPtr & other_stats) = 0;
 
     virtual void serialize(WriteBuffer & buf) = 0;
-    virtual void deserialize(ReadBuffer & buf) = 0;
+    virtual void deserialize(ReadBuffer & buf, StatisticsFileVersion version) = 0;
 
     /// Estimate the cardinality of the column.
     /// Throws if the statistics object is not able to do a meaningful estimation.

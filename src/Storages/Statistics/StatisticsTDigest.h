@@ -15,7 +15,7 @@ public:
     void merge(const StatisticsPtr & other_stats) override;
 
     void serialize(WriteBuffer & buf) override;
-    void deserialize(ReadBuffer & buf) override;
+    void deserialize(ReadBuffer & buf, StatisticsFileVersion version) override;
 
     std::optional<Float64> estimateLess(const Field & val) const override;
     Float64 estimateEqual(const Field & val) const override;

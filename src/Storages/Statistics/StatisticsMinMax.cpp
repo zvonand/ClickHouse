@@ -67,11 +67,23 @@ void StatisticsMinMax::serialize(WriteBuffer & buf)
     writeFieldBinary(max, buf);
 }
 
-void StatisticsMinMax::deserialize(ReadBuffer & buf)
+void StatisticsMinMax::deserialize(ReadBuffer & buf, StatisticsFileVersion version)
 {
     readIntBinary(row_count, buf);
 
-    /// Type name followed by Field-typed min and max
+    if (version == StatisticsFileVersion::V1)
+    {
+        /// V1 format: min and max were stored as Float64
+        Float64 min_val;
+        Float64 max_val;
+        readFloatBinary(min_val, buf);
+        readFloatBinary(max_val, buf);
+        min = min_val;
+        max = max_val;
+        return;
+    }
+
+    /// V2+ format: type name followed by Field-typed min and max
     String stored_type_name;
     readStringBinary(stored_type_name, buf);
     min = readFieldBinary(buf);

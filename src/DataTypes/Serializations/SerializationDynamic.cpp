@@ -1,3 +1,4 @@
+#include <Common/SipHash.h>
 #include <DataTypes/Serializations/SerializationDynamic.h>
 #include <DataTypes/Serializations/SerializationVariant.h>
 #include <DataTypes/Serializations/SerializationDynamicHelpers.h>
@@ -13,7 +14,6 @@
 #include <IO/WriteHelpers.h>
 #include <IO/ReadHelpers.h>
 #include <IO/ReadBufferFromString.h>
-#include <Interpreters/castColumn.h>
 #include <Formats/EscapingRuleUtils.h>
 
 namespace DB
@@ -23,6 +23,15 @@ namespace ErrorCodes
 {
     extern const int INCORRECT_DATA;
     extern const int LOGICAL_ERROR;
+}
+
+UInt128 SerializationDynamic::getHash(size_t max_dynamic_types_, const SerializationInfoSettings & serialization_info_settings_)
+{
+    SipHash hash;
+    hash.update("Dynamic");
+    hash.update(max_dynamic_types_);
+    serialization_info_settings_.updateHash(hash);
+    return hash.get128();
 }
 
 struct SerializeBinaryBulkStateDynamic : public ISerialization::SerializeBinaryBulkState
@@ -86,7 +95,7 @@ void SerializationDynamic::enumerateStreams(
         return;
 
     const auto & variant_type = column_dynamic ? column_dynamic->getVariantInfo().variant_type : checkAndGetState<DeserializeBinaryBulkStateDynamicStructure>(deserialize_state->structure_state)->variant_type;
-    auto variant_serialization = variant_type->getDefaultSerialization();
+    auto variant_serialization = variant_type->getSerialization(serialization_info_settings);
 
     settings.path.push_back(Substream::DynamicData);
     auto variant_data = SubstreamData(variant_serialization)
@@ -303,7 +312,7 @@ void SerializationDynamic::serializeBinaryBulkStatePrefix(
         dynamic_state->recalculate_statistics = true;
     }
 
-    dynamic_state->variant_serialization = dynamic_state->variant_type->getDefaultSerialization();
+    dynamic_state->variant_serialization = dynamic_state->variant_type->getSerialization(serialization_info_settings);
     settings.path.push_back(Substream::DynamicData);
     dynamic_state->variant_serialization->serializeBinaryBulkStatePrefix(variant_column, settings, dynamic_state->variant_state);
     settings.path.pop_back();
@@ -339,7 +348,7 @@ void SerializationDynamic::deserializeBinaryBulkStatePrefix(
         return;
     }
 
-    dynamic_state->variant_serialization = structure_state_typed->variant_type->getDefaultSerialization();
+    dynamic_state->variant_serialization = structure_state_typed->variant_type->getSerialization(serialization_info_settings);
 
     settings.path.push_back(Substream::DynamicData);
 
@@ -459,6 +468,10 @@ ISerialization::DeserializeBinaryBulkStatePtr SerializationDynamic::deserializeD
 
         state = structure_state;
         addToSubstreamsDeserializeStatesCache(cache, settings.path, state);
+
+        /// We won't read from this stream anymore so we can release it.
+        if (settings.release_stream_callback)
+            settings.release_stream_callback(settings.path);
     }
 
     settings.path.pop_back();
@@ -855,7 +868,7 @@ static void deserializeTextImpl(
     if (!checkIfTypeIsComplete(variant_type))
     {
         size_t shared_variant_discr = dynamic_column.getSharedVariantDiscriminator();
-        for (size_t i = 0; i != variant_types.size(); ++i)
+        for (ColumnVariant::Discriminator i = 0; i != variant_types.size(); ++i)
         {
             auto field_buf = std::make_unique<ReadBufferFromString>(field);
             if (i != shared_variant_discr
@@ -916,6 +929,11 @@ static void serializeTextImpl(
     {
         nested_serialize(*dynamic_column.getVariantInfo().variant_type->getDefaultSerialization(), variant_column, row_num, ostr);
     }
+}
+
+SerializationPtr SerializationDynamic::create(size_t max_dynamic_types_, const SerializationInfoSettings & serialization_info_settings_)
+{
+    return ISerialization::pooled(getHash(max_dynamic_types_, serialization_info_settings_), [=] { return new SerializationDynamic(max_dynamic_types_, serialization_info_settings_); });
 }
 
 void SerializationDynamic::serializeTextCSV(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings & settings) const
@@ -1164,6 +1182,11 @@ void SerializationDynamic::serializeTextXML(const IColumn & column, size_t row_n
     };
 
     serializeTextImpl(column, row_num, ostr, nested_serialize);
+}
+
+SerializationPtr SerializationDynamic::createSerializationForType(const DataTypePtr & type) const
+{
+    return type->getSerialization(serialization_info_settings);
 }
 
 }

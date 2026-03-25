@@ -98,6 +98,17 @@ namespace ErrorCodes
 }
 
 
+static const char * connectionGroupTypeToString(HTTPConnectionGroupType type)
+{
+    switch (type)
+    {
+        case HTTPConnectionGroupType::DISK: return "Disk";
+        case HTTPConnectionGroupType::STORAGE: return "Storage";
+        case HTTPConnectionGroupType::HTTP: return "HTTP";
+    }
+}
+
+
 static IHTTPConnectionPoolForEndpoint::Metrics getMetricsForStorageConnectionPool()
 {
     return IHTTPConnectionPoolForEndpoint::Metrics{
@@ -184,18 +195,18 @@ public:
     {
         if (sizes.rcvbuf > static_cast<size_t>(INT_MAX))
         {
-            LOG_ERROR(log, "rcvbuf value {} exceeds maximum {}, ignore buffer settings for {}", sizes.rcvbuf, INT_MAX, type);
+            LOG_ERROR(log, "rcvbuf value {} exceeds maximum {}, ignore buffer settings for {}", sizes.rcvbuf, INT_MAX, connectionGroupTypeToString(type));
             return;
         }
         if (sizes.sndbuf > static_cast<size_t>(INT_MAX))
         {
-            LOG_ERROR(log, "sndbuf value {} exceeds maximum {}, ignore buffer settings for {}", sizes.sndbuf, INT_MAX, type);
+            LOG_ERROR(log, "sndbuf value {} exceeds maximum {}, ignore buffer settings for {}", sizes.sndbuf, INT_MAX, connectionGroupTypeToString(type));
             return;
         }
 
         std::lock_guard lock(mutex);
         if (sizes.rcvbuf != socket_buffer_sizes.rcvbuf || sizes.sndbuf != socket_buffer_sizes.sndbuf)
-            LOG_DEBUG(log, "Socket buffer sizes updated for group {}: rcvbuf={}, sndbuf={}", type, sizes.rcvbuf, sizes.sndbuf);
+            LOG_DEBUG(log, "Socket buffer sizes updated for group {}: rcvbuf={}, sndbuf={}", connectionGroupTypeToString(type), sizes.rcvbuf, sizes.sndbuf);
 
         socket_buffer_sizes = sizes;
     }
@@ -226,7 +237,7 @@ public:
             throw Exception(
                 ErrorCodes::HTTP_CONNECTION_LIMIT_REACHED,
                 "Cannot create new connection to {}:{}, hard limit {} for connections in group {} is reached",
-                host, port, limits.hard_limit, getType());
+                host, port, limits.hard_limit, connectionGroupTypeToString(getType()));
 
         ++total_connections_in_group;
 
@@ -234,7 +245,7 @@ public:
         {
             mute_warning_until = roundUp(total_connections_in_group, HTTPConnectionPools::Limits::warning_step);
             LOG_WARNING(log, "Too many active sessions in group {}, count {}, warning limit {}, next warning at {}",
-                        type, total_connections_in_group, limits.warning_limit, mute_warning_until);
+                        connectionGroupTypeToString(type), total_connections_in_group, limits.warning_limit, mute_warning_until);
         }
     }
 
@@ -248,7 +259,7 @@ public:
         const size_t reduced_warning_limit = limits.warning_limit > gap ? limits.warning_limit - gap : 1;
         if (mute_warning_until > 0 && total_connections_in_group < reduced_warning_limit)
         {
-            LOG_WARNING(log, "Sessions count is OK in the group {}, count {}", type, total_connections_in_group);
+            LOG_WARNING(log, "Sessions count is OK in the group {}, count {}", connectionGroupTypeToString(type), total_connections_in_group);
             mute_warning_until = 0;
         }
     }
@@ -767,10 +778,11 @@ private:
         try
         {
             setTimeouts(*connection, timeouts);
-            applySocketBufferSizes(*connection, group->getSocketBufferSizes());
 
             auto timer = CurrentThread::getProfileEvents().timer(getMetrics().elapsed_microseconds);
             connection->doConnect(connect_time);
+
+            applySocketBufferSizes(*connection, group->getSocketBufferSizes());
         }
         catch (...)
         {

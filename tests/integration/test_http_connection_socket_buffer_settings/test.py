@@ -1,4 +1,6 @@
 import os
+import re
+import time
 import pytest
 import random
 
@@ -20,61 +22,153 @@ def started_cluster():
         cluster.shutdown()
 
 
-def test_rcvbuf_server_reloads(started_cluster):
-    result = node.query(
-        "SELECT name, value FROM system.server_settings "
-        "WHERE name IN ('http_connections_rcvbuf', 'http_connections_sndbuf') "
-        "ORDER BY name"
-    )
-    assert "http_connections_rcvbuf\t0" in result
-    assert "http_connections_sndbuf\t0" in result
-
+def apply_config(config_name):
+    """Copy a config file into the container and reload."""
     node.copy_file_to_container(
-        os.path.join(SCRIPT_DIR, "configs/valid_rcvbuf.xml"),
-        "/etc/clickhouse-server/config.d/valid_rcvbuf.xml",
+        os.path.join(SCRIPT_DIR, f"configs/{config_name}"),
+        f"/etc/clickhouse-server/config.d/{config_name}",
     )
-
     node.query("SYSTEM RELOAD CONFIG")
 
-    """Server should start successfully with valid socket buffer settings and handle HTTP requests."""
-    result = node.query(
-        "SELECT name, value FROM system.server_settings "
-        "WHERE name IN ('http_connections_rcvbuf', 'http_connections_sndbuf') "
-        "ORDER BY name"
-    )
-    assert "http_connections_rcvbuf\t262144" in result
-    assert "http_connections_sndbuf\t262144" in result
 
-    # Verify outgoing HTTP connections work with the buffer settings.
-    # url() table function makes an outgoing HTTP request through the connection pool.
-    result = node.query(
-        "SELECT count() FROM url('http://localhost:8123/?query=SELECT%201', TSV)"
-    )
-    assert result.strip() == "1"
-
-    """Reloading config with rcvbuf exceeding INT_MAX should be rejected."""
-
-    # Clean up: remove invalid config and restore
+def remove_config(config_name):
     node.exec_in_container(
-        ["rm", "-f", "/etc/clickhouse-server/config.d/valid_rcvbuf.xml"]
+        ["rm", "-f", f"/etc/clickhouse-server/config.d/{config_name}"]
     )
 
-    # Copy invalid config into the running container
-    node.copy_file_to_container(
-        os.path.join(SCRIPT_DIR, "configs/invalid_rcvbuf.xml"),
-        "/etc/clickhouse-server/config.d/invalid_rcvbuf.xml",
-    )
 
-    query_id = f"test_invalid_rcvbuf_rejected_on_reload_{random.randint(10000, 99999)}"
-    node.query("SYSTEM RELOAD CONFIG", query_id=query_id)
-    node.query(f"""
-        SYSTEM FLUSH LOGS text_log;
-        SELECT throwIf( count() = 0 ) FROM system.text_log
-        WHERE query_id = '{query_id}' AND message LIKE '%ignore buffer settings for HTTP%'
-    """)
-
-    # Verify outgoing HTTP connections work after rejecting invalid buffer settings.
+def assert_settings(settings_dict):
+    """Check that server_settings match expected values."""
+    names = ", ".join(f"'{name}'" for name in settings_dict)
     result = node.query(
-        "SELECT count() FROM url('http://localhost:8123/?query=SELECT%201', TSV)"
+        f"SELECT name, value FROM system.server_settings "
+        f"WHERE name IN ({names}) ORDER BY name"
     )
-    assert result.strip() == "1"
+    for name, value in settings_dict.items():
+        assert f"{name}\t{value}" in result, f"Expected {name}={value}, got: {result}"
+
+
+def reload_with_invalid_config_and_check_log(config_name, group_name):
+    """Copy an invalid config and reload, then verify rejection is logged."""
+    node.copy_file_to_container(
+        os.path.join(SCRIPT_DIR, f"configs/{config_name}"),
+        f"/etc/clickhouse-server/config.d/{config_name}",
+    )
+    query_id = f"test_invalid_{group_name}_{random.randint(10000, 99999)}"
+    node.query("SYSTEM RELOAD CONFIG", query_id=query_id)
+    node.query(
+        f"SYSTEM FLUSH LOGS text_log; "
+        f"SELECT throwIf(count() = 0) FROM system.text_log "
+        f"WHERE query_id = '{query_id}' AND message LIKE '%ignore buffer settings for {group_name}%'"
+    )
+
+
+def test_http_buffer_settings(started_cluster):
+    """Verify HTTP group socket buffer settings: reload, apply, and reject invalid values."""
+    # Defaults are 0
+    assert_settings({"http_connections_rcvbuf": 0, "http_connections_sndbuf": 0})
+
+    apply_config("valid_rcvbuf.xml")
+
+    assert_settings({"http_connections_rcvbuf": 262144, "http_connections_sndbuf": 262144})
+
+    # Invalid value should be rejected on reload
+    remove_config("valid_rcvbuf.xml")
+    reload_with_invalid_config_and_check_log("invalid_rcvbuf.xml", "HTTP")
+
+    remove_config("invalid_rcvbuf.xml")
+    node.query("SYSTEM RELOAD CONFIG")
+
+
+def test_disk_buffer_settings(started_cluster):
+    """Verify Disk group socket buffer settings: reload, apply, and reject invalid values."""
+    assert_settings({"disk_connections_rcvbuf": 0, "disk_connections_sndbuf": 0})
+
+    apply_config("valid_disk_rcvbuf.xml")
+
+    assert_settings({"disk_connections_rcvbuf": 262144, "disk_connections_sndbuf": 262144})
+
+    remove_config("valid_disk_rcvbuf.xml")
+    reload_with_invalid_config_and_check_log("invalid_disk_rcvbuf.xml", "Disk")
+
+    remove_config("invalid_disk_rcvbuf.xml")
+    node.query("SYSTEM RELOAD CONFIG")
+
+
+def test_storage_buffer_settings(started_cluster):
+    """Verify Storage group socket buffer settings: reload, apply, and reject invalid values."""
+    assert_settings({"storage_connections_rcvbuf": 0, "storage_connections_sndbuf": 0})
+
+    apply_config("valid_storage_rcvbuf.xml")
+
+    assert_settings({"storage_connections_rcvbuf": 262144, "storage_connections_sndbuf": 262144})
+
+    remove_config("valid_storage_rcvbuf.xml")
+    reload_with_invalid_config_and_check_log("invalid_storage_rcvbuf.xml", "Storage")
+
+    remove_config("invalid_storage_rcvbuf.xml")
+    node.query("SYSTEM RELOAD CONFIG")
+
+
+def test_receive_buffer_size_applied(started_cluster):
+    """Verify that changing storage_connections_rcvbuf is picked up and connections work.
+
+    The url() table function uses the Storage connection group, so we set
+    storage_connections_rcvbuf and verify the setting is logged and connections work.
+    """
+    buf_size = 65536
+
+    node.copy_file_to_container(
+        os.path.join(SCRIPT_DIR, "configs/small_rcvbuf.xml"),
+        "/etc/clickhouse-server/config.d/small_rcvbuf.xml",
+    )
+
+    query_id = f"test_rcvbuf_applied_{random.randint(10000, 99999)}"
+    node.query("SYSTEM RELOAD CONFIG", query_id=query_id)
+
+    # Verify the server logged the buffer size update for the Storage group.
+    node.query(
+        f"SYSTEM FLUSH LOGS text_log; "
+        f"SELECT throwIf(count() = 0) FROM system.text_log "
+        f"WHERE query_id = '{query_id}' "
+        f"AND message LIKE '%Socket buffer sizes updated for group Storage%rcvbuf={buf_size}%'"
+    )
+
+    # Verify the setting is reflected in server_settings.
+    result = node.query(
+        "SELECT value FROM system.server_settings "
+        "WHERE name = 'storage_connections_rcvbuf'"
+    )
+    assert result.strip() == str(buf_size)
+
+    # Make a slow outgoing HTTP request via the Storage pool to keep the connection alive.
+    # url() table function uses the Storage connection group.
+    request = node.get_query_request(
+        "SELECT * FROM url('http://localhost:8123/?query=SELECT+sleepEachRow(0.1)+FROM+numbers(30)', TSV) FORMAT Null",
+    )
+    time.sleep(2)
+
+    # Use `ss -tm` to inspect the kernel receive buffer on the established connection.
+    ss_output = node.exec_in_container(
+        ["bash", "-c", "ss -tm state established '( dport = 8123 )'"],
+        privileged=True,
+        user="root",
+    )
+
+    # Parse skmem rb field — the kernel receive buffer limit.
+    # The kernel doubles the SO_RCVBUF value passed to setsockopt.
+    rb_values = re.findall(r"rb(\d+)", ss_output)
+    assert len(rb_values) > 0, f"No connections found. ss output: {ss_output}"
+
+    expected_rb = buf_size * 2  # kernel doubles setsockopt value
+    for rb in rb_values:
+        rb_int = int(rb)
+        assert rb_int == expected_rb, (
+            f"Receive buffer {rb_int} != expected {expected_rb} "
+            f"(2 * {buf_size}). ss output: {ss_output}"
+        )
+
+    request.get_answer()
+
+    remove_config("small_rcvbuf.xml")
+    node.query("SYSTEM RELOAD CONFIG")

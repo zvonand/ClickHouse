@@ -519,7 +519,7 @@ public:
     {
         if constexpr (is_able_to_parallelize_merge)
         {
-            std::vector<DataSet *> data_vec;
+            std::vector<DataSet *> data_vec; // STYLE_CHECK_ALLOW_STD_CONTAINERS
             data_vec.resize(places.size());
 
             for (size_t i = 0; i < data_vec.size(); ++i)
@@ -632,7 +632,7 @@ public:
         if constexpr (is_able_to_parallelize_merge)
         {
             using DataSet = typename Data::Set;
-            std::vector<DataSet *> data_vec;
+            std::vector<DataSet *> data_vec; // STYLE_CHECK_ALLOW_STD_CONTAINERS
             data_vec.resize(places.size());
 
             for (size_t i = 0; i < data_vec.size(); ++i)

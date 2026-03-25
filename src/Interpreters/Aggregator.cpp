@@ -3162,10 +3162,10 @@ void NO_INLINE Aggregator::mergeWithoutKeyDataImpl(
     /// Helper to collect aggregate data pointers for all states.
     auto collect_data_vec = [&](size_t aggregate_index)
     {
-        std::vector<AggregateDataPtr> data_vec;
+        std::vector<AggregateDataPtr> data_vec; // STYLE_CHECK_ALLOW_STD_CONTAINERS
         data_vec.reserve(non_empty_data.size());
-        for (size_t result_num = 0; result_num < non_empty_data.size(); ++result_num)
-            data_vec.emplace_back(non_empty_data[result_num]->without_key + offsets_of_aggregate_states[aggregate_index]);
+        for (const auto & result : non_empty_data)
+            data_vec.emplace_back(result->without_key + offsets_of_aggregate_states[aggregate_index]);
         return data_vec;
     };
 
@@ -3182,7 +3182,6 @@ void NO_INLINE Aggregator::mergeWithoutKeyDataImpl(
     /// Merge all aggregation results to the first.
     /// Use batch merge (parallelizeMergeMulti) when parallel merge is supported;
     /// the default implementation falls back to pairwise merge with thread pool.
-    /// Destroy each function's source states immediately after merge to limit peak memory.
     for (size_t i = 0; i < params.aggregates_size; ++i)
     {
         if (aggregate_functions[i]->isAbleToParallelizeMerge())
@@ -3198,14 +3197,16 @@ void NO_INLINE Aggregator::mergeWithoutKeyDataImpl(
                     non_empty_data[result_num]->without_key + offsets_of_aggregate_states[i],
                     res->aggregates_pool);
         }
-
-        /// Destroy source states for this aggregate function right after merge.
-        for (size_t result_num = 1, size = non_empty_data.size(); result_num < size; ++result_num)
-            aggregate_functions[i]->destroy(non_empty_data[result_num]->without_key + offsets_of_aggregate_states[i]);
     }
 
+    /// Destroy source states and null without_key per row to maintain exception safety:
+    /// if destruction of one row throws, already-nulled rows won't be double-destroyed during unwind.
     for (size_t result_num = 1, size = non_empty_data.size(); result_num < size; ++result_num)
+    {
+        for (size_t i = 0; i < params.aggregates_size; ++i)
+            aggregate_functions[i]->destroy(non_empty_data[result_num]->without_key + offsets_of_aggregate_states[i]);
         non_empty_data[result_num]->without_key = nullptr;
+    }
 }
 
 

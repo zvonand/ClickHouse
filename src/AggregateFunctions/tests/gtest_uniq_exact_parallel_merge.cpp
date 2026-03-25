@@ -10,7 +10,7 @@ namespace
 {
 /// Instantiate the same concrete type used by AggregateFunctionUniqExact<UInt64>.
 using Key = UInt64;
-static constexpr size_t initial_size_degree = 4;
+constexpr size_t initial_size_degree = 4;
 using SingleLevelSet = HashSetWithStackMemory<Key, HashCRC32<Key>, initial_size_degree>;
 using TwoLevelSet = TwoLevelHashSet<Key, HashCRC32<Key>>;
 using TestSet = UniqExactSet<SingleLevelSet, TwoLevelSet>;

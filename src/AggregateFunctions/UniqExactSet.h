@@ -119,7 +119,7 @@ public:
     /// Batch merge multiple UniqExactSet into the first one in parallel.
     /// Each thread processes one bucket at a time across all hash tables,
     /// reducing thread pool overhead from O(N) to O(1) compared to pairwise merge.
-    static void parallelizeMergeMulti(const std::vector<UniqExactSet *> & data_vec, ThreadPool & thread_pool, std::atomic<bool> & is_cancelled)
+    static void parallelizeMergeMulti(const std::vector<UniqExactSet *> & data_vec, ThreadPool & thread_pool, std::atomic<bool> & is_cancelled) // STYLE_CHECK_ALLOW_STD_CONTAINERS
     {
         if (data_vec.size() <= 1)
             return;
@@ -146,7 +146,7 @@ public:
         constexpr size_t NUM_BUCKETS = TwoLevelSet::NUM_BUCKETS;
 
         /// Pre-fetch all two-level set pointers to avoid concurrent access to getTwoLevelSet().
-        std::vector<TwoLevelSet *> two_level_ptrs;
+        std::vector<TwoLevelSet *> two_level_ptrs; // STYLE_CHECK_ALLOW_STD_CONTAINERS
         two_level_ptrs.reserve(data_vec.size());
         for (auto * set : data_vec)
             two_level_ptrs.emplace_back(&set->asTwoLevelChecked());

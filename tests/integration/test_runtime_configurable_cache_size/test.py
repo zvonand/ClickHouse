@@ -172,26 +172,26 @@ def test_cache_size_capped_by_ram_ratio(start_cluster):
     )
     node.query("SYSTEM RELOAD CONFIG")
 
-    mark_cache_size = int(
-        node.query(
-            "SELECT toUInt64(value) FROM system.server_settings WHERE name = 'mark_cache_size'"
-        ).strip()
-    )
-    assert mark_cache_size < oversized_cache_size, (
-        f"mark_cache_size was not capped: got {mark_cache_size}, expected < {oversized_cache_size}"
-    )
+    try:
+        mark_cache_size = int(
+            node.query(
+                "SELECT toUInt64(value) FROM system.server_settings WHERE name = 'mark_cache_size'"
+            ).strip()
+        )
+        assert mark_cache_size < oversized_cache_size, (
+            f"mark_cache_size was not capped: got {mark_cache_size}, expected < {oversized_cache_size}"
+        )
 
-    query_cache_size = int(
-        node.query(
-            "SELECT toUInt64(value) FROM system.server_settings WHERE name = 'query_cache.max_size_in_bytes'"
-        ).strip()
-    )
-    assert query_cache_size < oversized_cache_size, (
-        f"query_cache.max_size_in_bytes was not capped: got {query_cache_size}, expected < {oversized_cache_size}"
-    )
-
-    # Cleanup.
-    node.exec_in_container(
-        ["rm", "-f", "/etc/clickhouse-server/config.d/oversized_caches.xml"]
-    )
-    node.query("SYSTEM RELOAD CONFIG")
+        query_cache_size = int(
+            node.query(
+                "SELECT toUInt64(value) FROM system.server_settings WHERE name = 'query_cache.max_size_in_bytes'"
+            ).strip()
+        )
+        assert query_cache_size < oversized_cache_size, (
+            f"query_cache.max_size_in_bytes was not capped: got {query_cache_size}, expected < {oversized_cache_size}"
+        )
+    finally:
+        node.exec_in_container(
+            ["rm", "-f", "/etc/clickhouse-server/config.d/oversized_caches.xml"]
+        )
+        node.query("SYSTEM RELOAD CONFIG")

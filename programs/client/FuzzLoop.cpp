@@ -633,7 +633,14 @@ bool Client::buzzHouse()
         const auto u = processTextAsSingleQuery("DROP DATABASE IF EXISTS fuzztest;");
         UNUSED(u);
 
-        if (fuzz_config->allow_query_oracles)
+        fuzz_config->outf << "--Session seed: " << rg.getSeed() << std::endl;
+        /// Load server configurations for the fuzzer
+        fuzz_config->loadServerConfigurations();
+        loadFuzzerServerSettings(*fuzz_config);
+        loadFuzzerTableSettings(*fuzz_config);
+        loadSystemTables(*fuzz_config);
+
+        if (fuzz_config->allow_client_restarts && fuzz_config->allow_query_oracles)
         {
             /// Create a dedicated oracle user and role for the row policy oracle.
             /// Row policies are created with `TO <oracleRole>` so they apply only to members
@@ -641,24 +648,17 @@ bool Client::buzzHouse()
             /// The oracle uses "EXECUTE AS <oracleUser>" (allowed by the default
             /// access_control_improvements.allow_impersonate_user = true) to run sq1 with
             /// the row policy active.
-            const auto rpu = processTextAsSingleQuery(
-                "CREATE USER IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleUser + " IDENTIFIED WITH no_password");
-            UNUSED(rpu);
-            const auto rpr = processTextAsSingleQuery("CREATE ROLE IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleRole);
-            UNUSED(rpr);
-            const auto rpg = processTextAsSingleQuery("GRANT SELECT ON *.* TO " + BuzzHouse::FuzzConfig::oracleRole);
-            UNUSED(rpg);
-            const auto rpgr
-                = processTextAsSingleQuery("GRANT " + BuzzHouse::FuzzConfig::oracleRole + " TO " + BuzzHouse::FuzzConfig::oracleUser);
-            UNUSED(rpgr);
+            for (const String & q : {
+                     "CREATE USER IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleUser + " IDENTIFIED WITH no_password;",
+                     "CREATE ROLE IF NOT EXISTS " + BuzzHouse::FuzzConfig::oracleRole + ";",
+                     "GRANT SELECT ON *.* TO " + BuzzHouse::FuzzConfig::oracleRole + ";",
+                     "GRANT " + BuzzHouse::FuzzConfig::oracleRole + " TO " + BuzzHouse::FuzzConfig::oracleUser + ";",
+                 })
+            {
+                fuzz_config->outf << q << std::endl;
+                server_up &= processBuzzHouseQuery(q);
+            }
         }
-
-        fuzz_config->outf << "--Session seed: " << rg.getSeed() << std::endl;
-        /// Load server configurations for the fuzzer
-        fuzz_config->loadServerConfigurations();
-        loadFuzzerServerSettings(*fuzz_config);
-        loadFuzzerTableSettings(*fuzz_config);
-        loadSystemTables(*fuzz_config);
 
         full_query2.reserve(8192);
         BuzzHouse::StatementGenerator gen(rg, *fuzz_config, *external_integrations, has_cloud_features);

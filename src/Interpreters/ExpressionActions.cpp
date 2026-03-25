@@ -54,7 +54,6 @@ ExpressionActions::ExpressionActions(ActionsDAG actions_dag_, const ExpressionAc
     : actions_dag(std::move(actions_dag_))
     , project_inputs(project_inputs_)
     , settings(settings_)
-    , is_cancelled(std::make_unique<std::atomic<bool>>(false))
 {
     /// It's important to determine lazy executed nodes before compiling expressions.
     std::unordered_set<const ActionsDAG::Node *> lazy_executed_nodes = processShortCircuitFunctions(actions_dag, settings.short_circuit_function_evaluation);
@@ -70,23 +69,6 @@ ExpressionActions::ExpressionActions(ActionsDAG actions_dag_, const ExpressionAc
         throw Exception(ErrorCodes::TOO_MANY_TEMPORARY_COLUMNS,
                         "Too many temporary columns: {}. Maximum: {}",
                         actions_dag.dumpNames(), settings.max_temporary_columns);
-}
-
-void ExpressionActions::cancel() noexcept
-{
-    if (!is_cancelled)
-        return;
-
-    bool already_cancelled = is_cancelled->exchange(true, std::memory_order_acq_rel);
-    if (already_cancelled)
-        return;
-
-    const auto & nodes = getNodes();
-    for (const auto & node : nodes)
-    {
-        if (node.type == ActionsDAG::ActionType::FUNCTION && node.function)
-            node.function->cancelExecution();
-    }
 }
 
 ExpressionActionsPtr ExpressionActions::clone() const
@@ -110,7 +92,6 @@ ExpressionActionsPtr ExpressionActions::clone() const
 
     copy->project_inputs = project_inputs;
     copy->settings = settings;
-    copy->is_cancelled = std::make_unique<std::atomic<bool>>(false);
 
     return copy;
 }
@@ -817,7 +798,8 @@ static void executeAction(const ExpressionActions::Action & action, ExecutionCon
     }
 }
 
-void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, bool allow_duplicates_in_input) const
+void ExpressionActions::execute(
+    Block & block, size_t & num_rows, bool dry_run, bool allow_duplicates_in_input, CheckCancelled check_cancelled) const
 {
     ExecutionContext execution_context
     {
@@ -860,8 +842,9 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
             throw;
         }
 
-        if (isCancelled())
+        if (check_cancelled && check_cancelled())
         {
+            /// Return an empty block with the names and types of result columns
             block = sample_block.cloneEmpty();
             num_rows = 0;
             return;
@@ -900,11 +883,11 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
     num_rows = execution_context.num_rows;
 }
 
-void ExpressionActions::execute(Block & block, bool dry_run, bool allow_duplicates_in_input) const
+void ExpressionActions::execute(Block & block, bool dry_run, bool allow_duplicates_in_input, CheckCancelled check_cancelled) const
 {
     size_t num_rows = block.rows();
 
-    execute(block, num_rows, dry_run, allow_duplicates_in_input);
+    execute(block, num_rows, dry_run, allow_duplicates_in_input, std::move(check_cancelled));
 
     if (block.empty())
         block.insert({DataTypeUInt8().createColumnConst(num_rows, 0), std::make_shared<DataTypeUInt8>(), "_dummy"});

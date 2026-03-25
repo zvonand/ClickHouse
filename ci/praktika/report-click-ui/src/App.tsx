@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ClickUIProvider, Container, Text, Table, Link, Popover, Button, Badge, Icon, Tooltip, Panel, useToast, Dropdown, Logo } from '@clickhouse/click-ui'
+import { ClickUIProvider, Container, Text, Table, Link, Dialog, Button, Badge, Icon, Tooltip, Panel, useToast, Dropdown, Logo } from '@clickhouse/click-ui'
 import './App.css'
 
 interface TestResult {
@@ -847,8 +847,8 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     const currentPath = [...namesPath, result.name]
 
     return (
-      <Popover>
-        <Popover.Trigger asChild>
+      <Dialog>
+        <Dialog.Trigger asChild>
           <div style={{
             width: '100%',
             height: '100%',
@@ -860,11 +860,11 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
           }}>
             {content}
           </div>
-        </Popover.Trigger>
-        <Popover.Content side="right" showArrow style={{ zIndex: 1001 }}>
+        </Dialog.Trigger>
+        <Dialog.Content title={result.name} showClose>
           {createPopoverContent(result, navigateUrl, currentPath, createToast)}
-        </Popover.Content>
-      </Popover>
+        </Dialog.Content>
+      </Dialog>
     )
   }
 

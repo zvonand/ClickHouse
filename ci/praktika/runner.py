@@ -9,6 +9,8 @@ import sys
 import traceback
 from pathlib import Path
 
+from ci.praktika import job
+
 from ._environment import _Environment
 from .artifact import Artifact
 from .cidb import CIDB
@@ -296,7 +298,10 @@ class Runner:
         if job.enable_gh_auth:
             _GH_Auth(workflow=workflow)
 
+        print("INFO: disk status before running docker:")
+        Shell.run("df -h")
         if job.run_in_docker and not no_docker:
+            Shell.run("docker system df")
             job.run_in_docker, docker_settings = (
                 job.run_in_docker.split("+")[0],
                 job.run_in_docker.split("+")[1:],
@@ -356,9 +361,6 @@ class Runner:
                     f"Docker container '{container_name}' is already running. "
                     f"Another instance of job [{job.name}] may be active in this worktree."
                 )
-            print("INFO: disk status before running docker:")
-            Shell.run("docker system df; df -h")
-            Shell.run("sudo du / | sort -nr | head -100") # REMOVEME
             if Shell.check(
                 f"docker ps -a --format '{{{{.Names}}}}' | grep -qx {container_name}",
                 verbose=False,
@@ -491,15 +493,17 @@ class Runner:
                     ).set_info("---")
             result.dump()
 
+        print("INFO: disk status after running docker:")
+        Shell.run("df -h")
+        if job.run_in_docker and not no_docker:
+            Shell.run("docker system df")
+
         # When running Docker containers as root (non-rootless mode), any files created
         # by the job will be owned by root. This causes issues when:
         # 1. Files need to be read/compressed/uploaded by subsequent steps
         # 2. Root-owned files remain in the repository working directory
         # The ownership fix below ensures all root-owned files are changed to the current user
         if job.run_in_docker and not no_docker and from_root:
-            print("INFO: disk status after running docker:")
-            Shell.run("docker system df; df -h")
-            Shell.run("sudo du / | sort -nr | head -100") # REMOVEME
 
             print(f"--- Fixing file ownership after running docker as root")
             # Get host user's UID and GID (not from inside the container)

@@ -246,6 +246,7 @@ std_cerr_cout_excludes=(
     src/Common/ProgressIndication.h
     src/Common/ZooKeeper/KeeperClientCLI/KeeperClient.h
     src/IO/Ask.cpp
+    src/Examples/main.cpp
 )
 sources_with_std_cerr_cout=( $(
     find $ROOT_PATH/{src,base} -name '*.h' -or -name '*.cpp' | \

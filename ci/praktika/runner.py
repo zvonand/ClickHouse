@@ -497,6 +497,10 @@ class Runner:
         # 2. Root-owned files remain in the repository working directory
         # The ownership fix below ensures all root-owned files are changed to the current user
         if job.run_in_docker and not no_docker and from_root:
+            print("INFO: disk status after running docker:")
+            Shell.run("docker system df; df -h")
+            Shell.run("sudo du / | sort -nr | head -100") # REMOVEME
+
             print(f"--- Fixing file ownership after running docker as root")
             # Get host user's UID and GID (not from inside the container)
             uid = os.getuid()

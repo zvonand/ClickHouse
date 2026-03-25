@@ -401,9 +401,9 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
         });
 
         /// After grouping sets aggregation, the stream count equals grouping_sets_size (typically 2-3),
-        /// which is artificially low and unrelated to data volume. Expand to max_threads so that
-        /// downstream steps (sorting, merging) can process the result in parallel.
-        pipeline.resize(max_threads);
+        /// which is artificially low and unrelated to data volume. Always expand to the full max_threads
+        /// (ignoring the read-stream-reduced cap) so downstream steps can process the result in parallel.
+        pipeline.resize(params.max_threads);
 
         aggregating = collector.detachProcessors(0);
         return;

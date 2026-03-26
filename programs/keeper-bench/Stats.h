@@ -13,8 +13,6 @@
 
 struct Stats
 {
-    std::atomic<size_t> errors{0};
-
     using Sampler = ReservoirSampler<double>;
     /// All StatsCollector access is protected by Stats::mutex
     struct StatsCollector
@@ -31,6 +29,8 @@ struct Stats
         void clear();
         void merge(const StatsCollector & from);
     };
+
+    std::atomic<size_t> errors{0};
 
     Stopwatch elapsed;
 

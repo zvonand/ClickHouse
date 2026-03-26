@@ -35,6 +35,7 @@ void Stats::merge(Stats & from)
 {
     std::scoped_lock lock(mutex, from.mutex);
 
+    errors += from.errors;
     read_collector.merge(from.read_collector);
     write_collector.merge(from.write_collector);
     for (const auto & [op, s] : from.op_collectors)

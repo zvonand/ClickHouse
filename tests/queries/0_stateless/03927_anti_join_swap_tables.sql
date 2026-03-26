@@ -14,10 +14,9 @@ INSERT INTO rhs SELECT * FROM numbers_mt(1e6);
 SET enable_parallel_replicas = 0; -- join swap/reordering disabled with parallel replicas
 SET enable_analyzer = 1, query_plan_join_swap_table = 'auto';
 SET join_algorithm='hash';
-SET query_plan_join_shard_by_pk_ranges = 0; -- adds Sharding: sub-node, changes Type:/Strictness: indentation
 
 -- swap LEFT ANTI join to RIGHT ANTI join
-SELECT *
+SELECT trimLeft(explain)
 FROM (
     EXPLAIN actions=1
     SELECT *
@@ -25,8 +24,7 @@ FROM (
     LEFT ANTI JOIN rhs
     ON lhs.a = rhs.a
 )
-WHERE (explain LIKE '% Type:%') OR (explain LIKE '% Strictness:%')
-SETTINGS query_plan_join_shard_by_pk_ranges = 0;
+WHERE (explain LIKE '% Type:%') OR (explain LIKE '% Strictness:%');
 
 SELECT *
 FROM lhs
@@ -42,7 +40,7 @@ FROM system.query_log
 WHERE log_comment = '03927_left_anti_join_swap_tables' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() AND event_time >= NOW() - INTERVAL '10 MINUTE';
 
 -- swap RIGHT ANTI join to LEFT ANTI join
-SELECT *
+SELECT trimLeft(explain)
 FROM (
     EXPLAIN actions=1
     SELECT *
@@ -50,8 +48,7 @@ FROM (
     RIGHT ANTI JOIN rhs
     ON lhs.a = rhs.a
 )
-WHERE (explain LIKE '% Type:%') OR (explain LIKE '% Strictness:%')
-SETTINGS query_plan_join_shard_by_pk_ranges = 0;
+WHERE (explain LIKE '% Type:%') OR (explain LIKE '% Strictness:%');
 
 SELECT *
 FROM lhs

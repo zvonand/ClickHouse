@@ -82,6 +82,7 @@ public:
     /// stemmer's internal buffer (valid until the next call to stem).
     /// Throws BAD_ARGUMENTS if the input contains whitespace, or
     /// CANNOT_ALLOCATE_MEMORY if the stemmer runs out of memory.
+    /// Note: the input must be lowercase; passing uppercase characters produces undefined results.
     std::string_view stem(std::string_view word)
     {
         if (std::any_of(word.begin(), word.end(), isWhitespaceASCII))
@@ -89,12 +90,6 @@ public:
                 ErrorCodes::BAD_ARGUMENTS,
                 "Function stem requires each input to be a single word without whitespace, "
                 "but got: '{}'",
-                String(word));
-
-        if (std::any_of(word.begin(), word.end(), isUpperAlphaASCII))
-            throw Exception(
-                ErrorCodes::BAD_ARGUMENTS,
-                "Function stem requires lowercase input, but got: '{}'",
                 String(word));
 
         const sb_symbol * result = sb_stemmer_stem(
@@ -251,7 +246,8 @@ REGISTER_FUNCTION(Stem)
 {
     FunctionDocumentation::Description description = R"(
 Performs stemming on a word or an array of words using the Snowball algorithms.
-Each input string must be a single, lowercase word — strings containing whitespace or uppercase characters cause an exception.
+Each input string must be a single, lowercase word — strings containing whitespace cause an exception.
+Passing uppercase characters produces undefined results.
 Returns String for scalar inputs (including FixedString) and Array(String) for array inputs.
 Nullable and LowCardinality variants of String and FixedString are supported.
 )";
@@ -259,6 +255,7 @@ Nullable and LowCardinality variants of String and FixedString are supported.
     FunctionDocumentation::Arguments arguments = {
         {"word",
          "A single lowercase word (or array of words) to stem. "
+         "Must be lowercase — uppercase characters produce undefined results. "
          "Accepts String, FixedString, Array(String), Array(FixedString), "
          "Array(Nullable(String)), or Array(Nullable(FixedString)).",
          {"String", "FixedString", "Array(String)", "Array(FixedString)"}},

@@ -93,7 +93,6 @@ bless
 bless
 disguis
 - Negative tests.
--- Uppercase input raises BAD_ARGUMENTS.
 -- Whitespace in a String input raises BAD_ARGUMENTS.
 -- Whitespace in an Array element raises BAD_ARGUMENTS.
 -- Whitespace in a FixedString input raises BAD_ARGUMENTS.

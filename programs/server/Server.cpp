@@ -3154,9 +3154,12 @@ try
             else
                 global_context->cancelAllBackupsAndRestores();
 
-            /// Killing remaining queries.
+            global_context->getExternalDictionariesLoader().enablePeriodicUpdates(false);
+
             if (!server_settings[ServerSetting::shutdown_wait_unfinished_queries])
                 global_context->getProcessList().killAllQueries();
+
+            global_context->getExternalDictionariesLoader().waitForCurrentLoadingThreadsToFinish();
 
             size_t wait_limit_seconds = server_settings[ServerSetting::shutdown_wait_unfinished];
             auto wait_start = std::chrono::steady_clock::now();

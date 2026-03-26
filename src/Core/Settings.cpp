@@ -7125,7 +7125,7 @@ Allow usage of materialized views with parallel replicas
     DECLARE(Bool, parallel_replicas_filter_pushdown, false, R"(
 Allow pushing down filters to part of query which parallel replicas choose to execute
 )", BETA) \
-    DECLARE(Bool, parallel_replicas_allow_view_over_mergetree, false, R"(
+    DECLARE(Bool, parallel_replicas_allow_view_over_mergetree, true, R"(
 Allow pushing down filters to part of query which parallel replicas choose to execute
 )", BETA) \
     DECLARE(Bool, distributed_index_analysis, false, R"(

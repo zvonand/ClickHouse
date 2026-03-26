@@ -27,7 +27,7 @@
 #include <sys/stat.h>
 
 #include <queue>
-#include <unordered_set>
+#include <unordered_map>
 
 #include "config.h"
 
@@ -205,7 +205,7 @@ public:
                 host, port, limits.hard_limit, getType());
 
         ++total_connections_in_group;
-        live_connections.insert(session);
+        live_connections.emplace(session, 0);
 
         if (total_connections_in_group >= limits.warning_limit && total_connections_in_group >= mute_warning_until)
         {
@@ -213,6 +213,13 @@ public:
             LOG_WARNING(log, "Too many active sessions in group {}, count {}, warning limit {}, next warning at {}",
                         type, total_connections_in_group, limits.warning_limit, mute_warning_until);
         }
+    }
+
+    void updateSocketInode(Poco::Net::HTTPClientSession * session, uint64_t inode) noexcept
+    {
+        std::lock_guard lock(mutex);
+        if (auto it = live_connections.find(session); it != live_connections.end())
+            it->second = inode;
     }
 
     void atConnectionDestroy(Poco::Net::HTTPClientSession * session) noexcept
@@ -235,27 +242,17 @@ public:
 
     const IHTTPConnectionPoolForEndpoint::Metrics & getMetrics() const { return metrics; }
 
-    /// Collect socket inodes of all tracked connections.
-    /// fstat is called under the lock so the FD is guaranteed to be alive and not reused.
+    /// Return cached socket inodes of all tracked connections.
+    /// Inodes are updated by PooledConnection after each connect/reconnect.
     std::vector<uint64_t> getSocketInodes() const
     {
         std::lock_guard lock(mutex);
         std::vector<uint64_t> inodes;
         inodes.reserve(live_connections.size());
-        for (auto * session : live_connections)
+        for (const auto & [_, inode] : live_connections)
         {
-            try
-            {
-                auto fd = session->socket().impl()->sockfd();
-                if (fd < 0)
-                    continue;
-                struct stat st; // NOLINT(cppcoreguidelines-pro-type-member-init)
-                if (fstat(fd, &st) == 0)
-                    inodes.push_back(st.st_ino);
-            }
-            catch (...) // NOLINT(bugprone-empty-catch) Ok: socket may not be connected yet
-            {
-            }
+            if (inode != 0)
+                inodes.push_back(inode);
         }
         return inodes;
     }
@@ -275,7 +272,7 @@ private:
     HTTPConnectionPools::Limits limits TSA_GUARDED_BY(mutex) = HTTPConnectionPools::Limits();
     size_t total_connections_in_group TSA_GUARDED_BY(mutex) = 0;
     size_t mute_warning_until TSA_GUARDED_BY(mutex) = 0;
-    std::unordered_set<Poco::Net::HTTPClientSession *> live_connections TSA_GUARDED_BY(mutex);
+    std::unordered_map<Poco::Net::HTTPClientSession *, uint64_t> live_connections TSA_GUARDED_BY(mutex);
 };
 
 
@@ -389,6 +386,7 @@ private:
                 Session::reconnect(connect_time);
                 ProfileEvents::increment(metrics.created);
             }
+            notifySocketInode();
         }
 
         String getTarget() const
@@ -557,9 +555,28 @@ private:
             return std::make_shared<make_shared_enabler>(std::forward<Args>(args)...);
         }
 
+        /// Notify the connection group about the current socket inode.
+        /// Called after connect/reconnect so the async metrics thread can map sockets to netlink data.
+        void notifySocketInode()
+        {
+            try
+            {
+                auto fd = Session::socket().impl()->sockfd();
+                if (fd < 0)
+                    return;
+                struct stat st; // NOLINT(cppcoreguidelines-pro-type-member-init)
+                if (fstat(fd, &st) == 0)
+                    group->updateSocketInode(this, st.st_ino);
+            }
+            catch (...) // NOLINT(bugprone-empty-catch) Ok: socket may not be connected yet
+            {
+            }
+        }
+
         void doConnect(UInt64 * connect_time)
         {
             Session::reconnect(connect_time);
+            notifySocketInode();
         }
 
         bool isCompleted() const

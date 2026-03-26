@@ -2978,14 +2978,11 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
     if (replace)
     {
         /// Let it mix row policies with masking policies
-        const SQLPolicy & existing = rg.pickValueRandomlyFromMap(this->policies);
-        next.policy_id = existing.policy_id;
-        next.name = existing.name;
+        next.name = rg.pickRandomly(this->policies);
     }
     else
     {
-        next.policy_id = this->policy_counter++;
-        next.name = rg.nextIdentifier("p", next.policy_id, fc.allow_nasty_identifiers);
+        next.name = rg.nextIdentifier("p", this->policy_counter++, fc.allow_nasty_identifiers);
     }
     next.table_id = t.tname;
 
@@ -3036,7 +3033,7 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
     {
         crp->mutable_role()->set_role(FuzzConfig::oracleRole);
     }
-    this->staged_policies[next.policy_id] = next;
+    this->staged_policies[next.name] = next;
 }
 
 }

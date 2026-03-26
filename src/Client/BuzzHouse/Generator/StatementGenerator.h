@@ -201,11 +201,11 @@ private:
     std::unordered_map<uint32_t, SQLView> views;
     std::unordered_map<uint32_t, SQLDictionary> staged_dictionaries;
     std::unordered_map<uint32_t, SQLDictionary> dictionaries;
-    std::unordered_map<uint32_t, SQLFunction> staged_functions;
-    std::unordered_map<uint32_t, SQLFunction> functions;
+    std::unordered_map<String, SQLFunction> staged_functions;
+    std::unordered_map<String, SQLFunction> functions;
     std::unordered_map<uint32_t, CatalogBackup> backups;
-    std::unordered_map<uint32_t, SQLPolicy> staged_policies;
-    std::unordered_map<uint32_t, SQLPolicy> policies;
+    std::unordered_map<String, SQLPolicy> staged_policies;
+    std::unordered_map<String, SQLPolicy> policies;
 
     DB::Strings enum_values
         = {"'-1'",    "'0'",       "'1'",    "'10'",   "'1000'", "'is'",     "'was'",      "'are'",  "'be'",       "'have'", "'had'",
@@ -378,7 +378,7 @@ private:
     String setMergeTableParameter(RandomGenerator & rg, const String & initial);
 
     template <typename T>
-    std::unordered_map<uint32_t, T> & getNextCollection()
+    auto & getNextCollection()
     {
         if constexpr (std::is_same_v<T, SQLTable>)
         {

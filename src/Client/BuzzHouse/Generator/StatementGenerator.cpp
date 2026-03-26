@@ -449,12 +449,9 @@ void StatementGenerator::generateNextCreateFunction(RandomGenerator & rg, Create
     const bool replace = !functions.empty() && rg.nextMediumNumber() < 16;
     const bool prev_enforce_final = this->enforce_final;
     const bool prev_allow_not_deterministic = this->allow_not_deterministic;
-    const uint32_t fname = replace ? rg.pickRandomly(this->functions) : this->function_counter++;
-
     /// REPLACE FUNCTION syntax is not yet supported
     cf->set_create_opt(replace ? CreateReplaceOption::CreateOrReplace : CreateReplaceOption::Create);
-    next.fname = fname;
-    next.name = replace ? this->functions.at(fname).name : rg.nextIdentifier("f", fname, fc.allow_nasty_identifiers);
+    next.name = replace ? rg.pickRandomly(this->functions) : rg.nextIdentifier("f", this->function_counter++, fc.allow_nasty_identifiers);
     next.nargs = std::min(this->fc.max_width - this->width, rg.randomInt<uint32_t>(1, fc.max_columns));
     next.is_deterministic = rg.nextBool();
     /// If this function is later called by an oracle, then don't call it
@@ -470,7 +467,7 @@ void StatementGenerator::generateNextCreateFunction(RandomGenerator & rg, Create
         setClusterClause(rg, next.cluster, cf->mutable_cluster());
     }
     next.setName(cf->mutable_function());
-    this->staged_functions[fname] = std::move(next);
+    this->staged_functions[next.name] = std::move(next);
 }
 
 static void SetViewInterval(RandomGenerator & rg, RefreshInterval * ri)
@@ -2303,10 +2300,9 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
               {
                   SQLPolicy renamed(rp);
 
-                  renamed.policy_id = this->policy_counter++;
-                  renamed.name = rg.nextIdentifier("p", renamed.policy_id, fc.allow_nasty_identifiers);
+                  renamed.name = rg.nextIdentifier("p", this->policy_counter++, fc.allow_nasty_identifiers);
                   renamed.setName(apc->mutable_rename_to());
-                  this->staged_policies[renamed.policy_id] = renamed;
+                  this->staged_policies[renamed.name] = renamed;
               }
           }}});
     setClusterClause(rg, cluster, at->mutable_cluster());
@@ -3682,11 +3678,11 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         }
         else if (drp.sobject() == SQLObject::FUNCTION)
         {
-            this->functions.erase(getIdentifierFromString(drp.object().function().function()));
+            this->functions.erase(drp.object().function().function());
         }
         else if (drp.sobject() == SQLObject::ROW_POLICY || drp.sobject() == SQLObject::MASKING_POLICY)
         {
-            this->policies.erase(getIdentifierFromString(drp.object().policy().policy()));
+            this->policies.erase(drp.object().policy().policy());
         }
         else
         {
@@ -3975,10 +3971,8 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         }
         else if (at.alter().has_alter_policy())
         {
-            const uint32_t old_id = getIdentifierFromString(at.object().policy().policy());
-            const uint32_t new_id = at.alter().alter_policy().has_rename_to()
-                ? getIdentifierFromString(at.alter().alter_policy().rename_to().policy())
-                : old_id;
+            const String & old_id = at.object().policy().policy();
+            const String & new_id = at.alter().alter_policy().has_rename_to() ? at.alter().alter_policy().rename_to().policy() : old_id;
 
             if (success && this->policies.contains(old_id))
             {
@@ -4082,7 +4076,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
     }
     else if (ssq.has_explain() && query.has_create_function())
     {
-        const uint32_t fname = getIdentifierFromString(query.create_function().function().function());
+        const String & fname = query.create_function().function().function();
 
         if (!ssq.explain().is_explain() && success)
         {
@@ -4096,7 +4090,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
     }
     else if (ssq.has_explain() && query.has_create_policy())
     {
-        const uint32_t policy_id = getIdentifierFromString(query.create_policy().policy().policy());
+        const String & policy_id = query.create_policy().policy().policy();
 
         if (!ssq.explain().is_explain() && success)
         {

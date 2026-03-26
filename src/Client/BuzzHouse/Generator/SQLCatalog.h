@@ -462,7 +462,6 @@ struct SQLFunction : WithCluster
 {
 public:
     bool is_deterministic = false;
-    uint32_t fname = 0;
     uint32_t nargs = 0;
     String name;
 
@@ -473,7 +472,6 @@ struct SQLPolicy : WithCluster
 {
 public:
     bool is_row = true;
-    uint32_t policy_id = 0;
     uint32_t table_id = 0;
     String name;
     /// USING predicate stored at creation time; absent means the policy allows all rows.
@@ -486,7 +484,6 @@ public:
         : WithCluster(other)
     {
         this->is_row = other.is_row;
-        this->policy_id = other.policy_id;
         this->table_id = other.table_id;
         this->name = other.name;
         this->where_expr = other.where_expr;

@@ -288,13 +288,17 @@ void QueryOracle::generateRoundtripOracleQueries(RandomGenerator & rg, Statement
     sif1->set_path(qcfile.generic_string());
     sif1->set_step(SelectIntoFile_SelectIntoFileStep::SelectIntoFile_SelectIntoFileStep_TRUNCATE);
 
-    /// Build sq2: SELECT count() FROM <from_clause> WHERE roundtrip(col) = col
+    /// Build sq2: SELECT count() FROM <from_clause> WHERE col IS NOT NULL AND roundtrip(col) = col
+    /// The explicit IS NOT NULL guard is necessary because for Dynamic columns toString(NULL) returns ''
+    /// rather than NULL, so the roundtrip predicate would evaluate to TRUE for NULL rows and diverge
+    /// from sq1's IS NOT NULL baseline.  For Nullable columns this guard is redundant but harmless.
     /// CopyFrom clones the FROM clause, format, and output file from sq1.
     sq2.CopyFrom(sq1);
     {
         SelectStatementCore * ssc
             = sq2.mutable_single_query()->mutable_explain()->mutable_inner_query()->mutable_select()->mutable_sel()->mutable_select_core();
-        ssc->mutable_where()->mutable_expr()->mutable_expr()->mutable_lit_val()->set_no_quote_str(roundtrip_pred);
+        ssc->mutable_where()->mutable_expr()->mutable_expr()->mutable_lit_val()->set_no_quote_str(
+            fmt::format("{} IS NOT NULL AND {}", col_ref, roundtrip_pred));
     }
     gen.enforceFinal(false);
     gen.setAllowNotDetermistic(true);

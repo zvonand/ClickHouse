@@ -338,7 +338,21 @@ String RandomGenerator::nextIdentifier(const String & prefix, const uint32_t cou
         return prefix + std::to_string(counter);
 
     /// SQL keyword or nasty identifier as leading part
-    String res = nextBool() ? pickRandomly(nasty_identifier_keywords) : pickRandomly(nasty_identifiers);
+    String res = pickRandomly(nextSmallNumber() < 3 ? nasty_identifier_keywords : nasty_identifiers);
+
+    /// ~30% chance: build a long identifier by concatenating 1-3 more parts
+    if (nextSmallNumber() < 3)
+    {
+        const uint32_t extra = randomInt<uint32_t>(1, 10);
+
+        for (uint32_t i = 0; i < extra; i++)
+        {
+            /// Occasionally insert a separator between parts
+            if (nextSmallNumber() < 3)
+                res += pickRandomly(DB::Strings{" ", "_", "-", "."});
+            res += pickRandomly(nasty_identifiers);
+        }
+    }
     if (nextSmallNumber() < 9)
     {
         /// Add suffix most of the time, to increase variability and uniqueness

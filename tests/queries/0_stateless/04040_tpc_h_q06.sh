@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest, no-replicated-database
+# Tags: no-fasttest, no-random-settings, no-replicated-database
 # no-fasttest: the `tpch` database is not created in fasttest.
 # no-replicated-database: the `tpch` database is not created in DatabaseReplicated mode.
+# no-random-settings: these tests verify correctness, not behavior under random settings that may cause memory issues.
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh

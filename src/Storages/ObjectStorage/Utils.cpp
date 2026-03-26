@@ -501,11 +501,29 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
     if (!isAbsolutePath(path))
         return {base_storage, convertPathToKeyInStorage(table_location, path)}; // Relative path definitely goes to base storage
 
+    auto ensure_local_path_inside_user_files = [&](const std::string & local_path)
+    {
+        const auto target_path = std::filesystem::path(local_path).lexically_normal();
+        const auto user_files_path = std::filesystem::path(context->getUserFilesPath()).lexically_normal();
+
+        if (user_files_path.empty() || !fileOrSymlinkPathStartsWith(target_path.string(), user_files_path.string()))
+            throw DB::Exception(
+                DB::ErrorCodes::PATH_ACCESS_DENIED,
+                "File URI '{}' is outside of allowed `user_files` path '{}'",
+                local_path,
+                user_files_path.string());
+    };
+
     SchemeAuthorityKey table_location_decomposed{table_location};
     SchemeAuthorityKey target_decomposed{path};
 
     if (target_decomposed.scheme.empty() && target_decomposed.key.starts_with('/'))
+    {
+        if (base_storage->getType() == ObjectStorageType::Local)
+            ensure_local_path_inside_user_files(target_decomposed.key);
+
         return {base_storage, convertPathToKeyInStorage(table_location, target_decomposed.key)};
+    }
 
     const std::string base_scheme_normalized = normalizeScheme(table_location_decomposed.scheme);
     const std::string target_scheme_normalized = normalizeScheme(target_decomposed.scheme);
@@ -514,15 +532,7 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
     /// Without this check, metadata could drive reads from arbitrary local paths.
     if (target_scheme_normalized == "file")
     {
-        const auto target_path = std::filesystem::path(target_decomposed.key).lexically_normal();
-        const auto user_files_path = std::filesystem::path(context->getUserFilesPath()).lexically_normal();
-
-        if (user_files_path.empty() || !fileOrSymlinkPathStartsWith(target_path.string(), user_files_path.string()))
-            throw DB::Exception(
-                DB::ErrorCodes::PATH_ACCESS_DENIED,
-                "File URI '{}' is outside of allowed `user_files` path '{}'",
-                path,
-                user_files_path.string());
+        ensure_local_path_inside_user_files(target_decomposed.key);
     }
 
     // For S3 URIs, use S3::URI to properly handle all kinds of URIs, e.g. https://s3.amazonaws.com/bucket/... == s3://bucket/...

@@ -15,7 +15,9 @@ non-parallel
 17	2	168	168
 18	3	168	168
 19	4	168	168
-parallel
+-- parallel, allowing view over mt is disabled
+Aggregating
+---
 1	1	168	168
 2	2	168	168
 3	3	168	168
@@ -32,7 +34,10 @@ parallel
 17	2	168	168
 18	3	168	168
 19	4	168	168
-parallel, allowed view over mt
+-- parallel, allow view over mt
+MergingAggregated
+Aggregating
+---
 1	1	168	168
 2	2	168	168
 3	3	168	168

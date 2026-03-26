@@ -115,13 +115,14 @@ ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage
 {
     auto view_context = storage_snapshot->metadata->getSQLSecurityOverriddenContext(context);
     Settings view_settings = view_context->getSettingsCopy();
-    if (view_settings[Setting::allow_experimental_analyzer] && view_settings[Setting::parallel_replicas_allow_view_over_mergetree])
+    if (context->canUseParallelReplicasOnInitiator() && view_settings[Setting::parallel_replicas_allow_view_over_mergetree])
     {
         if (auto storage = view->getUnderlyingStorage(context))
         {
-            if (storage->isMergeTree()
+            const bool can_apply_parallel_replicas = storage->isMergeTree()
                 && (storage->supportsReplication()
-                    || (!storage->supportsReplication() && view_settings[Setting::parallel_replicas_for_non_replicated_merge_tree])))
+                    || (!storage->supportsReplication() && view_settings[Setting::parallel_replicas_for_non_replicated_merge_tree]));
+            if (can_apply_parallel_replicas)
             {
                 view_settings[Setting::allow_experimental_parallel_reading_from_replicas] = Field{0};
             }

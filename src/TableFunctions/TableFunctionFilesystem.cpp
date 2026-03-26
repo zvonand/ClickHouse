@@ -58,12 +58,9 @@ The `FILE` source access type is required.
 
 ## Optimizations
 
-- **Lazy content reading**: the `content` column is only read when explicitly selected.
-  Queries that do not select `content` avoid file I/O entirely.
-- **Predicate pushdown on metadata**: filters on cheap columns (`path`, `name`, `depth`, `type`, `is_symlink`)
-  are evaluated before reading file content, size, or modification time.
-- **Parallel traversal**: multiple threads traverse the directory tree concurrently via a shared bounded queue,
-  enabling fast scanning of large directory trees.
+- **Lazy content reading**: the `content` column is only read when explicitly selected. Queries that do not select `content` avoid file I/O entirely.
+- **Predicate pushdown on metadata**: filters on cheap columns (`path`, `name`, `depth`, `type`, `is_symlink`) are evaluated before reading file content, size, or modification time.
+- **Parallel traversal**: multiple threads traverse the directory tree concurrently via a shared bounded queue, enabling fast scanning of large directory trees.
 - **Early LIMIT**: because results are streamed, `LIMIT` stops the traversal early.
 )",
             .examples

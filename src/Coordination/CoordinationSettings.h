@@ -35,8 +35,11 @@ struct CoordinationSettings
 
     void loadFromConfig(const String & config_elem, const Poco::Util::AbstractConfiguration & config);
     void dump(WriteBufferFromOwnString & buf) const;
+    void updateHotReloadableSettings(const CoordinationSettings & new_settings);
 
     COORDINATION_SETTINGS_SUPPORTED_TYPES(CoordinationSettings, DECLARE_SETTING_SUBSCRIPT_OPERATOR)
+
+    uint64_t version = 0;
 
 private:
     std::unique_ptr<CoordinationSettingsImpl> impl;

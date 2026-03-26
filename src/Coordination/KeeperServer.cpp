@@ -255,7 +255,7 @@ KeeperServer::KeeperServer(
     , create_snapshot_on_exit(config.getBool("keeper_server.create_snapshot_on_exit", true))
     , enable_reconfiguration(config.getBool("keeper_server.enable_reconfiguration", false))
 {
-    if (keeper_context->getCoordinationSettings()[CoordinationSetting::quorum_reads])
+    if (keeper_context->getDynamicSettings()[CoordinationSetting::quorum_reads])
         LOG_WARNING(log, "Quorum reads enabled, Keeper will work slower.");
 
 #if USE_ROCKSDB

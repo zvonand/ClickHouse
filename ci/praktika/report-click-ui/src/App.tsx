@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ClickUIProvider, Container, Text, Table, Link, Dialog, Button, Badge, Icon, Tooltip, Panel, useToast, Dropdown, Logo } from '@clickhouse/click-ui'
+import { ClickUIProvider, Container, Text, Table, Link, Dialog, Button, Badge, Icon, IconButton, Tooltip, Panel, useToast, Dropdown, Logo } from '@clickhouse/click-ui'
 import './App.css'
 
 interface TestResult {
@@ -755,7 +755,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     }
 
     return (
-      <Container orientation='vertical' gap='sm' padding='md' style={{ maxHeight: '600px', overflow: 'auto' }}>
+      <Container orientation='vertical' gap='sm' padding='none' style={{ maxHeight: '60vh', overflow: 'auto', paddingInline: '2px' }}>
         {result.info && (
           <Panel hasShadow padding='sm' orientation='vertical' gap='xs' alignItems='start' style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)' }}>
             <Text style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '12px' }}>
@@ -812,33 +812,34 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
             </div>
           </Panel>
         )}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px', marginTop: '8px' }}>
           {navigateUrl && (
-            <Link href={navigateUrl} style={{ textDecoration: 'none' }}>
-              <Button
-                type="primary"
-                label="Open Result page"
-              />
-            </Link>
+            <Tooltip>
+              <Tooltip.Trigger>
+                <Link href={navigateUrl} style={{ textDecoration: 'none', display: 'flex' }}>
+                  <IconButton icon="folder-open" type="ghost" />
+                </Link>
+              </Tooltip.Trigger>
+              <Tooltip.Content showArrow>Open result page</Tooltip.Content>
+            </Tooltip>
           )}
           {result.ext?.run_url && (
-            <Link href={result.ext.run_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', padding: '4px' }}>
-              <Logo name={'github'} size="sm" />
-            </Link>
+            <Tooltip>
+              <Tooltip.Trigger>
+                <Link href={result.ext.run_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', padding: '4px' }}>
+                  <Logo name={'github'} size="sm" />
+                </Link>
+              </Tooltip.Trigger>
+              <Tooltip.Content showArrow>Open GitHub Actions run</Tooltip.Content>
+            </Tooltip>
           )}
           {!result.status.toLowerCase().includes('skip') && (
-            <div
-              onClick={copyUrlToClipboard}
-              style={{
-                cursor: 'pointer',
-                padding: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <Icon name="copy" size="md" />
-            </div>
+            <Tooltip>
+              <Tooltip.Trigger>
+                <IconButton icon="copy" type="ghost" onClick={copyUrlToClipboard} />
+              </Tooltip.Trigger>
+              <Tooltip.Content showArrow>Copy link to this result</Tooltip.Content>
+            </Tooltip>
           )}
         </div>
       </Container>
@@ -911,9 +912,10 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     // Determine if navigation should be available
     // Only available if max_N > 0 OR status is success/failure/error
     const maxNameIndex = nameParams.length - 1
+    const isTopLevel = maxNameIndex <= 0
     const isClickableStatus = ['success', 'failure', 'error'].includes(result.status.toLowerCase())
-    const hasSubResults = result.results === undefined || result.results.length > 0
-    const shouldBeClickable = (maxNameIndex > 0 || isClickableStatus) && hasSubResults
+    const hasSubResults = result.results !== undefined && result.results.length > 0
+    const shouldBeClickable = isTopLevel ? isClickableStatus : hasSubResults
 
     const navigateUrl = shouldBeClickable ? buildUrlWithNewName(result.name) : undefined
 
@@ -1203,7 +1205,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                     <Text><strong>{data.name}</strong></Text>
                   </div>
                   <div style={{ fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Text>status:</Text>
+                    <Text>Status:</Text>
                     {getStatusBadge(data.status)}
                     <Text>|</Text>
                     <Text>Start Time: <strong>{data.start_time ? (typeof data.start_time === 'number' ? new Date(data.start_time * 1000).toLocaleString() : new Date(data.start_time).toLocaleString()) : ''}</strong></Text>

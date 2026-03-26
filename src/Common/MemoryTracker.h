@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <base/types.h>
@@ -67,7 +68,7 @@ private:
     Int64 profiler_step = 0;
 
     /// To test exception safety of calling code, memory tracker throws an exception on each memory allocation with specified probability.
-    double fault_probability = 0;
+    std::atomic<double> fault_probability = 0;
 
     /// To randomly sample allocations and deallocations in trace_log.
     double sample_probability = -1;
@@ -146,16 +147,7 @@ public:
     // This method is intended to fix the counter inside of background_memory_tracker.
     // NOTE: We can't use alloc/free methods to do it, because they also will change the value inside
     // of total_memory_tracker.
-    void adjustOnBackgroundTaskEnd(const MemoryTracker * child)
-    {
-        auto background_memory_consumption = child->amount.load(std::memory_order_relaxed);
-        amount.fetch_sub(background_memory_consumption, std::memory_order_relaxed);
-
-        // Also fix CurrentMetrics::MergesMutationsMemoryTracking
-        auto metric_loaded = metric.load(std::memory_order_relaxed);
-        if (metric_loaded != CurrentMetrics::end())
-            CurrentMetrics::sub(metric_loaded, background_memory_consumption);
-    }
+    void adjustOnBackgroundTaskEnd(const MemoryTracker * child);
 
     Int64 getPeak() const
     {
@@ -181,7 +173,9 @@ public:
 
     void setFaultProbability(double value)
     {
-        fault_probability = value;
+        /// Cap to 0.5 to avoid infinite loops where every allocation fails
+        /// and operations that retry on memory errors can never make progress.
+        fault_probability.store(std::min(value, 0.5), std::memory_order_relaxed);
     }
 
     void injectFault() const;
@@ -286,11 +280,10 @@ public:
 
     /// Prints info about peak memory consumption into log.
     void logPeakMemoryUsage();
-
-    void debugLogBigAllocationWithoutCheck(Int64 size [[maybe_unused]]);
 };
 
 extern MemoryTracker total_memory_tracker;
 extern MemoryTracker background_memory_tracker;
+bool isTotalMemoryTrackerInitialized();
 
 bool canEnqueueBackgroundTask();

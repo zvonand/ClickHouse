@@ -624,7 +624,7 @@ void KeeperContext::updateSettings(CoordinationSettingsPtr new_settings)
     merged->updateHotReloadableSettings(*new_settings);
 
     std::lock_guard lock(settings_mutex);
-    merged->version = dynamic_settings->version + 1;
+    merged->version = next_coordination_settings_version++;
     dynamic_settings = std::move(merged);
     settings_version.store(dynamic_settings->version);
 }

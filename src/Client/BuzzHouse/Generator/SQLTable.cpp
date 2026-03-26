@@ -876,7 +876,7 @@ String StatementGenerator::setMergeTableParameter(RandomGenerator & rg, const St
         {
             const std::shared_ptr<SQLDatabase> & d = rg.pickRandomly(filterCollection<std::shared_ptr<SQLDatabase>>(attached_databases));
 
-            return initial + std::to_string(d->dname);
+            return initial + d->getName();
         }
     }
     else if constexpr (std::is_same_v<T, SQLTable>)
@@ -885,7 +885,7 @@ String StatementGenerator::setMergeTableParameter(RandomGenerator & rg, const St
         {
             const SQLTable & t = rg.pickRandomly(filterCollection<SQLTable>(attached_tables));
 
-            return initial + std::to_string(t.tname);
+            return initial + t.getBaseName();
         }
     }
     else if constexpr (std::is_same_v<T, SQLView>)
@@ -894,7 +894,7 @@ String StatementGenerator::setMergeTableParameter(RandomGenerator & rg, const St
         {
             const SQLView & v = rg.pickRandomly(filterCollection<SQLView>(attached_views));
 
-            return initial + std::to_string(v.tname);
+            return initial + v.getBaseName();
         }
     }
     else if constexpr (std::is_same_v<T, SQLDictionary>)
@@ -903,7 +903,7 @@ String StatementGenerator::setMergeTableParameter(RandomGenerator & rg, const St
         {
             const SQLDictionary & d = rg.pickRandomly(filterCollection<SQLDictionary>(attached_dictionaries));
 
-            return initial + std::to_string(d.tname);
+            return initial + d.getBaseName();
         }
     }
     else
@@ -1049,7 +1049,7 @@ void StatementGenerator::generateMergeTreeEngineDetails(
                 b.shard_counter = rg.nextBool() ? t.shard_counter++ : t.shard_counter;
                 b.replica_counter = rg.nextBool() ? t.replica_counter++ : t.replica_counter;
                 b.replica_db = t.getDatabaseName();
-                b.replica_table = t.getTableName(false);
+                b.replica_table = t.getBaseName(false);
                 b.shard_name = "s" + std::to_string(b.shard_counter);
                 b.replica_name = "r" + std::to_string(b.replica_counter);
             }
@@ -1058,7 +1058,7 @@ void StatementGenerator::generateMergeTreeEngineDetails(
                 /// Make this the first replica of all
                 b.shard_counter = b.replica_counter = 1;
                 b.replica_db = b.getDatabaseName();
-                b.replica_table = b.getTableName(false);
+                b.replica_table = b.getBaseName(false);
                 b.shard_name = "s0";
                 b.replica_name = "r0";
             }
@@ -1325,8 +1325,8 @@ void StatementGenerator::generateEngineDetails(
               {
                   const auto & ntable = rg.pickRandomly(systemTables);
 
-                  te->add_params()->mutable_database()->set_database(ntable.schema_name);
-                  te->add_params()->mutable_table()->set_table(ntable.table_name);
+                  te->add_params()->mutable_database()->set_value(ntable.schema_name);
+                  te->add_params()->mutable_table()->set_value(ntable.table_name);
                   /// Something as a placeholder
                   b.sub = MergeTree;
               }},
@@ -1334,8 +1334,8 @@ void StatementGenerator::generateEngineDetails(
               [&]
               {
                   /// Empty database/table — no underlying entity
-                  te->add_params()->mutable_database()->set_database("");
-                  te->add_params()->mutable_table()->set_table("");
+                  te->add_params()->mutable_database()->set_value("");
+                  te->add_params()->mutable_table()->set_value("");
                   b.sub = MergeTree;
               }}});
 
@@ -1928,7 +1928,7 @@ void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const
     }
     if (!projection)
     {
-        idef->mutable_idx()->set_index(rg.nextIdentifier("i", t.idx_counter++, fc.allow_nasty_identifiers));
+        idef->mutable_idx()->set_value(rg.nextIdentifier("i", t.idx_counter++, fc.allow_nasty_identifiers));
         if (rg.nextSmallNumber() < 7)
         {
             uint32_t granularity = 1;
@@ -1949,7 +1949,7 @@ void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const
 
 void StatementGenerator::addTableProjection(RandomGenerator & rg, SQLTable & t, ProjectionDef * pdef)
 {
-    pdef->mutable_proj()->set_projection(rg.nextIdentifier("p", t.proj_counter++, fc.allow_nasty_identifiers));
+    pdef->mutable_proj()->set_value(rg.nextIdentifier("p", t.proj_counter++, fc.allow_nasty_identifiers));
     this->inside_projection = true;
     if (rg.nextBool())
     {
@@ -2002,7 +2002,7 @@ void StatementGenerator::addTableConstraint(RandomGenerator & rg, SQLTable & t, 
     std::uniform_int_distribution<uint32_t> constr_range(1, static_cast<uint32_t>(ConstraintDef::ConstraintType_MAX));
 
     cdef->set_ctype(static_cast<ConstraintDef_ConstraintType>(constr_range(rg.generator)));
-    cdef->mutable_constr()->set_constraint("c" + std::to_string(crname));
+    cdef->mutable_constr()->set_value("c" + std::to_string(crname));
     if (!t.cols.empty())
     {
         addTableRelation(rg, rg.nextSmallNumber() < 2, "", t);
@@ -2288,7 +2288,6 @@ void StatementGenerator::getNextTableEngine(RandomGenerator & rg, bool use_exter
 void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const bool in_parallel, CreateTable * ct)
 {
     SQLTable next;
-    uint32_t tname = 0;
     bool has_ttl = false;
     bool added_pkey = false;
     TableEngine * te = ct->mutable_engine();
@@ -2312,7 +2311,7 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
         const SQLTable & t = rg.pickRandomly(filterCollection<SQLTable>(replaceTableLambda));
 
         next.db = t.db;
-        tname = next.tname = t.tname;
+        next.name = t.getBaseName();
     }
     else
     {
@@ -2320,7 +2319,7 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
         {
             next.db = rg.pickRandomly(filterCollection<std::shared_ptr<SQLDatabase>>(attached_databases));
         }
-        tname = next.tname = this->table_counter++;
+        next.name = rg.nextIdentifier("t", this->table_counter++, fc.allow_nasty_identifiers);
     }
     ct->set_create_opt(
         replace ? (rg.nextBool() ? CreateReplaceOption::CreateOrReplace : CreateReplaceOption::Replace) : CreateReplaceOption::Create);
@@ -2539,13 +2538,12 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
         ct->set_comment(nextComment(rg));
     }
     chassert(!next.toption.has_value() || next.isMergeTreeFamily() || next.isJoinEngine() || next.isSetEngine());
-    this->staged_tables[tname] = std::move(next);
+    this->staged_tables[next.name] = std::move(next);
 }
 
 void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, CreateDictionary * cd)
 {
     SQLDictionary next;
-    uint32_t tname = 0;
     uint32_t col_counter = 0;
     const DictionaryLayouts & dl = rg.pickRandomly(allDictionaryLayoutSettings);
     const bool isRange = dl == COMPLEX_KEY_RANGE_HASHED || dl == RANGE_HASHED;
@@ -2570,7 +2568,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         const SQLDictionary & d = rg.pickRandomly(filterCollection<SQLDictionary>(replaceDictionaryLambda));
 
         next.db = d.db;
-        tname = next.tname = d.tname;
+        next.name = d.getBaseName();
     }
     else
     {
@@ -2578,7 +2576,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         {
             next.db = rg.pickRandomly(filterCollection<std::shared_ptr<SQLDatabase>>(attached_databases));
         }
-        tname = next.tname = this->table_counter++;
+        next.name = rg.nextIdentifier("d", this->table_counter++, fc.allow_nasty_identifiers);
     }
     cd->set_create_opt(
         replace ? (rg.nextBool() ? CreateReplaceOption::CreateOrReplace : CreateReplaceOption::Replace) : CreateReplaceOption::Create);
@@ -2612,8 +2610,8 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
                   ExprSchemaTable * est = dsd->mutable_est();
                   const ServerCredentials & sc = fc.postgresql_server.value();
 
-                  est->mutable_database()->set_database(sc.database);
-                  est->mutable_table()->set_table(t.getTableName());
+                  est->mutable_database()->set_value(sc.database);
+                  est->mutable_table()->set_value(t.getBaseName());
                   dsd->set_host(sc.server_hostname);
                   dsd->set_port(std::to_string(sc.port));
                   dsd->set_user(sc.user);
@@ -2625,8 +2623,8 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
                   ExprSchemaTable * est = dsd->mutable_est();
                   const ServerCredentials & sc = fc.mysql_server.value();
 
-                  est->mutable_database()->set_database(sc.database);
-                  est->mutable_table()->set_table(t.getTableName());
+                  est->mutable_database()->set_value(sc.database);
+                  est->mutable_table()->set_value(t.getBaseName());
                   dsd->set_host(sc.server_hostname);
                   dsd->set_port(std::to_string(sc.mysql_port ? sc.mysql_port : sc.port));
                   dsd->set_user(sc.user);
@@ -2638,8 +2636,8 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
                   ExprSchemaTable * est = dsd->mutable_est();
                   const ServerCredentials & sc = fc.mongodb_server.value();
 
-                  est->mutable_database()->set_database(sc.database);
-                  est->mutable_table()->set_table(t.getTableName());
+                  est->mutable_database()->set_value(sc.database);
+                  est->mutable_table()->set_value(t.getBaseName());
                   dsd->set_host(sc.server_hostname);
                   dsd->set_port(std::to_string(sc.port));
                   dsd->set_user(sc.user);
@@ -2676,8 +2674,8 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
               ExprSchemaTable * est = dsd->mutable_est();
               const auto & ntable = rg.pickRandomly(systemTables);
 
-              est->mutable_database()->set_database(ntable.schema_name);
-              est->mutable_table()->set_table(ntable.table_name);
+              est->mutable_database()->set_value(ntable.schema_name);
+              est->mutable_table()->set_value(ntable.table_name);
               dsd->set_source(DictionarySourceDetails::CLICKHOUSE);
           }},
          {dict_view,
@@ -2826,7 +2824,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     {
         cd->set_comment(nextComment(rg));
     }
-    this->staged_dictionaries[tname] = std::move(next);
+    this->staged_dictionaries[next.name] = std::move(next);
 }
 
 DatabaseEngineValues StatementGenerator::getNextDatabaseEngine(RandomGenerator & rg, const SQLDatabase & d)
@@ -2918,7 +2916,6 @@ void StatementGenerator::generateDatabaseEngineDetails(RandomGenerator & rg, SQL
 void StatementGenerator::generateNextCreateDatabase(RandomGenerator & rg, CreateDatabase * cd)
 {
     SQLDatabase next;
-    const uint32_t dname = this->database_counter++;
     DatabaseEngine * deng = cd->mutable_dengine();
 
     SQLDatabase::setRandomDatabase(rg, next);
@@ -2933,7 +2930,7 @@ void StatementGenerator::generateNextCreateDatabase(RandomGenerator & rg, Create
         next.cluster = rg.pickRandomly(fc.clusters);
         setClusterClause(rg, next.cluster, cd->mutable_cluster());
     }
-    next.dname = dname;
+    next.name = rg.nextIdentifier("d", this->database_counter++, fc.allow_nasty_identifiers);
     next.setDatabasePath(rg, fc);
     if (next.random_engine)
     {
@@ -2963,7 +2960,7 @@ void StatementGenerator::generateNextCreateDatabase(RandomGenerator & rg, Create
     {
         connections.createExternalDatabase(rg, next, deng);
     }
-    this->staged_databases[dname] = std::make_shared<SQLDatabase>(std::move(next));
+    this->staged_databases[next.name] = std::make_shared<SQLDatabase>(std::move(next));
 }
 
 void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bool row, CreatePolicy * crp)
@@ -2984,7 +2981,7 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
     {
         next.name = rg.nextIdentifier("p", this->policy_counter++, fc.allow_nasty_identifiers);
     }
-    next.table_id = t.tname;
+    next.table_key = t.getBaseName();
 
     crp->set_create_opt(
         replace ? (rg.nextBool() ? CreateReplaceOption::CreateOrReplace : CreateReplaceOption::Replace) : CreateReplaceOption::Create);
@@ -3031,7 +3028,7 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
     }
     if (next.targets_oracle_role)
     {
-        crp->mutable_role()->set_role(FuzzConfig::oracleRole);
+        crp->mutable_role()->set_value(FuzzConfig::oracleRole);
     }
     this->staged_policies[next.name] = next;
 }

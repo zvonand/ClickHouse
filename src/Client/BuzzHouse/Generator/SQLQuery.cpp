@@ -237,7 +237,7 @@ void StatementGenerator::setTableFunction(RandomGenerator & rg, const TableFunct
 
         mfunc->set_address(sc.server_hostname + ":" + std::to_string(sc.mysql_port ? sc.mysql_port : sc.port));
         mfunc->set_rdatabase(sc.database);
-        mfunc->set_rtable(t.getTableName());
+        mfunc->set_rtable(t.getBaseName());
         mfunc->set_user(sc.user);
         mfunc->set_password(sc.password);
     }
@@ -250,7 +250,7 @@ void StatementGenerator::setTableFunction(RandomGenerator & rg, const TableFunct
 
         pfunc->set_address(sc.server_hostname + ":" + std::to_string(sc.port));
         pfunc->set_rdatabase(sc.database);
-        pfunc->set_rtable(t.getTableName());
+        pfunc->set_rtable(t.getBaseName());
         pfunc->set_user(sc.user);
         pfunc->set_password(sc.password);
         pfunc->set_rschema("test");
@@ -261,7 +261,7 @@ void StatementGenerator::setTableFunction(RandomGenerator & rg, const TableFunct
         SQLiteFunc * sfunc = tfunc->mutable_sqite();
 
         sfunc->set_rdatabase(connections.getSQLitePath().generic_string());
-        sfunc->set_rtable(t.getTableName());
+        sfunc->set_rtable(t.getBaseName());
     }
     else if (usage == TableFunctionUsage::EngineReplace && t.isEngineReplaceable())
     {
@@ -410,7 +410,7 @@ void StatementGenerator::setTableFunction(RandomGenerator & rg, const TableFunct
         {
             MongoDBFunc * mfunc = tfunc->mutable_mongodb();
 
-            mfunc->set_collection(t.getTableName());
+            mfunc->set_collection(t.getBaseName());
             if (fc.mongodb_server.has_value())
             {
                 const ServerCredentials & sc = fc.mongodb_server.value();
@@ -742,7 +742,7 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
             const auto & next_cte = rg.pickValueRandomlyFromMap(rg.pickValueRandomlyFromMap(this->ctes));
 
             chassert(!next_cte.cols.empty());
-            tof->mutable_est()->mutable_table()->set_table(next_cte.name);
+            tof->mutable_est()->mutable_table()->set_value(next_cte.name);
             for (const auto & entry : next_cte.cols)
             {
                 chassert(!entry.path.empty() && !entry.path[0].empty());
@@ -897,8 +897,8 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
             ExprSchemaTable * est = tof->mutable_est();
             const auto & ntable = rg.pickRandomly(systemTables);
 
-            est->mutable_database()->set_database(ntable.schema_name);
-            est->mutable_table()->set_table(ntable.table_name);
+            est->mutable_database()->set_value(ntable.schema_name);
+            est->mutable_table()->set_value(ntable.table_name);
             chassert(!ntable.columns.empty());
             for (const auto & entry : ntable.columns)
             {
@@ -1146,10 +1146,10 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
             MergeTreeProjectionFunc * mtudf = tof->mutable_tfunc()->mutable_mtproj();
             const SQLTable & tt = rg.pickRandomly(filterCollection<SQLTable>(has_mergetree_table_lambda));
             const String dname = tt.getDatabaseName();
-            const String tname = tt.getTableName();
+            const String tname = tt.getBaseName();
 
             tt.setName(mtudf->mutable_est(), true);
-            mtudf->mutable_proj()->set_projection(
+            mtudf->mutable_proj()->set_value(
                 fc.tableCountProjections(dname, tname) > 0 ? fc.tableGetRandomProjection(rg.nextInFullRange(), dname, tname) : "p0");
             addTableRelation(rg, true, rel_name, tt);
             SQLRelation & rel = this->levels.at(this->current_level).rels.back();
@@ -1169,10 +1169,10 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
             MergeTreeTextIndexFunc * mtudf = tof->mutable_tfunc()->mutable_mttxtidx();
             const SQLTable & tt = rg.pickRandomly(filterCollection<SQLTable>(has_mergetree_table_lambda));
             const String dname = tt.getDatabaseName();
-            const String tname = tt.getTableName();
+            const String tname = tt.getBaseName();
 
             tt.setName(mtudf->mutable_est(), true);
-            mtudf->mutable_idx()->set_index(
+            mtudf->mutable_idx()->set_value(
                 fc.tableCountIndexes(dname, tname) > 0 ? fc.tableGetRandomIndex(rg.nextInFullRange(), dname, tname) : "i0");
             rel.cols.emplace_back(SQLRelationCol(rel_name, {"part_name"}, string_tp.get()));
             rel.cols.emplace_back(SQLRelationCol(rel_name, {"token"}, string_tp.get()));
@@ -1195,7 +1195,7 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
             {
                 /// Add predicate
                 const String dname = tt.getDatabaseName();
-                const String tname = tt.getTableName();
+                const String tname = tt.getBaseName();
                 std::optional<SQLRelation> trel = std::make_optional<SQLRelation>(createTableRelation(rg, true, "", tt));
 
                 generateTableExpression(rg, trel, rg.nextMediumNumber() < 16, rg.nextMediumNumber() < 81, mtudf->mutable_pred());
@@ -1226,7 +1226,7 @@ void StatementGenerator::generateFromElement(RandomGenerator & rg, const uint32_
     JoinedTableOrFunction * jtof = tos->mutable_joined_table();
     const String name = fmt::format("t{}d{}", this->levels[this->current_level].rels.size(), this->current_level);
 
-    jtof->mutable_table_alias()->set_table(name);
+    jtof->mutable_table_alias()->set_value(name);
     const auto src = joinedTableOrFunction(rg, name, allowed_clauses, false, jtof->mutable_tof());
     jtof->set_final(src.supports_final);
     /// SAMPLE is only valid for MergeTree-family tables
@@ -2233,7 +2233,7 @@ void StatementGenerator::addCTEs(RandomGenerator & rg, const uint32_t allowed_cl
                 rg.nextSmallNumber() < 7,
                 recursive ? std::make_optional<String>(name) : std::nullopt,
                 nqcte->mutable_query());
-            nqcte->mutable_table()->set_table(name);
+            nqcte->mutable_table()->set_value(name);
             this->ctes[this->current_level][name] = std::move(rel);
         }
         else

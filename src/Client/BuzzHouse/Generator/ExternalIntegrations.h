@@ -80,7 +80,7 @@ public:
 
     virtual int performQuery(const String &) { return 1; }
 
-    virtual String getTableName(std::shared_ptr<SQLDatabase>, uint32_t) { return String(); }
+    virtual String getSQLQuotedTableName(std::shared_ptr<SQLDatabase>, const String &) { return String(); }
 
     virtual String columnTypeAsString(RandomGenerator &, bool, SQLType *) const { return String(); }
 
@@ -127,7 +127,7 @@ public:
 
     void setTableEngineDetails(RandomGenerator & rg, const SQLTable &, TableEngine * te) override;
 
-    String getTableName(std::shared_ptr<SQLDatabase> db, uint32_t tname) override;
+    String getSQLQuotedTableName(std::shared_ptr<SQLDatabase> db, const String &) override;
 
     String truncateStatement() override;
 
@@ -171,7 +171,7 @@ public:
 
     void setTableEngineDetails(RandomGenerator & rg, const SQLTable &, TableEngine * te) override;
 
-    String getTableName(std::shared_ptr<SQLDatabase>, uint32_t tname) override;
+    String getSQLQuotedTableName(std::shared_ptr<SQLDatabase>, const String &) override;
 
     String truncateStatement() override;
 
@@ -213,7 +213,7 @@ public:
 
     void setTableEngineDetails(RandomGenerator &, const SQLTable &, TableEngine * te) override;
 
-    String getTableName(std::shared_ptr<SQLDatabase>, uint32_t tname) override;
+    String getSQLQuotedTableName(std::shared_ptr<SQLDatabase>, const String &) override;
 
     String truncateStatement() override;
 

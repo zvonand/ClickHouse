@@ -256,11 +256,7 @@ public:
     SystemTable & operator=(const SystemTable & c) = default;
     SystemTable & operator=(SystemTable && c) noexcept = default;
 
-    void setName(ExprSchemaTable * est) const
-    {
-        est->mutable_database()->set_database(schema_name);
-        est->mutable_table()->set_table(table_name);
-    }
+    void setName(ExprSchemaTable * est) const;
 };
 
 struct DiskInfo
@@ -273,6 +269,20 @@ struct DiskInfo
     bool is_encrypted = false;
     bool is_cached = false; /// true when cache_path != '' in system.disks
 };
+
+/// Escape a string for embedding inside a single-quoted SQL literal (doubles single quotes).
+inline String escapeSQLString(const String & s)
+{
+    String out;
+    out.reserve(s.size());
+    for (const char c : s)
+    {
+        if (c == '\'')
+            out += '\'';
+        out += c;
+    }
+    return out;
+}
 
 class FuzzConfig
 {

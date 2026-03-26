@@ -144,9 +144,12 @@ public:
 struct WithCluster
 {
 public:
+    String name;
     std::optional<String> cluster;
 
     const std::optional<String> & getCluster() const { return cluster; }
+
+    void setName(SQLIdentifier * f) const;
 };
 
 struct SQLDatabase : WithCluster
@@ -156,7 +159,6 @@ public:
     String keeper_path;
     String shard_name;
     String replica_name;
-    uint32_t dname = 0;
     uint32_t replica_counter = 0;
     uint32_t shard_counter = 0;
     uint32_t backup_number = 0;
@@ -170,7 +172,7 @@ public:
 
     static void setRandomDatabase(RandomGenerator & rg, SQLDatabase & d);
 
-    static void setName(Database * db, uint32_t name);
+    static void setName(SQLIdentifier * db, const String & name);
 
     bool isAtomicDatabase() const;
 
@@ -192,7 +194,7 @@ public:
 
     bool isDettached() const;
 
-    void setName(Database * db) const;
+    void setName(SQLIdentifier * db) const;
 
     String getName() const;
 
@@ -206,7 +208,6 @@ public:
 struct SQLBase : WithCluster
 {
 public:
-    String prefix;
     bool is_temp = false;
     bool is_deterministic = false;
     bool has_metadata = false;
@@ -214,7 +215,6 @@ public:
     bool has_order_by = false;
     bool random_engine = false;
     bool can_run_merges = true;
-    uint32_t tname = 0;
     uint32_t replica_counter = 0;
     uint32_t shard_counter = 0;
     std::shared_ptr<SQLDatabase> db = nullptr;
@@ -240,10 +240,7 @@ public:
     IntegrationCall integration = IntegrationCall::None;
 
     SQLBase() = default;
-    explicit SQLBase(const String && p)
-        : prefix(p)
-    {
-    }
+    explicit SQLBase(const String && n) { name = n; }
     virtual ~SQLBase() = default;
     SQLBase(const SQLBase &) = default;
     SQLBase & operator=(const SQLBase &) = default;
@@ -372,7 +369,7 @@ public:
 
     String getDatabaseName() const;
 
-    String getTableName(bool full = true) const;
+    String getBaseName(bool full = true) const;
 
     String getFullName(bool setdbname) const;
 
@@ -392,7 +389,7 @@ public:
 
     LakeFormat getPossibleLakeFormat() const;
 
-    static void setName(ExprSchemaTable * est, const String & prefix, bool setdbname, std::shared_ptr<SQLDatabase> database, uint32_t name);
+    static void setName(ExprSchemaTable * est, const String & name, bool setdbname, std::shared_ptr<SQLDatabase> database);
 
     void setName(ExprSchemaTable * est, bool setdbname) const;
 
@@ -463,17 +460,13 @@ struct SQLFunction : WithCluster
 public:
     bool is_deterministic = false;
     uint32_t nargs = 0;
-    String name;
-
-    void setName(Function * f) const;
 };
 
 struct SQLPolicy : WithCluster
 {
 public:
     bool is_row = true;
-    uint32_t table_id = 0;
-    String name;
+    String table_key;
     /// USING predicate stored at creation time; absent means the policy allows all rows.
     std::optional<WhereStatement> where_expr;
     /// True when the policy was created with `TO buzzhouse_oracle_role` — eligible for the row policy oracle.
@@ -484,14 +477,12 @@ public:
         : WithCluster(other)
     {
         this->is_row = other.is_row;
-        this->table_id = other.table_id;
+        this->table_key = other.table_key;
         this->name = other.name;
         this->where_expr = other.where_expr;
         this->targets_oracle_role = other.targets_oracle_role;
     }
     SQLPolicy & operator=(const SQLPolicy & other) = default;
-
-    void setName(Policy * f) const;
 };
 
 struct ColumnPathChainEntry

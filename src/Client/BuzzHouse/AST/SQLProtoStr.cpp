@@ -17,6 +17,19 @@ namespace BuzzHouse
 static constexpr char hexDigits[] = "0123456789ABCDEF";
 static constexpr char digits[] = "0123456789";
 
+/// Append a single-quoted SQL string literal to ret, doubling any embedded single quotes.
+static void appendSQLStringLiteral(String & ret, const String & s)
+{
+    ret += '\'';
+    for (const char c : s)
+    {
+        if (c == '\'')
+            ret += '\'';
+        ret += c;
+    }
+    ret += '\'';
+}
+
 CONV_FN(Expr, expr);
 CONV_FN(Select, select);
 
@@ -60,10 +73,10 @@ CONV_FN_QUOTE(ColumnPath, ic)
 }
 
 /// Append name backtick-quoted, escaping any embedded backtick by doubling it.
-static void appendBacktickQuoted(String & ret, const String & name)
+CONV_FN(SQLIdentifier, ident)
 {
     ret += "`";
-    for (const char c : name)
+    for (const char c : ident.value())
     {
         if (c == '`')
             ret += "``";
@@ -71,46 +84,6 @@ static void appendBacktickQuoted(String & ret, const String & name)
             ret += c;
     }
     ret += "`";
-}
-
-CONV_FN(Index, idx)
-{
-    appendBacktickQuoted(ret, idx.index());
-}
-
-CONV_FN(Projection, proj)
-{
-    appendBacktickQuoted(ret, proj.projection());
-}
-
-CONV_FN(Constraint, constr)
-{
-    appendBacktickQuoted(ret, constr.constraint());
-}
-
-CONV_FN(Database, db)
-{
-    appendBacktickQuoted(ret, db.database());
-}
-
-CONV_FN(Table, tab)
-{
-    appendBacktickQuoted(ret, tab.table());
-}
-
-CONV_FN(Function, func)
-{
-    appendBacktickQuoted(ret, func.function());
-}
-
-CONV_FN(Policy, rowp)
-{
-    appendBacktickQuoted(ret, rowp.policy());
-}
-
-CONV_FN(Role, r)
-{
-    appendBacktickQuoted(ret, r.role());
 }
 
 void ClusterToString(String & ret, const bool clause, const Cluster & cl)
@@ -121,9 +94,7 @@ void ClusterToString(String & ret, const bool clause, const Cluster & cl)
         {
             ret += " ON CLUSTER ";
         }
-        ret += "'";
-        ret += cl.cluster();
-        ret += "'";
+        appendSQLStringLiteral(ret, cl.cluster());
         if (!clause)
         {
             ret += ", ";
@@ -139,9 +110,8 @@ CONV_FN(Window, win)
 CONV_FN(Storage, store)
 {
     ret += Storage_DataStorage_Name(store.storage());
-    ret += " '";
-    ret += store.storage_name();
-    ret += "'";
+    ret += " ";
+    appendSQLStringLiteral(ret, store.storage_name());
 }
 
 CONV_FN(ExprColAlias, eca)
@@ -223,10 +193,10 @@ CONV_FN(ExprSchemaTable, st)
 {
     if (st.has_database())
     {
-        DatabaseToString(ret, st.database());
+        SQLIdentifierToString(ret, st.database());
         ret += ".";
     }
-    TableToString(ret, st.table());
+    SQLIdentifierToString(ret, st.table());
 }
 
 CONV_FN_QUOTE(TypeName, top);
@@ -323,12 +293,12 @@ CONV_FN(ExprSchemaTableColumn, stc)
 {
     if (stc.has_database())
     {
-        DatabaseToString(ret, stc.database());
+        SQLIdentifierToString(ret, stc.database());
         ret += ".";
     }
     if (stc.has_table())
     {
-        TableToString(ret, stc.table());
+        SQLIdentifierToString(ret, stc.table());
         ret += ".";
     }
     ExprColumnToString(ret, stc.col());
@@ -942,9 +912,7 @@ static void BottomTypeNameToString(String & ret, const uint32_t quote, const boo
                     {
                         ret += ",";
                     }
-                    ret += "'";
-                    ret += dt.timezone();
-                    ret += "'";
+                    appendSQLStringLiteral(ret, dt.timezone());
                 }
                 ret += ")";
             }
@@ -1447,7 +1415,7 @@ CONV_FN(SQLFuncName, sfn)
     }
     else if (sfn.has_function())
     {
-        FunctionToString(ret, sfn.function());
+        SQLIdentifierToString(ret, sfn.function());
     }
     else
     {
@@ -1550,9 +1518,8 @@ CONV_FN(ExprOrderingTerm, eot)
     }
     if (eot.has_collation())
     {
-        ret += " COLLATE '";
-        ret += eot.collation();
-        ret += "'";
+        ret += " COLLATE ";
+        appendSQLStringLiteral(ret, eot.collation());
     }
     if (eot.has_fill())
     {
@@ -1832,7 +1799,7 @@ CONV_FN(ComplicatedExpr, expr)
             ret += ")";
             break;
         case ExprType::kTable:
-            TableToString(ret, expr.table());
+            SQLIdentifierToString(ret, expr.table());
             ret += ".*";
             break;
         case ExprType::kLambda:
@@ -1979,9 +1946,8 @@ CONV_FN(JoinClause, jc)
 CONV_FN(KeyValuePair, kvp)
 {
     ret += kvp.key();
-    ret += " = '";
-    ret += kvp.value();
-    ret += "'";
+    ret += " = ";
+    appendSQLStringLiteral(ret, kvp.value());
 }
 
 CONV_FN(SetValue, setv)
@@ -2009,26 +1975,21 @@ CONV_FN(FileFunc, ff)
     {
         ClusterToString(ret, false, ff.cluster());
     }
-    ret += "'";
-    ret += ff.path();
-    ret += "'";
+    appendSQLStringLiteral(ret, ff.path());
     if (ff.has_informat())
     {
-        ret += ", '";
-        ret += InFormat_Name(ff.informat()).substr(3);
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, InFormat_Name(ff.informat()).substr(3));
     }
     else if (ff.has_outformat())
     {
-        ret += ", '";
-        ret += OutFormat_Name(ff.outformat()).substr(4);
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, OutFormat_Name(ff.outformat()).substr(4));
     }
     else if (ff.has_inoutformat())
     {
-        ret += ", '";
-        ret += InOutFormat_Name(ff.inoutformat()).substr(6);
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, InOutFormat_Name(ff.inoutformat()).substr(6));
     }
     if (ff.has_structure())
     {
@@ -2037,9 +1998,8 @@ CONV_FN(FileFunc, ff)
     }
     if (ff.has_fcomp())
     {
-        ret += ", '";
-        ret += ff.fcomp();
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, ff.fcomp());
     }
     ret += ")";
 }
@@ -2079,9 +2039,9 @@ CONV_FN(NumbersFunc, gsf)
 static void FlatExprSchemaTableToString(String & ret, const ExprSchemaTable & est, const String & separator)
 {
     ret += "'";
-    ConvertToSQLString(ret, est.has_database() ? est.database().database() : "default");
+    ConvertToSQLString(ret, est.has_database() ? est.database().value() : "default");
     ret += separator;
-    ConvertToSQLString(ret, est.table().table());
+    ConvertToSQLString(ret, est.table().value());
     ret += "'";
 }
 
@@ -2121,21 +2081,19 @@ CONV_FN(RemoteFunc, rfunc)
     const TableOrFunction & tof = rfunc.tof();
 
     ret += RemoteFunc_RName_Name(rfunc.rname());
-    ret += "('";
-    ret += rfunc.address();
-    ret += "', ";
+    ret += "(";
+    appendSQLStringLiteral(ret, rfunc.address());
+    ret += ", ";
     TableOrFunctionToString(ret, true, tof);
     if (rfunc.has_user())
     {
-        ret += ", '";
-        ret += rfunc.user();
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, rfunc.user());
     }
     if (rfunc.has_password())
     {
-        ret += ", '";
-        ret += rfunc.password();
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, rfunc.password());
     }
     if (rfunc.has_sharding_key())
     {
@@ -2147,55 +2105,53 @@ CONV_FN(RemoteFunc, rfunc)
 
 CONV_FN(MySQLFunc, mfunc)
 {
-    ret += "mysql('";
-    ret += mfunc.address();
-    ret += "', '";
-    ret += mfunc.rdatabase();
-    ret += "', '";
-    ret += mfunc.rtable();
-    ret += "', '";
-    ret += mfunc.user();
-    ret += "', '";
-    ret += mfunc.password();
-    ret += "')";
+    ret += "mysql(";
+    appendSQLStringLiteral(ret, mfunc.address());
+    ret += ", ";
+    appendSQLStringLiteral(ret, mfunc.rdatabase());
+    ret += ", ";
+    appendSQLStringLiteral(ret, mfunc.rtable());
+    ret += ", ";
+    appendSQLStringLiteral(ret, mfunc.user());
+    ret += ", ";
+    appendSQLStringLiteral(ret, mfunc.password());
+    ret += ")";
 }
 
 CONV_FN(PostgreSQLFunc, pfunc)
 {
-    ret += "postgresql('";
-    ret += pfunc.address();
-    ret += "', '";
-    ret += pfunc.rdatabase();
-    ret += "', '";
-    ret += pfunc.rtable();
-    ret += "', '";
-    ret += pfunc.user();
-    ret += "', '";
-    ret += pfunc.password();
-    ret += "'";
+    ret += "postgresql(";
+    appendSQLStringLiteral(ret, pfunc.rdatabase());
+    ret += ", ";
+    appendSQLStringLiteral(ret, pfunc.rdatabase());
+    ret += ", ";
+    appendSQLStringLiteral(ret, pfunc.rtable());
+    ret += ", ";
+    appendSQLStringLiteral(ret, pfunc.user());
+    ret += ", ";
+    appendSQLStringLiteral(ret, pfunc.password());
     if (pfunc.has_rschema())
     {
-        ret += ", '";
-        ret += pfunc.rschema();
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, pfunc.rschema());
     }
     ret += ")";
 }
 
 CONV_FN(SQLiteFunc, sfunc)
 {
-    ret += "sqlite('";
-    ret += sfunc.rdatabase();
-    ret += "', '";
-    ret += sfunc.rtable();
-    ret += "')";
+    ret += "sqlite(";
+    appendSQLStringLiteral(ret, sfunc.rdatabase());
+    ret += ", ";
+    appendSQLStringLiteral(ret, sfunc.rtable());
+    ret += ")";
 }
 
 CONV_FN(RedisFunc, rfunc)
 {
-    ret += "redis('";
-    ret += rfunc.address();
-    ret += "', ";
+    ret += "redis(";
+    appendSQLStringLiteral(ret, rfunc.address());
+    ret += ", ";
     ExprToString(ret, rfunc.key());
     if (rfunc.has_structure())
     {
@@ -2209,9 +2165,8 @@ CONV_FN(RedisFunc, rfunc)
     }
     if (rfunc.has_password())
     {
-        ret += ", '";
-        ret += rfunc.password();
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, rfunc.password());
     }
     if (rfunc.has_pool_size())
     {
@@ -2223,17 +2178,16 @@ CONV_FN(RedisFunc, rfunc)
 
 CONV_FN(MongoDBFunc, mfunc)
 {
-    ret += "mongodb('";
-    ret += mfunc.address();
-    ret += "', '";
-    ret += mfunc.database();
-    ret += "', '";
-    ret += mfunc.collection();
-    ret += "', '";
-    ret += mfunc.user();
-    ret += "', '";
-    ret += mfunc.password();
-    ret += "'";
+    ret += "mongodb(";
+    appendSQLStringLiteral(ret, mfunc.address());
+    ret += ", ";
+    appendSQLStringLiteral(ret, mfunc.database());
+    ret += ", ";
+    appendSQLStringLiteral(ret, mfunc.collection());
+    ret += ", ";
+    appendSQLStringLiteral(ret, mfunc.user());
+    ret += ", ";
+    appendSQLStringLiteral(ret, mfunc.password());
     if (mfunc.has_structure())
     {
         ret += ", ";
@@ -2276,26 +2230,21 @@ CONV_FN(URLFunc, url)
     {
         ClusterToString(ret, false, url.cluster());
     }
-    ret += "'";
-    ret += url.uurl();
-    ret += "'";
+    appendSQLStringLiteral(ret, url.uurl());
     if (url.has_informat())
     {
-        ret += ", '";
-        ret += InFormat_Name(url.informat()).substr(3);
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, InFormat_Name(url.informat()).substr(3));
     }
     else if (url.has_outformat())
     {
-        ret += ", '";
-        ret += OutFormat_Name(url.outformat()).substr(4);
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, OutFormat_Name(url.outformat()).substr(4));
     }
     else if (url.has_inoutformat())
     {
-        ret += ", '";
-        ret += InOutFormat_Name(url.inoutformat()).substr(6);
-        ret += "'";
+        ret += ", ";
+        appendSQLStringLiteral(ret, InOutFormat_Name(url.inoutformat()).substr(6));
     }
     if (url.has_structure())
     {
@@ -2342,9 +2291,8 @@ CONV_FN(MergeFunc, mfunc)
         ret += mfunc.mdatabase();
         ret += "'), ";
     }
-    ret += "'";
-    ret += mfunc.mtable();
-    ret += "')";
+    appendSQLStringLiteral(ret, mfunc.mtable());
+    ret += ")";
 }
 
 CONV_FN(ClusterFunc, cluster)
@@ -2388,18 +2336,18 @@ CONV_FN(MergeTreeProjectionFunc, mfunc)
 {
     ret += "mergeTreeProjection(";
     FlatExprSchemaTableToString(ret, mfunc.est(), "', '");
-    ret += ", '";
-    ProjectionToString(ret, mfunc.proj());
-    ret += "')";
+    ret += ", ";
+    appendSQLStringLiteral(ret, mfunc.proj().value());
+    ret += ")";
 }
 
 CONV_FN(MergeTreeTextIndexFunc, mttxtidx)
 {
     ret += "mergeTreeTextIndex(";
     FlatExprSchemaTableToString(ret, mttxtidx.est(), "', '");
-    ret += ", '";
-    IndexToString(ret, mttxtidx.idx());
-    ret += "')";
+    ret += ", ";
+    appendSQLStringLiteral(ret, mttxtidx.idx().value());
+    ret += ")";
 }
 
 CONV_FN(MergeTreeAnalyzeIndexesFunc, mfunc)
@@ -2420,9 +2368,7 @@ CONV_FN(MergeTreeAnalyzeIndexesFunc, mfunc)
             {
                 ret += ", ";
             }
-            ret += "'";
-            ret += mfunc.plist().parts(i);
-            ret += "'";
+            appendSQLStringLiteral(ret, mfunc.plist().parts(i));
         }
         ret += "]";
     }
@@ -2469,11 +2415,11 @@ static void ValuesStatementToString(String & ret, const bool tudf, const ValuesS
 
 CONV_FN(ArrowFlightFunc, afunc)
 {
-    ret += "arrowFlight('";
-    ret += afunc.address();
-    ret += "', '";
-    ret += afunc.dataset();
-    ret += "')";
+    ret += "arrowFlight(";
+    appendSQLStringLiteral(ret, afunc.address());
+    ret += ", ";
+    appendSQLStringLiteral(ret, afunc.dataset());
+    ret += ")";
 }
 
 CONV_FN(TableFunction, tf)
@@ -2600,7 +2546,7 @@ CONV_FN(JoinedTableOrFunction, jtf)
     if (jtf.has_table_alias())
     {
         ret += " AS ";
-        TableToString(ret, jtf.table_alias());
+        SQLIdentifierToString(ret, jtf.table_alias());
     }
     if (jtf.col_aliases_size())
     {
@@ -2949,7 +2895,7 @@ CONV_FN(CTEquery, cteq)
     {
         ret += "RECURSIVE ";
     }
-    TableToString(ret, cteq.table());
+    SQLIdentifierToString(ret, cteq.table());
     ret += " AS ";
     if (cteq.is_materialized())
     {
@@ -3043,9 +2989,7 @@ CONV_FN(IndexParam, ip)
             ret += std::to_string(ip.dval());
             break;
         case IndexParamType::kSval:
-            ret += "'";
-            ret += ip.sval();
-            ret += "'";
+            appendSQLStringLiteral(ret, ip.sval());
             break;
         case IndexParamType::kUnescapedSval:
             ret += ip.unescaped_sval();
@@ -3066,9 +3010,7 @@ CONV_FN(BackupParam, bp)
     switch (bp.backup_param_oneof_case())
     {
         case BackupParamType::kSvalue:
-            ret += "'";
-            ret += bp.svalue();
-            ret += "'";
+            appendSQLStringLiteral(ret, bp.svalue());
             break;
         case BackupParamType::kRvalue:
             ret += bp.rvalue();
@@ -3104,9 +3046,7 @@ CONV_FN(DatabaseEngineParam, dep)
     switch (dep.database_engine_param_oneof_case())
     {
         case DatabaseEngineParamType::kSvalue:
-            ret += "'";
-            ret += dep.svalue();
-            ret += "'";
+            appendSQLStringLiteral(ret, dep.svalue());
             break;
         case DatabaseEngineParamType::kExpr:
             ExprToString(ret, dep.expr());
@@ -3149,7 +3089,7 @@ CONV_FN(CreateDatabase, create_database)
     {
         ret += "IF NOT EXISTS ";
     }
-    DatabaseToString(ret, create_database.database());
+    SQLIdentifierToString(ret, create_database.database());
     if (create_database.has_uuid())
     {
         ret += " UUID '";
@@ -3189,7 +3129,7 @@ CONV_FN(CreateFunction, create_function)
 {
     CreateOrReplaceToString(ret, create_function.create_opt());
     ret += " FUNCTION ";
-    FunctionToString(ret, create_function.function());
+    SQLIdentifierToString(ret, create_function.function());
     if (create_function.has_cluster())
     {
         ClusterToString(ret, true, create_function.cluster());
@@ -3262,7 +3202,7 @@ CONV_FN(IndexDef, idef)
     ret += "INDEX ";
     if (idef.has_idx())
     {
-        IndexToString(ret, idef.idx());
+        SQLIdentifierToString(ret, idef.idx());
         ret += " ";
     }
     ExprToString(ret, idef.expr());
@@ -3304,7 +3244,7 @@ CONV_FN(ProjectionSelectDef, psdef)
 CONV_FN(ProjectionDef, proj_def)
 {
     ret += "PROJECTION ";
-    ProjectionToString(ret, proj_def.proj());
+    SQLIdentifierToString(ret, proj_def.proj());
     ret += " ";
     using ProjectionDefType = ProjectionDef::ProjectionOneofCase;
     switch (proj_def.projection_oneof_case())
@@ -3323,7 +3263,7 @@ CONV_FN(ProjectionDef, proj_def)
 CONV_FN(ConstraintDef, const_def)
 {
     ret += "CONSTRAINT ";
-    ConstraintToString(ret, const_def.constr());
+    SQLIdentifierToString(ret, const_def.constr());
     ret += " ";
     ret += ConstraintDef_ConstraintType_Name(const_def.ctype());
     ret += " (";
@@ -3425,18 +3365,16 @@ CONV_FN(TableEngineParam, tep)
             ret += JoinConst_Name(tep.join_const()).substr(2);
             break;
         case TableEngineParamType::kDatabase:
-            DatabaseToString(ret, tep.database());
+            SQLIdentifierToString(ret, tep.database());
             break;
         case TableEngineParamType::kTable:
-            TableToString(ret, tep.table());
+            SQLIdentifierToString(ret, tep.table());
             break;
         case TableEngineParamType::kNum:
             ret += std::to_string(tep.num());
             break;
         case TableEngineParamType::kSvalue:
-            ret += "'";
-            ret += tep.svalue();
-            ret += "'";
+            appendSQLStringLiteral(ret, tep.svalue());
             break;
         case TableEngineParamType::kColList:
             ret += "(";
@@ -3681,13 +3619,13 @@ CONV_FN(SQLObjectName, son)
             ExprSchemaTableToString(ret, son.est());
             break;
         case SQLObjectNameType::kDatabase:
-            DatabaseToString(ret, son.database());
+            SQLIdentifierToString(ret, son.database());
             break;
         case SQLObjectNameType::kFunction:
-            FunctionToString(ret, son.function());
+            SQLIdentifierToString(ret, son.function());
             break;
         case SQLObjectNameType::kPolicy:
-            PolicyToString(ret, son.policy());
+            SQLIdentifierToString(ret, son.policy());
             break;
         default:
             ret += "t0";
@@ -3799,14 +3737,12 @@ CONV_FN(Insert, insert)
     {
         const InsertFromFile & insert_file = insert.insert_file();
 
-        ret += "FROM INFILE '";
-        ret += insert_file.path();
-        ret += "'";
+        ret += "FROM INFILE ";
+        appendSQLStringLiteral(ret, insert_file.path());
         if (insert_file.has_fcomp())
         {
-            ret += " COMPRESSION '";
-            ret += insert_file.fcomp();
-            ret += "'";
+            ret += " COMPRESSION ";
+            appendSQLStringLiteral(ret, insert_file.fcomp());
         }
         if (insert.has_setting_values())
         {
@@ -3833,9 +3769,7 @@ CONV_FN(PartitionExpr, pexpr)
     switch (pexpr.partition_oneof_case())
     {
         case PartitionType::kPart:
-            ret += "'";
-            ret += pexpr.part();
-            ret += "'";
+            appendSQLStringLiteral(ret, pexpr.part());
             break;
         case PartitionType::kPartition:
             ret += "$piddef$";
@@ -3843,9 +3777,8 @@ CONV_FN(PartitionExpr, pexpr)
             ret += "$piddef$";
             break;
         case PartitionType::kPartitionId:
-            ret += "ID '";
-            ret += pexpr.partition_id();
-            ret += "'";
+            ret += "ID ";
+            appendSQLStringLiteral(ret, pexpr.partition_id());
             break;
         case PartitionType::kAll:
             ret += "ALL";
@@ -3947,11 +3880,11 @@ CONV_FN(Truncate, trunc)
             break;
         case TruncateType::kAllTables:
             ret += "ALL TABLES FROM ";
-            DatabaseToString(ret, trunc.all_tables());
+            SQLIdentifierToString(ret, trunc.all_tables());
             break;
         case TruncateType::kDatabase:
             ret += "DATABASE ";
-            DatabaseToString(ret, trunc.database());
+            SQLIdentifierToString(ret, trunc.database());
             break;
         default:
             ret += "t0";
@@ -4317,9 +4250,8 @@ CONV_FN(DictionarySourceDetails, dsd)
         {
             ret += " ";
         }
-        ret += "HOST '";
-        ret += dsd.host();
-        ret += "'";
+        ret += "HOST ";
+        appendSQLStringLiteral(ret, dsd.host());
         has_something = true;
     }
     if (dsd.has_port())
@@ -4328,9 +4260,8 @@ CONV_FN(DictionarySourceDetails, dsd)
         {
             ret += " ";
         }
-        ret += "PORT '";
-        ret += dsd.port();
-        ret += "'";
+        ret += "PORT ";
+        appendSQLStringLiteral(ret, dsd.port());
         has_something = true;
     }
     if (dsd.has_user())
@@ -4339,9 +4270,8 @@ CONV_FN(DictionarySourceDetails, dsd)
         {
             ret += " ";
         }
-        ret += "USER '";
-        ret += dsd.user();
-        ret += "'";
+        ret += "USER ";
+        appendSQLStringLiteral(ret, dsd.user());
         has_something = true;
     }
     if (dsd.has_password())
@@ -4350,9 +4280,8 @@ CONV_FN(DictionarySourceDetails, dsd)
         {
             ret += " ";
         }
-        ret += "PASSWORD '";
-        ret += dsd.password();
-        ret += "'";
+        ret += "PASSWORD ";
+        appendSQLStringLiteral(ret, dsd.password());
         has_something = true;
     }
     if (dsd.source() == DictionarySourceDetails::REDIS && dsd.has_redis_storage())
@@ -4361,9 +4290,8 @@ CONV_FN(DictionarySourceDetails, dsd)
         {
             ret += " ";
         }
-        ret += "STORAGE_TYPE '";
-        ret += DictionarySourceDetails_RedisStorageType_Name(dsd.redis_storage());
-        ret += "'";
+        ret += "STORAGE_TYPE ";
+        appendSQLStringLiteral(ret, DictionarySourceDetails_RedisStorageType_Name(dsd.redis_storage()));
     }
     ret += ")";
 }
@@ -4499,7 +4427,7 @@ CONV_FN(AddWhere, add)
     else if (add.has_idx())
     {
         ret += " AFTER ";
-        IndexToString(ret, add.idx());
+        SQLIdentifierToString(ret, add.idx());
     }
     else if (add.has_first())
     {
@@ -4562,7 +4490,7 @@ static void RowPolicyClausesToString(
     const CreateRowPolicy & crp,
     const bool has_where_expr,
     const WhereStatement & where_expr,
-    const Role * role,
+    const SQLIdentifier * role,
     const bool create)
 {
     if (crp.has_is_restrictive())
@@ -4582,12 +4510,12 @@ static void RowPolicyClausesToString(
     if (role)
     {
         ret += " TO ";
-        RoleToString(ret, *role);
+        SQLIdentifierToString(ret, *role);
     }
 }
 
 static void MaskingPolicyClausesToString(
-    String & ret, const CreateMaskingPolicy & cmp, const bool has_where_expr, const WhereStatement & where_expr, const Role * role)
+    String & ret, const CreateMaskingPolicy & cmp, const bool has_where_expr, const WhereStatement & where_expr, const SQLIdentifier * role)
 {
     if (cmp.has_first_update())
     {
@@ -4607,7 +4535,7 @@ static void MaskingPolicyClausesToString(
     if (role)
     {
         ret += " TO ";
-        RoleToString(ret, *role);
+        SQLIdentifierToString(ret, *role);
     }
     if (cmp.has_priority())
     {
@@ -4757,7 +4685,7 @@ CONV_FN(AlterItem, alter)
             break;
         case AlterType::kMaterializeIndex:
             ret += "MATERIALIZE INDEX ";
-            IndexToString(ret, alter.materialize_index().idx());
+            SQLIdentifierToString(ret, alter.materialize_index().idx());
             if (alter.materialize_index().has_single_partition())
             {
                 ret += " IN ";
@@ -4770,11 +4698,11 @@ CONV_FN(AlterItem, alter)
             break;
         case AlterType::kDropIndex:
             ret += "DROP INDEX ";
-            IndexToString(ret, alter.drop_index());
+            SQLIdentifierToString(ret, alter.drop_index());
             break;
         case AlterType::kClearIndex:
             ret += "CLEAR INDEX ";
-            IndexToString(ret, alter.clear_index().idx());
+            SQLIdentifierToString(ret, alter.clear_index().idx());
             if (alter.clear_index().has_single_partition())
             {
                 ret += " IN ";
@@ -4807,11 +4735,11 @@ CONV_FN(AlterItem, alter)
             break;
         case AlterType::kRemoveProjection:
             ret += "DROP PROJECTION ";
-            ProjectionToString(ret, alter.remove_projection());
+            SQLIdentifierToString(ret, alter.remove_projection());
             break;
         case AlterType::kMaterializeProjection:
             ret += "MATERIALIZE PROJECTION ";
-            ProjectionToString(ret, alter.materialize_projection().proj());
+            SQLIdentifierToString(ret, alter.materialize_projection().proj());
             if (alter.materialize_projection().has_single_partition())
             {
                 ret += " IN ";
@@ -4820,7 +4748,7 @@ CONV_FN(AlterItem, alter)
             break;
         case AlterType::kClearProjection:
             ret += "CLEAR PROJECTION ";
-            ProjectionToString(ret, alter.clear_projection().proj());
+            SQLIdentifierToString(ret, alter.clear_projection().proj());
             if (alter.clear_projection().has_single_partition())
             {
                 ret += " IN ";
@@ -4833,7 +4761,7 @@ CONV_FN(AlterItem, alter)
             break;
         case AlterType::kRemoveConstraint:
             ret += "DROP CONSTRAINT ";
-            ConstraintToString(ret, alter.remove_constraint());
+            SQLIdentifierToString(ret, alter.remove_constraint());
             break;
         case AlterType::kDetachPartition:
             ret += "DETACH ";
@@ -4909,7 +4837,7 @@ CONV_FN(AlterItem, alter)
             break;
         case AlterType::kClearIndexPartition:
             ret += "CLEAR INDEX ";
-            IndexToString(ret, alter.clear_index_partition().idx());
+            SQLIdentifierToString(ret, alter.clear_index_partition().idx());
             ret += " IN ";
             SinglePartitionExprToString(ret, alter.clear_index_partition().single_partition());
             break;
@@ -4953,14 +4881,14 @@ CONV_FN(AlterItem, alter)
             break;
         case AlterType::kAlterPolicy: {
             const AlterPolicyContent & apc = alter.alter_policy();
-            const Role * role = apc.has_role() ? &apc.role() : nullptr;
+            const SQLIdentifier * role = apc.has_role() ? &apc.role() : nullptr;
 
             ret += "ON ";
             ExprSchemaTableToString(ret, apc.target());
             if (apc.has_rename_to())
             {
                 ret += " RENAME TO ";
-                PolicyToString(ret, apc.rename_to());
+                SQLIdentifierToString(ret, apc.rename_to());
             }
             if (apc.has_masking())
             {
@@ -5056,9 +4984,9 @@ CONV_FN(Detach, dt)
 
 CONV_FN(SelectIntoFile, intofile)
 {
-    ret += "INTO OUTFILE '";
+    ret += "INTO OUTFILE ";
+    appendSQLStringLiteral(ret, intofile.path());
     ret += intofile.path();
-    ret += "'";
     if (intofile.tstdout())
     {
         ret += " AND STDOUT";
@@ -5070,9 +4998,8 @@ CONV_FN(SelectIntoFile, intofile)
     }
     if (intofile.has_compression())
     {
-        ret += " COMPRESSION '";
-        ret += intofile.compression();
-        ret += "'";
+        ret += " COMPRESSION ";
+        appendSQLStringLiteral(ret, intofile.compression());
         if (intofile.has_level())
         {
             ret += " LEVEL ";
@@ -5138,7 +5065,7 @@ CONV_FN(SystemCommand, cmd)
                 ClusterToString(ret, true, cmd.cluster());
             }
             ret += " ";
-            FunctionToString(ret, cmd.reload_function());
+            SQLIdentifierToString(ret, cmd.reload_function());
             break;
         case CmdType::kReloadAsynchronousMetrics:
             ret += "RELOAD ASYNCHRONOUS METRICS";
@@ -5250,9 +5177,7 @@ CONV_FN(SystemCommand, cmd)
                             {
                                 ret += ", ";
                             }
-                            ret += "'";
-                            ret += sr.lightweight().replicas(i);
-                            ret += "'";
+                            appendSQLStringLiteral(ret, sr.lightweight().replicas(i));
                         }
                     }
                     break;
@@ -5268,7 +5193,7 @@ CONV_FN(SystemCommand, cmd)
                 ClusterToString(ret, true, cmd.cluster());
             }
             ret += " ";
-            DatabaseToString(ret, cmd.sync_replicated_database());
+            SQLIdentifierToString(ret, cmd.sync_replicated_database());
             break;
         case CmdType::kRestartReplica:
             SystemCommandOnCluster(ret, "RESTART REPLICA", cmd, cmd.restart_replica());
@@ -5448,7 +5373,7 @@ CONV_FN(SystemCommand, cmd)
                 ClusterToString(ret, true, cmd.cluster());
             }
             ret += " ";
-            DatabaseToString(ret, cmd.restore_database_replica());
+            SQLIdentifierToString(ret, cmd.restore_database_replica());
             break;
         case CmdType::kStopReplicatedView:
             ret += "STOP REPLICATED VIEW ";
@@ -5464,9 +5389,8 @@ CONV_FN(SystemCommand, cmd)
             ret += "'";
             break;
         case CmdType::kDropReplica:
-            ret += "DROP REPLICA '";
-            ret += cmd.drop_replica().replica();
-            ret += "'";
+            ret += "DROP REPLICA ";
+            appendSQLStringLiteral(ret, cmd.drop_replica().replica());
             if (cmd.drop_replica().has_est())
             {
                 ret += " FROM TABLE ";
@@ -5475,23 +5399,21 @@ CONV_FN(SystemCommand, cmd)
             else if (cmd.drop_replica().has_database())
             {
                 ret += " FROM DATABASE ";
-                DatabaseToString(ret, cmd.drop_replica().database());
+                SQLIdentifierToString(ret, cmd.drop_replica().database());
             }
             break;
         case CmdType::kDropDatabaseReplica:
-            ret += "DROP DATABASE REPLICA '";
-            ret += cmd.drop_database_replica().replica();
-            ret += "'";
+            ret += "DROP DATABASE REPLICA ";
+            appendSQLStringLiteral(ret, cmd.drop_database_replica().replica());
             if (cmd.drop_database_replica().has_shard())
             {
-                ret += " FROM SHARD '";
-                ret += cmd.drop_database_replica().shard();
-                ret += "'";
+                ret += " FROM SHARD ";
+                appendSQLStringLiteral(ret, cmd.drop_database_replica().shard());
             }
             if (cmd.drop_database_replica().has_database())
             {
                 ret += " FROM DATABASE ";
-                DatabaseToString(ret, cmd.drop_database_replica().database());
+                SQLIdentifierToString(ret, cmd.drop_database_replica().database());
             }
             break;
         case CmdType::kStopCleanup:
@@ -5544,9 +5466,8 @@ CONV_FN(SystemCommand, cmd)
             ret += "DROP DISTRIBUTED CACHE";
             break;
         case CmdType::kUnlockSnapshot:
-            ret += "UNLOCK SNAPSHOT '";
-            ret += cmd.unlock_snapshot();
-            ret += "'";
+            ret += "UNLOCK SNAPSHOT ";
+            appendSQLStringLiteral(ret, cmd.unlock_snapshot());
             break;
         default:
             ret += "FLUSH LOGS";
@@ -5737,7 +5658,7 @@ CONV_FN(ShowTables, sh)
     if (sh.has_database())
     {
         ret += " FROM ";
-        DatabaseToString(ret, sh.database());
+        SQLIdentifierToString(ret, sh.database());
     }
 }
 
@@ -5747,7 +5668,7 @@ CONV_FN(ShowDictionaries, sh)
     if (sh.has_database())
     {
         ret += " FROM ";
-        DatabaseToString(ret, sh.database());
+        SQLIdentifierToString(ret, sh.database());
     }
 }
 
@@ -5762,11 +5683,11 @@ CONV_FN(ShowColumns, sh)
         ret += "FULL ";
     }
     ret += "COLUMNS FROM ";
-    TableToString(ret, sh.est().table());
+    SQLIdentifierToString(ret, sh.est().table());
     if (sh.est().has_database())
     {
         ret += " FROM ";
-        DatabaseToString(ret, sh.est().database());
+        SQLIdentifierToString(ret, sh.est().database());
     }
 }
 
@@ -5778,11 +5699,11 @@ CONV_FN(ShowIndex, sh)
     }
     ret += ShowIndex_IndexShow_Name(sh.key());
     ret += " FROM ";
-    TableToString(ret, sh.est().table());
+    SQLIdentifierToString(ret, sh.est().table());
     if (sh.est().has_database())
     {
         ret += " FROM ";
-        DatabaseToString(ret, sh.est().database());
+        SQLIdentifierToString(ret, sh.est().database());
     }
 }
 
@@ -5846,9 +5767,7 @@ CONV_FN(ShowStatement, sh)
             ret += "CLUSTER ";
             if (sh.cluster().has_cluster())
             {
-                ret += "'";
-                ret += sh.cluster().cluster();
-                ret += "'";
+                appendSQLStringLiteral(ret, sh.cluster().cluster());
             }
             break;
         case ShowType::kClusters:
@@ -5887,7 +5806,7 @@ CONV_FN(ShowStatement, sh)
 CONV_FN(CreatePolicy, cp)
 {
     const bool is_masking = cp.has_masking();
-    const Role * role = cp.has_role() ? &cp.role() : nullptr;
+    const SQLIdentifier * role = cp.has_role() ? &cp.role() : nullptr;
 
     ret += "CREATE ";
     ret += is_masking ? "MASKING" : "ROW";
@@ -5900,7 +5819,7 @@ CONV_FN(CreatePolicy, cp)
     {
         ret += "OR REPLACE ";
     }
-    PolicyToString(ret, cp.policy());
+    SQLIdentifierToString(ret, cp.policy());
     if (cp.has_cluster())
     {
         ClusterToString(ret, true, cp.cluster());
@@ -6007,9 +5926,9 @@ CONV_FN(ExplainQuery, explain)
 {
     if (explain.has_execute_as())
     {
-        ret += "EXECUTE AS '";
-        ret += explain.execute_as();
-        ret += "' ";
+        ret += "EXECUTE AS ";
+        appendSQLStringLiteral(ret, explain.execute_as());
+        ret += " ";
     }
     if (explain.is_explain())
     {

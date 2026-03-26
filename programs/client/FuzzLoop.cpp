@@ -977,7 +977,7 @@ bool Client::buzzHouse()
                              = rg.pickRandomly(gen.filterCollection<BuzzHouse::SQLTable>(gen.attached_tables_for_external_call)).get();
                          const auto & engine = tbl.isAnyIcebergEngine() ? "iceberg" : (tbl.isAnyDeltaLakeEngine() ? "deltalake" : "kafka");
                          const auto & ndname = tbl.isKafkaEngine() ? tbl.getDatabaseName() : tbl.getSparkCatalogName();
-                         const auto & ntname = tbl.getTableName(false);
+                         const auto & ntname = tbl.getBaseName(false);
                          const bool async = fuzz_config->allow_async_requests && rg.nextSmallNumber() < 4;
 
                          chassert(tbl.isAnyIcebergEngine() || tbl.isAnyDeltaLakeEngine() || tbl.isKafkaEngine());

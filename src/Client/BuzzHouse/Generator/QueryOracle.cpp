@@ -337,9 +337,9 @@ void QueryOracle::generateRowPolicyOracleQueries(RandomGenerator & rg, Statement
     JoinedTableOrFunction * jtf2 = ssc2->mutable_from()->mutable_tos()->mutable_join_clause()->mutable_tos()->mutable_joined_table();
     /// Pick an existing row policy with a USING predicate on a suitable table
     const SQLPolicy & policy = rg.pickRandomly(gen.filterCollection<SQLPolicy>(gen.row_policies_for_oracle));
-    if (gen.hasTable(policy.table_id))
+    if (gen.hasTable(policy.table_key))
     {
-        const SQLTable & t = gen.lookupTable(policy.table_id);
+        const SQLTable & t = gen.lookupTable(policy.table_key);
 
         t.setName(jtf2->mutable_tof()->mutable_est(), false);
         jtf2->set_final(t.supportsFinal());
@@ -348,8 +348,8 @@ void QueryOracle::generateRowPolicyOracleQueries(RandomGenerator & rg, Statement
     {
         /// The policy's table is gone — this can happen if the policy is detached but not dropped, or if the table was dropped without detaching the policy.
         /// In either case we can't generate a valid oracle query, so we build a dummy query that selects from system.one with a constant WHERE to produce a predictable result (1 row).
-        jtf2->mutable_tof()->mutable_est()->mutable_database()->set_database("system");
-        jtf2->mutable_tof()->mutable_est()->mutable_table()->set_table("one");
+        jtf2->mutable_tof()->mutable_est()->mutable_database()->set_value("system");
+        jtf2->mutable_tof()->mutable_est()->mutable_table()->set_value("one");
     }
     // count() result column
     ssc2->add_result_columns()->mutable_eca()->mutable_expr()->mutable_comp_expr()->mutable_func_call()->mutable_func()->set_catalog_func(
@@ -357,7 +357,7 @@ void QueryOracle::generateRowPolicyOracleQueries(RandomGenerator & rg, Statement
     // WHERE pred — copied from the stored USING predicate of the catalog policy.
     // In the fallback path (table gone, querying system.one) we cannot reuse column references
     // from the original table; use a constant TRUE predicate instead so the result is always 1.
-    if (gen.hasTable(policy.table_id))
+    if (gen.hasTable(policy.table_key))
         ssc2->mutable_where()->CopyFrom(policy.where_expr.value());
     else
         ssc2->mutable_where()->mutable_expr()->mutable_expr()->mutable_lit_val()->mutable_special_val()->set_val(
@@ -491,7 +491,7 @@ void QueryOracle::generateCountDistinctSecondQuery(SQLQuery & sq1, SQLQuery & sq
     null_test->mutable_expr()->mutable_comp_expr()->mutable_expr_stc()->mutable_col()->mutable_path()->mutable_col()->set_column("cx");
     null_test->set_not_(true);
 
-    outer_jtf->mutable_table_alias()->set_table("sub");
+    outer_jtf->mutable_table_alias()->set_value("sub");
     finishSettings(sel2->mutable_setting_values());
     ts2->set_format(sq1.single_query().explain().inner_query().select().format());
     const auto err = std::filesystem::remove(qcfile);
@@ -806,7 +806,7 @@ void QueryOracle::dumpOracleIntermediateSteps(
             SettingValues * rsett = nullptr;
             BackupRestoreObject * baco = bac->mutable_backup_element()->mutable_bobject();
             const String dname = t.getDatabaseName();
-            const String tname = t.getTableName();
+            const String tname = t.getBaseName();
             const bool table_has_partitions = t.isMergeTreeFamily() && fc.tableHasPartitions(false, dname, tname);
 
             bac->set_command(BackupRestore_BackupCommand_BACKUP);
@@ -1155,7 +1155,7 @@ void QueryOracle::generateOracleSelectQuery(RandomGenerator & rg, const PeerQuer
             ->mutable_col()
             ->set_column("explain");
         fcall2->add_args()->mutable_expr()->mutable_lit_val()->set_no_quote_str("'^\\ *(Parts|Granules|Ranges):'");
-        jtf->mutable_table_alias()->set_table("ex");
+        jtf->mutable_table_alias()->set_value("ex");
         jtf->add_col_aliases()->set_column("explain");
 
         query = eq->mutable_inner_query()->mutable_select()->mutable_sel();
@@ -1285,16 +1285,16 @@ void QueryOracle::maybeUpdateOracleSelectQuery(RandomGenerator & rg, StatementGe
                         const ExprSchemaTable & est = tf->est();
 
                         if ((!est.has_database()
-                             || (est.database().database() != "system" && est.database().database() != "INFORMATION_SCHEMA"
-                                 && est.database().database() != "information_schema"))
-                            && est.table().table().at(0) == 't')
+                             || (est.database().value() != "system" && est.database().value() != "INFORMATION_SCHEMA"
+                                 && est.database().value() != "information_schema"))
+                            && est.table().value().at(0) == 't')
                         {
-                            const uint32_t tname = gen.getIdentifierFromString(est.table().table());
+                            const String tkey = StatementGenerator::getNameFromProto(est.table().value());
 
-                            if (gen.tables.contains(tname))
+                            if (gen.tables.contains(tkey))
                             {
                                 /// Replace table with table function call
-                                const SQLTable & t = gen.tables.at(tname);
+                                const SQLTable & t = gen.tables.at(tkey);
 
                                 gen.setAllowNotDetermistic(false);
                                 if (t.isEngineReplaceable() && rg.nextSmallNumber() < 5)
@@ -1374,15 +1374,15 @@ void QueryOracle::replaceQueryWithTablePeers(
                         const ExprSchemaTable & est = tf.est();
 
                         if ((!est.has_database()
-                             || (est.database().database() != "system" && est.database().database() != "INFORMATION_SCHEMA"
-                                 && est.database().database() != "information_schema"))
-                            && est.table().table().at(0) == 't')
+                             || (est.database().value() != "system" && est.database().value() != "INFORMATION_SCHEMA"
+                                 && est.database().value() != "information_schema"))
+                            && est.table().value().at(0) == 't')
                         {
-                            const uint32_t tname = gen.getIdentifierFromString(est.table().table());
+                            const String tkey = StatementGenerator::getNameFromProto(est.table().value());
 
-                            if (gen.tables.contains(tname))
+                            if (gen.tables.contains(tkey))
                             {
-                                const SQLTable & t = gen.tables.at(tname);
+                                const SQLTable & t = gen.tables.at(tkey);
 
                                 if (t.hasDatabasePeer())
                                 {
@@ -1390,7 +1390,7 @@ void QueryOracle::replaceQueryWithTablePeers(
                                     {
                                         insertOnTableOrCluster(rg, gen, t, true, &tf);
                                     }
-                                    found_tables.insert(tname);
+                                    found_tables.insert(tkey);
                                     res = !t.hasClickHousePeer();
                                     can_test_oracle_result &= t.hasClickHousePeer();
                                 }

@@ -372,8 +372,10 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
         // Store current SHA (resolved from "latest" if needed)
         setCurrentSha(shaParam || '')
 
-        // Create cache key based on PR/REF and SHA to identify the session
-        const cacheKey = `ci_ext_${prParam || refParam}_${shaParam}`
+        // Create cache key based on PR/REF and SHA (or url) to identify the session
+        const cacheKey = urlParam
+          ? `ci_ext_url_${urlParam}`
+          : `ci_ext_${prParam || refParam}_${shaParam}`
 
         if (urlParam) {
           // Mode 1: Direct URL provided

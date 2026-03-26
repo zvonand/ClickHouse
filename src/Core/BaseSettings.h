@@ -674,7 +674,7 @@ void BaseSettings<TTraits>::read(ReadBuffer & in, SettingsWriteFormat format)
 template <typename TTraits>
 void BaseSettings<TTraits>::updateHotReloadableSettings(const BaseSettings & new_settings)
 {
-    auto accessor = Traits::Accessor::instance();
+    const auto & accessor = Traits::Accessor::instance();
     for (size_t index = 0; index < accessor.size(); ++index)
     {
         if (!accessor.isHotReload(index))

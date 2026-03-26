@@ -7,7 +7,8 @@ SET enable_analyzer = 1,
     enable_parallel_replicas = 0,
     use_skip_indexes_for_top_k = 0,
     use_top_k_dynamic_filtering = 0,
-    query_plan_read_in_order_through_join = 0; -- changes plan structure (Limit/Sorting nesting under Join)
+    query_plan_read_in_order_through_join = 0, -- changes plan structure (Limit/Sorting nesting under Join)
+    optimize_sorting_by_input_stream_properties = 1; -- changes preliminary LIMIT / Sorting nesting
 
 
 SELECT '-------------- Limit < table size -------------';

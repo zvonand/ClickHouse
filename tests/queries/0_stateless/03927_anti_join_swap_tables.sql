@@ -14,6 +14,7 @@ INSERT INTO rhs SELECT * FROM numbers_mt(1e6);
 SET enable_parallel_replicas = 0; -- join swap/reordering disabled with parallel replicas
 SET enable_analyzer = 1, query_plan_join_swap_table = 'auto';
 SET join_algorithm='hash';
+SET query_plan_join_shard_by_pk_ranges = 0; -- adds Sharding: sub-node, changes Type:/Strictness: indentation
 
 -- swap LEFT ANTI join to RIGHT ANTI join
 SELECT *

@@ -814,6 +814,7 @@ private:
         {
             auto connection_to_store = PooledConnection::create(this->getWeakFromThis(), group, getMetrics(), host, port);
             connection_to_store->assign(connection);
+            connection_to_store->notifySocketInode();
 
             {
                 MemoryTrackerSwitcher switcher{&total_memory_tracker};

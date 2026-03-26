@@ -18,7 +18,6 @@
 #include <Common/HTTPConnectionPool.h>
 #include <Common/TCPSocketMemInfo.h>
 
-#include <sys/stat.h>
 
 #include "config.h"
 #if USE_AWS_S3
@@ -65,24 +64,21 @@ double percentile(const std::vector<uint32_t> & sorted, double p)
 }
 
 /// Emit p50/p75/p90/p95 of kernel TCP buffer memory for one connection pool group.
-/// Resolves FDs to inodes via fstat, then looks up rmem/wmem from the netlink dump.
+/// Looks up rmem/wmem from the netlink dump by inode.
 void emitTCPBufferPercentiles(
-    const std::vector<int> & fds,
+    const std::vector<uint64_t> & inodes,
     const char * group_name,
     const std::unordered_map<uint64_t, TCPSocketMemInfo> & meminfo_by_inode,
     AsynchronousMetricValues & new_values)
 {
     std::vector<uint32_t> rmem_values;
     std::vector<uint32_t> wmem_values;
-    rmem_values.reserve(fds.size());
-    wmem_values.reserve(fds.size());
+    rmem_values.reserve(inodes.size());
+    wmem_values.reserve(inodes.size());
 
-    for (int fd : fds)
+    for (uint64_t inode : inodes)
     {
-        struct stat st; // NOLINT(cppcoreguidelines-pro-type-member-init)
-        if (fstat(fd, &st) != 0)
-            continue;
-        if (auto it = meminfo_by_inode.find(st.st_ino); it != meminfo_by_inode.end())
+        if (auto it = meminfo_by_inode.find(inode); it != meminfo_by_inode.end())
         {
             rmem_values.push_back(it->second.rmem);
             wmem_values.push_back(it->second.wmem);
@@ -111,21 +107,21 @@ void emitTCPBufferPercentiles(
 }
 
 /// Emit p50/p75/p90/p95 metrics for kernel TCP buffer memory of HTTP connection pool sockets.
-/// Queries sock_diag netlink to get per-socket rmem/wmem, then joins with pool FDs by inode.
+/// Queries sock_diag netlink to get per-socket rmem/wmem, then joins with pool inodes.
 void updateHTTPConnectionPoolTCPBufferMetrics(
-    const HTTPConnectionPools::PoolSocketFDs & pool_fds,
+    const HTTPConnectionPools::PoolSocketInodes & pool_inodes,
     AsynchronousMetricValues & new_values)
 {
-    if (pool_fds.empty())
+    if (pool_inodes.empty())
         return;
 
     auto meminfo_by_inode = getTCPSocketMemInfoByInode();
     if (meminfo_by_inode.empty())
         return;
 
-    emitTCPBufferPercentiles(pool_fds.disk, "Disk", meminfo_by_inode, new_values);
-    emitTCPBufferPercentiles(pool_fds.storage, "Storage", meminfo_by_inode, new_values);
-    emitTCPBufferPercentiles(pool_fds.http, "HTTP", meminfo_by_inode, new_values);
+    emitTCPBufferPercentiles(pool_inodes.disk, "Disk", meminfo_by_inode, new_values);
+    emitTCPBufferPercentiles(pool_inodes.storage, "Storage", meminfo_by_inode, new_values);
+    emitTCPBufferPercentiles(pool_inodes.http, "HTTP", meminfo_by_inode, new_values);
 }
 
 #endif
@@ -466,7 +462,7 @@ void ServerAsynchronousMetrics::updateImpl(TimePoint update_time, TimePoint curr
 #endif
 
 #if defined(OS_LINUX)
-    updateHTTPConnectionPoolTCPBufferMetrics(HTTPConnectionPools::instance().getSocketFDs(), new_values);
+    updateHTTPConnectionPoolTCPBufferMetrics(HTTPConnectionPools::instance().getSocketInodes(), new_values);
 #endif
 
     if (update_heavy_metrics)

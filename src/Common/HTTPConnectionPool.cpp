@@ -24,6 +24,8 @@
 #include <Poco/Net/NetException.h>
 #include <Poco/Timespan.h>
 
+#include <sys/stat.h>
+
 #include <queue>
 #include <unordered_set>
 
@@ -233,26 +235,29 @@ public:
 
     const IHTTPConnectionPoolForEndpoint::Metrics & getMetrics() const { return metrics; }
 
-    /// Collect file descriptors of all tracked connections.
-    /// The returned fds may become stale (closed/reused) by the time the caller uses them — this is expected.
-    std::vector<int> getSocketFDs() const
+    /// Collect socket inodes of all tracked connections.
+    /// fstat is called under the lock so the FD is guaranteed to be alive and not reused.
+    std::vector<uint64_t> getSocketInodes() const
     {
         std::lock_guard lock(mutex);
-        std::vector<int> fds;
-        fds.reserve(live_connections.size());
+        std::vector<uint64_t> inodes;
+        inodes.reserve(live_connections.size());
         for (auto * session : live_connections)
         {
             try
             {
                 auto fd = session->socket().impl()->sockfd();
-                if (fd >= 0)
-                    fds.push_back(fd);
+                if (fd < 0)
+                    continue;
+                struct stat st; // NOLINT(cppcoreguidelines-pro-type-member-init)
+                if (fstat(fd, &st) == 0)
+                    inodes.push_back(st.st_ino);
             }
             catch (...) // NOLINT(bugprone-empty-catch) Ok: socket may not be connected yet
             {
             }
         }
-        return fds;
+        return inodes;
     }
 
 private:
@@ -940,14 +945,14 @@ public:
         endpoints_pool.clear();
     }
 
-    HTTPConnectionPools::PoolSocketFDs getSocketFDs()
+    HTTPConnectionPools::PoolSocketInodes getSocketInodes()
     {
         /// ConnectionGroup has its own mutex, no need for Impl::mutex here.
         /// The groups are created once in the constructor and never replaced.
         return {
-            .disk = disk_group->getSocketFDs(),
-            .storage = storage_group->getSocketFDs(),
-            .http = http_group->getSocketFDs()
+            .disk = disk_group->getSocketInodes(),
+            .storage = storage_group->getSocketInodes(),
+            .http = http_group->getSocketInodes()
         };
     }
 
@@ -1050,9 +1055,9 @@ HTTPConnectionPools::getPool(HTTPConnectionGroupType type, const Poco::URI & uri
     return impl->getPool(type, uri, proxy_configuration);
 }
 
-HTTPConnectionPools::PoolSocketFDs HTTPConnectionPools::getSocketFDs()
+HTTPConnectionPools::PoolSocketInodes HTTPConnectionPools::getSocketInodes()
 {
-    return impl->getSocketFDs();
+    return impl->getSocketInodes();
 }
 
 }

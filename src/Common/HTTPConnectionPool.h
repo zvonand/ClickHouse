@@ -12,6 +12,7 @@
 #include <Poco/Timespan.h>
 #include <Poco/Net/HTTPClientSession.h>
 
+#include <cstdint>
 #include <mutex>
 #include <memory>
 #include <vector>
@@ -73,12 +74,12 @@ public:
         static constexpr size_t warning_step = 100;
     };
 
-    /// File descriptors of live connections, grouped by connection pool type.
-    struct PoolSocketFDs
+    /// Socket inodes of live connections, grouped by connection pool type.
+    struct PoolSocketInodes
     {
-        std::vector<int> disk;
-        std::vector<int> storage;
-        std::vector<int> http;
+        std::vector<uint64_t> disk;
+        std::vector<uint64_t> storage;
+        std::vector<uint64_t> http;
 
         bool empty() const { return disk.empty() && storage.empty() && http.empty(); }
     };
@@ -97,9 +98,9 @@ public:
 
     IHTTPConnectionPoolForEndpoint::Ptr getPool(HTTPConnectionGroupType type, const Poco::URI & uri, const ProxyConfiguration & proxy_configuration);
 
-    /// Collect file descriptors of all tracked HTTP connections, grouped by pool type.
-    /// The returned fds are a snapshot — some may become stale by the time the caller uses them.
-    PoolSocketFDs getSocketFDs();
+    /// Collect socket inodes of all tracked HTTP connections, grouped by pool type.
+    /// Inodes are resolved via fstat while the connection pool lock is held, so they are always valid.
+    PoolSocketInodes getSocketInodes();
 
 private:
     class Impl;

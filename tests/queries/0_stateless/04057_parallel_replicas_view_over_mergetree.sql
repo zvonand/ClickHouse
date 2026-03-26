@@ -1,6 +1,4 @@
 -- Test that parallel replicas work with a simple view over a MergeTree table.
--- Simplified reproduction of a customer schema: a SummingMergeTree table
--- with a view defined as SELECT * FROM that table.
 
 DROP TABLE IF EXISTS t_rtb_hourly;
 DROP VIEW IF EXISTS v_rtb_hourly;

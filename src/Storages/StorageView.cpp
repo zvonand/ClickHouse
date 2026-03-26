@@ -48,6 +48,7 @@ namespace Setting
     extern const SettingsUInt64 max_result_bytes;
     extern const SettingsBool parallel_replicas_for_non_replicated_merge_tree;
     extern const SettingsUInt64 allow_experimental_parallel_reading_from_replicas;
+    extern const SettingsBool parallel_replicas_allow_view_over_mergetree;
 }
 
 namespace ErrorCodes
@@ -114,14 +115,13 @@ ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage
 {
     auto view_context = storage_snapshot->metadata->getSQLSecurityOverriddenContext(context);
     Settings view_settings = view_context->getSettingsCopy();
-    if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
+    if (view_settings[Setting::allow_experimental_analyzer] && view_settings[Setting::parallel_replicas_allow_view_over_mergetree])
     {
         if (auto storage = view->getUnderlyingStorage(context))
         {
             if (storage->isMergeTree()
                 && (storage->supportsReplication()
-                    || (!storage->supportsReplication()
-                        && !context->getSettingsRef()[Setting::parallel_replicas_for_non_replicated_merge_tree])))
+                    || (!storage->supportsReplication() && view_settings[Setting::parallel_replicas_for_non_replicated_merge_tree])))
             {
                 view_settings[Setting::allow_experimental_parallel_reading_from_replicas] = Field{0};
             }
@@ -176,6 +176,9 @@ StorageView::StorageView(
     setInMemoryMetadata(storage_metadata);
 }
 
+/// Build and resolve the view's inner query tree, then walk the join tree
+/// to find the leftmost underlying storage. Returns nullptr if the view
+/// is too complex or resolution fails.
 StoragePtr StorageView::getUnderlyingStorage(const ContextPtr & context) const
 {
     if (isParameterizedView())
@@ -213,7 +216,15 @@ StoragePtr StorageView::getUnderlyingStorage(const ContextPtr & context) const
                 break;
             }
             case QueryTreeNodeType::TABLE:
-                return node->as<TableNode &>().getStorage();
+            {
+                const auto & table_node = node->as<const TableNode &>();
+
+                /// Parallel replicas not supported with FINAL.
+                if (table_node.hasTableExpressionModifiers() && table_node.getTableExpressionModifiers()->hasFinal())
+                    return nullptr;
+
+                return table_node.getStorage();
+            }
             default:
                 return nullptr;
         }

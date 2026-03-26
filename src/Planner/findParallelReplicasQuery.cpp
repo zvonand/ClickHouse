@@ -33,6 +33,7 @@ namespace Setting
     extern const SettingsBool parallel_replicas_for_non_replicated_merge_tree;
     extern const SettingsBool parallel_replicas_allow_materialized_views;
     extern const SettingsBool serialize_query_plan;
+    extern const SettingsBool parallel_replicas_allow_view_over_mergetree;
 }
 
 namespace ErrorCodes
@@ -41,72 +42,30 @@ namespace ErrorCodes
     extern const int UNSUPPORTED_METHOD;
 }
 
-/// Build and resolve the view's inner query tree, then walk the join tree
-/// to find the leftmost underlying storage. Returns nullptr if the view
-/// is too complex or resolution fails.
-StoragePtr getViewUnderlyingStorage(const StoragePtr & view_storage, const ContextPtr & context)
+static bool canUseTableForParallelReplicas(const TableNode & table_node, const ContextPtr & context)
 {
-    const auto * view = typeid_cast<const StorageView *>(view_storage.get());
-    if (!view || view->isParameterizedView())
-        return nullptr;
-
-    auto inner_query_ast = view_storage->getInMemoryMetadataPtr()->getSelectQuery().inner_query;
-
-    QueryTreeNodePtr inner_query_tree;
-    try
-    {
-        inner_query_tree = buildQueryTree(inner_query_ast->clone(), context);
-        QueryTreePassManager pass_manager(context);
-        addQueryTreePasses(pass_manager);
-        pass_manager.runOnlyResolve(inner_query_tree);
-    }
-    catch (...)
-    {
-        /// If resolution fails for any reason, this view is not suitable.
-        return nullptr;
-    }
-
-    /// Walk the resolved join tree to find the leftmost leaf table.
-    const IQueryTreeNode * node = inner_query_tree.get();
-    while (node)
-    {
-        switch (node->getNodeType())
-        {
-            case QueryTreeNodeType::QUERY:
-                node = node->as<QueryNode &>().getJoinTree().get();
-                break;
-            case QueryTreeNodeType::UNION:
-            {
-                const auto & queries = node->as<UnionNode &>().getQueries().getNodes();
-                node = queries.empty() ? nullptr : queries.front().get();
-                break;
-            }
-            case QueryTreeNodeType::TABLE:
-                return node->as<TableNode &>().getStorage();
-            default:
-                return nullptr;
-        }
-    }
-    return nullptr;
-}
-
-static bool canUseTableForParallelReplicas(const TableNode & table_node, const ContextPtr & context [[maybe_unused]])
-{
+    const auto & settings = context->getSettingsRef();
     auto storage = table_node.getStorage();
 
-    if (storage->isView() && !typeid_cast<const StorageMaterializedView *>(storage.get()))
+    if (settings[Setting::parallel_replicas_allow_view_over_mergetree])
     {
-        auto underlying = getViewUnderlyingStorage(storage, context);
-        if (!underlying)
-            return false;
+        const auto * view = typeid_cast<const StorageView *>(storage.get());
+        if (view)
+        {
+            auto underlying_storage = view->getUnderlyingStorage(context);
+            if (!underlying_storage)
+                return false;
 
-        storage = underlying;
+            storage = underlying_storage;
+            if (!storage)
+                return false;
+        }
     }
 
     const auto * mv = typeid_cast<const StorageMaterializedView *>(storage.get());
     if (mv)
     {
-        if (!context->getSettingsRef()[Setting::parallel_replicas_allow_materialized_views])
+        if (!settings[Setting::parallel_replicas_allow_materialized_views])
             return false;
 
         // address refreshable MVs separately, currently leads to logical error
@@ -119,7 +78,7 @@ static bool canUseTableForParallelReplicas(const TableNode & table_node, const C
     if (!storage->isMergeTree() && !typeid_cast<const StorageDummy *>(storage.get()))
         return false;
 
-    if (!storage->supportsReplication() && !context->getSettingsRef()[Setting::parallel_replicas_for_non_replicated_merge_tree])
+    if (!storage->supportsReplication() && !settings[Setting::parallel_replicas_for_non_replicated_merge_tree])
         return false;
 
     /// Parallel replicas not supported with FINAL.

@@ -136,6 +136,7 @@ namespace Setting
     extern const SettingsBool query_plan_display_internal_aliases;
     extern const SettingsBool enable_lazy_columns_replication;
     extern const SettingsBool parallel_replicas_allow_materialized_views;
+    extern const SettingsBool parallel_replicas_allow_view_over_mergetree;
 }
 
 namespace ErrorCodes
@@ -1135,14 +1136,19 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                 {
                     const auto * table_ptr = current_storage.get();
 
-                    const auto * view = typeid_cast<const StorageView *>(current_storage.get());
-                    if (view)
+                    if (query_settings[Setting::parallel_replicas_allow_view_over_mergetree])
                     {
-                        auto underlying = getViewUnderlyingStorage(current_storage, context);
-                        if (!underlying)
-                            return false;
+                        const auto * view = typeid_cast<const StorageView *>(current_storage.get());
+                        if (view)
+                        {
+                            auto underlying_storage = view->getUnderlyingStorage(context);
+                            if (!underlying_storage)
+                                return false;
 
-                        table_ptr = underlying.get();
+                            table_ptr = underlying_storage.get();
+                            if (!table_ptr)
+                                return false;
+                        }
                     }
 
                     const auto * mv = typeid_cast<const StorageMaterializedView *>(current_storage.get());

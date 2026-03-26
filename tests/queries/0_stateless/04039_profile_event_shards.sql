@@ -1,5 +1,7 @@
 -- Tags: shard
 
+SET send_logs_level = 'fatal';
+
 -- Single distributed query: 2 shards
 SELECT count() FROM remote('127.0.0.{1,2}', system.one) FORMAT Null SETTINGS log_comment = '04039_profile_event_shards_1';
 SYSTEM FLUSH LOGS query_log;

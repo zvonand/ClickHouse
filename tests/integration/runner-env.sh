@@ -1,8 +1,6 @@
 #!/bin/zsh
 # Works with bash and zsh
 
-#REMOVEME
-
 # It should be used with `runner --debug`
 # Tip: place a `breakpoint()` somewhere in your integration test python code before run.
 

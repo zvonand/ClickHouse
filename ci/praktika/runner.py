@@ -9,8 +9,6 @@ import sys
 import traceback
 from pathlib import Path
 
-from ci.praktika import job
-
 from ._environment import _Environment
 from .artifact import Artifact
 from .cidb import CIDB
@@ -504,7 +502,6 @@ class Runner:
         # 2. Root-owned files remain in the repository working directory
         # The ownership fix below ensures all root-owned files are changed to the current user
         if job.run_in_docker and not no_docker and from_root:
-
             print(f"--- Fixing file ownership after running docker as root")
             # Get host user's UID and GID (not from inside the container)
             uid = os.getuid()

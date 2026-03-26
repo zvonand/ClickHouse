@@ -155,13 +155,9 @@ Pass the full URL directly:
 http://localhost:5173/?url=https://s3.amazonaws.com/clickhouse-test-reports/PRs/12345/abc/result_pr.json
 ```
 
-#### Default (no parameters)
+#### No parameters
 
-```
-http://localhost:5173/
-```
-
-Uses hardcoded default: `https://s3.amazonaws.com/clickhouse-test-reports/PRs/96792/dd4e76d16912546d3cdbcfb8c14b076b6ad28ee6/result_pr.json`
+Without any parameters, the app shows an error. At least one of `PR`/`REF` with `SHA`, or `url` must be provided.
 
 ### CORS Handling
 

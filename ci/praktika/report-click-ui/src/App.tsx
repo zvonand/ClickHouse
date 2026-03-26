@@ -239,14 +239,16 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     const params = new URLSearchParams(window.location.search)
     const newParams = new URLSearchParams()
 
-    // Keep PR, REF, SHA parameters
+    // Keep PR, REF, SHA, url parameters
     const prParam = params.get('PR')
     const refParam = params.get('REF')
     const shaParam = params.get('SHA') || params.get('sha')
+    const urlParam = params.get('url')
 
     if (prParam) newParams.set('PR', prParam)
     if (refParam) newParams.set('REF', refParam)
     if (shaParam) newParams.set('SHA', shaParam)
+    if (urlParam) newParams.set('url', urlParam)
 
     // Keep name parameters from 0 to maxIndex
     for (let i = 0; i <= maxIndex; i++) {
@@ -263,14 +265,16 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     const params = new URLSearchParams(window.location.search)
     const newParams = new URLSearchParams()
 
-    // Keep PR, REF, SHA parameters
+    // Keep PR, REF, SHA, url parameters
     const prParam = params.get('PR')
     const refParam = params.get('REF')
     const shaParam = params.get('SHA') || params.get('sha')
+    const urlParam = params.get('url')
 
     if (prParam) newParams.set('PR', prParam)
     if (refParam) newParams.set('REF', refParam)
     if (shaParam) newParams.set('SHA', shaParam)
+    if (urlParam) newParams.set('url', urlParam)
 
     // Keep all existing name parameters
     let maxNameIndex = -1

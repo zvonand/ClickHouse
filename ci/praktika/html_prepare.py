@@ -10,7 +10,7 @@ from .utils import Utils
 class Html:
     @classmethod
     def prepare(cls, is_test):
-        html_file = Path("./ci/praktika") / Settings.HTML_PAGE_FILE
+        html_file = Path("./ci/praktika/json.html")
         if is_test:
             page_file = str(html_file).removesuffix(".html") + "_test.html"
             Shell.check(f"cp {html_file} {page_file}")
@@ -44,7 +44,8 @@ class Html:
 
         # Build the React app
         print("Building report UI...")
-        Shell.check(f"cd {report_dir} && npm install && npm run build")
+        if not Shell.check(f"cd {report_dir} && npm install && npm run build"):
+            raise RuntimeError("Failed to build report UI")
 
         # Get base S3 path
         base_s3_path = Settings.HTML_S3_PATH

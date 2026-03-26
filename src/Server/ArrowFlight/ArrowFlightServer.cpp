@@ -769,6 +769,14 @@ public:
                     break;
 
                 auto pd_it = poll_descriptors.find(it->second);
+                chassert(pd_it != poll_descriptors.end());
+                if (pd_it == poll_descriptors.end())
+                {
+                    LOG_WARNING(log, "Poll descriptor {} found in expiration index but not in poll_descriptors; removing stale expiration entry", it->second);
+                    it = poll_descriptors_by_expiration_time.erase(it);
+                    continue;
+                }
+
                 if (pd_it->second->evaluating)
                 {
                     ++it;

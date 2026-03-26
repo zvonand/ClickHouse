@@ -618,6 +618,11 @@ public:
                 auto new_info = std::make_shared<PollDescriptorInfo>(*info);
                 new_info->evaluating = true;
                 it->second = new_info;
+                if (info->expiration_time)
+                {
+                    poll_descriptors_by_expiration_time.erase(std::make_pair(*info->expiration_time, poll_descriptor));
+                    updateNextExpirationTime();
+                }
                 return true;
             }
             return false; /// The poll descriptor is being evaluated in another thread, we need to wait.
@@ -650,7 +655,14 @@ public:
         new_info->bytes = bytes;
         if (!last)
             new_info->next_poll_descriptor = generatePollDescriptorName();
+        auto new_expiration_time = calculatePollDescriptorExpirationTime(now());
+        new_info->expiration_time = new_expiration_time;
         it->second = new_info;
+        if (new_expiration_time)
+        {
+            poll_descriptors_by_expiration_time.emplace(*new_expiration_time, poll_descriptor);
+            updateNextExpirationTime();
+        }
         info = new_info;
         evaluation_ended.notify_all();
     }
@@ -670,7 +682,14 @@ public:
                 new_info->evaluating = false;
                 new_info->evaluated = true;
                 new_info->status = error_status;
+                auto new_expiration_time = calculatePollDescriptorExpirationTime(now());
+                new_info->expiration_time = new_expiration_time;
                 it->second = new_info;
+                if (new_expiration_time)
+                {
+                    poll_descriptors_by_expiration_time.emplace(*new_expiration_time, poll_descriptor);
+                    updateNextExpirationTime();
+                }
                 info = new_info;
                 evaluation_ended.notify_all();
             }
@@ -755,6 +774,7 @@ public:
                     continue;
                 }
 
+                chassert(!pd_it->second->evaluating);
                 if (pd_it->second->evaluating)
                 {
                     ++it;

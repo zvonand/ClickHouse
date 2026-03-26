@@ -27,8 +27,6 @@ INSERT INTO t_vrow_1 SELECT (SELECT max(event_time) FROM t_vrow_1 WHERE filter_v
 INSERT INTO t_vrow_1 SELECT (SELECT min(event_time) FROM t_vrow_1 WHERE filter_val = 1) - 17000 + number, 0, 'b' FROM numbers(100_000);
 INSERT INTO t_vrow_1 SELECT (SELECT max(event_time) FROM t_vrow_1 WHERE filter_val = 1) + 17000 - number, 0, 'd' FROM numbers(100_000);
 
-OPTIMIZE TABLE t_vrow_1 FINAL;
-
 CREATE TEMPORARY TABLE start_ts AS ( SELECT now() AS ts );
 
 SET max_block_size = 8192;

@@ -162,10 +162,13 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
   useEffect(() => {
     if (!data?.results) return
 
-    // Check if any jobs are running
-    const hasRunningJobs = data.results.some(r => r.status.toLowerCase() === 'running')
+    // Check if any jobs are in progress
+    const hasInProgressJobs = data.results.some(r => {
+      const s = r.status.toLowerCase()
+      return s === 'running' || s === 'pending'
+    })
 
-    if (hasRunningJobs) {
+    if (hasInProgressJobs) {
       const interval = setInterval(() => {
         setTick(t => t + 1)
       }, 1000)
@@ -784,7 +787,10 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
           case 0: return dir * (getStatusPriority(a.status) - getStatusPriority(b.status))
           case 1: return dir * a.name.localeCompare(b.name)
           case 2: return dir * ((a.duration ?? 0) - (b.duration ?? 0))
-          case 3: return dir * ((Number(a.start_time) || 0) - (Number(b.start_time) || 0))
+          case 3: {
+            const toEpoch = (t: string | number) => typeof t === 'number' ? t : new Date(t).getTime() / 1000
+            return dir * ((toEpoch(a.start_time) || 0) - (toEpoch(b.start_time) || 0))
+          }
           default: return 0
         }
       })

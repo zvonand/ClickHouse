@@ -369,7 +369,13 @@ void QueryOracle::generateRowPolicyOracleQueries(RandomGenerator & rg, Statement
     // ---- Build sq1: EXECUTE AS oracleUser; SELECT count() FROM db.t [FINAL] INTO OUTFILE ----
     // so the session switches to the oracle user before the SELECT runs (row policy applies).
     sq1.CopyFrom(sq2);
-    sq1.mutable_single_query()->mutable_explain()->mutable_inner_query()->mutable_select()->mutable_sel()->mutable_select_core()->clear_where();
+    sq1.mutable_single_query()
+        ->mutable_explain()
+        ->mutable_inner_query()
+        ->mutable_select()
+        ->mutable_sel()
+        ->mutable_select_core()
+        ->clear_where();
 
     gen.enforceFinal(false);
     gen.setAllowNotDetermistic(true);

@@ -71,31 +71,7 @@ static std::unordered_map<String, CHSetting> mergeTreeTableSettings = {
     {"async_insert", trueOrFalseSetting},
     {"auto_statistics_types",
      CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &)
-         {
-             String res;
-             DB::Strings choices = {"tdigest", "countmin", "minmax", "uniq"};
-
-             if (rg.nextSmallNumber() < 3)
-             {
-                 res = rg.pickRandomly(choices);
-             }
-             else
-             {
-                 const uint32_t nopt = rg.randomInt<uint32_t>(0, static_cast<uint32_t>(choices.size()));
-
-                 std::shuffle(choices.begin(), choices.end(), rg.generator);
-                 for (uint32_t i = 0; i < nopt; i++)
-                 {
-                     if (i != 0)
-                     {
-                         res += ",";
-                     }
-                     res += choices[i];
-                 }
-             }
-             return "'" + res + "'";
-         },
+         [](RandomGenerator & rg, FuzzConfig &) { return settingCombinations(rg, {"tdigest", "countmin", "minmax", "uniq"}); },
          {"'tdigest'", "'countmin'", "'minmax'", "'uniq'"},
          false)},
     {"cache_populated_by_fetch", trueOrFalseSetting},

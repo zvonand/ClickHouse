@@ -1,8 +1,32 @@
 #include <gtest/gtest.h>
 
 #include <Interpreters/PredicateAtomExtractor.h>
+#include <Interpreters/ActionsDAG.h>
+#include <Functions/FunctionFactory.h>
+#include <Functions/registerFunctions.h>
+#include <DataTypes/DataTypesNumber.h>
+#include <DataTypes/DataTypeString.h>
 
 using namespace DB;
+
+/// Helper to build a simple DAG node: function(column, constant)
+static const ActionsDAG::Node & makePredicateNode(
+    ActionsDAG & dag,
+    const String & func_name,
+    const String & col_name,
+    const DataTypePtr & col_type,
+    const Field & constant)
+{
+    const auto & col_node = dag.addInput(col_name, col_type);
+    ColumnWithTypeAndName const_col;
+    const_col.type = col_type;
+    const_col.column = col_type->createColumnConst(1, constant);
+    const_col.name = constant.dump();
+    const auto & const_node = dag.addColumn(std::move(const_col));
+
+    auto resolver = FunctionFactory::instance().get(func_name, nullptr);
+    return dag.addFunction(resolver, {&col_node, &const_node}, func_name + "_result");
+}
 
 
 TEST(PredicateAtomExtractor, ClassifyEquals)
@@ -52,4 +76,69 @@ TEST(PredicateAtomExtractor, ExtractFromNullptr)
 {
     auto atoms = extractPredicateAtoms(nullptr);
     EXPECT_TRUE(atoms.empty());
+}
+
+TEST(PredicateAtomExtractor, ExtractSingleAtom)
+{
+    registerFunctions();
+    ActionsDAG dag;
+    /// WHERE x = 1
+    const auto & eq_node = makePredicateNode(dag, "equals", "x", std::make_shared<DataTypeUInt64>(), Field(UInt64(1)));
+
+    auto atoms = extractPredicateAtoms(&eq_node);
+    ASSERT_EQ(atoms.size(), 1);
+    EXPECT_EQ(atoms[0].column_name, "x");
+    EXPECT_EQ(atoms[0].function_name, "equals");
+    EXPECT_EQ(atoms[0].predicate_class, "Equality");
+}
+
+TEST(PredicateAtomExtractor, ExtractConjunction)
+{
+    registerFunctions();
+    ActionsDAG dag;
+    /// WHERE x = 1 AND y > 5
+    const auto & eq_node = makePredicateNode(dag, "equals", "x", std::make_shared<DataTypeUInt64>(), Field(UInt64(1)));
+    const auto & gt_node = makePredicateNode(dag, "greater", "y", std::make_shared<DataTypeUInt64>(), Field(UInt64(5)));
+
+    auto and_resolver = FunctionFactory::instance().get("and", nullptr);
+    const auto & and_node = dag.addFunction(and_resolver, {&eq_node, &gt_node}, "and_result");
+
+    auto atoms = extractPredicateAtoms(&and_node);
+    ASSERT_EQ(atoms.size(), 2);
+
+    /// Order may vary, so check both are present
+    std::set<String> columns;
+    for (const auto & atom : atoms)
+        columns.insert(atom.column_name);
+    EXPECT_TRUE(columns.count("x"));
+    EXPECT_TRUE(columns.count("y"));
+}
+
+TEST(PredicateAtomExtractor, ExtractSkipsMultiColumnAtom)
+{
+    registerFunctions();
+    ActionsDAG dag;
+    /// WHERE x = y (two column inputs, no single column -> skipped)
+    const auto & x_node = dag.addInput("x", std::make_shared<DataTypeUInt64>());
+    const auto & y_node = dag.addInput("y", std::make_shared<DataTypeUInt64>());
+
+    auto eq_resolver = FunctionFactory::instance().get("equals", nullptr);
+    const auto & eq_node = dag.addFunction(eq_resolver, {&x_node, &y_node}, "eq_result");
+
+    auto atoms = extractPredicateAtoms(&eq_node);
+    EXPECT_TRUE(atoms.empty());
+}
+
+TEST(PredicateAtomExtractor, ExtractThroughAlias)
+{
+    registerFunctions();
+    ActionsDAG dag;
+    /// WHERE alias(x = 1)
+    const auto & eq_node = makePredicateNode(dag, "equals", "x", std::make_shared<DataTypeUInt64>(), Field(UInt64(1)));
+    const auto & alias_node = dag.addAlias(eq_node, "my_alias");
+
+    auto atoms = extractPredicateAtoms(&alias_node);
+    ASSERT_EQ(atoms.size(), 1);
+    EXPECT_EQ(atoms[0].column_name, "x");
+    EXPECT_EQ(atoms[0].function_name, "equals");
 }

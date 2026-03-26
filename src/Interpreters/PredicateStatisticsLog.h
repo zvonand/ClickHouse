@@ -9,8 +9,8 @@
 namespace DB
 {
 
-/// PredicateStatisticsLog records per-predicate selectivity statistics
-/// collected during query execution in `FilterTransform`
+/// PredicateStatisticsLog records predicate selectivity statistics collected
+/// from `FilterTransform` (row-level per-atom) and `ReadFromMergeTree` (index-level per-stage)
 struct PredicateStatisticsLogElement
 {
     UInt16 event_date{};

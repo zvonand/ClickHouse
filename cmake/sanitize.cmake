@@ -75,16 +75,20 @@ option(WITH_COVERAGE_XRAY
 if (WITH_COVERAGE)
     message (STATUS "Enabled instrumentation for code coverage")
 
-    # We set this define for whole build to indicate that at least some parts are compiled with coverage.
-    # And to expose it in system.build_options.
-    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWITH_COVERAGE=1")
-    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DWITH_COVERAGE=1")
-
     # But the actual coverage will be enabled on per-library basis: for ClickHouse code, but not for 3rd-party.
     set (COVERAGE_FLAGS -fprofile-instr-generate -fcoverage-mapping)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate")
 
     if (WITH_COVERAGE_DEPTH)
+        # WITH_COVERAGE_DEPTH enables per-test collection (CoverageCollection.cpp,
+        # LLVMCoverageMapping.cpp, SYSTEM SET COVERAGE TEST).  All per-test-specific
+        # flags are gated here — not in the base WITH_COVERAGE block — so that the
+        # regular amd_llvm_coverage build (used for HTML coverage reports) is unchanged.
+        message (STATUS "Enabled per-test coverage instrumentation (WITH_COVERAGE_DEPTH)")
+        # Expose WITH_COVERAGE=1 as a C++ macro so that CoverageCollection.cpp,
+        # LLVMCoverageMapping.cpp, and SYSTEM SET COVERAGE TEST are compiled in.
+        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWITH_COVERAGE=1")
+        set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -DWITH_COVERAGE=1")
         message (STATUS "Enabled call-depth shadow stack via -finstrument-functions-after-inlining")
         set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finstrument-functions-after-inlining")
         set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -finstrument-functions-after-inlining")

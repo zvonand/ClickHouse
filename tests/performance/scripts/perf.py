@@ -255,11 +255,25 @@ def split_sql_statements(sql):
 
 
 def first_keyword(sql):
-    """Return the first SQL keyword from a statement, skipping comments and whitespace."""
-    for line in sql.split("\n"):
-        stripped = line.strip()
-        if stripped and not stripped.startswith("--"):
-            return stripped.split()[0].upper()
+    """Return the first SQL keyword from a statement, skipping --, #, and /* */ comments."""
+    i = 0
+    while i < len(sql):
+        ch = sql[i]
+        next_ch = sql[i + 1] if i + 1 < len(sql) else ""
+        if ch in (" ", "\t", "\n", "\r"):
+            i += 1
+        elif (ch == "-" and next_ch == "-") or ch == "#":
+            nl = sql.find("\n", i)
+            i = nl + 1 if nl != -1 else len(sql)
+        elif ch == "/" and next_ch == "*":
+            end = sql.find("*/", i + 2)
+            i = end + 2 if end != -1 else len(sql)
+        else:
+            # Found start of a token → read until whitespace or special chars
+            j = i
+            while j < len(sql) and sql[j] not in (" ", "\t", "\n", "\r", "(", ";"):
+                j += 1
+            return sql[i:j].upper()
     return ""
 
 

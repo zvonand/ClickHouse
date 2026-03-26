@@ -1,5 +1,6 @@
 #include <Disks/DiskObjectStorage/ObjectStorages/Local/LocalObjectStorage.h>
 
+#include <atomic>
 #include <exception>
 #include <filesystem>
 #include <Disks/IO/AsynchronousBoundedReadBuffer.h>
@@ -129,8 +130,8 @@ private:
     const String file_path;
     const String bucket;
     BlobStorageLogWriterPtr blob_log;
-    mutable size_t elapsed_microseconds = 0;
-    mutable size_t bytes_read = 0;
+    mutable std::atomic<size_t> elapsed_microseconds = 0;
+    mutable std::atomic<size_t> bytes_read = 0;
 };
 
 /// Wrapper around WriteBufferFromFile that adds blob storage logging on finalize.

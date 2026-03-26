@@ -9,7 +9,6 @@
 #include <hdfs/hdfs.h>
 #include <base/types.h>
 #include <IO/ReadBufferFromFileBase.h>
-#include <Common/BlobStorageLogWriter.h>
 
 namespace Poco
 {
@@ -21,6 +20,9 @@ class AbstractConfiguration;
 
 namespace DB
 {
+
+class BlobStorageLogWriter;
+using BlobStorageLogWriterPtr = std::shared_ptr<BlobStorageLogWriter>;
 
 struct ReadSettings;
 

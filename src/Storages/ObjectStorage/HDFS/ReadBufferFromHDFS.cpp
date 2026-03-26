@@ -5,6 +5,7 @@
 #include <Storages/ObjectStorage/HDFS/HDFSCommon.h>
 #include <Storages/ObjectStorage/HDFS/HDFSErrorWrapper.h>
 #include <Common/Scheduler/ResourceGuard.h>
+#include <Common/BlobStorageLogWriter.h>
 #include <Common/Stopwatch.h>
 #include <IO/Progress.h>
 #include <Common/Throttler.h>

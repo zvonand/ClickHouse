@@ -845,14 +845,14 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     )
   }
 
-  const wrapWithPopover = (content: React.ReactNode, result: TestResult, navigateUrl?: string, namesPath: string[] = []) => {
+  const wrapWithPopover = (content: React.ReactNode, result: TestResult, navigateUrl?: string, namesPath: string[] = [], justifyContent: string = 'flex-start') => {
     const hasAdditionalInfo = result.info ||
                                (result.links && result.links.length > 0) ||
                                (result.results && result.results.length > 0) ||
                                navigateUrl
 
     if (!hasAdditionalInfo) {
-      return <div style={{ width: '100%', height: '100%' }}>{content}</div>
+      return <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent }}>{content}</div>
     }
 
     const currentPath = [...namesPath, result.name]
@@ -866,6 +866,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
+            justifyContent,
             margin: '-8px -12px',
             padding: '8px 12px'
           }}>
@@ -879,15 +880,13 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     )
   }
 
-  const headerDefs = ['Status', 'Name', 'Duration', 'Start Time']
-  const headers = headerDefs.map((label, i) => ({
-    label,
-    ...(i === 0 && { width: '100px' }),
-    ...(i === 2 && { width: '120px' }),
-    ...(i === 3 && { width: '110px' }),
-    isSortable: true,
-    sortDir: mainSortColumn === i ? mainSortDir : undefined as any,
-  }))
+  const minimalCol = { style: { whiteSpace: 'nowrap' as const, width: '1px' } }
+  const headers = [
+    { label: 'Status',     ...minimalCol, isSortable: true, sortDir: mainSortColumn === 0 ? mainSortDir : undefined as any },
+    { label: 'Name',                      isSortable: true, sortDir: mainSortColumn === 1 ? mainSortDir : undefined as any },
+    { label: 'Duration',   ...minimalCol, isSortable: true, sortDir: mainSortColumn === 2 ? mainSortDir : undefined as any },
+    { label: 'Start Time', ...minimalCol, isSortable: true, sortDir: mainSortColumn === 3 ? mainSortDir : undefined as any },
+  ]
 
   const sortedResults = data?.results ? (() => {
     if (mainSortColumn !== null) {
@@ -913,7 +912,8 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     // Only available if max_N > 0 OR status is success/failure/error
     const maxNameIndex = nameParams.length - 1
     const isClickableStatus = ['success', 'failure', 'error'].includes(result.status.toLowerCase())
-    const shouldBeClickable = maxNameIndex > 0 || isClickableStatus
+    const hasSubResults = result.results === undefined || result.results.length > 0
+    const shouldBeClickable = (maxNameIndex > 0 || isClickableStatus) && hasSubResults
 
     const navigateUrl = shouldBeClickable ? buildUrlWithNewName(result.name) : undefined
 
@@ -932,10 +932,10 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     return {
       id: index,
       items: [
-        { label: wrapWithPopover(getStatusBadge(result.status), result, navigateUrl), align: 'center' as const },
-        { label: nameCell, align: 'left' as const },
-        { label: getJobDuration(result), align: 'center' as const },
-        { label: formatTime(result.start_time), align: 'center' as const },
+        { label: wrapWithPopover(getStatusBadge(result.status), result, navigateUrl, [], 'center'), style: { whiteSpace: 'nowrap' } },
+        { label: nameCell },
+        { label: getJobDuration(result), style: { whiteSpace: 'nowrap' } },
+        { label: formatTime(result.start_time), style: { whiteSpace: 'nowrap' } },
       ],
     }
   }) || []
@@ -1255,6 +1255,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                 loading={loading}
                 mobileLayout="scroll"
                 onSort={handleMainSort}
+                style={{ tableLayout: 'auto' }}
               />
             </div>
           )}

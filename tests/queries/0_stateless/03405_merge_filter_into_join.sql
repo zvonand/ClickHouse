@@ -1,5 +1,3 @@
-SET max_bytes_before_external_join = 0; -- Remove once spilling hash join is enabled by default
-
 CREATE TABLE users (uid Int16, name String, age Int16) ENGINE=MergeTree ORDER BY tuple();
 
 INSERT INTO users VALUES (1231, 'John', 33);

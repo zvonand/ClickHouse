@@ -236,24 +236,33 @@ void SettingsConstraints::clamp(const Settings & current_settings, SettingsChang
 
 void SettingsConstraints::checkOrClamp(const Settings & current_settings, SettingsChanges & changes, ReactionOnViolation reaction, SettingSource source) const
 {
-    /// When `compatibility` is present, keep all settings (even if they match current values). This ensures they're applied
-    /// and marked as `changed`, preventing `compatibility` from overriding explicit user values with its own defaults.
-    if (changes.tryGet("compatibility") == nullptr)
-        std::erase_if(changes, [&](SettingChange & change) { return !checkImpl(current_settings, change, reaction, source); });
-    else
-        for (auto & change : changes)
-            checkImpl(current_settings, change, reaction, source);
+    /// Normally, settings whose value already matches the server default are filtered out as no-ops. 
+    /// But `compatibility` is applied later and retroactively changes defaults (e.g. `compatibility='23.8'` resets `enable_analyzer` to 0). 
+    /// If we erase `enable_analyzer=1` here because it matches the current default, `compatibility` will silently override it. 
+    /// The user asked for analyzer=1 but gets 0.
+    ///
+    /// Thus, when `compatibility` is present, we keep unchanged settings so they get marked as explicitly `changed` and take precedence. 
+    /// Genuinely rejected settings (unknown names, cast failures, constraint violations) are still erased.
+    bool has_compatibility = changes.tryGet("compatibility") != nullptr;
+    std::erase_if(changes, [&](SettingChange & change)
+    {
+        return !checkImpl(current_settings, change, reaction, source, /*keep_if_unchanged=*/has_compatibility);
+    });
 }
 
 template <typename SettingsT>
-bool getNewValueToCheck(const SettingsT & current_settings, SettingChange & change, Field & new_value, bool throw_on_failure)
+bool getNewValueToCheck(const SettingsT & current_settings, SettingChange & change, Field & new_value, bool throw_on_failure, bool * value_unchanged = nullptr)
 {
     Field current_value;
     bool has_current_value = current_settings.tryGet(change.name, current_value);
 
     /// Setting isn't checked if value has not changed.
     if (has_current_value && change.value == current_value)
+    {
+        if (value_unchanged)
+            *value_unchanged = true;
         return false;
+    }
 
     if (throw_on_failure)
         new_value = SettingsT::castValueUtil(change.name, change.value);
@@ -271,7 +280,11 @@ bool getNewValueToCheck(const SettingsT & current_settings, SettingChange & chan
 
     /// Setting isn't checked if value has not changed.
     if (has_current_value && new_value == current_value)
+    {
+        if (value_unchanged)
+            *value_unchanged = true;
         return false;
+    }
 
     return true;
 }
@@ -279,7 +292,8 @@ bool getNewValueToCheck(const SettingsT & current_settings, SettingChange & chan
 bool SettingsConstraints::checkImpl(const Settings & current_settings,
                                     SettingChange & change,
                                     ReactionOnViolation reaction,
-                                    SettingSource source) const
+                                    SettingSource source,
+                                    bool keep_if_unchanged) const
 {
     std::string_view setting_name = Settings::resolveName(change.name);
 
@@ -307,9 +321,12 @@ bool SettingsConstraints::checkImpl(const Settings & current_settings,
     else if (!access_control->isSettingNameAllowed(setting_name))
         return false;
 
+    /// `getNewValueToCheck` returns false either because the value is unchanged (no-op) or because the cast failed.
+    /// `value_unchanged` disambiguates: true means unchanged, false means the setting itself is broken.
     Field new_value;
-    if (!getNewValueToCheck(current_settings, change, new_value, reaction == THROW_ON_VIOLATION))
-        return false;
+    bool value_unchanged = false;
+    if (!getNewValueToCheck(current_settings, change, new_value, reaction == THROW_ON_VIOLATION, &value_unchanged))
+        return keep_if_unchanged && value_unchanged;
 
     return getChecker(current_settings, setting_name).check(change, new_value, reaction, source);
 }

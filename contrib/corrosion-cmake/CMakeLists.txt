@@ -173,6 +173,17 @@ message(STATUS "RUST_CARGO_BUILD_STD: ${RUST_CARGO_BUILD_STD}")
 
 set(RUST_VENDOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../rust_vendor")
 
+# Sanitizer instrumentation combined with opt-level=3 and the default codegen-units=16
+# causes LLVM to use too much memory while compiling large crates like cranelift-codegen
+# and polyglot-sql (with all-dialects). Set opt-level and codegen-units via the Cargo
+# profile so that there is no conflict with the default profile flags.
+if (NOT SANITIZE STREQUAL "")
+    set(RUST_RELEASE_PROFILE_EXTRA "opt-level = 0
+codegen-units = 4")
+else()
+    set(RUST_RELEASE_PROFILE_EXTRA "")
+endif()
+
 # We now prepare a custom config.toml with all the flags and add it to cargo via flags
 configure_file("config.toml.in" "config.toml" @ONLY)
 set(RUST_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/config.toml" CACHE INTERNAL "Rust config")

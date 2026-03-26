@@ -284,7 +284,7 @@ static SQLSet commandGetPrimaryKeys(const arrow::flight::protocol::sql::CommandG
 
         for (size_t i = 0; i < num_rows; ++i)
         {
-            auto expressions = splitExpressionList(pk_col->getDataAt(i).toView());
+            auto expressions = splitExpressionList(pk_col->getDataAt(i));
 
             Int32 key_seq = 1;
             for (const auto & expr : expressions)

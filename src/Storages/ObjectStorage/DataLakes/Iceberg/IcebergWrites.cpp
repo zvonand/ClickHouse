@@ -1031,7 +1031,7 @@ bool IcebergStorageSink::initializeMetadata()
                     hint_path,
                     object_storage,
                     context,
-                    CompressionMethod::None,
+                    metadata_info.compression_method,
                     data_lake_settings[DataLakeStorageSetting::iceberg_use_version_hint]))
             {
                 LOG_DEBUG(log, "Failed to write metadata {}, retrying", metadata_info.path);

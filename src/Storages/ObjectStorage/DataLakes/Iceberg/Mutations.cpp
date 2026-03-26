@@ -510,7 +510,7 @@ static bool writeMetadataFiles(
                     hint_path,
                     object_storage,
                     context,
-                    CompressionMethod::None,
+                    metadata_info.compression_method,
                     data_lake_settings[DataLakeStorageSetting::iceberg_use_version_hint]))
             {
                 cleanup();
@@ -737,7 +737,7 @@ void alter(
                 hint_path,
                 object_storage,
                 context,
-                CompressionMethod::None,
+                metadata_info.compression_method,
                 data_lake_settings[DataLakeStorageSetting::iceberg_use_version_hint]))
             break;
     }
@@ -1385,7 +1385,7 @@ ExpireSnapshotsResult expireSnapshots(
                 hint_path,
                 object_storage,
                 context,
-                CompressionMethod::None,
+                metadata_info.compression_method,
                 data_lake_settings[DataLakeStorageSetting::iceberg_use_version_hint]))
         {
             LOG_WARNING(log, "Metadata commit conflict during expire_snapshots, retrying ({} retries left)", max_retries);

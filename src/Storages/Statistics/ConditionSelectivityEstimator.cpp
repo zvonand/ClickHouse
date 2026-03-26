@@ -279,7 +279,19 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
                 if (column_desc)
                     column_type = removeLowCardinalityAndNullable(column_desc->type);
                 else
-                    return false; /// Not a real column (e.g. a function expression like toDecimal64(a, 3)); skip.
+                {
+                    /// Not a real column (e.g. a function expression like lower(col) or toDecimal64(col, 3)).
+                    /// Skip range analysis to avoid bad cast when merging ranges of incompatible Field types.
+                    /// Pre-set selectivity based on the function type so prewhere ordering is still reasonable.
+                    if (func_name == "equals" || func_name == "in")
+                        out.selectivity = default_cond_equal_factor;
+                    else if (func_name == "notEquals" || func_name == "notIn")
+                        out.selectivity = 1.0 - default_cond_equal_factor;
+                    else /// less, greater, lessOrEquals, greaterOrEquals
+                        out.selectivity = default_cond_range_factor;
+                    out.finalized = true;
+                    return false;
+                }
             }
             /// In some cases we need to cast the type of const
             bool cast_not_needed = !column_type || !const_type ||

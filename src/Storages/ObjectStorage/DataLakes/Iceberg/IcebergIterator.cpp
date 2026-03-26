@@ -132,7 +132,7 @@ std::span<const ProcessedManifestFileEntryPtr> defineDeletesSpan(
             "delete object info is {}",
             std::distance(beg_it, end_it),
             is_equality_delete ? "equality" : "position",
-            data_object_->absolute_file_path,
+            data_object_->parsed_entry->file_path_key,
             data_object_->dumpDeletesMatchingInfo(),
             (*beg_it)->dumpDeletesMatchingInfo(),
             (*previous_it)->dumpDeletesMatchingInfo());
@@ -143,7 +143,7 @@ std::span<const ProcessedManifestFileEntryPtr> defineDeletesSpan(
             logger,
             "No {} delete elements for data file {}, taken data file object info: {}",
             is_equality_delete ? "equality" : "position",
-            data_object_->absolute_file_path,
+            data_object_->parsed_entry->file_path_key,
             data_object_->dumpDeletesMatchingInfo());
     }
     return {beg_it, end_it};
@@ -174,8 +174,8 @@ std::optional<ProcessedManifestFileEntryPtr> SingleThreadIcebergKeysIterator::ne
         /// Find the next manifest file with matching content type.
         while (manifest_file_index < data_snapshot->manifest_list_entries.size())
         {
-            const auto & mle = data_snapshot->manifest_list_entries[manifest_file_index++];
-            if (mle.content_type != manifest_file_content_type)
+            const auto & manifest_list_entry = data_snapshot->manifest_list_entries[manifest_file_index++];
+            if (manifest_list_entry.content_type != manifest_file_content_type)
                 continue;
 
             auto manifest_file_cacheable_part = Iceberg::getManifestFile(
@@ -183,21 +183,19 @@ std::optional<ProcessedManifestFileEntryPtr> SingleThreadIcebergKeysIterator::ne
                 persistent_components,
                 local_context,
                 log,
-                mle.manifest_file_absolute_path,
-                mle.manifest_file_byte_size,
+                manifest_list_entry.manifest_file_path,
+                manifest_list_entry.manifest_file_byte_size,
                 *secondary_storages);
 
             current_manifest_file_iterator = Iceberg::ManifestFileIterator::create(
                 manifest_file_cacheable_part.deserializer,
-                mle.manifest_file_absolute_path,
+                manifest_list_entry.manifest_file_path,
                 persistent_components.format_version,
-                persistent_components.table_path,
+                persistent_components.path_resolver,
                 *persistent_components.schema_processor,
-                mle.added_sequence_number,
-                mle.added_snapshot_id,
-                persistent_components.table_location,
+                manifest_list_entry.added_sequence_number,
+                manifest_list_entry.added_snapshot_id,
                 local_context,
-                mle.manifest_file_absolute_path,
                 filter_dag,
                 table_snapshot->schema_id);
             break;
@@ -339,22 +337,25 @@ ObjectInfoPtr IcebergIterator::next(size_t)
     Iceberg::ProcessedManifestFileEntryPtr manifest_file_entry;
     if (blocking_queue.pop(manifest_file_entry))
     {
+        const auto & raw_metadata_path = manifest_file_entry->parsed_entry->file_path_key.serialize();
         auto [storage_to_use, resolved_key] = resolveObjectStorageForPath(
-            persistent_components.table_location, manifest_file_entry->absolute_file_path, object_storage, *secondary_storages, local_context);
+            persistent_components.table_location, raw_metadata_path,
+            object_storage, *secondary_storages, local_context);
 
         IcebergDataObjectInfoPtr object_info = std::make_shared<IcebergDataObjectInfo>(
-            manifest_file_entry, table_state_snapshot->schema_id, storage_to_use, resolved_key);
+            manifest_file_entry, raw_metadata_path, table_state_snapshot->schema_id, storage_to_use, resolved_key);
 
         object_info->info.requires_external_storage = (storage_to_use != object_storage);
 
         for (const auto & position_delete :
              defineDeletesSpan(manifest_file_entry, position_deletes_files, /* is_equality_delete */ false, logger))
         {
-            const auto & data_file_path = object_info->info.data_object_file_path_from_metadata;
+            const auto & data_file_path = object_info->info.data_object_file_path_key;
             const auto & lower = position_delete->parsed_entry->lower_reference_data_file_path;
             const auto & upper = position_delete->parsed_entry->upper_reference_data_file_path;
             bool can_contain_data_file_deletes
-                = (!lower.has_value() || lower.value() <= data_file_path) && (!upper.has_value() || upper.value() >= data_file_path);
+                = (!lower.has_value() || *lower <= data_file_path)
+                && (!upper.has_value() || *upper >= data_file_path);
             /// Skip position deletes that do not match the data file path.
             if (!can_contain_data_file_deletes)
             {
@@ -364,10 +365,10 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                     "Skipping position delete file `{}` for data file `{}` because position delete has out of bounds reference data file "
                     "bounds: "
                     "(lower bound: `{}`, upper bound: `{}`)",
-                    position_delete->absolute_file_path,
+                    position_delete->parsed_entry->file_path_key,
                     data_file_path,
-                    lower.value_or("[no lower bound]"),
-                    upper.value_or("[no upper bound]"));
+                    lower.has_value() ? lower->serialize() : "[no lower bound]",
+                    upper.has_value() ? upper->serialize() : "[no upper bound]");
             }
             else
             {
@@ -376,11 +377,12 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                     logger,
                     "Processing position delete file `{}` for data file `{}` with reference data file bounds: "
                     "(lower bound: `{}`, upper bound: `{}`)",
-                    position_delete->absolute_file_path,
+                    position_delete->parsed_entry->file_path_key,
                     data_file_path,
-                    lower.value_or("[no lower bound]"),
-                    upper.value_or("[no upper bound]"));
-                object_info->addPositionDeleteObject(position_delete);
+                    lower.has_value() ? lower->serialize() : "[no lower bound]",
+                    upper.has_value() ? upper->serialize() : "[no upper bound]");
+                object_info->addPositionDeleteObject(
+                    position_delete, position_delete->parsed_entry->file_path_key.serialize());
             }
         }
 
@@ -390,13 +392,14 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                 logger,
                 "Finally got {} position delete elements for data file {}",
                 object_info->info.position_deletes_objects.size(),
-                object_info->info.data_object_file_path_from_metadata);
+                object_info->info.data_object_file_path_key);
         }
 
         for (const auto & equality_delete :
              defineDeletesSpan(manifest_file_entry, equality_deletes_files, /* is_equality_delete */ true, logger))
         {
-            object_info->addEqualityDeleteObject(equality_delete);
+            object_info->addEqualityDeleteObject(
+                equality_delete, equality_delete->parsed_entry->file_path_key.serialize());
         }
 
         if (!object_info->info.equality_deletes_objects.empty())
@@ -405,7 +408,7 @@ ObjectInfoPtr IcebergIterator::next(size_t)
                 logger,
                 "Finally got {} equality delete elements for data file {}",
                 object_info->info.equality_deletes_objects.size(),
-                object_info->info.data_object_file_path_from_metadata);
+                object_info->info.data_object_file_path_key);
         }
 
         if (!object_info->info.requires_external_storage)

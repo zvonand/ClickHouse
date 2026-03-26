@@ -38,11 +38,11 @@ extern const SettingsBool use_roaring_bitmap_iceberg_positional_deletes;
 #if USE_AVRO
 
 IcebergDataObjectInfo::IcebergDataObjectInfo(
-    Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_, Int32 schema_id_relevant_to_iterator_, ObjectStoragePtr resolved_storage_, const String & resolved_key_)
-    : ObjectInfo(RelativePathWithMetadata(resolved_key_.empty() ? data_manifest_file_entry_->absolute_file_path : resolved_key_))
+    Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_, const String & resolved_storage_path_, Int32 schema_id_relevant_to_iterator_, ObjectStoragePtr resolved_storage_, const String & resolved_key_)
+    : ObjectInfo(RelativePathWithMetadata(resolved_key_.empty() ? resolved_storage_path_ : resolved_key_))
     , info{
-          data_manifest_file_entry_->parsed_entry->file_path_from_metadata,
-          data_manifest_file_entry_->absolute_file_path,
+          data_manifest_file_entry_->parsed_entry->file_path_key,
+          resolved_storage_path_,
           data_manifest_file_entry_->resolved_schema_id,
           schema_id_relevant_to_iterator_,
           data_manifest_file_entry_->sequence_number,
@@ -77,7 +77,7 @@ std::shared_ptr<ISimpleTransform> IcebergDataObjectInfo::getPositionDeleteTransf
         return std::make_shared<IcebergBitmapPositionDeleteTransform>(header, self, object_storage, format_settings, parser_shared_resources, context_, table_location, secondary_storages);
 }
 
-void IcebergDataObjectInfo::addPositionDeleteObject(Iceberg::ProcessedManifestFileEntryPtr position_delete_object)
+void IcebergDataObjectInfo::addPositionDeleteObject(Iceberg::ProcessedManifestFileEntryPtr position_delete_object, const String & resolved_storage_path)
 {
     if (Poco::toUpper(info.file_format) != "PARQUET")
     {
@@ -87,13 +87,13 @@ void IcebergDataObjectInfo::addPositionDeleteObject(Iceberg::ProcessedManifestFi
             info.file_format);
     }
     info.position_deletes_objects.emplace_back(
-        position_delete_object->absolute_file_path, position_delete_object->parsed_entry->file_format, std::nullopt);
+        resolved_storage_path, position_delete_object->parsed_entry->file_format, std::nullopt);
 }
 
-void IcebergDataObjectInfo::addEqualityDeleteObject(const Iceberg::ProcessedManifestFileEntryPtr & equality_delete_object)
+void IcebergDataObjectInfo::addEqualityDeleteObject(const Iceberg::ProcessedManifestFileEntryPtr & equality_delete_object, const String & resolved_storage_path)
 {
     info.equality_deletes_objects.emplace_back(
-        equality_delete_object->absolute_file_path,
+        resolved_storage_path,
         equality_delete_object->parsed_entry->file_format,
         equality_delete_object->parsed_entry->equality_ids,
         equality_delete_object->resolved_schema_id);
@@ -105,8 +105,6 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
 {
     checkVersion(protocol_version);
 
-    /// If the absolute path was resolved to a location outside the table location,
-    /// so workers using older version will silently try to open the wrong file.
     if (requires_external_storage && protocol_version < DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {
         throw Exception(
@@ -118,7 +116,6 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
             protocol_version);
     }
 
-    /// Transform paths for old workers to just contain a key in storage: strip the scheme and authority, leave a key in storage.
     auto path_for_protocol = [&](const String & path) -> String
     {
         if (protocol_version < DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
@@ -126,7 +123,7 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
         return path;
     };
 
-    writeStringBinary(data_object_file_path_from_metadata, out);
+    writeStringBinary(data_object_file_path_key.serialize(), out);
     if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {
         writeStringBinary(data_object_file_absolute_path, out);
@@ -179,7 +176,11 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
 void IcebergObjectSerializableInfo::deserializeForClusterFunctionProtocol(ReadBuffer & in, size_t protocol_version)
 {
     checkVersion(protocol_version);
-    readStringBinary(data_object_file_path_from_metadata, in);
+    {
+        String raw_path;
+        readStringBinary(raw_path, in);
+        data_object_file_path_key = IcebergPathFromMetadata::deserialize(std::move(raw_path));
+    }
     if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {
         readStringBinary(data_object_file_absolute_path, in);

@@ -29,7 +29,7 @@ Iceberg::ManifestFileCacheableInfo getManifestFile(
     const PersistentTableComponents & persistent_table_components,
     ContextPtr local_context,
     LoggerPtr log,
-    const String & absolute_path,
+    const IcebergPathFromMetadata & filename,
     size_t bytes_size,
     SecondaryStorages & secondary_storages);
 
@@ -50,7 +50,7 @@ ManifestFileCacheKeys getManifestList(
     ObjectStoragePtr object_storage,
     const PersistentTableComponents & persistent_table_components,
     ContextPtr local_context,
-    const String & absolute_path,
+    const IcebergPathFromMetadata & filename,
     LoggerPtr log,
     SecondaryStorages & secondary_storages);
 

@@ -99,7 +99,7 @@ public:
     IHTTPConnectionPoolForEndpoint::Ptr getPool(HTTPConnectionGroupType type, const Poco::URI & uri, const ProxyConfiguration & proxy_configuration);
 
     /// Collect socket inodes of all tracked HTTP connections, grouped by pool type.
-    /// Inodes are resolved via fstat while the connection pool lock is held, so they are always valid.
+    /// Inodes are cached snapshots updated on connect, reconnect, and keep-alive store.
     PoolSocketInodes getSocketInodes();
 
 private:

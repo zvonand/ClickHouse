@@ -3967,7 +3967,7 @@ message ClearColumnInPartition {
 
 message FreezePartition {
     optional SinglePartitionExpr single_partition = 1;
-    required uint32 fname = 2;
+    required string fname = 2;
 }
 
 message ClearIndexInPartition {
@@ -4230,7 +4230,7 @@ message SystemCommand {
         SQLIdentifier restore_database_replica = 81;
         ExprSchemaTable stop_replicated_view = 82;
         ExprSchemaTable start_replicated_view = 83;
-        uint32 unfreeze = 84;
+        string unfreeze = 84;
         DropReplica drop_replica = 85;
         DropDatabaseReplica drop_database_replica = 86;
         ExprSchemaTable stop_cleanup = 87;

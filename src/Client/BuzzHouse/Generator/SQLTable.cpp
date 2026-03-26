@@ -1991,13 +1991,13 @@ void StatementGenerator::addTableProjection(RandomGenerator & rg, SQLTable & t, 
 
 void StatementGenerator::addTableConstraint(RandomGenerator & rg, SQLTable & t, const bool staged, ConstraintDef * cdef)
 {
-    const uint32_t crname = t.constr_counter++;
+    const String crname = rg.nextIdentifier("c", t.constr_counter++, fc.allow_nasty_identifiers);
     auto & to_add = staged ? t.staged_constrs : t.constrs;
     const bool prev_allow_in_expression_alias = this->allow_in_expression_alias;
     std::uniform_int_distribution<uint32_t> constr_range(1, static_cast<uint32_t>(ConstraintDef::ConstraintType_MAX));
 
     cdef->set_ctype(static_cast<ConstraintDef_ConstraintType>(constr_range(rg.generator)));
-    cdef->mutable_constr()->set_value("c" + std::to_string(crname));
+    cdef->mutable_constr()->set_value(crname);
     if (!t.cols.empty())
     {
         addTableRelation(rg, rg.nextSmallNumber() < 2, "", t);
@@ -2008,7 +2008,7 @@ void StatementGenerator::addTableConstraint(RandomGenerator & rg, SQLTable & t, 
     this->generateWherePredicate(rg, cdef->mutable_expr());
     this->allow_in_expression_alias = prev_allow_in_expression_alias;
     this->levels.clear();
-    to_add.insert(crname);
+    to_add.insert(std::move(crname));
 }
 
 void StatementGenerator::getNextPeerTableDatabase(RandomGenerator & rg, SQLBase & b)

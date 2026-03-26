@@ -1999,7 +1999,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
             {2 * static_cast<uint32_t>(no_oracle && t.constrs.size() < 4),
              [&] { addTableConstraint(rg, t, true, ati->mutable_add_constraint()); }},
             {2 * static_cast<uint32_t>(no_oracle && has_constrs),
-             [&] { ati->mutable_remove_constraint()->set_value("c" + std::to_string(rg.pickRandomly(t.constrs))); }},
+             [&] { ati->mutable_remove_constraint()->set_value(rg.pickRandomly(t.constrs)); }},
             /// Partition operations
             {5 * static_cast<uint32_t>(no_oracle && is_mt),
              [&]
@@ -2048,14 +2048,14 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  if (rg.nextSmallNumber() < 9)
                      generateNextTablePartition(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, fp->mutable_single_partition()->mutable_partition());
-                 fp->set_fname(freeze_counter++);
+                 fp->set_fname(rg.nextIdentifier("f", freeze_counter++, fc.allow_nasty_identifiers));
              }},
             {7 * static_cast<uint32_t>(!t.frozen_partitions.empty()),
              [&]
              {
                  FreezePartition * fp = ati->mutable_unfreeze_partition();
-                 const uint32_t fname = rg.pickRandomly(t.frozen_partitions);
-                 const String & partition_id = t.frozen_partitions[fname];
+                 const String fname = rg.pickRandomly(t.frozen_partitions);
+                 const String & partition_id = t.frozen_partitions.at(fname);
                  if (!partition_id.empty())
                      fp->mutable_single_partition()->mutable_partition()->set_partition_id(partition_id);
                  fp->set_fname(fname);
@@ -2602,12 +2602,7 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
          [&] { cluster = setTableSystemStatement<SQLView>(rg, has_refreshable_view_func, sc->mutable_stop_replicated_view()); }},
         {8 * has_refreshable_view,
          [&] { cluster = setTableSystemStatement<SQLView>(rg, has_refreshable_view_func, sc->mutable_start_replicated_view()); }},
-        {3 * static_cast<uint32_t>(freeze_counter > 0),
-         [&]
-         {
-             chassert(freeze_counter > 0);
-             sc->set_unfreeze(rg.randomInt<uint32_t>(0, freeze_counter - 1));
-         }},
+        {3 * static_cast<uint32_t>(!freeze_names.empty()), [&] { sc->set_unfreeze(rg.pickRandomly(freeze_names)); }},
         {3 * has_replicated_table,
          [&]
          {
@@ -3927,7 +3922,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 }
                 else if (ati.has_add_constraint())
                 {
-                    const uint32_t pname = static_cast<uint32_t>(std::stoul(ati.add_constraint().constr().value().substr(1)));
+                    const String & pname = ati.add_constraint().constr().value();
 
                     if (success)
                     {
@@ -3937,15 +3932,14 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 }
                 else if (ati.has_remove_constraint() && success)
                 {
-                    const uint32_t pname = static_cast<uint32_t>(std::stoul(ati.remove_constraint().value().substr(1)));
-
-                    t.constrs.erase(pname);
+                    t.constrs.erase(ati.remove_constraint().value());
                 }
                 else if (ati.has_freeze_partition() && success)
                 {
                     const FreezePartition & fp = ati.freeze_partition();
 
                     t.frozen_partitions[fp.fname()] = fp.has_single_partition() ? fp.single_partition().partition().partition_id() : "";
+                    freeze_names.push_back(fp.fname());
                 }
                 else if (ati.has_unfreeze_partition() && success)
                 {

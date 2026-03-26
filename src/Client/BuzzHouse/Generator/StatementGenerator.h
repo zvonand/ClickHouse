@@ -192,6 +192,7 @@ private:
     uint32_t aliases_counter = 0;
     uint32_t id_counter = 0;
     uint32_t freeze_counter = 0;
+    std::vector<String> freeze_names;
 
     std::unordered_map<String, std::shared_ptr<SQLDatabase>> staged_databases;
     std::unordered_map<String, std::shared_ptr<SQLDatabase>> databases;

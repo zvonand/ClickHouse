@@ -4813,9 +4813,8 @@ CONV_FN(AlterItem, alter)
                 ret += " ";
                 SinglePartitionExprToString(ret, alter.freeze_partition().single_partition());
             }
-            ret += " WITH NAME 'f";
-            ret += std::to_string(alter.freeze_partition().fname());
-            ret += "'";
+            ret += " WITH NAME ";
+            appendSQLStringLiteral(ret, alter.freeze_partition().fname());
             break;
         case AlterType::kUnfreezePartition:
             ret += "UNFREEZE";
@@ -4824,9 +4823,8 @@ CONV_FN(AlterItem, alter)
                 ret += " ";
                 SinglePartitionExprToString(ret, alter.unfreeze_partition().single_partition());
             }
-            ret += " WITH NAME 'f";
-            ret += std::to_string(alter.unfreeze_partition().fname());
-            ret += "'";
+            ret += " WITH NAME ";
+            appendSQLStringLiteral(ret, alter.unfreeze_partition().fname());
             break;
         case AlterType::kMovePartition:
             ret += "MOVE ";
@@ -5383,9 +5381,8 @@ CONV_FN(SystemCommand, cmd)
             ExprSchemaTableToString(ret, cmd.start_replicated_view());
             break;
         case CmdType::kUnfreeze:
-            ret += "UNFREEZE WITH NAME 'f";
-            ret += std::to_string(cmd.unfreeze());
-            ret += "'";
+            ret += "UNFREEZE WITH NAME ";
+            appendSQLStringLiteral(ret, cmd.unfreeze());
             break;
         case CmdType::kDropReplica:
             ret += "DROP REPLICA ";

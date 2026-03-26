@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest, no-random-settings, no-replicated-database, no-parallel
+# Tags: no-fasttest, no-random-settings, no-replicated-database, no-flaky-check, no-parallel
 # no-fasttest: the `tpch` database is not created in fasttest.
 # no-replicated-database: the `tpch` database is not created in DatabaseReplicated mode.
 # no-random-settings: these tests verify correctness, not behavior under random settings that may cause memory issues.
+# no-flaky-check: TPC-H queries are too expensive for thread fuzzer.
 # no-parallel: the query creates and drops a view in the shared `tpch` database.
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

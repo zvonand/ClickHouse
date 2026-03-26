@@ -504,7 +504,7 @@ class Runner:
         return exit_code
 
     def _post_run(
-        self, workflow, job, setup_env_exit_code, prerun_exit_code, run_exit_code
+        self, workflow, job, setup_env_exit_code, prerun_exit_code, run_exit_code,
     ):
         info_errors = []
         env = _Environment.get()
@@ -566,19 +566,6 @@ class Runner:
 
         result.update_duration()
         result.set_files([Settings.RUN_LOG])
-
-        if job.post_hooks:
-            sw_ = Utils.Stopwatch()
-            results_ = []
-            for check in job.post_hooks:
-                if callable(check):
-                    name = check.__name__
-                else:
-                    name = str(check)
-                results_.append(Result.from_commands_run(name=name, command=check))
-            result.results.append(
-                Result.create_from(name="Post Hooks", results=results_, stopwatch=sw_)
-            )
 
         is_final_job = job.name == Settings.FINISH_WORKFLOW_JOB_NAME
         is_initial_job = job.name == Settings.CI_CONFIG_JOB_NAME
@@ -886,6 +873,7 @@ class Runner:
         job,
         docker="",
         local_run=False,
+        run_hooks=True,
         no_docker=False,
         param=None,
         test="",
@@ -939,6 +927,19 @@ class Runner:
                 Info().store_traceback()
             print(f"=== Pre run finished ===\n\n")
 
+        prehook_result = None
+        if res and run_hooks and job.pre_hooks:
+            print(f"=== Pre-hooks [{job.name}], workflow [{workflow.name}] ===")
+            sw_ = Utils.Stopwatch()
+            results_ = []
+            for check in job.pre_hooks:
+                if callable(check):
+                    name = check.__name__
+                else:
+                    name = str(check)
+                results_.append(Result.from_commands_run(name=name, command=check))
+            prehook_result = Result.create_from(name="Pre Hooks", results=results_, stopwatch=sw_)
+
         if res:
             print(f"=== Run script [{job.name}], workflow [{workflow.name}] ===")
             run_code = None
@@ -981,6 +982,27 @@ class Runner:
             )
             res = res and post_res
             print(f"=== Post run script finished ===")
+
+        if run_hooks:
+            result = Result.from_fs(job.name)
+            if job.post_hooks:
+                print(f"=== Post hooks [{job.name}], workflow [{workflow.name}] ===")
+                sw_ = Utils.Stopwatch()
+                results_ = []
+                for check in job.post_hooks:
+                    if callable(check):
+                        name = check.__name__
+                    else:
+                        name = str(check)
+                    results_.append(Result.from_commands_run(name=name, command=check))
+                result.results.append(
+                    Result.create_from(name="Post Hooks", results=results_, stopwatch=sw_)
+                )
+                print(f"=== Post hooks [{job.name}], workflow [{workflow.name}] ===")
+
+            if prehook_result:
+                result.results.append(prehook_result)
+            result.dump()
 
         if not res:
             sys.exit(1)

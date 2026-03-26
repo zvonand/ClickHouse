@@ -13,16 +13,16 @@ from helpers.iceberg_utils import (
 from helpers.config_cluster import minio_secret_key
 
 
-def parse_logged_file_stats(instance, query_id):
+def parse_logged_file_stats(instance, query_ids):
     """
-    Parse Iceberg file stats from server log, filtering by query_id.
+    Parse Iceberg file stats from server log, filtering by any of the given query_ids.
     Returns dict: {file_path: {"record_count": int, "file_size_in_bytes": int}}
     """
     stats = {}
 
     record_count_logs = instance.grep_in_log("Iceberg record_count for")
     for log_line in record_count_logs.splitlines():
-        if query_id not in log_line:
+        if not any(qid in log_line for qid in query_ids):
             continue
         match = re.search(r"Iceberg record_count for '([^']+)': (\d+)", log_line)
         if match:
@@ -31,7 +31,7 @@ def parse_logged_file_stats(instance, query_id):
 
     file_size_logs = instance.grep_in_log("Iceberg file_size_in_bytes for")
     for log_line in file_size_logs.splitlines():
-        if query_id not in log_line:
+        if not any(qid in log_line for qid in query_ids):
             continue
         match = re.search(
             r"Iceberg file_size_in_bytes for '([^']+)': (\d+)", log_line
@@ -101,10 +101,23 @@ def test_iceberg_file_stats_logging(
     )
     assert len(result.strip().split("\n")) == NUM_ROWS
 
-    # Collect file stats from all nodes, filtered by query_id
+    # Collect all query_ids related to this query across all nodes
+    # (in cluster mode, worker nodes get their own query_id but share initial_query_id)
+    all_query_ids = {query_id}
+    for node_name, node_instance in started_cluster_iceberg_with_spark.instances.items():
+        node_instance.query("SYSTEM FLUSH LOGS")
+        related_ids = node_instance.query(
+            f"SELECT query_id FROM system.query_log WHERE initial_query_id = '{query_id}'"
+        ).strip()
+        for qid in related_ids.splitlines():
+            if qid:
+                all_query_ids.add(qid)
+    logging.info(f"All related query_ids: {all_query_ids}")
+
+    # Collect file stats from all nodes, filtered by any related query_id
     all_stats = {}
     for node_name, node_instance in started_cluster_iceberg_with_spark.instances.items():
-        node_stats = parse_logged_file_stats(node_instance, query_id)
+        node_stats = parse_logged_file_stats(node_instance, all_query_ids)
         logging.info(f"[{node_name}] Parsed file stats from logs: {node_stats}")
         all_stats.update(node_stats)
 

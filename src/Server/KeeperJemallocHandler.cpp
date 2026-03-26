@@ -50,8 +50,6 @@ void KeeperJemallocWebUIHandler::handleRequest(
     wb.finalize();
 }
 
-#if USE_JEMALLOC
-
 void KeeperJemallocAPIHandler::handleRequest(
     HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event &)
 try
@@ -59,17 +57,20 @@ try
     Poco::URI uri(request.getURI());
     const std::string & path = uri.getPath();
 
+    if (path == "/jemalloc/")
+    {
+        setResponseDefaultHeaders(response);
+        response.redirect("/jemalloc", Poco::Net::HTTPResponse::HTTP_MOVED_PERMANENTLY);
+        return;
+    }
+
+#if USE_JEMALLOC
     if (path == "/jemalloc/profile")
         handleProfile(request, response);
     else if (path == "/jemalloc/stats")
         handleStats(request, response);
     else if (path == "/jemalloc/status")
         handleStatus(request, response);
-    else if (path == "/jemalloc/")
-    {
-        setResponseDefaultHeaders(response);
-        response.redirect("/jemalloc", Poco::Net::HTTPResponse::HTTP_MOVED_PERMANENTLY);
-    }
     else
     {
         setResponseDefaultHeaders(response);
@@ -77,6 +78,12 @@ try
         response.setContentType("text/plain");
         *response.send() << "Not found\n";
     }
+#else
+    setResponseDefaultHeaders(response);
+    response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_NOT_IMPLEMENTED);
+    response.setContentType("text/plain");
+    *response.send() << "jemalloc profiling is not available in this build\n";
+#endif
 }
 catch (...)
 {
@@ -93,6 +100,8 @@ catch (...)
         LOG_ERROR(getLogger("KeeperJemallocAPIHandler"), "Cannot send exception to client");
     }
 }
+
+#if USE_JEMALLOC
 
 void KeeperJemallocAPIHandler::handleProfile(
     HTTPServerRequest & request, HTTPServerResponse & response)
@@ -113,6 +122,15 @@ void KeeperJemallocAPIHandler::handleProfile(
         response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
         response.setContentType("text/plain");
         *response.send() << "Unknown format: " << format << ". Supported: collapsed, raw\n";
+        return;
+    }
+
+    if (request.getMethod() == HTTPRequest::HTTP_HEAD)
+    {
+        setResponseDefaultHeaders(response);
+        response.setContentType("text/plain; charset=UTF-8");
+        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
+        response.send();
         return;
     }
 
@@ -187,8 +205,8 @@ void KeeperJemallocAPIHandler::handleStatus(
         }
         catch (...)
         {
-            tryLogCurrentException("KeeperJemallocAPIHandler", "Failed to read thread_active_init");
-            errors.add("thread.prof.active");
+            tryLogCurrentException("KeeperJemallocAPIHandler", "Failed to read prof.thread_active_init");
+            errors.add("prof.thread_active_init");
         }
     }
 

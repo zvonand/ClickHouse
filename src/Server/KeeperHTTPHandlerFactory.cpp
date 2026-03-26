@@ -21,6 +21,7 @@
 
 #include <Server/KeeperDashboardRequestHandler.h>
 #include <Server/KeeperHTTPStorageHandler.h>
+#include <Server/KeeperJemallocHandler.h>
 #include <Server/KeeperNotFoundHandler.h>
 #include <Common/ZooKeeper/ZooKeeperConstants.h>
 #include <Common/ZooKeeper/KeeperClientCLI/KeeperClient.h>
@@ -127,7 +128,6 @@ void addJemallocHandlersToFactory(KeeperHTTPRequestHandlerFactory & factory)
     factory.addPathToHints("/jemalloc");
     factory.addHandler(web_ui_handler);
 
-#if USE_JEMALLOC
     auto api_creator = []() -> std::unique_ptr<KeeperJemallocAPIHandler>
     { return std::make_unique<KeeperJemallocAPIHandler>(); };
 
@@ -135,7 +135,6 @@ void addJemallocHandlersToFactory(KeeperHTTPRequestHandlerFactory & factory)
     api_handler->attachNonStrictPath("/jemalloc/");
     api_handler->allowGetAndHeadRequest();
     factory.addHandler(api_handler);
-#endif
 }
 
 void addStorageHandlersToFactory(

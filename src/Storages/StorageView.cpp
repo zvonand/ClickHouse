@@ -37,6 +37,7 @@
 #include <Analyzer/QueryTreePassManager.h>
 #include <Analyzer/UnionNode.h>
 #include <Analyzer/QueryNode.h>
+#include <arrow/type_fwd.h>
 
 namespace DB
 {
@@ -115,18 +116,11 @@ ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage
 {
     auto view_context = storage_snapshot->metadata->getSQLSecurityOverriddenContext(context);
     Settings view_settings = view_context->getSettingsCopy();
+
     if (context->canUseParallelReplicasOnInitiator() && view_settings[Setting::parallel_replicas_allow_view_over_mergetree])
     {
-        if (auto storage = view->getUnderlyingStorage(context))
-        {
-            const bool can_apply_parallel_replicas = storage->isMergeTree()
-                && (storage->supportsReplication()
-                    || (!storage->supportsReplication() && view_settings[Setting::parallel_replicas_for_non_replicated_merge_tree]));
-            if (can_apply_parallel_replicas)
-            {
-                view_settings[Setting::allow_experimental_parallel_reading_from_replicas] = Field{0};
-            }
-        }
+        if (auto storage = view->getUnderlyingMergeTreeStorageForParallelReplicas(context))
+            view_settings[Setting::allow_experimental_parallel_reading_from_replicas] = Field{0};
     }
 
     view_settings[Setting::max_result_rows] = 0;
@@ -177,10 +171,10 @@ StorageView::StorageView(
     setInMemoryMetadata(storage_metadata);
 }
 
-/// Build and resolve the view's inner query tree, then walk the join tree
-/// to find the leftmost underlying storage. Returns nullptr if the view
-/// is too complex or resolution fails.
-StoragePtr StorageView::getUnderlyingStorage(const ContextPtr & context) const
+/// Build and resolve the view's inner query tree
+/// Then find the leftmost underlying MT storage eligible for parallel replicas.
+/// Returns nullptr if the view is too complex or resolution fails.
+StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const ContextPtr & context) const
 {
     if (isParameterizedView())
         return nullptr;
@@ -201,6 +195,7 @@ StoragePtr StorageView::getUnderlyingStorage(const ContextPtr & context) const
         return nullptr;
     }
 
+    const auto & settings = context->getSettingsRef();
     /// Walk the resolved join tree to find the leftmost leaf table.
     const IQueryTreeNode * node = inner_query_tree.get();
     while (node)
@@ -210,15 +205,16 @@ StoragePtr StorageView::getUnderlyingStorage(const ContextPtr & context) const
             case QueryTreeNodeType::QUERY:
                 node = node->as<QueryNode &>().getJoinTree().get();
                 break;
-            case QueryTreeNodeType::UNION:
-            {
-                const auto & queries = node->as<UnionNode &>().getQueries().getNodes();
-                node = queries.empty() ? nullptr : queries.front().get();
-                break;
-            }
             case QueryTreeNodeType::TABLE:
             {
                 const auto & table_node = node->as<const TableNode &>();
+                const auto & storage = table_node.getStorage();
+
+                if (!storage->isMergeTree())
+                    return nullptr;
+
+                if (!storage->supportsReplication() && !settings[Setting::parallel_replicas_for_non_replicated_merge_tree])
+                    return nullptr;
 
                 /// Parallel replicas not supported with FINAL.
                 if (table_node.hasTableExpressionModifiers() && table_node.getTableExpressionModifiers()->hasFinal())

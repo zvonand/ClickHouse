@@ -52,13 +52,11 @@ static bool canUseTableForParallelReplicas(const TableNode & table_node, const C
         const auto * view = typeid_cast<const StorageView *>(storage.get());
         if (view)
         {
-            auto underlying_storage = view->getUnderlyingStorage(context);
+            auto underlying_storage = view->getUnderlyingMergeTreeStorageForParallelReplicas(context);
             if (!underlying_storage)
                 return false;
 
             storage = underlying_storage;
-            if (!storage)
-                return false;
         }
     }
 

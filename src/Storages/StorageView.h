@@ -30,7 +30,7 @@ public:
 
     void checkAlterIsPossible(const AlterCommands & commands, ContextPtr local_context) const override;
 
-    StoragePtr getUnderlyingStorage(const ContextPtr & context) const;
+    StoragePtr getUnderlyingMergeTreeStorageForParallelReplicas(const ContextPtr & context) const;
 
     void read(
         QueryPlan & query_plan,

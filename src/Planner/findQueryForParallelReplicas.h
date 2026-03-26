@@ -1,7 +1,6 @@
 #pragma once
 #include <list>
 #include <memory>
-#include <Interpreters/Context_fwd.h>
 
 namespace DB
 {
@@ -11,9 +10,6 @@ class TableNode;
 
 class IQueryTreeNode;
 using QueryTreeNodePtr = std::shared_ptr<IQueryTreeNode>;
-
-class IStorage;
-using StoragePtr = std::shared_ptr<IStorage>;
 
 struct SelectQueryOptions;
 

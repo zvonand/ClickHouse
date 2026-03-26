@@ -1141,13 +1141,11 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                         const auto * view = typeid_cast<const StorageView *>(current_storage.get());
                         if (view)
                         {
-                            auto underlying_storage = view->getUnderlyingStorage(context);
+                            auto underlying_storage = view->getUnderlyingMergeTreeStorageForParallelReplicas(context);
                             if (!underlying_storage)
                                 return false;
 
                             table_ptr = underlying_storage.get();
-                            if (!table_ptr)
-                                return false;
                         }
                     }
 

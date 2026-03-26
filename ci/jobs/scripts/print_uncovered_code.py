@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 from ci.praktika.utils import Utils
 import re
@@ -41,6 +42,50 @@ def _is_noise(relpath: str, lineno: int) -> bool:
         return False
     text = lines[lineno - 1].strip()
     return any(p.search(text) for p in _NOISE_PATTERNS)
+
+
+def _normalize_sf(sf: str) -> str:
+    """Strip machine-specific path prefix, keeping only the repo-relative path.
+
+    Handles both CI paths (/home/ubuntu/actions-runner/_work/ClickHouse/ClickHouse/src/...)
+    and local paths (/home/user/Documents/ClickHouse/src/...) by taking everything
+    after the last occurrence of '/ClickHouse/'.
+    """
+    marker = "/ClickHouse/"
+    idx = sf.rfind(marker)
+    if idx >= 0:
+        return sf[idx + len(marker):]
+    return sf
+
+
+def _parse_info(path: str) -> dict:
+    """Parse an LCOV .info file.
+
+    Returns dict mapping normalized-relpath -> {"lines": {lineno: count}, "fns": {name: count}}.
+    """
+    data: dict = {}
+    cur: str | None = None
+    cur_rel: str | None = None
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            line = raw.strip()
+            if line.startswith("SF:"):
+                cur = line[3:]
+                cur_rel = _normalize_sf(cur)
+                data[cur_rel] = {"lines": {}, "fns": {}}
+            elif not cur_rel:
+                continue
+            elif line.startswith("DA:"):
+                parts = line[3:].split(",", 2)
+                ln, cnt = int(parts[0]), int(parts[1])
+                data[cur_rel]["lines"][ln] = cnt
+            elif line.startswith("FNDA:"):
+                rest = line[5:]
+                cnt_str, name = rest.split(",", 1)
+                data[cur_rel]["fns"][name] = int(cnt_str)
+            elif line == "end_of_record":
+                cur = cur_rel = None
+    return data
 
 
 if __name__ == "__main__":
@@ -129,25 +174,16 @@ if __name__ == "__main__":
                 else:
                     uncovered.append((active_rel, ln))
 
-    if total == 0:
-        msg = "PR changed-lines coverage: N/A (no coverable changed lines found in .info)."
-        print(msg)
-        r = Result.create_from(
-            name="Print Uncovered Code",
-            status=Result.Status.SUCCESS,
-            info=msg,
-        )
-        r.set_comment(msg)
-        r.dump()
-        sys.exit(0)
-
-    pct = 100.0 * covered / total
-
     CONTEXT = 2  # lines before/after
     MAX_PRINT = 200  # max uncovered lines to print total
 
-    msg = f"{pct:.2f}% ({covered}/{total})"
-    print(msg)
+    if total == 0:
+        msg = "N/A (no coverable changed lines)"
+        print(f"PR changed-lines coverage: {msg}")
+    else:
+        pct = 100.0 * covered / total
+        msg = f"{pct:.2f}% ({covered}/{total})"
+        print(msg)
 
     if uncovered:
         print("\nUncovered changed code (with context):\n")
@@ -198,14 +234,113 @@ if __name__ == "__main__":
     else:
         print("No uncovered changed lines found.")
 
+    # --- Lost Baseline Coverage (LBC) ---
+    # Detect lines/functions that were covered in the master baseline but are no longer
+    # covered in the current PR build.  This catches regressions introduced by test
+    # modifications that silently drop existing coverage.
+    BASELINE_INFO = f"{temp_dir}/baseline.changed.info"
+    BASELINE_REMAPPED = f"{temp_dir}/baseline_remapped.info"
+
+    lbc_lines: list[tuple[str, int]] = []     # (relpath, lineno)
+    lbc_fns: list[tuple[str, str]] = []       # (relpath, fn_name)
+
+    if os.path.exists(BASELINE_INFO):
+        # Remap baseline line numbers to the current revision so both .info files
+        # use the same line numbering.  Errors are suppressed because some hunks
+        # may not map cleanly (e.g., file was renamed or heavily restructured).
+        remap_result = subprocess.run(
+            [
+                "lcov", "--diff",
+                BASELINE_INFO, DIFF,
+                "--ignore-errors", "inconsistent,source,format",
+                "-o", BASELINE_REMAPPED,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if remap_result.returncode != 0:
+            print(
+                f"Warning: lcov --diff exited with code {remap_result.returncode}; "
+                "skipping LBC analysis.\n" + remap_result.stderr
+            )
+        elif os.path.exists(BASELINE_REMAPPED):
+            base_data = _parse_info(BASELINE_REMAPPED)
+            curr_data = _parse_info(INFO)
+
+            for rel in sorted(set(base_data) & set(curr_data)):
+                b = base_data[rel]
+                c = curr_data[rel]
+
+                for ln, bcnt in b["lines"].items():
+                    if bcnt > 0 and c["lines"].get(ln, 0) == 0:
+                        if not _is_noise(rel, ln):
+                            lbc_lines.append((rel, ln))
+
+                for fn, bcnt in b["fns"].items():
+                    if bcnt > 0 and c["fns"].get(fn, 0) == 0:
+                        lbc_fns.append((rel, fn))
+
+    if lbc_lines:
+        print(f"\n=== Lost Baseline Coverage: {len(lbc_lines)} lines ===\n")
+
+        by_file: dict[str, list[int]] = defaultdict(list)
+        for rel, ln in lbc_lines[:MAX_PRINT]:
+            by_file[rel].append(ln)
+
+        for rel in sorted(by_file.keys()):
+            lines = _load_source(rel)
+
+            print("=" * 80)
+            print(rel)
+            print("=" * 80)
+
+            if not lines:
+                abs_path = os.path.join(repo_root, rel)
+                print(f"  [source file not found: {abs_path}]")
+                continue
+
+            file_lines = sorted(set(by_file[rel]))
+            blocks = []
+            start = prev = file_lines[0]
+            for ln in file_lines[1:]:
+                if ln == prev + 1:
+                    prev = ln
+                else:
+                    blocks.append((start, prev))
+                    start = prev = ln
+            blocks.append((start, prev))
+
+            for block_start, block_end in blocks:
+                start_line = max(1, block_start - CONTEXT)
+                end_line = min(len(lines), block_end + CONTEXT)
+                print(f"\n--- lost coverage block {block_start}-{block_end} ---")
+                for i in range(start_line, end_line + 1):
+                    prefix = ">>" if block_start <= i <= block_end else "  "
+                    code = lines[i - 1].rstrip("\n")
+                    print(f"{prefix} {i:6d} | {code}")
+    else:
+        print("No lost baseline coverage found.")
+
+    if lbc_fns:
+        print(f"\n=== Lost Baseline Coverage: {len(lbc_fns)} functions ===\n")
+        for rel, fn in lbc_fns[:MAX_PRINT]:
+            print(f"  {rel}: {fn}")
+
+    lbc_count = len(lbc_lines)
+    if lbc_count > 0:
+        lbc_suffix = f", LBC: {lbc_count} lines"
+    else:
+        lbc_suffix = ""
+    full_msg = msg + lbc_suffix
+
     r = Result.create_from(
         name="Print Uncovered Code",
         status=Result.Status.SUCCESS,
-        info=msg,
+        info=full_msg,
         with_info_from_results=True,
     )
-    r.set_comment(msg)
+    r.set_comment(full_msg)
     r.ext["changed_lines_total"] = total
     r.ext["changed_lines_covered"] = covered
-    r.ext["changed_lines_cov"] = pct
+    r.ext["changed_lines_cov"] = pct if total > 0 else 0.0
     r.dump()

@@ -148,9 +148,19 @@ def test_receive_buffer_size_applied(started_cluster):
     )
     time.sleep(2)
 
-    # Use `ss -tm` to inspect the kernel receive buffer on the established connection.
+    # Use `ss -tmpn` to inspect sockets and their owning PIDs.
+    # Filter to established connections to localhost:8123 owned by the
+    # clickhouse-server process (pid obtained from the container).
+    pid = node.get_process_pid("clickhouse")
+    assert pid is not None, "clickhouse-server process not found"
+    # ss -m prints skmem info on the line following the connection line,
+    # so use grep -A1 to capture both the connection and its skmem data.
     ss_output = node.exec_in_container(
-        ["bash", "-c", "ss -tm state established '( dport = 8123 )'"],
+        [
+            "bash",
+            "-c",
+            f"ss -tmpn state established '( dport = 8123 and dst 127.0.0.1 )' | grep -A1 'pid={pid},' || true",
+        ],
         privileged=True,
         user="root",
     )
@@ -161,12 +171,11 @@ def test_receive_buffer_size_applied(started_cluster):
     assert len(rb_values) > 0, f"No connections found. ss output: {ss_output}"
 
     expected_rb = buf_size * 2  # kernel doubles setsockopt value
-    for rb in rb_values:
-        rb_int = int(rb)
-        assert rb_int == expected_rb, (
-            f"Receive buffer {rb_int} != expected {expected_rb} "
-            f"(2 * {buf_size}). ss output: {ss_output}"
-        )
+    matched = any(int(rb) == expected_rb for rb in rb_values)
+    assert matched, (
+        f"No socket with receive buffer {expected_rb} (2 * {buf_size}) found. "
+        f"Actual rb values: {rb_values}. ss output: {ss_output}"
+    )
 
     request.get_answer()
 

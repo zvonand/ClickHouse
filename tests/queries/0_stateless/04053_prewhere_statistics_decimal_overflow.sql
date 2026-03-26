@@ -34,6 +34,8 @@ INSERT INTO test_prewhere_decimal_overflow VALUES
 ALTER TABLE test_prewhere_decimal_overflow ADD STATISTICS ts TYPE minmax;
 ALTER TABLE test_prewhere_decimal_overflow MATERIALIZE STATISTICS ts;
 
+SET optimize_move_to_prewhere=1;
+
 -- Correct result without statistics.
 SELECT sig
 FROM test_prewhere_decimal_overflow

@@ -1286,8 +1286,8 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                             {
                                 throw Exception(
                                     ErrorCodes::LOGICAL_ERROR,
-                                    "Step is expected to be ReadFromMergeTree but it's {}\n{}",
-                                    prev_node->step->getName(), dumpQueryPlan(query_plan));
+                                    "Step is expected to be ReadFromMergeTree but it's {}",
+                                    prev_node->step->getName());
                             }
                         }
 

@@ -5,8 +5,6 @@
 #include <Analyzer/TableNode.h>
 #include <Analyzer/UnionNode.h>
 #include <Core/Settings.h>
-#include <Analyzer/QueryTreeBuilder.h>
-#include <Analyzer/QueryTreePassManager.h>
 #include <Interpreters/ClusterProxy/SelectStreamFactory.h>
 #include <Interpreters/ClusterProxy/executeQuery.h>
 #include <Interpreters/InterpreterSelectQueryAnalyzer.h>

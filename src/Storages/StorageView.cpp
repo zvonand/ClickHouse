@@ -35,9 +35,7 @@
 
 #include <Analyzer/QueryTreeBuilder.h>
 #include <Analyzer/QueryTreePassManager.h>
-#include <Analyzer/UnionNode.h>
 #include <Analyzer/QueryNode.h>
-#include <arrow/type_fwd.h>
 
 namespace DB
 {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { ClickUIProvider, Container, Text, Table, Link, Dialog, Button, Badge, Icon, IconButton, Tooltip, Panel, useToast, Dropdown, Logo } from '@clickhouse/click-ui'
 import './App.css'
 
@@ -40,16 +40,11 @@ interface PRResult {
   }
 }
 
-interface NestedTestResult extends TestResult {
-  results?: NestedTestResult[]
-}
-
 function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (theme: 'dark' | 'light') => void }) {
-  const [data, setData] = useState<PRResult | NestedTestResult | null>(null)
+  const [data, setData] = useState<PRResult | TestResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [nameParams, setNameParams] = useState<string[]>([])
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [sortByStatus, setSortByStatus] = useState<boolean>(true)
   const [mainSortColumn, setMainSortColumn] = useState<number | null>(null)
   const [mainSortDir, setMainSortDir] = useState<'asc' | 'desc'>('asc')
@@ -210,16 +205,16 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
   }
 
   const navigateToNestedResult = (
-    rootData: PRResult | NestedTestResult,
+    rootData: PRResult | TestResult,
     namePath: string[]
-  ): PRResult | NestedTestResult => {
+  ): PRResult | TestResult => {
     // If no navigation path beyond name_1, return root
     if (namePath.length <= 2) {
       return rootData
     }
 
     // Navigate through results using name_2, name_3, etc.
-    let current: PRResult | NestedTestResult = rootData
+    let current: PRResult | TestResult = rootData
 
     for (let i = 2; i < namePath.length; i++) {
       const targetName = namePath[i]
@@ -234,7 +229,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
         throw new Error(`Result not found: ${targetName} at level ${i}`)
       }
 
-      current = found as NestedTestResult
+      current = found as TestResult
     }
 
     return current
@@ -454,7 +449,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
         }
 
         // Navigate to nested result if name_2 or higher exists
-        let finalData: PRResult | NestedTestResult
+        let finalData: PRResult | TestResult
         try {
           finalData = navigateToNestedResult(jsonData, names)
         } catch (navError) {
@@ -606,118 +601,6 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     )
   }
 
-  const getColorForStatus = (status: string): string => {
-    const colorMap: Record<string, string> = {
-      success: '#22c55e',
-      failure: '#ef4444',
-      error: '#ef4444',
-      pending: '#eab308',
-      skipped: '#94a3b8',
-      running: '#3b82f6',
-    }
-    return colorMap[status.toLowerCase()] || '#64748b'
-  }
-
-  const drawTimeline = () => {
-    const canvas = canvasRef.current
-    if (!canvas || !data || !data.results || data.results.length === 0) {
-      console.log('Timeline draw skipped:', { canvas: !!canvas, data: !!data, results: data?.results?.length })
-      return
-    }
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const results = data.results
-    const lineWidth = 2
-    const padding = 2
-    const totalHeight = (lineWidth + padding) * results.length
-
-    // Ensure minimum width
-    const width = Math.max(canvas.clientWidth, 400)
-
-    // Set canvas dimensions
-    canvas.width = width
-    canvas.height = totalHeight
-    canvas.style.height = `${totalHeight}px`
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    console.log('Drawing timeline:', { width: canvas.width, height: canvas.height, resultsCount: results.length })
-
-    // Calculate time scale based on workflow duration
-    // start_time is Unix timestamp (seconds since epoch) - use it directly
-    const workflowStartTime = typeof data.start_time === 'string'
-      ? new Date(data.start_time).getTime() / 1000
-      : (data.start_time || 0)
-    const workflowDuration = data.duration || 1
-    const scaleX = canvas.width / workflowDuration
-
-    console.log('Workflow:', { workflowStartTime, workflowDuration, canvasWidth: canvas.width, scaleX })
-
-    results.forEach((task, index) => {
-      const y = index * (lineWidth + padding)
-      const height = lineWidth
-
-      let x, width, color
-
-      if (!task.start_time) {
-        // Pending or skipped - full width bar
-        x = 0
-        width = canvas.width
-        color = getColorForStatus(task.status)
-      } else {
-        // start_time is already a Unix timestamp (seconds) - use it directly
-        const taskStartTime = typeof task.start_time === 'string'
-          ? new Date(task.start_time).getTime() / 1000
-          : task.start_time
-
-        // Calculate how many seconds after workflow start this task began
-        const relativeStartTime = taskStartTime - workflowStartTime
-        x = relativeStartTime * scaleX
-
-        if (!task.duration || task.duration === 0) {
-          // Running or incomplete - extend to end
-          width = canvas.width - x
-          color = getColorForStatus('running')
-        } else {
-          // Completed - show actual duration
-          width = task.duration * scaleX
-          color = getColorForStatus(task.status)
-        }
-
-        // Debug first few tasks
-        if (index < 3) {
-          console.log(`Task ${index} (${task.name}):`, {
-            taskStartTime,
-            relativeStartTime,
-            x,
-            width,
-            duration: task.duration
-          })
-        }
-      }
-
-      ctx.fillStyle = color
-      ctx.fillRect(x, y, width, height)
-    })
-  }
-
-  useEffect(() => {
-    // Draw timeline whenever flyout might be visible
-    const drawIfVisible = () => {
-      if (canvasRef.current && data && nameParams.length <= 1) {
-        drawTimeline()
-      }
-    }
-
-    // Try drawing immediately and after a delay
-    drawIfVisible()
-    const timer = setTimeout(drawIfVisible, 200)
-
-    return () => clearTimeout(timer)
-  }, [data, nameParams, theme])
-
   const createPopoverContent = (result: TestResult, navigateUrl?: string, namesPath: string[] = [], showToast?: (options: any) => void) => {
     const copyUrlToClipboard = () => {
       const url = new URL(window.location.href)
@@ -749,8 +632,6 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
         } catch (e) {
           console.error('Toast error:', e)
         }
-      } else {
-        console.log('No toast function available')
       }
     }
 
@@ -1004,93 +885,6 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
               flexShrink: 0
             }}
           >
-            {/* TODO: Timeline feature - shows test execution timeline
-            {nameParams.length <= 1 && (
-              <Flyout>
-                <Flyout.Trigger>
-                  <Button
-                    type="secondary"
-                    label="i"
-                    style={{ minWidth: '32px', width: '32px', padding: 0 }}
-                    onClick={() => {
-                      // Trigger redraw when flyout opens
-                      setTimeout(() => drawTimeline(), 150)
-                    }}
-                  />
-                </Flyout.Trigger>
-                <Flyout.Content align="start" showOverlay strategy="fixed" width="500px">
-                  <Flyout.Header title="Timeline" description="Test execution timeline" />
-                  <Flyout.Body>
-                    <Flyout.Element>
-                      {data && data.results && data.results.length > 0 ? (
-                        <div style={{ position: 'relative' }}>
-                          <canvas
-                            ref={canvasRef}
-                            onMouseMove={(e) => {
-                              const canvas = canvasRef.current
-                              if (!canvas || !data.results) return
-
-                              const rect = canvas.getBoundingClientRect()
-                              const mouseY = e.clientY - rect.top
-
-                              const lineWidth = 2
-                              const padding = 2
-                              const lineHeight = lineWidth + padding
-
-                              const hoveredIndex = Math.floor(mouseY / lineHeight)
-
-                              if (hoveredIndex >= 0 && hoveredIndex < data.results.length) {
-                                const task = data.results[hoveredIndex]
-                                setHoveredTask({
-                                  name: task.name,
-                                  x: e.clientX,
-                                  y: e.clientY
-                                })
-                              } else {
-                                setHoveredTask(null)
-                              }
-                            }}
-                            onMouseLeave={() => setHoveredTask(null)}
-                            style={{
-                              width: '100%',
-                              minHeight: '100px',
-                              display: 'block',
-                              border: '1px solid',
-                              borderColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                              cursor: 'pointer',
-                            }}
-                          />
-                          {hoveredTask && (
-                            <div
-                              style={{
-                                position: 'fixed',
-                                left: `${hoveredTask.x + 10}px`,
-                                top: `${hoveredTask.y - 10}px`,
-                                backgroundColor: theme === 'dark' ? '#1D1D1D' : '#F9F9F9',
-                                border: '1px solid',
-                                borderColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                pointerEvents: 'none',
-                                zIndex: 10000,
-                                whiteSpace: 'nowrap',
-                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                              }}
-                            >
-                              {hoveredTask.name}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <Text>No timeline data available</Text>
-                      )}
-                    </Flyout.Element>
-                  </Flyout.Body>
-                </Flyout.Content>
-              </Flyout>
-            )}
-            */}
             <Tooltip>
               <Tooltip.Trigger>
                 <div
@@ -1125,8 +919,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
           </div>
         </div>
 
-        {/* Main Content - using plain div instead of Click UI Container to prevent overflow issues
-            with Panel padding. TODO: improve responsive layout for narrow viewports */}
+        {/* Main Content */}
         <div className="main-content" style={{ marginTop: '56px' }}>
 
           {loading && <Text>Loading test results...</Text>}
@@ -1136,8 +929,8 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
           )}
 
           {data && !loading && (
-            <div style={{ boxSizing: 'border-box' }}>
-              <Panel hasBorder padding='md' orientation='vertical' gap='xs' alignItems='start' style={{ marginBottom: '16px', boxSizing: 'border-box' }}>
+            <>
+              <Panel hasBorder padding='md' orientation='vertical' gap='xs' alignItems='start' style={{ marginBottom: '16px' }}>
                 {topLevelExt && (topLevelExt.pr_number > 0 || topLevelExt.commit_sha) && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', width: '100%', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
@@ -1259,7 +1052,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                 onSort={handleMainSort}
                 style={{ tableLayout: 'auto' }}
               />
-            </div>
+            </>
           )}
 
           {/* Watermark footer - appears at bottom of page content */}

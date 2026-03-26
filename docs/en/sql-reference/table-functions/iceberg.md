@@ -678,7 +678,7 @@ ALTER TABLE iceberg_table EXECUTE remove_orphan_files()
 |---|---|---|---|
 | `older_than` | `String` (timestamp) | 3 days ago (configurable via `iceberg_orphan_files_older_than_seconds`) | Only consider files with a last-modified time older than this timestamp as orphan candidates. Safety guard against deleting files from in-progress writes. |
 | `location` | `String` | Table location | Restrict the scan to a specific subdirectory under the table location (e.g., `'data/'` or `'metadata/'`). |
-| `dry_run` | `UInt8` | `0` | When `1`, identify orphan files and return the result summary without actually deleting anything. |
+| `dry_run` | `UInt64` | `0` | When `1`, identify orphan files and return the result summary without actually deleting anything. |
 
 **Examples:**
 

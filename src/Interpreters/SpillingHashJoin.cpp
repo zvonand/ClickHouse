@@ -120,7 +120,8 @@ bool SpillingHashJoin::addBlockToJoin(const Block & block, bool check_limits)
             if (state.load(std::memory_order_acquire) != State::COLLECTING)
                 return chosen_join->addBlockToJoin(block, check_limits);
 
-            concurrent_join->addBlockToJoin(block, /*check_limits=*/false);
+            if (!concurrent_join->addBlockToJoin(block, check_limits))
+                return false;
         }
 
         /// Check memory limit outside the shared lock.
@@ -131,7 +132,8 @@ bool SpillingHashJoin::addBlockToJoin(const Block & block, bool check_limits)
     }
 
     /// Single-thread HashJoin path.
-    hash_join->addBlockToJoin(block, /*check_limits=*/false);
+    if (!hash_join->addBlockToJoin(block, check_limits))
+        return false;
 
     if (hash_join->getTotalByteCount() >= max_bytes_before_external_join)
         switchToGraceHashJoin();

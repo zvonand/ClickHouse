@@ -31,6 +31,10 @@
 #include <IO/WriteHelpers.h>
 #include <Storages/StorageGenerateRandom.h>
 
+#if defined(MEMORY_SANITIZER)
+#include <sanitizer/msan_interface.h>
+#endif
+
 using namespace DB;
 namespace po = boost::program_options;
 

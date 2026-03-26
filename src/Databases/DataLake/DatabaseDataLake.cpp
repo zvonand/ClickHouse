@@ -624,6 +624,8 @@ ASTPtr DatabaseDataLake::getCreateDatabaseQuery() const
     const auto & create_query = std::make_shared<ASTCreateQuery>();
     create_query->setDatabase(getDatabaseName());
     create_query->set(create_query->storage, database_engine_definition);
+    /// Don't show any settings because almost all of them may contain some secrets
+    create_query->storage->settings = nullptr;
     return create_query;
 }
 

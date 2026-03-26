@@ -145,6 +145,11 @@ SETTINGS {",".join((k+"="+repr(v) for k, v in settings.items()))}
     assert minio_secret_key not in show_result
     assert "HIDDEN" in show_result
 
+    show_result = node.query(f"SELECT * FROM system.databases WHERE name = '{name} SETTINGS show_data_lake_catalogs_in_system_tables = 1")
+    assert minio_secret_key not in show_result
+    assert "us-east-1" not in show_result
+    assert "http://minio:9000/warehouse-rest" not in show_result
+
 
 def create_clickhouse_iceberg_table(
     started_cluster, node, database_name, table_name, schema, additional_settings={}

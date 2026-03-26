@@ -1279,7 +1279,6 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                             QueryPlan::Node * prev_node = node;
                             if (!node->children.empty())
                             {
-                                chassert(node->children.size() == 1);
                                 node = node->children.at(0);
                             }
                             else

@@ -37,6 +37,7 @@
 #include <Analyzer/QueryTreePassManager.h>
 #include <Analyzer/QueryNode.h>
 #include <Analyzer/TableNode.h>
+#include <Analyzer/UnionNode.h>
 
 namespace DB
 {
@@ -204,6 +205,12 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
             case QueryTreeNodeType::QUERY:
                 node = node->as<QueryNode &>().getJoinTree().get();
                 break;
+            case QueryTreeNodeType::UNION:
+            {
+                const auto & queries = node->as<UnionNode &>().getQueries().getNodes();
+                node = queries.empty() ? nullptr : queries.front().get();
+                break;
+            }
             case QueryTreeNodeType::TABLE:
             {
                 const auto & table_node = node->as<const TableNode &>();

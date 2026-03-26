@@ -3402,7 +3402,7 @@ class ClickHouseCluster:
                         user, password = (
                             base64.b64decode(tokens[region])
                             .decode("utf-8")
-                            .split(":")
+                            .split(":", 1)
                         )
                         logging.info(
                             f"Logging into {instance_registry}"
@@ -6000,7 +6000,7 @@ class ClickHouseInstance:
 
         port_lines = []
         # KEEPER_PUBLISH_CLIENT: publish keeper client port 9181 to host for keeper-bench on host
-        
+
         if os.environ.get("KEEPER_PUBLISH_CLIENT") == "1":
             base = int(os.environ.get("KEEPER_PUBLISH_CLIENT_BASE") or "19181")
             m = re.search(r"keeper(\d+)", str(self.name or ""), re.I)

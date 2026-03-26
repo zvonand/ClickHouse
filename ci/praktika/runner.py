@@ -984,6 +984,9 @@ class Runner:
             result = self._get_result_object(
                 job, setup_env_code, prerun_code, run_code
             )
+
+            if prehook_result:
+                result.results.append(prehook_result)
             if job.post_hooks:
                 print(f"=== Post hooks [{job.name}], workflow [{workflow.name}] ===")
                 sw_ = Utils.Stopwatch()
@@ -998,9 +1001,6 @@ class Runner:
                     Result.create_from(name="Post Hooks", results=results_, stopwatch=sw_)
                 )
                 print(f"=== Post hooks finished ===")
-
-            if prehook_result:
-                result.results.append(prehook_result)
 
             if not local_run:
                 print(f"=== Post run script [{job.name}], workflow [{workflow.name}] ===")

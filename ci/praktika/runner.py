@@ -503,13 +503,10 @@ class Runner:
 
         return exit_code
 
-    def _post_run(
-        self, workflow, job, setup_env_exit_code, prerun_exit_code, run_exit_code,
-    ):
-        info_errors = []
-        env = _Environment.get()
+    def _get_result_object(
+        self, job, setup_env_exit_code, prerun_exit_code, run_exit_code,
+    ) -> Result:
         result_exist = Result.exist(job.name)
-        is_ok = True
 
         if setup_env_exit_code != 0:
             info = f"ERROR: {ResultInfo.SETUP_ENV_JOB_FAILED}"
@@ -566,6 +563,14 @@ class Runner:
 
         result.update_duration()
         result.set_files([Settings.RUN_LOG])
+        return result
+
+    def _post_run(
+        self, result, workflow, job, run_exit_code,
+    ) -> None:
+        info_errors = []
+        env = _Environment.get()
+        is_ok = True
 
         is_final_job = job.name == Settings.FINISH_WORKFLOW_JOB_NAME
         is_initial_job = job.name == Settings.CI_CONFIG_JOB_NAME
@@ -975,16 +980,10 @@ class Runner:
 
             print(f"=== Run script finished ===\n\n")
 
-        if not local_run:
-            print(f"=== Post run script [{job.name}], workflow [{workflow.name}] ===")
-            post_res = self._post_run(
-                workflow, job, setup_env_code, prerun_code, run_code
-            )
-            res = res and post_res
-            print(f"=== Post run script finished ===")
-
         if run_hooks:
-            result = Result.from_fs(job.name)
+            result = self._get_result_object(
+                job, setup_env_code, prerun_code, run_code
+            )
             if job.post_hooks:
                 print(f"=== Post hooks [{job.name}], workflow [{workflow.name}] ===")
                 sw_ = Utils.Stopwatch()
@@ -1002,6 +1001,15 @@ class Runner:
 
             if prehook_result:
                 result.results.append(prehook_result)
+
+            if not local_run:
+                print(f"=== Post run script [{job.name}], workflow [{workflow.name}] ===")
+                post_res = self._post_run(
+                    result, workflow, job, run_code
+                )
+                res = res and post_res
+                print(f"=== Post run script finished ===")
+
             result.dump()
 
         if not res:

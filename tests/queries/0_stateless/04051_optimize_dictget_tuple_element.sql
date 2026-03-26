@@ -23,46 +23,65 @@ CREATE DICTIONARY test_dict
     population UInt64
 )
 PRIMARY KEY id
-SOURCE(CLICKHOUSE(TABLE 'dict_source'))
+SOURCE(CLICKHOUSE(TABLE 'dict_source' DB currentDatabase()))
 LAYOUT(FLAT())
 LIFETIME(0);
 
 CREATE TABLE test_keys (id UInt64) ENGINE = Memory;
 INSERT INTO test_keys VALUES (1), (2), (3);
 
--- With optimization: dictGet should have single attribute 'country', no tupleElement wrapper
+-- With optimization: the query tree should contain dictGet but not tupleElement
 SELECT 'optimization enabled';
-EXPLAIN QUERY TREE
-SELECT dictGet('default.test_dict', ('country', 'city', 'population'), id).1 FROM test_keys
-SETTINGS optimize_dictget_tuple_element = 1;
+SELECT count() > 0 FROM (
+    EXPLAIN QUERY TREE
+    SELECT tupleElement(dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id), 1) FROM test_keys
+    SETTINGS optimize_dictget_tuple_element = 1
+) WHERE explain LIKE '%function_name: dictGet,%';
+SELECT count() FROM (
+    EXPLAIN QUERY TREE
+    SELECT tupleElement(dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id), 1) FROM test_keys
+    SETTINGS optimize_dictget_tuple_element = 1
+) WHERE explain LIKE '%function_name: tupleElement%';
 
--- Without optimization: tupleElement wrapping dictGet with tuple of attributes
+-- Without optimization: tupleElement should be present wrapping dictGet
 SELECT 'optimization disabled';
-EXPLAIN QUERY TREE
-SELECT dictGet('default.test_dict', ('country', 'city', 'population'), id).1 FROM test_keys
-SETTINGS optimize_dictget_tuple_element = 0;
+SELECT count() > 0 FROM (
+    EXPLAIN QUERY TREE
+    SELECT tupleElement(dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id), 1) FROM test_keys
+    SETTINGS optimize_dictget_tuple_element = 0
+) WHERE explain LIKE '%function_name: tupleElement%';
 
 -- Functional tests: verify correctness
 SELECT 'dictGet index access';
-SELECT dictGet('default.test_dict', ('country', 'city'), id).1 FROM test_keys ORDER BY id;
-SELECT dictGet('default.test_dict', ('country', 'city'), id).2 FROM test_keys ORDER BY id;
+SELECT dictGet(currentDatabase() || '.test_dict', ('country', 'city'), id).1 FROM test_keys ORDER BY id;
+SELECT dictGet(currentDatabase() || '.test_dict', ('country', 'city'), id).2 FROM test_keys ORDER BY id;
 
 SELECT 'all three attributes by index';
 SELECT
-    dictGet('default.test_dict', ('country', 'city', 'population'), id).1,
-    dictGet('default.test_dict', ('country', 'city', 'population'), id).2,
-    dictGet('default.test_dict', ('country', 'city', 'population'), id).3
+    dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id).1,
+    dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id).2,
+    dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id).3
 FROM test_keys ORDER BY id;
 
 -- Test named access (e.g. .country instead of .1)
 SELECT 'named access';
-SELECT dictGet('default.test_dict', ('country', 'city', 'population'), id).country FROM test_keys ORDER BY id;
-SELECT dictGet('default.test_dict', ('country', 'city', 'population'), id).city FROM test_keys ORDER BY id;
+SELECT dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id).country FROM test_keys ORDER BY id;
+SELECT dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id).city FROM test_keys ORDER BY id;
 
--- Test with dictGetOrDefault
+-- Test with dictGetOrDefault (existing keys)
 SELECT 'dictGetOrDefault';
-SELECT dictGetOrDefault('default.test_dict', ('country', 'city'), id, ('Unknown', 'Unknown')).1 FROM test_keys ORDER BY id;
-SELECT dictGetOrDefault('default.test_dict', ('country', 'city'), id, ('Unknown', 'Unknown')).2 FROM test_keys ORDER BY id;
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), id, ('Unknown', 'Unknown')).1 FROM test_keys ORDER BY id;
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), id, ('Unknown', 'Unknown')).2 FROM test_keys ORDER BY id;
+
+-- Test with dictGetOrDefault (missing keys — exercises the default value rewrite path)
+SELECT 'dictGetOrDefault with missing keys';
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), ('DefaultCountry', 'DefaultCity')).1;
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), ('DefaultCountry', 'DefaultCity')).2;
+
+-- Test dictGetOrDefault with tuple() function as default
+SELECT 'dictGetOrDefault with tuple function default';
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('FuncCountry', 'FuncCity')).1;
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('FuncCountry', 'FuncCity')).2;
 
 DROP TABLE test_keys;
 DROP DICTIONARY test_dict;

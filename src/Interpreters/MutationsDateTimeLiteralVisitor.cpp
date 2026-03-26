@@ -5,6 +5,8 @@
 #include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTSelectQuery.h>
+#include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeDateTime.h>
 #include <DataTypes/DataTypeDateTime64.h>
 
@@ -22,15 +24,17 @@ DataTypePtr getDateTimeColumnType(const String & identifier_name, const ColumnsD
     if (!desc)
         return nullptr;
 
-    if (const auto * dt = typeid_cast<const DataTypeDateTime *>(desc->type.get()))
+    auto unwrapped = removeNullable(removeLowCardinality(desc->type));
+
+    if (const auto * dt = typeid_cast<const DataTypeDateTime *>(unwrapped.get()))
     {
         if (!dt->hasExplicitTimeZone())
-            return desc->type;
+            return unwrapped;
     }
-    else if (const auto * dt64 = typeid_cast<const DataTypeDateTime64 *>(desc->type.get()))
+    else if (const auto * dt64 = typeid_cast<const DataTypeDateTime64 *>(unwrapped.get()))
     {
         if (!dt64->hasExplicitTimeZone())
-            return desc->type;
+            return unwrapped;
     }
     return nullptr;
 }

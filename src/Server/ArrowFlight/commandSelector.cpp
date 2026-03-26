@@ -180,25 +180,132 @@ static SQLSet commandGetDbSchemas(const arrow::flight::protocol::sql::CommandGet
     return {"SELECT NULL::Nullable(String) AS catalog_name, name AS db_schema_name FROM system.databases" + where_expression, {}, {}};
 }
 
+/// Splits a formatted expression list (e.g. from `system.tables.primary_key`) into
+/// individual expressions. Unlike `splitByChar(',', ...)`, this correctly handles commas
+/// inside parenthesized function arguments, square-bracketed array subscripts,
+/// single-quoted string literals, and backtick-quoted identifiers.
+static std::vector<std::string> splitExpressionList(std::string_view s)
+{
+    std::vector<std::string> result;
+    int depth = 0;
+    bool in_single_quote = false;
+    bool in_backtick = false;
+    bool escape_next = false;
+    size_t expr_start = 0;
+
+    auto flush = [&](size_t end)
+    {
+        auto token = s.substr(expr_start, end - expr_start);
+        size_t first = token.find_first_not_of(' ');
+        size_t last = token.find_last_not_of(' ');
+        if (first != std::string_view::npos)
+            result.emplace_back(token.substr(first, last - first + 1));
+    };
+
+    for (size_t i = 0; i < s.size(); ++i)
+    {
+        char c = s[i];
+
+        if (escape_next)
+        {
+            escape_next = false;
+            continue;
+        }
+
+        if (c == '\\' && (in_single_quote || in_backtick))
+        {
+            escape_next = true;
+            continue;
+        }
+
+        if (c == '\'' && !in_backtick)
+        {
+            in_single_quote = !in_single_quote;
+            continue;
+        }
+
+        if (c == '`' && !in_single_quote)
+        {
+            in_backtick = !in_backtick;
+            continue;
+        }
+
+        if (in_single_quote || in_backtick)
+            continue;
+
+        if (c == '(' || c == '[')
+            ++depth;
+        else if (c == ')' || c == ']')
+            --depth;
+        else if (c == ',' && depth == 0)
+        {
+            flush(i);
+            expr_start = i + 1;
+        }
+    }
+
+    flush(s.size());
+    return result;
+}
+
 static SQLSet commandGetPrimaryKeys(const arrow::flight::protocol::sql::CommandGetPrimaryKeys & command)
 {
     std::string where_expression = " WHERE" +
         (command.has_db_schema() ? (" database = " + quoteString(command.db_schema()) + " AND") : "") +
         " name = " + quoteString(command.table());
 
-    return {
+    auto sql =
         "SELECT "
             "NULL::Nullable(String) AS catalog_name, "
             "database AS schema_name, "
             "name AS table_name, "
-            "(arrayJoin(arrayMap((x, y) -> (trimBoth(x), y), splitByChar(',', primary_key) AS p_keys, arrayEnumerate(p_keys))) AS p_key).1 AS column_name, "
-            "p_key.2 AS key_seq, "
+            "primary_key AS column_name, "
+            "0::Int32 AS key_seq, "
             "NULL::Nullable(String) AS pk_name "
         "FROM system.tables"
-        + where_expression,
-        {},
-        {}
+        + where_expression;
+
+    auto block_modifier = [](ContextPtr, Block & block)
+    {
+        size_t num_rows = block.rows();
+        if (num_rows == 0)
+            return;
+
+        const size_t column_name_pos = 3;
+        const size_t key_seq_pos = 4;
+        const size_t num_columns = block.columns();
+
+        auto & pk_column = block.getByPosition(column_name_pos);
+        auto pk_col = pk_column.column->convertToFullIfNeeded();
+
+        std::vector<MutableColumnPtr> new_columns;
+        for (size_t col = 0; col < num_columns; ++col)
+            new_columns.push_back(block.getByPosition(col).column->cloneEmpty());
+
+        for (size_t i = 0; i < num_rows; ++i)
+        {
+            auto expressions = splitExpressionList(pk_col->getDataAt(i).toView());
+
+            Int32 key_seq = 1;
+            for (const auto & expr : expressions)
+            {
+                for (size_t col = 0; col < num_columns; ++col)
+                {
+                    if (col == column_name_pos)
+                        new_columns[col]->insert(expr);
+                    else if (col == key_seq_pos)
+                        new_columns[col]->insert(key_seq);
+                    else
+                        new_columns[col]->insertFrom(*block.getByPosition(col).column, i);
+                }
+                ++key_seq;
+            }
+        }
+
+        block.setColumns(std::move(new_columns));
     };
+
+    return {sql, {}, block_modifier};
 }
 
 static SQLSet commandGetTables(const arrow::flight::protocol::sql::CommandGetTables & command)

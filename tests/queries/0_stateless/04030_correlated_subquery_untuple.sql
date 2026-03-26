@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS t;
 CREATE TABLE t (`col` Tuple(Int32, Int32)) ENGINE = Memory;
 INSERT INTO t VALUES ((1, 2)), ((3, 4));
 
--- EXPLAIN QUERY TREE dump_ast=1
+SET enable_analyzer = 1;
 SELECT untuple(arrayJoin((SELECT tupleToNameValuePairs(col)))) FROM t
 FORMAT Null;
 

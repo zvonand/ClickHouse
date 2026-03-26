@@ -844,7 +844,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
             backgroundColor: theme === 'dark' ? '#1a1a1a' : '#ffffff',
             borderBottom: '1px solid',
             borderColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-            height: '56px',
+            height: '38px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -928,7 +928,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
         </div>
 
         {/* Main Content */}
-        <div className="main-content" style={{ marginTop: '56px' }}>
+        <div className="main-content" style={{ marginTop: '38px' }}>
 
           {loading && <Text>Loading test results...</Text>}
 

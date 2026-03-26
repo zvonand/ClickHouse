@@ -170,17 +170,10 @@ def main():
     os.environ["SCCACHE_S3_KEY_PREFIX"] = "ccache/sccache"
     os.environ["SCCACHE_ERROR_LOG"] = f"{build_dir}/sccache.log"
     os.environ["SCCACHE_LOG"] = "info"
-    if Settings.SCCACHE_S3_ENDPOINT:
-        os.environ["SCCACHE_ENDPOINT"] = Settings.SCCACHE_S3_ENDPOINT
-
     info = Info()
     if info.is_local_run:
         print("NOTE: It's a local run")
-        # Allow credentials when custom sccache S3 is configured for local runs
-        if Settings.SCCACHE_S3_ACCESS_KEY_ID and Settings.SCCACHE_S3_SECRET_ACCESS_KEY:
-            os.environ["AWS_ACCESS_KEY_ID"] = Settings.SCCACHE_S3_ACCESS_KEY_ID
-            os.environ["AWS_SECRET_ACCESS_KEY"] = Settings.SCCACHE_S3_SECRET_ACCESS_KEY
-        else:
+        if not os.environ.get("AWS_ACCESS_KEY_ID"):
             os.environ["SCCACHE_S3_NO_CREDENTIALS"] = "true"
     else:
         os.environ["CH_HOSTNAME"] = (

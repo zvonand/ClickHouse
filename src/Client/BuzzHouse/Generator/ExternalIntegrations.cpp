@@ -1721,11 +1721,11 @@ bool DolorIntegration::performTableIntegration(RandomGenerator & rg, SQLTable & 
     bool first = true;
     std::vector<ColumnPathChain> entries;
 
-    for (const auto & [key, val] : t.cols)
+    for (const auto & [_, val] : t.cols)
     {
         ColumnPathChain cpc(val.nullable, val.special, val.dmod, {});
 
-        collectColumnPaths("c" + std::to_string(key), val.tp.get(), 0, cpc, entries);
+        collectColumnPaths(val.getColumnName(), val.tp.get(), 0, cpc, entries);
     }
     /// Common information
     buf += fmt::format(

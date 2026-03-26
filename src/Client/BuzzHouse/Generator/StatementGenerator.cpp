@@ -547,8 +547,6 @@ static void matchQueryAliases(const SQLView & v, Select * osel, Select * nsel)
 
     for (const auto & entry : v.cols)
     {
-        const String ncname = "c" + std::to_string(entry);
-
         ssc->add_result_columns()
             ->mutable_eca()
             ->mutable_expr()
@@ -557,8 +555,8 @@ static void matchQueryAliases(const SQLView & v, Select * osel, Select * nsel)
             ->mutable_col()
             ->mutable_path()
             ->mutable_col()
-            ->set_column(ncname);
-        jtf->add_col_aliases()->set_column(ncname);
+            ->set_column(entry);
+        jtf->add_col_aliases()->set_column(entry);
     }
     jtf->mutable_tof()->mutable_select()->mutable_inner_query()->mutable_select()->set_allocated_sel(osel);
 }
@@ -625,7 +623,7 @@ void StatementGenerator::generateNextCreateView(RandomGenerator & rg, CreateView
             }
             for (uint32_t i = 0; i < view_ncols; i++)
             {
-                next.cols.insert(i);
+                next.cols.insert("c" + std::to_string(i));
             }
             generateEngineDetails(rg, createViewRelation("", next), next, true, te);
             if ((next.isMergeTreeFamily() || rg.nextLargeNumber() < 8) && !next.is_deterministic && rg.nextMediumNumber() < 26)
@@ -642,7 +640,7 @@ void StatementGenerator::generateNextCreateView(RandomGenerator & rg, CreateView
             t.setName(cmvt->mutable_est(), false);
             if (next.has_with_cols)
             {
-                std::vector<uint32_t> nids;
+                std::vector<String> nids;
                 const bool allCols = rg.nextBool();
                 const bool newdef = rg.nextSmallNumber() < 4;
 
@@ -670,9 +668,9 @@ void StatementGenerator::generateNextCreateView(RandomGenerator & rg, CreateView
 
                     if (newdef)
                     {
-                        addTableColumnInternal(rg, t, col.cname, false, false, ColumnSpecial::NONE, col, cmvt->add_col_list());
+                        addTableColumnInternal(rg, t, false, false, ColumnSpecial::NONE, col, cmvt->add_col_list());
                     }
-                    next.cols.insert(col.cname);
+                    next.cols.insert(col.getColumnName());
                 }
             }
         }
@@ -690,7 +688,7 @@ void StatementGenerator::generateNextCreateView(RandomGenerator & rg, CreateView
     {
         for (uint32_t i = 0; i < view_ncols; i++)
         {
-            next.cols.insert(i);
+            next.cols.insert("c" + std::to_string(i));
         }
     }
     if (!next.isShared() && (!next.db || !next.db->isSharedDatabase()) && (next.db || !supports_cloud_features) && rg.nextSmallNumber() < 2)
@@ -1592,7 +1590,7 @@ void StatementGenerator::generateNextExchange(RandomGenerator & rg, Exchange * e
           {
               const auto & input = filterCollection<SQLView>(attached_views);
 
-              exc->set_sobject(SQLObject::TABLE);
+              exc->set_sobject(SQLObject::VIEW);
               for (const auto & entry : input)
               {
                   this->str_ids.push_back(entry.get().getBaseName());
@@ -1636,10 +1634,6 @@ void StatementGenerator::generateNextExchange(RandomGenerator & rg, Exchange * e
     }
 }
 
-uint32_t StatementGenerator::getIdentifierFromString(const String & cname) const
-{
-    return static_cast<uint32_t>(std::stoul(cname.substr(1)));
-}
 
 std::optional<String> StatementGenerator::alterSingleTable(
     RandomGenerator & rg,
@@ -1702,7 +1696,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  AddColumn * add_col = ati->mutable_add_column();
                  ColumnDef * def = add_col->mutable_new_col();
                  const uint64_t type_mask_backup = this->next_type_mask;
-                 std::vector<uint32_t> nested_ids;
+                 std::vector<String> nested_ids;
 
                  if (next_option < 4)
                  {
@@ -1725,24 +1719,25 @@ std::optional<String> StatementGenerator::alterSingleTable(
                      this->next_type_mask = fc.type_mask & ~(allow_nested);
                  }
 
-                 addTableColumn(rg, t, ncname, true, false, rg.nextMediumNumber() < 6, ColumnSpecial::NONE, def);
+                 const String ncname_key = addTableColumn(rg, t, ncname, true, false, rg.nextMediumNumber() < 6, ColumnSpecial::NONE, def);
                  this->next_type_mask = type_mask_backup;
 
                  if (!nested_ids.empty())
                  {
-                     std::unordered_map<uint32_t, SQLColumn> nested_cols;
-                     SQLColumn ncol = std::move(t.staged_cols[ncname]);
-                     SQLColumn & nested_col = t.cols.at(rg.pickRandomly(nested_ids));
+                     std::unordered_map<String, SQLColumn> nested_cols;
+                     SQLColumn ncol = std::move(t.staged_cols[ncname_key]);
+                     const String nested_key = rg.pickRandomly(nested_ids);
+                     SQLColumn & nested_col = t.cols.at(nested_key);
                      NestedType * ntp = dynamic_cast<NestedType *>(nested_col.tp.get());
 
                      chassert(ntp && ncol.tp);
-                     ntp->subtypes.emplace_back(NestedSubType(ncname, std::move(ncol.tp)));
+                     ntp->subtypes.emplace_back(NestedSubType(ncname_key, std::move(ncol.tp)));
                      ncol.tp = nullptr;
-                     nested_cols[nested_col.cname] = nested_col;
+                     nested_cols[nested_key] = nested_col;
                      flatTableColumnPath(flat_nested, nested_cols, [](const SQLColumn &) { return true; });
                      columnPathRef(this->entries.back(), def->mutable_col());
                      this->entries.clear();
-                     t.staged_cols.erase(ncname);
+                     t.staged_cols.erase(ncname_key);
                  }
              }},
             /// Materialize column
@@ -1769,7 +1764,6 @@ std::optional<String> StatementGenerator::alterSingleTable(
             {2 * static_cast<uint32_t>(no_oracle && no_peer),
              [&]
              {
-                 const uint32_t ncname = t.col_counter++;
                  RenameCol * rcol = ati->mutable_rename_column();
                  flatTableColumnPath(flat_nested, t.cols, [](const SQLColumn &) { return true; });
                  columnPathRef(rg.pickRandomly(this->entries), rcol->mutable_old_name());
@@ -1777,7 +1771,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  rcol->mutable_new_name()->CopyFrom(rcol->old_name());
                  const uint32_t size = rcol->new_name().sub_cols_size();
                  Column & ncol = *(size ? rcol->mutable_new_name()->mutable_sub_cols(size - 1) : rcol->mutable_new_name()->mutable_col());
-                 ncol.set_column("c" + std::to_string(ncname));
+                 ncol.set_column(rg.nextIdentifier("c", t.col_counter++, fc.allow_nasty_identifiers));
              }},
             /// Clear column
             {2 * static_cast<uint32_t>(can_merge),
@@ -1799,7 +1793,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  AddColumn * add_col = ati->mutable_modify_column();
                  ColumnDef * def = add_col->mutable_new_col();
                  const uint64_t type_mask_backup = this->next_type_mask;
-                 std::vector<uint32_t> nested_ids;
+                 std::vector<String> nested_ids;
 
                  if (next_option < 4)
                  {
@@ -1822,22 +1816,23 @@ std::optional<String> StatementGenerator::alterSingleTable(
                      this->next_type_mask = fc.type_mask & ~(allow_nested);
                  }
 
-                 const uint32_t ncol = nested_ids.empty() ? rg.pickRandomly(t.cols) : t.col_counter++;
-                 addTableColumn(rg, t, ncol, true, true, rg.nextMediumNumber() < 6, ColumnSpecial::NONE, def);
+                 const String ncol_key
+                     = addTableColumn(rg, t, t.col_counter++, true, true, rg.nextMediumNumber() < 6, ColumnSpecial::NONE, def);
                  this->next_type_mask = type_mask_backup;
 
                  if (!nested_ids.empty())
                  {
-                     std::unordered_map<uint32_t, SQLColumn> nested_cols;
-                     const SQLColumn & nested_col = t.cols.at(rg.pickRandomly(nested_ids));
-                     nested_cols[nested_col.cname] = nested_col;
+                     std::unordered_map<String, SQLColumn> nested_cols;
+                     const String nested_key = rg.pickRandomly(nested_ids);
+                     const SQLColumn & nested_col = t.cols.at(nested_key);
+                     nested_cols[nested_key] = nested_col;
                      flatTableColumnPath(flat_nested, nested_cols, [](const SQLColumn &) { return true; });
                      const auto & entry = rg.pickRandomly(this->entries);
                      columnPathRef(entry, def->mutable_col());
-                     const uint32_t refcol = getIdentifierFromString(entry.getBottomName());
+                     const String refcol = entry.getBottomName();
                      this->entries.clear();
-                     t.staged_cols[refcol] = std::move(t.staged_cols[ncol]);
-                     t.staged_cols.erase(ncol);
+                     t.staged_cols[refcol] = std::move(t.staged_cols[ncol_key]);
+                     t.staged_cols.erase(ncol_key);
                  }
              }},
             /// Comment column
@@ -2178,7 +2173,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
               this->enforce_final = v.is_deterministic;
               cluster = v.getCluster();
               at->set_is_temp(v.is_temp);
-              at->set_sobject(SQLObject::TABLE);
+              at->set_sobject(SQLObject::VIEW);
               v.setName(at->mutable_object()->mutable_est(), false);
               for (uint32_t i = 0; i < nalters; i++)
               {
@@ -2334,7 +2329,7 @@ void StatementGenerator::generateAttach(RandomGenerator & rg, Attach * att)
               const SQLView & v = rg.pickRandomly(filterCollection<SQLView>(detached_views));
 
               cluster = v.getCluster();
-              att->set_sobject(SQLObject::TABLE);
+              att->set_sobject(SQLObject::VIEW);
               v.setName(sot->mutable_est(), false);
           }},
          {attach_dictionary,
@@ -2395,7 +2390,7 @@ void StatementGenerator::generateDetach(RandomGenerator & rg, Detach * det)
               const SQLView & v = rg.pickRandomly(filterCollection<SQLView>(attached_views));
 
               cluster = v.getCluster();
-              det->set_sobject(SQLObject::TABLE);
+              det->set_sobject(SQLObject::VIEW);
               v.setName(sot->mutable_est(), false);
           }},
          {detach_dictionary,
@@ -3098,7 +3093,7 @@ void StatementGenerator::generateNextRename(RandomGenerator & rg, Rename * ren)
               const SQLView & v = rg.pickRandomly(filterCollection<SQLView>(attached_views));
 
               cluster = v.getCluster();
-              ren->set_sobject(SQLObject::TABLE);
+              ren->set_sobject(SQLObject::VIEW);
               v.setName(oldn->mutable_est(), true);
               SQLView::setName(newn->mutable_est(), rg.nextIdentifier("v", this->table_counter++, fc.allow_nasty_identifiers), true, v.db);
           }},
@@ -3689,16 +3684,14 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
     {
         const Exchange & ex = query.exchange();
         const SQLObjectName & obj1 = ex.object1();
-        const bool istable = ex.sobject() == SQLObject::TABLE && obj1.est().table().value()[0] == 't';
-        const bool isview = ex.sobject() == SQLObject::TABLE && obj1.est().table().value()[0] == 'v';
         const String tkey1 = getNameFromProto(obj1.est().table().value());
         const String tkey2 = getNameFromProto(query.exchange().object2().est().table().value());
 
-        if (istable)
+        if (ex.sobject() == SQLObject::TABLE)
         {
             this->exchangeObjects<SQLTable>(tkey1, tkey2);
         }
-        else if (isview)
+        else if (ex.sobject() == SQLObject::VIEW)
         {
             this->exchangeObjects<SQLView>(tkey1, tkey2);
         }
@@ -3716,8 +3709,6 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         const Rename & ren = query.rename();
         const SQLObjectName & oobj = ren.old_object();
         const SQLObjectName & nobj = ren.new_object();
-        const bool istable = ren.sobject() == SQLObject::TABLE && oobj.est().table().value()[0] == 't';
-        const bool isview = ren.sobject() == SQLObject::TABLE && oobj.est().table().value()[0] == 'v';
         const bool isdatabase = ren.sobject() == SQLObject::DATABASE;
         const String old_key = getNameFromProto(isdatabase ? oobj.database().value() : oobj.est().table().value());
         const String new_key = getNameFromProto(isdatabase ? nobj.database().value() : nobj.est().table().value());
@@ -3727,11 +3718,11 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         {
             new_db = getNameFromProto(nobj.est().database().value());
         }
-        if (istable)
+        if (ren.sobject() == SQLObject::TABLE)
         {
             this->renameObjects<SQLTable>(old_key, new_key, new_db);
         }
-        else if (isview)
+        else if (ren.sobject() == SQLObject::VIEW)
         {
             this->renameObjects<SQLView>(old_key, new_key, new_db);
         }
@@ -3751,10 +3742,8 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
     else if (ssq.has_explain() && !ssq.explain().is_explain() && query.has_alter())
     {
         const Alter & at = query.alter();
-        const bool istable = at.object().has_est() && at.object().est().table().value()[0] == 't';
-        const bool isview = at.object().has_est() && at.object().est().table().value()[0] == 'v';
 
-        if (isview)
+        if (at.sobject() == SQLObject::VIEW)
         {
             SQLView & v = this->views[getNameFromProto(at.object().est().table().value())];
 
@@ -3767,13 +3756,13 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                     v.cols.clear();
                     for (uint32_t j = 0; j < v.staged_ncols; j++)
                     {
-                        v.cols.insert(j);
+                        v.cols.insert("c" + std::to_string(j));
                     }
                 }
                 v.is_refreshable |= (success && ati.has_refresh());
             }
         }
-        else if (istable)
+        else if (at.sobject() == SQLObject::TABLE)
         {
             SQLTable & t = this->tables[getNameFromProto(at.object().est().table().value())];
 
@@ -3788,11 +3777,11 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                     const Column & cstr = is_nested
                         ? ati.add_column().new_col().col().sub_cols(ati.add_column().new_col().col().sub_cols_size() - 1)
                         : ati.add_column().new_col().col().col();
-                    const uint32_t cname = getIdentifierFromString(cstr.column());
+                    const String & cname = cstr.column();
 
                     if (is_nested && !success)
                     {
-                        const uint32_t top_col = getIdentifierFromString(ati.add_column().new_col().col().col().column());
+                        const String & top_col = ati.add_column().new_col().col().col().column();
 
                         if (t.cols.contains(top_col))
                         {
@@ -3817,7 +3806,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 {
                     /// If this is the last column in the table and the statement succeeded, don't drop it
                     const ColumnPath & path = ati.drop_column();
-                    const uint32_t cname = getIdentifierFromString(path.col().column());
+                    const String & cname = path.col().column();
 
                     if (path.sub_cols_size() == 0)
                     {
@@ -3831,7 +3820,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                         chassert(path.sub_cols_size() == 1);
                         if ((ntp = dynamic_cast<NestedType *>(col.tp.get())) && ntp->subtypes.size() > 1)
                         {
-                            const uint32_t ncname = getIdentifierFromString(path.sub_cols(0).column());
+                            const String & ncname = path.sub_cols(0).column();
 
                             for (auto it = ntp->subtypes.cbegin(), next_it = it; it != ntp->subtypes.cend(); it = next_it)
                             {
@@ -3852,16 +3841,15 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 else if (ati.has_rename_column() && success)
                 {
                     const ColumnPath & path = ati.rename_column().old_name();
-                    const uint32_t old_cname = getIdentifierFromString(path.col().column());
+                    const String & old_cname = path.col().column();
 
                     if (path.sub_cols_size() == 0)
                     {
                         if (t.cols.contains(old_cname))
                         {
-                            const uint32_t new_cname = getIdentifierFromString(ati.rename_column().new_name().col().column());
+                            const String & new_cname = ati.rename_column().new_name().col().column();
 
                             t.cols[new_cname] = std::move(t.cols[old_cname]);
-                            t.cols[new_cname].cname = new_cname;
                             t.cols.erase(old_cname);
                         }
                     }
@@ -3873,14 +3861,14 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                         chassert(path.sub_cols_size() == 1);
                         if ((ntp = dynamic_cast<NestedType *>(col.tp.get())))
                         {
-                            const uint32_t nocname = getIdentifierFromString(path.sub_cols(0).column());
+                            const String & nocname = path.sub_cols(0).column();
 
                             for (auto it = ntp->subtypes.begin(), next_it = it; it != ntp->subtypes.end(); it = next_it)
                             {
                                 ++next_it;
                                 if (it->cname == nocname)
                                 {
-                                    it->cname = getIdentifierFromString(ati.rename_column().new_name().sub_cols(0).column());
+                                    it->cname = ati.rename_column().new_name().sub_cols(0).column();
                                     break;
                                 }
                             }
@@ -3893,11 +3881,11 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                     const Column & cstr = is_nested
                         ? ati.modify_column().new_col().col().sub_cols(ati.modify_column().new_col().col().sub_cols_size() - 1)
                         : ati.modify_column().new_col().col().col();
-                    const uint32_t cname = getIdentifierFromString(cstr.column());
+                    const String & cname = cstr.column();
 
                     if (is_nested)
                     {
-                        const uint32_t top_col = getIdentifierFromString(ati.modify_column().new_col().col().col().column());
+                        const String & top_col = ati.modify_column().new_col().col().col().column();
 
                         if (success && t.staged_cols.contains(cname) && t.cols.contains(top_col))
                         {
@@ -3930,7 +3918,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                     && ati.column_remove_property().property() < RemoveColumnProperty_ColumnProperties_CODEC)
                 {
                     const ColumnPath & path = ati.column_remove_property().col();
-                    const uint32_t cname = getIdentifierFromString(path.col().column());
+                    const String & cname = path.col().column();
 
                     if (path.sub_cols_size() == 0)
                     {
@@ -3939,7 +3927,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 }
                 else if (ati.has_add_constraint())
                 {
-                    const uint32_t pname = getIdentifierFromString(ati.add_constraint().constr().value());
+                    const uint32_t pname = static_cast<uint32_t>(std::stoul(ati.add_constraint().constr().value().substr(1)));
 
                     if (success)
                     {
@@ -3949,7 +3937,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 }
                 else if (ati.has_remove_constraint() && success)
                 {
-                    const uint32_t pname = getIdentifierFromString(ati.remove_constraint().value());
+                    const uint32_t pname = static_cast<uint32_t>(std::stoul(ati.remove_constraint().value().substr(1)));
 
                     t.constrs.erase(pname);
                 }
@@ -3965,7 +3953,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 }
             }
         }
-        else if (at.alter().has_alter_policy())
+        else if (at.sobject() == SQLObject::ROW_POLICY || at.sobject() == SQLObject::MASKING_POLICY)
         {
             const String & old_id = at.object().policy().value();
             const String & new_id = at.alter().alter_policy().has_rename_to() ? at.alter().alter_policy().rename_to().value() : old_id;
@@ -3991,17 +3979,15 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
     {
         const SQLObject & ob = query.has_attach() ? query.attach().sobject() : query.detach().sobject();
         const SQLObjectName & oobj = query.has_attach() ? query.attach().object() : query.detach().object();
-        const bool istable = ob == SQLObject::TABLE && oobj.est().table().value()[0] == 't';
-        const bool isview = ob == SQLObject::TABLE && oobj.est().table().value()[0] == 'v';
         const DetachStatus status = query.has_attach()
             ? DetachStatus::ATTACHED
             : (query.detach().permanently() ? DetachStatus::PERM_DETACHED : DetachStatus::DETACHED);
 
-        if (istable)
+        if (ob == SQLObject::TABLE)
         {
             this->attachOrDetachObject<SQLTable>(getNameFromProto(oobj.est().table().value()), status);
         }
-        else if (isview)
+        else if (ob == SQLObject::VIEW)
         {
             this->attachOrDetachObject<SQLView>(getNameFromProto(oobj.est().table().value()), status);
         }

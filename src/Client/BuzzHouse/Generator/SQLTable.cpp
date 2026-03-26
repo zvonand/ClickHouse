@@ -122,7 +122,7 @@ void collectColumnPaths(
 
         for (const auto & entry : nt->subtypes)
         {
-            const String nsub = "c" + std::to_string(entry.cname);
+            const String & nsub = entry.cname;
 
             collectColumnPaths(nsub, entry.subtype.get(), flags, next, paths);
             if ((flags & collect_generated) != 0)
@@ -179,7 +179,7 @@ void collectColumnPaths(
 }
 
 void StatementGenerator::flatTableColumnPath(
-    const uint32_t flags, const std::unordered_map<uint32_t, SQLColumn> & cols, std::function<bool(const SQLColumn & c)> col_filter)
+    const uint32_t flags, const std::unordered_map<String, SQLColumn> & cols, std::function<bool(const SQLColumn & c)> col_filter)
 {
     auto & res = ((flags & to_table_entries) != 0) ? this->table_entries
                                                    : (((flags & to_remote_entries) != 0) ? this->remote_entries : this->entries);
@@ -191,7 +191,7 @@ void StatementGenerator::flatTableColumnPath(
         {
             ColumnPathChain cpc(val.nullable, val.special, val.dmod, {});
 
-            collectColumnPaths("c" + std::to_string(key), val.tp.get(), flags, cpc, res);
+            collectColumnPaths(val.getColumnName(), val.tp.get(), flags, cpc, res);
         }
     }
 }
@@ -333,7 +333,7 @@ SQLRelation StatementGenerator::createViewRelation(const String & rel_name, cons
     chassert(!v.cols.empty());
     for (const auto & entry : v.cols)
     {
-        rel.cols.emplace_back(SQLRelationCol(rel_name, {"c" + std::to_string(entry)}));
+        rel.cols.emplace_back(SQLRelationCol(rel_name, {entry}));
     }
     return rel;
 }
@@ -1530,19 +1530,12 @@ void StatementGenerator::generateEngineDetails(
 }
 
 void StatementGenerator::addTableColumnInternal(
-    RandomGenerator & rg,
-    SQLTable & t,
-    const uint32_t cname,
-    const bool modify,
-    const bool is_pk,
-    const ColumnSpecial special,
-    SQLColumn & col,
-    ColumnDef * cd)
+    RandomGenerator & rg, SQLTable & t, const bool modify, const bool is_pk, const ColumnSpecial special, SQLColumn & col, ColumnDef * cd)
 {
     std::unique_ptr<SQLType> tp;
 
-    col.cname = cname;
-    cd->mutable_col()->mutable_col()->set_column("c" + std::to_string(cname));
+    chassert(!col.getColumnName().empty());
+    cd->mutable_col()->mutable_col()->set_column(col.getColumnName());
     if (special == ColumnSpecial::SIGN || special == ColumnSpecial::IS_DELETED)
     {
         tp = std::make_unique<IntType>(8, special == ColumnSpecial::IS_DELETED);
@@ -1670,7 +1663,7 @@ void StatementGenerator::addTableColumnInternal(
     }
 }
 
-void StatementGenerator::addTableColumn(
+String StatementGenerator::addTableColumn(
     RandomGenerator & rg,
     SQLTable & t,
     const uint32_t cname,
@@ -1681,6 +1674,7 @@ void StatementGenerator::addTableColumn(
     ColumnDef * cd)
 {
     SQLColumn col;
+    col.cname = rg.nextIdentifier("c", cname, fc.allow_nasty_identifiers);
     auto & to_add = staged ? t.staged_cols : t.cols;
     const uint64_t type_mask_backup = this->next_type_mask;
 
@@ -1723,11 +1717,12 @@ void StatementGenerator::addTableColumn(
         /// ClickHouse's UUID sorting order is different from other databases
         this->next_type_mask &= ~(allow_uuid);
     }
-    addTableColumnInternal(rg, t, cname, modify, is_pk, special, col, cd);
+    addTableColumnInternal(rg, t, modify, is_pk, special, col, cd);
 
-    to_add.erase(cname);
-    to_add[cname] = std::move(col);
+    const String result_col_name = col.getColumnName();
+    to_add[result_col_name] = std::move(col);
     this->next_type_mask = type_mask_backup;
+    return result_col_name;
 }
 
 void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const bool projection, IndexDef * idef)
@@ -2434,9 +2429,10 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
                       const uint32_t cname = next.col_counter++;
                       const bool add_pkey = !added_pkey && rg.nextMediumNumber() < 4;
 
-                      addTableColumn(rg, next, cname, false, false, add_pkey, ColumnSpecial::SIGN, ndef->mutable_col_def());
+                      const String sign_col
+                          = addTableColumn(rg, next, cname, false, false, add_pkey, ColumnSpecial::SIGN, ndef->mutable_col_def());
                       added_pkey |= add_pkey;
-                      te->add_params()->mutable_cols()->mutable_col()->set_column("c" + std::to_string(cname));
+                      te->add_params()->mutable_cols()->mutable_col()->set_column(sign_col);
                       added_sign++;
                   }},
                  {add_version,
@@ -2445,9 +2441,10 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
                       const uint32_t cname = next.col_counter++;
                       const bool add_pkey = !added_pkey && rg.nextMediumNumber() < 4;
 
-                      addTableColumn(rg, next, cname, false, false, add_pkey, ColumnSpecial::VERSION, ndef->mutable_col_def());
+                      const String version_col
+                          = addTableColumn(rg, next, cname, false, false, add_pkey, ColumnSpecial::VERSION, ndef->mutable_col_def());
                       added_pkey |= add_pkey;
-                      te->add_params()->mutable_cols()->mutable_col()->set_column("c" + std::to_string(cname));
+                      te->add_params()->mutable_cols()->mutable_col()->set_column(version_col);
                       added_version++;
                   }},
                  {add_is_deleted,
@@ -2456,9 +2453,10 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
                       const uint32_t cname = next.col_counter++;
                       const bool add_pkey = !added_pkey && rg.nextMediumNumber() < 4;
 
-                      addTableColumn(rg, next, cname, false, false, add_pkey, ColumnSpecial::IS_DELETED, ndef->mutable_col_def());
+                      const String is_deleted_col
+                          = addTableColumn(rg, next, cname, false, false, add_pkey, ColumnSpecial::IS_DELETED, ndef->mutable_col_def());
                       added_pkey |= add_pkey;
-                      te->add_params()->mutable_cols()->mutable_col()->set_column("c" + std::to_string(cname));
+                      te->add_params()->mutable_cols()->mutable_col()->set_column(is_deleted_col);
                       added_is_deleted++;
                   }}});
         }
@@ -2708,8 +2706,8 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         const bool prev_allow_in_expression_alias = this->allow_in_expression_alias;
         const bool prev_allow_subqueries = this->allow_subqueries;
 
-        col.cname = ncname;
-        dc->mutable_col()->set_column("c" + std::to_string(ncname));
+        col.cname = rg.nextIdentifier("c", ncname, fc.allow_nasty_identifiers);
+        dc->mutable_col()->set_column(col.getColumnName());
         /// Many types are not allowed in dictionaries
         this->next_type_mask = fc.type_mask
             & ~(allow_JSON | allow_variant | allow_dynamic | allow_tuple | allow_low_cardinality | allow_map | allow_enum | allow_geo
@@ -2717,7 +2715,8 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         col.tp = randomNextType(rg, this->next_type_mask, col_counter, dc->mutable_type()->mutable_type());
         this->next_type_mask = type_mask_backup;
 
-        next.cols[ncname] = std::move(col);
+        const String dict_col_name = col.getColumnName();
+        next.cols[dict_col_name] = std::move(col);
         addDictionaryRelation("", next);
         this->levels[this->current_level].allow_aggregates = rg.nextMediumNumber() < 11;
         this->levels[this->current_level].allow_window_funcs = rg.nextMediumNumber() < 11;
@@ -2734,7 +2733,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         if (!has_hierarchical && rg.nextSmallNumber() < 8)
         {
             /// Hierarchical is only valid once, on an integer-type value column
-            const SQLType * eff_tp = next.cols[ncname].tp.get();
+            const SQLType * eff_tp = next.cols[dict_col_name].tp.get();
 
             if (eff_tp && eff_tp->getTypeClass() == SQLTypeClass::NULLABLE)
                 eff_tp = static_cast<const Nullable *>(eff_tp)->subtype.get();

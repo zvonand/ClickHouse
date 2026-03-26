@@ -85,7 +85,7 @@ extern const std::vector<std::vector<InOutFormat>> inOutFormats;
 struct SQLColumn
 {
 public:
-    uint32_t cname = 0;
+    String cname;
     std::unique_ptr<SQLType> tp;
     ColumnSpecial special = ColumnSpecial::NONE;
     std::optional<bool> nullable;
@@ -102,7 +102,7 @@ public:
     }
     SQLColumn(SQLColumn && c) noexcept
     {
-        this->cname = c.cname;
+        this->cname = std::move(c.cname);
         this->tp = std::move(c.tp);
         this->special = c.special;
         this->nullable = c.nullable;
@@ -127,7 +127,7 @@ public:
         {
             return *this;
         }
-        this->cname = c.cname;
+        this->cname = std::move(c.cname);
         this->tp = std::move(c.tp);
         this->special = c.special;
         this->nullable = std::optional<bool>(c.nullable);
@@ -403,8 +403,8 @@ public:
     uint32_t idx_counter = 0;
     uint32_t proj_counter = 0;
     uint32_t constr_counter = 0;
-    std::unordered_map<uint32_t, SQLColumn> cols;
-    std::unordered_map<uint32_t, SQLColumn> staged_cols;
+    std::unordered_map<String, SQLColumn> cols;
+    std::unordered_map<String, SQLColumn> staged_cols;
     std::unordered_set<uint32_t> constrs;
     std::unordered_set<uint32_t> staged_constrs;
     std::unordered_map<uint32_t, String> frozen_partitions;
@@ -432,7 +432,7 @@ public:
     bool is_refreshable = false;
     bool has_with_cols = false;
     uint32_t staged_ncols = 0;
-    std::unordered_set<uint32_t> cols;
+    std::unordered_set<String> cols;
 
     SQLView()
         : SQLBase("v")
@@ -445,7 +445,7 @@ public:
 struct SQLDictionary : SQLBase
 {
 public:
-    std::unordered_map<uint32_t, SQLColumn> cols;
+    std::unordered_map<String, SQLColumn> cols;
 
     SQLDictionary()
         : SQLBase("d")

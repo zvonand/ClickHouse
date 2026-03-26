@@ -205,7 +205,7 @@ def main():
         "compare_success_results": False,  # This can give false positives, so disable it
         "allow_infinite_tables": random.randint(1, 7) == 1,
         "allow_health_check": False,  # I have to test this first
-        "allow_nasty_identifiers": random.randint(1, 4) == 1,
+        "allow_nasty_identifiers": random.randint(1, 5) == 1,
         "enable_compatibility_settings": random.randint(1, 4) == 1,
         "enable_memory_settings": random.randint(1, 4) == 1,
         "enable_sync_settings": random.randint(1, 4) == 1,

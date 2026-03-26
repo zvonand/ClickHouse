@@ -4037,10 +4037,9 @@ CONV_FN(Exchange, et)
     switch (et.sobject())
     {
         case SQLObject::TABLE:
-            ret += "TABLES";
-            break;
         case SQLObject::VIEW:
-            ret += "VIEWS";
+            /// EXCHANGE VIEWS is a syntax error
+            ret += "TABLES";
             break;
         case SQLObject::DICTIONARY:
             ret += "DICTIONARIES";
@@ -5581,7 +5580,8 @@ CONV_FN(BackupRestore, backup)
 CONV_FN(Rename, ren)
 {
     ret += "RENAME ";
-    ret += SQLObjectToString(ren.sobject());
+    /// RENAME VIEW is a typo
+    ret += ren.sobject() == SQLObject::VIEW ? "TABLE" : SQLObjectToString(ren.sobject());
     ret += " ";
     SQLObjectNameToString(ret, ren.old_object());
     ret += " TO ";

@@ -136,7 +136,7 @@ bool SQLColumn::canBeInserted() const
 
 String SQLColumn::getColumnName() const
 {
-    return "c" + std::to_string(cname);
+    return cname;
 }
 
 void SQLDatabase::setRandomDatabase(RandomGenerator & rg, SQLDatabase & d)

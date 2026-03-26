@@ -3,10 +3,10 @@
 #pragma clang diagnostic ignored "-Wreserved-identifier"
 
 
-/// WITH_COVERAGE enables the default implementation of code coverage,
+/// WITH_COVERAGE_DEPTH enables the default implementation of code coverage,
 /// that dumps a map to the filesystem.
 
-#if WITH_COVERAGE
+#if WITH_COVERAGE_DEPTH
 
 #include <algorithm>
 #include <cstddef>
@@ -423,7 +423,7 @@ void resetCoverage()
 
 void dumpCoverageReportIfPossible()
 {
-#if WITH_COVERAGE
+#if WITH_COVERAGE_DEPTH
     static std::mutex mutex;
     std::lock_guard lock(mutex);
     __llvm_profile_dump(); // NOLINT

@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(__ELF__) && !defined(OS_FREEBSD) && WITH_COVERAGE
+#if defined(__ELF__) && !defined(OS_FREEBSD) && WITH_COVERAGE_DEPTH
 
 #include <Interpreters/Context_fwd.h>
 #include <base/coverage.h>

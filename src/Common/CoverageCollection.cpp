@@ -1,4 +1,4 @@
-#if defined(__ELF__) && !defined(OS_FREEBSD) && WITH_COVERAGE
+#if defined(__ELF__) && !defined(OS_FREEBSD) && WITH_COVERAGE_DEPTH
 
 #include <Common/CoverageCollection.h>
 #include <Common/LLVMCoverageMapping.h>

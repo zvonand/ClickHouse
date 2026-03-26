@@ -10,7 +10,7 @@
 /// Flush coverage report to file, depending on coverage system
 /// proposed by compiler (llvm for clang and gcov for gcc).
 ///
-/// Noop if build without coverage (WITH_COVERAGE=0).
+/// Noop if build without coverage (WITH_COVERAGE_DEPTH=0).
 /// Thread safe (use exclusive lock).
 /// Idempotent, may be called multiple times.
 void dumpCoverageReportIfPossible();
@@ -19,20 +19,20 @@ void dumpCoverageReportIfPossible();
 /// Reads /proc/self/exe to parse __llvm_covmap and __llvm_covfun sections.
 /// Builds a counter→region index for fast per-test scanning.
 /// Call once at server startup.
-/// Noop if build without coverage (WITH_COVERAGE=0).
+/// Noop if build without coverage (WITH_COVERAGE_DEPTH=0).
 void loadCoverageMapping();
 
 /// Atomically flush current coverage for the previous test → reset counters → arm new test name.
 /// Call before each test. Empty name flushes without starting a new test.
-/// Noop if build without coverage (WITH_COVERAGE=0).
+/// Noop if build without coverage (WITH_COVERAGE_DEPTH=0).
 void setCoverageTest(std::string_view test_name);
 
 /// Reset the accumulated coverage.
 /// For compatibility: equivalent to setCoverageTest("").
-/// Noop if build without coverage (WITH_COVERAGE=0).
+/// Noop if build without coverage (WITH_COVERAGE_DEPTH=0).
 void resetCoverage();
 
-#if WITH_COVERAGE
+#if WITH_COVERAGE_DEPTH
 
 /// Each entry is (name_hash, func_hash, counter_id, min_depth).
 ///

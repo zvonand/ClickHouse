@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(__ELF__) && WITH_COVERAGE
+#if defined(__ELF__) && WITH_COVERAGE_DEPTH
 
 #include <cstdint>
 #include <string>

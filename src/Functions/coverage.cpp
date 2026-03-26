@@ -1,4 +1,4 @@
-#if WITH_COVERAGE
+#if WITH_COVERAGE_DEPTH
 
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypesNumber.h>
@@ -31,7 +31,7 @@ enum class Kind : uint8_t
     LineEnds,
 };
 
-/** If ClickHouse is built with coverage instrumentation (WITH_COVERAGE=1), returns arrays
+/** If ClickHouse is built with coverage instrumentation (WITH_COVERAGE_DEPTH=1), returns arrays
   * of source files / line start numbers / line end numbers covered since the last reset.
   */
 class FunctionCoverageLines : public IFunction
@@ -158,7 +158,7 @@ REGISTER_FUNCTION(CoverageLines)
     factory.registerFunction("coverageDiag", [](ContextPtr){ return std::make_shared<FunctionCoverageDiag>(); },
         FunctionDocumentation
         {
-            .description = R"(Returns diagnostic counters for the LLVM coverage system as an `Array(UInt64)`: `[name_refs_count, coverage_map_size, matches, non_empty_file_regions, zero_line_regions, first_file_info]`. Only available in `WITH_COVERAGE=1` builds.)",
+            .description = R"(Returns diagnostic counters for the LLVM coverage system as an `Array(UInt64)`: `[name_refs_count, coverage_map_size, matches, non_empty_file_regions, zero_line_regions, first_file_info]`. Only available in `WITH_COVERAGE_DEPTH=1` builds.)",
             .syntax = "coverageDiag()",
             .introduced_in = {25, 6},
             .category = FunctionDocumentation::Category::Introspection
@@ -168,7 +168,7 @@ REGISTER_FUNCTION(CoverageLines)
         FunctionDocumentation
         {
             .description = R"(
-This function is only available if ClickHouse was built with the `WITH_COVERAGE=1` option.
+This function is only available if ClickHouse was built with the `WITH_COVERAGE_DEPTH=1` option.
 
 Returns an `Array(String)` of source file paths covered since the last `SYSTEM SET COVERAGE TEST` call.
 
@@ -183,7 +183,7 @@ Use together with `coverageCurrentLineStarts` and `coverageCurrentLineEnds` to g
         FunctionDocumentation
         {
             .description = R"(
-This function is only available if ClickHouse was built with the `WITH_COVERAGE=1` option.
+This function is only available if ClickHouse was built with the `WITH_COVERAGE_DEPTH=1` option.
 
 Returns an `Array(UInt32)` of line start numbers parallel to `coverageCurrentFiles`.
 )",
@@ -196,7 +196,7 @@ Returns an `Array(UInt32)` of line start numbers parallel to `coverageCurrentFil
         FunctionDocumentation
         {
             .description = R"(
-This function is only available if ClickHouse was built with the `WITH_COVERAGE=1` option.
+This function is only available if ClickHouse was built with the `WITH_COVERAGE_DEPTH=1` option.
 
 Returns an `Array(UInt32)` of line end numbers parallel to `coverageCurrentFiles`.
 )",

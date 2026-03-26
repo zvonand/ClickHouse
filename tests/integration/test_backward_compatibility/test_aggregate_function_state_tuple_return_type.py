@@ -183,6 +183,142 @@ def test_backward_compatibility_for_tuple_return_type(start_cluster):
                 "sumCount",
                 f"SELECT sumCount(x) FROM {remote_tab}",
             ),
+            # -If combinator
+            (
+                "sumCountIf",
+                f"SELECT sumCountIf(x, x > 2) FROM {remote_tab}",
+            ),
+            (
+                "simpleLinearRegressionIf",
+                f"SELECT tuple("
+                f"roundBankers(tupleElement(simpleLinearRegressionIf(x, y, x > 1), 1), 4), "
+                f"roundBankers(tupleElement(simpleLinearRegressionIf(x, y, x > 1), 2), 4)) "
+                f"FROM {remote_tab}",
+            ),
+            (
+                "studentTTestIf",
+                f"SELECT tuple("
+                f"roundBankers(tupleElement(studentTTestIf(x, g, x > 1), 1), 4), "
+                f"roundBankers(tupleElement(studentTTestIf(x, g, x > 1), 2), 4)) "
+                f"FROM {remote_tab}",
+            ),
+            (
+                "argAndMinIf",
+                f"SELECT argAndMinIf(a, b, a > 0) FROM {remote_tab}",
+            ),
+            (
+                "argAndMaxIf",
+                f"SELECT argAndMaxIf(a, b, a > 0) FROM {remote_tab}",
+            ),
+            # -Distinct combinator
+            (
+                "sumCountDistinct",
+                f"SELECT sumCountDistinct(x) FROM {remote_tab}",
+            ),
+            (
+                "simpleLinearRegressionDistinct",
+                f"SELECT tuple("
+                f"roundBankers(tupleElement(simpleLinearRegressionDistinct(x, y), 1), 4), "
+                f"roundBankers(tupleElement(simpleLinearRegressionDistinct(x, y), 2), 4)) "
+                f"FROM {remote_tab}",
+            ),
+            (
+                "studentTTestDistinct",
+                f"SELECT tuple("
+                f"roundBankers(tupleElement(studentTTestDistinct(x, g), 1), 4), "
+                f"roundBankers(tupleElement(studentTTestDistinct(x, g), 2), 4)) "
+                f"FROM {remote_tab}",
+            ),
+            (
+                "argAndMinDistinct",
+                f"SELECT argAndMinDistinct(a, b) FROM {remote_tab}",
+            ),
+            (
+                "argAndMaxDistinct",
+                f"SELECT argAndMaxDistinct(a, b) FROM {remote_tab}",
+            ),
+            # -DistinctIf combinator
+            (
+                "sumCountDistinctIf",
+                f"SELECT sumCountDistinctIf(x, x > 2) FROM {remote_tab}",
+            ),
+            (
+                "simpleLinearRegressionDistinctIf",
+                f"SELECT tuple("
+                f"roundBankers(tupleElement(simpleLinearRegressionDistinctIf(x, y, x > 1), 1), 4), "
+                f"roundBankers(tupleElement(simpleLinearRegressionDistinctIf(x, y, x > 1), 2), 4)) "
+                f"FROM {remote_tab}",
+            ),
+            (
+                "argAndMinDistinctIf",
+                f"SELECT argAndMinDistinctIf(a, b, a > 0) FROM {remote_tab}",
+            ),
+            # -Array combinator
+            (
+                "sumCountArray",
+                f"SELECT sumCountArray([x]) FROM {remote_tab}",
+            ),
+            (
+                "simpleLinearRegressionArray",
+                f"SELECT tuple("
+                f"roundBankers(tupleElement(simpleLinearRegressionArray([x], [y]), 1), 4), "
+                f"roundBankers(tupleElement(simpleLinearRegressionArray([x], [y]), 2), 4)) "
+                f"FROM {remote_tab}",
+            ),
+            (
+                "argAndMinArray",
+                f"SELECT argAndMinArray([a], [b]) FROM {remote_tab}",
+            ),
+            # -Merge combinator
+            (
+                "sumCountMerge",
+                f"SELECT sumCountMerge(s) FROM (SELECT sumCountState(x) AS s FROM {remote_tab})",
+            ),
+            (
+                "simpleLinearRegressionMerge",
+                f"SELECT tuple("
+                f"roundBankers(tupleElement(simpleLinearRegressionMerge(s), 1), 4), "
+                f"roundBankers(tupleElement(simpleLinearRegressionMerge(s), 2), 4)) "
+                f"FROM (SELECT simpleLinearRegressionState(x, y) AS s FROM {remote_tab})",
+            ),
+            (
+                "argAndMinMerge",
+                f"SELECT argAndMinMerge(s) FROM (SELECT argAndMinState(a, b) AS s FROM {remote_tab})",
+            ),
+            # -ForEach combinator
+            (
+                "sumCountForEach",
+                f"SELECT sumCountForEach([x]) FROM {remote_tab}",
+            ),
+            (
+                "simpleLinearRegressionForEach",
+                f"SELECT arrayMap(t -> tuple("
+                f"roundBankers(tupleElement(t, 1), 4), "
+                f"roundBankers(tupleElement(t, 2), 4)), "
+                f"simpleLinearRegressionForEach([x], [y])) "
+                f"FROM {remote_tab}",
+            ),
+            (
+                "argAndMinForEach",
+                f"SELECT argAndMinForEach([a], [b]) FROM {remote_tab}",
+            ),
+            # -Resample combinator
+            (
+                "sumCountResample",
+                f"SELECT sumCountResample(0, 2, 1)(x, g) FROM {remote_tab}",
+            ),
+            (
+                "simpleLinearRegressionResample",
+                f"SELECT arrayMap(t -> tuple("
+                f"roundBankers(tupleElement(t, 1), 4), "
+                f"roundBankers(tupleElement(t, 2), 4)), "
+                f"simpleLinearRegressionResample(0, 2, 1)(x, y, g)) "
+                f"FROM {remote_tab}",
+            ),
+            (
+                "argAndMinResample",
+                f"SELECT argAndMinResample(0, 2, 1)(a, b, g) FROM {remote_tab}",
+            ),
         ]
 
     def build_empty_checks(remote_tab):
@@ -197,6 +333,16 @@ def test_backward_compatibility_for_tuple_return_type(start_cluster):
                 "sumMapWithOverflow_empty",
                 f"SELECT sumMapWithOverflow(tuple(keys, vals8)) FROM {remote_tab} WHERE 0",
             ),
+            ("sumCountIf_empty", f"SELECT sumCountIf(x, x > 2) FROM {remote_tab} WHERE 0"),
+            ("sumCountDistinct_empty", f"SELECT sumCountDistinct(x) FROM {remote_tab} WHERE 0"),
+            ("sumCountArray_empty", f"SELECT sumCountArray([x]) FROM {remote_tab} WHERE 0"),
+            (
+                "simpleLinearRegressionIf_empty",
+                f"SELECT simpleLinearRegressionIf(x, y, x > 1) FROM {remote_tab} WHERE 0",
+            ),
+            ("argAndMinIf_empty", f"SELECT argAndMinIf(a, b, a > 0) FROM {remote_tab} WHERE 0"),
+            ("sumCountForEach_empty", f"SELECT sumCountForEach([x]) FROM {remote_tab} WHERE 0"),
+            ("sumCountResample_empty", f"SELECT sumCountResample(0, 2, 1)(x, g) FROM {remote_tab} WHERE 0"),
         ]
 
     mixed_checks = build_checks(mixed_remote_tab)

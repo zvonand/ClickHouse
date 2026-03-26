@@ -405,7 +405,7 @@ public:
         joinLoadingThreads(lock);
     }
 
-    void waitForCurrentLoadingThreadsToFinish()
+    void joinLoadingThreads()
     {
         std::unique_lock lock{mutex};
         joinLoadingThreads(lock);
@@ -1389,9 +1389,9 @@ void ExternalLoader::enablePeriodicUpdates(bool enable_)
     periodic_updater->enable(enable_);
 }
 
-void ExternalLoader::waitForCurrentLoadingThreadsToFinish()
+void ExternalLoader::joinLoadingThreads()
 {
-    loading_dispatcher->waitForCurrentLoadingThreadsToFinish();
+    loading_dispatcher->joinLoadingThreads();
 }
 
 bool ExternalLoader::hasLoadedObjects() const

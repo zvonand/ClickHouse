@@ -25,7 +25,8 @@ FROM (
     LEFT ANTI JOIN rhs
     ON lhs.a = rhs.a
 )
-WHERE (explain LIKE '% Type:%') OR (explain LIKE '% Strictness:%');
+WHERE (explain LIKE '% Type:%') OR (explain LIKE '% Strictness:%')
+SETTINGS query_plan_join_shard_by_pk_ranges = 0;
 
 SELECT *
 FROM lhs
@@ -49,7 +50,8 @@ FROM (
     RIGHT ANTI JOIN rhs
     ON lhs.a = rhs.a
 )
-WHERE (explain LIKE '% Type:%') OR (explain LIKE '% Strictness:%');
+WHERE (explain LIKE '% Type:%') OR (explain LIKE '% Strictness:%')
+SETTINGS query_plan_join_shard_by_pk_ranges = 0;
 
 SELECT *
 FROM lhs

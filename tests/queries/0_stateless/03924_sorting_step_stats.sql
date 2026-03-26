@@ -6,9 +6,7 @@ SET enable_analyzer = 1,
     query_plan_join_swap_table = 0,
     enable_parallel_replicas = 0,
     use_skip_indexes_for_top_k = 0,
-    use_top_k_dynamic_filtering = 0,
-    query_plan_read_in_order_through_join = 0, -- changes plan structure (Limit/Sorting nesting under Join)
-    optimize_sorting_by_input_stream_properties = 1; -- changes preliminary LIMIT / Sorting nesting
+    use_top_k_dynamic_filtering = 0; -- changes preliminary LIMIT / Sorting nesting
 
 
 SELECT '-------------- Limit < table size -------------';
@@ -20,7 +18,8 @@ SELECT explain FROM
         (SELECT * FROM t ORDER BY c LIMIT 22) AS t2
     WHERE t1.c = t2.c
 )
-WHERE (explain LIKE '%Join%') OR (explain LIKE '%Sorting%') OR (explain LIKE '%Limit%') OR (explain LIKE '%ReadFromMergeTree%');
+WHERE (explain LIKE '%Join%') OR (explain LIKE '%Sorting%') OR (explain LIKE '%Limit%') OR (explain LIKE '%ReadFromMergeTree%')
+SETTINGS query_plan_read_in_order_through_join = 0, optimize_sorting_by_input_stream_properties = 1;
 
 
 SELECT '-------------- Limit > table size -------------';
@@ -32,4 +31,5 @@ SELECT explain FROM
         (SELECT * FROM t ORDER BY c LIMIT 5000) AS t2
     WHERE t1.c = t2.c
 )
-WHERE (explain LIKE '%Join%') OR (explain LIKE '%Sorting%') OR (explain LIKE '%Limit%') OR (explain LIKE '%ReadFromMergeTree%');
+WHERE (explain LIKE '%Join%') OR (explain LIKE '%Sorting%') OR (explain LIKE '%Limit%') OR (explain LIKE '%ReadFromMergeTree%')
+SETTINGS query_plan_read_in_order_through_join = 0, optimize_sorting_by_input_stream_properties = 1;

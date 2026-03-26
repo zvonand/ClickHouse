@@ -854,14 +854,13 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
               alignItems: 'center',
               flex: 1,
               minWidth: 0,
-              gap: '4px',
               overflow: 'auto'
             }}
           >
             {nameParams.length > 0 ? (
               nameParams.map((name, index) => (
                 <div key={index} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                  <Text style={{ opacity: 0.6, margin: '0 4px' }}>/</Text>
+                  <span style={{ opacity: 0.6, paddingLeft: index === 0 ? 0 : '6px', paddingRight: '6px' }}>/</span>
                   <Link
                     href={buildUrlWithNameRange(index)}
                     style={{
@@ -1016,13 +1015,10 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                       </>
                     )}
                   </div>
+                {data.info && (
+                  <Text style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '12px', padding: '8px', backgroundColor: 'rgba(0, 0, 0, 0.05)', borderRadius: '4px', boxSizing: 'border-box' }}>{data.info}</Text>
+                )}
                 </Panel>
-
-              {data.info && (
-                <Panel hasShadow padding='md' orientation='vertical' gap='xs' alignItems='start' style={{ marginBottom: '16px', boxSizing: 'border-box' }}>
-                  <Text style={{ whiteSpace: 'pre-wrap', fontSize: '13px' }}>{data.info}</Text>
-                </Panel>
-              )}
 
               {data.links && data.links.length > 0 && (
                 <Panel hasShadow padding='md' style={{ marginBottom: '16px', boxSizing: 'border-box' }}>
@@ -1047,14 +1043,16 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                 </Panel>
               )}
 
-              <Table
-                headers={headers}
-                rows={rows}
-                loading={loading}
-                mobileLayout="scroll"
-                onSort={handleMainSort}
-                style={{ tableLayout: 'auto' }}
-              />
+              {rows.length > 0 && (
+                <Table
+                  headers={headers}
+                  rows={rows}
+                  loading={loading}
+                  mobileLayout="scroll"
+                  onSort={handleMainSort}
+                  style={{ tableLayout: 'auto' }}
+                />
+              )}
             </>
           )}
 

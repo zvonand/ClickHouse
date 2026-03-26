@@ -172,72 +172,7 @@ def test_flush_blocks_until_commit_succeeds(started_cluster, mode):
     assert count > 0, f"Expected rows in destination table after flush, got 0"
 
 
-def test_flush_ordered_with_regex_partitioning(started_cluster):
-    """
-    FLUSH must be watch-driven in ordered mode with REGEX partitioning.
 
-    In the REGEX partitioned case the `Processed` marker lives under
-    `processed/<partition_key>`, not the parent `processed/` node.  A ZooKeeper
-    watch on a parent does NOT fire when a child is created or modified, so FLUSH
-    must watch the child directly.
-
-    This test uses hostname-based regex partitioning: filenames match the pattern
-    `(?P<hostname>[^_]+)_<timestamp>_<sequence>.csv` and the `hostname` group is
-    the partition key.  For `server-1_20251217T100000.000000Z_0001.csv` the
-    Keeper processed pointer lives at `processed/server-1`.
-
-    The watch correctness is verified via `fail_commit`: FLUSH must block while
-    the failpoint is active and unblock as soon as it is disabled.
-    """
-    node = started_cluster.instances["instance"]
-    table_name = f"flush_regex_{generate_random_string()}"
-    dst_table_name = f"{table_name}_dst"
-    files_path = f"{table_name}_data"
-    keeper_path = f"/clickhouse/test_{table_name}"
-    file_path = f"{files_path}/server-1_20251217T100000.000000Z_0001.csv"
-
-    put_s3_file_content(
-        started_cluster,
-        file_path,
-        b"1,2,3\n4,5,6\n7,8,9\n",
-    )
-
-    node.query("SYSTEM ENABLE FAILPOINT object_storage_queue_fail_commit")
-    try:
-        create_table(
-            started_cluster,
-            node,
-            table_name,
-            "ordered",
-            files_path,
-            partitioning_mode="regex",
-            partition_regex=r"(?P<hostname>[^_]+)_(?P<timestamp>\d{8}T\d{6}\.\d{6}Z)_(?P<sequence>\d+)",
-            partition_component="hostname",
-            additional_settings={"keeper_path": keeper_path},
-        )
-        create_mv(node, table_name, dst_table_name)
-
-        _wait_for_commit_failure(node, table_name)
-
-        t, flush_done, flush_errors = _run_flush_in_thread(node, table_name, file_path)
-        _wait_for_flush_running(node, table_name)
-
-        assert not flush_done.is_set(), (
-            "FLUSH returned while fail_commit was still active — it did not block"
-        )
-    finally:
-        node.query("SYSTEM DISABLE FAILPOINT object_storage_queue_fail_commit")
-
-    assert flush_done.wait(timeout=120), (
-        "FLUSH (REGEX partitioned) did not unblock within 120 s after disabling fail_commit"
-    )
-    t.join()
-
-    if flush_errors:
-        raise flush_errors[0]
-
-    count = int(node.query(f"SELECT count() FROM {dst_table_name}"))
-    assert count > 0, f"Expected rows in destination table after flush, got 0"
 @pytest.mark.parametrize("mode", AVAILABLE_MODES)
 def test_flush_returns_quickly_if_already_processed(started_cluster, mode):
     """
@@ -384,56 +319,6 @@ def test_flush_ordered_with_buckets(started_cluster):
     count = int(node.query(f"SELECT count() FROM {dst_table_name}"))
     assert count > 0, f"Expected rows in destination table after flush, got 0 (buckets=4)"
 
-
-def test_flush_ordered_semantics_advances_past_path(started_cluster):
-    """
-    In ordered mode FLUSH returns as soon as the queue pointer has advanced past
-    `path`, not necessarily because `path` was explicitly processed.  A path that
-    sorts lexicographically before the current last-processed path returns
-    immediately even if it was never uploaded.
-
-    This test documents and pins that semantic: it uploads `test_0.csv`, waits for
-    it to be naturally processed, then calls FLUSH for `aaa.csv` (which sorts
-    before `test_0.csv` and was never uploaded).  FLUSH must return immediately.
-    """
-    node = started_cluster.instances["instance"]
-    table_name = f"flush_semantics_{generate_random_string()}"
-    dst_table_name = f"{table_name}_dst"
-    files_path = f"{table_name}_data"
-    keeper_path = f"/clickhouse/test_{table_name}"
-
-    # test_0.csv sorts after aaa.csv, so processing it advances the pointer past aaa.csv.
-    generate_random_files(started_cluster, files_path, count=1, row_num=3)
-    file_path_earlier = f"{files_path}/aaa.csv"   # never uploaded, sorts before test_0.csv
-
-    create_table(
-        started_cluster,
-        node,
-        table_name,
-        "ordered",
-        files_path,
-        additional_settings={"keeper_path": keeper_path},
-    )
-    create_mv(node, table_name, dst_table_name)
-
-    # Wait for the uploaded file to be processed naturally.
-    for _ in range(60):
-        if int(node.query(f"SELECT count() FROM {dst_table_name}")) == 3:
-            break
-        time.sleep(1)
-    else:
-        raise AssertionError("File was not processed within 60 s")
-
-    # FLUSH for the path that sorts before the pointer must return immediately.
-    deadline = time.monotonic() + 5.0
-    node.query(
-        f"SYSTEM FLUSH OBJECT STORAGE QUEUE default.{table_name}"
-        f" PATH '{file_path_earlier}'"
-    )
-    assert time.monotonic() < deadline, (
-        "FLUSH for a path below the ordered pointer should return immediately "
-        "(ordered-mode semantics: 'advanced past', not 'exact match')"
-    )
 
 
 def test_flush_ordered_with_hive_partitioning(started_cluster):

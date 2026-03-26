@@ -1844,7 +1844,7 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
         constexpr UInt64 watch_timeout_ms = 1000;
         if (event->tryWait(watch_timeout_ms))
         {
-            event->reset();
+            (*event).reset();
             need_arm = true;
         }
     }

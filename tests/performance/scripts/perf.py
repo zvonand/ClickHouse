@@ -203,6 +203,57 @@ def substitute_parameters(query_templates, other_templates=[]):
         return query_results
 
 
+def split_sql_statements(sql):
+    """Split SQL into statements on semicolons, respecting quoted literals/identifiers, -- and # comments, and /* block comments */."""
+    statements = []
+    current = []
+    quote_char = ""
+    in_line_comment = False
+    in_block_comment = False
+    i = 0
+    while i < len(sql):
+        ch = sql[i]
+        next_ch = sql[i + 1] if i + 1 < len(sql) else ""
+        if in_line_comment:
+            current.append(ch)
+            if ch == "\n":
+                in_line_comment = False
+        elif in_block_comment:
+            current.append(ch)
+            if ch == "*" and next_ch == "/":
+                current.append("/")
+                i += 1
+                in_block_comment = False
+        elif quote_char:
+            current.append(ch)
+            if ch == quote_char and next_ch == quote_char:
+                current.append(quote_char)
+                i += 1
+            elif ch == quote_char:
+                quote_char = ""
+        elif (ch == "-" and next_ch == "-") or (ch == "#"):
+            in_line_comment = True
+            current.append(ch)
+        elif ch == "/" and next_ch == "*":
+            in_block_comment = True
+            current.append(ch)
+        elif ch in ("'", '"', "`"):
+            quote_char = ch
+            current.append(ch)
+        elif ch == ";":
+            stmt = "".join(current).strip()
+            if stmt:
+                statements.append(stmt)
+            current = []
+        else:
+            current.append(ch)
+        i += 1
+    stmt = "".join(current).strip()
+    if stmt:
+        statements.append(stmt)
+    return statements
+
+
 def first_keyword(sql):
     """Return the first SQL keyword from a statement, skipping comments and whitespace."""
     for line in sql.split("\n"):
@@ -237,7 +288,7 @@ for e in root.findall("query"):
         query_path = os.path.join(xml_dir, e.attrib["file"])
         with open(query_path, "r", encoding="utf-8") as f:
             full_text = f.read().strip()
-        statements = [s.strip() for s in full_text.split(";") if s.strip()]
+        statements = split_sql_statements(full_text)
         for stmt in statements:
             keyword = first_keyword(stmt)
             if keyword in ("CREATE", "ALTER"):

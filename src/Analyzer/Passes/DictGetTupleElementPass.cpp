@@ -184,10 +184,14 @@ public:
             }
         }
 
+        /// For dictGetOrDefault, both pieces must be rewritable — bail out if not
+        if (is_dict_get_or_default && !new_default_arg)
+            return;
+
         /// Now apply all mutations atomically
         dict_get_args[1] = std::move(new_attr_arg);
 
-        if (is_dict_get_or_default && new_default_arg)
+        if (new_default_arg)
         {
             size_t default_arg_idx = dict_get_args.size() - 1;
             dict_get_args[default_arg_idx] = std::move(new_default_arg);

@@ -130,9 +130,10 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
   useEffect(() => {
     if (!data) return
 
-    const isRunning = data.status.toLowerCase() === 'running'
+    const statusLower = data.status.toLowerCase()
+    const isInProgress = statusLower === 'running' || statusLower === 'pending'
 
-    if (isRunning && data.start_time) {
+    if (isInProgress && data.start_time) {
       const startTime = typeof data.start_time === 'number'
         ? data.start_time * 1000
         : new Date(data.start_time).getTime()
@@ -146,8 +147,8 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
       // Initial update
       updateDuration()
 
-      // Update every second for running status
-      if (isRunning) {
+      // Update every second for in-progress statuses
+      if (isInProgress) {
         const interval = setInterval(updateDuration, 1000)
         return () => clearInterval(interval)
       }
@@ -484,15 +485,16 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
   }
 
   const getJobDuration = (result: TestResult): string => {
-    const isRunning = result.status.toLowerCase() === 'running'
+    const statusLower = result.status.toLowerCase()
+    const isInProgress = statusLower === 'running' || statusLower === 'pending'
 
     // If no start_time and no duration, return empty
     if (!result.start_time && (!result.duration || result.duration === 0)) {
       return ''
     }
 
-    // For running jobs, calculate elapsed time from start_time
-    if (isRunning && result.start_time) {
+    // For in-progress jobs, calculate elapsed time from start_time
+    if (isInProgress && result.start_time) {
       const startTime = typeof result.start_time === 'number'
         ? result.start_time * 1000
         : new Date(result.start_time).getTime()

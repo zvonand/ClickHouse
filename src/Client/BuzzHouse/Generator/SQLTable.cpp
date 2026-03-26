@@ -974,7 +974,7 @@ void StatementGenerator::generateMergeTreeEngineDetails(
     {
         generateTableKey(rg, rel, b, false, te->mutable_primary_key());
     }
-    if (rg.nextBool())
+    if (rg.nextSmallNumber() < 4)
     {
         generateTableKey(rg, rel, b, false, te->mutable_partition_by());
     }

@@ -296,7 +296,7 @@ class Runner:
         if job.enable_gh_auth:
             _GH_Auth(workflow=workflow)
 
-        print("INFO: disk status before running docker:")
+        print("INFO: disk status before running a job:")
         Shell.run("df -h")
         if job.run_in_docker and not no_docker:
             Shell.run("docker system df")
@@ -491,7 +491,7 @@ class Runner:
                     ).set_info("---")
             result.dump()
 
-        print("INFO: disk status after running docker:")
+        print("INFO: disk status after running a job:")
         Shell.run("df -h")
         if job.run_in_docker and not no_docker:
             Shell.run("docker ps -a; docker container prune -f; docker volume prune -f --all; docker system df")

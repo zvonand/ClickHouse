@@ -3527,7 +3527,7 @@ KeeperDigest KeeperStorage<Container>::preprocessRequest(
         const auto elapsed_ms = watch.elapsedMilliseconds();
         const auto elapsed_us = watch.elapsedMicroseconds();
 
-        if (elapsed_ms > keeper_context->getDynamicSettings()[CoordinationSetting::log_slow_cpu_threshold_ms])
+        if (elapsed_ms > keeper_context->getCoordinationSettings()[CoordinationSetting::log_slow_cpu_threshold_ms])
         {
             LOG_INFO(
                 getLogger("KeeperStorage"),
@@ -3734,7 +3734,7 @@ KeeperResponsesForSessions KeeperStorage<Container>::processRequest(
         const auto elapsed_us = watch.elapsedMicroseconds();
         const auto elapsed_ms = watch.elapsedMilliseconds();
 
-        if (elapsed_ms > keeper_context->getDynamicSettings()[CoordinationSetting::log_slow_cpu_threshold_ms])
+        if (elapsed_ms > keeper_context->getCoordinationSettings()[CoordinationSetting::log_slow_cpu_threshold_ms])
         {
             LOG_INFO(
                 getLogger("KeeperStorage"),

@@ -390,28 +390,6 @@ public:
         return it->second->expiration_time;
     }
 
-    /// Extends the expiration time of a ticket.
-    /// The function calculates a new expiration time of a ticket based on the current time.
-    [[nodiscard]] arrow::Status extendTicketExpirationTime(const String & ticket)
-    {
-        if (!tickets_lifetime)
-            return arrow::Status::OK();
-        std::lock_guard lock{mutex};
-        auto it = tickets.find(ticket);
-        if (it == tickets.end())
-            return arrow::Status::KeyError("Ticket ", quoteString(ticket), " not found");
-        auto info = it->second;
-        auto old_expiration_time = info->expiration_time;
-        auto new_expiration_time = calculateTicketExpirationTime(now());
-        auto new_info = std::make_shared<TicketInfo>(*info);
-        new_info->expiration_time = new_expiration_time;
-        it->second = new_info;
-        tickets_by_expiration_time.erase(std::make_pair(*old_expiration_time, ticket));
-        tickets_by_expiration_time.emplace(*new_expiration_time, ticket);
-        updateNextExpirationTime();
-        return arrow::Status::OK();
-    }
-
     /// Cancels a ticket to free memory.
     /// Tickets are cancelled either by timer (if setting "arrowflight.tickets_lifetime_seconds" > 0)
     /// or after they are used by method DoGet (if setting "arrowflight.cancel_flight_descriptor_after_poll_flight_info" is set to true).

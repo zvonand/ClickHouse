@@ -329,6 +329,24 @@ String RandomGenerator::nextTokenString()
     return pickRandomly(this->nextSmallNumber() < 3 ? nasty_strings : (this->nextBool() ? common_english : common_chinese));
 }
 
+/// Returns a backtick-safe identifier string.
+/// When allow_nasty is true, embeds spaces, special characters, unicode, or SQL keywords.
+/// Callers must backtick-quote the result in SQL output.
+String RandomGenerator::nextIdentifier(const String & prefix, const uint32_t counter, const bool allow_nasty)
+{
+    if (!allow_nasty || nextMediumNumber() < 6)
+        return prefix + std::to_string(counter);
+
+    /// SQL keyword or nasty identifier as leading part
+    String res = nextBool() ? pickRandomly(nasty_identifier_keywords) : pickRandomly(nasty_identifiers);
+    if (nextSmallNumber() < 9)
+    {
+        /// Add suffix most of the time, to increase variability and uniqueness
+        res += std::to_string(counter);
+    }
+    return res;
+}
+
 String RandomGenerator::nextString(const String & delimiter, const bool allow_nasty, const uint32_t limit)
 {
     String ret;

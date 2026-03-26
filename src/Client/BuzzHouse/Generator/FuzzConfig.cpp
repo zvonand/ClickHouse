@@ -388,6 +388,7 @@ FuzzConfig::FuzzConfig(DB::ClientBase * c, const String & path)
         {"enable_sync_settings", [&](const JSONObjectType & value) { enable_sync_settings = value.getBool(); }},
         {"enable_backups", [&](const JSONObjectType & value) { enable_backups = value.getBool(); }},
         {"enable_renames", [&](const JSONObjectType & value) { enable_renames = value.getBool(); }},
+        {"allow_nasty_identifiers", [&](const JSONObjectType & value) { allow_nasty_identifiers = value.getBool(); }},
         {"random_limited_values", [&](const JSONObjectType & value) { random_limited_values = value.getBool(); }},
         {"truncate_output", [&](const JSONObjectType & value) { truncate_output = value.getBool(); }},
         {"allow_transactions", [&](const JSONObjectType & value) { allow_transactions = value.getBool(); }},

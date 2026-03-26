@@ -989,12 +989,12 @@ bool SQLDictionary::supportsFinal() const
 
 void SQLFunction::setName(Function * f) const
 {
-    f->set_function("f" + std::to_string(fname));
+    f->set_function(name);
 }
 
 void SQLPolicy::setName(Policy * f) const
 {
-    f->set_policy("p" + std::to_string(policy_id));
+    f->set_policy(name);
 }
 
 const String & ColumnPathChain::getBottomName() const

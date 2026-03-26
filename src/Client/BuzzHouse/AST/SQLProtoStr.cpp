@@ -59,47 +59,11 @@ CONV_FN_QUOTE(ColumnPath, ic)
     }
 }
 
-CONV_FN(Index, idx)
-{
-    ret += idx.index();
-}
-
-CONV_FN(Projection, proj)
-{
-    ret += proj.projection();
-}
-
-CONV_FN(Constraint, constr)
-{
-    ret += constr.constraint();
-}
-
-CONV_FN(Database, db)
-{
-    ret += db.database();
-}
-
-void TableToString(String & ret, const bool quote, const Table & tab)
-{
-    ret += quote ? "`" : "";
-    ret += tab.table();
-    ret += quote ? "`" : "";
-}
-
-CONV_FN(Function, func)
-{
-    ret += func.function();
-}
-
-CONV_FN(Policy, rowp)
-{
-    ret += rowp.policy();
-}
-
-CONV_FN(Role, r)
+/// Append name backtick-quoted, escaping any embedded backtick by doubling it.
+static void appendBacktickQuoted(String & ret, const String & name)
 {
     ret += "`";
-    for (const char & c : r.role())
+    for (const char c : name)
     {
         if (c == '`')
             ret += "``";
@@ -107,6 +71,46 @@ CONV_FN(Role, r)
             ret += c;
     }
     ret += "`";
+}
+
+CONV_FN(Index, idx)
+{
+    appendBacktickQuoted(ret, idx.index());
+}
+
+CONV_FN(Projection, proj)
+{
+    appendBacktickQuoted(ret, proj.projection());
+}
+
+CONV_FN(Constraint, constr)
+{
+    appendBacktickQuoted(ret, constr.constraint());
+}
+
+CONV_FN(Database, db)
+{
+    appendBacktickQuoted(ret, db.database());
+}
+
+CONV_FN(Table, tab)
+{
+    appendBacktickQuoted(ret, tab.table());
+}
+
+CONV_FN(Function, func)
+{
+    appendBacktickQuoted(ret, func.function());
+}
+
+CONV_FN(Policy, rowp)
+{
+    appendBacktickQuoted(ret, rowp.policy());
+}
+
+CONV_FN(Role, r)
+{
+    appendBacktickQuoted(ret, r.role());
 }
 
 void ClusterToString(String & ret, const bool clause, const Cluster & cl)
@@ -222,7 +226,7 @@ CONV_FN(ExprSchemaTable, st)
         DatabaseToString(ret, st.database());
         ret += ".";
     }
-    TableToString(ret, true, st.table());
+    TableToString(ret, st.table());
 }
 
 CONV_FN_QUOTE(TypeName, top);
@@ -324,7 +328,7 @@ CONV_FN(ExprSchemaTableColumn, stc)
     }
     if (stc.has_table())
     {
-        TableToString(ret, true, stc.table());
+        TableToString(ret, stc.table());
         ret += ".";
     }
     ExprColumnToString(ret, stc.col());
@@ -1828,7 +1832,7 @@ CONV_FN(ComplicatedExpr, expr)
             ret += ")";
             break;
         case ExprType::kTable:
-            TableToString(ret, true, expr.table());
+            TableToString(ret, expr.table());
             ret += ".*";
             break;
         case ExprType::kLambda:
@@ -2075,16 +2079,9 @@ CONV_FN(NumbersFunc, gsf)
 static void FlatExprSchemaTableToString(String & ret, const ExprSchemaTable & est, const String & separator)
 {
     ret += "'";
-    if (est.has_database())
-    {
-        DatabaseToString(ret, est.database());
-    }
-    else
-    {
-        ret += "default";
-    }
+    ConvertToSQLString(ret, est.has_database() ? est.database().database() : "default");
     ret += separator;
-    TableToString(ret, false, est.table());
+    ConvertToSQLString(ret, est.table().table());
     ret += "'";
 }
 
@@ -2603,7 +2600,7 @@ CONV_FN(JoinedTableOrFunction, jtf)
     if (jtf.has_table_alias())
     {
         ret += " AS ";
-        TableToString(ret, false, jtf.table_alias());
+        TableToString(ret, jtf.table_alias());
     }
     if (jtf.col_aliases_size())
     {
@@ -2952,7 +2949,7 @@ CONV_FN(CTEquery, cteq)
     {
         ret += "RECURSIVE ";
     }
-    TableToString(ret, false, cteq.table());
+    TableToString(ret, cteq.table());
     ret += " AS ";
     if (cteq.is_materialized())
     {
@@ -3431,7 +3428,7 @@ CONV_FN(TableEngineParam, tep)
             DatabaseToString(ret, tep.database());
             break;
         case TableEngineParamType::kTable:
-            TableToString(ret, true, tep.table());
+            TableToString(ret, tep.table());
             break;
         case TableEngineParamType::kNum:
             ret += std::to_string(tep.num());
@@ -5765,7 +5762,7 @@ CONV_FN(ShowColumns, sh)
         ret += "FULL ";
     }
     ret += "COLUMNS FROM ";
-    TableToString(ret, true, sh.est().table());
+    TableToString(ret, sh.est().table());
     if (sh.est().has_database())
     {
         ret += " FROM ";
@@ -5781,7 +5778,7 @@ CONV_FN(ShowIndex, sh)
     }
     ret += ShowIndex_IndexShow_Name(sh.key());
     ret += " FROM ";
-    TableToString(ret, true, sh.est().table());
+    TableToString(ret, sh.est().table());
     if (sh.est().has_database())
     {
         ret += " FROM ";

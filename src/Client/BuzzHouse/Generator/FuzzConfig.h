@@ -348,6 +348,7 @@ public:
     bool enable_sync_settings = false;
     bool enable_backups = true;
     bool enable_renames = true;
+    bool allow_nasty_identifiers = false;
 
     uint64_t seed = 0;
     uint64_t min_insert_rows = 1;

@@ -1928,7 +1928,7 @@ void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const
     }
     if (!projection)
     {
-        idef->mutable_idx()->set_index("i" + std::to_string(t.idx_counter++));
+        idef->mutable_idx()->set_index(rg.nextIdentifier("i", t.idx_counter++, fc.allow_nasty_identifiers));
         if (rg.nextSmallNumber() < 7)
         {
             uint32_t granularity = 1;
@@ -1949,7 +1949,7 @@ void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const
 
 void StatementGenerator::addTableProjection(RandomGenerator & rg, SQLTable & t, ProjectionDef * pdef)
 {
-    pdef->mutable_proj()->set_projection("p" + std::to_string(t.proj_counter++));
+    pdef->mutable_proj()->set_projection(rg.nextIdentifier("p", t.proj_counter++, fc.allow_nasty_identifiers));
     this->inside_projection = true;
     if (rg.nextBool())
     {
@@ -2980,10 +2980,12 @@ void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bo
         /// Let it mix row policies with masking policies
         const SQLPolicy & existing = rg.pickValueRandomlyFromMap(this->policies);
         next.policy_id = existing.policy_id;
+        next.name = existing.name;
     }
     else
     {
         next.policy_id = this->policy_counter++;
+        next.name = rg.nextIdentifier("p", next.policy_id, fc.allow_nasty_identifiers);
     }
     next.table_id = t.tname;
 

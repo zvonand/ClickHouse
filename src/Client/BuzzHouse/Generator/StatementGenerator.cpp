@@ -454,6 +454,7 @@ void StatementGenerator::generateNextCreateFunction(RandomGenerator & rg, Create
     /// REPLACE FUNCTION syntax is not yet supported
     cf->set_create_opt(replace ? CreateReplaceOption::CreateOrReplace : CreateReplaceOption::Create);
     next.fname = fname;
+    next.name = replace ? this->functions.at(fname).name : rg.nextIdentifier("f", fname, fc.allow_nasty_identifiers);
     next.nargs = std::min(this->fc.max_width - this->width, rg.randomInt<uint32_t>(1, fc.max_columns));
     next.is_deterministic = rg.nextBool();
     /// If this function is later called by an oracle, then don't call it
@@ -2303,6 +2304,7 @@ void StatementGenerator::generateAlter(RandomGenerator & rg, const bool in_paral
                   SQLPolicy renamed(rp);
 
                   renamed.policy_id = this->policy_counter++;
+                  renamed.name = rg.nextIdentifier("p", renamed.policy_id, fc.allow_nasty_identifiers);
                   renamed.setName(apc->mutable_rename_to());
                   this->staged_policies[renamed.policy_id] = renamed;
               }

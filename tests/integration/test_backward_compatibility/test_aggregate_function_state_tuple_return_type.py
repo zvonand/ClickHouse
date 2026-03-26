@@ -345,71 +345,88 @@ def test_backward_compatibility_for_tuple_return_type(start_cluster):
             ("sumCountResample_empty", f"SELECT sumCountResample(0, 2, 1)(x, g) FROM {remote_tab} WHERE 0"),
         ]
 
+    def batch_query(checks):
+        """Combine individual checks into a single multi-statement query.
+
+        Each check's SELECT is wrapped as ``SELECT 'name', (original_select)``
+        so that the output contains one labeled row per check.
+        """
+        parts = []
+        for name, query in checks:
+            # Strip trailing semicolons/whitespace from the original query.
+            q = query.rstrip().rstrip(";")
+            parts.append(f"SELECT '{name}', ({q})")
+        return ";\n".join(parts)
+
+    def parse_batch_result(result, checks):
+        """Parse the labeled output back into a ``{name: value}`` dict."""
+        lines = result.strip().split("\n")
+        assert len(lines) == len(checks), (
+            f"Expected {len(checks)} result lines, got {len(lines)}"
+        )
+        parsed = {}
+        for line, (name, _) in zip(lines, checks):
+            parts = line.split("\t", 1)
+            assert parts[0] == name, f"Expected label '{name}', got '{parts[0]}'"
+            parsed[name] = parts[1] if len(parts) > 1 else ""
+        return parsed
+
+    def run_checks(node, checks):
+        """Run all checks on a node in a single round-trip and return results dict."""
+        return parse_batch_result(node.query(batch_query(checks)), checks)
+
     mixed_checks = build_checks(mixed_remote_tab)
     pre_nullable_only_checks = build_checks(pre_nullable_only_remote_tab)
-
-    mixed_baseline_results = {}
-    for name, query in mixed_checks:
-        mixed_baseline_results[name] = pre_nullable_tuple_node_1.query(query)
-
-    assert mixed_baseline_results["sumCount"] == "(48,16)\n"
-
-    for name, query in mixed_checks:
-        assert pre_nullable_tuple_node_2.query(query) == mixed_baseline_results[name], name
-        assert node3.query(query) == mixed_baseline_results[name], name
-        assert node4.query(query) == mixed_baseline_results[name], name
-
-    # Extra baseline with 4x pre-26.1 nodes.
-    pre_nullable_only_baseline_results = {}
-    for name, query in pre_nullable_only_checks:
-        pre_nullable_only_baseline_results[name] = pre_nullable_tuple_node_1.query(query)
-
-    for name, _ in mixed_checks:
-        assert pre_nullable_only_baseline_results[name] == mixed_baseline_results[name], name
-
-    # Cover empty aggregate states with deterministic tuple-return functions.
     mixed_empty_checks = build_empty_checks(mixed_remote_tab)
     pre_nullable_only_empty_checks = build_empty_checks(pre_nullable_only_remote_tab)
 
-    mixed_empty_baseline_results = {}
-    for name, query in mixed_empty_checks:
-        mixed_empty_baseline_results[name] = pre_nullable_tuple_node_1.query(query)
+    # Baseline: run all checks from the first pre-26.1 node.
+    mixed_baseline = run_checks(pre_nullable_tuple_node_1, mixed_checks)
+    assert mixed_baseline["sumCount"] == "(48,16)"
 
-    assert mixed_empty_baseline_results["sumCount_empty"] == "(0,0)\n"
+    # Verify all other nodes produce the same results (one round-trip per node).
+    for node in [pre_nullable_tuple_node_2, node3, node4]:
+        results = run_checks(node, mixed_checks)
+        for name in mixed_baseline:
+            assert results[name] == mixed_baseline[name], f"{name} on {node.name}"
 
-    for name, query in mixed_empty_checks:
-        assert pre_nullable_tuple_node_2.query(query) == mixed_empty_baseline_results[name], name
-        assert node3.query(query) == mixed_empty_baseline_results[name], name
-        assert node4.query(query) == mixed_empty_baseline_results[name], name
+    # Extra baseline with 4x pre-26.1 nodes — must match mixed baseline.
+    pre_nullable_only_baseline = run_checks(
+        pre_nullable_tuple_node_1, pre_nullable_only_checks
+    )
+    for name in mixed_baseline:
+        assert pre_nullable_only_baseline[name] == mixed_baseline[name], name
 
-    pre_nullable_only_empty_baseline_results = {}
-    for name, query in pre_nullable_only_empty_checks:
-        pre_nullable_only_empty_baseline_results[name] = pre_nullable_tuple_node_1.query(query)
+    # Cover empty aggregate states.
+    mixed_empty_baseline = run_checks(pre_nullable_tuple_node_1, mixed_empty_checks)
+    assert mixed_empty_baseline["sumCount_empty"] == "(0,0)"
 
-    for name, _ in mixed_empty_checks:
+    for node in [pre_nullable_tuple_node_2, node3, node4]:
+        results = run_checks(node, mixed_empty_checks)
+        for name in mixed_empty_baseline:
+            assert results[name] == mixed_empty_baseline[name], f"{name} on {node.name}"
+
+    pre_nullable_only_empty_baseline = run_checks(
+        pre_nullable_tuple_node_1, pre_nullable_only_empty_checks
+    )
+    for name in mixed_empty_baseline:
         assert (
-            pre_nullable_only_empty_baseline_results[name]
-            == mixed_empty_baseline_results[name]
+            pre_nullable_only_empty_baseline[name] == mixed_empty_baseline[name]
         ), name
 
     # Upgrade one pre-26.1 node to latest and re-check compatibility from all coordinators.
     pre_nullable_tuple_node_1.restart_with_latest_version(fix_metadata=True)
 
-    for name, query in mixed_checks:
-        assert pre_nullable_tuple_node_1.query(query) == mixed_baseline_results[name], name
-        assert pre_nullable_tuple_node_2.query(query) == mixed_baseline_results[name], name
-        assert node3.query(query) == mixed_baseline_results[name], name
-        assert node4.query(query) == mixed_baseline_results[name], name
+    for node in [pre_nullable_tuple_node_1, pre_nullable_tuple_node_2, node3, node4]:
+        results = run_checks(node, mixed_checks)
+        for name in mixed_baseline:
+            assert results[name] == mixed_baseline[name], f"{name} on {node.name}"
 
-    for name, query in mixed_empty_checks:
-        assert (
-            pre_nullable_tuple_node_1.query(query) == mixed_empty_baseline_results[name]
-        ), name
-        assert (
-            pre_nullable_tuple_node_2.query(query) == mixed_empty_baseline_results[name]
-        ), name
-        assert node3.query(query) == mixed_empty_baseline_results[name], name
-        assert node4.query(query) == mixed_empty_baseline_results[name], name
+        results = run_checks(node, mixed_empty_checks)
+        for name in mixed_empty_baseline:
+            assert (
+                results[name] == mixed_empty_baseline[name]
+            ), f"{name} on {node.name}"
 
     for node in test_nodes:
         node.query("DROP TABLE IF EXISTS tab_tuple_return")

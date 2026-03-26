@@ -181,10 +181,18 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
     auto inner_query_ast = getInMemoryMetadataPtr()->getSelectQuery().inner_query;
 
     QueryTreeNodePtr inner_query_tree;
-    inner_query_tree = buildQueryTree(inner_query_ast->clone(), context);
-    QueryTreePassManager pass_manager(context);
-    addQueryTreePasses(pass_manager);
-    pass_manager.runOnlyResolve(inner_query_tree);
+    try
+    {
+        inner_query_tree = buildQueryTree(inner_query_ast->clone(), context);
+        QueryTreePassManager pass_manager(context);
+        addQueryTreePasses(pass_manager);
+        pass_manager.runOnlyResolve(inner_query_tree);
+    }
+    catch (...)
+    {
+        tryLogCurrentException(__func__, fmt::format("Failed to resolve inner query of view {}", getStorageID().getFullTableName()));
+        return nullptr;
+    }
 
     const auto & settings = context->getSettingsRef();
     /// Walk the resolved join tree to find the leftmost leaf table.

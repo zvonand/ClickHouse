@@ -53,6 +53,7 @@
 #include <Interpreters/convertFieldToType.h>
 #include <TableFunctions/TableFunctionFactory.h>
 #include <Storages/IStorage.h>
+#include <Storages/StorageView.h>
 
 #include <base/Decimal_fwd.h>
 #include <base/types.h>
@@ -66,6 +67,7 @@ namespace Setting
 {
     extern const SettingsBool aggregate_functions_null_for_empty;
     extern const SettingsBool analyzer_compatibility_join_using_top_level_identifier;
+    extern const SettingsBool analyzer_inline_views;
     extern const SettingsBool asterisk_include_alias_columns;
     extern const SettingsBool asterisk_include_materialized_columns;
     extern const SettingsString count_distinct_implementation;
@@ -4881,6 +4883,50 @@ void QueryAnalyzer::resolveJoin(QueryTreeNodePtr & join_node, IdentifierResolveS
     }
 }
 
+/** Try to expand an ordinary (non-materialized, non-parameterized) VIEW into an inline subquery.
+  * This replaces the TableNode wrapping a StorageView with a QueryNode/UnionNode built from the
+  * view's inner query AST, making the view transparent to the analyzer and all optimization passes.
+  */
+void QueryAnalyzer::inlineViewSubqueryIfNeeded(QueryTreeNodePtr & join_tree_node, IdentifierResolveScope & scope) const
+{
+    if (!scope.context->getSettingsRef()[Setting::analyzer_inline_views])
+        return;
+
+    auto * table_node = join_tree_node->as<TableNode>();
+    if (!table_node)
+        return;
+
+    const auto & storage = table_node->getStorage();
+    const auto * view = typeid_cast<const StorageView *>(storage.get());
+    if (!view || view->isParameterizedView())
+        return;
+
+    /// Do not inline views with FINAL/SAMPLE modifiers for now.
+    if (table_node->hasTableExpressionModifiers())
+        return;
+
+    /// Get the view's inner query AST.
+    const auto & storage_snapshot = table_node->getStorageSnapshot();
+
+    auto view_context = StorageView::getViewSubqueryContext(scope.context, storage_snapshot);
+
+    /// Build the query tree from the view's inner query AST.
+    ASTPtr view_ast = storage_snapshot->metadata->getSelectQuery().inner_query->clone();
+    auto view_query_tree = buildQueryTree(view_ast, view_context);
+    QueryAnalyzer view_analyzer(this->only_analyze);
+    view_analyzer.resolve(view_query_tree, {}, view_context);
+
+    /// Preserve alias: the outer query references columns via the view name or user-provided alias.
+    view_query_tree->setAlias(table_node->getAlias());
+
+    /// Fix scope tracking: the old TableNode pointer was inserted during initializeQueryJoinTreeNode.
+    auto * old_ptr = join_tree_node.get();
+    scope.table_expressions_in_resolve_process.erase(old_ptr);
+
+    join_tree_node = std::move(view_query_tree);
+    scope.table_expressions_in_resolve_process.insert(join_tree_node.get());
+}
+
 /** Resolve query join tree.
   *
   * Query join tree must be initialized before calling this function.
@@ -4995,6 +5041,8 @@ void QueryAnalyzer::resolveQueryJoinTreeNode(QueryTreeNodePtr & join_tree_node, 
                     table_node->updateStorage(materialized_cte_ptr->storage, scope.context);
                 }
             }
+
+            inlineViewSubqueryIfNeeded(join_tree_node, scope);
             break;
         }
         case QueryTreeNodeType::ARRAY_JOIN:

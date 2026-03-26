@@ -256,12 +256,12 @@ static SQLSet commandGetPrimaryKeys(const arrow::flight::protocol::sql::CommandG
 
     auto sql =
         "SELECT "
-            "NULL::Nullable(String) AS catalog_name, "
+            "materialize(NULL::Nullable(String)) AS catalog_name, "
             "database AS schema_name, "
             "name AS table_name, "
             "primary_key AS column_name, "
-            "0::Int32 AS key_seq, "
-            "NULL::Nullable(String) AS pk_name "
+            "materialize(0::Int32) AS key_seq, "
+            "materialize(NULL::Nullable(String)) AS pk_name "
         "FROM system.tables"
         + where_expression;
 

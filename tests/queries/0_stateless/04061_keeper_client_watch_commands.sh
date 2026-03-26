@@ -46,7 +46,7 @@ $CLICKHOUSE_KEEPER_CLIENT -q "watch no_such_watch 1" 2>&1
 
 # -- duplicate watches --
 echo '-- duplicate watches' 2>&1
-$CLICKHOUSE_KEEPER_CLIENT -q "ls '$path' wdup; get '$path' wdup" 2>&1
+$CLICKHOUSE_KEEPER_CLIENT -q "ls '$path' wexists_ls; get '$path' wexists_ls" 2>&1
 
 # Cleanup
 $CLICKHOUSE_KEEPER_CLIENT -q "rmr '$path'"

@@ -24,4 +24,4 @@ Watch 'wtimeout' timed out
 No watch with id 'no_such_watch'
 -- duplicate watches
 child1 child2 will_appear
-Watch 'wdup' already exists
+Watch 'wexists_ls' already exists

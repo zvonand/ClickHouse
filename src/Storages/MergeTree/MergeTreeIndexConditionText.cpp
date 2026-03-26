@@ -15,9 +15,7 @@
 #include <Storages/MergeTree/MergeTreeIndexTextPreprocessor.h>
 #include <Storages/MergeTree/TextIndexCache.h>
 #include <DataTypes/DataTypeMapHelpers.h>
-#include <Common/OptimizedRegularExpression.h>
 #include <Columns/ColumnSet.h>
-#include <Interpreters/ExpressionActions.h>
 
 namespace DB
 {

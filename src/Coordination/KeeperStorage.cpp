@@ -1631,6 +1631,11 @@ bool KeeperStorage<Container>::checkACL(std::string_view path, int32_t permissio
 }
 
 /// Default implementations ///
+
+/// For most read requests, processLocal can be called for multiple consecutive read requests in
+/// parallel. So it must be thread-safe and shouldn't depend on the order of requests.
+/// In particular, it shouldn't read or write watches.
+/// Requests that need to access watches are excluded from parallel execution in processLocalRequests.
 template <std::derived_from<Coordination::ZooKeeperRequest> T, typename Storage>
 Coordination::ZooKeeperResponsePtr
 processLocal(const T & zk_request, Storage & /*storage*/, KeeperStorageBase::DeltaRange /*deltas*/, int64_t /*session_id*/)
@@ -3850,10 +3855,10 @@ KeeperResponsesForSessions KeeperStorage<Container>::processRequest(
                     nodes_digest = transaction_digest;
             }
 
-            /// Watches for this requests are added to the watches lists
+            /// Watches for this request are added to the watches lists
             updateWatches(zk_request, response, session_id);
 
-            /// If this requests processed successfully we need to check watches
+            /// If this request was processed successfully we need to check watches
             if (response->error == Coordination::Error::ZOK)
             {
                 auto [watch_responses, total_removed_watches] = processWatches(concrete_zk_request, deltas_range, *this, session_id);
@@ -3925,11 +3930,34 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
     std::list<Delta> empty_deltas;
     KeeperStorageBase::DeltaRange deltas_range{.begin_it = empty_deltas.begin(), .end_it = empty_deltas.end()};
 
-    /// Read requests have exactly one response each (no watch notifications from processWatches,
-    /// but SetWatches/SetWatches2 may produce watch notifications from setWatches).
-    /// For now, the parallel array stores only the primary response; watch notifications
-    /// from SetWatches are appended in the sequential phase.
+    /// Read requests have exactly one response each (no watch notifications from processWatches),
+    /// with the exception of SetWatches/SetWatches2, whose responses we insert separately below.
     KeeperResponsesForSessions results(requests.size());
+
+    /// TODO: Unbundle multireads, so that parts of one huge MultiRead can run in parallel.
+
+    auto is_request_thread_safe = [](Coordination::OpNum op) -> bool
+    {
+        switch (op)
+        {
+            case Coordination::OpNum::Exists:
+            case Coordination::OpNum::Get:
+            case Coordination::OpNum::GetACL:
+            case Coordination::OpNum::SimpleList:
+            case Coordination::OpNum::List:
+            case Coordination::OpNum::Check:
+            case Coordination::OpNum::MultiRead:
+            case Coordination::OpNum::FilteredList:
+            case Coordination::OpNum::CheckNotExists:
+            case Coordination::OpNum::CheckStat:
+            case Coordination::OpNum::FilteredListWithStatsAndData:
+                return true;
+            /// (Note: CheckWatch is not on this list because it needs to be ordered correctly with
+            ///  other RemoveWatch/AddWatch requests in the same batch.)
+            default:
+                return false;
+        }
+    };
 
     /// Phase 1: Execute reads (checkAuth + processLocal + spans).
     /// This is the parallelizable part — each request reads committed storage state
@@ -3976,7 +4004,6 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
 
                 try
                 {
-                    std::shared_lock lock(storage_mutex);
                     response = processLocal(concrete_zk_request, *this, deltas_range, session_id);
                 }
                 catch (...)
@@ -3997,35 +4024,40 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
         callOnConcreteRequestType(*zk_request, process_request);
     };
 
+    auto process_only_thread_safe_reads = [&](size_t begin, size_t end)
+        {
+            for (size_t request_idx = begin; request_idx < end; ++request_idx)
+            {
+                if (is_request_thread_safe(requests[request_idx].request->getOpNum()))
+                    process_one_read(request_idx);
+            }
+        };
+
     const auto & coordination_settings = keeper_context->getCoordinationSettings();
     size_t min_batch = coordination_settings[CoordinationSetting::parallel_read_min_batch];
     bool use_parallel = read_thread_pool && requests.size() >= min_batch;
 
-    if (use_parallel)
     {
-        size_t chunk_size = coordination_settings[CoordinationSetting::parallel_read_chunk_size];
-        if (chunk_size == 0)
-            chunk_size = 1;
+        std::shared_lock lock(storage_mutex);
+        if (use_parallel)
+        {
+            size_t chunk_size = coordination_settings[CoordinationSetting::parallel_read_chunk_size];
+            if (chunk_size == 0)
+                chunk_size = 1;
 
-        read_thread_pool->execute(
-            requests.size(),
-            chunk_size,
-            [&](size_t begin, size_t end)
-            {
-                for (size_t i = begin; i < end; ++i)
-                    process_one_read(i);
-            });
-    }
-    else
-    {
-        for (size_t i = 0; i < requests.size(); ++i)
-            process_one_read(i);
+            read_thread_pool->execute(requests.size(), chunk_size, process_only_thread_safe_reads);
+        }
+        else
+        {
+            process_only_thread_safe_reads(0, requests.size());
+        }
     }
 
     /// Phase 2 (sequential): session expiry, watch registration, processWatches.
     /// These mutate shared state (watches, sessions_and_watchers, total_watches_count)
     /// and must run single-threaded.
     int64_t prev_session_id = -1;
+    std::vector<std::pair</*request_idx*/ size_t, KeeperResponsesForSessions>> additional_responses;
     for (size_t request_idx = 0; request_idx < requests.size(); ++request_idx)
     {
         const auto & request_for_session = requests[request_idx];
@@ -4036,6 +4068,13 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
         {
             session_expiry_queue.addNewSessionOrUpdate(session_id, session_and_timeout[session_id]);
             prev_session_id = session_id;
+        }
+
+        /// If we didn't process the request above, process it now.
+        if (!is_request_thread_safe(zk_request->getOpNum()))
+        {
+            std::shared_lock lock(storage_mutex);
+            process_one_read(request_idx);
         }
 
         updateWatches(zk_request, results[request_idx].response, session_id);
@@ -4049,11 +4088,31 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
             {
                 auto [watch_responses, removed_count] = processWatches(concrete_zk_request, deltas_range, *this, session_id);
                 total_watches_count -= removed_count;
-                for (auto & wr : watch_responses)
-                    results.push_back(std::move(wr));
+                if (!watch_responses.empty())
+                    additional_responses.emplace_back(request_idx, std::move(watch_responses));
             };
             callOnConcreteRequestType(*zk_request, run_process_watches);
         }
+    }
+
+    if (!additional_responses.empty())
+    {
+        /// Rare case where responses are not 1:1 matched to requests, because of SetWatches/SetWatches2.
+        /// We have to insert some responses into the middle of the list.
+        KeeperResponsesForSessions merged;
+        size_t j = 0;
+        for (size_t request_idx = 0; request_idx < requests.size(); ++request_idx)
+        {
+            merged.push_back(std::move(results[request_idx]));
+            if (j < additional_responses.size() && additional_responses[j].first == request_idx)
+            {
+                auto & to_insert = additional_responses[j].second;
+                merged.insert(merged.end(), std::move_iterator(to_insert.begin()), std::move_iterator(to_insert.end()));
+                ++j;
+            }
+        }
+        chassert(j == additional_responses.size());
+        results = std::move(merged);
     }
 
     updateStats();

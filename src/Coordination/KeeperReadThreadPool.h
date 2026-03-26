@@ -12,6 +12,11 @@
 namespace DB
 {
 
+//asdqwe review
+//asdqwe ThreadPool instead of raw std::thread
+//asdqwe try the primed busy-wait thing
+//asdqwe limit on read batch size, in both places
+
 /// A simple thread pool for parallel execution of read request batches.
 /// Persistent threads sleep on a condvar between batches. Work is distributed
 /// via atomic fetch_add on a shared index (work-stealing by chunk).

@@ -51,6 +51,8 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
   const [nameParams, setNameParams] = useState<string[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [sortByStatus, setSortByStatus] = useState<boolean>(true)
+  const [mainSortColumn, setMainSortColumn] = useState<number | null>(null)
+  const [mainSortDir, setMainSortDir] = useState<'asc' | 'desc'>('asc')
   const [displayDuration, setDisplayDuration] = useState<number>(0)
   const [, setTick] = useState(0)
   const { createToast } = useToast()
@@ -183,6 +185,11 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     const newValue = !sortByStatus
     setSortByStatus(newValue)
     localStorage.setItem('sortByStatus', newValue ? 'true' : 'false')
+  }
+
+  const handleMainSort = (sortDir: 'asc' | 'desc', _header: any, index: number) => {
+    setMainSortColumn(index)
+    setMainSortDir(sortDir)
   }
 
   const getStatusPriority = (status: string): number => {
@@ -872,17 +879,34 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     )
   }
 
-  const headers = [
-    { label: 'Status', width: '100px', align: 'center' as const },
-    { label: 'Name', align: 'left' as const },
-    { label: 'Duration', width: '120px', align: 'center' as const },
-    { label: 'Start Time', width: '110px', align: 'center' as const },
-  ]
+  const headerDefs = ['Status', 'Name', 'Duration', 'Start Time']
+  const headers = headerDefs.map((label, i) => ({
+    label,
+    ...(i === 0 && { width: '100px' }),
+    ...(i === 2 && { width: '120px' }),
+    ...(i === 3 && { width: '110px' }),
+    isSortable: true,
+    sortDir: mainSortColumn === i ? mainSortDir : undefined as any,
+  }))
 
-  // Sort results by status if enabled
-  const sortedResults = data?.results ? (sortByStatus
-    ? [...data.results].sort((a, b) => getStatusPriority(a.status) - getStatusPriority(b.status))
-    : data.results) : undefined
+  const sortedResults = data?.results ? (() => {
+    if (mainSortColumn !== null) {
+      const dir = mainSortDir === 'asc' ? 1 : -1
+      return [...data.results].sort((a, b) => {
+        switch (mainSortColumn) {
+          case 0: return dir * (getStatusPriority(a.status) - getStatusPriority(b.status))
+          case 1: return dir * a.name.localeCompare(b.name)
+          case 2: return dir * ((a.duration ?? 0) - (b.duration ?? 0))
+          case 3: return dir * ((Number(a.start_time) || 0) - (Number(b.start_time) || 0))
+          default: return 0
+        }
+      })
+    }
+    if (sortByStatus) {
+      return [...data.results].sort((a, b) => getStatusPriority(a.status) - getStatusPriority(b.status))
+    }
+    return data.results
+  })() : undefined
 
   const rows = sortedResults?.map((result, index) => {
     // Determine if navigation should be available
@@ -1226,6 +1250,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
                 rows={rows}
                 loading={loading}
                 mobileLayout="scroll"
+                onSort={handleMainSort}
               />
             </div>
           )}

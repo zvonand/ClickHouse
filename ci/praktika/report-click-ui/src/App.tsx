@@ -521,7 +521,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     return last.split('?')[0] || last
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, underline = false) => {
     const statusLower = status.toLowerCase()
     const statusUpper = status.toUpperCase()
 
@@ -545,7 +545,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     }
 
     return (
-      <span style={{ color: color, fontWeight: 'bold' }}>
+      <span style={{ color, fontWeight: 'bold', textDecoration: underline ? 'underline' : 'none' }}>
         {status}
       </span>
     )
@@ -815,7 +815,10 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
     return {
       id: index,
       items: [
-        { label: wrapWithPopover(getStatusBadge(result.status), result, navigateUrl, [], 'center'), style: { whiteSpace: 'nowrap' } },
+        { label: (() => {
+          const hasDialog = !!(result.info || result.links?.length || result.results?.length || navigateUrl)
+          return wrapWithPopover(getStatusBadge(result.status, hasDialog), result, navigateUrl, [], 'center')
+        })(), style: { whiteSpace: 'nowrap' } },
         { label: nameCell },
         { label: getJobDuration(result), style: { whiteSpace: 'nowrap' } },
         { label: formatTime(result.start_time), style: { whiteSpace: 'nowrap' } },

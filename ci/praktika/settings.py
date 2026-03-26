@@ -47,15 +47,6 @@ class _Settings:
     S3_ARTIFACT_PATH: str = ""
 
     ######################################
-    #      Sccache settings              #
-    ######################################
-    # Custom S3 endpoint for sccache (e.g. "https://my-s3-endpoint.com")
-    SCCACHE_S3_ENDPOINT: str = ""
-    # S3 credentials for sccache (used in local runs with custom S3)
-    SCCACHE_S3_ACCESS_KEY_ID: str = ""
-    SCCACHE_S3_SECRET_ACCESS_KEY: str = ""
-
-    ######################################
     #        CI workspace settings       #
     ######################################
     TEMP_DIR: str = "./ci/tmp"
@@ -184,9 +175,6 @@ _USER_DEFINED_SETTINGS = [
     "CI_DB_READ_USER",
     "CI_DB_READ_URL",
     "TEST_FAILURE_PATTERNS",
-    "SCCACHE_S3_ENDPOINT",
-    "SCCACHE_S3_ACCESS_KEY_ID",
-    "SCCACHE_S3_SECRET_ACCESS_KEY",
 ]
 
 

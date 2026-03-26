@@ -1,5 +1,5 @@
 ---
-name: continue-on-pr
+name: continue-pr
 description: Continue work on an existing PR - resolve conflicts, fix CI failures, address reviewer feedback, and push updates. Use when the user wants to pick up and advance a pull request.
 argument-hint: <pr-number>
 disable-model-invocation: false

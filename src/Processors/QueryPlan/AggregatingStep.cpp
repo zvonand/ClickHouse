@@ -253,16 +253,17 @@ ActionsDAG AggregatingStep::makeCreatingMissingKeysForGroupingSetDAG(
 
 void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings & settings)
 {
-    /// If the read step deliberately reduced the stream count (e.g. ReadFromMergeTree
-    /// chose fewer streams because data is small), don't expand beyond what was produced.
-    /// This avoids overhead from mostly-empty streams in subsequent steps.
-    const size_t max_threads = pipeline.getReadStreamCountWasReduced()
-        ? std::min(params.max_threads, pipeline.getNumStreams())
-        : params.max_threads;
-
     size_t new_merge_threads = merge_threads;
     size_t new_temporary_data_merge_threads = temporary_data_merge_threads;
     updateThreadsValues(new_merge_threads, new_temporary_data_merge_threads, params, settings);
+
+    /// If the read step deliberately reduced the stream count (e.g. ReadFromMergeTree
+    /// chose fewer streams because data is small), don't expand beyond what was produced.
+    /// This avoids overhead from mostly-empty streams in subsequent steps.
+    /// Note: must be computed after updateThreadsValues, which resolves params.max_threads from 0 to settings.max_threads.
+    const size_t max_threads = pipeline.getReadStreamCountWasReduced()
+        ? std::min(params.max_threads, pipeline.getNumStreams())
+        : params.max_threads;
 
     QueryPipelineProcessorsCollector collector(pipeline, this);
 

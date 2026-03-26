@@ -277,7 +277,7 @@ def main():
                 job=job,
                 docker=args.docker,
                 local_run=not args.ci,
-                run_hooks = args.ci or args.run_hooks_locally,
+                run_hooks=args.ci or args.run_hooks_locally,
                 no_docker=args.no_docker,
                 param=args.param,
                 test=" ".join(args.test),

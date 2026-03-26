@@ -16,7 +16,7 @@ CREATE TABLE test_prewhere_decimal_overflow
 )
 ENGINE = MergeTree()
 ORDER BY (ts, id)
-SETTINGS min_bytes_for_wide_part = 0, min_rows_for_wide_part = 0;
+SETTINGS min_bytes_for_wide_part = 0, min_rows_for_wide_part = 0, auto_statistics_types='';
 
 -- Single INSERT so all rows land in one part (needed for selectivity estimates to differ).
 INSERT INTO test_prewhere_decimal_overflow VALUES
@@ -43,6 +43,16 @@ WHERE (ts >= '2024-01-01 00:00:00') AND (ts < '2024-01-02 00:00:00')
                                  toFloat64(x.after - x.before), toFloat64(0)),
                         balance_changes) / 1000000000) > 0)
 SETTINGS use_statistics = 0, allow_experimental_statistics = 1;
+
+-- Bug: statistics move `arraySum` before the NOT-IN guard → DECIMAL_OVERFLOW.
+SELECT sig
+FROM test_prewhere_decimal_overflow
+WHERE (ts >= '2024-01-01 00:00:00') AND (ts < '2024-01-02 00:00:00')
+    AND (sig NOT IN ('bad'))
+    AND (round(arraySum(x -> if(x.account = 'acct1' AND x.after > x.before,
+                                 toFloat64(x.after - x.before), toFloat64(0)),
+                        balance_changes) / 1000000000) > 0)
+SETTINGS use_statistics = 1, allow_experimental_statistics = 1; -- { serverError DECIMAL_OVERFLOW }
 
 -- Workaround: disable reordering to preserve the original WHERE order.
 SELECT sig

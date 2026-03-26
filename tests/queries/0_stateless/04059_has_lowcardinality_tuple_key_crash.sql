@@ -1,5 +1,3 @@
--- Tags: no-parallel
-
 -- Regression test for crash: "ColumnUnique can't contain null values"
 -- when has() is used with PREWHERE on a Tuple key containing LowCardinality elements.
 -- The crash occurred because tryPrepareSetColumnsForIndex passed the LowCardinality-wrapped

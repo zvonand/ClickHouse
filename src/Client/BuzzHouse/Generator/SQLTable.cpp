@@ -2538,7 +2538,8 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
         ct->set_comment(nextComment(rg));
     }
     chassert(!next.toption.has_value() || next.isMergeTreeFamily() || next.isJoinEngine() || next.isSetEngine());
-    this->staged_tables[next.name] = std::move(next);
+    const String tkey = next.name;
+    this->staged_tables[tkey] = std::move(next);
 }
 
 void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, CreateDictionary * cd)
@@ -2824,7 +2825,8 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     {
         cd->set_comment(nextComment(rg));
     }
-    this->staged_dictionaries[next.name] = std::move(next);
+    const String dkey = next.name;
+    this->staged_dictionaries[dkey] = std::move(next);
 }
 
 DatabaseEngineValues StatementGenerator::getNextDatabaseEngine(RandomGenerator & rg, const SQLDatabase & d)
@@ -2960,7 +2962,8 @@ void StatementGenerator::generateNextCreateDatabase(RandomGenerator & rg, Create
     {
         connections.createExternalDatabase(rg, next, deng);
     }
-    this->staged_databases[next.name] = std::make_shared<SQLDatabase>(std::move(next));
+    const String dbkey = next.name;
+    this->staged_databases[dbkey] = std::make_shared<SQLDatabase>(std::move(next));
 }
 
 void StatementGenerator::generateNextCreatePolicy(RandomGenerator & rg, const bool row, CreatePolicy * crp)

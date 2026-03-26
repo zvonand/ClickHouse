@@ -467,7 +467,8 @@ void StatementGenerator::generateNextCreateFunction(RandomGenerator & rg, Create
         setClusterClause(rg, next.cluster, cf->mutable_cluster());
     }
     next.setName(cf->mutable_function());
-    this->staged_functions[next.name] = std::move(next);
+    const String fkey = next.name;
+    this->staged_functions[fkey] = std::move(next);
 }
 
 static void SetViewInterval(RandomGenerator & rg, RefreshInterval * ri)
@@ -721,7 +722,8 @@ void StatementGenerator::generateNextCreateView(RandomGenerator & rg, CreateView
     {
         cv->set_comment(nextComment(rg));
     }
-    this->staged_views[next.name] = std::move(next);
+    const String vkey = next.name;
+    this->staged_views[vkey] = std::move(next);
 }
 
 void StatementGenerator::generateNextDrop(RandomGenerator & rg, Drop * dp)

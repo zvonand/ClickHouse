@@ -340,10 +340,10 @@ String RandomGenerator::nextIdentifier(const String & prefix, const uint32_t cou
     /// SQL keyword or nasty identifier as leading part
     String res = pickRandomly(nextSmallNumber() < 3 ? nasty_identifier_keywords : nasty_identifiers);
 
-    /// ~30% chance: build a long identifier by concatenating 1-3 more parts
+    /// ~20% chance: build a long identifier by concatenating more parts
     if (nextSmallNumber() < 3)
     {
-        const uint32_t extra = randomInt<uint32_t>(1, 150);
+        const uint32_t extra = randomInt<uint32_t>(1, 10);
 
         for (uint32_t i = 0; i < extra; i++)
         {

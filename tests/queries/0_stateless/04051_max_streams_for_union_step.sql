@@ -78,6 +78,17 @@ SELECT sum(x) FROM
 )
 SETTINGS max_streams_for_union_step = 0, max_streams_for_union_step_to_max_threads_ratio = 0;
 
--- 8. Negative ratio must be rejected
+-- 8. Small positive ratio (0.5 * 1 thread = 0.5) must clamp to 1, not silently disable
+EXPLAIN PIPELINE
+SELECT 1
+UNION ALL
+SELECT 2
+UNION ALL
+SELECT 3
+UNION ALL
+SELECT 4
+SETTINGS max_threads = 1, max_streams_for_union_step = 0, max_streams_for_union_step_to_max_threads_ratio = 0.5;
+
+-- 9. Negative ratio must be rejected
 SELECT 1 UNION ALL SELECT 2
 SETTINGS max_streams_for_union_step_to_max_threads_ratio = -1; -- { serverError PARAMETER_OUT_OF_BOUND }

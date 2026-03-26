@@ -69,3 +69,17 @@ Concat × 3 2 → 1
     (ReadFromSystemOne)
 15
 15
+(Union)
+Concat 4 → 1
+  (Expression)
+  ExpressionTransform
+    (ReadFromSystemOne)
+  (Expression)
+  ExpressionTransform
+    (ReadFromSystemOne)
+  (Expression)
+  ExpressionTransform
+    (ReadFromSystemOne)
+  (Expression)
+  ExpressionTransform
+    (ReadFromSystemOne)

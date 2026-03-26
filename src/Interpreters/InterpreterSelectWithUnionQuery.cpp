@@ -356,6 +356,10 @@ void InterpreterSelectWithUnionQuery::buildQueryPlan(QueryPlan & query_plan)
                 "Make sure that `max_threads * max_streams_for_union_step_to_max_threads_ratio` is in some reasonable boundaries, current value: {}",
                 streams_from_ratio);
         size_t max_streams_from_ratio = static_cast<size_t>(streams_from_ratio);
+        /// Clamp positive products to at least 1 so that a small but nonzero ratio
+        /// (e.g. 0.1 * 8 threads = 0.8) does not silently disable the limit.
+        if (max_streams_from_ratio == 0 && streams_from_ratio > 0)
+            max_streams_from_ratio = 1;
         if (max_streams && max_streams_from_ratio)
             max_streams = std::min(max_streams, max_streams_from_ratio);
         else if (!max_streams)

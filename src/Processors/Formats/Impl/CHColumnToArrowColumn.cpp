@@ -1695,7 +1695,7 @@ namespace DB
                 // Generate the unwrapped builder schema (safe for MakeBuilder)
                 bool is_column_nullable = false;
                 auto builder_type = getArrowType(
-                    header_column.type, column, header_column.name, format_name, settings, &is_column_nullable, true /* for_builder */);
+                    column_type, column, header_column.name, format_name, settings, &is_column_nullable, true /* for_builder */);
 
                 std::unique_ptr<arrow::ArrayBuilder> array_builder;
                 arrow::Status status = MakeBuilder(arrow::default_memory_pool(), builder_type, &array_builder);

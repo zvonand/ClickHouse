@@ -9,7 +9,6 @@
 #include <IO/ReadHelpers.h>
 #include <IO/WriteHelpers.h>
 #include <IO/parseDateTimeBestEffort.h>
-#include <Common/DateLUT.h>
 #include <Common/assert_cast.h>
 
 namespace DB
@@ -102,13 +101,6 @@ SerializationDateTime::SerializationDateTime(const TimezoneMixin & time_zone_)
 {
 }
 
-const DateLUTImpl & SerializationDateTime::getEffectiveTimeZone() const
-{
-    if (has_explicit_time_zone)
-        return time_zone;
-    return DateLUT::instance();
-}
-
 SerializationPtr SerializationDateTime::create(const TimezoneMixin & time_zone_)
 {
     return ISerialization::pooled(getHash(time_zone_), [&] { return new SerializationDateTime(time_zone_); });
@@ -125,7 +117,7 @@ void SerializationDateTime::serializeText(const IColumn & column, size_t row_num
     switch (settings.date_time_output_format)
     {
         case FormatSettings::DateTimeOutputFormat::Simple:
-            writeDateTimeText(value, ostr, getEffectiveTimeZone());
+            writeDateTimeText(value, ostr, time_zone);
             return;
         case FormatSettings::DateTimeOutputFormat::UnixTimestamp:
             writeIntText(value, ostr);
@@ -152,7 +144,7 @@ void SerializationDateTime::deserializeWholeText(IColumn & column, ReadBuffer & 
 bool SerializationDateTime::tryDeserializeWholeText(IColumn & column, ReadBuffer & istr, const FormatSettings & settings) const
 {
     time_t x = 0;
-    if (!tryReadText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone) || !istr.eof())
+    if (!tryReadText(x, istr, settings, time_zone, utc_time_zone) || !istr.eof())
         return false;
 
     assert_cast<ColumnType &>(column).getData().push_back(static_cast<UInt32>(x));
@@ -162,14 +154,14 @@ bool SerializationDateTime::tryDeserializeWholeText(IColumn & column, ReadBuffer
 void SerializationDateTime::deserializeTextEscaped(IColumn & column, ReadBuffer & istr, const FormatSettings & settings) const
 {
     time_t x = 0;
-    readText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone);
+    readText(x, istr, settings, time_zone, utc_time_zone);
     assert_cast<ColumnType &>(column).getData().push_back(static_cast<UInt32>(x));
 }
 
 bool SerializationDateTime::tryDeserializeTextEscaped(IColumn & column, ReadBuffer & istr, const FormatSettings & settings) const
 {
     time_t x = 0;
-    if (!tryReadText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone))
+    if (!tryReadText(x, istr, settings, time_zone, utc_time_zone))
         return false;
     assert_cast<ColumnType &>(column).getData().push_back(static_cast<UInt32>(x));
     return true;
@@ -188,7 +180,7 @@ void SerializationDateTime::deserializeTextQuoted(IColumn & column, ReadBuffer &
     time_t x = 0;
     if (checkChar('\'', istr)) /// Cases: '2017-08-31 18:36:48' or '1504193808'
     {
-        readText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone);
+        readText(x, istr, settings, time_zone, utc_time_zone);
         assertChar('\'', istr);
     }
     else /// Just 1504193808 or 01504193808
@@ -205,7 +197,7 @@ bool SerializationDateTime::tryDeserializeTextQuoted(IColumn & column, ReadBuffe
     time_t x = 0;
     if (checkChar('\'', istr)) /// Cases: '2017-08-31 18:36:48' or '1504193808'
     {
-        if (!tryReadText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone) || !checkChar('\'', istr))
+        if (!tryReadText(x, istr, settings, time_zone, utc_time_zone) || !checkChar('\'', istr))
             return false;
     }
     else /// Just 1504193808 or 01504193808
@@ -232,7 +224,7 @@ void SerializationDateTime::deserializeTextJSON(IColumn & column, ReadBuffer & i
     time_t x = 0;
     if (checkChar('"', istr))
     {
-        readText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone);
+        readText(x, istr, settings, time_zone, utc_time_zone);
         assertChar('"', istr);
     }
     else
@@ -248,7 +240,7 @@ bool SerializationDateTime::tryDeserializeTextJSON(IColumn & column, ReadBuffer 
     time_t x = 0;
     if (checkChar('"', istr))
     {
-        if (!tryReadText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone) || !checkChar('"', istr))
+        if (!tryReadText(x, istr, settings, time_zone, utc_time_zone) || !checkChar('"', istr))
             return false;
     }
     else
@@ -281,14 +273,14 @@ void SerializationDateTime::deserializeTextCSV(IColumn & column, ReadBuffer & is
     if (maybe_quote == '\'' || maybe_quote == '\"')
     {
         ++istr.position();
-        readText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone);
+        readText(x, istr, settings, time_zone, utc_time_zone);
         assertChar(maybe_quote, istr);
     }
     else
     {
         if (settings.csv.delimiter != ',' || settings.date_time_input_format == FormatSettings::DateTimeInputFormat::Basic)
         {
-            readText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone);
+            readText(x, istr, settings, time_zone, utc_time_zone);
         }
         /// Best effort parsing supports datetime in format like "01.01.2000, 00:00:00"
         /// and can mistakenly read comma as a part of datetime.
@@ -299,7 +291,7 @@ void SerializationDateTime::deserializeTextCSV(IColumn & column, ReadBuffer & is
             String datetime_str;
             readCSVString(datetime_str, istr, settings.csv);
             ReadBufferFromString buf(datetime_str);
-            readText(x, buf, settings, getEffectiveTimeZone(), utc_time_zone);
+            readText(x, buf, settings, time_zone, utc_time_zone);
             if (!buf.eof())
                 throw Exception(
                     ErrorCodes::UNEXPECTED_DATA_AFTER_PARSED_VALUE,
@@ -324,14 +316,14 @@ bool SerializationDateTime::tryDeserializeTextCSV(IColumn & column, ReadBuffer &
     if (maybe_quote == '\'' || maybe_quote == '\"')
     {
         ++istr.position();
-        if (!tryReadText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone) || !checkChar(maybe_quote, istr))
+        if (!tryReadText(x, istr, settings, time_zone, utc_time_zone) || !checkChar(maybe_quote, istr))
             return false;
     }
     else
     {
         if (settings.csv.delimiter != ',' || settings.date_time_input_format == FormatSettings::DateTimeInputFormat::Basic)
         {
-            if (!tryReadText(x, istr, settings, getEffectiveTimeZone(), utc_time_zone))
+            if (!tryReadText(x, istr, settings, time_zone, utc_time_zone))
                 return false;
         }
         else
@@ -339,7 +331,7 @@ bool SerializationDateTime::tryDeserializeTextCSV(IColumn & column, ReadBuffer &
             String datetime_str;
             readCSVString(datetime_str, istr, settings.csv);
             ReadBufferFromString buf(datetime_str);
-            if (!tryReadText(x, buf, settings, getEffectiveTimeZone(), utc_time_zone) || !buf.eof())
+            if (!tryReadText(x, buf, settings, time_zone, utc_time_zone) || !buf.eof())
                 return false;
         }
     }

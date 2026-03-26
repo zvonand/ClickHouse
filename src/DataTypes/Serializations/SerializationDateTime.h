@@ -12,11 +12,6 @@ class SerializationDateTime final : public SerializationNumber<UInt32>, public T
 private:
     explicit SerializationDateTime(const TimezoneMixin & time_zone_);
 
-    /// Returns the effective timezone for text parsing and formatting.
-    /// When the column has an explicit timezone (e.g. DateTime('UTC')), use it.
-    /// Otherwise, use DateLUT::instance() which respects session_timezone.
-    const DateLUTImpl & getEffectiveTimeZone() const;
-
 public:
     static UInt128 getHash(const TimezoneMixin & time_zone_);
     static SerializationPtr create(const TimezoneMixin & time_zone_);

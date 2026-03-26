@@ -207,6 +207,39 @@ def test_remove_orphan_files_no_orphans(started_cluster_iceberg_with_spark, stor
     env.assert_data_intact()
 
 
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_remove_orphan_files_default_older_than(started_cluster_iceberg_with_spark, storage_type):
+    """Zero-argument form: older_than defaults to now - iceberg_orphan_files_older_than_seconds."""
+    env = make_env(started_cluster_iceberg_with_spark, storage_type, "test_orphan_default")
+    env.populate(1)
+
+    env.add_orphan("data", "orphan-default.parquet")
+    time.sleep(2)
+
+    settings_with_short_threshold = {
+        **ICEBERG_SETTINGS,
+        "iceberg_orphan_files_older_than_seconds": 1,
+    }
+
+    raw = env.instance.query(
+        f"ALTER TABLE {env.table_name} EXECUTE remove_orphan_files();",
+        settings=settings_with_short_threshold,
+    )
+    counts = {}
+    for line in raw.strip().split("\n"):
+        if not line:
+            continue
+        parts = line.split("\t")
+        if len(parts) == 2:
+            counts[parts[0]] = int(parts[1])
+
+    assert counts["deleted_data_files_count"] >= 1, \
+        f"Zero-arg form with 1s threshold should delete orphan, got {counts}"
+    assert not env.exists("data", "orphan-default.parquet"), \
+        "Orphan file should be deleted via setting-driven default older_than"
+    env.assert_data_intact()
+
+
 @pytest.mark.parametrize("storage_type", ["local", "s3"])
 def test_remove_orphan_files_older_than(started_cluster_iceberg_with_spark, storage_type):
     """Orphan files newer than older_than threshold should be preserved."""
@@ -371,6 +404,20 @@ def test_remove_orphan_files_location_validation(started_cluster_iceberg_with_sp
     counts = env.remove_orphans(older_than=env.now_ts(), location="./data/")
     assert counts["deleted_data_files_count"] >= 1, \
         "location='./data/' should work the same as 'data/'"
+
+
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_remove_orphan_files_rejected_on_v1(started_cluster_iceberg_with_spark, storage_type):
+    """remove_orphan_files must reject Iceberg format-version 1 tables."""
+    env = make_env(started_cluster_iceberg_with_spark, storage_type, "test_orphan_v1")
+    env.populate(1, format_version=1)
+
+    error = env.instance.query_and_get_error(
+        f"ALTER TABLE {env.table_name} EXECUTE remove_orphan_files();",
+        settings=ICEBERG_SETTINGS,
+    )
+    assert "BAD_ARGUMENTS" in error, f"Expected BAD_ARGUMENTS error, got: {error}"
+    assert "format version" in error.lower(), f"Error should mention format version, got: {error}"
 
 
 @pytest.mark.parametrize("storage_type", ["azure"])

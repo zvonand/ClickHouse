@@ -292,6 +292,13 @@ Pipe executeRemoveOrphanFiles(
     const DataLakeStorageSettings & data_lake_settings,
     const PersistentTableComponents & persistent_components)
 {
+    if (persistent_components.format_version < 2)
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "remove_orphan_files requires Iceberg format version >= 2, "
+            "but this table uses format version {}",
+            persistent_components.format_version);
+
     auto parsed = makeSchema().parse(args);
 
     RemoveOrphanFilesParams params;

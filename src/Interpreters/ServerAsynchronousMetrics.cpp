@@ -53,7 +53,7 @@ void calculateMaxAndSum(Max & max, Sum & sum, T x)
 
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) && __has_include(<linux/sock_diag.h>)
 
 double percentile(const std::vector<uint32_t> & sorted, double p)
 {
@@ -461,7 +461,7 @@ void ServerAsynchronousMetrics::updateImpl(TimePoint update_time, TimePoint curr
     }
 #endif
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) && __has_include(<linux/sock_diag.h>)
     updateHTTPConnectionPoolTCPBufferMetrics(HTTPConnectionPools::instance().getSocketInodes(), new_values);
 #endif
 

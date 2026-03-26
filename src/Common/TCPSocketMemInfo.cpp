@@ -1,6 +1,6 @@
 #include <Common/TCPSocketMemInfo.h>
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) && __has_include(<linux/sock_diag.h>)
 
 #include <linux/sock_diag.h>
 #include <linux/inet_diag.h>

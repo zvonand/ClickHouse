@@ -11,13 +11,13 @@
 #include <Poco/URI.h>
 
 #if USE_JEMALLOC
-#    include <Common/Jemalloc.h>
-#    include <IO/ReadBufferFromFile.h>
-#    include <IO/ReadHelpers.h>
-#    include <Poco/JSON/Object.h>
-#    include <Poco/JSON/Stringifier.h>
-#    include <base/scope_guard.h>
-#    include <filesystem>
+#include <Common/Jemalloc.h>
+#include <IO/ReadBufferFromFile.h>
+#include <IO/ReadHelpers.h>
+#include <Poco/JSON/Object.h>
+#include <Poco/JSON/Stringifier.h>
+#include <base/scope_guard.h>
+#include <filesystem>
 #endif
 
 /// Reuse the server's jemalloc HTML — the page auto-adapts via window.JEMALLOC_CONFIG.
@@ -50,61 +50,18 @@ void KeeperJemallocWebUIHandler::handleRequest(
     wb.finalize();
 }
 
-void KeeperJemallocAPIHandler::handleRequest(
+void KeeperJemallocRedirectHandler::handleRequest(
+    HTTPServerRequest &, HTTPServerResponse & response, const ProfileEvents::Event &)
+{
+    setResponseDefaultHeaders(response);
+    response.redirect("/jemalloc", Poco::Net::HTTPResponse::HTTP_MOVED_PERMANENTLY);
+}
+
+#if USE_JEMALLOC
+
+void KeeperJemallocProfileHandler::handleRequest(
     HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event &)
 try
-{
-    Poco::URI uri(request.getURI());
-    const std::string & path = uri.getPath();
-
-    if (path == "/jemalloc/")
-    {
-        setResponseDefaultHeaders(response);
-        response.redirect("/jemalloc", Poco::Net::HTTPResponse::HTTP_MOVED_PERMANENTLY);
-        return;
-    }
-
-#if USE_JEMALLOC
-    if (path == "/jemalloc/profile")
-        handleProfile(request, response);
-    else if (path == "/jemalloc/stats")
-        handleStats(request, response);
-    else if (path == "/jemalloc/status")
-        handleStatus(request, response);
-    else
-    {
-        setResponseDefaultHeaders(response);
-        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_NOT_FOUND);
-        response.setContentType("text/plain");
-        *response.send() << "Not found\n";
-    }
-#else
-    setResponseDefaultHeaders(response);
-    response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_NOT_IMPLEMENTED);
-    response.setContentType("text/plain");
-    *response.send() << "jemalloc profiling is not available in this build\n";
-#endif
-}
-catch (...)
-{
-    tryLogCurrentException("KeeperJemallocAPIHandler");
-
-    try
-    {
-        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
-        if (!response.sent())
-            *response.send() << getCurrentExceptionMessage(false) << '\n';
-    }
-    catch (...)
-    {
-        LOG_ERROR(getLogger("KeeperJemallocAPIHandler"), "Cannot send exception to client");
-    }
-}
-
-#if USE_JEMALLOC
-
-void KeeperJemallocAPIHandler::handleProfile(
-    HTTPServerRequest & request, HTTPServerResponse & response)
 {
     Poco::URI uri(request.getURI());
     auto params = uri.getQueryParameters();
@@ -156,9 +113,25 @@ void KeeperJemallocAPIHandler::handleProfile(
     wb.write(output.data(), output.size());
     wb.finalize();
 }
+catch (...)
+{
+    tryLogCurrentException("KeeperJemallocProfileHandler");
 
-void KeeperJemallocAPIHandler::handleStats(
-    HTTPServerRequest & request, HTTPServerResponse & response)
+    try
+    {
+        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+        if (!response.sent())
+            *response.send() << getCurrentExceptionMessage(false) << '\n';
+    }
+    catch (...)
+    {
+        LOG_ERROR(getLogger("KeeperJemallocProfileHandler"), "Cannot send exception to client");
+    }
+}
+
+void KeeperJemallocStatsHandler::handleRequest(
+    HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event &)
+try
 {
     auto stats = Jemalloc::getStats();
 
@@ -169,9 +142,25 @@ void KeeperJemallocAPIHandler::handleStats(
     wb.write(stats.data(), stats.size());
     wb.finalize();
 }
+catch (...)
+{
+    tryLogCurrentException("KeeperJemallocStatsHandler");
 
-void KeeperJemallocAPIHandler::handleStatus(
-    HTTPServerRequest & request, HTTPServerResponse & response)
+    try
+    {
+        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+        if (!response.sent())
+            *response.send() << getCurrentExceptionMessage(false) << '\n';
+    }
+    catch (...)
+    {
+        LOG_ERROR(getLogger("KeeperJemallocStatsHandler"), "Cannot send exception to client");
+    }
+}
+
+void KeeperJemallocStatusHandler::handleRequest(
+    HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event &)
+try
 {
     Poco::JSON::Object json;
     Poco::JSON::Array errors;
@@ -184,7 +173,7 @@ void KeeperJemallocAPIHandler::handleStatus(
         }
         catch (...)
         {
-            tryLogCurrentException("KeeperJemallocAPIHandler", std::string("Failed to read mallctl '") + name + "'");
+            tryLogCurrentException("KeeperJemallocStatusHandler", std::string("Failed to read mallctl '") + name + "'");
             errors.add(std::string(name));
             return default_value;
         }
@@ -205,7 +194,7 @@ void KeeperJemallocAPIHandler::handleStatus(
         }
         catch (...)
         {
-            tryLogCurrentException("KeeperJemallocAPIHandler", "Failed to read prof.thread_active_init");
+            tryLogCurrentException("KeeperJemallocStatusHandler", "Failed to read prof.thread_active_init");
             errors.add("prof.thread_active_init");
         }
     }
@@ -228,6 +217,32 @@ void KeeperJemallocAPIHandler::handleStatus(
     auto str = oss.str();
     wb.write(str.data(), str.size());
     wb.finalize();
+}
+catch (...)
+{
+    tryLogCurrentException("KeeperJemallocStatusHandler");
+
+    try
+    {
+        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+        if (!response.sent())
+            *response.send() << getCurrentExceptionMessage(false) << '\n';
+    }
+    catch (...)
+    {
+        LOG_ERROR(getLogger("KeeperJemallocStatusHandler"), "Cannot send exception to client");
+    }
+}
+
+#else
+
+void KeeperJemallocNotAvailableHandler::handleRequest(
+    HTTPServerRequest &, HTTPServerResponse & response, const ProfileEvents::Event &)
+{
+    setResponseDefaultHeaders(response);
+    response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_NOT_IMPLEMENTED);
+    response.setContentType("text/plain");
+    *response.send() << "jemalloc profiling is not available in this build\n";
 }
 
 #endif

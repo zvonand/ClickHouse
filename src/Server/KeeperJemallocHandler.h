@@ -9,32 +9,53 @@
 namespace DB
 {
 
-/// Serves the static jemalloc.html page for Keeper
+/// Serves the static jemalloc.html page at GET /jemalloc
 class KeeperJemallocWebUIHandler : public HTTPRequestHandler
 {
 public:
     void handleRequest(HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event & write_event) override;
 };
 
-/// Returns jemalloc profile/stats/status data via REST API for Keeper.
-/// Routes:
-///   GET /jemalloc/profile?format={collapsed|raw}  — heap profile
-///   GET /jemalloc/stats                           — malloc_stats_print output
-///   GET /jemalloc/status                          — profiling state as JSON
-///
-/// When jemalloc is not linked (sanitizer builds), routes return HTTP 501.
-class KeeperJemallocAPIHandler : public HTTPRequestHandler
+/// Redirects /jemalloc/ → /jemalloc (HTTP 301).  Always registered.
+class KeeperJemallocRedirectHandler : public HTTPRequestHandler
 {
 public:
     void handleRequest(HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event & write_event) override;
-
-private:
-#if USE_JEMALLOC
-    void handleProfile(HTTPServerRequest & request, HTTPServerResponse & response);
-    void handleStats(HTTPServerRequest & request, HTTPServerResponse & response);
-    void handleStatus(HTTPServerRequest & request, HTTPServerResponse & response);
-#endif
 };
+
+#if USE_JEMALLOC
+
+/// GET /jemalloc/profile?format={collapsed|raw} — heap profile dump
+class KeeperJemallocProfileHandler : public HTTPRequestHandler
+{
+public:
+    void handleRequest(HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event & write_event) override;
+};
+
+/// GET /jemalloc/stats — raw malloc_stats_print output
+class KeeperJemallocStatsHandler : public HTTPRequestHandler
+{
+public:
+    void handleRequest(HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event & write_event) override;
+};
+
+/// GET /jemalloc/status — profiling state as JSON
+class KeeperJemallocStatusHandler : public HTTPRequestHandler
+{
+public:
+    void handleRequest(HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event & write_event) override;
+};
+
+#else
+
+/// Stub handler for non-jemalloc builds; returns HTTP 501 for all API paths.
+class KeeperJemallocNotAvailableHandler : public HTTPRequestHandler
+{
+public:
+    void handleRequest(HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event & write_event) override;
+};
+
+#endif
 
 }
 

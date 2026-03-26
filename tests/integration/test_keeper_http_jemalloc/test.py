@@ -106,12 +106,9 @@ def test_jemalloc_profile_bad_format(leader, has_jemalloc):
         assert_501(response)
 
 
-def test_jemalloc_unknown_api_path(leader, has_jemalloc):
+def test_jemalloc_unknown_api_path(leader):
     response = requests.get(get_url(leader, "/jemalloc/nonexistent"))
-    if has_jemalloc:
-        assert response.status_code == 404
-    else:
-        assert_501(response)
+    assert response.status_code == 404
 
 
 @pytest.mark.parametrize("path", ["/jemalloc/stats", "/jemalloc/status", "/jemalloc/profile"])

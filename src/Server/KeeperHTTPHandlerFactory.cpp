@@ -117,24 +117,32 @@ void addCommandsHandlersToFactory(
     factory.addHandler(commands_handler);
 }
 
+template <typename H>
+void addStrictHandler(KeeperHTTPRequestHandlerFactory & factory, const char * path)
+{
+    auto handler = std::make_shared<HandlingRuleHTTPHandlerFactory<H>>(
+        [] { return std::make_unique<H>(); });
+    handler->attachStrictPath(path);
+    handler->allowGetAndHeadRequest();
+    factory.addHandler(handler);
+}
+
 void addJemallocHandlersToFactory(KeeperHTTPRequestHandlerFactory & factory)
 {
-    auto web_ui_creator = []() -> std::unique_ptr<KeeperJemallocWebUIHandler>
-    { return std::make_unique<KeeperJemallocWebUIHandler>(); };
-
-    auto web_ui_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<KeeperJemallocWebUIHandler>>(web_ui_creator);
-    web_ui_handler->attachStrictPath("/jemalloc");
-    web_ui_handler->allowGetAndHeadRequest();
+    addStrictHandler<KeeperJemallocWebUIHandler>(factory, "/jemalloc");
     factory.addPathToHints("/jemalloc");
-    factory.addHandler(web_ui_handler);
 
-    auto api_creator = []() -> std::unique_ptr<KeeperJemallocAPIHandler>
-    { return std::make_unique<KeeperJemallocAPIHandler>(); };
+    addStrictHandler<KeeperJemallocRedirectHandler>(factory, "/jemalloc/");
 
-    auto api_handler = std::make_shared<HandlingRuleHTTPHandlerFactory<KeeperJemallocAPIHandler>>(api_creator);
-    api_handler->attachNonStrictPath("/jemalloc/");
-    api_handler->allowGetAndHeadRequest();
-    factory.addHandler(api_handler);
+#if USE_JEMALLOC
+    addStrictHandler<KeeperJemallocProfileHandler>(factory, "/jemalloc/profile");
+    addStrictHandler<KeeperJemallocStatsHandler>(factory, "/jemalloc/stats");
+    addStrictHandler<KeeperJemallocStatusHandler>(factory, "/jemalloc/status");
+#else
+    addStrictHandler<KeeperJemallocNotAvailableHandler>(factory, "/jemalloc/profile");
+    addStrictHandler<KeeperJemallocNotAvailableHandler>(factory, "/jemalloc/stats");
+    addStrictHandler<KeeperJemallocNotAvailableHandler>(factory, "/jemalloc/status");
+#endif
 }
 
 void addStorageHandlersToFactory(

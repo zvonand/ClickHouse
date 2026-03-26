@@ -8,8 +8,6 @@
 
 #include <Common/logger_useful.h>
 
-#include <limits>
-#include <ranges>
 #include <memory>
 #include <shared_mutex>
 
@@ -209,11 +207,11 @@ bool MetadataStorageFromDisk::loadRemovalLog()
 
             if (entry_type == RemovalLogEntryType::ADD)
             {
-                objects_to_remove.insert(std::move(object));
+                objects_to_remove.submitForRemoval({std::move(object)});
             }
             else if (entry_type == RemovalLogEntryType::REMOVED)
             {
-                objects_to_remove.erase(object);
+                objects_to_remove.markAsRemoved({object});
                 ++removal_log_stale_entries;
             }
             else
@@ -267,7 +265,8 @@ void MetadataStorageFromDisk::compactRemovalLog()
     UInt32 version = RemovalLogVersion::V0;
     writeBinaryLittleEndian(version, *buf);
 
-    for (const auto & blob : objects_to_remove)
+    auto all_blobs = objects_to_remove.takeFirst(0);
+    for (const auto & blob : all_blobs)
     {
         UInt8 type = RemovalLogEntryType::ADD;
         writeBinaryLittleEndian(type, *buf);
@@ -286,11 +285,8 @@ IMetadataStorage::BlobsToRemove MetadataStorageFromDisk::getBlobsToRemove(const 
 {
     std::lock_guard guard(removed_objects_mutex);
 
-    if (max_count == 0)
-        max_count = std::numeric_limits<int64_t>::max();
-
     BlobsToRemove blobs_to_remove;
-    for (const auto & blob : objects_to_remove | std::views::take(max_count))
+    for (const auto & blob : objects_to_remove.takeFirst(max_count))
         blobs_to_remove[blob] = {cluster->getLocalLocation()};
 
     return blobs_to_remove;
@@ -300,31 +296,24 @@ int64_t MetadataStorageFromDisk::recordAsRemoved(const StoredObjects & blobs)
 {
     std::lock_guard guard(removed_objects_mutex);
 
-    StoredObjects to_remove;
-    for (const auto & blob : blobs)
-    {
-        if (objects_to_remove.contains(blob))
-            to_remove.push_back(blob);
-    }
-
-    if (to_remove.empty())
-        return 0;
-
-    /// Persist REMOVED entries to WAL before erasing from in-memory set,
+    /// Persist REMOVED entries to WAL before erasing from in-memory queue,
     /// so that on WAL failure the blobs remain tracked and will be retried.
-    if (persist_removal_queue)
+    if (persist_removal_queue && !blobs.empty())
     {
-        appendToRemovalLog(RemovalLogEntryType::REMOVED, to_remove);
-        removal_log_stale_entries += to_remove.size();
+        appendToRemovalLog(RemovalLogEntryType::REMOVED, blobs);
+        removal_log_stale_entries += blobs.size();
 
         if (removal_log_stale_entries >= removal_log_compaction_threshold)
             compactRemovalLog();
     }
 
-    for (const auto & blob : to_remove)
-        objects_to_remove.erase(blob);
+    return objects_to_remove.markAsRemoved(blobs);
+}
 
-    return static_cast<int64_t>(to_remove.size());
+bool MetadataStorageFromDisk::hasPendingRemovalBlobs(const StoredObjects & blobs) const
+{
+    std::lock_guard guard(removed_objects_mutex);
+    return objects_to_remove.containsAny(blobs);
 }
 
 MetadataStorageFromDiskTransaction::MetadataStorageFromDiskTransaction(MetadataStorageFromDisk & metadata_storage_)
@@ -347,16 +336,6 @@ void MetadataStorageFromDiskTransaction::commit(const TransactionCommitOptionsVa
     if (!objects_to_remove.empty())
     {
         std::lock_guard guard(metadata_storage.removed_objects_mutex);
-
-        try
-        {
-            metadata_storage.objects_to_remove.insert_range(objects_to_remove);
-        }
-        catch (...)
-        {
-            LOG_ERROR(metadata_storage.log, "Failed to insert removal queue entries: {}", getCurrentExceptionMessage(false));
-        }
-
         if (metadata_storage.persist_removal_queue)
         {
             try
@@ -370,6 +349,8 @@ void MetadataStorageFromDiskTransaction::commit(const TransactionCommitOptionsVa
                     getCurrentExceptionMessage(false));
             }
         }
+
+        metadata_storage.objects_to_remove.submitForRemoval(objects_to_remove);
     }
 }
 

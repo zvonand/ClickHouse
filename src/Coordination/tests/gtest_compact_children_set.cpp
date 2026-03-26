@@ -7,9 +7,9 @@ using namespace DB;
 
 /// We need stable string data that outlives insert/erase operations,
 /// similar to how SnapshotableHashTable's GlobalArena works in production.
-static constexpr std::string_view CHILD_A = "child_a";
-static constexpr std::string_view CHILD_B = "child_b";
-static constexpr std::string_view CHILD_C = "child_c";
+// static constexpr std::string_view CHILD_A = "child_a";
+// static constexpr std::string_view CHILD_B = "child_b";
+// static constexpr std::string_view CHILD_C = "child_c";
 
 // TEST(CompactChildrenSet, EmptyState)
 // {

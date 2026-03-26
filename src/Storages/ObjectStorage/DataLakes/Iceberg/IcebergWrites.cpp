@@ -267,10 +267,25 @@ void generateManifestFile(
     if (root_schema->type() != avro::AVRO_RECORD)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Iceberg manifest file schema must be record");
 
-    std::ostringstream oss; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
     int current_schema_id = metadata->getValue<Int32>(Iceberg::f_current_schema_id);
-    Poco::JSON::Stringifier::stringify(metadata->getArray(Iceberg::f_schemas)->getObject(current_schema_id), oss, 4);
+    Poco::JSON::Object::Ptr schema_obj;
+    {
+        auto schemas = metadata->getArray(Iceberg::f_schemas);
+        for (UInt32 i = 0; i < schemas->size(); ++i)
+        {
+            auto candidate = schemas->getObject(i);
+            if (candidate->getValue<Int32>(Iceberg::f_schema_id) == current_schema_id)
+            {
+                schema_obj = candidate;
+                break;
+            }
+        }
+        if (!schema_obj)
+            schema_obj = schemas->getObject(0);
+    }
 
+    std::ostringstream oss; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
+    Poco::JSON::Stringifier::stringify(schema_obj, oss);
     std::string json_representation = removeEscapedSlashes(oss.str());
 
     auto adapter = std::make_unique<OutputStreamWriteBufferAdapter>(buf);
@@ -278,9 +293,11 @@ void generateManifestFile(
     writer.setMetadata(Iceberg::f_schema, json_representation);
 
     std::ostringstream oss_partition_spec; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    Poco::JSON::Stringifier::stringify(partition_spec->getArray(Iceberg::f_fields), oss_partition_spec, 4);
+    Poco::JSON::Stringifier::stringify(partition_spec->getArray(Iceberg::f_fields), oss_partition_spec);
     writer.setMetadata(Iceberg::f_partition_spec, oss_partition_spec.str());
-    writer.setMetadata(Iceberg::f_partition_spec_id, std::to_string(partition_spec_id));
+    writer.setMetadata("partition-spec-id", std::to_string(partition_spec_id));
+    writer.setMetadata("format-version", std::to_string(version));
+    writer.setMetadata("content", content_type == Iceberg::FileContentType::DATA ? "data" : "deletes");
     for (const auto & data_file_name : data_file_names)
     {
         avro::GenericDatum manifest_datum(root_schema);
@@ -337,7 +354,7 @@ void generateManifestFile(
                 {
                     avro::GenericDatum record_datum(schema_element);
                     auto & record = record_datum.value<avro::GenericRecord>();
-                    record.field(Iceberg::f_key) = static_cast<Int64>(field_id);
+                    record.field(Iceberg::f_key) = static_cast<Int32>(field_id);
                     record.field(Iceberg::f_value) = dump_function(field_id, value);
                     record_values.value().push_back(record_datum);
                 }
@@ -503,8 +520,8 @@ void generateManifestList(
         else
         {
             entry.field(Iceberg::f_added_files_count) = 1;
-            entry.field(Iceberg::f_existing_files_count)
-                = summary->getValue<Int32>(Iceberg::f_total_data_files);
+            /// This manifest only contains newly added files; no pre-existing entries.
+            entry.field(Iceberg::f_existing_files_count) = 0;
             entry.field(Iceberg::f_deleted_files_count) = 0;
 
             if (summary->has(Iceberg::f_added_position_deletes))
@@ -525,6 +542,20 @@ void generateManifestList(
             0,
             Iceberg::f_existing_rows_count);
         set_versioned_field(0, Iceberg::f_deleted_rows_count);
+
+        if (version > 1)
+        {
+            /// Set `partitions` to an empty array (not null) for unpartitioned tables.
+            /// Unity Catalog and PyIceberg expect a non-null list even when it is empty.
+            size_t partitions_field_index;
+            if (schema.root()->nameIndex(Iceberg::f_partitions, partitions_field_index))
+            {
+                const avro::NodePtr & union_schema = schema.root()->leafAt(static_cast<UInt32>(partitions_field_index));
+                avro::GenericUnion partitions_union(union_schema);
+                partitions_union.selectBranch(1); // array branch
+                entry.field(Iceberg::f_partitions) = avro::GenericDatum(union_schema, partitions_union);
+            }
+        }
 
         writer.write(entry_datum);
     }

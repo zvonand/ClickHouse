@@ -925,13 +925,17 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
       </>
     )
 
+    const nameCell = navigateUrl
+      ? <Link href={navigateUrl} style={{ textDecoration: 'none' }}>{nameWithLabels}</Link>
+      : nameWithLabels
+
     return {
       id: index,
       items: [
         { label: wrapWithPopover(getStatusBadge(result.status), result, navigateUrl), align: 'center' as const },
-        { label: wrapWithPopover(nameWithLabels, result, navigateUrl), align: 'left' as const },
-        { label: wrapWithPopover(getJobDuration(result), result, navigateUrl), align: 'center' as const },
-        { label: wrapWithPopover(formatTime(result.start_time), result, navigateUrl), align: 'center' as const },
+        { label: nameCell, align: 'left' as const },
+        { label: getJobDuration(result), align: 'center' as const },
+        { label: formatTime(result.start_time), align: 'center' as const },
       ],
     }
   }) || []

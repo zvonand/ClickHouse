@@ -1125,7 +1125,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
 
         {/* Main Content - using plain div instead of Click UI Container to prevent overflow issues
             with Panel padding. TODO: improve responsive layout for narrow viewports */}
-        <div style={{ marginTop: '56px', padding: '24px', width: '100%', boxSizing: 'border-box' }}>
+        <div className="main-content" style={{ marginTop: '56px' }}>
 
           {loading && <Text>Loading test results...</Text>}
 
@@ -1134,7 +1134,7 @@ function AppContent({ theme, setTheme }: { theme: 'dark' | 'light', setTheme: (t
           )}
 
           {data && !loading && (
-            <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+            <div style={{ boxSizing: 'border-box' }}>
               <Panel hasBorder padding='md' orientation='vertical' gap='xs' alignItems='start' style={{ marginBottom: '16px', boxSizing: 'border-box' }}>
                 {topLevelExt && (topLevelExt.pr_number > 0 || topLevelExt.commit_sha) && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', width: '100%', overflow: 'hidden' }}>

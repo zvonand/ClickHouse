@@ -254,8 +254,8 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
         Coordination::ZooKeeperRequestPtr request;
     };
 
-    Generator generator;
-    generator.startup(*config_ptr, *zookeepers[0], thread_state.thread_idx);
+    auto generator = std::make_shared<Generator>();
+    generator->startup(*config_ptr, *zookeepers[0], thread_state.thread_idx);
 
     /// Randomly choosing connection index
     pcg64 rng(randomSeed());
@@ -360,7 +360,7 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
             in_flight.pop_front();
         }
 
-        ZooKeeperRequestWithCallbacks request_with_callbacks = generator.generate();
+        ZooKeeperRequestWithCallbacks request_with_callbacks = generator->generate();
 
         const auto connection_index = distribution(rng);
         auto & zk = zookeepers[connection_index];
@@ -377,7 +377,8 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
             [promise,
              success_callbacks,
              failure_callbacks,
-             watch](const Coordination::Response & response)
+             watch,
+             generator](const Coordination::Response & response)
         {
             auto elapsed = watch->elapsedMicroseconds();
             if (response.error == Coordination::Error::ZOK)

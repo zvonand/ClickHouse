@@ -998,7 +998,7 @@ class Runner:
                 result.results.append(
                     Result.create_from(name="Post Hooks", results=results_, stopwatch=sw_)
                 )
-                print(f"=== Post hooks [{job.name}], workflow [{workflow.name}] ===")
+                print(f"=== Post hooks finished ===")
 
             if prehook_result:
                 result.results.append(prehook_result)

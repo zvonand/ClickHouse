@@ -29,6 +29,7 @@
 #include <Storages/StorageMaterializedView.h>
 #include <Storages/StorageMerge.h>
 #include <Storages/StorageValues.h>
+#include <Storages/StorageView.h>
 
 #include <Analyzer/ConstantNode.h>
 #include <Analyzer/ColumnNode.h>
@@ -1129,10 +1130,22 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                     }
                 }
 
-                auto parallel_replicas_enabled_for_storage = [](const StoragePtr & current_storage, const Settings & query_settings)
+                auto parallel_replicas_enabled_for_storage
+                    = [](const StoragePtr & current_storage, const ContextPtr & context, const Settings & query_settings)
                 {
-                    const auto * mv = typeid_cast<const StorageMaterializedView *>(current_storage.get());
                     const auto * table_ptr = current_storage.get();
+
+                    const auto * view = typeid_cast<const StorageView *>(current_storage.get());
+                    if (view)
+                    {
+                        auto underlying = getViewUnderlyingStorage(current_storage, context);
+                        if (!underlying)
+                            return false;
+
+                        table_ptr = underlying.get();
+                    }
+
+                    const auto * mv = typeid_cast<const StorageMaterializedView *>(current_storage.get());
                     if (mv)
                     {
                         if (!query_settings[Setting::parallel_replicas_allow_materialized_views])
@@ -1156,12 +1169,12 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
 
                 /// query_plan can be empty if there is nothing to read
                 if (query_plan.isInitialized() && !select_query_options.build_logical_plan
-                    && parallel_replicas_enabled_for_storage(storage, settings))
+                    && parallel_replicas_enabled_for_storage(storage, query_context, settings))
                 {
                     /// we need to decide if parallel replicas is supported for join tree while visiting left table expression
                     /// therefore, here both join sides are analysed
                     auto allow_parallel_replicas_for_join_tree
-                        = [&parallel_replicas_enabled_for_storage](const QueryTreeNodePtr & join_tree_node, const Settings & query_settings)
+                        = [&parallel_replicas_enabled_for_storage](const QueryTreeNodePtr & join_tree_node, const ContextPtr & context, const Settings & query_settings)
                     {
                         if (join_tree_node->as<CrossJoinNode>())
                             return false;
@@ -1181,11 +1194,11 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                         {
                             // check that left table expression can be used for parallel replicas
                             if (left_table)
-                                return parallel_replicas_enabled_for_storage(left_table->getStorage(), query_settings);
+                                return parallel_replicas_enabled_for_storage(left_table->getStorage(), context, query_settings);
 
                             const auto * left_table_function = left_table_expr->as<TableFunctionNode>();
                             if (left_table_function)
-                                return parallel_replicas_enabled_for_storage(left_table_function->getStorage(), query_settings);
+                                return parallel_replicas_enabled_for_storage(left_table_function->getStorage(), context, query_settings);
 
                             // check if left one is not subquery
                             return left_table_expr->getNodeType() != QueryTreeNodeType::QUERY
@@ -1209,11 +1222,11 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                                 return false;
 
                             const auto right_storage = right_table ? right_table->getStorage() : right_table_function->getStorage();
-                            if (parallel_replicas_enabled_for_storage(right_storage, query_settings))
+                            if (parallel_replicas_enabled_for_storage(right_storage, context, query_settings))
                             {
                                 const auto * left_table_function = left_table_expr->as<TableFunctionNode>();
                                 const auto left_storage = (left_table ? left_table->getStorage() : left_table_function->getStorage());
-                                if (!parallel_replicas_enabled_for_storage(left_storage, query_settings))
+                                if (!parallel_replicas_enabled_for_storage(left_storage, context, query_settings))
                                     // TODO: support parallel replicas for (non_mt_table RIGHT JOIN mt_table) later
                                     return false;
 
@@ -1248,7 +1261,7 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                     }
                     else if (
                         ClusterProxy::canUseParallelReplicasOnInitiator(query_context)
-                        && allow_parallel_replicas_for_join_tree(parent_join_tree, settings))
+                        && allow_parallel_replicas_for_join_tree(parent_join_tree, query_context, settings))
                     {
                         // (1) find read step
                         QueryPlan::Node * node = query_plan.getRootNode();
@@ -1269,8 +1282,8 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                             {
                                 throw Exception(
                                     ErrorCodes::LOGICAL_ERROR,
-                                    "Step is expected to be ReadFromMergeTree but it's {}",
-                                    prev_node->step->getName());
+                                    "Step is expected to be ReadFromMergeTree but it's {}\n{}",
+                                    prev_node->step->getName(), dumpQueryPlan(query_plan));
                             }
                         }
 

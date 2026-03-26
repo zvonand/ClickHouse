@@ -30,6 +30,8 @@ public:
 
     void checkAlterIsPossible(const AlterCommands & commands, ContextPtr local_context) const override;
 
+    StoragePtr getUnderlyingStorage(const ContextPtr & context) const;
+
     void read(
         QueryPlan & query_plan,
         const Names & column_names,

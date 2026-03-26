@@ -5,6 +5,8 @@
 #include <Analyzer/TableNode.h>
 #include <Analyzer/UnionNode.h>
 #include <Core/Settings.h>
+#include <Analyzer/QueryTreeBuilder.h>
+#include <Analyzer/QueryTreePassManager.h>
 #include <Interpreters/ClusterProxy/SelectStreamFactory.h>
 #include <Interpreters/ClusterProxy/executeQuery.h>
 #include <Interpreters/InterpreterSelectQueryAnalyzer.h>
@@ -20,6 +22,7 @@
 #include <Storages/MergeTree/MergeTreeData.h>
 #include <Storages/StorageDummy.h>
 #include <Storages/StorageMaterializedView.h>
+#include <Storages/StorageView.h>
 #include <Storages/buildQueryTreeForShard.h>
 
 namespace DB
@@ -38,9 +41,68 @@ namespace ErrorCodes
     extern const int UNSUPPORTED_METHOD;
 }
 
+/// Build and resolve the view's inner query tree, then walk the join tree
+/// to find the leftmost underlying storage. Returns nullptr if the view
+/// is too complex or resolution fails.
+StoragePtr getViewUnderlyingStorage(const StoragePtr & view_storage, const ContextPtr & context)
+{
+    const auto * view = typeid_cast<const StorageView *>(view_storage.get());
+    if (!view || view->isParameterizedView())
+        return nullptr;
+
+    auto inner_query_ast = view_storage->getInMemoryMetadataPtr()->getSelectQuery().inner_query;
+
+    QueryTreeNodePtr inner_query_tree;
+    try
+    {
+        inner_query_tree = buildQueryTree(inner_query_ast->clone(), context);
+        QueryTreePassManager pass_manager(context);
+        addQueryTreePasses(pass_manager);
+        pass_manager.runOnlyResolve(inner_query_tree);
+    }
+    catch (...)
+    {
+        /// If resolution fails for any reason, this view is not suitable.
+        return nullptr;
+    }
+
+    /// Walk the resolved join tree to find the leftmost leaf table.
+    const IQueryTreeNode * node = inner_query_tree.get();
+    while (node)
+    {
+        switch (node->getNodeType())
+        {
+            case QueryTreeNodeType::QUERY:
+                node = node->as<QueryNode &>().getJoinTree().get();
+                break;
+            case QueryTreeNodeType::UNION:
+            {
+                const auto & queries = node->as<UnionNode &>().getQueries().getNodes();
+                node = queries.empty() ? nullptr : queries.front().get();
+                break;
+            }
+            case QueryTreeNodeType::TABLE:
+                return node->as<TableNode &>().getStorage();
+            default:
+                return nullptr;
+        }
+    }
+    return nullptr;
+}
+
 static bool canUseTableForParallelReplicas(const TableNode & table_node, const ContextPtr & context [[maybe_unused]])
 {
     auto storage = table_node.getStorage();
+
+    if (storage->isView() && !typeid_cast<const StorageMaterializedView *>(storage.get()))
+    {
+        auto underlying = getViewUnderlyingStorage(storage, context);
+        if (!underlying)
+            return false;
+
+        storage = underlying;
+    }
+
     const auto * mv = typeid_cast<const StorageMaterializedView *>(storage.get());
     if (mv)
     {

@@ -33,6 +33,11 @@
 #include <Interpreters/ReplaceQueryParameterVisitor.h>
 #include <Parsers/QueryParameterVisitor.h>
 
+#include <Analyzer/QueryTreeBuilder.h>
+#include <Analyzer/QueryTreePassManager.h>
+#include <Analyzer/UnionNode.h>
+#include <Analyzer/QueryNode.h>
+
 namespace DB
 {
 namespace Setting
@@ -41,6 +46,8 @@ namespace Setting
     extern const SettingsBool extremes;
     extern const SettingsUInt64 max_result_rows;
     extern const SettingsUInt64 max_result_bytes;
+    extern const SettingsBool parallel_replicas_for_non_replicated_merge_tree;
+    extern const SettingsUInt64 allow_experimental_parallel_reading_from_replicas;
 }
 
 namespace ErrorCodes
@@ -103,10 +110,24 @@ bool hasJoin(const ASTSelectWithUnionQuery & ast)
 /** There are no limits on the maximum size of the result for the view.
   *  Since the result of the view is not the result of the entire query.
   */
-ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage_snapshot)
+ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage_snapshot, const StorageView * view)
 {
     auto view_context = storage_snapshot->metadata->getSQLSecurityOverriddenContext(context);
     Settings view_settings = view_context->getSettingsCopy();
+    if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
+    {
+        if (auto storage = view->getUnderlyingStorage(context))
+        {
+            if (storage->isMergeTree()
+                && (storage->supportsReplication()
+                    || (!storage->supportsReplication()
+                        && !context->getSettingsRef()[Setting::parallel_replicas_for_non_replicated_merge_tree])))
+            {
+                view_settings[Setting::allow_experimental_parallel_reading_from_replicas] = Field{0};
+            }
+        }
+    }
+
     view_settings[Setting::max_result_rows] = 0;
     view_settings[Setting::max_result_bytes] = 0;
     view_settings[Setting::extremes] = false;
@@ -155,6 +176,51 @@ StorageView::StorageView(
     setInMemoryMetadata(storage_metadata);
 }
 
+StoragePtr StorageView::getUnderlyingStorage(const ContextPtr & context) const
+{
+    if (isParameterizedView())
+        return nullptr;
+
+    auto inner_query_ast = getInMemoryMetadataPtr()->getSelectQuery().inner_query;
+
+    QueryTreeNodePtr inner_query_tree;
+    try
+    {
+        inner_query_tree = buildQueryTree(inner_query_ast->clone(), context);
+        QueryTreePassManager pass_manager(context);
+        addQueryTreePasses(pass_manager);
+        pass_manager.runOnlyResolve(inner_query_tree);
+    }
+    catch (...)
+    {
+        /// If resolution fails for any reason, this view is not suitable.
+        return nullptr;
+    }
+
+    /// Walk the resolved join tree to find the leftmost leaf table.
+    const IQueryTreeNode * node = inner_query_tree.get();
+    while (node)
+    {
+        switch (node->getNodeType())
+        {
+            case QueryTreeNodeType::QUERY:
+                node = node->as<QueryNode &>().getJoinTree().get();
+                break;
+            case QueryTreeNodeType::UNION:
+            {
+                const auto & queries = node->as<UnionNode &>().getQueries().getNodes();
+                node = queries.empty() ? nullptr : queries.front().get();
+                break;
+            }
+            case QueryTreeNodeType::TABLE:
+                return node->as<TableNode &>().getStorage();
+            default:
+                return nullptr;
+        }
+    }
+    return nullptr;
+}
+
 void StorageView::read(
         QueryPlan & query_plan,
         const Names & column_names,
@@ -178,14 +244,15 @@ void StorageView::read(
 
     if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
     {
-        auto view_context = getViewContext(context, storage_snapshot);
-        InterpreterSelectQueryAnalyzer interpreter(current_inner_query, view_context, options, column_names, query_info.filter_actions_dag.get());
+        auto view_context = getViewContext(context, storage_snapshot, this);
+        InterpreterSelectQueryAnalyzer interpreter(
+            current_inner_query, view_context, options, column_names, query_info.filter_actions_dag.get());
         interpreter.addStorageLimits(*query_info.storage_limits);
         query_plan = std::move(interpreter).extractQueryPlan();
     }
     else
     {
-        auto view_context = getViewContext(context, storage_snapshot);
+        auto view_context = getViewContext(context, storage_snapshot, this);
         InterpreterSelectWithUnionQuery interpreter(current_inner_query, view_context, options, column_names);
         interpreter.addStorageLimits(*query_info.storage_limits);
         interpreter.buildQueryPlan(query_plan);

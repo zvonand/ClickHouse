@@ -110,32 +110,45 @@ Fetch review comments:
 
 ```bash
 gh pr view $PR_NUMBER --json reviews,comments --jq '.reviews[] | select(.state != "COMMENTED" or .body != "") | {author: .author.login, state: .state, body: .body}'
-gh api repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/comments --jq '.[] | select(.in_reply_to_id == null or .in_reply_to_id == 0) | {author: .user.login, body: .body, path: .path, line: .line, created_at: .created_at}'
+gh api repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/comments --paginate --jq '.[] | select(.in_reply_to_id == null or .in_reply_to_id == 0) | {author: .user.login, body: .body, path: .path, line: .line, created_at: .created_at}'
 ```
 
 Also fetch review comment threads to identify which are resolved and which are not:
 
 ```bash
-gh api graphql -f query='
-{
-  repository(owner: "ClickHouse", name: "ClickHouse") {
-    pullRequest(number: '$PR_NUMBER') {
-      reviewThreads(first: 100) {
-        nodes {
-          isResolved
-          comments(first: 10) {
-            nodes {
-              author { login }
-              body
-              path
-              line
+# Paginate through all review threads (PRs may have more than 100)
+CURSOR=""
+while true; do
+  AFTER_CLAUSE=""
+  if [ -n "$CURSOR" ]; then
+    AFTER_CLAUSE=", after: \"$CURSOR\""
+  fi
+  RESULT=$(gh api graphql -f query="
+  {
+    repository(owner: \"ClickHouse\", name: \"ClickHouse\") {
+      pullRequest(number: $PR_NUMBER) {
+        reviewThreads(first: 100${AFTER_CLAUSE}) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            isResolved
+            comments(first: 10) {
+              nodes {
+                author { login }
+                body
+                path
+                line
+              }
             }
           }
         }
       }
     }
-  }
-}'
+  }")
+  echo "$RESULT"
+  HAS_NEXT=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+  [ "$HAS_NEXT" = "true" ] || break
+  CURSOR=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+done
 ```
 
 For each unresolved review thread:

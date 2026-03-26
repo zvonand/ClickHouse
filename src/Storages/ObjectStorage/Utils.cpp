@@ -40,6 +40,7 @@ namespace ErrorCodes
     extern const int BAD_ARGUMENTS;
     extern const int LOGICAL_ERROR;
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
+    extern const int PATH_ACCESS_DENIED;
 }
 
 namespace
@@ -509,6 +510,21 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
     const std::string base_scheme_normalized = normalizeScheme(table_location_decomposed.scheme);
     const std::string target_scheme_normalized = normalizeScheme(target_decomposed.scheme);
 
+    /// `file://` paths must stay inside `user_files`.
+    /// Without this check, metadata could drive reads from arbitrary local paths.
+    if (target_scheme_normalized == "file")
+    {
+        const auto target_path = std::filesystem::path(target_decomposed.key).lexically_normal();
+        const auto user_files_path = std::filesystem::path(context->getUserFilesPath()).lexically_normal();
+
+        if (user_files_path.empty() || !fileOrSymlinkPathStartsWith(target_path.string(), user_files_path.string()))
+            throw DB::Exception(
+                DB::ErrorCodes::PATH_ACCESS_DENIED,
+                "File URI '{}' is outside of allowed `user_files` path '{}'",
+                path,
+                user_files_path.string());
+    }
+
     // For S3 URIs, use S3::URI to properly handle all kinds of URIs, e.g. https://s3.amazonaws.com/bucket/... == s3://bucket/...
     #if USE_AWS_S3
     if (target_scheme_normalized == "s3" || target_scheme_normalized == "https" || target_scheme_normalized == "http")
@@ -636,7 +652,7 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
                 cfg.setString(config_prefix + ".endpoint", endpoint_to_use);
 
                 /// Copy credentials from base storage when the endpoint is the same or
-                /// or s3_propagate_credentials_to_other_storages is 1
+                /// `s3_propagate_credentials_to_other_storages` is enabled.
                 if (base_storage->getType() == ObjectStorageType::S3
                     && (context->getSettingsRef()[Setting::s3_propagate_credentials_to_other_storages]
                         || sameEndpoint(base_storage->getDescription(), endpoint_to_use)))

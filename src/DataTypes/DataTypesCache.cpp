@@ -4,6 +4,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int LOGICAL_ERROR;
+}
+
 SimpleDataTypesCache::SimpleDataTypesCache()
 {
     addSimpleType(BinaryTypeIndex::Nothing, "Nothing");

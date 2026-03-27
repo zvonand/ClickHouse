@@ -9,6 +9,14 @@
 
 using namespace DB;
 
+struct PredicateAtomExtractorFixture : public ::testing::Test
+{
+    static void SetUpTestSuite()
+    {
+        registerFunctions();
+    }
+};
+
 /// Helper to build a simple DAG node: function(column, constant)
 static const ActionsDAG::Node & makePredicateNode(
     ActionsDAG & dag,
@@ -78,9 +86,8 @@ TEST(PredicateAtomExtractor, ExtractFromNullptr)
     EXPECT_TRUE(atoms.empty());
 }
 
-TEST(PredicateAtomExtractor, ExtractSingleAtom)
+TEST_F(PredicateAtomExtractorFixture, ExtractSingleAtom)
 {
-    registerFunctions();
     ActionsDAG dag;
     /// WHERE x = 1
     const auto & eq_node = makePredicateNode(dag, "equals", "x", std::make_shared<DataTypeUInt64>(), Field(UInt64(1)));
@@ -92,9 +99,8 @@ TEST(PredicateAtomExtractor, ExtractSingleAtom)
     EXPECT_EQ(atoms[0].predicate_class, "Equality");
 }
 
-TEST(PredicateAtomExtractor, ExtractConjunction)
+TEST_F(PredicateAtomExtractorFixture, ExtractConjunction)
 {
-    registerFunctions();
     ActionsDAG dag;
     /// WHERE x = 1 AND y > 5
     const auto & eq_node = makePredicateNode(dag, "equals", "x", std::make_shared<DataTypeUInt64>(), Field(UInt64(1)));
@@ -114,11 +120,10 @@ TEST(PredicateAtomExtractor, ExtractConjunction)
     EXPECT_TRUE(columns.count("y"));
 }
 
-TEST(PredicateAtomExtractor, ExtractSkipsMultiColumnAtom)
+TEST_F(PredicateAtomExtractorFixture, ExtractSkipsMultiColumnAtom)
 {
-    registerFunctions();
     ActionsDAG dag;
-    /// WHERE x = y (two column inputs, no single column -> skipped)
+    /// WHERE x = y (two column inputs, no single column → skipped)
     const auto & x_node = dag.addInput("x", std::make_shared<DataTypeUInt64>());
     const auto & y_node = dag.addInput("y", std::make_shared<DataTypeUInt64>());
 
@@ -129,9 +134,8 @@ TEST(PredicateAtomExtractor, ExtractSkipsMultiColumnAtom)
     EXPECT_TRUE(atoms.empty());
 }
 
-TEST(PredicateAtomExtractor, ExtractThroughAlias)
+TEST_F(PredicateAtomExtractorFixture, ExtractThroughAlias)
 {
-    registerFunctions();
     ActionsDAG dag;
     /// WHERE alias(x = 1)
     const auto & eq_node = makePredicateNode(dag, "equals", "x", std::make_shared<DataTypeUInt64>(), Field(UInt64(1)));

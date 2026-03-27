@@ -96,6 +96,7 @@ namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int BAD_ARGUMENTS;
+    extern const int DATALAKE_DATABASE_ERROR;
     extern const int NOT_IMPLEMENTED;
     extern const int ICEBERG_SPECIFICATION_VIOLATION;
 }
@@ -851,7 +852,7 @@ void IcebergStorageSink::finalizeBuffers()
         ++i;
     }
     if (!successed_write)
-        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Write into iceberg was not successful");
+        throw Exception(ErrorCodes::DATALAKE_DATABASE_ERROR, "Write into iceberg was not successful");
 }
 
 void IcebergStorageSink::releaseBuffers()

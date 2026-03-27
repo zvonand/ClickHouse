@@ -1519,7 +1519,7 @@ bool AzuriteIntegration::performTableIntegration(RandomGenerator &, SQLTable &, 
 
 void HTTPIntegration::setTableEngineDetails(RandomGenerator & rg, const SQLTable & t, TableEngine * te)
 {
-    te->add_params()->set_svalue(t.getTablePath(rg, fc, false));
+    te->add_params()->set_svalue(t.getTablePath(rg, false));
 }
 
 bool HTTPIntegration::performTableIntegration(RandomGenerator &, SQLTable &, const bool, std::vector<ColumnPathChain> &)
@@ -1866,7 +1866,7 @@ void DolorIntegration::setTableEngineDetails(RandomGenerator & rg, const SQLTabl
                           /// The key-value format is not well supported for catalogs at the moment
                           const ServerCredentials & minio = fc.minio_server.value();
 
-                          te->add_params()->set_svalue(t.getTablePath(fc));
+                          te->add_params()->set_svalue(t.getTablePath());
                           te->add_params()->set_svalue(minio.password);
                           te->add_params()->set_svalue(minio.secret);
                           if (t.isAnyIcebergEngine() && t.file_format.has_value() && rg.nextMediumNumber() < 96)

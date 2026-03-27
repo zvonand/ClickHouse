@@ -748,7 +748,7 @@ private:
                       next->set_key(
                           b.isOnS3() ? (b.getLakeCatalog() == LakeCatalog::None ? "filename" : "url")
                                      : (b.isOnAzure() ? "blob_path" : "path"));
-                      next->set_value(b.getTablePath(rg, fc, this->allow_not_deterministic));
+                      next->set_value(b.getTablePath(rg, this->allow_not_deterministic));
                       added_path++;
                   }},
                  {add_format,

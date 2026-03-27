@@ -583,6 +583,7 @@ void StatementGenerator::generateNextCreateView(RandomGenerator & rg, CreateView
 
         next.db = v.db;
         next.name = v.getBaseName();
+        next.counter = v.counter;
     }
     else
     {
@@ -590,7 +591,8 @@ void StatementGenerator::generateNextCreateView(RandomGenerator & rg, CreateView
         {
             next.db = rg.pickRandomly(filterCollection<std::shared_ptr<SQLDatabase>>(attached_databases));
         }
-        next.name = rg.nextIdentifier("v", this->table_counter++, fc.allow_nasty_identifiers);
+        next.counter = this->table_counter++;
+        next.name = rg.nextIdentifier("v", next.counter, fc.allow_nasty_identifiers);
     }
     cv->set_create_opt(
         replace ? (rg.nextBool() ? CreateReplaceOption::CreateOrReplace : CreateReplaceOption::Replace) : CreateReplaceOption::Create);

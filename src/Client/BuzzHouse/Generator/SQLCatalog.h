@@ -208,6 +208,7 @@ public:
 struct SQLBase : WithCluster
 {
 public:
+    uint32_t counter = 0;
     bool is_temp = false;
     bool is_deterministic = false;
     bool has_metadata = false;
@@ -377,9 +378,9 @@ public:
 
     void setTablePath(RandomGenerator & rg, const FuzzConfig & fc, bool has_dolor);
 
-    String getTablePath(const FuzzConfig & fc) const;
+    String getTablePath() const;
 
-    String getTablePath(RandomGenerator & rg, const FuzzConfig & fc, bool allow_not_deterministic) const;
+    String getTablePath(RandomGenerator & rg, bool allow_not_deterministic) const;
 
     String getMetadataPath(const FuzzConfig & fc) const;
 

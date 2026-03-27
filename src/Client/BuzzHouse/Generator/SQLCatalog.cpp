@@ -737,6 +737,27 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
         }
         bucket_path = std::move(next_bucket_path);
     }
+    else if (isKeeperMapEngine() || isArrowFlightEngine() || isFileEngine() || (isURLEngine() && fc.http_server.has_value()))
+    {
+        /// Nasty strings give bad URLs, so use table counter
+        const String bname = rg.nextSmallNumber() < 4 ? name : ("t" + std::to_string(counter));
+
+        if (isKeeperMapEngine() || isArrowFlightEngine())
+        {
+            bucket_path = fmt::format("/{}", bname);
+        }
+        else if (isFileEngine())
+        {
+            bucket_path = fmt::format("{}/{}", fc.server_file_path.generic_string(), bname);
+        }
+        else if (isURLEngine() && fc.http_server.has_value())
+        {
+            const ServerCredentials & sc = fc.http_server.value();
+
+            bucket_path = fmt::format("http://{}:{}/{}", sc.server_hostname, sc.port, name);
+        }
+    }
+
     if (isAnyIcebergEngine() && rg.nextMediumNumber() < 91)
     {
         /// Iceberg supports 3 formats
@@ -806,35 +827,15 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
     }
 }
 
-String SQLBase::getTablePath(const FuzzConfig & fc) const
+String SQLBase::getTablePath() const
 {
-    if (isAnyIcebergEngine() || isAnyDeltaLakeEngine() || isAnyS3Engine() || isAnyAzureEngine())
-    {
-        return bucket_path.has_value() ? bucket_path.value() : "test";
-    }
-    if (isFileEngine())
-    {
-        return fmt::format("{}/{}", fc.server_file_path.generic_string(), name);
-    }
-    if (isURLEngine())
-    {
-        if (fc.http_server.has_value())
-        {
-            const ServerCredentials & sc = fc.http_server.value();
-
-            return fmt::format("http://{}:{}/{}", sc.server_hostname, sc.port, name);
-        }
-        return "test";
-    }
-    if (isKeeperMapEngine() || isArrowFlightEngine())
-    {
-        return fmt::format("/{}", name);
-    }
-
-    UNREACHABLE();
+    chassert(
+        isAnyIcebergEngine() || isAnyDeltaLakeEngine() || isAnyS3Engine() || isAnyAzureEngine() || isKeeperMapEngine()
+        || isArrowFlightEngine() || isFileEngine() || isURLEngine());
+    return bucket_path.has_value() ? bucket_path.value() : "test";
 }
 
-String SQLBase::getTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bool allow_not_deterministic) const
+String SQLBase::getTablePath(RandomGenerator & rg, const bool allow_not_deterministic) const
 {
     if ((isAnyS3Engine() || isAnyAzureEngine()) && allow_not_deterministic && rg.nextSmallNumber() < 8)
     {
@@ -889,7 +890,7 @@ String SQLBase::getTablePath(RandomGenerator & rg, const FuzzConfig & fc, const 
         }
         return res;
     }
-    return getTablePath(fc);
+    return getTablePath();
 }
 
 String SQLBase::getMetadataPath(const FuzzConfig & fc) const

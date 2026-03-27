@@ -1215,7 +1215,7 @@ void StatementGenerator::generateEngineDetails(
         {
             te->add_params()->set_in_out(b.file_format.value());
         }
-        te->add_params()->set_svalue(b.getTablePath(rg, fc, false));
+        te->add_params()->set_svalue(b.getTablePath(rg, false));
         if (b.file_comp.has_value())
         {
             te->add_params()->set_svalue(b.file_comp.value());
@@ -1400,7 +1400,7 @@ void StatementGenerator::generateEngineDetails(
     }
     else if (te->has_engine() && b.isKeeperMapEngine())
     {
-        te->add_params()->set_svalue(b.getTablePath(rg, fc, false));
+        te->add_params()->set_svalue(b.getTablePath(rg, false));
         if (rg.nextBool())
         {
             std::uniform_int_distribution<uint64_t> keys_limit_dist(0, 8192);
@@ -1436,7 +1436,7 @@ void StatementGenerator::generateEngineDetails(
         /// Set arrow flight params
         b.host_params = rg.pickRandomly(fc.arrow_flight_servers);
         te->add_params()->set_svalue(b.host_params.value());
-        te->add_params()->set_svalue(b.getTablePath(rg, fc, false));
+        te->add_params()->set_svalue(b.getTablePath(rg, false));
     }
 
     if (te->has_engine() && (b.isJoinEngine() || b.isSetEngine()) && allow_shared_tbl && rg.nextSmallNumber() < 5)
@@ -2307,6 +2307,7 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
 
         next.db = t.db;
         next.name = t.getBaseName();
+        next.counter = t.counter;
     }
     else
     {
@@ -2314,7 +2315,8 @@ void StatementGenerator::generateNextCreateTable(RandomGenerator & rg, const boo
         {
             next.db = rg.pickRandomly(filterCollection<std::shared_ptr<SQLDatabase>>(attached_databases));
         }
-        next.name = rg.nextIdentifier("t", this->table_counter++, fc.allow_nasty_identifiers);
+        next.counter = this->table_counter++;
+        next.name = rg.nextIdentifier("t", next.counter, fc.allow_nasty_identifiers);
     }
     ct->set_create_opt(
         replace ? (rg.nextBool() ? CreateReplaceOption::CreateOrReplace : CreateReplaceOption::Replace) : CreateReplaceOption::Create);
@@ -2568,6 +2570,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
 
         next.db = d.db;
         next.name = d.getBaseName();
+        next.counter = d.counter;
     }
     else
     {
@@ -2575,7 +2578,8 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         {
             next.db = rg.pickRandomly(filterCollection<std::shared_ptr<SQLDatabase>>(attached_databases));
         }
-        next.name = rg.nextIdentifier("d", this->table_counter++, fc.allow_nasty_identifiers);
+        next.counter = this->table_counter++;
+        next.name = rg.nextIdentifier("d", next.counter, fc.allow_nasty_identifiers);
     }
     cd->set_create_opt(
         replace ? (rg.nextBool() ? CreateReplaceOption::CreateOrReplace : CreateReplaceOption::Replace) : CreateReplaceOption::Create);

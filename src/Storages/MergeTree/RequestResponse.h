@@ -47,13 +47,18 @@ struct ParallelReadRequest
     /// No default constructor, you must initialize all fields at once.
 
     ParallelReadRequest(
-        CoordinationMode mode_, size_t replica_num_, size_t min_marks_per_request_, RangesInDataPartsDescription description_)
+        CoordinationMode mode_,
+        size_t replica_num_,
+        size_t min_marks_per_request_,
+        RangesInDataPartsDescription description_,
+        const StorageID & table_id_)
         : mode(mode_)
         , replica_num(replica_num_)
         , min_marks_per_request(min_marks_per_request_)
         , description(std::move(description_))
-        , table_id(StorageID::createEmpty())
-    {}
+        , table_id(table_id_)
+    {
+    }
 
     CoordinationMode mode;
     size_t replica_num;
@@ -104,14 +109,16 @@ struct InitialAllRangesAnnouncement
         RangesInDataPartsDescription description_,
         size_t replica_num_,
         size_t mark_segment_size_,
-        size_t min_marks_per_request_)
+        size_t min_marks_per_request_,
+        const StorageID & table_id_)
         : mode(mode_)
         , description(std::move(description_))
         , replica_num(replica_num_)
         , mark_segment_size(mark_segment_size_)
         , min_marks_per_request(min_marks_per_request_)
-        , table_id(StorageID::createEmpty())
-    {}
+        , table_id(table_id_)
+    {
+    }
 
     CoordinationMode mode;
     RangesInDataPartsDescription description;

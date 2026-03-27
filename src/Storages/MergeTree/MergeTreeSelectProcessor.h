@@ -33,7 +33,9 @@ public:
         MergeTreeAllRangesCallback all_callback_,
         MergeTreeReadTaskCallback callback_,
         size_t number_of_current_replica_,
-        size_t total_nodes_count_);
+        size_t total_nodes_count_,
+        const StorageID & table_id_
+    );
 
     void sendInitialRequest(CoordinationMode mode, RangesInDataPartsDescription description, size_t mark_segment_size, size_t min_marks_per_request) const;
 
@@ -49,6 +51,7 @@ private:
     MergeTreeReadTaskCallback callback;
     const size_t number_of_current_replica;
     const size_t total_nodes_count;
+    const StorageID table_id;
 };
 
 using RangesByIndex = std::unordered_map<size_t, RangesInDataPart>;

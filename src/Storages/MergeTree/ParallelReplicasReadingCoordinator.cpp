@@ -1137,32 +1137,18 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
 
     std::lock_guard lock(mutex);
 
-    if (!pimpl)
+    if (!snapshot_replica_num)
     {
-        initialize(announcement.mode);
-
-        chassert(!snapshot_replica_num);
         snapshot_replica_num = announcement.replica_num;
         LOG_DEBUG(getLogger("ParallelReplicasReadingCoordinator"), "Using snapshot from replica num {}", snapshot_replica_num.value());
     }
-    else
-    {
-        // let's always check the reading mode match
-        if (announcement.mode != pimpl->getCoordinationMode())
-        {
-            throw Exception(
-                ErrorCodes::LOGICAL_ERROR,
-                "Replica {} decided to read in {} mode, not in {}. This is a bug",
-                announcement.replica_num,
-                magic_enum::enum_name(announcement.mode),
-                magic_enum::enum_name(pimpl->getCoordinationMode()));
-        }
-    }
+
+    auto coordinator = getOrCreateCoordinator(announcement.table_id, announcement.mode);
 
     if (is_reading_completed)
         return;
 
-    pimpl->handleInitialAllRangesAnnouncement(std::move(announcement));
+    coordinator->handleInitialAllRangesAnnouncement(std::move(announcement));
 }
 
 ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelReadRequest request)
@@ -1183,26 +1169,35 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
         if (is_reading_completed)
             return response;
 
-        if (!pimpl)
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "Got read request from replica {} without ranges announcement", request.replica_num);
+        auto coordinator = getCoordinator(request.table_id);
+        if (!coordinator)
+            throw Exception(
+                ErrorCodes::LOGICAL_ERROR,
+                "Got read request from replica {} for table {} without ranges announcement",
+                request.replica_num,
+                request.table_id.getFullTableName());
 
-        if (request.mode != pimpl->getCoordinationMode())
+        if (request.mode != coordinator->getCoordinationMode())
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,
                 "Replica {} decided to read in {} mode, not in {}. This is a bug",
                 request.replica_num,
                 magic_enum::enum_name(request.mode),
-                magic_enum::enum_name(pimpl->getCoordinationMode()));
+                magic_enum::enum_name(coordinator->getCoordinationMode()));
 
         const auto replica_num = request.replica_num;
+        const auto request_table_id = request.table_id;
 
-        if (pimpl->replica_status[replica_num].is_finished)
+        if (coordinator->replica_status[replica_num].is_finished)
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,
-                "Got request from replica {} after ranges assignment has been completed for the replica",
-                request.replica_num);
+                "Got request from replica {} for table {} after ranges assignment has been completed for the replica",
+                replica_num,
+                request_table_id.getFullTableName());
 
-        response = pimpl->handleRequest(std::move(request));
+        response = coordinator->handleRequest(std::move(request));
+        response.table_id = request_table_id;
+
         if (!response.finish)
         {
             chassert(!is_reading_completed);
@@ -1212,7 +1207,7 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
         }
         else
         {
-            pimpl->replica_status[replica_num].is_finished = true;
+            coordinator->replica_status[replica_num].is_finished = true;
 
             if (isReadingCompleted())
             {
@@ -1241,7 +1236,10 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
                 "All ranges for reading has been assigned to replicas. Cancelling execution for unused replicas. Used replicas: {}",
                 replicas);
 
-            if (pimpl && !pimpl->initializedWithEmptyRanges())
+            bool all_initialized_with_empty_ranges = std::all_of(
+                table_to_coordinator.begin(), table_to_coordinator.end(),
+                [](const auto & p) { return p.second->initializedWithEmptyRanges(); });
+            if (!all_initialized_with_empty_ranges)
                 chassert(!replicas_used.empty());
 
             (*read_completed_callback)(replicas_to_exclude);
@@ -1258,39 +1256,67 @@ void ParallelReplicasReadingCoordinator::markReplicaAsUnavailable(size_t replica
 
     std::lock_guard lock(mutex);
 
-    if (!pimpl)
+    if (table_to_coordinator.empty())
     {
         unavailable_nodes_registered_before_initialization.push_back(replica_number);
         if (unavailable_nodes_registered_before_initialization.size() == replicas_count)
             throw Exception(ErrorCodes::ALL_CONNECTION_TRIES_FAILED, "Can't connect to any replica chosen for query execution");
     }
     else
-        pimpl->markReplicaAsUnavailable(replica_number);
+    {
+        for (auto & [_, coordinator] : table_to_coordinator)
+            coordinator->markReplicaAsUnavailable(replica_number);
+    }
 }
 
-void ParallelReplicasReadingCoordinator::initialize(CoordinationMode mode)
+std::shared_ptr<ParallelReplicasReadingCoordinator::ImplInterface>
+ParallelReplicasReadingCoordinator::getOrCreateCoordinator(const StorageID & table_id, CoordinationMode mode)
 {
-    chassert(!pimpl);
+    auto key = table_id.getFullTableName();
+    auto it = table_to_coordinator.find(key);
+    if (it != table_to_coordinator.end())
+    {
+        if (mode != it->second->getCoordinationMode())
+            throw Exception(
+                ErrorCodes::LOGICAL_ERROR,
+                "Coordination mode mismatch for table {}: got {}, expected {}",
+                key,
+                magic_enum::enum_name(mode),
+                magic_enum::enum_name(it->second->getCoordinationMode()));
+        return it->second;
+    }
 
+    std::shared_ptr<ImplInterface> coordinator;
     switch (mode)
     {
         case CoordinationMode::Default:
-            pimpl = std::make_unique<DefaultCoordinator>(replicas_count, mode);
+            coordinator = std::make_shared<DefaultCoordinator>(replicas_count, mode);
             break;
         case CoordinationMode::WithOrder:
-            pimpl = std::make_unique<InOrderCoordinator>(replicas_count, mode);
+            coordinator = std::make_shared<InOrderCoordinator>(replicas_count, mode);
             break;
         case CoordinationMode::ReverseOrder:
-            pimpl = std::make_unique<InOrderCoordinator>(replicas_count, mode);
+            coordinator = std::make_shared<InOrderCoordinator>(replicas_count, mode);
             break;
     }
 
     // progress_callback is not set when local plan is used for initiator
     if (progress_callback)
-        pimpl->setProgressCallback(std::move(progress_callback));
+        coordinator->setProgressCallback(progress_callback);
 
     for (const auto replica : unavailable_nodes_registered_before_initialization)
-        pimpl->markReplicaAsUnavailable(replica);
+        coordinator->markReplicaAsUnavailable(replica);
+
+    table_to_coordinator[key] = coordinator;
+
+    LOG_DEBUG(
+        getLogger("ParallelReplicasReadingCoordinator"),
+        "Created coordinator for table {} with mode {}, total tables: {}",
+        key,
+        magic_enum::enum_name(mode),
+        table_to_coordinator.size());
+
+    return coordinator;
 }
 
 ParallelReplicasReadingCoordinator::ParallelReplicasReadingCoordinator(size_t replicas_count_) : replicas_count(replicas_count_)
@@ -1307,10 +1333,10 @@ ParallelReplicasReadingCoordinator::~ParallelReplicasReadingCoordinator()
 void ParallelReplicasReadingCoordinator::setProgressCallback(ProgressCallback callback)
 {
     std::lock_guard lock(mutex);
-    // store callback since pimpl can be not instantiated yet
+    // store callback since coordinators may not be instantiated yet
     progress_callback = std::move(callback);
-    if (pimpl)
-        pimpl->setProgressCallback(std::move(progress_callback));
+    for (auto & [_, coordinator] : table_to_coordinator)
+        coordinator->setProgressCallback(progress_callback);
 }
 
 void ParallelReplicasReadingCoordinator::setReadCompletedCallback(ReadCompletedCallback callback)
@@ -1320,10 +1346,24 @@ void ParallelReplicasReadingCoordinator::setReadCompletedCallback(ReadCompletedC
 
 bool ParallelReplicasReadingCoordinator::isReadingCompleted() const
 {
-    if (pimpl)
-        return pimpl->isReadingCompleted();
+    if (table_to_coordinator.empty())
+        return false;
 
-    return false;
+    for (const auto & [_, coordinator] : table_to_coordinator)
+    {
+        if (!coordinator->isReadingCompleted())
+            return false;
+    }
+    return true;
 }
 
+std::shared_ptr<ParallelReplicasReadingCoordinator::ImplInterface>
+ParallelReplicasReadingCoordinator::getCoordinator(const StorageID & table_id) const
+{
+    auto key = table_id.getFullTableName();
+    auto it = table_to_coordinator.find(key);
+    if (it != table_to_coordinator.end())
+        return it->second;
+    return nullptr;
+}
 }

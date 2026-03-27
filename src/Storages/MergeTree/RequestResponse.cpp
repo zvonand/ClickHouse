@@ -79,13 +79,13 @@ ParallelReadRequest ParallelReadRequest::deserialize(ReadBuffer & in, UInt64 rep
     readIntBinary(min_marks_per_request, in);
     description.deserialize(in, replica_pr_protocol_version);
 
-    auto result = ParallelReadRequest(mode, replica_num, min_marks_per_request, std::move(description));
+    StorageID table_id = StorageID::createEmpty();
     if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
     {
-        readStringBinary(result.table_id.database_name, in);
-        readStringBinary(result.table_id.table_name, in);
+        readStringBinary(table_id.database_name, in);
+        readStringBinary(table_id.table_name, in);
     }
-    return result;
+    return ParallelReadRequest(mode, replica_num, min_marks_per_request, std::move(description), table_id);
 }
 
 void ParallelReadRequest::merge(ParallelReadRequest & other)
@@ -202,13 +202,13 @@ InitialAllRangesAnnouncement InitialAllRangesAnnouncement::deserialize(ReadBuffe
     if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
         readIntBinary(min_marks_per_request, in);
 
-    auto result = InitialAllRangesAnnouncement{mode, description, replica_num, mark_segment_size, min_marks_per_request};
+    StorageID table_id = StorageID::createEmpty();
     if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
     {
-        readStringBinary(result.table_id.database_name, in);
-        readStringBinary(result.table_id.table_name, in);
+        readStringBinary(table_id.database_name, in);
+        readStringBinary(table_id.table_name, in);
     }
-    return result;
+    return InitialAllRangesAnnouncement{mode, description, replica_num, mark_segment_size, min_marks_per_request, table_id};
 }
 
 }

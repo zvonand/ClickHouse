@@ -29,28 +29,28 @@ SELECT
     count()
 FROM tab_in_preprocess
 WHERE (id, str) IN (
-    SELECT tuple(number) FROM numbers(100)
-); -- { serverError TYPE_MISMATCH, NUMBER_OF_COLUMNS_DOESNT_MATCH }
+    SELECT number FROM numbers(100)
+); -- { serverError TYPE_MISMATCH, NUMBER_OF_COLUMNS_DOESNT_MATCH, ILLEGAL_TYPE_OF_ARGUMENT }
 
 SELECT
     count()
 FROM tab_in_preprocess
 WHERE (id, str) IN (
     SELECT tuple(number) FROM numbers(100)
-); -- { serverError TYPE_MISMATCH, NUMBER_OF_COLUMNS_DOESNT_MATCH }
+); -- { serverError TYPE_MISMATCH, NUMBER_OF_COLUMNS_DOESNT_MATCH, ILLEGAL_TYPE_OF_ARGUMENT }
 
 SELECT
     count()
 FROM tab_in_preprocess
 WHERE (id, str) IN (
     SELECT tuple(number, 'Hello10', 'Hello11') FROM numbers(100)
-); -- { serverError TYPE_MISMATCH, NUMBER_OF_COLUMNS_DOESNT_MATCH }
+); -- { serverError TYPE_MISMATCH, NUMBER_OF_COLUMNS_DOESNT_MATCH, ILLEGAL_TYPE_OF_ARGUMENT }
 
 SELECT
     count()
 FROM tab_in_preprocess
 WHERE (id, str) IN (
     SELECT number, 'Hello10', 'Hello11' FROM numbers(100)
-); -- { serverError TYPE_MISMATCH, NUMBER_OF_COLUMNS_DOESNT_MATCH }
+); -- { serverError TYPE_MISMATCH, NUMBER_OF_COLUMNS_DOESNT_MATCH, ILLEGAL_TYPE_OF_ARGUMENT }
 
 DROP TABLE tab_in_preprocess;

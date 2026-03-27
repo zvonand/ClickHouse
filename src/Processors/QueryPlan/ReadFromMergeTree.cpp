@@ -3255,6 +3255,11 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
     if (result.index_stats.empty())
         return;
 
+    /// per_part_index_stats produces per-part rows that break our chained-granule logic — skip
+    for (const auto & stat : result.index_stats)
+        if (!stat.part_name.empty())
+            return;
+
     auto storage_id = data.getStorageID();
     if (storage_id.database_name.empty())
         return;

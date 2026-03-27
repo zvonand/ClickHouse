@@ -372,13 +372,19 @@ ObjectStorageQueueOrderedFileMetadata::getProcessingStateFromKeeper(
     bool check_failed,
     LoggerPtr log_)
 {
+    std::optional<std::string> partition_path;
+    if (hasPartitioningMode(partitioning_mode))
+    {
+        const auto pk = getPartitionKeyImpl(path, partitioning_mode, parser);
+        if (!pk.empty())
+            partition_path = (std::filesystem::path(processed_node_path) / pk).string();
+    }
+
     return getProcessingStateFromKeeper(
         processed_node_stat,
         processed_node_path,
         path,
-        hasPartitioningMode(partitioning_mode)
-            ? std::optional<std::string>(std::filesystem::path(processed_node_path) / getPartitionKeyImpl(path, partitioning_mode, parser))
-            : std::nullopt,
+        partition_path,
         check_failed ? std::optional<std::string>(failed_node_path) : std::nullopt,
         log_,
         zookeeper_name);
@@ -824,7 +830,15 @@ void ObjectStorageQueueOrderedFileMetadata::preparePartitionProcessedMap(Partiti
     if (!hasPartitioningMode(partitioning_mode))
         return;
 
-    const auto partition_processed_path = std::filesystem::path(processed_node_path) / getPartitionKey(node_metadata.file_path, partitioning_mode, parser);
+    const auto partition_key = getPartitionKey(node_metadata.file_path, partitioning_mode, parser);
+    if (partition_key.empty())
+    {
+        /// Regex did not match the file path; fall back to bucket-level processed tracking.
+        LOG_TEST(log, "Partition key is empty for '{}', skipping per-partition tracking", node_metadata.file_path);
+        return;
+    }
+
+    const auto partition_processed_path = std::filesystem::path(processed_node_path) / partition_key;
 
     if (auto it = last_processed_file_per_partition.find(partition_processed_path);
         it != last_processed_file_per_partition.end())

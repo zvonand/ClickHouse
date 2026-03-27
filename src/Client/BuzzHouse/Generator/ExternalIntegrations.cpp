@@ -667,7 +667,7 @@ String PostgreSQLIntegration::quoteIdentifier(const String & name) const
 
 String PostgreSQLIntegration::getSQLQuotedTableName(std::shared_ptr<SQLDatabase>, const String & tname)
 {
-    return "\"test\".\"" + escapeSQLString(tname, '"') + "\"";
+    return R"("test".")" + escapeSQLString(tname, '"') + "\"";
 }
 
 String PostgreSQLIntegration::truncateStatement()

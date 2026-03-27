@@ -256,26 +256,15 @@ std::vector<PageCache::MappedPtr> CachedInMemoryReadBufferFromFile::populateBloc
             ++i;
         size_t miss_end = i; /// exclusive
 
-        size_t range_start = first_block_start + miss_begin * block_size;
-        size_t range_end = std::min(first_block_start + miss_end * block_size, file_size.value());
-        size_t range_size = range_end - range_start;
-
-        /// Fetch the entire miss range in one request.
-        PODArray<char> buf(range_size);
-        size_t bytes_read = in->readBigAt(buf.data(), range_size, range_start, nullptr);
-        if (bytes_read < range_size)
-            throw Exception(ErrorCodes::UNEXPECTED_END_OF_FILE, "File {} ended after {} bytes, but we expected {}",
-                cache_key.path, range_start + bytes_read, file_size.value());
-
-        /// Distribute the fetched data into individual cache cells.
-        for (size_t j = miss_begin; j < miss_end; ++j)
+        if (miss_end - miss_begin == 1)
         {
-            size_t block_start = first_block_start + j * block_size;
+            /// Single-block miss: read directly into the cache cell to avoid
+            /// a temporary buffer allocation and an extra memcpy.
+            size_t block_start = first_block_start + miss_begin * block_size;
             size_t block_data_size = std::min(block_size, file_size.value() - block_start);
-            size_t buf_offset = block_start - range_start;
             UInt128 key_hash = PageCacheKey::hashForBlock(base_hash, block_start, block_data_size);
 
-            cells[j] = cache->getOrSet(key_hash,
+            cells[miss_begin] = cache->getOrSet(key_hash,
                 [&]() -> PageCacheKey
                 {
                     return PageCacheKey{cache_key.path, cache_key.file_version, block_start, block_data_size};
@@ -283,8 +272,44 @@ std::vector<PageCache::MappedPtr> CachedInMemoryReadBufferFromFile::populateBloc
                 detached_if_missing, inject_eviction,
                 [&](const auto & c)
                 {
-                    memcpy(c->data(), buf.data() + buf_offset, block_data_size);
+                    size_t bytes_read = in->readBigAt(c->data(), block_data_size, block_start, nullptr);
+                    if (bytes_read < block_data_size)
+                        throw Exception(ErrorCodes::UNEXPECTED_END_OF_FILE, "File {} ended after {} bytes, but we expected {}",
+                            cache_key.path, block_start + bytes_read, file_size.value());
                 });
+        }
+        else
+        {
+            /// Multi-block coalesced miss: fetch the entire range in one request,
+            /// then distribute into individual cache cells.
+            size_t range_start = first_block_start + miss_begin * block_size;
+            size_t range_end = std::min(first_block_start + miss_end * block_size, file_size.value());
+            size_t range_size = range_end - range_start;
+
+            PODArray<char> buf(range_size);
+            size_t bytes_read = in->readBigAt(buf.data(), range_size, range_start, nullptr);
+            if (bytes_read < range_size)
+                throw Exception(ErrorCodes::UNEXPECTED_END_OF_FILE, "File {} ended after {} bytes, but we expected {}",
+                    cache_key.path, range_start + bytes_read, file_size.value());
+
+            for (size_t j = miss_begin; j < miss_end; ++j)
+            {
+                size_t block_start = first_block_start + j * block_size;
+                size_t block_data_size = std::min(block_size, file_size.value() - block_start);
+                size_t buf_offset = block_start - range_start;
+                UInt128 key_hash = PageCacheKey::hashForBlock(base_hash, block_start, block_data_size);
+
+                cells[j] = cache->getOrSet(key_hash,
+                    [&]() -> PageCacheKey
+                    {
+                        return PageCacheKey{cache_key.path, cache_key.file_version, block_start, block_data_size};
+                    },
+                    detached_if_missing, inject_eviction,
+                    [&](const auto & c)
+                    {
+                        memcpy(c->data(), buf.data() + buf_offset, block_data_size);
+                    });
+            }
         }
     }
 

@@ -691,7 +691,7 @@ void processAndOptimizeTextIndexFunctions(const Stack & stack, QueryPlan::Nodes 
         return;
 
     /// Walk up the stack for a FilterStep, collecting any ExpressionSteps along the way.
-    /// When query_plan_query_plan_merge_expressions = 0, one or more ExpressionSteps may sit between ReadFromMergeTree and FilterStep.
+    /// When query_plan_merge_expressions = 0, one or more ExpressionSteps may sit between ReadFromMergeTree and FilterStep.
     QueryPlan::Node * filter_node = nullptr;
     FilterStep * filter_step = nullptr;
     std::vector<ExpressionStep *> expression_steps; /// bottom-up order (index 0 = closest to ReadFromMergeTree)

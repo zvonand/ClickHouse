@@ -18,6 +18,6 @@ set (CMAKE_SYSROOT "${CMAKE_CURRENT_LIST_DIR}/../../contrib/sysroot/linux-loonga
 
 set (TOOLCHAIN_PATH "${CMAKE_CURRENT_LIST_DIR}/../../contrib/sysroot/linux-loongarch64/usr")
 
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --gcc-toolchain=${TOOLCHAIN_PATH}")
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --gcc-toolchain=${TOOLCHAIN_PATH}")
-set (CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} --gcc-toolchain=${TOOLCHAIN_PATH}")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --no-default-config --gcc-toolchain=${TOOLCHAIN_PATH}")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --no-default-config --gcc-toolchain=${TOOLCHAIN_PATH}")
+set (CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} --no-default-config --gcc-toolchain=${TOOLCHAIN_PATH}")

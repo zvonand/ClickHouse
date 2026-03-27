@@ -2499,12 +2499,14 @@ ReadFromMergeTree::AnalysisResultPtr ReadFromMergeTree::selectRangesToRead(
     {
         MergeTreeDataSelectExecutor::filterPartsByQueryConditionCache(res_parts, query_info_, vector_search_parameters, mutations_snapshot, context_, log);
 
-        auto get_indexes_size = [&](const MergeTreeData & data_) -> size_t
+        auto get_indexes_size = [&]() -> size_t
         {
             size_t res = 0;
-            for (const auto & [_, size] : data_.getSecondaryIndexSizes())
-                res += size.data_uncompressed;
-            res += data_.getPrimaryIndexSize().data_uncompressed;
+            for (const auto & part : res_parts)
+            {
+                res += part.data_part->getTotalSecondaryIndicesSize().data_uncompressed;
+                res += part.data_part->getIndexSizeFromFile().data_uncompressed;
+            }
             return res;
         };
 
@@ -2518,7 +2520,7 @@ ReadFromMergeTree::AnalysisResultPtr ReadFromMergeTree::selectRangesToRead(
             && settings[Setting::distributed_index_analysis]
             && (settings[Setting::distributed_index_analysis_for_non_shared_merge_tree] || data.isSharedStorage())
             && (total_parts >= distributed_index_analysis_min_parts_to_activate)
-            && (!distributed_index_analysis_min_indexes_bytes_to_activate || get_indexes_size(data) >= distributed_index_analysis_min_indexes_bytes_to_activate)
+            && (!distributed_index_analysis_min_indexes_bytes_to_activate || get_indexes_size() >= distributed_index_analysis_min_indexes_bytes_to_activate)
             /// When `distributed_index_analysis_only_on_coordinator` is set, restrict distributed index analysis to the coordinator (initial query).
             /// Otherwise, subqueries in the predicate (e.g. `IN (SELECT ...)`) on follower replicas would each independently trigger distributed index analysis, causing O(N^2) queries.
             && (is_initial_query || !settings[Setting::distributed_index_analysis_only_on_coordinator]);
@@ -3261,7 +3263,16 @@ void ReadFromMergeTree::initializePipeline(QueryPipelineBuilder & pipeline, cons
     {
         /// Do not keep data parts in snapshot.
         /// They are stored separately, and some could be released after PK analysis.
-        storage_snapshot->data = std::make_unique<MergeTreeData::SnapshotData>();
+        /// Keep the underlying storage alive because part teardown still reaches
+        /// `data_part->storage.getContext()`.
+        auto stripped_snapshot_data = std::make_unique<MergeTreeData::SnapshotData>();
+        if (const auto * snapshot_data = dynamic_cast<const MergeTreeData::SnapshotData *>(storage_snapshot->data.get()))
+        {
+            stripped_snapshot_data->storage = snapshot_data->storage;
+            stripped_snapshot_data->mutations_snapshot = snapshot_data->mutations_snapshot;
+        }
+
+        storage_snapshot->data = std::move(stripped_snapshot_data);
     }
 
     /// Check if we should apply row policy and prewhere after FINAL instead of during reading

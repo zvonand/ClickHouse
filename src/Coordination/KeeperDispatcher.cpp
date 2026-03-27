@@ -199,6 +199,8 @@ void KeeperDispatcher::requestThread()
         uint64_t max_wait = coordination_settings[CoordinationSetting::operation_timeout_ms].totalMilliseconds();
         uint64_t max_batch_bytes_size = coordination_settings[CoordinationSetting::max_requests_batch_bytes_size];
         size_t max_batch_size = coordination_settings[CoordinationSetting::max_requests_batch_size];
+        size_t max_read_batch_size = coordination_settings[CoordinationSetting::max_read_batch_size];
+        size_t max_read_batch_bytes_size = coordination_settings[CoordinationSetting::max_read_batch_bytes_size];
 
         /// The code below do a very simple thing: batch all write (quorum) requests into vector until
         /// previous write batch is not finished or max_batch size achieved. The main complexity goes from
@@ -306,6 +308,8 @@ void KeeperDispatcher::requestThread()
             {
                 current_batch_bytes_size += request.request->bytesSize();
                 current_batch.emplace_back(request);
+                size_t reads_count = 0;
+                size_t reads_bytes_size = 0;
 
                 const auto try_get_request = [&]
                 {
@@ -326,6 +330,8 @@ void KeeperDispatcher::requestThread()
                             const auto & last_request = current_batch.back();
                             ZooKeeperOpentelemetrySpans::maybeInitialize(request.request->spans.read_wait_for_write, request.request->tracing_context);
                             ProfiledMutexLock lock(read_request_queue_mutex, ProfileEvents::KeeperReadRequestQueueLockWaitMicroseconds, ProfileEvents::KeeperReadRequestQueueLockHoldMicroseconds);
+                            reads_count += 1;
+                            reads_bytes_size += request.request->bytesSize();
                             read_request_queue[last_request.session_id][last_request.request->xid].push_back(request);
                         }
                         else if (request.request->getOpNum() == Coordination::OpNum::Reconfig)
@@ -346,7 +352,9 @@ void KeeperDispatcher::requestThread()
                 };
 
                 while (!shutdown_called && current_batch.size() < max_batch_size && !has_reconfig_request
-                        && current_batch_bytes_size < max_batch_bytes_size && try_get_request())
+                        && current_batch_bytes_size < max_batch_bytes_size
+                        && reads_count < max_read_batch_size && reads_bytes_size < max_read_batch_bytes_size
+                        && try_get_request())
                     ;
 
                 const auto prev_result_done = [&]
@@ -366,10 +374,9 @@ void KeeperDispatcher::requestThread()
             {
                 /// Read request with no pending writes — batch consecutive reads.
                 read_batch.push_back(request);
-                //asdqwe use max_read_batch_size in both places
 
                 KeeperRequestForSession next;
-                while (!shutdown_called && requests_queue->tryPop(next))
+                while (!shutdown_called && read_batch.size() < max_read_batch_size && requests_queue->tryPop(next))
                 {
                     CurrentMetrics::sub(CurrentMetrics::KeeperOutstandingRequests);
 
@@ -405,10 +412,9 @@ void KeeperDispatcher::requestThread()
             /// Process collected write requests batch
             if (!current_batch.empty())
             {
-                if (current_batch.size() == max_batch_size)
+                if (current_batch.size() >= max_batch_size)
                     ProfileEvents::increment(ProfileEvents::KeeperBatchMaxCount, 1);
-
-                if (current_batch_bytes_size == max_batch_bytes_size)
+                else if (current_batch_bytes_size >= max_batch_bytes_size)
                     ProfileEvents::increment(ProfileEvents::KeeperBatchMaxTotalSize, 1);
 
                 LOG_TEST(log, "Processing requests batch, size: {}, bytes: {}", current_batch.size(), current_batch_bytes_size);

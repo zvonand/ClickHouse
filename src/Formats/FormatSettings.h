@@ -337,11 +337,9 @@ struct FormatSettings
         bool output_enum_as_byte_array = false;
 
         bool parallel_encoding = true;
-        bool output_compliant_nested_types = true;
         bool write_page_index = false;
         bool write_bloom_filter = false;
         bool write_checksums = true;
-        ParquetVersion output_version = ParquetVersion::V2_LATEST;
         ParquetCompression output_compression_method = ParquetCompression::SNAPPY;
         uint64_t output_compression_level;
         size_t data_page_size = 1024 * 1024;

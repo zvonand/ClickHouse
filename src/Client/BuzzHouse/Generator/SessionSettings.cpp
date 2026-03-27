@@ -1082,7 +1082,6 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
          { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, UINT32_C(1024) * UINT32_C(1024) * UINT32_C(1024))); },
          {},
          false)},
-    {"output_format_parquet_compliant_nested_types", trueOrFalseSettingNoOracle},
     {"output_format_parquet_compression_method",
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &)
@@ -1106,15 +1105,6 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
     {"output_format_parquet_parallel_encoding", trueOrFalseSettingNoOracle},
     {"output_format_parquet_string_as_string", trueOrFalseSettingNoOracle},
 
-    {"output_format_parquet_version",
-     CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &)
-         {
-             static const DB::Strings choices = {"'1.0'", "'2.4'", "'2.6'", "'2.latest'"};
-             return rg.pickRandomly(choices);
-         },
-         {},
-         false)},
     {"output_format_parquet_write_bloom_filter", trueOrFalseSettingNoOracle},
     {"output_format_parquet_write_page_index", trueOrFalseSettingNoOracle},
     {"output_format_pretty_color",

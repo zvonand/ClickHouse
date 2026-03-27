@@ -195,7 +195,6 @@ When reading Parquet files, skip whole row groups based on the WHERE expressions
     DECLARE(Bool, input_format_parquet_enable_json_parsing, true, R"(
 When reading Parquet files, parse JSON columns as ClickHouse JSON Column.
 )", 0) \
-    /** Obsolete setting, does nothing. */ \
     DECLARE(UInt64, input_format_parquet_memory_low_watermark, 2ul << 20, R"(
 Schedule prefetches more aggressively if memory usage is below than threshold. Potentially useful e.g. if there are many small bloom filters to read over network.
 )", 0) \
@@ -1150,16 +1149,9 @@ Use Parquet String type instead of Binary for String columns.
     DECLARE(Bool, output_format_parquet_fixed_string_as_fixed_byte_array, true, R"(
 Use Parquet FIXED_LEN_BYTE_ARRAY type instead of Binary for FixedString columns.
 )", 0) \
-    DECLARE(ParquetVersion, output_format_parquet_version, "2.latest", R"(
-Parquet format version for output format. Supported versions: 1.0, 2.4, 2.6 and 2.latest (default)
-)", 0) \
     DECLARE(ParquetCompression, output_format_parquet_compression_method, "zstd", R"(
 Compression method for Parquet output format. Supported codecs: snappy, lz4, brotli, zstd, gzip, none (uncompressed)
 )", 0) \
-    DECLARE(Bool, output_format_parquet_compliant_nested_types, true, R"(
-In parquet file schema, use name 'element' instead of 'item' for list elements. This is a historical artifact of Arrow library implementation. Generally increases compatibility, except perhaps with some old versions of Arrow.
-)", 0) \
-    /** Obsolete setting, does nothing. */ \
     DECLARE(Bool, output_format_parquet_parallel_encoding, true, R"(
 Do Parquet encoding in multiple threads.
 )", 0) \
@@ -1575,6 +1567,8 @@ Automatically create parent directories when using INTO OUTFILE if they do not a
     MAKE_OBSOLETE(M, Bool, input_format_parquet_use_native_reader, false) \
     MAKE_OBSOLETE(M, Bool, input_format_parquet_use_native_reader_v3, true) \
     MAKE_OBSOLETE(M, Bool, output_format_parquet_use_custom_encoder, true) \
+    MAKE_OBSOLETE(M, ParquetVersion, output_format_parquet_version, "2.latest") \
+    MAKE_OBSOLETE(M, Bool, output_format_parquet_compliant_nested_types, true) \
 
 #endif // __CLION_IDE__
 

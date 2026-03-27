@@ -680,11 +680,10 @@ IcebergStorageSink::IcebergStorageSink(
     , data_lake_settings(configuration_->getDataLakeSettings())
     , write_format(configuration_->format)
 {
-    auto fresh_data_lake_settings = getDataLakeSettingsWithFreshMetadataPath();
     auto [last_version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
         object_storage,
         persistent_table_components.table_path,
-        fresh_data_lake_settings,
+        data_lake_settings,
         persistent_table_components.metadata_cache,
         context_,
         log.get(),
@@ -916,31 +915,6 @@ void IcebergStorageSink::cancelBuffers()
     }
 }
 
-DataLakeStorageSettings IcebergStorageSink::getDataLakeSettingsWithFreshMetadataPath() const
-{
-    DataLakeStorageSettings fresh_settings(data_lake_settings);
-    if (!catalog)
-        return fresh_settings;
-
-    const auto & [namespace_name, table_name] = DataLake::parseTableName(table_id.getTableName());
-    DataLake::TableMetadata fresh_table_meta;
-    fresh_table_meta.withLocation().withDataLakeSpecificProperties();
-    if (!catalog->tryGetTableMetadata(namespace_name, table_name, fresh_table_meta))
-        return fresh_settings;
-
-    auto props = fresh_table_meta.getDataLakeSpecificProperties();
-    if (!props.has_value())
-        return fresh_settings;
-
-    auto metadata_loc = props->iceberg_metadata_file_location;
-    if (metadata_loc.empty())
-        return fresh_settings;
-
-    metadata_loc = fresh_table_meta.getMetadataLocation(metadata_loc);
-    fresh_settings[DataLakeStorageSetting::iceberg_metadata_file_path] = metadata_loc;
-    return fresh_settings;
-}
-
 bool IcebergStorageSink::initializeMetadata()
 {
     const auto & resolver = persistent_table_components.path_resolver;
@@ -985,11 +959,10 @@ bool IcebergStorageSink::initializeMetadata()
 
         if (retry_because_of_metadata_conflict)
         {
-            auto retry_data_lake_settings = getDataLakeSettingsWithFreshMetadataPath();
             auto [last_version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
                 object_storage,
                 persistent_table_components.table_path,
-                retry_data_lake_settings,
+                data_lake_settings,
                 persistent_table_components.metadata_cache,
                 context,
                 getLogger("IcebergWrites").get(),

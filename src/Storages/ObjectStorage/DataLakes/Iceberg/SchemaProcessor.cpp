@@ -153,12 +153,7 @@ void IcebergSchemaProcessor::addIcebergTableSchema(Poco::JSON::Object::Ptr schem
     if (iceberg_table_schemas_by_ids.contains(schema_id))
     {
         chassert(clickhouse_table_schemas_by_ids.contains(schema_id));
-        if (!schemasAreIdentical(*iceberg_table_schemas_by_ids.at(schema_id), *schema_ptr))
-            LOG_WARNING(
-                getLogger("IcebergSchemaProcessor"),
-                "Schema with id {} in a manifest file differs from the schema in the catalog. "
-                "Using the catalog schema.",
-                schema_id);
+        chassert(schemasAreIdentical(*iceberg_table_schemas_by_ids.at(schema_id), *schema_ptr));
     }
     else
     {

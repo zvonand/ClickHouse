@@ -3,6 +3,7 @@ import os.path
 import ssl
 import urllib.parse
 import urllib.request
+import uuid
 from os import remove
 
 import pytest
@@ -55,7 +56,7 @@ config = """<clickhouse>
 
 
 def execute_query_native(node, query, user, cert_name, password=None):
-    config_path = f"{SCRIPT_DIR}/configs/client.xml"
+    config_path = f"{SCRIPT_DIR}/configs/client_{uuid.uuid4().hex}.xml"
 
     formatted = config.format(
         certificateFile=f"{SCRIPT_DIR}/certs/{cert_name}-cert.pem",
@@ -76,12 +77,9 @@ def execute_query_native(node, query, user, cert_name, password=None):
     )
 
     try:
-        result = client.query(query, user=user, password=password)
+        return client.query(query, user=user, password=password)
+    finally:
         remove(config_path)
-        return result
-    except:
-        remove(config_path)
-        raise
 
 
 def test_native():

@@ -47,11 +47,16 @@ git pull origin "$HEAD_BRANCH"
 ```
 
 **If the branch is in the author's fork:**
+
+Derive the fork clone URL from the PR metadata (`headRepository.url` or `headRepository.owner.login` + `headRepository.name`) rather than hardcoding the repository name (forks can be renamed). Use a `pr-` prefixed remote name to avoid colliding with existing remotes like `origin`:
+
 ```bash
-git remote add "$AUTHOR_LOGIN" "https://github.com/$AUTHOR_LOGIN/ClickHouse.git" 2>/dev/null || git remote set-url "$AUTHOR_LOGIN" "https://github.com/$AUTHOR_LOGIN/ClickHouse.git"
-git fetch "$AUTHOR_LOGIN" "$HEAD_BRANCH"
-git checkout -b "$HEAD_BRANCH" "$AUTHOR_LOGIN/$HEAD_BRANCH" 2>/dev/null || git checkout "$HEAD_BRANCH"
-git pull "$AUTHOR_LOGIN" "$HEAD_BRANCH"
+REMOTE_NAME="pr-$AUTHOR_LOGIN"
+FORK_URL="https://github.com/$FORK_OWNER/$FORK_REPO.git"  # from headRepository in PR metadata
+git remote add "$REMOTE_NAME" "$FORK_URL" 2>/dev/null || git remote set-url "$REMOTE_NAME" "$FORK_URL"
+git fetch "$REMOTE_NAME" "$HEAD_BRANCH"
+git checkout -b "$HEAD_BRANCH" "$REMOTE_NAME/$HEAD_BRANCH" 2>/dev/null || git checkout "$HEAD_BRANCH"
+git pull "$REMOTE_NAME" "$HEAD_BRANCH"
 ```
 
 ### 3. Resolve conflicts with master (if any)
@@ -223,7 +228,7 @@ git push origin "$HEAD_BRANCH"
 
 **If the branch is in the author's fork:**
 ```bash
-git push "$AUTHOR_LOGIN" "$HEAD_BRANCH"
+git push "$REMOTE_NAME" "$HEAD_BRANCH"
 ```
 
 Report the result and provide the PR URL.

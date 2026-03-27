@@ -24,7 +24,6 @@ def started_cluster():
             with_zookeeper=True,
         )
         cluster.start()
-        cluster.instances["node1"].query("SYSTEM WAIT BLOBS CLEANUP 's3'")
 
         yield cluster
     finally:

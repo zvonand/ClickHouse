@@ -21,7 +21,6 @@ SETTINGS min_bytes_for_wide_part = 10485760,
             enable_bypass_cache_with_threshold = 1,
             bypass_cache_threshold = 100,
             disk = 's3_disk');
-SYSTEM WAIT BLOBS CLEANUP '02240_bypass_cache_threshold';
 
 INSERT INTO test SELECT number, toString(number) FROM numbers(100);
 

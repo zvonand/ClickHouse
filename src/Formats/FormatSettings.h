@@ -314,7 +314,7 @@ struct FormatSettings
         bool bloom_filter_push_down = true;
         bool page_filter_push_down = true;
         bool use_offset_index = true;
-        bool use_native_reader_v3 = false;
+
         bool enable_json_parsing = true;
         bool preserve_order = false;
         bool enable_row_group_prefetch = true;
@@ -335,7 +335,7 @@ struct FormatSettings
         bool output_datetime_as_uint32 = false;
         bool output_date_as_uint16 = false;
         bool output_enum_as_byte_array = false;
-        bool use_custom_encoder = true;
+
         bool parallel_encoding = true;
         bool output_compliant_nested_types = true;
         bool write_page_index = false;

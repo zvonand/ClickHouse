@@ -82,7 +82,6 @@ namespace Setting
     extern const SettingsBool table_engine_read_through_distributed_cache;
     extern const SettingsUInt64 s3_path_filter_limit;
     extern const SettingsBool use_parquet_metadata_cache;
-    extern const SettingsBool input_format_parquet_use_native_reader_v3;
 }
 
 namespace ErrorCodes
@@ -668,12 +667,8 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
             object_info->getObjectMetadata()->size_bytes,
             object_info->getFileFormat().value_or(configuration->format));
 
-        bool use_native_reader_v3 = format_settings.has_value()
-            ? format_settings->parquet.use_native_reader_v3
-            : context_->getSettingsRef()[Setting::input_format_parquet_use_native_reader_v3];
-
         InputFormatPtr input_format;
-        if (context_->getSettingsRef()[Setting::use_parquet_metadata_cache] && use_native_reader_v3
+        if (context_->getSettingsRef()[Setting::use_parquet_metadata_cache]
             && (object_info->getFileFormat().value_or(configuration->format) == "Parquet")
             && !object_info->getObjectMetadata()->etag.empty())
         {

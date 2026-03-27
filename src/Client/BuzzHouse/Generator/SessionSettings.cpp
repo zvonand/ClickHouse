@@ -806,7 +806,7 @@ std::unordered_map<String, CHSetting> serverSettings = {
     {"input_format_parquet_filter_push_down", trueOrFalseSetting},
     {"input_format_parquet_preserve_order", trueOrFalseSettingNoOracle},
     {"input_format_parquet_skip_columns_with_unsupported_types_in_schema_inference", trueOrFalseSettingNoOracle},
-    {"input_format_parquet_use_native_reader_v3", trueOrFalseSetting},
+
     {"input_format_parquet_page_filter_push_down", trueOrFalseSetting},
     {"input_format_parquet_use_offset_index", trueOrFalseSetting},
     {"input_format_protobuf_flatten_google_wrappers", trueOrFalseSettingNoOracle},
@@ -1105,7 +1105,7 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
     {"output_format_parquet_geometadata", trueOrFalseSettingNoOracle},
     {"output_format_parquet_parallel_encoding", trueOrFalseSettingNoOracle},
     {"output_format_parquet_string_as_string", trueOrFalseSettingNoOracle},
-    {"output_format_parquet_use_custom_encoder", trueOrFalseSettingNoOracle},
+
     {"output_format_parquet_version",
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &)

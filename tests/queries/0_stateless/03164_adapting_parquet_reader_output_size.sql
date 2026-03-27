@@ -22,4 +22,4 @@ SELECT roundToExp2(max(blockSize())+sum(ignore(short, long2))) FROM file(current
 SELECT roundToExp2(max(blockSize())+sum(ignore(short, long1, long2))) FROM file(currentDatabase() || '03164_adapting_parquet_reader_output_size.parquet') settings input_format_parquet_prefer_block_bytes=700000;
 
 -- Only the new parquet reader uses correct length estimate for dictionary-encoded strings.
-SELECT roundToExp2(max(blockSize())+sum(ignore(short, long_low_cardinality))) FROM file(currentDatabase() || '03164_adapting_parquet_reader_output_size.parquet') settings input_format_parquet_prefer_block_bytes=700000, input_format_parquet_use_native_reader_v3=1;
+SELECT roundToExp2(max(blockSize())+sum(ignore(short, long_low_cardinality))) FROM file(currentDatabase() || '03164_adapting_parquet_reader_output_size.parquet') settings input_format_parquet_prefer_block_bytes=700000;

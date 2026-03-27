@@ -51,11 +51,6 @@ public:
     void setVersion(Int32 initial_version_) { initial_version = initial_version_; }
     void setCompressionMethod(CompressionMethod compression_method_) { compression_method = compression_method_; }
 
-    /// Override the base location for data files. When set, data files are placed directly
-    /// under this path instead of the default `{table_location}data/` layout.
-    /// Used to honour the `write.data.path` Iceberg table property (e.g. for Unity Catalog
-    /// where the metadata `location` field points to the `_iceberg/` subdirectory, not the
-    /// table root where data files should be written).
     void setDataLocation(String data_location_)
     {
         data_location = std::move(data_location_);

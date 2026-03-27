@@ -525,20 +525,6 @@ void generateManifestList(
             Iceberg::f_existing_rows_count);
         set_versioned_field(0, Iceberg::f_deleted_rows_count);
 
-        if (version > 1)
-        {
-            /// Set `partitions` to an empty array (not null) for unpartitioned tables.
-            /// Unity Catalog and PyIceberg expect a non-null list even when it is empty.
-            size_t partitions_field_index;
-            if (schema.root()->nameIndex(Iceberg::f_partitions, partitions_field_index))
-            {
-                const avro::NodePtr & union_schema = schema.root()->leafAt(static_cast<UInt32>(partitions_field_index));
-                avro::GenericUnion partitions_union(union_schema);
-                partitions_union.selectBranch(1); // array branch
-                entry.field(Iceberg::f_partitions) = avro::GenericDatum(union_schema, partitions_union);
-            }
-        }
-
         writer.write(entry_datum);
     }
 

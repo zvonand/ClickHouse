@@ -1,4 +1,5 @@
 import sys
+import time
 import traceback
 
 from praktika.info import Info
@@ -14,11 +15,16 @@ def check():
         print(f"WARNING: Invalid or unknown pr number: {info.pr_number}")
         return True
 
-    sync_pr_numbers = Shell.get_output(
+    raw = Shell.get_output(
         f"gh pr list --state open --head sync-upstream/pr/{info.pr_number} --repo {SYNC_REPO} --json number --jq '.[].number'",
         verbose=True,
-    ).splitlines()
-    sync_pr_numbers = [n for n in sync_pr_numbers if n.strip()]
+        retries=3,
+    )
+    if not raw:
+        print("WARNING: Failed to retrieve Sync PR list after retries - skipping check")
+        return True
+
+    sync_pr_numbers = [n for n in raw.splitlines() if n.strip()]
 
     if len(sync_pr_numbers) == 0:
         print("WARNING: No open Sync PR found - skipping check")
@@ -36,7 +42,21 @@ def check():
     mergeable = Shell.get_output(
         f"gh pr view {sync_pr_number} --repo {SYNC_REPO} --json mergeable --jq .mergeable",
         verbose=True,
-    ).strip()
+    )
+    if not mergeable or mergeable == "UNKNOWN":
+        print(
+            f"WARNING: Sync PR #{sync_pr_number} mergeable state is '{mergeable}', retrying in 5s..."
+        )
+        time.sleep(5)
+        mergeable = Shell.get_output(
+            f"gh pr view {sync_pr_number} --repo {SYNC_REPO} --json mergeable --jq .mergeable",
+            verbose=True,
+        )
+    if not mergeable or mergeable == "UNKNOWN":
+        print(
+            f"WARNING: Sync PR #{sync_pr_number} mergeable state is still '{mergeable}' - skipping check"
+        )
+        return True
 
     if mergeable == "CONFLICTING":
         print(

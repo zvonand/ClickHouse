@@ -193,6 +193,8 @@ The GraphQL API for review threads requires authentication, so unresolved-thread
 3. Treat all threads as potentially unresolved (since resolution status is only available via GraphQL)
 4. Note in the output that thread resolution status could not be determined without `gh` authentication
 
+Filter out resolved threads before processing — only consider threads where `isResolved == false`. Skip resolved threads entirely to avoid reintroducing already-addressed feedback.
+
 For each unresolved review thread:
 1. Read the comment and understand what the reviewer is asking for
 2. Read the relevant code context

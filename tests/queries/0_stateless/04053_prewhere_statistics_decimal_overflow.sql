@@ -32,7 +32,7 @@ INSERT INTO test_prewhere_decimal_overflow VALUES
        toDecimal128( '90000000000000000000000000000', 9))]);
 
 ALTER TABLE test_prewhere_decimal_overflow ADD STATISTICS ts TYPE minmax;
-ALTER TABLE test_prewhere_decimal_overflow MATERIALIZE STATISTICS ts;
+ALTER TABLE test_prewhere_decimal_overflow MATERIALIZE STATISTICS ts SETTINGS mutations_sync = 1;
 
 SET optimize_move_to_prewhere=1;
 

@@ -466,6 +466,8 @@ namespace
             user->authentication_methods.emplace_back(parseUserAuthMethod(config, user_name, user_config, otp_secret));
         }
 
+        chassert(!user->authentication_methods.empty());
+
         validateUserAuthenticationMethods(user->authentication_methods, user_name, allow_no_password, allow_plaintext_password, otp_secret);
 
         const auto profile_name_config = user_config + ".profile";

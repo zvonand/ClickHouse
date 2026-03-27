@@ -80,7 +80,7 @@ bool ClickHouseIntegratedDatabase::performTableIntegration(
             buf += fmt::format(
                 "{}{} {} {}NULL",
                 first ? "" : ", ",
-                entry.getBottomNameSQL(),
+                quoteIdentifier(entry.getBottomName()),
                 columnTypeAsString(rg, t.is_deterministic, tp),
                 ((entry.nullable.has_value() && entry.nullable.value()) || hasType<Nullable>(false, false, false, tp)) ? "" : "NOT ");
             first = false;
@@ -406,11 +406,17 @@ void MySQLIntegration::setTableEngineDetails(RandomGenerator & rg, const SQLTabl
     }
 }
 
+String ClickHouseIntegratedDatabase::quoteIdentifier(const String & name) const
+{
+    return "`" + escapeSQLString(name, '`') + "`";
+}
+
 String MySQLIntegration::getSQLQuotedTableName(std::shared_ptr<SQLDatabase> db, const String & tname)
 {
     if (is_clickhouse)
-        return db ? (escapeSQLString(db->getName()) + "." + escapeSQLString(tname, '`')) : escapeSQLString(tname, '`');
-    return "`test`." + escapeSQLString(tname, '`');
+        return db ? ("`" + escapeSQLString(db->getName(), '`') + "`.`" + escapeSQLString(tname, '`') + "`")
+                  : ("`" + escapeSQLString(tname, '`') + "`");
+    return "`test`.`" + escapeSQLString(tname, '`') + "`";
 }
 
 String MySQLIntegration::truncateStatement()
@@ -654,9 +660,14 @@ void PostgreSQLIntegration::setTableEngineDetails(RandomGenerator & rg, const SQ
     }
 }
 
+String PostgreSQLIntegration::quoteIdentifier(const String & name) const
+{
+    return "\"" + escapeSQLString(name, '"') + "\"";
+}
+
 String PostgreSQLIntegration::getSQLQuotedTableName(std::shared_ptr<SQLDatabase>, const String & tname)
 {
-    return "\"test\"." + escapeSQLString(tname, '"');
+    return "\"test\".\"" + escapeSQLString(tname, '"') + "\"";
 }
 
 String PostgreSQLIntegration::truncateStatement()
@@ -833,7 +844,7 @@ void SQLiteIntegration::setTableEngineDetails(RandomGenerator &, const SQLTable 
 
 String SQLiteIntegration::getSQLQuotedTableName(std::shared_ptr<SQLDatabase>, const String & tname)
 {
-    return escapeSQLString(tname, '`');
+    return "`" + escapeSQLString(tname, '`') + "`";
 }
 
 String SQLiteIntegration::truncateStatement()

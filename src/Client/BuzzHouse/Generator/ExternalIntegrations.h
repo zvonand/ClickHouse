@@ -82,6 +82,8 @@ public:
 
     virtual String getSQLQuotedTableName(std::shared_ptr<SQLDatabase>, const String &) { return String(); }
 
+    virtual String quoteIdentifier(const String & name) const;
+
     virtual String columnTypeAsString(RandomGenerator &, bool, SQLType *) const { return String(); }
 
     bool performTableIntegration(RandomGenerator &, SQLTable &, bool, std::vector<ColumnPathChain> &) override;
@@ -172,6 +174,8 @@ public:
     void setTableEngineDetails(RandomGenerator & rg, const SQLTable &, TableEngine * te) override;
 
     String getSQLQuotedTableName(std::shared_ptr<SQLDatabase>, const String &) override;
+
+    String quoteIdentifier(const String & name) const override;
 
     String truncateStatement() override;
 

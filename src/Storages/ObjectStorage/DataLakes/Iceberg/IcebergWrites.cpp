@@ -267,25 +267,9 @@ void generateManifestFile(
     if (root_schema->type() != avro::AVRO_RECORD)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Iceberg manifest file schema must be record");
 
-    int current_schema_id = metadata->getValue<Int32>(Iceberg::f_current_schema_id);
-    Poco::JSON::Object::Ptr schema_obj;
-    {
-        auto schemas = metadata->getArray(Iceberg::f_schemas);
-        for (UInt32 i = 0; i < schemas->size(); ++i)
-        {
-            auto candidate = schemas->getObject(i);
-            if (candidate->getValue<Int32>(Iceberg::f_schema_id) == current_schema_id)
-            {
-                schema_obj = candidate;
-                break;
-            }
-        }
-        if (!schema_obj)
-            schema_obj = schemas->getObject(0);
-    }
-
     std::ostringstream oss; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
-    Poco::JSON::Stringifier::stringify(schema_obj, oss);
+    int current_schema_id = metadata->getValue<Int32>(Iceberg::f_current_schema_id);
+    Poco::JSON::Stringifier::stringify(metadata->getArray(Iceberg::f_schemas)->getObject(current_schema_id), oss, 4);
     std::string json_representation = removeEscapedSlashes(oss.str());
 
     auto adapter = std::make_unique<OutputStreamWriteBufferAdapter>(buf);
@@ -295,9 +279,7 @@ void generateManifestFile(
     std::ostringstream oss_partition_spec; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
     Poco::JSON::Stringifier::stringify(partition_spec->getArray(Iceberg::f_fields), oss_partition_spec);
     writer.setMetadata(Iceberg::f_partition_spec, oss_partition_spec.str());
-    writer.setMetadata("partition-spec-id", std::to_string(partition_spec_id));
-    writer.setMetadata("format-version", std::to_string(version));
-    writer.setMetadata("content", content_type == Iceberg::FileContentType::DATA ? "data" : "deletes");
+    writer.setMetadata(Iceberg::f_partition_spec_id, std::to_string(partition_spec_id));
     for (const auto & data_file_name : data_file_names)
     {
         avro::GenericDatum manifest_datum(root_schema);
@@ -471,19 +453,6 @@ void generateManifestList(
 
     auto adapter = std::make_unique<OutputStreamWriteBufferAdapter>(buf);
     avro::DataFileWriter<avro::GenericDatum> writer(std::move(adapter), schema);
-
-    /// Set file-level metadata required by Unity Catalog and other Iceberg engines
-    /// that read these properties from the Avro container header.
-    writer.setMetadata("format-version", std::to_string(version));
-    writer.setMetadata("snapshot-id", std::to_string(new_snapshot->getValue<Int64>(Iceberg::f_metadata_snapshot_id)));
-    {
-        Int64 parent_id = new_snapshot->has(Iceberg::f_parent_snapshot_id)
-            ? new_snapshot->getValue<Int64>(Iceberg::f_parent_snapshot_id)
-            : -1;
-        writer.setMetadata("parent-snapshot-id", std::to_string(parent_id));
-    }
-    if (version > 1 && new_snapshot->has(Iceberg::f_metadata_sequence_number))
-        writer.setMetadata("sequence-number", std::to_string(new_snapshot->getValue<Int64>(Iceberg::f_metadata_sequence_number)));
 
     for (size_t entry_idx = 0; entry_idx < manifest_entry_names.size(); ++entry_idx)
     {

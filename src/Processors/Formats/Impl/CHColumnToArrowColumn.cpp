@@ -147,8 +147,17 @@ namespace DB
             throw Exception(ErrorCodes::UNKNOWN_EXCEPTION, "Error with a {} column \"{}\": {}.", format_name, column_name, status.ToString());
     }
 
+    template <typename ResultType>
+    static ResultType checkResult(arrow::Result<ResultType> && result, const String & column_name, const String & format_name)
+    {
+        checkStatus(result.status(), column_name, format_name);
+        return std::move(result).ValueUnsafe();
+    }
+
     static std::shared_ptr<arrow::Buffer> nullBytemapToArrowBitmap(
         const PaddedPODArray<UInt8> * null_bytemap,
+        const String & column_name,
+        const String & format_name,
         size_t start,
         size_t end)
     {
@@ -156,7 +165,7 @@ namespace DB
             return nullptr;
 
         int64_t length = static_cast<int64_t>(end - start);
-        auto bitmap = arrow::AllocateEmptyBitmap(length).ValueOrDie();
+        auto bitmap = checkResult(arrow::AllocateEmptyBitmap(length), column_name, format_name);
         auto * data = bitmap->mutable_data();
         for (size_t i = 0; i < static_cast<size_t>(length); ++i)
         {
@@ -457,7 +466,7 @@ namespace DB
 
             if (ends[i] == 0)
             {
-                auto empty_array = arrow::MakeArrayOfNull(arrow_type, 0).ValueOrDie();
+                auto empty_array = checkResult(arrow::MakeArrayOfNull(arrow_type, 0), variant->getName(), format_name);
                 children.push_back(empty_array);
             }
             else
@@ -536,7 +545,7 @@ namespace DB
         status = offsets_builder.Finish(&offsets_array);
         checkStatus(status, "offsets", format_name);
 
-        return std::move(arrow::DenseUnionArray::Make(*type_ids_array, *offsets_array, children)).ValueOrDie();
+        return checkResult(arrow::DenseUnionArray::Make(*type_ids_array, *offsets_array, children), "type_ids", format_name);
     }
 
 
@@ -563,7 +572,7 @@ namespace DB
         {
             for (size_t i = start; i != end; ++i)
                 checkStatus(builder.Append(), column->getName(), format_name);
-            return builder.Finish().ValueOrDie();
+            return checkResult(builder.Finish(), column_name, format_name);
         }
 
         arrow::ArrayVector children;
@@ -584,8 +593,8 @@ namespace DB
             children.push_back(nested_arrow_array);
         }
 
-        auto null_bitmap = nullBytemapToArrowBitmap(null_bytemap, start, end);
-        return std::move(arrow::StructArray::Make(children, builder.type()->fields(), null_bitmap)).ValueOrDie();
+        auto null_bitmap = nullBytemapToArrowBitmap(null_bytemap, column_name, format_name, start, end);
+        return checkResult(arrow::StructArray::Make(children, builder.type()->fields(), null_bitmap), column_name, format_name);
     }
 
     template<typename From, typename To>
@@ -742,8 +751,8 @@ namespace DB
         status = offsets_builder.Finish(&offsets_array);
         checkStatus(status, column_name, format_name);
 
-        auto null_bitmap = nullBytemapToArrowBitmap(null_bytemap, start, end);
-        return arrow::ListArray::FromArrays(*offsets_array, *data_array, arrow::default_memory_pool(), null_bitmap).ValueOrDie();
+        auto null_bitmap = nullBytemapToArrowBitmap(null_bytemap, column_name, format_name, start, end);
+        return checkResult(arrow::ListArray::FromArrays(*offsets_array, *data_array, arrow::default_memory_pool(), null_bitmap), column_name, format_name);
     }
 
     static std::shared_ptr<arrow::Array> buildArrowMapArrayWithMapColumnData(
@@ -764,13 +773,12 @@ namespace DB
         const DataTypePtr & nested_type = type_map->getNestedType();
 
         auto * map_builder = assert_cast<arrow::MapBuilder *>(array_builder);
-        auto builder = arrow::MakeBuilder(arrow::list(map_builder->value_builder()->type())).ValueOrDie();
+        auto builder = checkResult(arrow::MakeBuilder(arrow::list(map_builder->value_builder()->type())), column_name, format_name);
 
         auto list = buildArrowListArrayWithArrayColumnData(column_name, nested_column, nested_type, null_bytemap, builder.get(), format_name, start, end, settings, dictionary_values);
         auto * list_array = assert_cast<arrow::ListArray *>(list.get());
 
-        auto null_bitmap = nullBytemapToArrowBitmap(null_bytemap, start, end);
-        return std::make_shared<arrow::MapArray>(map_builder->type(), list_array->length(), list_array->value_offsets(), list_array->values(), null_bitmap);
+        return std::make_shared<arrow::MapArray>(map_builder->type(), list_array->length(), list_array->value_offsets(), list_array->values(), list_array->null_bitmap());
     }
 
     template<typename ValueType>
@@ -1716,11 +1724,7 @@ namespace DB
                 // Zero-copy cast to the extension-rich schema (handles infinite nesting)
                 auto target_type = schema->field(static_cast<int>(column_i))->type();
                 if (!arrow_array->type()->Equals(*target_type))
-                {
-                    auto view_result = arrow_array->View(target_type);
-                    checkStatus(view_result.status(), column->getName(), format_name);
-                    arrow_array = view_result.ValueOrDie();
-                }
+                    arrow_array = checkResult(arrow_array->View(target_type), column->getName(), format_name);
 
                 table_data.at(column_i).emplace_back(std::move(arrow_array));
             }

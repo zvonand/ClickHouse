@@ -22,12 +22,6 @@ namespace DB
 
 using namespace Parquet;
 
-namespace ErrorCodes
-{
-    extern const int UNKNOWN_EXCEPTION;
-    extern const int NOT_IMPLEMENTED;
-}
-
 ParquetBlockOutputFormat::ParquetBlockOutputFormat(WriteBuffer & out_, SharedHeader header_, const FormatSettings & format_settings_, FormatFilterInfoPtr format_filter_info_)
     : IOutputFormat(header_, out_), format_settings{format_settings_}, format_filter_info(format_filter_info_)
 {

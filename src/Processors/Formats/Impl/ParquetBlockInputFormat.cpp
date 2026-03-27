@@ -14,11 +14,6 @@
 namespace DB
 {
 
-namespace ErrorCodes
-{
-    extern const int LOGICAL_ERROR;
-}
-
 void ParquetFileBucketInfo::serialize(WriteBuffer & buffer)
 {
     writeVarUInt(row_group_ids.size(), buffer);

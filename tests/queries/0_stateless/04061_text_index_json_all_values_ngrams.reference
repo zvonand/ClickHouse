@@ -103,15 +103,22 @@ Description: text GRANULARITY 100000000
 Condition: (mode: All; tokens: ["foo"])
 Parts: 1/3
 Granules: 1/3
-SELECT id FROM tab WHERE hasAllTokens(data.tags::String, 'not array') ORDER BY id
+SELECT id FROM tab WHERE hasAllTokens(data.tags::String, 'not_array') ORDER BY id
+2
 Description: text GRANULARITY 100000000
-Condition: (mode: All; tokens: [" ar", "arr", "not", "ot ", "ray", "rra", "t a"])
-Parts: 0/3
-Granules: 0/3
+Condition: (mode: All; tokens: ["_ar", "arr", "not", "ot_", "ray", "rra", "t_a"])
+Parts: 1/3
+Granules: 1/3
+SELECT id FROM tab WHERE hasAllTokens(data.tags::String, 'not_an_array') ORDER BY id
+2
+Description: text GRANULARITY 100000000
+Condition: (mode: All; tokens: ["_an", "_ar", "an_", "arr", "n_a", "not", "ot_", "ray", "rra", "t_a"])
+Parts: 1/3
+Granules: 1/3
 -- Nested JSON subcolumns
 SELECT id FROM tab WHERE data.a.b = 'deep value one' ORDER BY id
 0
 Description: text GRANULARITY 100000000
-Condition: (mode: All; tokens: ["deep", "one", "value"])
+Condition: (mode: All; tokens: [" on", " va", "alu", "dee", "e o", "eep", "ep ", "lue", "one", "p v", "ue ", "val"])
 Parts: 1/3
 Granules: 1/3

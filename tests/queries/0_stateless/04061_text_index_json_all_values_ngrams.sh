@@ -81,7 +81,8 @@ $MY_CLICKHOUSE_CLIENT --query "
 run_query "SELECT id FROM tab WHERE data.tags = ['foo', 'bar'] ORDER BY id"
 run_query "SELECT id FROM tab WHERE data.tags = 'not_an_array' ORDER BY id"
 run_query "SELECT id FROM tab WHERE hasAllTokens(data.tags::String, 'foo') ORDER BY id"
-run_query "SELECT id FROM tab WHERE hasAllTokens(data.tags::String, 'not array') ORDER BY id"
+run_query "SELECT id FROM tab WHERE hasAllTokens(data.tags::String, 'not_array') ORDER BY id"
+run_query "SELECT id FROM tab WHERE hasAllTokens(data.tags::String, 'not_an_array') ORDER BY id"
 
 echo "-- Nested JSON subcolumns"
 
@@ -92,7 +93,7 @@ $MY_CLICKHOUSE_CLIENT --query "
     (
         id UInt32,
         data JSON,
-        INDEX json_idx JSONAllValues(data) TYPE text(tokenizer = 'splitByNonAlpha')
+        INDEX json_idx JSONAllValues(data) TYPE text(tokenizer = ngrams(3))
     )
     ENGINE = MergeTree
     ORDER BY (id) SETTINGS index_granularity = 1;

@@ -81,7 +81,7 @@ class CoverageExporter:
             query = (
                 f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_lines', '{self.dest.user}', '{self.dest.pwd}') "
                 "SELECT file, line_start, line_end, "
-                f"toStartOfHour('{self.check_start_time}') AS check_start_time, "
+                f"toStartOfHour(toDateTime('{self.check_start_time}')) AS check_start_time, "
                 f"'{self.job_name}' AS check_name, "
                 "test_name, min_depth, branch_flag "
                 f"FROM system.{table} FINAL "
@@ -131,7 +131,7 @@ class CoverageExporter:
             if ic_count > 0:
                 ic_query = (
                     f"INSERT INTO FUNCTION remoteSecure('{self.dest.url.removeprefix('https://')}', 'default.checks_coverage_indirect_calls', '{self.dest.user}', '{self.dest.pwd}') "
-                    f"SELECT toStartOfHour('{self.check_start_time}') AS check_start_time, "
+                    f"SELECT toStartOfHour(toDateTime('{self.check_start_time}')) AS check_start_time, "
                     f"'{self.job_name}' AS check_name, "
                     "test_name, caller_name_hash, caller_func_hash, callee_offset, call_count "
                     "FROM system.coverage_indirect_calls FINAL "

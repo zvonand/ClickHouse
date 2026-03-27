@@ -1403,8 +1403,6 @@ int IKeeperStateMachine::read_logical_snp_obj(
     nuraft::byte * src_ptr = ctx->loader->getChunk(offset, chunk_size, log);
     if (!src_ptr)
     {
-        if (auto err = ctx->loader->getLastError())
-            tryLogException(err, log, "RemoteSnapshotLoader failed to read chunk");
         {
             std::lock_guard lock(snapshots_lock);
             /// Only reset if this is the same loader instance that's currently cached
@@ -1412,7 +1410,10 @@ int IKeeperStateMachine::read_logical_snp_obj(
             if (snapshot_loader_info == ctx->loader)
                 snapshot_loader_info.reset();
         }
+        auto err = ctx->loader->getLastError();
         free_user_snp_ctx(user_snp_ctx);
+        if (err)
+            LOG_ERROR(log, "RemoteSnapshotLoader failed to read chunk: {}", getExceptionMessage(err, /*with_stacktrace=*/false));
         return -1;
     }
 

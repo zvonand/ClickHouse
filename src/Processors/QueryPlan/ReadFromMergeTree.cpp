@@ -3296,10 +3296,8 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
     elem.filter_expression = filter_expr;
 
     UInt64 prev_granules = 0;
-    for (size_t i = 0; i < result.index_stats.size(); ++i)
+    for (const auto & stat : result.index_stats)
     {
-        const auto & stat = result.index_stats[i];
-
         /// IndexType::None is the baseline — use it to seed prev_granules and skip it
         if (stat.type == IndexType::None)
         {

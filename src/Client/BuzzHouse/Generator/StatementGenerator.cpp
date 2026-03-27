@@ -1571,16 +1571,12 @@ void StatementGenerator::generateNextExchange(RandomGenerator & rg, Exchange * e
         {{exchange_table,
           [&]
           {
-              const auto & input = filterCollection<SQLTable>(exchange_table_lambda);
+              auto & input = filterCollection<SQLTable>(exchange_table_lambda);
 
               exc->set_sobject(SQLObject::TABLE);
-              for (const auto & entry : input)
-              {
-                  this->str_ids.push_back(entry.get().getBaseName());
-              }
-              std::shuffle(this->str_ids.begin(), this->str_ids.end(), rg.generator);
-              const SQLTable & t1 = this->tables[this->str_ids[0]];
-              const SQLTable & t2 = this->tables[this->str_ids[1]];
+              std::shuffle(input.begin(), input.end(), rg.generator);
+              const SQLTable & t1 = input[0].get();
+              const SQLTable & t2 = input[1].get();
 
               cluster1 = t1.cluster;
               cluster2 = t2.cluster;
@@ -1590,16 +1586,12 @@ void StatementGenerator::generateNextExchange(RandomGenerator & rg, Exchange * e
          {exchange_view,
           [&]
           {
-              const auto & input = filterCollection<SQLView>(attached_views);
+              auto & input = filterCollection<SQLView>(attached_views);
 
               exc->set_sobject(SQLObject::VIEW);
-              for (const auto & entry : input)
-              {
-                  this->str_ids.push_back(entry.get().getBaseName());
-              }
-              std::shuffle(this->str_ids.begin(), this->str_ids.end(), rg.generator);
-              const SQLView & v1 = this->views[this->str_ids[0]];
-              const SQLView & v2 = this->views[this->str_ids[1]];
+              std::shuffle(input.begin(), input.end(), rg.generator);
+              const SQLView & v1 = input[0].get();
+              const SQLView & v2 = input[1].get();
 
               cluster1 = v1.cluster;
               cluster2 = v2.cluster;
@@ -1609,23 +1601,18 @@ void StatementGenerator::generateNextExchange(RandomGenerator & rg, Exchange * e
          {exchange_dictionary,
           [&]
           {
-              const auto & input = filterCollection<SQLDictionary>(attached_dictionaries);
+              auto & input = filterCollection<SQLDictionary>(attached_dictionaries);
 
               exc->set_sobject(SQLObject::DICTIONARY);
-              for (const auto & entry : input)
-              {
-                  this->str_ids.push_back(entry.get().getBaseName());
-              }
-              std::shuffle(this->str_ids.begin(), this->str_ids.end(), rg.generator);
-              const SQLDictionary & d1 = this->dictionaries[this->str_ids[0]];
-              const SQLDictionary & d2 = this->dictionaries[this->str_ids[1]];
+              std::shuffle(input.begin(), input.end(), rg.generator);
+              const SQLDictionary & d1 = input[0].get();
+              const SQLDictionary & d2 = input[1].get();
 
               cluster1 = d1.cluster;
               cluster2 = d2.cluster;
               d1.setName(est1, false);
               d2.setName(est2, false);
           }}});
-    this->str_ids.clear();
     if (cluster1.has_value() && cluster2.has_value() && cluster1 == cluster2)
     {
         setClusterClause(rg, cluster1, exc->mutable_cluster());

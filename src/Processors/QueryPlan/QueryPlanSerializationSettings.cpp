@@ -108,8 +108,8 @@ namespace DB
     DECLARE(Bool, enable_lazy_columns_replication, false, "When enabled, replication of columns data during ARRAY JOIN and JOIN is performed lazily", 0) \
     DECLARE(Bool, serialize_string_in_memory_with_zero_byte, true, "Serialize String values during aggregation with zero byte at the end. Enable to keep compatibility when querying cluster of incompatible versions.", 0) \
     DECLARE(Bool, use_hash_table_stats_for_join_reordering, false, "Enable using collected hash table statistics for cardinality estimation during join reordering", 0) \
-    DECLARE(Bool, enable_conversion_to_fixed_hash_table, true, R"(Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range)", 0) \
-    DECLARE(UInt64, fixed_hash_table_conversion_max_range, 100'000, R"(Maximum range (max - min + 1) of join key values for the fixed hash table conversion to apply.)", 0) \
+    DECLARE(Bool, enable_join_fixed_hash_table_conversion, true, R"(Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range)", 0) \
+    DECLARE(UInt64, join_fixed_hash_table_conversion_max_range, 100'000, R"(Maximum range (max - min + 1) of join key values for the fixed hash table conversion to apply.)", 0) \
 
 
 // clang-format on

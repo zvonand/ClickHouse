@@ -165,7 +165,7 @@ KeyGetter HashJoinMethods<KIND, STRICTNESS, MapsTemplate>::createKeyGetter(const
             return KeyGetter(key_columns, key_sizes, nullptr);
     }();
 
-    if constexpr (ColumnsHashing::IsHashMethodWithMinKey<KeyGetter>::value)
+    if constexpr (ColumnsHashing::IsHashMethodInRange<KeyGetter>::value)
         getter.min_key = static_cast<decltype(getter.min_key)>(min_key);
 
     return getter;

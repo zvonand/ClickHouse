@@ -2027,7 +2027,7 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
 {
     using SignedKey = std::make_signed_t<Key>;
 
-    auto max_range = table_join->fixedHashTableConversionMaxRange();
+    auto max_range = table_join->joinFixedHashTableConversionMaxRange();
 
     auto & source_map = [&]() -> auto &
     {
@@ -2116,7 +2116,7 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
 
 void HashJoin::tryConvertToFixedHashMap()
 {
-    if (!table_join->enableFixedHashTableConversion())
+    if (!table_join->enableJoinFixedHashTableConversion())
         return;
 
     if (data->type != Type::key32 && data->type != Type::key64)

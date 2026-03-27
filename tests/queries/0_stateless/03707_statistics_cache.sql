@@ -3,9 +3,6 @@
 SET optimize_move_to_prewhere = 1, query_plan_optimize_prewhere = 1;
 SET enable_analyzer = 1;
 
--- test rely on local execution, - force parallel replicas to genearate local plan
--- SET parallel_replicas_local_plan=1;
-
 DROP TABLE IF EXISTS sc_core SYNC;
 
 CREATE TABLE sc_core

@@ -1,0 +1,54 @@
+-- { echo }
+
+DROP TABLE IF EXISTS test_int_divide;
+CREATE TABLE test_int_divide (x Int32) ENGINE = MergeTree PARTITION BY x ORDER BY tuple();
+INSERT INTO test_int_divide VALUES (0), (1), (2), (3), (4);
+SELECT * FROM test_int_divide WHERE x != 0 AND intDiv(10, x) > 4 ORDER BY x;
+1
+2
+EXPLAIN indexes = 1
+SELECT * FROM test_int_divide WHERE x != 0 AND intDiv(10, x) > 4;
+Expression ((Project names + Projection))
+  Filter ((WHERE + Change column names to column identifiers))
+    ReadFromMergeTree (default.test_int_divide)
+    Indexes:
+      MinMax
+        Keys:
+          x
+        Condition: and((intDiv(10, x) in [5, +Inf)), (x not in [0, 0]))
+        Parts: 2/5
+        Granules: 2/5
+      Partition
+        Keys:
+          x
+        Condition: and((intDiv(10, x) in [5, +Inf)), (x not in [0, 0]))
+        Parts: 2/2
+        Granules: 2/2
+      Ranges: 2
+DROP TABLE IF EXISTS test_divide;
+CREATE TABLE test_divide (x Decimal32(2)) ENGINE = MergeTree PARTITION BY x ORDER BY tuple();
+INSERT INTO test_divide VALUES (0), (1), (2);
+SELECT * FROM test_divide WHERE x != 0 AND divide(10, x) > 4 ORDER BY x;
+1
+2
+EXPLAIN indexes = 1
+SELECT * FROM test_divide WHERE x != 0 AND divide(10, x) > 4 ORDER BY x;
+Expression (Project names)
+  Sorting (Sorting for ORDER BY)
+    Expression ((Before ORDER BY + Projection))
+      Filter ((WHERE + Change column names to column identifiers))
+        ReadFromMergeTree (default.test_divide)
+        Indexes:
+          MinMax
+            Keys:
+              x
+            Condition: and((divide(10, x) in (\'4\', +Inf)), (x not in [\'0\', \'0\']))
+            Parts: 2/3
+            Granules: 2/3
+          Partition
+            Keys:
+              x
+            Condition: and((divide(10, x) in (\'4\', +Inf)), (x not in [\'0\', \'0\']))
+            Parts: 2/2
+            Granules: 2/2
+          Ranges: 2

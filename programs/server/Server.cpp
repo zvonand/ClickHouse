@@ -897,6 +897,40 @@ void sanityChecks(Server & server, const ServerSettings & server_settings)
             Context::WarningType::ROTATIONAL_DISK_WITH_DISABLED_READHEAD,
             PreformattedMessage::create(
                 "Rotational disk with disabled readahead is in use. Performance can be degraded. Used for data: {}", String(data_path)));
+
+    try
+    {
+        /// Check if any mdraid arrays are currently being checked or repaired.
+        /// This can significantly degrade disk I/O performance.
+        fs::path sys_block("/sys/block");
+        if (fs::exists(sys_block))
+        {
+            for (const auto & entry : fs::directory_iterator(sys_block))
+            {
+                const auto name = entry.path().filename().string();
+                if (!name.starts_with("md"))
+                    continue;
+
+                auto sync_action_path = entry.path() / "md" / "sync_action";
+                if (!fs::exists(sync_action_path))
+                    continue;
+
+                String sync_action = readLine(sync_action_path.string());
+                if (sync_action != "idle")
+                {
+                    server.context()->addOrUpdateWarningMessage(
+                        Context::WarningType::LINUX_MDRAID_IS_BEING_RESYNCHRONIZED,
+                        PreformattedMessage::create(
+                            "Linux mdraid array {} is currently performing `{}`. Disk I/O performance can be degraded. Check {}",
+                            name, sync_action, sync_action_path.string()));
+                    break;
+                }
+            }
+        }
+    }
+    catch (const std::exception &) // NOLINT(bugprone-empty-catch)
+    {
+    }
 #endif
 
     try

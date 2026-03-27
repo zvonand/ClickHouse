@@ -3927,11 +3927,14 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                     const FreezePartition & fp = ati.freeze_partition();
 
                     t.frozen_partitions[fp.fname()] = fp.has_single_partition() ? fp.single_partition().partition().partition_id() : "";
-                    freeze_names.push_back(fp.fname());
+                    freeze_names.insert(fp.fname());
                 }
                 else if (ati.has_unfreeze_partition() && success)
                 {
-                    t.frozen_partitions.erase(ati.unfreeze_partition().fname());
+                    const String & fname = ati.unfreeze_partition().fname();
+
+                    t.frozen_partitions.erase(fname);
+                    freeze_names.erase(fname);
                 }
             }
         }

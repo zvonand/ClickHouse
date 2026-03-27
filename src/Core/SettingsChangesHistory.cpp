@@ -44,6 +44,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"distributed_index_analysis_only_on_coordinator", false, false, "New setting."},
             {"enable_materialized_cte", false, false, "New setting"},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},
+            {"optimize_rewrite_array_exists_to_has", false, true, "Enable arrayExists to has rewrite optimization by default, now that type compatibility is checked before rewriting."},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {

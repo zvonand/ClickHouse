@@ -1284,10 +1284,9 @@ void QueryOracle::maybeUpdateOracleSelectQuery(RandomGenerator & rg, StatementGe
                     {
                         const ExprSchemaTable & est = tf->est();
 
-                        if ((!est.has_database()
-                             || (est.database().value() != "system" && est.database().value() != "INFORMATION_SCHEMA"
-                                 && est.database().value() != "information_schema"))
-                            && est.table().value().at(0) == 't')
+                        if (!est.has_database()
+                            || (est.database().value() != "system" && est.database().value() != "INFORMATION_SCHEMA"
+                                && est.database().value() != "information_schema"))
                         {
                             const String tkey = StatementGenerator::getNameFromProto(est.table().value());
 
@@ -1373,10 +1372,9 @@ void QueryOracle::replaceQueryWithTablePeers(
                     {
                         const ExprSchemaTable & est = tf.est();
 
-                        if ((!est.has_database()
-                             || (est.database().value() != "system" && est.database().value() != "INFORMATION_SCHEMA"
-                                 && est.database().value() != "information_schema"))
-                            && est.table().value().at(0) == 't')
+                        if (!est.has_database()
+                            || (est.database().value() != "system" && est.database().value() != "INFORMATION_SCHEMA"
+                                && est.database().value() != "information_schema"))
                         {
                             const String tkey = StatementGenerator::getNameFromProto(est.table().value());
 

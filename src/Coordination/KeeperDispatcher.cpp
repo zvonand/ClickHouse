@@ -236,7 +236,7 @@ void KeeperDispatcher::requestThread()
                 if (req.request->getOpNum() != Coordination::OpNum::Close
                     && req.request->getOpNum() != Coordination::OpNum::SessionID)
                 {
-                    /// Small optimization: if we checke the same session id multiple times in a row,
+                    /// Small optimization: if we check the same session id multiple times in a row,
                     /// do the lookup once and cache the result.
                     if (req.session_id != last_checked_session_id)
                     {
@@ -366,6 +366,7 @@ void KeeperDispatcher::requestThread()
             {
                 /// Read request with no pending writes — batch consecutive reads.
                 read_batch.push_back(request);
+                //asdqwe use max_read_batch_size in both places
 
                 KeeperRequestForSession next;
                 while (!shutdown_called && requests_queue->tryPop(next))

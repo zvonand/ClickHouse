@@ -7,6 +7,7 @@
 #include <Coordination/SessionExpiryQueue.h>
 #include <Coordination/SnapshotableHashTable.h>
 #include <Coordination/KeeperCommon.h>
+#include <Coordination/KeeperReadThreadPool.h>
 #include <Common/StringHashForHeterogeneousLookup.h>
 #include <Common/SharedMutex.h>
 #include <Common/Concepts.h>
@@ -678,8 +679,7 @@ private:
     void removeDigest(const Node & node, std::string_view path);
     void addDigest(const Node & node, std::string_view path);
 
-    struct KeeperReadThreadPool;
-    std::unique_ptr<KeeperReadThreadPool> read_thread_pool;
+    KeeperReadThreadPool read_thread_pool;
 };
 
 }

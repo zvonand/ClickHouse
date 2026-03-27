@@ -27,7 +27,6 @@
 #include <Coordination/KeeperCommon.h>
 #include <Coordination/KeeperConstants.h>
 #include <Coordination/KeeperDispatcher.h>
-#include <Coordination/KeeperReadThreadPool.h>
 #include <Coordination/KeeperReconfiguration.h>
 #include <Coordination/KeeperStorage.h>
 
@@ -681,12 +680,6 @@ KeeperStorageBase::KeeperStorageBase(int64_t tick_time_ms, const KeeperContextPt
 {}
 
 template <typename Container>
-struct KeeperStorage<Container>::KeeperReadThreadPool : public DB::KeeperReadThreadPool
-{
-    using DB::KeeperReadThreadPool::KeeperReadThreadPool;
-};
-
-template <typename Container>
 KeeperStorage<Container>::~KeeperStorage() = default;
 
 template <typename Container>
@@ -703,10 +696,6 @@ KeeperStorage<Container>::KeeperStorage(
 
     if (initialize_system_nodes)
         initializeSystemNodes();
-
-    size_t num_read_threads = keeper_context->getCoordinationSettings()[CoordinationSetting::parallel_read_threads];
-    if (num_read_threads > 0)
-        read_thread_pool = std::make_unique<KeeperReadThreadPool>(num_read_threads);
 }
 
 template<typename Container>
@@ -4024,33 +4013,18 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
         callOnConcreteRequestType(*zk_request, process_request);
     };
 
-    auto process_only_thread_safe_reads = [&](size_t begin, size_t end)
-        {
-            for (size_t request_idx = begin; request_idx < end; ++request_idx)
-            {
-                if (is_request_thread_safe(requests[request_idx].request->getOpNum()))
-                    process_one_read(request_idx);
-            }
-        };
-
-    const auto & coordination_settings = keeper_context->getCoordinationSettings();
-    size_t min_batch = coordination_settings[CoordinationSetting::parallel_read_min_batch];
-    bool use_parallel = read_thread_pool && requests.size() >= min_batch;
-
     {
         std::shared_lock lock(storage_mutex);
-        if (use_parallel)
-        {
-            size_t chunk_size = coordination_settings[CoordinationSetting::parallel_read_chunk_size];
-            if (chunk_size == 0)
-                chunk_size = 1;
-
-            read_thread_pool->execute(requests.size(), chunk_size, process_only_thread_safe_reads);
-        }
-        else
-        {
-            process_only_thread_safe_reads(0, requests.size());
-        }
+        /// TODO: getDynamicSettings()
+        read_thread_pool.execute(requests.size(), keeper_context->getCoordinationSettings(),
+            [&](size_t begin, size_t end)
+            {
+                for (size_t request_idx = begin; request_idx < end; ++request_idx)
+                {
+                    if (is_request_thread_safe(requests[request_idx].request->getOpNum()))
+                        process_one_read(request_idx);
+                }
+            });
     }
 
     /// Phase 2 (sequential): session expiry, watch registration, processWatches.

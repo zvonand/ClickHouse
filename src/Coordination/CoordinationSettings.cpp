@@ -319,6 +319,9 @@ void KeeperConfigurationAndSettings::dump(WriteBufferFromOwnString & buf) const
     write_int(coordination_settings[CoordinationSetting::write_snapshot_version]);
     writeText("nuraft_test_mode=", buf);
     write_bool(coordination_settings[CoordinationSetting::nuraft_test_mode]);
+
+    writeText("snapshot_transfer_chunk_size=", buf);
+    write_int(coordination_settings[CoordinationSetting::snapshot_transfer_chunk_size]);
 }
 
 KeeperConfigurationAndSettingsPtr

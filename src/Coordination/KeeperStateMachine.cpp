@@ -46,6 +46,7 @@ namespace ProfileEvents
     extern const Event KeeperReadSnapshot;
     extern const Event KeeperReadSnapshotObject;
     extern const Event KeeperReadSnapshotFailed;
+    extern const Event KeeperSnapshotRemoteLoaderErrors;
     extern const Event KeeperSaveSnapshotObject;
     extern const Event KeeperSaveSnapshotFailed;
     extern const Event KeeperSaveSnapshot;
@@ -1073,8 +1074,11 @@ struct ISnapshotLoader
 
     /// Return a stable pointer to bytes [offset, offset+length).
     /// For remote disk: loads data on demand under an internal mutex.
-    /// Returns nullptr on any error.
+    /// Returns nullptr on any error; call getLastError() to retrieve the exception.
     virtual nuraft::byte * getChunk(uint64_t offset, uint64_t length, LoggerPtr log) = 0;
+
+    /// Returns the stored exception if a previous getChunk call failed, nullptr otherwise.
+    virtual std::exception_ptr getLastError() const { return nullptr; }
 };
 
 /// Remote disk loader: reads the snapshot file from remote storage into a shared in-memory buffer,
@@ -1087,6 +1091,8 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
     nuraft::ptr<nuraft::buffer> buf; /// pre-allocated full-size buffer; chunks are served from it
     std::unique_ptr<ReadBufferFromFileBase> reader; /// null until initialized, null again once fully loaded
     std::atomic<uint64_t> loaded_bytes = 0;
+    std::atomic<bool> has_error = false; /// set on readStrict failure; prevents retrying a broken reader
+    std::exception_ptr last_error;
     mutable std::mutex load_mutex;
 
     bool init(uint64_t log_idx, const SnapshotFileInfo & info, LoggerPtr log_) override
@@ -1132,8 +1138,18 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
         return file_size;
     }
 
+    std::exception_ptr getLastError() const override
+    {
+        if (has_error.load(std::memory_order_acquire))
+            return last_error;
+        return nullptr;
+    }
+
     nuraft::byte * getChunk(uint64_t offset, uint64_t length, LoggerPtr log_) override
     {
+        if (has_error.load(std::memory_order_acquire))
+            return nullptr;
+
         const uint64_t needed = offset + length;
 
         /// Once bytes [0, needed) are written into buf they are never modified,
@@ -1145,6 +1161,8 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
         }
 
         std::lock_guard lock(load_mutex);
+        if (has_error.load(std::memory_order_relaxed))
+            return nullptr;
         const uint64_t current = loaded_bytes.load(std::memory_order_relaxed);
         if (current < needed)
         {
@@ -1158,7 +1176,10 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
             }
             catch (...)
             {
+                last_error = std::current_exception();
                 tryLogCurrentException(log_);
+                has_error.store(true, std::memory_order_release);
+                ProfileEvents::increment(ProfileEvents::KeeperSnapshotRemoteLoaderErrors);
                 return nullptr;
             }
             loaded_bytes.store(needed, std::memory_order_release);
@@ -1382,6 +1403,8 @@ int IKeeperStateMachine::read_logical_snp_obj(
     nuraft::byte * src_ptr = ctx->loader->getChunk(offset, chunk_size, log);
     if (!src_ptr)
     {
+        if (auto err = ctx->loader->getLastError())
+            tryLogException(err, log, "RemoteSnapshotLoader failed to read chunk");
         {
             std::lock_guard lock(snapshots_lock);
             /// Only reset if this is the same loader instance that's currently cached

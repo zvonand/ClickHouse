@@ -49,10 +49,6 @@ UInt128 SerializationLowCardinality::getHash(const DataTypePtr & dictionary_type
     auto dict_type_name = dictionary_type_->getName();
     hash.update(dict_type_name.size());
     hash.update(dict_type_name);
-
-    auto inner_type_name = removeNullable(dictionary_type_)->getName();
-    hash.update(inner_type_name.size());
-    hash.update(inner_type_name);
     return hash.get128();
 }
 

@@ -42,7 +42,7 @@ Determine whether the PR branch is in the main repository or in the author's for
 **If the branch is in the main repository (`ClickHouse/ClickHouse`):**
 ```bash
 git fetch origin "$HEAD_BRANCH"
-git checkout "$HEAD_BRANCH"
+git checkout -b "$HEAD_BRANCH" "origin/$HEAD_BRANCH" 2>/dev/null || git checkout "$HEAD_BRANCH"
 git pull origin "$HEAD_BRANCH"
 ```
 
@@ -59,19 +59,21 @@ git checkout -b "$HEAD_BRANCH" "$REMOTE_NAME/$HEAD_BRANCH" 2>/dev/null || git ch
 git pull "$REMOTE_NAME" "$HEAD_BRANCH"
 ```
 
-### 3. Resolve conflicts with master (if any)
+### 3. Resolve conflicts with the base branch (if any)
+
+Use the PR's actual base branch from metadata (`baseRefName`) instead of hardcoding `master` — this ensures backport PRs targeting other branches are handled correctly.
 
 Check if the PR has conflicts with the base branch:
 
 ```bash
-git fetch origin master
-git merge-base --is-ancestor origin/master HEAD || echo "needs merge"
+git fetch origin "$BASE_BRANCH"
+git merge-base --is-ancestor "origin/$BASE_BRANCH" HEAD || echo "needs merge"
 ```
 
-If the branch is behind master or has conflicts, merge master:
+If the branch is behind the base branch or has conflicts, merge:
 
 ```bash
-git merge origin/master
+git merge "origin/$BASE_BRANCH"
 ```
 
 If there are merge conflicts:
@@ -207,8 +209,8 @@ For each unresolved review thread:
 After all fixes are applied, review the complete diff of the PR:
 
 ```bash
-git diff origin/master...HEAD --stat
-git log origin/master..HEAD --oneline
+git diff "origin/$BASE_BRANCH"...HEAD --stat
+git log "origin/$BASE_BRANCH"..HEAD --oneline
 ```
 
 Evaluate the changes holistically:

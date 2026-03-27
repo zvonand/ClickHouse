@@ -3248,11 +3248,6 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
     if (sample_rate == 0)
         return;
 
-    /// log every N-th query, consistent with FilterTransform behavior
-    static std::atomic<UInt64> query_counter{0};
-    if (++query_counter % sample_rate != 0)
-        return;
-
     auto predicate_stats_log = global_context->getPredicateStatisticsLog();
     if (!predicate_stats_log)
         return;

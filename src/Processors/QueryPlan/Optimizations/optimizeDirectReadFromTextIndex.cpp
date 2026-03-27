@@ -735,7 +735,7 @@ void processAndOptimizeTextIndexFunctions(const Stack & stack, QueryPlan::Nodes 
 
     bool removes_filter_column = filter_step->removesFilterColumn();
     auto new_filter_column_name = result_filter_node->result_name;
-    filter_node->step = std::make_unique<FilterStep>(frame.node->step->getOutputHeader(), std::move(composed), new_filter_column_name, removes_filter_column);
+    filter_node->step = std::make_unique<FilterStep>(read_from_merge_tree_step->getOutputHeader(), std::move(composed), new_filter_column_name, removes_filter_column);
     filter_node->children = {frame.node};
 }
 

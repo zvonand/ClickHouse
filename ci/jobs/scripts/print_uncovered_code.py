@@ -267,9 +267,12 @@ if __name__ == "__main__":
             base_data = _parse_info(BASELINE_REMAPPED)
             curr_data = _parse_info(INFO)
 
-            for rel in sorted(set(base_data) & set(curr_data)):
+            _empty: dict = {"lines": {}, "fns": {}}
+            for rel in sorted(base_data):
                 b = base_data[rel]
-                c = curr_data[rel]
+                # Use empty coverage when the SF is absent from current entirely
+                # (e.g. a test file was commented out and produced zero coverage).
+                c = curr_data.get(rel, _empty)
 
                 for ln, bcnt in b["lines"].items():
                     if bcnt > 0 and c["lines"].get(ln, 0) == 0:

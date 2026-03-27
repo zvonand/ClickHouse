@@ -157,8 +157,8 @@ void MergeTreeTransaction::removeOldPart(const StoragePtr & storage, const DataP
             storages.insert(storage);
             removing_parts.push_back(part_to_remove);
         });
+        part_to_remove->version->setAndStoreRemovalTID(tid);
     }
-    part_to_remove->version->setAndStoreRemovalTID(tid);
 }
 
 void MergeTreeTransaction::addMutation(const StoragePtr & table, const String & mutation_id)

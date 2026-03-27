@@ -4916,9 +4916,6 @@ void QueryAnalyzer::inlineViewSubqueryIfNeeded(QueryTreeNodePtr & join_tree_node
     QueryAnalyzer view_analyzer(this->only_analyze);
     view_analyzer.resolve(view_query_tree, {}, view_context);
 
-    /// Preserve alias: the outer query references columns via the view name or user-provided alias.
-    view_query_tree->setAlias(table_node->getAlias());
-
     /// Mark the inlined query as a subquery so it is wrapped in parentheses when serialized to AST
     /// (e.g. for sending to parallel replicas). Without this, it produces `FROM SELECT ...` instead
     /// of `FROM (SELECT ...)`.
@@ -4927,12 +4924,86 @@ void QueryAnalyzer::inlineViewSubqueryIfNeeded(QueryTreeNodePtr & join_tree_node
     else if (auto * union_node = view_query_tree->as<UnionNode>())
         union_node->setIsSubquery(true);
 
-    /// Fix scope tracking: the old TableNode pointer was inserted during initializeQueryJoinTreeNode.
-    auto * old_ptr = join_tree_node.get();
-    scope.table_expressions_in_resolve_process.erase(old_ptr);
+    /// The VIEW's declared column types may differ from what the inner subquery actually produces
+    /// (e.g. the view was created with explicit column types, or implicit conversions apply).
+    /// Normally StorageView adds a converting step in the query pipeline. When inlining, we must
+    /// reproduce that by wrapping the subquery in SELECT CAST(col, 'ViewType') ... FROM (subquery).
+    auto view_columns_list = storage_snapshot->metadata->getColumns().getOrdinary();
+    NamesAndTypes view_columns(view_columns_list.begin(), view_columns_list.end());
 
-    join_tree_node = std::move(view_query_tree);
-    scope.table_expressions_in_resolve_process.insert(join_tree_node.get());
+    NamesAndTypes subquery_columns;
+    if (const auto * query_node = view_query_tree->as<QueryNode>())
+        subquery_columns = query_node->getProjectionColumns();
+    else if (const auto * union_node = view_query_tree->as<UnionNode>())
+        subquery_columns = union_node->computeProjectionColumns();
+
+    bool needs_type_conversion = false;
+    if (view_columns.size() == subquery_columns.size())
+    {
+        for (size_t i = 0; i < view_columns.size(); ++i)
+        {
+            if (!view_columns[i].type->equals(*subquery_columns[i].type))
+            {
+                needs_type_conversion = true;
+                break;
+            }
+        }
+    }
+
+    if (needs_type_conversion)
+    {
+        /// Build a wrapping query: SELECT CAST(col1, 'Type1') AS col1, ... FROM (view_subquery)
+        QueryTreeNodes projection_nodes;
+        NamesAndTypes projection_columns;
+        projection_nodes.reserve(view_columns.size());
+        projection_columns.reserve(view_columns.size());
+
+        for (size_t i = 0; i < view_columns.size(); ++i)
+        {
+            auto column_node = std::make_shared<ColumnNode>(subquery_columns[i], view_query_tree);
+            QueryTreeNodePtr projection_node;
+
+            if (!view_columns[i].type->equals(*subquery_columns[i].type))
+            {
+                projection_node = buildCastFunction(column_node, view_columns[i].type, scope.context);
+                projection_node->setAlias(view_columns[i].name);
+            }
+            else
+            {
+                projection_node = std::move(column_node);
+            }
+
+            projection_nodes.push_back(std::move(projection_node));
+            projection_columns.push_back(view_columns[i]);
+        }
+
+        auto wrapper_context = Context::createCopy(scope.context);
+        auto wrapper_query = std::make_shared<QueryNode>(std::move(wrapper_context));
+        wrapper_query->getProjection().getNodes() = std::move(projection_nodes);
+        wrapper_query->resolveProjectionColumns(std::move(projection_columns));
+        wrapper_query->getJoinTree() = view_query_tree;
+        wrapper_query->setIsSubquery(true);
+        wrapper_query->setAlias(table_node->getAlias());
+
+        /// Fix scope tracking: the old TableNode pointer was inserted during initializeQueryJoinTreeNode.
+        auto * old_ptr = join_tree_node.get();
+        scope.table_expressions_in_resolve_process.erase(old_ptr);
+
+        join_tree_node = std::move(wrapper_query);
+        scope.table_expressions_in_resolve_process.insert(join_tree_node.get());
+    }
+    else
+    {
+        /// Preserve alias: the outer query references columns via the view name or user-provided alias.
+        view_query_tree->setAlias(table_node->getAlias());
+
+        /// Fix scope tracking: the old TableNode pointer was inserted during initializeQueryJoinTreeNode.
+        auto * old_ptr = join_tree_node.get();
+        scope.table_expressions_in_resolve_process.erase(old_ptr);
+
+        join_tree_node = std::move(view_query_tree);
+        scope.table_expressions_in_resolve_process.insert(join_tree_node.get());
+    }
 }
 
 /** Resolve query join tree.

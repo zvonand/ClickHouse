@@ -83,49 +83,60 @@ Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_colum
 {
     static constexpr int null_direction_hint = 1;
 
-    if constexpr (has_left_nulls && has_right_nulls)
-    {
-        const auto * left_nullable = checkAndGetColumn<ColumnNullable>(&left_column);
-        const auto * right_nullable = checkAndGetColumn<ColumnNullable>(&right_column);
-
-        if (left_nullable && right_nullable)
-        {
-            int res = left_column.compareAt(lhs_pos, rhs_pos, right_column, null_direction_hint);
-            if (res)
-                return res;
-
-            /// NULL != NULL case
-            if (left_column.isNullAt(lhs_pos))
-                return null_direction_hint;
-
-            return 0;
-        }
-    }
+    const IColumn * left_notnull = &left_column;
+    const IColumn * right_notnull = &right_column;
+    const ColumnNullable * left_nullable = nullptr;
+    const ColumnNullable * right_nullable = nullptr;
 
     if constexpr (has_left_nulls)
     {
-        if (const auto * left_nullable = checkAndGetColumn<ColumnNullable>(&left_column))
+        left_nullable = checkAndGetColumn<ColumnNullable>(&left_column);
+        if (left_nullable)
         {
-            if (left_column.isNullAt(lhs_pos))
+            /// NULL != NULL case
+            if (left_nullable->isNullAt(lhs_pos))
                 return null_direction_hint;
-            return left_nullable->getNestedColumn().compareAt(lhs_pos, rhs_pos, right_column, null_direction_hint);
+
+            left_notnull = &left_nullable->getNestedColumn();
         }
     }
 
     if constexpr (has_right_nulls)
     {
-        if (const auto * right_nullable = checkAndGetColumn<ColumnNullable>(&right_column))
+        right_nullable = checkAndGetColumn<ColumnNullable>(&right_column);
+        if (right_nullable)
         {
-            if (right_column.isNullAt(rhs_pos))
+            if (right_nullable->isNullAt(rhs_pos))
                 return -null_direction_hint;
-            return left_column.compareAt(lhs_pos, rhs_pos, right_nullable->getNestedColumn(), null_direction_hint);
+
+            right_notnull = &right_nullable->getNestedColumn();
         }
     }
 
     if constexpr (track)
-        return left_column.compareTrackAt(lhs_pos, rhs_pos, right_column, null_direction_hint);
+    {
+        Int64 res = left_notnull->compareTrackAt(lhs_pos, rhs_pos, *right_notnull, null_direction_hint);
+
+        if (left_nullable && res < 0)
+        {
+            size_t pos = lhs_pos + 1;
+            size_t end = lhs_pos - res;
+            for (; pos < end; ++pos)
+                if (left_nullable->isNullAt(pos))
+                    return -static_cast<Int64>(pos - lhs_pos);
+        }
+        if (right_nullable && res > 0)
+        {
+            size_t pos = rhs_pos + 1;
+            size_t end = rhs_pos + res;
+            for (; pos < end; ++pos)
+                if (right_nullable->isNullAt(pos))
+                    return pos - rhs_pos;
+        }
+        return res;
+    }
     else
-        return left_column.compareAt(lhs_pos, rhs_pos, right_column, null_direction_hint);
+        return left_notnull->compareAt(lhs_pos, rhs_pos, *right_notnull, null_direction_hint);
 }
 
 /// Get first and last row from sorted block

@@ -2881,7 +2881,7 @@ class TestCase:
 
             client_options = self.add_effective_settings(client_options)
 
-            if args.collect_per_test_coverage and BuildFlags.WITH_COVERAGE in args.build_flags:
+            if args.collect_per_test_coverage and BuildFlags.WITH_COVERAGE_DEPTH in args.build_flags:
                 try:
                     safe_case = self.case.replace("'", "\\'")
                     clickhouse_execute(args, f"SYSTEM SET COVERAGE TEST '{safe_case}'")
@@ -3506,7 +3506,8 @@ def run_tests_array(
         multiprocessing.synchronize.Event,
         multiprocessing.sharedctypes.Synchronized,
         multiprocessing.managers.ListProxy,
-        int
+        int,
+        multiprocessing.sharedctypes.Synchronized,
     ],
 ):
     (
@@ -3519,7 +3520,8 @@ def run_tests_array(
         server_died,
         workers_to_shed,
         restarted_tests,
-        process_index
+        process_index,
+        total_failures_shared,
     ) = all_tests_with_params
 
     os.environ["LLVM_PROFILE_FILE"] = f"clickhouse-client-proc{process_index}-%2m.profraw"
@@ -3665,6 +3667,12 @@ def run_tests_array(
                     stop_tests()
                     server_died.set()
                     raise ServerDied("Server died")
+                if args.max_failures > 0:
+                    with total_failures_shared.get_lock():
+                        total_failures_shared.value += 1
+                        if total_failures_shared.value >= args.max_failures:
+                            stop_tests()
+                            raise ServerDied(f"Reached --max-failures limit ({args.max_failures})")
             elif test_result.status == TestStatus.SKIPPED:
                 skipped_total += 1
 
@@ -3834,6 +3842,7 @@ class BuildFlags:
     UNDEFINED = "ubsan"
     MEMORY = "msan"
     WITH_COVERAGE = "with-coverage"
+    WITH_COVERAGE_DEPTH = "with-coverage-depth"
     SANITIZERS = [THREAD, ADDRESS, UNDEFINED, MEMORY]
     DEBUG = "debug"
     RELEASE = "release"
@@ -3871,13 +3880,19 @@ def collect_build_flags(args):
                 result.append(flag)
         SANITIZED = bool(result)
 
-    # WITH_COVERAGE has a dedicated row in system.build_options; do not rely
-    # on CXX_FLAGS which uses FULL_CXX_FLAGS_NORMALIZED and may not include it.
+    # WITH_COVERAGE / WITH_COVERAGE_DEPTH have dedicated rows in system.build_options;
+    # do not rely on CXX_FLAGS which uses FULL_CXX_FLAGS_NORMALIZED and may not include them.
     with_coverage = clickhouse_execute(
         args, "SELECT value FROM system.build_options WHERE name = 'WITH_COVERAGE'"
     )
     if with_coverage.strip() in (b"ON", b"1"):
         result.append(BuildFlags.WITH_COVERAGE)
+
+    with_coverage_depth = clickhouse_execute(
+        args, "SELECT value FROM system.build_options WHERE name = 'WITH_COVERAGE_DEPTH'"
+    )
+    if with_coverage_depth.strip() in (b"ON", b"1"):
+        result.append(BuildFlags.WITH_COVERAGE_DEPTH)
 
     value = clickhouse_execute(
         args, "SELECT value FROM system.build_options WHERE name = 'BUILD_TYPE'"
@@ -4021,6 +4036,7 @@ def do_run_tests(
         parallel_tests = manager.list()
         parallel_tests.extend(test_suite.parallel_tests)
         workers_to_shed = multiprocessing.Value('i', 0)
+        total_failures_shared = multiprocessing.Value('i', 0)
 
         processes = []
         for i in range(jobs):
@@ -4038,6 +4054,7 @@ def do_run_tests(
                         workers_to_shed,
                         restarted_tests,
                         i,  # process index
+                        total_failures_shared,
                     ),
                 ),
             )
@@ -4116,6 +4133,9 @@ def do_run_tests(
                     processes.remove(p)
 
     if test_suite.sequential_tests:
+        # Sequential runner shares the total_failures_shared counter with parallel workers
+        # so that --max-failures counts failures from both groups combined.
+        seq_total_failures = total_failures_shared if test_suite.parallel_tests else multiprocessing.Value('i', 0)
         run_tests_array(
             (
                 list(test_suite.sequential_tests),
@@ -4127,7 +4147,8 @@ def do_run_tests(
                 server_died,
                 multiprocessing.Value('i', 0),  # sequential runner is never shed
                 restarted_tests,
-                jobs + 1
+                jobs + 1,
+                seq_total_failures,
             )
         )
 
@@ -4439,7 +4460,7 @@ def main(args):
     print(
         f"build_flags={args.build_flags} "
         f"collect_per_test_coverage={args.collect_per_test_coverage} "
-        f"coverage_active={args.collect_per_test_coverage and BuildFlags.WITH_COVERAGE in args.build_flags}"
+        f"coverage_active={args.collect_per_test_coverage and BuildFlags.WITH_COVERAGE_DEPTH in args.build_flags}"
     )
 
     if args.s3_storage and (BuildFlags.RELEASE not in args.build_flags):
@@ -4512,7 +4533,7 @@ def main(args):
 
     if (
         args.collect_per_test_coverage
-        and BuildFlags.WITH_COVERAGE in args.build_flags
+        and BuildFlags.WITH_COVERAGE_DEPTH in args.build_flags
     ):
         clickhouse_execute(
             args,
@@ -4785,7 +4806,7 @@ ORDER BY (test_name, callee_offset)
     else:
         print("All tests have finished.")
 
-    if args.collect_per_test_coverage and BuildFlags.WITH_COVERAGE in args.build_flags:
+    if args.collect_per_test_coverage and BuildFlags.WITH_COVERAGE_DEPTH in args.build_flags:
         try:
             # Flush the last test's coverage into system.coverage_log.
             clickhouse_execute(args, "SYSTEM SET COVERAGE TEST ''")
@@ -5281,6 +5302,12 @@ def parse_args():
         default=20,
         type=int,
         help="Max number of failed tests in a row (stop tests if higher)",
+    )
+    parser.add_argument(
+        "--max-failures",
+        default=0,
+        type=int,
+        help="Stop after this many total failures across all workers (0 = no limit)",
     )
     parser.add_argument(
         "--report-coverage",

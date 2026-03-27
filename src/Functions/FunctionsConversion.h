@@ -3216,7 +3216,8 @@ private:
 
             return ConvertImplFromDynamicToColumn::execute(
                 arguments, result_type, input_rows_count, nested_convert,
-                settings.cast_keep_nullable && !result_type->isNullable() && !result_type->isLowCardinalityNullable() && !result_type->canBeInsideNullable());
+                settings.cast_keep_nullable && !result_type->isNullable() && !result_type->isLowCardinalityNullable()
+                    && !isVariant(*result_type) && !isDynamic(*result_type) && !result_type->canBeInsideNullable());
         }
 
         auto call = [&](const auto & types, BehaviourOnErrorFromString from_string_tag) -> bool

@@ -1484,7 +1484,8 @@ FunctionCast::WrapperType FunctionCast::createDynamicToColumnWrapper(const DataT
     {
         return ConvertImplFromDynamicToColumn::execute(
             arguments, result_type, input_rows_count, nested_convert,
-            keep_nullable && !result_type->isNullable() && !result_type->isLowCardinalityNullable() && !result_type->canBeInsideNullable());
+            keep_nullable && !result_type->isNullable() && !result_type->isLowCardinalityNullable()
+                && !isVariant(*result_type) && !isDynamic(*result_type) && !result_type->canBeInsideNullable());
     };
 }
 

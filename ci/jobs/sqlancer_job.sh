@@ -130,5 +130,9 @@ done
 
 ls "$OUTPUT_PATH"
 
-pkill clickhouse || true
+if [ -f "$PID_FILE" ]; then
+    kill "$(cat "$PID_FILE")" || true
+else
+    echo "Warning: PID file not found at $PID_FILE"
+fi
 for _ in $(seq 1 60); do if [[ $(wget -q 'localhost:8123' -O- 2>/dev/null) == 'Ok.' ]]; then sleep 1 ; else break; fi ; done

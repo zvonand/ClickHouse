@@ -557,7 +557,7 @@ void generateManifestList(
                     new_entry.field(f_manifest_path) = old_entry.field(Iceberg::f_manifest_path);
                     new_entry.field(f_manifest_length) = old_entry.field(Iceberg::f_manifest_length);
                     new_entry.field(f_partition_spec_id) = old_entry.field(Iceberg::f_partition_spec_id);
-                    /// Why do we need this for version 1? In some version, iceberg-spark has changed the type of field `f_added_snapshot_id`
+                    /// In some version, iceberg-spark has changed the type of field `f_added_snapshot_id`
                     /// from 'null, long' to 'long'. See https://github.com/apache/iceberg/pull/11626.
                     /// Just in case that we read the old type 'null, long', we do this conversion: read every field
                     /// and write it again with new, correct schema.
@@ -579,7 +579,7 @@ void generateManifestList(
                         new_entry.field(f_added_snapshot_id) = old_added_snapshot_id_entry.value<Int64>();
                     }
                     else
-                        /// This only happens when we read data written by a old version of iceberg, which violent the spec of iceberg.
+                        /// This only happens when we read data written by a old version of iceberg, which violates the spec of iceberg.
                         throw Exception(
                             ErrorCodes::ICEBERG_SPECIFICATION_VIOLATION,
                             "Manifest list {} has null value for field '{}', but it is required",

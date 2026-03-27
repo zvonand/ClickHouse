@@ -601,7 +601,6 @@ void generateManifestList(
                     add_field_to_datum(Iceberg::f_key_metadata);
                     if (version == 2)
                     {
-                        add_field_to_datum(Iceberg::f_added_snapshot_id);
                         add_field_to_datum(Iceberg::f_content);
                         add_field_to_datum(Iceberg::f_sequence_number);
                         add_field_to_datum(Iceberg::f_min_sequence_number);

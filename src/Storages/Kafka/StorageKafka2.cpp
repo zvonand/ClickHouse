@@ -1182,12 +1182,20 @@ void StorageKafka2::cleanConsumers()
             LOG_WARNING(log, "Timed out waiting for consumer(s) to be released, proceeding with shutdown");
         }
 
+        size_t skipped = 0;
         for (const auto & consumer : consumers)
         {
             if (!consumer->hasConsumer())
                 continue;
+            if (consumer->isInUse())
+            {
+                ++skipped;
+                continue;
+            }
             cpp_consumers_to_close.push_back(consumer->moveConsumer());
         }
+        if (skipped)
+            LOG_WARNING(log, "Skipped closing {} consumer(s) that are still in use", skipped);
     }
 
     cpp_consumers_to_close.clear();

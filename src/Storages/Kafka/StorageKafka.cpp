@@ -362,12 +362,20 @@ void StorageKafka::cleanConsumers()
                 std::count_if(consumers.begin(), consumers.end(), [](const auto & ptr) { return ptr->isInUse(); }));
         }
 
+        size_t skipped = 0;
         for (const auto & consumer : consumers)
         {
             if (!consumer->hasConsumer())
                 continue;
+            if (consumer->isInUse())
+            {
+                ++skipped;
+                continue;
+            }
             consumers_to_close.push_back(consumer->moveConsumer());
         }
+        if (skipped)
+            LOG_WARNING(log, "Skipped closing {} consumer(s) that are still in use", skipped);
     }
 
     /// First close cppkafka::Consumer (it can use KafkaConsumer object via stat callback)

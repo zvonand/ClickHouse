@@ -4950,6 +4950,8 @@ void QueryAnalyzer::inlineViewSubqueryIfNeeded(QueryTreeNodePtr & join_tree_node
         }
     }
 
+    QueryTreeNodePtr result_node;
+
     if (needs_type_conversion)
     {
         /// Build a wrapping query: SELECT CAST(col1, 'Type1') AS col1, ... FROM (view_subquery)
@@ -4983,27 +4985,23 @@ void QueryAnalyzer::inlineViewSubqueryIfNeeded(QueryTreeNodePtr & join_tree_node
         wrapper_query->resolveProjectionColumns(std::move(projection_columns));
         wrapper_query->getJoinTree() = view_query_tree;
         wrapper_query->setIsSubquery(true);
-        wrapper_query->setAlias(table_node->getAlias());
 
-        /// Fix scope tracking: the old TableNode pointer was inserted during initializeQueryJoinTreeNode.
-        auto * old_ptr = join_tree_node.get();
-        scope.table_expressions_in_resolve_process.erase(old_ptr);
-
-        join_tree_node = std::move(wrapper_query);
-        scope.table_expressions_in_resolve_process.insert(join_tree_node.get());
+        result_node = std::move(wrapper_query);
     }
     else
     {
-        /// Preserve alias: the outer query references columns via the view name or user-provided alias.
-        view_query_tree->setAlias(table_node->getAlias());
-
-        /// Fix scope tracking: the old TableNode pointer was inserted during initializeQueryJoinTreeNode.
-        auto * old_ptr = join_tree_node.get();
-        scope.table_expressions_in_resolve_process.erase(old_ptr);
-
-        join_tree_node = std::move(view_query_tree);
-        scope.table_expressions_in_resolve_process.insert(join_tree_node.get());
+        result_node = std::move(view_query_tree);
     }
+
+    /// Preserve alias: the outer query references columns via the view name or user-provided alias.
+    result_node->setAlias(table_node->getAlias());
+
+    /// Fix scope tracking: the old TableNode pointer was inserted during initializeQueryJoinTreeNode.
+    auto * old_ptr = join_tree_node.get();
+    scope.table_expressions_in_resolve_process.erase(old_ptr);
+
+    join_tree_node = std::move(result_node);
+    scope.table_expressions_in_resolve_process.insert(join_tree_node.get());
 }
 
 /** Resolve query join tree.

@@ -116,7 +116,7 @@ void readMetricsFromStatFile(
 
     if (print_warnings)
     {
-        for (auto it = keys.begin(); it != keys.end(); ++it)
+        for (const auto * it = keys.begin(); it != keys.end(); ++it)
         {
             uint64_t key_bit = 1ull << (it - keys.begin());
             if (!(seen_mask & key_bit) && std::find(optional_keys.begin(), optional_keys.end(), *it) == optional_keys.end())

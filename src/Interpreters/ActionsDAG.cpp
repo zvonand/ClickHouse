@@ -448,18 +448,19 @@ const ActionsDAG::Node & ActionsDAG::addFunctionImpl(
         {
             size_t num_rows = arguments.empty() ? 0 : arguments.front().column->size();
             column = node.function->execute(arguments, node.result_type, num_rows, true);
-            if (!columnMatchesType(*column, *node.result_type))
-                throw Exception(
-                    ErrorCodes::LOGICAL_ERROR,
-                    "Unexpected return type from {}. Expected {}. Got {}",
-                    node.function->getName(),
-                    node.result_type->getName(),
-                    column->getName());
         }
         else
         {
             column = node.function_base->getConstantResultForNonConstArguments(arguments, node.result_type);
         }
+
+        if (column && !columnMatchesType(*column, *node.result_type))
+            throw Exception(
+                ErrorCodes::LOGICAL_ERROR,
+                "Unexpected return type from {}. Expected {}. Got {}",
+                node.function->getName(),
+                node.result_type->getName(),
+                column->getName());
 
         /// If the result is not a constant, just in case, we will consider the result as unknown.
         if (column && isColumnConst(*column))
@@ -917,18 +918,17 @@ static ColumnWithTypeAndName executeActionForPartialResult(
             try
             {
                 if (only_constant_arguments)
-                {
                     res_column.column = node->function->execute(arguments, res_column.type, input_rows_count, true);
-                    if (res_column.column && !columnMatchesType(*res_column.column, *res_column.type))
-                        throw Exception(
-                            ErrorCodes::LOGICAL_ERROR,
-                            "Unexpected return type from {}. Expected {}. Got {}",
-                            node->function->getName(),
-                            res_column.type->getName(),
-                            res_column.column->getName());
-                }
                 else
                     res_column.column = node->function_base->getConstantResultForNonConstArguments(arguments, res_column.type);
+
+                if (res_column.column && !columnMatchesType(*res_column.column, *res_column.type))
+                    throw Exception(
+                        ErrorCodes::LOGICAL_ERROR,
+                        "Unexpected return type from {}. Expected {}. Got {}",
+                        node->function->getName(),
+                        res_column.type->getName(),
+                        res_column.column->getName());
             }
             catch (Exception & e)
             {

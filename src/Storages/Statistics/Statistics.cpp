@@ -3,12 +3,8 @@
 #include <Common/Exception.h>
 #include <Common/FieldVisitorConvertToNumber.h>
 #include <Common/logger_useful.h>
-#include <DataTypes/DataTypeLowCardinality.h>
-#include <DataTypes/DataTypeNullable.h>
-#include <DataTypes/DataTypesDecimal.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Functions/FunctionFactory.h>
-#include <Interpreters/castColumn.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteHelpers.h>
 #include <IO/ReadBufferFromString.h>
@@ -61,48 +57,6 @@ std::optional<Float64> StatisticsUtils::tryConvertToFloat64(const Field & value,
         tryLogCurrentException("StatisticsUtils", "Cannot convert field to Float64", LogsLevel::information);
         return {};
     }
-}
-
-std::optional<Field> StatisticsUtils::tryConvertFromFloat64(Float64 value, const DataTypePtr & data_type)
-{
-    auto unwrapped_type = removeLowCardinalityAndNullable(data_type);
-    WhichDataType which(unwrapped_type);
-
-    /// Decimal with precision > 15 cannot be exactly represented by Float64.
-    if (which.isDecimal() && getDecimalPrecision(*unwrapped_type) > MAX_FLOAT64_DECIMAL_PRECISION)
-        return std::nullopt;
-
-    /// Values outside (-2^53, 2^53) cannot be exactly represented as integers by Float64.
-    /// This guard only applies to non-float target types (integers, decimals, dates, etc.).
-    /// For Float32/Float64 targets, large-magnitude values are valid and the conversion is lossless
-    /// (Float64->Float64) or handled by castColumnAccurate (Float64->Float32).
-    if (!which.isFloat() && (value > MAX_EXACT_FLOAT64_INTEGER || value < -MAX_EXACT_FLOAT64_INTEGER))
-        return std::nullopt;
-
-    static const DataTypePtr float64_type = std::make_shared<DataTypeFloat64>();
-
-    auto float64_column = float64_type->createColumn();
-    float64_column->insert(Field(value));
-
-    ColumnWithTypeAndName src_column(std::move(float64_column), float64_type, "");
-
-    ColumnPtr casted_column;
-    try
-    {
-        /// castColumnAccurate throws on conversion failure (overflow, etc.)
-        casted_column = castColumnAccurate(src_column, unwrapped_type);
-    }
-    catch (const Exception &)
-    {
-        return std::nullopt;
-    }
-
-    if (!casted_column || casted_column->empty())
-        return std::nullopt;
-
-    Field result_field;
-    casted_column->get(0, result_field);
-    return result_field;
 }
 
 IStatistics::IStatistics(const SingleStatisticsDescription & stat_)

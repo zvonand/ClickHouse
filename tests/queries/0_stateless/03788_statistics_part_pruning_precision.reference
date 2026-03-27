@@ -1,4 +1,4 @@
--- Case 1: UInt64 both >= 2^53, query value = 2^53+5, should NOT prune part 1
+-- Case 1: UInt64 >= 2^53, query in range, should NOT prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -19,7 +19,7 @@ Expression ((Project names + Projection))
             Granules: 1/1
           Ranges: 1
 1
--- Case 1: UInt64 both >= 2^53, query value < 2^53, should prune part 1
+-- Case 1: UInt64 >= 2^53, query out of range, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -46,7 +46,7 @@ Expression ((Project names + Projection))
             Granules: 0/1
           Ranges: 0
 0
--- Case 2: Int64 min in range, max >= 2^53, query < min, should prune part 2
+-- Case 2: Int64 query < min, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -73,7 +73,7 @@ Expression ((Project names + Projection))
             Granules: 0/1
           Ranges: 0
 0
--- Case 2: Int64 min in range, max >= 2^53, query > 2^53, should NOT prune part 2
+-- Case 2: Int64 query > max (beyond 2^53), should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -92,9 +92,15 @@ Expression ((Project names + Projection))
             Condition: (toYYYYMMDD(dt) in [20250102, 20250102])
             Parts: 1/1
             Granules: 1/1
-          Ranges: 1
-1
--- Case 3: Int64 min <= -2^53, max in range, query > max, should prune part 3
+          Statistics
+            Keys:
+              dt
+              val_int64
+            Parts: 0/1
+            Granules: 0/1
+          Ranges: 0
+0
+-- Case 3: Int64 query > max, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -121,7 +127,7 @@ Expression ((Project names + Projection))
             Granules: 0/1
           Ranges: 0
 0
--- Case 3: Int64 min <= -2^53, max in range, query = max, should NOT prune part 3
+-- Case 3: Int64 query = max, should NOT prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -142,7 +148,7 @@ Expression ((Project names + Projection))
             Granules: 1/1
           Ranges: 1
 1
--- Case 3: Int64 min <= -2^53, max in range, query < -2^53, should NOT prune part 3
+-- Case 3: Int64 query < min (beyond -2^53), should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -161,9 +167,15 @@ Expression ((Project names + Projection))
             Condition: (toYYYYMMDD(dt) in [20250103, 20250103])
             Parts: 1/1
             Granules: 1/1
-          Ranges: 1
-1
--- Case 4: Int64 min <= -2^53 and max >= 2^53, cannot prune
+          Statistics
+            Keys:
+              dt
+              val_int64
+            Parts: 0/1
+            Granules: 0/1
+          Ranges: 0
+0
+-- Case 4: Int64 extreme range, query outside range, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -182,9 +194,15 @@ Expression ((Project names + Projection))
             Condition: (toYYYYMMDD(dt) in [20250104, 20250104])
             Parts: 1/1
             Granules: 1/1
-          Ranges: 1
-1
--- Case 5: Decimal128 precision=38 > 15, should NOT prune (skips statistics)
+          Statistics
+            Keys:
+              dt
+              val_int64
+            Parts: 0/1
+            Granules: 0/1
+          Ranges: 0
+0
+-- Case 5: Decimal128, query outside range, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -203,9 +221,15 @@ Expression ((Project names + Projection))
             Condition: (toYYYYMMDD(dt) in [20250105, 20250105])
             Parts: 1/1
             Granules: 1/1
-          Ranges: 1
+          Statistics
+            Keys:
+              dt
+              val_decimal128
+            Parts: 0/1
+            Granules: 0/1
+          Ranges: 0
 0
--- Case 6.1: Decimal32(0) precision=9 <= 15 with extreme value, query at max limit 999999999, should NOT prune part 6
+-- Case 6.1: Decimal32(0) query at max, should NOT prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -226,7 +250,7 @@ Expression ((Project names + Projection))
             Granules: 1/1
           Ranges: 1
 1
--- Case 6.2: Decimal32(0) precision=9 <= 15 with extreme value, query < min, should prune part 6
+-- Case 6.2: Decimal32(0) query < min, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -253,7 +277,7 @@ Expression ((Project names + Projection))
             Granules: 0/1
           Ranges: 0
 0
--- Case 6.3: Decimal32(9) precision=9 <= 15 with extreme value, query at max limit 0.999999999, should NOT prune part 6
+-- Case 6.3: Decimal32(9) query at max, should NOT prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -274,7 +298,7 @@ Expression ((Project names + Projection))
             Granules: 1/1
           Ranges: 1
 1
--- Case 7: Int64 both <= -2^53, query value = -2^53-5, should NOT prune part 7
+-- Case 7: Int64 <= -2^53, query in range, should NOT prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -295,7 +319,7 @@ Expression ((Project names + Projection))
             Granules: 1/1
           Ranges: 1
 1
--- Case 7: Int64 both <= -2^53, query value > -2^53, should prune part 7
+-- Case 7: Int64 <= -2^53, query out of range, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -322,7 +346,7 @@ Expression ((Project names + Projection))
             Granules: 0/1
           Ranges: 0
 0
--- Case 8.1: Float64 min < 2^53, max > 2^53, query < min, should prune part 8
+-- Case 8.1: Float64 query < min, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -349,7 +373,7 @@ Expression ((Project names + Projection))
             Granules: 0/1
           Ranges: 0
 0
--- Case 8.2: Float64 min < 2^53, max > 2^53, query > max (2e17), should prune part 8
+-- Case 8.2: Float64 query > max, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -376,7 +400,7 @@ Expression ((Project names + Projection))
             Granules: 0/1
           Ranges: 0
 0
--- Case 9.1: Float64 min < -2^53, max > -2^53, query > max, should prune part 9
+-- Case 9.1: Float64 query > max, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)
@@ -403,7 +427,7 @@ Expression ((Project names + Projection))
             Granules: 0/1
           Ranges: 0
 0
--- Case 9.2: Float64 min < -2^53, max > -2^53, query < min (-2e17), should prune part 9
+-- Case 9.2: Float64 query < min, should prune
 Expression ((Project names + Projection))
   Aggregating
     Expression (Before GROUP BY)

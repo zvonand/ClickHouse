@@ -1,7 +1,5 @@
 #include <Core/NamesAndTypes.h>
 #include <DataTypes/DataTypeLowCardinality.h>
-#include <DataTypes/DataTypesDecimal.h>
-#include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/IDataType.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Storages/Statistics/Statistics.h>
@@ -15,29 +13,19 @@ namespace DB
 namespace
 {
 
-UInt32 getDecimalPrecisionOrZero(const DataTypePtr & data_type)
-{
-    const auto unwrapped = removeLowCardinalityAndNullable(data_type);
-    WhichDataType which(unwrapped);
-    if (!which.isDecimal())
-        return 0;
-    return getDecimalPrecision(*unwrapped);
-}
-
 /// Create a Range from statistics estimate for use in part pruning.
+/// MinMax statistics now store typed Field values, so we can directly construct Range
+/// without lossy Float64 conversions.
 ///
-/// Statistics may have already lost origin info during collection:
-///   For Decimal with precision > 15
-///   For Int64/UInt64 and BigInt with values >= 2^53
-///   For Nullable
-/// So, the Range is conservatively extended.
-std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const DataTypePtr & data_type, bool is_nullable)
+/// Returns std::nullopt when statistics are unavailable or corrupted,
+/// causing the caller to fall back to a whole-universe Range (no pruning).
+std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const DataTypePtr & /*data_type*/, bool is_nullable)
 {
     if (!estimate.estimated_min.has_value() || !estimate.estimated_max.has_value())
         return std::nullopt;
 
-    Float64 min_value = estimate.estimated_min.value();
-    Float64 max_value = estimate.estimated_max.value();
+    const Field & min_value = estimate.estimated_min.value();
+    const Field & max_value = estimate.estimated_max.value();
 
     auto make_whole_universe = [is_nullable]() -> Range
     {
@@ -46,101 +34,17 @@ std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const Da
         return Range::createWholeUniverseWithoutNull();
     };
 
-    /// If min > max, the statistics are either:
-    /// 1. For nullable columns with the sentinel pair (max, lowest): indicates an all-NULL part.
-    ///    Since statistics don't track NULL existence, we can't safely prune - return whole-universe.
-    /// 2. Corrupted/inconsistent statistics for non-nullable columns.
-    ///    Conservatively return whole-universe to avoid incorrect pruning.
-    ///
-    /// NOTE: We intentionally don't use Range(POSITIVE_INFINITY) for all-NULL parts because:
-    /// - POSITIVE_INFINITY is a Null-type Field that can cause issues in `checkInRange`
-    /// - `getMonotonicityForRange` may not correctly handle Null-type boundaries
-    /// - After `invert` for negative-monotonic functions, the range becomes unpredictable
-    /// - This can lead to "Invalid binary search result" errors in `MergeTreeSetIndex`
+    /// min > max indicates either an all-NULL part (sentinel pair) or corrupted statistics.
+    /// Return whole-universe to avoid incorrect pruning.
     if (min_value > max_value)
-    {
-        return make_whole_universe();
-    }
-
-    /// For Decimal, check if precision > 15 - skip statistics entirely.
-    if (getDecimalPrecisionOrZero(data_type) > StatisticsUtils::MAX_FLOAT64_DECIMAL_PRECISION)
         return make_whole_universe();
 
-    /// For non-float integer-like types, handle values outside Float64's exact integer range [-2^53, 2^53].
-    /// When |value| > 2^53, Float64 cannot represent the exact integer, so we use
-    /// the boundary value 2^53 (or -2^53) as a safe conservative bound.
-    /// For Float32/Float64 targets, values outside ±2^53 are valid and the conversion
-    /// via tryConvertFromFloat64 is lossless, so overflow handling is skipped.
-    ///
-    /// Cases:
-    /// 1. max < -2^53: all data in negative overflow region -> (-inf, -2^53]
-    /// 2. min > 2^53: all data in positive overflow region -> [2^53, +inf)
-    /// 3. min < -2^53: left bound unreliable -> (-inf, max]
-    /// 4. max > 2^53: right bound unreliable -> [min, +inf)
-    bool is_float_type = WhichDataType(removeLowCardinalityAndNullable(data_type)).isFloat();
+    /// For nullable columns, extend the right bound to POSITIVE_INFINITY
+    /// because statistics don't track whether NULL values exist in the part.
+    if (is_nullable)
+        return Range(min_value, true, POSITIVE_INFINITY, true);
 
-    bool min_in_negative_overflow = !is_float_type && min_value < -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-    bool max_in_negative_overflow = !is_float_type && max_value < -StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-    bool min_in_positive_overflow = !is_float_type && min_value > StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-    bool max_in_positive_overflow = !is_float_type && max_value > StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER;
-
-    /// Case 1: max < -2^53, use (-inf, -2^53) or whole universe for nullable
-    /// For nullable columns, we return whole universe because statistics don't track
-    /// whether NULL values exist, and we must not prune parts that might contain NULLs.
-    if (max_in_negative_overflow)
-    {
-        if (is_nullable)
-            return make_whole_universe();
-        auto boundary = StatisticsUtils::tryConvertFromFloat64(-StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER, data_type);
-        if (!boundary.has_value())
-            return make_whole_universe();
-        return Range::createRightBounded(boundary.value(), true, false);
-    }
-
-    /// Case 2: min > 2^53, use [2^53, +inf)
-    if (min_in_positive_overflow)
-    {
-        auto boundary = StatisticsUtils::tryConvertFromFloat64(StatisticsUtils::MAX_EXACT_FLOAT64_INTEGER, data_type);
-        if (!boundary.has_value())
-            return make_whole_universe();
-        return Range::createLeftBounded(boundary.value(), true, is_nullable);
-    }
-
-    std::optional<Field> left_bound;
-    std::optional<Field> right_bound;
-
-    /// Case 3: min < -2^53, left bound is -inf
-    if (!min_in_negative_overflow)
-        left_bound = StatisticsUtils::tryConvertFromFloat64(min_value, data_type);
-
-    /// Case 4: max > 2^53, right bound is +inf
-    if (!max_in_positive_overflow)
-        right_bound = StatisticsUtils::tryConvertFromFloat64(max_value, data_type);
-
-    /// Build the range based on which boundaries are valid.
-    if (!left_bound.has_value() && !right_bound.has_value())
-    {
-        return make_whole_universe();
-    }
-    else if (!left_bound.has_value())
-    {
-        /// For nullable columns, we must include POSITIVE_INFINITY (NULL) in the range
-        /// because statistics don't track whether NULL values exist in the part.
-        if (is_nullable)
-            return make_whole_universe();
-        return Range::createRightBounded(right_bound.value(), true, false);
-    }
-    else if (!right_bound.has_value())
-    {
-        return Range::createLeftBounded(left_bound.value(), true, is_nullable);
-    }
-    else
-    {
-        /// Both valid: range is [min, max] or [min, +inf] for nullable
-        if (is_nullable)
-            return Range(left_bound.value(), true, POSITIVE_INFINITY, true);
-        return Range(left_bound.value(), true, right_bound.value(), true);
-    }
+    return Range(min_value, true, max_value, true);
 }
 
 } /// anonymous namespace

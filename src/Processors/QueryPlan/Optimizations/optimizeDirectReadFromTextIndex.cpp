@@ -691,7 +691,7 @@ void processAndOptimizeTextIndexFunctions(const Stack & stack, QueryPlan::Nodes 
         return;
 
     /// Walk up the stack for a FilterStep, collecting any ExpressionSteps along the way.
-    /// When query_plan_merge_expressions = 0, one or more ExpressionSteps may sit between ReadFromMergeTree and FilterStep.
+    /// When query_plan_query_plan_merge_expressions = 0, one or more ExpressionSteps may sit between ReadFromMergeTree and FilterStep.
     QueryPlan::Node * filter_node = nullptr;
     FilterStep * filter_step = nullptr;
     std::vector<ExpressionStep *> expression_steps; /// bottom-up order (index 0 = closest to ReadFromMergeTree)
@@ -715,11 +715,11 @@ void processAndOptimizeTextIndexFunctions(const Stack & stack, QueryPlan::Nodes 
 
     /// Compose the DAG by prepending any ExpressionSteps (bottom-up) into a clone of FilterStep's DAG.
     ///
-    /// With merge_expressions = 0 the new query analyzer inserts ExpressionSteps that rename "msg" to "__table1.msg", so FilterStep's DAG
+    /// With query_plan_merge_expressions = 0 the new query analyzer inserts ExpressionSteps that rename "msg" to "__table1.msg", so FilterStep's DAG
     /// has bare INPUT("__table1.msg") nodes that aren't found in the text index header.
     ///
     /// After composing, those inputs become ALIAS("__table1.msg") → INPUT("msg"), and getColumnName() follows the alias back to the
-    /// physical name. With merge_expressions = 1 the loop is a no-op since expression_steps is empty.
+    /// physical name. With query_plan_merge_expressions = 1 the loop is a no-op since expression_steps is empty.
     const String & filter_column_name = filter_step->getFilterColumnName();
 
     /// expression_steps is bottom-up (index 0 = closest to ReadFromMergeTree, back() = closest to FilterStep),

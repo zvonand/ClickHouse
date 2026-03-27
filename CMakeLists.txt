@@ -159,6 +159,12 @@ if (OS_LINUX)
         # Fold identical code and data sections to reduce binary size.
         set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--icf=all")
     endif ()
+
+    # In Release builds, strip residual debug sections that may come from contrib
+    # libraries or Rust crates compiled with debug info by their own build systems.
+    if (CMAKE_BUILD_TYPE_UC STREQUAL "RELEASE" AND NOT SPLIT_DEBUG_SYMBOLS)
+        set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--strip-debug")
+    endif ()
 endif ()
 
 if (OS_DARWIN)

@@ -31,7 +31,7 @@ $MY_CLICKHOUSE_CLIENT --query "
     (
         id UInt32,
         data JSON,
-        INDEX json_idx JSONAllValues(data) TYPE text(tokenizer = splitByNonAlpha)
+        INDEX json_idx JSONAllValues(data) TYPE text(tokenizer = ngrams(3))
     )
     ENGINE = MergeTree
     ORDER BY (id) SETTINGS index_granularity = 1;
@@ -56,8 +56,8 @@ run_query "SELECT id FROM tab WHERE data.key1::String = 'the quick brown fox' OR
 run_query "SELECT id FROM tab WHERE data.key1::String LIKE '%quick%' ORDER BY id"
 run_query "SELECT id FROM tab WHERE startsWith(data.key1::String, 'lazy') ORDER BY id"
 run_query "SELECT id FROM tab WHERE hasToken(data.key1::String, 'quick') ORDER BY id"
-run_query "SELECT id FROM tab WHERE hasAnyTokens(data.key1::String, ['quick', 'lazy']) ORDER BY id"
-run_query "SELECT id FROM tab WHERE hasAllTokens(data.key1::String, ['the', 'quick']) ORDER BY id"
+run_query "SELECT id FROM tab WHERE hasAnyTokens(data.key1::String, 'quick lazy') ORDER BY id"
+run_query "SELECT id FROM tab WHERE hasAllTokens(data.key1::String, 'the quick') ORDER BY id"
 
 echo "-- JSON values that are arrays"
 
@@ -68,7 +68,7 @@ $MY_CLICKHOUSE_CLIENT --query "
     (
         id UInt32,
         data JSON,
-        INDEX json_idx JSONAllValues(data) TYPE text(tokenizer = splitByNonAlpha)
+        INDEX json_idx JSONAllValues(data) TYPE text(tokenizer = ngrams(3))
     )
     ENGINE = MergeTree
     ORDER BY (id) SETTINGS index_granularity = 1;

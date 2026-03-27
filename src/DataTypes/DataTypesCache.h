@@ -35,6 +35,9 @@ public:
     /// O(1) lookup by BinaryTypeIndex. Returns nullptr for non-simple types.
     DataTypePtr getType(BinaryTypeIndex index) const;
 
+    /// Lookup by type name. Returns pre-cached element for simple types, nullptr otherwise.
+    const Element * findByName(const String & type_name) const;
+
     /// Lookup by type name. Returns pre-cached type for simple types,
     /// falls back to DataTypeFactory for others.
     DataTypePtr getType(const String & type_name) const;
@@ -53,5 +56,31 @@ private:
 
 /// Return the singleton instance of the simple data type cache.
 const SimpleDataTypeCache & getSimpleDataTypeCache();
+
+/// Thread-local cache for data type lookups by name.
+/// Checks the global SimpleDataTypeCache first; only caches
+/// non-simple types (e.g. DateTime64(9), Variant types) in its own map.
+class DataTypeCache
+{
+public:
+    DataTypePtr getType(const String & type_name);
+    SerializationPtr getSerialization(const String & type_name);
+
+private:
+    static constexpr size_t MAX_ELEMENTS = 16;
+
+    struct Element
+    {
+        DataTypePtr type;
+        SerializationPtr serialization;
+    };
+
+    const Element & getCacheElement(const String & type_name);
+
+    std::unordered_map<String, Element> cache;
+};
+
+/// Return instance of a thread-local cache.
+DataTypeCache & getDataTypeCache();
 
 }

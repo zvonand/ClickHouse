@@ -10,8 +10,9 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # The test runs in the default database s.t. the shard (which connects with database=default) can resolve the unqualified dictionary name.
 # Object names include CLICKHOUSE_DATABASE to avoid collisions in parallel runs.
 SUFFIX="${CLICKHOUSE_DATABASE}"
+CLICKHOUSE_CLIENT_DEFAULT_DB=$(echo ${CLICKHOUSE_CLIENT} | sed 's/'"--database=${CLICKHOUSE_DATABASE}"'/--database=default/g')
 
-${CLICKHOUSE_CLIENT} --database=default <<SQL
+${CLICKHOUSE_CLIENT_DEFAULT_DB} <<SQL
 DROP TABLE IF EXISTS test_table_dist_${SUFFIX};
 DROP TABLE IF EXISTS test_table_${SUFFIX};
 DROP DICTIONARY IF EXISTS test_dict_${SUFFIX};

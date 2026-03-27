@@ -161,6 +161,12 @@ endif()
 # may not exist and compilation fails. This happens with musl.
 add_compile_definitions("_LARGEFILE64_SOURCE")
 
+# When cross-compiling to macOS, LLVM's config-ix.cmake detects HAVE_LIBRT from the Linux build host,
+# but librt doesn't exist on macOS. This prevents the Orc JIT libraries from trying to link it.
+if (APPLE)
+    set (HAVE_LIBRT 0 CACHE INTERNAL "")
+endif ()
+
 add_subdirectory ("${LLVM_SOURCE_DIR}" "${LLVM_BINARY_DIR}")
 
 set_directory_properties (PROPERTIES

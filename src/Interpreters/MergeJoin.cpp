@@ -163,6 +163,14 @@ Block extractMinMax(const Block & block, const Block & keys)
     return min_max;
 }
 
+std::vector<ColumnPtr> extractColumnsByNames(const Block & src, const Block & names)
+{
+    std::vector<ColumnPtr> columns;
+    columns.reserve(names.columns());
+    for (size_t i = 0; i < names.columns(); ++i)
+        columns.push_back(src.getByName(names.getByPosition(i).name).column);
+    return columns;
+}
 }
 
 
@@ -431,12 +439,11 @@ void copyLeftRange(const Block & block, MutableColumns & columns, size_t start, 
     }
 }
 
-void copyRightRange(const Block & right_block, const Block & right_columns_to_add, MutableColumns & columns,
-                    size_t row_position, size_t rows_to_add)
+void copyRightRange(const std::vector<ColumnPtr> & columns_to_add, MutableColumns & columns, size_t row_position, size_t rows_to_add)
 {
-    for (size_t i = 0; i < right_columns_to_add.columns(); ++i)
+    for (size_t i = 0; i < columns_to_add.size(); ++i)
     {
-        const auto & src_column = right_block.getByName(right_columns_to_add.getByPosition(i).name).column;
+        const auto & src_column = columns_to_add[i];
         auto & dst_column = columns[i];
         auto * dst_nullable = typeid_cast<ColumnNullable *>(dst_column.get());
 
@@ -447,14 +454,19 @@ void copyRightRange(const Block & right_block, const Block & right_columns_to_ad
     }
 }
 
-void joinEqualsAnyLeft(const Block & right_block, const Block & right_columns_to_add, MutableColumns & right_columns, const MergeJoinEqualRange & range)
+void joinEqualsAnyLeft(const std::vector<ColumnPtr> & columns_to_add, MutableColumns & right_columns, const MergeJoinEqualRange & range)
 {
-    copyRightRange(right_block, right_columns_to_add, right_columns, range.right_start, range.left_length);
+    copyRightRange(columns_to_add, right_columns, range.right_start, range.left_length);
 }
 
 template <bool is_all>
-bool joinEquals(const Block & left_block, const Block & right_block, const Block & right_columns_to_add,
-                MutableColumns & left_columns, MutableColumns & right_columns, MergeJoinEqualRange & range, size_t max_rows [[maybe_unused]])
+bool joinEquals(
+    const Block & left_block,
+    const std::vector<ColumnPtr> & columns_to_add,
+    MutableColumns & left_columns,
+    MutableColumns & right_columns,
+    MergeJoinEqualRange & range,
+    size_t max_rows [[maybe_unused]])
 {
     bool one_more = true;
 
@@ -475,14 +487,14 @@ bool joinEquals(const Block & left_block, const Block & right_block, const Block
         for (size_t right_row = 0; right_row < range.right_length; ++right_row, ++row_position)
         {
             copyLeftRange(left_block, left_columns, range.left_start, left_rows_to_add);
-            copyRightRange(right_block, right_columns_to_add, right_columns, row_position, left_rows_to_add);
+            copyRightRange(columns_to_add, right_columns, row_position, left_rows_to_add);
         }
     }
     else
     {
         size_t left_rows_to_add = range.left_length;
         copyLeftRange(left_block, left_columns, range.left_start, left_rows_to_add);
-        copyRightRange(right_block, right_columns_to_add, right_columns, range.right_start, left_rows_to_add);
+        copyRightRange(columns_to_add, right_columns, range.right_start, left_rows_to_add);
     }
 
     return one_more;
@@ -937,6 +949,8 @@ bool MergeJoin::leftJoin(MergeJoinCursor & left_cursor, const Block & left_block
     MergeJoinCursor right_cursor(right_block, right_merge_description);
     left_cursor.setCompareNullability(right_cursor);
 
+    auto r_columns_to_add = extractColumnsByNames(right_block, right_columns_to_add);
+
     /// Set right cursor position in first continuation right block
     if constexpr (is_all)
     {
@@ -964,7 +978,7 @@ bool MergeJoin::leftJoin(MergeJoinCursor & left_cursor, const Block & left_block
 
             size_t max_rows = maxRangeRows(left_columns[0]->size(), max_joined_block_rows);
 
-            if (!joinEquals<true>(left_block, right_block, right_columns_to_add, left_columns, right_columns, range, max_rows))
+            if (!joinEquals<true>(left_block, r_columns_to_add, left_columns, right_columns, range, max_rows))
             {
                 right_cursor.nextN(range.right_length);
                 right_block_info.skip = right_cursor.position();
@@ -973,7 +987,7 @@ bool MergeJoin::leftJoin(MergeJoinCursor & left_cursor, const Block & left_block
             }
         }
         else
-            joinEqualsAnyLeft(right_block, right_columns_to_add, right_columns, range);
+            joinEqualsAnyLeft(r_columns_to_add, right_columns, range);
 
         right_cursor.nextN(range.right_length);
 
@@ -999,6 +1013,8 @@ bool MergeJoin::allInnerJoin(MergeJoinCursor & left_cursor, const Block & left_b
     MergeJoinCursor right_cursor(right_block, right_merge_description);
     left_cursor.setCompareNullability(right_cursor);
 
+    auto r_columns_to_add = extractColumnsByNames(right_block, right_columns_to_add);
+
     /// Set right cursor position in first continuation right block
     right_cursor.nextN(right_block_info.skip);
     right_block_info.skip = 0;
@@ -1013,7 +1029,7 @@ bool MergeJoin::allInnerJoin(MergeJoinCursor & left_cursor, const Block & left_b
 
         size_t max_rows = maxRangeRows(left_columns[0]->size(), max_joined_block_rows);
 
-        if (!joinEquals<true>(left_block, right_block, right_columns_to_add, left_columns, right_columns, range, max_rows))
+        if (!joinEquals<true>(left_block, r_columns_to_add, left_columns, right_columns, range, max_rows))
         {
             right_cursor.nextN(range.right_length);
             right_block_info.skip = right_cursor.position();
@@ -1041,13 +1057,15 @@ bool MergeJoin::semiLeftJoin(MergeJoinCursor & left_cursor, const Block & left_b
     MergeJoinCursor right_cursor(right_block, right_merge_description);
     left_cursor.setCompareNullability(right_cursor);
 
+    auto r_columns_to_add = extractColumnsByNames(right_block, right_columns_to_add);
+
     while (!left_cursor.atEnd() && !right_cursor.atEnd())
     {
         MergeJoinEqualRange range = left_cursor.getNextEqualRange(right_cursor);
         if (range.empty())
             break;
 
-        joinEquals<false>(left_block, right_block, right_columns_to_add, left_columns, right_columns, range, 0);
+        joinEquals<false>(left_block, r_columns_to_add, left_columns, right_columns, range, 0);
 
         right_cursor.nextN(range.right_length);
         left_cursor.nextN(range.left_length);

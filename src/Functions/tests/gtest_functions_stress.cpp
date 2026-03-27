@@ -31,10 +31,6 @@
 #include <IO/WriteHelpers.h>
 #include <Storages/StorageGenerateRandom.h>
 
-#if defined(MEMORY_SANITIZER)
-#include <sanitizer/msan_interface.h>
-#endif
-
 using namespace DB;
 namespace po = boost::program_options;
 
@@ -2181,25 +2177,8 @@ void __tsan_on_report(void * /*report*/) // NOLINT(bugprone-reserved-identifier,
 #pragma clang diagnostic pop
 }
 
-#if defined(MEMORY_SANITIZER)
-static void msanDeathCallback()
-{
-    if (current_stress_thread)
-        current_stress_thread->got_sanitizer_error = true;
-}
-#endif
-
 TEST(FunctionsStress, stress)
 {
-#if defined(MEMORY_SANITIZER)
-    /// Allow the stress test to continue past MSan errors instead of aborting.
-    /// Some third-party libraries (e.g. h3) or functions may read from partially-initialized
-    /// buffers when given random input. Errors are still reported to stderr, and the
-    /// `got_sanitizer_error` flag is set via the death callback so the test can track them.
-    __msan_set_keep_going(1);
-    __msan_set_death_callback(msanDeathCallback);
-#endif
-
     chassert(!logger);
     logger = getLogger("stress");
 

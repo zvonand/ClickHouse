@@ -493,8 +493,6 @@ class Runner:
 
         print("INFO: disk status after running a job:")
         Shell.run("df -h")
-        if job.run_in_docker and not no_docker:
-            Shell.run("docker ps -a; docker container prune -f; docker volume prune -f --all; docker system df")
 
         # When running Docker containers as root (non-rootless mode), any files created
         # by the job will be owned by root. This causes issues when:

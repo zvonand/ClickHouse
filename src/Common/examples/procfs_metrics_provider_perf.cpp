@@ -35,7 +35,8 @@ int mainEntryExampleProcfsMetricsProviderPerf(int argc, char ** argv)
     return 0;
 }
 #else
-int main()
+int mainEntryExampleProcfsMetricsProviderPerf(int, char **)
 {
+    return 0;
 }
 #endif

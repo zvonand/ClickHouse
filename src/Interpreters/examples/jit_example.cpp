@@ -63,7 +63,7 @@ int mainEntryExampleJitExample(int argc, char **argv)
 
 #else
 
-int main(int argc, char **argv)
+int mainEntryExampleJitExample(int argc, char **argv)
 {
     (void)(argc);
     (void)(argv);

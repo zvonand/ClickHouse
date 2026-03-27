@@ -472,6 +472,19 @@ void generateManifestList(
     auto adapter = std::make_unique<OutputStreamWriteBufferAdapter>(buf);
     avro::DataFileWriter<avro::GenericDatum> writer(std::move(adapter), schema);
 
+    /// Set file-level metadata required by Unity Catalog and other Iceberg engines
+    /// that read these properties from the Avro container header.
+    writer.setMetadata("format-version", std::to_string(version));
+    writer.setMetadata("snapshot-id", std::to_string(new_snapshot->getValue<Int64>(Iceberg::f_metadata_snapshot_id)));
+    {
+        Int64 parent_id = new_snapshot->has(Iceberg::f_parent_snapshot_id)
+            ? new_snapshot->getValue<Int64>(Iceberg::f_parent_snapshot_id)
+            : -1;
+        writer.setMetadata("parent-snapshot-id", std::to_string(parent_id));
+    }
+    if (version > 1 && new_snapshot->has(Iceberg::f_metadata_sequence_number))
+        writer.setMetadata("sequence-number", std::to_string(new_snapshot->getValue<Int64>(Iceberg::f_metadata_sequence_number)));
+
     for (size_t entry_idx = 0; entry_idx < manifest_entry_names.size(); ++entry_idx)
     {
         avro::GenericDatum entry_datum(schema.root());
@@ -667,10 +680,11 @@ IcebergStorageSink::IcebergStorageSink(
     , data_lake_settings(configuration_->getDataLakeSettings())
     , write_format(configuration_->format)
 {
+    auto fresh_data_lake_settings = getDataLakeSettingsWithFreshMetadataPath();
     auto [last_version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
         object_storage,
         persistent_table_components.table_path,
-        data_lake_settings,
+        fresh_data_lake_settings,
         persistent_table_components.metadata_cache,
         context_,
         log.get(),
@@ -692,6 +706,13 @@ IcebergStorageSink::IcebergStorageSink(
         (catalog != nullptr && catalog->isTransactional()), metadata_compression_method, write_format);
 
     filename_generator.setVersion(last_version + 1);
+
+    if (metadata->has(Iceberg::f_properties))
+    {
+        auto properties = metadata->getObject(Iceberg::f_properties);
+        if (properties && properties->has("write.data.path"))
+            filename_generator.setDataLocation(properties->getValue<String>("write.data.path"));
+    }
 
     partition_spec_id = metadata->getValue<Int64>(Iceberg::f_default_spec_id);
     auto partitions_specs = metadata->getArray(Iceberg::f_partition_specs);
@@ -895,6 +916,31 @@ void IcebergStorageSink::cancelBuffers()
     }
 }
 
+DataLakeStorageSettings IcebergStorageSink::getDataLakeSettingsWithFreshMetadataPath() const
+{
+    DataLakeStorageSettings fresh_settings(data_lake_settings);
+    if (!catalog)
+        return fresh_settings;
+
+    const auto & [namespace_name, table_name] = DataLake::parseTableName(table_id.getTableName());
+    DataLake::TableMetadata fresh_table_meta;
+    fresh_table_meta.withLocation().withDataLakeSpecificProperties();
+    if (!catalog->tryGetTableMetadata(namespace_name, table_name, fresh_table_meta))
+        return fresh_settings;
+
+    auto props = fresh_table_meta.getDataLakeSpecificProperties();
+    if (!props.has_value())
+        return fresh_settings;
+
+    auto metadata_loc = props->iceberg_metadata_file_location;
+    if (metadata_loc.empty())
+        return fresh_settings;
+
+    metadata_loc = fresh_table_meta.getMetadataLocation(metadata_loc);
+    fresh_settings[DataLakeStorageSetting::iceberg_metadata_file_path] = metadata_loc;
+    return fresh_settings;
+}
+
 bool IcebergStorageSink::initializeMetadata()
 {
     const auto & resolver = persistent_table_components.path_resolver;
@@ -939,10 +985,11 @@ bool IcebergStorageSink::initializeMetadata()
 
         if (retry_because_of_metadata_conflict)
         {
+            auto retry_data_lake_settings = getDataLakeSettingsWithFreshMetadataPath();
             auto [last_version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
                 object_storage,
                 persistent_table_components.table_path,
-                data_lake_settings,
+                retry_data_lake_settings,
                 persistent_table_components.metadata_cache,
                 context,
                 getLogger("IcebergWrites").get(),
@@ -1039,7 +1086,8 @@ bool IcebergStorageSink::initializeMetadata()
             try
             {
                 generateManifestList(
-                    persistent_table_components.path_resolver, metadata, object_storage, context, manifest_entries, new_snapshot, manifest_entry_sizes, *buffer_manifest_list, Iceberg::FileContentType::DATA);
+                    persistent_table_components.path_resolver, metadata, object_storage, context, manifest_entries, new_snapshot, manifest_entry_sizes, *buffer_manifest_list, Iceberg::FileContentType::DATA,
+                    /* use_previous_snapshots = */ true);
                 buffer_manifest_list->finalize();
             }
             catch (...)

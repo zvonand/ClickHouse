@@ -74,12 +74,17 @@ bool checkValidSchemaEvolution(Poco::Dynamic::Var old_type, Poco::Dynamic::Var n
 MetadataGenerator::MetadataGenerator(Poco::JSON::Object::Ptr metadata_object_)
     : metadata_object(metadata_object_)
     , gen(randomSeed())
-    , dis(0, INT32_MAX)
+    , dis(1, std::numeric_limits<Int64>::max())
 {
 }
 
 Int64 MetadataGenerator::getMaxSequenceNumber()
 {
+    /// Use the authoritative top-level field per Iceberg V2 spec.
+    /// Iterating snapshots is unreliable when catalogs prune snapshot history.
+    if (metadata_object->has(Iceberg::f_last_sequence_number))
+        return metadata_object->getValue<Int64>(Iceberg::f_last_sequence_number);
+
     auto snapshots = metadata_object->get(Iceberg::f_snapshots).extract<Poco::JSON::Array::Ptr>();
     Int64 max_seq_number = 0;
 
@@ -123,7 +128,7 @@ MetadataGenerator::NextMetadataResult MetadataGenerator::generateNextMetadata(
     if (format_version > 1)
     {
         auto sequence_number = getMaxSequenceNumber() + 1;
-        new_snapshot->set(Iceberg::f_metadata_sequence_number, getMaxSequenceNumber() + 1);
+        new_snapshot->set(Iceberg::f_metadata_sequence_number, sequence_number);
         metadata_object->set(Iceberg::f_last_sequence_number, sequence_number);
     }
     Int64 snapshot_id = user_defined_snapshot_id.value_or(static_cast<Int64>(dis(gen)));

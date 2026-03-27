@@ -116,6 +116,13 @@ private:
     void cancelBuffers();
     bool initializeMetadata();
 
+    /// When a catalog is available, fetches the current metadata-file path from the catalog
+    /// and returns a copy of `data_lake_settings` with `iceberg_metadata_file_path` set to the
+    /// freshly fetched value. This prevents stale-metadata conflicts (e.g. Unity Catalog error 2012)
+    /// that arise when the table has been updated by another writer since ClickHouse last loaded it.
+    /// Falls back to `data_lake_settings` unchanged when no catalog is configured.
+    DataLakeStorageSettings getDataLakeSettingsWithFreshMetadataPath() const;
+
     FileNamesGenerator filename_generator;
     std::optional<ChunkPartitioner> partitioner;
     Poco::JSON::Object::Ptr partititon_spec;

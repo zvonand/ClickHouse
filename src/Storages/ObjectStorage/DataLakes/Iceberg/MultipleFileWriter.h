@@ -36,7 +36,7 @@ public:
 
     const std::vector<Iceberg::IcebergPathFromMetadata> & getDataFiles() const
     {
-        return data_file_metadata_names;
+        return data_file_names;
     }
 
     const DataFileStatistics & getResultStatistics() const

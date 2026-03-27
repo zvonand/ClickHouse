@@ -115,6 +115,12 @@ endif()
 clickhouse_add_executable(clickhouse-examples ${EXAMPLES_SOURCES})
 target_link_libraries(clickhouse-examples PRIVATE dbms clickhouse_aggregate_functions clickhouse_functions)
 
+if (OS_LINUX)
+    # Build as non-PIE so jemalloc heap profile addresses are stable across processes,
+    # enabling cross-process batch symbolization with --symbolize-batch (needed by parser_memory_profiler).
+    target_link_options(clickhouse-examples PRIVATE -no-pie -Wl,-no-pie)
+endif()
+
 if (TARGET ch_contrib::krb5)
     target_link_libraries(clickhouse-examples PRIVATE ch_contrib::krb5)
 endif()

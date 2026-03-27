@@ -46,7 +46,7 @@ git pull origin <head_branch>
 
 **If the branch is in the author's fork:**
 ```bash
-git remote add <author_login> https://github.com/<author_login>/ClickHouse.git 2>/dev/null || true
+git remote add <author_login> https://github.com/<author_login>/ClickHouse.git 2>/dev/null || git remote set-url <author_login> https://github.com/<author_login>/ClickHouse.git
 git fetch <author_login> <head_branch>
 git checkout -b <head_branch> <author_login>/<head_branch> 2>/dev/null || git checkout <head_branch>
 git pull <author_login> <head_branch>
@@ -113,7 +113,9 @@ gh pr view $PR_NUMBER --json reviews,comments --jq '.reviews[] | select(.state !
 gh api repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/comments --paginate --jq '.[] | select(.in_reply_to_id == null or .in_reply_to_id == 0) | {author: .user.login, body: .body, path: .path, line: .line, created_at: .created_at}'
 ```
 
-Also fetch review comment threads to identify which are resolved and which are not:
+Also fetch review comment threads to identify which are resolved and which are not.
+
+**If `gh` is available:**
 
 ```bash
 # Paginate through all review threads (PRs may have more than 100)
@@ -131,7 +133,8 @@ while true; do
           pageInfo { hasNextPage endCursor }
           nodes {
             isResolved
-            comments(first: 10) {
+            comments(first: 100) {
+              pageInfo { hasNextPage endCursor }
               nodes {
                 author { login }
                 body
@@ -150,6 +153,16 @@ while true; do
   CURSOR=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
 done
 ```
+
+If any thread has `comments.pageInfo.hasNextPage == true`, issue a follow-up GraphQL query for that thread to fetch remaining comments.
+
+**If `gh` is not available (WebFetch fallback):**
+
+The GraphQL API for review threads requires authentication, so unresolved-thread detection is not possible via `WebFetch`. In this case:
+1. Fetch all review comments from the REST API: `https://api.github.com/repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/comments?per_page=100` (follow pagination via `Link` header)
+2. Group comments by `pull_request_review_id` and `in_reply_to_id` to reconstruct threads
+3. Treat all threads as potentially unresolved (since resolution status is only available via GraphQL)
+4. Note in the output that thread resolution status could not be determined without `gh` authentication
 
 For each unresolved review thread:
 1. Read the comment and understand what the reviewer is asking for

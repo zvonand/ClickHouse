@@ -58,18 +58,24 @@ def test_mixed_authentication_methods(started_cluster):
 
 
 def test_auth_types_in_system_table(started_cluster):
-    """system.users reflects the correct auth types for all users"""
+    """system.users reflects the correct auth types for all users.
+
+    auth_type is Enum8, so ORDER BY auth_type sorts by numeric enum value, not
+    alphabetically by name. The expected values below must match that ordering:
+      plaintext_password = 1, double_sha1_password = 3, sha256_password = 2.
+    """
     result = node.query(
-        "SELECT arrayJoin(auth_type) AS auth_type FROM system.users WHERE name = 'multi_plaintext' ORDER BY auth_type"
+        "SELECT arrayJoin(arraySort(auth_type)) AS auth_type FROM system.users WHERE name = 'multi_plaintext'"
     )
     assert TSV(result) == TSV([["plaintext_password"]] * 3)
 
     result = node.query(
-        "SELECT arrayJoin(auth_type) AS auth_type FROM system.users WHERE name = 'multi_sha256' ORDER BY auth_type"
+        "SELECT arrayJoin(arraySort(auth_type)) AS auth_type FROM system.users WHERE name = 'multi_sha256'"
     )
     assert TSV(result) == TSV([["sha256_password"]] * 2)
 
     result = node.query(
-        "SELECT arrayJoin(auth_type) AS auth_type FROM system.users WHERE name = 'mixed_auth' ORDER BY auth_type"
+        "SELECT arrayJoin(arraySort(auth_type)) AS auth_type FROM system.users WHERE name = 'mixed_auth'"
     )
+    # plaintext_password(1) < double_sha1_password(3), so plaintext comes first
     assert TSV(result) == TSV([["plaintext_password"], ["double_sha1_password"], ["double_sha1_password"]])

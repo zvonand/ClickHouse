@@ -2121,7 +2121,7 @@ CONV_FN(MySQLFunc, mfunc)
 CONV_FN(PostgreSQLFunc, pfunc)
 {
     ret += "postgresql(";
-    appendSQLStringLiteral(ret, pfunc.rdatabase());
+    appendSQLStringLiteral(ret, pfunc.address());
     ret += ", ";
     appendSQLStringLiteral(ret, pfunc.rdatabase());
     ret += ", ";

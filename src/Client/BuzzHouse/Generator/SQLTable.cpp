@@ -1991,7 +1991,7 @@ void StatementGenerator::addTableProjection(RandomGenerator & rg, SQLTable & t, 
 
 void StatementGenerator::addTableConstraint(RandomGenerator & rg, SQLTable & t, const bool staged, ConstraintDef * cdef)
 {
-    const String crname = rg.nextIdentifier("c", t.constr_counter++, fc.allow_nasty_identifiers);
+    String crname = rg.nextIdentifier("c", t.constr_counter++, fc.allow_nasty_identifiers);
     auto & to_add = staged ? t.staged_constrs : t.constrs;
     const bool prev_allow_in_expression_alias = this->allow_in_expression_alias;
     std::uniform_int_distribution<uint32_t> constr_range(1, static_cast<uint32_t>(ConstraintDef::ConstraintType_MAX));

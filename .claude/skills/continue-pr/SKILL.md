@@ -134,6 +134,7 @@ while true; do
         reviewThreads(first: 100${AFTER_CLAUSE}) {
           pageInfo { hasNextPage endCursor }
           nodes {
+            id
             isResolved
             comments(first: 100) {
               pageInfo { hasNextPage endCursor }
@@ -156,7 +157,28 @@ while true; do
 done
 ```
 
-If any thread has `comments.pageInfo.hasNextPage == true`, issue a follow-up GraphQL query for that thread to fetch remaining comments.
+If any thread has `comments.pageInfo.hasNextPage == true`, issue a follow-up GraphQL query using the thread's `id` and the `endCursor` to fetch remaining comments:
+
+```bash
+gh api graphql -f query="
+{
+  node(id: \"<thread_id>\") {
+    ... on PullRequestReviewThread {
+      comments(first: 100, after: \"<end_cursor>\") {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          author { login }
+          body
+          path
+          line
+        }
+      }
+    }
+  }
+}"
+```
+
+Repeat until `hasNextPage` is `false`.
 
 **If `gh` is not available (WebFetch fallback):**
 

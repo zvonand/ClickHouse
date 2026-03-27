@@ -3296,16 +3296,20 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
     elem.filter_expression = filter_expr;
 
     UInt64 prev_granules = 0;
-    for (const auto & stat : result.index_stats)
+    for (size_t i = 0; i < result.index_stats.size(); ++i)
     {
-        /// any filtering — record it as the baseline and skip it
+        const auto & stat = result.index_stats[i];
+
+        /// IndexType::None is the baseline — use it to seed prev_granules and skip it
         if (stat.type == IndexType::None)
         {
             prev_granules = stat.num_granules_after;
             continue;
         }
 
-        UInt64 total = prev_granules;
+        /// if there's no None baseline (distributed index analysis path),
+        /// use the first real stage's own granule count as the baseline
+        UInt64 total = prev_granules > 0 ? prev_granules : stat.num_granules_after;
         UInt64 after = stat.num_granules_after;
         Float64 selectivity = total > 0 ? static_cast<Float64>(after) / static_cast<Float64>(total) : 1.0;
 

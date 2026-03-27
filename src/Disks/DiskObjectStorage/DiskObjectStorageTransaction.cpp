@@ -324,7 +324,7 @@ std::unique_ptr<WriteBufferFromFileBase> DiskObjectStorageTransaction::writeFile
     {
         object.bytes_size = count;
 
-        /// Locations to which blocks were not originally copied should be marked as missing.
+        /// Locations to which blobs were not originally copied should be marked as missing.
         auto missing_locations = disk_tx->cluster->findComplement(replicated_locations);
         disk_tx->operations_to_execute.push_back([object, mode, create_blob_if_empty, blob_replication = std::move(missing_locations)](MetadataTransactionPtr tx)
         {

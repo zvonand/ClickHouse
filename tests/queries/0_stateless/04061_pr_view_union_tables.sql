@@ -46,14 +46,14 @@ INSERT INTO t_rtb_hourly_1
 
 INSERT INTO t_rtb_hourly_2
     SELECT
-        toDateTime('2024-02-01', 'UTC') + toIntervalHour(number % 720),
+        toDateTime('2024-01-01', 'UTC') + toIntervalHour(number % 720),
         number % 3,
         number % 20,
         number % 20,
         number % 5,
         1,
         1
-    FROM numbers(5000);
+    FROM numbers(10000);
 
 CREATE VIEW v_rtb_union AS
     SELECT * FROM t_rtb_hourly_1

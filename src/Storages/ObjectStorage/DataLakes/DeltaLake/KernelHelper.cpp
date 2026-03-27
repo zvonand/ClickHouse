@@ -255,8 +255,8 @@ public:
 
         LOG_TRACE(
             log,
-            "Using storage_account_url : {}, container: {}, data_path: {}",
-            connection_params.getConnectionURL(), endpoint.container_name, data_path);
+            "Using azure container: {}, data_path: {}",
+            endpoint.container_name, data_path);
 
         return builder;
     }

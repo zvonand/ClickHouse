@@ -11,6 +11,7 @@
 #include <Storages/MergeTree/MarkRange.h>
 #include <Storages/MergeTree/RangesInDataPart.h>
 
+#include <Interpreters/StorageID.h>
 
 namespace DB
 {
@@ -51,6 +52,7 @@ struct ParallelReadRequest
         , replica_num(replica_num_)
         , min_marks_per_request(min_marks_per_request_)
         , description(std::move(description_))
+        , table_id(StorageID::createEmpty())
     {}
 
     CoordinationMode mode;
@@ -64,6 +66,8 @@ struct ParallelReadRequest
     /// Extension for Ordered (InOrder or ReverseOrder) mode
     /// Contains only data part names without mark ranges.
     RangesInDataPartsDescription description;
+
+    StorageID table_id;
 
     void serialize(WriteBuffer & out, UInt64 initiator_pr_protocol_version, UInt64 initiator_tcp_protocol_version) const;
     String describe() const;
@@ -79,6 +83,7 @@ struct ParallelReadResponse
 {
     bool finish{false};
     RangesInDataPartsDescription description;
+    StorageID table_id = StorageID::createEmpty();
 
     void serialize(WriteBuffer & out, UInt64 replica_pr_protocol_version, UInt64 replica_tcp_protocol_version) const;
     String describe() const;
@@ -105,6 +110,7 @@ struct InitialAllRangesAnnouncement
         , replica_num(replica_num_)
         , mark_segment_size(mark_segment_size_)
         , min_marks_per_request(min_marks_per_request_)
+        , table_id(StorageID::createEmpty())
     {}
 
     CoordinationMode mode;
@@ -116,6 +122,8 @@ struct InitialAllRangesAnnouncement
     /// this value is sent once in the initial announcement.
     /// Total number of marks the replica wants per coordinator request.
     size_t min_marks_per_request;
+
+    StorageID table_id;
 
     void serialize(WriteBuffer & out, UInt64 initiator_pr_protocol_version, UInt64 initiator_tcp_protocol_version) const;
     String describe();

@@ -42,6 +42,11 @@ void ParallelReadRequest::serialize(WriteBuffer & out, UInt64 initiator_pr_proto
     writeIntBinary(replica_num, out);
     writeIntBinary(min_marks_per_request, out);
     description.serialize(out, initiator_pr_protocol_version);
+    if (initiator_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    {
+        writeStringBinary(table_id.database_name, out);
+        writeStringBinary(table_id.table_name, out);
+    }
 }
 
 String ParallelReadRequest::describe() const
@@ -74,7 +79,13 @@ ParallelReadRequest ParallelReadRequest::deserialize(ReadBuffer & in, UInt64 rep
     readIntBinary(min_marks_per_request, in);
     description.deserialize(in, replica_pr_protocol_version);
 
-    return ParallelReadRequest(mode, replica_num, min_marks_per_request, std::move(description));
+    auto result = ParallelReadRequest(mode, replica_num, min_marks_per_request, std::move(description));
+    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    {
+        readStringBinary(result.table_id.database_name, in);
+        readStringBinary(result.table_id.table_name, in);
+    }
+    return result;
 }
 
 void ParallelReadRequest::merge(ParallelReadRequest & other)
@@ -98,6 +109,11 @@ void ParallelReadResponse::serialize(WriteBuffer & out, UInt64 replica_pr_protoc
 
     writeBoolText(finish, out);
     description.serialize(out, replica_pr_protocol_version);
+    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    {
+        writeStringBinary(table_id.database_name, out);
+        writeStringBinary(table_id.table_name, out);
+    }
 }
 
 String ParallelReadResponse::describe() const
@@ -118,6 +134,11 @@ void ParallelReadResponse::deserialize(ReadBuffer & in, UInt64 replica_pr_protoc
 
     readBoolText(finish, in);
     description.deserialize(in, replica_pr_protocol_version);
+    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    {
+        readStringBinary(table_id.database_name, in);
+        readStringBinary(table_id.table_name, in);
+    }
 }
 
 
@@ -139,6 +160,11 @@ void InitialAllRangesAnnouncement::serialize(
         writeIntBinary(mark_segment_size, out);
     if (initiator_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
         writeIntBinary(min_marks_per_request, out);
+    if (initiator_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    {
+        writeStringBinary(table_id.database_name, out);
+        writeStringBinary(table_id.table_name, out);
+    }
 }
 
 
@@ -176,7 +202,13 @@ InitialAllRangesAnnouncement InitialAllRangesAnnouncement::deserialize(ReadBuffe
     if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
         readIntBinary(min_marks_per_request, in);
 
-    return InitialAllRangesAnnouncement{mode, description, replica_num, mark_segment_size, min_marks_per_request};
+    auto result = InitialAllRangesAnnouncement{mode, description, replica_num, mark_segment_size, min_marks_per_request};
+    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    {
+        readStringBinary(result.table_id.database_name, in);
+        readStringBinary(result.table_id.table_name, in);
+    }
+    return result;
 }
 
 }

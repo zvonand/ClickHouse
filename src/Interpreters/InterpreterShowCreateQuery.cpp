@@ -53,7 +53,7 @@ QueryPipeline InterpreterShowCreateQuery::executeImpl()
         (show_query = query_ptr->as<ASTShowCreateViewQuery>()) ||
         (show_query = query_ptr->as<ASTShowCreateDictionaryQuery>()))
     {
-        auto resolve_table_type = show_query->isTemporary() ? Context::ResolveExternal : Context::ResolveOrdinary;
+        auto resolve_table_type = show_query->isTemporary() ? Context::ResolveExternal : Context::ResolveAll;
         auto table_id = getContext()->resolveStorageID(*show_query, resolve_table_type);
 
         bool is_dictionary = static_cast<bool>(query_ptr->as<ASTShowCreateDictionaryQuery>());

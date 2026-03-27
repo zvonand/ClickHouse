@@ -18,6 +18,7 @@ bool ParserDescribeTableQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & ex
 {
     ParserKeyword s_describe(Keyword::DESCRIBE);
     ParserKeyword s_desc(Keyword::DESC);
+    ParserKeyword s_temporary(Keyword::TEMPORARY);
     ParserKeyword s_table(Keyword::TABLE);
     ParserKeyword s_settings(Keyword::SETTINGS);
     ParserSetQuery parser_settings(true);
@@ -28,6 +29,9 @@ bool ParserDescribeTableQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & ex
         return false;
 
     auto query = make_intrusive<ASTDescribeQuery>();
+
+    if (s_temporary.ignore(pos, expected))
+        query->temporary = true;
 
     s_table.ignore(pos, expected);
 

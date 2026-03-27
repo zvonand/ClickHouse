@@ -65,13 +65,25 @@ FROM (EXPLAIN indexes = 1 SELECT * FROM t_json_text WHERE 1 = json.a.b)
 WHERE explain LIKE '%Parts:%' OR explain LIKE '%Granules:%' OR explain LIKE '%Skip%';
 
 -- =============================================================================
--- Section 2: IN — no JSON support in tryPrepareSetForTextSearch
+-- Section 2: IN — path-existence filtering via traverseJSONSubcolumnKeyNode
 -- =============================================================================
 
--- 2a: IN with typed subcolumn — text index does not support JSON IN
-SELECT 'text IN not supported';
+-- 2a: IN with typed subcolumn — path-existence skip works
+SELECT 'text IN typed subcolumn';
 SELECT trimLeft(explain)
 FROM (EXPLAIN indexes = 1 SELECT * FROM t_json_text WHERE json.a.b.:Int64 IN (1, 2, 3))
+WHERE explain LIKE '%Parts:%' OR explain LIKE '%Granules:%' OR explain LIKE '%Skip%';
+
+-- 2b: IN with subquery — set must be built before evaluation
+SELECT 'text IN subquery';
+SELECT trimLeft(explain)
+FROM (EXPLAIN indexes = 1 SELECT * FROM t_json_text WHERE json.a.b.:Int64 IN (SELECT number FROM numbers(3)))
+WHERE explain LIKE '%Parts:%' OR explain LIKE '%Granules:%' OR explain LIKE '%Skip%';
+
+-- 2c: IN with CAST containing zero — unsafe (CAST default is 0, which is in the set)
+SELECT 'text IN CAST with zero unsafe';
+SELECT trimLeft(explain)
+FROM (EXPLAIN indexes = 1 SELECT * FROM t_json_text WHERE json.a.b::Int64 IN (0, 1, 2))
 WHERE explain LIKE '%Parts:%' OR explain LIKE '%Granules:%' OR explain LIKE '%Skip%';
 
 -- =============================================================================
@@ -204,5 +216,12 @@ SELECT id FROM t_json_text_res WHERE json.a.b = 1 OR json.x.y = 3 ORDER BY id;
 
 SELECT 'result: text AND nonexistent';
 SELECT id FROM t_json_text_res WHERE json.a.b = 1 AND json.nonexistent = 99 ORDER BY id;
+
+-- IN
+SELECT 'result: text IN';
+SELECT id FROM t_json_text_res WHERE json.a.b.:Int64 IN (1, 2, 3) ORDER BY id;
+
+SELECT 'result: text IN subquery';
+SELECT id FROM t_json_text_res WHERE json.a.b.:Int64 IN (SELECT number FROM numbers(3)) ORDER BY id;
 
 DROP TABLE t_json_text_res;

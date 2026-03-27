@@ -13,6 +13,7 @@
 #include <Storages/MergeTree/MergeTreeIndexTextPreprocessor.h>
 #include <Storages/MergeTree/TextIndexCache.h>
 #include <DataTypes/DataTypeMapHelpers.h>
+#include <DataTypes/DataTypeNullable.h>
 #include <Common/OptimizedRegularExpression.h>
 #include <Columns/ColumnSet.h>
 #include <Interpreters/ExpressionActions.h>
@@ -505,23 +506,6 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
         direct_read_mode = getHintOrNoneMode();
     }
 
-    /// Try to match JSON subcolumn for JSONAllPaths index.
-    /// tryMatchNodeToJSONIndex handles both plain identifiers and CAST-unwrapped expressions.
-    auto json_info = tryMatchNodeToJSONIndex(index_column_node, header);
-
-    if (json_info && function_name == "equals")
-    {
-        auto key_type = index_column_node.getDAGNode()->result_type;
-        if (!isJSONPathFilterSafe(key_type, value_field))
-            return false;
-
-        auto tokens = stringToTokens(Field(json_info->path));
-        out.function = RPNElement::FUNCTION_EQUALS;
-        out.text_search_queries.emplace_back(std::make_shared<TextSearchQuery>(
-            function_name, TextSearchMode::All, getHintOrNoneMode(), std::move(tokens)));
-        return true;
-    }
-
     /// Try to parse map subcolumn reference like `map.key_<serialized_key>` for `mapValues` index.
     if (!has_index_column && !has_map_keys_column && !has_map_values_column)
     {
@@ -842,7 +826,7 @@ bool MergeTreeIndexConditionText::traverseJSONSubcolumnKeyNode(
 
     const auto * dag_node = function_node.getDAGNode();
     if (!dag_node || !dag_node->function_base || !dag_node->isDeterministic()
-        || !WhichDataType(dag_node->result_type).isUInt8())
+        || !WhichDataType(removeNullable(dag_node->result_type)).isUInt8())
         return false;
 
     auto subdag = ActionsDAG::cloneSubDAG({dag_node}, true);
@@ -859,6 +843,26 @@ bool MergeTreeIndexConditionText::traverseJSONSubcolumnKeyNode(
     auto json_info = tryMatchJSONSubcolumnToIndex(required_column.name, header);
     if (!json_info)
         return false;
+
+    /// If the DAG contains a Set (e.g. from an IN subquery), try to build it before execution.
+    /// The Set may not be ready yet because it is built later during query execution.
+    for (const auto & node : subdag.getNodes())
+    {
+        if (node.type != ActionsDAG::ActionType::COLUMN)
+            continue;
+
+        const auto * column_set = checkAndGetColumn<ColumnSet>(node.column.get());
+        if (!column_set)
+            continue;
+
+        auto future_set = column_set->getData();
+        if (!future_set)
+            return false;
+
+        auto prepared_set = future_set->buildOrderedSetInplace(getContext());
+        if (!prepared_set || !prepared_set->hasExplicitSetElements())
+            return false;
+    }
 
     /// Evaluate the function on a default column value.
     /// If the function returns true for the default value (what we'd get when the path is missing),

@@ -118,11 +118,16 @@ void addCommandsHandlersToFactory(
 }
 
 template <typename H>
-void addStrictHandler(KeeperHTTPRequestHandlerFactory & factory, const char * path)
+void addStrictHandler(KeeperHTTPRequestHandlerFactory & factory, const std::string & path)
 {
     auto handler = std::make_shared<HandlingRuleHTTPHandlerFactory<H>>(
         [] { return std::make_unique<H>(); });
-    handler->attachStrictPath(path);
+    handler->addFilter([path](const auto & request)
+    {
+        const auto & uri = request.getURI();
+        return uri == path
+            || (uri.size() > path.size() && uri.starts_with(path) && uri[path.size()] == '?');
+    });
     handler->allowGetAndHeadRequest();
     factory.addHandler(handler);
 }

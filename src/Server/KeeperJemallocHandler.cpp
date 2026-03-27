@@ -82,6 +82,8 @@ try
         return;
     }
 
+    Jemalloc::checkProfilingEnabled();
+
     if (request.getMethod() == HTTPRequest::HTTP_HEAD)
     {
         setResponseDefaultHeaders(response);
@@ -133,12 +135,21 @@ void KeeperJemallocStatsHandler::handleRequest(
     HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event &)
 try
 {
+    if (request.getMethod() == HTTPRequest::HTTP_HEAD)
+    {
+        setResponseDefaultHeaders(response);
+        response.setContentType("text/plain; charset=UTF-8");
+        response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
+        response.send();
+        return;
+    }
+
     auto stats = Jemalloc::getStats();
 
     setResponseDefaultHeaders(response);
     response.setContentType("text/plain; charset=UTF-8");
     response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_OK);
-    auto wb = WriteBufferFromHTTPServerResponse(response, request.getMethod() == HTTPRequest::HTTP_HEAD);
+    auto wb = WriteBufferFromHTTPServerResponse(response, false);
     wb.write(stats.data(), stats.size());
     wb.finalize();
 }

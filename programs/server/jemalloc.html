@@ -2197,6 +2197,7 @@
                     const response = await fetch(location.origin + '/jemalloc/status');
                     if (!response.ok) return null;
                     const status = await response.json();
+                    if (status.errors && status.errors.length > 0) return null;
                     return status.prof_enabled && status.thread_active_init;
                 }
                 readConnectionParams();

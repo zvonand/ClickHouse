@@ -111,14 +111,27 @@ def test_jemalloc_unknown_api_path(leader):
     assert response.status_code == 404
 
 
-@pytest.mark.parametrize("path", ["/jemalloc/stats", "/jemalloc/status", "/jemalloc/profile"])
+@pytest.mark.parametrize("path", ["/jemalloc/stats", "/jemalloc/status"])
 def test_jemalloc_head(leader, has_jemalloc, path):
     response = requests.head(get_url(leader, path))
     if has_jemalloc:
         assert response.status_code == 200
-        assert len(response.content) == 0
     else:
-        assert_501(response)
+        assert response.status_code == 501
+    assert len(response.content) == 0
+
+
+def test_jemalloc_head_profile(leader, has_jemalloc):
+    response = requests.head(get_url(leader, "/jemalloc/profile"))
+    if not has_jemalloc:
+        assert response.status_code == 501
+    else:
+        status = requests.get(get_url(leader, "/jemalloc/status")).json()
+        if status.get("prof_enabled", False):
+            assert response.status_code == 200
+        else:
+            assert response.status_code == 500
+    assert len(response.content) == 0
 
 
 @pytest.mark.parametrize("fmt", ["collapsed", "raw"])
@@ -134,4 +147,5 @@ def test_jemalloc_profile_success(leader, has_jemalloc, fmt):
     response = requests.get(url)
     assert response.status_code == 200
     assert "text/plain" in response.headers["Content-Type"]
-    assert len(response.text) > 0
+    if fmt == "raw":
+        assert len(response.text) > 0

@@ -4919,6 +4919,14 @@ void QueryAnalyzer::inlineViewSubqueryIfNeeded(QueryTreeNodePtr & join_tree_node
     /// Preserve alias: the outer query references columns via the view name or user-provided alias.
     view_query_tree->setAlias(table_node->getAlias());
 
+    /// Mark the inlined query as a subquery so it is wrapped in parentheses when serialized to AST
+    /// (e.g. for sending to parallel replicas). Without this, it produces `FROM SELECT ...` instead
+    /// of `FROM (SELECT ...)`.
+    if (auto * query_node = view_query_tree->as<QueryNode>())
+        query_node->setIsSubquery(true);
+    else if (auto * union_node = view_query_tree->as<UnionNode>())
+        union_node->setIsSubquery(true);
+
     /// Fix scope tracking: the old TableNode pointer was inserted during initializeQueryJoinTreeNode.
     auto * old_ptr = join_tree_node.get();
     scope.table_expressions_in_resolve_process.erase(old_ptr);

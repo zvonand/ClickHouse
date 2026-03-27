@@ -9,8 +9,8 @@
 namespace DB
 {
 
-/// PredicateStatisticsLog records predicate selectivity statistics collected
-/// from `FilterTransform` (row-level per-atom) and `ReadFromMergeTree` (index-level per-stage)
+/// Predicate selectivity from `FilterTransform` (row-level) and `ReadFromMergeTree` (index-level).
+/// Filter selectivity is per whole expression, not per atom. Table name needs `use_query_condition_cache`
 struct PredicateStatisticsLogElement
 {
     UInt16 event_date{};

@@ -74,37 +74,38 @@ ColumnsDescription PredicateStatisticsLogElement::getColumnsDescription()
             "column_name",
             lc_string,
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Column referenced by the predicate atom (filter source only)."
+            "Column referenced by a predicate atom extracted from the filter expression. One row per atom; "
+            "input_rows/passed_rows/filter_selectivity reflect the whole filter, not this atom alone."
         },
         {
             "predicate_class",
             lc_string,
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Predicate classification: Equality, Range, In, LikeSubstring, IsNull, Other (filter source only)."
+            "Classification of the predicate atom: Equality, Range, In, LikeSubstring, IsNull, Other."
         },
         {
             "function_name",
             lc_string,
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Function name from the DAG, e.g. equals, less (filter source only)."
+            "DAG function name of the predicate atom, e.g. equals, less, in."
         },
         {
             "input_rows",
             std::make_shared<DataTypeUInt64>(),
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Rows entering the filter chunk (filter source only)."
+            "Rows entering the filter chunk. Reflects the whole filter expression, not per-atom."
         },
         {
             "passed_rows",
             std::make_shared<DataTypeUInt64>(),
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Rows passing the filter chunk (filter source only)."
+            "Rows passing the filter chunk. Reflects the whole filter expression, not per-atom."
         },
         {
             "filter_selectivity",
             std::make_shared<DataTypeFloat64>(),
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Filter selectivity: passed_rows / input_rows (filter source only)."
+            "Selectivity of the whole filter expression: passed_rows / input_rows. Shared across all atoms from the same chunk."
         },
         {
             "index_names",

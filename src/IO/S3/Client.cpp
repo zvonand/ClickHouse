@@ -7,6 +7,7 @@
 #include <Poco/MD5Engine.h>
 #include <Common/CurrentThread.h>
 #include <Common/Exception.h>
+#include <Common/SipHash.h>
 
 #include <aws/core/Aws.h>
 #include <aws/core/client/CoreErrors.h>

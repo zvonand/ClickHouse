@@ -32,7 +32,6 @@ struct ServerSideEncryptionKMSConfig
 #include <IO/S3/PocoHTTPClient.h>
 #include <IO/S3/Credentials.h>
 #include <IO/S3/ProviderType.h>
-#include <Common/SipHash.h>
 #include <Common/HashTable/Hash.h>
 
 #include <aws/core/Aws.h>

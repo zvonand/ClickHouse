@@ -1147,7 +1147,7 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
 
     nuraft::byte * getChunk(uint64_t offset, uint64_t length, LoggerPtr log_) override
     {
-        if (has_error.load(std::memory_order_acquire))
+        if (has_error.load(std::memory_order_relaxed))
             return nullptr;
 
         const uint64_t needed = offset + length;

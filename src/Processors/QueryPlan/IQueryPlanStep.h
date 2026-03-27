@@ -4,9 +4,9 @@
 #include <Core/SortDescription.h>
 #include <Interpreters/ActionsDAG.h>
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
-#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <string_view>
 #include <variant>
+
 
 namespace DB
 {
@@ -34,6 +34,7 @@ struct ExplainPlanOptions;
 class IQueryPlanStep;
 using QueryPlanStepPtr = std::unique_ptr<IQueryPlanStep>;
 
+struct ExplainFormatSettings;
 
 /// Single step of query plan.
 class IQueryPlanStep

@@ -1,4 +1,5 @@
 #include <Processors/QueryPlan/FillingStep.h>
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <Processors/Transforms/FillingTransform.h>
 #include <QueryPipeline/QueryPipelineBuilder.h>
 #include <IO/Operators.h>

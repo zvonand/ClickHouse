@@ -1,5 +1,6 @@
 #include <Processors/QueryPlan/FilterStep.h>
 
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <Processors/QueryPlan/QueryPlanStepRegistry.h>
 #include <Processors/QueryPlan/Serialization.h>
 #include <Processors/Transforms/FilterTransform.h>
@@ -213,7 +214,7 @@ void FilterStep::describeActions(FormatSettings & settings) const
     }
 
     settings.out << prefix << "Filter column: "
-        << QueryPlanFormat::formatColumnPretty(filter_column_name, settings.pretty_names);
+        << (settings.pretty ? QueryPlanFormat::formatColumnPretty(filter_column_name, settings.pretty_names) : filter_column_name);
 
     if (!settings.pretty && remove_filter_column)
         settings.out << " (removed)";

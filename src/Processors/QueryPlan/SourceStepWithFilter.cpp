@@ -1,4 +1,5 @@
 #include <Processors/QueryPlan/IQueryPlanStep.h>
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <Processors/QueryPlan/SourceStepWithFilter.h>
 
 #include <DataTypes/DataTypeLowCardinality.h>

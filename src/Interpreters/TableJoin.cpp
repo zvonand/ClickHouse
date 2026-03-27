@@ -26,6 +26,7 @@
 #include <Parsers/ASTExpressionList.h>
 #include <Parsers/ASTFunction.h>
 
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <Processors/QueryPlan/IQueryPlanStep.h>
 #include <Storages/IStorage.h>
 #include <Storages/StorageDictionary.h>

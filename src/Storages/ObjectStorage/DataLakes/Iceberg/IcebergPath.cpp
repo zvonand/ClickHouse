@@ -27,7 +27,7 @@ String IcebergPathResolver::resolve(const IcebergPathFromMetadata & metadata_pat
 
     auto raw_path = metadata_path.serialize();
 
-    if (raw_path.starts_with(table_location) && table_location.ends_with(table_root))
+    if (raw_path.starts_with(table_location))
     {
         auto result = std::filesystem::path{table_root} / trim_forward_slash(raw_path.substr(table_location.size()));
         return result;

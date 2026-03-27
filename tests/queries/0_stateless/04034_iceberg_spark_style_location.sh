@@ -3,7 +3,7 @@
 # Positive test: Spark-created Iceberg table where metadata location field uses
 # a completely different scheme/bucket (s3a://spark-bucket/...) than ClickHouse's path.
 # The manifest-list entries use full absolute paths with Spark's URI.
-# getProperFilePathFromMetadataInfo should strip table_location prefix and prepend common_path.
+# IcebergPathResolver::resolve should strip table_location prefix and prepend table_root.
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -40,8 +40,8 @@ print(json.dumps(m))
     SELECT * FROM input('line String') FORMAT LineAsString
 "
 
-# The query should succeed: getProperFilePathFromMetadataInfo strips the Spark
-# table_location prefix from the manifest-list path and prepends common_path.
+# The query should succeed: IcebergPathResolver::resolve strips the Spark
+# table_location prefix from the manifest-list path and prepends table_root.
 ${CLICKHOUSE_CLIENT} --use_iceberg_metadata_files_cache 0 -q "
     SELECT * FROM icebergS3(s3_conn, filename='${TABLE_PATH}');
 "

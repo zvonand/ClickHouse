@@ -20,7 +20,7 @@ ${CLICKHOUSE_CLIENT} --allow_experimental_insert_into_iceberg 1 -q "
 # Modify metadata: set location to a very long path, manifest-list to just the filename.
 # This simulates a Spark-created table where ClickHouse rewrites the location field
 # but Spark's manifest-list entries use short relative paths.
-# Before the fix this caused std::out_of_range exception in getProperFilePathFromMetadataInfo
+# Before the fix this caused std::out_of_range exception in IcebergPathResolver::resolve
 # because table_location is longer than data_path (the manifest filename),
 # causing unsigned underflow and out-of-range substr.
 ${CLICKHOUSE_CLIENT} -q "
@@ -40,7 +40,7 @@ print(json.dumps(m))
 
 # Disable iceberg metadata cache as a client-level setting so the modified metadata
 # file is actually re-read (not served from cache populated during CREATE TABLE above).
-# Before the fix this would crash with std::out_of_range in getProperFilePathFromMetadataInfo.
+# Before the fix this would crash with std::out_of_range in IcebergPathResolver::resolve.
 # After the fix it returns a proper BAD_ARGUMENTS error about unresolvable path.
 ${CLICKHOUSE_CLIENT} --use_iceberg_metadata_files_cache 0 -q "
     SELECT * FROM icebergS3(s3_conn, filename='${TABLE_PATH}');

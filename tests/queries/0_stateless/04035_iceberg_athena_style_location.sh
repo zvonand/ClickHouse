@@ -7,7 +7,7 @@
 #   ├── <uuid_old>/data/*.parquet        ← data from previous dbt run
 #   └── <uuid_new>/metadata/             ← current metadata referencing old data
 # ClickHouse points at <uuid_new>, but manifests reference data under <uuid_old>.
-# getProperFilePathFromMetadataInfo must strip the scheme://bucket/ prefix correctly.
+# IcebergPathResolver::resolve must strip the scheme://bucket/ prefix correctly.
 # Fixes https://github.com/ClickHouse/ClickHouse/issues/97234
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -103,7 +103,7 @@ ${CLICKHOUSE_CLIENT} -q "
 " 2>/dev/null
 
 # Query via the NEW_PATH — manifests reference data under OLD UUID.
-# getProperFilePathFromMetadataInfo strips scheme://bucket/ prefix to resolve cross-UUID paths.
+# IcebergPathResolver::resolve strips scheme://bucket/ prefix to resolve cross-UUID paths.
 ${CLICKHOUSE_CLIENT} --use_iceberg_metadata_files_cache 0 -q "
     SELECT * FROM icebergS3(s3_conn, filename='${NEW_PATH}');
 "

@@ -587,6 +587,9 @@ bool VersionMetadata::hasValidMetadata()
                 current_info.removal_tid,
                 persisted_info.removal_tid);
 
+        /// In-memory creation_csn can be learned from TransactionLog after commit while
+        /// the on-disk file still carries Tx::UnknownCSN — that is a valid transient state.
+        /// Similarly, RolledBackCSN is only ever written to the in-memory state, never to disk.
         if (current_info.creation_csn != persisted_info.creation_csn
             && current_info.creation_csn != Tx::RolledBackCSN
             && persisted_info.creation_csn != Tx::UnknownCSN)
@@ -596,7 +599,12 @@ bool VersionMetadata::hasValidMetadata()
                 current_info.creation_csn,
                 persisted_info.creation_csn);
 
-        if (current_info.removal_csn != persisted_info.removal_csn && current_info.removal_csn != Tx::NonTransactionalCSN)
+        /// Same reasoning as creation_csn above: in-memory removal_csn can be learned from
+        /// TransactionLog before the metadata file is rewritten with the final CSN.
+        /// NonTransactionalCSN is set in-memory immediately but may not yet be on disk.
+        if (current_info.removal_csn != persisted_info.removal_csn
+            && current_info.removal_csn != Tx::NonTransactionalCSN
+            && persisted_info.removal_csn != Tx::UnknownCSN)
             throw Exception(
                 ErrorCodes::CORRUPTED_DATA,
                 "Invalid version metadata, removal_csn mismatched {} and {}",

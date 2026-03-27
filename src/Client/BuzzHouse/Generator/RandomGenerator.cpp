@@ -343,7 +343,7 @@ String RandomGenerator::nextIdentifier(const String & prefix, const uint32_t cou
     /// ~20% chance: build a long identifier by concatenating more parts
     if (nextSmallNumber() < 3)
     {
-        const uint32_t extra = randomInt<uint32_t>(1, 10);
+        const uint32_t extra = randomInt<uint32_t>(1, 5);
 
         for (uint32_t i = 0; i < extra; i++)
         {

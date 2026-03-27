@@ -4934,7 +4934,7 @@ CONV_FN(Alter, alter)
 CONV_FN(Attach, at)
 {
     ret += "ATTACH ";
-    ret += SQLObjectToString(at.sobject());
+    ret += at.sobject() == SQLObject::VIEW ? "TABLE" : SQLObjectToString(at.sobject());
     ret += " ";
     SQLObjectNameToString(ret, at.object());
     if (at.has_cluster())
@@ -4957,7 +4957,7 @@ CONV_FN(Attach, at)
 CONV_FN(Detach, dt)
 {
     ret += "DETACH ";
-    ret += SQLObjectToString(dt.sobject());
+    ret += dt.sobject() == SQLObject::VIEW ? "TABLE" : SQLObjectToString(dt.sobject());
     ret += " ";
     SQLObjectNameToString(ret, dt.object());
     if (dt.has_cluster())
@@ -4983,7 +4983,6 @@ CONV_FN(SelectIntoFile, intofile)
 {
     ret += "INTO OUTFILE ";
     appendSQLStringLiteral(ret, intofile.path());
-    ret += intofile.path();
     if (intofile.tstdout())
     {
         ret += " AND STDOUT";

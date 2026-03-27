@@ -2,20 +2,12 @@
 
 #include <Interpreters/PredicateAtomExtractor.h>
 #include <Interpreters/ActionsDAG.h>
+#include <Common/tests/gtest_global_register.h>
 #include <Functions/FunctionFactory.h>
-#include <Functions/registerFunctions.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeString.h>
 
 using namespace DB;
-
-struct PredicateAtomExtractorFixture : public ::testing::Test
-{
-    static void SetUpTestSuite()
-    {
-        registerFunctions();
-    }
-};
 
 /// Helper to build a simple DAG node: function(column, constant)
 static const ActionsDAG::Node & makePredicateNode(
@@ -86,8 +78,9 @@ TEST(PredicateAtomExtractor, ExtractFromNullptr)
     EXPECT_TRUE(atoms.empty());
 }
 
-TEST_F(PredicateAtomExtractorFixture, ExtractSingleAtom)
+TEST(PredicateAtomExtractor, ExtractSingleAtom)
 {
+    tryRegisterFunctions();
     ActionsDAG dag;
     /// WHERE x = 1
     const auto & eq_node = makePredicateNode(dag, "equals", "x", std::make_shared<DataTypeUInt64>(), Field(UInt64(1)));
@@ -99,8 +92,9 @@ TEST_F(PredicateAtomExtractorFixture, ExtractSingleAtom)
     EXPECT_EQ(atoms[0].predicate_class, "Equality");
 }
 
-TEST_F(PredicateAtomExtractorFixture, ExtractConjunction)
+TEST(PredicateAtomExtractor, ExtractConjunction)
 {
+    tryRegisterFunctions();
     ActionsDAG dag;
     /// WHERE x = 1 AND y > 5
     const auto & eq_node = makePredicateNode(dag, "equals", "x", std::make_shared<DataTypeUInt64>(), Field(UInt64(1)));
@@ -120,8 +114,9 @@ TEST_F(PredicateAtomExtractorFixture, ExtractConjunction)
     EXPECT_TRUE(columns.count("y"));
 }
 
-TEST_F(PredicateAtomExtractorFixture, ExtractSkipsMultiColumnAtom)
+TEST(PredicateAtomExtractor, ExtractSkipsMultiColumnAtom)
 {
+    tryRegisterFunctions();
     ActionsDAG dag;
     /// WHERE x = y (two column inputs, no single column → skipped)
     const auto & x_node = dag.addInput("x", std::make_shared<DataTypeUInt64>());
@@ -134,8 +129,9 @@ TEST_F(PredicateAtomExtractorFixture, ExtractSkipsMultiColumnAtom)
     EXPECT_TRUE(atoms.empty());
 }
 
-TEST_F(PredicateAtomExtractorFixture, ExtractThroughAlias)
+TEST(PredicateAtomExtractor, ExtractThroughAlias)
 {
+    tryRegisterFunctions();
     ActionsDAG dag;
     /// WHERE alias(x = 1)
     const auto & eq_node = makePredicateNode(dag, "equals", "x", std::make_shared<DataTypeUInt64>(), Field(UInt64(1)));

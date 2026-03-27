@@ -75,6 +75,10 @@ std::vector<PredicateAtom> extractPredicateAtoms(const ActionsDAG::Node * filter
 
     for (const auto * atom_node : atoms)
     {
+        /// unwrap aliases to reach the underlying function node
+        while (atom_node->type == ActionsDAG::ActionType::ALIAS)
+            atom_node = atom_node->children[0];
+
         if (atom_node->type != ActionsDAG::ActionType::FUNCTION || !atom_node->function_base)
             continue;
 

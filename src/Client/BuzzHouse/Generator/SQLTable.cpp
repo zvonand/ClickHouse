@@ -1151,9 +1151,9 @@ String StatementGenerator::getTableStructure(RandomGenerator & rg, const SQLTabl
     for (const auto & entry : this->remote_entries)
     {
         buf += fmt::format(
-            "{}`{}` {}{}",
+            "{}{} {}{}",
             first ? "" : ", ",
-            entry.getBottomName(),
+            entry.getBottomNameSQL(),
             entry.getBottomType()->typeName(escape, false),
             entry.nullable.has_value() ? (entry.nullable.value() ? " NULL" : " NOT NULL") : "");
         first = false;

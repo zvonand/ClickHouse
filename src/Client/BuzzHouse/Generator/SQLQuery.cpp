@@ -1068,14 +1068,12 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
             std::shuffle(this->remote_entries.begin(), this->remote_entries.end(), rg.generator);
             for (const auto & entry : this->remote_entries)
             {
-                const String & bottomName = entry.getBottomName();
-
-                url += fmt::format("{}`{}`", first ? "" : ",", bottomName);
-                buf += fmt::format("{}`{}` {}", first ? "" : ", ", bottomName, entry.getBottomType()->typeName(false, false));
+                url += fmt::format("{}{}", first ? "" : ",", entry.getBottomNameSQL());
+                buf += fmt::format("{}{} {}", first ? "" : ", ", entry.getBottomNameSQL(), entry.getBottomType()->typeName(false, false));
                 first = false;
             }
             this->remote_entries.clear();
-            url += "+FROM+" + tt.getFullName(rg.nextBool());
+            url += "+FROM+`" + escapeSQLString(tt.getDatabaseName(), '`') + "`.`" + escapeSQLString(tt.name, '`') + "`";
             if (rg.nextMediumNumber() < 91)
             {
                 url += "+FORMAT+" + InFormat_Name(iinf).substr(3);

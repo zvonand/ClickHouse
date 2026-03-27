@@ -515,6 +515,9 @@ public:
 
     const String & getBottomName() const;
 
+    /// Returns the bottom name as a backtick-quoted SQL identifier: `escaped_name`.
+    String getBottomNameSQL() const;
+
     SQLType * getBottomType() const;
 
     String columnPathRef(const String & quote = "`") const;

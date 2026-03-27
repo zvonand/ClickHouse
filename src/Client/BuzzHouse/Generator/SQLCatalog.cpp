@@ -994,6 +994,11 @@ const String & ColumnPathChain::getBottomName() const
     return path[path.size() - 1].cname;
 }
 
+String ColumnPathChain::getBottomNameSQL() const
+{
+    return "`" + escapeSQLString(getBottomName(), '`') + "`";
+}
+
 SQLType * ColumnPathChain::getBottomType() const
 {
     chassert(!path.empty());

@@ -226,7 +226,6 @@ private:
            34,  35,   36,   37,   38,   39,     40,     41,     42,  43,  44,  126, 127, 128, 129, 32766, 32767};
 
     std::vector<uint32_t> ids;
-    std::vector<String> str_ids;
     std::vector<CHFunction> one_arg_funcs;
     std::vector<ColumnPathChain> entries;
     std::vector<ColumnPathChain> table_entries;

@@ -78,9 +78,9 @@ bool ClickHouseIntegratedDatabase::performTableIntegration(
             SQLType * tp = entry.getBottomType();
 
             buf += fmt::format(
-                "{}`{}` {} {}NULL",
+                "{}{} {} {}NULL",
                 first ? "" : ", ",
-                entry.getBottomName(),
+                entry.getBottomNameSQL(),
                 columnTypeAsString(rg, t.is_deterministic, tp),
                 ((entry.nullable.has_value() && entry.nullable.value()) || hasType<Nullable>(false, false, false, tp)) ? "" : "NOT ");
             first = false;

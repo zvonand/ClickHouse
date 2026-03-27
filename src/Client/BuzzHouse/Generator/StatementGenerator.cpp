@@ -1046,7 +1046,8 @@ bool StatementGenerator::tableOrFunctionRef(
               {
                   ufunc->set_fname(URLFunc_FName::URLFunc_FName_url);
               }
-              url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "/?query=INSERT+INTO+" + t.getFullName(rg.nextBool());
+              url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "/?query=INSERT+INTO+`" + escapeSQLString(t.getDatabaseName(), '`')
+                  + "`.`" + escapeSQLString(t.name, '`') + "`";
               if (!this->entries.empty())
               {
                   bool first = true;
@@ -1056,9 +1057,9 @@ bool StatementGenerator::tableOrFunctionRef(
                   {
                       url += fmt::format("{}{}", first ? "" : ",", entry.columnPathRef());
                       buf += fmt::format(
-                          "{}`{}` {}{}{}",
+                          "{}{} {}{}{}",
                           first ? "" : ", ",
-                          entry.getBottomName(),
+                          entry.getBottomNameSQL(),
                           entry.path.size() > 1 ? "Array(" : "",
                           entry.getBottomType()->typeName(false, false),
                           entry.path.size() > 1 ? ")" : "");
@@ -1272,16 +1273,14 @@ void StatementGenerator::generateInsertToTable(
 
               for (const auto & entry : this->entries)
               {
-                  const String & bottomName = entry.getBottomName();
-
                   buf += fmt::format(
-                      "{}`{}` {}{}{}",
+                      "{}{} {}{}{}",
                       first ? "" : ", ",
-                      bottomName,
+                      entry.getBottomNameSQL(),
                       entry.path.size() > 1 ? "Array(" : "",
                       entry.getBottomType()->typeName(false, false),
                       entry.path.size() > 1 ? ")" : "");
-                  ssc->add_result_columns()->mutable_etc()->mutable_col()->mutable_path()->mutable_col()->set_column(bottomName);
+                  ssc->add_result_columns()->mutable_etc()->mutable_col()->mutable_path()->mutable_col()->set_column(entry.getBottomName());
                   first = false;
               }
               grf->mutable_structure()->mutable_lit_val()->set_string_lit(std::move(buf));

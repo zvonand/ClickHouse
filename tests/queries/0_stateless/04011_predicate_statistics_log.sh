@@ -23,23 +23,26 @@ $CLICKHOUSE_CLIENT --send_logs_level=fatal --query "SYSTEM RELOAD CONFIG"
 # on exit: disable the override and reload config
 trap 'rm -f "$config_override"; $CLICKHOUSE_CLIENT --send_logs_level=fatal --query "SYSTEM RELOAD CONFIG" 2>/dev/null' EXIT
 
+index_qid="pred_stats_index_${CLICKHOUSE_DATABASE}_$$"
+filter_qid="pred_stats_filter_${CLICKHOUSE_DATABASE}_$$"
+
 $CLICKHOUSE_CLIENT -m --query "
 DROP TABLE IF EXISTS test_pred_stats;
 
 CREATE TABLE test_pred_stats (id UInt64, status String, value Float64) ENGINE = MergeTree ORDER BY id;
 INSERT INTO test_pred_stats SELECT number, if(number % 10 = 0, 'active', 'inactive'), rand() FROM numbers(100000);
+"
 
--- Direct MergeTree query triggers index-level logging
-SELECT count() FROM test_pred_stats WHERE id > 50000 FORMAT Null;
+# Direct MergeTree query triggers index-level logging
+$CLICKHOUSE_CLIENT --query_id="$index_qid" --query "SELECT count() FROM test_pred_stats WHERE id > 50000 FORMAT Null"
 
--- Use numbers() table function — it always produces a FilterTransform
--- (MergeTree queries may push the filter into the reader, skipping FilterTransform)
-SELECT count() FROM numbers(100000) WHERE number > 50000 FORMAT Null;
+# numbers() always produces a FilterTransform (MergeTree may push filter into reader)
+$CLICKHOUSE_CLIENT --query_id="$filter_qid" --query "SELECT count() FROM numbers(100000) WHERE number > 50000 FORMAT Null"
 
-SYSTEM FLUSH LOGS predicate_statistics_log;
+$CLICKHOUSE_CLIENT --query "SYSTEM FLUSH LOGS predicate_statistics_log"
 
--- Verify index-level entry: arrays populated, consistent lengths,
--- and total_granules[i] >= granules_after[i] for each stage
+# Verify index-level entry tied to this run's query_id
+$CLICKHOUSE_CLIENT -m --query "
 SELECT
     filter_expression != '' AS has_filter_expr,
     length(index_names) > 0 AS has_index_names,
@@ -49,11 +52,11 @@ SELECT
     arrayAll(x -> x >= 0 AND x <= 1, index_selectivities) AS valid_selectivities,
     arrayAll((t, a) -> t >= a, total_granules, granules_after) AS granules_consistent
 FROM system.predicate_statistics_log
-WHERE table = 'test_pred_stats' AND currentDatabase() = database
+WHERE query_id = '$index_qid'
     AND length(index_names) > 0
 LIMIT 1;
 
--- Verify filter-level entries exist (from numbers() query above)
+-- Verify filter-level entry tied to this run's query_id
 SELECT
     column_name = 'number' AS correct_column,
     predicate_class = 'Range' AS correct_class,
@@ -61,7 +64,8 @@ SELECT
     input_rows > 0 AS has_input,
     filter_selectivity >= 0 AND filter_selectivity <= 1 AS valid_selectivity
 FROM system.predicate_statistics_log
-WHERE column_name = 'number' AND function_name = 'greater'
+WHERE query_id = '$filter_qid'
+    AND column_name != ''
 LIMIT 1;
 
 DROP TABLE test_pred_stats;

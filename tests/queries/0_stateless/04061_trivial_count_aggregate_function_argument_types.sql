@@ -12,6 +12,7 @@ SET allow_experimental_analyzer = 1;
 -- count(v0 + v1) should have argument type UInt64 (the result of plus(UInt32, UInt64)),
 -- not (UInt32, UInt64) (the types of the underlying columns).
 SELECT trimBoth(explain) FROM (EXPLAIN header = 1 SELECT count(v0 + v1) FROM test_trivial_count_types)
-WHERE explain LIKE '%Header:%' AND explain LIKE '%AggregateFunction%';
+WHERE explain LIKE '%Header:%' AND explain LIKE '%AggregateFunction%'
+ORDER BY ALL;
 
 DROP TABLE test_trivial_count_types;

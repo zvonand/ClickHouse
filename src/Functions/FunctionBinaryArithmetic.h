@@ -2937,9 +2937,16 @@ public:
             return {false, true, false, false};
         }
 
-        // For simplicity, we treat every single value interval as positive monotonic.
+        // For simplicity, we treat every single value interval as positive monotonic,
+        // unless the function is undefined at that point (e.g. division by zero).
         if (accurateEquals(left_point, right_point))
+        {
+            if ((name_view == "divide" || name_view == "intDiv") && left.column && isColumnConst(*left.column)
+                && accurateEquals(left_point, Field(0)))
+                return {false, true, false, false};
+
             return {true, true, false, false};
+        }
 
         if (name_view == "minus" || name_view == "plus")
         {

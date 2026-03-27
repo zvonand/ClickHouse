@@ -28,10 +28,10 @@ Fetch PR metadata using `gh` if available, otherwise use `WebFetch` on the GitHu
 gh pr view "$PR_NUMBER" --json number,title,body,headRefName,baseRefName,state,mergeable,mergeStateStatus,author,url,headRepository,headRepositoryOwner,statusCheckRollup,reviews,comments,reviewRequests
 ```
 
-If `gh` is not available or not authenticated, use WebFetch to get the data:
+If `gh` is not available or not authenticated, use WebFetch to get the data. Append `?per_page=100` and follow the `Link` header for pagination (the `rel="next"` URL) to fetch all pages:
 - `https://api.github.com/repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER`
-- `https://api.github.com/repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/reviews`
-- `https://api.github.com/repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/comments`
+- `https://api.github.com/repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/reviews?per_page=100`
+- `https://api.github.com/repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/comments?per_page=100`
 
 Report the PR title, author, branch, and current state to the user.
 

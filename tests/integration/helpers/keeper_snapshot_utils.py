@@ -6,20 +6,36 @@ import time
 def generate_keeper_configs(configs_dir, clusters):
     """Generate Keeper XML config files for the given cluster definitions.
 
-    clusters is a list of (filenames, hosts, chunk_size, use_s3) tuples where:
-      - filenames: output XML file names, one per server
-      - hosts:     hostname for each server (same length as filenames)
-      - chunk_size: snapshot_transfer_chunk_size value, or None to omit
-      - use_s3:    whether to add an S3 snapshot block
+    clusters is a list of (filenames, hosts, chunk_size[, use_s3_disk_primary]) tuples where:
+      - filenames:           output XML file names, one per server
+      - hosts:               hostname for each server (same length as filenames)
+      - chunk_size:          snapshot_transfer_chunk_size value, or None to omit
+      - use_s3_disk_primary: (optional, default False) use an S3 plain disk as the *primary*
+                             snapshot disk so that RemoteSnapshotLoader is exercised during
+                             chunked transfer. Each server gets its own prefix inside the
+                             "root" bucket (pre-created by the test framework).
     """
-    def make_config(server_id, hosts, chunk_size, use_s3):
-        s3_block = (
-            "\n        <s3_snapshot>"
-            "\n            <endpoint>http://minio1:9001/snapshots/</endpoint>"
-            "\n            <access_key_id>minio</access_key_id>"
-            "\n            <secret_access_key>ClickHouse_Minio_P@ssw0rd</secret_access_key>"
-            "\n        </s3_snapshot>"
-        ) if use_s3 else ""
+    def make_config(server_id, hosts, chunk_size, use_s3_disk_primary):
+        if use_s3_disk_primary:
+            # Each server gets its own S3 path so snapshot objects don't collide across clusters.
+            endpoint = f"http://minio1:9001/root/keeper-snapshots/{hosts[server_id - 1]}/"
+            storage_block = (
+                "\n<storage_configuration>"
+                "\n    <disks>"
+                "\n        <keeper_snap_s3>"
+                "\n            <type>s3_plain</type>"
+                f"\n            <endpoint>{endpoint}</endpoint>"
+                "\n            <access_key_id>minio</access_key_id>"
+                "\n            <secret_access_key>ClickHouse_Minio_P@ssw0rd</secret_access_key>"
+                "\n        </keeper_snap_s3>"
+                "\n    </disks>"
+                "\n</storage_configuration>"
+            )
+            snapshot_disk_line = "\n        <snapshot_storage_disk>keeper_snap_s3</snapshot_storage_disk>"
+        else:
+            storage_block = ""
+            snapshot_disk_line = ""
+
         chunk_line = (
             f"\n            <snapshot_transfer_chunk_size>{chunk_size}</snapshot_transfer_chunk_size>"
             if chunk_size else ""
@@ -41,7 +57,8 @@ def generate_keeper_configs(configs_dir, clusters):
             )
         return (
             f"<clickhouse>\n"
-            f"    <keeper_server>{s3_block}\n"
+            + (f"{storage_block}\n" if storage_block else "")
+            + f"    <keeper_server>{snapshot_disk_line}\n"
             f"        <tcp_port>9181</tcp_port>\n"
             f"        <server_id>{server_id}</server_id>\n"
             f"\n"
@@ -62,11 +79,23 @@ def generate_keeper_configs(configs_dir, clusters):
         )
 
     os.makedirs(configs_dir, exist_ok=True)
-    for filenames, hosts, chunk_size, use_s3 in clusters:
+    # Always write the small remote read-buffer config so that ReadBufferFromS3::nextImpl
+    # is called multiple times per readStrict, making failpoints reachable and stressing
+    # RemoteSnapshotLoader under realistic multi-chunk I/O conditions.
+    small_buf_path = os.path.join(configs_dir, "small_remote_buf_user.xml")
+    with open(small_buf_path, "w") as f:
+        f.write(
+            "<clickhouse>\n<profiles>\n    <default>\n"
+            "        <max_read_buffer_size_remote_fs>1024</max_read_buffer_size_remote_fs>\n"
+            "    </default>\n</profiles>\n</clickhouse>\n"
+        )
+    for cluster_def in clusters:
+        filenames, hosts, chunk_size = cluster_def[:3]
+        use_s3_disk_primary = cluster_def[3] if len(cluster_def) > 3 else False
         for server_id, filename in enumerate(filenames, start=1):
             path = os.path.join(configs_dir, filename)
             with open(path, "w") as f:
-                f.write(make_config(server_id, hosts, chunk_size, use_s3))
+                f.write(make_config(server_id, hosts, chunk_size, use_s3_disk_primary))
 
 
 def stop_zk(zk):
@@ -151,10 +180,11 @@ def get_snapshot_log_lines_for_idx(node, snapshot_log_idx, after_time, timeout=1
     )
 
 
-def assert_receiving_snapshot_logged(node_lagging, after_time):
-    """Assert that `save_logical_snp_obj` fired on the first chunk (proves the snapshot was actually received)."""
-    lines = _query_text_log(node_lagging, after_time, "Receiving snapshot % to % disk", timeout=15)
-    assert lines, f"Expected 'Receiving snapshot % to % disk' in system.text_log on {node_lagging.name}"
+def assert_receiving_snapshot_logged(node_lagging, after_time, disk_type):
+    """Assert that the follower logged receiving a snapshot to the expected disk type ("local" or "remote")."""
+    pattern = f"Receiving snapshot % to {disk_type} disk"
+    lines = _query_text_log(node_lagging, after_time, pattern, timeout=15)
+    assert lines, f"Expected '{pattern}' in system.text_log on {node_lagging.name}"
 
 
 def assert_obj_ids(node_lagging, snapshot_log_idx, expected, after_time):

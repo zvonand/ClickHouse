@@ -20,11 +20,13 @@ configs_dir = os.path.join(os.path.dirname(__file__), "configs")
 generate_keeper_configs(configs_dir, [
     (["enable_keeper_conc1.xml",     "enable_keeper_conc2.xml",     "enable_keeper_conc3.xml",
       "enable_keeper_conc4.xml",     "enable_keeper_conc5.xml"],
-     ["node_conc1", "node_conc2", "node_conc3", "node_conc4", "node_conc5"], 4096, False),
+     ["node_conc1", "node_conc2", "node_conc3", "node_conc4", "node_conc5"], 4096),
     (["enable_keeper_conc_s3_1.xml", "enable_keeper_conc_s3_2.xml", "enable_keeper_conc_s3_3.xml",
       "enable_keeper_conc_s3_4.xml", "enable_keeper_conc_s3_5.xml"],
      ["node_concs1", "node_concs2", "node_concs3", "node_concs4", "node_concs5"], 4096, True),
 ])
+
+_small_buf_cfg = os.path.join(configs_dir, "small_remote_buf_user.xml")
 
 cluster = ClickHouseCluster(__file__)
 
@@ -34,18 +36,17 @@ node_conc3 = cluster.add_instance("node_conc3", main_configs=["configs/enable_ke
 node_conc4 = cluster.add_instance("node_conc4", main_configs=["configs/enable_keeper_conc4.xml"], stay_alive=True, with_remote_database_disk=False)
 node_conc5 = cluster.add_instance("node_conc5", main_configs=["configs/enable_keeper_conc5.xml"], stay_alive=True, with_remote_database_disk=False)
 
-node_concs1 = cluster.add_instance("node_concs1", main_configs=["configs/enable_keeper_conc_s3_1.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node_concs2 = cluster.add_instance("node_concs2", main_configs=["configs/enable_keeper_conc_s3_2.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node_concs3 = cluster.add_instance("node_concs3", main_configs=["configs/enable_keeper_conc_s3_3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node_concs4 = cluster.add_instance("node_concs4", main_configs=["configs/enable_keeper_conc_s3_4.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node_concs5 = cluster.add_instance("node_concs5", main_configs=["configs/enable_keeper_conc_s3_5.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node_concs1 = cluster.add_instance("node_concs1", main_configs=["configs/enable_keeper_conc_s3_1.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node_concs2 = cluster.add_instance("node_concs2", main_configs=["configs/enable_keeper_conc_s3_2.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node_concs3 = cluster.add_instance("node_concs3", main_configs=["configs/enable_keeper_conc_s3_3.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node_concs4 = cluster.add_instance("node_concs4", main_configs=["configs/enable_keeper_conc_s3_4.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node_concs5 = cluster.add_instance("node_concs5", main_configs=["configs/enable_keeper_conc_s3_5.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
 
 
 @pytest.fixture(scope="module")
 def started_cluster():
     try:
         cluster.start()
-        cluster.minio_client.make_bucket("snapshots")
         yield cluster
     finally:
         cluster.shutdown()
@@ -53,7 +54,7 @@ def started_cluster():
 
 CONCURRENT_FOLLOWERS_PARAMS = [
     pytest.param({"leader": node_conc1, "lagging": [node_conc4, node_conc5]}, id="local_disk"),
-    pytest.param({"leader": node_concs1, "lagging": [node_concs4, node_concs5]}, id="s3_disk"),
+    pytest.param({"leader": node_concs1, "lagging": [node_concs4, node_concs5]}, id="remote_disk"),
 ]
 
 
@@ -68,7 +69,6 @@ def test_concurrent_followers_fetch_snapshot(started_cluster, nodes):
 
     cleanup_test_tree(cluster, node_leader, prefix)
 
-    # Stop both lagging followers; the remaining 3 nodes maintain quorum (majority of 5).
     for node in lagging:
         node.stop_clickhouse(kill=True)
 
@@ -76,7 +76,6 @@ def test_concurrent_followers_fetch_snapshot(started_cluster, nodes):
     fill_test_tree(leader_zk, prefix)
     kill_time = get_kill_timestamp(node_leader)
 
-    # Start both lagging followers concurrently to exercise simultaneous snapshot transfer.
     def start_and_wait(node):
         node.start_clickhouse(20)
         keeper_utils.wait_until_connected(cluster, node)

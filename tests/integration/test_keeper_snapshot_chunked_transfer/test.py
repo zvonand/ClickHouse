@@ -21,54 +21,58 @@ from helpers.keeper_snapshot_utils import (
 configs_dir = os.path.join(os.path.dirname(__file__), "configs")
 generate_keeper_configs(configs_dir, [
     (["enable_keeper1.xml",             "enable_keeper2.xml",             "enable_keeper3.xml"],
-     ["node1",      "node2",      "node3"],      4096,      False),
+     ["node1",      "node2",      "node3"],      4096),
     (["enable_keeper4_large_chunk.xml",  "enable_keeper5_large_chunk.xml",  "enable_keeper6_large_chunk.xml"],
-     ["node4",      "node5",      "node6"],      104857600, False),
+     ["node4",      "node5",      "node6"],      104857600),
     (["enable_keeper7_s3.xml",           "enable_keeper8_s3.xml",           "enable_keeper9_s3.xml"],
      ["node7",      "node8",      "node9"],      4096,      True),
     (["enable_keeper10_large_chunk_s3.xml", "enable_keeper11_large_chunk_s3.xml", "enable_keeper12_large_chunk_s3.xml"],
      ["node10",     "node11",     "node12"],     104857600, True),
     (["enable_keeper_compat1.xml",       "enable_keeper_compat2.xml",       "enable_keeper_compat3.xml"],
-     ["compat1",    "compat2",    "compat3"],    None,      False),
+     ["compat1",    "compat2",    "compat3"],    None),
     (["enable_keeper_compat_s3_1.xml",   "enable_keeper_compat_s3_2.xml",   "enable_keeper_compat_s3_3.xml"],
      ["compat_s3_1","compat_s3_2","compat_s3_3"],None,     True),
 ])
 
+# Limits S3 read buffer size so ReadBufferFromS3::nextImpl is called multiple times per
+# readStrict, stressing RemoteSnapshotLoader and keeping the s3_read_buffer_throw_expired_token
+# failpoint reachable. Applied to all instances that use S3 as the primary snapshot disk.
+_small_buf_cfg = os.path.join(configs_dir, "small_remote_buf_user.xml")
+
 cluster = ClickHouseCluster(__file__)
 
-# small chunk (4096 B): local and S3
+# small chunk (4096 B): local disk and S3 primary disk
 node1 = cluster.add_instance("node1", main_configs=["configs/enable_keeper1.xml"], stay_alive=True, with_remote_database_disk=False)
 node2 = cluster.add_instance("node2", main_configs=["configs/enable_keeper2.xml"], stay_alive=True, with_remote_database_disk=False)
 node3 = cluster.add_instance("node3", main_configs=["configs/enable_keeper3.xml", "configs/text_log.xml"], stay_alive=True, with_remote_database_disk=False)
 
-node7 = cluster.add_instance("node7", main_configs=["configs/enable_keeper7_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node8 = cluster.add_instance("node8", main_configs=["configs/enable_keeper8_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node9 = cluster.add_instance("node9", main_configs=["configs/enable_keeper9_s3.xml", "configs/text_log.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node7 = cluster.add_instance("node7", main_configs=["configs/enable_keeper7_s3.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node8 = cluster.add_instance("node8", main_configs=["configs/enable_keeper8_s3.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node9 = cluster.add_instance("node9", main_configs=["configs/enable_keeper9_s3.xml", "configs/text_log.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
 
-# large chunk (100 MB): local and S3
+# large chunk (100 MB): local disk and S3 primary disk
 node4 = cluster.add_instance("node4", main_configs=["configs/enable_keeper4_large_chunk.xml"], stay_alive=True, with_remote_database_disk=False)
 node5 = cluster.add_instance("node5", main_configs=["configs/enable_keeper5_large_chunk.xml"], stay_alive=True, with_remote_database_disk=False)
 node6 = cluster.add_instance("node6", main_configs=["configs/enable_keeper6_large_chunk.xml", "configs/text_log.xml"], stay_alive=True, with_remote_database_disk=False)
 
-node10 = cluster.add_instance("node10", main_configs=["configs/enable_keeper10_large_chunk_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node11 = cluster.add_instance("node11", main_configs=["configs/enable_keeper11_large_chunk_s3.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
-node12 = cluster.add_instance("node12", main_configs=["configs/enable_keeper12_large_chunk_s3.xml", "configs/text_log.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node10 = cluster.add_instance("node10", main_configs=["configs/enable_keeper10_large_chunk_s3.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node11 = cluster.add_instance("node11", main_configs=["configs/enable_keeper11_large_chunk_s3.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+node12 = cluster.add_instance("node12", main_configs=["configs/enable_keeper12_large_chunk_s3.xml", "configs/text_log.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
 
-# compat: old-version leader (no chunking), new-version follower — local and S3
+# compat: old-version leader (no chunking support), new-version follower
 compat1 = cluster.add_instance("compat1", main_configs=["configs/enable_keeper_compat1.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag=CLICKHOUSE_CI_MIN_TESTED_VERSION, with_installed_binary=True, with_remote_database_disk=False)
 compat2 = cluster.add_instance("compat2", main_configs=["configs/enable_keeper_compat2.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag=CLICKHOUSE_CI_MIN_TESTED_VERSION, with_installed_binary=True, with_remote_database_disk=False)
 compat3 = cluster.add_instance("compat3", main_configs=["configs/enable_keeper_compat3.xml", "configs/text_log.xml"], stay_alive=True, with_remote_database_disk=False)
 
-compat_s3_1 = cluster.add_instance("compat_s3_1", main_configs=["configs/enable_keeper_compat_s3_1.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag=CLICKHOUSE_CI_MIN_TESTED_VERSION, with_installed_binary=True, with_remote_database_disk=False)
-compat_s3_2 = cluster.add_instance("compat_s3_2", main_configs=["configs/enable_keeper_compat_s3_2.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag=CLICKHOUSE_CI_MIN_TESTED_VERSION, with_installed_binary=True, with_remote_database_disk=False)
-compat_s3_3 = cluster.add_instance("compat_s3_3", main_configs=["configs/enable_keeper_compat_s3_3.xml", "configs/text_log.xml"], stay_alive=True, with_minio=True, with_remote_database_disk=False)
+compat_s3_1 = cluster.add_instance("compat_s3_1", main_configs=["configs/enable_keeper_compat_s3_1.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag="25.12", with_installed_binary=True, with_remote_database_disk=False)
+compat_s3_2 = cluster.add_instance("compat_s3_2", main_configs=["configs/enable_keeper_compat_s3_2.xml"], stay_alive=True, image="clickhouse/clickhouse-server", tag="25.12", with_installed_binary=True, with_remote_database_disk=False)
+compat_s3_3 = cluster.add_instance("compat_s3_3", main_configs=["configs/enable_keeper_compat_s3_3.xml", "configs/text_log.xml"], user_configs=[_small_buf_cfg], stay_alive=True, with_minio=True, with_remote_database_disk=False)
 
 
 @pytest.fixture(scope="module")
 def started_cluster():
     try:
         cluster.start()
-        cluster.minio_client.make_bucket("snapshots")
         yield cluster
     finally:
         cluster.shutdown()
@@ -77,18 +81,18 @@ def started_cluster():
 CHUNK_SIZE = 4096  # matches snapshot_transfer_chunk_size in small-chunk configs
 
 CHUNKED_TRANSFER_PARAMS = [
-    pytest.param({"leader": node1, "middle": node2, "lagging": node3}, id="local_disk"),
-    pytest.param({"leader": node7, "middle": node8, "lagging": node9}, id="s3_disk"),
+    pytest.param({"leader": node1, "middle": node2, "lagging": node3, "disk_type": "local"}, id="local_disk"),
+    pytest.param({"leader": node7, "middle": node8, "lagging": node9, "disk_type": "remote"}, id="remote_disk"),
 ]
 
 LARGE_CHUNK_PARAMS = [
-    pytest.param({"leader": node4, "lagging": node6}, id="local_disk"),
-    pytest.param({"leader": node10, "lagging": node12}, id="s3_disk"),
+    pytest.param({"leader": node4, "lagging": node6, "disk_type": "local"}, id="local_disk"),
+    pytest.param({"leader": node10, "lagging": node12, "disk_type": "remote"}, id="remote_disk"),
 ]
 
 COMPAT_PARAMS = [
-    pytest.param({"old_leader": compat1, "lagging": compat3}, id="local_disk"),
-    pytest.param({"old_leader": compat_s3_1, "lagging": compat_s3_3}, id="s3_disk"),
+    pytest.param({"old_leader": compat1, "lagging": compat3, "disk_type": "local"}, id="local_disk"),
+    pytest.param({"old_leader": compat_s3_1, "lagging": compat_s3_3, "disk_type": "remote"}, id="remote_disk"),
 ]
 
 
@@ -131,7 +135,8 @@ def test_recover_from_snapshot_with_chunked_transfer(started_cluster, nodes):
         f"Expected {expected_chunks} chunks for {snapshot_size}-byte snapshot (chunk_size={CHUNK_SIZE}), got {n_chunks}"
     assert_obj_ids(node_lagging, snapshot_log_idx, list(range(n_chunks)), kill_time)
 
-    assert_receiving_snapshot_logged(node_lagging, kill_time)
+    assert_receiving_snapshot_logged(node_lagging, kill_time, nodes["disk_type"])
+    cleanup_test_tree(cluster, node_leader, prefix)
 
 
 @pytest.mark.parametrize("nodes", CHUNKED_TRANSFER_PARAMS)
@@ -139,6 +144,7 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
     """A `tmp_snapshot_X.bin` left by an interrupted transfer must not block recovery."""
     node_leader = nodes["leader"]
     node_lagging = nodes["lagging"]
+    is_remote = nodes["disk_type"] == "remote"
     prefix = "/test_interrupted_chunked_transfer"
 
     cleanup_test_tree(cluster, node_leader, prefix)
@@ -168,7 +174,6 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
         _drop_rule()
         raise
 
-    # Allow Raft to connect now that the failpoint is armed.
     _drop_rule()
 
     # SYSTEM WAIT FAILPOINT ... PAUSE blocks until a thread pauses at the failpoint.
@@ -187,28 +192,42 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
         assert False, "Failpoint keeper_save_snapshot_pause_mid_transfer not triggered within 60 s"
     pool.shutdown(wait=False)
 
-    # Thread is paused mid-transfer: tmp_snapshot_X.bin is on disk.
+    recovery_time = get_kill_timestamp(node_leader)
     node_lagging.stop_clickhouse(kill=True)
 
-    snapshot_dir = "/var/lib/clickhouse/coordination/snapshots"
-    tmp_snapshot_path = node_lagging.exec_in_container(
-        ["bash", "-c", f"find {snapshot_dir} -name 'tmp_snapshot_*.bin*' | sort | tail -1 || true"]
-    ).strip()
-    assert tmp_snapshot_path, "No tmp_snapshot file on disk after killing mid-transfer"
+    if is_remote:
+        s3_prefix = f"keeper-snapshots/{node_lagging.name}/"
+        tmp_objects = list(started_cluster.minio_client.list_objects(
+            "root", prefix=s3_prefix + "tmp_snapshot_"
+        ))
+        assert tmp_objects, "No tmp_snapshot object in S3 after killing mid-transfer"
+    else:
+        snapshot_dir = "/var/lib/clickhouse/coordination/snapshots"
+        tmp_snapshot_path = node_lagging.exec_in_container(
+            ["bash", "-c", f"find {snapshot_dir} -name 'tmp_snapshot_*.bin*' | sort | tail -1 || true"]
+        ).strip()
+        assert tmp_snapshot_path, "No tmp_snapshot file on disk after killing mid-transfer"
 
     node_lagging.start_clickhouse(20)
     keeper_utils.wait_until_connected(cluster, node_lagging)
 
-    assert (
-        node_lagging.exec_in_container(
-            ["bash", "-c", f"test -f {tmp_snapshot_path} && echo yes || echo no"]
-        ).strip()
-        == "no"
-    ), f"tmp file was not removed on startup: {tmp_snapshot_path}"
+    if is_remote:
+        remaining = list(started_cluster.minio_client.list_objects(
+            "root", prefix=s3_prefix + "tmp_snapshot_"
+        ))
+        assert not remaining, f"tmp_snapshot objects not removed from S3 on startup: {[o.object_name for o in remaining]}"
+    else:
+        assert (
+            node_lagging.exec_in_container(
+                ["bash", "-c", f"test -f {tmp_snapshot_path} && echo yes || echo no"]
+            ).strip()
+            == "no"
+        ), f"tmp file was not removed on startup: {tmp_snapshot_path}"
 
     leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
     lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
     verify_test_tree(leader_zk, lagging_zk, prefix)
+    assert_receiving_snapshot_logged(node_lagging, recovery_time, nodes["disk_type"])
     cleanup_test_tree(cluster, node_leader, prefix)
 
 
@@ -240,7 +259,47 @@ def test_recover_with_chunk_size_larger_than_snapshot(started_cluster, nodes):
     snapshot_log_idx, n_chunks, _ = received
     assert n_chunks == 1, f"Expected 1 chunk (snapshot fits within chunk_size), got {n_chunks}"
     assert_obj_ids(node_lagging, snapshot_log_idx, [0], kill_time)
-    assert_receiving_snapshot_logged(node_lagging, kill_time)
+    assert_receiving_snapshot_logged(node_lagging, kill_time, nodes["disk_type"])
+
+
+def test_recover_after_s3_read_error_during_transfer(started_cluster):
+    """After `readStrict` throws in `RemoteSnapshotLoader` (simulated via failpoint),
+    the loader marks itself as broken and the follower recovers on the next NuRaft retry."""
+    node_lagging = node9
+    # Disarm any leftover failpoint from a previous failed run so it does not fire
+    # unexpectedly during setup (before we are ready to observe the error).
+    node7.query("SYSTEM DISABLE FAILPOINT s3_read_buffer_throw_expired_token")
+    node8.query("SYSTEM DISABLE FAILPOINT s3_read_buffer_throw_expired_token")
+    node_leader = keeper_utils.get_leader(cluster, [node7, node8])
+    prefix = "/test_s3_read_error_recovery"
+
+    cleanup_test_tree(cluster, node_leader, prefix)
+
+    kill_time = get_kill_timestamp(node_lagging)
+    node_lagging.stop_clickhouse(kill=True)
+
+    leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
+    fill_test_tree(leader_zk, prefix)
+
+    node_leader.query("SYSTEM ENABLE FAILPOINT s3_read_buffer_throw_expired_token")
+
+    node_lagging.start_clickhouse(20)
+    keeper_utils.wait_until_connected(cluster, node_lagging)
+
+    received = get_received_snapshot_info(node_lagging, kill_time, timeout=30)
+    assert received is not None, "Follower did not receive snapshot after S3 read error"
+
+    leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
+    lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
+    verify_test_tree(leader_zk, lagging_zk, prefix)
+    cleanup_test_tree(cluster, node_leader, prefix)
+
+    assert_receiving_snapshot_logged(node_lagging, kill_time, "remote")
+
+    errors = int(node_leader.query(
+        "SELECT value FROM system.events WHERE event = 'KeeperSnapshotRemoteLoaderErrors'"
+    ).strip() or "0")
+    assert errors > 0, "Expected KeeperSnapshotRemoteLoaderErrors > 0 on the leader after S3 read error"
 
 
 @pytest.mark.parametrize("nodes", COMPAT_PARAMS)
@@ -271,4 +330,4 @@ def test_recover_from_snapshot_sent_by_old_leader(started_cluster, nodes):
     snapshot_log_idx, n_chunks, _ = received
     assert n_chunks == 1, f"Old leader always sends snapshot as single object, got {n_chunks} chunks"
     assert_obj_ids(node_lagging, snapshot_log_idx, [0], kill_time)
-    assert_receiving_snapshot_logged(node_lagging, kill_time)
+    assert_receiving_snapshot_logged(node_lagging, kill_time, nodes["disk_type"])

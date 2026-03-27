@@ -203,7 +203,7 @@ private:
         if (!buf.peek(type_index))
             throw Exception(ErrorCodes::INCORRECT_DATA, "Cannot parse shared data value of JSON: no type index found");
 
-        const auto & cache = getSimpleDataTypeCache();
+        const auto & cache = getSimpleDataTypesCache();
         auto binary_type_index = static_cast<BinaryTypeIndex>(type_index);
 
         if (cache.hasElement(binary_type_index))

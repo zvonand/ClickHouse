@@ -15,7 +15,7 @@ class DataTypeFactory;
 /// pre-filled at construction time. Avoids repeated DataTypeFactory lookups
 /// and shared_ptr allocations for commonly used types.
 /// Thread-safe: immutable after construction.
-class SimpleDataTypeCache
+class SimpleDataTypesCache
 {
 public:
     struct Element
@@ -25,15 +25,18 @@ public:
         SerializationPtr serialization;
     };
 
-    static const SimpleDataTypeCache & instance();
+    static const SimpleDataTypesCache & instance();
 
     bool hasElement(BinaryTypeIndex index) const;
 
     /// O(1) lookup by BinaryTypeIndex. Returns the cached element.
     const Element & getElement(BinaryTypeIndex index) const;
 
-    /// O(1) lookup by BinaryTypeIndex. Returns nullptr for non-simple types.
+    /// O(1) lookup by BinaryTypeIndex. Returns pre-cached type.
     DataTypePtr getType(BinaryTypeIndex index) const;
+
+    /// O(1) lookup by BinaryTypeIndex. Returns pre-cached serialization.
+    SerializationPtr getSerialization(BinaryTypeIndex index) const;
 
     /// Lookup by type name. Returns pre-cached element for simple types, nullptr otherwise.
     const Element * findByName(const String & type_name) const;
@@ -47,7 +50,7 @@ public:
     SerializationPtr getSerialization(const String & type_name) const;
 
 private:
-    SimpleDataTypeCache();
+    SimpleDataTypesCache();
     void addSimpleType(BinaryTypeIndex index, const String & type_name);
 
     std::array<Element, BINARY_TYPE_INDEX_SIZE> by_index{};
@@ -55,12 +58,12 @@ private:
 };
 
 /// Return the singleton instance of the simple data type cache.
-const SimpleDataTypeCache & getSimpleDataTypeCache();
+const SimpleDataTypesCache & getSimpleDataTypesCache();
 
 /// Thread-local cache for data type lookups by name.
-/// Checks the global SimpleDataTypeCache first; only caches
+/// Checks the global SimpleDataTypesCache first; only caches
 /// non-simple types (e.g. DateTime64(9), Variant types) in its own map.
-class DataTypeCache
+class DataTypesCache
 {
 public:
     DataTypePtr getType(const String & type_name);
@@ -80,7 +83,8 @@ private:
     std::unordered_map<String, Element> cache;
 };
 
-/// Return instance of a thread-local cache.
-DataTypeCache & getDataTypeCache();
+/// Return instance of a thread local cache.
+/// Cache is relatively small, so it's ok to have separate instance per thread to avoid using mutex inside the cache.
+DataTypesCache & getDataTypesCache();
 
 }

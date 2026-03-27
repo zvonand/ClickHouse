@@ -4,7 +4,7 @@
 namespace DB
 {
 
-SimpleDataTypeCache::SimpleDataTypeCache()
+SimpleDataTypesCache::SimpleDataTypesCache()
 {
     addSimpleType(BinaryTypeIndex::Nothing, "Nothing");
     addSimpleType(BinaryTypeIndex::UInt8, "UInt8");
@@ -31,7 +31,7 @@ SimpleDataTypeCache::SimpleDataTypeCache()
     addSimpleType(BinaryTypeIndex::Bool, "Bool");
 }
 
-void SimpleDataTypeCache::addSimpleType(BinaryTypeIndex index, const String & type_name)
+void SimpleDataTypesCache::addSimpleType(BinaryTypeIndex index, const String & type_name)
 {
     auto type = DataTypeFactory::instance().get(type_name);
     Element element{type_name, type, type->getDefaultSerialization()};
@@ -39,13 +39,13 @@ void SimpleDataTypeCache::addSimpleType(BinaryTypeIndex index, const String & ty
     by_name.emplace(type_name, std::move(element));
 }
 
-bool SimpleDataTypeCache::hasElement(BinaryTypeIndex index) const
+bool SimpleDataTypesCache::hasElement(BinaryTypeIndex index) const
 {
     uint8_t index_value = static_cast<uint8_t>(index);
     return index_value < by_index.size() && by_index[index_value].type != nullptr;
 }
 
-const SimpleDataTypeCache::Element & SimpleDataTypeCache::getElement(BinaryTypeIndex index) const
+const SimpleDataTypesCache::Element & SimpleDataTypesCache::getElement(BinaryTypeIndex index) const
 {
     uint8_t index_value = static_cast<uint8_t>(index);
     if (index_value >= by_index.size() || by_index[index_value].type == nullptr)
@@ -54,7 +54,7 @@ const SimpleDataTypeCache::Element & SimpleDataTypeCache::getElement(BinaryTypeI
     return by_index[index_value];
 }
 
-DataTypePtr SimpleDataTypeCache::getType(BinaryTypeIndex index) const
+DataTypePtr SimpleDataTypesCache::getType(BinaryTypeIndex index) const
 {
     uint8_t index_value = static_cast<uint8_t>(index);
     if (index_value >= by_index.size() || by_index[index_value].type == nullptr)
@@ -63,13 +63,22 @@ DataTypePtr SimpleDataTypeCache::getType(BinaryTypeIndex index) const
     return by_index[index_value].type;
 }
 
-const SimpleDataTypeCache::Element * SimpleDataTypeCache::findByName(const String & type_name) const
+SerializationPtr SimpleDataTypesCache::getSerialization(BinaryTypeIndex index) const
+{
+    uint8_t index_value = static_cast<uint8_t>(index);
+    if (index_value >= by_index.size() || by_index[index_value].serialization == nullptr)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Invalid binary type index");
+
+    return by_index[index_value].serialization;
+}
+
+const SimpleDataTypesCache::Element * SimpleDataTypesCache::findByName(const String & type_name) const
 {
     auto it = by_name.find(type_name);
     return it != by_name.end() ? &it->second : nullptr;
 }
 
-DataTypePtr SimpleDataTypeCache::getType(const String & type_name) const
+DataTypePtr SimpleDataTypesCache::getType(const String & type_name) const
 {
     if (const auto * elem = findByName(type_name))
         return elem->type;
@@ -77,7 +86,7 @@ DataTypePtr SimpleDataTypeCache::getType(const String & type_name) const
     return DataTypeFactory::instance().get(type_name);
 }
 
-SerializationPtr SimpleDataTypeCache::getSerialization(const String & type_name) const
+SerializationPtr SimpleDataTypesCache::getSerialization(const String & type_name) const
 {
     if (const auto * elem = findByName(type_name))
         return elem->serialization;
@@ -86,36 +95,36 @@ SerializationPtr SimpleDataTypeCache::getSerialization(const String & type_name)
     return type->getDefaultSerialization();
 }
 
-const SimpleDataTypeCache & SimpleDataTypeCache::instance()
+const SimpleDataTypesCache & SimpleDataTypesCache::instance()
 {
-    static SimpleDataTypeCache cache;
+    static SimpleDataTypesCache cache;
     return cache;
 }
 
-const SimpleDataTypeCache & getSimpleDataTypeCache()
+const SimpleDataTypesCache & getSimpleDataTypesCache()
 {
-    return SimpleDataTypeCache::instance();
+    return SimpleDataTypesCache::instance();
 }
 
-DataTypePtr DataTypeCache::getType(const String & type_name)
+DataTypePtr DataTypesCache::getType(const String & type_name)
 {
     /// Check the global immutable cache of simple types first.
-    if (const auto * elem = SimpleDataTypeCache::instance().findByName(type_name))
+    if (const auto * elem = SimpleDataTypesCache::instance().findByName(type_name))
         return elem->type;
 
     return getCacheElement(type_name).type;
 }
 
-SerializationPtr DataTypeCache::getSerialization(const String & type_name)
+SerializationPtr DataTypesCache::getSerialization(const String & type_name)
 {
     /// Check the global immutable cache of simple types first.
-    if (const auto * elem = SimpleDataTypeCache::instance().findByName(type_name))
+    if (const auto * elem = SimpleDataTypesCache::instance().findByName(type_name))
         return elem->serialization;
 
     return getCacheElement(type_name).serialization;
 }
 
-const DataTypeCache::Element & DataTypeCache::getCacheElement(const String & type_name)
+const DataTypesCache::Element & DataTypesCache::getCacheElement(const String & type_name)
 {
     auto it = cache.find(type_name);
     if (it != cache.end())
@@ -130,9 +139,9 @@ const DataTypeCache::Element & DataTypeCache::getCacheElement(const String & typ
     return it->second;
 }
 
-DataTypeCache & getDataTypeCache()
+DataTypesCache & getDataTypesCache()
 {
-    thread_local static DataTypeCache data_type_cache;
+    thread_local static DataTypesCache data_type_cache;
     return data_type_cache;
 }
 

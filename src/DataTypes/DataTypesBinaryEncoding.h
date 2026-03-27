@@ -74,7 +74,7 @@ enum class BinaryTypeIndex : uint8_t
     QBit = 0x36
 };
 
-/// Maximum value of BinaryTypeIndex + 1, used for sizing the index array in SimpleDataTypeCache.
+/// Maximum value of BinaryTypeIndex + 1, used for sizing the index array in SimpleDataTypesCache.
 inline constexpr size_t BINARY_TYPE_INDEX_SIZE = 0x37;
 
 /**

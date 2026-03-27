@@ -593,7 +593,7 @@ DataTypePtr decodeDataType(ReadBuffer & buf, size_t & complexity)
         case BinaryTypeIndex::UUID:
         case BinaryTypeIndex::IPv4:
         case BinaryTypeIndex::IPv6:
-            return getSimpleDataTypeCache().getType(binary_type_index);
+            return getSimpleDataTypesCache().getType(binary_type_index);
         case BinaryTypeIndex::DateTimeUTC:
             return std::make_shared<DataTypeDateTime>();
         case BinaryTypeIndex::DateTimeWithTimezone:

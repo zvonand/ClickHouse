@@ -1070,8 +1070,8 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
             {
                 const String & bottomName = entry.getBottomName();
 
-                url += fmt::format("{}{}", first ? "" : ",", bottomName);
-                buf += fmt::format("{}{} {}", first ? "" : ", ", bottomName, entry.getBottomType()->typeName(false, false));
+                url += fmt::format("{}`{}`", first ? "" : ",", bottomName);
+                buf += fmt::format("{}`{}` {}", first ? "" : ", ", bottomName, entry.getBottomType()->typeName(false, false));
                 first = false;
             }
             this->remote_entries.clear();

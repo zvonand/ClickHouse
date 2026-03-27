@@ -1056,7 +1056,7 @@ bool StatementGenerator::tableOrFunctionRef(
                   {
                       url += fmt::format("{}{}", first ? "" : ",", entry.columnPathRef());
                       buf += fmt::format(
-                          "{}{} {}{}{}",
+                          "{}`{}` {}{}{}",
                           first ? "" : ", ",
                           entry.getBottomName(),
                           entry.path.size() > 1 ? "Array(" : "",
@@ -1275,7 +1275,7 @@ void StatementGenerator::generateInsertToTable(
                   const String & bottomName = entry.getBottomName();
 
                   buf += fmt::format(
-                      "{}{} {}{}{}",
+                      "{}`{}` {}{}{}",
                       first ? "" : ", ",
                       bottomName,
                       entry.path.size() > 1 ? "Array(" : "",

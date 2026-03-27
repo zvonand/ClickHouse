@@ -271,18 +271,7 @@ struct DiskInfo
 };
 
 /// Escape a string for embedding inside a single-quoted SQL literal (doubles single quotes).
-inline String escapeSQLString(const String & s)
-{
-    String out;
-    out.reserve(s.size());
-    for (const char c : s)
-    {
-        if (c == '\'')
-            out += '\'';
-        out += c;
-    }
-    return out;
-}
+String escapeSQLString(const String & s, char escape_char = '\'');
 
 class FuzzConfig
 {

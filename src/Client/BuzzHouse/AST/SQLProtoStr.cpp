@@ -142,7 +142,7 @@ static void ConvertToSQLString(String & ret, const String & s)
         switch (c)
         {
             case '\'':
-                ret += "\\'";
+                ret += "''";
                 break;
             case '\\':
                 ret += "\\\\";
@@ -735,9 +735,9 @@ CONV_FN(LiteralValue, lit_val)
             NumericLiteralToString(ret, lit_val.numeric_lit());
             break;
         case LitValType::kStringLit:
-            ret += '\'';
+            ret += "'";
             ConvertToSQLString(ret, lit_val.string_lit());
-            ret += '\'';
+            ret += "'";
             break;
         case LitValType::kSpecialVal:
             SpecialValToString(ret, lit_val.special_val());
@@ -2557,7 +2557,9 @@ CONV_FN(JoinedTableOrFunction, jtf)
             {
                 ret += ", ";
             }
+            ret += "`";
             ColumnToString(ret, 1, jtf.col_aliases(i));
+            ret += "`";
         }
         ret += ")";
     }

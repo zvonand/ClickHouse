@@ -23,6 +23,19 @@ const DB::Strings compressionMethods
 const DB::Strings codecs
     = {"LZ4", "LZ4HC", "ZSTD", "Delta", "DoubleDelta", "Gorilla", "T64", "FPC", "GCD", "ALP", "AES_128_GCM_SIV", "AES_256_GCM_SIV", "NONE"};
 
+String escapeSQLString(const String & s, const char escape_char)
+{
+    String out;
+    out.reserve(s.size());
+    for (const char c : s)
+    {
+        if (c == escape_char)
+            out += escape_char;
+        out += c;
+    }
+    return out;
+}
+
 void SystemTable::setName(ExprSchemaTable * est) const
 {
     est->mutable_database()->set_value(schema_name);

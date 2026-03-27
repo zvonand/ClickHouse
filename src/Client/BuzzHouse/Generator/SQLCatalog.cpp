@@ -625,6 +625,7 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
     {
         /// Set bucket path first if possible
         String next_bucket_path;
+        const String bname = rg.nextSmallNumber() < 4 ? name : ("t" + std::to_string(counter));
 
         /// Set integration call to use, sometimes create tables in ClickHouse, others also in Spark
         if (has_dolor && (isAnyIcebergEngine() || isAnyDeltaLakeEngine()) && rg.nextBool())
@@ -653,7 +654,7 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
                     isOnLocal() ? "/" : "",
                     (integration == IntegrationCall::Dolor) ? getSparkCatalogName() : "",
                     (integration == IntegrationCall::Dolor) ? "/test/" : "",
-                    name,
+                    bname,
                     rg.nextBool() ? "/" : "");
             }
             else if (fc.dolor_server.has_value() && fc.minio_server.has_value())
@@ -684,7 +685,7 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
                     fc.minio_server.value().server_hostname,
                     fc.minio_server.value().port,
                     cat->warehouse,
-                    name,
+                    bname,
                     rg.nextBool() ? "/" : "");
             }
         }
@@ -700,7 +701,7 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
             {
                 /// Use a subdirectory
                 next_bucket_path += "subdir";
-                next_bucket_path += rg.nextBool() ? name : "";
+                next_bucket_path += rg.nextBool() ? bname : "";
                 const bool want_partition = has_partition_by && rg.nextBool();
                 const bool want_hash = rg.nextBool();
                 next_bucket_path += placeholders(rg, want_partition, want_hash);
@@ -713,10 +714,10 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
                 const bool add_before = rg.nextBool();
 
                 next_bucket_path += "file";
-                next_bucket_path += add_before ? name : "";
+                next_bucket_path += add_before ? bname : "";
                 next_bucket_path
                     += placeholders(rg, has_partition_by && !used_partition && rg.nextBool(), !used_schema_hash && rg.nextBool());
-                next_bucket_path += !add_before ? name : "";
+                next_bucket_path += !add_before ? bname : "";
                 if ((isS3QueueEngine() || isAzureQueueEngine()) && rg.nextMediumNumber() < 81)
                 {
                     next_bucket_path += "/";
@@ -754,7 +755,7 @@ void SQLBase::setTablePath(RandomGenerator & rg, const FuzzConfig & fc, const bo
         {
             const ServerCredentials & sc = fc.http_server.value();
 
-            bucket_path = fmt::format("http://{}:{}/{}", sc.server_hostname, sc.port, name);
+            bucket_path = fmt::format("http://{}:{}/{}", sc.server_hostname, sc.port, bname);
         }
     }
 
@@ -891,11 +892,6 @@ String SQLBase::getTablePath(RandomGenerator & rg, const bool allow_not_determin
         return res;
     }
     return getTablePath();
-}
-
-String SQLBase::getMetadataPath(const FuzzConfig & fc) const
-{
-    return has_metadata ? fmt::format("{}/{}", fc.server_file_path.generic_string(), name) : "";
 }
 
 LakeCatalog SQLBase::getLakeCatalog() const

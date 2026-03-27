@@ -896,7 +896,14 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
 
             std::function<void(const ASTPtr &)> apply_aliases = [&](const ASTPtr & node)
             {
-                if (const auto * select_query = node->as<ASTSelectQuery>())
+                /// Must check ASTSelectIntersectExceptQuery before ASTSelectQuery
+                /// because ASTSelectIntersectExceptQuery inherits from ASTSelectQuery.
+                if (const auto * intersect_except = node->as<ASTSelectIntersectExceptQuery>())
+                {
+                    for (const auto & child : intersect_except->getListOfSelects())
+                        apply_aliases(child);
+                }
+                else if (const auto * select_query = node->as<ASTSelectQuery>())
                 {
                     auto select_expression_list = select_query->select();
                     if (!select_expression_list)
@@ -927,11 +934,6 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
                         const auto & alias_ast = aliases_children[i]->as<ASTIdentifier &>();
                         expr->setAlias(alias_ast.name());
                     }
-                }
-                else if (const auto * intersect_except = node->as<ASTSelectIntersectExceptQuery>())
-                {
-                    for (const auto & child : intersect_except->getListOfSelects())
-                        apply_aliases(child);
                 }
                 else if (const auto * nested_union = node->as<ASTSelectWithUnionQuery>())
                 {

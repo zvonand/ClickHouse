@@ -11,11 +11,10 @@ set mutations_sync=2;
 
 DROP TABLE IF EXISTS test_alter_atomic;
 
--- Test 2: MergeTree engine - same behavior expected
+-- Test 1: MergeTree engine - same behavior expected
 CREATE TABLE test_alter_atomic (key Int32, c0 Int32) ENGINE = MergeTree ORDER BY key;
 INSERT INTO test_alter_atomic VALUES (1, 0);
 
--- This should be rejected early
 ALTER TABLE test_alter_atomic UPDATE c0 = 1 WHERE true, RENAME COLUMN c0 TO c1;
 
 -- Verify column still has original name
@@ -25,7 +24,7 @@ SELECT * FROM test_alter_atomic ORDER BY key;
 
 DROP TABLE test_alter_atomic;
 
--- Test 4: Verify UPDATE + RENAME on DIFFERENT columns works fine
+-- Test 2: Verify UPDATE + RENAME on DIFFERENT columns works fine
 CREATE TABLE test_alter_atomic (key Int32, c0 Int32, c1 Int32) ENGINE = MergeTree ORDER BY key;
 INSERT INTO test_alter_atomic VALUES (1, 10, 20);
 

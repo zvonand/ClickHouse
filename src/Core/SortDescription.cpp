@@ -8,6 +8,7 @@
 #include <Common/typeid_cast.h>
 #include <Common/logger_useful.h>
 #include <Processors/QueryPlan/QueryPlanFormat.h>
+#include <DataTypes/DataTypeNullable.h>
 
 #include "config.h"
 
@@ -156,11 +157,18 @@ void compileSortDescriptionIfNeeded(SortDescription & description, const DataTyp
     if (!description.compile_sort_description || sort_description_types.empty())
         return;
 
-    for (const auto & type : sort_description_types)
+    for (size_t i = 0; i < description.size(); ++i)
     {
-        if (!type->createColumn()->isComparatorCompilable() || !canBeNativeType(*type))
+        auto nested_type = removeNullable(sort_description_types[i]);
+        if (!sort_description_types[i]->createColumn()->isComparatorCompilable() ||
+            (!canBeNativeType(*sort_description_types[i]) && !WhichDataType(nested_type).isString() && !WhichDataType(nested_type).isFixedString()))
+            return;
+
+        /// JIT comparator does not support collation-aware comparison
+        if (description[i].collator)
             return;
     }
+
 
     auto description_dump = getSortDescriptionDump(description, sort_description_types);
 

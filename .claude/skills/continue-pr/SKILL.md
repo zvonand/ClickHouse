@@ -20,10 +20,12 @@ Pick up an existing pull request, resolve conflicts, fix CI failures, address re
 
 Extract the PR number from `$0`. If not provided, use `AskUserQuestion` to ask for it.
 
+Validate that the PR number contains only digits. Reject any non-numeric input immediately — do not pass unvalidated input to shell commands or GraphQL queries.
+
 Fetch PR metadata using `gh` if available, otherwise use `WebFetch` on the GitHub API:
 
 ```bash
-gh pr view $PR_NUMBER --json number,title,body,headRefName,baseRefName,state,mergeable,mergeStateStatus,author,url,headRepository,headRepositoryOwner,statusCheckRollup,reviews,comments,reviewRequests
+gh pr view "$PR_NUMBER" --json number,title,body,headRefName,baseRefName,state,mergeable,mergeStateStatus,author,url,headRepository,headRepositoryOwner,statusCheckRollup,reviews,comments,reviewRequests
 ```
 
 If `gh` is not available or not authenticated, use WebFetch to get the data:
@@ -109,8 +111,8 @@ For each CI failure:
 Fetch review comments:
 
 ```bash
-gh pr view $PR_NUMBER --json reviews,comments --jq '.reviews[] | select(.state != "COMMENTED" or .body != "") | {author: .author.login, state: .state, body: .body}'
-gh api repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/comments --paginate --jq '.[] | select(.in_reply_to_id == null or .in_reply_to_id == 0) | {author: .user.login, body: .body, path: .path, line: .line, created_at: .created_at}'
+gh pr view "$PR_NUMBER" --json reviews,comments --jq '.reviews[] | select(.state != "COMMENTED" or .body != "") | {author: .author.login, state: .state, body: .body}'
+gh api "repos/ClickHouse/ClickHouse/pulls/$PR_NUMBER/comments" --paginate --jq '.[] | select(.in_reply_to_id == null or .in_reply_to_id == 0) | {author: .user.login, body: .body, path: .path, line: .line, created_at: .created_at}'
 ```
 
 Also fetch review comment threads to identify which are resolved and which are not.

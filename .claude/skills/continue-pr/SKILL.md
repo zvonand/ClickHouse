@@ -41,17 +41,17 @@ Determine whether the PR branch is in the main repository or in the author's for
 
 **If the branch is in the main repository (`ClickHouse/ClickHouse`):**
 ```bash
-git fetch origin <head_branch>
-git checkout <head_branch>
-git pull origin <head_branch>
+git fetch origin "$HEAD_BRANCH"
+git checkout "$HEAD_BRANCH"
+git pull origin "$HEAD_BRANCH"
 ```
 
 **If the branch is in the author's fork:**
 ```bash
-git remote add <author_login> https://github.com/<author_login>/ClickHouse.git 2>/dev/null || git remote set-url <author_login> https://github.com/<author_login>/ClickHouse.git
-git fetch <author_login> <head_branch>
-git checkout -b <head_branch> <author_login>/<head_branch> 2>/dev/null || git checkout <head_branch>
-git pull <author_login> <head_branch>
+git remote add "$AUTHOR_LOGIN" "https://github.com/$AUTHOR_LOGIN/ClickHouse.git" 2>/dev/null || git remote set-url "$AUTHOR_LOGIN" "https://github.com/$AUTHOR_LOGIN/ClickHouse.git"
+git fetch "$AUTHOR_LOGIN" "$HEAD_BRANCH"
+git checkout -b "$HEAD_BRANCH" "$AUTHOR_LOGIN/$HEAD_BRANCH" 2>/dev/null || git checkout "$HEAD_BRANCH"
+git pull "$AUTHOR_LOGIN" "$HEAD_BRANCH"
 ```
 
 ### 3. Resolve conflicts with master (if any)
@@ -218,12 +218,12 @@ Determine where to push based on step 2:
 
 **If the branch is in the main repository:**
 ```bash
-git push origin <head_branch>
+git push origin "$HEAD_BRANCH"
 ```
 
 **If the branch is in the author's fork:**
 ```bash
-git push <author_login> <head_branch>
+git push "$AUTHOR_LOGIN" "$HEAD_BRANCH"
 ```
 
 Report the result and provide the PR URL.

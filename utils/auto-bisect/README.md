@@ -69,35 +69,14 @@ For replicateddb/sharedcatalog environments, also:
 
 By default, binaries are downloaded from the public S3 bucket. Use `--private` for private CloudFront builds.
 
-Credentials are read in this order:
+Set credentials via `CH_CI_USER` and `CH_CI_PASSWORD` env vars:
 
-1. **`CH_CI_BASIC_AUTH` env var** — base64-encoded `user:password`:
-   ```bash
-   export CH_CI_BASIC_AUTH="$(echo -n 'myuser:mypassword' | base64 -w0)"
-   ```
+```bash
+export CH_CI_USER="myuser"
+export CH_CI_PASSWORD="mypassword"
+```
 
-2. **`CH_CI_USER` + `CH_CI_PASSWORD` env vars**:
-   ```bash
-   export CH_CI_USER="myuser"
-   export CH_CI_PASSWORD="mypassword"
-   ```
-
-3. **`/etc/netrc` or `~/.netrc`** (standard netrc format):
-   ```
-   machine d1k2gkhrlfqv31.cloudfront.net login myuser password mypassword
-   ```
-
-   To set up system-wide credentials in `/etc/netrc`:
-   ```bash
-   echo "machine d1k2gkhrlfqv31.cloudfront.net login myuser password mypassword" | sudo tee -a /etc/netrc
-   sudo chmod 600 /etc/netrc
-   ```
-
-   Or per-user in `~/.netrc`:
-   ```bash
-   echo "machine d1k2gkhrlfqv31.cloudfront.net login myuser password mypassword" >> ~/.netrc
-   chmod 600 ~/.netrc
-   ```
+The script will fail immediately if `--private` is used without these variables set.
 
 ## Writing a Test Script
 

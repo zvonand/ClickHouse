@@ -20,13 +20,7 @@ VERSIONS=("25.8" "25.9" "25.10" "25.11" "25.12" "26.1" "26.2" "26.3" "26.4" "26.
 # Public builds (default): https://clickhouse-builds.s3.amazonaws.com
 # Private builds (--private): https://d1k2gkhrlfqv31.cloudfront.net/clickhouse-builds-private
 #
-# Private build credentials are read from (in order of precedence):
-#   1. CH_CI_BASIC_AUTH env var: base64-encoded "user:password" string
-#   2. CH_CI_USER + CH_CI_PASSWORD env vars
-#   3. /etc/netrc or ~/.netrc (standard netrc format, machine d1k2gkhrlfqv31.cloudfront.net)
-#
-# To set up /etc/netrc for private builds:
-#   machine d1k2gkhrlfqv31.cloudfront.net login <user> password <password>
+# Private build credentials must be set via CH_CI_USER + CH_CI_PASSWORD env vars.
 
 if [[ "${PRIVATE:-false}" == "true" ]]; then
   BASE_URL="https://d1k2gkhrlfqv31.cloudfront.net/clickhouse-builds-private"
@@ -34,18 +28,10 @@ else
   BASE_URL="https://clickhouse-builds.s3.amazonaws.com"
 fi
 
-# Resolve Basic Auth credentials for private builds
+# Build Basic Auth header from CH_CI_USER + CH_CI_PASSWORD (validated in bisect.sh)
 BASIC_AUTH_HEADER=""
 if [[ "${PRIVATE:-false}" == "true" ]]; then
-  if [[ -n "${CH_CI_BASIC_AUTH:-}" ]]; then
-    BASIC_AUTH_HEADER="Authorization: Basic ${CH_CI_BASIC_AUTH}"
-  elif [[ -n "${CH_CI_USER:-}" && -n "${CH_CI_PASSWORD:-}" ]]; then
-    BASIC_AUTH_HEADER="Authorization: Basic $(echo -n "${CH_CI_USER}:${CH_CI_PASSWORD}" | base64 -w0)"
-  else
-    echo "WARNING: --private mode enabled but no credentials found."
-    echo "  Set CH_CI_BASIC_AUTH, or CH_CI_USER + CH_CI_PASSWORD, or configure /etc/netrc."
-    echo "  See utils/auto-bisect/README.md for details."
-  fi
+  BASIC_AUTH_HEADER="Authorization: Basic $(echo -n "${CH_CI_USER}:${CH_CI_PASSWORD}" | base64 -w0)"
 fi
 
 function try_download() {
@@ -57,9 +43,6 @@ function try_download() {
     # 1. Quick HEAD check to see if file exists (saves bandwidth/time)
     if [[ -n "$BASIC_AUTH_HEADER" ]]; then
         if ! curl -I -s -f -H "$BASIC_AUTH_HEADER" "$URL" > /dev/null; then return 1; fi
-    elif [[ "${PRIVATE:-false}" == "true" && -z "$BASIC_AUTH_HEADER" ]]; then
-        # Use netrc if no explicit credentials
-        if ! curl -I -s -f --netrc-optional "$URL" > /dev/null; then return 1; fi
     else
         if ! curl -I -s -f "$URL" > /dev/null; then return 1; fi
     fi
@@ -70,16 +53,6 @@ function try_download() {
     # 2. Download
     if [[ -n "$BASIC_AUTH_HEADER" ]]; then
         wget -q --header="$BASIC_AUTH_HEADER" -O "$CH_PATH" "$URL"
-    elif [[ "${PRIVATE:-false}" == "true" && -z "$BASIC_AUTH_HEADER" ]]; then
-        # Try netrc files
-        NETRC_FILE=""
-        [[ -f "/etc/netrc" ]] && NETRC_FILE="/etc/netrc"
-        [[ -f "$HOME/.netrc" ]] && NETRC_FILE="$HOME/.netrc"
-        if [[ -n "$NETRC_FILE" ]]; then
-            wget -q --netrc-file="$NETRC_FILE" -O "$CH_PATH" "$URL"
-        else
-            wget -q -O "$CH_PATH" "$URL"
-        fi
     else
         wget -q -O "$CH_PATH" "$URL"
     fi

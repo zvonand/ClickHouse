@@ -202,6 +202,13 @@ check_script_executable() {
 }
 
 # Call the checks before running main logic
+if [[ "$PRIVATE" == "true" ]]; then
+  if [[ -z "${CH_CI_USER:-}" || -z "${CH_CI_PASSWORD:-}" ]]; then
+    echo "Error: --private requires CH_CI_USER and CH_CI_PASSWORD to be set."
+    exit 1
+  fi
+fi
+
 check_path_exists
 if [[ -z "$COMMITS_ARG" ]]; then
   check_commit_exists "$START_COMMIT"

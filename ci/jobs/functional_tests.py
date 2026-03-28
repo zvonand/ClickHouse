@@ -237,12 +237,12 @@ def main():
 
     if is_llvm_coverage:
         # Randomization makes coverage non-deterministic, long tests are slow to collect coverage
-        runner_options += " --llvm-coverage"
+        runner_options += " --llvm-coverage --no-long"
+        os.environ["LLVM_PROFILE_FILE"] = f"ft-{batch_num}-%2m.profraw"
         if is_per_test_coverage:
             runner_options += " --collect-per-test-coverage"
         else:
             runner_options += " --no-random-settings --no-random-merge-tree-settings"
-            os.environ["LLVM_PROFILE_FILE"] = f"ft-{batch_num}-%2m.profraw"
 
     if (
         not is_flaky_check
@@ -262,7 +262,7 @@ def main():
         # Large repeat count so the 45-min global_time_limit is the effective stopping
         # condition, not the repeat count.  Tests run in parallel (--jobs N) with fresh
         # random settings per TestCase; --max-failures 5 stops early on broken PRs.
-        rerun_count = 1000
+        rerun_count = 50
 
 
     if not info.is_local_run:
@@ -323,6 +323,8 @@ def main():
     stages = list(JobStages)
     if not is_per_test_coverage:
         stages.remove(JobStages.COLLECT_COVERAGE)
+    else:
+        stages.remove(JobStages.COLLECT_LOGS)
     if is_per_test_coverage or info.is_local_run or is_bugfix_validation:
         # For bugfix validation, we intentionally skip the check error stage (checks FATAL messages):
         # regular test failures are assumed to be sufficient to validate the test

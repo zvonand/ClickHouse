@@ -9,13 +9,13 @@ CREATE TABLE t(key UInt64, value String) ENGINE = MergeTree ORDER BY key;
 
 INSERT INTO t SELECT number, toString(number) FROM numbers(1000);
 
--- Use `count(), min(key)` instead of bare `count()` to avoid the trivial count optimization
--- which would bypass the parallel replicas code path entirely.
+-- Use `sum(key)` instead of bare `count()` to avoid both the trivial count optimization
+-- and the minmax_count_proj projection, which would bypass the parallel replicas code path.
 
 -- With `prefer_local_replica` = 0 and `max_parallel_replicas` = 1, the query should
 -- use the parallel replicas path (the query is sent to a replica selected
 -- by load balancing, not necessarily the local one).
-SELECT count(), min(key)
+SELECT count(), sum(key)
 FROM t
 SETTINGS
     enable_parallel_replicas = 1,
@@ -23,11 +23,12 @@ SETTINGS
     cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost',
     parallel_replicas_prefer_local_replica = 0,
     parallel_replicas_for_non_replicated_merge_tree = 1,
+    optimize_use_projections = 0,
     log_comment = '04050_prefer_local_0_max_1';
 
 -- With `prefer_local_replica` = 0 and `max_parallel_replicas` = 2, the query should
 -- also work and use 2 replicas (but local is not guaranteed to be among them).
-SELECT count(), min(key)
+SELECT count(), sum(key)
 FROM t
 SETTINGS
     enable_parallel_replicas = 1,
@@ -35,11 +36,12 @@ SETTINGS
     cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost',
     parallel_replicas_prefer_local_replica = 0,
     parallel_replicas_for_non_replicated_merge_tree = 1,
+    optimize_use_projections = 0,
     log_comment = '04050_prefer_local_0_max_2';
 
 -- Default behavior (`prefer_local_replica` = 1) with `max_parallel_replicas` = 1
 -- should NOT use parallel replicas (backward compatibility).
-SELECT count(), min(key)
+SELECT count(), sum(key)
 FROM t
 SETTINGS
     enable_parallel_replicas = 1,
@@ -47,6 +49,7 @@ SETTINGS
     cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost',
     parallel_replicas_prefer_local_replica = 1,
     parallel_replicas_for_non_replicated_merge_tree = 1,
+    optimize_use_projections = 0,
     log_comment = '04050_prefer_local_1_max_1';
 
 -- INSERT SELECT: with `prefer_local_replica` = 0 and `max_parallel_replicas` = 1,

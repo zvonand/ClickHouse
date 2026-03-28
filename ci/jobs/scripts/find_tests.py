@@ -909,7 +909,7 @@ class Targeting:
         #   rc=100 → 40%
         #   rc=200 → 70%  (unchanged default)
         min_seed_rc = min(seed_rcs) if seed_rcs else 200
-        JACCARD_MIN_PCT = max(10, 70 - (200 - min(min_seed_rc, 200)) * 0.3)
+        JACCARD_MIN_PCT = max(5, 70 - (200 - min(min_seed_rc, 200)) * 0.3)
         # Adaptive LIMIT: when direct evidence is strong (min_seed_rc is low),
         # reduce the indirect cap so that specific PRs don't get 200 loosely-related
         # tests.  At min_seed_rc=1 (rc=1 line, top_score=1.0): limit=20.

@@ -85,10 +85,10 @@ if (WITH_COVERAGE)
         # flags are gated here — not in the base WITH_COVERAGE block — so that the
         # regular amd_llvm_coverage build (used for HTML coverage reports) is unchanged.
         message (STATUS "Enabled per-test coverage instrumentation (WITH_COVERAGE_DEPTH)")
-        # Expose WITH_COVERAGE_DEPTH=1 as a C++ macro so that CoverageCollection.cpp,
+        # Expose WITH_COVERAGE=1 as a C++ macro so that CoverageCollection.cpp,
         # LLVMCoverageMapping.cpp, and SYSTEM SET COVERAGE TEST are compiled in.
-        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWITH_COVERAGE_DEPTH=1")
-        set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -DWITH_COVERAGE_DEPTH=1")
+        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWITH_COVERAGE=1")
+        set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -DWITH_COVERAGE=1")
         message (STATUS "Enabled call-depth shadow stack via -finstrument-functions-after-inlining")
         set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finstrument-functions-after-inlining")
         set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -finstrument-functions-after-inlining")

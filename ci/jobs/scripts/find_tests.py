@@ -737,7 +737,7 @@ class Targeting:
         # Store top broad-tier2 tests (by cov_regions) on self so that
         # get_most_relevant_tests() can guarantee they make it through
         # the MAX_OUTPUT_TESTS cap even if their scores fall below the cutoff.
-        n_guarantee = min(50, max(10, len(coverage_lines) // 5))
+        n_guarantee = min(50, max(15, len(coverage_lines) // 4))
         self._broad_tier2_guarantee = [
             t
             for t, _ in sorted(broad_tests.items(), key=lambda x: -x[1])

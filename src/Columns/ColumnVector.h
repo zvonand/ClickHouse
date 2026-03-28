@@ -10,6 +10,8 @@
 #include <base/TypeName.h>
 #include <base/unaligned.h>
 
+#include <cstring>
+
 #include "config.h"
 
 class SipHash;
@@ -315,7 +317,18 @@ public:
         return std::string_view(reinterpret_cast<const char *>(&data[n]), sizeof(data[n]));
     }
 
-    bool isDefaultAt(size_t n) const override { return data[n] == T{}; }
+    bool isDefaultAt(size_t n) const override
+    {
+        if constexpr (std::is_floating_point_v<T> || std::is_same_v<T, BFloat16>)
+        {
+            T zero{};
+            return memcmp(&data[n], &zero, sizeof(T)) == 0;
+        }
+        else
+        {
+            return data[n] == T{};
+        }
+    }
 
     bool structureEquals(const IColumn & rhs) const override
     {

@@ -1704,16 +1704,34 @@ class Targeting:
         all_ranked = sorted(width_score, key=sort_key)
         ranked = [t for t in all_ranked if width_score[t] >= effective_min][:MAX_OUTPUT_TESTS]
 
-        # Broad-tier2 guarantee: if the cap cut off high-cov_regions broad-tier2 tests,
-        # append the top few (by cov_regions) that didn't make it — but only up to the cap.
+        # Broad-tier2 guarantee: ensure the top-N high-cov_regions broad-tier2 tests
+        # are always in the output, even if the score-ranked list is already at the cap.
+        #
+        # Problem without this: when ALL evidence is from broad-tier2 regions (e.g.
+        # HTTPConnectionPool.cpp where the changed lines only have rc=5918 coverage),
+        # 5918+ tests all get nearly equal scores.  The cap cuts them to MAX_OUTPUT_TESTS
+        # in an effectively random order, potentially omitting the most relevant tests
+        # (those with highest cov_regions, covering more of the changed hunks).
+        #
+        # Fix: after ranking, replace the last guarantee.size tests in the ranked list
+        # with the top-cov_regions tests from the guarantee that aren't already present.
+        # This ensures the most-covering broad-tier2 tests are always included.
         broad_guarantee = getattr(self, '_broad_tier2_guarantee', [])
-        if broad_guarantee and len(ranked) < MAX_OUTPUT_TESTS:
+        if broad_guarantee:
             ranked_set = set(ranked)
-            slots = MAX_OUTPUT_TESTS - len(ranked)
-            extra = [t for t in broad_guarantee if t not in ranked_set][:slots]
-            if extra:
-                ranked = ranked + extra
-                print(f"[find_tests] broad-tier2 guarantee: +{len(extra)} high-cov_regions tests added")
+            missing = [t for t in broad_guarantee if t not in ranked_set]
+            if missing:
+                if len(ranked) < MAX_OUTPUT_TESTS:
+                    # Simple case: there's room; just append.
+                    slots = MAX_OUTPUT_TESTS - len(ranked)
+                    ranked = ranked + missing[:slots]
+                else:
+                    # Cap already reached: replace the tail of ranked with the guarantee.
+                    # This is safe because guarantee tests have higher cov_regions than most
+                    # broad-tier2 tests in the tail.
+                    n_replace = min(len(missing), len(ranked))
+                    ranked = ranked[:-n_replace] + missing[:n_replace]
+                print(f"[find_tests] broad-tier2 guarantee: +{len(missing)} high-cov_regions tests added/replaced")
 
         narrow_count = sum(1 for t in ranked if has_narrow_hit[t])
         direct_count = sum(

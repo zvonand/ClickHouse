@@ -168,7 +168,7 @@ class Targeting:
     # secondary signals and are discounted so that even a weak direct hit
     # outranks the strongest indirect or sibling hit.
     PASS_WEIGHT_DIRECT        = 1.0   # Pass 1: test directly covers changed lines
-    PASS_WEIGHT_HUNK_CONTEXT  = 0.40  # Pass 1b: test covers context line within the diff hunk
+    PASS_WEIGHT_HUNK_CONTEXT  = 0.45  # Pass 1b: test covers context line within the diff hunk
     PASS_WEIGHT_INDIRECT      = 0.35  # Pass 3: test shares virtual-dispatch callees with primary tests
     PASS_WEIGHT_BROAD2        = 0.18  # Pass 4: test covers changed files via very-broad regions (rc 2001-8000)
     PASS_WEIGHT_SIBLING       = 0.1   # Pass 2: test covers a sibling file in the same source directory

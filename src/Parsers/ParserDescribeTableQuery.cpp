@@ -30,14 +30,16 @@ bool ParserDescribeTableQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & ex
 
     auto query = make_intrusive<ASTDescribeQuery>();
 
-    if (s_temporary.ignore(pos, expected))
-        query->temporary = true;
+    bool temporary = s_temporary.ignore(pos, expected);
 
     s_table.ignore(pos, expected);
 
     /// Try to parse SELECT query without parentheses (e.g., DESCRIBE SELECT 1)
     if (ParserSelectWithUnionQuery().parse(pos, select, expected))
     {
+        if (temporary)
+            return false;
+
         auto table_expr = make_intrusive<ASTTableExpression>();
         /// Wrap SELECT in ASTSubquery, as expected by the rest of the codebase
         auto subquery = make_intrusive<ASTSubquery>(std::move(select));
@@ -46,7 +48,17 @@ bool ParserDescribeTableQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & ex
         query->table_expression = table_expr;
     }
     else if (!ParserTableExpression().parse(pos, query->table_expression, expected))
+    {
         return false;
+    }
+    else if (temporary)
+    {
+        /// TEMPORARY is only valid with a table name, not with a table function or subquery
+        auto * table_expr = query->table_expression->as<ASTTableExpression>();
+        if (!table_expr || !table_expr->database_and_table_name)
+            return false;
+        query->temporary = true;
+    }
 
     /// For compatibility with SELECTs, where SETTINGS can be in front of FORMAT
     ASTPtr settings;

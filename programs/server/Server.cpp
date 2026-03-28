@@ -930,7 +930,7 @@ void sanityChecks(Server & server, const ServerSettings & server_settings)
                 auto array_state_path = entry.path() / "md" / "array_state";
                 if (fs::exists(array_state_path))
                 {
-                    static const std::unordered_set<String> normal_states = {"active", "active-idle", "clean", "write-pending"};
+                    static const std::unordered_set<String> normal_states = {"active", "active-idle", "clean", "write-pending", "readonly", "read-auto"};
                     String array_state = readLine(array_state_path.string());
                     if (!normal_states.contains(array_state))
                     {

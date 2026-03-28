@@ -755,8 +755,13 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
             ///  - tables with row policies (they extend real_column_names differently);
             ///  - Merge/Distributed/View storages (they interpret table_expression for
             ///    query routing and nested plan building, so sharing a representative's
-            ///    table_expression would route reads to the wrong table).
+            ///    table_expression would route reads to the wrong table);
+            ///  - when processed_stage > FetchColumns, because createPlanForTable will
+            ///    either convert query_tree->toAST() (analyzer path, referencing the wrong
+            ///    table) or call replaceDatabaseAndTable on the shared AST (non-analyzer
+            ///    path, corrupting the cache).
             bool can_cache = !row_policy_data_opt
+                && common_processed_stage == QueryProcessingStage::FetchColumns
                 && !std::dynamic_pointer_cast<StorageMerge>(storage)
                 && !std::dynamic_pointer_cast<StorageDistributed>(storage)
                 && !storage->isView();

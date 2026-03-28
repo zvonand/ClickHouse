@@ -855,7 +855,7 @@ class Targeting:
         # that path), the existing seeds are too few / too specific to find related
         # tests via Jaccard.  Seeds from other narrow regions in the same file have
         # broader callee coverage and higher overlap with domain-related tests.
-        FILE_SEED_RC = 20   # narrower than MAX_TESTS_PER_LINE; avoids pulling in broad seeds
+        FILE_SEED_RC = 30   # narrower than MAX_TESTS_PER_LINE; avoids pulling in broad seeds
         if sparse_files:
             from ci.praktika.cidb import CIDB
             from ci.praktika.settings import Settings

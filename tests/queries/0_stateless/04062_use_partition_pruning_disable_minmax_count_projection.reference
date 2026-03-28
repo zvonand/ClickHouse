@@ -10,7 +10,7 @@ Expression ((Project names + Projection))
   Filter ((WHERE + Change column names to column identifiers))
     ReadFromMergeTree (default.t)
     Indexes:
-      MinMax
+      Partition Min-Max
         Keys:
           x
         Condition: (x in [1, 1])
@@ -30,7 +30,7 @@ Expression ((Project names + Projection))
   Filter ((WHERE + Change column names to column identifiers))
     ReadFromMergeTree (default.t)
     Indexes:
-      MinMax
+      Partition Min-Max
         Condition: true
         Parts: 3/3
         Granules: 3/3

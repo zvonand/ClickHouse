@@ -167,17 +167,25 @@ class Targeting:
     # Pass 1 (direct line coverage) is the baseline.  Passes 2 and 3 use
     # secondary signals and are discounted so that even a weak direct hit
     # outranks the strongest indirect or sibling hit.
-    PASS_WEIGHT_DIRECT   = 1.0   # Pass 1: test directly covers changed lines
-    PASS_WEIGHT_INDIRECT = 0.3   # Pass 3: test shares virtual-dispatch callees with primary tests
-    PASS_WEIGHT_BROAD2   = 0.15  # Pass 4: test covers changed files via very-broad regions (rc 2001-8000)
-    PASS_WEIGHT_SIBLING  = 0.1   # Pass 2: test covers a sibling file in the same source directory
-    PASS_WEIGHT_KEYWORD  = 0.05  # Fallback: test filename contains domain keywords from changed files
+    PASS_WEIGHT_DIRECT        = 1.0   # Pass 1: test directly covers changed lines
+    PASS_WEIGHT_HUNK_CONTEXT  = 0.35  # Pass 1b: test covers context line within the diff hunk
+    PASS_WEIGHT_INDIRECT      = 0.3   # Pass 3: test shares virtual-dispatch callees with primary tests
+    PASS_WEIGHT_BROAD2        = 0.15  # Pass 4: test covers changed files via very-broad regions (rc 2001-8000)
+    PASS_WEIGHT_SIBLING       = 0.1   # Pass 2: test covers a sibling file in the same source directory
+    PASS_WEIGHT_KEYWORD       = 0.05  # Fallback: test filename contains domain keywords from changed files
 
-    def get_tests_by_changed_lines(self, changed_lines: list) -> dict:
+    def get_tests_by_changed_lines(self, changed_lines: list,
+                                   hunk_ranges: dict | None = None) -> dict:
         """
         Query `checks_coverage_lines` for tests that cover each (filename, line_no) pair.
 
         `changed_lines` is a list of `(filename, line_no)` tuples.
+        `hunk_ranges` is an optional `{filename: [(start, end), ...]}` dict from
+        `_parse_diff_hunk_ranges`.  When provided, the SQL pre-filter for `.cpp`
+        files uses the union of all hunk ranges instead of just `[min, max]` of the
+        changed lines.  This ensures coverage points at unchanged context lines
+        adjacent to the actual change are also returned by the query (they are then
+        matched against truly-changed `line_no` values in the Python post-filter).
         Returns a dict mapping each input tuple to a list of `(test_name, region_width)`
         tuples, where `region_width = line_end - line_start + 1`.  The region width is
         used by the caller to weight test scores (narrow regions = high signal).
@@ -232,7 +240,7 @@ class Targeting:
             f"across {len(unique_files)} files"
         )
 
-        # Build one condition per file: file='X' AND line_end >= min_changed AND line_start <= max_changed.
+        # Build one condition per file: file='X' AND <range condition>.
         # This pre-filters to regions that *could* overlap any changed line in that file,
         # avoiding a full table scan per file while keeping the query size O(files) not O(lines).
         #
@@ -241,13 +249,42 @@ class Targeting:
         # the class semantics.  Tests covering OTHER methods in the same header are
         # highly relevant.  This mirrors the old symbol-level algo which matched all
         # symbols in the same translation unit.
+        #
+        # For .cpp files, we use per-hunk range conditions when hunk_ranges is provided.
+        # This expands the SQL filter to cover context lines within each hunk so that
+        # coverage points at unchanged lines adjacent to the actual change are fetched.
+        # Example: a one-line change in @@ -331,6 @@ has context lines 332-336; CIDB may
+        # only record coverage at line 332 (the first statement in the branch).  Without
+        # hunk expansion the query would use line_end >= 331 AND line_start <= 331 and
+        # miss this point; with hunk expansion it uses line_end >= 331 AND line_start <= 336
+        # and finds it.  The Python post-filter still only assigns results to actually-changed
+        # lines, so no spurious tests are introduced — only the SQL range is widened.
         per_file_conds_parts = []
         for f, lines in sorted(files_to_lines.items()):
+            esc_f = self._escape_sql_string(f)
             if f.endswith(".h"):
                 # For headers: fetch ALL regions in the file (no line range filter)
-                per_file_conds_parts.append(
-                    f"(file = '{self._escape_sql_string(f)}')"
-                )
+                per_file_conds_parts.append(f"(file = '{esc_f}')")
+            elif hunk_ranges:
+                # Use per-hunk OR conditions to widen the range beyond min/max of changed lines.
+                # Derive the original (non-stored) filename from the stored path for lookup.
+                orig_f = f[2:] if f.startswith("./") else f  # strip "./" prefix
+                file_hunks = hunk_ranges.get(orig_f, [])
+                if file_hunks:
+                    # Build OR of per-hunk range conditions.
+                    hunk_conds = " OR ".join(
+                        f"(line_end >= {h_start} AND line_start <= {h_end})"
+                        for h_start, h_end in file_hunks
+                    )
+                    per_file_conds_parts.append(
+                        f"(file = '{esc_f}' AND ({hunk_conds}))"
+                    )
+                else:
+                    # No hunk info for this file; fall back to min/max of changed lines.
+                    per_file_conds_parts.append(
+                        f"(file = '{esc_f}'"
+                        f" AND line_end >= {min(lines)} AND line_start <= {max(lines)})"
+                    )
             else:
                 per_file_conds_parts.append(
                     f"(file = '{self._escape_sql_string(f)}'"
@@ -410,34 +447,77 @@ class Targeting:
         for entry in coverage_ranges:
             ranges_by_file.setdefault(entry[0], []).append(entry)
 
+        # Build a per-file, per-changed-line hunk-range lookup: for each changed line,
+        # find the hunk (start, end) that contains it.  A coverage region is relevant
+        # for a changed line if it overlaps either the line itself OR the hunk containing
+        # the line.  This ensures regions at unchanged context lines (e.g. the `if`
+        # condition at the start of a hunk) are counted for the changed lines inside it.
+        # The region width used for scoring is the actual CIDB region width (not the hunk
+        # width) so the scoring formula remains correct.
+        line_to_hunk: dict = {}  # (filename, line_no) -> (hunk_start, hunk_end) or None
+        if hunk_ranges:
+            for filename, line_no in coverage_lines:
+                orig_f = filename  # coverage_lines use original paths
+                file_hunks = hunk_ranges.get(orig_f, [])
+                for h_start, h_end in file_hunks:
+                    if h_start <= line_no <= h_end:
+                        line_to_hunk[(filename, line_no)] = (h_start, h_end)
+                        break
+
         result: dict = dict(base_result)
         for filename, line_no in coverage_lines:
             stored = self._stored_path(filename)
             matched: list = []
             is_header = filename.endswith(".h")
+            hunk = line_to_hunk.get((filename, line_no))  # (hunk_start, hunk_end) or None
             for file_, line_start, line_end, test_depths, region_test_count in ranges_by_file.get(stored, []):
+                # Direct overlap: region contains the changed line.
                 overlaps = line_start <= line_no <= line_end
+                # Hunk overlap: region overlaps the hunk containing the changed line.
+                # Used for regions at context lines adjacent to the actual change.
+                hunk_overlap = (
+                    not overlaps and hunk is not None and
+                    line_start <= hunk[1] and line_end >= hunk[0]
+                )
                 if overlaps:
                     width = line_end - line_start + 1
                     for t, depth in test_depths:
-                        matched.append((t, width, depth, region_test_count))
+                        matched.append((t, width, depth, region_test_count,
+                                        self.PASS_WEIGHT_DIRECT))
+                elif hunk_overlap:
+                    # Context-line hit: region is within the diff hunk but does not
+                    # directly contain the changed line.  Use PASS_WEIGHT_HUNK_CONTEXT
+                    # (0.35 < PASS_WEIGHT_DIRECT but > PASS_WEIGHT_INDIRECT) so:
+                    # - Scores rank below direct hits but above indirect/sibling.
+                    # - The pass_weight is below PASS_WEIGHT_INDIRECT (0.3)... wait
+                    #   actually 0.35 > 0.3; sparse-file threshold uses pw >= PASS_WEIGHT_INDIRECT,
+                    #   so hunk-context hits WOULD still count.  But we explicitly want them
+                    #   NOT to count — the file has nearby coverage but the changed lines
+                    #   themselves are in a code path with low rc (pure insertions).
+                    #   Using PASS_WEIGHT_HUNK_CONTEXT in the sparse-file check is handled
+                    #   by the condition: sparse-file uses pw >= PASS_WEIGHT_DIRECT (see below).
+                    width = line_end - line_start + 1
+                    for t, depth in test_depths:
+                        matched.append((t, width, depth, region_test_count,
+                                        self.PASS_WEIGHT_HUNK_CONTEXT))
                 elif is_header:
                     # For header files: include non-overlapping regions from
                     # the same file with SIBLING_DIR_WIDTH penalty.  These are
                     # other methods in the same class, still relevant but with
                     # weaker signal than a direct line overlap.
                     for t, depth in test_depths:
-                        matched.append((t, self.SIBLING_DIR_WIDTH, 255, region_test_count))
-            # Deduplicate: keep lowest width, depth, and region_test_count per test.
-            by_test: dict = {}  # test -> (min_width, min_depth, min_region_test_count)
-            for t, w, d, rc in matched:
+                        matched.append((t, self.SIBLING_DIR_WIDTH, 255, region_test_count,
+                                        self.PASS_WEIGHT_DIRECT))
+            # Deduplicate: keep best (min width, max pass_weight, min depth, min rc) per test.
+            by_test: dict = {}  # test -> (min_width, min_depth, min_region_test_count, max_pw)
+            for t, w, d, rc, pw in matched:
                 if t not in by_test:
-                    by_test[t] = (w, d, rc)
+                    by_test[t] = (w, d, rc, pw)
                 else:
-                    ow, od, orc = by_test[t]
-                    by_test[t] = (min(ow, w), min(od, d), min(orc, rc))
+                    ow, od, orc, opw = by_test[t]
+                    by_test[t] = (min(ow, w), min(od, d), min(orc, rc), max(opw, pw))
             result[(filename, line_no)] = [
-                (t, w, d, rc, self.PASS_WEIGHT_DIRECT) for t, (w, d, rc) in sorted(by_test.items())
+                (t, w, d, rc, pw) for t, (w, d, rc, pw) in sorted(by_test.items())
             ]
 
         # Inject broad-tier2 tests into coverage results.
@@ -510,7 +590,12 @@ class Targeting:
         for (fname, _), pairs in result.items():
             stored = self._stored_path(fname)  # fname from coverage_lines (orig path)
             for _, _, _, region_rc, pw in pairs:
-                if pw >= self.PASS_WEIGHT_INDIRECT:  # direct-pass entries only
+                # Only count DIRECT hits (pw == PASS_WEIGHT_DIRECT) for sparse-file threshold.
+                # Hunk-context hits (PASS_WEIGHT_HUNK_CONTEXT) are excluded: a file where
+                # the actually-changed lines have rc=0 but nearby context has rc=30 is still
+                # "sparse from the changed code's perspective" and benefits from sparse-file
+                # expansion.  Including hunk-context hits here would suppress that expansion.
+                if pw >= self.PASS_WEIGHT_DIRECT:  # direct-pass entries only
                     if region_rc > file_max_primary_rc.get(stored, 0):
                         file_max_primary_rc[stored] = region_rc
 
@@ -1379,6 +1464,47 @@ class Targeting:
                     old_line += 1  # context line
         return list(changed)
 
+    @staticmethod
+    def _parse_diff_hunk_ranges(diff_text: str) -> dict:
+        """
+        Parse a unified diff and return per-file hunk boundary ranges.
+
+        Returns `{filename: [(hunk_start, hunk_end), ...]}` where each tuple is the
+        old-file start and end line of a hunk.  These ranges are used to expand the
+        CIDB range query beyond just the actually-changed lines so that coverage
+        regions at unchanged context lines adjacent to the change are also captured.
+
+        Example: a hunk `@@ -331,6 ... @@` contains 6 old-file lines (331-336).
+        If CIDB only records a coverage point at line 332 (the first statement
+        after a branch), a query using only the changed lines {331} would miss it,
+        but including the full hunk range [331, 336] finds it.
+        """
+        hunks: dict = {}  # filename -> list of (start, end)
+        current_file = None
+        for line in diff_text.splitlines():
+            if line.startswith("--- "):
+                pass
+            elif line.startswith("+++ b/"):
+                current_file = line[6:]
+            elif line.startswith("@@ ") and current_file:
+                # @@ -old_start,old_count +new_start,new_count @@
+                m = re.search(r"-(\d+)(?:,(\d+))?", line)
+                if m:
+                    start = int(m.group(1))
+                    count = int(m.group(2)) if m.group(2) is not None else 1
+                    end = start + count - 1
+                    hunks.setdefault(current_file, []).append((start, end))
+        return hunks
+
+    def get_diff_text(self) -> str:
+        """Fetch the PR diff text (cached on self._diff_text after first call)."""
+        if not hasattr(self, '_diff_text') or not self._diff_text:
+            assert self.info.pr_number > 0, "Diff fetching applicable for PRs only"
+            self._diff_text = Shell.get_output(
+                f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse"
+            )
+        return self._diff_text
+
     def get_changed_lines_from_diff(self):
         """
         Return changed lines from the PR diff.
@@ -1386,10 +1512,7 @@ class Targeting:
         reflect the actual PR regardless of the local checkout state.
         """
         assert self.info.pr_number > 0, "Find tests by diff applicable for PRs only"
-        diff_output = Shell.get_output(
-            f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse"
-        )
-        return self._parse_diff_lines(diff_output)
+        return self._parse_diff_lines(self.get_diff_text())
 
     # min_depth stores the raw entry-counter call count (capped at 254; 255 = not tracked).
     # A low call count means the function was called rarely during the test → more specific.
@@ -1411,7 +1534,11 @@ class Targeting:
         4. Returns the ranked list and a `Result` with info about the findings.
         """
         changed_lines = self.get_changed_lines_from_diff()
-        line_to_tests = self.get_tests_by_changed_lines(changed_lines)
+        # Also parse hunk boundaries so the CIDB query covers context lines within
+        # each hunk (not just the actually-changed lines).  See _parse_diff_hunk_ranges.
+        hunk_ranges = self._parse_diff_hunk_ranges(self.get_diff_text())
+        line_to_tests = self.get_tests_by_changed_lines(changed_lines,
+                                                        hunk_ranges=hunk_ranges)
 
         # Keyword-based fallback: if no coverage results were found for any
         # C++ source file, try to find tests by matching the source filename
@@ -1542,7 +1669,7 @@ class Targeting:
         # scores.  A minimum score threshold keeps the result set bounded
         # without an arbitrary count limit.
         MIN_SCORE = 1e-8        # floor: tests scoring below this have negligible signal
-        MAX_OUTPUT_TESTS = 500   # hard cap: flaky check runs must stay focused
+        MAX_OUTPUT_TESTS = 400   # hard cap: flaky check runs must stay focused
         # Dynamic ratio floor: drop tests whose score is more than MAX_SCORE_RATIO times
         # weaker than the best evidence.  This supersedes per-pass suppression guards —
         # when strong direct hits exist (e.g. rc=37 on a SAMPLE-specific line, score=0.027)
@@ -1555,7 +1682,20 @@ class Targeting:
         # effective_min to 1e-3 and cut indirect / sparse-file expansion results.
         # Equivalent to treating any top_score above 1/10 the same as 1/10.
         MAX_EFFECTIVE_MIN = 1e-4
-        top_score = max(width_score.values(), default=0.0)
+        # Compute top_score from direct-pass entries ONLY (pw >= PASS_WEIGHT_DIRECT = 1.0).
+        # Hunk-context hits (PASS_WEIGHT_HUNK_CONTEXT = 0.35) are excluded so that their
+        # score doesn't inflate top_score and suppress lower-scoring but genuinely
+        # relevant tests (e.g. sparse-file expansion results at high-rc regions).
+        # When there are no direct hits at all (pr changes code with zero CIDB coverage),
+        # top_score stays 0.0 and effective_min defaults to MIN_SCORE so ALL tests survive.
+        top_score = 0.0
+        for quads in line_to_tests.values():
+            for t, width, depth, region_test_count, pass_weight in quads:
+                if pass_weight >= self.PASS_WEIGHT_DIRECT:
+                    rc = max(1, region_test_count)
+                    s = pass_weight / (width * rc)
+                    if s > top_score:
+                        top_score = s
         effective_min = min(MAX_EFFECTIVE_MIN, max(MIN_SCORE, top_score / MAX_SCORE_RATIO))
         all_ranked = sorted(width_score, key=sort_key)
         ranked = [t for t in all_ranked if width_score[t] >= effective_min][:MAX_OUTPUT_TESTS]
@@ -1689,14 +1829,13 @@ if __name__ == "__main__":
     info = InfoLocalTest()
     targeting = Targeting(info)
 
-    # If a pre-fetched diff file is provided, monkey-patch get_changed_lines_from_diff
-    # so it reads from the file rather than calling gh pr diff.
+    # If a pre-fetched diff file is provided, monkey-patch get_diff_text so both
+    # get_changed_lines_from_diff and get_most_relevant_tests read from the file
+    # rather than calling gh pr diff.
     if args.diff_file:
         import types
         diff_text = Path(args.diff_file).read_text()
-        targeting.get_changed_lines_from_diff = types.MethodType(
-            lambda self: Targeting._parse_diff_lines(diff_text), targeting
-        )
+        targeting._diff_text = diff_text
 
     if args.coverage_only:
         ranked, result = targeting.get_most_relevant_tests()

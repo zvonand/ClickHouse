@@ -103,6 +103,10 @@ echo "Using workspace path: $WORKSPACE_PATH"
         > llvm_coverage.info
 
 sed -i "s|^SF:ci/tmp/build/|SF:$WORKSPACE_PATH/|" "llvm_coverage.info"
+
+echo "Deduplicating template instantiations..."
+python3 "$WORKSPACE_PATH/ci/jobs/scripts/dedup_lcov_instantiations.py" llvm_coverage.info
+
 rm -rf ./coverage_html/*
 
 echo "Generating HTML report..."

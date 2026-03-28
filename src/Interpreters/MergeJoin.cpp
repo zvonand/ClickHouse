@@ -78,7 +78,7 @@ ColumnWithTypeAndName condtitionColumnToJoinable(const Block & block, const Stri
     return {res_col, res_col_type, res_name};
 }
 
-template <bool has_left_nulls, bool has_right_nulls, bool track = false>
+template <bool has_left_nulls, bool has_right_nulls>
 Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_column, size_t lhs_pos, size_t rhs_pos)
 {
     const IColumn * left_notnull = &left_column;
@@ -111,30 +111,66 @@ Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_colum
         }
     }
 
-    if constexpr (track)
-    {
-        Int64 res = left_notnull->compareTrackAt(lhs_pos, rhs_pos, *right_notnull, -1);
+    return left_notnull->compareAt(lhs_pos, rhs_pos, *right_notnull, -1);
+}
 
-        if (left_nullable && res < 0)
+template <bool has_left_nulls, bool has_right_nulls>
+Int64 nullableCompareTrackAt(const IColumn & left_column, const IColumn & right_column, size_t lhs_pos, size_t rhs_pos)
+{
+    const IColumn * left_notnull = &left_column;
+    const IColumn * right_notnull = &right_column;
+    const ColumnNullable * left_nullable = nullptr;
+    const ColumnNullable * right_nullable = nullptr;
+
+    if constexpr (has_left_nulls)
+    {
+        left_nullable = checkAndGetColumn<ColumnNullable>(&left_column);
+        if (left_nullable)
         {
-            size_t pos = lhs_pos + 1;
-            size_t end = lhs_pos - res;
-            for (; pos < end; ++pos)
-                if (left_nullable->isNullAt(pos))
-                    return -static_cast<Int64>(pos - lhs_pos);
+            size_t null_pos = lhs_pos;
+            while (null_pos < left_nullable->size() && left_nullable->isNullAt(null_pos))
+                ++null_pos;
+            if (null_pos > lhs_pos)
+                return -static_cast<Int64>(null_pos - lhs_pos);
+
+            left_notnull = &left_nullable->getNestedColumn();
         }
-        if (right_nullable && res > 0)
-        {
-            size_t pos = rhs_pos + 1;
-            size_t end = rhs_pos + res;
-            for (; pos < end; ++pos)
-                if (right_nullable->isNullAt(pos))
-                    return pos - rhs_pos;
-        }
-        return res;
     }
-    else
-        return left_notnull->compareAt(lhs_pos, rhs_pos, *right_notnull, -1);
+
+    if constexpr (has_right_nulls)
+    {
+        right_nullable = checkAndGetColumn<ColumnNullable>(&right_column);
+        if (right_nullable)
+        {
+            size_t null_pos = rhs_pos;
+            while (null_pos < right_nullable->size() && right_nullable->isNullAt(null_pos))
+                ++null_pos;
+            if (null_pos > rhs_pos)
+                return null_pos - rhs_pos;
+
+            right_notnull = &right_nullable->getNestedColumn();
+        }
+    }
+
+    Int64 res = left_notnull->compareTrackAt(lhs_pos, rhs_pos, *right_notnull, -1);
+
+    if (left_nullable && res < 0)
+    {
+        size_t pos = lhs_pos + 1;
+        size_t end = lhs_pos - res;
+        for (; pos < end; ++pos)
+            if (left_nullable->isNullAt(pos))
+                return -static_cast<Int64>(pos - lhs_pos);
+    }
+    if (right_nullable && res > 0)
+    {
+        size_t pos = rhs_pos + 1;
+        size_t end = rhs_pos + res;
+        for (; pos < end; ++pos)
+            if (right_nullable->isNullAt(pos))
+                return pos - rhs_pos;
+    }
+    return res;
 }
 
 /// Get first and last row from sorted block
@@ -341,7 +377,7 @@ private:
 
         while (true)
         {
-            Int64 cmp = nullableCompareAt<left_nulls, right_nulls, true>(
+            Int64 cmp = nullableCompareTrackAt<left_nulls, right_nulls>(
                 *impl.sort_columns[0], *rhs.impl.sort_columns[0], position(), rhs.position());
 
             for (size_t i = 1; (!cmp) && i < impl.sort_columns_size; ++i)

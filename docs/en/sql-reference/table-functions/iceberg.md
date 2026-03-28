@@ -401,7 +401,6 @@ y: 993
 Deleting extra rows in the merge-on-read format is also supported in ClickHouse.
 This query will create a new snapshot with position delete files.
 
-
 ### Example {#example-iceberg-writes-delete}
 
 ```sql

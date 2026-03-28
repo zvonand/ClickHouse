@@ -58,8 +58,13 @@ size_t tryPushDownLimit(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes,
     /// Push LIMIT into each branch of UNION ALL.
     /// Each branch only needs to produce at most (limit + offset) rows,
     /// because the final LIMIT on top will handle the rest.
+    /// Skip when `always_read_till_end` is set (e.g. `exact_rows_before_limit` or `WITH TOTALS`),
+    /// because per-branch limits would terminate sources early and break `rows_before_limit_at_least`.
     if (typeid_cast<UnionStep *>(child.get()))
     {
+        if (limit->alwaysReadTillEnd())
+            return 0;
+
         const size_t limit_for_branches = limit->getLimitForSorting();
         if (limit_for_branches == 0)
             return 0;

@@ -92,3 +92,18 @@ SELECT * FROM
 )
 ORDER BY number WITH FILL
 LIMIT 5;
+
+SELECT '---';
+
+-- exact_rows_before_limit must prevent pushdown (always_read_till_end is true).
+-- Without this check, per-branch limits would terminate sources early
+-- and rows_before_limit_at_least would be incorrect.
+EXPLAIN PLAN header=0
+SELECT * FROM
+(
+    SELECT number FROM numbers(100)
+    UNION ALL
+    SELECT number FROM numbers(200)
+)
+LIMIT 5
+SETTINGS exact_rows_before_limit = 1;

@@ -25,7 +25,7 @@ Expression ((Project names + Projection))
   Expression ((WHERE + Change column names to column identifiers))
     ReadFromMergeTree (default.test)
     Indexes:
-      MinMax
+      Partition Min-Max
         Keys:
           d
         Condition: (d in [20454, 20454])
@@ -52,7 +52,7 @@ Expression ((Project names + Projection))
   Expression ((WHERE + Change column names to column identifiers))
     ReadFromMergeTree (default.test)
     Indexes:
-      MinMax
+      Partition Min-Max
         Condition: true
         Parts: 2/2
         Granules: 2/2
@@ -115,7 +115,7 @@ Expression ((Projection + Before ORDER BY))
       Filter (WHERE)
         ReadFromMergeTree (default.test)
         Indexes:
-          MinMax
+          Partition Min-Max
             Condition: true
             Parts: 2/2
             Granules: 3/3
@@ -150,7 +150,7 @@ Expression ((Projection + Before ORDER BY))
       Filter (WHERE)
         ReadFromMergeTree (default.test)
         Indexes:
-          MinMax
+          Partition Min-Max
             Condition: true
             Parts: 2/2
             Granules: 3/3

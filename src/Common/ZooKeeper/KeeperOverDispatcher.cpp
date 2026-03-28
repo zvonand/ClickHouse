@@ -1,3 +1,5 @@
+#include <Common/ZooKeeper/IKeeper.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include "config.h"
 
 #if USE_NURAFT
@@ -168,6 +170,31 @@ void KeeperOverDispatcher::get(
         callback_state->callbacks[request->xid] = [callback](const ZooKeeperResponsePtr & response)
         {
             callback(dynamic_cast<const GetResponse &>(*response));
+        };
+    }
+
+    keeper_dispatcher->putLocalReadRequest(request, session_id);
+}
+
+void KeeperOverDispatcher::getChildrenRecursive(
+    const String & path,
+    uint32_t get_children_recursive_nodes_limit,
+    GetChildrenRecursiveCallback callback,
+    WatchCallbackPtrOrEventPtr watch)
+{
+    if (watch)
+        throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Watch is not implemented");
+
+    const auto request = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>();
+    request->path = path;
+    request->children_nodes_limit = get_children_recursive_nodes_limit;
+    request->xid = next_xid++;
+
+    {
+        std::lock_guard lock(callback_state->callbacks_mutex);
+        callback_state->callbacks[request->xid] = [callback](const ZooKeeperResponsePtr & response)
+        {
+            callback(dynamic_cast<const GetChildrenRecursiveResponse &>(*response));
         };
     }
 

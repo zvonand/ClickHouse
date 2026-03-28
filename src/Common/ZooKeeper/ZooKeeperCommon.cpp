@@ -1084,6 +1084,11 @@ ZooKeeperMultiRequest::ZooKeeperMultiRequest(std::span<const Coordination::Reque
             checkOperationType(Read);
             requests.push_back(std::make_shared<ZooKeeperSimpleListRequest>(*concrete_request_simple_list));
         }
+        else if (const auto * concrete_request_get_children_recursive = dynamic_cast<const ZooKeeperGetChildrenRecursiveRequest *>(generic_request.get()))
+        {
+            checkOperationType(Read);
+            requests.push_back(std::make_shared<ZooKeeperGetChildrenRecursiveRequest>(*concrete_request_get_children_recursive));
+        }
         else if (const auto * concrete_request_list = dynamic_cast<const ZooKeeperFilteredListRequest *>(generic_request.get()))
         {
             checkOperationType(Read);
@@ -1551,6 +1556,37 @@ void ZooKeeperListResponse::fillLogElements(LogElements & elems, size_t idx) con
     auto & elem =  elems[idx];
     elem.stat = stat;
     elem.children = names;
+}
+
+void ZooKeeperGetChildrenRecursiveRequest::writeImpl(WriteBuffer & out) const
+{
+    Coordination::write(path, out);
+    Coordination::write(children_nodes_limit, out);
+}
+
+void ZooKeeperGetChildrenRecursiveRequest::readImpl(ReadBuffer & in)
+{
+    Coordination::read(path, in);
+    Coordination::read(children_nodes_limit, in);
+}
+
+std::string ZooKeeperGetChildrenRecursiveRequest::toStringImpl(bool /*short_format*/) const
+{
+    return fmt::format(
+        "path = {}\n"
+        "remove_nodes_limit = {}",
+        path,
+        children_nodes_limit);
+}
+
+void ZooKeeperGetChildrenRecursiveResponse::readImpl(ReadBuffer & in)
+{
+    Coordination::read(childs, in);
+}
+
+void ZooKeeperGetChildrenRecursiveResponse::writeImpl(WriteBuffer & out) const
+{
+    Coordination::write(childs, out);
 }
 
 void ZooKeeperMultiResponse::fillLogElements(LogElements & elems, size_t idx) const

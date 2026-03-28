@@ -133,6 +133,14 @@ struct TestKeeperRemoveRecursiveRequest final : RemoveRecursiveRequest, TestKeep
     }
 };
 
+struct TestKeeperGetChildrenRecursiveRequest final : GetChildrenRecursiveRequest, TestKeeperRequest
+{
+    TestKeeperGetChildrenRecursiveRequest() = default;
+    explicit TestKeeperGetChildrenRecursiveRequest(const GetChildrenRecursiveRequest & base) : GetChildrenRecursiveRequest(base) {}
+    ResponsePtr createResponse() const override;
+    std::pair<ResponsePtr, Undo> process(TestKeeper::Container & container, int64_t zxid) const override;
+};
+
 struct TestKeeperExistsRequest final : ExistsRequest, TestKeeperRequest
 {
     TestKeeperExistsRequest() = default;
@@ -509,6 +517,26 @@ std::pair<ResponsePtr, Undo> TestKeeperGetRequest::process(TestKeeper::Container
     return { std::make_shared<GetResponse>(response), {} };
 }
 
+std::pair<ResponsePtr, Undo> TestKeeperGetChildrenRecursiveRequest::process(TestKeeper::Container & container, int64_t zxid) const
+{
+    GetChildrenRecursiveResponse response;
+    response.zxid = zxid;
+
+    auto it = container.find(path);
+    if (it == container.end())
+    {
+        response.error = Error::ZNONODE;
+    }
+    else
+    {
+        response.childs = {}; // TODO
+        //response.data = it->second.data;
+        response.error = Error::ZOK;
+    }
+
+    return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
+}
+
 std::pair<ResponsePtr, Undo> TestKeeperSetRequest::process(TestKeeper::Container & container, int64_t zxid) const
 {
     SetResponse response;
@@ -786,6 +814,7 @@ ResponsePtr TestKeeperSyncRequest::createResponse() const { return std::make_sha
 ResponsePtr TestKeeperReconfigRequest::createResponse() const { return std::make_shared<ReconfigResponse>(); }
 ResponsePtr TestKeeperGetACLRequest::createResponse() const { return std::make_shared<GetACLResponse>(); }
 ResponsePtr TestKeeperMultiRequest::createResponse() const { return std::make_shared<MultiResponse>(); }
+ResponsePtr TestKeeperGetChildrenRecursiveRequest::createResponse() const { return std::make_shared<GetChildrenRecursiveResponse>(); }
 
 
 TestKeeper::TestKeeper(const zkutil::ZooKeeperArgs & args_)
@@ -1044,6 +1073,22 @@ void TestKeeper::removeRecursive(
     RequestInfo request_info;
     request_info.request = std::make_shared<TestKeeperRemoveRecursiveRequest>(std::move(request));
     request_info.callback = [callback](const Response & response) { callback(dynamic_cast<const RemoveRecursiveResponse &>(response)); };
+    pushRequest(std::move(request_info));
+}
+
+void TestKeeper::getChildrenRecursive(
+    const String & path,
+    uint32_t get_children_recursive_nodes_limit,
+    GetChildrenRecursiveCallback callback,
+    WatchCallbackPtrOrEventPtr /*watch*/)
+{
+    TestKeeperGetChildrenRecursiveRequest request;
+    request.path = path;
+    request.children_nodes_limit = get_children_recursive_nodes_limit;
+
+    RequestInfo request_info;
+    request_info.request = std::make_shared<TestKeeperGetChildrenRecursiveRequest>(std::move(request));
+    request_info.callback = [callback](const Response & response) { callback(dynamic_cast<const GetChildrenRecursiveResponse &>(response)); };
     pushRequest(std::move(request_info));
 }
 

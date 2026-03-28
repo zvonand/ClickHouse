@@ -1528,6 +1528,8 @@ auto callOnConcreteRequestType(Coordination::ZooKeeperRequest & zk_request, F fu
             return function(static_cast<Coordination::ZooKeeperRemoveRequest &>(zk_request));
         case Coordination::OpNum::RemoveRecursive:
             return function(static_cast<Coordination::ZooKeeperRemoveRecursiveRequest &>(zk_request));
+        case Coordination::OpNum::GetChildrenRecursive:
+            return function(static_cast<Coordination::ZooKeeperGetChildrenRecursiveRequest &>(zk_request));
         case Coordination::OpNum::Exists:
             return function(static_cast<Coordination::ZooKeeperExistsRequest &>(zk_request));
         case Coordination::OpNum::Set:
@@ -2415,6 +2417,105 @@ process(const Coordination::ZooKeeperRemoveRecursiveRequest & zk_request, Storag
 }
 
 /// REMOVERECURSIVE Request ///
+
+/// GETRECURSIVECHILDREN Request ///
+
+template <typename Storage>
+bool checkAuth(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, int64_t session_id, bool is_local)
+{
+    return storage.checkACL(zk_request.getPath(), Coordination::ACL::Read, session_id, is_local);
+}
+
+template <typename Storage>
+std::list<KeeperStorageBase::Delta> preprocess(
+    const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request,
+    Storage & storage,
+    int64_t zxid,
+    int64_t /*session_id*/,
+    int64_t /*time*/,
+    uint64_t * /*digest*/,
+    const KeeperContext & /*keeper_context*/)
+{
+    ProfileEvents::increment(ProfileEvents::KeeperGetRequest);
+
+    if (zk_request.path == Coordination::keeper_api_feature_flags_path
+        || zk_request.path == Coordination::keeper_config_path
+        || zk_request.path == Coordination::keeper_availability_zone_path)
+        return {};
+
+    if (!storage.uncommitted_state.getNode(zk_request.path))
+        return {KeeperStorageBase::Delta{zxid, Coordination::Error::ZNONODE}};
+
+    return {};
+}
+
+template <bool local, typename Storage>
+Coordination::ZooKeeperResponsePtr
+processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t /*session_id*/)
+{
+    auto response = std::make_shared<Coordination::ZooKeeperGetChildrenRecursiveResponse>();
+
+    if constexpr (!local)
+    {
+        if (const auto result = storage.commit(std::move(deltas)); result != Coordination::Error::ZOK)
+        {
+            response->error = result;
+            return response;
+        }
+    }
+
+    if (zk_request.path == Coordination::keeper_config_path)
+    {
+        //response->data = serializeClusterConfig(
+        //    storage.keeper_context->getDispatcher()->getStateMachine().getClusterConfig());
+        response->error = Coordination::Error::ZOK;
+        return response;
+    }
+
+    auto & container = storage.container;
+    
+    auto node_it = container.find(zk_request.path);
+    if (node_it == container.end())
+    {
+        if constexpr (local)
+            response->error = Coordination::Error::ZNONODE;
+        else
+            onStorageInconsistency("Failed to get node because it's missing");
+    }
+    else
+    {
+        auto result = node_it->value.getChildren();
+        for (const auto & child : result)
+        {
+            response->childs.push_back(child.);
+        }
+        //response->childs = result;
+
+        //node_it->value.setResponseStat(response->stat);
+        //auto data = node_it->value.getData();
+        //response->data = std::string(data);
+        response->error = Coordination::Error::ZOK;
+    }
+
+    return response;
+}
+
+template <typename Storage>
+Coordination::ZooKeeperResponsePtr process(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
+{
+    return processImpl<false>(zk_request, storage, std::move(deltas), session_id);
+}
+
+template <typename Storage>
+Coordination::ZooKeeperResponsePtr
+processLocal(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
+{
+    ProfileEvents::increment(ProfileEvents::KeeperGetRequest);
+    return processImpl<true>(zk_request, storage, std::move(deltas), session_id);
+}
+
+/// GETRECURSIVECHILDREN Request ///
+
 
 /// EXISTS Request ///
 template <typename Storage>

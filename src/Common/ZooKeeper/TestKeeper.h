@@ -64,6 +64,12 @@ public:
         uint32_t remove_nodes_limit,
         RemoveRecursiveCallback callback) override;
 
+    void getChildrenRecursive(
+        const String & path,
+        uint32_t get_children_recursive_nodes_limit,
+        GetChildrenRecursiveCallback callback,
+        WatchCallbackPtrOrEventPtr watch) override;
+
     void exists(
         const String & path,
         ExistsCallback callback,

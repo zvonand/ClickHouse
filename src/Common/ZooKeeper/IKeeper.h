@@ -458,6 +458,32 @@ struct RemoveRecursiveResponse : virtual Response
 {
 };
 
+struct GetChildrenRecursiveRequest : virtual Request
+{
+    String path;
+
+    /// strict limit for number of deleted nodes
+    uint32_t children_nodes_limit = 1;
+
+    void addRootPath(const String & root_path) override;
+    String getPath() const override { return path; }
+
+    size_t bytesSize() const override { return path.size() + sizeof(children_nodes_limit); }
+};
+
+struct GetChildrenRecursiveResponse : virtual Response
+{
+    std::vector<String> childs;
+
+    size_t bytesSize() const override
+    {
+        size_t result = 0;
+        for (const auto & child : childs)
+            result += child.size();
+        return result;
+    }
+};
+
 struct ExistsRequest : virtual Request
 {
     String path;
@@ -666,6 +692,7 @@ using SyncCallback = std::function<void(const SyncResponse &)>;
 using ReconfigCallback = std::function<void(const ReconfigResponse &)>;
 using MultiCallback = std::function<void(const MultiResponse &)>;
 using GetACLCallback = std::function<void(const GetACLResponse &)>;
+using GetChildrenRecursiveCallback = std::function<void(const GetChildrenRecursiveResponse &)>;
 
 /// For watches.
 enum State
@@ -769,6 +796,12 @@ public:
         const String & path,
         uint32_t remove_nodes_limit,
         RemoveRecursiveCallback callback) = 0;
+
+    virtual void getChildrenRecursive(
+        const String & path,
+        uint32_t get_children_recursive_nodes_limit,
+        GetChildrenRecursiveCallback callback,
+        WatchCallbackPtrOrEventPtr watch) = 0;
 
     virtual void exists(
         const String & path,

@@ -1639,6 +1639,26 @@ void ZooKeeper::removeRecursive(
     ProfileEvents::increment(ProfileEvents::ZooKeeperRemove);
 }
 
+void ZooKeeper::getChildrenRecursive(
+    const String & path,
+    uint32_t get_children_recursive_nodes_limit,
+    GetChildrenRecursiveCallback callback,
+    WatchCallbackPtrOrEventPtr watch)
+{
+    ZooKeeperGetChildrenRecursiveRequest request;
+    request.path = path;
+    request.children_nodes_limit = get_children_recursive_nodes_limit;
+
+    instrumentResponseTimeMetric(callback, HistogramMetrics::KeeperResponseTimeReadonly);
+
+    RequestInfo request_info;
+    request_info.request = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>(std::move(request));
+    request_info.callback = [callback](const Response & response) { callback(dynamic_cast<const GetChildrenRecursiveResponse &>(response)); };
+    request_info.watch = watch;
+    pushRequest(std::move(request_info));
+    ProfileEvents::increment(ProfileEvents::ZooKeeperGet);
+}
+
 void ZooKeeper::exists(
     const String & path,
     ExistsCallback callback,

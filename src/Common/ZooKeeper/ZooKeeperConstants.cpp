@@ -83,6 +83,7 @@ std::string_view opNumToString(OpNum op_num)
         case OpNum::SetWatch: return "SetWatch";
         case OpNum::SetWatch2: return "SetWatch2";
         case OpNum::TryRemove: return "TryRemove";
+        case OpNum::GetChildrenRecursive: return "GetChildrenRecursive";
         case OpNum::FilteredListWithStatsAndData: return "FilteredListWithStatsAndData";
     }
 }
@@ -102,6 +103,7 @@ const char * toOperationTypeMetricLabel(OpNum op_num)
         case OpNum::CheckNotExists:
         case OpNum::CheckWatch:
         case OpNum::CheckStat:
+        case OpNum::GetChildrenRecursive:
             return "readonly";
 
         case OpNum::Multi:

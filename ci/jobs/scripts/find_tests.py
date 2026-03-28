@@ -1206,7 +1206,7 @@ class Targeting:
             return {}
 
         # Parse TSV: test_name (single column).
-        SIBLING_RC = 500
+        SIBLING_RC = 300
         sibling_test_names: dict = {}
         for row in raw.strip().splitlines():
             test_name = row.strip()

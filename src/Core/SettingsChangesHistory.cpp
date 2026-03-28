@@ -43,6 +43,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         {
             {"use_skip_indexes_for_top_k", false, true, "Enable using data skipping indexes for TopK filtering by default"},
             {"use_top_k_dynamic_filtering", false, true, "Enable dynamic filtering optimization for TopK queries by default"},
+            {"use_statistics_for_part_pruning", false, true, "New setting to use statistics for part pruning during query execution."},
             {"distributed_index_analysis_only_on_coordinator", false, false, "New setting."},
             {"enable_materialized_cte", false, false, "New setting"},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},

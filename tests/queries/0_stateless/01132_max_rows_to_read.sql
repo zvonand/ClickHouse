@@ -65,6 +65,7 @@ SET optimize_use_implicit_projections = 1;
 
 SET max_rows_to_read = 1000;
 SET read_overflow_mode = 'throw';
+SET use_primary_key = 1; -- range pruning is essential to the row-limit logic below
 
 -- count() queries use exact count optimization and bypass the limit
 SELECT count() FROM row_limits_fail_fast WHERE key < 500000;

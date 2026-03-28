@@ -1,2 +1,14 @@
-WITH t(a, b) AS\n    (\n        SELECT\n            1,\n            2\n    )\nSELECT *\nFROM t
-WITH t(a) AS\n    (\n        SELECT 1\n    )\nSELECT *\nFROM t
+WITH t(a, b) AS
+    (
+        SELECT
+            1,
+            2
+    )
+SELECT *
+FROM t
+WITH t(a) AS
+    (
+        SELECT 1
+    )
+SELECT *
+FROM t

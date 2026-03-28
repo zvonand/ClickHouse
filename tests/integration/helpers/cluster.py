@@ -1188,7 +1188,7 @@ class ClickHouseCluster:
 
             result = run_and_check(["docker volume ls | wc -l"], shell=True)
             if int(result) > 1:
-                run_and_check(["docker", "volume", "prune", "-f"])
+                run_and_check(["docker", "volume", "prune", "-f", "--all"])
             logging.debug(f"Volumes pruned: {result}")
         except:
             pass
@@ -1778,8 +1778,7 @@ class ClickHouseCluster:
         file_name = "docker_compose_iceberg_rest_catalog.yml"
         if extra_parameters is not None and extra_parameters["docker_compose_file_name"] != "":
             file_name = extra_parameters["docker_compose_file_name"]
-        if file_name == "docker_compose_iceberg_rest_catalog.yml":
-            env_variables["ICEBERG_REST_CATALOG_PORT"] = str(self.iceberg_rest_catalog_port)
+        env_variables["ICEBERG_REST_CATALOG_PORT"] = str(self.iceberg_rest_catalog_port)
         self.base_cmd.extend(
             [
                 "--file",
@@ -5985,7 +5984,7 @@ class ClickHouseInstance:
 
         port_lines = []
         # KEEPER_PUBLISH_CLIENT: publish keeper client port 9181 to host for keeper-bench on host
-        
+
         if os.environ.get("KEEPER_PUBLISH_CLIENT") == "1":
             base = int(os.environ.get("KEEPER_PUBLISH_CLIENT_BASE") or "19181")
             m = re.search(r"keeper(\d+)", str(self.name or ""), re.I)

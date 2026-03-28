@@ -948,7 +948,7 @@ class Targeting:
         # (e.g. 3 tests for a focused single-file PR) still find results while
         # large primary sets use stricter filters to suppress infrastructure noise.
         n_primary = len(primary_tests)
-        MIN_SHARED    = max(2, min(10, n_primary // 5))   # 2 for tiny, 10 for large
+        MIN_SHARED    = max(1, min(10, n_primary // 5))   # 2 for tiny, 10 for large
         MIN_SECONDARY = max(15, min(50, n_primary * 3))   # 15 for tiny, 50 for large
         query = f"""
         SELECT

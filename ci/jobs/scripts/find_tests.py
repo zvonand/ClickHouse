@@ -1386,7 +1386,7 @@ class Targeting:
         #   kw_hits=100→ width=5000000 score=1e-8  ≈ MIN_SCORE (barely survives)
         # Tests from broad keywords (hits>100) score below MIN_SCORE and are
         # dropped at the ranking stage — no hard per-keyword filter needed.
-        MAX_KEYWORD_TESTS = 30   # hard cap: keyword signal is weak, keep it tight
+        MAX_KEYWORD_TESTS = 50   # hard cap: keyword signal is weak, keep it tight
         matched_tests: dict = {}  # normalised_name → (kw_hits, raw_name)
         for kw in candidate_kws:
             kw_lower = kw.lower()

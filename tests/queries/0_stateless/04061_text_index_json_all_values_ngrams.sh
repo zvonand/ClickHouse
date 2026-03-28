@@ -59,6 +59,9 @@ run_query "SELECT id FROM tab WHERE hasToken(data.key1::String, 'quick') ORDER B
 run_query "SELECT id FROM tab WHERE hasAnyTokens(data.key1::String, 'quick lazy') ORDER BY id"
 run_query "SELECT id FROM tab WHERE hasAllTokens(data.key1::String, 'the quick') ORDER BY id"
 
+echo "-- IN operator"
+run_query "SELECT id FROM tab WHERE data.key1::String IN ('the quick brown fox', 'lazy dog jumps') ORDER BY id"
+
 echo "-- JSON values that are arrays"
 
 $MY_CLICKHOUSE_CLIENT --query "

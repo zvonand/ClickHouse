@@ -54,7 +54,7 @@ const SimpleDataTypesCache::Element & SimpleDataTypesCache::getElement(BinaryTyp
 {
     uint8_t index_value = static_cast<uint8_t>(index);
     if (index_value >= by_index.size() || by_index[index_value].type == nullptr)
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "Invalid binary type index");
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Invalid binary type index: {}", index);
 
     return by_index[index_value];
 }
@@ -63,7 +63,7 @@ DataTypePtr SimpleDataTypesCache::getType(BinaryTypeIndex index) const
 {
     uint8_t index_value = static_cast<uint8_t>(index);
     if (index_value >= by_index.size() || by_index[index_value].type == nullptr)
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "Invalid binary type index");
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Invalid binary type index: {}", index);
 
     return by_index[index_value].type;
 }
@@ -72,7 +72,7 @@ SerializationPtr SimpleDataTypesCache::getSerialization(BinaryTypeIndex index) c
 {
     uint8_t index_value = static_cast<uint8_t>(index);
     if (index_value >= by_index.size() || by_index[index_value].serialization == nullptr)
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "Invalid binary type index");
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Invalid binary type index: {}", index);
 
     return by_index[index_value].serialization;
 }
@@ -146,8 +146,8 @@ const DataTypesCache::Element & DataTypesCache::getCacheElement(const String & t
 
 DataTypesCache & getDataTypesCache()
 {
-    thread_local static DataTypesCache data_type_cache;
-    return data_type_cache;
+    thread_local static DataTypesCache data_types_cache;
+    return data_types_cache;
 }
 
 }

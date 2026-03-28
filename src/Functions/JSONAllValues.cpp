@@ -90,7 +90,6 @@ private:
         const auto & typed_path_types = type_object.getTypedPaths();
         const auto & typed_path_columns = column_object.getTypedPaths();
         const auto & dynamic_path_columns = column_object.getDynamicPaths();
-
         auto dynamic_serialization = SerializationDynamic::create();
 
         std::vector<PathInfo> sorted_paths;
@@ -108,7 +107,7 @@ private:
         std::sort(sorted_paths.begin(), sorted_paths.end(),
             [](const PathInfo & a, const PathInfo & b) { return a.path < b.path; });
 
-        /// Cache of reusable (data_type, serialization, column) structs keyed by type name,
+        /// Cache of reusable (serialization, column) structs keyed by type name,
         /// to avoid createColumn and getDefaultSerialization per shared data value.
         std::unordered_map<String, SerializationPtr> shared_serializations_cache;
         std::unordered_map<String, MutableColumnPtr> shared_columns_cache;
@@ -261,19 +260,19 @@ Values are serialized in their text representation and ordered by their path nam
         "Usage example",
         R"(
 CREATE TABLE test (json JSON(max_dynamic_paths=1)) ENGINE = Memory;
-INSERT INTO test FORMAT JSONEachRow {"json" : {"a" : 42}}, {"json" : {"b" : "Hello"}}, {"json" : {"a" : [1, 2, 3], "c" : "2020-01-01"}}
+INSERT INTO test FORMAT JSONEachRow {"json": {"a": 42}}, {"json": {"b": "Hello"}}, {"json": {"a": [1, 2, 3], "c": "2020-01-01"}}
 SELECT json, JSONAllValues(json) FROM test;
         )",
         R"(
 ┌─json─────────────────────────────────┬─JSONAllValues(json)──────┐
-│ {"a":"42"}                           │ ['42']                   │
+│ {"a":42}                             │ ['42']                   │
 │ {"b":"Hello"}                        │ ['Hello']                │
-│ {"a":["1","2","3"],"c":"2020-01-01"} │ ['[1,2,3]','2020-01-01'] │
+│ {"a":[1,2,3],"c":"2020-01-01"}       │ ['[1,2,3]','2020-01-01'] │
 └──────────────────────────────────────┴──────────────────────────┘
         )"
     }
     };
-    FunctionDocumentation::IntroducedIn introduced_in = {25, 6};
+    FunctionDocumentation::IntroducedIn introduced_in = {26, 4};
     FunctionDocumentation::Category category = FunctionDocumentation::Category::JSON;
     FunctionDocumentation documentation = {description, syntax, arguments, {}, returned_value, examples, introduced_in, category};
     factory.registerFunction<FunctionJSONAllValues>(documentation);

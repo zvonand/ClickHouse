@@ -9,8 +9,6 @@
 namespace DB
 {
 
-class DataTypeFactory;
-
 /// Cache of simple (parameterless) data types and their serializations,
 /// pre-filled at construction time. Avoids repeated DataTypeFactory lookups
 /// and shared_ptr allocations for commonly used types.

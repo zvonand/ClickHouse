@@ -84,6 +84,14 @@ Description: text GRANULARITY 100000000
 Condition: (mode: All; tokens: [" qu", "e q", "he ", "ick", "qui", "the", "uic"])
 Parts: 1/4
 Granules: 1/4
+-- IN operator
+SELECT id FROM tab WHERE data.key1::String IN ('the quick brown fox', 'lazy dog jumps') ORDER BY id
+0
+1
+Description: text GRANULARITY 100000000
+Condition: (mode: Any; tokens: [" br", " do", " fo", " ju", " qu", "azy", "bro", "ck ", "dog", "e q", "fox", "g j", "he ", "ick", "jum", "k b", "laz", "mps", "n f", "og ", "own", "qui", "row", "the", "uic", "ump", "wn ", "y d", "zy "])
+Parts: 2/4
+Granules: 2/4
 -- JSON values that are arrays
 SELECT id FROM tab WHERE data.tags = ['foo', 'bar'] ORDER BY id
 0

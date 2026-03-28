@@ -115,8 +115,9 @@ ORDER BY key
 
 Text indexes can be defined on columns of these types:
 - [String](/sql-reference/data-types/string.md) and [FixedString](/sql-reference/data-types/fixedstring.md),
-- [Array(String)](/sql-reference/data-types/array.md) and [Array(FixedString)](/sql-reference/data-types/array.md), and
-- [Map](/sql-reference/data-types/map.md) (via [mapKeys](/sql-reference/functions/tuple-map-functions.md/#mapKeys) and [mapValues](/sql-reference/functions/tuple-map-functions.md/#mapValues) functions).
+- [Array(String)](/sql-reference/data-types/array.md) and [Array(FixedString)](/sql-reference/data-types/array.md),
+- [Map](/sql-reference/data-types/map.md) (via [mapKeys](/sql-reference/functions/tuple-map-functions.md/#mapKeys) and [mapValues](/sql-reference/functions/tuple-map-functions.md/#mapValues) functions), and
+- [JSON](/sql-reference/data-types/newjson.md) (via [`JSONAllValues`](/sql-reference/functions/json-functions.md#JSONAllValues)).
 
 Columns of type [Nullable(T)](/sql-reference/data-types/nullable.md) and [LowCardinality()](/sql-reference/data-types/lowcardinality.md) are also supported, including `Array(Nullable(String or FixedString))`.
 
@@ -642,6 +643,69 @@ SELECT * FROM logs WHERE has(mapValues(attributes), '192.168.1.1'); -- fast
 -- Finds all logs where any attribute includes an error:
 SELECT * FROM logs WHERE mapContainsValueLike(attributes, '% error %'); -- fast
 ```
+
+### Indexing JSON columns {#text-index-example-json}
+
+Text indexes can be used to accelerate searches on [JSON](/sql-reference/data-types/newjson.md) columns via function [`JSONAllValues`](/sql-reference/functions/json-functions.md#JSONAllValues).
+
+`JSONAllValues` returns all values from a JSON column as `Array(String)`, with values serialized in their text representation.
+When a text index is built on `JSONAllValues(json_column)`, all values across all JSON paths are tokenized and indexed together.
+This single index can then accelerate queries that filter on individual JSON subcolumns.
+
+#### Creating the index
+
+```sql
+CREATE TABLE events
+(
+    id UInt64,
+    data JSON,
+    INDEX json_idx JSONAllValues(data) TYPE text(tokenizer = splitByNonAlpha)
+)
+ENGINE = MergeTree
+ORDER BY id;
+```
+
+#### Supported query patterns
+
+Once the index is created, it can speed up queries on JSON subcolumns using the same functions as for `String` columns and function `equals` for all columns.
+
+Subcolumn access:
+
+```sql
+SELECT * FROM events WHERE data.user_name = 'alice';
+SELECT * FROM events WHERE data.message LIKE '% error %';
+SELECT * FROM events WHERE startsWith(data.status, 'fail');
+SELECT * FROM events WHERE hasToken(data.title, 'clickhouse');
+```
+
+Subcolumn access with explicit `CAST`:
+
+```sql
+SELECT * FROM events WHERE hasAllTokens(data.message::String, 'connection timeout');
+SELECT * FROM events WHERE data.status_code::UInt64 = 404;
+SELECT * FROM events WHERE has(data.tags::Array(String), 'bug')
+```
+
+`IN` operator:
+
+```sql
+SELECT * FROM events WHERE data.level IN ('error', 'critical');
+```
+
+#### How it works
+
+`JSONAllValues` serializes every value to its text representation, so values of all types (strings, integers, arrays, etc.) are indexed as text tokens.
+
+The text index on `JSONAllValues` indexes these text representations across all JSON paths in each row.
+When a query filters on a specific subcolumn (e.g. `data.user_name = 'alice'`), the text index can quickly skip rows (and granules) that do not contain the search tokens in any of their JSON values.
+Since the index covers all paths, a single index definition is sufficient to accelerate searches across any JSON subcolumn.
+
+:::note
+The index may produce false positives when different JSON paths contain the same tokens.
+For example, if row 1 has `{"a": "hello", "b": "world"}` and a query searches for `data.a = 'world'`, the text index cannot distinguish that `world` belongs to path `b`, not `a`.
+In such cases, the index will not skip the row, and the filter on the actual column data will handle the final evaluation.
+This is the same behavior as with other text index use cases where the index acts as a fast pre-filter.
+:::
 
 ## Performance Tuning {#performance-tuning}
 

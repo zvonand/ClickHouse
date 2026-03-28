@@ -46,6 +46,18 @@ SELECT count() FROM ghdata WHERE hasAnyTokens(data.payload.pull_request.title::S
 Condition: (mode: Any; tokens: ["Fix", "fix"])
 Parts: 1/1
 Granules: 50/50
+-- IN operator on string field (rare values, granules should be skipped)
+SELECT count() FROM ghdata WHERE data.type::String IN ('MemberEvent', 'ForkEvent')
+112
+Condition: (mode: Any; tokens: ["ForkEvent", "MemberEvent"])
+Parts: 1/1
+Granules: 45/50
+-- IN operator on nested path (rare values, granules should be skipped)
+SELECT count() FROM ghdata WHERE data.payload.action::String IN ('reopened', 'published')
+42
+Condition: (mode: Any; tokens: ["published", "reopened"])
+Parts: 1/1
+Granules: 32/50
 -- Combined conditions on different paths
 SELECT count() FROM ghdata WHERE data.type = 'WatchEvent' AND data.repo.name = 'leonardomso/33-js-concepts'
 3
@@ -103,6 +115,8 @@ Granules: 1/50
 37
 4
 18
+112
+42
 3
 3
 11

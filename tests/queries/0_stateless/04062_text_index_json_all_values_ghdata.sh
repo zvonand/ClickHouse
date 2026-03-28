@@ -71,6 +71,12 @@ run_query "SELECT count() FROM ghdata WHERE hasAllTokens(data.payload.pull_reque
 echo "-- hasAnyTokens on string field with cast"
 run_query "SELECT count() FROM ghdata WHERE hasAnyTokens(data.payload.pull_request.title::String, ['Fix', 'fix'])"
 
+echo "-- IN operator on string field (rare values, granules should be skipped)"
+run_query "SELECT count() FROM ghdata WHERE data.type::String IN ('MemberEvent', 'ForkEvent')"
+
+echo "-- IN operator on nested path (rare values, granules should be skipped)"
+run_query "SELECT count() FROM ghdata WHERE data.payload.action::String IN ('reopened', 'published')"
+
 echo "-- Combined conditions on different paths"
 run_query "SELECT count() FROM ghdata WHERE data.type = 'WatchEvent' AND data.repo.name = 'leonardomso/33-js-concepts'"
 
@@ -104,6 +110,8 @@ run_query_no_idx "SELECT count() FROM ghdata WHERE data.repo.name LIKE '%python%
 run_query_no_idx "SELECT count() FROM ghdata WHERE hasToken(data.actor.login, 'dependabot')"
 run_query_no_idx "SELECT count() FROM ghdata WHERE hasAllTokens(data.payload.pull_request.title::String, 'Fix spelling')"
 run_query_no_idx "SELECT count() FROM ghdata WHERE hasAnyTokens(data.payload.pull_request.title::String, ['Fix', 'fix'])"
+run_query_no_idx "SELECT count() FROM ghdata WHERE data.type::String IN ('MemberEvent', 'ForkEvent')"
+run_query_no_idx "SELECT count() FROM ghdata WHERE data.payload.action::String IN ('reopened', 'published')"
 run_query_no_idx "SELECT count() FROM ghdata WHERE data.type = 'WatchEvent' AND data.repo.name = 'leonardomso/33-js-concepts'"
 run_query_no_idx "SELECT count() FROM ghdata WHERE hasAllTokens(JSONAllValues(data), ['football', 'team'])"
 run_query_no_idx "SELECT count() FROM ghdata WHERE hasAnyTokens(JSONAllValues(data), ['football', 'calculator'])"

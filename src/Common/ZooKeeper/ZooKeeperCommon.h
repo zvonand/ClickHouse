@@ -865,7 +865,7 @@ struct ZooKeeperGetChildrenRecursiveRequest final : GetChildrenRecursiveRequest,
     size_t sizeImpl() const override;
 
     ZooKeeperResponsePtr makeResponse() const override;
-    bool isReadRequest() const override { return false; }
+    bool isReadRequest() const override { return true; }
 
     size_t bytesSize() const override { return GetChildrenRecursiveRequest::bytesSize() + sizeof(xid); }
 };
@@ -874,6 +874,7 @@ struct ZooKeeperGetChildrenRecursiveResponse : GetChildrenRecursiveResponse, Zoo
 {
     void readImpl(ReadBuffer & in) override;
     void writeImpl(WriteBuffer & out) const override;
+    size_t sizeImpl() const override;
     OpNum getOpNum() const override { return OpNum::GetChildrenRecursive; }
 
     size_t bytesSize() const override { return GetChildrenRecursiveResponse::bytesSize() + sizeof(xid) + sizeof(zxid); }

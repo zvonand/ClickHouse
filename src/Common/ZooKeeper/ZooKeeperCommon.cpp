@@ -1574,9 +1574,14 @@ std::string ZooKeeperGetChildrenRecursiveRequest::toStringImpl(bool /*short_form
 {
     return fmt::format(
         "path = {}\n"
-        "remove_nodes_limit = {}",
+        "children_nodes_limit = {}",
         path,
         children_nodes_limit);
+}
+
+size_t ZooKeeperGetChildrenRecursiveRequest::sizeImpl() const
+{
+    return Coordination::size(path) + Coordination::size(children_nodes_limit);
 }
 
 void ZooKeeperGetChildrenRecursiveResponse::readImpl(ReadBuffer & in)
@@ -1587,6 +1592,16 @@ void ZooKeeperGetChildrenRecursiveResponse::readImpl(ReadBuffer & in)
 void ZooKeeperGetChildrenRecursiveResponse::writeImpl(WriteBuffer & out) const
 {
     Coordination::write(childs, out);
+}
+
+size_t ZooKeeperGetChildrenRecursiveResponse::sizeImpl() const
+{
+    return Coordination::size(childs);
+}
+
+ZooKeeperResponsePtr ZooKeeperGetChildrenRecursiveRequest::makeResponse() const
+{
+    return std::make_shared<ZooKeeperGetChildrenRecursiveResponse>();
 }
 
 void ZooKeeperMultiResponse::fillLogElements(LogElements & elems, size_t idx) const
@@ -1695,6 +1710,7 @@ ZooKeeperRequestFactory::ZooKeeperRequestFactory()
     registerZooKeeperRequest<OpNum::FilteredList, ZooKeeperFilteredListRequest>(*this);
     registerZooKeeperRequest<OpNum::FilteredListWithStatsAndData, ZooKeeperFilteredListWithStatsAndDataRequest>(*this);
     registerZooKeeperRequest<OpNum::RemoveRecursive, ZooKeeperRemoveRecursiveRequest>(*this);
+    registerZooKeeperRequest<OpNum::GetChildrenRecursive, ZooKeeperGetChildrenRecursiveRequest>(*this);
     registerZooKeeperRequest<OpNum::AddWatch, ZooKeeperAddWatchRequest>(*this);
     registerZooKeeperRequest<OpNum::CheckWatch, ZooKeeperCheckWatchRequest>(*this);
     registerZooKeeperRequest<OpNum::RemoveWatch, ZooKeeperRemoveWatchRequest>(*this);

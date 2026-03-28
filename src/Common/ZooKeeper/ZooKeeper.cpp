@@ -1951,6 +1951,13 @@ Coordination::RequestPtr makeRemoveRecursiveRequest(const Client & client, const
 template Coordination::RequestPtr makeRemoveRecursiveRequest<zkutil::ZooKeeper>(const zkutil::ZooKeeper & client, const std::string & path, uint32_t remove_nodes_limit);
 template Coordination::RequestPtr makeRemoveRecursiveRequest<DB::ZooKeeperWithFaultInjection>(const DB::ZooKeeperWithFaultInjection & client, const std::string & path, uint32_t remove_nodes_limit);
 
+Coordination::RequestPtr makeGetChildrenRequest(const std::string & path)
+{
+    auto request = std::make_shared<Coordination::ZooKeeperGetChildrenRecursiveRequest>();
+    request->path = path;
+    return request;
+}
+
 Coordination::RequestPtr makeSetRequest(const std::string & path, const std::string & data, int version)
 {
     auto request = std::make_shared<Coordination::ZooKeeperSetRequest>();

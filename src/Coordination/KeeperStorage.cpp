@@ -2464,39 +2464,57 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
         }
     }
 
-    if (zk_request.path == Coordination::keeper_config_path)
-    {
-        //response->data = serializeClusterConfig(
-        //    storage.keeper_context->getDispatcher()->getStateMachine().getClusterConfig());
-        response->error = Coordination::Error::ZOK;
-        return response;
-    }
-
     auto & container = storage.container;
-    
+
     auto node_it = container.find(zk_request.path);
     if (node_it == container.end())
     {
         if constexpr (local)
             response->error = Coordination::Error::ZNONODE;
         else
-            onStorageInconsistency("Failed to get node because it's missing");
+            onStorageInconsistency("Failed to find node because it's missing");
+        return response;
     }
-    else
+
+    std::queue<std::string> traverse;
+    traverse.push(std::string{zk_request.path});
+
+    while (!traverse.empty())
     {
-        auto result = node_it->value.getChildren();
-        for (const auto & child : result)
-        {
-            response->childs.push_back(child.);
-        }
-        //response->childs = result;
+        auto current_path = std::move(traverse.front());
+        traverse.pop();
 
-        //node_it->value.setResponseStat(response->stat);
-        //auto data = node_it->value.getData();
-        //response->data = std::string(data);
-        response->error = Coordination::Error::ZOK;
+        if constexpr (Storage::use_rocksdb)
+        {
+            auto children = container.getChildren(current_path, /*read_meta=*/false, /*read_data=*/false);
+            for (auto && [child_name, _] : children)
+            {
+                auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
+                response->childs.push_back(child_path);
+                traverse.push(std::move(child_path));
+            }
+        }
+        else
+        {
+            auto it = container.find(current_path);
+            if (it == container.end())
+                continue;
+            for (const auto & child_name : it->value.getChildren())
+            {
+                auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
+                response->childs.push_back(child_path);
+                to_visit.push(child_path);
+            }
+        }
+
+        if (response->childs.size() > zk_request.children_nodes_limit)
+        {
+            response->error = Coordination::Error::ZNOTEMPTY;
+            return response;
+        }
     }
 
+    response->error = Coordination::Error::ZOK;
     return response;
 }
 

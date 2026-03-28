@@ -1645,6 +1645,9 @@ void ZooKeeper::getChildrenRecursive(
     GetChildrenRecursiveCallback callback,
     WatchCallbackPtrOrEventPtr watch)
 {
+    if (!isFeatureEnabled(KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
+        throw Exception::fromMessage(Error::ZBADARGUMENTS, "GetChildrenRecursive request type cannot be used because it's not supported by the server");
+
     ZooKeeperGetChildrenRecursiveRequest request;
     request.path = path;
     request.children_nodes_limit = get_children_recursive_nodes_limit;

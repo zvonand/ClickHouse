@@ -526,14 +526,26 @@ std::pair<ResponsePtr, Undo> TestKeeperGetChildrenRecursiveRequest::process(Test
     if (it == container.end())
     {
         response.error = Error::ZNONODE;
-    }
-    else
-    {
-        response.childs = {}; // TODO
-        //response.data = it->second.data;
-        response.error = Error::ZOK;
+        return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
     }
 
+    const auto path_with_slash = path + "/";
+    std::vector<String> children;
+    for (auto child_it = std::next(it); child_it != container.end(); ++child_it)
+    {
+        if (!child_it->first.starts_with(path_with_slash))
+            break;
+        children.push_back(child_it->first);
+    }
+
+    if (children.size() > children_nodes_limit)
+    {
+        response.error = Error::ZNOTEMPTY;
+        return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
+    }
+
+    response.childs = std::move(children);
+    response.error = Error::ZOK;
     return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
 }
 
@@ -832,6 +844,7 @@ TestKeeper::TestKeeper(const zkutil::ZooKeeperArgs & args_)
     keeper_feature_flags.enableFeatureFlag(KeeperFeatureFlag::CHECK_NOT_EXISTS);
     keeper_feature_flags.enableFeatureFlag(KeeperFeatureFlag::CREATE_IF_NOT_EXISTS);
     keeper_feature_flags.enableFeatureFlag(KeeperFeatureFlag::REMOVE_RECURSIVE);
+    keeper_feature_flags.enableFeatureFlag(KeeperFeatureFlag::GET_CHILDREN_RECURSIVE);
     keeper_feature_flags.enableFeatureFlag(KeeperFeatureFlag::CHECK_STAT);
     keeper_feature_flags.enableFeatureFlag(KeeperFeatureFlag::TRY_REMOVE);
     keeper_feature_flags.enableFeatureFlag(KeeperFeatureFlag::LIST_WITH_STAT_AND_DATA);

@@ -1,5 +1,4 @@
 import os
-import subprocess
 import sys
 from ci.praktika.utils import Utils
 import re
@@ -86,6 +85,100 @@ def _parse_info(path: str) -> dict:
             elif line == "end_of_record":
                 cur = cur_rel = None
     return data
+
+
+def _parse_diff_hunks(diff_path: str) -> dict:
+    """
+    Parse a unified diff into per-file hunk data for line-number remapping.
+
+    Returns dict: rel_path -> list of hunk dicts, each containing:
+      old_start, old_count, new_start, new_count,
+      removed     - set of old line numbers deleted by this PR,
+      context_map - dict mapping old_line -> new_line for unchanged context lines.
+
+    This replaces `lcov --diff` (removed in lcov 2.x) with pure Python.
+    """
+    file_hunks: dict = {}
+    current_file = None
+    current_hunk = None
+    old_pos = new_pos = 0
+
+    re_file_hdr = re.compile(r"^\+\+\+ b/(.*)$")
+    re_hunk_hdr = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+    with open(diff_path, encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            line = raw.rstrip("\n")
+
+            m = re_file_hdr.match(line)
+            if m:
+                current_file = m.group(1)
+                if current_file == "/dev/null":
+                    current_file = None
+                else:
+                    file_hunks.setdefault(current_file, [])
+                current_hunk = None
+                continue
+
+            m = re_hunk_hdr.match(line)
+            if m and current_file is not None:
+                old_start = int(m.group(1))
+                old_count = int(m.group(2)) if m.group(2) is not None else 1
+                new_start = int(m.group(3))
+                new_count = int(m.group(4)) if m.group(4) is not None else 1
+                current_hunk = {
+                    "old_start": old_start,
+                    "old_count": old_count,
+                    "new_start": new_start,
+                    "new_count": new_count,
+                    "removed": set(),
+                    "context_map": {},
+                }
+                file_hunks[current_file].append(current_hunk)
+                old_pos = old_start
+                new_pos = new_start
+                continue
+
+            if current_hunk is None or current_file is None:
+                continue
+
+            if line.startswith("-"):
+                current_hunk["removed"].add(old_pos)
+                old_pos += 1
+            elif line.startswith("+"):
+                new_pos += 1
+            elif line.startswith(" "):
+                current_hunk["context_map"][old_pos] = new_pos
+                old_pos += 1
+                new_pos += 1
+
+    return file_hunks
+
+
+def _remap_line(old_line: int, hunks: list) -> int | None:
+    """
+    Map a line number from the old (baseline) file to the new (current) file.
+    Returns None if the line was deleted by this PR.
+
+    Walks hunks in order, accumulating the net line-count delta from each hunk
+    that ends before old_line.  For lines inside a hunk, uses context_map
+    (unchanged lines) or the removed set (deleted lines).
+    """
+    offset = 0
+    for h in hunks:
+        hunk_old_end = h["old_start"] + h["old_count"] - 1
+        if old_line < h["old_start"]:
+            break  # line is before this hunk; accumulated offset is final
+        if old_line > hunk_old_end:
+            offset += h["new_count"] - h["old_count"]
+            continue
+        # line is inside this hunk
+        if old_line in h["removed"]:
+            return None
+        if old_line in h["context_map"]:
+            return h["context_map"][old_line]
+        return old_line + offset  # fallback; should not normally occur
+    return old_line + offset
 
 
 if __name__ == "__main__":
@@ -238,50 +331,40 @@ if __name__ == "__main__":
     # Detect lines/functions that were covered in the master baseline but are no longer
     # covered in the current PR build.  This catches regressions introduced by test
     # modifications that silently drop existing coverage.
+    #
+    # Line numbers in baseline.changed.info may differ from current.changed.info
+    # because the PR itself edited those files.  We remap them through the unified
+    # diff in pure Python (lcov --diff was removed in lcov 2.x).
     BASELINE_INFO = f"{temp_dir}/baseline.changed.info"
-    BASELINE_REMAPPED = f"{temp_dir}/baseline_remapped.info"
 
     lbc_lines: list[tuple[str, int]] = []     # (relpath, lineno)
     lbc_fns: list[tuple[str, str]] = []       # (relpath, fn_name)
 
-    if os.path.exists(BASELINE_INFO):
-        # Remap baseline line numbers to the current revision so both .info files
-        # use the same line numbering.  Errors are suppressed because some hunks
-        # may not map cleanly (e.g., file was renamed or heavily restructured).
-        remap_result = subprocess.run(
-            [
-                "lcov", "--diff",
-                BASELINE_INFO, DIFF,
-                "--ignore-errors", "inconsistent,source,format",
-                "-o", BASELINE_REMAPPED,
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if remap_result.returncode != 0:
-            print(
-                f"Warning: lcov --diff exited with code {remap_result.returncode}; "
-                "skipping LBC analysis.\n" + remap_result.stderr
-            )
-        elif os.path.exists(BASELINE_REMAPPED):
-            base_data = _parse_info(BASELINE_REMAPPED)
-            curr_data = _parse_info(INFO)
+    if os.path.exists(BASELINE_INFO) and os.path.getsize(BASELINE_INFO) > 0:
+        diff_hunks = _parse_diff_hunks(DIFF)
+        base_data = _parse_info(BASELINE_INFO)
+        curr_data = _parse_info(INFO)
 
-            _empty: dict = {"lines": {}, "fns": {}}
-            for rel in sorted(base_data):
-                b = base_data[rel]
-                # Use empty coverage when the SF is absent from current entirely
-                # (e.g. a test file was commented out and produced zero coverage).
-                c = curr_data.get(rel, _empty)
+        _empty: dict = {"lines": {}, "fns": {}}
+        for rel in sorted(base_data):
+            b = base_data[rel]
+            # Use empty coverage when the SF is absent from current entirely
+            # (e.g. a test file was commented out and produced zero coverage).
+            c = curr_data.get(rel, _empty)
+            hunks = diff_hunks.get(rel, [])
 
-                for ln, bcnt in b["lines"].items():
-                    if bcnt > 0 and c["lines"].get(ln, 0) == 0:
-                        if not _is_noise(rel, ln):
-                            lbc_lines.append((rel, ln))
+            for old_ln, bcnt in b["lines"].items():
+                if bcnt == 0:
+                    continue
+                new_ln = _remap_line(old_ln, hunks)
+                if new_ln is None:
+                    continue  # line was deleted by this PR — expected
+                if c["lines"].get(new_ln, 0) == 0 and not _is_noise(rel, new_ln):
+                    lbc_lines.append((rel, new_ln))
 
-                for fn, bcnt in b["fns"].items():
-                    if bcnt > 0 and c["fns"].get(fn, 0) == 0:
-                        lbc_fns.append((rel, fn))
+            for fn, bcnt in b["fns"].items():
+                if bcnt > 0 and c["fns"].get(fn, 0) == 0:
+                    lbc_fns.append((rel, fn))
 
     if lbc_lines:
         print(f"\n=== Lost Baseline Coverage: {len(lbc_lines)} lines ===\n")

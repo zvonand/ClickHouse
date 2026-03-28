@@ -58,7 +58,10 @@ SYSTEM STOP MERGES row_limits_fail_fast;
 -- The exact count optimization computes the result from primary key analysis without reading data,
 -- so count() queries bypass the max_rows_to_read limit. This requires projection optimization to be
 -- enabled (it is by default, but CI may randomize it off).
+-- The exact count optimization also requires implicit projections (minmax_count_projection),
+-- because the code path that sets only_count_column is gated behind can_use_minmax_projection.
 SET optimize_use_projections = 1;
+SET optimize_use_implicit_projections = 1;
 
 SET max_rows_to_read = 1000;
 SET read_overflow_mode = 'throw';

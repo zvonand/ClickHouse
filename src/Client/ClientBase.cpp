@@ -123,6 +123,7 @@ namespace Setting
 {
     extern const SettingsBool allow_settings_after_format_in_insert;
     extern const SettingsBool async_insert;
+    extern const SettingsBool send_table_structure_on_insert_with_inline_data;
     extern const SettingsDialect dialect;
     extern const SettingsNonZeroUInt64 max_block_size;
     extern const SettingsNonZeroUInt64 max_insert_block_size;
@@ -2378,7 +2379,8 @@ void ClientBase::processParsedSingleQuery(
         /// Update async_insert after applying settings from server
         is_async_insert_with_inlined_data = client_context->getSettingsRef()[Setting::async_insert] && insert && insert->hasInlinedData();
 
-        bool is_inline_insert_data = inline_insert_data && insert && insert->hasInlinedData() && !insert->select;
+        bool is_inline_insert_data = (inline_insert_data || !client_context->getSettingsRef()[Setting::send_table_structure_on_insert_with_inline_data])
+            && insert && insert->hasInlinedData() && !insert->select;
 
         if (is_async_insert_with_inlined_data)
         {

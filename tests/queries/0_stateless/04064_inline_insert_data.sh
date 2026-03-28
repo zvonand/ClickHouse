@@ -17,8 +17,8 @@ $CLICKHOUSE_CLIENT --inline-insert-data --query "INSERT INTO test_inline_insert 
 $CLICKHOUSE_CLIENT --inline-insert-data --query "INSERT INTO test_inline_insert FORMAT Values (3, 'foo')"
 $CLICKHOUSE_CLIENT --inline-insert-data --query "INSERT INTO test_inline_insert FORMAT JSONEachRow {\"x\": 4, \"y\": \"bar\"}"
 
-# Test with send_table_structure_on_insert_with_inline_data setting directly
-$CLICKHOUSE_CLIENT --send_table_structure_on_insert_with_inline_data 0 --inline-insert-data --query "INSERT INTO test_inline_insert VALUES (5, 'baz')"
+# Test with send_table_structure_on_insert_with_inline_data setting directly (without --inline-insert-data)
+$CLICKHOUSE_CLIENT --send_table_structure_on_insert_with_inline_data 0 --query "INSERT INTO test_inline_insert VALUES (5, 'baz')"
 
 $CLICKHOUSE_CLIENT --query "SELECT * FROM test_inline_insert ORDER BY x"
 

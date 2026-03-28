@@ -459,7 +459,7 @@ void makeSortAndMerge(const Names & keys, SortDescription & sort, SortDescriptio
         if (!unique_keys.contains(key_name))
         {
             unique_keys.insert(key_name);
-            sort.emplace_back(key_name);
+            sort.emplace_back(key_name, /*direction*/1, /*nulls_direction*/-1);
         }
     }
 }

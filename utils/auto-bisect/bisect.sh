@@ -218,6 +218,17 @@ check_script_executable
 
 echo
 
+cleanup() {
+  echo "Cleaning up..."
+  # Kill all local ClickHouse server processes
+  (ps aux | grep -E '[c]lickhouse[- ]server' | awk '{print $2}' | xargs kill -9) 2>/dev/null || true
+  # Kill MinIO (identified by port 11111)
+  (lsof -ti :11111 | xargs kill -9) 2>/dev/null || true
+  # Git bisect reset (only matters for bisect mode)
+  git -C "$GIT_WORK_TREE" bisect reset > /dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
 mkdir -p $SCRIPT_DIR/data
 
 #check dirs exist and current user have rw right
@@ -294,7 +305,6 @@ if $USE_WALKER; then
 
 else
   echo "Running in BISECT mode..."
-  trap 'git -C "$GIT_WORK_TREE" bisect reset > /dev/null 2>&1' EXIT
 
   if [ "$NO_CHECKOUT" = true ]; then
     git -C "$GIT_WORK_TREE" bisect start --first-parent --no-checkout

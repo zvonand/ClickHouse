@@ -34,7 +34,9 @@ public:
     bool supportsReadAt() override;
 
     std::vector<CachedRegion> readBigAtRetainCells(size_t n, size_t offset) const override;
-    bool supportsReadAtRetainCells() const override { return in->supportsReadAt(); }
+    /// Always true: determineReadModeAndFileSize proved random-read capability at construction.
+    /// Returning a constant avoids calling through to `in` which is not thread-safe for concurrent access.
+    bool supportsReadAtRetainCells() const override { return true; }
 
     PageCache::MappedPtr getPageCacheCell() const { return chunk; }
     PageCachePtr getPageCache() const { return cache; }

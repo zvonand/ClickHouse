@@ -31,11 +31,11 @@ def get_paths(output_dir):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     clickhouse_root = os.path.join(script_dir, "../..")
     
-    # The profiler binary is built from src/Parsers/examples/parser_memory_profiler.cpp
+    # The profiler binary is part of the clickhouse-examples multi-call binary (src/Examples/)
     return {
         'script_dir': script_dir,
         'build_dir': os.path.join(clickhouse_root, "build"),
-        'profiler': os.path.join(clickhouse_root, "build/src/Parsers/examples/parser_memory_profiler"),
+        'profiler': os.path.join(clickhouse_root, "build/src/Examples/clickhouse-examples"),
         'jeprof': os.path.expanduser("~/github/jemalloc/bin/jeprof"),
         'flamegraph': os.path.expanduser("~/FlameGraph/flamegraph.pl"),
         'output_dir': output_dir,
@@ -101,8 +101,8 @@ Examples:
         sys.exit(1)
     
     if not os.path.exists(paths['profiler']):
-        print(f"Error: profiler not found at {paths['profiler']}")
-        print("Build it with: cd build && ninja parser_memory_profiler")
+        print(f"Error: clickhouse-examples not found at {paths['profiler']}")
+        print("Build it with: cd build && ninja clickhouse-examples")
         sys.exit(1)
     
     if not os.path.exists(paths['jeprof']):

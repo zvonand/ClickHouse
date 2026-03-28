@@ -1696,7 +1696,7 @@ class Targeting:
         # results are naturally excluded without any explicit per-pass logic.
         # A ratio of 1000 covers ~two jumps in signal quality (direct→indirect→keyword)
         # while keeping genuinely related tests from weaker passes when direct is sparse.
-        MAX_SCORE_RATIO = 1000
+        MAX_SCORE_RATIO = 1500
         # Cap the floor so that rc=1 changed lines (top_score=1.0) don't push
         # effective_min to 1e-3 and cut indirect / sparse-file expansion results.
         # Equivalent to treating any top_score above 1/1000 the same as 1/1000.

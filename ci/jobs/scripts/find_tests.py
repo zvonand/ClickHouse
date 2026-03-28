@@ -1690,8 +1690,11 @@ class Targeting:
         MAX_SCORE_RATIO = 1000
         # Cap the floor so that rc=1 changed lines (top_score=1.0) don't push
         # effective_min to 1e-3 and cut indirect / sparse-file expansion results.
-        # Equivalent to treating any top_score above 1/10 the same as 1/10.
-        MAX_EFFECTIVE_MIN = 1e-4
+        # Equivalent to treating any top_score above 1/100 the same as 1/100.
+        # Using 1e-5 (instead of 1e-4) recovers tests that cover changed .h files via
+        # non-overlapping regions (header expansion): such tests score 1/(SIBLING_DIR_WIDTH*rc)
+        # = 1/(10000*7) ≈ 1.4e-5, which is above the 1e-5 threshold but below the old 1e-4.
+        MAX_EFFECTIVE_MIN = 1e-5
         # Compute top_score from direct-pass entries ONLY (pw >= PASS_WEIGHT_DIRECT = 1.0).
         # Hunk-context hits (PASS_WEIGHT_HUNK_CONTEXT = 0.35) are excluded so that their
         # score doesn't inflate top_score and suppress lower-scoring but genuinely

@@ -49,8 +49,8 @@ struct AggregateFunctionWithProperties
     /// Optional override to prefer in window context (OVER (...))
     /// See TheilsU aggregate function for an example.
     AggregateFunctionCreator window_creator;
+    FunctionDocumentation documentation;
     AggregateFunctionProperties properties;
-    FunctionDocumentation documentation = {}; /// TODO remove default initialization ... all aggregate functions should have documentation
 
     AggregateFunctionWithProperties() = default;
     AggregateFunctionWithProperties(const AggregateFunctionWithProperties &) = default;
@@ -58,8 +58,8 @@ struct AggregateFunctionWithProperties
 
     template <typename Creator>
     requires (!std::is_same_v<Creator, AggregateFunctionWithProperties>)
-    AggregateFunctionWithProperties(Creator creator_, AggregateFunctionProperties properties_ = {}, FunctionDocumentation documentation_ = {}, AggregateFunctionCreator window_creator_ = {}) /// NOLINT
-        : creator(std::forward<Creator>(creator_)), window_creator(std::move(window_creator_)), properties(std::move(properties_)), documentation(std::move(documentation_))
+    AggregateFunctionWithProperties(Creator creator_, FunctionDocumentation documentation_, AggregateFunctionProperties properties_ = {}, AggregateFunctionCreator window_creator_ = {}) /// NOLINT
+        : creator(std::forward<Creator>(creator_)), window_creator(std::move(window_creator_)), documentation(std::move(documentation_)), properties(std::move(properties_))
     {
     }
 };

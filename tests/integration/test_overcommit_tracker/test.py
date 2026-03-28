@@ -27,9 +27,9 @@ USER_TEST_QUERY_B = "SELECT groupArray(number) FROM numbers(2500000) SETTINGS ma
 
 
 def test_user_overcommit():
-    if node.is_built_with_memory_sanitizer():
+    if node.is_built_with_memory_sanitizer() or node.is_built_with_address_sanitizer():
         pytest.skip(
-            "doesn't fit in memory limits under MSan (~3x memory overhead)"
+            "doesn't fit in memory limits under sanitizers (memory overhead causes timeouts)"
         )
 
     node.query("CREATE USER IF NOT EXISTS A")

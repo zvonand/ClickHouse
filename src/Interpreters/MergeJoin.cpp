@@ -81,8 +81,6 @@ ColumnWithTypeAndName condtitionColumnToJoinable(const Block & block, const Stri
 template <bool has_left_nulls, bool has_right_nulls, bool track = false>
 Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_column, size_t lhs_pos, size_t rhs_pos)
 {
-    static constexpr int null_direction_hint = 1;
-
     const IColumn * left_notnull = &left_column;
     const IColumn * right_notnull = &right_column;
     const ColumnNullable * left_nullable = nullptr;
@@ -95,7 +93,7 @@ Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_colum
         {
             /// NULL != NULL case
             if (left_nullable->isNullAt(lhs_pos))
-                return null_direction_hint;
+                return -1;
 
             left_notnull = &left_nullable->getNestedColumn();
         }
@@ -107,7 +105,7 @@ Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_colum
         if (right_nullable)
         {
             if (right_nullable->isNullAt(rhs_pos))
-                return -null_direction_hint;
+                return 1;
 
             right_notnull = &right_nullable->getNestedColumn();
         }
@@ -115,7 +113,7 @@ Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_colum
 
     if constexpr (track)
     {
-        Int64 res = left_notnull->compareTrackAt(lhs_pos, rhs_pos, *right_notnull, null_direction_hint);
+        Int64 res = left_notnull->compareTrackAt(lhs_pos, rhs_pos, *right_notnull, -1);
 
         if (left_nullable && res < 0)
         {
@@ -136,7 +134,7 @@ Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_colum
         return res;
     }
     else
-        return left_notnull->compareAt(lhs_pos, rhs_pos, *right_notnull, null_direction_hint);
+        return left_notnull->compareAt(lhs_pos, rhs_pos, *right_notnull, -1);
 }
 
 /// Get first and last row from sorted block

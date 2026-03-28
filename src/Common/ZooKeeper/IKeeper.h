@@ -473,12 +473,12 @@ struct GetChildrenRecursiveRequest : virtual Request
 
 struct GetChildrenRecursiveResponse : virtual Response
 {
-    std::vector<String> childs;
+    std::vector<String> children;
 
     size_t bytesSize() const override
     {
         size_t result = 0;
-        for (const auto & child : childs)
+        for (const auto & child : children)
             result += child.size();
         return result;
     }

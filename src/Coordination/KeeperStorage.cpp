@@ -2490,7 +2490,7 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
             for (auto && [child_name, _] : children)
             {
                 auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
-                response->childs.push_back(child_path);
+                response->children.push_back(child_path);
                 traverse.push(std::move(child_path));
             }
         }
@@ -2502,12 +2502,12 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
             for (const auto & child_name : it->value.getChildren())
             {
                 auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
-                response->childs.push_back(child_path);
-                to_visit.push(child_path);
+                response->children.push_back(child_path);
+                traverse.push(child_path);
             }
         }
 
-        if (response->childs.size() > zk_request.children_nodes_limit)
+        if (response->children.size() > zk_request.children_nodes_limit)
         {
             response->error = Coordination::Error::ZNOTEMPTY;
             return response;

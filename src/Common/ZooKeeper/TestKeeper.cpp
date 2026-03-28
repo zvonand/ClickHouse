@@ -544,7 +544,7 @@ std::pair<ResponsePtr, Undo> TestKeeperGetChildrenRecursiveRequest::process(Test
         return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
     }
 
-    response.childs = std::move(children);
+    response.children = std::move(children);
     response.error = Error::ZOK;
     return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
 }

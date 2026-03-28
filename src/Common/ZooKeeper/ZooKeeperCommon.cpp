@@ -1586,17 +1586,17 @@ size_t ZooKeeperGetChildrenRecursiveRequest::sizeImpl() const
 
 void ZooKeeperGetChildrenRecursiveResponse::readImpl(ReadBuffer & in)
 {
-    Coordination::read(childs, in);
+    Coordination::read(children, in);
 }
 
 void ZooKeeperGetChildrenRecursiveResponse::writeImpl(WriteBuffer & out) const
 {
-    Coordination::write(childs, out);
+    Coordination::write(children, out);
 }
 
 size_t ZooKeeperGetChildrenRecursiveResponse::sizeImpl() const
 {
-    return Coordination::size(childs);
+    return Coordination::size(children);
 }
 
 ZooKeeperResponsePtr ZooKeeperGetChildrenRecursiveRequest::makeResponse() const

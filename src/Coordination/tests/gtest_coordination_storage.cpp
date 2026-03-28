@@ -1584,7 +1584,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         const auto & response = dynamic_cast<ZooKeeperGetChildrenRecursiveResponse &>(*responses[0].response);
         if (response.error != Error::ZOK)
             return {};
-        return response.childs;
+        return response.children;
     };
 
     const auto get_children_recursive_error = [&](const String & path, uint32_t limit) -> Error
@@ -1765,7 +1765,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveInMultiRequest)
         ASSERT_EQ(multi_response->responses[0]->error, Error::ZOK);
 
         const auto & get_response = dynamic_cast<ZooKeeperGetChildrenRecursiveResponse &>(*multi_response->responses[0]);
-        std::unordered_set<String> child_set(get_response.childs.begin(), get_response.childs.end());
+        std::unordered_set<String> child_set(get_response.children.begin(), get_response.children.end());
         ASSERT_EQ(child_set.size(), 3);
         ASSERT_TRUE(child_set.contains("/M/A"));
         ASSERT_TRUE(child_set.contains("/M/A/B"));

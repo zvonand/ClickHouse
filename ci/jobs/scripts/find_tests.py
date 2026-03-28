@@ -141,7 +141,7 @@ class Targeting:
         return "./" + p
 
     # Regions wider than this are considered "broad" (low signal).
-    NARROW_REGION_MAX_LINES = 20
+    NARROW_REGION_MAX_LINES = 25
 
     # Regions covered by more tests than this are skipped from Pass 1 (direct line
     # coverage).  Infrastructure files like SignalHandlers.cpp, Context.cpp, and

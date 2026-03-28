@@ -421,7 +421,7 @@ class Targeting:
         # reflecting that broad-tier2 signal is weaker than indirect-call (0.15 < 0.30).
         # With PASS_WEIGHT_BROAD2=0.15 and the same score target (1e-5 at cov_regions=50,
         # effective_width=10): BROAD_TIER2_RC = 0.15 / (10 × 1e-5) = 1500.
-        BROAD_TIER2_RC = 1500
+        BROAD_TIER2_RC = 1200
         PASS_WEIGHT_BROAD_TIER2 = self.PASS_WEIGHT_BROAD2
 
         broad_tests: dict = {}   # test_name -> cov_regions count

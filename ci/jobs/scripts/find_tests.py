@@ -1096,22 +1096,26 @@ class Targeting:
         unique_kws = list(dict.fromkeys(all_keywords))
 
         # Build keyword filter for sibling filenames.
-        # With a single keyword (e.g. "Arrow") use LIKE '%Arrow%'.
-        # With multiple keywords (e.g. "Index"+"Text") use AND so we only
-        # match files containing ALL keywords — this avoids matching broad
-        # architectural files that share only one word with the changed file
-        # (e.g. MergeTreeIndexGranularity.cpp shares "Index" with
-        # MergeTreeIndexConditionText.cpp but is unrelated to text indexing).
+        # Use OR across keywords so that compound-named files (e.g. "DistributedSink")
+        # can find siblings matching EITHER component ("Distributed" OR "Sink").
+        # Previously AND was used but it was too restrictive: when a PR changes
+        # DistributedSink.cpp (keywords: Distributed, Sink), the AND condition
+        # "file LIKE '%Distributed%' AND file LIKE '%Sink%'" only matched
+        # DistributedSink.cpp itself (the changed file), yielding zero sibling results.
+        # With OR, related sibling files (DistributedAsyncInsert*.cpp etc.) are found.
+        #
+        # False positive risk is mitigated by:
+        # 1. MAX_SIBLING_FILE_TESTS cap (200): broad infrastructure files excluded.
+        # 2. Inner subquery: sibling file must be covered by >= min_sibling_coverage
+        #    primary tests, so loosely-related files not exercised by the PR's primary
+        #    tests are naturally excluded.
         if unique_kws:
             kws = unique_kws[:4]  # cap to avoid overly long queries
-            if len(kws) == 1:
-                kw_cond = f"file LIKE '%{self._escape_sql_string(kws[0])}%'"
-            else:
-                # AND: sibling file must contain every keyword
-                kw_cond = " AND ".join(
-                    f"file LIKE '%{self._escape_sql_string(kw)}%'"
-                    for kw in kws
-                )
+            # OR: sibling file must contain at least one keyword.
+            kw_cond = " OR ".join(
+                f"file LIKE '%{self._escape_sql_string(kw)}%'"
+                for kw in kws
+            )
             sibling_file_filter = f"AND ({kw_cond})"
         else:
             # No specific keywords — fall back to all sibling files (rare)

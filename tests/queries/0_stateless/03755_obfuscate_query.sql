@@ -1,3 +1,6 @@
+-- Test short identifier that starts with uppercase (regression test for buffer underread)
+SELECT length(obfuscateQueryWithSeed('Ab', 1)) > 0;
+
 -- Ensure obfuscateQuery produces different results per row for the same constant query string
 SELECT uniq(obfuscateQuery('SELECT user_id, amount FROM orders WHERE amount > 10')) FROM numbers(2);
 

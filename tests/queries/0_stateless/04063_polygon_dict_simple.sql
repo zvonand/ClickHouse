@@ -56,7 +56,7 @@ SELECT 'dictGet', dictGet('dict_polygons', 'value1', tuple(6.5, 1.5));
 SELECT 'dictGet', dictGet('dict_polygons', 'value2', tuple(6.5, 1.5));
 SELECT 'dictGet', dictGet('dict_polygons', 'value3', tuple(6.5, 1.5));
 
--- Point outside all polygonsx
+-- Point outside all polygons
 SELECT 'dictGet', dictGet('dict_polygons', 'name', tuple(10.0, 10.0));
 SELECT 'dictGet', dictGet('dict_polygons', 'value1', tuple(10.0, 10.0));
 SELECT 'dictGet', dictGet('dict_polygons', 'value2', tuple(10.0, 10.0));

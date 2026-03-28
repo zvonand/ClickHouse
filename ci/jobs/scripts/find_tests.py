@@ -383,8 +383,13 @@ class Targeting:
         # broad Context.cpp/ProcessList.cpp regions) rank above tests that merely
         # touch one broad region.  ORDER BY cov_regions DESC + LIMIT ensures we
         # prioritise the most-covering tests when truncating.
+        # Rank broad-tier2 tests by (cov_regions * files_covered) so that tests
+        # exercising MULTIPLE changed files via broad regions rank above tests that
+        # only cover a single changed file.  This makes the guarantee selection more
+        # specific: a test covering 3 changed files at 74 broad regions each ranks
+        # above a test covering only 1 file at 74 regions.
         broad_query = f"""
-        SELECT test_name, count() AS cov_regions
+        SELECT test_name, count() AS cov_regions, uniqExact(file) AS files_covered
         FROM checks_coverage_lines
         WHERE check_start_time > now() - interval 3 days
           AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
@@ -401,7 +406,7 @@ class Targeting:
                  AND uniqExact(test_name) <= {VERY_BROAD_REGION_CAP}
           )
         GROUP BY test_name
-        ORDER BY cov_regions DESC
+        ORDER BY (cov_regions * uniqExact(file)) DESC
         LIMIT 8000
         """
         # Broad-tier2 tests have real coverage but from regions shared by
@@ -430,18 +435,22 @@ class Targeting:
                 print(f"[find_tests] broad-tier2 query failed (non-fatal): {e}")
                 broad_raw = ""
 
-            # Parse broad-tier2 results: test_name \t cov_regions
+            # Parse broad-tier2 results: test_name \t cov_regions \t files_covered
+            # Store cov_regions * files_covered as the ranking key so tests covering
+            # multiple changed files via broad regions rank above single-file tests.
             for row in broad_raw.strip().splitlines():
-                parts = row.strip().split("\t", 1)
-                if parts[0]:
-                    count = int(parts[1]) if len(parts) == 2 and parts[1].isdigit() else 1
-                    broad_tests[parts[0]] = count
+                parts = row.strip().split("\t", 2)
+                if not parts[0]:
+                    continue
+                cov_regions = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 1
+                files_covered = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 1
+                broad_tests[parts[0]] = cov_regions * files_covered
             if broad_tests:
-                max_cov = max(broad_tests.values()) if broad_tests else 0
+                max_score = max(broad_tests.values()) if broad_tests else 0
                 print(
                     f"[find_tests] broad-tier2: {len(broad_tests)} additional tests from "
                     f"regions with {BROAD_REGION_HARD_CAP} < rc <= {VERY_BROAD_REGION_CAP} "
-                    f"(top cov_regions={max_cov})"
+                    f"(top score={max_score})"
                 )
 
         # Map each input (filename, line_no) to (test_name, region_width, min_depth,

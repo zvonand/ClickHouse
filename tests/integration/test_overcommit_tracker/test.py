@@ -37,7 +37,7 @@ def test_user_overcommit():
 
     # The test relies on memory pressure to selectively kill queries based on
     # memory_overcommit_ratio_denominator. This is nondeterministic, so retry.
-    overcommited_killed = False
+    overcommitted_killed = False
     finished = False
     last_error = ""
 
@@ -54,25 +54,25 @@ def test_user_overcommit():
                     node.get_query_request(USER_TEST_QUERY_B, user="A")
                 )
 
-        overcommited_killed = False
+        overcommitted_killed = False
         for response in responses_A:
             _, err = response.get_answer_and_error()
             if "MEMORY_LIMIT_EXCEEDED" in err:
-                overcommited_killed = True
+                overcommitted_killed = True
         finished = False
         for response in responses_B:
             _, err = response.get_answer_and_error()
             if err == "":
                 finished = True
 
-        if overcommited_killed and finished:
+        if overcommitted_killed and finished:
             break
 
         last_error = (
-            f"attempt {attempt + 1}: overcommited_killed={overcommited_killed}, finished={finished}"
+            f"attempt {attempt + 1}: overcommitted_killed={overcommitted_killed}, finished={finished}"
         )
 
-    assert overcommited_killed, f"overcommitted query is not killed ({last_error})"
+    assert overcommitted_killed, f"overcommitted query is not killed ({last_error})"
     assert finished, f"all tasks are killed ({last_error})"
 
     node.query("DROP USER IF EXISTS A")

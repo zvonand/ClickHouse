@@ -304,7 +304,7 @@ class Targeting:
         # etc.) are not completely invisible — the scoring formula already
         # penalises them via the 1/region_test_count denominator.  Only truly
         # ubiquitous regions (> HARD_CAP) are dropped to keep response size sane.
-        BROAD_REGION_HARD_CAP = 2000  # scoring handles broad regions; very ubiquitous dropped
+        BROAD_REGION_HARD_CAP = 3000  # scoring handles broad regions; very ubiquitous dropped
         query = f"""
         SELECT
             file,

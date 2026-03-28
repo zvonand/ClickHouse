@@ -1726,22 +1726,16 @@ class Targeting:
         # Fix: after ranking, replace the last guarantee.size tests in the ranked list
         # with the top-cov_regions tests from the guarantee that aren't already present.
         # This ensures the most-covering broad-tier2 tests are always included.
+        # Broad-tier2 guarantee: if the cap cut off high-cov_regions broad-tier2 tests,
+        # append the top few (by cov_regions) that didn't make it — but only up to the cap.
         broad_guarantee = getattr(self, '_broad_tier2_guarantee', [])
-        if broad_guarantee:
+        if broad_guarantee and len(ranked) < MAX_OUTPUT_TESTS:
             ranked_set = set(ranked)
-            missing = [t for t in broad_guarantee if t not in ranked_set]
-            if missing:
-                if len(ranked) < MAX_OUTPUT_TESTS:
-                    # Simple case: there's room; just append.
-                    slots = MAX_OUTPUT_TESTS - len(ranked)
-                    ranked = ranked + missing[:slots]
-                else:
-                    # Cap already reached: replace the tail of ranked with the guarantee.
-                    # This is safe because guarantee tests have higher cov_regions than most
-                    # broad-tier2 tests in the tail.
-                    n_replace = min(len(missing), len(ranked))
-                    ranked = ranked[:-n_replace] + missing[:n_replace]
-                print(f"[find_tests] broad-tier2 guarantee: +{len(missing)} high-cov_regions tests added/replaced")
+            slots = MAX_OUTPUT_TESTS - len(ranked)
+            extra = [t for t in broad_guarantee if t not in ranked_set][:slots]
+            if extra:
+                ranked = ranked + extra
+                print(f"[find_tests] broad-tier2 guarantee: +{len(extra)} high-cov_regions tests added")
 
         narrow_count = sum(1 for t in ranked if has_narrow_hit[t])
         direct_count = sum(

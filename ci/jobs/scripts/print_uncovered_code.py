@@ -158,11 +158,17 @@ def _parse_diff_hunks(diff_path: str) -> dict:
 def _remap_line(old_line: int, hunks: list) -> int | None:
     """
     Map a line number from the old (baseline) file to the new (current) file.
-    Returns None if the line was deleted by this PR.
+    Returns None only for pure deletions with no replacement (new_count == 0).
+
+    For lines that were replaced/commented-out (new_count > 0), returns an
+    approximate new line position so that LBC analysis can still report them.
+    This is important for the common case of "commenting out tests": the test
+    code appears as '-' lines in the diff, so without this approximation the
+    coverage loss would be silently ignored.
 
     Walks hunks in order, accumulating the net line-count delta from each hunk
     that ends before old_line.  For lines inside a hunk, uses context_map
-    (unchanged lines) or the removed set (deleted lines).
+    (unchanged lines) or approximates from the hunk's new_start offset.
     """
     offset = 0
     for h in hunks:
@@ -173,10 +179,15 @@ def _remap_line(old_line: int, hunks: list) -> int | None:
             offset += h["new_count"] - h["old_count"]
             continue
         # line is inside this hunk
-        if old_line in h["removed"]:
-            return None
         if old_line in h["context_map"]:
             return h["context_map"][old_line]
+        if old_line in h["removed"]:
+            if h["new_count"] == 0:
+                return None  # pure deletion — code is gone entirely
+            # Replaced or commented-out: approximate position within the new hunk.
+            # For 1-to-1 replacements (e.g. adding // prefix) this is exact.
+            approx = h["new_start"] + (old_line - h["old_start"])
+            return min(approx, h["new_start"] + h["new_count"] - 1)
         return old_line + offset  # fallback; should not normally occur
     return old_line + offset
 

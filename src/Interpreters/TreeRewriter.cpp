@@ -1204,7 +1204,7 @@ bool TreeRewriterResult::collectUsedColumns(const ASTPtr & query, bool is_select
     if (storage_snapshot)
     {
         const auto & virtuals = storage_snapshot->virtual_columns;
-        const auto & common_virtual_columns = IStorage::getCommonVirtuals();
+        const auto & common_virtual_columns = storage_snapshot->storage.getCommonVirtuals();
         for (auto it = unknown_required_source_columns.begin(); it != unknown_required_source_columns.end();)
         {
             if (auto column = virtuals->tryGet(*it))

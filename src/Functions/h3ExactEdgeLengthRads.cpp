@@ -100,7 +100,7 @@ Returns the exact edge length of the unidirectional edge represented by the inpu
         {"index", "Hexagon index number.", {"UInt64"}}
     };
     FunctionDocumentation::ReturnedValue returned_value = {
-        "Returns the exact length of the H3 edge in radians.",
+        "Returns the exact length of the H3 edge in radians. Throws an exception if the input is not a valid directed edge (controlled by the `functions_h3_default_if_invalid` setting).",
         {"Float64"}
     };
     FunctionDocumentation::Examples examples = {

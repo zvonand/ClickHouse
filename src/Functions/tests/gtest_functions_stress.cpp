@@ -87,7 +87,6 @@ namespace DB::ErrorCodes
     extern const int ZERO_ARRAY_OR_TUPLE_INDEX;
     extern const int UNICODE_ERROR;
     extern const int CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN;
-    extern const int CANNOT_SET_SIGNAL_HANDLER;
 }
 
 namespace
@@ -1318,7 +1317,6 @@ struct FunctionsStressTestThread
                             ErrorCodes::UNSUPPORTED_METHOD,
                             ErrorCodes::UNICODE_ERROR,
                             ErrorCodes::FUNCTION_THROW_IF_VALUE_IS_NON_ZERO,
-                            ErrorCodes::CANNOT_SET_SIGNAL_HANDLER,
                         };
 
                         if (validation_tolerated_errors.contains(e.code()))

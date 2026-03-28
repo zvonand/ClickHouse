@@ -102,7 +102,7 @@ Returns the base cell number of the [H3](#h3-index) index.
         {"index", "Hexagon index number.", {"UInt64"}}
     };
     FunctionDocumentation::ReturnedValue returned_value = {
-        "Returns the hexagon base cell number.",
+        "Returns the hexagon base cell number. Throws an exception if the input is not a valid H3 cell (controlled by the `functions_h3_default_if_invalid` setting).",
         {"UInt8"}
     };
     FunctionDocumentation::Examples examples = {

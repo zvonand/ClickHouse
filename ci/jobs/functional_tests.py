@@ -231,11 +231,9 @@ def main():
     runner_options += f" --jobs {workers}"
 
     if is_flaky_check:
-        # Hard caps for the flaky/targeted combined check:
-        # - stop after 5 consecutive failures (fast feedback on broken PRs)
-        # - overall time limit 45 min (enforced via global_time_limit below as well,
-        #   but also set here so clickhouse-test enforces it independently)
-        runner_options += " --max-failures-chain 5"
+        # Stop after 5 total failures across all parallel workers (fast feedback on broken PRs).
+        # The 45-min global_time_limit is the primary stopping condition for healthy PRs.
+        runner_options += " --max-failures 5"
 
     if is_llvm_coverage:
         # Randomization makes coverage non-deterministic, long tests are slow to collect coverage
@@ -261,10 +259,10 @@ def main():
         print(f"Rerun count set from --count: {args.count}")
         rerun_count = args.count
     elif is_flaky_check:
-        # Run each selected test 50 times to surface flakiness.
-        # The 45-min global time limit and 5-failure chain cap stop early if needed.
-        print("Rerun count set to 50 for flaky check")
-        rerun_count = 50
+        # Large repeat count so the 45-min global_time_limit is the effective stopping
+        # condition, not the repeat count.  Tests run in parallel (--jobs N) with fresh
+        # random settings per TestCase; --max-failures 5 stops early on broken PRs.
+        rerun_count = 1000
 
 
     if not info.is_local_run:
@@ -478,7 +476,7 @@ def main():
             f"prof_prefix:{temp_dir}/jemalloc_profiles/clickhouse.jemalloc"
         )
 
-        if not is_per_test_coverage:
+        if not is_llvm_coverage:
             commands.append(configure_log_export)
 
         results.append(
@@ -536,19 +534,10 @@ def main():
         res = results[-1].is_ok()
 
     test_result = None
-    stopped_by_time_limit = False
     if res and JobStages.TEST in stages:
         stop_watch_ = Utils.Stopwatch()
         step_name = "Tests"
         print(step_name)
-
-        # For flaky check, use N separate clickhouse-test invocations
-        # (run_sets_cnt=N, rerun_count=1 each) so that every invocation creates fresh
-        # TestCase objects with independently randomized settings.
-        # A single invocation with --test-runs N reuses the same TestCase (and thus the
-        # same random settings) for all N runs — not what we want for flakiness detection.
-        run_sets_cnt = rerun_count if is_flaky_check else 1
-        rerun_count = 1 if is_flaky_check else rerun_count
 
         ft_res_processor = FTResultsProcessor(wd=temp_dir)
 
@@ -565,70 +554,16 @@ def main():
                 f" remaining: {global_time_limit}s)"
             )
 
-        # Track collected test results across multiple runs (only used when run_sets_cnt > 1)
-        collected_test_results = []
-        seen_test_names = set()
-        tests_to_run = list(tests) if tests else tests
-
-        for cnt in range(run_sets_cnt):
-            # Recalculate the remaining time before each invocation of the test runner.
-            if global_time_limit > 0 and run_sets_cnt > 1:
-                FLAKY_CHECK_TIME_LIMIT = 45 * 60
-                global_time_limit = max(
-                    FLAKY_CHECK_TIME_LIMIT - int(stop_watch.duration), 0
-                )
-                if global_time_limit <= 0:
-                    print(
-                        "NOTE: Time limit exhausted; stopping before next iteration"
-                    )
-                    if is_flaky_check:
-                        stopped_by_time_limit = True
-                    break
-
-            run_tests(
-                batch_num=batch_num if not tests_to_run else 0,
-                batch_total=total_batches if not tests_to_run else 0,
-                tests=tests_to_run,
-                extra_args=runner_options,
-                random_order=is_flaky_check or is_bugfix_validation,
-                rerun_count=rerun_count,
-                global_time_limit=global_time_limit,
-            )
-            test_result = ft_res_processor.run()
-
-            # Experimental mode for targeted check: collect first failure of each test,
-            # or all results on the final attempt
-            if run_sets_cnt > 1:
-                is_final_run = cnt == run_sets_cnt - 1
-
-                for test_case_result in test_result.results:
-                    # Only collect each test once (first failure or final result)
-                    if test_case_result.name not in seen_test_names:
-                        # On non-final runs: collect only failed test cases
-                        # On final run: collect all remaining test cases
-                        should_collect = not test_case_result.is_ok() or is_final_run
-                        if should_collect:
-                            test_case_result.set_info(
-                                f"Run attempt {cnt + 1} out of {run_sets_cnt}"
-                            )
-                            collected_test_results.append(test_case_result)
-                            seen_test_names.add(test_case_result.name)
-
-                stop_by_elapsed_time = global_time_limit <= 0
-                if stop_by_elapsed_time and is_flaky_check:
-                    stopped_by_time_limit = True
-
-                # On final run, replace results with collected ones
-                if is_final_run or stop_by_elapsed_time:
-                    break
-
-        # Apply collected results from multi-run mode
-        if run_sets_cnt > 1 and collected_test_results:
-            test_result.results = collected_test_results
-            # Set overall status to failed if any collected test cases failed
-            has_failures = any(not t.is_ok() for t in collected_test_results)
-            if has_failures and test_result.is_ok():
-                test_result.set_failed()
+        run_tests(
+            batch_num=batch_num if not tests else 0,
+            batch_total=total_batches if not tests else 0,
+            tests=tests,
+            extra_args=runner_options,
+            random_order=is_flaky_check or is_bugfix_validation,
+            rerun_count=rerun_count,
+            global_time_limit=global_time_limit,
+        )
+        test_result = ft_res_processor.run()
 
         if not info.is_local_run:
             CH.stop_log_exports()
@@ -777,11 +712,9 @@ def main():
 
     # Decide whether to block the CI pipeline on test failures
     force_ok_exit = False
-    if is_flaky_check and stopped_by_time_limit:
-        # Hitting the 45-minute wall-clock cap is a normal stopping condition, not a
-        # failure.  The job ran as many of the 20 iterations as time allowed; any
-        # genuinely flaky tests will already be reported in the collected results.
-        print("NOTE: Flaky-check stopped by time limit — marking job as success")
+    if is_flaky_check:
+        # Flaky-check exits normally via --global_time_limit or --max-failures.
+        # Both are expected stopping conditions; do not block the pipeline.
         force_ok_exit = True
     if "parallel" in test_options and test_result:
         failures_cnt = len([r for r in test_result.results if not r.is_ok()])

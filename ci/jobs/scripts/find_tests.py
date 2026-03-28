@@ -1220,7 +1220,7 @@ class Targeting:
 
     # Synthetic width for keyword-fallback tests (broader than sibling-dir tests
     # since we have no coverage signal at all — just filename matching).
-    KEYWORD_FALLBACK_WIDTH = 50000
+    KEYWORD_FALLBACK_WIDTH = 30000
 
     def _get_keyword_fallback_tests(self, changed_src_files: list) -> list:
         """

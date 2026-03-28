@@ -103,6 +103,21 @@ public:
             removeReplicatedFromSortingColumns(input, description);
     }
 
+    /// Materialize ALL ColumnReplicated columns in a chunk, not just sort columns.
+    /// Use in consume() to ensure late-arriving inputs don't introduce ColumnReplicated
+    /// columns that mismatch the MergedData destination column types set during initialize().
+    static void removeReplicatedFromAllColumns(Input & input)
+    {
+        if (!input.chunk)
+            return;
+
+        size_t num_rows = input.chunk.getNumRows();
+        auto columns = input.chunk.detachColumns();
+        for (auto & column : columns)
+            column = column->convertToFullColumnIfReplicated();
+        input.chunk.setColumns(std::move(columns), num_rows);
+    }
+
     virtual const char * getName() const = 0;
     virtual void initialize(Inputs inputs) = 0;
     virtual void consume(Input & input, size_t source_num) = 0;

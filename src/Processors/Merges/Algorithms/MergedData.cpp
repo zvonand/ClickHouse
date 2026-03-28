@@ -54,7 +54,20 @@ void MergedData::insertRow(const ColumnRawPtrs & raw_columns, size_t row, size_t
     size_t num_columns = raw_columns.size();
     chassert(columns.size() == num_columns);
     for (size_t i = 0; i < num_columns; ++i)
-        columns[i]->insertFrom(*raw_columns[i], row);
+    {
+        const IColumn * src = raw_columns[i];
+        /// If the source is ColumnReplicated but the destination is not, materialize the source
+        /// to avoid type mismatch in insertFrom. This can happen when some merge inputs were null
+        /// at initialization time (their ColumnReplicated status was unknown), and later arrive
+        /// via consume() with ColumnReplicated non-sort columns.
+        ColumnPtr materialized;
+        if (src->isReplicated() && !columns[i]->isReplicated())
+        {
+            materialized = src->convertToFullColumnIfReplicated();
+            src = materialized.get();
+        }
+        columns[i]->insertFrom(*src, row);
+    }
 
     ++total_merged_rows;
     ++merged_rows;
@@ -67,10 +80,19 @@ void MergedData::insertRows(const ColumnRawPtrs & raw_columns, size_t start_inde
     chassert(columns.size() == num_columns);
     for (size_t i = 0; i < num_columns; ++i)
     {
+        const IColumn * src = raw_columns[i];
+        /// See comment in insertRow for why this materialization is needed.
+        ColumnPtr materialized;
+        if (src->isReplicated() && !columns[i]->isReplicated())
+        {
+            materialized = src->convertToFullColumnIfReplicated();
+            src = materialized.get();
+        }
+
         if (length == 1)
-            columns[i]->insertFrom(*raw_columns[i], start_index);
+            columns[i]->insertFrom(*src, start_index);
         else
-            columns[i]->insertRangeFrom(*raw_columns[i], start_index, length);
+            columns[i]->insertRangeFrom(*src, start_index, length);
     }
 
     total_merged_rows += length;
@@ -116,6 +138,11 @@ void MergedData::insertChunk(Chunk && chunk, size_t rows_size)
         else if (columns[i]->isReplicated() && !chunk_columns[i]->isReplicated())
         {
             columns[i] = ColumnReplicated::create(std::move(chunk_columns[i]));
+        }
+        else if (!columns[i]->isReplicated() && chunk_columns[i]->isReplicated())
+        {
+            /// Destination is regular but chunk has ColumnReplicated — materialize to avoid type mismatch.
+            columns[i] = chunk_columns[i]->convertToFullColumnIfReplicated()->assumeMutable();
         }
         else
         {

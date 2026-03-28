@@ -4463,12 +4463,6 @@ def main(args):
         f"coverage_active={args.collect_per_test_coverage and BuildFlags.WITH_COVERAGE_DEPTH in args.build_flags}"
     )
 
-    if args.collect_per_test_coverage and BuildFlags.WITH_COVERAGE_DEPTH not in args.build_flags:
-        raise RuntimeError(
-            "--collect-per-test-coverage is enabled but the binary was not built with "
-            "WITH_COVERAGE_DEPTH=ON. Per-test coverage collection will not work. "
-            "Make sure the binary is built with -DWITH_COVERAGE_DEPTH=ON."
-        )
     if BuildFlags.WITH_COVERAGE_DEPTH in args.build_flags and not args.collect_per_test_coverage:
         raise RuntimeError(
             "Binary is built with WITH_COVERAGE_DEPTH=ON but --collect-per-test-coverage "

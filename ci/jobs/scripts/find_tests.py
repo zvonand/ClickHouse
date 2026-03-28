@@ -156,7 +156,7 @@ class Targeting:
     # Lower than SIBLING_DIR_WIDTH (10000) because callee co-occurrence is a stronger
     # signal than directory proximity: tests that call the same vtable slots as primary
     # tests are exercising the same interface, not merely a related file.
-    INDIRECT_CALL_WIDTH = 3000
+    INDIRECT_CALL_WIDTH = 2500
 
     # Synthetic width assigned to tests found via same-directory sibling file
     # expansion (secondary pass).  Must be >> NARROW_REGION_MAX_LINES so they

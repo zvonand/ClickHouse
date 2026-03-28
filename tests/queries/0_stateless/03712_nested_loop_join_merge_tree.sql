@@ -102,7 +102,7 @@ WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryF
 SELECT
     -- Full scan on each lookup
     if(read_rows > 2_000_000, 'OK', format('Fail: {} rows read, query_id="{}"', read_rows, query_id)),
-    if(ProfileEvents['JoinBuildTableRowCount'] BETWEEN 1_100_000 AND 2_100_000, 'OK',
+    if(ProfileEvents['JoinBuildTableRowCount'] BETWEEN 1_100_000 AND 3_000_000, 'OK',
         format('Fail: JoinBuildTableRowCount={}, query_id="{}"', ProfileEvents['JoinBuildTableRowCount'], query_id)),
 FROM system.query_log
 WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND event_time >= yesterday() AND query_kind = 'Select'

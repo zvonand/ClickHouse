@@ -1,0 +1,2 @@
+WITH t(a, b) AS\n    (\n        SELECT\n            1,\n            2\n    )\nSELECT *\nFROM t
+WITH t(a) AS\n    (\n        SELECT 1\n    )\nSELECT *\nFROM t

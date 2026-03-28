@@ -1,0 +1,2 @@
+SELECT formatQuery('WITH t(a, b) AS (SELECT 1, 2) SELECT * FROM t');
+SELECT formatQuery('WITH t(a) AS (SELECT 1) SELECT * FROM t');

@@ -2584,6 +2584,15 @@ void Context::addViewAccessInfo(const String & view_name)
     query_access_info->views.emplace(view_name);
 }
 
+void Context::addUsedRowPolicy(const String & policy_name)
+{
+    if (isGlobalContext())
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Global context cannot have query access info");
+
+    std::lock_guard<std::mutex> lock(query_access_info->mutex);
+    query_access_info->row_policies.emplace(policy_name);
+}
+
 void Context::addQueryAccessInfo(const QualifiedProjectionName & qualified_projection_name)
 {
     if (!qualified_projection_name)

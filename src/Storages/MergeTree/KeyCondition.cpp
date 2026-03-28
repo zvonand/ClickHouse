@@ -3789,6 +3789,12 @@ static bool functionIsIntegerCastPreservingFieldRepresentation(
         return id == TypeIndex::Int8 || id == TypeIndex::Int16 || id == TypeIndex::Int32 || id == TypeIndex::Int64;
     };
 
+    /// We can only skip the function application when the target type is at least as wide
+    /// as the source type (widening or same-size cast). For narrowing casts (e.g. UInt32 -> UInt16),
+    /// truncation changes the actual value even though both use UInt64 in the Field representation.
+    if (to_type->getSizeOfValueInMemory() < from_type->getSizeOfValueInMemory())
+        return false;
+
     /// Unsigned integer types all use UInt64 as their Field representation.
     if (is_unsigned_int(from_id) && is_unsigned_int(to_id))
         return true;

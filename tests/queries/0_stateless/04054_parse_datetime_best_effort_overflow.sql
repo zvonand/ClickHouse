@@ -2,6 +2,8 @@
 -- The fractional digit count must be clamped to avoid signed integer overflow in readDecimalNumber.
 -- https://github.com/ClickHouse/ClickHouse/pull/100368
 
+SET session_timezone = 'UTC';
+
 -- 10-digit unix timestamp with 19-digit fractional part that exceeds Int64 range
 SELECT parseDateTime64BestEffort('1234567890.9999999999999999999', 3, 'UTC');
 

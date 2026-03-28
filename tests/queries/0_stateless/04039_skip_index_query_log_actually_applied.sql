@@ -25,7 +25,7 @@ CREATE TABLE t_skip_applied
 )
 ENGINE = MergeTree
 ORDER BY tuple()
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192, auto_statistics_types = ''; -- pin: auto minmax stats prune parts before skip indices evaluate
 
 -- we want to intentionally create multiple parts
 SYSTEM STOP MERGES t_skip_applied;

@@ -266,18 +266,24 @@ class Targeting:
                 # For headers: fetch ALL regions in the file (no line range filter)
                 per_file_conds_parts.append(f"(file = '{esc_f}')")
             elif hunk_ranges:
-                # Use per-hunk OR conditions to widen the range beyond min/max of changed lines.
+                # Use the bounding box of all hunk ranges (min hunk start to max hunk end)
+                # as the SQL pre-filter for .cpp files.  This covers:
+                # 1. Context lines at the start/end of each hunk (same as per-hunk OR).
+                # 2. Coverage points that fall BETWEEN two hunks in the same file —
+                #    a common case when a PR changes two separate sections of a function.
+                #    Example: S3RequestSettings.cpp with hunks (301,306) and (321,326)
+                #    has coverage at line 312 (between the hunks, rc=107) that would be
+                #    missed by per-hunk OR but is captured by the bounding box [301, 326].
                 # Derive the original (non-stored) filename from the stored path for lookup.
                 orig_f = f[2:] if f.startswith("./") else f  # strip "./" prefix
                 file_hunks = hunk_ranges.get(orig_f, [])
                 if file_hunks:
-                    # Build OR of per-hunk range conditions.
-                    hunk_conds = " OR ".join(
-                        f"(line_end >= {h_start} AND line_start <= {h_end})"
-                        for h_start, h_end in file_hunks
-                    )
+                    # Bounding box: span from earliest hunk start to latest hunk end.
+                    hunk_min = min(h_start for h_start, _ in file_hunks)
+                    hunk_max = max(h_end for _, h_end in file_hunks)
                     per_file_conds_parts.append(
-                        f"(file = '{esc_f}' AND ({hunk_conds}))"
+                        f"(file = '{esc_f}'"
+                        f" AND line_end >= {hunk_min} AND line_start <= {hunk_max})"
                     )
                 else:
                     # No hunk info for this file; fall back to min/max of changed lines.

@@ -57,14 +57,6 @@ ALTER TABLE sc_unused MATERIALIZE STATISTICS ALL;
 SELECT sum(val) FROM sc_unused
 SETTINGS use_statistics_cache = 0, log_comment = 'nouse-agg' FORMAT Null;
 
-SYSTEM FLUSH LOGS query_log;
-
-SELECT toUInt8(ProfileEvents['LoadedStatisticsMicroseconds'] = 0)
-FROM system.query_log
-WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'nouse-agg'
-ORDER BY event_time_microseconds DESC
-LIMIT 1;
-
 ------------------------------------------------------------
 -- LowCardinality: CountMin https://github.com/ClickHouse/ClickHouse/issues/87886
 ------------------------------------------------------------
@@ -89,14 +81,6 @@ ALTER TABLE st_cm_lc MATERIALIZE STATISTICS ALL;
 
 SELECT count() FROM st_cm_lc WHERE cat = 'PROMO'
 SETTINGS use_statistics_cache = 0, log_comment = 'cm-lc-load' FORMAT Null;
-
-SYSTEM FLUSH LOGS query_log;
-
-SELECT toUInt8(ProfileEvents['LoadedStatisticsMicroseconds'] > 0)
-FROM system.query_log
-WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'cm-lc-load'
-ORDER BY event_time_microseconds DESC
-LIMIT 1;
 
 ------------------------------------------------------------
 -- JOIN with Uniq
@@ -130,7 +114,22 @@ WHERE b.t = 'PROMO'
 SETTINGS use_statistics_cache = 0, query_plan_optimize_join_order_limit = 10, log_comment = 'join-load'
 FORMAT Null;
 
+------------------------------------------------------------
+-- Verify all test cases (single flush for performance)
+------------------------------------------------------------
 SYSTEM FLUSH LOGS query_log;
+
+SELECT toUInt8(ProfileEvents['LoadedStatisticsMicroseconds'] = 0)
+FROM system.query_log
+WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'nouse-agg'
+ORDER BY event_time_microseconds DESC
+LIMIT 1;
+
+SELECT toUInt8(ProfileEvents['LoadedStatisticsMicroseconds'] > 0)
+FROM system.query_log
+WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'cm-lc-load'
+ORDER BY event_time_microseconds DESC
+LIMIT 1;
 
 SELECT toUInt8(ProfileEvents['LoadedStatisticsMicroseconds'] > 0)
 FROM system.query_log

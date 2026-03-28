@@ -615,7 +615,10 @@ void S3StorageParsedArguments::fromAST(ASTs & args, ContextPtr context, bool wit
     }
 
     /// Re-apply user/profile/query-level settings on top, so they take priority over the global <s3> config section.
-    s3_settings->request_settings.updateFromSettings(context->getSettingsRef(), /* if_changed */ true);
+    s3_settings->request_settings.updateFromSettings(
+        context->getSettingsRef(),
+        /* if_changed */ true,
+        context->getSettingsRef()[Setting::s3_validate_request_settings]);
 
     if (auto format_value = getFromPositionOrKeyValue<String>("format", args, engine_args_to_idx, key_value_args);
         format_value.has_value())

@@ -61,9 +61,6 @@ namespace CoordinationSetting
 {
     extern const CoordinationSettingsUInt64 log_slow_cpu_threshold_ms;
     extern const CoordinationSettingsBool check_node_acl_on_remove;
-    extern const CoordinationSettingsUInt64 parallel_read_threads;
-    extern const CoordinationSettingsUInt64 parallel_read_chunk_size;
-    extern const CoordinationSettingsUInt64 parallel_read_min_batch;
 }
 
 namespace ErrorCodes
@@ -3514,6 +3511,8 @@ void KeeperStorageBase::finalize()
     sessions_and_watchers.clear();
 
     session_expiry_queue.clear();
+
+    read_thread_pool.shutdown();
 }
 
 bool KeeperStorageBase::isFinalized() const
@@ -3862,7 +3861,7 @@ KeeperResponsesForSessions KeeperStorage<Container>::processRequest(
             }
 
             /// Watches for this request are added to the watches lists
-            updateWatches(zk_request, response, session_id);
+            updateWatches(zk_request, response.get(), session_id);
 
             /// If this request was processed successfully we need to check watches
             if (response->error == Coordination::Error::ZOK)
@@ -3936,12 +3935,7 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
     std::list<Delta> empty_deltas;
     KeeperStorageBase::DeltaRange deltas_range{.begin_it = empty_deltas.begin(), .end_it = empty_deltas.end()};
 
-    /// Read requests have exactly one response each (no watch notifications from processWatches),
-    /// with the exception of SetWatches/SetWatches2, whose responses we insert separately below.
-    KeeperResponsesForSessions results(requests.size());
-
-    /// TODO: Unbundle multireads, so that parts of one huge MultiRead can run in parallel.
-
+    /// Which processLocal overloads can be run in parallel. Excludes things like AddWatch and SetWatches.
     auto is_request_thread_safe = [](Coordination::OpNum op) -> bool
     {
         switch (op)
@@ -3965,24 +3959,105 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
         }
     };
 
-    /// Phase 1: Execute reads (checkAuth + processLocal + spans).
-    /// This is the parallelizable part — each request reads committed storage state
-    /// under shared_lock(storage_mutex) and writes to its own slot in `results`.
-    const auto process_one_read = [&](size_t request_idx)
+    /// Read requests usually have exactly one response each (unlike write requests, which can
+    /// trigger watch notifications). So we preallocate the responses array here and write to it
+    /// lock-free from worker threads.
+    /// Exception: SetWatches/SetWatches2 can produce more responses; we insert them separately below.
+    KeeperResponsesForSessions results(requests.size());
+
+    /// Unbundle MultiRead requests so that their subrequests can be processed in parallel.
+    /// Useful only if there's a huge MultiRead.
+    struct Task
+    {
+        size_t request_idx;
+        int64_t session_id;
+        const Coordination::ZooKeeperRequestPtr * request;
+        void * response;
+        bool is_base_response_type;
+        bool thread_safe;
+
+        /// Workaround for historical nonsense: KeeperResponseForSession.response is ZooKeeperResponsePtr,
+        /// but MultiResponse.responses[i] is ResponsePtr. They're compatible but slightly different types.
+        void setResponse(Coordination::ZooKeeperResponsePtr r)
+        {
+            if (is_base_response_type)
+                *static_cast<Coordination::ResponsePtr *>(response) = std::move(r);
+            else
+                *static_cast<Coordination::ZooKeeperResponsePtr *>(response) = std::move(r);
+        }
+        const Coordination::Response * getResponse()
+        {
+            if (is_base_response_type)
+                return static_cast<Coordination::ResponsePtr *>(response)->get();
+            else
+                return static_cast<Coordination::ZooKeeperResponsePtr *>(response)->get();
+        }
+    };
+    std::vector<Task> tasks;
+    tasks.reserve(requests.size());
+
+    int64_t prev_session_id = -1;
+    for (size_t request_idx = 0; request_idx < requests.size(); ++request_idx)
     {
         const auto & request_for_session = requests[request_idx];
         int64_t session_id = request_for_session.session_id;
         const Coordination::ZooKeeperRequestPtr & zk_request = request_for_session.request;
+        results[request_idx] = KeeperResponseForSession{session_id, nullptr, zk_request};
+
+        /// Bump session expiry times along the way.
+        if (session_id != prev_session_id)
+        {
+            session_expiry_queue.addNewSessionOrUpdate(session_id, session_and_timeout[session_id]);
+            prev_session_id = session_id;
+        }
+
+        auto op = zk_request->getOpNum();
+        if (op == Coordination::OpNum::MultiRead)
+        {
+            ProfileEvents::increment(ProfileEvents::KeeperMultiReadRequest);
+            const auto & multi = static_cast<const Coordination::ZooKeeperMultiRequest &>(*zk_request);
+            auto response = std::make_shared<Coordination::ZooKeeperMultiReadResponse>();
+            response->responses.resize(multi.requests.size());
+            response->xid = zk_request->xid;
+            response->zxid = current_zxid;
+            for (size_t i = 0; i < multi.requests.size(); ++i)
+            {
+                const Coordination::ZooKeeperRequestPtr & subrequest = multi.requests[i];
+                auto * resp = &response->responses[i];
+                static_assert(std::is_same_v<decltype(resp), Coordination::ResponsePtr *>);
+                tasks.push_back(Task {
+                    .request_idx = request_idx, .session_id = session_id, .request = &subrequest,
+                    .response = static_cast<void*>(resp), .is_base_response_type = true,
+                    .thread_safe = is_request_thread_safe(subrequest->getOpNum())});
+            }
+            results[request_idx].response = std::move(response);
+        }
+        else
+        {
+            auto * resp = &results[request_idx].response;
+            static_assert(std::is_same_v<decltype(resp), Coordination::ZooKeeperResponsePtr *>);
+            tasks.push_back(Task {
+                .request_idx = request_idx, .session_id = session_id, .request = &zk_request,
+                .response = static_cast<void*>(resp), .is_base_response_type = false,
+                .thread_safe = is_request_thread_safe(op)});
+        }
+    }
+
+    /// Phase 1: Execute reads (checkAuth + processLocal + spans).
+    /// This is the parallelizable part — each request reads committed storage state
+    /// under shared_lock(storage_mutex) and writes to its own slot in `results`.
+    const auto run_task = [&](size_t task_idx)
+    {
+        Task & task = tasks[task_idx];
+        const Coordination::ZooKeeperRequestPtr & zk_request = *task.request;
+        chassert(zk_request->isReadRequest());
+        Coordination::ZooKeeperResponsePtr response;
 
         const auto process_request = [&]<std::derived_from<Coordination::ZooKeeperRequest> T>(T & concrete_zk_request)
         {
-            chassert(zk_request->isReadRequest());
-
-            Coordination::ZooKeeperResponsePtr response;
-
-            if (check_acl && !checkAuth(concrete_zk_request, *this, session_id, true))
+            if (check_acl && !checkAuth(concrete_zk_request, *this, task.session_id, true))
             {
-                response = zk_request->makeResponse();
+                response = concrete_zk_request.makeResponse();
                 /// Original ZooKeeper always throws no auth, even when user provided some credentials
                 response->error = Coordination::Error::ZNOAUTH;
             }
@@ -4010,7 +4085,7 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
 
                 try
                 {
-                    response = processLocal(concrete_zk_request, *this, deltas_range, session_id);
+                    response = processLocal(concrete_zk_request, *this, deltas_range, task.session_id);
                 }
                 catch (...)
                 {
@@ -4020,26 +4095,24 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
 
                 maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::OK, "");
             }
-
-            response->xid = zk_request->xid;
-            response->zxid = current_zxid;
-
-            results[request_idx] = KeeperResponseForSession{session_id, response, zk_request};
         };
 
         callOnConcreteRequestType(*zk_request, process_request);
+
+        response->xid = zk_request->xid;
+        response->zxid = current_zxid;
+        task.setResponse(std::move(response));
     };
 
     {
         std::shared_lock lock(storage_mutex);
-        /// TODO: getDynamicSettings()
-        read_thread_pool.execute(requests.size(), keeper_context->getCoordinationSettings(),
+        read_thread_pool.execute(tasks.size(), keeper_context->getDynamicSettings(),
             [&](size_t begin, size_t end)
             {
-                for (size_t request_idx = begin; request_idx < end; ++request_idx)
+                for (size_t task_idx = begin; task_idx < end; ++task_idx)
                 {
-                    if (is_request_thread_safe(requests[request_idx].request->getOpNum()))
-                        process_one_read(request_idx);
+                    if (tasks[task_idx].thread_safe)
+                        run_task(task_idx);
                 }
             });
     }
@@ -4047,28 +4120,20 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
     /// Phase 2 (sequential): session expiry, watch registration, processWatches.
     /// These mutate shared state (watches, sessions_and_watchers, total_watches_count)
     /// and must run single-threaded.
-    int64_t prev_session_id = -1;
     std::vector<std::pair</*request_idx*/ size_t, KeeperResponsesForSessions>> additional_responses;
-    for (size_t request_idx = 0; request_idx < requests.size(); ++request_idx)
+    for (size_t task_idx = 0; task_idx < tasks.size(); ++task_idx)
     {
-        const auto & request_for_session = requests[request_idx];
-        int64_t session_id = request_for_session.session_id;
-        const Coordination::ZooKeeperRequestPtr & zk_request = request_for_session.request;
-
-        if (session_id != prev_session_id)
-        {
-            session_expiry_queue.addNewSessionOrUpdate(session_id, session_and_timeout[session_id]);
-            prev_session_id = session_id;
-        }
+        Task & task = tasks[task_idx];
+        const Coordination::ZooKeeperRequestPtr & zk_request = *task.request;
 
         /// If we didn't process the request above, process it now.
-        if (!is_request_thread_safe(zk_request->getOpNum()))
+        if (!task.thread_safe)
         {
             std::shared_lock lock(storage_mutex);
-            process_one_read(request_idx);
+            run_task(task_idx);
         }
 
-        updateWatches(zk_request, results[request_idx].response, session_id);
+        updateWatches(zk_request, task.getResponse(), task.session_id);
 
         /// SetWatches/SetWatches2 have specialized processWatches that call storage.setWatches.
         /// Other read requests return {} from the default processWatches template.
@@ -4077,10 +4142,10 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
         {
             const auto run_process_watches = [&]<std::derived_from<Coordination::ZooKeeperRequest> T>(T & concrete_zk_request)
             {
-                auto [watch_responses, removed_count] = processWatches(concrete_zk_request, deltas_range, *this, session_id);
+                auto [watch_responses, removed_count] = processWatches(concrete_zk_request, deltas_range, *this, task.session_id);
                 total_watches_count -= removed_count;
                 if (!watch_responses.empty())
-                    additional_responses.emplace_back(request_idx, std::move(watch_responses));
+                    additional_responses.emplace_back(task.request_idx, std::move(watch_responses));
             };
             callOnConcreteRequestType(*zk_request, run_process_watches);
         }
@@ -4095,7 +4160,7 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
         for (size_t request_idx = 0; request_idx < requests.size(); ++request_idx)
         {
             merged.push_back(std::move(results[request_idx]));
-            if (j < additional_responses.size() && additional_responses[j].first == request_idx)
+            while (j < additional_responses.size() && additional_responses[j].first == request_idx)
             {
                 auto & to_insert = additional_responses[j].second;
                 merged.insert(merged.end(), std::move_iterator(to_insert.begin()), std::move_iterator(to_insert.end()));
@@ -4360,10 +4425,10 @@ void KeeperStorageBase::dumpSessionsAndEphemerals(WriteBufferFromOwnString & buf
 template<typename Container>
 void KeeperStorage<Container>::updateWatches(
     const Coordination::ZooKeeperRequestPtr & zk_request,
-    const Coordination::ZooKeeperResponsePtr & response,
+    const Coordination::Response * response,
     int64_t session_id)
 {
-    const auto register_watch = [&](const Coordination::ZooKeeperRequestPtr & req, const Coordination::ResponsePtr & resp)
+    const auto register_watch = [&](const Coordination::ZooKeeperRequestPtr & req, const Coordination::Response * resp)
     {
         if (resp->error == Coordination::Error::ZOK)
         {
@@ -4397,14 +4462,14 @@ void KeeperStorage<Container>::updateWatches(
     if (zk_request->getOpNum() == Coordination::OpNum::MultiRead)
     {
         const auto * multi_read_request = dynamic_cast<const Coordination::ZooKeeperMultiRequest *>(zk_request.get());
-        const auto * multi_read_response = dynamic_cast<const Coordination::ZooKeeperMultiReadResponse *>(response.get());
+        const auto * multi_read_response = dynamic_cast<const Coordination::ZooKeeperMultiReadResponse *>(response);
         chassert(multi_read_request != nullptr);
         chassert(multi_read_response != nullptr);
 
         for (const auto [subrequest, subresponse] : std::views::zip(multi_read_request->requests, multi_read_response->responses))
         {
             if (subrequest->has_watch)
-                register_watch(subrequest, subresponse);
+                register_watch(subrequest, subresponse.get());
         }
     }
     else if (zk_request->has_watch)

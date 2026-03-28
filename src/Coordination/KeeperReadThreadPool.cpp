@@ -22,7 +22,7 @@ namespace CoordinationSetting
 }
 
 
-KeeperReadThreadPool::~KeeperReadThreadPool()
+void KeeperReadThreadPool::shutdown()
 {
     {
         std::lock_guard lock(mutex);
@@ -31,6 +31,11 @@ KeeperReadThreadPool::~KeeperReadThreadPool()
     wake_cv.notify_all();
     if (pool)
         pool->wait();
+}
+
+KeeperReadThreadPool::~KeeperReadThreadPool()
+{
+    shutdown();
 }
 
 void KeeperReadThreadPool::execute(size_t count, const CoordinationSettings & coordination_settings, ExecuteRequestsFunction func)

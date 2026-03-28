@@ -25,6 +25,8 @@ public:
 
     void execute(size_t count, const CoordinationSettings & coordination_settings, ExecuteRequestsFunction func);
 
+    void shutdown();
+
 private:
     /// Settings.
     size_t target_num_threads = 0;

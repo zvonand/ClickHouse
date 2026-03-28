@@ -411,6 +411,8 @@ public:
     /// Mapping session_id -> set of watched nodes paths
     SessionAndWatcher sessions_and_watchers;
 
+    KeeperReadThreadPool read_thread_pool;
+
     static bool checkDigest(const KeeperDigest & first, const KeeperDigest & second);
 
     void finalize();
@@ -672,15 +674,13 @@ public:
     /// Register watches from a request/response pair.
     void updateWatches(
         const Coordination::ZooKeeperRequestPtr & zk_request,
-        const Coordination::ZooKeeperResponsePtr & response,
+        const Coordination::Response * response,
         int64_t session_id);
 
     void recalculateStats();
 private:
     void removeDigest(const Node & node, std::string_view path);
     void addDigest(const Node & node, std::string_view path);
-
-    KeeperReadThreadPool read_thread_pool;
 };
 
 }

@@ -81,6 +81,8 @@ namespace CoordinationSetting
     extern const CoordinationSettingsUInt64 max_request_queue_size;
     extern const CoordinationSettingsUInt64 max_requests_batch_bytes_size;
     extern const CoordinationSettingsUInt64 max_requests_batch_size;
+    extern const CoordinationSettingsUInt64 max_read_batch_bytes_size;
+    extern const CoordinationSettingsUInt64 max_read_batch_size;
     extern const CoordinationSettingsMilliseconds operation_timeout_ms;
     extern const CoordinationSettingsBool quorum_reads;
     extern const CoordinationSettingsMilliseconds session_shutdown_timeout;
@@ -373,10 +375,13 @@ void KeeperDispatcher::requestThread()
             else
             {
                 /// Read request with no pending writes — batch consecutive reads.
+                size_t reads_bytes_size = request.request->bytesSize();
                 read_batch.push_back(request);
 
                 KeeperRequestForSession next;
-                while (!shutdown_called && read_batch.size() < max_read_batch_size && requests_queue->tryPop(next))
+                while (!shutdown_called
+                       && read_batch.size() < max_read_batch_size && reads_bytes_size < max_read_batch_bytes_size
+                       && requests_queue->tryPop(next))
                 {
                     CurrentMetrics::sub(CurrentMetrics::KeeperOutstandingRequests);
 
@@ -387,6 +392,7 @@ void KeeperDispatcher::requestThread()
 
                     if (next.request->isReadRequest())
                     {
+                        reads_bytes_size += next.request->bytesSize();
                         read_batch.push_back(std::move(next));
                     }
                     else

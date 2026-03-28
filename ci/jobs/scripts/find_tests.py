@@ -1613,7 +1613,7 @@ class Targeting:
         # zero-coverage keyword fallback).  Skip the supplementary keyword pass when
         # coverage already produced enough candidates: keyword signal is weak and
         # adding broad filename-based tests to an already-large set dilutes ranking.
-        KEYWORD_SUPPLEMENT_MAX_PRIOR = 100
+        KEYWORD_SUPPLEMENT_MAX_PRIOR = 150
         n_tests_before_keyword = len({q[0] for pairs in line_to_tests.values() for q in pairs})
         if n_tests_before_keyword >= KEYWORD_SUPPLEMENT_MAX_PRIOR:
             print(

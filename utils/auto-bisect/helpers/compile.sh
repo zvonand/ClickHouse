@@ -24,22 +24,21 @@ if $SCRIPT_DIR/cache.sh has $COMMIT_SHA; then
 fi
 
 echo "Will compile the binary from ${COMMIT_SHA}."
-cd $GIT_WORK_TREE
 
-(git reset --hard $COMMIT_SHA) > /dev/null 2>&1
-(git clean -xfd) > /dev/null 2>&1
-(git submodule sync --recursive && git submodule update --init --recursive && git submodule foreach git reset --hard && git submodule foreach git clean -xfd) > /dev/null 2>&1
+# Compile in a temporary worktree so the main work tree is never modified.
+WORKTREE_DIR=$(mktemp -d "$SCRIPT_DIR/data/compile_XXXXXX")
+trap 'git -C "$GIT_WORK_TREE" worktree remove --force "$WORKTREE_DIR" 2>/dev/null || rm -rf "$WORKTREE_DIR"' EXIT
+
+git -C "$GIT_WORK_TREE" worktree add --detach "$WORKTREE_DIR" "$COMMIT_SHA"
+(cd "$WORKTREE_DIR" && git submodule sync --recursive && git submodule update --init --recursive) > /dev/null 2>&1
 
 cd $BUILD_DIR
 # Disabling RUST as it is very unstable.
-(cmake -DCMAKE_C_COMPILER=/usr/bin/clang-19 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-19 -DCMAKE_BUILD_TYPE=Debug -DENABLE_THINLTO=0 -DENABLE_RUST=0 -DENABLE_TESTS=0 -DENABLE_EXAMPLES=0 $GIT_WORK_TREE) > /dev/null 2>&1
+(cmake -DCMAKE_C_COMPILER=/usr/bin/clang-19 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-19 -DCMAKE_BUILD_TYPE=Debug -DENABLE_THINLTO=0 -DENABLE_RUST=0 -DENABLE_TESTS=0 -DENABLE_EXAMPLES=0 "$WORKTREE_DIR") > /dev/null 2>&1
 
 # Sometimes the build may fail. In this case we stop the process,
 # ask the user to fix the source code and retry.
 run_with_retry "ninja"
-
-(git stash) > /dev/null 2>&1
-(git clean -xfd) > /dev/null 2>&1
 
 strip --strip-unneeded $BUILD_DIR/programs/clickhouse
 $SCRIPT_DIR/cache.sh add $BUILD_DIR/programs/clickhouse $COMMIT_SHA;

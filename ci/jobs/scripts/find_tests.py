@@ -150,7 +150,7 @@ class Targeting:
     # owners prevents these files from flooding primary_tests (which would then
     # cause sibling/indirect queries to fail with HTTP form-field-too-long errors
     # and inflate unique_tests to nearly the full suite).
-    MAX_TESTS_PER_LINE = 200
+    MAX_TESTS_PER_LINE = 150
 
     # Synthetic width for tests found via indirect-call (virtual dispatch) co-occurrence.
     # Lower than SIBLING_DIR_WIDTH (10000) because callee co-occurrence is a stronger

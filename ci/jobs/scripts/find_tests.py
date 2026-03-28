@@ -1346,9 +1346,42 @@ class Targeting:
             info=info,
         )
 
+    @staticmethod
+    def _parse_diff_lines(diff_text: str) -> list:
+        """
+        Parse a unified diff and return `(filename, line_no)` tuples for every changed line.
+        Line numbers are old-file positions (from the `-a,b` hunk header), which match the
+        master-build coverage data stored in CIDB.  For `-` lines the old-file line number
+        is used directly; for `+` lines (pure additions) the current old-file position
+        (insertion point) is used so that the surrounding function is still found in CIDB.
+        """
+        changed: set = set()
+        current_file = None
+        old_line = 0
+        in_hunk = False
+        for line in diff_text.splitlines():
+            if line.startswith("--- "):
+                in_hunk = False
+            elif line.startswith("+++ b/"):
+                current_file = line[6:]
+                in_hunk = False
+            elif line.startswith("@@ ") and current_file:
+                m = re.search(r"-(\d+)", line)
+                old_line = int(m.group(1)) if m else 0
+                in_hunk = True
+            elif in_hunk:
+                if line.startswith("-"):
+                    changed.add((current_file, old_line))
+                    old_line += 1
+                elif line.startswith("+"):
+                    changed.add((current_file, old_line))  # insertion point in old file
+                else:
+                    old_line += 1  # context line
+        return list(changed)
+
     def get_changed_lines_from_diff(self):
         """
-        Return a list of `(filename, line_no)` tuples from the PR diff.
+        Return changed lines from the PR diff.
         Always fetches the diff from GitHub using `gh pr diff` so that results
         reflect the actual PR regardless of the local checkout state.
         """
@@ -1356,19 +1389,7 @@ class Targeting:
         diff_output = Shell.get_output(
             f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse"
         )
-        changed: list = []
-        current_file = None
-        for line in diff_output.splitlines():
-            if line.startswith("+++ b/"):
-                current_file = line[6:]
-            elif line.startswith("@@ ") and current_file:
-                m = re.search(r"\+(\d+)(?:,(\d+))?", line)
-                if m:
-                    start = int(m.group(1))
-                    count = int(m.group(2)) if m.group(2) is not None else 1
-                    for ln in range(start, start + count):
-                        changed.append((current_file, ln))
-        return changed
+        return self._parse_diff_lines(diff_output)
 
     # min_depth stores the raw entry-counter call count (capped at 254; 255 = not tracked).
     # A low call count means the function was called rarely during the test → more specific.
@@ -1673,22 +1694,8 @@ if __name__ == "__main__":
     if args.diff_file:
         import types
         diff_text = Path(args.diff_file).read_text()
-        def _patched_get_changed_lines_from_diff(self):
-            changed: list = []
-            current_file = None
-            for line in diff_text.splitlines():
-                if line.startswith("+++ b/"):
-                    current_file = line[6:]
-                elif line.startswith("@@ ") and current_file:
-                    m = re.search(r"\+(\d+)(?:,(\d+))?", line)
-                    if m:
-                        start = int(m.group(1))
-                        count = int(m.group(2)) if m.group(2) is not None else 1
-                        for ln in range(start, start + count):
-                            changed.append((current_file, ln))
-            return changed
         targeting.get_changed_lines_from_diff = types.MethodType(
-            _patched_get_changed_lines_from_diff, targeting
+            lambda self: Targeting._parse_diff_lines(diff_text), targeting
         )
 
     if args.coverage_only:

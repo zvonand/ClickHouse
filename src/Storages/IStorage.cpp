@@ -38,11 +38,10 @@ namespace ErrorCodes
     extern const int TABLE_IS_BEING_RESTARTED;
 }
 
-const VirtualColumnsDescription IStorage::common_virtuals = IStorage::createCommonVirtuals();
-
 IStorage::IStorage(StorageID storage_id_, std::unique_ptr<StorageInMemoryMetadata> metadata_)
     : storage_id(std::move(storage_id_))
     , virtuals(std::make_unique<VirtualColumnsDescription>())
+    , common_virtuals(createCommonVirtuals({}))
 {
     if (metadata_)
         metadata.set(std::move(metadata_));
@@ -56,11 +55,12 @@ bool IStorage::isVirtualColumn(const String & column_name, const StorageMetadata
     return !metadata_snapshot->getColumns().has(column_name) && (virtuals.get()->has(column_name) || common_virtuals.has(column_name));
 }
 
-VirtualColumnsDescription IStorage::createCommonVirtuals()
+VirtualColumnsDescription IStorage::createCommonVirtuals(const VirtualColumnsDescription & storage_virtuals)
 {
     VirtualColumnsDescription desc;
 
-    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "The name of table which the row comes from");
+    if (!storage_virtuals.has("_table"))
+        desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "The name of table which the row comes from");
 
     return desc;
 }

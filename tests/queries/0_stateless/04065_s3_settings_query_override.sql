@@ -1,13 +1,15 @@
 -- Tags: no-fasttest
 -- Tag no-fasttest: needs s3
 
--- Verify that query-level S3 settings properly override session-level defaults
--- when using the s3() table function. This exercises the fromAST code path
--- where user/profile/query-level settings must take priority over
+-- Verify that query-level S3 settings properly override global <s3> endpoint
+-- configuration when using the s3() table function. This exercises the fromAST
+-- code path where user/profile/query-level settings must take priority over
 -- global <s3> endpoint configuration.
-
--- Set session-level to a large value (would result in single-part upload).
-SET s3_max_single_part_upload_size = '100Mi';
+--
+-- The test depends on tests/config/config.d/s3_settings_override.xml which
+-- configures a matching endpoint with max_single_part_upload_size = 100Mi.
+-- Without the fix, the global endpoint config would override the query-level
+-- setting, resulting in a single-part upload instead of multipart.
 
 -- Use query-level SETTINGS with a small value to force multipart upload.
 -- If query-level settings are properly re-applied after endpoint config,
@@ -20,7 +22,7 @@ SYSTEM FLUSH LOGS query_log;
 
 -- With s3_max_single_part_upload_size = 10000 at query level, the data should
 -- be uploaded via multipart (CreateMultipartUpload + UploadPart + CompleteMultipartUpload).
--- If session-level (100Mi) had incorrectly taken priority, it would be a single PutObject.
+-- If the global endpoint config (100Mi) had incorrectly taken priority, it would be a single PutObject.
 SELECT
     ProfileEvents['S3CreateMultipartUpload'] >= 1 AS has_multipart_create,
     ProfileEvents['S3UploadPart'] >= 1 AS has_upload_parts,

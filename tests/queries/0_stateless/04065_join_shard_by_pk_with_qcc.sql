@@ -14,13 +14,15 @@ DROP TABLE IF EXISTS t1_04065;
 DROP TABLE IF EXISTS t2_04065;
 
 -- auto_statistics_types forces the statistics-based join optimization path
+-- Use tdigest (not countmin) because CountMinSketch requires datasketches library which is
+-- disabled in the fast test build (-DENABLE_LIBRARIES=0).
 CREATE TABLE t1_04065 (id UInt32, attr UInt32) ENGINE = MergeTree ORDER BY id
-SETTINGS ratio_of_defaults_for_sparse_serialization = 0.1, auto_statistics_types = 'countmin';
+SETTINGS ratio_of_defaults_for_sparse_serialization = 0.1, auto_statistics_types = 'tdigest';
 
 INSERT INTO t1_04065 VALUES (0, 0);
 
 CREATE TABLE t2_04065 (id UInt32, attr UInt32) ENGINE = MergeTree ORDER BY id
-SETTINGS ratio_of_defaults_for_sparse_serialization = 0.1, auto_statistics_types = 'countmin';
+SETTINGS ratio_of_defaults_for_sparse_serialization = 0.1, auto_statistics_types = 'tdigest';
 
 INSERT INTO t2_04065 VALUES (0, 0);
 

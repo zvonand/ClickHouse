@@ -32,7 +32,7 @@ ALTER TABLE test_skip_index_alter MODIFY COLUMN value Nullable(UInt64);
 SELECT count() FROM test_skip_index_alter WHERE value = 300;
 
 SYSTEM START MERGES test_skip_index_alter;
-SYSTEM SYNC MUTATIONS test_skip_index_alter;
+OPTIMIZE TABLE test_skip_index_alter FINAL SETTINGS mutations_sync = 2;
 
 -- After mutation completes, the index should work with the new type
 SELECT count() FROM test_skip_index_alter WHERE value = 300;

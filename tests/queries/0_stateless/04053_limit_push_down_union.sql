@@ -107,3 +107,47 @@ SELECT * FROM
 )
 LIMIT 5
 SETTINGS exact_rows_before_limit = 1;
+
+SELECT '---';
+
+-- WITH TOTALS with GROUP BY must not get LIMIT pushed down
+-- (TotalsHavingStep sits between Limit and Union, so pushdown does not apply).
+EXPLAIN PLAN header=0
+SELECT number, count() FROM
+(
+    SELECT number FROM numbers(100)
+    UNION ALL
+    SELECT number FROM numbers(200)
+)
+GROUP BY number WITH TOTALS
+LIMIT 5;
+
+SELECT '---';
+
+-- Runtime correctness: exact_rows_before_limit must report correct total (300)
+-- even when LIMIT pushdown is disabled. Uses FORMAT JSONCompact to check rows_before_limit_at_least.
+SELECT * FROM
+(
+    SELECT number FROM numbers(100)
+    UNION ALL
+    SELECT number FROM numbers(200)
+)
+LIMIT 5
+SETTINGS exact_rows_before_limit = 1, output_format_write_statistics = 0
+FORMAT JSONCompact;
+
+SELECT '---';
+
+-- Runtime correctness: regular pushdown does not affect result count.
+SELECT count() FROM
+(
+    SELECT * FROM
+    (
+        SELECT number FROM numbers(100)
+        UNION ALL
+        SELECT number FROM numbers(200)
+        UNION ALL
+        SELECT number FROM numbers(300)
+    )
+    LIMIT 10
+);

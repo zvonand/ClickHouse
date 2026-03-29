@@ -1,14 +1,5 @@
-#include <Columns/ColumnArray.h>
-#include <Columns/ColumnString.h>
-#include <Columns/ColumnTuple.h>
-#include <Columns/ColumnsNumber.h>
-#include <DataTypes/DataTypeArray.h>
-#include <DataTypes/DataTypeEnum.h>
-#include <DataTypes/DataTypeTuple.h>
-#include <DataTypes/DataTypesNumber.h>
 #include <Functions/FunctionFactory.h>
-#include <Functions/FunctionHelpers.h>
-#include <Functions/IFunction.h>
+#include <Functions/QueryTokenizationImpl.h>
 #include <Parsers/IParser.h>
 #include <Parsers/Lexer.h>
 #include <Parsers/ParserQuery.h>
@@ -27,114 +18,69 @@ namespace ErrorCodes
 namespace
 {
 
-DataTypePtr makeHighlightTypeEnum()
+struct HighlightQueryImpl
 {
-    return std::make_shared<DataTypeEnum8>(DataTypeEnum8::Values{
-#define M(NAME) {#NAME, static_cast<Int8>(Highlight::NAME)},
-        APPLY_FOR_HIGHLIGHTS(M)
-#undef M
-    });
-}
-
-class FunctionHighlightQuery : public IFunction
-{
-public:
     static constexpr auto name = "highlightQuery";
 
-    static FunctionPtr create(ContextPtr)
+    static DataTypePtr makeEnumType()
     {
-        return std::make_shared<FunctionHighlightQuery>();
+        return std::make_shared<DataTypeEnum8>(DataTypeEnum8::Values{
+#define M(NAME) {#NAME, static_cast<Int8>(Highlight::NAME)},
+            APPLY_FOR_HIGHLIGHTS(M)
+#undef M
+        });
     }
 
-    String getName() const override { return name; }
-    size_t getNumberOfArguments() const override { return 1; }
-    bool isSuitableForShortCircuitArgumentsExecution(const DataTypesWithConstInfo &) const override { return true; }
-    bool useDefaultImplementationForConstants() const override { return true; }
-
-    DataTypePtr getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const override
+    static void processRow(
+        std::string_view query, const char * begin,
+        PaddedPODArray<UInt64> & data_begin,
+        PaddedPODArray<UInt64> & data_end,
+        PaddedPODArray<Int8> & data_type,
+        size_t & total)
     {
-        FunctionArgumentDescriptors args{{"query", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), nullptr, "String"}};
-        validateFunctionArguments(*this, arguments, args);
+        const char * end = begin + query.size();
 
-        DataTypes types{std::make_shared<DataTypeUInt64>(), std::make_shared<DataTypeUInt64>(), makeHighlightTypeEnum()};
-        Strings names{"begin", "end", "type"};
-        return std::make_shared<DataTypeArray>(std::make_shared<DataTypeTuple>(std::move(types), std::move(names)));
-    }
+        Tokens tokens(begin, end, /* max_query_size = */ 0, /* skip_insignificant = */ true);
+        IParser::Pos token_iterator(tokens, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS);
 
-    ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const override
-    {
-        const ColumnString & col_query = assert_cast<const ColumnString &>(*arguments[0].column);
+        Expected expected;
+        expected.enable_highlighting = true;
 
-        auto col_begin = ColumnUInt64::create();
-        auto col_end = ColumnUInt64::create();
-        auto col_type = ColumnInt8::create();
-        auto col_offsets = ColumnArray::ColumnOffsets::create();
+        ParserQuery parser(end, /* allow_settings_after_format_in_insert = */ false, /* implicit_select = */ false);
+        ASTPtr ast;
 
-        auto & data_begin = col_begin->getData();
-        auto & data_end = col_end->getData();
-        auto & data_type = col_type->getData();
-        auto & offsets = col_offsets->getData();
-        offsets.resize(input_rows_count);
-
-        size_t total_ranges = 0;
-
-        for (size_t i = 0; i < input_rows_count; ++i)
+        try
         {
-            std::string_view query = col_query.getDataAt(i);
-            const char * begin = query.data();
-            const char * end = begin + query.size();
-
-            Tokens tokens(begin, end, /* max_query_size = */ 0, /* skip_insignificant = */ true);
-            IParser::Pos token_iterator(tokens, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS);
-
-            Expected expected;
-            expected.enable_highlighting = true;
-
-            ParserQuery parser(end, /* allow_settings_after_format_in_insert = */ false, /* implicit_select = */ false);
-            ASTPtr ast;
-
-            try
+            while (!token_iterator->isEnd())
             {
-                while (!token_iterator->isEnd())
-                {
-                    bool res = parser.parse(token_iterator, ast, expected);
-                    if (!res)
-                        break;
+                bool res = parser.parse(token_iterator, ast, expected);
+                if (!res)
+                    break;
 
-                    if (!token_iterator->isEnd() && token_iterator->type != TokenType::Semicolon)
-                        break;
+                if (!token_iterator->isEnd() && token_iterator->type != TokenType::Semicolon)
+                    break;
 
-                    while (token_iterator->type == TokenType::Semicolon)
-                        ++token_iterator;
-                }
+                while (token_iterator->type == TokenType::Semicolon)
+                    ++token_iterator;
             }
-            catch (const Exception & e)
-            {
-                /// Skip highlighting on parse/syntax errors, just return what we have so far for this row.
-                /// Rethrow all other exceptions (memory, resource, etc.) to avoid hiding real failures.
-                if (e.code() != ErrorCodes::SYNTAX_ERROR)
-                    throw;
-            }
-
-            const auto expanded = expandHighlights(expected.highlights);
-
-            for (const auto & range : expanded)
-            {
-                data_begin.push_back(range.begin - begin);
-                data_end.push_back(range.end - begin);
-                data_type.push_back(static_cast<Int8>(range.highlight));
-                ++total_ranges;
-            }
-
-            offsets[i] = total_ranges;
+        }
+        catch (const Exception & e)
+        {
+            /// Skip highlighting on parse/syntax errors, just return what we have so far for this row.
+            /// Rethrow all other exceptions (memory, resource, etc.) to avoid hiding real failures.
+            if (e.code() != ErrorCodes::SYNTAX_ERROR)
+                throw;
         }
 
-        MutableColumns tuple_columns;
-        tuple_columns.emplace_back(std::move(col_begin));
-        tuple_columns.emplace_back(std::move(col_end));
-        tuple_columns.emplace_back(std::move(col_type));
+        const auto expanded = expandHighlights(expected.highlights);
 
-        return ColumnArray::create(ColumnTuple::create(std::move(tuple_columns)), std::move(col_offsets));
+        for (const auto & range : expanded)
+        {
+            data_begin.push_back(range.begin - begin);
+            data_end.push_back(range.end - begin);
+            data_type.push_back(static_cast<Int8>(range.highlight));
+            ++total;
+        }
     }
 };
 
@@ -142,7 +88,7 @@ public:
 
 REGISTER_FUNCTION(HighlightQuery)
 {
-    factory.registerFunction<FunctionHighlightQuery>(FunctionDocumentation{
+    factory.registerFunction<FunctionQueryTokenization<HighlightQueryImpl>>(FunctionDocumentation{
         .description = R"(
 Parses a ClickHouse SQL query string and returns an array of highlighted ranges for syntax highlighting.
 Each range is a named tuple with the beginning position (in bytes), the end position, and the highlight type.

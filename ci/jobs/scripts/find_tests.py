@@ -595,7 +595,7 @@ class Targeting:
         # so domain-specific tests (e.g. other JSON wide-part tests) get included.
         SPARSE_FILE_THRESHOLD = 8   # trigger when max primary rc for a file ≤ this
         PASS_WEIGHT_SPARSE_FILE = 0.40  # between direct (1.0) and sibling (0.1)
-        SPARSE_FILE_WIDTH = 400        # synthetic width: stronger than sibling (10000)
+        SPARSE_FILE_WIDTH = 300        # synthetic width: stronger than sibling (10000)
 
         # Compute per-file max rc from the Python-filtered result dict (only regions
         # that actually overlapped a changed line, not merely the SQL-fetched neighbourhood).

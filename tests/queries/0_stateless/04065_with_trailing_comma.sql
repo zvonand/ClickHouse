@@ -32,7 +32,7 @@ SELECT * FROM (WITH 1 AS a, SELECT a);
 SELECT * FROM (WITH 1 AS a, SELECT a UNION ALL WITH 2 AS b, SELECT b) ORDER BY 1;
 
 -- Double trailing comma should fail
-WITH 1 AS a,, SELECT a; -- { serverError SYNTAX_ERROR }
+WITH 1 AS a,, SELECT a; -- { clientError SYNTAX_ERROR }
 
 -- Leading comma, no elements should fail
-WITH , SELECT 1; -- { serverError SYNTAX_ERROR }
+WITH , SELECT 1; -- { clientError SYNTAX_ERROR }

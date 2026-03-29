@@ -195,6 +195,7 @@ class Targeting:
         """
         import time
         t0 = time.monotonic()
+        assert self.job_type, "get_tests_by_changed_lines requires a known job type"
 
         if not changed_lines:
             return {fl: [] for fl in changed_lines}
@@ -324,7 +325,7 @@ class Targeting:
 
         cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
         t_query = time.monotonic()
-        raw = cidb.query(query, log_level="")
+        raw = cidb.query(query, log_level="") or ""
         print(f"[find_tests] CIDB query: {time.monotonic()-t_query:.2f}s, response={len(raw)} bytes")
 
         # Parse TSV: file \t line_start \t line_end \t [tests] \t [depths] \t region_test_count
@@ -428,7 +429,7 @@ class Targeting:
         if run_broad_tier2:
             t_broad = time.monotonic()
             try:
-                broad_raw = cidb.query(broad_query, log_level="")
+                broad_raw = cidb.query(broad_query, log_level="") or ""
                 broad_elapsed = time.monotonic() - t_broad
                 print(f"[find_tests] broad-tier2 query: {broad_elapsed:.2f}s, response={len(broad_raw)} bytes")
             except Exception as e:
@@ -645,8 +646,9 @@ class Targeting:
             HAVING region_test_count <= {self.MAX_TESTS_PER_LINE}
             """
             t_sparse = time.monotonic()
+            sparse_elapsed = 0.0
             try:
-                sparse_raw = cidb.query(sparse_query, log_level="")
+                sparse_raw = cidb.query(sparse_query, log_level="") or ""
                 sparse_elapsed = time.monotonic() - t_sparse
             except Exception as e:
                 print(f"[find_tests] sparse-file query failed (non-fatal): {e}")
@@ -837,6 +839,7 @@ class Targeting:
         # <= MAX_TESTS_PER_LINE) for the indirect-call join.  Including all
         # tests from broad regions (e.g. 1000+) would make the IN-list too
         # large for the CIDB HTTP endpoint ("Field value too long").
+        assert self.job_type, "_query_indirect_call_tests requires a known job type"
         primary_tests = set()
         seed_rcs: list = []
         for pairs in primary_result.values():
@@ -878,7 +881,7 @@ class Targeting:
             HAVING rc <= {FILE_SEED_RC}
             """
             try:
-                seed_raw = _cidb.query(seed_query, log_level="")
+                seed_raw = _cidb.query(seed_query, log_level="") or ""
                 extra_seeds = 0
                 for row in seed_raw.strip().splitlines():
                     parts = row.split("\t", 4)
@@ -1002,7 +1005,7 @@ class Targeting:
             from ci.praktika.settings import Settings
             cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
             t0 = time.monotonic()
-            raw = cidb.query(query, log_level="")
+            raw = cidb.query(query, log_level="") or ""
             elapsed = time.monotonic() - t0
         except Exception as e:
             print(f"[find_tests] indirect-call query failed (non-fatal): {e}")
@@ -1057,6 +1060,7 @@ class Targeting:
         """
         import time
 
+        assert self.job_type, "_query_sibling_dir_tests requires a known job type"
         # Collect source directories of changed C++ files.
         src_dirs: dict = {}  # dir_path -> list of changed files in that dir
         for f in files_to_lines:
@@ -1196,7 +1200,7 @@ class Targeting:
             from ci.praktika.settings import Settings
             cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
             t0 = time.monotonic()
-            raw = cidb.query(query, log_level="")
+            raw = cidb.query(query, log_level="") or ""
             print(
                 f"[find_tests] sibling-dir query: {time.monotonic()-t0:.2f}s, "
                 f"response={len(raw)} bytes"
@@ -1345,6 +1349,7 @@ class Targeting:
             kw_lower = kw.lower()
             return any(kw_lower in f.lower() for f in all_test_files)
 
+        candidate_kws: list = []
         if dir_ranked:
             # Use the best directory keyword.  Skip any that match zero tests (e.g.
             # "Coordination" for KeeperStorage.cpp — no test names contain "coordination").
@@ -1688,7 +1693,7 @@ class Targeting:
         # scores.  A minimum score threshold keeps the result set bounded
         # without an arbitrary count limit.
         MIN_SCORE = 1e-8        # floor: tests scoring below this have negligible signal
-        MAX_OUTPUT_TESTS = 8000   # hard cap: targeted runs must stay focused
+        MAX_OUTPUT_TESTS = 300   # hard cap: targeted runs must stay focused
         # Dynamic ratio floor: drop tests whose score is more than MAX_SCORE_RATIO times
         # weaker than the best evidence.  This supersedes per-pass suppression guards —
         # when strong direct hits exist (e.g. rc=37 on a SAMPLE-specific line, score=0.027)

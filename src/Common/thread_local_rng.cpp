@@ -1,4 +1,3 @@
-// ci: trigger llvm coverage
 #include <Common/thread_local_rng.h>
 #include <Common/randomSeed.h>
 

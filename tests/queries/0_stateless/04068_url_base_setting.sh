@@ -40,5 +40,8 @@ $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTI
 # Host-relative URL with url_base that has a query string with slashes
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('/other/file.csv', CSV, 'c String') SETTINGS url_base = 'https://example.com/def/?redirect=http://x.com/'" 2>&1 | grep -oF 'https://example.com/other/file.csv'
 
+# Path-relative URL with authority-only base (no path): https://example.com + data.csv → https://example.com/data.csv
+$CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'https://example.com'" 2>&1 | grep -oF 'https://example.com/data.csv'
+
 # Invalid url_base (no scheme) should produce an error
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'example.com/def/'" 2>&1 | grep -oF 'must contain a scheme'

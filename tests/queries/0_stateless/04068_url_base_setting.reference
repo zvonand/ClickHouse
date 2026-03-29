@@ -9,4 +9,5 @@ http://example.invalid/other.csv
 https://example.com/def/data.csv
 https://example.com/def/data.csv
 https://example.com/other/file.csv
+https://example.com/data.csv
 must contain a scheme

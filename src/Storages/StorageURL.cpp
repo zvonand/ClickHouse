@@ -1705,8 +1705,11 @@ String StorageURL::resolveURLBase(const String & url, const String & base)
 
     /// Path-relative URL: merge with the base path per RFC 3986.
     /// Replace everything after the last '/' in the path portion of the base URL.
+    /// Only search within the path (after authority), not within the scheme's "://".
+    auto authority_end = base_before_query.find('/', authority_start);
+    if (authority_end == String::npos)
+        return base_before_query + "/" + url;
     auto last_slash = base_before_query.rfind('/');
-    /// last_slash is always found because we checked for "://" above, so at minimum the scheme has slashes.
     return base_before_query.substr(0, last_slash + 1) + url;
 }
 

@@ -1105,12 +1105,6 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                         && table_node != planner_context->getGlobalPlannerContext()->parallel_replicas_table;
                     if (no_tables_or_another_table_chosen_for_reading_with_parallel_replicas_mode)
                     {
-                        LOG_DEBUG(
-                            getLogger(__func__),
-                            "current table node: {}, PR table node {}",
-                            table_node->getStorageID().getFullTableName(),
-                            planner_context->getGlobalPlannerContext()->parallel_replicas_table->getStorageID().getFullTableName());
-
                         ContextPtr updated_context = query_context;
                         if (const UnionNode * table_union = planner_context->getGlobalPlannerContext()->parallel_replicas_table_union)
                         {

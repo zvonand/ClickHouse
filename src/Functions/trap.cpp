@@ -37,7 +37,7 @@ namespace ErrorCodes
 class FunctionTrap : public IFunction
 {
 private:
-    ContextPtr context;
+    String query_id;
 
 public:
     static constexpr auto name = "trap";
@@ -46,7 +46,7 @@ public:
         return std::make_shared<FunctionTrap>(context);
     }
 
-    FunctionTrap(ContextPtr context_) : context(context_) {}
+    FunctionTrap(ContextPtr context_) : query_id(context_->getCurrentQueryId()) {}
 
     String getName() const override
     {
@@ -141,7 +141,7 @@ public:
             }
             else if (mode == "access context")
             {
-                (void)context->getCurrentQueryId();
+                (void)query_id;
             }
             else if (mode == "stack overflow")
             {

@@ -60,8 +60,8 @@ public:
         if (tuple_size == 0)
             return std::make_shared<DataTypeUInt8>();
 
-        auto compare = FunctionFactory::instance().get("notEquals", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto compare = FunctionFactory::instance().get("notEquals", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         DataTypePtr res_type;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -105,8 +105,8 @@ public:
         if (tuple_size == 0)
             return DataTypeUInt8().createColumnConstWithDefaultValue(input_rows_count);
 
-        auto compare = FunctionFactory::instance().get("notEquals", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto compare = FunctionFactory::instance().get("notEquals", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         ColumnWithTypeAndName res;
         for (size_t i = 0; i < tuple_size; ++i)
         {

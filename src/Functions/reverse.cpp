@@ -119,13 +119,13 @@ public:
 
 
 /// Also works with arrays.
-class ReverseOverloadResolver : public IFunctionOverloadResolver
+class ReverseOverloadResolver : public IFunctionOverloadResolver, private WithContext
 {
 public:
     static constexpr auto name = "reverse";
-    static FunctionOverloadResolverPtr create(ContextPtr context) { return std::make_unique<ReverseOverloadResolver>(context); }
+    static FunctionOverloadResolverPtr create(ContextPtr context_) { return std::make_unique<ReverseOverloadResolver>(context_); }
 
-    explicit ReverseOverloadResolver(ContextPtr context_) : context(context_) {}
+    explicit ReverseOverloadResolver(ContextPtr context_) : WithContext(context_) {}
 
     String getName() const override { return name; }
     size_t getNumberOfArguments() const override { return 1; }
@@ -135,17 +135,14 @@ public:
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
         if (isArray(arguments.at(0).type))
-            return FunctionFactory::instance().getImpl("arrayReverse", context)->build(arguments);
+            return FunctionFactory::instance().getImpl("arrayReverse", getContext())->build(arguments);
         return std::make_unique<FunctionToFunctionBaseAdaptor>(
-            FunctionReverse::create(context),
+            FunctionReverse::create(getContext()),
             DataTypes{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })},
             return_type);
     }
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override { return FunctionReverse{}.getReturnTypeImpl(arguments); }
-
-private:
-    ContextPtr context;
 };
 
 }

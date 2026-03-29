@@ -1,4 +1,5 @@
 #include <Functions/IFunction.h>
+#include <array>
 #include <Columns/ColumnConst.h>
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnsNumber.h>
@@ -21,7 +22,17 @@ class FunctionToInterval : public IFunction
 public:
     static constexpr auto name = "toInterval";
 
-    explicit FunctionToInterval(ContextPtr context_) : context(context_) {}
+    static constexpr size_t num_interval_kinds = static_cast<size_t>(IntervalKind::Kind::Year) + 1;
+
+    explicit FunctionToInterval(ContextPtr context)
+    {
+        auto & factory = FunctionFactory::instance();
+        for (size_t i = 0; i < num_interval_kinds; ++i)
+        {
+            IntervalKind ik(static_cast<IntervalKind::Kind>(i));
+            to_interval_functions[i] = factory.get(ik.toNameOfFunctionToIntervalDataType(), context);
+        }
+    }
 
     static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionToInterval>(context); }
 
@@ -65,14 +76,12 @@ public:
         ColumnsWithTypeAndName temp_columns(1);
         temp_columns[0] = arguments[0];
 
-        const char * to_interval_function_name = kind.toNameOfFunctionToIntervalDataType();
-        auto to_interval_function = FunctionFactory::instance().get(to_interval_function_name, context);
-
+        const auto & to_interval_function = to_interval_functions[static_cast<size_t>(kind.kind)];
         return to_interval_function->build(temp_columns)->execute(temp_columns, result_type, input_rows_count, /* dry run = */ false);
     }
 
 private:
-    ContextPtr context;
+    std::array<FunctionOverloadResolverPtr, num_interval_kinds> to_interval_functions;
     mutable IntervalKind kind = IntervalKind::Kind::Second;
 };
 

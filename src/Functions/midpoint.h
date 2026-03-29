@@ -17,6 +17,7 @@
 #include <Functions/IFunctionAdaptors.h>
 #include <Functions/castTypeToEither.h>
 
+#include <Interpreters/Context_fwd.h>
 #include <Interpreters/castColumn.h>
 
 #include <base/TypeList.h>
@@ -450,17 +451,17 @@ struct MidpointImpl
 };
 
 template <typename SpecializedFunction>
-class MidpointResolver : public IFunctionOverloadResolver
+class MidpointResolver : public IFunctionOverloadResolver, WithContext
 {
 public:
     static constexpr auto name = "midpoint";
-    static FunctionOverloadResolverPtr create(ContextPtr context)
+    static FunctionOverloadResolverPtr create(ContextPtr context_)
     {
-        return std::make_unique<MidpointResolver<SpecializedFunction>>(context);
+        return std::make_unique<MidpointResolver<SpecializedFunction>>(context_);
     }
 
     explicit MidpointResolver(ContextPtr context_)
-        : context(context_)
+        : WithContext(context_)
     {
     }
 
@@ -495,11 +496,11 @@ public:
                 /// combinations correctly by casting arguments to the result type first.
                 if (a0->equals(*a1) && isNumber(a0) && !isDecimal(a0))
                     return std::make_unique<FunctionToFunctionBaseAdaptor>(
-                        SpecializedFunction::create(context), argument_types, return_type);
+                        SpecializedFunction::create(getContext()), argument_types, return_type);
             }
         }
 
-        return std::make_unique<FunctionToFunctionBaseAdaptor>(FunctionMidpoint::create(context), argument_types, return_type);
+        return std::make_unique<FunctionToFunctionBaseAdaptor>(FunctionMidpoint::create(getContext()), argument_types, return_type);
     }
 
     DataTypePtr getReturnTypeImpl(const DataTypes & types) const override
@@ -510,8 +511,6 @@ public:
         return getLeastSupertype(types);
     }
 
-protected:
-    ContextPtr context;
 };
 
 }

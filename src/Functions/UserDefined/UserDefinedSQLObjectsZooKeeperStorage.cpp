@@ -337,8 +337,8 @@ ASTPtr UserDefinedSQLObjectsZooKeeperStorage::parseObjectData(const String & obj
                 object_data.data() + object_data.size(),
                 "",
                 0,
-                global_context->getSettingsRef()[Setting::max_parser_depth],
-                global_context->getSettingsRef()[Setting::max_parser_backtracks]);
+                getContext()->getSettingsRef()[Setting::max_parser_depth],
+                getContext()->getSettingsRef()[Setting::max_parser_backtracks]);
             return ast;
         }
     }

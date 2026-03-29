@@ -105,7 +105,7 @@ public:
         Columns left_elements = arguments[0].column ? getTupleElements(*arguments[0].column) : Columns();
         Columns right_elements = arguments[1].column ? getTupleElements(*arguments[1].column) : Columns();
 
-        auto func = FunctionFactory::instance().get(FuncName::name, context);
+        auto func = FunctionFactory::instance().get(FuncName::name, getContext());
         DataTypes types(tuple_size);
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -139,7 +139,7 @@ public:
         if (tuple_size == 0)
             return ColumnTuple::create(input_rows_count);
 
-        auto func = FunctionFactory::instance().get(FuncName::name, context);
+        auto func = FunctionFactory::instance().get(FuncName::name, getContext());
         Columns columns(tuple_size);
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -190,7 +190,7 @@ public:
             cur_elements = getTupleElements(*arguments[0].column);
 
         size_t tuple_size = cur_types.size();
-        auto negate = FunctionFactory::instance().get("negate", context);
+        auto negate = FunctionFactory::instance().get("negate", getContext());
         DataTypes types(tuple_size);
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -220,7 +220,7 @@ public:
         if (tuple_size == 0)
             return ColumnTuple::create(input_rows_count);
 
-        auto negate = FunctionFactory::instance().get("negate", context);
+        auto negate = FunctionFactory::instance().get("negate", getContext());
         Columns columns(tuple_size);
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -265,7 +265,7 @@ public:
         size_t tuple_size = cur_types.size();
 
         const auto & p_column = arguments[1];
-        auto func = FunctionFactory::instance().get(FuncName::name, context);
+        auto func = FunctionFactory::instance().get(FuncName::name, getContext());
         DataTypes types(tuple_size);
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -296,7 +296,7 @@ public:
             return ColumnTuple::create(input_rows_count);
 
         const auto & p_column = arguments[1];
-        auto func = FunctionFactory::instance().get(FuncName::name, context);
+        auto func = FunctionFactory::instance().get(FuncName::name, getContext());
         Columns columns(tuple_size);
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -359,8 +359,8 @@ public:
         if (tuple_size == 0)
             return std::make_shared<DataTypeUInt8>();
 
-        auto multiply = FunctionFactory::instance().get("multiply", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto multiply = FunctionFactory::instance().get("multiply", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         DataTypePtr res_type;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -404,8 +404,8 @@ public:
         if (tuple_size == 0)
             return DataTypeUInt8().createColumnConstWithDefaultValue(input_rows_count);
 
-        auto multiply = FunctionFactory::instance().get("multiply", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto multiply = FunctionFactory::instance().get("multiply", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         ColumnWithTypeAndName res;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -470,7 +470,7 @@ public:
         if (tuple_size == 0)
             return arguments[0].type;
 
-        auto plus = FunctionFactory::instance().get(Impl::func_name, context);
+        auto plus = FunctionFactory::instance().get(Impl::func_name, getContext());
         DataTypePtr res_type = arguments[0].type;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -501,7 +501,7 @@ public:
         if (tuple_size == 0)
             return arguments[0].column;
 
-        auto plus = FunctionFactory::instance().get(Impl::func_name, context);
+        auto plus = FunctionFactory::instance().get(Impl::func_name, getContext());
         ColumnWithTypeAndName res;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -660,14 +660,14 @@ public:
 
             if constexpr (is_minus)
             {
-                auto minus = FunctionFactory::instance().get("minus", context);
+                auto minus = FunctionFactory::instance().get("minus", getContext());
                 auto elem_minus = minus->build({left, arguments[1]});
                 last_column = elem_minus->execute({left, arguments[1]}, arguments[1].type, input_rows_count, /* dry_run = */ false)
                                         ->convertToFullColumnIfConst();
             }
             else
             {
-                auto plus = FunctionFactory::instance().get("plus", context);
+                auto plus = FunctionFactory::instance().get("plus", getContext());
                 auto elem_plus = plus->build({left, arguments[1]});
                 last_column = elem_plus->execute({left, arguments[1]}, arguments[1].type, input_rows_count, /* dry_run = */ false)
                                         ->convertToFullColumnIfConst();
@@ -677,7 +677,7 @@ public:
         {
             if constexpr (is_minus)
             {
-                auto negate = FunctionFactory::instance().get("negate", context);
+                auto negate = FunctionFactory::instance().get("negate", getContext());
                 auto elem_negate = negate->build({arguments[1]});
                 last_column = elem_negate->execute({arguments[1]}, arguments[1].type, input_rows_count, /* dry_run = */ false);
             }
@@ -729,8 +729,8 @@ public:
         if (tuple_size == 0)
             return std::make_shared<DataTypeUInt8>();
 
-        auto abs = FunctionFactory::instance().get("abs", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto abs = FunctionFactory::instance().get("abs", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         DataTypePtr res_type;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -770,8 +770,8 @@ public:
         if (tuple_size == 0)
             return DataTypeUInt8().createColumnConstWithDefaultValue(input_rows_count);
 
-        auto abs = FunctionFactory::instance().get("abs", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto abs = FunctionFactory::instance().get("abs", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         ColumnWithTypeAndName res;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -832,8 +832,8 @@ public:
         if (tuple_size == 0)
             return std::make_shared<DataTypeUInt8>();
 
-        auto multiply = FunctionFactory::instance().get("multiply", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto multiply = FunctionFactory::instance().get("multiply", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         DataTypePtr res_type;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -873,8 +873,8 @@ public:
         if (tuple_size == 0)
             return DataTypeUInt8().createColumnConstWithDefaultValue(input_rows_count);
 
-        auto multiply = FunctionFactory::instance().get("multiply", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto multiply = FunctionFactory::instance().get("multiply", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         ColumnWithTypeAndName res;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -929,7 +929,7 @@ public:
         if (tuple_size == 0)
             return std::make_shared<DataTypeUInt8>();
 
-        auto sqrt = FunctionFactory::instance().get("sqrt", context);
+        auto sqrt = FunctionFactory::instance().get("sqrt", getContext());
         return sqrt->build({ColumnWithTypeAndName{Base::getReturnTypeImpl(arguments), {}}})->getResultType();
     }
 
@@ -945,7 +945,7 @@ public:
         squared_res.type = Base::getReturnTypeImpl(arguments);
         squared_res.column = Base::executeImpl(arguments, squared_res.type, input_rows_count);
 
-        auto sqrt = FunctionFactory::instance().get("sqrt", context);
+        auto sqrt = FunctionFactory::instance().get("sqrt", getContext());
         auto sqrt_elem = sqrt->build({squared_res});
         return sqrt_elem->execute({squared_res}, sqrt_elem->getResultType(), input_rows_count, /* dry_run = */ false);
     }
@@ -984,8 +984,8 @@ public:
         if (tuple_size == 0)
             return std::make_shared<DataTypeUInt8>();
 
-        auto abs = FunctionFactory::instance().get("abs", context);
-        auto max = FunctionFactory::instance().get("max2", context);
+        auto abs = FunctionFactory::instance().get("abs", getContext());
+        auto max = FunctionFactory::instance().get("max2", getContext());
         DataTypePtr res_type;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -1025,8 +1025,8 @@ public:
         if (tuple_size == 0)
             return DataTypeUInt8().createColumnConstWithDefaultValue(input_rows_count);
 
-        auto abs = FunctionFactory::instance().get("abs", context);
-        auto max = FunctionFactory::instance().get("max2", context);
+        auto abs = FunctionFactory::instance().get("abs", getContext());
+        auto max = FunctionFactory::instance().get("max2", getContext());
         ColumnWithTypeAndName res;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -1091,9 +1091,9 @@ public:
             return std::make_shared<DataTypeUInt8>();
 
         const auto & p_column = arguments[1];
-        auto abs = FunctionFactory::instance().get("abs", context);
-        auto pow = FunctionFactory::instance().get("pow", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto abs = FunctionFactory::instance().get("abs", getContext());
+        auto pow = FunctionFactory::instance().get("pow", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         DataTypePtr res_type;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -1156,9 +1156,9 @@ public:
                             "Second argument for function {} must be not less than one and not be an infinity",
                             getName());
 
-        auto abs = FunctionFactory::instance().get("abs", context);
-        auto pow = FunctionFactory::instance().get("pow", context);
-        auto plus = FunctionFactory::instance().get("plus", context);
+        auto abs = FunctionFactory::instance().get("abs", getContext());
+        auto pow = FunctionFactory::instance().get("pow", getContext());
+        auto plus = FunctionFactory::instance().get("plus", getContext());
         ColumnWithTypeAndName res;
         for (size_t i = 0; i < tuple_size; ++i)
         {
@@ -1209,14 +1209,14 @@ public:
 
     DataTypePtr getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const override
     {
-        FunctionTupleMinus tuple_minus(context);
+        FunctionTupleMinus tuple_minus(getContext());
         // Only pass the first two arguments (the tuples) to tupleMinus
         ColumnsWithTypeAndName tuple_args{arguments[0], arguments[1]};
         auto type = tuple_minus.getReturnTypeImpl(tuple_args);
 
         ColumnWithTypeAndName minus_res{type, {}};
 
-        auto func = FunctionFactory::instance().get(std::string("L") + FuncLabel::name + "Norm", context);
+        auto func = FunctionFactory::instance().get(std::string("L") + FuncLabel::name + "Norm", getContext());
         if constexpr (FuncLabel::name[0] == 'p')
             return func->build({minus_res, arguments[2]})->getResultType();
         else
@@ -1225,7 +1225,7 @@ public:
 
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const override
     {
-        FunctionTupleMinus tuple_minus(context);
+        FunctionTupleMinus tuple_minus(getContext());
         // Only pass the first two arguments (the tuples) to tupleMinus
         ColumnsWithTypeAndName tuple_args{arguments[0], arguments[1]};
         auto type = tuple_minus.getReturnTypeImpl(tuple_args);
@@ -1233,7 +1233,7 @@ public:
 
         ColumnWithTypeAndName minus_res{column, type, {}};
 
-        auto func = FunctionFactory::instance().get(std::string("L") + FuncLabel::name + "Norm", context);
+        auto func = FunctionFactory::instance().get(std::string("L") + FuncLabel::name + "Norm", getContext());
         if constexpr (FuncLabel::name[0] == 'p')
         {
             auto func_elem = func->build({minus_res, arguments[2]});
@@ -1282,24 +1282,24 @@ public:
 
     DataTypePtr getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const override
     {
-        FunctionLNorm<FuncLabel> norm(context);
+        FunctionLNorm<FuncLabel> norm(getContext());
         auto type = norm.getReturnTypeImpl(arguments);
 
         ColumnWithTypeAndName norm_res{type, {}};
 
-        FunctionTupleDivideByNumber divide(context);
+        FunctionTupleDivideByNumber divide(getContext());
         return divide.getReturnTypeImpl({arguments[0], norm_res});
     }
 
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const override
     {
-        FunctionLNorm<FuncLabel> norm(context);
+        FunctionLNorm<FuncLabel> norm(getContext());
         auto type = norm.getReturnTypeImpl(arguments);
         auto column = norm.executeImpl(arguments, DataTypePtr(), input_rows_count);
 
         ColumnWithTypeAndName norm_res{column, type, {}};
 
-        FunctionTupleDivideByNumber divide(context);
+        FunctionTupleDivideByNumber divide(getContext());
         return divide.executeImpl({arguments[0], norm_res}, DataTypePtr(), input_rows_count);
     }
 };
@@ -1335,16 +1335,16 @@ public:
             throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
                 "Result of function {} is undefined for empty tuples", getName());
 
-        FunctionDotProduct dot(context);
+        FunctionDotProduct dot(getContext());
         ColumnWithTypeAndName dot_result{dot.getReturnTypeImpl(arguments), {}};
 
-        FunctionL2Norm norm(context);
+        FunctionL2Norm norm(getContext());
         ColumnWithTypeAndName first_norm{norm.getReturnTypeImpl({arguments[0]}), {}};
         ColumnWithTypeAndName second_norm{norm.getReturnTypeImpl({arguments[1]}), {}};
 
-        auto minus = FunctionFactory::instance().get("minus", context);
-        auto multiply = FunctionFactory::instance().get("multiply", context);
-        auto divide = FunctionFactory::instance().get("divide", context);
+        auto minus = FunctionFactory::instance().get("minus", getContext());
+        auto multiply = FunctionFactory::instance().get("multiply", getContext());
+        auto divide = FunctionFactory::instance().get("divide", getContext());
 
         ColumnWithTypeAndName one{std::make_shared<DataTypeUInt8>(), {}};
 
@@ -1361,19 +1361,19 @@ public:
         if (return_type->isNullable())
             return return_type->createColumnConstWithDefaultValue(input_rows_count);
 
-        FunctionDotProduct dot(context);
+        FunctionDotProduct dot(getContext());
         ColumnWithTypeAndName dot_result{dot.executeImpl(arguments, DataTypePtr(), input_rows_count),
                                          dot.getReturnTypeImpl(arguments), {}};
 
-        FunctionL2Norm norm(context);
+        FunctionL2Norm norm(getContext());
         ColumnWithTypeAndName first_norm{norm.executeImpl({arguments[0]}, DataTypePtr(), input_rows_count),
                                          norm.getReturnTypeImpl({arguments[0]}), {}};
         ColumnWithTypeAndName second_norm{norm.executeImpl({arguments[1]}, DataTypePtr(), input_rows_count),
                                           norm.getReturnTypeImpl({arguments[1]}), {}};
 
-        auto minus = FunctionFactory::instance().get("minus", context);
-        auto multiply = FunctionFactory::instance().get("multiply", context);
-        auto divide = FunctionFactory::instance().get("divide", context);
+        auto minus = FunctionFactory::instance().get("minus", getContext());
+        auto multiply = FunctionFactory::instance().get("multiply", getContext());
+        auto divide = FunctionFactory::instance().get("divide", getContext());
 
         ColumnWithTypeAndName one{DataTypeUInt8().createColumnConst(input_rows_count, 1),
                                   std::make_shared<DataTypeUInt8>(), {}};

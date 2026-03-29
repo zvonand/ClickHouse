@@ -13,6 +13,7 @@
 #include <DataTypes/Native.h>
 #include <Functions/FunctionHelpers.h>
 #include <Functions/IFunction.h>
+#include <Interpreters/Context_fwd.h>
 #include <Functions/IsOperation.h>
 #include <Functions/castTypeToEither.h>
 
@@ -149,14 +150,12 @@ struct InvalidType;
 
 
 template <template <typename> class Op, typename Name, bool is_injective>
-class FunctionUnaryArithmetic : public IFunction
+class FunctionUnaryArithmetic : public IFunction, private WithContext
 {
     static constexpr bool allow_decimal = IsUnaryOperation<Op>::negate || IsUnaryOperation<Op>::abs || IsUnaryOperation<Op>::sign;
     static constexpr bool allow_string_or_fixed_string = Op<UInt8>::allow_string_or_fixed_string;
     static constexpr bool is_bit_count = IsUnaryOperation<Op>::bit_count;
     static constexpr bool is_sign_function = IsUnaryOperation<Op>::sign;
-
-    ContextPtr context;
 
     template <typename F>
     static bool castType(const IDataType * type, F && f)
@@ -186,7 +185,7 @@ class FunctionUnaryArithmetic : public IFunction
     }
 
     static FunctionOverloadResolverPtr
-    getFunctionForTupleArithmetic(const DataTypePtr & type, ContextPtr context)
+    getFunctionForTupleArithmetic(const DataTypePtr & type, ContextPtr context_)
     {
         if (!isTuple(type))
             return {};
@@ -197,16 +196,14 @@ class FunctionUnaryArithmetic : public IFunction
         if constexpr (!IsUnaryOperation<Op>::negate)
             return {};
 
-        return FunctionFactory::instance().get("tupleNegate", context);
+        return FunctionFactory::instance().get("tupleNegate", context_);
     }
 
 public:
     static constexpr auto name = Name::name;
-    static FunctionPtr create(ContextPtr) { return std::make_shared<FunctionUnaryArithmetic>(); }
+    static FunctionPtr create(ContextPtr context_) { return std::make_shared<FunctionUnaryArithmetic>(context_); }
 
-    FunctionUnaryArithmetic() = default;
-
-    explicit FunctionUnaryArithmetic(ContextPtr context_) : context(context_) {}
+    explicit FunctionUnaryArithmetic(ContextPtr context_ = nullptr) : WithContext(context_) {}
 
     String getName() const override
     {
@@ -224,13 +221,13 @@ public:
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
     {
-        return getReturnTypeImplStatic(arguments, context);
+        return getReturnTypeImplStatic(arguments, getContext());
     }
 
-    static DataTypePtr getReturnTypeImplStatic(const DataTypes & arguments, ContextPtr context)
+    static DataTypePtr getReturnTypeImplStatic(const DataTypes & arguments, ContextPtr context_)
     {
         /// Special case when the function is negate, argument is tuple.
-        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0], context))
+        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0], context_))
         {
             ColumnsWithTypeAndName new_arguments(1);
 
@@ -304,7 +301,7 @@ public:
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const override
     {
         /// Special case when the function is negate, argument is tuple.
-        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, context))
+        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, getContext()))
         {
             return function_builder->build(arguments)->execute(arguments, result_type, input_rows_count, /* dry_run = */ false);
         }

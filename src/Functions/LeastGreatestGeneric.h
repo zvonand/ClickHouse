@@ -111,15 +111,15 @@ private:
 };
 
 template <LeastGreatest kind, typename SpecializedFunction>
-class LeastGreatestOverloadResolver : public IFunctionOverloadResolver
+class LeastGreatestOverloadResolver : public IFunctionOverloadResolver, public WithContext
 {
 public:
     static constexpr auto name = kind == LeastGreatest::Least ? "least" : "greatest";
-    static FunctionOverloadResolverPtr create(ContextPtr context) { return std::make_unique<LeastGreatestOverloadResolver<kind, SpecializedFunction>>(context); }
+    static FunctionOverloadResolverPtr create(ContextPtr context_) { return std::make_unique<LeastGreatestOverloadResolver<kind, SpecializedFunction>>(context_); }
 
     explicit LeastGreatestOverloadResolver(ContextPtr context_)
-        : context(context_)
-        , legacy_null_behavior(context->getSettingsRef()[Setting::least_greatest_legacy_null_behavior])
+        : WithContext(context_)
+        , legacy_null_behavior(context_->getSettingsRef()[Setting::least_greatest_legacy_null_behavior])
     {
     }
 
@@ -140,11 +140,11 @@ public:
             auto arg_0_type = legacy_null_behavior ? removeNullable(arguments[0].type) : arguments[0].type;
             auto arg_1_type = legacy_null_behavior ? removeNullable(arguments[1].type) : arguments[1].type;
             if (isNumber(arg_0_type) && isNumber(arg_1_type))
-                return std::make_unique<FunctionToFunctionBaseAdaptor>(SpecializedFunction::create(context), argument_types, return_type);
+                return std::make_unique<FunctionToFunctionBaseAdaptor>(SpecializedFunction::create(getContext()), argument_types, return_type);
         }
 
         return std::make_unique<FunctionToFunctionBaseAdaptor>(
-            FunctionLeastGreatestGeneric<kind>::create(context), argument_types, return_type);
+            FunctionLeastGreatestGeneric<kind>::create(getContext()), argument_types, return_type);
     }
 
     DataTypePtr getReturnTypeImpl(const DataTypes & types) const override
@@ -157,14 +157,13 @@ public:
             auto arg_0_type = legacy_null_behavior ? removeNullable(types[0]) : types[0];
             auto arg_1_type = legacy_null_behavior ? removeNullable(types[1]) : types[1];
             if (isNumber(arg_0_type) && isNumber(arg_1_type))
-                return SpecializedFunction::create(context)->getReturnTypeImpl(types);
+                return SpecializedFunction::create(getContext())->getReturnTypeImpl(types);
         }
 
         return getLeastSupertype(types);
     }
 
 private:
-    ContextPtr context;
     bool legacy_null_behavior;
 };
 

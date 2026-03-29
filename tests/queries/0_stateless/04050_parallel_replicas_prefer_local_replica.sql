@@ -3,6 +3,9 @@
 -- Verify that `parallel_replicas_prefer_local_replica` controls whether parallel replicas
 -- are used when `max_parallel_replicas` = 1.
 
+-- Disable automatic parallel replicas mode so randomized settings do not interfere.
+SET automatic_parallel_replicas_mode = 0;
+
 DROP TABLE IF EXISTS t;
 
 CREATE TABLE t(key UInt64, value String) ENGINE = MergeTree ORDER BY key;

@@ -115,6 +115,13 @@ void MergedData::insertChunk(Chunk && chunk, size_t rows_size)
     /// We want to keep constants in the result, so just re-create them carefully.
     for (size_t i = 0; i < num_columns; ++i)
     {
+        /// Materialize ColumnReplicated sources up front, before any type-specific branches.
+        /// Without this, the hasDynamicStructure/hasStatistics branches would receive a
+        /// ColumnReplicated source when they expect the concrete column type (e.g., ColumnObject),
+        /// causing assert_cast failures in debug/sanitizer builds and UB in release.
+        if (chunk_columns[i]->isReplicated())
+            chunk_columns[i] = chunk_columns[i]->convertToFullColumnIfReplicated()->assumeMutable();
+
         if (isColumnConst(*columns[i]))
         {
             columns[i] = columns[i]->cloneResized(num_rows);
@@ -135,14 +142,10 @@ void MergedData::insertChunk(Chunk && chunk, size_t rows_size)
             chunk_columns[i]->takeOrCalculateStatisticsFrom({columns[i]->getPtr()});
             columns[i] = std::move(chunk_columns[i]);
         }
-        else if (columns[i]->isReplicated() && !chunk_columns[i]->isReplicated())
+        else if (columns[i]->isReplicated())
         {
+            /// Destination is ColumnReplicated (set during initialize), wrap the regular chunk column.
             columns[i] = ColumnReplicated::create(std::move(chunk_columns[i]));
-        }
-        else if (!columns[i]->isReplicated() && chunk_columns[i]->isReplicated())
-        {
-            /// Destination is regular but chunk has ColumnReplicated — materialize to avoid type mismatch.
-            columns[i] = chunk_columns[i]->convertToFullColumnIfReplicated()->assumeMutable();
         }
         else
         {

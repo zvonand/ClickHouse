@@ -5,6 +5,7 @@
 #include <Analyzer/QueryNode.h>
 #include <Analyzer/TableNode.h>
 #include <Analyzer/UnionNode.h>
+#include <Common/quoteString.h>
 #include <Interpreters/Context.h>
 #include <IO/WriteHelpers.h>
 
@@ -30,7 +31,7 @@ const ColumnIdentifier & GlobalPlannerContext::createColumnIdentifier(const Name
 
     const auto & source_alias = column_source_node->getAlias();
     if (!source_alias.empty())
-        column_identifier = source_alias + "." + column.name;
+        column_identifier = backQuoteIfNeed(source_alias) + "." + backQuoteIfNeed(column.name);
     else
         column_identifier = column.name;
 
@@ -49,7 +50,7 @@ const ColumnIdentifier & GlobalPlannerContext::createColumnIdentifierOrGet(const
 
     const auto & source_alias = column_source_node->getAlias();
     if (!source_alias.empty())
-        column_identifier = source_alias + "." + column.name;
+        column_identifier = backQuoteIfNeed(source_alias) + "." + backQuoteIfNeed(column.name);
     else
         column_identifier = column.name;
 

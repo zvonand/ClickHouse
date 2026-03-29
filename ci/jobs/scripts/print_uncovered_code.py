@@ -71,17 +71,17 @@ def _parse_info(path: str) -> dict:
             if line.startswith("SF:"):
                 cur = line[3:]
                 cur_rel = _normalize_sf(cur)
-                data[cur_rel] = {"lines": {}, "fns": {}}
+                data.setdefault(cur_rel, {"lines": {}, "fns": {}})
             elif not cur_rel:
                 continue
             elif line.startswith("DA:"):
                 parts = line[3:].split(",", 2)
                 ln, cnt = int(parts[0]), int(parts[1])
-                data[cur_rel]["lines"][ln] = cnt
+                data[cur_rel]["lines"][ln] = data[cur_rel]["lines"].get(ln, 0) + cnt
             elif line.startswith("FNDA:"):
                 rest = line[5:]
                 cnt_str, name = rest.split(",", 1)
-                data[cur_rel]["fns"][name] = int(cnt_str)
+                data[cur_rel]["fns"][name] = data[cur_rel]["fns"].get(name, 0) + int(cnt_str)
             elif line == "end_of_record":
                 cur = cur_rel = None
     return data
@@ -424,11 +424,17 @@ if __name__ == "__main__":
             print(f"  {rel}: {fn}")
 
     lbc_count = len(lbc_lines)
-    if lbc_count > 0:
-        lbc_suffix = f", LBC: {lbc_count} lines"
-    else:
-        lbc_suffix = ""
-    full_msg = msg + lbc_suffix
+    lbc_fn_count = len(lbc_fns)
+
+    parts = [msg]
+    if lbc_count > 0 or lbc_fn_count > 0:
+        lbc_details = []
+        if lbc_count > 0:
+            lbc_details.append(f"{lbc_count} line(s)")
+        if lbc_fn_count > 0:
+            lbc_details.append(f"{lbc_fn_count} function(s)")
+        parts.append(f"lost baseline coverage: {', '.join(lbc_details)}")
+    full_msg = " | ".join(parts)
 
     r = Result.create_from(
         name="Print Uncovered Code",

@@ -3,10 +3,10 @@
 -- This verifies that `getAllUpdatedColumns` correctly reports columns changed by
 -- ALTER mutations, not just data mutations (UPDATE/DELETE).
 --
--- Uses UInt64 → String conversion because the UInt64 binary data, when
--- deserialized as a varint-length-prefixed String, requests more bytes than
--- available and throws reliably (unlike String → Nullable which may silently
--- produce garbage that doesn't affect results in release builds).
+-- Uses UInt64 → Float64 conversion because both types use 8-byte fixed-width
+-- serialization: the old UInt64 bytes are reinterpreted as Float64 without
+-- deserialization errors, producing tiny denormalized values that silently cause
+-- the set index to incorrectly skip granules (returning 0 rows instead of 128).
 
 DROP TABLE IF EXISTS test_skip_index_alter;
 
@@ -33,18 +33,20 @@ SYSTEM STOP MERGES test_skip_index_alter;
 
 -- Change column type; creates an ALTER mutation (READ_COLUMN), not a data mutation
 SET alter_sync = 0, mutations_sync = 0;
-ALTER TABLE test_skip_index_alter MODIFY COLUMN value String;
+ALTER TABLE test_skip_index_alter MODIFY COLUMN value Float64;
 
 -- The index data is now incompatible with the new type.
 -- Without the fix, the skip index is used on old parts and the UInt64 data
--- is deserialized as String (varint-length-prefixed), which throws.
+-- is reinterpreted as Float64 (same byte width but different encoding),
+-- producing tiny denormalized values that don't match 300.0, so the index
+-- incorrectly skips all granules and returns 0 rows.
 -- With the fix, the index is correctly skipped for old parts.
-SELECT count() FROM test_skip_index_alter WHERE value = '300' SETTINGS force_data_skipping_indices = 'idx_value';
+SELECT count() FROM test_skip_index_alter WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value';
 
 SYSTEM START MERGES test_skip_index_alter;
 OPTIMIZE TABLE test_skip_index_alter FINAL SETTINGS mutations_sync = 2;
 
 -- After mutation completes, the index should work with the new type
-SELECT count() FROM test_skip_index_alter WHERE value = '300' SETTINGS force_data_skipping_indices = 'idx_value';
+SELECT count() FROM test_skip_index_alter WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value';
 
 DROP TABLE test_skip_index_alter;

@@ -615,6 +615,9 @@ static bool extractRequiredNonTableColumnsFromStorage(
     if (std::dynamic_pointer_cast<StorageDistributed>(storage))
         return false;
 
+    if (storage->getVirtualsPtr()->has("_table"))
+        return false;
+
     bool has_table_virtual_column = false;
     for (const auto & column_name : columns_names)
     {

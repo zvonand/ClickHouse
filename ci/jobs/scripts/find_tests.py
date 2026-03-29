@@ -1688,7 +1688,7 @@ class Targeting:
         # scores.  A minimum score threshold keeps the result set bounded
         # without an arbitrary count limit.
         MIN_SCORE = 1e-8        # floor: tests scoring below this have negligible signal
-        MAX_OUTPUT_TESTS = 6000   # hard cap: targeted runs must stay focused
+        MAX_OUTPUT_TESTS = 7000   # hard cap: targeted runs must stay focused
         # Dynamic ratio floor: drop tests whose score is more than MAX_SCORE_RATIO times
         # weaker than the best evidence.  This supersedes per-pass suppression guards —
         # when strong direct hits exist (e.g. rc=37 on a SAMPLE-specific line, score=0.027)

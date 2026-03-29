@@ -46,8 +46,8 @@ void filterBlockWithExpression(const ExpressionActionsPtr & actions, Block & blo
 void buildSetsForDAG(const ActionsDAG & dag, const ContextPtr & context);
 
 /// Builds sets used by ActionsDAG inplace, but skips sets that are arguments to
-/// globalIn/globalNotIn functions. Those sets need external tables set up by
-/// ReadFromRemote before they can be built.
+/// GLOBAL IN functions (globalIn, globalNotIn, globalNullIn, globalNotNullIn).
+/// Those sets need external tables set up by ReadFromRemote before they can be built.
 void buildSetsForDAGExcludingGlobalIn(const ActionsDAG & dag, const ContextPtr & context);
 
 /// Builds ordered sets used by ActionsDAG inplace.

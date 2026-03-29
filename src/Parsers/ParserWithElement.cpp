@@ -27,6 +27,16 @@ bool ParserWithElement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     if (ASTPtr cte_name, aliases;
         s_ident.parse(pos, cte_name, expected) &&
         (
+            [&cte_name, &old_pos]() -> bool {
+                String name;
+                if (tryGetIdentifierNameInto(cte_name, name)
+                    && old_pos->type == TokenType::BareWord
+                    && strcasecmp(name.c_str(), "select") == 0)
+                    return false;
+                return true;
+            }()
+        ) &&
+        (
             [&]() -> bool {
                 if (open_bracket.ignore(pos, expected))
                 {

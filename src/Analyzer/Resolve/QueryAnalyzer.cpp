@@ -2165,7 +2165,59 @@ ProjectionNames QueryAnalyzer::resolveMatcher(QueryTreeNodePtr & matcher_node, I
         }
     }
 
-    if (!scope.expressions_in_resolve_process_stack.hasAggregateFunction())
+    /// When an APPLY transformer creates an aggregate function (e.g. `* APPLY x -> argMax(x, number)`
+    /// or `* APPLY x -> toString(argMax(x, number))`), the matched columns must NOT be converted to
+    /// Nullable here. Aggregate function arguments use pre-aggregation types (non-Nullable); the Nullable
+    /// wrapping is handled post-aggregation by Rollup/Cube/GroupingSets transforms. Converting here would
+    /// create a type mismatch: the aggregate function would expect Nullable input columns, but the actual
+    /// columns in the Aggregating step are non-Nullable.
+    /// This causes a crash in AggregateFunctionNullVariadic::addBatchSinglePlace.
+    ///
+    /// We recursively check the APPLY expression tree because the aggregate function may be nested
+    /// inside other function calls (e.g. `toString(argMax(x, number))`), not just at the top level.
+    /// We use AggregateFunctionFactory name lookup (not FunctionNode::isAggregateFunction()) because
+    /// APPLY expressions have not been resolved yet at this point — FunctionNode::kind is still UNKNOWN.
+    auto has_aggregate_function_in_tree = [](const IQueryTreeNode * node, auto & self) -> bool
+    {
+        if (!node)
+            return false;
+        if (const auto * func = node->as<FunctionNode>())
+        {
+            if (AggregateFunctionFactory::instance().isAggregateFunctionName(func->getFunctionName()))
+                return true;
+        }
+        for (const auto & child : node->getChildren())
+        {
+            if (child && self(child.get(), self))
+                return true;
+        }
+        return false;
+    };
+
+    bool has_aggregate_apply_transformer = false;
+    for (const auto & transformer : matcher_node_typed.getColumnTransformers().getNodes())
+    {
+        if (auto * apply = transformer->as<ApplyColumnTransformerNode>())
+        {
+            const IQueryTreeNode * expr_to_check = nullptr;
+            if (apply->getApplyTransformerType() == ApplyColumnTransformerType::LAMBDA)
+            {
+                if (const auto * lambda = apply->getExpressionNode()->as<LambdaNode>())
+                    expr_to_check = lambda->getExpression().get();
+            }
+            else if (apply->getApplyTransformerType() == ApplyColumnTransformerType::FUNCTION)
+            {
+                expr_to_check = apply->getExpressionNode().get();
+            }
+            if (expr_to_check && has_aggregate_function_in_tree(expr_to_check, has_aggregate_function_in_tree))
+            {
+                has_aggregate_apply_transformer = true;
+                break;
+            }
+        }
+    }
+
+    if (!scope.expressions_in_resolve_process_stack.hasAggregateFunction() && !has_aggregate_apply_transformer)
     {
         for (auto & [node, _] : matched_expression_nodes_with_names)
         {

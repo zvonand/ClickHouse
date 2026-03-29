@@ -17,8 +17,12 @@ $CLICKHOUSE_CLIENT --inline-insert-data --query "INSERT INTO test_inline_insert 
 $CLICKHOUSE_CLIENT --inline-insert-data --query "INSERT INTO test_inline_insert FORMAT Values (3, 'foo')"
 $CLICKHOUSE_CLIENT --inline-insert-data --query "INSERT INTO test_inline_insert FORMAT JSONEachRow {\"x\": 4, \"y\": \"bar\"}"
 
-# Test with send_table_structure_on_insert_with_inline_data setting directly (without --inline-insert-data)
+# Test with send_table_structure_on_insert_with_inline_data setting directly (without --inline-insert-data flag)
+# This verifies the setting-driven path works independently of the CLI flag.
 $CLICKHOUSE_CLIENT --send_table_structure_on_insert_with_inline_data 0 --query "INSERT INTO test_inline_insert VALUES (5, 'baz')"
+$CLICKHOUSE_CLIENT --send_table_structure_on_insert_with_inline_data 0 --query "INSERT INTO test_inline_insert FORMAT JSONEachRow {\"x\": 6, \"y\": \"setting_json\"}"
+$CLICKHOUSE_CLIENT --send_table_structure_on_insert_with_inline_data 0 --query "INSERT INTO test_inline_insert FORMAT CSV
+7,\"setting_csv\""
 
 $CLICKHOUSE_CLIENT --query "SELECT * FROM test_inline_insert ORDER BY x"
 

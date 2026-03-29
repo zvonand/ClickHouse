@@ -943,7 +943,7 @@ class Targeting:
         #   MIN_SECONDARY    — secondary test must have at least this many specific
         #                      callees; avoids 100%-Jaccard artifacts from tiny sets.
         #   MAX_CALLEE_COUNT — exclude globally-ubiquitous callees (logging, malloc).
-        MAX_CALLEE_TEST_COUNT = 250  # callees in >= this many tests are ubiquitous
+        MAX_CALLEE_TEST_COUNT = 300  # callees in >= this many tests are ubiquitous
         # Thresholds scale with the primary set size so that small primary sets
         # (e.g. 3 tests for a focused single-file PR) still find results while
         # large primary sets use stricter filters to suppress infrastructure noise.

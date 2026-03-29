@@ -192,10 +192,11 @@ public:
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
-        /// buildImpl receives the original arguments which may still have Nullable types/columns,
-        /// because the framework only unwraps Nullable for getReturnTypeImpl, not for buildImpl.
-        auto args_without_nullable = createBlockWithNestedColumns(arguments);
-        auto aggregate_function = resolveAggregateFunction(args_without_nullable);
+        /// useDefaultImplementationForNulls() is false, so buildImpl receives Nullable arguments
+        /// just like getReturnTypeImpl does. Resolve the aggregate function with the original types
+        /// so it matches what executeImpl will receive (also Nullable, since the IFunction also
+        /// has useDefaultImplementationForNulls() = false).
+        auto aggregate_function = resolveAggregateFunction(arguments);
         auto function = std::make_shared<FunctionArrayReduce>(std::move(aggregate_function));
 
         DataTypes data_types(arguments.size());

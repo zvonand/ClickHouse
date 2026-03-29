@@ -1,0 +1,8 @@
+[(0,6,'BareWord'),(6,7,'Whitespace'),(7,8,'Number')]
+[]
+[(0,6,'BareWord'),(6,7,'Whitespace'),(7,13,'BareWord'),(13,14,'Whitespace'),(14,18,'BareWord'),(18,19,'Whitespace'),(19,26,'BareWord'),(26,27,'OpeningRoundBracket'),(27,29,'Number'),(29,30,'ClosingRoundBracket'),(30,31,'Whitespace'),(31,36,'BareWord'),(36,37,'Whitespace'),(37,43,'BareWord'),(43,44,'Whitespace'),(44,45,'Greater'),(45,46,'Whitespace'),(46,47,'Number')]
+[(0,6,'keyword'),(7,8,'number')]
+[]
+[(0,6,'keyword'),(7,13,'identifier'),(14,18,'keyword'),(19,26,'function'),(27,29,'number'),(31,36,'keyword'),(37,43,'identifier'),(46,47,'number')]
+[(0,6,'BareWord'),(6,7,'Whitespace'),(7,20,'StringLiteral')]
+[(0,6,'keyword'),(7,20,'string')]

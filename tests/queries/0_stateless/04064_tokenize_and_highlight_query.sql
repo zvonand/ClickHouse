@@ -1,0 +1,8 @@
+SELECT tokenizeQuery('SELECT 1');
+SELECT tokenizeQuery('');
+SELECT tokenizeQuery('SELECT number FROM numbers(10) WHERE number > 5');
+SELECT highlightQuery('SELECT 1');
+SELECT highlightQuery('');
+SELECT highlightQuery('SELECT number FROM numbers(10) WHERE number > 5');
+SELECT tokenizeQuery('SELECT \'hello world\'');
+SELECT highlightQuery('SELECT \'hello world\'');

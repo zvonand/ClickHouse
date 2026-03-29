@@ -3,7 +3,7 @@ name: bisect
 description: Bisect a ClickHouse regression using pre-built master binaries from CI. Use when the user wants to find the commit that introduced a bug.
 argument-hint: <repro.sql> [good-ref] [bad-ref]
 disable-model-invocation: false
-allowed-tools: Task, Bash(git:*), Bash(curl:*), Bash(chmod:*), Bash(mkdir:*), Bash(ls:*), Bash(/tmp/*), Bash(cat:*), Bash(utils/auto-bisect/*), Read, Write, Glob, Grep, WebFetch
+allowed-tools: Task, Bash(git:*), Bash(curl:*), Bash(chmod:*), Bash(mkdir:*), Bash(ls:*), Bash(/tmp/*), Bash(cat:*), Bash(utils/auto-bisect/*), Read, Write, Glob, Grep, WebFetch, LSP
 ---
 
 # ClickHouse Bisect Skill

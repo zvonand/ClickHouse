@@ -3776,6 +3776,10 @@ static bool functionIsIntegerCastPreservingFieldRepresentation(
     if (!is_cast)
         return false;
 
+    /// Nullable types don't have a fixed size in memory; this optimization only applies to plain integer types.
+    if (from_type->isNullable() || to_type->isNullable())
+        return false;
+
     auto from_id = from_type->getTypeId();
     auto to_id = to_type->getTypeId();
 

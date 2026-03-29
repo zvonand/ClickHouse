@@ -2950,6 +2950,26 @@ ProjectionNames QueryAnalyzer::resolveExpressionNode(
 
             if (!resolved_identifier_node)
             {
+                /** If the identifier could not be resolved and there is an expression with the same alias
+                  * currently being resolved (cycle prevention returned {}), check if this alias is duplicated.
+                  * If so, report MULTIPLE_EXPRESSIONS_FOR_ALIAS instead of UNKNOWN_IDENTIFIER,
+                  * which is a much more helpful error message.
+                  * Example: SELECT number AS num, num * 1 AS num FROM numbers(10)
+                  */
+                if (scope.expressions_in_resolve_process_stack.getExpressionWithAlias(unresolved_identifier.getFullName()) != nullptr)
+                {
+                    for (const auto & node_with_duplicated_alias : scope.aliases.nodes_with_duplicated_aliases)
+                    {
+                        if (node_with_duplicated_alias->getAlias() == unresolved_identifier.getFullName())
+                        {
+                            throw Exception(ErrorCodes::MULTIPLE_EXPRESSIONS_FOR_ALIAS,
+                                "Multiple expressions with the same alias {}. In scope {}",
+                                backQuote(unresolved_identifier.getFullName()),
+                                scope.scope_node->formatASTForErrorMessage());
+                        }
+                    }
+                }
+
                 std::string message_clarification;
                 if (allow_lambda_expression)
                     message_clarification = std::string(" or ") + toStringLowercase(IdentifierLookupContext::FUNCTION);

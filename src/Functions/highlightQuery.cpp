@@ -19,6 +19,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int SYNTAX_ERROR;
+}
+
 namespace
 {
 
@@ -110,9 +115,12 @@ public:
                         ++token_iterator;
                 }
             }
-            catch (const Exception &)
+            catch (const Exception & e)
             {
-                /// Skip highlighting on parse errors, just return what we have so far for this row.
+                /// Skip highlighting on parse/syntax errors, just return what we have so far for this row.
+                /// Rethrow all other exceptions (memory, resource, etc.) to avoid hiding real failures.
+                if (e.code() != ErrorCodes::SYNTAX_ERROR)
+                    throw;
             }
 
             const auto expanded = expandHighlights(expected.highlights);

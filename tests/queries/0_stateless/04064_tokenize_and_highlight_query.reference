@@ -8,3 +8,4 @@
 [(0,6,'keyword'),(7,20,'string')]
 [(0,6,'keyword'),(7,13,'string'),(13,15,'string_escape'),(15,21,'string')]
 [(0,6,'keyword'),(7,11,'identifier'),(12,16,'keyword'),(17,18,'identifier'),(19,24,'keyword'),(25,29,'identifier'),(30,34,'keyword'),(35,36,'string'),(36,37,'string_metacharacter'),(37,41,'string'),(41,42,'string_escape'),(42,47,'string'),(47,48,'string_metacharacter'),(48,49,'string')]
+[(0,6,'keyword'),(7,11,'identifier'),(12,16,'keyword'),(17,18,'identifier'),(19,24,'keyword'),(25,29,'identifier'),(30,36,'keyword'),(37,38,'string'),(38,39,'string_metacharacter'),(39,43,'string'),(43,44,'string_metacharacter'),(44,47,'string'),(47,50,'string_metacharacter'),(50,53,'string'),(53,54,'string_metacharacter'),(54,55,'string')]

@@ -39,5 +39,6 @@ DROP TABLE t_100327_2;
 -- https://github.com/ClickHouse/ClickHouse/issues/100329
 CREATE TABLE t_100329 (v1 DateTime64(3), v2 Int16, v3 Nullable(DateTime64(3)), v4 Nullable(DateTime64(3)), v5 Nullable(UInt8), v6 LowCardinality(String), v7 Float64) ENGINE = SummingMergeTree() ORDER BY v2;
 INSERT INTO t_100329 (v1, v2, v3, v4, v5, v6, v7) VALUES (toDateTime('2001-09-18 10:03:30'), 17349, toDateTime('2013-07-02 01:02:55'), toDateTime('1978-05-17 09:23:31'), NULL, 'bx3t6', inf);
-ALTER TABLE t_100329 MODIFY COLUMN v2 COMMENT 'Primary key column', MODIFY TTL toStartOfDay(v1) + INTERVAL 1 DAY GROUP BY v2;
+ALTER TABLE t_100329 MODIFY COLUMN v2 COMMENT 'Primary key column';
+ALTER TABLE t_100329 MODIFY TTL toStartOfDay(v1) + INTERVAL 1 DAY GROUP BY v2;
 DROP TABLE t_100329;

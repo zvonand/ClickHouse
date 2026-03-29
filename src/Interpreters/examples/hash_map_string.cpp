@@ -21,6 +21,8 @@
 
 #pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
 
+namespace
+{
 
 struct CompactStringRef
 {
@@ -66,6 +68,8 @@ inline bool operator==(CompactStringRef lhs, CompactStringRef rhs)
     return true;
 }
 
+} /// close anonymous namespace for ZeroTraits/DefaultHash specializations
+
 namespace ZeroTraits
 {
     template <>
@@ -84,6 +88,8 @@ struct DefaultHash<CompactStringRef>
     }
 };
 
+namespace
+{
 
 static inline UInt64 mix(UInt64 h)
 {
@@ -288,6 +294,7 @@ struct Grower : public HashTableGrower<>
     }
 };
 
+}
 
 int mainEntryExampleHashMapString(int argc, char ** argv)
 {

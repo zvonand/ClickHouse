@@ -20,6 +20,9 @@
 #include <Interpreters/AggregationCommon.h>
 
 
+namespace
+{
+
 struct SmallStringView
 {
     size_t size = 0;
@@ -70,6 +73,7 @@ inline bool operator==(SmallStringView lhs, SmallStringView rhs)
 #endif
 }
 
+} /// close anonymous namespace for ZeroTraits/DefaultHash specializations
 
 namespace ZeroTraits
 {

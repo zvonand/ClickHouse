@@ -35,6 +35,9 @@
   * But in this test, there was something similar to the old scenario of using hash tables in the aggregation.
   */
 
+namespace
+{
+
 struct AlternativeHash
 {
     size_t operator() (UInt64 x) const
@@ -62,6 +65,7 @@ struct CRC32HashTest
 
 #endif
 
+}
 
 int mainEntryExampleHashMap(int argc, char ** argv)
 {

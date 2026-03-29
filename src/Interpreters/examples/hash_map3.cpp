@@ -13,6 +13,9 @@
 #include <Common/HashTable/HashMap.h>
 
 
+namespace
+{
+
 template
 <
     typename Key,
@@ -51,6 +54,8 @@ struct Grower : public HashTableGrower<2>
         ++size_degree;
     }
 };
+
+}
 
 int mainEntryExampleHashMap3(int, char **)
 {

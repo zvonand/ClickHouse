@@ -8,9 +8,14 @@
 
 #include <Interpreters/JIT/CHJIT.h>
 
+namespace
+{
+
 void test_function()
 {
     std::cerr << "Test function" << std::endl;
+}
+
 }
 
 int mainEntryExampleJitExample(int argc, char **argv)

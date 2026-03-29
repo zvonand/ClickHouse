@@ -177,6 +177,9 @@ inline bool operator==(StringView_Compare8_1_byUInt64 lhs, StringView_Compare8_1
 }
 
 
+namespace
+{
+
 inline bool compare_byMemcmp(const char * p1, const char * p2)
 {
     return 0 == memcmp(p1, p2, 16);
@@ -501,6 +504,7 @@ inline bool memequal_sse_wide(const char * p1, const char * p2, size_t size)
 
 #endif
 
+} /// close anonymous namespace for operator== overloads
 
 #define Op(METHOD) \
 inline bool operator==(StringView_Compare16_1_ ## METHOD lhs, StringView_Compare16_1_ ## METHOD rhs) \
@@ -571,6 +575,9 @@ inline bool operator==(StringView_CompareAlmostAlwaysTrue lhs, StringView_Compar
 }
 
 
+namespace
+{
+
 using Value = UInt64;
 
 
@@ -604,6 +611,7 @@ void NO_INLINE bench(const std::vector<std::string_view> & data, const char * na
         << std::endl;
 }
 
+}
 
 int mainEntryExampleHashMapString2(int argc, char ** argv)
 {

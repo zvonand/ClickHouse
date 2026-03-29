@@ -91,6 +91,8 @@ inline bool operator==(StringView_CompareAlwaysTrue, StringView_CompareAlwaysTru
     return true;
 }
 
+namespace
+{
 
 struct FastHash64
 {
@@ -456,6 +458,7 @@ void NO_INLINE bench(const std::vector<std::string_view> & data, const char * na
         << std::endl;
 }
 
+}
 
 int mainEntryExampleHashMapString3(int argc, char ** argv)
 {

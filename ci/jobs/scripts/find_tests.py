@@ -14,35 +14,20 @@ from ci.praktika.settings import Settings
 from ci.praktika.utils import Shell
 
 # Query to fetch failed tests from CIDB for a given PR.
-# Only returns tests from commit_sha/check_name combinations with fewer than 20 failures.
-# This helps filter out commits with widespread test failures.
+# Results are ordered by recency-weighted failure count (exponential decay, 7-day half-life),
+# so tests that failed recently rank higher than old failures. Capped at 100.
 FAILED_TESTS_QUERY = """ \
- select distinct test_name
- from (
-          select test_name, commit_sha, check_name
-          from checks
-          where 1
-            and pull_request_number = {PR_NUMBER}
-            and check_name LIKE '{JOB_TYPE}%'
-            and check_status = 'failure'
-            and match(test_name, '{TEST_NAME_PATTERN}')
-            and test_status = 'FAIL'
-            and check_start_time >= now() - interval 300 day
-          order by check_start_time desc
-              limit 10000
-      )
- where (commit_sha, check_name) IN (
-     select commit_sha, check_name
-     from checks
-     where 1
-       and pull_request_number = {PR_NUMBER}
+ select test_name
+ from checks
+ where pull_request_number = {PR_NUMBER}
    and check_name LIKE '{JOB_TYPE}%'
    and check_status = 'failure'
+   and match(test_name, '{TEST_NAME_PATTERN}')
    and test_status = 'FAIL'
-   and check_start_time >= now() - interval 300 day
- group by commit_sha, check_name
- having count(test_name) < 20
-     ) \
+   and check_start_time >= now() - interval 30 day
+ group by test_name
+ order by count() * exp(-dateDiff('day', max(check_start_time), now()) / 7.) desc
+ limit 100 \
 """
 
 
@@ -596,7 +581,7 @@ class Targeting:
         # so domain-specific tests (e.g. other JSON wide-part tests) get included.
         SPARSE_FILE_THRESHOLD = 8   # trigger when max primary rc for a file ≤ this
         PASS_WEIGHT_SPARSE_FILE = 0.30  # between direct (1.0) and sibling (0.1)
-        SPARSE_FILE_WIDTH = 300        # synthetic width: stronger than sibling (10000)
+        SPARSE_FILE_WIDTH = 600        # synthetic width: stronger than sibling (10000)
 
         # Compute per-file max rc from the Python-filtered result dict (only regions
         # that actually overlapped a changed line, not merely the SQL-fetched neighbourhood).

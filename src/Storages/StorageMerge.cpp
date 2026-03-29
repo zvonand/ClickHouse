@@ -1046,7 +1046,9 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
                 continue;
 
             auto merge_column = merge_storage_snapshot->tryGetColumn(
-                GetColumnsOptions(GetColumnsOptions::All).withVirtuals(), column_name);
+                GetColumnsOptions(GetColumnsOptions::All).withVirtuals()
+                    .withSubcolumns(merge_storage_snapshot->storage.supportsSubcolumns()),
+                column_name);
             if (!merge_column)
                 continue;
 

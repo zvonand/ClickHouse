@@ -30,16 +30,9 @@ namespace
 DataTypePtr makeHighlightTypeEnum()
 {
     return std::make_shared<DataTypeEnum8>(DataTypeEnum8::Values{
-        {"none", static_cast<Int8>(Highlight::none)},
-        {"keyword", static_cast<Int8>(Highlight::keyword)},
-        {"identifier", static_cast<Int8>(Highlight::identifier)},
-        {"function", static_cast<Int8>(Highlight::function)},
-        {"alias", static_cast<Int8>(Highlight::alias)},
-        {"substitution", static_cast<Int8>(Highlight::substitution)},
-        {"number", static_cast<Int8>(Highlight::number)},
-        {"string", static_cast<Int8>(Highlight::string)},
-        {"string_escape", static_cast<Int8>(Highlight::string_escape)},
-        {"string_metacharacter", static_cast<Int8>(Highlight::string_metacharacter)},
+#define M(NAME) {#NAME, static_cast<Int8>(Highlight::NAME)},
+        APPLY_FOR_HIGHLIGHTS(M)
+#undef M
     });
 }
 
@@ -161,6 +154,7 @@ and escape characters are highlighted separately.
         .arguments = {{"query", "A ClickHouse SQL query string. String."}},
         .returned_value = {"An array of named tuples `(begin UInt64, end UInt64, type Enum8(...))` representing highlighted ranges.", {"Array(Tuple(begin UInt64, end UInt64, type Enum8(...)))"}},
         .examples = {{"simple", "SELECT highlightQuery('SELECT 1')", R"([('0','6','keyword'),('7','8','number')])"}},
+        .introduced_in = {26, 4},
         .category = FunctionDocumentation::Category::Other,
     });
 }

@@ -24,22 +24,28 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
+/// Highlight types for syntax highlighting of parsed queries.
+/// APPLY_FOR_HIGHLIGHTS lists the publicly visible types (used in the output of `highlightQuery`).
+/// string_like and string_regexp are internal types used by the parser before expansion.
+#define APPLY_FOR_HIGHLIGHTS(M) \
+    M(none) \
+    M(keyword) \
+    M(identifier) \
+    M(function) \
+    M(alias) \
+    M(substitution) \
+    M(number) \
+    M(string) \
+    M(string_escape) \
+    M(string_metacharacter)
+
 enum class Highlight : uint8_t
 {
-    none = 0,
-    keyword,
-    identifier,
-    function,
-    alias,
-    substitution,
-    number,
-    string,
-    /// Backslash escape characters inside strings.
-    string_escape,
-    /// Metacharacters inside LIKE patterns (%_) or regexp patterns (|()^$.[]?*+{:-).
-    string_metacharacter,
+#define M(NAME) NAME,
+    APPLY_FOR_HIGHLIGHTS(M)
+#undef M
     /// These two are used internally by the parser to mark LIKE/REGEXP string ranges.
-    /// They are expanded into string/string_escape/string_metacharacter by expandHighlights.
+    /// They are expanded into string/string_escape/string_metacharacter by `expandHighlights`.
     string_like,
     string_regexp,
 };

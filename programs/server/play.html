@@ -287,7 +287,8 @@
             white-space: pre;
             transform: translate(0.25rem, calc(-50% + 0.5em));
             color: var(--element-background-color);
-            background: var(--text-color);
+            background: color-mix(in srgb, var(--text-color) 80%, transparent);
+            backdrop-filter: blur(4px);
             border: 1px solid var(--border-color);
             border-radius: 0.5rem;
             padding: 0.25rem;

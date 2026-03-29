@@ -13,6 +13,7 @@
 #include <Parsers/Lexer.h>
 #include <Parsers/ParserQuery.h>
 #include <Parsers/TokenIterator.h>
+#include <Common/Exception.h>
 
 
 namespace DB
@@ -109,7 +110,7 @@ public:
                         ++token_iterator;
                 }
             }
-            catch (...)
+            catch (const Exception &)
             {
                 /// Skip highlighting on parse errors, just return what we have so far for this row.
             }

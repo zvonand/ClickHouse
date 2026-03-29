@@ -36,9 +36,19 @@ const ColumnIdentifier & GlobalPlannerContext::createColumnIdentifier(const Name
 
     auto [it, inserted] = column_identifiers.emplace(column_identifier);
     if (!inserted)
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "Column identifier {} is already registered", column_identifier);
-
-    assert(inserted);
+    {
+        /// In UNION ALL queries, different branches share the same GlobalPlannerContext.
+        /// When both branches reference a table expression with no alias and the same column name,
+        /// the column identifier will collide. Disambiguate by appending a numeric suffix.
+        size_t suffix = 0;
+        do
+        {
+            auto disambiguated = column_identifier + "_" + toString(suffix);
+            std::tie(it, inserted) = column_identifiers.emplace(std::move(disambiguated));
+            ++suffix;
+        }
+        while (!inserted);
+    }
 
     return *it;
 }

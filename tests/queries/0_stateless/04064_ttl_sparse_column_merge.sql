@@ -1,12 +1,14 @@
 -- Regression test: TTL column with sparse serialization caused
 -- "Unexpected type of result TTL column" during merge because
 -- ColumnSparse was not unwrapped before type dispatch.
+-- The TTL expression must reference the column directly (TTL ts, not TTL ts + INTERVAL ...)
+-- so that the result column is looked up in the block and returned as-is (sparse).
 
 DROP TABLE IF EXISTS t_ttl_sparse;
 
 CREATE TABLE t_ttl_sparse (key UInt64, ts DateTime)
 ENGINE = MergeTree ORDER BY key
-TTL ts + INTERVAL 1 DAY
+TTL ts
 SETTINGS ratio_of_defaults_for_sparse_serialization = 0.001,
          vertical_merge_algorithm_min_rows_to_activate = 1,
          vertical_merge_algorithm_min_columns_to_activate = 1,

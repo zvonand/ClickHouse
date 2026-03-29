@@ -23,6 +23,10 @@ fi
 
 source ${SCRIPT_DIR}/helpers/lib.sh
 
+ETC_DIR="$SCRIPT_DIR/data/etc"
+CH_CONFIG_DIR="$ETC_DIR/clickhouse-server"
+CH_CLIENT_DIR="$ETC_DIR/clickhouse-client"
+
 PID_FILE="$SCRIPT_DIR/data/ch.pid"
 LOG_FILE="$SCRIPT_DIR/data/clickhouse.log"
 
@@ -30,22 +34,22 @@ LOG_FILE="$SCRIPT_DIR/data/clickhouse.log"
   cd $WORK_TREE || exit 1
   echo "Installing ClickHouse config"
 
-  rm -rf /etc/clickhouse-server/* /etc/clickhouse-client/*
-  mkdir -p /etc/clickhouse-server/config.d /etc/clickhouse-server/users.d /etc/clickhouse-client
+  rm -rf "$CH_CONFIG_DIR" "$CH_CLIENT_DIR"
+  mkdir -p "$CH_CONFIG_DIR/config.d" "$CH_CONFIG_DIR/users.d" "$CH_CLIENT_DIR"
 
   # Copy base server configs, dereferencing symlinks so absolute paths are not needed
-  cp -rL programs/server/. /etc/clickhouse-server/
+  cp -rL programs/server/. "$CH_CONFIG_DIR/"
 
   # Remove configs not needed for single-node bisect
   rm -f \
-    /etc/clickhouse-server/config.d/keeper_port.xml \
-    /etc/clickhouse-server/config.d/azure_storage_conf.xml \
-    /etc/clickhouse-server/config.d/azure_storage_policy_by_default.xml \
-    /etc/clickhouse-server/config.d/distributed_cache_server.xml \
-    /etc/clickhouse-server/config.d/distributed_cache_client.xml
+    "$CH_CONFIG_DIR/config.d/keeper_port.xml" \
+    "$CH_CONFIG_DIR/config.d/azure_storage_conf.xml" \
+    "$CH_CONFIG_DIR/config.d/azure_storage_policy_by_default.xml" \
+    "$CH_CONFIG_DIR/config.d/distributed_cache_server.xml" \
+    "$CH_CONFIG_DIR/config.d/distributed_cache_client.xml"
 
   # Overlay our bisect-specific user settings
-  cp $SCRIPT_DIR/env/config/users_single.xml /etc/clickhouse-server/users.d/
+  cp $SCRIPT_DIR/env/config/users_single.xml "$CH_CONFIG_DIR/users.d/"
 )
 
 set +e
@@ -65,7 +69,7 @@ sleep 1
 (
   cd $SCRIPT_DIR/data/ch || exit 1
   echo "Starting ClickHouse"
-  $CH_PATH server --config /etc/clickhouse-server/config.xml --pid-file=$PID_FILE \
+  $CH_PATH server --config "$CH_CONFIG_DIR/config.xml" --pid-file=$PID_FILE \
     -- --path="$SCRIPT_DIR/data/ch" > "$LOG_FILE" 2>&1 &
 )
 

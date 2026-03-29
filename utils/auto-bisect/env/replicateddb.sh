@@ -24,59 +24,64 @@ fi
 source ${SCRIPT_DIR}/helpers/lib.sh
 start_minio
 
+ETC_DIR="$SCRIPT_DIR/data/etc"
+CH_CONFIG_DIR="$ETC_DIR/clickhouse-server"
+CH_CONFIG_DIR1="$ETC_DIR/clickhouse-server1"
+CH_CLIENT_DIR="$ETC_DIR/clickhouse-client"
+
 (
   cd $WORK_TREE || exit 1
-  rm -rf /etc/clickhouse-server/* /etc/clickhouse-server1/*
-  mkdir -p /etc/clickhouse-server/config.d /etc/clickhouse-server/users.d \
-            /etc/clickhouse-server1/config.d /etc/clickhouse-server1/users.d \
-            /etc/clickhouse-client \
+  rm -rf "$CH_CONFIG_DIR" "$CH_CONFIG_DIR1"
+  mkdir -p "$CH_CONFIG_DIR/config.d" "$CH_CONFIG_DIR/users.d" \
+            "$CH_CONFIG_DIR1/config.d" "$CH_CONFIG_DIR1/users.d" \
+            "$CH_CLIENT_DIR" \
             /var/lib/clickhouse/ /var/lib/clickhouse1/
 
   # Copy base server configs, dereferencing symlinks so absolute paths are not needed
-  cp -rL programs/server/. /etc/clickhouse-server/
+  cp -rL programs/server/. "$CH_CONFIG_DIR/"
 
   # Remove configs that conflict with or are superseded by our replicated setup
   rm -f \
-    /etc/clickhouse-server/config.d/keeper_port.xml \
-    /etc/clickhouse-server/config.d/azure_storage_conf.xml \
-    /etc/clickhouse-server/config.d/azure_storage_policy_by_default.xml \
-    /etc/clickhouse-server/config.d/zookeeper.xml \
-    /etc/clickhouse-server/config.d/keeper.xml \
-    /etc/clickhouse-server/config.d/keeper_port_fault_injection.xml \
-    /etc/clickhouse-server/config.d/distributed_cache_server.xml \
-    /etc/clickhouse-server/config.d/distributed_cache_client.xml \
-    /etc/clickhouse-server/config.d/reduce_blocking_parts.xml \
-    /etc/clickhouse-server/config.d/database_replicated.xml \
-    /etc/clickhouse-server/config.d/clusters.xml
+    "$CH_CONFIG_DIR/config.d/keeper_port.xml" \
+    "$CH_CONFIG_DIR/config.d/azure_storage_conf.xml" \
+    "$CH_CONFIG_DIR/config.d/azure_storage_policy_by_default.xml" \
+    "$CH_CONFIG_DIR/config.d/zookeeper.xml" \
+    "$CH_CONFIG_DIR/config.d/keeper.xml" \
+    "$CH_CONFIG_DIR/config.d/keeper_port_fault_injection.xml" \
+    "$CH_CONFIG_DIR/config.d/distributed_cache_server.xml" \
+    "$CH_CONFIG_DIR/config.d/distributed_cache_client.xml" \
+    "$CH_CONFIG_DIR/config.d/reduce_blocking_parts.xml" \
+    "$CH_CONFIG_DIR/config.d/database_replicated.xml" \
+    "$CH_CONFIG_DIR/config.d/clusters.xml"
 
   # Add our replicated setup configs
-  cp $SCRIPT_DIR/env/config/database_replicated.xml /etc/clickhouse-server/config.d/
-  cp $SCRIPT_DIR/env/config/clusters.xml /etc/clickhouse-server/config.d/
-  cp $SCRIPT_DIR/env/config/users_cloud.xml /etc/clickhouse-server/users.d/
-  cp $WORK_TREE/tests/config/users.d/database_replicated.xml /etc/clickhouse-server/users.d/
+  cp $SCRIPT_DIR/env/config/database_replicated.xml "$CH_CONFIG_DIR/config.d/"
+  cp $SCRIPT_DIR/env/config/clusters.xml "$CH_CONFIG_DIR/config.d/"
+  cp $SCRIPT_DIR/env/config/users_cloud.xml "$CH_CONFIG_DIR/users.d/"
+  cp $WORK_TREE/tests/config/users.d/database_replicated.xml "$CH_CONFIG_DIR/users.d/"
 
   # Override filesystem caches path to use /var/lib/clickhouse
-  cp $SCRIPT_DIR/env/config/filesystem_caches_path.xml /etc/clickhouse-server/config.d/
+  cp $SCRIPT_DIR/env/config/filesystem_caches_path.xml "$CH_CONFIG_DIR/config.d/"
 
   # Copy server1 config to server2
-  cp -r /etc/clickhouse-server/. /etc/clickhouse-server1/
+  cp -r "$CH_CONFIG_DIR/." "$CH_CONFIG_DIR1/"
 
   # Patch server2: replica r1 -> r2
   sed "s|<replica>r1</replica>|<replica>r2</replica>|" \
-    /etc/clickhouse-server/config.d/macros.xml \
-    > /etc/clickhouse-server1/config.d/macros.xml
+    "$CH_CONFIG_DIR/config.d/macros.xml" \
+    > "$CH_CONFIG_DIR1/config.d/macros.xml"
 
   # Patch server2: separate transaction log path
   sed "s|/test/clickhouse/txn|/test/clickhouse/txn1|" \
-    /etc/clickhouse-server/config.d/transactions.xml \
-    > /etc/clickhouse-server1/config.d/transactions.xml
+    "$CH_CONFIG_DIR/config.d/transactions.xml" \
+    > "$CH_CONFIG_DIR1/config.d/transactions.xml"
 
   # Patch server2: separate filesystem cache path
   sed \
     -e "s|<filesystem_caches_path>/var/lib/clickhouse/filesystem_caches/</filesystem_caches_path>|<filesystem_caches_path>/var/lib/clickhouse/filesystem_caches_1/</filesystem_caches_path>|" \
     -e "s|<custom_cached_disks_base_directory replace=\"replace\">/var/lib/clickhouse/filesystem_caches/</custom_cached_disks_base_directory>|<custom_cached_disks_base_directory replace=\"replace\">/var/lib/clickhouse/filesystem_caches_1/</custom_cached_disks_base_directory>|" \
-    /etc/clickhouse-server/config.d/filesystem_caches_path.xml \
-    > /etc/clickhouse-server1/config.d/filesystem_caches_path.xml
+    "$CH_CONFIG_DIR/config.d/filesystem_caches_path.xml" \
+    > "$CH_CONFIG_DIR1/config.d/filesystem_caches_path.xml"
 )
 
 
@@ -102,7 +107,7 @@ function start_ch()
     cd $CH_DATA || exit 1
     kill -9 "$(cat $PID_FILE 2>/dev/null)" 2>/dev/null || true
     rm -f $PID_FILE
-    $CH_PATH server --config /etc/clickhouse-server/config.xml --pid-file=$PID_FILE \
+    $CH_PATH server --config "$CH_CONFIG_DIR/config.xml" --pid-file=$PID_FILE \
       -- --path="$CH_DATA" > "$LOG_FILE" 2>&1 &
   )
 }
@@ -113,7 +118,7 @@ function start_ch2()
     cd $CH_DATA1 || exit 1
     kill -9 "$(cat $PID_FILE1 2>/dev/null)" 2>/dev/null || true
     rm -f $PID_FILE1
-    $CH_PATH server --config /etc/clickhouse-server1/config.xml \
+    $CH_PATH server --config "$CH_CONFIG_DIR1/config.xml" \
       --pid-file $PID_FILE1 \
       -- --path="$CH_DATA1" \
          --logger.errorlog /var/log/clickhouse-server/clickhouse-server1.err.log \

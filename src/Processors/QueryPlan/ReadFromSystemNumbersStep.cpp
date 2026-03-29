@@ -77,6 +77,54 @@ private:
     UInt64 step_between_chunks;
 };
 
+/// Bounded descending numbers generator, used by `generate_series` with negative step.
+/// Generates values from `start` down to `stop` (inclusive) with a given positive `step` (subtracted each time).
+/// Uses wrapping unsigned arithmetic: subtracting `step` is the same as adding `0 - step` in UInt64.
+class DescendingNumbersSource : public ISource
+{
+public:
+    DescendingNumbersSource(
+        UInt64 block_size_,
+        UInt64 start_,
+        UInt64 step_,
+        UInt64 total_count_,
+        const std::string & column_name)
+        : ISource(NumbersSource::createHeader(column_name))
+        , block_size(block_size_)
+        , next(start_)
+        , wrapping_step(UInt64(0) - step_)
+        , remaining(total_count_)
+    {
+    }
+
+    String getName() const override { return "DescendingNumbers"; }
+
+protected:
+    Chunk generate() override
+    {
+        if (remaining == 0)
+            return {};
+
+        UInt64 count = std::min(block_size, remaining);
+        auto column = ColumnUInt64::create(count);
+        ColumnUInt64::Container & vec = column->getData();
+
+        iotaWithStepOptimized(vec.data(), count, next, wrapping_step);
+
+        next += count * wrapping_step;
+        remaining -= count;
+
+        progress(column->size(), column->byteSize());
+        return {Columns{std::move(column)}, count};
+    }
+
+private:
+    UInt64 block_size;
+    UInt64 next;
+    UInt64 wrapping_step;  /// UInt64(0) - step, so adding this wraps to subtraction
+    UInt64 remaining;
+};
+
 struct RangeWithStep
 {
     UInt64 left;    /// first value in the range
@@ -442,6 +490,25 @@ Pipe ReadFromSystemNumbersStep::makePipe()
     }
 
     chassert(numbers_storage.step != UInt64{0});
+
+    /// Descending series (used by `generate_series` with negative step).
+    /// Uses a simple single-stream source without filter pushdown.
+    if (numbers_storage.descending)
+    {
+        chassert(numbers_storage.limit.has_value());
+        UInt64 total_count = *numbers_storage.limit;
+        if (total_count == 0)
+        {
+            add_null_source();
+            return pipe;
+        }
+
+        auto source = std::make_shared<DescendingNumbersSource>(
+            max_block_size, numbers_storage.offset, numbers_storage.step, total_count, numbers_storage.column_name);
+        source->addTotalRowsApprox(total_count);
+        pipe.addSource(std::move(source));
+        return pipe;
+    }
 
     /// Extract ranges/bounds implied by the WHERE clause.
     ActionsDAGWithInversionPushDown inverted_dag(filter_actions_dag ? filter_actions_dag->getOutputs().front() : nullptr, context);

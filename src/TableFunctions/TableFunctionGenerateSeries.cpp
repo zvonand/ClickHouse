@@ -49,6 +49,7 @@ private:
     }
 
     UInt64 evaluateArgument(ContextPtr context, ASTPtr & argument) const;
+    Int64 evaluateSignedArgument(ContextPtr context, ASTPtr & argument) const;
 
     ColumnsDescription getActualTableStructure(ContextPtr context, bool is_insert_query) const override;
 };
@@ -78,14 +79,30 @@ StoragePtr TableFunctionGenerateSeries<alias_num>::executeImpl(
 
         UInt64 start = evaluateArgument(context, arguments[0]);
         UInt64 stop = evaluateArgument(context, arguments[1]);
-        UInt64 step = (arguments.size() == 3) ? evaluateArgument(context, arguments[2]) : UInt64{1};
-        if (step == UInt64{0})
-            throw Exception(ErrorCodes::INVALID_SETTING_VALUE, "Table function '{}' requires step to be a positive number", getName());
-        auto res = (start > stop)
-            ? std::make_shared<StorageSystemNumbers>(
-                StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, 0, 0, 1)
-            : std::make_shared<StorageSystemNumbers>(
-                StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, (stop - start) + 1, start, step);
+        Int64 step = (arguments.size() == 3) ? evaluateSignedArgument(context, arguments[2]) : Int64{1};
+        if (step == Int64{0})
+            throw Exception(ErrorCodes::INVALID_SETTING_VALUE, "Table function '{}' requires step to be a non-zero number", getName());
+
+        StoragePtr res;
+        if (step > 0)
+        {
+            res = (start > stop)
+                ? std::make_shared<StorageSystemNumbers>(
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, 0, 0, 1)
+                : std::make_shared<StorageSystemNumbers>(
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, (stop - start) + 1, start, static_cast<UInt64>(step));
+        }
+        else
+        {
+            /// Negative step: generate descending series from start down to stop.
+            UInt64 abs_step = static_cast<UInt64>(-step);
+            res = (start < stop)
+                ? std::make_shared<StorageSystemNumbers>(
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, 0, 0, 1)
+                : std::make_shared<StorageSystemNumbers>(
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"},
+                    (start - stop) / abs_step + 1, start, abs_step, /* descending= */ true);
+        }
         res->startup();
         return res;
     }
@@ -108,6 +125,24 @@ UInt64 TableFunctionGenerateSeries<alias_num>::evaluateArgument(ContextPtr conte
             applyVisitor(FieldVisitorToString(), field));
 
     return converted.safeGet<UInt64>();
+}
+
+template <size_t alias_num>
+Int64 TableFunctionGenerateSeries<alias_num>::evaluateSignedArgument(ContextPtr context, ASTPtr & argument) const
+{
+    const auto & [field, type] = evaluateConstantExpression(argument, context);
+
+    if (!isNativeNumber(type))
+        throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Illegal type {} expression, must be numeric type", type->getName());
+
+    Field converted = convertFieldToType(field, DataTypeInt64());
+    if (converted.isNull())
+        throw Exception(
+            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+            "The value {} is not representable as Int64",
+            applyVisitor(FieldVisitorToString(), field));
+
+    return converted.safeGet<Int64>();
 }
 
 

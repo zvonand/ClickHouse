@@ -47,7 +47,8 @@ public:
         const std::string & column_name,
         std::optional<UInt64> limit_ = std::nullopt,
         UInt64 offset_ = 0,
-        UInt64 step_ = 1);
+        UInt64 step_ = 1,
+        bool descending_ = false);
 
     std::string getName() const override { return "SystemNumbers"; }
 
@@ -73,6 +74,7 @@ private:
     UInt64 offset;
     std::string column_name;
     UInt64 step;
+    bool descending;
 };
 
 }

@@ -335,9 +335,11 @@ void MergeTreeBackgroundExecutor<Queue>::routine(TaskRuntimeDataPtr item)
 
     auto complete_task = [this, &release_task] (TaskRuntimeDataPtr && item_)
     {
+        /// Run onCompleted outside the lock — it can be slow (especially under sanitizers)
+        /// and holding the mutex here was the root cause of lock-contention warnings.
+        /// The item stays in `active` during onCompleted, so removeTasksCorrespondingToStorage
+        /// can still find it and wait on is_done.
         {
-            LockGuardWithStopWatch lock(mutex, log, __PRETTY_FUNCTION__);
-
             Stopwatch watch_on_completed;
             ALLOW_ALLOCATIONS_IN_SCOPE;
             /// In a situation of a lack of memory this method can throw an exception,

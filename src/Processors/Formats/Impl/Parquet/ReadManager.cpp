@@ -12,6 +12,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <thread>
 #include <unordered_set>
 
 namespace DB::ErrorCodes

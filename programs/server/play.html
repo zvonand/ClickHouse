@@ -66,6 +66,7 @@
             --menu-toggle-color: #000;
 
             --progress-color: #0C4;
+            --table-size-bar-color: #FFF;
 
             --selection-color: #FFF;
             --selection-background-color: #456;
@@ -97,6 +98,7 @@
             --menu-toggle-color: #FF0;
 
             --progress-color: #FF0;
+            --table-size-bar-color: #104050;
 
             --selection-color: #000;
             --selection-background-color: #FF8;
@@ -183,6 +185,13 @@
         #databases
         {
             grid-area: contents;
+            max-width: 25em;
+            overflow: hidden;
+        }
+
+        .tables:not(:empty)
+        {
+            margin-bottom: 1em;
         }
 
         #github-icon
@@ -240,11 +249,6 @@
             color: var(--misc-text-color);
         }
 
-        .tables
-        {
-            padding-left: 1rem;
-        }
-
         .current
         {
             font-weight: bold;
@@ -252,9 +256,16 @@
 
         .table
         {
-            background-position: bottom;
-            background-size: 100% 2px;
             background-repeat: no-repeat;
+        }
+
+        .table button
+        {
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .table-icon
@@ -264,7 +275,7 @@
             vertical-align: -0.1em;
             margin-right: 0.25em;
             flex-shrink: 0;
-            stroke-opacity: 0.7;
+            opacity: 0.5;
         }
 
         .table-addendum
@@ -2257,8 +2268,8 @@ async function loadTables(server_address, user, password, database, container) {
         if (max_total_bytes && +elem.total_bytes) {
             const percent = Number(100 * +elem.total_bytes / max_total_bytes).toFixed(2);
             table.style.backgroundImage = `linear-gradient(to right,
-                var(--progress-color) 0%,
-                var(--progress-color) ${percent}%,
+                var(--table-size-bar-color) 0%,
+                var(--table-size-bar-color) ${percent}%,
                 transparent ${percent}%)`;
         }
 

@@ -1,41 +1,29 @@
--- Tests for JSON_VALUE with tuple and array output
---JSON_VALUE WITH TUPLE OUTPUT--
-('null')
-('{"hello":1}','1',NULL)
-('{"hello":1.2}','1.2')
-('{"hello":true}','true')
-('{"hello":"world"}','world')
-('{"hello":["world","world2"],"hello1":{"a":"b"}}','["world","world2"]','world2','{"a":"b"}','b')
-('{"a":"b"}','[{"a":"b"},{"a":"b1"},{"b":"c1"}]','[b,b1]','c1')
-('{"world":"!"}')
-(NULL)
-(NULL)
-('bar')
-('🌺 🌸 🌷 Hello, World 🌷 🌸 🌺')
-('Hello "World" \\')
-('\n\0')
-('☺')
-('1')
-('1','1','1')
-('1')
-(NULL,'1')
---JSON_VALUE WITH ARRAY OUTPUT--
-['null']
-['{"hello":1}','1',NULL]
-['{"hello":1.2}','1.2']
-['{"hello":true}','true']
-['{"hello":"world"}','world']
-['{"hello":["world","world2"],"hello1":{"a":"b"}}','["world","world2"]','world2','{"a":"b"}','b']
-['{"a":"b"}','[{"a":"b"},{"a":"b1"},{"b":"c1"}]','[b,b1]','c1']
-['{"world":"!"}']
-[]
-[]
-['bar']
-['🌺 🌸 🌷 Hello, World 🌷 🌸 🌺']
-['Hello "World" \\']
-['\n\0']
-['☺']
-['1']
-['1','1','1']
-['1']
-[NULL,'1']
+--JSON_VALUE with Tuple--
+('1','hello')
+('1',NULL)
+(NULL,NULL)
+--JSON_VALUE with Array--
+['1','hello']
+['1',NULL]
+[NULL]
+--JSON_VALUE with nested structure--
+(['1','2'],'3')
+(('1','2'),['3'])
+[('10',NULL)]
+--JSON_VALUE preserves all value types--
+('null','true','1.5','text',NULL)
+--JSON_VALUE with multiple rows--
+('Alice','30')
+('Bob','25')
+(NULL,NULL)
+--JSON_EXISTS with Tuple--
+(1,0)
+--JSON_EXISTS with Array--
+[1,0,1]
+--JSON_EXISTS with nested structure--
+([1,0],1)
+--JSON_QUERY with Tuple--
+('[[1,2]]','[{"c":3}]')
+--JSON_QUERY with Array--
+['[[1,2]]','']
+--Error cases--

@@ -1,53 +1,44 @@
--- Tests for JSON_VALUE with tuple and array output
+-- Tests for SQL/JSON functions with multi-path (Tuple/Array) second argument.
+-- The second argument can be an arbitrarily nested constant structure of Tuples/Arrays
+-- with String leaves. The result mirrors the shape, with each leaf replaced by the function's result.
 
-SELECT '--JSON_VALUE WITH TUPLE OUTPUT--';
-SELECT JSON_VALUE('{"hello":null}', tuple('$.hello'));
-SELECT JSON_VALUE('{"hello":1}', tuple('$', '$.hello', '$.hello1'));
-SELECT JSON_VALUE('{"hello":1.2}', tuple('$', '$.hello'));
-SELECT JSON_VALUE('{"hello":true}', tuple('$', '$.hello'));
-SELECT JSON_VALUE('{"hello":"world"}', tuple('$', '$.hello'));
-SELECT JSON_VALUE('{"hello":["world","world2"], "hello1": {"a": "b"}}', tuple('$', '$.hello', '$.hello[1]', '$.hello1', '$.hello1.a'));
-SELECT JSON_VALUE('{"hello":[{"a":"b"}, {"a":"b1"}, {"b":"c1"}]}', tuple('$.hello[0]', '$.hello[*]', '$.hello[*].a', '$.hello[*].b'));
-SELECT JSON_VALUE('{"hello":{"world":"!"}}', tuple('$.hello'));
-SELECT JSON_VALUE('{hello:world}', tuple('$.hello')); -- invalid json => default value (empty string)
-SELECT JSON_VALUE('', tuple('$.hello'));
-SELECT JSON_VALUE('{"foo foo":"bar"}', tuple('$."foo foo"'));
-SELECT JSON_VALUE('{"hello":"\\uD83C\\uDF3A \\uD83C\\uDF38 \\uD83C\\uDF37 Hello, World \\uD83C\\uDF37 \\uD83C\\uDF38 \\uD83C\\uDF3A"}', tuple('$.hello'));
-SELECT JSON_VALUE('{"a":"Hello \\"World\\" \\\\"}', tuple('$.a'));
-select JSON_VALUE('{"a":"\\n\\u0000"}', tuple('$.a'));
-select JSON_VALUE('{"a":"\\u263a"}', tuple('$.a'));
-SELECT JSON_VALUE('{"1key":1}', tuple('$.1key'));
-SELECT JSON_VALUE('{"hello":1}', tuple('$[hello]', '$["hello"]', '$[\'hello\']'));
-SELECT JSON_VALUE('{"hello 1":1}', tuple('$["hello 1"]'));
-SELECT JSON_VALUE('{"1key":1}', tuple('$..1key')); -- { serverError BAD_ARGUMENTS }
-SELECT JSON_VALUE('{"1key":1}', tuple('$1key')); -- { serverError BAD_ARGUMENTS }
-SELECT JSON_VALUE('{"1key":1}', tuple('$key')); -- { serverError BAD_ARGUMENTS }
-SELECT JSON_VALUE('{"1key":1}', tuple('$.[key]')); -- { serverError BAD_ARGUMENTS }
-SELECT JSON_VALUE('{"1key":1}', tuple('$.[key]', 1));  -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
-SELECT JSON_VALUE('{"1key":1}', tuple('$.key', '$.1key'));
+SELECT '--JSON_VALUE with Tuple--';
+SELECT JSON_VALUE('{"a":1, "b":"hello"}', tuple('$.a', '$.b'));
+SELECT JSON_VALUE('{"a":1}', tuple('$.a', '$.missing'));
+SELECT JSON_VALUE('{bad json}', tuple('$.a', '$.b'));
 
-SELECT '--JSON_VALUE WITH ARRAY OUTPUT--';
-SELECT JSON_VALUE('{"hello":null}', array('$.hello'));
-SELECT JSON_VALUE('{"hello":1}', array('$', '$.hello', '$.hello1'));
-SELECT JSON_VALUE('{"hello":1.2}', array('$', '$.hello'));
-SELECT JSON_VALUE('{"hello":true}', array('$', '$.hello'));
-SELECT JSON_VALUE('{"hello":"world"}', array('$', '$.hello'));
-SELECT JSON_VALUE('{"hello":["world","world2"], "hello1": {"a": "b"}}', array('$', '$.hello', '$.hello[1]', '$.hello1', '$.hello1.a'));
-SELECT JSON_VALUE('{"hello":[{"a":"b"}, {"a":"b1"}, {"b":"c1"}]}', array('$.hello[0]', '$.hello[*]', '$.hello[*].a', '$.hello[*].b'));
-SELECT JSON_VALUE('{"hello":{"world":"!"}}', array('$.hello'));
-SELECT JSON_VALUE('{hello:world}', array('$.hello')); -- invalid json => default value (empty string)
-SELECT JSON_VALUE('', array('$.hello'));
-SELECT JSON_VALUE('{"foo foo":"bar"}', array('$."foo foo"'));
-SELECT JSON_VALUE('{"hello":"\\uD83C\\uDF3A \\uD83C\\uDF38 \\uD83C\\uDF37 Hello, World \\uD83C\\uDF37 \\uD83C\\uDF38 \\uD83C\\uDF3A"}', array('$.hello'));
-SELECT JSON_VALUE('{"a":"Hello \\"World\\" \\\\"}', array('$.a'));
-select JSON_VALUE('{"a":"\\n\\u0000"}', array('$.a'));
-select JSON_VALUE('{"a":"\\u263a"}', array('$.a'));
-SELECT JSON_VALUE('{"1key":1}', array('$.1key'));
-SELECT JSON_VALUE('{"hello":1}', array('$[hello]', '$["hello"]', '$[\'hello\']'));
-SELECT JSON_VALUE('{"hello 1":1}', array('$["hello 1"]'));
-SELECT JSON_VALUE('{"1key":1}', array('$..1key')); -- { serverError BAD_ARGUMENTS }
-SELECT JSON_VALUE('{"1key":1}', array('$1key')); -- { serverError BAD_ARGUMENTS }
-SELECT JSON_VALUE('{"1key":1}', array('$key')); -- { serverError BAD_ARGUMENTS }
-SELECT JSON_VALUE('{"1key":1}', array('$.[key]')); -- { serverError BAD_ARGUMENTS }
-SELECT JSON_VALUE('{"1key":1}', array(0, 1));  -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
-SELECT JSON_VALUE('{"1key":1}', array('$.key', '$.1key'));
+SELECT '--JSON_VALUE with Array--';
+SELECT JSON_VALUE('{"a":1, "b":"hello"}', array('$.a', '$.b'));
+SELECT JSON_VALUE('{"a":1}', array('$.a', '$.missing'));
+SELECT JSON_VALUE('{bad json}', array('$.a'));
+
+SELECT '--JSON_VALUE with nested structure--';
+SELECT JSON_VALUE('{"a":1, "b":2, "c":3}', tuple(array('$.a', '$.b'), '$.c'));
+SELECT JSON_VALUE('{"a":1, "b":2, "c":3}', tuple(tuple('$.a', '$.b'), array('$.c')));
+SELECT JSON_VALUE('{"x":10}', array(tuple('$.x', '$.y')));
+
+SELECT '--JSON_VALUE preserves all value types--';
+SELECT JSON_VALUE('{"a":null, "b":true, "c":1.5, "d":"text", "e":[1,2]}', tuple('$.a', '$.b', '$.c', '$.d', '$.e'));
+
+SELECT '--JSON_VALUE with multiple rows--';
+SELECT JSON_VALUE(json, tuple('$.name', '$.age')) FROM VALUES('json String', ('{"name":"Alice","age":30}'), ('{"name":"Bob","age":25}'), ('{bad}'));
+
+SELECT '--JSON_EXISTS with Tuple--';
+SELECT JSON_EXISTS('{"a":1, "b":2}', tuple('$.a', '$.missing'));
+
+SELECT '--JSON_EXISTS with Array--';
+SELECT JSON_EXISTS('{"a":1, "b":2}', array('$.a', '$.missing', '$.b'));
+
+SELECT '--JSON_EXISTS with nested structure--';
+SELECT JSON_EXISTS('{"a":1}', tuple(array('$.a', '$.b'), '$.a'));
+
+SELECT '--JSON_QUERY with Tuple--';
+SELECT JSON_QUERY('{"a":[1,2], "b":{"c":3}}', tuple('$.a', '$.b'));
+
+SELECT '--JSON_QUERY with Array--';
+SELECT JSON_QUERY('{"a":[1,2]}', array('$.a', '$.missing'));
+
+SELECT '--Error cases--';
+SELECT JSON_VALUE('{"a":1}', tuple('$..invalid')); -- { serverError BAD_ARGUMENTS }
+SELECT JSON_VALUE('{"a":1}', tuple('$.a', 1)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT JSON_VALUE('{"a":1}', array(1, 2)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

@@ -234,9 +234,6 @@ mkdir -p $SCRIPT_DIR/data
 if $USE_WALKER; then
   echo "Running in WALKER mode (first-parent linear history)..."
   rm -f "$SCRIPT_DIR/data/walker.log"
-  ORIGINAL_SHA=$(git -C "$GIT_WORK_TREE" rev-parse HEAD)
-  # Walker does explicit checkouts, so bisect_step.sh must use HEAD, not BISECT_HEAD
-  export NO_CHECKOUT=false
   if [[ -n "$COMMITS_ARG" ]]; then
     echo "Walker: Using user-specified commits list"
     # Split comma or space separated input to array
@@ -277,7 +274,9 @@ if $USE_WALKER; then
   for commit in "${COMMITS[@]}"; do
     echo "[$INDEX/$TOTAL_COMMITS] Testing commit: $commit" | tee -a "$SCRIPT_DIR/data/walker.log"
     ((INDEX++))
-    git -C "$GIT_WORK_TREE" checkout -q "$commit" || { echo "Failed to checkout $commit"; continue; }
+    # Write commit SHA to BISECT_HEAD so bisect_step.sh can read it without
+    # checking out the commit (working tree stays at its current state).
+    echo "$commit" > "$GIT_WORK_TREE/.git/BISECT_HEAD"
 
     set +e
     "$SCRIPT_DIR/bisect_step.sh" | tee -a "$SCRIPT_DIR/data/walker.log"
@@ -287,7 +286,7 @@ if $USE_WALKER; then
 
   done
 
-  git -C "$GIT_WORK_TREE" checkout "$ORIGINAL_SHA"
+  rm -f "$GIT_WORK_TREE/.git/BISECT_HEAD"
 
 else
   echo "Running in BISECT mode..."

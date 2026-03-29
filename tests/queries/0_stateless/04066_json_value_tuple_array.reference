@@ -16,6 +16,9 @@
 ('Alice','30')
 ('Bob','25')
 (NULL,NULL)
+--JSON_VALUE with nullable=0--
+('1','')
+['1','']
 --JSON_EXISTS with Tuple--
 (1,0)
 --JSON_EXISTS with Array--

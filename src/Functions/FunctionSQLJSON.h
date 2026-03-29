@@ -280,7 +280,7 @@ public:
             std::vector<PlanNode> children;     /// for Tuple: one child per element; for Array: single child (the element plan)
         };
 
-        static std::shared_ptr<GeneratorJSONPath<JSONParser>> parseJsonPath(
+        static std::shared_ptr<GeneratorJSONPath<JSONParser>> parseJSONPath(
             std::string_view query, uint32_t parse_depth, uint32_t parse_backtracks)
         {
             Tokens tokens(query.data(), query.data() + query.size());
@@ -309,7 +309,7 @@ public:
                 PlanNode node;
                 node.kind = NodeKind::Leaf;
                 node.dest = &dest;
-                generators.push_back(parseJsonPath(path_data.getDataAt(index), parse_depth, parse_backtracks));
+                generators.push_back(parseJSONPath(path_data.getDataAt(index), parse_depth, parse_backtracks));
                 return node;
             }
 
@@ -592,7 +592,12 @@ public:
             throw Exception(ErrorCodes::TOO_FEW_ARGUMENTS_FOR_FUNCTION, "Function JSON_VALUE requires at least 2 arguments");
 
         if (FunctionSQLJSONHelpers::isMultiPathType(arguments[1].type))
-            return FunctionSQLJSONHelpers::buildReturnType(arguments[1].type, makeNullable(std::make_shared<DataTypeString>()));
+        {
+            DataTypePtr leaf_type = std::make_shared<DataTypeString>();
+            if (function_json_value_return_type_allow_nullable)
+                leaf_type = makeNullable(leaf_type);
+            return FunctionSQLJSONHelpers::buildReturnType(arguments[1].type, leaf_type);
+        }
 
         if (function_json_value_return_type_allow_nullable)
         {

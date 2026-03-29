@@ -13,6 +13,9 @@
 
 /// NOTE: see string_hash_map.cpp for usage example
 
+namespace
+{
+
 template <typename Set>
 void NO_INLINE bench(const std::vector<std::string_view> & data, DB::Arena & pool, const char * name)
 {
@@ -38,6 +41,8 @@ void NO_INLINE bench(const std::vector<std::string_view> & data, DB::Arena & poo
                   << watch.elapsedSeconds() << std::endl;
     }
 }
+
+} /// anonymous namespace
 
 int mainEntryExampleStringHashSet(int argc, char ** argv)
 {

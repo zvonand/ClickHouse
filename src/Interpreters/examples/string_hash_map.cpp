@@ -115,6 +115,9 @@ Best: 1 - 593010342                 Best: 1 - 503062152                 Best: 1 
 */
 
 
+namespace
+{
+
 using Value = uint64_t;
 
 template <typename Map>
@@ -161,6 +164,8 @@ void NO_INLINE bench(const std::vector<std::string_view> & data, DB::Arena &, co
                   << watch.elapsedSeconds() << std::endl;
     }
 }
+
+} /// anonymous namespace
 
 /*
 template <typename Map>

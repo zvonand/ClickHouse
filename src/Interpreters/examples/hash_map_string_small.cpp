@@ -93,9 +93,12 @@ struct DefaultHash<SmallStringView>
     }
 };
 
+namespace
+{
 
 using Value = UInt64;
 
+} /// anonymous namespace
 
 int mainEntryExampleHashMapStringSmall(int argc, char ** argv)
 {

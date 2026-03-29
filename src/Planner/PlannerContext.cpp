@@ -6,6 +6,7 @@
 #include <Analyzer/TableNode.h>
 #include <Analyzer/UnionNode.h>
 #include <Interpreters/Context.h>
+#include <Common/quoteString.h>
 #include <IO/WriteHelpers.h>
 
 namespace DB
@@ -30,9 +31,9 @@ const ColumnIdentifier & GlobalPlannerContext::createColumnIdentifier(const Name
 
     const auto & source_alias = column_source_node->getAlias();
     if (!source_alias.empty())
-        column_identifier = source_alias + "." + column.name;
+        column_identifier = backQuoteIfNeed(source_alias) + "." + backQuoteIfNeed(column.name);
     else
-        column_identifier = column.name;
+        column_identifier = backQuoteIfNeed(column.name);
 
     auto [it, inserted] = column_identifiers.emplace(column_identifier);
     if (!inserted)
@@ -49,9 +50,9 @@ const ColumnIdentifier & GlobalPlannerContext::createColumnIdentifierOrGet(const
 
     const auto & source_alias = column_source_node->getAlias();
     if (!source_alias.empty())
-        column_identifier = source_alias + "." + column.name;
+        column_identifier = backQuoteIfNeed(source_alias) + "." + backQuoteIfNeed(column.name);
     else
-        column_identifier = column.name;
+        column_identifier = backQuoteIfNeed(column.name);
 
     auto [it, inserted] = column_identifiers.emplace(column_identifier);
     return *it;

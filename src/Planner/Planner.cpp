@@ -1678,6 +1678,13 @@ void addAdditionalFilterStepIfNeeded(QueryPlan & query_plan,
     auto storage = std::make_shared<StorageDummy>(StorageID{"dummy", "dummy"}, fake_column_descriptions);
     auto fake_table_expression = std::make_shared<TableNode>(std::move(storage), query_context);
 
+    /// Each call to collectSourceColumns will register column identifiers in the shared GlobalPlannerContext.
+    /// When multiple UNION branches share the same GlobalPlannerContext and each applies additional_result_filter,
+    /// the bare column names (e.g. "a") would collide. Give the fake table expression a unique alias
+    /// so that identifiers become unique (e.g. "_additional_result_filter_0.a").
+    auto unique_alias = "_additional_result_filter_" + std::to_string(planner_context->getGlobalPlannerContext()->nextUniqueId());
+    fake_table_expression->setAlias(unique_alias);
+
     auto filter_info = buildFilterInfo(additional_result_filter_ast, fake_table_expression, planner_context, std::move(fake_name_set));
     if (!query_plan.isInitialized())
         return;

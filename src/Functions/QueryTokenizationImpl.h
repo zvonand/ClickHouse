@@ -1,5 +1,15 @@
 #pragma once
 
+/// Helper: build a DataTypeEnum8 from an X-macro list.
+/// Before calling, temporarily #define ENUM_TYPE to the target enum.
+/// Example:
+///   #define ENUM_TYPE TokenType
+///   return MAKE_ENUM8_TYPE(APPLY_FOR_TOKENS);
+///   #undef ENUM_TYPE
+#define ENUM8_ENTRY_(NAME) {#NAME, static_cast<Int8>(ENUM_TYPE::NAME)},
+#define MAKE_ENUM8_TYPE(APPLY_MACRO) \
+    std::make_shared<DataTypeEnum8>(DataTypeEnum8::Values{APPLY_MACRO(ENUM8_ENTRY_)})
+
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnTuple.h>

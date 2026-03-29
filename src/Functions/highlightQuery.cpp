@@ -24,11 +24,9 @@ struct HighlightQueryImpl
 
     static DataTypePtr makeEnumType()
     {
-        return std::make_shared<DataTypeEnum8>(DataTypeEnum8::Values{
-#define M(NAME) {#NAME, static_cast<Int8>(Highlight::NAME)},
-            APPLY_FOR_HIGHLIGHTS(M)
-#undef M
-        });
+#define ENUM_TYPE Highlight
+        return MAKE_ENUM8_TYPE(APPLY_FOR_HIGHLIGHTS);
+#undef ENUM_TYPE
     }
 
     static void processRow(

@@ -15,11 +15,9 @@ struct TokenizeQueryImpl
 
     static DataTypePtr makeEnumType()
     {
-        return std::make_shared<DataTypeEnum8>(DataTypeEnum8::Values{
-#define M(TOKEN) {#TOKEN, static_cast<Int8>(TokenType::TOKEN)},
-            APPLY_FOR_TOKENS(M)
-#undef M
-        });
+#define ENUM_TYPE TokenType
+        return MAKE_ENUM8_TYPE(APPLY_FOR_TOKENS);
+#undef ENUM_TYPE
     }
 
     static void processRow(

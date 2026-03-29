@@ -19,6 +19,7 @@ namespace DB
 
 class QueryNode;
 class TableNode;
+class UnionNode;
 
 struct FiltersForTableExpression
 {
@@ -39,9 +40,11 @@ public:
     GlobalPlannerContext(
         const QueryNode * parallel_replicas_node_,
         const TableNode * parallel_replicas_table_,
+        const UnionNode * parallel_replicas_table_union_,
         FiltersForTableExpressionMap filters_for_table_expressions_)
         : parallel_replicas_node(parallel_replicas_node_)
         , parallel_replicas_table(parallel_replicas_table_)
+        , parallel_replicas_table_union(parallel_replicas_table_union_)
         , filters_for_table_expressions(std::move(filters_for_table_expressions_))
     {
     }
@@ -74,6 +77,7 @@ public:
     /// Table which is used with parallel replicas reading. Now, only one table is supported by the protocol.
     /// It is the left-most table of the query (in JOINs, UNIONs and subqueries).
     const TableNode * const parallel_replicas_table = nullptr;
+    const UnionNode * const parallel_replicas_table_union = nullptr;
 
     const FiltersForTableExpressionMap filters_for_table_expressions;
 

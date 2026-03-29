@@ -1105,14 +1105,46 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                         && table_node != planner_context->getGlobalPlannerContext()->parallel_replicas_table;
                     if (no_tables_or_another_table_chosen_for_reading_with_parallel_replicas_mode)
                     {
-                        auto mutable_context = Context::createCopy(query_context);
-                        mutable_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));
+                        LOG_DEBUG(
+                            getLogger(__func__),
+                            "current table node: {}, PR table node {}",
+                            table_node->getStorageID().getFullTableName(),
+                            planner_context->getGlobalPlannerContext()->parallel_replicas_table->getStorageID().getFullTableName());
+
+                        ContextPtr updated_context = query_context;
+                        if (const UnionNode * table_union = planner_context->getGlobalPlannerContext()->parallel_replicas_table_union)
+                        {
+                            bool table_found = false;
+                            SelectQueryOptions options;
+                            for (const auto & child : table_union->getQueries().getNodes())
+                            {
+                                if (table_node == findTableForParallelReplicas(child, options))
+                                {
+                                    table_found = true;
+                                    break;
+                                }
+                            }
+
+                            if (!table_found)
+                            {
+                                auto mutable_context = Context::createCopy(query_context);
+                                mutable_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));
+                                updated_context = mutable_context;
+                            }
+                        }
+                        else
+                        {
+                            auto mutable_context = Context::createCopy(query_context);
+                            mutable_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));
+                            updated_context = mutable_context;
+                        }
+
                         storage->read(
                             query_plan,
                             storage_column_names,
                             storage_snapshot,
                             table_expression_query_info,
-                            std::move(mutable_context),
+                            std::move(updated_context),
                             till_stage,
                             max_block_size,
                             max_streams);
@@ -1462,7 +1494,7 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
         {
             std::shared_ptr<GlobalPlannerContext> subquery_planner_context;
             if (wrap_read_columns_in_subquery)
-                subquery_planner_context = std::make_shared<GlobalPlannerContext>(nullptr, nullptr, FiltersForTableExpressionMap{});
+                subquery_planner_context = std::make_shared<GlobalPlannerContext>(nullptr, nullptr, nullptr, FiltersForTableExpressionMap{});
             else
                 subquery_planner_context = planner_context->getGlobalPlannerContext();
 

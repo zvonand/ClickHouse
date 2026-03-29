@@ -176,6 +176,7 @@ public:
     Stats stats;
     const size_t replicas_count{0};
     const CoordinationMode mode;
+    const String table_name;
     size_t unavailable_replicas_count{0};
     size_t received_initial_requests{0};
 
@@ -191,10 +192,11 @@ public:
     };
     std::vector<ReplicaStatus> replica_status;
 
-    ImplInterface(size_t replicas_count_, CoordinationMode mode_)
+    ImplInterface(size_t replicas_count_, CoordinationMode mode_, const String & table_name_ = {})
         : stats{replicas_count_}
         , replicas_count(replicas_count_)
         , mode(mode_)
+        , table_name(table_name_)
         , replica_status(replicas_count_)
     {
     }
@@ -251,8 +253,9 @@ using PartRefs = std::deque<Parts::iterator>;
 class DefaultCoordinator : public ParallelReplicasReadingCoordinator::ImplInterface
 {
 public:
-    DefaultCoordinator(size_t replicas_count_, CoordinationMode mode_)
-        : ParallelReplicasReadingCoordinator::ImplInterface(replicas_count_, mode_)
+    DefaultCoordinator(size_t replicas_count_, CoordinationMode mode_, const String & table_name_ = {})
+        : ParallelReplicasReadingCoordinator::ImplInterface(replicas_count_, mode_, table_name_)
+        , log(getLogger(table_name_.empty() ? "DefaultCoordinator" : fmt::format("DefaultCoordinator({})", table_name_)))
         , distribution_by_hash_queue(replicas_count_)
     {
     }
@@ -276,7 +279,7 @@ private:
     bool state_initialized{false};
     size_t finished_replicas{0};
 
-    LoggerPtr log = getLogger("DefaultCoordinator");
+    LoggerPtr log;
 
     /// Workflow of a segment:
     /// 0. `all_parts_to_read` contains all the parts and thus all the segments initially present there (virtually)
@@ -916,8 +919,11 @@ bool DefaultCoordinator::isReadingCompleted() const
 class InOrderCoordinator : public ParallelReplicasReadingCoordinator::ImplInterface
 {
 public:
-    InOrderCoordinator([[maybe_unused]] size_t replicas_count_, CoordinationMode mode_)
-        : ParallelReplicasReadingCoordinator::ImplInterface(replicas_count_, mode_)
+    InOrderCoordinator([[maybe_unused]] size_t replicas_count_, CoordinationMode mode_, const String & table_name_ = {})
+        : ParallelReplicasReadingCoordinator::ImplInterface(replicas_count_, mode_, table_name_)
+        , log(getLogger(table_name_.empty()
+            ? fmt::format("{}Coordinator", magic_enum::enum_name(mode))
+            : fmt::format("{}Coordinator({})", magic_enum::enum_name(mode), table_name_)))
     {
         chassert(mode_ == CoordinationMode::WithOrder || mode_ == CoordinationMode::ReverseOrder);
     }
@@ -934,7 +940,7 @@ public:
     size_t total_rows_to_read = 0;
     bool state_initialized{false};
 
-    LoggerPtr log = getLogger(fmt::format("{}{}", magic_enum::enum_name(mode), "Coordinator"));
+    LoggerPtr log;
 };
 
 void InOrderCoordinator::markReplicaAsUnavailable(size_t replica_number)
@@ -1290,13 +1296,13 @@ ParallelReplicasReadingCoordinator::getOrCreateCoordinator(const StorageID & tab
     switch (mode)
     {
         case CoordinationMode::Default:
-            coordinator = std::make_shared<DefaultCoordinator>(replicas_count, mode);
+            coordinator = std::make_shared<DefaultCoordinator>(replicas_count, mode, key);
             break;
         case CoordinationMode::WithOrder:
-            coordinator = std::make_shared<InOrderCoordinator>(replicas_count, mode);
+            coordinator = std::make_shared<InOrderCoordinator>(replicas_count, mode, key);
             break;
         case CoordinationMode::ReverseOrder:
-            coordinator = std::make_shared<InOrderCoordinator>(replicas_count, mode);
+            coordinator = std::make_shared<InOrderCoordinator>(replicas_count, mode, key);
             break;
     }
 

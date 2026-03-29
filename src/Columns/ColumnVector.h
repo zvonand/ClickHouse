@@ -10,7 +10,7 @@
 #include <base/TypeName.h>
 #include <base/unaligned.h>
 
-#include <cstring>
+#include <bit>
 
 #include "config.h"
 
@@ -321,8 +321,19 @@ public:
     {
         if constexpr (std::is_floating_point_v<T> || std::is_same_v<T, BFloat16>)
         {
-            T zero{};
-            return memcmp(&data[n], &zero, sizeof(T)) == 0;
+            /// For floating-point types, use bit_cast to compare raw bit patterns instead of
+            /// arithmetic equality. IEEE 754 defines -0.0 == +0.0, so the arithmetic check
+            /// would incorrectly treat -0.0 as the default value, losing the sign on
+            /// deserialization. Comparing bits directly distinguishes the two: +0.0 is
+            /// all-zero bits, while -0.0 has its sign bit set.
+            ///
+            /// std::conditional_t selects an unsigned integer type of the same size as T,
+            /// satisfying the requirement of std::bit_cast that both types have equal size.
+            /// Unsigned integers are chosen because their value equals their bit pattern,
+            /// making the comparison to 0 unambiguous.
+            using Bits = std::conditional_t<sizeof(T) == 2, UInt16,
+                         std::conditional_t<sizeof(T) == 4, UInt32, UInt64>>;
+            return std::bit_cast<Bits>(data[n]) == 0;
         }
         else
         {

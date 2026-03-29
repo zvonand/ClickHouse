@@ -205,10 +205,9 @@ private:
         // As the input might be an arbitrary decimal number we might end up with a non-integer amount of bytes when parsing binary (eg MiB) units.
         // This doesn't make sense so we round up to indicate the byte size that can fit the passed size.
         num_bytes_with_decimals = std::ceil(num_bytes_with_decimals);
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wimplicit-const-int-float-conversion"
-        if (num_bytes_with_decimals > std::numeric_limits<UInt64>::max())
-#pragma clang diagnostic pop
+        /// Use >= because UInt64 max (2^64-1) rounds up to 2^64 when converted to Float64,
+        /// and casting 2^64 back to UInt64 is undefined behavior.
+        if (num_bytes_with_decimals >= 18446744073709551616.0 /* 2^64 */)
         {
             throw Exception(
                 ErrorCodes::BAD_ARGUMENTS,

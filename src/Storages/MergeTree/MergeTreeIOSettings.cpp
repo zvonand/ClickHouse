@@ -58,6 +58,7 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsMergeTreeMapBucketsStrategy map_buckets_strategy;
     extern const MergeTreeSettingsFloat map_buckets_coefficient;
     extern const MergeTreeSettingsUInt64 map_buckets_min_avg_size;
+    extern const MergeTreeSettingsBool compact_parts_flush_per_column;
 }
 
 MergeTreeWriterSettings::MergeTreeWriterSettings(
@@ -97,6 +98,7 @@ MergeTreeWriterSettings::MergeTreeWriterSettings(
     , use_adaptive_write_buffer_for_dynamic_subcolumns((*storage_settings)[MergeTreeSetting::use_adaptive_write_buffer_for_dynamic_subcolumns])
     , min_columns_to_activate_adaptive_write_buffer((*storage_settings)[MergeTreeSetting::min_columns_to_activate_adaptive_write_buffer])
     , adaptive_write_buffer_initial_size((*storage_settings)[MergeTreeSetting::adaptive_write_buffer_initial_size])
+    , compact_parts_flush_per_column((*storage_settings)[MergeTreeSetting::compact_parts_flush_per_column])
 {
 }
 

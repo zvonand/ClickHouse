@@ -50,11 +50,11 @@ struct SmallStringView
             data_big = data_;
     }
 
-    SmallStringView(const unsigned char * data_, size_t size_) : SmallStringView(reinterpret_cast<const char *>(data_), size_) {}
-    explicit SmallStringView(const std::string & s) : SmallStringView(s.data(), s.size()) {}
+    SmallStringView(const unsigned char * data_, size_t size_) : SmallStringView(reinterpret_cast<const char *>(data_), size_) {} // NOLINT(clang-diagnostic-unused-member-function)
+    explicit SmallStringView(const std::string & s) : SmallStringView(s.data(), s.size()) {} // NOLINT(clang-diagnostic-unused-member-function)
     SmallStringView() = default;
 
-    std::string toString() const { return std::string(data(), size); }
+    std::string toString() const { return std::string(data(), size); } // NOLINT(clang-diagnostic-unused-member-function)
 };
 
 

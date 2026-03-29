@@ -45,13 +45,13 @@ struct CompactStringRef
         size = static_cast<UInt16>(size_);
     }
 
-    CompactStringRef(const unsigned char * data_, size_t size_) : CompactStringRef(reinterpret_cast<const char *>(data_), size_) {}
-    explicit CompactStringRef(const std::string & s) : CompactStringRef(s.data(), s.size()) {}
+    CompactStringRef(const unsigned char * data_, size_t size_) : CompactStringRef(reinterpret_cast<const char *>(data_), size_) {} // NOLINT(clang-diagnostic-unused-member-function)
+    explicit CompactStringRef(const std::string & s) : CompactStringRef(s.data(), s.size()) {} // NOLINT(clang-diagnostic-unused-member-function)
     CompactStringRef() = default;
 
     const char * data() const { return reinterpret_cast<const char *>(reinterpret_cast<intptr_t>(data_mixed) & 0x0000FFFFFFFFFFFFULL); }
 
-    std::string toString() const { return std::string(data(), size); }
+    std::string toString() const { return std::string(data(), size); } // NOLINT(clang-diagnostic-unused-member-function)
 };
 
 inline bool operator==(CompactStringRef lhs, CompactStringRef rhs)
@@ -91,7 +91,7 @@ struct DefaultHash<CompactStringRef>
 namespace
 {
 
-static inline UInt64 mix(UInt64 h)
+inline UInt64 mix(UInt64 h)
 {
     h ^= h >> 23;
     h *= 0x2127599bf4325c37ULL;

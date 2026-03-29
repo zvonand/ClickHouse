@@ -43,7 +43,7 @@ public:
 
 struct SimpleHash
 {
-    size_t operator() (UInt64 x) const { return x; }
+    size_t operator() (UInt64 x) const { return x; } // NOLINT(clang-diagnostic-unused-member-function)
     size_t operator() (std::string_view x) const { return DB::parse<UInt64>(x.data()); } /// NOLINT(bugprone-suspicious-stringview-data-usage)
 };
 

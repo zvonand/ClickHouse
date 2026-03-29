@@ -1,0 +1,12 @@
+https://example.com/def/data.csv
+https://example.com/test/data.csv
+https://example.invalid/test/data.csv
+https://example.invalid/absolute.csv
+https://example.com/data.csv
+https://example.com/def/data.csv
+https://example.com/test
+http://example.invalid/other.csv
+https://example.com/def/data.csv
+https://example.com/def/data.csv
+https://example.com/other/file.csv
+must contain a scheme

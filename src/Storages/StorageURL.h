@@ -349,6 +349,15 @@ public:
     static size_t evalArgsAndCollectHeaders(ASTs & url_function_args, HTTPHeaderEntries & header_entries, const ContextPtr & context, bool evaluate_arguments = true);
 
     static void processNamedCollectionResult(Configuration & configuration, const NamedCollection & collection);
+
+    /// Resolve a possibly relative URL against a base URL.
+    /// If the URL already contains a scheme, it is returned as-is.
+    /// Otherwise, it is resolved relative to the base:
+    /// - `//host/path` → scheme-relative (uses scheme from base)
+    /// - `/path` → host-relative (uses scheme and host from base)
+    /// - `path` → path-relative (appended to base URL path)
+    /// The resolution is done by string manipulation to allow malformed URLs.
+    static String resolveURLBase(const String & url, const String & base);
 };
 
 

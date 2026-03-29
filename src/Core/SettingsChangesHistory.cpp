@@ -46,6 +46,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"distributed_index_analysis_only_on_coordinator", false, false, "New setting."},
             {"enable_materialized_cte", false, false, "New setting"},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},
+            {"url_base", "", "", "New setting to specify the base URL for resolving relative URLs in the url table function and URL table engine."},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {

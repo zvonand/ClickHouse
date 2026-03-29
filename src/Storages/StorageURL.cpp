@@ -79,6 +79,7 @@ namespace Setting
     extern const SettingsInt64 zstd_window_log_max;
     extern const SettingsBool use_hive_partitioning;
     extern const SettingsUInt64 max_streams_for_files_processing_in_cluster_functions;
+    extern const SettingsString url_base;
 }
 
 namespace ErrorCodes
@@ -1670,6 +1671,45 @@ void StorageURL::processNamedCollectionResult(Configuration & configuration, con
     configuration.structure = collection.getOrDefault<String>("structure", "auto");
 }
 
+String StorageURL::resolveURLBase(const String & url, const String & base)
+{
+    if (base.empty())
+        return url;
+
+    /// If the URL already contains a scheme, return as-is.
+    if (url.find("://") != String::npos)
+        return url;
+
+    auto scheme_end = base.find("://");
+    if (scheme_end == String::npos)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "The `url_base` setting must contain a scheme (e.g. https://), got: {}", base);
+
+    /// Find the boundary of the path component in the base URL (before '?' or '#').
+    auto authority_start = scheme_end + 3; /// skip "://"
+    auto query_or_fragment = base.find_first_of("?#", authority_start);
+    /// The part of the base URL up to (but not including) the query/fragment.
+    auto base_before_query = (query_or_fragment == String::npos) ? base : base.substr(0, query_or_fragment);
+
+    /// Scheme-relative URL: //host/path → prepend scheme from base.
+    if (url.starts_with("//"))
+        return base.substr(0, scheme_end + 1) + url;
+
+    /// Host-relative URL: /path → use scheme and authority from base.
+    if (url.starts_with("/"))
+    {
+        auto authority_end = base_before_query.find('/', authority_start);
+        if (authority_end == String::npos)
+            return base_before_query + url;
+        return base_before_query.substr(0, authority_end) + url;
+    }
+
+    /// Path-relative URL: merge with the base path per RFC 3986.
+    /// Replace everything after the last '/' in the path portion of the base URL.
+    auto last_slash = base_before_query.rfind('/');
+    /// last_slash is always found because we checked for "://" above, so at minimum the scheme has slashes.
+    return base_before_query.substr(0, last_slash + 1) + url;
+}
+
 void StorageURL::addInferredEngineArgsToCreateQuery(ASTs & args, const ContextPtr & context) const
 {
     TableFunctionURL::updateStructureAndFormatArgumentsIfNeeded(args, "", format_name, context, /*with_structure=*/false);
@@ -1697,6 +1737,10 @@ StorageURL::Configuration StorageURL::getConfiguration(ASTs & args, const Contex
         if (count == 3)
             configuration.compression_method = checkAndGetLiteralArgument<String>(args[2], "compression_method");
     }
+
+    /// Resolve relative URLs against the url_base setting.
+    const auto & url_base = local_context->getSettingsRef()[Setting::url_base].value;
+    configuration.url = resolveURLBase(configuration.url, url_base);
 
     if (configuration.format == "auto")
         configuration.format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(configuration.url).getPath()).value_or("auto");

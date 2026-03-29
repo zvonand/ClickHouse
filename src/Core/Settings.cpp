@@ -5591,6 +5591,19 @@ Allows to enable/disable decoding/encoding path in uri in [URL](../../engines/ta
 
 Disabled by default.
 )", 0) \
+    DECLARE(String, url_base, "", R"(
+The base URL used to resolve relative URLs in the [url](../../sql-reference/table-functions/url.md) table function and the [URL](../../engines/table-engines/special/url.md) table engine.
+
+When set, relative URLs are resolved as follows:
+- Path-relative URL (e.g. `data.csv`): appended to the base URL path.
+- Host-relative URL (e.g. `/test/data.csv`): resolved against the base URL's scheme and host.
+- Scheme-relative URL (e.g. `//example.com/test/data.csv`): resolved using the base URL's scheme.
+
+For example, if `url_base` is `https://example.com/def/`, then:
+- `data.csv` resolves to `https://example.com/def/data.csv`
+- `/test/data.csv` resolves to `https://example.com/test/data.csv`
+- `//example.com/test/data.csv` resolves to `https://example.com/test/data.csv`
+)", 0) \
     DECLARE(UInt64, database_replicated_initial_query_timeout_sec, 300, R"(
 Sets how long initial DDL query should wait for Replicated database to process previous DDL queue entries in seconds.
 

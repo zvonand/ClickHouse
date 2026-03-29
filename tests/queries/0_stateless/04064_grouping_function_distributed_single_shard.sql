@@ -118,7 +118,7 @@ GROUP BY
         (number % 2)
     )
 ORDER BY number, gr
-SETTINGS allow_experimental_parallel_reading_from_replicas = 2, max_parallel_replicas = 3, cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost';
+SETTINGS enable_analyzer = 1, allow_experimental_parallel_reading_from_replicas = 2, max_parallel_replicas = 3, cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost';
 
 DROP TABLE dist_t;
 DROP TABLE local_t;

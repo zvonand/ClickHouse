@@ -37,7 +37,7 @@ ColumnPtr ITTLAlgorithm::executeExpressionAndGetColumn(
         return nullptr;
 
     if (block.has(result_column))
-        return block.getByName(result_column).column;
+        return block.getByName(result_column).column->convertToFullColumnIfSparse();
 
     Block block_copy;
     for (const auto & column_name : expression->getRequiredColumns())
@@ -47,7 +47,7 @@ ColumnPtr ITTLAlgorithm::executeExpressionAndGetColumn(
     size_t num_rows = block.rows();
     expression->execute(block_copy, num_rows);
 
-    return block_copy.getByName(result_column).column;
+    return block_copy.getByName(result_column).column->convertToFullColumnIfSparse();
 }
 
 /// TODO: This per-row type dispatch is inefficient when called in a loop.

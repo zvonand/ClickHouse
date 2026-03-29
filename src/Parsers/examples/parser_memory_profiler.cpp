@@ -36,19 +36,19 @@
  *   # Text report showing allocation diff:
  *   jeprof --text --show_bytes \
  *       --base=/tmp/query_before.*.heap \
- *       ./clickhouse-examples parser_memory_profiler \
+ *       ./clickhouse-examples \
  *       /tmp/query_after.*.heap
  *
  *   # Generate SVG call graph:
  *   jeprof --svg --show_bytes \
  *       --base=/tmp/query_before.*.heap \
- *       ./clickhouse-examples parser_memory_profiler \
+ *       ./clickhouse-examples \
  *       /tmp/query_after.*.heap > /tmp/parser.svg
  *
  *   # Generate flame graph:
  *   jeprof --collapsed --show_bytes \
  *       --base=/tmp/query_before.*.heap \
- *       ./clickhouse-examples parser_memory_profiler \
+ *       ./clickhouse-examples \
  *       /tmp/query_after.*.heap | \
  *       flamegraph.pl --title "Parser Memory" > /tmp/flame.svg
  *

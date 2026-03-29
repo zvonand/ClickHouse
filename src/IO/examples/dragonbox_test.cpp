@@ -15,11 +15,6 @@ struct DecomposedFloat64
 
     uint64_t x_uint;
 
-    bool sign() const
-    {
-        return x_uint >> 63;
-    }
-
     uint16_t exponent() const
     {
         return (x_uint >> 52) & 0x7FF;
@@ -40,43 +35,6 @@ struct DecomposedFloat64
         return x_uint == 0
             || (normalizedExponent() >= 0 && normalizedExponent() <= 52
                 && ((mantissa() & ((1ULL << (52 - normalizedExponent())) - 1)) == 0));
-    }
-};
-
-struct DecomposedFloat32
-{
-    explicit DecomposedFloat32(float x)
-    {
-        memcpy(&x_uint, &x, sizeof(x));
-    }
-
-    uint32_t x_uint;
-
-    bool sign() const
-    {
-        return x_uint >> 31;
-    }
-
-    uint16_t exponent() const
-    {
-        return (x_uint >> 23) & 0xFF;
-    }
-
-    int16_t normalizedExponent() const
-    {
-        return int16_t(exponent()) - 127;
-    }
-
-    uint32_t mantissa() const
-    {
-        return x_uint & 0x7fffff;
-    }
-
-    bool isInsideInt32() const
-    {
-        return x_uint == 0
-            || (normalizedExponent() >= 0 && normalizedExponent() <= 23
-                && ((mantissa() & ((1ULL << (23 - normalizedExponent())) - 1)) == 0));
     }
 };
 

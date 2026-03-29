@@ -201,7 +201,7 @@ const size_t BUF_SIZE = 1024;
 using Source = std::vector<UInt64>;
 
 
-static void report(const char * name, size_t n, double elapsed, UInt64 tsc_diff, size_t res)
+void report(const char * name, size_t n, double elapsed, UInt64 tsc_diff, size_t res)
 {
     std::cerr << name << std::endl
               << "Done in " << elapsed << " (" << static_cast<double>(n) / elapsed << " elem/sec."
@@ -214,7 +214,7 @@ static void report(const char * name, size_t n, double elapsed, UInt64 tsc_diff,
 
 
 template <size_t Func(UInt64)>
-static inline void test(size_t n, const UInt64 * data, const char * name)
+inline void test(size_t n, const UInt64 * data, const char * name)
 {
     /// throughput. Calculations of hash functions from different values may overlap.
     {

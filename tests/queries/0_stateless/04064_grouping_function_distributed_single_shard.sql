@@ -4,6 +4,11 @@
 -- The `grouping` function on a Distributed table with a single shard used to
 -- fail with "Method executeImpl is not supported for 'grouping' function".
 
+-- Disable serialize_query_plan because the specialized grouping functions
+-- (groupingForGroupingSets, etc.) are not registered in the FunctionFactory
+-- and cannot be deserialized on the shard.
+SET serialize_query_plan = 0;
+
 -- Part 1: Tests using remote() table function (exercises ClusterProxy code path).
 
 SELECT
@@ -100,6 +105,20 @@ FROM dist_t
 WHERE number < 6
 GROUP BY CUBE(k1, k2)
 ORDER BY k1, k2, gr;
+
+-- Part 3: Test with parallel replicas (exercises executeQueryWithParallelReplicas
+-- and findParallelReplicasQuery code paths).
+SELECT
+    number,
+    grouping(number, number % 2) AS gr
+FROM dist_t
+GROUP BY
+    GROUPING SETS (
+        (number),
+        (number % 2)
+    )
+ORDER BY number, gr
+SETTINGS allow_experimental_parallel_reading_from_replicas = 2, max_parallel_replicas = 3, cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost';
 
 DROP TABLE dist_t;
 DROP TABLE local_t;

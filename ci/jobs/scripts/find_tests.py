@@ -161,7 +161,7 @@ class Targeting:
     # Synthetic width assigned to tests found via same-directory sibling file
     # expansion (secondary pass).  Must be >> NARROW_REGION_MAX_LINES so they
     # never get the narrow-tier bonus and always rank below direct hits.
-    SIBLING_DIR_WIDTH = 7000
+    SIBLING_DIR_WIDTH = 5000
 
     # Per-pass score multipliers applied on top of the 1/(width×rc) signal.
     # Pass 1 (direct line coverage) is the baseline.  Passes 2 and 3 use

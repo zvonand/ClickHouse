@@ -415,7 +415,7 @@ class Targeting:
         # = cov_regions × 2e-7
         # A test covering 100 broad regions scores 2e-5 (much higher than the
         # flat 2e-7 the old single-injection approach gave every test).
-        BROAD_FALLBACK_WIDTH = 300  # synthetic width — broad but real coverage
+        BROAD_FALLBACK_WIDTH = 200  # synthetic width — broad but real coverage
         # Synthetic region_test_count: set so that PASS_WEIGHT_BROAD2 / (BROAD_FALLBACK_WIDTH
         # × BROAD_TIER2_RC) stays in the same absolute score range as before while correctly
         # reflecting that broad-tier2 signal is weaker than indirect-call (0.15 < 0.30).

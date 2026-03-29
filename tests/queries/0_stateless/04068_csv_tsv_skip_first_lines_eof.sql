@@ -1,7 +1,8 @@
 -- Verify that skip_first_lines doesn't cause an infinite loop when the file has fewer lines than requested.
+-- The bug only reproduces with file-based reading (pread), not with inline format() which uses ReadBufferFromMemory.
 
-SELECT * FROM format(CSV, 'x UInt32', '1\n2\n') SETTINGS input_format_csv_skip_first_lines = 100;
-SELECT * FROM format(TSV, 'x UInt32', '1\n2\n') SETTINGS input_format_tsv_skip_first_lines = 100;
+INSERT INTO FUNCTION file(currentDatabase() || '_04068.csv', 'CSV') SELECT number FROM numbers(2) SETTINGS engine_file_truncate_on_insert = 1;
+SELECT * FROM file(currentDatabase() || '_04068.csv', 'CSV', 'x UInt64') SETTINGS input_format_csv_skip_first_lines = 100;
 
-SELECT * FROM format(CSV, 'x UInt32', '') SETTINGS input_format_csv_skip_first_lines = 1;
-SELECT * FROM format(TSV, 'x UInt32', '') SETTINGS input_format_tsv_skip_first_lines = 1;
+INSERT INTO FUNCTION file(currentDatabase() || '_04068.tsv', 'TSV') SELECT number FROM numbers(2) SETTINGS engine_file_truncate_on_insert = 1;
+SELECT * FROM file(currentDatabase() || '_04068.tsv', 'TSV', 'x UInt64') SETTINGS input_format_tsv_skip_first_lines = 100;

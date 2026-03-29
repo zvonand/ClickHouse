@@ -752,6 +752,8 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
 
             /// Try to reuse cached modified_query_info for tables with the same column structure.
             /// Skip caching for:
+            ///  - the non-analyzer path: getModifiedQueryInfo rewrites _table and _database
+            ///    directly into the cloned AST, so sharing it across tables is incorrect;
             ///  - tables with row policies (they extend real_column_names differently);
             ///  - Merge/Distributed/View storages (they interpret table_expression for
             ///    query routing and nested plan building, so sharing a representative's
@@ -760,12 +762,18 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
             ///    either convert query_tree->toAST() (analyzer path, referencing the wrong
             ///    table) or call replaceDatabaseAndTable on the shared AST (non-analyzer
             ///    path, corrupting the cache).
-            bool can_cache = !row_policy_data_opt
+            /// The cache key includes the database name because getModifiedQueryInfo injects
+            /// a _database constant into the query tree (analyzer path), so tables in
+            /// different databases must not share cached entries.
+            bool can_cache = query_info.table_expression
+                && !row_policy_data_opt
                 && common_processed_stage == QueryProcessingStage::FetchColumns
                 && !std::dynamic_pointer_cast<StorageMerge>(storage)
                 && !std::dynamic_pointer_cast<StorageDistributed>(storage)
                 && !storage->isView();
-            auto structure_key = can_cache ? storage_metadata_snapshot->getColumns().toString(false) : String{};
+            auto structure_key = can_cache
+                ? (std::get<0>(table) + "\n" + storage_metadata_snapshot->getColumns().toString(false))
+                : String{};
             auto cache_it = can_cache ? query_info_cache.find(structure_key) : query_info_cache.end();
 
             if (cache_it != query_info_cache.end())

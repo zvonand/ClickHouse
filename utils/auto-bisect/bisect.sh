@@ -235,6 +235,8 @@ if $USE_WALKER; then
   echo "Running in WALKER mode (first-parent linear history)..."
   rm -f "$SCRIPT_DIR/data/walker.log"
   ORIGINAL_SHA=$(git -C "$GIT_WORK_TREE" rev-parse HEAD)
+  # Walker does explicit checkouts, so bisect_step.sh must use HEAD, not BISECT_HEAD
+  export NO_CHECKOUT=false
   if [[ -n "$COMMITS_ARG" ]]; then
     echo "Walker: Using user-specified commits list"
     # Split comma or space separated input to array

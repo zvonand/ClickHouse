@@ -54,7 +54,7 @@ namespace
 struct StringView_CompareMemcmp : public std::string_view {};
 struct StringView_CompareAlwaysTrue : public std::string_view {};
 
-inline bool operator==(StringView_CompareMemcmp lhs, StringView_CompareMemcmp rhs)
+inline bool operator==(StringView_CompareMemcmp lhs, StringView_CompareMemcmp rhs) // NOLINT(clang-diagnostic-unused-function)
 {
     if (lhs.size() != rhs.size())
         return false;
@@ -65,7 +65,7 @@ inline bool operator==(StringView_CompareMemcmp lhs, StringView_CompareMemcmp rh
     return 0 == memcmp(lhs.data(), rhs.data(), lhs.size()); /// NOLINT(bugprone-suspicious-stringview-data-usage)
 }
 
-inline bool operator==(StringView_CompareAlwaysTrue, StringView_CompareAlwaysTrue)
+inline bool operator==(StringView_CompareAlwaysTrue, StringView_CompareAlwaysTrue) // NOLINT(clang-diagnostic-unused-function)
 {
     return true;
 }
@@ -88,7 +88,7 @@ namespace ZeroTraits
 template <>
 struct DefaultHash<StringView_CompareMemcmp>
 {
-    size_t operator() (StringView_CompareMemcmp x) const
+    size_t operator() (StringView_CompareMemcmp x) const // NOLINT(clang-diagnostic-unused-member-function)
     {
         return CityHash_v1_0_2::CityHash64(x.data(), x.size());
     }
@@ -97,7 +97,7 @@ struct DefaultHash<StringView_CompareMemcmp>
 template <>
 struct DefaultHash<StringView_CompareAlwaysTrue>
 {
-    size_t operator() (StringView_CompareAlwaysTrue x) const
+    size_t operator() (StringView_CompareAlwaysTrue x) const // NOLINT(clang-diagnostic-unused-member-function)
     {
         return CityHash_v1_0_2::CityHash64(x.data(), x.size());
     }

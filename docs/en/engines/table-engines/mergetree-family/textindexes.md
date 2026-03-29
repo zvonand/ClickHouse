@@ -652,7 +652,7 @@ Text indexes can be used to accelerate searches on [JSON](/sql-reference/data-ty
 When a text index is built on `JSONAllValues(json_column)`, all values across all JSON paths are tokenized and indexed together.
 This single index can then accelerate queries that filter on individual JSON subcolumns.
 
-#### Creating the index
+#### Creating the index {#json-all-values-creating-the-index}
 
 ```sql
 CREATE TABLE events
@@ -665,7 +665,7 @@ ENGINE = MergeTree
 ORDER BY id;
 ```
 
-#### Supported query patterns
+#### Supported query patterns {#json-all-values-supported-query-patterns}
 
 Once the index is created, it can speed up queries on JSON subcolumns using the same functions as for `String` columns and function `equals` for all columns.
 
@@ -692,7 +692,7 @@ SELECT * FROM events WHERE has(data.tags::Array(String), 'bug')
 SELECT * FROM events WHERE data.level IN ('error', 'critical');
 ```
 
-#### How it works
+#### How it works {#json-all-values-how-it-works}
 
 `JSONAllValues` serializes every value to its text representation, so values of all types (strings, integers, arrays, etc.) are indexed as text tokens.
 

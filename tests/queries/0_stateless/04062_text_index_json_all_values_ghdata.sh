@@ -8,6 +8,8 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
+set -e
+
 MY_CLICKHOUSE_CLIENT="${CLICKHOUSE_CLIENT} --enable_analyzer 1"
 
 function run_query()
@@ -41,11 +43,13 @@ $MY_CLICKHOUSE_CLIENT --query "
     )
     ENGINE = MergeTree
     ORDER BY tuple()
-    SETTINGS index_granularity = 100;
+    SETTINGS index_granularity = 100, index_granularity_bytes = '10M';
 "
 
 cat "$CUR_DIR"/data_json/ghdata_sample.json | $MY_CLICKHOUSE_CLIENT \
     --max_memory_usage 10G --query "INSERT INTO ghdata FORMAT JSONAsObject"
+
+$MY_CLICKHOUSE_CLIENT --query "OPTIMIZE TABLE ghdata FINAL;"
 
 echo "-- Point lookup by string value"
 run_query "SELECT count() FROM ghdata WHERE data.actor.login = 'dependabot[bot]'"

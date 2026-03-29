@@ -1,4 +1,3 @@
-```sql
 -- Tags: no-fasttest
 
 SET enable_full_text_index = 1;
@@ -41,4 +40,3 @@ OPTIMIZE TABLE t_multi_text_idx_lwd_vertical FINAL;
 SELECT count() FROM t_multi_text_idx_lwd_vertical WHERE hasAllTokens(c1, 'c1_15') AND hasAllTokens(c2, 'c2_16') ORDER BY 1;
 
 DROP TABLE IF EXISTS t_multi_text_idx_lwd_vertical;
-```

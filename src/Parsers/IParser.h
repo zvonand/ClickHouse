@@ -34,7 +34,12 @@ enum class Highlight : uint8_t
     substitution,
     number,
     string,
-    /// This will highlight similarly to a string but also with highlighting metacharacters.
+    /// Backslash escape characters inside strings.
+    string_escape,
+    /// Metacharacters inside LIKE patterns (%_) or regexp patterns (|()^$.[]?*+{:-).
+    string_metacharacter,
+    /// These two are used internally by the parser to mark LIKE/REGEXP string ranges.
+    /// They are expanded into string/string_escape/string_metacharacter by expandHighlights.
     string_like,
     string_regexp,
 };
@@ -50,6 +55,11 @@ struct HighlightedRange
         return begin <=> other.begin;
     }
 };
+
+/// Expand string_like and string_regexp ranges into character-level sub-ranges
+/// with string, string_escape, and string_metacharacter highlight types.
+/// Other ranges are passed through unchanged.
+std::vector<HighlightedRange> expandHighlights(const std::set<HighlightedRange> & highlights);
 
 
 /** Collects variants, how parser could proceed further at rightmost position.

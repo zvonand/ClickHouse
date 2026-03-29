@@ -6,3 +6,5 @@ SELECT highlightQuery('');
 SELECT highlightQuery('SELECT number FROM numbers(10) WHERE number > 5');
 SELECT tokenizeQuery('SELECT \'hello world\'');
 SELECT highlightQuery('SELECT \'hello world\'');
+SELECT highlightQuery('SELECT \'hello\\\\world\'');
+SELECT highlightQuery('SELECT name FROM t WHERE name LIKE \'%test\\_name%\'');

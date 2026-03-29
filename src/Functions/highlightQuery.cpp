@@ -32,8 +32,8 @@ DataTypePtr makeHighlightTypeEnum()
         {"substitution", static_cast<Int8>(Highlight::substitution)},
         {"number", static_cast<Int8>(Highlight::number)},
         {"string", static_cast<Int8>(Highlight::string)},
-        {"string_like", static_cast<Int8>(Highlight::string_like)},
-        {"string_regexp", static_cast<Int8>(Highlight::string_regexp)},
+        {"string_escape", static_cast<Int8>(Highlight::string_escape)},
+        {"string_metacharacter", static_cast<Int8>(Highlight::string_metacharacter)},
     });
 }
 
@@ -114,7 +114,9 @@ public:
                 /// Skip highlighting on parse errors, just return what we have so far for this row.
             }
 
-            for (const auto & range : expected.highlights)
+            const auto expanded = expandHighlights(expected.highlights);
+
+            for (const auto & range : expanded)
             {
                 data_begin.push_back(range.begin - begin);
                 data_end.push_back(range.end - begin);
@@ -143,7 +145,8 @@ REGISTER_FUNCTION(HighlightQuery)
 Parses a ClickHouse SQL query string and returns an array of highlighted ranges for syntax highlighting.
 Each range is a named tuple with the beginning position (in bytes), the end position, and the highlight type.
 The highlight types describe the syntactic role of the fragment (keyword, identifier, function, etc.)
-and can be used to assign colors in a UI.
+and can be used to assign colors in a UI. Inside LIKE and REGEXP string patterns, metacharacters
+and escape characters are highlighted separately.
 )",
         .syntax = "highlightQuery(query)",
         .arguments = {{"query", "A ClickHouse SQL query string. String."}},

@@ -63,29 +63,14 @@ SELECT url FROM test_projection_pr WHERE region = 'europe' ORDER BY url LIMIT 1;
 -- Without the fix, the projection Expression feeds directly into the Union.
 -- Detect this by checking for two consecutive Expression steps in EXPLAIN PLAN
 -- output (the converting step immediately followed by the query step).
-SELECT count() > 0
-FROM
-(
-    SELECT
-        rowNumberInAllBlocks() AS rn,
-        trimBoth(explain) AS step
-    FROM
-    (
-        EXPLAIN PLAN
-        SELECT url FROM test_projection_pr WHERE region = 'europe'
-    )
-) AS a
-INNER JOIN
-(
-    SELECT
-        rowNumberInAllBlocks() AS rn,
-        trimBoth(explain) AS step
-    FROM
-    (
-        EXPLAIN PLAN
-        SELECT url FROM test_projection_pr WHERE region = 'europe'
-    )
-) AS b ON b.rn = a.rn + 1
-WHERE (a.step LIKE 'Expression%') AND (b.step LIKE 'Expression%');
+WITH (
+    SELECT groupArray(trimBoth(explain))
+    FROM (EXPLAIN PLAN SELECT url FROM test_projection_pr WHERE region = 'europe')
+) AS steps
+SELECT arrayExists(
+    (a, b) -> (a LIKE 'Expression%') AND (b LIKE 'Expression%'),
+    arraySlice(steps, 1, length(steps) - 1),
+    arraySlice(steps, 2)
+) AS has_converting_step;
 
 DROP TABLE test_projection_pr;

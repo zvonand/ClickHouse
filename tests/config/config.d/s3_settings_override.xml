@@ -7,5 +7,12 @@
             <endpoint>http://localhost:11111/test/04065_s3_settings_query_override</endpoint>
             <max_single_part_upload_size>104857600</max_single_part_upload_size>
         </test_04065>
+        <!-- Endpoint for test 04068_s3_disk_settings_override.
+             Sets a large max_single_part_upload_size. The disk config sets a small value.
+             The test verifies that disk config takes priority over global <s3> section. -->
+        <test_04068>
+            <endpoint>http://localhost:11111/test/04068_s3_disk_settings_override</endpoint>
+            <max_single_part_upload_size>104857600</max_single_part_upload_size>
+        </test_04068>
     </s3>
 </clickhouse>

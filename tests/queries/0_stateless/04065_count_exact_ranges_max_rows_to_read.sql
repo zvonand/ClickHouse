@@ -25,7 +25,11 @@ SET optimize_use_implicit_projections = 1;
 
 -- The exact count optimization computes the result from primary key analysis
 -- without reading data, so count() queries should bypass max_rows_to_read.
-SET max_rows_to_read = 100;
+-- The limit must be larger than the boundary-granule rows the optimizer still
+-- needs to read (a few granules of 128 rows each ≈ a few hundred rows) but
+-- much smaller than the total table size (15 000 rows) so that unoptimized
+-- full-table reads still hit the limit.
+SET max_rows_to_read = 1000;
 SET read_overflow_mode = 'throw';
 
 SELECT count() FROM t_count_exact;

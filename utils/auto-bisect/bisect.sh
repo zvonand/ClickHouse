@@ -78,7 +78,7 @@ while true; do
       ENV_OPTION="$2"
       if [[ "$ENV_OPTION" != "single" && "$ENV_OPTION" != "replicateddb" && "$ENV_OPTION" != "sharedcatalog" && "$ENV_OPTION" != "nothing" ]]; then
         echo "Invalid value for --env: $ENV_OPTION"
-        echo "Allowed values are: single, replicateddb, sharedcatalog"
+        echo "Allowed values are: single, replicateddb, sharedcatalog, nothing"
         exit 1
       fi
       shift 2

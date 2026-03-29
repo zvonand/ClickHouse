@@ -159,3 +159,20 @@ SELECT CAST(1, 'Bool') IN (0, 1, 10, 256);    -- 1: 1 matches true
 SELECT CAST(1, 'Bool') IN (0, 10, 256);        -- 0: no valid match for true
 SELECT CAST(0, 'Bool') IN (0, 1, 10, 256);    -- 1: 0 matches false
 SELECT CAST(0, 'Bool') IN (1, 10, 256);        -- 0: no valid match for false
+
+-- Int64 values (positive 0/1 must match, negative and other values must not)
+SELECT CAST(1, 'Bool') IN (CAST(1, 'Int64'));    -- 1: exact match
+SELECT CAST(1, 'Bool') IN (CAST(0, 'Int64'));    -- 0: different value
+SELECT CAST(0, 'Bool') IN (CAST(0, 'Int64'));    -- 1: exact match
+SELECT CAST(0, 'Bool') IN (CAST(1, 'Int64'));    -- 0: different value
+SELECT CAST(1, 'Bool') IN (-1);      -- 0: not representable
+SELECT CAST(0, 'Bool') IN (-1);      -- 0: not representable
+SELECT CAST(1, 'Bool') IN (-256);    -- 0: not representable
+SELECT CAST(0, 'Bool') IN (-256);    -- 0: not representable
+
+-- Float values
+SELECT CAST(1, 'Bool') IN (1.0);     -- 1: exact match
+SELECT CAST(0, 'Bool') IN (0.0);     -- 1: exact match
+SELECT CAST(1, 'Bool') IN (0.5);     -- 0: not representable
+SELECT CAST(1, 'Bool') IN (-1.0);    -- 0: not representable
+SELECT CAST(0, 'Bool') IN (-256.0);  -- 0: not representable

@@ -13,9 +13,12 @@ CREATE TABLE test_skip_index_alter
 )
 ENGINE = MergeTree()
 ORDER BY id
-SETTINGS alter_column_secondary_index_mode = 'rebuild';
+SETTINGS index_granularity = 128, alter_column_secondary_index_mode = 'rebuild';
 
-INSERT INTO test_skip_index_alter VALUES (1, '10'), (2, '20'), (3, '300');
+-- Insert enough rows across multiple granules so the skip index is populated and used.
+-- Granule 1..128 has value '10', granule 129..256 has value '300'.
+-- A query for '300' should skip the first granule via the set index.
+INSERT INTO test_skip_index_alter SELECT number, if(number < 128, '10', '300') FROM numbers(256);
 
 -- Verify initial index usage works
 SELECT count() FROM test_skip_index_alter WHERE value = '300';

@@ -22,5 +22,8 @@ SELECT count() FROM generate_series(1000, 0, -3);
 -- Sum with negative step
 SELECT sum(generate_series) FROM generate_series(10, 0, -1);
 
+-- Large positive UInt64 step (backward compatibility)
+SELECT * FROM generate_series(0, 10, toUInt64(9223372036854775808));
+
 -- Zero step should error
 SELECT * FROM generate_series(0, 10, 0); -- { serverError INVALID_SETTING_VALUE }

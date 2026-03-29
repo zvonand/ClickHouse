@@ -1301,7 +1301,10 @@ static void correctColumnExpressionType(ColumnNode & column_node, const ContextP
     if (!column_node.hasExpression())
         return;
     auto & column_expression = column_node.getExpression();
-    if (column_node.getColumnType()->equals(*column_expression->getResultType()))
+    /// Use getName() comparison instead of equals() because equals() ignores
+    /// timezone for DateTime/DateTime64 types, but ALIAS columns with a different
+    /// timezone must still be cast to the declared type.
+    if (column_node.getColumnType()->getName() == column_expression->getResultType()->getName())
         return;
     column_expression = buildCastFunction(column_expression, column_node.getColumnType(), context, true);
 }
@@ -3823,7 +3826,7 @@ void QueryAnalyzer::initializeTableExpressionData(const QueryTreeNodePtr & table
                 false /*allow_lambda_expression*/,
                 false /*allow_table_expression*/);
             auto & resolved_expression = alias_column_to_resolve->getExpression();
-            if (!resolved_expression->getResultType()->equals(*alias_column_to_resolve->getResultType()))
+            if (resolved_expression->getResultType()->getName() != alias_column_to_resolve->getResultType()->getName())
                 resolved_expression = buildCastFunction(resolved_expression, alias_column_to_resolve->getResultType(), scope.context, true);
             table_expression_data.column_name_to_column_node[alias_column_to_resolve_name] = alias_column_to_resolve;
         }

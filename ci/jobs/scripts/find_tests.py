@@ -172,7 +172,7 @@ class Targeting:
     PASS_WEIGHT_INDIRECT      = 0.40  # Pass 3: test shares virtual-dispatch callees with primary tests
     PASS_WEIGHT_BROAD2        = 0.25  # Pass 4: test covers changed files via very-broad regions (rc 2001-8000)
     PASS_WEIGHT_SIBLING       = 0.12  # Pass 2: test covers a sibling file in the same source directory
-    PASS_WEIGHT_KEYWORD       = 0.07  # Fallback: test filename contains domain keywords from changed files
+    PASS_WEIGHT_KEYWORD       = 0.10  # Fallback: test filename contains domain keywords from changed files
 
     def get_tests_by_changed_lines(self, changed_lines: list,
                                    hunk_ranges: dict | None = None) -> dict:

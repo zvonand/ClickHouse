@@ -121,7 +121,7 @@ function start_ch2()
     $CH_PATH server --config "$CH_CONFIG_DIR1/config.xml" \
       --pid-file $PID_FILE1 \
       -- --path="$CH_DATA1" \
-         --logger.errorlog /var/log/clickhouse-server/clickhouse-server1.err.log \
+         --logger.errorlog "$LOG_FILE1" \
          --tcp_port 19000 --tcp_port_secure 19440 --http_port 18123 --https_port 18443 \
          --interserver_http_port 19009 --tcp_with_proxy_port 19010 \
          --mysql_port 19004 --postgresql_port 19005 \

@@ -2548,7 +2548,6 @@ bool ActionsDAG::isFilterAlwaysFalseForDefaultValueInputs(const std::string & fi
 
     /// The filter expression may evaluate to any numeric type, not just UInt8,
     /// e.g. when WHERE uses a Float64 expression like sin(col) or radians(col).
-    /// Check if the value is zero (evaluates to false) in the context of any numeric type.
     if (value.getType() == Field::Types::UInt64)
         return value.safeGet<UInt64>() == 0;
     if (value.getType() == Field::Types::Int64)
@@ -2556,8 +2555,7 @@ bool ActionsDAG::isFilterAlwaysFalseForDefaultValueInputs(const std::string & fi
     if (value.getType() == Field::Types::Float64)
         return value.safeGet<Float64>() == 0;
 
-    /// For any other type that canBeUsedInBooleanContext, conservatively assume
-    /// it's not always false (i.e., don't convert the join).
+    /// For any other type, conservatively assume the filter is not always false.
     return false;
 }
 

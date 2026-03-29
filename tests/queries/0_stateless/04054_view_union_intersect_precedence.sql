@@ -30,35 +30,42 @@ SELECT * FROM v1;
 
 DROP TABLE v1;
 
--- Test with intersect_default_mode = 'ALL' and except_default_mode = 'ALL'
+-- Test with intersect_default_mode = 'ALL' and except_default_mode = 'ALL'.
+-- Use data with duplicates so that ALL vs DISTINCT actually produces different results.
 DROP TABLE IF EXISTS v2;
 
 SET intersect_default_mode = 'ALL';
 SET except_default_mode = 'ALL';
 
-CREATE VIEW v2 AS (SELECT 1 c0, 1 c1 UNION DISTINCT SELECT 2, 2 INTERSECT SELECT 3, 3);
+-- With INTERSECT ALL: (SELECT 1 UNION ALL SELECT 1) INTERSECT ALL (SELECT 1 UNION ALL SELECT 1) = {1, 1}
+-- Then: SELECT 0 UNION ALL {1, 1} = {0, 1, 1}
+-- With INTERSECT DISTINCT the intersect result would be {1}, giving {0, 1}.
+CREATE VIEW v2 AS (SELECT 0 AS x UNION ALL SELECT * FROM (SELECT 1 UNION ALL SELECT 1) INTERSECT SELECT * FROM (SELECT 1 UNION ALL SELECT 1));
 
-SELECT * FROM v2;
+SELECT * FROM v2 ORDER BY x;
 SELECT '---';
 
 DETACH TABLE v2 SYNC;
 ATTACH TABLE v2;
 
-SELECT * FROM v2;
+SELECT * FROM v2 ORDER BY x;
 
 DROP TABLE v2;
 
--- Verify EXCEPT with ALL mode
+-- Verify EXCEPT with ALL mode using duplicates.
+-- With EXCEPT ALL: {1, 1, 2} EXCEPT ALL {1} = {1, 2}
+-- Then: SELECT 0 UNION ALL {1, 2} = {0, 1, 2}
+-- With EXCEPT DISTINCT: {1, 1, 2} EXCEPT DISTINCT {1} = {2}, giving {0, 2}.
 DROP TABLE IF EXISTS v3;
 
-CREATE VIEW v3 AS (SELECT 1 UNION DISTINCT SELECT 2 EXCEPT SELECT 2);
+CREATE VIEW v3 AS (SELECT 0 AS x UNION ALL SELECT * FROM (SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 2) EXCEPT SELECT 1);
 
-SELECT * FROM v3;
+SELECT * FROM v3 ORDER BY x;
 SELECT '---';
 
 DETACH TABLE v3 SYNC;
 ATTACH TABLE v3;
 
-SELECT * FROM v3;
+SELECT * FROM v3 ORDER BY x;
 
 DROP TABLE v3;

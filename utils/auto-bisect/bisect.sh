@@ -231,26 +231,10 @@ trap cleanup EXIT
 
 mkdir -p $SCRIPT_DIR/data
 
-#check dirs exist and current user have rw right
-DIRS=("/etc/clickhouse-server" "/etc/clickhouse-client" "/var/lib/clickhouse")
-
-for dir in "${DIRS[@]}"; do
-    if [ -d "$dir" ]; then
-        # Check read, write, execute (search) permissions
-        if [ -r "$dir" ] && [ -w "$dir" ]; then
-            echo "OK: $dir exists and has rw permissions for user $(whoami)"
-        else
-            echo "FAIL: $dir exists but lacks sufficient permissions for user $(whoami)"
-        fi
-    else
-        echo "FAIL: $dir does not exist"
-    fi
-done
-
 if $USE_WALKER; then
   echo "Running in WALKER mode (first-parent linear history)..."
   rm -f "$SCRIPT_DIR/data/walker.log"
-  ORIGINAL_BRANCH=$(git -C "$GIT_WORK_TREE" rev-parse --abbrev-ref HEAD)
+  ORIGINAL_SHA=$(git -C "$GIT_WORK_TREE" rev-parse HEAD)
   if [[ -n "$COMMITS_ARG" ]]; then
     echo "Walker: Using user-specified commits list"
     # Split comma or space separated input to array
@@ -301,7 +285,7 @@ if $USE_WALKER; then
 
   done
 
-  git -C "$GIT_WORK_TREE" checkout "$ORIGINAL_BRANCH"
+  git -C "$GIT_WORK_TREE" checkout "$ORIGINAL_SHA"
 
 else
   echo "Running in BISECT mode..."

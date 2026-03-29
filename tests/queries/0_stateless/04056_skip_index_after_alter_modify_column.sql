@@ -26,7 +26,7 @@ SETTINGS index_granularity = 128;
 INSERT INTO test_skip_index_alter SELECT number, if(number < 128, 200, 300) FROM numbers(256);
 
 -- Verify initial index usage works
-SELECT count() FROM test_skip_index_alter WHERE value = 300;
+SELECT count() FROM test_skip_index_alter WHERE value = 300 SETTINGS force_data_skipping_indices = 'idx_value';
 
 -- Stop merges so the mutation doesn't get applied
 SYSTEM STOP MERGES test_skip_index_alter;
@@ -39,12 +39,12 @@ ALTER TABLE test_skip_index_alter MODIFY COLUMN value String;
 -- Without the fix, the skip index is used on old parts and the UInt64 data
 -- is deserialized as String (varint-length-prefixed), which throws.
 -- With the fix, the index is correctly skipped for old parts.
-SELECT count() FROM test_skip_index_alter WHERE value = '300';
+SELECT count() FROM test_skip_index_alter WHERE value = '300' SETTINGS force_data_skipping_indices = 'idx_value';
 
 SYSTEM START MERGES test_skip_index_alter;
 OPTIMIZE TABLE test_skip_index_alter FINAL SETTINGS mutations_sync = 2;
 
 -- After mutation completes, the index should work with the new type
-SELECT count() FROM test_skip_index_alter WHERE value = '300';
+SELECT count() FROM test_skip_index_alter WHERE value = '300' SETTINGS force_data_skipping_indices = 'idx_value';
 
 DROP TABLE test_skip_index_alter;

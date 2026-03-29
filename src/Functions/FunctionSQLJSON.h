@@ -7,24 +7,18 @@
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnsNumber.h>
 #include <Columns/ColumnTuple.h>
-#include <Columns/IColumn.h>
-#include <Columns/IColumn_fwd.h>
 #include <Core/Settings.h>
-#include <Core/TypeId.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/DataTypeArray.h>
-#include <Common/Exception.h>
 #include <Common/JSONParsers/DummyJSONParser.h>
-#include <DataTypes/IDataType.h>
 #include <Functions/FunctionHelpers.h>
 #include <Functions/IFunction.h>
 #include <Functions/JSONPath/Generator/GeneratorJSONPath.h>
 #include <Functions/JSONPath/Parsers/ParserJSONPath.h>
 #include <Common/JSONParsers/SimdJSONParser.h>
-#include <Common/assert_cast.h>
 #include <Interpreters/Context.h>
 #include <IO/ReadHelpers.h>
 #include <base/range.h>
@@ -167,7 +161,7 @@ public:
             {
                 if (const auto * tuple_type = checkAndGetDataType<DataTypeTuple>(json_path_column.type.get()))
                 {
-                    for (const auto& element_type : tuple_type->getElements())
+                    for (const auto & element_type : tuple_type->getElements())
                     {
                         if (!isString(element_type))
                         {
@@ -187,7 +181,7 @@ public:
             {
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Second argument (JSONPath) must be constant string/tuple/array");
             }
-            auto parse_json_path = [&](const std::string_view& query) -> std::shared_ptr<GeneratorJSONPath<JSONParser>>
+            auto parse_json_path = [&](const std::string_view & query) -> std::shared_ptr<GeneratorJSONPath<JSONParser>>
             {
                 /// Tokenize the query
                 Tokens tokens(query.data(), query.data() + query.size());
@@ -214,20 +208,20 @@ public:
             else
             {
                 const ColumnPtr data_column = typeid_cast<const ColumnConst &>(*json_path_column.column).getDataColumnPtr();
-                const ColumnTuple* tuple_column = checkAndGetColumn<ColumnTuple>(data_column.get());
-                const ColumnArray* array_column = checkAndGetColumn<ColumnArray>(data_column.get());
+                const ColumnTuple * tuple_column = checkAndGetColumn<ColumnTuple>(data_column.get());
+                const ColumnArray * array_column = checkAndGetColumn<ColumnArray>(data_column.get());
                 if (tuple_column)
                 {
                     for (size_t i = 0; i < tuple_column->tupleSize(); ++i)
                     {
-                        const auto* path_column = checkAndGetColumn<ColumnString>(tuple_column->getColumnPtr(i).get());
+                        const auto * path_column = checkAndGetColumn<ColumnString>(tuple_column->getColumnPtr(i).get());
                         std::string_view path = path_column->getDataAt(0);
                         generator_json_paths.emplace_back(parse_json_path(path));
                     }
                 }
                 else if (array_column)
                 {
-                    const ColumnString* path_column = checkAndGetColumn<ColumnString>(array_column->getDataPtr().get());
+                    const ColumnString * path_column = checkAndGetColumn<ColumnString>(array_column->getDataPtr().get());
                     size_t path_size = array_column->getOffsetsPtr()->get64(0);
                     for (size_t i = 0; i < path_size; ++i)
                     {
@@ -393,7 +387,7 @@ public:
         }
         if (isTuple(arguments[1].type))
         {
-            const auto* tuple_type = checkAndGetDataType<DataTypeTuple>(arguments[1].type.get());
+            const auto * tuple_type = checkAndGetDataType<DataTypeTuple>(arguments[1].type.get());
             DataTypes data_types;
             for (size_t i = 0; i < tuple_type->getElements().size(); ++i)
             {
@@ -476,7 +470,7 @@ public:
             json_paths[0]->reinitialize();
             return insertResultToColumn(dest, root, *json_paths[0], function_json_value_return_type_allow_complex);
         }
-        const bool dest_is_array = dest.getDataType() == TypeIndex::Array;
+        bool dest_is_array = dest.getDataType() == TypeIndex::Array;
         IColumn * array_data = nullptr;
         ColumnTuple * tuple_data = nullptr;
         if (dest_is_array)
@@ -517,7 +511,7 @@ public:
                 continue;
             }
 
-            auto add_element_to_json_serializer = [&](const Element& element) -> void
+            auto add_element_to_json_serializer = [&](const Element & element) -> void
             {
                 if (element.isString())
                     json_serializer.addRawString(element.getString());

@@ -60,6 +60,11 @@ SkipIndexReadResultPtr MergeTreeSkipIndexReader::read(const RangesInDataPart & p
         if (ranges.empty())
             break;
 
+        /// Skip indexes that were disabled for this part during the primary filtering phase
+        /// (e.g., due to pending ALTER mutations that change the indexed column type).
+        if (part.disabled_skip_indexes.contains(index_and_condition.index->index.name))
+            continue;
+
         ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::FilteringMarksWithSecondaryKeysMicroseconds);
 
         ranges = MergeTreeDataSelectExecutor::filterMarksUsingIndex(

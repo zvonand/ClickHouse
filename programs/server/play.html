@@ -264,6 +264,7 @@
             vertical-align: -0.1em;
             margin-right: 0.25em;
             flex-shrink: 0;
+            opacity: 0.7;
         }
 
         .table-addendum
@@ -2179,10 +2180,11 @@ function getTableIcon(engine)
     if (e === 'Merge')
     {
         const svg = makeSVG('0 0 24 24',
-            'M8 8 h14 v14',                          // back shadow
-            'M5 5 h14 v14',                          // middle shadow
-            'M2 2 h14 v14 h-14 z', 'M2 6 h14'       // front table
+            'M8 8 h14 v14 h-14 z', 'M8 12 h14',     // back table (bottom-right)
+            'M5 5 h14 v14 h-14 z', 'M5 9 h14',      // middle table
+            'M2 2 h14 v14 h-14 z', 'M2 6 h14'       // front table (top-left)
         );
+        svg.setAttribute('fill', 'var(--element-background-color)');
         return svg;
     }
 

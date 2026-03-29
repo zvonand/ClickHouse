@@ -14,6 +14,12 @@ RESULT_FILE="$TMP_PATH/result_job.json"
 
 mkdir -p $OUTPUT_PATH
 
+# Properly JSON-escape a string using python3, outputting only the inner
+# content (without surrounding quotes) so callers can embed it in "...".
+json_escape() {
+    printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read())[1:-1], end="")'
+}
+
 # Write result on any exit to ensure logs are always uploaded as artifacts
 write_result() {
     local status="${OVERALL_STATUS:-error}"
@@ -27,7 +33,9 @@ write_result() {
             if [ -n "$results_json" ]; then
                 results_json+=","
             fi
-            results_json+=$(printf '\n    {"name": "%s", "status": "%s", "files": [], "info": "%s"}' "$test_name" "$test_status" "$test_info")
+            local escaped_info
+            escaped_info="$(json_escape "$test_info")"
+            results_json+=$(printf '\n    {"name": "%s", "status": "%s", "files": [], "info": "%s"}' "$test_name" "$test_status" "$escaped_info")
         done
     fi
 
@@ -50,6 +58,9 @@ write_result() {
         fi
     done
 
+    local escaped_overall_info
+    escaped_overall_info="$(json_escape "$info")"
+
     printf '{\n' > $RESULT_FILE
     printf '  "name": "SQLancer",\n' >> $RESULT_FILE
     printf '  "status": "%s",\n' "$status" >> $RESULT_FILE
@@ -57,7 +68,7 @@ write_result() {
     printf '  "duration": null,\n' >> $RESULT_FILE
     printf '  "results": [%s\n  ],\n' "$results_json" >> $RESULT_FILE
     printf '  "files": [%s],\n' "$files_json" >> $RESULT_FILE
-    printf '  "info": "%s"\n' "$info" >> $RESULT_FILE
+    printf '  "info": "%s"\n' "$escaped_overall_info" >> $RESULT_FILE
     printf '}\n' >> $RESULT_FILE
 }
 
@@ -115,8 +126,8 @@ for TEST in "${TESTS[@]}"; do
         if [ -z "$assertion_error" ]; then
             TEST_RESULTS+=("${TEST},OK,")
         else
-            # Escape for JSON: replace newlines with spaces and escape quotes
-            assertion_error_clean="$(printf '%s' "$assertion_error" | tr '\n' ' ' | sed 's/"/\\"/g')"
+            # Collapse to single line; full JSON escaping is done in write_result
+            assertion_error_clean="$(printf '%s' "$assertion_error" | tr '\n' ' ')"
             TEST_RESULTS+=("${TEST},FAIL,${assertion_error_clean}")
             OVERALL_STATUS="failure"
         fi

@@ -33,7 +33,6 @@ UInt64 randomSeed()
     hash.update(times.tv_nsec);
     hash.update(times.tv_sec);
     hash.update(getThreadId());
-    hash.update(getpid());
 
     /// It makes sense to add something like hostname to avoid seed collision when multiple servers start simultaneously.
     /// But randomSeed() must be signal-safe and gethostname and similar functions are not.

@@ -914,7 +914,7 @@ class Targeting:
         # reduce the indirect cap so that specific PRs don't get 200 loosely-related
         # tests.  At min_seed_rc=1 (rc=1 line, top_score=1.0): limit=20.
         # At min_seed_rc=40 (rc=40 line): limit=200 (full).  Scales linearly between.
-        INDIRECT_LIMIT = max(40, min(200, int(200 * min_seed_rc / 40)))
+        INDIRECT_LIMIT = max(50, min(200, int(200 * min_seed_rc / 40)))
 
         # Cap at 500 tests to prevent HTTP field-length errors.
         if len(primary_tests) > 500:

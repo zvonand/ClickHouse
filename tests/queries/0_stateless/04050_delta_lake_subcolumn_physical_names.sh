@@ -2,8 +2,7 @@
 # Tags: no-fasttest, no-msan
 
 # Regression test for https://github.com/ClickHouse/ClickHouse/issues/87322
-# Accessing Tuple element subcolumns with delta.columnMapping.mode = 'name'
-# when nested fields don't have their own physical name entries.
+# Accessing Tuple element subcolumns with delta.columnMapping.mode = 'name'.
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh

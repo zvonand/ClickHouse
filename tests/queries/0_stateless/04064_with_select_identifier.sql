@@ -1,10 +1,10 @@
 -- Ensure that SELECT (case-insensitive) as a bareword identifier is not allowed in WITH CTE definitions.
 
 -- These should fail: "select" in any case as a CTE name
-WITH select AS (SELECT 1) SELECT * FROM select; -- { serverError SYNTAX_ERROR }
-WITH SELECT AS (SELECT 1) SELECT * FROM SELECT; -- { serverError SYNTAX_ERROR }
-WITH Select AS (SELECT 1) SELECT * FROM Select; -- { serverError SYNTAX_ERROR }
-WITH sElEcT AS (SELECT 1) SELECT * FROM sElEcT; -- { serverError SYNTAX_ERROR }
+WITH select AS (SELECT 1) SELECT * FROM select; -- { clientError SYNTAX_ERROR }
+WITH SELECT AS (SELECT 1) SELECT * FROM SELECT; -- { clientError SYNTAX_ERROR }
+WITH Select AS (SELECT 1) SELECT * FROM Select; -- { clientError SYNTAX_ERROR }
+WITH sElEcT AS (SELECT 1) SELECT * FROM sElEcT; -- { clientError SYNTAX_ERROR }
 
 -- Quoted identifiers should still work
 WITH `select` AS (SELECT 1) SELECT * FROM `select`;
@@ -22,7 +22,7 @@ WITH reselected AS (SELECT 1) SELECT * FROM reselected;
 WITH 1 AS select SELECT select;
 
 -- "select" as a bareword CTE name in a multi-CTE WITH should fail
-WITH foo AS (SELECT 1), select AS (SELECT 2) SELECT * FROM foo; -- { serverError SYNTAX_ERROR }
+WITH foo AS (SELECT 1), select AS (SELECT 2) SELECT * FROM foo; -- { clientError SYNTAX_ERROR }
 
 -- Other identifiers should still work
 WITH foo AS (SELECT 1) SELECT * FROM foo;

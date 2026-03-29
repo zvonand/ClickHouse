@@ -13,6 +13,9 @@
 
 using namespace DB;
 
+namespace
+{
+
 template <typename T>
 struct GroupArraySortedDataHeap
 {
@@ -168,6 +171,8 @@ NO_INLINE void benchmark(size_t elements, size_t max_elements)
 
     watch.stop();
     std::cerr << "Elapsed " << watch.elapsedMilliseconds() << " milliseconds" << '\n';
+}
+
 }
 
 int mainEntryExampleGroupArraySorted(int argc, char ** argv)

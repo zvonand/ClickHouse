@@ -20,20 +20,22 @@
 #include <Common/CurrentMetrics.h>
 
 
-using ThreadFromGlobalPoolSimple = ThreadFromGlobalPoolImpl</* propagate_opentelemetry_context= */ false, /* global_trace_collector_allowed= */ false>;
-using SimpleThreadPool = ThreadPoolImpl<ThreadFromGlobalPoolSimple>;
-
-using Key = UInt64;
-using Value = UInt64;
-using Source = std::vector<Key>;
-
-
 namespace CurrentMetrics
 {
     extern const Metric LocalThread;
     extern const Metric LocalThreadActive;
     extern const Metric LocalThreadScheduled;
 }
+
+namespace
+{
+
+using ThreadFromGlobalPoolSimple = ThreadFromGlobalPoolImpl</* propagate_opentelemetry_context= */ false, /* global_trace_collector_allowed= */ false>;
+using SimpleThreadPool = ThreadPoolImpl<ThreadFromGlobalPoolSimple>;
+
+using Key = UInt64;
+using Value = UInt64;
+using Source = std::vector<Key>;
 
 template <typename Map>
 struct AggregateIndependent
@@ -276,6 +278,7 @@ struct Merger
     void operator()(Value & dst, const Value & src) const { dst += src; }
 };
 
+}
 
 int mainEntryExampleParallelAggregation2(int argc, char ** argv)
 {

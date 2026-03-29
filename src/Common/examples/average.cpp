@@ -27,6 +27,9 @@
 
 using namespace DB;
 
+namespace
+{
+
 using Float = Float32;
 
 struct State
@@ -547,6 +550,8 @@ Float NO_INLINE another_unrolled_x4(const PODArray<UInt8> & keys, const PODArray
     }
 
     return map[0].result();
+}
+
 }
 
 int mainEntryExampleAverage(int argc, char ** argv)

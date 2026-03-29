@@ -48,32 +48,11 @@ done
 */
 
 
-#define DefineStringView(STRUCT) \
-\
-struct STRUCT : public std::string_view {}; \
-\
-namespace ZeroTraits \
-{ \
-    template <> \
-    inline bool check<STRUCT>(STRUCT x) { return x.empty(); } /* NOLINT */ \
- \
-    template <> \
-    inline void set<STRUCT>(STRUCT & x) { x = STRUCT{}; } /* NOLINT */ \
-} \
- \
-template <> \
-struct DefaultHash<STRUCT> \
-{ \
-    size_t operator() (STRUCT x) const \
-    { \
-        return CityHash_v1_0_2::CityHash64(x.data(), x.size()); \
-    } \
-};
+namespace
+{
 
-
-DefineStringView(StringView_CompareMemcmp)
-DefineStringView(StringView_CompareAlwaysTrue)
-
+struct StringView_CompareMemcmp : public std::string_view {};
+struct StringView_CompareAlwaysTrue : public std::string_view {};
 
 inline bool operator==(StringView_CompareMemcmp lhs, StringView_CompareMemcmp rhs)
 {
@@ -90,6 +69,39 @@ inline bool operator==(StringView_CompareAlwaysTrue, StringView_CompareAlwaysTru
 {
     return true;
 }
+
+} /// close anonymous namespace for ZeroTraits/DefaultHash specializations
+
+namespace ZeroTraits
+{
+    template <>
+    inline bool check<StringView_CompareMemcmp>(StringView_CompareMemcmp x) { return x.empty(); } // NOLINT
+    template <>
+    inline void set<StringView_CompareMemcmp>(StringView_CompareMemcmp & x) { x = StringView_CompareMemcmp{}; } // NOLINT
+
+    template <>
+    inline bool check<StringView_CompareAlwaysTrue>(StringView_CompareAlwaysTrue x) { return x.empty(); } // NOLINT
+    template <>
+    inline void set<StringView_CompareAlwaysTrue>(StringView_CompareAlwaysTrue & x) { x = StringView_CompareAlwaysTrue{}; } // NOLINT
+}
+
+template <>
+struct DefaultHash<StringView_CompareMemcmp>
+{
+    size_t operator() (StringView_CompareMemcmp x) const
+    {
+        return CityHash_v1_0_2::CityHash64(x.data(), x.size());
+    }
+};
+
+template <>
+struct DefaultHash<StringView_CompareAlwaysTrue>
+{
+    size_t operator() (StringView_CompareAlwaysTrue x) const
+    {
+        return CityHash_v1_0_2::CityHash64(x.data(), x.size());
+    }
+};
 
 namespace
 {

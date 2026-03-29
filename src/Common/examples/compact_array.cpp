@@ -11,6 +11,9 @@
 
 namespace fs = std::filesystem;
 
+namespace
+{
+
 static std::string createTmpPath(const std::string & filename)
 {
     char pattern[] = "/tmp/fileXXXXXX";
@@ -249,6 +252,8 @@ static void runTests()
     TestSet<Generator2>::execute();
     std::cout << "Test set 3\n";
     TestSet<Generator3>::execute();
+}
+
 }
 
 int mainEntryExampleCompactArray(int, char **)

@@ -3,6 +3,9 @@
 #include <cstring>
 #include <dragonbox/dragonbox_to_chars.h>
 
+namespace
+{
+
 struct DecomposedFloat64
 {
     explicit DecomposedFloat64(double x)
@@ -77,6 +80,7 @@ struct DecomposedFloat32
     }
 };
 
+}
 
 int mainEntryExampleDragonboxTest(int argc, char ** argv)
 {

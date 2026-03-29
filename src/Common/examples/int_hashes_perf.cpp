@@ -193,6 +193,9 @@ static inline size_t tabulation(UInt64 x)
 }
 
 
+namespace
+{
+
 const size_t BUF_SIZE = 1024;
 
 using Source = std::vector<UInt64>;
@@ -254,6 +257,7 @@ static inline void test(size_t n, const UInt64 * data, const char * name)
     }
 }
 
+}
 
 int mainEntryExampleIntHashesPerf(int argc, char ** argv)
 {

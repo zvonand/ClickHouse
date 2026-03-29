@@ -16,6 +16,8 @@
 /// Example:
 /// for i in {6,8} {11..26}; do echo $i; for j in {1..10}; do ./radix_sort $i 65536 1000; done; echo; done
 
+namespace
+{
 
 using Key = UInt64;
 
@@ -155,6 +157,7 @@ static void NO_INLINE sort26(Key * data, size_t size, size_t limit)
     RadixSort<RadixSortTraitsWithCustomBits<16>>::executeMSD(data, size, limit);
 }
 
+}
 
 int mainEntryExampleRadixSort(int argc, char ** argv)
 {

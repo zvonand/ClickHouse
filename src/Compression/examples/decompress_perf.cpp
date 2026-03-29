@@ -30,6 +30,9 @@ namespace ErrorCodes
     extern const int CANNOT_DECOMPRESS;
 }
 
+namespace
+{
+
 class FasterCompressedReadBufferBase
 {
 protected:
@@ -159,6 +162,8 @@ public:
     {
     }
 };
+
+}
 
 }
 

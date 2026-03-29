@@ -1050,10 +1050,18 @@ void obfuscateLiteral(
                     /// Obfuscate number but keep it within same power of two range.
 
                     uint64_t obfuscated = hash_func_num.get64();
-                    uint64_t log2 = bitScanReverse(num);
 
-                    obfuscated = (1ULL << log2) + obfuscated % (1ULL << log2);
-                    writeIntText(obfuscated, result);
+                    if (num == 0)
+                    {
+                        /// readIntText may overflow to zero for very large numbers.
+                        writeIntText(obfuscated, result);
+                    }
+                    else
+                    {
+                        uint64_t log2 = bitScanReverse(num);
+                        obfuscated = (1ULL << log2) + obfuscated % (1ULL << log2);
+                        writeIntText(obfuscated, result);
+                    }
                 }
             }
         }

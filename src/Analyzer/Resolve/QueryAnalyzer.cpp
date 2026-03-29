@@ -4037,11 +4037,15 @@ void QueryAnalyzer::resolveTableFunction(QueryTreeNodePtr & table_function_node,
 
                 QueryTreeNodePtr table_function_node_to_resolve = std::move(table_function_node_to_resolve_typed);
                 if (table_function_argument_function_name == "view"
-                    || table_function_name == "remote" || table_function_name == "remoteSecure"
-                    || table_function_name == "cluster" || table_function_name == "clusterAllReplicas")
+                    || (table_function_argument_function_name == "merge"
+                        && (table_function_name == "remote" || table_function_name == "remoteSecure"
+                            || table_function_name == "cluster" || table_function_name == "clusterAllReplicas")))
                 {
-                    /// Nested table functions inside remote/cluster should not be resolved on the initiator,
-                    /// because they reference tables that may only exist on the remote server.
+                    /// The `view` table function contains a subquery that may reference tables
+                    /// not available on the initiator.
+                    /// The `merge` table function inside remote/cluster should not be resolved
+                    /// on the initiator, because it pattern-matches tables that may only exist
+                    /// on the remote server.
                     /// For example: SELECT count() FROM remote('host', merge(currentDatabase(), '^test'))
                     skip_analysis_arguments_indexes.push_back(table_function_argument_index);
                 }

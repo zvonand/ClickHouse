@@ -170,7 +170,7 @@ class Targeting:
     PASS_WEIGHT_DIRECT        = 1.0   # Pass 1: test directly covers changed lines
     PASS_WEIGHT_HUNK_CONTEXT  = 0.50  # Pass 1b: test covers context line within the diff hunk
     PASS_WEIGHT_INDIRECT      = 0.45  # Pass 3: test shares virtual-dispatch callees with primary tests
-    PASS_WEIGHT_BROAD2        = 0.30  # Pass 4: test covers changed files via very-broad regions (rc 2001-8000)
+    PASS_WEIGHT_BROAD2        = 0.40  # Pass 4: test covers changed files via very-broad regions (rc 2001-8000)
     PASS_WEIGHT_SIBLING       = 0.20  # Pass 2: test covers a sibling file in the same source directory
     PASS_WEIGHT_KEYWORD       = 0.15  # Fallback: test filename contains domain keywords from changed files
 

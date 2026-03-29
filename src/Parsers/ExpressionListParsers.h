@@ -52,7 +52,7 @@ public:
                 pos = begin;
                 return true;
             }
-            
+
             Pos after_separator = pos;
             if (!parse_element())
             {

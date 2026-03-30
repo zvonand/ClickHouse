@@ -1211,8 +1211,7 @@ Coordination::Error ZooKeeper::tryGetChildrenRecursive(const std::string & path,
 
     auto response = future.get();
     Coordination::Error code = response.error;
-    if (code == Coordination::Error::ZOK)
-        res = std::move(response.children);
+    res = std::move(response.children);
     return code;
 }
 

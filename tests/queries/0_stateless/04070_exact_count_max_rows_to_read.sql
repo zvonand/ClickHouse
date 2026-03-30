@@ -37,6 +37,7 @@ SELECT count() FROM t_exact_count_force_pk;
 SELECT count() FROM t_exact_count_force_pk WHERE key < 5000;
 
 -- Non-count queries should still respect the limit and throw.
-SELECT * FROM t_exact_count_force_pk FORMAT Null; -- { serverError TOO_MANY_ROWS }
+-- Use a WHERE on the primary key to satisfy force_primary_key, but cover all rows.
+SELECT * FROM t_exact_count_force_pk WHERE key < 5000 FORMAT Null; -- { serverError TOO_MANY_ROWS }
 
 DROP TABLE t_exact_count_force_pk;

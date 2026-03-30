@@ -14,6 +14,7 @@ namespace DB
 namespace QueryPlanSerializationSetting
 {
     extern const QueryPlanSerializationSettingsUInt64 max_streams_for_union_step;
+    extern const QueryPlanSerializationSettingsFloat max_streams_for_union_step_to_max_threads_ratio;
 }
 
 namespace ErrorCodes
@@ -33,9 +34,10 @@ static SharedHeader checkHeaders(const SharedHeaders & input_headers)
     return res;
 }
 
-UnionStep::UnionStep(SharedHeaders input_headers_, size_t max_threads_, size_t max_streams_)
+UnionStep::UnionStep(SharedHeaders input_headers_, size_t max_threads_, size_t max_streams_, double max_streams_ratio_)
     : max_threads(max_threads_)
     , max_streams(max_streams_)
+    , max_streams_ratio(max_streams_ratio_)
 {
     updateInputHeaders(std::move(input_headers_));
 }
@@ -92,10 +94,24 @@ QueryPipelineBuilderPtr UnionStep::updatePipeline(QueryPipelineBuilders pipeline
 
     *pipeline = QueryPipelineBuilder::unitePipelines(std::move(pipelines), new_max_threads, &processors);
 
-    if (max_streams && pipeline->getNumStreams() > max_streams)
+    /// Compute effective stream limit from the raw settings and the actual max_threads
+    /// available on this node (which may differ from the coordinator in distributed execution).
+    size_t effective_max_streams = max_streams;
+    if (max_streams_ratio > 0 && new_max_threads > 0)
+    {
+        size_t max_streams_from_ratio = static_cast<size_t>(static_cast<double>(new_max_threads) * max_streams_ratio);
+        if (max_streams_from_ratio == 0)
+            max_streams_from_ratio = 1;
+        if (effective_max_streams)
+            effective_max_streams = std::min(effective_max_streams, max_streams_from_ratio);
+        else
+            effective_max_streams = max_streams_from_ratio;
+    }
+
+    if (effective_max_streams && pipeline->getNumStreams() > effective_max_streams)
     {
         QueryPipelineProcessorsCollector collector(*pipeline, this);
-        pipeline->narrow(max_streams);
+        pipeline->narrow(effective_max_streams);
         auto added_processors = collector.detachProcessors();
         processors.insert(processors.end(), added_processors.begin(), added_processors.end());
     }
@@ -111,6 +127,7 @@ void UnionStep::describePipeline(FormatSettings & settings) const
 void UnionStep::serializeSettings(QueryPlanSerializationSettings & settings) const
 {
     settings[QueryPlanSerializationSetting::max_streams_for_union_step] = max_streams;
+    settings[QueryPlanSerializationSetting::max_streams_for_union_step_to_max_threads_ratio] = static_cast<float>(max_streams_ratio);
 }
 
 void UnionStep::serialize(Serialization & ctx) const
@@ -123,7 +140,8 @@ QueryPlanStepPtr UnionStep::deserialize(Deserialization & ctx)
     return std::make_unique<UnionStep>(
         ctx.input_headers,
         /* max_threads_ = */ 0,
-        /* max_streams_ = */ ctx.settings[QueryPlanSerializationSetting::max_streams_for_union_step]);
+        /* max_streams_ = */ ctx.settings[QueryPlanSerializationSetting::max_streams_for_union_step],
+        /* max_streams_ratio_ = */ ctx.settings[QueryPlanSerializationSetting::max_streams_for_union_step_to_max_threads_ratio]);
 }
 
 void registerUnionStep(QueryPlanStepRegistry & registry)

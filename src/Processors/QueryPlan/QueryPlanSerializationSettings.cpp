@@ -110,6 +110,7 @@ namespace DB
     DECLARE(Bool, use_hash_table_stats_for_join_reordering, false, "Enable using collected hash table statistics for cardinality estimation during join reordering", 0) \
     \
     DECLARE(UInt64, max_streams_for_union_step, 0, "Limits the number of simultaneously active data streams in a UNION ALL step via ConcatProcessors. 0 means no narrowing.", 0) \
+    DECLARE(Float, max_streams_for_union_step_to_max_threads_ratio, 8, "This ratio multiplied by max_threads determines a limit on simultaneously active streams in a UNION ALL step. 0 disables the ratio-based limit.", 0) \
 
 
 // clang-format on

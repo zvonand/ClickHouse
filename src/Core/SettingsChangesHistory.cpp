@@ -47,6 +47,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"enable_materialized_cte", false, false, "New setting"},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},
             {"highlight_max_matches_per_row", 10000, 10000, "New setting to limit the number of highlight matches per row to protect against excessive memory usage."},
+            {"enable_join_fixed_hash_table_conversion", true, true, "Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range."},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {
@@ -79,7 +80,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"functions_h3_default_if_invalid", true, false, "A new setting for legacy behaviour to allow invalid inputs to h3 functions"},
             {"max_skip_unavailable_shards_num", 0, 0, "New setting to limit the number of shards that can be silently skipped when skip_unavailable_shards is enabled."},
             {"max_skip_unavailable_shards_ratio", 0, 0, "New setting to limit the ratio of shards that can be silently skipped when skip_unavailable_shards is enabled."},
-            {"enable_join_fixed_hash_table_conversion", true, true, "Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range."},
         });
         addSettingsChanges(settings_changes_history, "26.2",
         {

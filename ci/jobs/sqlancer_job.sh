@@ -111,7 +111,8 @@ for TEST in "${TESTS[@]}"; do
 
     if [[ $(wget -q 'localhost:8123' -O- 2>/dev/null) == 'Ok.' ]]; then
         echo "Server is OK"
-        ( java -jar target/sqlancer-*.jar --log-each-select true --print-failed false --num-threads "$NUM_THREADS" --timeout-seconds "$TIMEOUT" --num-queries "$NUM_QUERIES"  --username default --password "" clickhouse --oracle "$TEST" | tee "./$TEST.out" )  3>&1 1>&2 2>&3 | tee "$error_output_file"
+        java_exit=0
+        ( java -jar target/sqlancer-*.jar --log-each-select true --print-failed false --num-threads "$NUM_THREADS" --timeout-seconds "$TIMEOUT" --num-queries "$NUM_QUERIES"  --username default --password "" clickhouse --oracle "$TEST" | tee "./$TEST.out" )  3>&1 1>&2 2>&3 | tee "$error_output_file" || java_exit=$?
 
         if [[ $(wget -q 'localhost:8123' -O- 2>/dev/null) != 'Ok.' ]]; then
             echo "Server crashed during $TEST"
@@ -123,13 +124,16 @@ for TEST in "${TESTS[@]}"; do
 
         assertion_error="$(grep 'AssertionError' "$error_output_file" ||:)"
 
-        if [ -z "$assertion_error" ]; then
-            TEST_RESULTS+=("${TEST},OK,")
-        else
+        if [ -n "$assertion_error" ]; then
             # Collapse to single line; full JSON escaping is done in write_result
             assertion_error_clean="$(printf '%s' "$assertion_error" | tr '\n' ' ')"
             TEST_RESULTS+=("${TEST},FAIL,${assertion_error_clean}")
             OVERALL_STATUS="failure"
+        elif [ "$java_exit" -ne 0 ]; then
+            TEST_RESULTS+=("${TEST},ERROR,SQLancer exited with code $java_exit")
+            OVERALL_STATUS="failure"
+        else
+            TEST_RESULTS+=("${TEST},OK,")
         fi
     else
         TEST_RESULTS+=("${TEST},ERROR,Server is not responding")

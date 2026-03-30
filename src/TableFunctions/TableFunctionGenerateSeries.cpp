@@ -153,8 +153,14 @@ StoragePtr TableFunctionGenerateSeries<alias_num>::executeImpl(
                 /// The limit parameter of StorageSystemNumbers is the raw domain window size
                 /// (number of consecutive integers), not the number of stepped values.
                 /// ReadFromSystemNumbersStep handles the stepping internally.
+                UInt64 range = stop - start;
+                if (range == std::numeric_limits<UInt64>::max())
+                    throw Exception(
+                        ErrorCodes::INVALID_SETTING_VALUE,
+                        "Table function '{}' produces too many values (cardinality overflows UInt64)",
+                        getName());
                 res = std::make_shared<StorageSystemNumbers>(
-                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, (stop - start) + 1, start, abs_step);
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, range + 1, start, abs_step);
             }
         }
         else

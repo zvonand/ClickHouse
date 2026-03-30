@@ -3424,6 +3424,10 @@ void StatementGenerator::dropTable(const bool staged, bool drop_peer, const Stri
         {
             connections.dropPeerTableOnRemote(map_to_delete[tkey]);
         }
+        for (const auto & [fname, _] : map_to_delete[tkey].frozen_partitions)
+        {
+            freeze_names.erase(fname);
+        }
         map_to_delete.erase(tkey);
     }
 }

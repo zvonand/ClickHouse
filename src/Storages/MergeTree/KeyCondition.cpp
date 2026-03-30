@@ -3793,21 +3793,18 @@ static bool functionIsIntegerCastPreservingFieldRepresentation(
         return id == TypeIndex::Int8 || id == TypeIndex::Int16 || id == TypeIndex::Int32 || id == TypeIndex::Int64;
     };
 
+    /// Check that both types are in the same integer family before calling
+    /// getSizeOfValueInMemory, which throws for variable-length types like String.
+    bool same_family = (is_unsigned_int(from_id) && is_unsigned_int(to_id))
+        || (is_signed_int(from_id) && is_signed_int(to_id));
+
+    if (!same_family)
+        return false;
+
     /// We can only skip the function application when the target type is at least as wide
     /// as the source type (widening or same-size cast). For narrowing casts (e.g. UInt32 -> UInt16),
     /// truncation changes the actual value even though both use UInt64 in the Field representation.
-    if (to_type->getSizeOfValueInMemory() < from_type->getSizeOfValueInMemory())
-        return false;
-
-    /// Unsigned integer types all use UInt64 as their Field representation.
-    if (is_unsigned_int(from_id) && is_unsigned_int(to_id))
-        return true;
-
-    /// Signed integer types all use Int64 as their Field representation.
-    if (is_signed_int(from_id) && is_signed_int(to_id))
-        return true;
-
-    return false;
+    return to_type->getSizeOfValueInMemory() >= from_type->getSizeOfValueInMemory();
 }
 
 std::optional<Range> KeyCondition::applyMonotonicFunctionsChainToRange(

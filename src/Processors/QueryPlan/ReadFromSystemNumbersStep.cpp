@@ -500,11 +500,21 @@ Pipe ReadFromSystemNumbersStep::makePipe()
     if (numbers_storage.use_stepped_source)
     {
         UInt64 total_count = numbers_storage.count;
+
+        /// We cannot push down LIMIT if we have a filter. Consider:
+        ///   SELECT * FROM generate_series(10, 0, -1) WHERE generate_series < 3 LIMIT 1
+        /// Pushing LIMIT 1 would generate only {10}, which the filter discards, returning
+        /// empty instead of the correct {2}.
+        if (limit.has_value() && !filter_actions_dag)
+            total_count = std::min(total_count, *limit);
+
         if (total_count == 0)
         {
             add_null_source();
             return pipe;
         }
+
+        NumbersLikeUtils::checkLimits(context->getSettingsRef(), total_count);
 
         auto source = std::make_shared<SimpleSteppedNumbersSource>(
             max_block_size, numbers_storage.offset, numbers_storage.step, total_count, numbers_storage.column_name);

@@ -33,15 +33,22 @@ def _reauth_gh():
     """
     from ci.praktika.gh_auth import GHAuth
 
-    app_id = Secret.Config(
-        name="woolenwolf_gh_app.clickhouse-app-id",
-        type=Secret.Type.AWS_SSM_SECRET,
-    ).get_value()
-    pem = Secret.Config(
-        name="woolenwolf_gh_app.clickhouse-app-key",
-        type=Secret.Type.AWS_SSM_SECRET,
-    ).get_value()
-    GHAuth.auth(app_id=app_id, app_key=pem)
+    app_id, pem, installation_id = (
+        Secret.Config(
+            name="woolenwolf_gh_app.clickhouse-app-id",
+            type=Secret.Type.AWS_SSM_SECRET,
+        )
+        .join_with(Secret.Config(
+            name="woolenwolf_gh_app.clickhouse-app-key",
+            type=Secret.Type.AWS_SSM_SECRET,
+        ))
+        .join_with(Secret.Config(
+            name="woolenwolf_gh_app.installation_id",
+            type=Secret.Type.AWS_SSM_SECRET,
+        ))
+        .get_value()
+    )
+    GHAuth.auth(app_id=app_id, app_key=pem, installation_id=int(installation_id))
 
 
 def _post_review():

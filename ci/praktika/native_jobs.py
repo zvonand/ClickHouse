@@ -32,9 +32,13 @@ def _GH_Auth(workflow, force=False):
     from .gh_auth import GHAuth
 
     if force or not Shell.check(f"gh auth status", verbose=True):
-        pem = workflow.get_secret(Settings.SECRET_GH_APP_PEM_KEY).get_value()
-        app_id = workflow.get_secret(Settings.SECRET_GH_APP_ID).get_value()
-        GHAuth.auth(app_id=app_id, app_key=pem)
+        app_id, pem, installation_id = (
+            workflow.get_secret(Settings.SECRET_GH_APP_ID)
+            .join_with(workflow.get_secret(Settings.SECRET_GH_APP_PEM_KEY))
+            .join_with(workflow.get_secret(Settings.SECRET_GH_APP_INSTALLATION_ID))
+            .get_value()
+        )
+        GHAuth.auth(app_id=app_id, app_key=pem, installation_id=int(installation_id))
 
 
 _workflow_config_job = Job.Config(

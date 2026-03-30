@@ -57,5 +57,8 @@ SELECT * FROM generate_series(5, 5, -3);
 -- Descending series with step that exactly divides range
 SELECT * FROM generate_series(10, 0, -2);
 
+-- LIMIT with WHERE on descending series: LIMIT must not be pushed down past the filter
+SELECT * FROM generate_series(10, 0, -1) WHERE generate_series < 3 LIMIT 1;
+
 -- Zero step should error
 SELECT * FROM generate_series(0, 10, 0); -- { serverError BAD_ARGUMENTS }

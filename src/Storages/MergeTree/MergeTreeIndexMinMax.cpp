@@ -112,7 +112,7 @@ void MergeTreeIndexGranuleMinMax::deserializeBinary(ReadBuffer & istr, MergeTree
                 }
                 break;
 
-            /// New format with proper Nullable support for values that include Null values
+            /// New format with proper Nullable support for values that include NULL values
             case 2:
                 serializations[i]->deserializeBinary(min_ref, istr, format_settings);
                 serializations[i]->deserializeBinary(max_ref, istr, format_settings);

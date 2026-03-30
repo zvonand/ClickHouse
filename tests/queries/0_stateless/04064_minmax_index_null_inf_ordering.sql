@@ -60,7 +60,8 @@ INSERT INTO t_minmax_float VALUES (7, 1.0), (8, 2.0), (9, 3.0);
 INSERT INTO t_minmax_float VALUES (10, -1.0), (11, 0.0), (12, 1.0);
 OPTIMIZE TABLE t_minmax_float FINAL;
 
--- NaN should behave consistently: NaN is not equal to any normal value.
+-- NaN = NaN is false (IEEE 754), so this query returns no rows.
+-- The skip index must not cause incorrect results here.
 SELECT id FROM t_minmax_float WHERE val = nan ORDER BY id;
 
 -- NULL rows

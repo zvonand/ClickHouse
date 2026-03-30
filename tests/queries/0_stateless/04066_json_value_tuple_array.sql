@@ -50,3 +50,4 @@ SELECT '--Error cases--';
 SELECT JSON_VALUE('{"a":1}', tuple('$..invalid')); -- { serverError BAD_ARGUMENTS }
 SELECT JSON_VALUE('{"a":1}', tuple('$.a', 1)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT JSON_VALUE('{"a":1}', array(1, 2)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT JSON_VALUE('{"a":1}', tuple()); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

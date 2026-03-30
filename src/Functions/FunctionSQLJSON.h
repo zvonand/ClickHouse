@@ -156,11 +156,12 @@ public:
             {
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
                                 "JSONPath functions require second argument "
-                                "to be JSONPath of type string, illegal type: {}", json_path_column.type->getName());
+                                "to be a JSONPath of type String, illegal type: {}", json_path_column.type->getName());
             }
             if (!isColumnConst(*json_path_column.column))
             {
-                throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Second argument (JSONPath) must be constant string");
+                throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+                                "Second argument (JSONPath) must be a constant String, Tuple(String), or Array(String)");
             }
 
             /// Prepare to parse 1 argument (JSONPath)
@@ -241,7 +242,7 @@ public:
 
             if (!isColumnConst(*path_column.column))
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                    "Second argument (JSONPath structure) must be constant");
+                    "Second argument (JSONPath structure) must be a constant Tuple(String) or Array(String)");
 
             const auto & const_col = assert_cast<const ColumnConst &>(*path_column.column);
             const auto & const_data = const_col.getDataColumn();
@@ -355,7 +356,7 @@ public:
             }
 
             throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                "JSONPath structure must contain only String, Tuple, or Array elements, got: {}",
+                "JSONPath structure must contain only String, Tuple, or Array elements, got {}",
                 path_type->getName());
         }
 
@@ -428,7 +429,7 @@ public:
             return std::make_shared<DataTypeArray>(buildReturnType(array_type->getNestedType(), leaf_type));
 
         throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-            "JSONPath structure must contain only String, Tuple, or Array elements, got: {}",
+            "JSONPath structure must contain only String, Tuple, or Array elements, got {}",
             path_type->getName());
     }
 
@@ -441,6 +442,8 @@ public:
 
         if (const auto * tuple_type = checkAndGetDataType<DataTypeTuple>(type.get()))
         {
+            if (tuple_type->getElements().empty())
+                return false; /// Empty Tuple() is not a valid multi-path structure.
             for (const auto & elem : tuple_type->getElements())
                 if (!isString(elem) && !isMultiPathType(elem))
                     return false;

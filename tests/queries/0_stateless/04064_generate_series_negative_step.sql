@@ -29,5 +29,8 @@ SELECT * FROM generate_series(0, 10, toUInt64(9223372036854775808));
 SELECT * FROM generate_series(18446744073709551615, 0, -1); -- { serverError INVALID_SETTING_VALUE }
 SELECT * FROM generate_series(0, 18446744073709551615, 1); -- { serverError INVALID_SETTING_VALUE }
 
+-- INT64_MIN as step (boundary for signed negation)
+SELECT count() FROM generate_series(9223372036854775807, 0, -9223372036854775808);
+
 -- Zero step should error
 SELECT * FROM generate_series(0, 10, 0); -- { serverError INVALID_SETTING_VALUE }

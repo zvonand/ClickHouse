@@ -2029,6 +2029,9 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
     using SignedKey = std::make_signed_t<Key>;
 
     static constexpr size_t MAX_RANGE = (1ULL << 18);
+    /// Limits conversion to cases where FixedHashMaps larger than 2^16 have at least 25% fill factor,
+    /// ensuring they use at most around twice the memory of the source HashMap.
+    static constexpr size_t MAX_RANGE_SPARSITY_FACTOR = 4;
 
     auto & source_map = [&]() -> auto &
     {
@@ -2073,8 +2076,6 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
             return;
     }
 
-    data->min_key = min_key;
-
     using Mapped = typename std::decay_t<decltype(source_map)>::mapped_type;
     auto convert_to_fixed_hash_map = [&]<size_t size_bits>(auto & dst_map, Type type)
     {
@@ -2089,34 +2090,55 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
                 res->getMapped() = source_map_it->getMapped();
         }
         dst_map = std::move(range_map);
+        data->min_key = min_key;
         data->type = type;
     };
 
     size_t range = static_cast<size_t>(max_key - min_key) + 1;
+    auto dispatch_conversion =
+        [&](auto & range8, Type type8, auto & range16, Type type16, auto & range17, Type type17, auto & range18, Type type18, auto & source)
+    {
+        if (range <= (1ULL << 8))
+            convert_to_fixed_hash_map.template operator()<8>(range8, type8);
+        else if (range <= (1ULL << 16))
+            convert_to_fixed_hash_map.template operator()<16>(range16, type16);
+        else if (range <= (1ULL << 17))
+        {
+            if ((1ULL << 17) > key_count * MAX_RANGE_SPARSITY_FACTOR)
+                return;
+            convert_to_fixed_hash_map.template operator()<17>(range17, type17);
+        }
+        else
+        {
+            if ((1ULL << 18) > key_count * MAX_RANGE_SPARSITY_FACTOR)
+                return;
+            convert_to_fixed_hash_map.template operator()<18>(range18, type18);
+        }
+        source.reset();
+    };
+
     if constexpr (std::is_same_v<Key, UInt32>)
-    {
-        if (range <= (1ULL << 8))
-            convert_to_fixed_hash_map.template operator()<8>(maps.range8_key32, Type::range8_key32);
-        else if (range <= (1ULL << 16))
-            convert_to_fixed_hash_map.template operator()<16>(maps.range16_key32, Type::range16_key32);
-        else if (range <= (1ULL << 17))
-            convert_to_fixed_hash_map.template operator()<17>(maps.range17_key32, Type::range17_key32);
-        else
-            convert_to_fixed_hash_map.template operator()<18>(maps.range18_key32, Type::range18_key32);
-        maps.key32.reset();
-    }
+        dispatch_conversion(
+            maps.range8_key32,
+            Type::range8_key32,
+            maps.range16_key32,
+            Type::range16_key32,
+            maps.range17_key32,
+            Type::range17_key32,
+            maps.range18_key32,
+            Type::range18_key32,
+            maps.key32);
     else
-    {
-        if (range <= (1ULL << 8))
-            convert_to_fixed_hash_map.template operator()<8>(maps.range8_key64, Type::range8_key64);
-        else if (range <= (1ULL << 16))
-            convert_to_fixed_hash_map.template operator()<16>(maps.range16_key64, Type::range16_key64);
-        else if (range <= (1ULL << 17))
-            convert_to_fixed_hash_map.template operator()<17>(maps.range17_key64, Type::range17_key64);
-        else
-            convert_to_fixed_hash_map.template operator()<18>(maps.range18_key64, Type::range18_key64);
-        maps.key64.reset();
-    }
+        dispatch_conversion(
+            maps.range8_key64,
+            Type::range8_key64,
+            maps.range16_key64,
+            Type::range16_key64,
+            maps.range17_key64,
+            Type::range17_key64,
+            maps.range18_key64,
+            Type::range18_key64,
+            maps.key64);
 
     LOG_DEBUG(
         log,

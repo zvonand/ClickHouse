@@ -11,7 +11,7 @@ namespace DB
 
 namespace MergeTreeSetting
 {
-    extern const MergeTreeSettingsBool compact_parts_flush_per_column;
+    extern const MergeTreeSettingsBool compress_per_column_in_compact_parts;
 }
 
 namespace ErrorCodes
@@ -336,11 +336,11 @@ void MergeTreeDataPartWriterCompact::writeDataBlock(const Block & block, const G
                 getSerialization(name_and_type->name),
                 stream_getter, stream_mark_getter, granule.start_row, granule.rows_to_write, !data_written, getSerializationSettings());
 
-            if (settings.compact_parts_flush_per_column)
+            if (settings.compress_per_column_in_compact_parts)
                 prev_stream->hashing_buf.next();
         }
 
-        if (!settings.compact_parts_flush_per_column && prev_stream)
+        if (!settings.compress_per_column_in_compact_parts && prev_stream)
             prev_stream->hashing_buf.next();
 
         writeBinaryLittleEndian(granule.rows_to_write, marks_out);

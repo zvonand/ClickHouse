@@ -836,7 +836,7 @@ namespace ErrorCodes
     If amount of data in all patch parts exceeds this value, lightweight updates will be rejected.
     0 - unlimited.
     )", 0) \
-    DECLARE(Bool, compact_parts_flush_per_column, true, R"(
+    DECLARE(Bool, compress_per_column_in_compact_parts, true, R"(
     Controls the physical layout of Compact parts. If true (default), each column in a granule
     starts a new compressed block, allowing ClickHouse to skip reading unnecessary columns
     from disk. If false, all columns within a granule are packed into the same compressed block,
@@ -2790,6 +2790,7 @@ bool MergeTreeSettings::isReadonlySetting(const String & name)
         || name == "add_minmax_index_for_string_columns"
         || name == "add_minmax_index_for_temporal_columns"
         || name == "table_disk"
+        || name == "compress_per_column_in_compact_parts"
     ;
 }
 

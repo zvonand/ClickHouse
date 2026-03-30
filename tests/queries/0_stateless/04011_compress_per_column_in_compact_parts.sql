@@ -4,12 +4,12 @@ DROP TABLE IF EXISTS t_compact_flush_false;
 -- Table with per-column compressed blocks (default behavior)
 CREATE TABLE t_compact_flush_true (id UInt64, v1 UInt64, v2 UInt64, v3 UInt64, v4 UInt64, v5 UInt64, v6 UInt64, v7 UInt64, v8 UInt64, v9 UInt64, v10 UInt64)
 ENGINE = MergeTree ORDER BY id
-SETTINGS min_bytes_for_wide_part = 100000000, compact_parts_flush_per_column = true;
+SETTINGS min_bytes_for_wide_part = 100000000, compress_per_column_in_compact_parts = true;
 
 -- Table with shared compressed blocks per granule
 CREATE TABLE t_compact_flush_false (id UInt64, v1 UInt64, v2 UInt64, v3 UInt64, v4 UInt64, v5 UInt64, v6 UInt64, v7 UInt64, v8 UInt64, v9 UInt64, v10 UInt64)
 ENGINE = MergeTree ORDER BY id
-SETTINGS min_bytes_for_wide_part = 100000000, compact_parts_flush_per_column = false;
+SETTINGS min_bytes_for_wide_part = 100000000, compress_per_column_in_compact_parts = false;
 
 INSERT INTO t_compact_flush_true SELECT number, number+1, number+2, number+3, number+4, number+5, number+6, number+7, number+8, number+9, number+10 FROM numbers(5000);
 INSERT INTO t_compact_flush_false SELECT number, number+1, number+2, number+3, number+4, number+5, number+6, number+7, number+8, number+9, number+10 FROM numbers(5000);
@@ -21,6 +21,9 @@ SELECT 'false_part_type', part_type FROM system.parts WHERE database = currentDa
 -- Data should be identical regardless of setting
 SELECT 'true_hash', groupBitXor(sipHash64(*)) FROM t_compact_flush_true;
 SELECT 'false_hash', groupBitXor(sipHash64(*)) FROM t_compact_flush_false;
+
+-- Setting is readonly: ALTER TABLE MODIFY SETTING should fail
+ALTER TABLE t_compact_flush_true MODIFY SETTING compress_per_column_in_compact_parts = false; -- { serverError READONLY_SETTING }
 
 DROP TABLE t_compact_flush_true;
 DROP TABLE t_compact_flush_false;

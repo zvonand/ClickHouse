@@ -1,3 +1,5 @@
+-- Tags: long
+
 -- Test that read-in-order optimization works through CreatingSetsStep (IN subqueries)
 -- when used with full_sorting_merge join.
 -- Previously, DelayedCreatingSetsStep between SortingStep and ReadFromMergeTree

@@ -59,5 +59,11 @@ $CLICKHOUSE_CLIENT --query "SELECT * FROM url('#frag', CSV, 'c String') SETTINGS
 # Path-relative URL with embedded absolute URL in query parameter (should not be treated as absolute)
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv?next=https://other.invalid/a', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 2>&1 | grep -oF 'https://base.invalid/dir/data.csv?next=https://other.invalid/a'
 
+# Path-relative URL with dot-segment (../) — no normalization, passed through as-is
+$CLICKHOUSE_CLIENT --query "SELECT * FROM url('../a.csv', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 2>&1 | grep -oF 'https://base.invalid/dir/../a.csv'
+
+# Path-relative URL with dot-segment (./) — no normalization, passed through as-is
+$CLICKHOUSE_CLIENT --query "SELECT * FROM url('./a.csv', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 2>&1 | grep -oF 'https://base.invalid/dir/./a.csv'
+
 # Invalid url_base (no scheme) should produce an error
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'example.invalid/def/', $FAST" 2>&1 | grep -oF 'must contain a scheme'

@@ -77,13 +77,17 @@ private:
     UInt64 step_between_chunks;
 };
 
-/// Bounded descending numbers generator, used by `generate_series` with negative step.
-/// Generates values from `start` down to `stop` (inclusive) with a given positive `step` (subtracted each time).
-/// Uses wrapping unsigned arithmetic: subtracting `step` is the same as adding `0 - step` in UInt64.
-class DescendingNumbersSource : public ISource
+/// Generates a fixed number of values starting from a given value, advancing by a given step.
+/// The step is applied as-is using unsigned arithmetic, which means wrapping steps can be used
+/// to produce descending sequences (e.g. UInt64(0) - abs_step wraps so that addition becomes subtraction).
+///
+/// This source is used by `generate_series` for descending series (negative step) and for
+/// ascending series that span the full UInt64 range with step > 1, where the normal
+/// domain-window path with `NumbersRangedSource` cannot be used.
+class SimpleSteppedNumbersSource : public ISource
 {
 public:
-    DescendingNumbersSource(
+    SimpleSteppedNumbersSource(
         UInt64 block_size_,
         UInt64 start_,
         UInt64 step_,
@@ -92,12 +96,12 @@ public:
         : ISource(NumbersSource::createHeader(column_name))
         , block_size(block_size_)
         , next(start_)
-        , wrapping_step(UInt64(0) - step_)
+        , step(step_)
         , remaining(total_count_)
     {
     }
 
-    String getName() const override { return "DescendingNumbers"; }
+    String getName() const override { return "SimpleSteppedNumbers"; }
 
 protected:
     Chunk generate() override
@@ -109,9 +113,9 @@ protected:
         auto column = ColumnUInt64::create(count);
         ColumnUInt64::Container & vec = column->getData();
 
-        iotaWithStepOptimized(vec.data(), count, next, wrapping_step);
+        iotaWithStepOptimized(vec.data(), count, next, step);
 
-        next += count * wrapping_step;
+        next += count * step;
         remaining -= count;
 
         progress(column->size(), column->byteSize());
@@ -121,7 +125,7 @@ protected:
 private:
     UInt64 block_size;
     UInt64 next;
-    UInt64 wrapping_step;  /// UInt64(0) - step, so adding this wraps to subtraction
+    UInt64 step;
     UInt64 remaining;
 };
 
@@ -491,9 +495,9 @@ Pipe ReadFromSystemNumbersStep::makePipe()
 
     chassert(numbers_storage.step != UInt64{0});
 
-    /// Descending series (used by `generate_series` with negative step).
-    /// Uses a simple single-stream source without filter pushdown.
-    if (numbers_storage.descending)
+    /// Simple stepped mode: pre-computed row count, single-stream, no filter pushdown.
+    /// Used by `generate_series` for descending series and full-range ascending with step > 1.
+    if (numbers_storage.use_stepped_source)
     {
         chassert(numbers_storage.limit.has_value());
         UInt64 total_count = *numbers_storage.limit;
@@ -503,7 +507,7 @@ Pipe ReadFromSystemNumbersStep::makePipe()
             return pipe;
         }
 
-        auto source = std::make_shared<DescendingNumbersSource>(
+        auto source = std::make_shared<SimpleSteppedNumbersSource>(
             max_block_size, numbers_storage.offset, numbers_storage.step, total_count, numbers_storage.column_name);
         source->addTotalRowsApprox(total_count);
         pipe.addSource(std::move(source));

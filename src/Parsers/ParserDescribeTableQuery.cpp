@@ -57,6 +57,10 @@ bool ParserDescribeTableQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & ex
     /// Try to parse SELECT query without parentheses (e.g., DESCRIBE SELECT 1)
     if (ParserSelectWithUnionQuery().parse(pos, select, expected))
     {
+        /// TEMPORARY is only valid with a table name, not with a subquery or SELECT
+        if (temporary)
+            return false;
+
         auto table_expr = make_intrusive<ASTTableExpression>();
         /// Wrap SELECT in ASTSubquery, as expected by the rest of the codebase
         auto subquery = make_intrusive<ASTSubquery>(std::move(select));

@@ -167,3 +167,45 @@ INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04065_infer.parquet', 'Pa
 SELECT c0 FROM file(currentDatabase() || '_04065_infer.parquet', 'Parquet') SETTINGS input_format_parquet_use_native_reader_v3 = 0;
 
 DROP TABLE test_tuple_inside_nullable;
+
+-- Type hint mismatch: file has Nullable(Tuple(...)), read as Tuple(...) (strip nullable, NULLs become defaults)
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32, String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), (NULL), ((3, 'c'));
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04065_mismatch1.parquet', 'Parquet') SELECT c0 FROM test_tuple_inside_nullable;
+
+-- Parquet Arrow reader: read nullable file as non-nullable
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04065_mismatch1.parquet', 'Parquet', 'c0 Tuple(UInt32, String)') SETTINGS input_format_parquet_use_native_reader_v3 = 0;
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Type hint mismatch: file has Tuple(...), read as Nullable(Tuple(...)) (add nullable wrapper)
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Tuple(UInt32, String)) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), ((2, 'b'));
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04065_mismatch2.parquet', 'Parquet') SELECT c0 FROM test_tuple_inside_nullable;
+
+-- Parquet Arrow reader: read non-nullable file as nullable
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04065_mismatch2.parquet', 'Parquet', 'c0 Nullable(Tuple(UInt32, String))') SETTINGS input_format_parquet_use_native_reader_v3 = 0;
+
+-- Parquet V3 native reader: read non-nullable file as nullable (not yet supported)
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04065_mismatch2.parquet', 'Parquet', 'c0 Nullable(Tuple(UInt32, String))') SETTINGS input_format_parquet_use_native_reader_v3 = 1; -- { serverError TYPE_MISMATCH }
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Schema inference: inferred type with toTypeName
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32, String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), (NULL), ((3, 'c'));
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04065_describe.parquet', 'Parquet') SELECT c0 FROM test_tuple_inside_nullable;
+
+-- Parquet Arrow reader: inferred type
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04065_describe.parquet', 'Parquet') SETTINGS input_format_parquet_use_native_reader_v3 = 0;
+
+-- Parquet V3 native reader: inferred type (struct-level NULL not supported, becomes (NULL,NULL))
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04065_describe.parquet', 'Parquet') SETTINGS input_format_parquet_use_native_reader_v3 = 1;
+
+DROP TABLE test_tuple_inside_nullable;

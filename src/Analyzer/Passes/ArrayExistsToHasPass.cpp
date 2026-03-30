@@ -101,6 +101,13 @@ public:
         auto nested_type = removeNullable(removeLowCardinality(array_type->getNestedType()));
         auto constant_type = removeNullable(removeLowCardinality(has_constant_element_argument->getResultType()));
 
+        /// Skip rewrite when the constant is NULL (Nullable(Nothing)).
+        /// arrayExists(x -> x = NULL, [NULL]) returns 0 because equals(NULL, NULL) is NULL,
+        /// and arrayExists treats non-true values as false.
+        /// But has([NULL], NULL) returns 1, so the rewrite would change semantics.
+        if (isNothing(constant_type))
+            return;
+
         bool types_compatible = (isNativeNumber(nested_type) || isEnum(nested_type)) && isNativeNumber(constant_type);
         if (!types_compatible)
             types_compatible = tryGetLeastSupertype(DataTypes{nested_type, constant_type}) != nullptr;

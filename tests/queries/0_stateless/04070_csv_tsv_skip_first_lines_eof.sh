@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Tags: no-parallel
 
 # Verify that skip_first_lines doesn't cause an excessive loop when the file has fewer lines than requested.
 # The bug only reproduces with file-based reading (pread), not with inline format() which uses ReadBufferFromMemory.

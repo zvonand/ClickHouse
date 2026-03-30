@@ -58,7 +58,7 @@ createLocalObjectStorageDisk(const std::string & meta_path, const std::string & 
     auto obj_storage = std::make_shared<TestLocalObjectStorage>(
         DB::LocalObjectStorageSettings("SnapshotDisk", obj_path, false));
     std::unordered_map<DB::Location, DB::LocationInfo> cluster_locations = {{"main", {true, true, ""}}};
-    DB::ClusterConfigurationPtr cluster(new DB::ClusterConfiguration(std::move(cluster_locations)));
+    auto cluster = std::make_shared<DB::ClusterConfiguration>("SnapshotDisk", std::move(cluster_locations));
     auto router = std::make_shared<DB::ObjectStorageRouter>(
         std::unordered_map<DB::Location, DB::ObjectStoragePtr>{{"main", obj_storage}});
     auto meta_disk = std::make_shared<DB::DiskLocal>("SnapshotMetaDisk", meta_path);
@@ -66,7 +66,7 @@ createLocalObjectStorageDisk(const std::string & meta_path, const std::string & 
         meta_disk, "", obj_storage->createKeyGenerator());
     Poco::AutoPtr<Poco::Util::MapConfiguration> config_ptr(new Poco::Util::MapConfiguration);
     auto disk = std::make_shared<DB::DiskObjectStorage>(
-        "SnapshotDisk", cluster, metadata_storage, router, *config_ptr, "", /*use_fake_transaction=*/true);
+        "SnapshotDisk", cluster, metadata_storage, router, /*wrapped_disk=*/nullptr, *config_ptr, "", /*use_fake_transaction=*/true);
     return {disk, obj_storage};
 }
 

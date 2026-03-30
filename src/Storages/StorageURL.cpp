@@ -1676,8 +1676,12 @@ String StorageURL::resolveURLBase(const String & url, const String & base)
     if (base.empty())
         return url;
 
-    /// If the URL already contains a scheme, return as-is.
-    if (url.find("://") != String::npos)
+    /// If the URL already contains a scheme at the beginning, return as-is.
+    /// Only check the prefix before any '/', '?', or '#' to avoid false positives
+    /// from embedded URLs in query parameters (e.g. "data.csv?next=https://other/a").
+    auto first_special = url.find_first_of("/?#");
+    auto scheme_in_url = url.find("://");
+    if (scheme_in_url != String::npos && (first_special == String::npos || scheme_in_url < first_special))
         return url;
 
     auto scheme_end = base.find("://");

@@ -13,4 +13,5 @@ https://base.invalid/data.csv
 https://base.invalid/dir/file.csv?x=1
 https://base.invalid/dir/file.csv#frag
 https://base.invalid/dir/file.csv?token=abc#frag
+https://base.invalid/dir/data.csv?next=https://other.invalid/a
 must contain a scheme

@@ -56,5 +56,8 @@ $CLICKHOUSE_CLIENT --query "SELECT * FROM url('#frag', CSV, 'c String') SETTINGS
 # Fragment-only reference with base that has a query string: query must be preserved
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('#frag', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/file.csv?token=abc', $FAST" 2>&1 | grep -oF 'https://base.invalid/dir/file.csv?token=abc#frag'
 
+# Path-relative URL with embedded absolute URL in query parameter (should not be treated as absolute)
+$CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv?next=https://other.invalid/a', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 2>&1 | grep -oF 'https://base.invalid/dir/data.csv?next=https://other.invalid/a'
+
 # Invalid url_base (no scheme) should produce an error
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'example.invalid/def/', $FAST" 2>&1 | grep -oF 'must contain a scheme'

@@ -46,3 +46,6 @@ SELECT uniq(obfuscateQueryWithSeed(
     materialize(CAST('select 1', 'LowCardinality(String)')),
     materialize(CAST('seed', 'LowCardinality(String)')))) AS uniq_lc_seed
 FROM numbers(2);
+
+-- Test numeric literal overflow in obfuscation (readIntText overflows uint64 to zero for very large numbers)
+SELECT length(obfuscateQueryWithSeed('SELECT 99999999999999999999999999999999 FROM t', 1)) > 0 AS overflow_handled;

@@ -19,6 +19,9 @@ SET cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_local
 SET parallel_replicas_local_plan = 1;
 SET optimize_aggregation_in_order = 0;
 SET parallel_replicas_support_projection = 1;
+-- Disable lazy materialization so it does not mask the header mismatch
+-- (lazy materialization adds its own projection step that strips extra PREWHERE columns).
+SET query_plan_optimize_lazy_materialization = 0;
 
 DROP TABLE IF EXISTS test_projection_pr;
 

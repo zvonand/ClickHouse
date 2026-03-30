@@ -1422,7 +1422,7 @@ static ColumnWithTypeAndName readNonNullableColumnFromArrowColumn(
                 /// requested `Tuple(UInt32, String)`, not `Tuple(Nullable(UInt32), Nullable(String))`). In that case,
                 /// we should remove Nullable from the child column and type, so that we return the correct type according
                 /// to the type hint. If the type hint says the element is Nullable, we keep it as is.
-                if (nested_type_hint && !nested_type_hint->isNullable() && column_with_type_and_name.type->isNullable())
+                if (nested_type_hint && !isNullableOrLowCardinalityNullable(nested_type_hint) && column_with_type_and_name.type->isNullable())
                 {
                     column_with_type_and_name.column
                         = assert_cast<const ColumnNullable &>(*column_with_type_and_name.column).getNestedColumnPtr();

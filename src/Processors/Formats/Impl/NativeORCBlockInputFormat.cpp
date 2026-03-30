@@ -1942,7 +1942,7 @@ ColumnWithTypeAndName ORCColumnToCHColumn::readColumnFromORCColumn(
                 /// `Tuple(Nullable(UInt32), Nullable(String))`). In that case, we should remove Nullable
                 /// from the child column and type, so that we return the correct type according to the type
                 /// hint. If the type hint says the element is Nullable, we keep it as is.
-                if (nested_type_hint && !nested_type_hint->isNullable() && element.type->isNullable())
+                if (nested_type_hint && !isNullableOrLowCardinalityNullable(nested_type_hint) && element.type->isNullable())
                 {
                     element.column = assert_cast<const ColumnNullable &>(*element.column).getNestedColumnPtr();
                     element.type = removeNullable(element.type);

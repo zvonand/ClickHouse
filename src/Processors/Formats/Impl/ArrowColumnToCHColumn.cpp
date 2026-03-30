@@ -1416,6 +1416,19 @@ static ColumnWithTypeAndName readNonNullableColumnFromArrowColumn(
                 if (!column_with_type_and_name.column)
                     return {};
 
+                /// In Arrow, child values at null struct positions are undefined per spec. These undefined values
+                /// can cause the child array to report `null_count > 0`, making `readColumnFromArrowColumn` wrap
+                /// the child in Nullable even though the type hint says the element is non-nullable (e.g. the user
+                /// requested `Tuple(UInt32, String)`, not `Tuple(Nullable(UInt32), Nullable(String))`). In that case,
+                /// we should remove Nullable from the child column and type, so that we return the correct type according
+                /// to the type hint. If the type hint says the element is Nullable, we keep it as is.
+                if (nested_type_hint && !nested_type_hint->isNullable() && column_with_type_and_name.type->isNullable())
+                {
+                    column_with_type_and_name.column
+                        = assert_cast<const ColumnNullable &>(*column_with_type_and_name.column).getNestedColumnPtr();
+                    column_with_type_and_name.type = removeNullable(column_with_type_and_name.type);
+                }
+
                 tuple_elements.emplace_back(std::move(column_with_type_and_name.column));
                 tuple_types.emplace_back(std::move(column_with_type_and_name.type));
                 tuple_names.emplace_back(std::move(column_with_type_and_name.name));
@@ -1574,7 +1587,6 @@ static ColumnWithTypeAndName readColumnFromArrowColumn(
         arrow_column->type()->id() != arrow::Type::LARGE_LIST &&
         arrow_column->type()->id() != arrow::Type::FIXED_SIZE_LIST &&
         arrow_column->type()->id() != arrow::Type::MAP &&
-        arrow_column->type()->id() != arrow::Type::STRUCT && /// TODO: support Nullable(Tuple(...)) for Arrow/ORC
         arrow_column->type()->id() != arrow::Type::DICTIONARY)
     {
         DataTypePtr nested_type_hint;

@@ -26,13 +26,16 @@ ${CLICKHOUSE_CLIENT} --input_format_parallel_parsing 0 --output_format_parallel_
 " | python3 -c "
 import json, sys
 m = json.load(sys.stdin)
-old_location = m['location']
-new_location = '${SPARK_LOCATION}'
+old_location = m['location'].rstrip('/')
+new_location = '${SPARK_LOCATION}'.rstrip('/')
 m['location'] = new_location
 for s in m.get('snapshots', []):
     ml = s['manifest-list']
-    if ml.startswith(old_location):
-        s['manifest-list'] = new_location + ml[len(old_location):]
+    # Strip old_location prefix (with or without trailing slash) and rejoin with new_location
+    for prefix in [old_location + '/', old_location]:
+        if ml.startswith(prefix):
+            s['manifest-list'] = new_location + '/' + ml[len(prefix):].lstrip('/')
+            break
 print(json.dumps(m))
 " | ${CLICKHOUSE_CLIENT} -q "
     INSERT INTO FUNCTION s3(s3_conn, filename='${TABLE_PATH}/metadata/v2.metadata.json', structure='line String', format='LineAsString')

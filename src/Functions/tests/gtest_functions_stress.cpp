@@ -37,56 +37,19 @@ namespace po = boost::program_options;
 
 namespace DB::ErrorCodes
 {
-    extern const int ARGUMENT_OUT_OF_BOUND;
-    extern const int ATTEMPT_TO_READ_AFTER_EOF;
-    extern const int BAD_ARGUMENTS;
-    extern const int BAD_GET;
     extern const int BAD_TYPE_OF_FIELD;
-    extern const int CANNOT_COMPILE_REGEXP;
-    extern const int CANNOT_CONVERT_TYPE;
-    extern const int CANNOT_CREATE_CHARSET_CONVERTER;
-    extern const int CANNOT_FORMAT_DATETIME;
-    extern const int CANNOT_NORMALIZE_STRING;
-    extern const int CANNOT_PARSE_BOOL;
+    extern const int CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN;
     extern const int CANNOT_PARSE_DATE;
-    extern const int CANNOT_PARSE_DATETIME;
-    extern const int CANNOT_PARSE_ESCAPE_SEQUENCE;
-    extern const int CANNOT_PARSE_INPUT_ASSERTION_FAILED;
-    extern const int CANNOT_PARSE_IPV4;
-    extern const int CANNOT_PARSE_IPV6;
-    extern const int CANNOT_PARSE_NUMBER;
-    extern const int CANNOT_PARSE_TEXT;
-    extern const int CANNOT_PARSE_UUID;
-    extern const int CANNOT_PRINT_FLOAT_OR_DOUBLE_NUMBER;
-    extern const int CANNOT_READ_ALL_DATA;
-    extern const int CANNOT_READ_ARRAY_FROM_TEXT;
-    extern const int DATA_TYPE_CANNOT_BE_PROMOTED;
-    extern const int DECIMAL_OVERFLOW;
-    extern const int FUNCTION_THROW_IF_VALUE_IS_NON_ZERO;
     extern const int ILLEGAL_COLUMN;
-    extern const int ILLEGAL_DIVISION;
     extern const int ILLEGAL_TYPE_OF_ARGUMENT;
     extern const int INCORRECT_DATA;
-    extern const int INDEX_OF_POSITIONAL_ARGUMENT_IS_OUT_OF_RANGE;
     extern const int MEMORY_LIMIT_EXCEEDED;
     extern const int NO_COMMON_TYPE;
     extern const int NOT_IMPLEMENTED;
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
-    extern const int PARAMETER_OUT_OF_BOUND;
-    extern const int SIZES_OF_ARRAYS_DONT_MATCH;
-    extern const int SYNTAX_ERROR;
     extern const int TOO_FEW_ARGUMENTS_FOR_FUNCTION;
-    extern const int TOO_LARGE_ARRAY_SIZE;
-    extern const int TOO_LARGE_STRING_SIZE;
     extern const int TOO_MANY_ARGUMENTS_FOR_FUNCTION;
     extern const int TYPE_MISMATCH;
-    extern const int UNEXPECTED_AST_STRUCTURE;
-    extern const int UNKNOWN_ELEMENT_OF_ENUM;
-    extern const int UNKNOWN_TYPE;
-    extern const int UNSUPPORTED_METHOD;
-    extern const int ZERO_ARRAY_OR_TUPLE_INDEX;
-    extern const int UNICODE_ERROR;
-    extern const int CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN;
 }
 
 namespace
@@ -1253,77 +1216,7 @@ struct FunctionsStressTestThread
                 {
                     stats.add(S_EXEC_ROW_OK, result->size());
 
-                    try
-                    {
-                        checkFunctionExecutionResults();
-                    }
-                    catch (Exception & e)
-                    {
-                        if (e.code() == ErrorCodes::MEMORY_LIMIT_EXCEEDED || e.code() == ErrorCodes::LOGICAL_ERROR)
-                            throw;
-
-                        /// Only downgrade exceptions with known error codes that arise from
-                        /// the validation infrastructure itself (e.g. type mismatches during
-                        /// single-row re-execution, decimal overflow in Field comparison,
-                        /// Date vs DateTime in monotonicity checks). Other exceptions are
-                        /// real bugs and should be reported as unexpected errors.
-                        static const std::unordered_set<int> validation_tolerated_errors = {
-                            ErrorCodes::BAD_TYPE_OF_FIELD,
-                            ErrorCodes::ILLEGAL_COLUMN,
-                            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                            ErrorCodes::NO_COMMON_TYPE,
-                            ErrorCodes::NOT_IMPLEMENTED,
-                            ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
-                            ErrorCodes::TOO_FEW_ARGUMENTS_FOR_FUNCTION,
-                            ErrorCodes::TOO_MANY_ARGUMENTS_FOR_FUNCTION,
-                            ErrorCodes::TYPE_MISMATCH,
-                            ErrorCodes::CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN,
-                            ErrorCodes::DECIMAL_OVERFLOW,
-                            ErrorCodes::BAD_ARGUMENTS,
-                            ErrorCodes::BAD_GET,
-                            ErrorCodes::CANNOT_CONVERT_TYPE,
-                            ErrorCodes::ILLEGAL_DIVISION,
-                            ErrorCodes::ARGUMENT_OUT_OF_BOUND,
-                            ErrorCodes::INCORRECT_DATA,
-                            ErrorCodes::TOO_LARGE_ARRAY_SIZE,
-                            ErrorCodes::TOO_LARGE_STRING_SIZE,
-                            ErrorCodes::CANNOT_PARSE_NUMBER,
-                            ErrorCodes::CANNOT_PARSE_TEXT,
-                            ErrorCodes::CANNOT_PARSE_DATE,
-                            ErrorCodes::CANNOT_PARSE_DATETIME,
-                            ErrorCodes::CANNOT_PARSE_BOOL,
-                            ErrorCodes::CANNOT_PARSE_UUID,
-                            ErrorCodes::CANNOT_PARSE_IPV4,
-                            ErrorCodes::CANNOT_PARSE_IPV6,
-                            ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED,
-                            ErrorCodes::CANNOT_PARSE_ESCAPE_SEQUENCE,
-                            ErrorCodes::CANNOT_READ_ALL_DATA,
-                            ErrorCodes::CANNOT_READ_ARRAY_FROM_TEXT,
-                            ErrorCodes::ATTEMPT_TO_READ_AFTER_EOF,
-                            ErrorCodes::SIZES_OF_ARRAYS_DONT_MATCH,
-                            ErrorCodes::PARAMETER_OUT_OF_BOUND,
-                            ErrorCodes::ZERO_ARRAY_OR_TUPLE_INDEX,
-                            ErrorCodes::INDEX_OF_POSITIONAL_ARGUMENT_IS_OUT_OF_RANGE,
-                            ErrorCodes::CANNOT_FORMAT_DATETIME,
-                            ErrorCodes::CANNOT_PRINT_FLOAT_OR_DOUBLE_NUMBER,
-                            ErrorCodes::CANNOT_COMPILE_REGEXP,
-                            ErrorCodes::CANNOT_NORMALIZE_STRING,
-                            ErrorCodes::CANNOT_CREATE_CHARSET_CONVERTER,
-                            ErrorCodes::DATA_TYPE_CANNOT_BE_PROMOTED,
-                            ErrorCodes::SYNTAX_ERROR,
-                            ErrorCodes::UNEXPECTED_AST_STRUCTURE,
-                            ErrorCodes::UNKNOWN_ELEMENT_OF_ENUM,
-                            ErrorCodes::UNKNOWN_TYPE,
-                            ErrorCodes::UNSUPPORTED_METHOD,
-                            ErrorCodes::UNICODE_ERROR,
-                            ErrorCodes::FUNCTION_THROW_IF_VALUE_IS_NON_ZERO,
-                        };
-
-                        if (validation_tolerated_errors.contains(e.code()))
-                            stats.reportProblem(P_LATE_TYPECHECK, fmt::format("exception during validation: {} {}", operation.describe(), getCurrentExceptionMessage(false)));
-                        else
-                            handle_unexpected_exception();
-                    }
+                    checkFunctionExecutionResults();
                 }
             }
             catch (Exception & e)

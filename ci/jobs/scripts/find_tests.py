@@ -14,8 +14,10 @@ from ci.praktika.settings import Settings
 from ci.praktika.utils import Shell
 
 # Query to fetch failed tests from CIDB for a given PR.
-# Results are ordered by recency-weighted failure count (exponential decay, 7-day half-life),
-# so tests that failed recently rank higher than old failures. Capped at 100.
+# Pre-filters out commit/check_name combinations with >= 20 failures — these indicate
+# widespread failures (e.g. build broken, environment issue) where every test failed,
+# not genuine per-test flakiness.  Results are ordered by recency-weighted failure
+# count (exponential decay, 7-day half-life). Capped at 100.
 FAILED_TESTS_QUERY = """ \
  select test_name
  from checks
@@ -25,6 +27,17 @@ FAILED_TESTS_QUERY = """ \
    and match(test_name, '{TEST_NAME_PATTERN}')
    and test_status = 'FAIL'
    and check_start_time >= now() - interval 30 day
+   and (commit_sha, check_name) in (
+       select commit_sha, check_name
+       from checks
+       where pull_request_number = {PR_NUMBER}
+         and check_name LIKE '{JOB_TYPE}%'
+         and check_status = 'failure'
+         and test_status = 'FAIL'
+         and check_start_time >= now() - interval 30 day
+       group by commit_sha, check_name
+       having count(test_name) < 20
+   )
  group by test_name
  order by count() * exp(-dateDiff('day', max(check_start_time), now()) / 7.) desc
  limit 100 \

@@ -265,7 +265,7 @@ def main():
         # Large repeat count so the 45-min global_time_limit is the effective stopping
         # condition, not the repeat count.  Tests run in parallel (--jobs N) with fresh
         # random settings per TestCase; --max-failures 5 stops early on broken PRs.
-        rerun_count = 50
+        rerun_count = 100
 
 
     if not info.is_local_run:

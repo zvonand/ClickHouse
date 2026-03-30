@@ -50,6 +50,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"output_format_parquet_version", "2.latest", "2.latest", "Obsolete setting, the custom encoder always writes Parquet V2.6+."},
             {"output_format_parquet_compliant_nested_types", true, true, "Obsolete setting, the custom encoder always uses compliant nested types."},
             {"input_format_parquet_use_native_reader_v3", true, true, "Obsolete setting, the native reader v3 is now always used."},
+            {"highlight_max_matches_per_row", 10000, 10000, "New setting to limit the number of highlight matches per row to protect against excessive memory usage."},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {

@@ -47,6 +47,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"enable_materialized_cte", false, false, "New setting"},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},
             {"highlight_max_matches_per_row", 10000, 10000, "New setting to limit the number of highlight matches per row to protect against excessive memory usage."},
+            {"materialize_statistics_on_insert", true, false, "Disable building statistics on INSERT by default, rely on merges instead"},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {
@@ -1110,12 +1111,12 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
             {"allow_commit_order_projection", false, false, "New setting"},
             {"replicated_fetches_min_part_level", 0, 0, "New setting"},
             {"replicated_fetches_min_part_level_timeout_seconds", 300, 300, "New setting"},
+            {"auto_statistics_types", "", "minmax, uniq", "Enable auto statistics by default"},
         });
         addSettingsChanges(merge_tree_settings_changes_history, "26.3",
         {
             {"vertical_merge_optimize_ttl_delete", false, true, "Allow vertical merge algorithm for merges that need to remove rows expired by TTL"},
             {"shared_merge_tree_replica_set_max_lifetime_seconds", 300, 300, "New setting"},
-            {"auto_statistics_types", "", "minmax, uniq", "Enable auto statistics by default"},
             {"table_readonly", false, false, "New setting to mark table as read-only, preventing inserts and modifications"},
             {"propagate_types_serialization_versions_to_nested_types", false, true, "Propagate data types serialization version to nested types by default"},
             {"map_serialization_version", "basic", "basic", "Add a setting to control Map serialization version"},
@@ -1134,7 +1135,6 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
             {"distributed_index_analysis_min_indexes_bytes_to_activate", 1_GiB, 1_GiB, "New setting"},
             {"refresh_statistics_interval", 0, 300, "Enable statistics cache"},
             {"enable_max_bytes_limit_for_min_age_to_force_merge", false, true, "Limit part sizes even with min_age_to_force_merge_seconds by default"},
-            {"auto_statistics_types", "", "minmax, uniq", "Enable auto statistics by default"},
             {"shared_merge_tree_replica_set_max_lifetime_seconds", 300, 300, "New setting"},
             {"shared_merge_tree_enable_automatic_empty_partitions_cleanup", false, true, "Enable by default"},
         });

@@ -126,7 +126,8 @@ StoragePtr TableFunctionGenerateSeries<alias_num>::executeImpl(
             }
         }
 
-        /// Compute the number of elements in the series, guarding against UInt64 overflow.
+        /// Compute the number of stepped values in a descending series, guarding against UInt64 overflow.
+        /// Used only for negative step, where `DescendingNumbersSource` needs the actual value count.
         /// The formula is `range / abs_step + 1`, but `+ 1` can wrap to 0 when `range / abs_step == UInt64_MAX`.
         auto computeCardinality = [&](UInt64 range) -> UInt64
         {
@@ -149,9 +150,11 @@ StoragePtr TableFunctionGenerateSeries<alias_num>::executeImpl(
             }
             else
             {
-                UInt64 count = computeCardinality(stop - start);
+                /// The limit parameter of StorageSystemNumbers is the raw domain window size
+                /// (number of consecutive integers), not the number of stepped values.
+                /// ReadFromSystemNumbersStep handles the stepping internally.
                 res = std::make_shared<StorageSystemNumbers>(
-                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, count, start, abs_step);
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, (stop - start) + 1, start, abs_step);
             }
         }
         else

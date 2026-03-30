@@ -32,5 +32,10 @@ SELECT * FROM generate_series(0, 18446744073709551615, 1); -- { serverError INVA
 -- INT64_MIN as step (boundary for signed negation)
 SELECT count() FROM generate_series(9223372036854775807, 0, -9223372036854775808);
 
+-- Known limitation: when stop - start == UInt64_MAX, the query is rejected because the limit
+-- passed to `StorageSystemNumbers` is `range + 1` which would overflow UInt64, even though
+-- a large step would produce only a few values. Previously this silently returned empty result.
+SELECT * FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808)); -- { serverError INVALID_SETTING_VALUE }
+
 -- Zero step should error
 SELECT * FROM generate_series(0, 10, 0); -- { serverError INVALID_SETTING_VALUE }

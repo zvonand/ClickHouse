@@ -645,19 +645,6 @@ class Runner:
                     )
                     result.set_link(link)
 
-        if job.post_hooks:
-            sw_ = Utils.Stopwatch()
-            results_ = []
-            for check in job.post_hooks:
-                if callable(check):
-                    name = check.__name__
-                else:
-                    name = str(check)
-                results_.append(Result.from_commands_run(name=name, command=check))
-            result.results.append(
-                Result.create_from(name="Post Hooks", results=results_, stopwatch=sw_)
-            )
-
         # run after post hooks as they might modify workflow kv data
         job_outputs = env.JOB_KV_DATA
         print(f"Job's output: [{list(job_outputs.keys())}]")

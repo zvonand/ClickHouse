@@ -5989,8 +5989,8 @@ void MergeTreeData::swapActivePart(MergeTreeData::DataPartPtr part_copy, DataPar
             auto part_it = data_parts_indexes.insert(part_copy).first;
             modifyPartState(part_it, DataPartState::Active, lock);
 
-            removePartContributionToTableCounters(original_active_part);
             addPartContributionToTableCounters(part_copy);
+            removePartContributionToTableCounters(original_active_part);
             return;
         }
     }
@@ -8559,6 +8559,10 @@ MergeTreeData::DataPartsVector MergeTreeData::Transaction::commit(DataPartsLock 
                     covered_parts = std::move(covered_parts_for_commit[part_idx]);
 
                     total_covered_parts.insert(total_covered_parts.end(), covered_parts.begin(), covered_parts.end());
+
+                    data.addPartContributionToTableCounters(part);
+                    data.addPartContributionToColumnAndSecondaryIndexSizes(part);
+
                     for (const auto & covered_part : covered_parts)
                     {
                         covered_part->remove_time.store(current_time, std::memory_order_relaxed);
@@ -8569,8 +8573,6 @@ MergeTreeData::DataPartsVector MergeTreeData::Transaction::commit(DataPartsLock 
                     }
 
                     data.modifyPartState(part, DataPartState::Active, acquired_parts_lock);
-                    data.addPartContributionToTableCounters(part);
-                    data.addPartContributionToColumnAndSecondaryIndexSizes(part);
                 }
 
                 ++part_idx;

@@ -34,7 +34,7 @@ Provides access to file system to list files and return their metadata and conte
 ## Access control
 
 In server mode, the function is restricted to the `user_files` directory (controlled by the `user_files_path` server config).
-Paths are resolved relative to `user_files`. Symlinks that escape `user_files` are skipped.
+Paths are resolved relative to `user_files`. Symlinks whose resolved path leaves the `user_files` subtree are skipped during traversal.
 In `clickhouse-local` mode, any path on the local filesystem is accessible.
 
 The `FILE` source access type is required.

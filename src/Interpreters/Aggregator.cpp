@@ -1814,7 +1814,7 @@ bool Aggregator::executeOnBlock(Columns columns,
                 key_columns[i] = materialized_columns.back().get();
             }
         }
-        else if (!key_columns[i]->lowCardinality())
+        else if (key_types[i]->lowCardinality() && !key_columns[i]->lowCardinality())
         {
             /// The aggregation method expects LowCardinality but the column is not.
             /// This can happen after ALTER TABLE MODIFY COLUMN when old data parts
@@ -3707,7 +3707,7 @@ bool Aggregator::mergeOnBlock(Columns columns, size_t rows, bool is_overflows, A
     {
         for (size_t i = 0; i < params.keys_size; ++i)
         {
-            if (!columns[i]->lowCardinality())
+            if (key_types[i]->lowCardinality() && !columns[i]->lowCardinality())
             {
                 auto lc_col = key_types[i]->createColumn();
                 assert_cast<ColumnLowCardinality &>(*lc_col).insertRangeFromFullColumn(*columns[i], 0, rows);

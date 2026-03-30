@@ -2758,6 +2758,7 @@ message URLFunc {
         InOutFormat inoutformat = 6;
     }
     optional Expr structure = 7;
+    repeated string http_headers = 8; // Each entry: 'header-name'='value'
 }
 
 message SQLTableFuncCall {

@@ -2251,6 +2251,19 @@ CONV_FN(URLFunc, url)
         ret += ", ";
         ExprToString(ret, url.structure());
     }
+    if (url.has_structure() && url.http_headers_size() > 0)
+    {
+        ret += ", headers(";
+        for (int i = 0; i < url.http_headers_size(); i++)
+        {
+            if (i > 0)
+            {
+                ret += ", ";
+            }
+            ret += url.http_headers(i);
+        }
+        ret += ")";
+    }
     ret += ")";
 }
 

@@ -1046,7 +1046,7 @@ bool StatementGenerator::tableOrFunctionRef(
               {
                   ufunc->set_fname(URLFunc_FName::URLFunc_FName_url);
               }
-              url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "/?query=INSERT+INTO+`" + escapeSQLString(t.getDatabaseName(), '`')
+              url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "query=INSERT+INTO+`" + escapeSQLString(t.getDatabaseName(), '`')
                   + "`.`" + escapeSQLString(t.name, '`') + "`";
               if (!this->entries.empty())
               {
@@ -1077,6 +1077,7 @@ bool StatementGenerator::tableOrFunctionRef(
                   ufunc->set_outformat(outf);
               }
               ufunc->mutable_structure()->mutable_lit_val()->set_string_lit(std::move(buf));
+              addRandomURLFuncHeaders(rg, ufunc);
           }},
          {simple_est,
           [&]

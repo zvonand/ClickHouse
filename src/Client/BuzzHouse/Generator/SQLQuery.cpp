@@ -382,6 +382,10 @@ void StatementGenerator::setTableFunction(RandomGenerator & rg, const TableFunct
                 ufunc->set_inoutformat(t.file_format.value());
             }
             structure = rg.nextMediumNumber() < 96 ? ufunc->mutable_structure() : nullptr;
+            if (structure)
+            {
+                addRandomURLFuncHeaders(rg, ufunc);
+            }
         }
         else if (t.isRedisEngine())
         {
@@ -661,9 +665,59 @@ String StatementGenerator::getNextRandomServerAddresses(RandomGenerator & rg, co
 String StatementGenerator::getNextHTTPURL(RandomGenerator & rg, const bool secure)
 {
     const auto & servers = secure ? fc.https_servers : fc.http_servers;
+    String ret = (servers.empty() || rg.nextBool()) ? fc.getHTTPURL(secure)
+                                                    : fmt::format("http{}://{}", secure ? "s" : "", rg.pickRandomly(servers));
+    ret += "/?";
+    if (rg.nextSmallNumber() < 4)
+    {
+        ret += "compress=1&";
+    }
+    if (rg.nextSmallNumber() < 4)
+    {
+        ret += "enable_http_compression=1&";
+    }
+    if (rg.nextSmallNumber() < 4)
+    {
+        ret += "wait_end_of_query=" + std::to_string(static_cast<uint32_t>(rg.nextBool())) + "&";
+    }
+    if (rg.nextSmallNumber() < 4)
+    {
+        ret += "send_progress_in_http_headers=1&";
+    }
+    if (rg.nextSmallNumber() < 4)
+    {
+        ret += "decompress=1&";
+    }
+    if (rg.nextSmallNumber() < 4)
+    {
+        /// Small buffer sizes stress intermediate flushes in WriteBufferDecorator
+        ret += "buffer_size=" + std::to_string(UINT32_C(1) << (rg.nextSmallNumber() % 14)) + "&";
+    }
+    if (rg.nextSmallNumber() < 4)
+    {
+        ret += "http_write_exception_in_output_format=" + std::to_string(static_cast<uint32_t>(rg.nextBool())) + "&";
+    }
+    return ret;
+}
 
-    return (servers.empty() || rg.nextBool()) ? fc.getHTTPURL(secure)
-                                              : fmt::format("http{}://{}", secure ? "s" : "", rg.pickRandomly(servers));
+void StatementGenerator::addRandomURLFuncHeaders(RandomGenerator & rg, URLFunc * ufunc)
+{
+    /// Accept-Encoding triggers HTTP-level compression (WriteBufferDecorator path)
+    static const std::array<const char *, 5> accept_encodings = {"gzip", "zstd", "br", "deflate", "lz4"};
+    if (rg.nextSmallNumber() < 4)
+    {
+        ufunc->add_http_headers(fmt::format("'Accept-Encoding'='{}'", rg.pickRandomly(accept_encodings)));
+    }
+    /// X-ClickHouse-Compress: native LZ4 compression via header (alternative to compress=1 URL param)
+    if (rg.nextSmallNumber() < 4)
+    {
+        ufunc->add_http_headers("'X-ClickHouse-Compress'='1'");
+    }
+    /// X-ClickHouse-Progress: deliver query progress in response headers
+    if (rg.nextSmallNumber() < 4)
+    {
+        ufunc->add_http_headers("'X-ClickHouse-Progress'='1'");
+    }
 }
 
 StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
@@ -1063,7 +1117,7 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
             {
                 ufunc->set_fname(URLFunc_FName::URLFunc_FName_url);
             }
-            url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "/?query=SELECT+";
+            url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "query=SELECT+";
             flatTableColumnPath(to_remote_entries, tt.cols, [](const SQLColumn &) { return true; });
             std::shuffle(this->remote_entries.begin(), this->remote_entries.end(), rg.generator);
             for (const auto & entry : this->remote_entries)
@@ -1084,6 +1138,7 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
                 ufunc->set_outformat(outf);
             }
             ufunc->mutable_structure()->mutable_lit_val()->set_string_lit(std::move(buf));
+            addRandomURLFuncHeaders(rg, ufunc);
             addTableRelation(rg, rg.nextMediumNumber() < 4, rel_name, tt);
         }
         break;

@@ -626,6 +626,7 @@ private:
     String getNextTestingAddress(RandomGenerator & rg, bool secure) const;
     String getNextRandomServerAddresses(RandomGenerator & rg, bool secure);
     String getNextHTTPURL(RandomGenerator & rg, bool secure);
+    void addRandomURLFuncHeaders(RandomGenerator & rg, URLFunc * ufunc);
     struct FromSourceInfo
     {
         bool supports_final = false;

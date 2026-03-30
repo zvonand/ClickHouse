@@ -35,10 +35,22 @@ const ColumnIdentifier & GlobalPlannerContext::createColumnIdentifier(const Name
         column_identifier = column.name;
 
     auto [it, inserted] = column_identifiers.emplace(column_identifier);
+
     /// In UNION ALL queries, different branches share the same GlobalPlannerContext.
     /// When both branches reference a table expression with no alias and the same column name,
-    /// the column identifier will collide. This is fine because each branch has its own
-    /// PlannerContext with separate TableExpressionData, so returning the same identifier is safe.
+    /// the column identifier will collide. Disambiguate with a numeric suffix to maintain uniqueness.
+    if (!inserted)
+    {
+        size_t suffix = 0;
+        std::string disambiguated;
+        do
+        {
+            disambiguated = column_identifier + "_" + std::to_string(suffix);
+            ++suffix;
+        } while (column_identifiers.contains(disambiguated));
+
+        std::tie(it, inserted) = column_identifiers.emplace(std::move(disambiguated));
+    }
 
     return *it;
 }

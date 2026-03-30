@@ -25,6 +25,8 @@ Returns a table with the single 'generate_series' column (`UInt64`) that contain
 generate_series(START, STOP, STEP)
 ```
 
+`STEP` can be negative, in which case the series is generated in descending order from `START` down to `STOP`. If `STEP` is negative and `START < STOP`, the result is empty.
+
 ## Examples {#examples}
 
 The following queries return tables with the same content but different column names:
@@ -39,4 +41,10 @@ And the following queries return tables with the same content but different colu
 ```sql
 SELECT * FROM numbers(10, 11) WHERE number % 3 == (10 % 3);
 SELECT * FROM generate_series(10, 20, 3);
+```
+
+Generate a descending series:
+
+```sql
+SELECT * FROM generate_series(9, 0, -1);
 ```

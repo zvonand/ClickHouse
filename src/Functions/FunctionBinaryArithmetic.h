@@ -3185,6 +3185,10 @@ public:
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
+        /// Use context.lock() instead of getContext() for consistency with getReturnTypeImpl:
+        /// the context may have expired by the time buildImpl is called (e.g. during query plan optimization).
+        auto locked_context = context.lock();
+
         /// Only division-like operations can have division_by_nullable=true.
         /// Using if constexpr avoids instantiating FunctionBinaryArithmetic<..., true> and
         /// FunctionBinaryArithmeticWithConstants<..., true> for all other operations,
@@ -3220,18 +3224,18 @@ public:
             {
                 if (division_by_nullable)
                     return make_adaptor(FunctionBinaryArithmeticWithConstants<Op, Name, valid_on_default_arguments, valid_on_float_arguments, true>::create(
-                        arguments[0], arguments[1], return_type, getContext()));
+                        arguments[0], arguments[1], return_type, locked_context));
             }
             return make_adaptor(FunctionBinaryArithmeticWithConstants<Op, Name, valid_on_default_arguments, valid_on_float_arguments, false>::create(
-                arguments[0], arguments[1], return_type, getContext()));
+                arguments[0], arguments[1], return_type, locked_context));
         }
 
         if constexpr (can_have_division_by_nullable)
         {
             if (division_by_nullable)
-                return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, true>::create(getContext()));
+                return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, true>::create(locked_context));
         }
-        return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, false>::create(getContext()));
+        return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, false>::create(locked_context));
     }
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override

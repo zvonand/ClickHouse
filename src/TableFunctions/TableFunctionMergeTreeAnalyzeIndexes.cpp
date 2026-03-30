@@ -186,7 +186,7 @@ void TableFunctionMergeTreeAnalyzeIndexes::parseArgumentsDatabaseTable(const AST
     source_table_id = StorageID{database, table};
 }
 
-void TableFunctionMergeTreeAnalyzeIndexes::parseArgumentsForOptimizations(const ASTs & args, ContextPtr /*context*/)
+void TableFunctionMergeTreeAnalyzeIndexes::parseArgumentsForOptimizations(const ASTs & args, ContextPtr context)
 {
     if (args.size() == 5)
     {
@@ -194,7 +194,7 @@ void TableFunctionMergeTreeAnalyzeIndexes::parseArgumentsForOptimizations(const 
         if (optimization == "vector_search_index_analysis")
         {
             auto cast_node = args[4]->children.at(0);
-            auto vector_search_args = cast_node->children.at(0)->as<ASTLiteral>()->value.safeGet<Array>();
+            auto vector_search_args = evaluateConstantExpressionAsLiteral(cast_node->children.at(0), context)->as<ASTLiteral &>().value.safeGet<Array>();
             if (vector_search_args.size() != 6)
                 throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
                     "vector_search_index_analysis requires 6 arguments");

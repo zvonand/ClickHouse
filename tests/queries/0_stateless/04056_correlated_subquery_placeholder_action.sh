@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Regression test for the hasCorrelatedExpressions fix.
+#
+# Before the fix, IQueryPlanStep::hasCorrelatedExpressions threw NOT_IMPLEMENTED
+# for steps without an override (e.g. SortingStep). buildCorrelatedPlanStepMap
+# called this on every plan step, so correlated subqueries whose plans contained
+# SortingStep crashed with "Cannot check Sorting plan step for correlated expressions".
+#
+# After the fix, the default returns false. buildCorrelatedPlanStepMap succeeds and
+# the real decorrelation code runs, producing a clearer error: "Cannot decorrelate
+# query, because 'Sorting' step is not supported".
+#
+# The fix also adds guards in FutureSetFromSubquery::buildSetInplace and
+# buildOrderedSetInplace to skip correlated subquery plans with PLACEHOLDER nodes.
+# That path is only reachable through the AST fuzzer and cannot be tested from SQL.
+
+CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../shell_config.sh
+. "$CURDIR"/../shell_config.sh
+
+$CLICKHOUSE_CLIENT -q "
+    SET enable_analyzer = 1;
+    SET allow_experimental_correlated_subqueries = 1;
+
+    DROP TABLE IF EXISTS t1;
+    DROP TABLE IF EXISTS t2;
+
+    CREATE TABLE t1 (a UInt32, b UInt32) ENGINE = MergeTree() ORDER BY a;
+    CREATE TABLE t2 (x UInt32, y UInt32) ENGINE = MergeTree() ORDER BY x;
+
+    INSERT INTO t1 VALUES (1, 10), (2, 20), (3, 30);
+    INSERT INTO t2 VALUES (10, 100), (20, 200), (40, 400);
+"
+
+# Correlated scalar subquery with ORDER BY in the subquery (SortingStep in the plan).
+# On master: throws 'Cannot check Sorting plan step for correlated expressions'
+# On fix: throws 'Cannot decorrelate query, because Sorting step is not supported'
+# Both are NOT_IMPLEMENTED, but the message differs. We check for the post-fix message.
+ERROR=$($CLICKHOUSE_CLIENT -q "
+    SET enable_analyzer = 1;
+    SET allow_experimental_correlated_subqueries = 1;
+    SELECT a, (SELECT x FROM t2 WHERE t2.y = t1.a * 100 ORDER BY x) as s FROM t1 ORDER BY a;
+" 2>&1)
+
+if echo "$ERROR" | grep -q "Cannot decorrelate query"; then
+    echo "OK: got expected post-fix error"
+elif echo "$ERROR" | grep -q "Cannot check.*plan step for correlated expressions"; then
+    echo "FAIL: got pre-fix error (hasCorrelatedExpressions threw instead of returning false)"
+    exit 1
+else
+    echo "UNEXPECTED: $ERROR"
+    exit 1
+fi
+
+$CLICKHOUSE_CLIENT -q "
+    DROP TABLE t1;
+    DROP TABLE t2;
+"

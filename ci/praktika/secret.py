@@ -104,13 +104,14 @@ class Secret:
 
         def get_aws_ssm_secrets_batched(self):
             """
-            Fetch multiple secrets efficiently, making one boto3 API call per unique
-            root secret. Secrets sharing the same root (e.g. "vault.key1" and
-            "vault.key2") are resolved from a single get_secret_value response.
+            Fetch multiple secrets efficiently, making one CLI call per unique root
+            secret. Secrets sharing the same root (e.g. "vault.key1" and "vault.key2")
+            are resolved from a single get_secret_value response parsed in Python,
+            which correctly handles multi-line values such as PEM keys.
             """
-            import boto3
-
             assert isinstance(self.name, list)
+
+            region = f" --region {self.region}" if self.region else ""
 
             # Parse each name into (root, key); key is None when there is no dot
             parsed = [(n.split(".", 1) if "." in n else (n, None)) for n in self.name]
@@ -121,11 +122,10 @@ class Secret:
                 root_to_indices.setdefault(root, []).append(i)
 
             results = [None] * len(self.name)
-            kwargs = {"region_name": self.region} if self.region else {}
-            client = boto3.client("secretsmanager", **kwargs)
 
             for root, indices in root_to_indices.items():
-                secret_string = client.get_secret_value(SecretId=root)["SecretString"]
+                cmd = f"aws secretsmanager get-secret-value --secret-id {root} --query SecretString --output text{region}"
+                secret_string = Shell.get_output(cmd, verbose=True, strict=True)
                 secret_data = json.loads(secret_string)
                 for idx in indices:
                     key = parsed[idx][1]

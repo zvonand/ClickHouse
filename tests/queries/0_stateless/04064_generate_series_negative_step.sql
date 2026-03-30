@@ -35,12 +35,12 @@ SELECT * FROM generate_series(0, 18446744073709551615, 1); -- { serverError INVA
 SELECT count() FROM generate_series(9223372036854775807, 0, -9223372036854775808);
 
 -- Full UInt64 range with large step: previously silently returned empty result,
--- now uses bounded mode to produce correct output.
+-- now uses simple stepped mode to produce correct output.
 SELECT * FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808));
 
 SELECT * FROM generate_series(CAST('18446744073709551615', 'UInt64'), 0, -9223372036854775808);
 
--- Bounded ascending: LIMIT and WHERE
+-- Simple stepped ascending: LIMIT and WHERE
 SELECT * FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808)) LIMIT 1;
 SELECT * FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808)) WHERE generate_series > 0;
 SELECT count() FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808));

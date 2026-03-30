@@ -842,8 +842,15 @@ SnapshotFileInfoPtr KeeperSnapshotManager<Storage>::finalizeSnapshotReceiveToDis
 
     auto snapshot_file_info = std::make_shared<SnapshotFileInfo>(ctx.snapshot_file_name, ctx.disk);
     existing_snapshots.emplace(ctx.log_idx, snapshot_file_info);
-    removeOutdatedSnapshotsIfNeeded();
-    moveSnapshotsIfNeeded();
+    try
+    {
+        removeOutdatedSnapshotsIfNeeded();
+        moveSnapshotsIfNeeded();
+    }
+    catch (...)
+    {
+        tryLogCurrentException(__PRETTY_FUNCTION__);
+    }
 
     return snapshot_file_info;
 }

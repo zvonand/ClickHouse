@@ -1177,12 +1177,12 @@ std::shared_ptr<typename Container::Node> KeeperStorage<Container>::UncommittedS
 }
 
 template<typename Container>
-Coordination::ACLs KeeperStorage<Container>::UncommittedState::getACLs(std::string_view path) const
+Coordination::ACLs KeeperStorage<Container>::UncommittedState::getACLs(std::string_view path, bool should_lock_storage) const
 {
     auto node_it = nodes.find(path);
     if (node_it == nodes.end())
     {
-        std::shared_ptr<KeeperStorage::Node> node = tryGetNodeFromStorage(path);
+        std::shared_ptr<KeeperStorage::Node> node = tryGetNodeFromStorage(path, should_lock_storage);
 
         if (!node)
             return {};
@@ -1573,7 +1573,7 @@ namespace
 {
 
 template<typename Storage>
-Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is_local)
+Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is_local, bool should_lock_storage = true)
 {
     if (is_local)
     {
@@ -1585,7 +1585,7 @@ Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is
         return storage.acl_map.convertNumber(node_it->value.acl_id);
     }
 
-    return storage.uncommitted_state.getACLs(path);
+    return storage.uncommitted_state.getACLs(path, should_lock_storage);
 }
 
 void handleSystemNodeModification(const KeeperContext & keeper_context, std::string_view error_msg)
@@ -1603,9 +1603,9 @@ void handleSystemNodeModification(const KeeperContext & keeper_context, std::str
 }
 
 template<typename Container>
-bool KeeperStorage<Container>::checkACL(std::string_view path, int32_t permission, int64_t session_id, bool is_local)
+bool KeeperStorage<Container>::checkACL(std::string_view path, int32_t permission, int64_t session_id, bool is_local, bool should_lock_storage)
 {
-    const auto node_acls = getNodeACLs(*this, path, is_local);
+    const auto node_acls = getNodeACLs(*this, path, is_local, should_lock_storage);
     if (node_acls.empty())
         return true;
 
@@ -2451,7 +2451,7 @@ std::list<KeeperStorageBase::Delta> preprocess(
 
 template <bool local, typename Storage>
 Coordination::ZooKeeperResponsePtr
-processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t /*session_id*/)
+processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
 {
     auto response = std::make_shared<Coordination::ZooKeeperGetChildrenRecursiveResponse>();
 
@@ -2490,8 +2490,11 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
             for (auto && [child_name, _] : children)
             {
                 auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
-                response->children.push_back(child_path);
-                traverse.push(std::move(child_path));
+                if (storage.checkACL(child_path, Coordination::ACL::Read, session_id, local, false))
+                {
+                    response->children.push_back(child_path);
+                    traverse.push(std::move(child_path));
+                }
             }
         }
         else
@@ -2502,8 +2505,11 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
             for (const auto & child_name : it->value.getChildren())
             {
                 auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
-                response->children.push_back(child_path);
-                traverse.push(child_path);
+                if (storage.checkACL(child_path, Coordination::ACL::Read, session_id, local, false))
+                {
+                    response->children.push_back(child_path);
+                    traverse.push(child_path);
+                }
             }
         }
 

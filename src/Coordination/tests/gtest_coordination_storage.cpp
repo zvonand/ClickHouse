@@ -1,3 +1,4 @@
+#include <Common/ZooKeeper/IKeeper.h>
 #include "config.h"
 
 #if USE_NURAFT
@@ -1546,14 +1547,14 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
 
     using Storage = typename TestFixture::Storage;
 
-    ChangelogDirTest rocks("./rocksdb");
-    this->setRocksDBDirectory("./rocksdb");
+    ChangelogDirTest rocks("./rocksdb4");
+    this->setRocksDBDirectory("./rocksdb4");
 
     Storage storage{500, "", this->keeper_context};
 
     int32_t zxid = 0;
 
-    const auto create = [&](const String & path, int create_mode = zkutil::CreateMode::Persistent)
+    const auto create = [&](const String & path, int create_mode = zkutil::CreateMode::Persistent, std::optional<int> acl_mode = std::nullopt)
     {
         int new_zxid = ++zxid;
 
@@ -1561,6 +1562,11 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         create_request->path = path;
         create_request->is_ephemeral = create_mode == zkutil::CreateMode::Ephemeral || create_mode == zkutil::CreateMode::EphemeralSequential;
         create_request->is_sequential = create_mode == zkutil::CreateMode::PersistentSequential || create_mode == zkutil::CreateMode::EphemeralSequential;
+        if (acl_mode)
+        {
+            static constexpr std::string_view digest = "clickhouse:test";
+            create_request->acls = {{.permissions = *acl_mode, .scheme = "digest", .id = std::string{digest}}};
+        }
 
         storage.preprocessRequest(create_request, 1, 0, new_zxid);
         auto responses = storage.processRequest(create_request, 1, new_zxid);
@@ -1699,6 +1705,21 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         ASSERT_TRUE(child_set.contains("/mixed/P"));
         ASSERT_TRUE(child_set.contains("/mixed/E"));
     }
+
+    {
+        SCOPED_TRACE("ACL check");
+        create("/mixed_acl");
+        create("/mixed_acl/P", zkutil::CreateMode::Persistent);
+        create("/mixed_acl/E", zkutil::CreateMode::Ephemeral, ACL::Admin);
+
+        auto children = get_children_recursive("/mixed_acl", 100);
+        ASSERT_EQ(children.size(), 1);
+
+        std::unordered_set<String> child_set(children.begin(), children.end());
+        ASSERT_TRUE(child_set.contains("/mixed_acl/P"));
+        ASSERT_FALSE(child_set.contains("/mixed_acl/E"));
+    }
+
 }
 
 TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveInMultiRequest)

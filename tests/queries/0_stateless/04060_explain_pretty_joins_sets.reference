@@ -91,9 +91,9 @@ CreatingSets (Create sets before main query execution)
 │     Parts: 1 | Granules: 1
 │     Output: a, b
 │     Prewhere filter
-│     Prewhere filter column:  a IN subquery1 AND b IN subquery2
+│     Prewhere filter column:  b IN subquery1 AND a IN subquery2
 └──CreatingSet (Create set for subquery)
-   │  Set: subquery2
+   │  Set: subquery1
    └──ReadFromMergeTree (default.t2)
          Read type: Default
          Parts: 1 | Granules: 1

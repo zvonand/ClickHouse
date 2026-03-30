@@ -5,6 +5,7 @@ SET query_plan_join_swap_table = 0;
 SET enable_parallel_replicas = 0;
 SET use_statistics = 0;
 SET optimize_move_to_prewhere = 0;
+SET allow_reorder_prewhere_conditions = 0;
 
 DROP TABLE IF EXISTS t1;
 

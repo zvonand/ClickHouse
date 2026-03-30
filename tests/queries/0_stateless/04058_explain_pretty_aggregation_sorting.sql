@@ -4,6 +4,12 @@ SET enable_join_runtime_filters = 0;
 SET query_plan_join_swap_table = 0;
 SET enable_parallel_replicas = 0;
 SET use_statistics = 0;
+SET optimize_syntax_fuse_functions = 1;
+SET optimize_aggregation_in_order = 0;
+SET optimize_read_in_order = 1;
+SET optimize_distinct_in_order = 1;
+SET optimize_sorting_by_input_stream_properties = 1;
+SET allow_reorder_prewhere_conditions = 0;
 
 DROP TABLE IF EXISTS t1;
 

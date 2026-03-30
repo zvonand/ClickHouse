@@ -266,3 +266,57 @@ SELECT c0, c1 FROM file(currentDatabase() || '_04064_multi.orc', 'ORC', 'c0 Null
 SELECT c0, c1 FROM file(currentDatabase() || '_04064_multi.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String)), c1 Nullable(Tuple(Float64))') SETTINGS input_format_orc_use_fast_decoder = 0;
 
 DROP TABLE test_tuple_inside_nullable;
+
+-- Type hint mismatch: file has Nullable(Tuple(...)), read as Tuple(...) (strip nullable, NULLs become defaults)
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32, String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), (NULL), ((3, 'c'));
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_mismatch1.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_mismatch1.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+
+-- Arrow: read nullable file as non-nullable
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_mismatch1.arrow', 'Arrow', 'c0 Tuple(UInt32, String)');
+
+-- ORC: read nullable file as non-nullable
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_mismatch1.orc', 'ORC', 'c0 Tuple(UInt32, String)');
+
+-- ORC legacy: read nullable file as non-nullable
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_mismatch1.orc', 'ORC', 'c0 Tuple(UInt32, String)') SETTINGS input_format_orc_use_fast_decoder = 0;
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Type hint mismatch: file has Tuple(...), read as Nullable(Tuple(...)) (add nullable wrapper)
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Tuple(UInt32, String)) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), ((2, 'b'));
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_mismatch2.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_mismatch2.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+
+-- Arrow: read non-nullable file as nullable
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_mismatch2.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32, String))');
+
+-- ORC: read non-nullable file as nullable
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_mismatch2.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String))');
+
+-- ORC legacy: read non-nullable file as nullable
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_mismatch2.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String))') SETTINGS input_format_orc_use_fast_decoder = 0;
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Schema inference: DESCRIBE without type hint shows inferred type
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32, String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), (NULL), ((3, 'c'));
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_describe.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_describe.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+
+-- Arrow: inferred type
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_describe.arrow', 'Arrow');
+
+-- ORC: inferred type
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_describe.orc', 'ORC');
+
+DROP TABLE test_tuple_inside_nullable;

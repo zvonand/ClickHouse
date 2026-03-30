@@ -1,6 +1,6 @@
--- Regression test: GLOBAL IN (subquery) moved to PREWHERE must not be built
--- synchronously by buildSetsForDAGExcludingGlobalIn, because ReadFromRemote
--- needs to attach external tables first.
+-- Regression test: GLOBAL IN (subquery) must not be moved to PREWHERE,
+-- because GLOBAL IN sets are populated via external tables attached by ReadFromRemote
+-- and cannot be built synchronously during PREWHERE evaluation.
 -- Also covers null-aware variants (globalNullIn/globalNotNullIn) via transform_null_in.
 -- https://github.com/ClickHouse/ClickHouse/pull/100375
 

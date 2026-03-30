@@ -16,7 +16,9 @@ SELECT sum(x) FROM remote('127.0.0.1', merge(currentDatabase(), '^test_t'));
 
 -- Verify that merge() is kept as a TABLE_FUNCTION node in the query tree (not resolved locally).
 -- On master without the fix, merge() would be resolved to a TABLE node during analysis.
-SELECT count() > 0 FROM (EXPLAIN QUERY TREE SELECT sum(x) FROM remote('127.0.0.1', merge(currentDatabase(), '^test_t'))) WHERE explain LIKE '%table\_function\_name: merge%';
+-- EXPLAIN QUERY TREE requires the analyzer, so skip this check when running with the old analyzer.
+SELECT count() > 0 FROM (EXPLAIN QUERY TREE SELECT sum(x) FROM remote('127.0.0.1', merge(currentDatabase(), '^test_t'))) WHERE explain LIKE '%table\_function\_name: merge%'
+SETTINGS enable_analyzer = 1;
 
 DROP TABLE test_t1;
 DROP TABLE test_t2;

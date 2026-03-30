@@ -538,7 +538,7 @@ std::set<std::pair<TypeIndex, String>> transformers_optimize_in_filter_with_full
 /// intermediate_functions contains the chain from outermost to innermost,
 /// e.g. [inner_tupleElement_1, ..., inner_tupleElement_M, arrayElement].
 void optimizeJSONArrayElement(
-    QueryTreeNodePtr &, FunctionNode & function_node, ColumnContext & ctx,
+    QueryTreeNodePtr & node, FunctionNode & function_node, ColumnContext & ctx,
     std::vector<FunctionNode *> & intermediate_functions)
 {
     if (intermediate_functions.empty())
@@ -623,12 +623,21 @@ void optimizeJSONArrayElement(
     if (!new_column)
         return;
 
+    /// Remember the original result type before rewriting.
+    /// For example, json.a[1].b may have type Dynamic(max_types=8) while
+    /// arrayElement(col.:`Array(JSON)`.b, N) yields Dynamic(max_types=0).
+    auto original_result_type = function_node.getResultType();
+
     /// Rewrite: replace the whole tupleElement chain with arrayElement(new_column, N).
     auto new_column_node = std::make_shared<ColumnNode>(*new_column, column_source);
 
     auto & args = function_node.getArguments().getNodes();
     args = {std::move(new_column_node), std::move(array_index_node)};
     resolveOrdinaryFunctionNodeByName(function_node, "arrayElement", ctx.context);
+
+    /// Cast back to the original type if it changed, e.g. Dynamic(max_types=N) -> Dynamic(max_types=0).
+    if (!original_result_type->equals(*function_node.getResultType()))
+        node = buildCastFunction(node, original_result_type, ctx.context);
 }
 
 std::map<std::pair<TypeIndex, String>, ChainedNodeToSubcolumnTransformer> chained_node_transformers =

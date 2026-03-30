@@ -887,6 +887,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForIntervalArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         bool first_arg_is_date_or_time_or_datetime_or_string = isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(type0) || isString(type0);
         bool second_arg_is_date_or_time_or_datetime_or_string = isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(type1) || isString(type1);
 
@@ -944,6 +947,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForDateTupleOfIntervalsArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         bool first_arg_is_date_or_datetime = isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(type0);
         bool second_arg_is_date_or_datetime = isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(type1);
 
@@ -979,6 +985,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForMergeIntervalsArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         /// Special case when the function is plus or minus, first argument is Interval or Tuple of Intervals
         ///  and the second argument is the Interval of a different kind.
         /// We construct another function (example: addIntervals) and call it
@@ -1020,6 +1029,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForTupleArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         if (!isTuple(removeNullable(type0)) || !isTuple(removeNullable(type1)))
             return {};
 
@@ -1049,6 +1061,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForTupleAndNumberArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         if (!(isTuple(removeNullable(type0)) && isNumber(removeNullable(type1)))
             && !(isTuple(removeNullable(type1)) && isNumber(removeNullable(type0))))
             return {};
@@ -1778,7 +1793,10 @@ public:
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
     {
-        return getReturnTypeImplStatic(arguments, getContext());
+        /// Use context.lock() instead of getContext() because the context may have expired
+        /// in deferred execution paths (prewhere, skip indexes, grouping sets).
+        /// For plain numeric types, context is not needed.
+        return getReturnTypeImplStatic(arguments, context.lock());
     }
 
     static DataTypePtr getReturnTypeImplStatic(const DataTypes & arguments, ContextPtr context_)
@@ -2566,32 +2584,37 @@ ColumnPtr executeStringInteger(const ColumnsWithTypeAndName & arguments, const A
             return executeTime64Subtraction(arguments, result_type, input_rows_count);
         }
 
+        /// Use context.lock() instead of getContext() because the context may have expired
+        /// in deferred execution paths (prewhere, skip indexes, grouping sets).
+        /// For plain numeric types, context is not needed; the helpers return {} when types don't match.
+        auto context_ptr = context.lock();
+
         /// Special case when the function is plus or minus, one of arguments is Date/DateTime/String and another is Interval.
-        if (auto function_builder = getFunctionForIntervalArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForIntervalArithmetic(arguments[0].type, arguments[1].type, context_ptr))
         {
             return executeDateTimeIntervalPlusMinus(arguments, result_type, input_rows_count, function_builder);
         }
 
         /// Special case when the function is plus or minus, one of arguments is Date/DateTime and another is Tuple.
-        if (auto function_builder = getFunctionForDateTupleOfIntervalsArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForDateTupleOfIntervalsArithmetic(arguments[0].type, arguments[1].type, context_ptr))
         {
             return executeDateTimeTupleOfIntervalsPlusMinus(arguments, result_type, input_rows_count, function_builder);
         }
 
         /// Special case when the function is plus or minus, one of arguments is Interval/Tuple of Intervals and another is Interval.
-        if (auto function_builder = getFunctionForMergeIntervalsArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForMergeIntervalsArithmetic(arguments[0].type, arguments[1].type, context_ptr))
         {
             return executeIntervalTupleOfIntervalsPlusMinus(arguments, result_type, input_rows_count, function_builder);
         }
 
         /// Special case when the function is plus, minus or multiply, both arguments are tuples.
-        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, arguments[1].type, context_ptr))
         {
             return function_builder->build(arguments)->execute(arguments, result_type, input_rows_count, /* dry_run = */ false);
         }
 
         /// Special case when the function is multiply or divide, one of arguments is Tuple and another is Number.
-        if (auto function_builder = getFunctionForTupleAndNumberArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForTupleAndNumberArithmetic(arguments[0].type, arguments[1].type, context_ptr))
         {
             return executeTupleNumberOperator(arguments, result_type, input_rows_count, function_builder);
         }
@@ -3217,7 +3240,7 @@ public:
             throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
                 "Number of arguments for function {} doesn't match: passed {}, should be 2",
                 getName(), arguments.size());
-        return FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments>::getReturnTypeImplStatic(arguments, getContext());
+        return FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments>::getReturnTypeImplStatic(arguments, context.lock());
     }
 };
 }

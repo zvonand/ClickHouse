@@ -187,6 +187,9 @@ class FunctionUnaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForTupleArithmetic(const DataTypePtr & type, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         if (!isTuple(type))
             return {};
 
@@ -221,7 +224,7 @@ public:
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
     {
-        return getReturnTypeImplStatic(arguments, getContext());
+        return getReturnTypeImplStatic(arguments, context.lock());
     }
 
     static DataTypePtr getReturnTypeImplStatic(const DataTypes & arguments, ContextPtr context_)
@@ -301,7 +304,7 @@ public:
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const override
     {
         /// Special case when the function is negate, argument is tuple.
-        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, getContext()))
+        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, context.lock()))
         {
             return function_builder->build(arguments)->execute(arguments, result_type, input_rows_count, /* dry_run = */ false);
         }

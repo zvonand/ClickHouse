@@ -112,7 +112,7 @@ Window (Window step for window \'PARTITION BY b ORDER BY minus(multiply(a, _CAST
          Parts: 1 | Granules: 1
          Output: a, b
 --- Rollup ---
-Output: b, sum()
+Output: b, sum(c)
 
 Rollup
 └──Aggregating
@@ -124,7 +124,7 @@ Rollup
          Parts: 1 | Granules: 1
          Output: b, c
 --- Cube ---
-Output: b, sum()
+Output: b, sum(c)
 
 Cube
 └──Aggregating

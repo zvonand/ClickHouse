@@ -1477,7 +1477,8 @@ void optimizeReadInOrder(QueryPlan::Node & node, QueryPlan::Nodes & nodes, const
                     info->sort_description_for_merging,
                     *max_sort_descr,
                     sorting->getSettings().max_block_size,
-                    0); /// TODO: support limit with ties
+                    0, /// TODO: support limit with ties
+                    /* apply_virtual_row_conversions_ */ false);
             }
 
             if (additional_sorting)

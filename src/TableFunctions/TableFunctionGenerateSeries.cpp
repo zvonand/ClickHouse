@@ -126,24 +126,49 @@ StoragePtr TableFunctionGenerateSeries<alias_num>::executeImpl(
             }
         }
 
+        /// Compute the number of elements in the series, guarding against UInt64 overflow.
+        /// The formula is `range / abs_step + 1`, but `+ 1` can wrap to 0 when `range / abs_step == UInt64_MAX`.
+        auto computeCardinality = [&](UInt64 range) -> UInt64
+        {
+            UInt64 quotient = range / abs_step;
+            if (quotient == std::numeric_limits<UInt64>::max())
+                throw Exception(
+                    ErrorCodes::INVALID_SETTING_VALUE,
+                    "Table function '{}' produces too many values (cardinality overflows UInt64)",
+                    getName());
+            return quotient + 1;
+        };
+
         StoragePtr res;
         if (!negative_step)
         {
-            res = (start > stop)
-                ? std::make_shared<StorageSystemNumbers>(
-                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, 0, 0, 1)
-                : std::make_shared<StorageSystemNumbers>(
-                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, (stop - start) + 1, start, abs_step);
+            if (start > stop)
+            {
+                res = std::make_shared<StorageSystemNumbers>(
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, 0, 0, 1);
+            }
+            else
+            {
+                UInt64 count = computeCardinality(stop - start);
+                res = std::make_shared<StorageSystemNumbers>(
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, count, start, abs_step);
+            }
         }
         else
         {
             /// Negative step: generate descending series from start down to stop.
-            res = (start < stop)
-                ? std::make_shared<StorageSystemNumbers>(
-                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, 0, 0, 1)
-                : std::make_shared<StorageSystemNumbers>(
+            if (start < stop)
+            {
+                res = std::make_shared<StorageSystemNumbers>(
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, 0, 0, 1);
+            }
+            else
+            {
+                UInt64 count = computeCardinality(start - stop);
+                res = std::make_shared<StorageSystemNumbers>(
                     StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"},
-                    (start - stop) / abs_step + 1, start, abs_step, /* descending= */ true);
+                    count, start, abs_step, /* descending= */ true);
+            }
         }
         res->startup();
         return res;

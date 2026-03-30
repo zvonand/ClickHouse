@@ -208,8 +208,6 @@ public:
         M(key16)                       \
         M(key32)                       \
         M(key64)                       \
-        M(range_key32)                 \
-        M(range_key64)                 \
         M(key_string)                  \
         M(key_fixed_string)            \
         M(keys128)                     \
@@ -221,7 +219,15 @@ public:
         M(two_level_key_fixed_string)  \
         M(two_level_keys128)           \
         M(two_level_keys256)           \
-        M(two_level_hashed)
+        M(two_level_hashed)            \
+        M(range8_key32)                \
+        M(range16_key32)               \
+        M(range17_key32)               \
+        M(range18_key32)               \
+        M(range8_key64)                \
+        M(range16_key64)               \
+        M(range17_key64)               \
+        M(range18_key64)
 
     /// Used for reading from StorageJoin and applying joinGet function
     #define APPLY_FOR_JOIN_VARIANTS_LIMITED(M) \
@@ -278,8 +284,6 @@ public:
         std::shared_ptr<FixedHashMap<UInt16, Mapped>>                         key16;
         std::shared_ptr<HashMap<UInt32, Mapped, HashCRC32<UInt32>>>           key32;
         std::shared_ptr<HashMap<UInt64, Mapped, HashCRC32<UInt64>>>           key64;
-        std::shared_ptr<RuntimeFixedHashMap<UInt32, Mapped>>                         range_key32;
-        std::shared_ptr<RuntimeFixedHashMap<UInt64, Mapped>>                         range_key64;
         std::shared_ptr<HashMapWithSavedHash<std::string_view, Mapped>>              key_string;
         std::shared_ptr<HashMapWithSavedHash<std::string_view, Mapped>>              key_fixed_string;
         std::shared_ptr<HashMap<UInt128, Mapped, UInt128HashCRC32>>           keys128;
@@ -292,6 +296,14 @@ public:
         std::shared_ptr<TwoLevelHashMap<UInt128, Mapped, UInt128HashCRC32>>   two_level_keys128;
         std::shared_ptr<TwoLevelHashMap<UInt256, Mapped, UInt256HashCRC32>>   two_level_keys256;
         std::shared_ptr<TwoLevelHashMap<UInt128, Mapped, UInt128TrivialHash>> two_level_hashed;
+        std::shared_ptr<FixedHashMapWithSizeBits<UInt32, Mapped, 8>>          range8_key32;
+        std::shared_ptr<FixedHashMapWithSizeBits<UInt32, Mapped, 16>>         range16_key32;
+        std::shared_ptr<FixedHashMapWithSizeBits<UInt32, Mapped, 17>>         range17_key32;
+        std::shared_ptr<FixedHashMapWithSizeBits<UInt32, Mapped, 18>>         range18_key32;
+        std::shared_ptr<FixedHashMapWithSizeBits<UInt64, Mapped, 8>>          range8_key64;
+        std::shared_ptr<FixedHashMapWithSizeBits<UInt64, Mapped, 16>>         range16_key64;
+        std::shared_ptr<FixedHashMapWithSizeBits<UInt64, Mapped, 17>>         range17_key64;
+        std::shared_ptr<FixedHashMapWithSizeBits<UInt64, Mapped, 18>>         range18_key64;
 
         void create(Type which, size_t reserve)
         {
@@ -418,7 +430,7 @@ public:
         /// Whether the right table reranged by key
         bool sorted = false;
 
-        /// For range_key32/range_key64: the minimum key value in the right table. Keys are stored as (key - min_key).
+        /// For range types: the minimum key value in the right table. Keys are stored as (key - min_key).
         UInt64 min_key = 0;
 
         size_t avgPerKeyRows() const

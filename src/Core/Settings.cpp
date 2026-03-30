@@ -7477,9 +7477,6 @@ Limits the maximum size of the adaptive buffer used when writing to archive file
     DECLARE(Bool, enable_join_fixed_hash_table_conversion, true, R"(
 Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range.
 )", 0) \
-    DECLARE(UInt64, join_fixed_hash_table_conversion_max_range, 100'000, R"(
-Maximum range (max - min + 1) of join key values for the fixed hash table conversion to apply.
-)", 0) \
     \
     /* ####################################################### */ \
     /* ########### START OF EXPERIMENTAL FEATURES ############ */ \

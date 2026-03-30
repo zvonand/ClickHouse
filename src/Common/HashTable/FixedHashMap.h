@@ -100,17 +100,18 @@ template <
     typename Cell = FixedHashMapCell<Key, Mapped>,
     typename Size = FixedHashTableStoredSize<Cell>,
     typename Allocator = HashTableAllocator,
-    bool use_runtime_num_cells = false>
-class FixedHashMap : public FixedHashTable<Key, Cell, Size, Allocator, use_runtime_num_cells>
+    size_t size_bits = sizeof(Key) * 8>
+class FixedHashMap : public FixedHashTable<Key, Cell, Size, Allocator, size_bits>
 {
 public:
-    using Base = FixedHashTable<Key, Cell, Size, Allocator, use_runtime_num_cells>;
+    using Base = FixedHashTable<Key, Cell, Size, Allocator, size_bits>;
     using Self = FixedHashMap;
     using LookupResult = typename Base::LookupResult;
 
     using Base::Base;
 
     FixedHashMap() = default;
+    FixedHashMap(size_t ) {} /// NOLINT
 
     /// mergeToViaIndexFilter is a special mergeTo function to allow `total_worker` worker to merge without race condition.
     template <typename Func>
@@ -219,11 +220,11 @@ using FixedImplicitZeroHashMapWithCalculatedSize = FixedHashMap<
     FixedHashTableCalculatedSize<FixedHashMapImplicitZeroCell<Key, Mapped>>,
     Allocator>;
 
-template <typename Key, typename Mapped>
-using RuntimeFixedHashMap = FixedHashMap<
+template <typename Key, typename Mapped, size_t size_bits>
+using FixedHashMapWithSizeBits = FixedHashMap<
     Key,
     Mapped,
     FixedHashMapCell<Key, Mapped>,
     FixedHashTableStoredSize<FixedHashMapCell<Key, Mapped>>,
     HashTableAllocator,
-    /*use_runtime_num_cells=*/true>;
+    size_bits>;

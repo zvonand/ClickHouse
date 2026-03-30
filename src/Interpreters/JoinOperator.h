@@ -105,7 +105,6 @@ struct JoinSettings
     bool use_hash_table_stats_for_join_reordering;
 
     bool enable_join_fixed_hash_table_conversion;
-    UInt64 join_fixed_hash_table_conversion_max_range;
 
     explicit JoinSettings(const Settings & query_settings);
     explicit JoinSettings(const QueryPlanSerializationSettings & settings);

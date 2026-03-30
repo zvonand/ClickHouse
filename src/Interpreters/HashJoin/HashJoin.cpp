@@ -9,6 +9,7 @@
 #include <Columns/ColumnSparse.h>
 #include <Columns/ColumnString.h>
 #include <Common/CurrentThread.h>
+#include <Common/HashTable/FixedHashMap.h>
 #include <Common/StackTrace.h>
 #include <Common/logger_useful.h>
 
@@ -2027,7 +2028,7 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
 {
     using SignedKey = std::make_signed_t<Key>;
 
-    auto max_range = table_join->joinFixedHashTableConversionMaxRange();
+    static constexpr size_t MAX_RANGE = (1ULL << 18);
 
     auto & source_map = [&]() -> auto &
     {
@@ -2037,9 +2038,10 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
             return *maps.key64;
     }();
 
-    if (source_map.empty() || source_map.size() > max_range)
+    if (source_map.empty() || source_map.size() > MAX_RANGE)
         return;
 
+    size_t key_count = source_map.size();
     auto it = source_map.begin();
     Key min_key = it->getKey();
     Key max_key = it->getKey();
@@ -2067,50 +2069,60 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
                 max_key = k;
         }
 
-        if (static_cast<size_t>(max_key - min_key) >= max_range)
+        if (static_cast<size_t>(max_key - min_key) >= MAX_RANGE)
             return;
     }
 
     data->min_key = min_key;
 
     using Mapped = typename std::decay_t<decltype(source_map)>::mapped_type;
-
-    size_t range = static_cast<size_t>(max_key - min_key);
-    if (range == std::numeric_limits<size_t>::max())
-        throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Range too large and will overflow");
-    size_t num_cells = range + 1;
-
-    auto range_map = std::make_shared<RuntimeFixedHashMap<Key, Mapped>>(num_cells);
-    for (auto source_map_it = source_map.begin(); source_map_it != source_map.end(); ++source_map_it)
+    auto convert_to_fixed_hash_map = [&]<size_t size_bits>(auto & dst_map, Type type)
     {
-        typename RuntimeFixedHashMap<Key, Mapped>::LookupResult res;
-        bool inserted;
-        range_map->emplace(source_map_it->getKey() - min_key, res, inserted);
-        if (inserted)
-            res->getMapped() = source_map_it->getMapped();
-    }
+        using RangeMap = FixedHashMapWithSizeBits<Key, Mapped, size_bits>;
+        auto range_map = std::make_shared<RangeMap>();
+        for (auto source_map_it = source_map.begin(); source_map_it != source_map.end(); ++source_map_it)
+        {
+            typename RangeMap::LookupResult res;
+            bool inserted;
+            range_map->emplace(source_map_it->getKey() - min_key, res, inserted);
+            if (inserted)
+                res->getMapped() = source_map_it->getMapped();
+        }
+        dst_map = std::move(range_map);
+        data->type = type;
+    };
 
-    auto range_size = range_map->getBufferSizeInCells();
-    auto key_count = range_map->size();
-
+    size_t range = static_cast<size_t>(max_key - min_key) + 1;
     if constexpr (std::is_same_v<Key, UInt32>)
     {
-        maps.range_key32 = std::move(range_map);
+        if (range <= (1ULL << 8))
+            convert_to_fixed_hash_map.template operator()<8>(maps.range8_key32, Type::range8_key32);
+        else if (range <= (1ULL << 16))
+            convert_to_fixed_hash_map.template operator()<16>(maps.range16_key32, Type::range16_key32);
+        else if (range <= (1ULL << 17))
+            convert_to_fixed_hash_map.template operator()<17>(maps.range17_key32, Type::range17_key32);
+        else
+            convert_to_fixed_hash_map.template operator()<18>(maps.range18_key32, Type::range18_key32);
         maps.key32.reset();
-        data->type = Type::range_key32;
     }
     else
     {
-        maps.range_key64 = std::move(range_map);
+        if (range <= (1ULL << 8))
+            convert_to_fixed_hash_map.template operator()<8>(maps.range8_key64, Type::range8_key64);
+        else if (range <= (1ULL << 16))
+            convert_to_fixed_hash_map.template operator()<16>(maps.range16_key64, Type::range16_key64);
+        else if (range <= (1ULL << 17))
+            convert_to_fixed_hash_map.template operator()<17>(maps.range17_key64, Type::range17_key64);
+        else
+            convert_to_fixed_hash_map.template operator()<18>(maps.range18_key64, Type::range18_key64);
         maps.key64.reset();
-        data->type = Type::range_key64;
     }
 
     LOG_DEBUG(
         log,
         "{}Converted join hash map to fixed hash map (range: {}, keys: {})",
         instance_log_id,
-        range_size,
+        range,
         key_count);
 }
 
@@ -2134,16 +2146,17 @@ void HashJoin::tryConvertToFixedHashMap()
             using MapType = std::decay_t<decltype(map)>;
             if constexpr (std::is_same_v<MapType, MapsOne> || std::is_same_v<MapType, MapsAll>)
             {
+                bool is_signed = !right_table_keys.getByPosition(0).type->isValueRepresentedByUnsignedInteger();
                 if (data->type == Type::key32)
                 {
-                    if (right_table_keys.getByPosition(0).type->getTypeId() == TypeIndex::Int32)
+                    if (is_signed)
                         tryConvertToFixedHashMapImpl<true, UInt32>(map);
                     else
                         tryConvertToFixedHashMapImpl<false, UInt32>(map);
                 }
                 else
                 {
-                    if (right_table_keys.getByPosition(0).type->getTypeId() == TypeIndex::Int64)
+                    if (is_signed)
                         tryConvertToFixedHashMapImpl<true, UInt64>(map);
                     else
                         tryConvertToFixedHashMapImpl<false, UInt64>(map);

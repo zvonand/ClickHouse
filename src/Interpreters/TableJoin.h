@@ -140,11 +140,6 @@ private:
       *     to the subquery will be added expression `expr(t2 columns)`.
       * It's possible to use name `expr(t2 columns)`.
       */
-
-    /// Upper bound for fixed_hash_table_conversion_max_range to prevent excessive memory allocation.
-    /// At most ~96 MB at 32 bytes per hash table cell.
-    static constexpr UInt64 MAX_FIXED_HASH_TABLE_CONVERSION_RANGE = 3'000'000;
-
     SizeLimits size_limits;
     const size_t default_max_bytes = 0;
     const bool join_use_nulls = false;
@@ -167,7 +162,6 @@ private:
     const bool allow_dynamic_type_in_join_keys = false;
     const bool enable_lazy_columns_replication = false;
     const bool enable_join_fixed_hash_table_conversion = false;
-    const UInt64 join_fixed_hash_table_conversion_max_range = 100'000;
 
     /// Value if setting max_memory_usage for query, can be used when max_bytes_in_join is not specified.
     size_t max_memory_usage = 0;
@@ -330,7 +324,6 @@ public:
     bool needStreamWithNonJoinedRows() const;
     bool enableColumnsLazyReplication() const { return enable_lazy_columns_replication; }
     bool enableJoinFixedHashTableConversion() const { return enable_join_fixed_hash_table_conversion; }
-    UInt64 joinFixedHashTableConversionMaxRange() const { return join_fixed_hash_table_conversion_max_range; }
 
     bool oneDisjunct() const;
 

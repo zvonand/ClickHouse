@@ -111,25 +111,18 @@ struct FixedHashTableCalculatedSize
   *  transfer, key updates (f.g. std::string_view) and serde. This will allow
   *  TwoLevelHashSet(Map) to contain different type of sets(maps).
   */
-template <typename Key, typename Cell, typename Size, typename Allocator, bool use_runtime_num_cells = false>
+template <typename Key, typename Cell, typename Size, typename Allocator, size_t size_bits = sizeof(Key) * 8>
 class FixedHashTable : private boost::noncopyable, protected Allocator, protected Cell::State, protected Size
 {
-    size_t runtime_num_cells = 0;
+    static constexpr size_t NUM_CELLS = 1ULL << size_bits;
+    static constexpr bool NEEDS_BOUNDS_CHECK = size_bits < sizeof(Key) * 8;
 
     /// We maintain min and max values inserted into the hash table to then limit the amount of cells to traverse to the [min; max] range.
     /// Both values could be efficiently calculated only within `emplace` calls (and not when we populate the hash table in `read` method for example), so we update them only within `emplace` and track if any other method was called.
     bool only_emplace_was_used_to_insert_data = true;
     bool disable_min_max_optimization = false;
-    size_t min = 0;
+    size_t min = NUM_CELLS - 1;
     size_t max = 0;
-
-    ALWAYS_INLINE size_t numCells() const
-    {
-        if constexpr (use_runtime_num_cells)
-            return runtime_num_cells;
-        else
-            return 1ULL << (sizeof(Key) * 8);
-    }
 
 protected:
     friend class const_iterator;
@@ -140,7 +133,7 @@ protected:
 
     Cell * buf; /// A piece of memory for all elements.
 
-    void alloc() { buf = reinterpret_cast<Cell *>(Allocator::alloc(numCells() * sizeof(Cell))); }
+    void alloc() { buf = reinterpret_cast<Cell *>(Allocator::alloc(NUM_CELLS * sizeof(Cell))); }
 
     std::pair<UInt32, UInt32> getMinMaxIndex() const
     {
@@ -190,7 +183,7 @@ protected:
             ++ptr;
 
             /// Skip empty cells in the main buffer.
-            const auto * buf_end = container->buf + container->numCells();
+            const auto * buf_end = container->buf + container->NUM_CELLS;
             if (container->canUseMinMaxOptimization())
                 buf_end = container->buf + container->max + 1;
             while (ptr < buf_end && ptr->isZero(*container))
@@ -231,24 +224,7 @@ public:
 
     size_t hash(const Key & x) const { return x; }
 
-    FixedHashTable()
-    {
-        if constexpr (!use_runtime_num_cells)
-        {
-            min = numCells() - 1;
-            alloc();
-        }
-    }
-
-    FixedHashTable(size_t n) /// NOLINT
-    {
-        if constexpr (use_runtime_num_cells)
-        {
-            runtime_num_cells = n;
-            disable_min_max_optimization = true;
-            alloc();
-        }
-    }
+    FixedHashTable() { alloc(); }
 
     FixedHashTable(FixedHashTable && rhs) noexcept : buf(nullptr) { *this = std::move(rhs); } /// NOLINT
 
@@ -263,8 +239,6 @@ public:
         destroyElements();
         free();
 
-        std::swap(runtime_num_cells, rhs.runtime_num_cells);
-        std::swap(disable_min_max_optimization, rhs.disable_min_max_optimization);
         std::swap(buf, rhs.buf);
         this->setSize(rhs.size());
 
@@ -372,9 +346,9 @@ public:
     /// The last parameter is unused but exists for compatibility with HashTable interface.
     void ALWAYS_INLINE emplace(const Key & x, LookupResult & it, bool & inserted, size_t /* hash */ = 0)
     {
-        if constexpr (use_runtime_num_cells)
+        if constexpr (NEEDS_BOUNDS_CHECK)
         {
-            if (static_cast<size_t>(x) >= numCells())
+            if (static_cast<size_t>(x) >= NUM_CELLS)
                 throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Emplaced key out of range");
         }
 
@@ -410,9 +384,9 @@ public:
 
     LookupResult ALWAYS_INLINE find(const Key & x)
     {
-        if constexpr (use_runtime_num_cells)
+        if constexpr (NEEDS_BOUNDS_CHECK)
         {
-            if (static_cast<size_t>(x) >= numCells())
+            if (static_cast<size_t>(x) >= NUM_CELLS)
                 return nullptr;
         }
         return !buf[x].isZero(*this) ? &buf[x] : nullptr;
@@ -422,9 +396,9 @@ public:
 
     LookupResult ALWAYS_INLINE find(const Key &, size_t hash_value)
     {
-        if constexpr (use_runtime_num_cells)
+        if constexpr (NEEDS_BOUNDS_CHECK)
         {
-            if (hash_value >= numCells())
+            if (hash_value >= NUM_CELLS)
                 return nullptr;
         }
         return !buf[hash_value].isZero(*this) ? &buf[hash_value] : nullptr;
@@ -437,9 +411,9 @@ public:
 
     bool ALWAYS_INLINE has(const Key & x) const
     {
-        if constexpr (use_runtime_num_cells)
+        if constexpr (NEEDS_BOUNDS_CHECK)
         {
-            if (static_cast<size_t>(x) >= numCells())
+            if (static_cast<size_t>(x) >= NUM_CELLS)
                 return false;
         }
         return !buf[x].isZero(*this);
@@ -447,9 +421,9 @@ public:
 
     bool ALWAYS_INLINE has(const Key &, size_t hash_value) const
     {
-        if constexpr (use_runtime_num_cells)
+        if constexpr (NEEDS_BOUNDS_CHECK)
         {
-            if (hash_value >= numCells())
+            if (hash_value >= NUM_CELLS)
                 return false;
         }
         return !buf[hash_value].isZero(*this);
@@ -472,7 +446,7 @@ public:
         const Cell * ptr = buf;
         if (!canUseMinMaxOptimization())
         {
-            while (ptr < buf + numCells() && ptr->isZero(*this))
+            while (ptr < buf + NUM_CELLS && ptr->isZero(*this))
                 ++ptr;
         }
         else
@@ -481,20 +455,17 @@ public:
         return ptr;
     }
 
-    Cell * ALWAYS_INLINE lastPopulatedCell() const { return canUseMinMaxOptimization() ? buf + max + 1 : buf + numCells(); }
+    Cell * ALWAYS_INLINE lastPopulatedCell() const { return canUseMinMaxOptimization() ? buf + max + 1 : buf + NUM_CELLS; }
 
     void write(DB::WriteBuffer & wb) const
     {
-        if constexpr (use_runtime_num_cells)
-          throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Serialization is not supported for runtime-sized FixedHashTable");
-
         Cell::State::write(wb);
         DB::writeVarUInt(size(), wb);
 
         if (!buf)
             return;
 
-        for (auto ptr = buf, buf_end = buf + numCells(); ptr < buf_end; ++ptr)
+        for (auto ptr = buf, buf_end = buf + NUM_CELLS; ptr < buf_end; ++ptr)
         {
             if (!ptr->isZero(*this))
             {
@@ -506,16 +477,13 @@ public:
 
     void writeText(DB::WriteBuffer & wb) const
     {
-        if constexpr (use_runtime_num_cells)
-          throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Serialization is not supported for runtime-sized FixedHashTable");
-
         Cell::State::writeText(wb);
         DB::writeText(size(), wb);
 
         if (!buf)
             return;
 
-        for (auto ptr = buf, buf_end = buf + numCells(); ptr < buf_end; ++ptr)
+        for (auto ptr = buf, buf_end = buf + NUM_CELLS; ptr < buf_end; ++ptr)
         {
             if (!ptr->isZero(*this))
             {
@@ -529,9 +497,6 @@ public:
 
     void read(DB::ReadBuffer & rb)
     {
-        if constexpr (use_runtime_num_cells)
-          throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Serialization is not supported for runtime-sized FixedHashTable");
-
         Cell::State::read(rb);
         destroyElements();
         size_t m_size;
@@ -553,9 +518,6 @@ public:
 
     void readText(DB::ReadBuffer & rb)
     {
-        if constexpr (use_runtime_num_cells)
-          throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Serialization is not supported for runtime-sized FixedHashTable");
-
         Cell::State::readText(rb);
         destroyElements();
         size_t m_size;
@@ -577,15 +539,15 @@ public:
         only_emplace_was_used_to_insert_data = false;
     }
 
-    size_t size() const { return this->getSize(buf, *this, numCells()); }
-    bool empty() const { return this->isEmpty(buf, *this, numCells()); }
+    size_t size() const { return this->getSize(buf, *this, NUM_CELLS); }
+    bool empty() const { return this->isEmpty(buf, *this, NUM_CELLS); }
 
     void clear()
     {
         destroyElements();
         this->clearSize();
 
-        memset(static_cast<void *>(buf), 0, numCells() * sizeof(*buf));
+        memset(static_cast<void *>(buf), 0, NUM_CELLS * sizeof(*buf));
     }
 
     /// After executing this function, the table can only be destroyed,
@@ -597,9 +559,9 @@ public:
         free();
     }
 
-    size_t getBufferSizeInBytes() const { return numCells() * sizeof(Cell); }
+    size_t getBufferSizeInBytes() const { return NUM_CELLS * sizeof(Cell); }
 
-    size_t getBufferSizeInCells() const { return numCells(); }
+    size_t getBufferSizeInCells() const { return NUM_CELLS; }
 
     /// Return offset for result in internal buffer.
     /// Result can have value up to `getBufferSizeInCells() + 1`

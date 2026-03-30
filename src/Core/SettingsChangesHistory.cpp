@@ -64,7 +64,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"max_skip_unavailable_shards_num", 0, 0, "New setting to limit the number of shards that can be silently skipped when skip_unavailable_shards is enabled."},
             {"max_skip_unavailable_shards_ratio", 0, 0, "New setting to limit the ratio of shards that can be silently skipped when skip_unavailable_shards is enabled."},
             {"enable_join_fixed_hash_table_conversion", true, true, "Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range."},
-            {"join_fixed_hash_table_conversion_max_range", 100'000, 100'000, "Maximum range (max - min + 1) of join key values for the fixed hash table conversion to apply."},
         });
         addSettingsChanges(settings_changes_history, "26.2",
         {

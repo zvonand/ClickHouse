@@ -68,7 +68,6 @@ namespace Setting
     extern const SettingsBool use_hash_table_stats_for_join_reordering;
 
     extern const SettingsBool enable_join_fixed_hash_table_conversion;
-    extern const SettingsUInt64 join_fixed_hash_table_conversion_max_range;
 }
 
 namespace QueryPlanSerializationSetting
@@ -115,7 +114,6 @@ namespace QueryPlanSerializationSetting
     extern const QueryPlanSerializationSettingsBool use_hash_table_stats_for_join_reordering;
 
     extern const QueryPlanSerializationSettingsBool enable_join_fixed_hash_table_conversion;
-    extern const QueryPlanSerializationSettingsUInt64 join_fixed_hash_table_conversion_max_range;
 }
 
 JoinSettings::JoinSettings(const Settings & query_settings)
@@ -170,7 +168,6 @@ JoinSettings::JoinSettings(const Settings & query_settings)
     use_hash_table_stats_for_join_reordering = query_settings[Setting::use_hash_table_stats_for_join_reordering];
 
     enable_join_fixed_hash_table_conversion = query_settings[Setting::enable_join_fixed_hash_table_conversion];
-    join_fixed_hash_table_conversion_max_range = query_settings[Setting::join_fixed_hash_table_conversion_max_range];
 }
 
 JoinSettings::JoinSettings(const QueryPlanSerializationSettings & settings)
@@ -221,7 +218,6 @@ JoinSettings::JoinSettings(const QueryPlanSerializationSettings & settings)
     use_hash_table_stats_for_join_reordering = settings[QueryPlanSerializationSetting::use_hash_table_stats_for_join_reordering];
 
     enable_join_fixed_hash_table_conversion = settings[QueryPlanSerializationSetting::enable_join_fixed_hash_table_conversion];
-    join_fixed_hash_table_conversion_max_range = settings[QueryPlanSerializationSetting::join_fixed_hash_table_conversion_max_range];
 }
 
 void JoinSettings::updatePlanSettings(QueryPlanSerializationSettings & settings) const
@@ -272,7 +268,6 @@ void JoinSettings::updatePlanSettings(QueryPlanSerializationSettings & settings)
     settings[QueryPlanSerializationSetting::use_hash_table_stats_for_join_reordering] = use_hash_table_stats_for_join_reordering;
 
     settings[QueryPlanSerializationSetting::enable_join_fixed_hash_table_conversion] = enable_join_fixed_hash_table_conversion;
-    settings[QueryPlanSerializationSetting::join_fixed_hash_table_conversion_max_range] = join_fixed_hash_table_conversion_max_range;
 }
 
 String toString(const JoinActionRef & node)

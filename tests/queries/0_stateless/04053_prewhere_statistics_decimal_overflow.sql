@@ -16,14 +16,7 @@ CREATE TABLE test_prewhere_decimal_overflow
 )
 ENGINE = MergeTree()
 ORDER BY (ts, id)
-SETTINGS auto_statistics_types = '';
-
--- The PREWHERE optimizer skips entirely for compact parts (column_sizes is empty).
--- The test fuzzer appends its own MergeTree settings to CREATE TABLE, and its
--- min_bytes_for_wide_part value would win because it comes last.  Resetting it
--- via ALTER TABLE before the INSERT ensures wide parts regardless of what the
--- fuzzer injects.
-ALTER TABLE test_prewhere_decimal_overflow MODIFY SETTING min_bytes_for_wide_part = 0, min_rows_for_wide_part = 0;
+SETTINGS min_bytes_for_wide_part = 0, min_rows_for_wide_part = 0, auto_statistics_types = '';
 
 -- Single INSERT so all rows land in one part (needed for selectivity estimates to differ).
 INSERT INTO test_prewhere_decimal_overflow VALUES
@@ -41,7 +34,7 @@ INSERT INTO test_prewhere_decimal_overflow VALUES
 ALTER TABLE test_prewhere_decimal_overflow ADD STATISTICS ts TYPE minmax;
 ALTER TABLE test_prewhere_decimal_overflow MATERIALIZE STATISTICS ts SETTINGS mutations_sync = 1;
 
-SET optimize_move_to_prewhere=1;
+SET optimize_move_to_prewhere = 1, query_plan_optimize_prewhere = 1;
 
 -- Correct result without statistics.
 SELECT sig

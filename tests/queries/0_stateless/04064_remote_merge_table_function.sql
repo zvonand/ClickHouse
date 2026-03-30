@@ -14,10 +14,11 @@ INSERT INTO test_t2 VALUES (3), (4);
 -- merge() nested inside remote() should be sent to the remote server, not resolved locally.
 SELECT sum(x) FROM remote('127.0.0.1', merge(currentDatabase(), '^test_t'));
 
--- Verify that merge() is kept as a TABLE_FUNCTION node in the query tree (not resolved locally).
--- On master without the fix, merge() would be resolved to a TABLE node during analysis.
--- EXPLAIN QUERY TREE requires the analyzer, so skip this check when running with the old analyzer.
-SELECT count() > 0 FROM (EXPLAIN QUERY TREE SELECT sum(x) FROM remote('127.0.0.1', merge(currentDatabase(), '^test_t'))) WHERE explain LIKE '%table\_function\_name: merge%'
+-- Verify that merge()'s arguments are NOT resolved on the initiator.
+-- Without the fix, the analyzer resolves merge() locally, which evaluates currentDatabase()
+-- to a constant. With the fix, merge() is sent unresolved to the remote server,
+-- so currentDatabase() remains as a FUNCTION node in the query tree.
+SELECT count() > 0 FROM (EXPLAIN QUERY TREE SELECT sum(x) FROM remote('127.0.0.1', merge(currentDatabase(), '^test_t'))) WHERE explain LIKE '%function\_name: currentDatabase%'
 SETTINGS enable_analyzer = 1;
 
 DROP TABLE test_t1;

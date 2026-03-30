@@ -1728,7 +1728,11 @@ void AlterCommands::validate(const StoragePtr & table, ContextPtr context) const
             /// TODO Implement nested rename
             if (all_columns.hasNested(command.column_name))
             {
-                throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Cannot rename whole Nested struct");
+                bool skip = false;
+                if (auto * merge_tree = dynamic_cast<MergeTreeData *>(table.get()))
+                    skip = !(*merge_tree->getSettings())[MergeTreeSetting::share_nested_offsets];
+                if (!skip)
+                    throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Cannot rename whole Nested struct");
             }
 
             if (!all_columns.has(command.column_name))

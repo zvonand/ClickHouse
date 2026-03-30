@@ -1351,7 +1351,8 @@ size_t CachedOnDiskReadBufferFromFile::readFromFileSegment(
                 "Actual object size: {}, expected size: {}, stop reason: {}. Treating as EOF.",
                 offset, info.read_until_position, *object_size, file_size_,
                 impl_read_stop_reason ? *impl_read_stop_reason : "None");
-            file_segment.setDownloadFinishedWithoutContinuation();
+            if (file_segment.isDownloader())
+                file_segment.setDownloadFinishedWithoutContinuation();
             info.read_until_position = offset;
             return 0;
         }

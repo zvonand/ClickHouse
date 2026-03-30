@@ -6,7 +6,7 @@
 --
 -- The test depends on:
 -- - tests/config/config.d/storage_conf_04068.xml which defines s3_disk_04068
---   with max_single_part_upload_size = 10000 (small, to force multipart upload).
+--   with s3_max_single_part_upload_size = 10000 (small, to force multipart upload).
 -- - tests/config/config.d/s3_settings_override.xml which configures a matching
 --   global <s3> endpoint with max_single_part_upload_size = 100Mi.
 --
@@ -23,7 +23,7 @@ INSERT INTO t_04068_s3_disk_override SELECT number FROM numbers(1000000);
 
 SYSTEM FLUSH LOGS query_log;
 
--- With max_single_part_upload_size = 10000 from disk config, the data should
+-- With s3_max_single_part_upload_size = 10000 from disk config, the data should
 -- be uploaded via multipart (CreateMultipartUpload + UploadPart + CompleteMultipartUpload).
 -- If the global endpoint config (100Mi) had incorrectly taken priority, it would be a single PutObject.
 SELECT

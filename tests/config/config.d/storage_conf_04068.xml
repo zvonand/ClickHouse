@@ -10,7 +10,7 @@
                 <endpoint>http://localhost:11111/test/04068_s3_disk_settings_override/</endpoint>
                 <access_key_id>clickhouse</access_key_id>
                 <secret_access_key>clickhouse</secret_access_key>
-                <max_single_part_upload_size>10000</max_single_part_upload_size>
+                <s3_max_single_part_upload_size>10000</s3_max_single_part_upload_size>
             </s3_disk_04068>
         </disks>
         <policies>

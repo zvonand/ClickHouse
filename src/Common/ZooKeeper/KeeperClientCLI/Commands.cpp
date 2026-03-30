@@ -23,7 +23,6 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-static constexpr int MAX_LIMIT_CHILDREN_RECURSIVE_RESPONSE = 1000000;
 
 bool LSCommand::parse(IParser::Pos & pos, boost::intrusive_ptr<ASTKeeperQuery> & node, Expected & expected) const
 {
@@ -100,8 +99,6 @@ void LSCommand::execute(const ASTKeeperQuery * query, KeeperClientBase * client)
 
 bool LSRCommand::parse(IParser::Pos & pos, boost::intrusive_ptr<ASTKeeperQuery> & node, Expected & expected) const
 {
-    // A bare number (e.g. `lsr 100`) is the limit, not a path.
-    // Only try to parse a path when the next token is not a bare number.
     String path;
     if (!pos->isEnd() && pos->type != TokenType::Number && parseKeeperPath(pos, expected, path))
         node->args.push_back(std::move(path));
@@ -122,7 +119,7 @@ void LSRCommand::execute(const ASTKeeperQuery * query, KeeperClientBase * client
     }
 
     String path;
-    uint32_t children_limit = MAX_LIMIT_CHILDREN_RECURSIVE_RESPONSE;
+    uint32_t children_limit = LSR_DEFAULT_LIMIT;
 
     if (!query->args.empty() && query->args[0].getType() == Field::Types::String)
     {
@@ -130,7 +127,7 @@ void LSRCommand::execute(const ASTKeeperQuery * query, KeeperClientBase * client
         if (query->args.size() >= 2)
         {
             UInt64 lim = query->args[1].safeGet<UInt64>();
-            if (lim > MAX_LIMIT_CHILDREN_RECURSIVE_RESPONSE)
+            if (lim > LSR_DEFAULT_LIMIT)
             {
                 client->cerr << "Limit exceeds maximum.\n";
                 return;
@@ -144,7 +141,7 @@ void LSRCommand::execute(const ASTKeeperQuery * query, KeeperClientBase * client
         if (!query->args.empty())
         {
             UInt64 lim = query->args[0].safeGet<UInt64>();
-            if (lim > MAX_LIMIT_CHILDREN_RECURSIVE_RESPONSE)
+            if (lim > LSR_DEFAULT_LIMIT)
             {
                 client->cerr << "Limit exceeds maximum.\n";
                 return;

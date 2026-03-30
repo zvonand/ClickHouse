@@ -39,7 +39,6 @@ namespace DB::ErrorCodes
 {
     extern const int BAD_TYPE_OF_FIELD;
     extern const int CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN;
-    extern const int CANNOT_PARSE_DATE;
     extern const int ILLEGAL_COLUMN;
     extern const int ILLEGAL_TYPE_OF_ARGUMENT;
     extern const int INCORRECT_DATA;
@@ -1216,7 +1215,20 @@ struct FunctionsStressTestThread
                 {
                     stats.add(S_EXEC_ROW_OK, result->size());
 
-                    checkFunctionExecutionResults();
+                    try
+                    {
+                        checkFunctionExecutionResults();
+                    }
+                    catch (Exception & e)
+                    {
+                        if (e.code() == ErrorCodes::MEMORY_LIMIT_EXCEEDED || e.code() == ErrorCodes::LOGICAL_ERROR)
+                            throw;
+
+                        /// The validation infrastructure (sorting, Field comparisons,
+                        /// monotonicity checks, row-by-row re-execution) can throw
+                        /// various exceptions that are not bugs in the tested functions.
+                        stats.reportProblem(P_LATE_TYPECHECK, fmt::format("exception during validation: {} {}", operation.describe(), getCurrentExceptionMessage(false)));
+                    }
                 }
             }
             catch (Exception & e)

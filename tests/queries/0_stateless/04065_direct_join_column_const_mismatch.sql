@@ -43,3 +43,35 @@ ORDER BY l.id;
 
 DROP TABLE t_left;
 DROP TABLE t_right;
+
+SELECT '--- sparse columns ---';
+
+-- Test that ColumnSparse mixed with regular columns across blocks
+-- does not trigger assertTypeEquality failure in executePlan.
+-- With ratio_of_defaults_for_sparse_serialization = 0, some parts may
+-- produce ColumnSparse on read while others produce regular columns.
+
+CREATE TABLE t_right_sparse (id UInt64, value String, extra UInt64 DEFAULT 0)
+ENGINE = MergeTree() ORDER BY id
+SETTINGS ratio_of_defaults_for_sparse_serialization = 0;
+
+-- First part: extra column is all defaults → may read as ColumnSparse
+INSERT INTO t_right_sparse SELECT number, 'val_' || toString(number), 0 FROM numbers(5);
+
+-- Second part: extra column has non-default values → regular column
+INSERT INTO t_right_sparse SELECT number + 5, 'val_' || toString(number + 5), number + 100 FROM numbers(5);
+
+CREATE TABLE t_left_sparse (id UInt64) ENGINE = MergeTree() ORDER BY id;
+INSERT INTO t_left_sparse SELECT number FROM numbers(10);
+
+SET join_algorithm = 'direct';
+SET max_block_size = 2;
+SET enable_analyzer = 1;
+
+SELECT l.id, r.value, r.extra
+FROM t_left_sparse AS l
+INNER JOIN t_right_sparse AS r ON l.id = r.id
+ORDER BY l.id;
+
+DROP TABLE t_left_sparse;
+DROP TABLE t_right_sparse;

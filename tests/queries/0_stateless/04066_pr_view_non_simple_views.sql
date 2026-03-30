@@ -76,9 +76,9 @@ SELECT sum(value) AS r1 FROM v_simple
 SELECT sum(value) AS r1 FROM v_simple
     SETTINGS parallel_replicas_allow_view_over_mergetree = 1;
 
--- DROP VIEW v_simple;
--- DROP VIEW v_group_by;
--- DROP VIEW v_order_by;
--- DROP VIEW v_distinct;
--- DROP VIEW v_limit;
--- DROP TABLE t_base;
+DROP VIEW v_simple;
+DROP VIEW v_group_by;
+DROP VIEW v_order_by;
+DROP VIEW v_distinct;
+DROP VIEW v_limit;
+DROP TABLE t_base;

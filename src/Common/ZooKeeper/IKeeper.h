@@ -4,6 +4,7 @@
 #include <base/types.h>
 #include <Common/ZooKeeper/KeeperFeatureFlags.h>
 
+#include <limits>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -462,8 +463,8 @@ struct GetChildrenRecursiveRequest : virtual Request
 {
     String path;
 
-    /// strict limit for number of deleted nodes
-    uint32_t children_nodes_limit = 1;
+    /// strict limit for number of returned children nodes
+    uint32_t children_nodes_limit = std::numeric_limits<uint32_t>::max();
 
     void addRootPath(const String & root_path) override;
     String getPath() const override { return path; }
@@ -474,6 +475,8 @@ struct GetChildrenRecursiveRequest : virtual Request
 struct GetChildrenRecursiveResponse : virtual Response
 {
     std::vector<String> children;
+
+    void removeRootPath(const String & root_path) override;
 
     size_t bytesSize() const override
     {

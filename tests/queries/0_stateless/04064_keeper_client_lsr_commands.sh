@@ -4,7 +4,7 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
-path="/test-keeper-client-db"
+path="/test-keeper-client-$CLICKHOUSE_DATABASE"
 $CLICKHOUSE_KEEPER_CLIENT -q "rmr '$path'" >& /dev/null || true
 
 $CLICKHOUSE_KEEPER_CLIENT -q "create '$path' 'root'"

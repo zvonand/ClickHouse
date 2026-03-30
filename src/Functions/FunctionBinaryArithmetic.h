@@ -813,7 +813,7 @@ using namespace traits_;
 using namespace impl_;
 
 template <template <typename, typename> class Op, typename Name, bool valid_on_default_arguments = true, bool valid_on_float_arguments = true, bool division_by_nullable = false>
-class FunctionBinaryArithmetic : public IFunction, private WithContext
+class FunctionBinaryArithmetic : public IFunction
 {
     static constexpr bool is_plus = IsOperation<Op>::plus;
     static constexpr bool is_minus = IsOperation<Op>::minus;
@@ -824,6 +824,8 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static constexpr bool is_int_div = IsOperation<Op>::int_div;
     static constexpr bool is_int_div_or_zero = IsOperation<Op>::int_div_or_zero;
     static constexpr bool is_division_or_null = IsOperation<Op>::division_or_null;
+
+    ContextPtr context;
 
     bool check_decimal_overflow = true;
 
@@ -1765,7 +1767,7 @@ public:
     static FunctionPtr create(ContextPtr context_) { return std::make_shared<FunctionBinaryArithmetic>(context_); }
 
     explicit FunctionBinaryArithmetic(ContextPtr context_)
-    :   WithContext(context_),
+    :   context(context_),
         check_decimal_overflow(decimalCheckArithmeticOverflow(context_))
     {}
 
@@ -1793,10 +1795,7 @@ public:
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
     {
-        /// Use context.lock() instead of getContext() because the context may have expired
-        /// in deferred execution paths (prewhere, skip indexes, grouping sets).
-        /// For plain numeric types, context is not needed.
-        return getReturnTypeImplStatic(arguments, context.lock());
+        return getReturnTypeImplStatic(arguments, context);
     }
 
     static DataTypePtr getReturnTypeImplStatic(const DataTypes & arguments, ContextPtr context_)
@@ -2584,37 +2583,32 @@ ColumnPtr executeStringInteger(const ColumnsWithTypeAndName & arguments, const A
             return executeTime64Subtraction(arguments, result_type, input_rows_count);
         }
 
-        /// Use context.lock() instead of getContext() because the context may have expired
-        /// in deferred execution paths (prewhere, skip indexes, grouping sets).
-        /// For plain numeric types, context is not needed; the helpers return {} when types don't match.
-        auto context_ptr = context.lock();
-
         /// Special case when the function is plus or minus, one of arguments is Date/DateTime/String and another is Interval.
-        if (auto function_builder = getFunctionForIntervalArithmetic(arguments[0].type, arguments[1].type, context_ptr))
+        if (auto function_builder = getFunctionForIntervalArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return executeDateTimeIntervalPlusMinus(arguments, result_type, input_rows_count, function_builder);
         }
 
         /// Special case when the function is plus or minus, one of arguments is Date/DateTime and another is Tuple.
-        if (auto function_builder = getFunctionForDateTupleOfIntervalsArithmetic(arguments[0].type, arguments[1].type, context_ptr))
+        if (auto function_builder = getFunctionForDateTupleOfIntervalsArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return executeDateTimeTupleOfIntervalsPlusMinus(arguments, result_type, input_rows_count, function_builder);
         }
 
         /// Special case when the function is plus or minus, one of arguments is Interval/Tuple of Intervals and another is Interval.
-        if (auto function_builder = getFunctionForMergeIntervalsArithmetic(arguments[0].type, arguments[1].type, context_ptr))
+        if (auto function_builder = getFunctionForMergeIntervalsArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return executeIntervalTupleOfIntervalsPlusMinus(arguments, result_type, input_rows_count, function_builder);
         }
 
         /// Special case when the function is plus, minus or multiply, both arguments are tuples.
-        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, arguments[1].type, context_ptr))
+        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return function_builder->build(arguments)->execute(arguments, result_type, input_rows_count, /* dry_run = */ false);
         }
 
         /// Special case when the function is multiply or divide, one of arguments is Tuple and another is Number.
-        if (auto function_builder = getFunctionForTupleAndNumberArithmetic(arguments[0].type, arguments[1].type, context_ptr))
+        if (auto function_builder = getFunctionForTupleAndNumberArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return executeTupleNumberOperator(arguments, result_type, input_rows_count, function_builder);
         }
@@ -3168,7 +3162,7 @@ private:
 };
 
 template <template <typename, typename> class Op, typename Name, bool valid_on_default_arguments = true, bool valid_on_float_arguments = true>
-class BinaryArithmeticOverloadResolver : public IFunctionOverloadResolver, private WithContext
+class BinaryArithmeticOverloadResolver : public IFunctionOverloadResolver
 {
 public:
     static constexpr auto name = Name::name;
@@ -3177,7 +3171,7 @@ public:
         return std::make_unique<BinaryArithmeticOverloadResolver>(context_);
     }
 
-    explicit BinaryArithmeticOverloadResolver(ContextPtr context_) : WithContext(context_) {}
+    explicit BinaryArithmeticOverloadResolver(ContextPtr context_) : context(context_) {}
 
     String getName() const override { return name; }
     size_t getNumberOfArguments() const override { return 2; }
@@ -3185,10 +3179,6 @@ public:
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
-        /// Use context.lock() instead of getContext() for consistency with getReturnTypeImpl:
-        /// the context may have expired by the time buildImpl is called (e.g. during query plan optimization).
-        auto locked_context = context.lock();
-
         /// Only division-like operations can have division_by_nullable=true.
         /// Using if constexpr avoids instantiating FunctionBinaryArithmetic<..., true> and
         /// FunctionBinaryArithmeticWithConstants<..., true> for all other operations,
@@ -3224,18 +3214,18 @@ public:
             {
                 if (division_by_nullable)
                     return make_adaptor(FunctionBinaryArithmeticWithConstants<Op, Name, valid_on_default_arguments, valid_on_float_arguments, true>::create(
-                        arguments[0], arguments[1], return_type, locked_context));
+                        arguments[0], arguments[1], return_type, context));
             }
             return make_adaptor(FunctionBinaryArithmeticWithConstants<Op, Name, valid_on_default_arguments, valid_on_float_arguments, false>::create(
-                arguments[0], arguments[1], return_type, locked_context));
+                arguments[0], arguments[1], return_type, context));
         }
 
         if constexpr (can_have_division_by_nullable)
         {
             if (division_by_nullable)
-                return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, true>::create(locked_context));
+                return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, true>::create(context));
         }
-        return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, false>::create(locked_context));
+        return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, false>::create(context));
     }
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
@@ -3244,7 +3234,10 @@ public:
             throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
                 "Number of arguments for function {} doesn't match: passed {}, should be 2",
                 getName(), arguments.size());
-        return FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments>::getReturnTypeImplStatic(arguments, context.lock());
+        return FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments>::getReturnTypeImplStatic(arguments, context);
     }
+
+private:
+    ContextPtr context;
 };
 }

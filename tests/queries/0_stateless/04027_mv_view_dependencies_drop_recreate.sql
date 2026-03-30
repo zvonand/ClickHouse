@@ -17,7 +17,7 @@ BACKUP VIEW d0.mv TO Memory('04027_backup.tgz') SETTINGS id='04027_backup' FORMA
 ALTER TABLE d0.mv MODIFY QUERY SELECT c0 FROM d0.src2;
 ALTER TABLE d0.mv MODIFY QUERY SELECT 1 c0; -- leaks stale edge without the fix
 
-TRUNCATE DATABASE d0;
+DROP TABLE d0.mv;
 
 RESTORE VIEW d0.mv FROM Memory('04027_backup.tgz') SETTINGS id='04027_restore' FORMAT Null;
 

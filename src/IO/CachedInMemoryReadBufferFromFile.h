@@ -56,8 +56,8 @@ private:
     bool inner_supports_read_at;
 
     /// Ensures all cache blocks covering [offset, offset+n) are populated.
-    /// Returns a vector of MappedPtr, one per block. Consecutive misses are fetched
-    /// from the underlying reader in a single coalesced request.
+    /// Returns a vector of MappedPtr, one per block. Each missing block is read
+    /// individually via `readBigAt` directly into its cache cell.
     std::vector<PageCache::MappedPtr> populateBlockRange(size_t offset, size_t n) const;
 
     bool nextImpl() override;

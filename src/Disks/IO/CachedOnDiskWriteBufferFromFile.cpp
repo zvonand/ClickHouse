@@ -284,6 +284,8 @@ void FileSegmentRangeWriter::completeFileSegment()
 
     LOG_TEST(log, "Completing file segment {}:{}", file_segment.key(), file_segment.offset());
 
+    appendFilesystemCacheLog(file_segment);
+
     /// We do not force shrink file segment in case of distributed cache,
     /// because it is possible that we reconnected and
     /// used a different connection to continue writing to cache,
@@ -292,11 +294,6 @@ void FileSegmentRangeWriter::completeFileSegment()
     /// but in fact it does not affect anything,
     /// file segment size != reserved size.
     /// TODO: we could send a packet from client indicating end of file.
-    /// Log cache entry before completing, because completeAndPopFront may
-    /// destroy the FileSegment (the holder's shared_ptr is the last reference
-    /// when the cache has already evicted this segment from its metadata).
-    appendFilesystemCacheLog(file_segment);
-
     file_segments->completeAndPopFront(/*allow_background_download=*/false, /*force_shrink_to_downloaded_size=*/!is_distributed_cache);
 }
 

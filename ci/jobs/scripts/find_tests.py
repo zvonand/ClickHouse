@@ -1588,8 +1588,7 @@ class Targeting:
     def get_diff_text(self) -> str:
         """Fetch the PR diff text (cached on self._diff_text after first call)."""
         if not hasattr(self, '_diff_text') or not self._diff_text:
-            assert self.info.pr_number > 0, \
-                "Diff fetching requires a PR number; use --local or --diff-file for local diffs"
+            assert self.info.pr_number > 0, "Diff fetching applicable for PRs only"
             self._diff_text = Shell.get_output(
                 f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse"
             )
@@ -1601,8 +1600,7 @@ class Targeting:
         Always fetches the diff from GitHub using `gh pr diff` so that results
         reflect the actual PR regardless of the local checkout state.
         """
-        assert self.info.pr_number > 0 or hasattr(self, '_diff_text'), \
-            "Find tests by diff applicable for PRs or when _diff_text is pre-set (--local/--diff-file)"
+        assert self.info.pr_number > 0, "Find tests by diff applicable for PRs only"
         return self._parse_diff_lines(self.get_diff_text())
 
     # min_depth stores the raw entry-counter call count (capped at 254; 255 = not tracked).
@@ -1913,12 +1911,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="List tests covering changed lines for a PR by querying the coverage database."
     )
-    parser.add_argument(
-        "pr",
-        nargs="?",
-        default=None,
-        help="Pull request number (required unless --local is given).",
-    )
+    parser.add_argument("pr", help="Pull request number")
     parser.add_argument(
         "--coverage-only",
         action="store_true",
@@ -1931,76 +1924,23 @@ if __name__ == "__main__":
         help="Path to a pre-fetched unified diff file. When provided, "
              "get_changed_lines_from_diff reads from this file instead of calling gh.",
     )
-    parser.add_argument(
-        "--local",
-        action="store_true",
-        help="Use the local git diff instead of fetching a PR diff from GitHub. "
-             "Reads `git diff <base>` where <base> defaults to HEAD (all staged and "
-             "unstaged changes). Implies --coverage-only since there is no PR number "
-             "for the previously-failed pass. Combine with --base to diff against a "
-             "specific commit or branch.",
-    )
-    parser.add_argument(
-        "--base",
-        default="HEAD",
-        help="Base ref for --local mode (default: HEAD). "
-             "Examples: --base master, --base origin/master, --base HEAD~3.",
-    )
     args = parser.parse_args()
 
-    if args.local and args.pr:
-        parser.error("--local and pr are mutually exclusive")
-    if not args.local and args.pr is None:
-        parser.error("pr is required unless --local is given")
-
     class InfoLocalTest:
-        pr_number = int(args.pr) if args.pr else 0
+        pr_number = int(args.pr)
         is_local_run = True
         job_name = "Stateless"
 
     info = InfoLocalTest()
     targeting = Targeting(info)
 
-    if args.local:
-        # Obtain diff from local git working tree against the given base.
-        diff_text = Shell.get_output(f"git diff {args.base}")
-        if not diff_text:
-            print(f"No changes found against '{args.base}'.")
-            raise SystemExit(0)
-        targeting._diff_text = diff_text
-        # Also patch get_changed_tests so it reads test file names from the
-        # local diff rather than calling `gh pr diff --name-only`.
-        changed_files_local = [
-            line for line in Shell.get_output(
-                f"git diff --name-only {args.base}"
-            ).splitlines() if line
-        ]
-        targeting._local_changed_files = changed_files_local
-        _orig_get_changed_tests = targeting.get_changed_tests
-        def _get_changed_tests_local(self=targeting):
-            result_set = set()
-            for fpath in self._local_changed_files:
-                if re.match(r"tests/queries/0_stateless/\d{5}", fpath):
-                    if not Path(fpath).exists():
-                        print(f"File '{fpath}' was removed — skipping")
-                        continue
-                    print(f"Detected changed test file: '{fpath}'")
-                    fname_without_ext = os.path.splitext(os.path.basename(fpath))[0]
-                    result_set.add(f"{fname_without_ext}.")
-            return result_set
+    # If a pre-fetched diff file is provided, monkey-patch get_diff_text so both
+    # get_changed_lines_from_diff and get_most_relevant_tests read from the file
+    # rather than calling gh pr diff.
+    if args.diff_file:
         import types
-        targeting.get_changed_tests = types.MethodType(
-            lambda self: _get_changed_tests_local(), targeting
-        )
-        # Previously-failed pass requires a real PR number — skip it.
-        args.coverage_only = True
-        print(f"[find_tests] local mode: diffing against '{args.base}', "
-              f"{len(changed_files_local)} changed files")
-    elif args.diff_file:
-        # If a pre-fetched diff file is provided, monkey-patch get_diff_text so both
-        # get_changed_lines_from_diff and get_most_relevant_tests read from the file
-        # rather than calling gh pr diff.
-        targeting._diff_text = Path(args.diff_file).read_text()
+        diff_text = Path(args.diff_file).read_text()
+        targeting._diff_text = diff_text
 
     if args.coverage_only:
         ranked, result = targeting.get_most_relevant_tests()

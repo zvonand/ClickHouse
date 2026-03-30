@@ -8,6 +8,7 @@
 
 #include <Interpreters/Context.h>
 #include <Interpreters/ExpressionActions.h>
+#include <Interpreters/misc.h>
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/TreeRewriter.h>
 #include <Interpreters/convertFieldToType.h>
@@ -107,7 +108,7 @@ void buildSetsForDAGExcludingGlobalIn(const ActionsDAG & dag, const ContextPtr &
         if (node.type == ActionsDAG::ActionType::FUNCTION && node.function_base)
         {
             auto name = node.function_base->getName();
-            if (name == "globalIn" || name == "globalNotIn" || name == "globalNullIn" || name == "globalNotNullIn")
+            if (functionIsGlobalInOperator(name))
             {
                 /// The set is the second argument (index 1)
                 if (node.children.size() >= 2)

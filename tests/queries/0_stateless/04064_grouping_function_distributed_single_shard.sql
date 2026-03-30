@@ -106,8 +106,7 @@ WHERE number < 6
 GROUP BY CUBE(k1, k2)
 ORDER BY k1, k2, gr;
 
--- Part 3: Test with parallel replicas (exercises executeQueryWithParallelReplicas
--- and findParallelReplicasQuery code paths).
+-- Part 3: Test with parallel replicas (exercises executeQueryWithParallelReplicas code path).
 SELECT
     number,
     grouping(number, number % 2) AS gr
@@ -119,6 +118,21 @@ GROUP BY
     )
 ORDER BY number, gr
 SETTINGS enable_analyzer = 1, allow_experimental_parallel_reading_from_replicas = 2, max_parallel_replicas = 3, cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost';
+
+-- Part 4: Test with parallel replicas and serialize_query_plan = 1
+-- (exercises buildQueryPlanForParallelReplicas / findParallelReplicasQuery code path,
+-- which is only reached when serialize_query_plan is enabled).
+SELECT
+    number,
+    grouping(number, number % 2) AS gr
+FROM dist_t
+GROUP BY
+    GROUPING SETS (
+        (number),
+        (number % 2)
+    )
+ORDER BY number, gr
+SETTINGS enable_analyzer = 1, serialize_query_plan = 1, allow_experimental_parallel_reading_from_replicas = 2, max_parallel_replicas = 3, cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost';
 
 DROP TABLE dist_t;
 DROP TABLE local_t;

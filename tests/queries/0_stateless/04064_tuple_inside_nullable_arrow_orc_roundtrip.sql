@@ -1,0 +1,229 @@
+-- { echo }
+
+SET allow_experimental_nullable_tuple_type = 1;
+SET engine_file_truncate_on_insert = 1;
+
+-- Nullable struct with non-nullable elements
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32, String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), (NULL), ((3, 'c'));
+
+-- Arrow
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32, String))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32, String))');
+
+-- ArrowStream
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064.arrowstream', 'ArrowStream', 'c0 Nullable(Tuple(UInt32, String))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064.arrowstream', 'ArrowStream', 'c0 Nullable(Tuple(UInt32, String))');
+
+-- ORC
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String))');
+
+-- ORC with legacy (Arrow-based) reader
+SELECT c0 FROM file(currentDatabase() || '_04064.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String))') SETTINGS input_format_orc_use_fast_decoder = 0;
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Nullable empty tuple
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple())) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES (()), (NULL), (());
+
+-- Arrow empty
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_empty.arrow', 'Arrow', 'c0 Nullable(Tuple())') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_empty.arrow', 'Arrow', 'c0 Nullable(Tuple())');
+
+-- ArrowStream empty
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_empty.arrowstream', 'ArrowStream', 'c0 Nullable(Tuple())') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_empty.arrowstream', 'ArrowStream', 'c0 Nullable(Tuple())');
+
+-- ORC empty
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_empty.orc', 'ORC', 'c0 Nullable(Tuple())') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_empty.orc', 'ORC', 'c0 Nullable(Tuple())');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Both struct and element nullable: Nullable(Tuple(Nullable(UInt32), String))
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(Nullable(UInt32), String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), (NULL), ((NULL, 'c')), ((4, 'd'));
+
+-- Arrow both nullable
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_both.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_both.arrow', 'Arrow', 'c0 Nullable(Tuple(Nullable(UInt32), String))');
+
+-- ArrowStream both nullable
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_both.arrowstream', 'ArrowStream') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_both.arrowstream', 'ArrowStream', 'c0 Nullable(Tuple(Nullable(UInt32), String))');
+
+-- ORC both nullable
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_both.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_both.orc', 'ORC', 'c0 Nullable(Tuple(Nullable(UInt32), String))');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Non-nullable struct with nullable elements (should be unchanged)
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Tuple(Nullable(UInt32), String)) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), ((NULL, 'b'));
+
+-- Arrow nullable elements
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_elem.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_elem.arrow', 'Arrow', 'c0 Tuple(Nullable(UInt32), String)');
+
+-- ORC nullable elements
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_elem.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_elem.orc', 'ORC', 'c0 Tuple(Nullable(UInt32), String)');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Plain non-nullable tuple (baseline, should be unchanged)
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Tuple(UInt32, String)) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), ((2, 'b'));
+
+-- Arrow plain
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_plain.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_plain.arrow', 'Arrow', 'c0 Tuple(UInt32, String)');
+
+-- ORC plain
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_plain.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_plain.orc', 'ORC', 'c0 Tuple(UInt32, String)');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Nested tuple inside nullable struct
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(Tuple(UInt32, String), UInt64))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES (((1, 'a'), 10)), (NULL), (((3, 'c'), 30));
+
+-- Arrow nested
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_nested.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_nested.arrow', 'Arrow', 'c0 Nullable(Tuple(Tuple(UInt32, String), UInt64))');
+
+-- ORC nested
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_nested.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_nested.orc', 'ORC', 'c0 Nullable(Tuple(Tuple(UInt32, String), UInt64))');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Schema inference without type hint
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32, String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), (NULL), ((3, 'c'));
+
+-- Arrow infer
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_infer.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_infer.arrow', 'Arrow');
+
+-- ORC infer
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_infer.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_infer.orc', 'ORC');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Named tuple
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(a UInt32, b String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'x')), (NULL), ((3, 'z'));
+
+-- Arrow named
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_named.arrow', 'Arrow', 'c0 Nullable(Tuple(a UInt32, b String))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_named.arrow', 'Arrow', 'c0 Nullable(Tuple(a UInt32, b String))');
+
+-- ORC named
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_named.orc', 'ORC', 'c0 Nullable(Tuple(a UInt32, b String))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_named.orc', 'ORC', 'c0 Nullable(Tuple(a UInt32, b String))');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- All-NULL column
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32, String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES (NULL), (NULL), (NULL);
+
+-- Arrow all null
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_allnull.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32, String))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_allnull.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32, String))');
+
+-- ORC all null
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_allnull.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_allnull.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String))');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- No-NULL column (nullable type, zero actual NULLs)
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32, String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a')), ((2, 'b')), ((3, 'c'));
+
+-- Arrow no null
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_nonull.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32, String))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_nonull.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32, String))');
+
+-- ORC no null
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_nonull.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_nonull.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String))');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Single-element tuple
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1,)), (NULL), ((3,));
+
+-- Arrow single
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_single.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_single.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32))');
+
+-- ORC single
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_single.orc', 'ORC', 'c0 Nullable(Tuple(UInt32))') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_single.orc', 'ORC', 'c0 Nullable(Tuple(UInt32))');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Deeply nested: nullable tuple inside nullable tuple
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(Nullable(Tuple(UInt32, String)), UInt64))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES (((1, 'a'), 10)), (NULL), ((NULL, 20)), (((4, 'd'), 40));
+
+-- Arrow deep nested
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_deep.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_deep.arrow', 'Arrow', 'c0 Nullable(Tuple(Nullable(Tuple(UInt32, String)), UInt64))');
+
+-- ORC deep nested
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_deep.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_deep.orc', 'ORC', 'c0 Nullable(Tuple(Nullable(Tuple(UInt32, String)), UInt64))');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Nullable tuple with Array element
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(Array(UInt32), String))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES (([1, 2], 'a')), (NULL), (([3], 'c'));
+
+-- Arrow array elem
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_arr.arrow', 'Arrow') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_arr.arrow', 'Arrow', 'c0 Nullable(Tuple(Array(UInt32), String))');
+
+-- ORC array elem
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_arr.orc', 'ORC') SELECT c0 FROM test_tuple_inside_nullable;
+SELECT c0 FROM file(currentDatabase() || '_04064_arr.orc', 'ORC', 'c0 Nullable(Tuple(Array(UInt32), String))');
+
+DROP TABLE test_tuple_inside_nullable;
+
+-- Multiple nullable tuple columns
+DROP TABLE IF EXISTS test_tuple_inside_nullable;
+CREATE TABLE test_tuple_inside_nullable (c0 Nullable(Tuple(UInt32, String)), c1 Nullable(Tuple(Float64))) ENGINE = Memory;
+INSERT INTO test_tuple_inside_nullable VALUES ((1, 'a'), (1.5)), (NULL, (2.5)), ((3, 'c'), NULL);
+
+-- Arrow multi col
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_multi.arrow', 'Arrow') SELECT c0, c1 FROM test_tuple_inside_nullable;
+SELECT c0, c1 FROM file(currentDatabase() || '_04064_multi.arrow', 'Arrow', 'c0 Nullable(Tuple(UInt32, String)), c1 Nullable(Tuple(Float64))');
+
+-- ORC multi col
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_multi.orc', 'ORC') SELECT c0, c1 FROM test_tuple_inside_nullable;
+SELECT c0, c1 FROM file(currentDatabase() || '_04064_multi.orc', 'ORC', 'c0 Nullable(Tuple(UInt32, String)), c1 Nullable(Tuple(Float64))');
+
+DROP TABLE test_tuple_inside_nullable;

@@ -6,6 +6,7 @@
 
 #include <Processors/QueryPlan/Optimizations/RuntimeDataflowStatistics.h>
 
+#include <Common/logger_useful.h>
 
 namespace DB
 {
@@ -25,26 +26,26 @@ ExpressionTransform::ExpressionTransform(
 
 void ExpressionTransform::transform(Chunk & chunk)
 {
+    LOG_DEBUG(getLogger("ExpressionTransform"), "transform() enter this={}, expression={}", static_cast<const void*>(this), static_cast<void*>(expression.get()));
+
     size_t num_rows = chunk.getNumRows();
     auto block = getInputPort().getHeader().cloneWithColumns(chunk.detachColumns());
 
-    expression->execute(block, num_rows, false, false, [this]() { return isCancelled(); });
+    expression->execute(block, num_rows);
 
     chunk.setColumns(block.getColumns(), num_rows);
-
     if (updater)
         updater->recordOutputChunk(chunk, block);
+
+    LOG_DEBUG(getLogger("ExpressionTransform"), "transform() exit this={}, expression={}", static_cast<const void*>(this), static_cast<void*>(expression.get()));
 }
 
 void ExpressionTransform::onCancel() noexcept
 {
+    LOG_DEBUG(getLogger("ExpressionTransform"), "onCancel() enter this={}, expression={}", static_cast<const void*>(this), static_cast<void*>(expression.get()));
     ISimpleTransform::onCancel();
-    const auto & nodes = expression->getNodes();
-    for (const auto & node : nodes)
-    {
-        if (node.type == ActionsDAG::ActionType::FUNCTION && node.function)
-            node.function->cancelExecution();
-    }
+    expression->cancel();
+    LOG_DEBUG(getLogger("ExpressionTransform"), "onCancel() exit this={}, expression={}", static_cast<const void*>(this), static_cast<void*>(expression.get()));
 }
 
 ConvertingTransform::ConvertingTransform(SharedHeader header_, ExpressionActionsPtr expression_)
@@ -58,7 +59,7 @@ void ConvertingTransform::onConsume(Chunk chunk)
     size_t num_rows = chunk.getNumRows();
     auto block = getInputPort().getHeader().cloneWithColumns(chunk.detachColumns());
 
-    expression->execute(block, num_rows, false, false, [this]() { return isCancelled(); });
+    expression->execute(block, num_rows);
 
     chunk.setColumns(block.getColumns(), num_rows);
     cur_chunk = std::move(chunk);

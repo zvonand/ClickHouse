@@ -12,6 +12,8 @@
 #endif
 
 
+#include <Common/logger_useful.h>
+
 namespace DB
 {
 
@@ -78,6 +80,7 @@ void IProcessor::cancel() noexcept
 {
 
     bool already_cancelled = is_cancelled.exchange(true, std::memory_order_acq_rel);
+    LOG_DEBUG(getLogger("IProcessor"), "{} cancel() enter this={}, already_cancelled={}", getName(), static_cast<const void*>(this), already_cancelled);
     if (already_cancelled)
         return;
 

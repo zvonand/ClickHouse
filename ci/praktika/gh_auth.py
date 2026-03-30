@@ -72,6 +72,32 @@ class GHAuth:
             access_token = cls._get_access_token_deprecated(app_key, app_id, installation_id)
         Shell.check(f"echo {access_token} | gh auth login --with-token", strict=True)
 
+    @classmethod
+    def auth_from_settings(cls) -> None:
+        from praktika.secret import Secret
+        from praktika.settings import Settings
+
+        app_id, pem, installation_id = (
+            Secret.Config(
+                name=Settings.SECRET_GH_APP_ID,
+                type=Secret.Type.AWS_SSM_SECRET,
+            )
+            .join_with(
+                Secret.Config(
+                    name=Settings.SECRET_GH_APP_PEM_KEY,
+                    type=Secret.Type.AWS_SSM_SECRET,
+                )
+            )
+            .join_with(
+                Secret.Config(
+                    name=Settings.SECRET_GH_APP_INSTALLATION_ID,
+                    type=Secret.Type.AWS_SSM_SECRET,
+                )
+            )
+            .get_value()
+        )
+        cls.auth(app_id=app_id, app_key=pem, installation_id=int(installation_id))
+
 
 # if __name__ == "__main__":
 #     from ci.praktika.secret import Secret

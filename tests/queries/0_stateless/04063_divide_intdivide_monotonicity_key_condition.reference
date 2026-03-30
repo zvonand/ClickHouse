@@ -52,3 +52,27 @@ Expression (Project names)
             Parts: 2/2
             Granules: 2/2
           Ranges: 2
+-- Test variable / const case: divide(x, 0) is undefined, MinMax must not prune partitions
+DROP TABLE IF EXISTS test_div_by_zero_const;
+CREATE TABLE test_div_by_zero_const (x Int32) ENGINE = MergeTree PARTITION BY x ORDER BY tuple();
+INSERT INTO test_div_by_zero_const VALUES (-2), (-1), (0), (1), (2);
+-- divide(x, 0) is undefined so MinMax index must read all 5 parts (no pruning)
+EXPLAIN indexes = 1
+SELECT * FROM test_div_by_zero_const WHERE divide(x, 0) > 0;
+Expression ((Project names + Projection))
+  Filter ((WHERE + Change column names to column identifiers))
+    ReadFromMergeTree (default.test_div_by_zero_const)
+    Indexes:
+      Partition Min-Max
+        Keys:
+          x
+        Condition: (divide(x, 0) in (0., +Inf))
+        Parts: 5/5
+        Granules: 5/5
+      Partition
+        Keys:
+          x
+        Condition: (divide(x, 0) in (0., +Inf))
+        Parts: 2/5
+        Granules: 2/5
+      Ranges: 2

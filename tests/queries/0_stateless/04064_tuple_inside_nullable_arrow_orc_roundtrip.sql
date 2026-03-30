@@ -1,3 +1,6 @@
+-- Tags: no-fasttest
+-- no-fasttest: Arrow and ORC formats are not available in fasttest builds
+
 -- { echo }
 
 SET allow_experimental_nullable_tuple_type = 1;

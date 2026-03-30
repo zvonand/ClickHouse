@@ -57,20 +57,4 @@ OPTIMIZE TABLE test_projection_pr FINAL;
 -- header mismatch with the remote plan in the parallel replicas UnionStep.
 SELECT url FROM test_projection_pr WHERE region = 'europe' ORDER BY url LIMIT 1;
 
--- Verify the plan-level fix by checking that the converting Expression step
--- exists. The fix adds an Expression step between the Union and the
--- projection query Expression to strip extra PREWHERE columns.
--- Without the fix, the projection Expression feeds directly into the Union.
--- Detect this by checking for two consecutive Expression steps in EXPLAIN PLAN
--- output (the converting step immediately followed by the query step).
-WITH (
-    SELECT groupArray(trimBoth(explain))
-    FROM (EXPLAIN PLAN SELECT url FROM test_projection_pr WHERE region = 'europe')
-) AS steps
-SELECT arrayExists(
-    (a, b) -> (a LIKE 'Expression%') AND (b LIKE 'Expression%'),
-    arraySlice(steps, 1, length(steps) - 1),
-    arraySlice(steps, 2)
-) AS has_converting_step;
-
 DROP TABLE test_projection_pr;

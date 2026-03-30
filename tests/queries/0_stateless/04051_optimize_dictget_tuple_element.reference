@@ -31,6 +31,9 @@ Tokyo
 dictGetOrDefault with missing keys
 DefaultCountry
 DefaultCity
+dictGetOrDefault with missing keys named access
+DefaultCountry
+DefaultCity
 dictGetOrDefault with tuple function default
 FuncCountry
 FuncCity

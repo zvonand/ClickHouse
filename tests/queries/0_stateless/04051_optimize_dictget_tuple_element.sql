@@ -80,6 +80,11 @@ SELECT 'dictGetOrDefault with missing keys';
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), ('DefaultCountry', 'DefaultCity')).1;
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), ('DefaultCountry', 'DefaultCity')).2;
 
+-- Test dictGetOrDefault with named access on missing keys (exercises the default-value rewrite path with string index)
+SELECT 'dictGetOrDefault with missing keys named access';
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), ('DefaultCountry', 'DefaultCity')).country;
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), ('DefaultCountry', 'DefaultCity')).city;
+
 -- Test dictGetOrDefault with tuple() function as default
 SELECT 'dictGetOrDefault with tuple function default';
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('FuncCountry', 'FuncCity')).1;

@@ -200,8 +200,11 @@ public:
         /// Re-resolve the dictGet function with the modified arguments
         resolveOrdinaryFunctionNodeByName(*dict_get_function, dict_get_name, getContext());
 
-        /// Replace the tupleElement node with the modified dictGet node
-        node = std::move(tuple_element_args[0]);
+        /// Replace the tupleElement node with the modified dictGet node.
+        /// Use copy instead of move: the tupleElement node may be shared across
+        /// multiple parents (e.g. ORDER BY ALL referencing SELECT expressions),
+        /// and moving would leave a null child pointer that crashes on the next visit.
+        node = tuple_element_args[0];
     }
 };
 

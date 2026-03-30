@@ -15,10 +15,11 @@ INSERT INTO test_t2 VALUES (3), (4);
 SELECT sum(x) FROM remote('127.0.0.1', merge(currentDatabase(), '^test_t'));
 
 -- Verify that merge()'s arguments are NOT resolved on the initiator.
--- Without the fix, the analyzer resolves merge() locally, which evaluates currentDatabase()
--- to a constant. With the fix, merge() is sent unresolved to the remote server,
--- so currentDatabase() remains as a FUNCTION node in the query tree.
-SELECT count() > 0 FROM (EXPLAIN QUERY TREE SELECT sum(x) FROM remote('127.0.0.1', merge(currentDatabase(), '^test_t'))) WHERE explain LIKE '%function\_name: currentDatabase%'
+-- Without the fix, the analyzer resolves merge() locally, which constant-folds
+-- currentDatabase() into a CONSTANT node (with an EXPRESSION subtree preserving
+-- the original function). With the fix, merge() arguments are left unresolved,
+-- so no constant folding occurs and no EXPRESSION subtree appears.
+SELECT count() = 0 FROM (EXPLAIN QUERY TREE SELECT sum(x) FROM remote('127.0.0.1', merge(currentDatabase(), '^test_t'))) WHERE explain LIKE '%EXPRESSION%'
 SETTINGS enable_analyzer = 1;
 
 DROP TABLE test_t1;

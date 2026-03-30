@@ -69,7 +69,6 @@ void readMetricsFromStatFile(
     ReadBufferFromFile & buf,
     Metrics & metrics,
     std::initializer_list<std::string_view> keys,
-    std::initializer_list<std::string_view> optional_keys,
     bool * warnings_printed)
 {
     /// Zero out existing values; keeps map nodes allocated for reuse.
@@ -119,7 +118,7 @@ void readMetricsFromStatFile(
         for (const auto * it = keys.begin(); it != keys.end(); ++it)
         {
             uint64_t key_bit = 1ull << (it - keys.begin());
-            if (!(seen_mask & key_bit) && std::find(optional_keys.begin(), optional_keys.end(), *it) == optional_keys.end())
+            if (!(seen_mask & key_bit))
             {
                 *warnings_printed = true;
                 LOG_ERROR(getLogger("CgroupsReader"), "Cannot find '{}' in '{}'", *it, buf.getFileName());
@@ -136,7 +135,7 @@ struct CgroupsV1Reader : ICgroupsReader
     {
         std::lock_guard lock(mutex);
         buf.rewind();
-        readMetricsFromStatFile(buf, metrics, {"rss"}, {}, &warnings_printed);
+        readMetricsFromStatFile(buf, metrics, {"rss"}, &warnings_printed);
         auto it = metrics.find("rss");
         return it != metrics.end() ? it->second : 0;
     }
@@ -164,7 +163,7 @@ struct CgroupsV2Reader : ICgroupsReader
         std::lock_guard lock(mutex);
         stat_buf.rewind();
         readMetricsFromStatFile(
-            stat_buf, metrics, {"anon", "sock", "kernel", "slab_reclaimable"}, {"kernel", "slab_reclaimable"}, &warnings_printed);
+            stat_buf, metrics, {"anon", "sock", "kernel", "slab_reclaimable"}, &warnings_printed);
 
         auto get = [](const Metrics & m, std::string_view key) -> uint64_t
         {

@@ -1181,6 +1181,41 @@ Coordination::Error ZooKeeper::tryRemoveRecursive(const std::string & path, uint
     return code;
 }
 
+Strings ZooKeeper::getChildrenRecursive(const std::string & path, uint32_t children_nodes_limit)
+{
+    Strings res;
+    check(tryGetChildrenRecursive(path, res, children_nodes_limit), path);
+    return res;
+}
+
+Coordination::Error ZooKeeper::tryGetChildrenRecursive(const std::string & path, Strings & res, uint32_t children_nodes_limit)
+{
+    if (!isFeatureEnabled(DB::KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
+        return Coordination::Error::ZBADARGUMENTS;
+
+    auto promise = std::make_shared<std::promise<Coordination::GetChildrenRecursiveResponse>>();
+    auto future = promise->get_future();
+
+    auto callback = [promise](const Coordination::GetChildrenRecursiveResponse & response) mutable
+    {
+        promise->set_value(response);
+    };
+
+    impl->getChildrenRecursive(path, children_nodes_limit, std::move(callback), {});
+
+    if (future.wait_for(std::chrono::milliseconds(args.operation_timeout_ms)) != std::future_status::ready)
+    {
+        impl->finalize(fmt::format("Operation timeout on {} {}", Coordination::OpNum::GetChildrenRecursive, path));
+        return Coordination::Error::ZOPERATIONTIMEOUT;
+    }
+
+    auto response = future.get();
+    Coordination::Error code = response.error;
+    if (code == Coordination::Error::ZOK)
+        res = std::move(response.children);
+    return code;
+}
+
 Coordination::Error ZooKeeper::getACLImpl(const std::string & path, Coordination::ACLs & res, Coordination::Stat * stat)
 {
     std::optional<DB::OpenTelemetry::SpanHolder> maybe_span;

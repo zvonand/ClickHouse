@@ -44,6 +44,20 @@ class LSCommand : public IKeeperClientCommand
     String getHelpMessage() const override { return "{} [path] [watch_id] -- Lists the nodes for the given path (default: cwd). Optionally sets a watch"; }
 };
 
+class LSRCommand : public IKeeperClientCommand
+{
+    String getName() const override { return "lsr"; }
+
+    bool parse(IParser::Pos & pos, boost::intrusive_ptr<ASTKeeperQuery> & node, Expected & expected) const override;
+
+    void execute(const ASTKeeperQuery * query, KeeperClientBase * client) const override;
+
+    String getHelpMessage() const override
+    {
+        return "{} [path] [limit] -- Recursively lists descendant paths. Default path: cwd, default limit: 100000";
+    }
+};
+
 class CDCommand : public IKeeperClientCommand
 {
     String getName() const override { return "cd"; }

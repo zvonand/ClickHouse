@@ -1,7 +1,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <Common/StringUtils.h>
+#include <Common/ZooKeeper/KeeperFeatureFlags.h>
 #include <Common/ZooKeeper/KeeperClientCLI/Commands.h>
 #include <Common/ZooKeeper/KeeperClientCLI/KeeperClient.h>
 #include <future>
@@ -21,6 +23,8 @@ namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
 }
+
+static constexpr int MAX_LIMIT_CHILDREN_RECURSIVE_RESPONSE = 1000000;
 
 bool LSCommand::parse(IParser::Pos & pos, boost::intrusive_ptr<ASTKeeperQuery> & node, Expected & expected) const
 {
@@ -93,6 +97,52 @@ void LSCommand::execute(const ASTKeeperQuery * query, KeeperClientBase * client)
     }
 
     client->cout << "\n";
+}
+
+bool LSRCommand::parse(IParser::Pos & pos, boost::intrusive_ptr<ASTKeeperQuery> & node, Expected & expected) const
+{
+    String path;
+    if (parseKeeperPath(pos, expected, path))
+        node->args.push_back(std::move(path));
+
+    ASTPtr limit_literal;
+    if (ParserUnsignedInteger{}.parse(pos, limit_literal, expected))
+        node->args.push_back(limit_literal->as<ASTLiteral &>().value);
+
+    return true;
+}
+
+void LSRCommand::execute(const ASTKeeperQuery * query, KeeperClientBase * client) const
+{
+    if (!client->zookeeper->isFeatureEnabled(DB::KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
+    {
+        client->cerr << "GetChildrenRecursive is not supported by this Keeper cluster.\n";
+        return;
+    }
+
+    String path;
+    if (!query->args.empty())
+        path = client->getAbsolutePath(query->args[0].safeGet<String>());
+    else
+        path = client->cwd;
+
+    uint32_t children_limit = MAX_LIMIT_CHILDREN_RECURSIVE_RESPONSE;
+    if (query->args.size() >= 2)
+    {
+        UInt64 lim = query->args[1].safeGet<UInt64>();
+        if (lim > MAX_LIMIT_CHILDREN_RECURSIVE_RESPONSE)
+        {
+            client->cerr << "Limit exceeds maximum.\n";
+            return;
+        }
+        children_limit = static_cast<uint32_t>(lim);
+    }
+
+    auto children = client->zookeeper->getChildrenRecursive(path, children_limit);
+    std::sort(children.begin(), children.end());
+
+    for (const auto & child : children)
+        client->cout << child << '\n';
 }
 
 bool CDCommand::parse(IParser::Pos & pos, boost::intrusive_ptr<ASTKeeperQuery> & node, Expected & expected) const

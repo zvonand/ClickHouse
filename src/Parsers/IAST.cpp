@@ -100,6 +100,7 @@ IAST::IAST(const IAST & other)
     , children(other.children)
     , ref_counter(0)
     , flags_storage(other.flags_storage)
+    , parenthesized(other.parenthesized)
 {
 }
 
@@ -109,6 +110,7 @@ IAST & IAST::operator=(const IAST & other)
         return *this;
     children = other.children;
     flags_storage = other.flags_storage;
+    parenthesized = other.parenthesized;
     return *this;
 }
 

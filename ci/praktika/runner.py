@@ -573,12 +573,12 @@ class Runner:
 
     def _post_run(
         self, result, workflow, job, run_exit_code,
-    ) -> None:
+    ) -> bool:
         info_errors = []
         env = _Environment.get()
         is_ok = True
 
-        
+
         is_final_job = job.name == Settings.FINISH_WORKFLOW_JOB_NAME
         is_initial_job = job.name == Settings.CI_CONFIG_JOB_NAME
 

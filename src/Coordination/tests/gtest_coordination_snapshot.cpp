@@ -57,9 +57,8 @@ createLocalObjectStorageDisk(const std::string & meta_path, const std::string & 
 {
     auto obj_storage = std::make_shared<TestLocalObjectStorage>(
         DB::LocalObjectStorageSettings("SnapshotDisk", obj_path, false));
-    auto cluster = std::make_shared<DB::ClusterConfiguration>(
-        std::unordered_map<DB::Location, DB::LocationInfo>{
-            {"main", {.enabled = true, .local = true, .config_prefix = ""}}});
+    std::unordered_map<DB::Location, DB::LocationInfo> cluster_locations = {{"main", {true, true, ""}}};
+    DB::ClusterConfigurationPtr cluster(new DB::ClusterConfiguration(std::move(cluster_locations)));
     auto router = std::make_shared<DB::ObjectStorageRouter>(
         std::unordered_map<DB::Location, DB::ObjectStoragePtr>{{"main", obj_storage}});
     auto meta_disk = std::make_shared<DB::DiskLocal>("SnapshotMetaDisk", meta_path);

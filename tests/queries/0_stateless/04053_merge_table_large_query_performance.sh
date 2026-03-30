@@ -141,7 +141,7 @@ FORMAT Null"
 # Run query on merge table with a 10-second timeout.
 # Before the optimization this took ~0.65s with 100 tables.
 # With the optimization it should complete well under 10 seconds.
-$CLICKHOUSE_CLIENT --max_query_size 1048576 --max_execution_time 10 -q "$QUERY" && echo "OK" || echo "FAIL: query on merge table timed out"
+$CLICKHOUSE_CLIENT --max_query_size 1048576 --max_execution_time 10 -q "$QUERY" && echo "OK" || { echo "FAIL: query on merge table timed out" >&2; exit 1; }
 
 # Also verify correctness: same query on single table vs merge table should produce equal results.
 QUERY_RESULT="SELECT
@@ -167,9 +167,10 @@ RESULT_SINGLE=$($CLICKHOUSE_CLIENT -q "$QUERY_SINGLE")
 if [ "$RESULT_MERGE" = "$RESULT_SINGLE" ]; then
     echo "OK"
 else
-    echo "FAIL: merge table result differs from single table"
-    echo "Merge: $RESULT_MERGE"
-    echo "Single: $RESULT_SINGLE"
+    echo "FAIL: merge table result differs from single table" >&2
+    echo "Merge: $RESULT_MERGE" >&2
+    echo "Single: $RESULT_SINGLE" >&2
+    exit 1
 fi
 
 # Cleanup

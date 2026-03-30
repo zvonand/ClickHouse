@@ -787,6 +787,18 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
                 column_names_as_aliases = cached.column_names_as_aliases;
                 is_smallest_column_requested = cached.is_smallest_column_requested;
                 aliases = cached.aliases;
+
+                /// Rebind table_expression to the current table so that downstream code
+                /// (e.g. storage->read, getQueryProcessingStage) sees the correct table identity,
+                /// even though the shared query_tree internally still references the representative table.
+                const auto & storage_lock = std::get<2>(table);
+                auto replacement_table_expression = std::make_shared<TableNode>(storage, storage_lock, nested_storage_snapshot);
+                replacement_table_expression->setAlias(modified_query_info.table_expression->getAlias());
+                if (query_info.table_expression_modifiers)
+                    replacement_table_expression->setTableExpressionModifiers(*query_info.table_expression_modifiers);
+                modified_query_info.table_expression = replacement_table_expression;
+                if (modified_query_info.planner_context)
+                    modified_query_info.planner_context->getOrCreateTableExpressionData(replacement_table_expression);
             }
             else
             {

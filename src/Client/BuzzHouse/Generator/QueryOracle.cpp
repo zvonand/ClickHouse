@@ -182,14 +182,12 @@ void QueryOracle::generateRoundtripOracleQueries(RandomGenerator & rg, Statement
         /// Build a backtick-quoted SQL column reference from the SQLRelationCol
         if (!rel_col.rel_name.empty())
             col_ref = fmt::format("`{}`.", escapeSQLString(rel_col.rel_name, '`'));
-        col_ref += "`";
         for (size_t i = 0; i < rel_col.path.size(); ++i)
         {
             if (i > 0)
                 col_ref += ".";
-            col_ref += escapeSQLString(rel_col.path[i], '`');
+            col_ref += "`" + escapeSQLString(rel_col.path[i], '`') + "`";
         }
-        col_ref += "`";
 
         /// For String/FixedString: apply roundtrip directly.
         /// For all other types (or unknown type): wrap in `toString` so hex/base64 receive a String.

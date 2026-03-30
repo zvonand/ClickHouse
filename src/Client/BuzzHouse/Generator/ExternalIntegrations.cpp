@@ -342,6 +342,11 @@ bool ClickHouseIntegratedDatabase::performQueryOnServerOrRemote(const PeerTableD
     }
 }
 
+String ClickHouseIntegratedDatabase::quoteIdentifier(const String & name) const
+{
+    return "`" + escapeSQLString(name, '`') + "`";
+}
+
 #if defined USE_MYSQL && USE_MYSQL
 void MySQLIntegration::closeMySQLConnection(MYSQL * mysql)
 {
@@ -404,11 +409,6 @@ void MySQLIntegration::setTableEngineDetails(RandomGenerator & rg, const SQLTabl
     {
         te->add_params()->set_num(rg.nextBool() ? 1 : 0);
     }
-}
-
-String ClickHouseIntegratedDatabase::quoteIdentifier(const String & name) const
-{
-    return "`" + escapeSQLString(name, '`') + "`";
 }
 
 String MySQLIntegration::getSQLQuotedTableName(std::shared_ptr<SQLDatabase> db, const String & tname)

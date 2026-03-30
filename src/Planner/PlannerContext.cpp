@@ -5,8 +5,8 @@
 #include <Analyzer/QueryNode.h>
 #include <Analyzer/TableNode.h>
 #include <Analyzer/UnionNode.h>
-#include <Interpreters/Context.h>
 #include <IO/WriteHelpers.h>
+#include <Interpreters/Context.h>
 
 namespace DB
 {
@@ -35,20 +35,10 @@ const ColumnIdentifier & GlobalPlannerContext::createColumnIdentifier(const Name
         column_identifier = column.name;
 
     auto [it, inserted] = column_identifiers.emplace(column_identifier);
-    if (!inserted)
-    {
-        /// In UNION ALL queries, different branches share the same GlobalPlannerContext.
-        /// When both branches reference a table expression with no alias and the same column name,
-        /// the column identifier will collide. Disambiguate by appending a numeric suffix.
-        size_t suffix = 0;
-        do
-        {
-            auto disambiguated = column_identifier + "_" + toString(suffix);
-            std::tie(it, inserted) = column_identifiers.emplace(std::move(disambiguated));
-            ++suffix;
-        }
-        while (!inserted);
-    }
+    /// In UNION ALL queries, different branches share the same GlobalPlannerContext.
+    /// When both branches reference a table expression with no alias and the same column name,
+    /// the column identifier will collide. This is fine because each branch has its own
+    /// PlannerContext with separate TableExpressionData, so returning the same identifier is safe.
 
     return *it;
 }

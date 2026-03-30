@@ -1,3 +1,5 @@
+SET date_time_input_format = 'basic';
+
 select toStartOfInterval(toDateTime64('\0930-12-12 12:12:12.1234567', 3), toIntervalNanosecond(1024)); -- {serverError DECIMAL_OVERFLOW}
 
 SELECT

@@ -1,3 +1,5 @@
+SET date_time_input_format = 'basic';
+
 CREATE TABLE datetime_date_table (
     col_date Date,
     col_datetime DateTime,

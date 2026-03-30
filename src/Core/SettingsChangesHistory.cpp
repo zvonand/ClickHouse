@@ -41,6 +41,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         /// Note: please check if the key already exists to prevent duplicate entries.
         addSettingsChanges(settings_changes_history, "26.4",
         {
+            {"date_time_input_format", "basic", "best_effort", "Better usability"},
+            {"cast_string_to_date_time_mode", "basic", "best_effort", "Better usability"},
             {"optimize_truncate_order_by_after_group_by_keys", false, true, "Remove trailing ORDER BY elements once all GROUP BY keys are covered in the ORDER BY prefix."},
             {"use_statistics_for_part_pruning", false, true, "New setting to use statistics for part pruning during query execution."},
             {"distributed_index_analysis_only_on_coordinator", false, false, "New setting."},
@@ -200,8 +202,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         });
         addSettingsChanges(settings_changes_history, "25.11",
         {
-            {"date_time_input_format", "basic", "best_effort", "Better usability"},
-            {"cast_string_to_date_time_mode", "basic", "best_effort", "Better usability"},
             {"query_plan_max_limit_for_lazy_materialization", 10, 100, "More optimal"},
             {"create_table_empty_primary_key_by_default", false, true, "Better usability"},
             {"cluster_table_function_split_granularity", "file", "file", "New setting."},

@@ -1,6 +1,7 @@
 set allow_experimental_variant_type = 1;
 set allow_suspicious_variant_types = 1;
 set session_timezone = 'UTC';
+set date_time_input_format = 'basic';
 
 select 'JSON';
 select 'String';

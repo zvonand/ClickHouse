@@ -24,9 +24,17 @@ DESCRIBE TEMPORARY TABLE t;
 SELECT 'SHOW CREATE TEMPORARY TABLE:';
 SHOW CREATE TEMPORARY TABLE t;
 
--- DESCRIBE TEMPORARY with subquery or table function should be a syntax error.
-DESCRIBE TEMPORARY SELECT 1; -- { clientError SYNTAX_ERROR }
-DESCRIBE TEMPORARY numbers(10); -- { clientError SYNTAX_ERROR }
+-- DESCRIBE TEMPORARY TABLE with subquery or table function should be a syntax error.
+DESCRIBE TEMPORARY TABLE (SELECT 1); -- { clientError SYNTAX_ERROR }
+
+-- Regression test: a table named `temporary` should still work with DESCRIBE.
+DROP TABLE IF EXISTS temporary;
+CREATE TABLE temporary (x UInt8) ENGINE = MergeTree ORDER BY x;
+
+SELECT 'DESCRIBE unquoted table named temporary:';
+DESCRIBE temporary;
+
+DROP TABLE temporary;
 
 DROP TEMPORARY TABLE t;
 DROP TABLE t;

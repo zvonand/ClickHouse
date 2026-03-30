@@ -30,16 +30,33 @@ bool ParserDescribeTableQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & ex
 
     auto query = make_intrusive<ASTDescribeQuery>();
 
-    bool temporary = s_temporary.ignore(pos, expected);
-
-    s_table.ignore(pos, expected);
+    /// TEMPORARY is only recognized in the explicit "DESCRIBE TEMPORARY TABLE ..." form.
+    /// This avoids breaking "DESCRIBE temporary" where `temporary` is an unquoted table name.
+    bool temporary = false;
+    {
+        auto saved_pos = pos;
+        if (s_temporary.ignore(pos, expected))
+        {
+            if (s_table.ignore(pos, expected))
+            {
+                temporary = true;
+            }
+            else
+            {
+                /// Not followed by TABLE — revert so `temporary` is parsed as a table name.
+                pos = saved_pos;
+                s_table.ignore(pos, expected);
+            }
+        }
+        else
+        {
+            s_table.ignore(pos, expected);
+        }
+    }
 
     /// Try to parse SELECT query without parentheses (e.g., DESCRIBE SELECT 1)
     if (ParserSelectWithUnionQuery().parse(pos, select, expected))
     {
-        if (temporary)
-            return false;
-
         auto table_expr = make_intrusive<ASTTableExpression>();
         /// Wrap SELECT in ASTSubquery, as expected by the rest of the codebase
         auto subquery = make_intrusive<ASTSubquery>(std::move(select));

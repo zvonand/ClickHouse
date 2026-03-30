@@ -6,3 +6,5 @@ DESCRIBE TEMPORARY TABLE:
 world	UInt64
 SHOW CREATE TEMPORARY TABLE:
 CREATE TEMPORARY TABLE t\n(\n    `world` UInt64\n)\nENGINE = Memory
+DESCRIBE unquoted table named temporary:
+x	UInt8

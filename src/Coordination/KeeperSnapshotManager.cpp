@@ -822,19 +822,7 @@ std::unique_ptr<SnapshotReceiveCtx> KeeperSnapshotManager<Storage>::beginSnapsho
         buf->finalize();
     }
 
-    std::unique_ptr<WriteBuffer> write_buf;
-    try
-    {
-        write_buf = disk->writeFile(snapshot_file_name);
-    }
-    catch (...)
-    {
-        /// Remove the marker so we don't leave a stale tmp_ file that could cause
-        /// a valid existing snapshot to be deleted on the next restart.
-        disk->removeFileIfExists(tmp_snapshot_file_name);
-        throw;
-    }
-
+    auto write_buf = disk->writeFile(snapshot_file_name);
     return std::make_unique<SnapshotReceiveCtx>(std::move(write_buf), disk, std::move(snapshot_file_name), up_to_log_idx);
 }
 

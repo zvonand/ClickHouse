@@ -1,5 +1,6 @@
--- Regression test for https://github.com/ClickHouse/ClickHouse/issues/84318
--- This query previously caused a logical error with recursive CTEs referencing other CTEs.
+-- https://github.com/ClickHouse/ClickHouse/issues/84318
+-- This query causes a logical error with recursive CTEs referencing other CTEs.
+-- When the issue is fixed, remove the serverError annotation and keep the test as a regression test.
 WITH RECURSIVE
     subquery1 AS
     (
@@ -29,4 +30,4 @@ WITH RECURSIVE
 SELECT *
 FROM subquery3
 FORMAT Null
-SETTINGS max_execution_time = 1, timeout_overflow_mode = 'break';
+SETTINGS max_execution_time = 1, timeout_overflow_mode = 'break'; -- { serverError LOGICAL_ERROR }

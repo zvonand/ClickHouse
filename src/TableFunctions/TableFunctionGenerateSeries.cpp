@@ -133,7 +133,7 @@ StoragePtr TableFunctionGenerateSeries<alias_num>::executeImpl(
                 ? std::make_shared<StorageSystemNumbers>(
                     StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, 0, 0, 1)
                 : std::make_shared<StorageSystemNumbers>(
-                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, (stop - start) / abs_step + 1, start, abs_step);
+                    StorageID(getDatabaseName(), table_name), false, std::string{"generate_series"}, (stop - start) + 1, start, abs_step);
         }
         else
         {

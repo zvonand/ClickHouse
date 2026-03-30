@@ -34,17 +34,18 @@ struct HighlightQueryImpl
         PaddedPODArray<UInt64> & data_begin,
         PaddedPODArray<UInt64> & data_end,
         PaddedPODArray<Int8> & data_type,
-        size_t & total)
+        size_t & total,
+        const QueryTokenizationSettings & settings)
     {
         const char * end = begin + query.size();
 
         Tokens tokens(begin, end, /* max_query_size = */ 0, /* skip_insignificant = */ true);
-        IParser::Pos token_iterator(tokens, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS);
+        IParser::Pos token_iterator(tokens, settings.max_parser_depth, settings.max_parser_backtracks);
 
         Expected expected;
         expected.enable_highlighting = true;
 
-        ParserQuery parser(end, /* allow_settings_after_format_in_insert = */ false, /* implicit_select = */ false);
+        ParserQuery parser(end, /* allow_settings_after_format_in_insert = */ false, /* implicit_select = */ settings.implicit_select);
         ASTPtr ast;
 
         try

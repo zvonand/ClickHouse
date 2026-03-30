@@ -14,16 +14,33 @@
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnTuple.h>
 #include <Columns/ColumnsNumber.h>
+#include <Core/Settings.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeEnum.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Functions/FunctionHelpers.h>
 #include <Functions/IFunction.h>
+#include <Interpreters/Context.h>
 
 
 namespace DB
 {
+
+namespace Setting
+{
+    extern const SettingsUInt64 max_parser_backtracks;
+    extern const SettingsUInt64 max_parser_depth;
+    extern const SettingsBool implicit_select;
+}
+
+/// Parser settings extracted from context, used by highlightQuery.
+struct QueryTokenizationSettings
+{
+    size_t max_parser_depth = DBMS_DEFAULT_MAX_PARSER_DEPTH;
+    size_t max_parser_backtracks = DBMS_DEFAULT_MAX_PARSER_BACKTRACKS;
+    bool implicit_select = false;
+};
 
 /// Common base class for functions that tokenize/highlight queries.
 /// Impl must provide:
@@ -33,16 +50,28 @@ namespace DB
 ///                          PaddedPODArray<UInt64> & data_begin,
 ///                          PaddedPODArray<UInt64> & data_end,
 ///                          PaddedPODArray<Int8> & data_type,
-///                          size_t & total);
+///                          size_t & total,
+///                          const QueryTokenizationSettings & settings);
 template <typename Impl>
 class FunctionQueryTokenization : public IFunction
 {
 public:
     static constexpr auto name = Impl::name;
 
-    static FunctionPtr create(ContextPtr)
+    static FunctionPtr create(ContextPtr context)
     {
-        return std::make_shared<FunctionQueryTokenization>();
+        return std::make_shared<FunctionQueryTokenization>(context);
+    }
+
+    explicit FunctionQueryTokenization(ContextPtr context)
+    {
+        if (context)
+        {
+            const auto & settings = context->getSettingsRef();
+            parser_settings.max_parser_depth = settings[Setting::max_parser_depth];
+            parser_settings.max_parser_backtracks = settings[Setting::max_parser_backtracks];
+            parser_settings.implicit_select = settings[Setting::implicit_select];
+        }
     }
 
     String getName() const override { return name; }
@@ -82,7 +111,7 @@ public:
             std::string_view query = col_query.getDataAt(i);
             const char * begin = query.data();
 
-            Impl::processRow(query, begin, data_begin, data_end, data_type, total);
+            Impl::processRow(query, begin, data_begin, data_end, data_type, total, parser_settings);
 
             offsets[i] = total;
         }
@@ -94,6 +123,9 @@ public:
 
         return ColumnArray::create(ColumnTuple::create(std::move(tuple_columns)), std::move(col_offsets));
     }
+
+private:
+    QueryTokenizationSettings parser_settings;
 };
 
 }

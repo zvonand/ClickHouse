@@ -25,7 +25,8 @@ struct TokenizeQueryImpl
         PaddedPODArray<UInt64> & data_begin,
         PaddedPODArray<UInt64> & data_end,
         PaddedPODArray<Int8> & data_type,
-        size_t & total)
+        size_t & total,
+        const QueryTokenizationSettings & /*settings*/)
     {
         const char * end = begin + query.size();
         Lexer lexer(begin, end);

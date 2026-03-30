@@ -1707,9 +1707,14 @@ String StorageURL::resolveURLBase(const String & url, const String & base)
     if (url.starts_with("?"))
         return base_before_query + url;
 
-    /// Fragment-only relative reference: #frag → append to full base path (before any existing query/fragment).
+    /// Fragment-only relative reference: #frag → append to base URL preserving the query string.
+    /// Only strip any existing fragment from the base, keep everything else.
     if (url.starts_with("#"))
-        return base_before_query + url;
+    {
+        auto existing_fragment = base.find('#', authority_start);
+        auto base_without_fragment = (existing_fragment == String::npos) ? base : base.substr(0, existing_fragment);
+        return base_without_fragment + url;
+    }
 
     /// Path-relative URL: merge with the base path per RFC 3986.
     /// Replace everything after the last '/' in the path portion of the base URL.

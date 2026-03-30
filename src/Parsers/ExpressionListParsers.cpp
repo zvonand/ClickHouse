@@ -1,3 +1,6 @@
+#include <charconv>
+#include <limits>
+#include <optional>
 #include <string_view>
 
 #include <base/scope_guard.h>
@@ -2020,6 +2023,124 @@ protected:
 };
 
 
+/// Parses a compound interval literal string such as '1:30' for HOUR TO MINUTE,
+/// '2-6' for YEAR TO MONTH, or '5 12:30:45' for DAY TO SECOND.
+/// Returns a list of (value, IntervalKind) pairs, or empty on failure.
+///
+/// Valid combinations follow the SQL standard:
+///   Year-Month group: YEAR TO MONTH         format: Y-M
+///   Day-Time group:   DAY TO HOUR           format: D H
+///                     DAY TO MINUTE          format: D H:M
+///                     DAY TO SECOND          format: D H:M:S
+///                     HOUR TO MINUTE         format: H:M
+///                     HOUR TO SECOND         format: H:M:S
+///                     MINUTE TO SECOND       format: M:S
+struct ParsedCompoundInterval
+{
+    std::vector<std::pair<UInt64, IntervalKind>> parts;
+    bool is_negative = false;
+};
+
+static std::optional<ParsedCompoundInterval> parseCompoundIntervalString(
+    const String & literal,
+    IntervalKind from_kind,
+    IntervalKind to_kind)
+{
+    using Kind = IntervalKind::Kind;
+
+    /// Each entry describes an interval kind and the separator character that precedes it
+    /// (0 means no separator — it is the first field in its group).
+    struct KindWithSeparator
+    {
+        Kind kind;
+        char separator_before;
+    };
+
+    static const std::vector<KindWithSeparator> year_month_group = {
+        {Kind::Year, 0},
+        {Kind::Month, '-'},
+    };
+
+    static const std::vector<KindWithSeparator> day_time_group = {
+        {Kind::Day, 0},
+        {Kind::Hour, ' '},
+        {Kind::Minute, ':'},
+        {Kind::Second, ':'},
+    };
+
+    /// Extract the sub-range [from_kind .. to_kind] from a group.
+    auto extract_range = [](const std::vector<KindWithSeparator> & group, Kind from, Kind to)
+        -> std::vector<KindWithSeparator>
+    {
+        size_t from_idx = group.size();
+        size_t to_idx = group.size();
+        for (size_t i = 0; i < group.size(); ++i)
+        {
+            if (group[i].kind == from)
+                from_idx = i;
+            if (group[i].kind == to)
+                to_idx = i;
+        }
+        if (from_idx >= group.size() || to_idx >= group.size() || from_idx >= to_idx)
+            return {};
+        return {group.begin() + from_idx, group.begin() + to_idx + 1};
+    };
+
+    auto range = extract_range(year_month_group, from_kind.kind, to_kind.kind);
+    if (range.empty())
+        range = extract_range(day_time_group, from_kind.kind, to_kind.kind);
+    if (range.empty())
+        return {};
+
+    /// Parse the string according to the expected separators.
+    /// Per SQL standard, the sign on the leading field applies to the whole literal.
+    /// All component values are stored as UInt64; the caller applies negate() to the
+    /// whole toInterval*() AST node when is_negative is set.  This ensures the AST
+    /// round-trips correctly (negative Int64 literals format as -N which re-parses
+    /// as negate(N), causing an AST inconsistency check failure).
+    ParsedCompoundInterval parsed;
+    size_t str_pos = 0;
+
+    for (size_t i = 0; i < range.size(); ++i)
+    {
+        /// Expect separator before every field except the first.
+        if (i > 0)
+        {
+            if (str_pos >= literal.size() || literal[str_pos] != range[i].separator_before)
+                return {};
+            ++str_pos;
+        }
+
+        /// Parse digits; an optional +/- sign is allowed only on the leading field
+        /// and applies to all components of the compound literal.
+        if (i == 0 && str_pos < literal.size() && (literal[str_pos] == '+' || literal[str_pos] == '-'))
+        {
+            parsed.is_negative = (literal[str_pos] == '-');
+            ++str_pos;
+        }
+        size_t digits_start = str_pos;
+        while (str_pos < literal.size() && literal[str_pos] >= '0' && literal[str_pos] <= '9')
+            ++str_pos;
+
+        if (str_pos == digits_start) /// no digits found
+            return {};
+
+        UInt64 uvalue = 0;
+        auto [ptr, ec] = std::from_chars(literal.data() + digits_start, literal.data() + str_pos, uvalue);
+        if (ec != std::errc() || ptr != literal.data() + str_pos)
+            return {};
+
+        parsed.parts.emplace_back(uvalue, IntervalKind{range[i].kind});
+    }
+
+    /// The entire string must be consumed.
+    if (str_pos != literal.size())
+        return {};
+
+    return parsed;
+}
+
+
 class IntervalLayer : public Layer
 {
 public:
@@ -2028,6 +2149,7 @@ public:
     bool parse(IParser::Pos & pos, Expected & expected, Action & action) override
     {
         /// INTERVAL 1 HOUR or INTERVAL expr HOUR
+        /// INTERVAL '1:30' HOUR TO MINUTE (compound interval with TO syntax)
         ///
         /// 0. Try to parse interval_kind (-> 1)
         /// 1. Basic parser
@@ -2053,7 +2175,34 @@ public:
                 ASTPtr expr;
 
                 if (!ParserNumber{}.parse(token_pos, expr, token_expected))
-                    return false;
+                {
+                    /// case: INTERVAL '-1:30' HOUR TO MINUTE
+                    /// ParserNumber fails on strings like '-1:30' where the tokenizer
+                    /// splits '-' as a separate token. Try compound TO syntax directly.
+                    IntervalKind from_kind;
+                    IntervalKind to_kind;
+                    if (!parseIntervalKind(pos, expected, from_kind)
+                        || !ParserKeyword(Keyword::TO).ignore(pos, expected)
+                        || !parseIntervalKind(pos, expected, to_kind))
+                        return false;
+
+                    auto compound = parseCompoundIntervalString(literal, from_kind, to_kind);
+                    if (!compound)
+                        return false;
+
+                    for (const auto & [value, kind] : compound->parts)
+                    {
+                        auto interval_node = makeASTFunction(
+                            kind.toNameOfFunctionToIntervalDataType(),
+                            make_intrusive<ASTLiteral>(Field(value)));
+                        pushResult(compound->is_negative
+                            ? makeASTFunction("negate", std::move(interval_node))
+                            : std::move(interval_node));
+                    }
+
+                    finished = true;
+                    return true;
+                }
 
                 /// case: INTERVAL '1' HOUR
                 /// back to begin
@@ -2066,7 +2215,32 @@ public:
 
                 /// case: INTERVAL '1 HOUR'
                 if (!parseIntervalKind(token_pos, token_expected, interval_kind))
-                    return false;
+                {
+                    /// case: INTERVAL '1:30' HOUR TO MINUTE (compound interval with TO syntax)
+                    IntervalKind from_kind;
+                    IntervalKind to_kind;
+                    if (!parseIntervalKind(pos, expected, from_kind)
+                        || !ParserKeyword(Keyword::TO).ignore(pos, expected)
+                        || !parseIntervalKind(pos, expected, to_kind))
+                        return false;
+
+                    auto compound = parseCompoundIntervalString(literal, from_kind, to_kind);
+                    if (!compound)
+                        return false;
+
+                    for (const auto & [value, kind] : compound->parts)
+                    {
+                        auto interval_node = makeASTFunction(
+                            kind.toNameOfFunctionToIntervalDataType(),
+                            make_intrusive<ASTLiteral>(Field(value)));
+                        pushResult(compound->is_negative
+                            ? makeASTFunction("negate", std::move(interval_node))
+                            : std::move(interval_node));
+                    }
+
+                    finished = true;
+                    return true;
+                }
 
                 pushResult(makeASTFunction(interval_kind.toNameOfFunctionToIntervalDataType(), expr));
 

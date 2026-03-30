@@ -446,4 +446,6 @@ if __name__ == "__main__":
     r.ext["changed_lines_total"] = total
     r.ext["changed_lines_covered"] = covered
     r.ext["changed_lines_cov"] = pct if total > 0 else 0.0
+    r.ext["lbc_lines"] = lbc_count
+    r.ext["lbc_fns"] = lbc_fn_count
     r.dump()

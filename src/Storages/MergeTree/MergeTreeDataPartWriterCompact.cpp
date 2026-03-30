@@ -550,6 +550,8 @@ void MergeTreeDataPartWriterCompact::cancel() noexcept
 {
     for (const auto & [_, stream] : streams_by_codec)
     {
+        if (!stream)
+            continue;
         stream->hashing_buf.cancel();
         stream->compressed_buf.cancel();
     }

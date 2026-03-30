@@ -1666,6 +1666,16 @@ Possible values:
 - 0 — Disabled.
 - 1 — Enabled.
 )", 0) \
+    DECLARE(Bool, use_statistics_for_part_pruning, true, R"(
+Use statistics to filter out parts during query execution.
+
+When enabled, pruning in SELECT queries will use column statistics (e.g. MinMax statistics) to eliminate parts that cannot contain matching data before reading any data.
+
+Possible values:
+
+- 0 — Disabled.
+- 1 — Enabled.
+)", 0) \
     DECLARE(Bool, use_top_k_dynamic_filtering, false, R"(
 Enable dynamic filtering optimization when executing a `ORDER BY <column> LIMIT n` query.
 
@@ -4468,6 +4478,9 @@ Move arithmetic operations out of aggregation functions
     DECLARE(Bool, optimize_redundant_functions_in_order_by, true, R"(
 Remove functions from ORDER BY if its argument is also in ORDER BY
 )", 0) \
+    DECLARE(Bool, optimize_truncate_order_by_after_group_by_keys, true, R"(
+Remove trailing ORDER BY elements once all GROUP BY keys are covered in the ORDER BY prefix.
+)", 0) \
     DECLARE(Bool, optimize_if_chain_to_multiif, false, R"(
 Replace if(cond1, then1, if(cond2, ...)) chains to multiIf. Currently it's not beneficial for numeric types.
 )", 0) \
@@ -5970,6 +5983,14 @@ Possible values:
 - Positive integer.
 )", 0) \
     \
+    DECLARE(UInt64, highlight_max_matches_per_row, 10000, R"(
+Sets the maximum number of highlight matches per row in the [highlight](/sql-reference/functions/string-search-functions#highlight) function. Use it to protect against excessive memory usage when highlighting highly repetitive patterns in large texts.
+
+Possible values:
+
+- Positive integer.
+)", 0) \
+    \
     DECLARE(UInt64, limit, 0, R"(
 Sets the maximum number of rows to get from the query result. It adjusts the value set by the [LIMIT](/sql-reference/statements/select/limit) clause, so that the limit, specified in the query, cannot exceed the limit, set by this setting.
 
@@ -7136,6 +7157,12 @@ Uses replicas from cluster_for_parallel_replicas.
 - [distributed_index_analysis_min_parts_to_activate](merge-tree-settings.md/#distributed_index_analysis_min_parts_to_activate)
 - [distributed_index_analysis_min_indexes_bytes_to_activate](merge-tree-settings.md/#distributed_index_analysis_min_indexes_bytes_to_activate)
 )", EXPERIMENTAL) \
+    DECLARE(Bool, distributed_index_analysis_only_on_coordinator, false, R"(
+If enabled, distributed index analysis runs only on the coordinator.
+This prevents O(N^2) spawned queries when the predicate contains subqueries (e.g., `IN (SELECT ...)`),
+because each follower replica would otherwise independently trigger its own distributed index analysis,
+but makes distributed index analysis less efficient if large tables are used in the subqueries.
+)", 0) \
     DECLARE(Bool, distributed_index_analysis_for_non_shared_merge_tree, false, R"(
 Enable distributed index analysis even for non SharedMergeTree (cloud only engine).
 )", 0) \

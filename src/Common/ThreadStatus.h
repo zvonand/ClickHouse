@@ -335,6 +335,17 @@ public:
     size_t getNextPlanStepIndex() const;
     size_t getNextPipelineProcessorIndex() const;
 
+    double getEffectiveSampleProbability(UInt64 size) const
+    {
+        if (sample_probability <= 0)
+            return 0;
+        if (sample_min_allocation_size && size < sample_min_allocation_size)
+            return 0;
+        if (sample_max_allocation_size && size > sample_max_allocation_size)
+            return 0;
+        return sample_probability;
+    }
+
 private:
     void applyGlobalSettings();
     void applyQuerySettings();
@@ -348,6 +359,11 @@ private:
     void logToQueryThreadLog(QueryThreadLog & thread_log, const String & current_database);
 
     void attachToGroupImpl(const ThreadGroupPtr & thread_group_);
+
+    /// Cached sample probability resolved from MemoryTracker hierarchy to avoid parent traversal on every allocation
+    double sample_probability = 0;
+    UInt64 sample_min_allocation_size = 0;
+    UInt64 sample_max_allocation_size = 0;
 };
 
 /**

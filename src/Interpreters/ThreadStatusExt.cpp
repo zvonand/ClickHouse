@@ -75,6 +75,29 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
+namespace
+{
+
+using namespace DB;
+
+void configureMemoryTrackerFromSettings(bool has_trace_collector, MemoryTracker & memory_tracker, const Settings & settings)
+{
+    if (has_trace_collector)
+    {
+        memory_tracker.setProfilerStep(settings[Setting::memory_profiler_step]);
+        memory_tracker.setSampleProbability(settings[Setting::memory_profiler_sample_probability]);
+        memory_tracker.setSampleMinAllocationSize(settings[Setting::memory_profiler_sample_min_allocation_size]);
+        memory_tracker.setSampleMaxAllocationSize(settings[Setting::memory_profiler_sample_max_allocation_size]);
+    }
+
+    if (settings[Setting::memory_tracker_fault_probability] > 0.0)
+        memory_tracker.setFaultProbability(settings[Setting::memory_tracker_fault_probability]);
+
+    memory_tracker.setSoftLimit(settings[Setting::memory_overcommit_ratio_denominator]);
+}
+
+}
+
 ThreadGroup::ThreadGroup(ContextPtr query_context_, Int32 os_threads_nice_value_, FatalErrorCallback fatal_error_callback_)
     : master_thread_id(CurrentThread::get().thread_id)
     , query_context(query_context_)
@@ -186,14 +209,7 @@ ThreadGroupPtr ThreadGroup::create(ContextPtr context, Int32 os_threads_nice_val
 
     /// However settings from storage context have to be applied
     const Settings & settings = context->getSettingsRef();
-    group->memory_tracker.setProfilerStep(settings[Setting::memory_profiler_step]);
-    group->memory_tracker.setSampleProbability(settings[Setting::memory_profiler_sample_probability]);
-    group->memory_tracker.setSampleMinAllocationSize(settings[Setting::memory_profiler_sample_min_allocation_size]);
-    group->memory_tracker.setSampleMaxAllocationSize(settings[Setting::memory_profiler_sample_max_allocation_size]);
-    group->memory_tracker.setSoftLimit(settings[Setting::memory_overcommit_ratio_denominator]);
-    if (settings[Setting::memory_tracker_fault_probability] > 0.0)
-        group->memory_tracker.setFaultProbability(settings[Setting::memory_tracker_fault_probability]);
-
+    configureMemoryTrackerFromSettings(context->hasTraceCollector(), group->memory_tracker, settings);
     return group;
 }
 
@@ -375,6 +391,15 @@ void ThreadStatus::applyQuerySettings()
     untracked_memory_limit = settings[Setting::max_untracked_memory];
     if (settings[Setting::memory_profiler_step] && settings[Setting::memory_profiler_step] < static_cast<UInt64>(untracked_memory_limit))
         untracked_memory_limit = settings[Setting::memory_profiler_step];
+
+    /// Populate the cache from authoritative query settings; on the initiator this runs before ProcessList::insert, on workers after (idempotent)
+    /// (we cannot do this for all threads, even though it is no-op, since it is a data-race)
+    if (thread_group->master_thread_id == thread_id)
+        configureMemoryTrackerFromSettings(query_context_ptr->hasTraceCollector(), thread_group->memory_tracker, settings);
+    auto sample_config = memory_tracker.getResolvedSampleConfig();
+    sample_probability = sample_config.probability;
+    sample_min_allocation_size = sample_config.min_allocation_size;
+    sample_max_allocation_size = sample_config.max_allocation_size;
 
 #if USE_JEMALLOC
     if (settings[Setting::jemalloc_enable_profiler])

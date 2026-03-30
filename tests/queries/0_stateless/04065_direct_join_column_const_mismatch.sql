@@ -1,19 +1,26 @@
 -- Test that DirectJoinMergeTreeEntity handles ColumnConst columns correctly
 -- when merging multiple blocks from the pipeline (convertToFullColumnIfConst).
--- A column added via ALTER after data insertion produces ColumnConst in
--- MergeTree reads. With small max_block_size, multiple such blocks are
--- merged in executePlan, which previously triggered an assertTypeEquality
--- failure in insertRangeFrom.
+--
+-- We create two parts in t_right: the first part (written before ALTER) has no
+-- stored new_col, so MergeTree fills it as ColumnConst on read. The second part
+-- (written after ALTER) stores new_col as a regular column. With small
+-- max_block_size, blocks from both parts are merged in executePlan, which
+-- previously triggered an assertTypeEquality failure (debug/sanitizer builds)
+-- or produced wrong results (release builds) in insertRangeFrom.
 
 DROP TABLE IF EXISTS t_left;
 DROP TABLE IF EXISTS t_right;
 
 CREATE TABLE t_right (id UInt64, value String) ENGINE = MergeTree() ORDER BY id;
-INSERT INTO t_right SELECT number, 'val_' || toString(number) FROM numbers(10);
+INSERT INTO t_right SELECT number, 'val_' || toString(number) FROM numbers(5);
 
 -- Add a column after data is already written; the existing part does not
 -- store it, so MergeTree fills it as ColumnConst on read.
 ALTER TABLE t_right ADD COLUMN new_col String DEFAULT 'default_value';
+
+-- Insert more data: this creates a second part where new_col IS stored with
+-- actual (non-default) values, producing a regular column on read.
+INSERT INTO t_right SELECT number + 5, 'val_' || toString(number + 5), 'stored_' || toString(number + 5) FROM numbers(5);
 
 CREATE TABLE t_left (id UInt64) ENGINE = MergeTree() ORDER BY id;
 INSERT INTO t_left SELECT number FROM numbers(10);

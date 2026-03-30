@@ -798,7 +798,12 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
                     replacement_table_expression->setTableExpressionModifiers(*query_info.table_expression_modifiers);
                 modified_query_info.table_expression = replacement_table_expression;
                 if (modified_query_info.planner_context)
+                {
+                    /// Create a fresh PlannerContext for this table (just like getModifiedQueryInfo does)
+                    /// to avoid accumulating table expression data in the shared cached context.
+                    modified_query_info.planner_context = std::make_shared<PlannerContext>(modified_context, modified_query_info.planner_context);
                     modified_query_info.planner_context->getOrCreateTableExpressionData(replacement_table_expression);
+                }
             }
             else
             {

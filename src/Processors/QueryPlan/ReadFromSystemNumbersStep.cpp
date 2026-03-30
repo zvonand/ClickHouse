@@ -499,8 +499,7 @@ Pipe ReadFromSystemNumbersStep::makePipe()
     /// Used by `generate_series` for descending series and full-range ascending with step > 1.
     if (numbers_storage.use_stepped_source)
     {
-        chassert(numbers_storage.limit.has_value());
-        UInt64 total_count = *numbers_storage.limit;
+        UInt64 total_count = numbers_storage.count;
         if (total_count == 0)
         {
             add_null_source();

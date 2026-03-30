@@ -1703,6 +1703,14 @@ String StorageURL::resolveURLBase(const String & url, const String & base)
         return base_before_query.substr(0, authority_end) + url;
     }
 
+    /// Query-only relative reference: ?query → append to full base path (before any existing query/fragment).
+    if (url.starts_with("?"))
+        return base_before_query + url;
+
+    /// Fragment-only relative reference: #frag → append to full base path (before any existing query/fragment).
+    if (url.starts_with("#"))
+        return base_before_query + url;
+
     /// Path-relative URL: merge with the base path per RFC 3986.
     /// Replace everything after the last '/' in the path portion of the base URL.
     /// Only search within the path (after authority), not within the scheme's "://".

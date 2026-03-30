@@ -1,13 +1,15 @@
-https://example.com/def/data.csv
-https://example.com/test/data.csv
-https://example.invalid/test/data.csv
-https://example.invalid/absolute.csv
-https://example.com/data.csv
-https://example.com/def/data.csv
-https://example.com/test
-http://example.invalid/other.csv
-https://example.com/def/data.csv
-https://example.com/def/data.csv
-https://example.com/other/file.csv
-https://example.com/data.csv
+https://base.invalid/def/data.csv
+https://base.invalid/test/data.csv
+https://other.invalid/test/data.csv
+https://other.invalid/absolute.csv
+https://base.invalid/data.csv
+https://base.invalid/def/data.csv
+https://base.invalid/test
+http://other.invalid/other.csv
+https://base.invalid/def/data.csv
+https://base.invalid/def/data.csv
+https://base.invalid/other/file.csv
+https://base.invalid/data.csv
+https://base.invalid/dir/file.csv?x=1
+https://base.invalid/dir/file.csv#frag
 must contain a scheme

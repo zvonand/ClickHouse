@@ -1,3 +1,5 @@
+-- { echo }
+
 -- Descending series with negative step
 SELECT * FROM generate_series(9, 0, -1);
 SELECT * FROM generate_series(10, 0, -3);
@@ -32,10 +34,28 @@ SELECT * FROM generate_series(0, 18446744073709551615, 1); -- { serverError INVA
 -- INT64_MIN as step (boundary for signed negation)
 SELECT count() FROM generate_series(9223372036854775807, 0, -9223372036854775808);
 
--- Known limitation: when stop - start == UInt64_MAX, the query is rejected because the limit
--- passed to `StorageSystemNumbers` is `range + 1` which would overflow UInt64, even though
--- a large step would produce only a few values. Previously this silently returned empty result.
-SELECT * FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808)); -- { serverError INVALID_SETTING_VALUE }
+-- Full UInt64 range with large step: previously silently returned empty result,
+-- now uses bounded mode to produce correct output.
+SELECT * FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808));
+
+SELECT * FROM generate_series(CAST('18446744073709551615', 'UInt64'), 0, -9223372036854775808);
+
+-- Bounded ascending: LIMIT and WHERE
+SELECT * FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808)) LIMIT 1;
+SELECT * FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808)) WHERE generate_series > 0;
+SELECT count() FROM generate_series(0, CAST('18446744073709551615', 'UInt64'), toUInt64(9223372036854775808));
+
+-- WHERE filter on descending series (no filter pushdown)
+SELECT * FROM generate_series(20, 0, -3) WHERE generate_series > 10;
+
+-- generateSeries alias with negative step
+SELECT * FROM generateSeries(5, 0, -2);
+
+-- start == stop with negative step, abs_step > 1
+SELECT * FROM generate_series(5, 5, -3);
+
+-- Descending series with step that exactly divides range
+SELECT * FROM generate_series(10, 0, -2);
 
 -- Zero step should error
 SELECT * FROM generate_series(0, 10, 0); -- { serverError INVALID_SETTING_VALUE }

@@ -141,13 +141,6 @@ bool checkIfRequestIncreaseMem(const Coordination::ZooKeeperRequestPtr & request
                     memory_delta -= remove_req.bytesSize();
                     break;
                 }
-                case Coordination::OpNum::GetChildrenRecursive:
-                {
-                    Coordination::ZooKeeperGetChildrenRecursiveRequest & get_req
-                        = dynamic_cast<Coordination::ZooKeeperGetChildrenRecursiveRequest &>(*sub_zk_request);
-                    memory_delta -= get_req.bytesSize();
-                    break;
-                }
                 default:
                     break;
             }

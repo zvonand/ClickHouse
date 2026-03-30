@@ -1716,7 +1716,7 @@ ColumnWithTypeAndName ORCColumnToCHColumn::readColumnFromORCColumn(
     bool skipped = false;
 
     if (!inside_nullable && (orc_column->hasNulls || (type_hint && type_hint->isNullable())) && !orc_column->isEncoded
-        && (orc_type->getKind() != orc::LIST && orc_type->getKind() != orc::MAP && orc_type->getKind() != orc::STRUCT))
+        && (orc_type->getKind() != orc::LIST && orc_type->getKind() != orc::MAP))
     {
         DataTypePtr nested_type_hint;
         if (type_hint)
@@ -1935,6 +1935,18 @@ ColumnWithTypeAndName ORCColumnToCHColumn::readColumnFromORCColumn(
                 const auto * nested_orc_column = orc_struct_column->fields[i];
                 const auto * nested_orc_type = orc_type->getSubtype(i);
                 auto element = readColumnFromORCColumn(nested_orc_column, nested_orc_type, field_name, false, nested_type_hint);
+
+                /// In ORC, child values at null struct positions are marked as null. This causes
+                /// `readColumnFromORCColumn` to wrap the child in Nullable even though the type hint says
+                /// the element is non-nullable (e.g. the user requested `Tuple(UInt32, String)`, not
+                /// `Tuple(Nullable(UInt32), Nullable(String))`). In that case, we should remove Nullable
+                /// from the child column and type, so that we return the correct type according to the type
+                /// hint. If the type hint says the element is Nullable, we keep it as is.
+                if (nested_type_hint && !nested_type_hint->isNullable() && element.type->isNullable())
+                {
+                    element.column = assert_cast<const ColumnNullable &>(*element.column).getNestedColumnPtr();
+                    element.type = removeNullable(element.type);
+                }
 
                 tuple_elements.emplace_back(std::move(element.column));
                 tuple_types.emplace_back(std::move(element.type));

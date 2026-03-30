@@ -31,7 +31,7 @@ using StorageJoinPtr = std::shared_ptr<StorageJoin>;
 namespace
 {
 
-class ExecutableFunctionJoinGet final : public IExecutableFunction, private WithContext
+class ExecutableFunctionJoinGet final : public IExecutableFunction
 {
 public:
     ExecutableFunctionJoinGet(const char * name_,
@@ -39,8 +39,8 @@ public:
                               TableLockHolder table_lock_,
                               StorageJoinPtr storage_join_,
                               const DB::Block & result_columns_)
-        : WithContext(context_)
-        , function_name(name_)
+        : function_name(name_)
+        , context(context_)
         , table_lock(std::move(table_lock_))
         , storage_join(std::move(storage_join_))
         , result_columns(result_columns_)
@@ -56,12 +56,13 @@ public:
 
 private:
     const char * function_name;
+    ContextPtr context;
     TableLockHolder table_lock;
     StorageJoinPtr storage_join;
     DB::Block result_columns;
 };
 
-class FunctionJoinGet final : public IFunctionBase, private WithContext
+class FunctionJoinGet final : public IFunctionBase
 {
 public:
     FunctionJoinGet(const char * name_,
@@ -69,8 +70,8 @@ public:
                     TableLockHolder table_lock_,
                     StorageJoinPtr storage_join_, String attr_name_,
                     DataTypes argument_types_, DataTypePtr return_type_)
-        : WithContext(context_)
-        , function_name(name_)
+        : function_name(name_)
+        , context(context_)
         , table_lock(std::move(table_lock_))
         , storage_join(storage_join_)
         , attr_name(std::move(attr_name_))
@@ -90,6 +91,7 @@ public:
 
 private:
     const char * function_name;
+    ContextPtr context;
     TableLockHolder table_lock;
     StorageJoinPtr storage_join;
     const String attr_name;
@@ -135,7 +137,7 @@ ColumnPtr ExecutableFunctionJoinGet::executeImpl(const ColumnsWithTypeAndName & 
         auto key = arguments[i];
         keys.emplace_back(std::move(key));
     }
-    return storage_join->joinGet(keys, result_columns, getContext()).column;
+    return storage_join->joinGet(keys, result_columns, context).column;
 }
 
 ExecutableFunctionPtr FunctionJoinGet::prepare(const ColumnsWithTypeAndName &) const
@@ -144,9 +146,9 @@ ExecutableFunctionPtr FunctionJoinGet::prepare(const ColumnsWithTypeAndName &) c
 
     Names column_names = storage_join->getKeyNames();
     column_names.push_back(attr_name);
-    getContext()->checkAccess(AccessType::SELECT, storage_join->getStorageID(), column_names);
+    context->checkAccess(AccessType::SELECT, storage_join->getStorageID(), column_names);
 
-    return std::make_unique<ExecutableFunctionJoinGet>(function_name, getContext(), table_lock, storage_join, result_columns);
+    return std::make_unique<ExecutableFunctionJoinGet>(function_name, context, table_lock, storage_join, result_columns);
 }
 
 std::pair<std::shared_ptr<StorageJoin>, String>

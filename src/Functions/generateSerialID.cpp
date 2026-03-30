@@ -41,9 +41,10 @@ namespace Setting
 namespace
 {
 
-class FunctionSerial : public IFunction, private WithContext
+class FunctionSerial : public IFunction
 {
 private:
+    ContextPtr context;
     String keeper_path;
     size_t max_series = 0;
 
@@ -51,7 +52,7 @@ public:
     static constexpr auto name = "generateSerialID";
 
     explicit FunctionSerial(ContextPtr context_)
-        : WithContext(context_)
+        : context(context_)
     {
         keeper_path = context_->getServerSettings()[ServerSetting::series_keeper_path];
         max_series = context_->getSettingsRef()[Setting::max_autoincrement_series];
@@ -152,7 +153,7 @@ public:
         if (has_start_value)
             start_value = arguments[1].column->getUInt(0);
 
-        zkutil::ZooKeeperPtr keeper = getContext()->getZooKeeper();
+        zkutil::ZooKeeperPtr keeper = context->getZooKeeper();
 
         Coordination::Stat stat;
         if (!keeper->exists(keeper_path, &stat))

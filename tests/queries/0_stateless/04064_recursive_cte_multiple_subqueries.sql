@@ -29,4 +29,4 @@ WITH RECURSIVE
 SELECT *
 FROM subquery3
 FORMAT Null
-SETTINGS max_execution_time = 1, timeout_overflow_mode = 'break';
+SETTINGS max_execution_time = 1, timeout_overflow_mode = 'break'; -- { serverError LOGICAL_ERROR }

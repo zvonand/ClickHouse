@@ -544,6 +544,73 @@ class Targeting:
                         )
                 break  # inject into first tracked line only (score is cov_regions-weighted)
 
+        # --- Third tier: ultra-broad expansion -----------------------------------
+        # When both primary (rc ≤ BROAD_REGION_HARD_CAP) and broad-tier2
+        # (BROAD_REGION_HARD_CAP < rc ≤ VERY_BROAD_REGION_CAP) return no tests for
+        # all changed lines, expand further to rc ≤ ULTRA_BROAD_REGION_CAP.
+        # This handles infrastructure files where every changed line is covered by
+        # 8000+ tests (e.g. IMergeTreeDataPart.cpp, Context.cpp hot paths) so
+        # neither tier finds anything.  Ultra-broad tests rank below all other
+        # evidence — they are a last resort before the keyword fallback.
+        all_found = {e[0] for pairs in result.values() for e in pairs}
+        if not all_found and run_broad_tier2 and (time.monotonic() - t0) < 12.0:
+            ULTRA_BROAD_REGION_CAP = 30000
+            ultra_query = f"""
+            SELECT test_name, count() AS cov_regions, uniqExact(file) AS files_covered
+            FROM checks_coverage_lines
+            WHERE check_start_time > now() - interval 3 days
+              AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+              AND notEmpty(test_name)
+              AND ({per_file_conds})
+              AND (file, line_start, line_end) IN (
+                  SELECT file, line_start, line_end
+                  FROM checks_coverage_lines
+                  WHERE check_start_time > now() - interval 3 days
+                    AND check_name LIKE '{self._escape_sql_string(self.job_type)}%'
+                    AND ({per_file_conds})
+                  GROUP BY file, line_start, line_end
+                  HAVING uniqExact(test_name) > {VERY_BROAD_REGION_CAP}
+                     AND uniqExact(test_name) <= {ULTRA_BROAD_REGION_CAP}
+              )
+            GROUP BY test_name
+            ORDER BY (cov_regions * uniqExact(file)) DESC
+            LIMIT 4000
+            """
+            t_ultra = time.monotonic()
+            try:
+                ultra_raw = cidb.query(ultra_query, log_level="") or ""
+                print(f"[find_tests] ultra-broad query: {time.monotonic()-t_ultra:.2f}s, "
+                      f"response={len(ultra_raw)} bytes")
+            except Exception as e:
+                print(f"[find_tests] ultra-broad query failed (non-fatal): {e}")
+                ultra_raw = ""
+
+            ultra_tests: dict = {}
+            for row in ultra_raw.strip().splitlines():
+                parts = row.strip().split("\t", 2)
+                if not parts[0]:
+                    continue
+                cov_regions = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 1
+                files_covered = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 1
+                ultra_tests[parts[0]] = cov_regions * files_covered
+
+            if ultra_tests:
+                print(f"[find_tests] ultra-broad: {len(ultra_tests)} tests from "
+                      f"regions with rc > {VERY_BROAD_REGION_CAP} (top score={max(ultra_tests.values())})")
+                PASS_WEIGHT_ULTRA_BROAD = self.PASS_WEIGHT_BROAD2 / 2
+                for filename, line_no in coverage_lines:
+                    if not any(filename.startswith(p) for p in COVERAGE_TRACKED_PREFIXES):
+                        continue
+                    key = (filename, line_no)
+                    existing = {e[0] for e in result.get(key, [])}
+                    for tname, score in ultra_tests.items():
+                        if tname not in existing:
+                            effective_width = max(1, BROAD_FALLBACK_WIDTH // max(1, score))
+                            result.setdefault(key, []).append(
+                                (tname, effective_width, 255, BROAD_TIER2_RC, PASS_WEIGHT_ULTRA_BROAD)
+                            )
+                    break  # inject into first tracked line only
+
         # --- Secondary pass: sibling files in the same source directory ----
         # For each changed C++ file under src/, find tests that cover OTHER files
         # in the same directory.  These tests are added as very broad hits

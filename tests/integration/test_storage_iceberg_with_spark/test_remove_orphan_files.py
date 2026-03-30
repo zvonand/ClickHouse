@@ -420,6 +420,27 @@ def test_remove_orphan_files_rejected_on_v1(started_cluster_iceberg_with_spark, 
     assert "format version" in error.lower(), f"Error should mention format version, got: {error}"
 
 
+@pytest.mark.parametrize("storage_type", ["local", "s3"])
+def test_remove_orphan_files_delete_file_categories(started_cluster_iceberg_with_spark, storage_type):
+    """Equality-delete and position-delete orphan files must be tallied
+    under their respective metrics, not misclassified."""
+    env = make_env(started_cluster_iceberg_with_spark, storage_type, "test_orphan_del_cat")
+    env.populate(1)
+
+    env.add_orphan("data", "eq-delete-001.parquet")
+    env.add_orphan("data", "00000-0-eq-del-00001.parquet")
+    env.add_orphan("data", "00000-0-deletes.parquet")
+    env.add_orphan("data", "00000-0-delete-00001.parquet")
+    time.sleep(2)
+
+    counts = env.remove_orphans(older_than=env.now_ts())
+
+    assert counts["deleted_equality_delete_files_count"] == 2, \
+        f"Expected 2 equality-delete files, got {counts}"
+    assert counts["deleted_position_delete_files_count"] == 2, \
+        f"Expected 2 position-delete files, got {counts}"
+
+
 @pytest.mark.parametrize("storage_type", ["azure"])
 def test_remove_orphan_files_azure(started_cluster_iceberg_with_spark, storage_type):
     """Orphan removal on Azure (Azurite) backend: create orphans, verify deletion."""

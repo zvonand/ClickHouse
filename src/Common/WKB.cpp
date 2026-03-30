@@ -36,7 +36,7 @@ String getGeometricObjectTypeName(const GeometricObject & object)
     else if (std::holds_alternative<Polygon<CartesianPoint>>(object))
         return "Polygon";
     else if (std::holds_alternative<MultiPolygon<CartesianPoint>>(object))
-        return "Polygon";
+        return "MultiPolygon";
     throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unknown geometric object");
 }
 

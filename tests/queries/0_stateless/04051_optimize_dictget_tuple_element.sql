@@ -90,6 +90,11 @@ SELECT 'dictGetOrDefault with tuple function default';
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('FuncCountry', 'FuncCity')).1;
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('FuncCountry', 'FuncCity')).2;
 
+-- Test dictGetOrDefault with non-rewritable default (non-constant expression) — the pass must bail out gracefully
+SELECT 'dictGetOrDefault with non-rewritable default';
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), materialize(('MCountry', 'MCity'))).1;
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), materialize(('MCountry', 'MCity'))).2;
+
 DROP TABLE test_keys;
 DROP DICTIONARY test_dict;
 DROP TABLE dict_source;

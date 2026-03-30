@@ -37,3 +37,6 @@ DefaultCity
 dictGetOrDefault with tuple function default
 FuncCountry
 FuncCity
+dictGetOrDefault with non-rewritable default
+MCountry
+MCity

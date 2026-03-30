@@ -453,6 +453,7 @@ std::optional<String> optimizeUseNormalProjections(
                 nullptr);
             auto & converting_node = nodes.emplace_back();
             converting_node.step = std::make_unique<ExpressionStep>(next_node->step->getOutputHeader(), std::move(converting_dag));
+            converting_node.step->setStepDescription("Convert projection output to match expected header");
             converting_node.children.push_back(next_node);
             next_node = &converting_node;
         }

@@ -60,4 +60,16 @@ OPTIMIZE TABLE test_projection_pr FINAL;
 -- header mismatch with the remote plan in the parallel replicas UnionStep.
 SELECT url FROM test_projection_pr WHERE region = 'europe' ORDER BY url LIMIT 1;
 
+-- Verify the plan-level fix: when all parts come from the projection and
+-- PREWHERE adds extra columns, a converting Expression step must be present
+-- in the plan to strip those columns before the Union.
+-- Without this fix, the step is absent and the Union inputs have mismatched
+-- headers (handled at pipeline level by #99515, but incorrect at plan level).
+SELECT count() > 0
+FROM (
+    EXPLAIN PLAN
+    SELECT url FROM test_projection_pr WHERE region = 'europe' ORDER BY url LIMIT 1
+)
+WHERE explain LIKE '%Convert projection output to match expected header%';
+
 DROP TABLE test_projection_pr;

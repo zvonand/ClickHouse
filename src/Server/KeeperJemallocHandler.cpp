@@ -94,7 +94,12 @@ try
     }
 
     auto raw_file = std::string(Jemalloc::flushProfile("/tmp/jemalloc_keeper"));
-    SCOPE_EXIT({ std::error_code ec; std::filesystem::remove(raw_file, ec); });
+    SCOPE_EXIT({
+        std::error_code ec;
+        std::filesystem::remove(raw_file, ec);
+        if (ec)
+            LOG_WARNING(getLogger("KeeperJemallocProfileHandler"), "Failed to remove temporary heap profile {}: {}", raw_file, ec.message());
+    });
 
     std::string output;
 

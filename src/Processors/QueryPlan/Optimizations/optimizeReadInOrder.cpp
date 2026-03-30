@@ -133,6 +133,8 @@ QueryPlan::Node * findReadingStep(QueryPlan::Node & node, FindReadingStepContext
     if (auto * distinct = typeid_cast<DistinctStep *>(step); distinct && distinct->isPreliminary())
         return findReadingStep(*node.children.front(), data);
 
+    if (typeid_cast<CreatingSetsStep *>(step) || typeid_cast<DelayedCreatingSetsStep *>(step))
+        return findReadingStep(*node.children.front(), data);
 
     if (data.read_in_order_through_join)
     {

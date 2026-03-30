@@ -46,6 +46,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"distributed_index_analysis_only_on_coordinator", false, false, "New setting."},
             {"enable_materialized_cte", false, false, "New setting"},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},
+            {"recursive_cte_max_steps_in_type_inference", 0, 10, "Maximum iterations for inferring column types in recursive CTEs via iterative getLeastSupertype"},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {

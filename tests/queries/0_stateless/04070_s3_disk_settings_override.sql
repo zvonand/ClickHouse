@@ -12,12 +12,22 @@
 --
 -- Without the fix, the global endpoint config would override the disk config
 -- setting, resulting in a single-part upload instead of multipart.
+--
+-- SYSTEM RELOAD CONFIG triggers S3ObjectStorage::applyNewSettings, which merges
+-- the global <s3> endpoint settings with disk config settings.  Without the fix
+-- the endpoint's 100 Mi value overrides the disk's 10 000 value.
 
 DROP TABLE IF EXISTS t_04070_s3_disk_override;
 
 CREATE TABLE t_04070_s3_disk_override (number UInt64)
 ENGINE = MergeTree ORDER BY number
 SETTINGS storage_policy = 's3_04070';
+
+-- Force a config reload so that applyNewSettings merges global <s3> endpoint
+-- settings into the disk's S3ObjectStorage.  On the buggy code path the
+-- endpoint's large max_single_part_upload_size wins; with the fix the disk
+-- config value (10 000) takes priority.
+SYSTEM RELOAD CONFIG;
 
 INSERT INTO t_04070_s3_disk_override SELECT number FROM numbers(1000000);
 

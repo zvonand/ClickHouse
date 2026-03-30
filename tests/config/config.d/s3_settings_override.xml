@@ -1,12 +1,5 @@
 <clickhouse>
     <s3>
-        <!-- Endpoint-specific settings for test 04065_s3_settings_query_override.
-             Sets a large max_single_part_upload_size so the test can verify that
-             query-level settings properly override global endpoint config. -->
-        <test_04065>
-            <endpoint>http://localhost:11111/test/04065_s3_settings_query_override</endpoint>
-            <max_single_part_upload_size>104857600</max_single_part_upload_size>
-        </test_04065>
         <!-- Endpoint for test 04070_s3_disk_settings_override.
              Sets a large max_single_part_upload_size. The disk config sets a small value.
              The test verifies that disk config takes priority over global <s3> section. -->

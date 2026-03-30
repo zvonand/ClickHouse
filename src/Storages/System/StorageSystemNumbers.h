@@ -40,15 +40,27 @@ class Context;
 class StorageSystemNumbers final : public IStorage
 {
 public:
-    /// Otherwise, streams concurrently increment atomic.
+    /// Standard mode: `limit` is a domain window size, not the output row count
+    /// (e.g. `numbers(10, 5, 2)` has limit=5, offset=10, step=2 — the domain is
+    /// 5 consecutive integers [10, 14], but only 3 values are produced: 10, 12, 14).
+    /// Supports filter pushdown and multi-stream.
     StorageSystemNumbers(
         const StorageID & table_id,
         bool multithreaded_,
         const std::string & column_name,
         std::optional<UInt64> limit_ = std::nullopt,
         UInt64 offset_ = 0,
-        UInt64 step_ = 1,
-        bool descending_ = false);
+        UInt64 step_ = 1);
+
+    /// Simple stepped mode: `count` is the exact number of output values, `start` is the first value,
+    /// `step` is applied directly (use wrapping arithmetic for descending).
+    /// Single-stream, no filter pushdown.
+    StorageSystemNumbers(
+        const StorageID & table_id,
+        const std::string & column_name,
+        UInt64 count_,
+        UInt64 start,
+        UInt64 step_);
 
     std::string getName() const override { return "SystemNumbers"; }
 
@@ -74,7 +86,10 @@ private:
     UInt64 offset;
     std::string column_name;
     UInt64 step;
-    bool descending;
+
+    /// When true, uses `SimpleSteppedNumbersSource` instead of the normal domain-window path.
+    bool use_stepped_source = false;
+    UInt64 count = 0;  /// Exact output row count, only used when `use_stepped_source` is true.
 };
 
 }

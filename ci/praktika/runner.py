@@ -568,7 +568,7 @@ class Runner:
             Shell.check(result.get_on_error_hook(), verbose=True)
 
         result.update_duration()
-        result.set_files([Settings.RUN_LOG])
+        result.set_files([Settings.RUN_LOG], strict=False)
         return result
 
     def _post_run(

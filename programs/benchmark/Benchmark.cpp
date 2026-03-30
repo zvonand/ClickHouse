@@ -924,7 +924,7 @@ int mainEntryClickHouseBenchmark(int argc, char ** argv)
             std::cout << "Usage: clickhouse benchmark [options] < queries.txt\n";
             std::cout << "Usage: clickhouse benchmark [options] --query \"query text\"\n\n";
             std::cout << "clickhouse-benchmark connects to ClickHouse server, repeatedly sends "
-                         "specified queries and produces reports query statistics. "
+                         "specified queries and reports query statistics. "
                          "Multiple queries can be used if passed in TSV format.\n\n";
             if (options.contains("verbose"))
                 std::cout << options_description << "\n";

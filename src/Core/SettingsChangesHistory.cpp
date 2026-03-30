@@ -47,6 +47,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"enable_materialized_cte", false, false, "New setting"},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},
             {"url_base", "", "", "New setting to specify the base URL for resolving relative URLs in the url table function and URL table engine."},
+            {"highlight_max_matches_per_row", 10000, 10000, "New setting to limit the number of highlight matches per row to protect against excessive memory usage."},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {

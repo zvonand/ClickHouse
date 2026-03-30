@@ -54,7 +54,7 @@ class LSRCommand : public IKeeperClientCommand
 
     String getHelpMessage() const override
     {
-        return "{} [path] [limit] -- Recursively lists descendant paths. Default path: cwd, default limit: 100000";
+        return "{} [path] [limit] -- Recursively lists descendant paths. Default path: cwd, default limit: 1000000";
     }
 };
 

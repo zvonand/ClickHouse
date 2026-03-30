@@ -1577,7 +1577,9 @@ Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is
 {
     if (is_local)
     {
-        std::shared_lock lock(storage.storage_mutex);
+        std::shared_lock lock(storage.storage_mutex, std::defer_lock);
+        if (should_lock_storage)
+            lock.lock();
         auto node_it = storage.container.find(path);
         if (node_it == storage.container.end())
             return {};

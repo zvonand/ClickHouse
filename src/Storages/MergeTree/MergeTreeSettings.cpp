@@ -267,11 +267,12 @@ namespace ErrorCodes
     Escape special symbols in filenames created for subcolumns of Variant data type in Wide parts of MergeTree table. Needed for compatibility.
     )", 0) \
     DECLARE(Bool, share_nested_offsets, true, R"(
-    When enabled (default), columns that belong to the same flattened Nested structure (e.g. n.a and n.b)
-    share a single offsets file on disk (e.g. n.size0). The array sizes of sibling columns are also validated
-    to be equal during INSERT. When disabled, each Array column gets its own offset file, allowing columns
-    with dotted names to be independent without Nested type semantics. Disabling this is recommended for
-    new tables that use flatten_nested=0 or do not rely on the legacy Nested type.
+    When enabled (default), Array columns with dotted names that share a common prefix (e.g. n.a and n.b)
+    are treated as part of a Nested structure: they share a single offsets file on disk (e.g. n.size0),
+    and their array sizes are validated to be equal during INSERT.
+    When disabled, each Array column gets its own independent offset file, dotted names carry no special
+    semantics, and a scalar column may coexist with dotted Array columns sharing the same prefix
+    (e.g. n UInt32 alongside n.a Array(String)). This setting is immutable after table creation.
     )", 0) \
     DECLARE(MergeTreeSerializationInfoVersion, serialization_info_version, "with_types", R"(
     Serialization info version used when writing `serialization.json`.

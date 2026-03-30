@@ -1,5 +1,6 @@
 -- Test for share_nested_offsets MergeTree setting.
--- Covers: wide parts, compact parts, merges, missing columns, immutability.
+-- Covers: wide/compact parts, merges (horizontal + vertical), missing columns,
+-- immutability, ALTER UPDATE/RENAME, flatten_nested interaction, scalar+dotted coexistence.
 
 SET flatten_nested = 0;
 
@@ -260,5 +261,70 @@ OPTIMIZE TABLE t_vertical FINAL;
 SELECT id, n.a, n.b FROM t_vertical ORDER BY id;
 
 DROP TABLE t_vertical;
+
+-- =============================================================================
+-- 11. Interaction with flatten_nested=1
+--     With flatten_nested=1, Nested(a T1, b T2) is flattened into separate
+--     n.a Array(T1), n.b Array(T2) columns. Verify share_nested_offsets=false
+--     works correctly after flattening.
+-- =============================================================================
+
+SELECT '--- flatten_nested interaction ---';
+
+SET flatten_nested = 1;
+
+DROP TABLE IF EXISTS t_flatten;
+CREATE TABLE t_flatten
+(
+    id UInt64,
+    n Nested(a UInt32, b String)
+)
+ENGINE = MergeTree ORDER BY id
+SETTINGS share_nested_offsets = false, min_bytes_for_wide_part = 0;
+
+-- With flatten_nested=1, the Nested type is flattened into n.a and n.b.
+-- With share_nested_offsets=false, they should be independent arrays.
+INSERT INTO t_flatten VALUES (1, [1, 2, 3], ['x', 'y']);
+INSERT INTO t_flatten VALUES (2, [10], ['a', 'b', 'c', 'd']);
+
+SELECT id, `n.a`, `n.b` FROM t_flatten ORDER BY id;
+
+OPTIMIZE TABLE t_flatten FINAL;
+SELECT id, `n.a`, `n.b` FROM t_flatten ORDER BY id;
+
+DROP TABLE t_flatten;
+
+SET flatten_nested = 0;
+
+-- =============================================================================
+-- 12. Scalar column coexisting with dotted Array columns (PR #94768 scenario)
+--     When share_nested_offsets=false, Nested::collect is skipped entirely,
+--     so a scalar column n and dotted arrays n.a, n.b don't collide.
+-- =============================================================================
+
+SELECT '--- scalar + dotted arrays ---';
+
+DROP TABLE IF EXISTS t_scalar_dotted;
+CREATE TABLE t_scalar_dotted (n String, `n.a` Array(String))
+ENGINE = MergeTree ORDER BY n
+SETTINGS share_nested_offsets = false;
+INSERT INTO t_scalar_dotted VALUES ('Hello', ['World', 'Test']);
+SELECT * FROM t_scalar_dotted;
+SELECT n FROM t_scalar_dotted;
+SELECT `n.a` FROM t_scalar_dotted;
+SELECT `n.a`.size0 FROM t_scalar_dotted;
+DROP TABLE t_scalar_dotted;
+
+DROP TABLE IF EXISTS t_scalar_dotted_multi;
+CREATE TABLE t_scalar_dotted_multi (n UInt32, `n.a` Array(String), `n.b` Array(UInt32))
+ENGINE = MergeTree ORDER BY n
+SETTINGS share_nested_offsets = false;
+INSERT INTO t_scalar_dotted_multi VALUES (1, ['x', 'y'], [10, 20, 30]);
+INSERT INTO t_scalar_dotted_multi VALUES (2, ['z'], [30]);
+SELECT * FROM t_scalar_dotted_multi ORDER BY n;
+SELECT n FROM t_scalar_dotted_multi ORDER BY n;
+SELECT `n.a` FROM t_scalar_dotted_multi ORDER BY `n.a`;
+SELECT `n.b` FROM t_scalar_dotted_multi ORDER BY `n.b`;
+DROP TABLE t_scalar_dotted_multi;
 
 SELECT '--- done ---';

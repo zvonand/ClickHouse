@@ -48,7 +48,7 @@ IMergeTreeReader::IMergeTreeReader(
     const ValueSizeMap & avg_value_size_hints_)
     : data_part_info_for_read(data_part_info_for_read_)
     , avg_value_size_hints(avg_value_size_hints_)
-    , part_columns(data_part_info_for_read->isWidePart() && (*storage_settings_)[MergeTreeSetting::share_nested_offsets]
+    , part_columns(data_part_info_for_read->isWidePart()
         ? data_part_info_for_read->getColumnsDescriptionWithCollectedNested()
         : data_part_info_for_read->getColumnsDescription())
     , uncompressed_cache(uncompressed_cache_)

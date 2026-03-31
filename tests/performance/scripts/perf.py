@@ -325,11 +325,16 @@ for e in root.findall("query"):
                 extra_drop_queries.append(stmt)
             else:
                 select_stmts.append(stmt)
-        # Multi-SELECT files (e.g. TPC-DS Q14) are grouped into one timed entry.
-        if len(select_stmts) > 1:
-            test_queries.append(substitute_parameters(select_stmts))
-        else:
-            test_queries += [[s] for s in substitute_parameters(select_stmts)]
+        # Some benchmark queries (e.g. TPC-DS Q14) have multiple SELECTs in one file.
+        # They are executed together and timed as a single entry in the report.
+        # Substitution parameters are expanded per-statement and then zipped, so that each group contains statements with same parameters.
+        # Example:
+        #   select_stmts = ["SELECT FROM {t}.x", "SELECT FROM {t}.y"], {t} = [a, b]
+        #   expanded = [["SELECT FROM a.x", "SELECT FROM b.x"], ["SELECT FROM a.y", "SELECT FROM b.y"]]
+        #   zip(*expanded) -> ("SELECT FROM a.x", "SELECT FROM a.y"), ("SELECT FROM b.x", "SELECT FROM b.y")
+        expanded = [substitute_parameters([s]) for s in select_stmts]
+        for group in zip(*expanded):
+            test_queries.append(list(group))
     else:
         test_queries += [[s] for s in substitute_parameters([e.text])]
 

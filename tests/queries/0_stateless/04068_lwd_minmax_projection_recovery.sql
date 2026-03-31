@@ -35,6 +35,12 @@ SELECT count() FROM (EXPLAIN indexes = 1 SELECT min(dt), max(dt) FROM t_lwd_proj
     SETTINGS optimize_use_projections = 1, optimize_use_implicit_projections = 1)
 WHERE explain LIKE '%_minmax_count_projection%';
 
+-- Before any delete: trivial count optimization should be used.
+SELECT count() FROM (EXPLAIN SELECT count() FROM t_lwd_proj
+    SETTINGS optimize_trivial_count_query = 1)
+WHERE explain LIKE '%Optimized trivial count%';
+SELECT count() FROM t_lwd_proj;
+
 -- Perform lightweight delete.
 DELETE FROM t_lwd_proj WHERE id < 5;
 
@@ -43,6 +49,12 @@ SELECT 'after_delete';
 SELECT count() FROM (EXPLAIN indexes = 1 SELECT min(dt), max(dt) FROM t_lwd_proj
     SETTINGS optimize_use_projections = 1, optimize_use_implicit_projections = 1)
 WHERE explain LIKE '%_minmax_count_projection%';
+
+-- After delete: trivial count optimization should NOT be used.
+SELECT count() FROM (EXPLAIN SELECT count() FROM t_lwd_proj
+    SETTINGS optimize_trivial_count_query = 1)
+WHERE explain LIKE '%Optimized trivial count%';
+SELECT count() FROM t_lwd_proj;
 
 -- Merge away the LWD parts.
 OPTIMIZE TABLE t_lwd_proj FINAL;
@@ -56,5 +68,11 @@ SELECT 'after_optimize';
 SELECT count() FROM (EXPLAIN indexes = 1 SELECT min(dt), max(dt) FROM t_lwd_proj
     SETTINGS optimize_use_projections = 1, optimize_use_implicit_projections = 1)
 WHERE explain LIKE '%_minmax_count_projection%';
+
+-- After merge: trivial count optimization should be used again.
+SELECT count() FROM (EXPLAIN SELECT count() FROM t_lwd_proj
+    SETTINGS optimize_trivial_count_query = 1)
+WHERE explain LIKE '%Optimized trivial count%';
+SELECT count() FROM t_lwd_proj;
 
 DROP TABLE t_lwd_proj;

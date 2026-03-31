@@ -5312,17 +5312,21 @@ void MergeTreeData::removePartsFromWorkingSet(MergeTreeTransaction * txn, const 
         if (part->version.creation_csn != Tx::RolledBackCSN)
             MergeTreeTransaction::removeOldPart(shared_from_this(), part, txn);
 
-        if (part->getState() == MergeTreeDataPartState::Active)
+        bool was_active = part->getState() == MergeTreeDataPartState::Active;
+
+        if (was_active || clear_without_timeout)
+            part->remove_time.store(remove_time, std::memory_order_relaxed);
+
+        /// Transition state before decrementing counters to keep
+        /// `total_parts_with_lightweight_delete` monotonic for lock-free readers.
+        if (part->getState() != MergeTreeDataPartState::Outdated)
+            modifyPartState(part, MergeTreeDataPartState::Outdated, acquired_lock);
+
+        if (was_active)
         {
             removePartContributionToTableCounters(part);
             removePartContributionToColumnAndSecondaryIndexSizes(part);
         }
-
-        if (part->getState() == MergeTreeDataPartState::Active || clear_without_timeout)
-            part->remove_time.store(remove_time, std::memory_order_relaxed);
-
-        if (part->getState() != MergeTreeDataPartState::Outdated)
-            modifyPartState(part, MergeTreeDataPartState::Outdated, acquired_lock);
     }
 }
 
@@ -5581,13 +5585,18 @@ void MergeTreeData::forcefullyMovePartToDetachedAndRemoveFromMemory(const MergeT
     /// few lines below.
     DataPartPtr part = *it_part; // NOLINT
 
-    if (part->getState() == DataPartState::Active)
+    bool was_active = part->getState() == DataPartState::Active;
+
+    /// Transition state before decrementing counters to keep
+    /// `total_parts_with_lightweight_delete` monotonic for lock-free readers.
+    modifyPartState(it_part, DataPartState::Deleting, lock);
+
+    if (was_active)
     {
         removePartContributionToTableCounters(part);
         removePartContributionToColumnAndSecondaryIndexSizes(part);
     }
 
-    modifyPartState(it_part, DataPartState::Deleting, lock);
     asMutableDeletingPart(part)->renameToDetached(prefix, /*ignore_error=*/ replicated);
     LOG_TEST(log, "forcefullyMovePartToDetachedAndRemoveFromMemory: removing {} from data_parts_indexes", part->getNameWithState());
     data_parts_indexes.erase(it_part);
@@ -5987,9 +5996,12 @@ void MergeTreeData::swapActivePart(MergeTreeData::DataPartPtr part_copy, DataPar
 
             LOG_TEST(log, "swapActivePart: inserting {} into data_parts_indexes", part_copy->getNameWithState());
             auto part_it = data_parts_indexes.insert(part_copy).first;
+
+            /// Increment counter before activating to keep
+            /// `total_parts_with_lightweight_delete` monotonic for lock-free readers.
+            addPartContributionToTableCounters(part_copy);
             modifyPartState(part_it, DataPartState::Active, lock);
 
-            addPartContributionToTableCounters(part_copy);
             removePartContributionToTableCounters(original_active_part);
             return;
         }

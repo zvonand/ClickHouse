@@ -80,6 +80,44 @@ SELECT toIntervalMicrosecond(3600000000) = toIntervalHour(1);
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Compound Interval Literals {#compound-interval-literals}
+
+You can create compound intervals spanning multiple fields using the SQL-standard `INTERVAL 'string' <from_kind> TO <to_kind>` syntax. The result is a tuple of individual interval values.
+
+Supported combinations:
+
+| Syntax | String format | Example |
+|---|---|---|
+| `YEAR TO MONTH` | `Y-M` | `INTERVAL '2-6' YEAR TO MONTH` |
+| `DAY TO HOUR` | `D H` | `INTERVAL '5 12' DAY TO HOUR` |
+| `DAY TO MINUTE` | `D H:M` | `INTERVAL '5 12:30' DAY TO MINUTE` |
+| `DAY TO SECOND` | `D H:M:S` | `INTERVAL '5 12:30:45' DAY TO SECOND` |
+| `HOUR TO MINUTE` | `H:M` | `INTERVAL '1:30' HOUR TO MINUTE` |
+| `HOUR TO SECOND` | `H:M:S` | `INTERVAL '1:30:45' HOUR TO SECOND` |
+| `MINUTE TO SECOND` | `M:S` | `INTERVAL '5:30' MINUTE TO SECOND` |
+
+An optional leading `+` or `-` sign applies to all components:
+
+```sql
+SELECT INTERVAL '1:30' HOUR TO MINUTE;
+```
+
+```text
+┌─(toIntervalHour(1), toIntervalMinute(30))─┐
+│ (1,30)                                    │
+└───────────────────────────────────────────┘
+```
+
+```sql
+SELECT toDateTime('2024-01-01 12:00:00') + INTERVAL '-1:30' HOUR TO MINUTE;
+```
+
+```text
+┌─plus(toDateTime('2024-01-01 12:00:00'), negate(toIntervalHour(1)), negate(toIntervalMinute(30)))─┐
+│                                                                               2024-01-01 10:30:00 │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## See Also {#see-also}
 
 - [INTERVAL](/sql-reference/operators#interval) operator

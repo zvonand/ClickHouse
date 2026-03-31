@@ -23,13 +23,13 @@ SELECT k, count() as cnt FROM t_src_04070 GROUP BY k;
 -- Insert with dedup token, no ORDER BY ALL, with MV dedup enabled
 SELECT 'MV dedup with token, no ORDER BY ALL';
 INSERT INTO t_src_04070 SELECT number, 'a' FROM numbers(10) SETTINGS insert_deduplication_token = 'mv_token1', deduplicate_blocks_in_dependent_materialized_views = 1;
-INSERT INTO t_src_04070 SELECT number, 'a' FROM numbers(10) SETTINGS insert_deduplication_token = 'mv_token1', deduplicate_blocks_in_dependent_materialized_views = 1;
+INSERT INTO t_src_04070 SELECT number, 'b' FROM numbers(10) SETTINGS insert_deduplication_token = 'mv_token1', deduplicate_blocks_in_dependent_materialized_views = 1;
 SELECT count() FROM t_src_04070 ORDER BY 1;
 SELECT count() FROM t_mv_dst_04070 ORDER BY 1;
 
 -- Different token inserts new data into both source and MV
 SELECT 'Different token inserts into MV';
-INSERT INTO t_src_04070 SELECT number, 'b' FROM numbers(10) SETTINGS insert_deduplication_token = 'mv_token2', deduplicate_blocks_in_dependent_materialized_views = 1;
+INSERT INTO t_src_04070 SELECT number, 'c' FROM numbers(10) SETTINGS insert_deduplication_token = 'mv_token2', deduplicate_blocks_in_dependent_materialized_views = 1;
 SELECT count() FROM t_src_04070 ORDER BY 1;
 SELECT count() FROM t_mv_dst_04070 ORDER BY 1;
 

@@ -2841,14 +2841,42 @@ function endFlight() {
     setFavicon(favicon_default);
 }
 
-/// Run one query (the query under cursor or the selected text).
+/// Run the query under cursor, or all queries intersecting the selection.
 async function postOne()
 {
     ++request_num;
     document.body.scrollTo(0, 0);
     beginFlight();
-    const query = await getQueryUnderCursor();
-    await postSingle(request_num, query);
+
+    const has_selection = query_area.selectionStart !== query_area.selectionEnd;
+    if (has_selection && isMultiQuery) {
+        /// Find all queries that intersect the selection and run them.
+        const all_text = query_area.value;
+        const parsed = await splitAllQueries(all_text);
+        const selStart = query_area.selectionStart;
+        const selEnd = query_area.selectionEnd;
+
+        /// Use boundaries to find which queries overlap with the selection.
+        const tokens = await tokenize(all_text);
+        const boundaries = getQueryBoundaries(tokens, all_text);
+        const selected = [];
+        for (let i = 0; i < boundaries.length && i < parsed.length; ++i) {
+            const b = boundaries[i];
+            if (b.end > selStart && b.start < selEnd) {
+                selected.push(parsed[i]);
+            }
+        }
+
+        if (selected.length > 1) {
+            await postMulti(request_num, selected);
+        } else if (selected.length === 1) {
+            await postSingle(request_num, selected[0].query);
+        }
+    } else {
+        const query = await getQueryUnderCursor();
+        await postSingle(request_num, query);
+    }
+
     endFlight();
 }
 
@@ -3291,14 +3319,19 @@ function getQueryBoundaries(tokens, text) {
     return boundaries;
 }
 
-/// Show/hide the "Run all" button and relabel "Run" depending on multi-query mode.
+/// Show/hide the "Run all" button and relabel "Run" depending on multi-query mode and selection.
 let isMultiQuery = false;
 function updateRunButtons(multi) {
     isMultiQuery = multi;
     const runBtn = document.getElementById('run');
     const runAllBtn = document.getElementById('run-all');
     if (!in_flight) {
-        runBtn.innerText = multi ? 'Run one' : 'Run';
+        if (!multi) {
+            runBtn.innerText = 'Run';
+        } else {
+            const has_selection = query_area.selectionStart !== query_area.selectionEnd;
+            runBtn.innerText = has_selection ? 'Run selected' : 'Run one';
+        }
     }
     runAllBtn.style.display = multi ? 'inline-block' : 'none';
 }
@@ -3324,6 +3357,9 @@ function updateQueryBackdrop(text, boundaries) {
 function renderQueryBackdrop() {
     const text = currentBackdropText;
     const boundaries = currentBoundaries;
+
+    /// Update button labels to reflect current selection state.
+    updateRunButtons(boundaries.length > 1);
 
     if (boundaries.length <= 1) {
         queryBackdrop.style.display = 'none';
@@ -3376,9 +3412,10 @@ function renderQueryBackdrop() {
     queryBackdrop.scrollLeft = query_area.scrollLeft;
 }
 
-/// Re-render backdrop when cursor moves (click, arrow keys, etc.)
+/// Re-render backdrop when cursor moves or selection changes.
 query_area.addEventListener('click', renderQueryBackdrop);
 query_area.addEventListener('keyup', renderQueryBackdrop);
+query_area.addEventListener('select', renderQueryBackdrop);
 
 /// Keep backdrop scroll in sync with textarea.
 query_area.addEventListener('scroll', () => {

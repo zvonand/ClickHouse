@@ -4883,8 +4883,8 @@ def test_snapshot_initialized_once_per_query(started_cluster):
         query_id=f"snapshot_init_cluster_sum_{TABLE_NAME}",
     )
 
-
-def test_insert_select_from_cluster_with_partition_pruning(started_cluster):
+@pytest.mark.parametrize("allow_experimental_analyzer", [0, 1])
+def test_insert_select_from_cluster_with_partition_pruning(started_cluster, allow_experimental_analyzer):
     node = started_cluster.instances["node1"]
     table_name = randomize_table_name("test_insert_select_cluster_pruning")
 
@@ -4949,7 +4949,7 @@ def test_insert_select_from_cluster_with_partition_pruning(started_cluster):
         WHERE (event_time >= '2026-02-01') AND (event_time < '2026-02-02')
         """,
         query_id=query_id,
-        settings={"allow_experimental_delta_kernel_rs": 1, "delta_lake_enable_engine_predicate": 0},
+        settings={"allow_experimental_delta_kernel_rs": 1, "delta_lake_enable_engine_predicate": 0, "allow_experimental_analyzer" : allow_experimental_analyzer},
     )
 
     node.query("SYSTEM FLUSH LOGS")

@@ -148,6 +148,7 @@ static NamesAndTypesList getCommonVirtualsForFileLikeStorage()
         {"_data_lake_snapshot_version", makeNullable(std::make_shared<DataTypeUInt64>())},
         {"_row_number", makeNullable(std::make_shared<DataTypeInt64>())},
         {"_iceberg_metadata_file_path", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>())},
+        {"_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>())},
     };
 }
 
@@ -433,6 +434,10 @@ void addRequestedFileLikeStorageVirtualsToChunk(
                 chunk.addColumn(virtual_column.type->createColumnConst(chunk.getNumRows(), *virtual_values.iceberg_metadata_file_path)->convertToFullColumnIfConst());
             else
                 chunk.addColumn(virtual_column.type->createColumnConstWithDefaultValue(chunk.getNumRows())->convertToFullColumnIfConst());
+        }
+        else if (virtual_column.name == "_table")
+        {
+            chunk.addColumn(virtual_column.type->createColumnConst(chunk.getNumRows(), virtual_values.table_name)->convertToFullColumnIfConst());
         }
         else if (auto it = hive_map.find(virtual_column.getNameInStorage()); it != hive_map.end())
         {

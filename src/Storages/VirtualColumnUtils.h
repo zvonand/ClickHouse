@@ -129,6 +129,7 @@ void filterByPathOrFile(
 struct VirtualsForFileLikeStorage
 {
     const String & path;
+    const String & table_name;
     std::optional<size_t> size { std::nullopt };
     const String * filename { nullptr };
     std::optional<Poco::Timestamp> last_modified { std::nullopt };

@@ -1128,7 +1128,18 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
             tryLogCurrentException(log_, "Failed to open snapshot for transfer");
             return false;
         }
-        buf = nuraft::buffer::alloc(file_size);
+        try
+        {
+            buf = nuraft::buffer::alloc(file_size);
+        }
+        catch (...)
+        {
+            last_error = std::current_exception();
+            has_error.store(true, std::memory_order_release);
+            reader.reset();
+            tryLogCurrentException(log_, fmt::format("Failed to allocate {} bytes for snapshot {} transfer", file_size, log_idx));
+            return false;
+        }
         return true;
     }
 

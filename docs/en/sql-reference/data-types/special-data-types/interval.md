@@ -80,9 +80,10 @@ SELECT toIntervalMicrosecond(3600000000) = toIntervalHour(1);
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Compound Interval Literals {#compound-interval-literals}
+## Mixed-type Intervals {#mixed-type-intervals}
 
-You can create compound intervals spanning multiple fields using the SQL-standard `INTERVAL 'string' <from_kind> TO <to_kind>` syntax. The result is a tuple of individual interval values.
+Intervals of mixed type, e.g. multiple hours and multiple minutes, can be created using `INTERVAL 'value' <from_kind> TO <to_kind>` syntax.
+The result is a tuple of two or more intervals.
 
 Supported combinations:
 
@@ -96,7 +97,7 @@ Supported combinations:
 | `HOUR TO SECOND` | `H:M:S` | `INTERVAL '1:30:45' HOUR TO SECOND` |
 | `MINUTE TO SECOND` | `M:S` | `INTERVAL '5:30' MINUTE TO SECOND` |
 
-An optional leading `+` or `-` sign applies to all components:
+Non-leading fields are validated per the SQL standard: `MONTH` 0-11, `HOUR` 0-23, `MINUTE` 0-59, `SECOND` 0-59.
 
 ```sql
 SELECT INTERVAL '1:30' HOUR TO MINUTE;
@@ -104,18 +105,22 @@ SELECT INTERVAL '1:30' HOUR TO MINUTE;
 
 ```text
 ┌─(toIntervalHour(1), toIntervalMinute(30))─┐
-│ (1,30)                                    │
-└───────────────────────────────────────────┘
+│ (1,30)                                     │
+└────────────────────────────────────────────┘
 ```
 
+An optional leading `+` or `-` sign applies to all components:
+
 ```sql
-SELECT toDateTime('2024-01-01 12:00:00') + INTERVAL '-1:30' HOUR TO MINUTE;
+SELECT INTERVAL '+1:30' HOUR TO MINUTE;
+-- this is equivalent to:
+-- SELECT INTERVAL '1:30' HOUR TO MINUTE;
 ```
 
 ```text
-┌─plus(toDateTime('2024-01-01 12:00:00'), negate(toIntervalHour(1)), negate(toIntervalMinute(30)))─┐
-│                                                                               2024-01-01 10:30:00 │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌─(toIntervalHour(1), toIntervalMinute(30))─┐
+│ (1,30)                                     │
+└────────────────────────────────────────────┘
 ```
 
 ## See Also {#see-also}

@@ -2029,6 +2029,7 @@ protected:
 struct ParsedCompoundInterval
 {
     std::vector<std::pair<UInt64, IntervalKind>> parts;
+    /// Sign of the whole compound expression (from an optional leading +/- sign).
     bool is_negative = false;
 };
 
@@ -2121,10 +2122,28 @@ static std::optional<ParsedCompoundInterval> parseCompoundIntervalString(
         if (ec != std::errc() || ptr != literal.data() + str_pos)
             return {};
 
-        /// Reject values that exceed the signed 64-bit range so that
-        /// positive values stay positive after conversion to Int64.
-        if (uvalue > static_cast<UInt64>(std::numeric_limits<Int64>::max()))
-            return {};
+        if (i == 0)
+        {
+            /// Leading field: limited to Int64 range to avoid sign-flip.
+            if (uvalue > static_cast<UInt64>(std::numeric_limits<Int64>::max()))
+                return {};
+        }
+        else
+        {
+            /// Non-leading fields: constrained per SQL standard.
+            /// MONTH 0-11, HOUR 0-23, MINUTE 0-59, SECOND 0-59.
+            UInt64 max_value;
+            switch (range[i].kind)
+            {
+                case Kind::Month: max_value = 11; break;
+                case Kind::Hour: max_value = 23; break;
+                case Kind::Minute: max_value = 59; break;
+                case Kind::Second: max_value = 59; break;
+                default: max_value = 59; break;
+            }
+            if (uvalue > max_value)
+                return {};
+        }
 
         parsed.parts.emplace_back(uvalue, IntervalKind{range[i].kind});
     }
@@ -2193,12 +2212,12 @@ public:
                 Expected token_expected;
                 ASTPtr expr;
 
-                /// Case (c) when ParserNumber fails:
-                /// Strings like '-1:30' cause the tokenizer to split '-' as a separate
-                /// token, so ParserNumber does not consume the whole literal.
-                /// Try compound TO syntax directly.
                 if (!ParserNumber{}.parse(token_pos, expr, token_expected))
                 {
+                    /// Case (c) when ParserNumber fails:
+                    /// Strings like '-1:30' cause the tokenizer to split '-' as a separate
+                    /// token, so ParserNumber does not consume the whole literal.
+                    /// Try compound TO syntax directly.
                     if (!tryParseCompoundIntervalTO(literal, pos, expected))
                         return false;
                     return true;

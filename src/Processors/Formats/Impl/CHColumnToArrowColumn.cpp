@@ -498,40 +498,36 @@ namespace DB
         {
             const auto & discriminator = boost::get<0>(tuple);
             const auto & column_offset = boost::get<1>(tuple);
-            const auto & null_flag     = boost::get<2>(tuple);
-            if (discriminator == ColumnVariant::NULL_DISCRIMINATOR || static_cast<bool>(null_flag))
+
+            if constexpr (std::tuple_size_v<std::decay_t<decltype(tuple)>> == 3)
+                if (static_cast<bool>(boost::get<2>(tuple)))
+                    return 0;
+            if (discriminator == ColumnVariant::NULL_DISCRIMINATOR)
                 return 0;
+
             const auto offset = column_offset - starts[column.globalDiscriminatorByLocal(discriminator)];
             if (offset > static_cast<UInt64>(std::numeric_limits<int32_t>::max()))
                 throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot build Arrow DenseUnion: offset {} is out of Int32 range", offset);
             return static_cast<int32_t>(offset);
         };
 
-        auto append_offsets = [&](auto null_it)
+        auto append_offsets = [&]<typename... Ts>(Ts&&... args)
         {
             auto begin_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(
-                        discriminators.begin() + start,
-                        column_offsets.begin() + start,
-                        null_it + static_cast<int>(start)
-                )),
+                boost::make_zip_iterator(boost::make_tuple((args->begin() + start)...)),
                 to_arrow_offset
             );
             auto end_it = boost::make_transform_iterator(
-                boost::make_zip_iterator(boost::make_tuple(
-                        discriminators.begin() + start + size,
-                        column_offsets.begin() + start + size,
-                        null_it + static_cast<int>(start + size)
-                )),
+                boost::make_zip_iterator(boost::make_tuple((args->begin() + start + size)...)),
                 to_arrow_offset
             );
             return offsets_builder.AppendValues(begin_it, end_it);
         };
 
         if (null_bytemap)
-            status = append_offsets(null_bytemap->begin());
+            status = append_offsets(&discriminators, &column_offsets, null_bytemap);
         else
-            status = append_offsets(boost::make_transform_iterator(boost::make_counting_iterator(0), [](const auto &){ return 0; }));
+            status = append_offsets(&discriminators, &column_offsets);
 
         checkStatus(status, "offsets", format_name);
         std::shared_ptr<arrow::Array> offsets_array;

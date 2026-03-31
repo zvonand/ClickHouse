@@ -83,5 +83,5 @@ SELECT INTERVAL '1:9223372036854775808' HOUR TO MINUTE; -- { clientError SYNTAX_
 -- Boundary: negative of Int64 max
 SELECT INTERVAL '-9223372036854775807:1' HOUR TO MINUTE;
 
--- Boundary: negative beyond Int64 range (should reject)
+-- Boundary: negative component exceeds Int64::max magnitude (should reject)
 SELECT INTERVAL '-9223372036854775808:1' HOUR TO MINUTE; -- { clientError SYNTAX_ERROR }

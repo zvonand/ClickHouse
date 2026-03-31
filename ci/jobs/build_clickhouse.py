@@ -123,11 +123,15 @@ def main():
     os.environ["SCCACHE_S3_KEY_PREFIX"] = "ccache/sccache"
     os.environ["SCCACHE_ERROR_LOG"] = f"{build_dir}/sccache.log"
     os.environ["SCCACHE_LOG"] = "info"
-
     os.makedirs(build_dir, exist_ok=True)
 
     if info.is_local_run:
-        os.environ["SCCACHE_S3_NO_CREDENTIALS"] = "true"
+        if os.environ.get("SCCACHE_ENDPOINT"):
+            print(f"NOTE: Using custom sccache endpoint: {os.environ['SCCACHE_ENDPOINT']}")
+        if os.environ.get("AWS_ACCESS_KEY_ID"):
+            print("NOTE: Using custom AWS credentials for sccache")
+        else:
+            os.environ["SCCACHE_S3_NO_CREDENTIALS"] = "true"
     else:
         # Default timeout (10min), can be too low, we run this in docker
         # anyway, will be terminated once the build is finished

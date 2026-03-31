@@ -3228,7 +3228,11 @@ async function getQueryUnderCursor() {
 
     }
 
-    return all_queries;
+    /// Cursor is in the last query (no trailing semicolon).
+    const tail = all_queries.substring(current_query_start);
+    query_area.setSelectionRange(current_query_start, all_queries.length);
+    query_area.focus();
+    return tail;
 }
 
 const PARALLELIZABLE_KEYWORDS = new Set([

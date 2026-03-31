@@ -60,9 +60,20 @@ class Targeting:
     def get_changed_tests(self):
         # TODO: add support for integration tests
         result = set()
-        changed_files = Shell.get_output(
-            f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse --name-only"
-        ).splitlines() if self.info.is_local_run else self.info.get_changed_files()
+        if hasattr(self, '_diff_text') and self._diff_text:
+            # Reuse already-fetched diff text to extract changed file names — avoids
+            # a second gh API call and works when the PR diff was pre-fetched via
+            # --diff-file or the rate limit is exhausted.
+            changed_files = [
+                m.group(1)
+                for m in re.finditer(r'^\+\+\+ b/(.+)$', self._diff_text, re.MULTILINE)
+            ]
+        elif self.info.is_local_run:
+            changed_files = Shell.get_output(
+                f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse --name-only"
+            ).splitlines()
+        else:
+            changed_files = self.info.get_changed_files()
         if not changed_files:
             return result
 
@@ -148,7 +159,7 @@ class Targeting:
     # owners prevents these files from flooding primary_tests (which would then
     # cause sibling/indirect queries to fail with HTTP form-field-too-long errors
     # and inflate unique_tests to nearly the full suite).
-    MAX_TESTS_PER_LINE = 500
+    MAX_TESTS_PER_LINE = 150
 
     # Synthetic width for tests found via indirect-call (virtual dispatch) co-occurrence.
     # Lower than SIBLING_DIR_WIDTH (10000) because callee co-occurrence is a stronger
@@ -261,10 +272,7 @@ class Targeting:
         per_file_conds_parts = []
         for f, lines in sorted(files_to_lines.items()):
             esc_f = self._escape_sql_string(f)
-            if f.endswith(".h"):
-                # For headers: fetch ALL regions in the file (no line range filter)
-                per_file_conds_parts.append(f"(file = '{esc_f}')")
-            elif hunk_ranges:
+            if hunk_ranges:
                 # Use the bounding box of all hunk ranges (min hunk start to max hunk end)
                 # as the SQL pre-filter for .cpp files.  This covers:
                 # 1. Context lines at the start/end of each hunk (same as per-hunk OR).
@@ -277,13 +285,23 @@ class Targeting:
                 orig_f = f[2:] if f.startswith("./") else f  # strip "./" prefix
                 file_hunks = hunk_ranges.get(orig_f, [])
                 if file_hunks:
-                    # Bounding box: span from earliest hunk start to latest hunk end.
-                    hunk_min = min(h_start for h_start, _ in file_hunks)
-                    hunk_max = max(h_end for _, h_end in file_hunks)
-                    per_file_conds_parts.append(
-                        f"(file = '{esc_f}'"
-                        f" AND line_end >= {hunk_min} AND line_start <= {hunk_max})"
+                    # Merge hunks that are ≤ MERGE_GAP lines apart so coverage
+                    # points between two nearby hunks (inter-hunk lines) are
+                    # included.  Still uses per-range conditions rather than a
+                    # single bounding box to avoid vacuuming thousands of lines
+                    # between distant hunks in the same file.
+                    MERGE_GAP = 5
+                    merged: list = [list(file_hunks[0])]
+                    for h_start, h_end in file_hunks[1:]:
+                        if h_start - merged[-1][1] <= MERGE_GAP:
+                            merged[-1][1] = max(merged[-1][1], h_end)
+                        else:
+                            merged.append([h_start, h_end])
+                    hunk_conds = " OR ".join(
+                        f"(line_end >= {max(0, h_start - 1)} AND line_start <= {h_end + 1})"
+                        for h_start, h_end in merged
                     )
+                    per_file_conds_parts.append(f"(file = '{esc_f}' AND ({hunk_conds}))")
                 else:
                     # No hunk info for this file; fall back to min/max of changed lines.
                     per_file_conds_parts.append(
@@ -907,12 +925,21 @@ class Targeting:
         assert self.job_type, "_query_indirect_call_tests requires a known job type"
         primary_tests = set()
         seed_rcs: list = []
+        SHALLOW_DEPTH = 3  # min_depth ≤ this means the test called the changed function
+                           # very sparingly — it specifically targets this code path.
+                           # Use as seeds even when rc > MAX_TESTS_PER_LINE.
+        SHALLOW_RC_CAP = 2000  # don't use shallow seeds from ultra-broad regions
         for pairs in primary_result.values():
             for entry in pairs:
                 t = entry[0]
+                depth = entry[2] if len(entry) > 2 else 255
                 rc = entry[3] if len(entry) > 3 else 1
                 pw = entry[4] if len(entry) > 4 else 1.0
-                if rc <= self.MAX_TESTS_PER_LINE and pw >= self.PASS_WEIGHT_INDIRECT:
+                if pw < self.PASS_WEIGHT_INDIRECT:
+                    continue
+                is_narrow = rc <= self.MAX_TESTS_PER_LINE
+                is_shallow = depth <= SHALLOW_DEPTH and rc <= SHALLOW_RC_CAP
+                if is_narrow or is_shallow:
                     primary_tests.add(t)
                     seed_rcs.append(rc)
         if not primary_tests:
@@ -968,21 +995,25 @@ class Targeting:
             except Exception as e:
                 print(f"[find_tests] seed enrichment query failed (non-fatal): {e}")
 
-        # B. Adaptive Jaccard threshold: when primary seeds come from very specific
-        # regions (low rc), the seed test's callee set is small and unique — it
-        # won't share 70% of its callees with any other test even if they exercise
-        # the same domain.  Lower the threshold proportionally to min seed rc.
-        #   rc=1   → 15%  (5 shared callees out of 34 is meaningful)
-        #   rc=50  → 25%
-        #   rc=100 → 40%
-        #   rc=200 → 70%  (unchanged default)
+        # B. Adaptive Jaccard threshold.
+        # Only lower the threshold for truly sparse code (rc < 20) where the seed
+        # set is tiny and even 15% callee overlap is a meaningful signal.
+        # For rc ≥ 20 we already have enough seeds to enforce the full 70% threshold
+        # — loosening it further admits tests that share only generic callees
+        # (memory allocation, string ops) and pollutes results with non-domain tests.
+        #   rc=1   → 15%  (only 1 seed: anything sharing callees is relevant)
+        #   rc=10  → 43%
+        #   rc=20+ → 70%  (enough seeds: enforce strict domain match)
         min_seed_rc = min(seed_rcs) if seed_rcs else 200
-        JACCARD_MIN_PCT = max(1, 70 - (200 - min(min_seed_rc, 200)) * 0.5)
-        # Adaptive LIMIT: when direct evidence is strong (min_seed_rc is low),
-        # reduce the indirect cap so that specific PRs don't get 200 loosely-related
-        # tests.  At min_seed_rc=1 (rc=1 line, top_score=1.0): limit=20.
-        # At min_seed_rc=40 (rc=40 line): limit=200 (full).  Scales linearly between.
-        INDIRECT_LIMIT = max(50, min(200, int(200 * min_seed_rc / 40)))
+        JACCARD_MIN_PCT = max(15, min(70, 15 + int(55 * min(min_seed_rc, 20) / 20)))
+        # Adaptive LIMIT: fewer indirect tests when we already have many direct seeds.
+        # With many seeds the callee union is large and 70% Jaccard admits too many
+        # loosely-related tests.  Cap inversely with seed count so that:
+        #   n_seeds=1  → limit=200 (need many indirect to compensate)
+        #   n_seeds=10 → limit=100
+        #   n_seeds=50 → limit=20 (direct evidence is already rich)
+        n_seeds = len(primary_tests)
+        INDIRECT_LIMIT = max(20, min(200, int(200 / max(1, n_seeds / 5))))
 
         # Cap at 500 tests to prevent HTTP field-length errors.
         if len(primary_tests) > 500:
@@ -1679,18 +1710,11 @@ class Targeting:
             and f not in cpp_with_zero_coverage
             and any(pairs for (ff, _), pairs in line_to_tests.items() if ff == f)
         ))
-        # Count unique tests found so far (direct + indirect + broad-tier2 + sibling +
-        # zero-coverage keyword fallback).  Skip the supplementary keyword pass when
-        # coverage already produced enough candidates: keyword signal is weak and
-        # adding broad filename-based tests to an already-large set dilutes ranking.
-        KEYWORD_SUPPLEMENT_MAX_PRIOR = 150
-        n_tests_before_keyword = len({q[0] for pairs in line_to_tests.values() for q in pairs})
-        if n_tests_before_keyword >= KEYWORD_SUPPLEMENT_MAX_PRIOR:
-            print(
-                f"[find_tests] skipping supplementary keyword pass "
-                f"({n_tests_before_keyword} tests already found)"
-            )
-            cpp_with_coverage = []
+        # Always run the supplementary keyword pass: keyword tests get PASS_WEIGHT_KEYWORD
+        # (the lowest weight), so they rank below all coverage-backed hits but remain
+        # present in the scoring pool.  This ensures domain-specific tests (e.g.
+        # 03444_analyzer_resolve_alias_columns for QueryAnalyzer.cpp) are never
+        # silently dropped simply because coverage produced many generic candidates.
 
         if cpp_with_coverage:
             # Run keyword fallback per changed file so each file's domain keywords
@@ -1717,6 +1741,9 @@ class Targeting:
                             )
                             injected_s.add((ff, ln))
                             break
+
+            # Store keyword tests for the guarantee injection after ranking.
+            self._keyword_guarantee = [q[0] for q in all_supplement_quads]
 
         # Accumulate per-test scores across all changed lines.
         # line_to_tests values are lists of
@@ -1758,7 +1785,7 @@ class Targeting:
         # scores.  A minimum score threshold keeps the result set bounded
         # without an arbitrary count limit.
         MIN_SCORE = 1e-8        # floor: tests scoring below this have negligible signal
-        MAX_OUTPUT_TESTS = 300   # hard cap: targeted runs must stay focused
+        MAX_OUTPUT_TESTS = 250   # hard cap: targeted runs must stay focused
         # Dynamic ratio floor: drop tests whose score is more than MAX_SCORE_RATIO times
         # weaker than the best evidence.  This supersedes per-pass suppression guards —
         # when strong direct hits exist (e.g. rc=37 on a SAMPLE-specific line, score=0.027)
@@ -1815,6 +1842,21 @@ class Targeting:
             if extra:
                 ranked = ranked + extra
                 print(f"[find_tests] broad-tier2 guarantee: +{len(extra)} high-cov_regions tests added")
+
+        # Keyword guarantee: always include top keyword-matched tests even when their
+        # score is too low to survive the 300-cap against many direct hits.
+        # Replace the last N tail items with keyword tests not already present.
+        # This ensures domain-specific tests (e.g. 03444_analyzer_resolve_alias_columns
+        # for QueryAnalyzer.cpp changes) are never silently dropped.
+        keyword_guarantee = getattr(self, '_keyword_guarantee', [])
+        if keyword_guarantee:
+            ranked_set = set(ranked)
+            kw_extra = [t for t in keyword_guarantee if t not in ranked_set]
+            if kw_extra:
+                # Replace tail items to stay within MAX_OUTPUT_TESTS
+                n = min(len(kw_extra), MAX_OUTPUT_TESTS)
+                ranked = ranked[: MAX_OUTPUT_TESTS - n] + kw_extra[:n]
+                print(f"[find_tests] keyword guarantee: +{len(kw_extra[:n])} domain tests injected")
 
         narrow_count = sum(1 for t in ranked if has_narrow_hit[t])
         direct_count = sum(

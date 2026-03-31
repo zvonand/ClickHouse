@@ -97,7 +97,7 @@ DiskTransactionPtr DiskObjectStorage::createObjectStorageTransaction()
 
 DiskTransactionPtr DiskObjectStorage::createObjectStorageTransactionToAnotherDisk(DiskObjectStorage & to_disk)
 {
-    return std::make_shared<MultipleDisksObjectStorageTransaction>(cluster, metadata_storage, object_storages, to_disk.cluster, to_disk.metadata_storage, to_disk.object_storages, getReadResourceName(), getWriteResourceName());
+    return std::make_shared<MultipleDisksObjectStorageTransaction>(cluster, metadata_storage, object_storages, to_disk.cluster, to_disk.metadata_storage, to_disk.object_storages, getReadResourceName(), to_disk.getWriteResourceName());
 }
 
 DiskObjectStorage::DiskObjectStorage(

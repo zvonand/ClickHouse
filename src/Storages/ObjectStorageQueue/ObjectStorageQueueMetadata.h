@@ -118,8 +118,6 @@ public:
     /// For unordered mode checks the per-file processed/failed nodes.
     /// For ordered mode compares `path` against the stored last-processed pointer
     /// (Processed if path <= last_processed_path), and checks the per-file failed node.
-    /// NOTE: In ordered mode `Processed` does not mean the exact file was read;
-    ///       it means the queue pointer has advanced past the file's sort position.
     /// Sets `failure_message` when the result is `Failed`.
     PathState getPathState(const std::string & path, std::string & failure_message) const;
 

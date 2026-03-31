@@ -848,8 +848,6 @@ ASTPtr DatabaseDataLake::getCreateDatabaseQueryImpl() const
     const auto & create_query = make_intrusive<ASTCreateQuery>();
     create_query->setDatabase(database_name);
     create_query->set(create_query->storage, database_engine_definition);
-    /// Don't show any settings because almost all of them may contain some secrets
-    create_query->storage->settings = nullptr;
     create_query->uuid = db_uuid;
     return create_query;
 }

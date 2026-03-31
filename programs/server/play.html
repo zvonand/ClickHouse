@@ -381,6 +381,8 @@
             color: transparent; /* text is invisible; only backgrounds are visible */
         }
 
+        #query-backdrop .q-active { background-color: color-mix(in srgb, var(--selection-background-color) 20%, transparent); }
+
 
         #inputs
         {
@@ -3295,30 +3297,51 @@ function escapeHTML(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/// Cached boundaries for cursor-tracking updates.
+let currentBoundaries = [];
+let currentBackdropText = '';
+
 function updateQueryBackdrop(text, boundaries) {
+    currentBoundaries = boundaries;
+    currentBackdropText = text;
+    renderQueryBackdrop();
+}
+
+function renderQueryBackdrop() {
+    const text = currentBackdropText;
+    const boundaries = currentBoundaries;
+
     if (boundaries.length <= 1) {
-        /// Single query or empty — hide the backdrop.
         queryBackdrop.style.display = 'none';
         query_area.classList.remove('has-backdrop');
         return;
+    }
+
+    const cursor = query_area.selectionStart;
+
+    /// Find which query contains the cursor.
+    let activeIdx = -1;
+    for (let i = 0; i < boundaries.length; ++i) {
+        if (cursor >= boundaries[i].start && cursor <= boundaries[i].end) {
+            activeIdx = i;
+            break;
+        }
     }
 
     let html = '';
     let pos = 0;
     for (let i = 0; i < boundaries.length; ++i) {
         const b = boundaries[i];
-        /// Text before this query (gap between queries, if any).
         if (b.start > pos) {
             html += escapeHTML(text.substring(pos, b.start));
         }
-        /// Deterministic hue from the query text, faint background via oklch.
-        const queryText = text.substring(b.start, b.end).trim();
-        const hue = queryToColor(queryText);
-        html += '<span style="background-color:oklch(80% 0.06 ' + hue + ' / 0.25)">'
-              + escapeHTML(text.substring(b.start, b.end)) + '</span>';
+        if (i === activeIdx) {
+            html += '<span class="q-active">' + escapeHTML(text.substring(b.start, b.end)) + '</span>';
+        } else {
+            html += escapeHTML(text.substring(b.start, b.end));
+        }
         pos = b.end;
     }
-    /// Trailing text after the last query.
     if (pos < text.length) {
         html += escapeHTML(text.substring(pos));
     }
@@ -3329,10 +3352,13 @@ function updateQueryBackdrop(text, boundaries) {
     queryBackdrop.style.display = 'block';
     query_area.classList.add('has-backdrop');
 
-    /// Sync scroll position.
     queryBackdrop.scrollTop = query_area.scrollTop;
     queryBackdrop.scrollLeft = query_area.scrollLeft;
 }
+
+/// Re-render backdrop when cursor moves (click, arrow keys, etc.)
+query_area.addEventListener('click', renderQueryBackdrop);
+query_area.addEventListener('keyup', renderQueryBackdrop);
 
 /// Keep backdrop scroll in sync with textarea.
 query_area.addEventListener('scroll', () => {

@@ -98,7 +98,7 @@ std::optional<size_t> SingleValueDataBase::getSmallestIndexNotNullIf(
     size_t index = row_begin;
     while ((index < row_end) && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
         index++;
-    if (index >= row_end)
+    if (index == row_end)
         return std::nullopt;
 
     for (size_t i = index + 1; i < row_end; i++)
@@ -115,7 +115,7 @@ std::optional<size_t> SingleValueDataBase::getGreatestIndexNotNullIf(
     size_t index = row_begin;
     while ((index < row_end) && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
         index++;
-    if (index >= row_end)
+    if (index == row_end)
         return std::nullopt;
 
     for (size_t i = index + 1; i < row_end; i++)
@@ -432,7 +432,7 @@ void SingleValueDataFixed<T>::setSmallestNotNullIf(
         size_t index = row_begin;
         while ((index < row_end) && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
             index++;
-        if (index >= row_end)
+        if (index == row_end)
             return;
 
         setIfSmaller(column, index, arena);
@@ -476,7 +476,7 @@ void SingleValueDataFixed<T>::setGreatestNotNullIf(
         size_t index = row_begin;
         while ((index < row_end) && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0)))
             index++;
-        if (index >= row_end)
+        if (index == row_end)
             return;
 
         setIfGreater(column, index, arena);
@@ -643,7 +643,7 @@ std::optional<size_t> SingleValueDataFixed<T>::getSmallestIndexNotNullIf(
         while (first_valid < row_end
             && ((if_map && if_map[first_valid] == 0) || (null_map && null_map[first_valid] != 0)))
             first_valid++;
-        if (first_valid >= row_end)
+        if (first_valid == row_end)
             return std::nullopt;
 
         size_t index = first_valid;
@@ -652,7 +652,7 @@ std::optional<size_t> SingleValueDataFixed<T>::getSmallestIndexNotNullIf(
             while (index < row_end
                 && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0) || isNaN(vec_data[index])))
                 index++;
-            if (index >= row_end)
+            if (index == row_end)
                 return {first_valid}; /// All valid elements are NaN, return the first valid one
             for (size_t i = index + 1; i < row_end; i++)
                 if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0)
@@ -754,7 +754,7 @@ std::optional<size_t> SingleValueDataFixed<T>::getGreatestIndexNotNullIf(
         while (first_valid < row_end
             && ((if_map && if_map[first_valid] == 0) || (null_map && null_map[first_valid] != 0)))
             first_valid++;
-        if (first_valid >= row_end)
+        if (first_valid == row_end)
             return std::nullopt;
 
         size_t index = first_valid;
@@ -763,7 +763,7 @@ std::optional<size_t> SingleValueDataFixed<T>::getGreatestIndexNotNullIf(
             while (index < row_end
                 && ((if_map && if_map[index] == 0) || (null_map && null_map[index] != 0) || isNaN(vec_data[index])))
                 index++;
-            if (index >= row_end)
+            if (index == row_end)
                 return {first_valid};
             for (size_t i = index + 1; i < row_end; i++)
                 if ((!if_map || if_map[i] != 0) && (!null_map || null_map[i] == 0)

@@ -849,11 +849,19 @@ std::optional<QueryPipeline> InterpreterInsertQuery::distributedWriteIntoReplica
     const ActionsDAG::Node * predicate = nullptr;
     if (select_query)
     {
-        if (auto where = select_query->where())
+        ASTPtr condition_ast;
+        if (select_query->prewhere() && select_query->where())
+            condition_ast = makeASTOperator("and", select_query->prewhere()->clone(), select_query->where()->clone());
+        else if (select_query->prewhere())
+            condition_ast = select_query->prewhere()->clone();
+        else if (select_query->where())
+            condition_ast = select_query->where()->clone();
+
+        if (condition_ast)
         {
             auto columns = src_storage_cluster->getInMemoryMetadataPtr()->getColumns().getAllPhysical();
-            auto syntax = TreeRewriter(local_context).analyze(where, columns);
-            filter_dag = ExpressionAnalyzer(where, syntax, local_context).getActionsDAG(true, true);
+            auto syntax = TreeRewriter(local_context).analyze(condition_ast, columns);
+            filter_dag = ExpressionAnalyzer(condition_ast, syntax, local_context).getActionsDAG(true, true);
             predicate = filter_dag->getOutputs().at(0);
         }
     }

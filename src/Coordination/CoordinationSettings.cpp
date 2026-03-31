@@ -48,7 +48,7 @@ namespace ErrorCodes
     DECLARE(UInt64, max_requests_append_size, 100, "Max size of batch of requests that can be sent to replica in append request", 0) \
     DECLARE(UInt64, max_requests_append_bytes_size, 10*1024*1024, "Max size in bytes of batch of requests that can be sent to replica in append request", 0) \
     DECLARE(UInt64, max_flush_batch_size, 1000, "Max size of batch of requests that can be flushed together", 0) \
-    DECLARE(UInt64, max_requests_quick_batch_size, 0, "Obsolete setting, does nothing." , SettingsTierType::OBSOLETE) \
+    DECLARE(UInt64, max_requests_quick_batch_size, 100, "Obsolete setting, does nothing." , SettingsTierType::OBSOLETE) \
     DECLARE(Bool, quorum_reads, false, "Execute read requests as writes through whole RAFT consesus with similar speed", 0) \
     DECLARE(Bool, force_sync, true, "Call fsync on each change in RAFT changelog", 0) \
     DECLARE(Bool, compress_logs, false, "Write compressed coordination logs in ZSTD format", 0) \

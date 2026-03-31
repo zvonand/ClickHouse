@@ -17,7 +17,8 @@ CREATE TABLE t_rtb_hourly_1
 )
 ENGINE = MergeTree()
 PARTITION BY toYearWeek(Hour)
-ORDER BY (Hour, NetworkId, BundleDomain, AppSiteChannelId, DeviceTypeId);
+ORDER BY (Hour, NetworkId, BundleDomain, AppSiteChannelId, DeviceTypeId)
+SETTINGS index_granularity=1;
 
 CREATE TABLE t_rtb_hourly_2
 (
@@ -31,7 +32,8 @@ CREATE TABLE t_rtb_hourly_2
 )
 ENGINE = MergeTree()
 PARTITION BY toYearWeek(Hour)
-ORDER BY (Hour, NetworkId, BundleDomain, AppSiteChannelId, DeviceTypeId);
+ORDER BY (Hour, NetworkId, BundleDomain, AppSiteChannelId, DeviceTypeId)
+SETTINGS index_granularity=1;
 
 INSERT INTO t_rtb_hourly_1
     SELECT
@@ -150,6 +152,6 @@ GROUP BY AppOrSiteIdDomain, DeviceTypeId
 ORDER BY ALL
 SETTINGS parallel_replicas_allow_view_over_mergetree = 1;
 
--- DROP VIEW v_rtb_union;
--- DROP TABLE t_rtb_hourly_1;
--- DROP TABLE t_rtb_hourly_2;
+DROP VIEW v_rtb_union;
+DROP TABLE t_rtb_hourly_1;
+DROP TABLE t_rtb_hourly_2;

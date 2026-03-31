@@ -227,7 +227,6 @@ public:
 
     void setVirtuals(VirtualColumnsDescription virtuals_)
     {
-        common_virtuals.set(std::make_unique<VirtualColumnsDescription>(createCommonVirtuals(virtuals_)));
         virtuals.set(std::make_unique<VirtualColumnsDescription>(std::move(virtuals_)));
     }
 
@@ -245,7 +244,10 @@ public:
     NamesAndTypesList getVirtualsList() const { return virtuals.get()->getNamesAndTypesList(); }
     Block getVirtualsHeader() const { return virtuals.get()->getSampleBlock(); }
 
-    VirtualsDescriptionPtr getCommonVirtuals() const { return common_virtuals.get(); }
+    VirtualsDescriptionPtr getCommonVirtuals(VirtualsDescriptionPtr cur_virtuals) const
+    {
+        return std::make_unique<VirtualColumnsDescription>(createCommonVirtuals(*cur_virtuals));
+    }
 
     Names getAllRegisteredNames() const override;
 
@@ -320,10 +322,6 @@ private:
 
     /// Description of virtual columns. Optional, may be set in constructor.
     MultiVersionVirtualsDescriptionPtr virtuals;
-
-    /// Description of common virtual columns, built per-storage excluding
-    /// columns already declared in the storage's own virtual columns.
-    MultiVersionVirtualsDescriptionPtr common_virtuals;
 
     static VirtualColumnsDescription createCommonVirtuals(const VirtualColumnsDescription & storage_virtuals);
 

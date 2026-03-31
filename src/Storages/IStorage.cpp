@@ -41,7 +41,6 @@ namespace ErrorCodes
 IStorage::IStorage(StorageID storage_id_, std::unique_ptr<StorageInMemoryMetadata> metadata_)
     : storage_id(std::move(storage_id_))
     , virtuals(std::make_unique<VirtualColumnsDescription>())
-    , common_virtuals(std::make_unique<VirtualColumnsDescription>(createCommonVirtuals({})))
 {
     if (metadata_)
         metadata.set(std::move(metadata_));
@@ -52,7 +51,8 @@ IStorage::IStorage(StorageID storage_id_, std::unique_ptr<StorageInMemoryMetadat
 bool IStorage::isVirtualColumn(const String & column_name, const StorageMetadataPtr & metadata_snapshot) const
 {
     /// Virtual column maybe overridden by real column
-    return !metadata_snapshot->getColumns().has(column_name) && (virtuals.get()->has(column_name) || common_virtuals.get()->has(column_name));
+    const auto virtual_columns = virtuals.get();
+    return !metadata_snapshot->getColumns().has(column_name) && (virtual_columns->has(column_name) || getCommonVirtuals(virtual_columns)->has(column_name));
 }
 
 VirtualColumnsDescription IStorage::createCommonVirtuals(const VirtualColumnsDescription & storage_virtuals)

@@ -212,7 +212,7 @@ namespace
 ///
 /// Verified: exhaustive check of all ~4.3 billion Float32 values (positive
 /// and negative) confirms exact match with dragonbox output.
-size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, char * buffer)
+NO_INLINE size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, char * buffer)
 {
     UInt32 bits;
     memcpy(&bits, &f32, sizeof(bits));
@@ -266,7 +266,7 @@ size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, char * buf
 /// both positive and negative) plus all power-of-2 boundaries and their
 /// neighbors — zero mismatches with dragonbox. Exhaustive check is infeasible
 /// for Float64 (2^62 values in range).
-size_t writeFloatTextFastPathFloat64Rounded(Float64 f64, int16_t exp, char * buffer)
+NO_INLINE size_t writeFloatTextFastPathFloat64Rounded(Float64 f64, int16_t exp, char * buffer)
 {
     UInt64 bits;
     memcpy(&bits, &f64, sizeof(bits));

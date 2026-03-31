@@ -211,11 +211,24 @@ def should_skip_job(job_name):
             return True, "Skipped, not a bug-fix PR"
 
     if "flaky" in job_name.lower():
+        from ci.jobs.scripts.find_tests import Targeting
+
+        targeter = Targeting(info=_info_cache)
         changed_files = _info_cache.get_changed_files()
-        if "stateless" in job_name.lower() and not has_new_functional_tests(
-            changed_files
-        ):
-            return True, "Skipped, no functional tests updates"
+        if "stateless" in job_name.lower():
+            changed_tests = targeter.get_changed_tests()
+            try:
+                previously_failed = targeter.get_previously_failed_tests()
+            except Exception as e:
+                print(f"Warning: failed to fetch previously-failed tests: {e}")
+                previously_failed = []
+            try:
+                relevant_tests, _ = targeter.get_most_relevant_tests()
+            except Exception as e:
+                print(f"Warning: failed to fetch relevant tests: {e}")
+                relevant_tests = []
+            if not changed_tests and not previously_failed and not relevant_tests:
+                return True, "Skipped, no tests to run"
         if "integration" in job_name.lower() and not has_new_integration_tests(
             changed_files
         ):

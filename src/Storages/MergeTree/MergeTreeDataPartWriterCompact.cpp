@@ -4,13 +4,20 @@
 #include <Storages/StorageInMemoryMetadata.h>
 #include <Formats/MarkInCompressedFile.h>
 #include <IO/NullWriteBuffer.h>
+#include <Common/FailPoint.h>
 
 namespace DB
 {
 
+namespace FailPoints
+{
+    extern const char compact_writer_add_streams_throw[];
+}
+
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
+    extern const int FAULT_INJECTED;
 }
 
 MergeTreeDataPartWriterCompact::MergeTreeDataPartWriterCompact(
@@ -85,7 +92,13 @@ void MergeTreeDataPartWriterCompact::addStreams(const NameAndTypePair & name_and
         UInt64 codec_id = compression_codec->getHash();
         auto & stream = streams_by_codec[codec_id];
         if (!stream)
+        {
+            fiu_do_on(FailPoints::compact_writer_add_streams_throw,
+            {
+                throw Exception(ErrorCodes::FAULT_INJECTED, "Failpoint: simulated exception in addStreams");
+            });
             stream = std::make_shared<CompressedStream>(plain_hashing, compression_codec);
+        }
 
         compressed_streams.emplace(stream_name, stream);
     };

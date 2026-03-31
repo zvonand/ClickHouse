@@ -1,13 +1,6 @@
-#include <optional>
-#include <string_view>
 #include <AggregateFunctions/IAggregateFunction.h>
-#include <Columns/ColumnConst.h>
 #include <Columns/ColumnSet.h>
-#include <Columns/IColumn.h>
 #include <Common/FieldVisitorToString.h>
-#include <Core/Block.h>
-#include <DataTypes/DataTypeSet.h>
-#include <DataTypes/IDataType.h>
 #include <DataTypes/Serializations/ISerialization.h>
 #include <Functions/IFunction.h>
 #include <IO/Operators.h>
@@ -15,8 +8,8 @@
 #include <Interpreters/ActionsDAG.h>
 #include <Interpreters/Aggregator.h>
 #include <Interpreters/PreparedSets.h>
+#include <Functions/FunctionHelpers.h>
 #include <Processors/QueryPlan/AggregatingStep.h>
-#include <Processors/QueryPlan/CubeStep.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/FilterStep.h>
 #include <Processors/QueryPlan/IQueryPlanStep.h>
@@ -29,13 +22,14 @@
 #include <Processors/QueryPlan/ReadFromPreparedSource.h>
 #include <Processors/QueryPlan/ReadFromRemote.h>
 #include <Processors/QueryPlan/ReadFromTableStep.h>
-#include <Processors/QueryPlan/RollupStep.h>
 #include <Processors/QueryPlan/SourceStepWithFilter.h>
 #include <Processors/QueryPlan/TotalsHavingStep.h>
 #include <Processors/QueryPlan/WindowStep.h>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+#include <optional>
+#include <string_view>
 
 namespace DB
 {
@@ -261,9 +255,10 @@ namespace QueryPlanFormat
 
         String getRuntimeFilterId(const ActionsDAG::Node * node)
         {
-            Field value;
-            node->children[0]->column->get(0, value);
-            return value.safeGet<String>();
+            const ActionsDAG::Node * first_child = node->children[0];
+            if (const auto * col = checkAndGetColumnConst<ColumnString>(first_child->column.get()))
+                return col->getValue<String>();
+            return first_child->result_name;
         }
 
         String formatSetPretty(

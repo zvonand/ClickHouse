@@ -5,6 +5,7 @@ SET query_plan_join_swap_table = 0;
 SET enable_parallel_replicas = 0;
 SET use_statistics = 0;
 SET query_plan_join_shard_by_pk_ranges = 0;
+SET max_bytes_before_external_join = 0;
 
 DROP TABLE IF EXISTS t1;
 DROP TABLE IF EXISTS t2;

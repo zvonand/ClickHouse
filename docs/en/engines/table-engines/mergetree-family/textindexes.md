@@ -646,34 +646,137 @@ SELECT * FROM logs WHERE mapContainsValueLike(attributes, '% error %'); -- fast
 
 #### Indexing JSON columns {#text-index-example-json}
 
+Data skipping indexes can be used with `JSON` columns in two ways:
+
+1. **Indexes on specific subcolumns** — create a standard skip index on a known JSON path, just like on a regular column. This indexes the *values* at that path.
+2. **Path-based indexes with `JSONAllPaths`** — index the *set of paths* present in each granule to skip granules that cannot contain the queried path. Similar to `Map` columns.
+
+##### Indexes on specific subcolumns {#json-indexes-on-subcolumns}
+
+You can create a skip index on any JSON subcolumn using the same syntax as for regular columns.
+
+There are two ways to reference a JSON subcolumn in an index expression:
+
+- **Typed path** declared in the JSON type hint — access by name directly: `json.a`.
+- **Dynamic path** with explicit cast — use the `::` cast syntax: `json.b::String`.
+
+Example queries:
+
+```sql
+CREATE TABLE sensor_data
+(
+    data JSON(sensor_id String),
+    INDEX idx_sensor data.sensor_id TYPE text(tokenizer = splitByNonAlpha),
+    INDEX idx_location data.location::String TYPE text(tokenizer = splitByNonAlpha)
+)
+ENGINE = MergeTree
+ORDER BY tuple()
+SETTINGS index_granularity = 1;
+
+INSERT INTO sensor_data SELECT toJSONString(map('sensor_id', 'id_' || number , 'location', 'room_' || toString(number))) FROM numbers(4);
+INSERT INTO sensor_data SELECT toJSONString(map('sensor_id', 'id_' || number, 'location', 'room_' || toString(number))) FROM numbers(4, 4);
+```
+
+```sql title="Query"
+EXPLAIN indexes = 1 SELECT * FROM sensor_data WHERE data.sensor_id = 'id_5';
+```
+
+```text title="Response"
+...
+    Indexes:
+      Skip
+        Name: idx_sensor
+        Description: text
+        Condition: (mode: All; tokens: ["5", "id"])
+        Parts: 1/2
+        Granules: 1/8
+```
+
+```sql title="Query"
+EXPLAIN indexes = 1 SELECT * FROM sensor_data WHERE data.location::String = 'room_5';
+```
+
+```text title="Response"
+...
+    Indexes:
+      Skip
+        Name: idx_location
+        Description: text
+        Condition: (mode: All; tokens: ["5", "room"])
+        Parts: 1/2
+        Granules: 1/8
+```
+
+##### Path-based indexes with JSONAllPaths {#json-indexes-jsonallpaths}
+
 Similar to `Map` columns, text indexes can be created on [JSON](/sql-reference/data-types/newjson.md) columns using [`JSONAllPaths`](/sql-reference/functions/json-functions.md/#JSONAllPaths).
 The index stores the set of JSON paths present in each granule and uses them to skip granules where a queried path is absent.
+
+Example queries:
 
 ```sql
 CREATE TABLE events
 (
-    id UInt64,
     data JSON,
-    INDEX idx JSONAllPaths(data) TYPE text(tokenizer = 'splitByNonAlpha') GRANULARITY 1
+    INDEX idx JSONAllPaths(data) TYPE text(tokenizer = array)
 )
 ENGINE = MergeTree
-ORDER BY id;
+ORDER BY tuple();
+
+INSERT INTO events VALUES ('{"user": {"name": "Alice"}, "action": "login"}');
+INSERT INTO events VALUES ('{"metric": {"cpu": 0.95}, "host": "srv1"}');
 ```
 
-Queries that filter on JSON subcolumns will use the index:
+You can use `EXPLAIN indexes = 1` to verify that the skip index is being used. When a path exists only in one part, the index skips the other part:
 
-```sql
--- Only scans granules where path 'user.name' exists
-SELECT * FROM events WHERE data.user.name = 'Alice';
-
--- Skips all granules (path does not exist anywhere)
-SELECT * FROM events WHERE data.nonexistent = 1;
-
--- IS NOT NULL skips granules where the path is absent
-SELECT * FROM events WHERE data.user.name IS NOT NULL;
+```sql title="Query"
+EXPLAIN indexes = 1 SELECT * FROM events WHERE data.user.name = 'Alice';
 ```
 
-See [Data skipping indexes for JSON](/sql-reference/data-types/newjson#data-skipping-indexes-for-json) for more details on supported operations and safety semantics.
+```text title="Response"
+...
+    Indexes:
+      Skip
+        Name: idx
+        Description: text
+        Condition: (mode: All; tokens: ["user.name"])
+        Parts: 1/2
+        Granules: 1/2
+```
+
+When a path does not exist in any part, all parts and granules are skipped:
+
+```sql title="Query"
+EXPLAIN indexes = 1 SELECT * FROM events WHERE data.nonexistent = 1;
+```
+
+```text title="Response"
+...
+    Indexes:
+      Skip
+        Name: idx
+        Description: text
+        Condition: (mode: All; tokens: ["nonexistent"])
+        Parts: 0/2
+        Granules: 0/2
+```
+
+`IS NOT NULL` also uses the index — it skips granules where the path is absent (since the value would be `NULL`):
+
+```sql title="Query"
+EXPLAIN indexes = 1 SELECT * FROM events WHERE data.user.name IS NOT NULL;
+```
+
+```text title="Response"
+...
+    Indexes:
+      Skip
+        Name: idx
+        Description: text
+        Condition: (mode: All; tokens: ["user.name"])
+        Parts: 1/2
+        Granules: 1/2
+```
 
 ## Performance Tuning {#performance-tuning}
 

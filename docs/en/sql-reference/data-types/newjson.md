@@ -1195,7 +1195,7 @@ This works similarly to creating skip indexes on [`Map`](/sql-reference/data-typ
 - [`bloom_filter`](/engines/table-engines/mergetree-family/mergetree#bloom-filter) — supports `equals`, `in`, and `IS NOT NULL`.
 - [`tokenbf_v1`](/engines/table-engines/mergetree-family/mergetree#token-bloom-filter) — supports `equals` and `IS NOT NULL`.
 - [`ngrambf_v1`](/engines/table-engines/mergetree-family/mergetree#n-gram-bloom-filter) — supports `equals` and `IS NOT NULL`.
-- [`text`](/engines/table-engines/mergetree-family/textindexes) (inverted index) — supports `equals` and `IS NOT NULL`.
+- [`text`](/engines/table-engines/mergetree-family/textindexes) (inverted index) — supports `equals`, `in` and `IS NOT NULL`.
 
 #### Example {#json-indexes-jsonallpaths-example}
 

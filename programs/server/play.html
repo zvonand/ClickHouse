@@ -381,8 +381,6 @@
             color: transparent; /* text is invisible; only backgrounds are visible */
         }
 
-        #query-backdrop .q-even { background-color: color-mix(in srgb, var(--bar-color) 50%, transparent); }
-        #query-backdrop .q-odd  { background-color: transparent; }
 
         #inputs
         {
@@ -3313,8 +3311,11 @@ function updateQueryBackdrop(text, boundaries) {
         if (b.start > pos) {
             html += escapeHTML(text.substring(pos, b.start));
         }
-        const cls = i % 2 === 0 ? 'q-even' : 'q-odd';
-        html += '<span class="' + cls + '">' + escapeHTML(text.substring(b.start, b.end)) + '</span>';
+        /// Deterministic hue from the query text, faint background via oklch.
+        const queryText = text.substring(b.start, b.end).trim();
+        const hue = queryToColor(queryText);
+        html += '<span style="background-color:oklch(80% 0.06 ' + hue + ' / 0.25)">'
+              + escapeHTML(text.substring(b.start, b.end)) + '</span>';
         pos = b.end;
     }
     /// Trailing text after the last query.

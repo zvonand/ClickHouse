@@ -1095,9 +1095,20 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
     std::exception_ptr last_error;
     mutable std::mutex load_mutex;
 
+    void onException(LoggerPtr log_, const std::string & message)
+    {
+        last_error = std::current_exception();
+        has_error.store(true, std::memory_order_release);
+        tryLogCurrentException(log_, message);
+    }
+
     bool init(uint64_t log_idx, const SnapshotFileInfo & info, LoggerPtr log_) override
     {
+        if (has_error.load(std::memory_order_relaxed))
+            return false;
         std::lock_guard lock(load_mutex);
+        if (has_error.load(std::memory_order_relaxed))
+            return false;
         if (buf)
         {
             /// Already initialized by a previous follower — just verify it's the same snapshot.
@@ -1111,7 +1122,7 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
         }
         catch (...)
         {
-            tryLogCurrentException(log_, "Failed to get snapshot size for transfer");
+            onException(log_, "Failed to get snapshot size for transfer");
             return false;
         }
         if (file_size == 0)
@@ -1125,7 +1136,7 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
         }
         catch (...)
         {
-            tryLogCurrentException(log_, "Failed to open snapshot for transfer");
+            onException(log_, "Failed to open snapshot for transfer");
             return false;
         }
         try
@@ -1134,10 +1145,8 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
         }
         catch (...)
         {
-            last_error = std::current_exception();
-            has_error.store(true, std::memory_order_release);
             reader.reset();
-            tryLogCurrentException(log_, fmt::format("Failed to allocate {} bytes for snapshot {} transfer", file_size, log_idx));
+            onException(log_, fmt::format("Failed to allocate {} bytes for snapshot {} transfer", file_size, log_idx));
             return false;
         }
         return true;
@@ -1187,9 +1196,7 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
             }
             catch (...)
             {
-                last_error = std::current_exception();
-                tryLogCurrentException(log_);
-                has_error.store(true, std::memory_order_release);
+                onException(log_, "Failed to read snapshot chunk");
                 ProfileEvents::increment(ProfileEvents::KeeperSnapshotRemoteLoaderErrors);
                 return nullptr;
             }

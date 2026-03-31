@@ -7,6 +7,8 @@
 #include <Processors/QueryPlan/QueryPlanStepRegistry.h>
 #include <Processors/QueryPlan/Serialization.h>
 #include <Processors/QueryPlan/SortingStep.h>
+#include <Processors/ISimpleTransform.h>
+#include <Processors/Merges/Algorithms/MergeTreeReadInfo.h>
 #include <Processors/Transforms/FinishSortingTransform.h>
 #include <Processors/Transforms/LimitsCheckingTransform.h>
 #include <Processors/Transforms/MergeSortingTransform.h>
@@ -38,6 +40,28 @@ namespace ProfileEvents
 
 namespace DB
 {
+
+class RemoveVirtualRowTransform : public ISimpleTransform
+{
+public:
+    explicit RemoveVirtualRowTransform(SharedHeader header)
+        : ISimpleTransform(header, header, false)
+    {
+    }
+
+    String getName() const override { return "RemoveVirtualRowTransform"; }
+
+    void transform(Chunk & chunk) override
+    {
+        chunk.getChunkInfos().extract<MergeTreeReadInfo>();
+    }
+
+    static auto create(SharedHeader header)
+    {
+        return std::make_shared<RemoveVirtualRowTransform>(std::move(header));
+    }
+};
+
 namespace Setting
 {
     extern const SettingsNonZeroUInt64 max_block_size;
@@ -374,6 +398,10 @@ void SortingStep::mergingSorted(QueryPipelineBuilder & pipeline, const SortDescr
 
         pipeline.addTransform(std::move(transform));
     }
+    else if (apply_virtual_row_conversions)
+    {
+        pipeline.addSimpleTransform(RemoveVirtualRowTransform::create);
+    }
 }
 
 void SortingStep::mergeSorting(
@@ -481,6 +509,10 @@ void SortingStep::fullSort(
             always_read_till_end);
 
         pipeline.addTransform(std::move(transform));
+    }
+    else if (apply_virtual_row_conversions)
+    {
+        pipeline.addSimpleTransform(RemoveVirtualRowTransform::create);
     }
 }
 

@@ -795,16 +795,16 @@ std::optional<QueryPipeline> InterpreterInsertQuery::distributedWriteIntoReplica
     if (select.list_of_selects->children.size() == 1)
     {
         if (auto * sq = select.list_of_selects->children.at(0)->as<ASTSelectQuery>())
-         {
+        {
             select_query = sq;
             if (local_context->getSettingsRef()[Setting::enable_global_with_statement])
                 ApplyWithAliasVisitor::visit(select.list_of_selects->children.at(0));
             ApplyWithSubqueryVisitor(local_context).visit(select.list_of_selects->children.at(0));
- 
+
             JoinedTables joined_tables(Context::createCopy(local_context), *sq);
-             if (joined_tables.tablesCount() == 1)
-                 src_storage = joined_tables.getLeftTableStorage();
-         }
+            if (joined_tables.tablesCount() == 1)
+                src_storage = joined_tables.getLeftTableStorage();
+        }
     }
     if (!src_storage)
         return {};

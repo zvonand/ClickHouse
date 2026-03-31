@@ -415,7 +415,6 @@ void KeeperDispatcher::requestThread()
                         auto log_idx = bs.get_u64();
 
                         /// if timeout happened set error responses for the requests
-                        asdqwe make seen log idx a field assigned next to get(), instead of looking at result_buf only here;
                         if (!keeper_context->waitCommittedUpto(log_idx, coordination_settings[CoordinationSetting::operation_timeout_ms].totalMilliseconds()))
                             addErrorResponses(prev_batch, Coordination::Error::ZOPERATIONTIMEOUT);
 
@@ -442,7 +441,7 @@ void KeeperDispatcher::requestThread()
                         if (server->isLeaderAlive())
                             server->putLocalReadRequest({request});
                         else
-                            addErrorResponses({request}, Coordination::Error::ZCONNECTIONLOSS);
+                            addErrorResponses({request}, Coordination::Error::ZCONNECTIONLOSS, /*may_have_dependent_reads=*/ false);
                     }
                     else
                     {
@@ -729,7 +728,7 @@ void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & conf
 
                 if (!server->isLeaderAlive())
                 {
-                    addErrorResponses({read_request}, Coordination::Error::ZCONNECTIONLOSS);
+                    addErrorResponses({read_request}, Coordination::Error::ZCONNECTIONLOSS, /*may_have_dependent_reads=*/ false);
                     continue;
                 }
 
@@ -1046,6 +1045,8 @@ void KeeperDispatcher::finishSession(int64_t session_id)
 
 void KeeperDispatcher::addErrorResponses(const KeeperRequestsForSessions & requests_for_sessions, Coordination::Error error, bool may_have_dependent_reads)
 {
+    KeeperRequestsForSessions dependent_reads;
+
     for (const auto & request_for_session : requests_for_sessions)
     {
         KeeperResponsesForSessions responses;
@@ -1063,9 +1064,22 @@ void KeeperDispatcher::addErrorResponses(const KeeperRequestsForSessions & reque
 
         if (may_have_dependent_reads)
         {
-            //asdqwe
+            SessionAndXID key(request_for_session.session_id, request_for_session.request->xid);
+            ProfiledMutexLock lock(read_request_queue_mutex, ProfileEvents::KeeperReadRequestQueueLockWaitMicroseconds, ProfileEvents::KeeperReadRequestQueueLockHoldMicroseconds);
+            if (auto it = read_request_queue.find(key); it != read_request_queue.end())
+            {
+                dependent_reads.insert(dependent_reads.end(), std::move_iterator(it->second.begin()), std::move_iterator(it->second.end()));
+                read_request_queue.erase(it);
+            }
         }
     }
+
+    /// Cancel reads that we piggy-backed to the request that failed. They're innocent bystanders
+    /// that could otherwise succeed, but we don't have a simple way to run these reads correctly
+    /// in this situation. In particular, there may be later write requests from their sessions that
+    /// already completed; in that case we can't do the read at all, our committed state is too new.
+    if (!dependent_reads.empty())
+        addErrorResponses(dependent_reads, error, /*may_have_dependent_reads=*/ false);
 }
 
 nuraft::ptr<nuraft::buffer> KeeperDispatcher::forceWaitAndProcessResult(

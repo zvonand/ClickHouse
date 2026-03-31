@@ -5,6 +5,7 @@
 #include <Client/InternalTextLogs.h>
 #include <Client/LineReader.h>
 #include <Client/TerminalKeystrokeInterceptor.h>
+#include <Client/ClientTetris.h>
 #include <Client/TestHint.h>
 #include <Client/TestTags.h>
 #include <Core/SortDescription.h>
@@ -550,12 +551,12 @@ void ClientBase::onData(Block & block, ASTPtr parsed_query)
         return;
 
     /// If results are written INTO OUTFILE, we can avoid clearing progress to avoid flicker.
-    if (need_render_progress && tty_buf && (!select_into_file || select_into_file_and_stdout))
+    if (need_render_progress && tty_buf && !clientTetrisObscuresProgress() && (!select_into_file || select_into_file_and_stdout))
     {
         std::unique_lock lock(tty_mutex);
         progress_indication.clearProgressOutput(*tty_buf, lock);
     }
-    if (need_render_progress_table && tty_buf && (!select_into_file || select_into_file_and_stdout))
+    if (need_render_progress_table && tty_buf && !clientTetrisObscuresProgress() && (!select_into_file || select_into_file_and_stdout))
     {
         std::unique_lock lock(tty_mutex);
         progress_table.clearTableOutput(*tty_buf, lock);
@@ -587,14 +588,14 @@ void ClientBase::onData(Block & block, ASTPtr parsed_query)
     output_format->flush();
 
     /// Restore progress bar and progress table after data block.
-    if (need_render_progress && tty_buf)
+    if (need_render_progress && tty_buf && !clientTetrisObscuresProgress())
     {
         if (select_into_file && !select_into_file_and_stdout)
             error_stream << "\r";
         std::unique_lock lock(tty_mutex);
         progress_indication.writeProgress(*tty_buf, lock);
     }
-    if (need_render_progress_table && tty_buf && !cancelled)
+    if (need_render_progress_table && tty_buf && !clientTetrisObscuresProgress() && !cancelled)
     {
         if (!need_render_progress && select_into_file && !select_into_file_and_stdout)
             error_stream << "\r";
@@ -607,12 +608,12 @@ void ClientBase::onData(Block & block, ASTPtr parsed_query)
 void ClientBase::onLogData(Block & block)
 {
     initLogsOutputStream();
-    if (need_render_progress && tty_buf)
+    if (need_render_progress && tty_buf && !clientTetrisObscuresProgress())
     {
         std::unique_lock lock(tty_mutex);
         progress_indication.clearProgressOutput(*tty_buf, lock);
     }
-    if (need_render_progress_table && tty_buf)
+    if (need_render_progress_table && tty_buf && !clientTetrisObscuresProgress())
     {
         std::unique_lock lock(tty_mutex);
         progress_table.clearTableOutput(*tty_buf, lock);
@@ -991,21 +992,35 @@ void ClientBase::initTTYBuffer(ProgressOption progress_option, ProgressOption pr
     if (tty_buf)
         return;
 
+    const bool allow_client_tetris = is_interactive && getClientConfiguration().getBool("enable-client-tetris", true);
+
     if (progress_option == ProgressOption::OFF || (!is_interactive && progress_option == ProgressOption::DEFAULT))
         need_render_progress = false;
 
     if (progress_table_option == ProgressOption::OFF || (!is_interactive && progress_table_option == ProgressOption::DEFAULT))
         need_render_progress_table = false;
 
-    if (!need_render_progress && !need_render_progress_table)
+    if (!need_render_progress && !need_render_progress_table && !allow_client_tetris)
         return;
 
-    progress_table_toggle_enabled = getClientConfiguration().getBool("enable-progress-table-toggle");
-    progress_table_toggle_on = !progress_table_toggle_enabled;
+    if (need_render_progress_table)
+    {
+        progress_table_toggle_enabled = getClientConfiguration().getBool("enable-progress-table-toggle");
+        progress_table_toggle_on = !progress_table_toggle_enabled;
+    }
+    else
+    {
+        progress_table_toggle_enabled = false;
+        progress_table_toggle_on = false;
+    }
+
+    enable_client_tetris = allow_client_tetris;
 
     /// If need_render_progress and need_render_progress_table are enabled,
     /// use ProgressOption that was set for the progress bar for progress table as well.
     ProgressOption progress = progress_option ? progress_option : progress_table_option;
+    if (!need_render_progress && !need_render_progress_table)
+        progress = ProgressOption::TTY;
 
     /// Output all progress bar commands to terminal at once to avoid flicker.
     /// This size is usually greater than the window size.
@@ -1079,14 +1094,41 @@ void ClientBase::initTTYBuffer(ProgressOption progress_option, ProgressOption pr
 
 void ClientBase::initKeystrokeInterceptor()
 {
-    if (is_interactive && need_render_progress_table && progress_table_toggle_enabled)
-    {
-        keystroke_interceptor = std::make_unique<TerminalKeystrokeInterceptor>(stdin_fd, error_stream);
-        keystroke_interceptor->registerCallback(' ', [this]() { progress_table_toggle_on = !progress_table_toggle_on; });
+    const bool progress_keys = need_render_progress_table && progress_table_toggle_enabled;
+    if (!is_interactive || !tty_buf || (!progress_keys && !enable_client_tetris))
+        return;
 
-        if (isEmbeeddedClient())
-            keystroke_interceptor->registerCallback(0x03, [this]() { tryStopQuery(); });
+    keystroke_interceptor = std::make_unique<TerminalKeystrokeInterceptor>(stdin_fd, error_stream);
+
+    if (enable_client_tetris && !client_tetris)
+        client_tetris = std::make_unique<ClientTetris>(*this);
+
+    if (progress_keys || enable_client_tetris)
+    {
+        keystroke_interceptor->registerCallback(' ', [this, progress_keys]()
+        {
+            if (client_tetris && client_tetris->isActive())
+                client_tetris->handleKey(' ');
+            else if (progress_keys)
+                progress_table_toggle_on = !progress_table_toggle_on;
+        });
     }
+
+    if (enable_client_tetris)
+    {
+        keystroke_interceptor->registerCallback('t', [this]() { client_tetris->toggle(); });
+        keystroke_interceptor->registerCallback('T', [this]() { client_tetris->toggle(); });
+        for (char key : {'h', 'j', 'k', 'l', 'r', 'R'})
+            keystroke_interceptor->registerCallback(key, [this, key]() { client_tetris->handleKey(key); });
+    }
+
+    if (isEmbeeddedClient())
+        keystroke_interceptor->registerCallback(0x03, [this]() { tryStopQuery(); });
+}
+
+bool ClientBase::clientTetrisObscuresProgress() const
+{
+    return client_tetris && client_tetris->isActive();
 }
 
 
@@ -1543,7 +1585,7 @@ void ClientBase::onProgress(const Progress & value)
     if (output_format)
         output_format->onProgress(value);
 
-    if (need_render_progress && tty_buf)
+    if (need_render_progress && tty_buf && !clientTetrisObscuresProgress())
     {
         std::unique_lock lock(tty_mutex);
         progress_indication.writeProgress(*tty_buf, lock);
@@ -1558,12 +1600,12 @@ void ClientBase::onTimezoneUpdate(const String & tz)
 
 void ClientBase::onEndOfStream()
 {
-    if (need_render_progress && tty_buf)
+    if (need_render_progress && tty_buf && !clientTetrisObscuresProgress())
     {
         std::unique_lock lock(tty_mutex);
         progress_indication.clearProgressOutput(*tty_buf, lock);
     }
-    if (need_render_progress_table && tty_buf)
+    if (need_render_progress_table && tty_buf && !clientTetrisObscuresProgress())
     {
         std::unique_lock lock(tty_mutex);
         progress_table.clearTableOutput(*tty_buf, lock);
@@ -1648,12 +1690,12 @@ void ClientBase::onProfileEvents(Block & block)
         progress_indication.updateThreadEventData(thread_times);
         progress_table.updateTable(block);
 
-        if (need_render_progress && tty_buf)
+        if (need_render_progress && tty_buf && !clientTetrisObscuresProgress())
         {
             std::unique_lock lock(tty_mutex);
             progress_indication.writeProgress(*tty_buf, lock);
         }
-        if (need_render_progress_table && tty_buf && !cancelled)
+        if (need_render_progress_table && tty_buf && !clientTetrisObscuresProgress() && !cancelled)
         {
             bool toggle_enabled = getClientConfiguration().getBool("enable-progress-table-toggle", true);
             std::unique_lock lock(tty_mutex);
@@ -1667,12 +1709,12 @@ void ClientBase::onProfileEvents(Block & block)
                 /// We need to restart the watch each time we flushed these events
                 profile_events.watch.restart();
                 initLogsOutputStream();
-                if (need_render_progress && tty_buf)
+                if (need_render_progress && tty_buf && !clientTetrisObscuresProgress())
                 {
                     std::unique_lock lock(tty_mutex);
                     progress_indication.clearProgressOutput(*tty_buf, lock);
                 }
-                if (need_render_progress_table && tty_buf)
+                if (need_render_progress_table && tty_buf && !clientTetrisObscuresProgress())
                 {
                     std::unique_lock lock(tty_mutex);
                     progress_table.clearTableOutput(*tty_buf, lock);
@@ -1694,7 +1736,7 @@ void ClientBase::onProfileEvents(Block & block)
 /// Flush all buffers.
 void ClientBase::resetOutput()
 {
-    if (need_render_progress_table && tty_buf)
+    if (need_render_progress_table && tty_buf && !clientTetrisObscuresProgress())
     {
         std::unique_lock lock(tty_mutex);
         progress_table.clearTableOutput(*tty_buf, lock);
@@ -2274,12 +2316,12 @@ void ClientBase::cancelQuery()
 
     stopKeystrokeInterceptorIfExists();
 
-    if (need_render_progress && tty_buf)
+    if (need_render_progress && tty_buf && !clientTetrisObscuresProgress())
     {
         std::unique_lock lock(tty_mutex);
         progress_indication.clearProgressOutput(*tty_buf, lock);
     }
-    if (need_render_progress_table && tty_buf)
+    if (need_render_progress_table && tty_buf && !clientTetrisObscuresProgress())
     {
         std::unique_lock lock(tty_mutex);
         progress_table.clearTableOutput(*tty_buf, lock);
@@ -2447,12 +2489,12 @@ void ClientBase::processParsedSingleQuery(
     if (!profile_events.last_block.empty())
     {
         initLogsOutputStream();
-        if (need_render_progress && tty_buf)
+        if (need_render_progress && tty_buf && !clientTetrisObscuresProgress())
         {
             std::unique_lock lock(tty_mutex);
             progress_indication.clearProgressOutput(*tty_buf, lock);
         }
-        if (need_render_progress_table && tty_buf)
+        if (need_render_progress_table && tty_buf && !clientTetrisObscuresProgress())
         {
             std::unique_lock lock(tty_mutex);
             progress_table.clearTableOutput(*tty_buf, lock);
@@ -2474,7 +2516,7 @@ void ClientBase::processParsedSingleQuery(
         progress_indication.writeFinalProgress();
         bool toggle_enabled = getClientConfiguration().getBool("enable-progress-table-toggle", true);
         bool show_progress_table = !toggle_enabled || progress_table_toggle_on;
-        if (need_render_progress_table && show_progress_table)
+        if (need_render_progress_table && show_progress_table && !clientTetrisObscuresProgress())
         {
             std::unique_lock lock(tty_mutex);
             progress_table.writeFinalTable(*tty_buf, lock);
@@ -3136,6 +3178,9 @@ void ClientBase::startKeystrokeInterceptorIfExists()
 
 void ClientBase::stopKeystrokeInterceptorIfExists()
 {
+    if (client_tetris)
+        client_tetris->onInterceptorStop();
+
     if (keystroke_interceptor)
     {
         try
@@ -3261,7 +3306,7 @@ bool ClientBase::checkAIProviderAcknowledgment()
     if (ai_inferred_from_env && !ai_provider_acknowledged && is_interactive)
     {
         // Clear any progress display
-        if (need_render_progress && tty_buf)
+        if (need_render_progress && tty_buf && !clientTetrisObscuresProgress())
         {
             std::unique_lock lock(tty_mutex);
             progress_indication.clearProgressOutput(*tty_buf, lock);
@@ -3320,6 +3365,7 @@ void ClientBase::addCommonOptions(OptionsDescription & options_description)
         ("progress", po::value<ProgressOption>()->implicit_value(ProgressOption::TTY, "tty")->default_value(ProgressOption::DEFAULT, "default"), "Print progress of queries execution - to TTY: tty|on|1|true|yes; to STDERR non-interactive mode: err; OFF: off|0|false|no; DEFAULT - interactive to TTY, non-interactive is off")
         ("progress-table", po::value<ProgressOption>()->implicit_value(ProgressOption::TTY, "tty")->default_value(ProgressOption::DEFAULT, "default"), "Print a progress table with changing metrics during query execution - to TTY: tty|on|1|true|yes; to STDERR non-interactive mode: err; OFF: off|0|false|no; DEFAULT - interactive to TTY, non-interactive is off")
         ("enable-progress-table-toggle", po::value<bool>()->default_value(true), "Enable toggling of the progress table by pressing the control key (Space). Only applicable in interactive mode with the progress table enabled.")
+        ("enable-client-tetris", po::value<bool>()->default_value(true), "Enable the terminal Tetris mini-game during long queries (press `t` to toggle). Interactive mode with a TTY only.")
 
         ("disable_suggestion,A", "Disable loading suggestions. Note that suggestions are loaded asynchronously through a second connection to ClickHouse server. Recommended when pasting queries with TAB characters.") /// Shorthand -A like in MySQL client
         ("wait_for_suggestions_to_load", "Load suggestion data synchonously")
@@ -3458,6 +3504,8 @@ void ClientBase::addOptionsToTheClientConfiguration(const CommandLineOptions & o
     }
     if (options.contains("enable-progress-table-toggle"))
         getClientConfiguration().setBool("enable-progress-table-toggle", options["enable-progress-table-toggle"].as<bool>());
+    if (options.contains("enable-client-tetris"))
+        getClientConfiguration().setBool("enable-client-tetris", options["enable-client-tetris"].as<bool>());
     if (options.contains("echo"))
         getClientConfiguration().setBool("echo", true);
     if (options.contains("disable_suggestion"))

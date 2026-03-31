@@ -76,6 +76,7 @@ std::istream& operator>> (std::istream & in, ProgressOption & progress);
 
 class InternalTextLogs;
 class TerminalKeystrokeInterceptor;
+class ClientTetris;
 class WriteBufferFromFileDescriptor;
 struct Settings;
 struct MergeTreeSettings;
@@ -90,6 +91,8 @@ struct MergeTreeSettings;
  */
 class ClientBase
 {
+    friend class ClientTetris;
+
 public:
     using Arguments = std::vector<String>;
 
@@ -260,6 +263,8 @@ private:
     void startKeystrokeInterceptorIfExists();
     void stopKeystrokeInterceptorIfExists();
 
+    bool clientTetrisObscuresProgress() const;
+
     /// Execute a query and collect all results as a single string (rows separated by newlines)
     /// Returns empty string on exception
     std::string executeQueryForSingleString(const std::string & query);
@@ -323,6 +328,8 @@ protected:
     bool multiline = false;
 
     std::unique_ptr<TerminalKeystrokeInterceptor> keystroke_interceptor;
+    std::unique_ptr<ClientTetris> client_tetris;
+    bool enable_client_tetris = false;
 
     bool is_interactive = false; /// Use either interactive line editing interface or batch mode.
     bool delayed_interactive = false;

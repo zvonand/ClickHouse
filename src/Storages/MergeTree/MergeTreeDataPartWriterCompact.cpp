@@ -83,6 +83,7 @@ void MergeTreeDataPartWriterCompact::addStreams(const NameAndTypePair & name_and
             compression_codec = CompressionCodecFactory::instance().get(effective_codec_desc, nullptr, default_codec, true);
 
         UInt64 codec_id = compression_codec->getHash();
+        /// Exception safety: if `make_shared` throws, the map is not modified, avoiding null entries in `cancel`.
         auto it = streams_by_codec.find(codec_id);
         if (it == streams_by_codec.end())
             it = streams_by_codec.emplace(codec_id, std::make_shared<CompressedStream>(plain_hashing, compression_codec)).first;

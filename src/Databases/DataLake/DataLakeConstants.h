@@ -24,28 +24,14 @@ static inline std::unordered_map<String, ValueMaskingFunc> SETTINGS_TO_HIDE =
     /// Catalog credentials
     {"catalog_credential", DEFAULT_MASKING_RULE},
     {"auth_header", DEFAULT_MASKING_RULE},
-    {"auth_scope", DEFAULT_MASKING_RULE},
-    {"oauth_server_uri", DEFAULT_MASKING_RULE},
-    {"warehouse", DEFAULT_MASKING_RULE},
-    /// AWS catalog credentials
+    /// AWS credentials
     {"aws_access_key_id", DEFAULT_MASKING_RULE},
     {"aws_secret_access_key", DEFAULT_MASKING_RULE},
-    {"aws_role_arn", DEFAULT_MASKING_RULE},
-    {"aws_role_session_name", DEFAULT_MASKING_RULE},
-    {"region", DEFAULT_MASKING_RULE},
     /// OneLake credentials
-    {"onelake_tenant_id", DEFAULT_MASKING_RULE},
-    {"onelake_client_id", DEFAULT_MASKING_RULE},
     {"onelake_client_secret", DEFAULT_MASKING_RULE},
     /// Google credentials
-    {"google_project_id", DEFAULT_MASKING_RULE},
-    {"google_service_account", DEFAULT_MASKING_RULE},
-    {"google_metadata_service", DEFAULT_MASKING_RULE},
-    {"google_adc_client_id", DEFAULT_MASKING_RULE},
     {"google_adc_client_secret", DEFAULT_MASKING_RULE},
     {"google_adc_refresh_token", DEFAULT_MASKING_RULE},
-    {"google_adc_quota_project_id", DEFAULT_MASKING_RULE},
-    {"google_adc_credentials_file", DEFAULT_MASKING_RULE},
     /// DLF credentials
     {"dlf_access_key_id", DEFAULT_MASKING_RULE},
     {"dlf_access_key_secret", DEFAULT_MASKING_RULE},

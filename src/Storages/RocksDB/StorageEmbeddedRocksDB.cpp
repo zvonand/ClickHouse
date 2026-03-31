@@ -142,6 +142,9 @@ public:
         else
             block = generateFullScan();
 
+        if (block.empty())
+            return Chunk(getPort().getHeader().cloneEmpty().detachColumns(), 0);
+
         fillVirtualColumns(block);
         return Chunk(block.getColumns(), block.rows());
     }

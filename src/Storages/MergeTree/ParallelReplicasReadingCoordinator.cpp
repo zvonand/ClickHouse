@@ -1180,7 +1180,7 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
         if (!ignored_replicas.contains(request.replica_num))
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,
-                "Got request from repilca {} with empty table id without ranges announcement",
+                "Got request from replica {} with empty table id without ranges announcement",
                 request.replica_num);
 
         return response;

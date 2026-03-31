@@ -133,11 +133,10 @@ void ASTSetQuery::formatImpl(WriteBuffer & ostr, const FormatSettings & format, 
 
             if (DataLake::DATABASE_ENGINE_NAME == state.create_engine_name)
             {
-                if (DataLake::SETTINGS_TO_HIDE.contains(change.name))
-                {
-                    ostr << " = " << DataLake::SETTINGS_TO_HIDE.at(change.name)(change.value);
-                    return true;
-                }
+                /// Hide all DataLakeCatalog settings: almost all may contain secrets,
+                /// and distinguishing safe ones from sensitive ones is error-prone.
+                ostr << " = '[HIDDEN]'";
+                return true;
             }
             if (RabbitMQ::TABLE_ENGINE_NAME == state.create_engine_name)
             {

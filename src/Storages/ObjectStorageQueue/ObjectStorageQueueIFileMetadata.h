@@ -120,7 +120,24 @@ public:
     const std::string & getProcessorInfo() const { return processor_info; }
 
     static std::string generateProcessingID();
+    /// Returns a single-component Keeper node name for the given file path.
+    /// Raw file paths contain '/' and cannot be used directly as Keeper node names,
+    /// so SipHash64 of the path is used instead.
     static std::string getNodeName(const std::string & path);
+
+    enum class PathState
+    {
+        /// The path has been successfully processed.
+        Processed,
+        /// The path has permanently failed; the failure message is populated.
+        Failed,
+        /// The path has not been processed yet (or its status is unknown).
+        Unknown,
+    };
+
+    /// Check Keeper to determine whether this file has already been processed or failed.
+    /// Sets `failure_message` when the result is `Failed`.
+    virtual PathState getPathState(std::string & failure_message) const = 0;
 
     virtual bool useBucketsForProcessing() const { return false; }
     virtual size_t getBucket() const { throw Exception(ErrorCodes::LOGICAL_ERROR, "Buckets are not supported"); }

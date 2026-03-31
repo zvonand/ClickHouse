@@ -330,6 +330,20 @@ bool ObjectStorageQueueOrderedFileMetadata::useBucketsForProcessing() const
     return DB::useBucketsForProcessing(buckets_num);
 }
 
+ObjectStorageQueueIFileMetadata::PathState ObjectStorageQueueOrderedFileMetadata::getPathState(
+    std::string & failure_message) const
+{
+    auto state = getProcessingStateFromKeeper(nullptr, /*check_failed=*/true, log);
+    if (state.is_failed)
+    {
+        failure_message = state.failure_message;
+        return PathState::Failed;
+    }
+    if (state.is_processed)
+        return PathState::Processed;
+    return PathState::Unknown;
+}
+
 std::vector<std::string> ObjectStorageQueueOrderedFileMetadata::getMetadataPaths(size_t buckets_num)
 {
     if (DB::useBucketsForProcessing(buckets_num))

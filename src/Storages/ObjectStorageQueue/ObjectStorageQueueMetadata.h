@@ -112,20 +112,12 @@ public:
     /// (rewrites what we write in syncWithKeeper()).
     void alterSettings(const SettingsChanges & changes, const ContextPtr & context);
 
-    enum class PathState
-    {
-        /// The path has been successfully processed.
-        Processed,
-        /// The path has failed processing; the failure message is populated.
-        Failed,
-        /// The path has not been processed yet.
-        Unknown,
-    };
+    using PathState = ObjectStorageQueueIFileMetadata::PathState;
 
     /// Check Keeper to determine whether `path` has already been processed or failed.
     /// For unordered mode checks the per-file processed/failed nodes.
     /// For ordered mode compares `path` against the stored last-processed pointer
-    /// (Processed iff path <= last_processed_path), and checks the per-file failed node.
+    /// (Processed if path <= last_processed_path), and checks the per-file failed node.
     /// NOTE: In ordered mode `Processed` does not mean the exact file was read;
     ///       it means the queue pointer has advanced past the file's sort position.
     /// Sets `failure_message` when the result is `Failed`.

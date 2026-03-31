@@ -217,6 +217,7 @@ namespace Setting
     extern const SettingsBool use_skip_indexes_for_top_k;
     extern const SettingsBool use_top_k_dynamic_filtering;
     extern const SettingsBool use_query_condition_cache;
+    extern const SettingsUInt64 predicate_statistics_sample_rate;
     extern const SettingsNonZeroUInt64 max_parallel_replicas;
     extern const SettingsBool enable_shared_storage_snapshot_in_query;
     extern const SettingsUInt64 query_plan_max_step_description_length;
@@ -233,11 +234,6 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsUInt64 min_marks_to_honor_max_concurrent_queries;
     extern const MergeTreeSettingsUInt64 distributed_index_analysis_min_parts_to_activate;
     extern const MergeTreeSettingsUInt64 distributed_index_analysis_min_indexes_bytes_to_activate;
-}
-
-namespace ServerSetting
-{
-    extern const ServerSettingsUInt64 predicate_statistics_sample_rate;
 }
 
 namespace ErrorCodes
@@ -3240,15 +3236,11 @@ bool ReadFromMergeTree::supportsSkipIndexesOnDataRead() const
 
 void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) const
 {
-    auto global_context = Context::getGlobalContextInstance();
-    if (!global_context)
-        return;
-
-    UInt64 sample_rate = global_context->getServerSettings()[ServerSetting::predicate_statistics_sample_rate];
+    UInt64 sample_rate = context->getSettingsRef()[Setting::predicate_statistics_sample_rate];
     if (sample_rate == 0)
         return;
 
-    auto predicate_stats_log = global_context->getPredicateStatisticsLog();
+    auto predicate_stats_log = context->getPredicateStatisticsLog();
     if (!predicate_stats_log)
         return;
 

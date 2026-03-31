@@ -1,32 +1,18 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest, no-parallel
+# Tags: no-fasttest
 
-# Verify that system.predicate_statistics_log collects per-predicate selectivity data
-# The global predicate_statistics_sample_rate is 0 to avoid overhead in unrelated tests
-# this test enables it temporarily via a config override + SYSTEM RELOAD CONFIG
+# Verify that system.predicate_statistics_log collects both filter-level and index-level selectivity data
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
-config_override="${CLICKHOUSE_CONFIG_DIR}/config.d/zzz_predicate_statistics_test_override.xml"
-
-# enable predicate statistics collection for this test
-cat > "$config_override" <<'EOF'
-<clickhouse>
-    <predicate_statistics_sample_rate>1</predicate_statistics_sample_rate>
-</clickhouse>
-EOF
-
-$CLICKHOUSE_CLIENT --send_logs_level=fatal --query "SYSTEM RELOAD CONFIG"
-
-# on exit: disable the override and reload config
-trap 'rm -f "$config_override"; $CLICKHOUSE_CLIENT --send_logs_level=fatal --query "SYSTEM RELOAD CONFIG" 2>/dev/null' EXIT
-
 index_qid="pred_stats_index_${CLICKHOUSE_DATABASE}_$$"
 filter_qid="pred_stats_filter_${CLICKHOUSE_DATABASE}_$$"
 
 $CLICKHOUSE_CLIENT -m --query "
+SET predicate_statistics_sample_rate = 1;
+
 DROP TABLE IF EXISTS test_pred_stats;
 
 CREATE TABLE test_pred_stats (id UInt64, status String, value Float64) ENGINE = MergeTree ORDER BY id;
@@ -34,10 +20,10 @@ INSERT INTO test_pred_stats SELECT number, if(number % 10 = 0, 'active', 'inacti
 "
 
 # Direct MergeTree query triggers index-level logging
-$CLICKHOUSE_CLIENT --query_id="$index_qid" --query "SELECT count() FROM test_pred_stats WHERE id > 50000 FORMAT Null"
+$CLICKHOUSE_CLIENT --query_id="$index_qid" --query "SET predicate_statistics_sample_rate = 1; SELECT count() FROM test_pred_stats WHERE id > 50000 FORMAT Null"
 
 # numbers() always produces a FilterTransform (MergeTree may push filter into reader)
-$CLICKHOUSE_CLIENT --query_id="$filter_qid" --query "SELECT count() FROM numbers(100000) WHERE number > 50000 FORMAT Null"
+$CLICKHOUSE_CLIENT --query_id="$filter_qid" --query "SET predicate_statistics_sample_rate = 1; SELECT count() FROM numbers(100000) WHERE number > 50000 FORMAT Null"
 
 $CLICKHOUSE_CLIENT --query "SYSTEM FLUSH LOGS predicate_statistics_log"
 

@@ -260,6 +260,9 @@ The maximum number of streams (columns) to delay final part flush. Default - aut
 
 Cloud default value: `50`.
 )", 0) \
+    DECLARE(Bool, enable_insert_memory_throttle, false, R"(
+If enabled, INSERT SELECT dynamically adjusts the number of parallel sink streams based on available memory to avoid memory-limit-exceeded errors.
+)", 0) \
     DECLARE(MaxThreads, max_final_threads, 0, R"(
 Sets the maximum number of parallel threads for the `SELECT` query data read phase with the [FINAL](/sql-reference/statements/select/from#final-modifier) modifier.
 
@@ -6830,6 +6833,9 @@ See also:
 )", 0) \
     DECLARE(Bool, enable_blob_storage_log, true, R"(
 Write information about blob storage operations to system.blob_storage_log table
+)", 0) \
+    DECLARE(UInt64, predicate_statistics_sample_rate, 0, R"(
+Collect predicate selectivity statistics and write them to `system.predicate_statistics_log`. Filter-level statistics are sampled every N chunks. Index-level statistics are logged once per MergeTree read when enabled. 0 means disabled, 1 means every chunk/query.
 )", 0) \
     DECLARE(Bool, allow_create_index_without_type, false, R"(
 Allow CREATE INDEX query without TYPE. Query will be ignored. Made for SQL compatibility tests.

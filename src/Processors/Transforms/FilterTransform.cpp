@@ -7,7 +7,7 @@
 #include <Common/CurrentThread.h>
 #include <Common/DateLUT.h>
 #include <Core/Field.h>
-#include <Core/ServerSettings.h>
+#include <Core/Settings.h>
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <Interpreters/Cache/QueryConditionCache.h>
@@ -33,9 +33,9 @@ namespace ProfileEvents
 namespace DB
 {
 
-namespace ServerSetting
+namespace Setting
 {
-    extern const ServerSettingsUInt64 predicate_statistics_sample_rate;
+    extern const SettingsUInt64 predicate_statistics_sample_rate;
 }
 
 namespace ErrorCodes
@@ -121,13 +121,13 @@ FilterTransform::FilterTransform(
     if (condition.has_value())
         query_condition_cache = Context::getGlobalContextInstance()->getQueryConditionCache();
 
-    /// predicate statistics collection
-    if (auto global_context = Context::getGlobalContextInstance())
+    /// Predicate statistics collection
+    if (auto query_context = CurrentThread::tryGetQueryContext())
     {
-        predicate_stats_sample_rate = global_context->getServerSettings()[ServerSetting::predicate_statistics_sample_rate];
+        predicate_stats_sample_rate = query_context->getSettingsRef()[Setting::predicate_statistics_sample_rate];
         if (predicate_stats_sample_rate > 0)
         {
-            predicate_stats_log = global_context->getPredicateStatisticsLog();
+            predicate_stats_log = query_context->getPredicateStatisticsLog();
             if (predicate_stats_log && expression)
             {
                 const auto * node = &expression->getActionsDAG().findInOutputs(filter_column_name);
@@ -178,7 +178,7 @@ void FilterTransform::removeFilterIfNeed(Columns & columns) const
 void FilterTransform::transform(Chunk & chunk)
 {
     auto chunk_rows_before = chunk.getNumRows();
-    /// Remember whether this chunk will actually be filtered
+    /// Remember whether this chunk will actually be filtered (on_totals and virtual rows bypass filtering)
     bool will_filter = !on_totals && !isVirtualRow(chunk);
     doTransform(chunk);
     auto chunk_rows_after = chunk.getNumRows();
@@ -327,7 +327,8 @@ void FilterTransform::collectPredicateStatistics(size_t num_rows_before, size_t 
     if (chunk_counter % predicate_stats_sample_rate != 0)
         return;
 
-    /// Resolve database/table once and cache for subsequent chunks
+    /// Resolve database/table once and cache for subsequent chunks via MarkRangesInfo.
+    /// For non-MergeTree sources, database/table will remain empty.
     if (!table_resolved)
     {
         if (auto mark_ranges_info = chunk.getChunkInfos().get<MarkRangesInfo>())

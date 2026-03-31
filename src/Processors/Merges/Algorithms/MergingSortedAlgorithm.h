@@ -14,17 +14,6 @@ namespace DB
 class MergingSortedAlgorithm final : public IMergingAlgorithm
 {
 public:
-    /// How to handle virtual rows (first-row-per-granule hints from MergeTree).
-    enum class VirtualRowAction : uint8_t
-    {
-        /// Virtual rows are not expected, skip handling.
-        Skip,
-        /// Use the virtual row as-is (columns already match the sort key).
-        AsIs,
-        /// Apply PK-to-ORDER BY conversions before using the virtual row.
-        Convert,
-    };
-
     MergingSortedAlgorithm(
         SharedHeader header_,
         size_t num_inputs,
@@ -37,7 +26,7 @@ public:
         WriteBuffer * out_row_sources_buf_ = nullptr,
         const std::optional<String> & filter_column_name_ = std::nullopt,
         bool use_average_block_sizes = false,
-        VirtualRowAction virtual_row_action_ = VirtualRowAction::Convert);
+        bool apply_virtual_row_conversions_ = true);
 
     void addInput();
 
@@ -65,11 +54,7 @@ private:
     /// The position of filter column if filter is set.
     ssize_t filter_column_position = -1;
 
-    VirtualRowAction virtual_row_action;
-
-    /// When virtual rows are skipped (in consume or initialize), store
-    /// source numbers so that merge() can immediately request more data.
-    std::vector<size_t> sources_pending_data;
+    bool apply_virtual_row_conversions;
 
     /// Chunks currently being merged.
     Inputs current_inputs;

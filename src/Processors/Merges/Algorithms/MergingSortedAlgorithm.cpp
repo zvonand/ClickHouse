@@ -25,14 +25,14 @@ MergingSortedAlgorithm::MergingSortedAlgorithm(
     WriteBuffer * out_row_sources_buf_,
     const std::optional<String> & filter_column_name_,
     bool use_average_block_sizes,
-    VirtualRowAction virtual_row_action_)
+    bool apply_virtual_row_conversions_)
     : header(std::move(header_))
     , merged_data(use_average_block_sizes, max_block_size_, max_block_size_bytes_, max_dynamic_subcolumns_)
     , description(description_)
     , limit(limit_)
     , out_row_sources_buf(out_row_sources_buf_)
     , filter_column_position(filter_column_name_ ? header->getPositionByName(filter_column_name_.value()) : -1)
-    , virtual_row_action(virtual_row_action_)
+    , apply_virtual_row_conversions(apply_virtual_row_conversions_)
     , current_inputs(num_inputs)
     , sorting_queue_strategy(sorting_queue_strategy_)
     , cursors(num_inputs)
@@ -67,22 +67,12 @@ void MergingSortedAlgorithm::addInput()
 
 void MergingSortedAlgorithm::initialize(Inputs inputs)
 {
-    for (size_t i = 0; i < inputs.size(); ++i)
+    for (auto & input : inputs)
     {
-        auto & input = inputs[i];
-
         if (!isVirtualRow(input.chunk))
             continue;
 
-        if (virtual_row_action == VirtualRowAction::Skip)
-        {
-            /// Clear the virtual row so no 0-row cursor is created for this source.
-            /// The first merge() call will request data from it via sources_pending_data.
-            sources_pending_data.push_back(i);
-            continue;
-        }
-
-        setVirtualRow(input.chunk, *header, /*apply_virtual_row_conversions=*/ virtual_row_action == VirtualRowAction::Convert);
+        setVirtualRow(input.chunk, *header, apply_virtual_row_conversions);
         input.skip_last_row = true;
     }
 
@@ -122,15 +112,7 @@ void MergingSortedAlgorithm::consume(Input & input, size_t source_num)
 {
     if (isVirtualRow(input.chunk))
     {
-        if (virtual_row_action == VirtualRowAction::Skip)
-        {
-            /// Don't consume the virtual row — it would create a 0-row cursor
-            /// that drops this source from the merge queue. Instead, ask for
-            /// more data from the same source on the next merge() call.
-            sources_pending_data.push_back(source_num);
-            return;
-        }
-        setVirtualRow(input.chunk, *header, /*apply_virtual_row_conversions=*/ virtual_row_action == VirtualRowAction::Convert);
+        setVirtualRow(input.chunk, *header, apply_virtual_row_conversions);
         input.skip_last_row = true;
     }
 
@@ -157,13 +139,6 @@ void MergingSortedAlgorithm::consume(Input & input, size_t source_num)
 
 IMergingAlgorithm::Status MergingSortedAlgorithm::merge()
 {
-    if (!sources_pending_data.empty())
-    {
-        auto source = sources_pending_data.back();
-        sources_pending_data.pop_back();
-        return Status(source);
-    }
-
     if (sorting_queue_strategy == SortingQueueStrategy::Default)
     {
         IMergingAlgorithm::Status result = queue_variants.callOnVariant([&](auto & queue)

@@ -25,7 +25,7 @@ MergingSortedTransform::MergingSortedTransform(
     WriteBuffer * out_row_sources_buf_,
     const std::optional<String> & filter_column_name_,
     bool use_average_block_sizes,
-    MergingSortedAlgorithm::VirtualRowAction virtual_row_action,
+    bool apply_virtual_row_conversions,
     bool have_all_inputs_)
     : IMergingTransform(
         num_inputs,
@@ -45,7 +45,7 @@ MergingSortedTransform::MergingSortedTransform(
         out_row_sources_buf_,
         filter_column_name_,
         use_average_block_sizes,
-        virtual_row_action)
+        apply_virtual_row_conversions)
 {
 }
 

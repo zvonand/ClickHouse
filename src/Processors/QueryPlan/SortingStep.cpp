@@ -357,8 +357,6 @@ void SortingStep::mergingSorted(QueryPipelineBuilder & pipeline, const SortDescr
             });
         }
 
-        using VirtualRowAction = MergingSortedAlgorithm::VirtualRowAction;
-
         auto transform = std::make_shared<MergingSortedTransform>(
             pipeline.getSharedHeader(),
             pipeline.getNumStreams(),
@@ -372,7 +370,7 @@ void SortingStep::mergingSorted(QueryPipelineBuilder & pipeline, const SortDescr
             /*out_row_sources_buf=*/ nullptr,
             /*filter_column_name=*/ std::nullopt,
             /*use_average_block_sizes=*/ false,
-            apply_virtual_row_conversions ? VirtualRowAction::Convert : VirtualRowAction::Skip);
+            apply_virtual_row_conversions);
 
         pipeline.addTransform(std::move(transform));
     }

@@ -74,7 +74,7 @@ public:
     /// The query which will be executed with parallel replicas.
     /// In case if only the most inner subquery can be executed with parallel replicas, node is nullptr.
     const QueryNode * const parallel_replicas_node = nullptr;
-    /// Table which is used with parallel replicas reading. Now, only one table is supported by the protocol.
+    /// Table which is used with parallel replicas reading.
     /// It is the left-most table of the query (in JOINs, UNIONs and subqueries).
     const TableNode * const parallel_replicas_table = nullptr;
     const UnionNode * const parallel_replicas_table_union = nullptr;

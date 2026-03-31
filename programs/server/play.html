@@ -2951,13 +2951,7 @@ document.addEventListener('keydown', event => {
         if (in_flight) {
             cancel();
         } else {
-            /// If there is a selection, run the query under cursor; otherwise run all.
-            const has_selection = query_area.selectionStart !== query_area.selectionEnd;
-            if (has_selection || !isMultiQuery) {
-                postOne();
-            } else {
-                postAll();
-            }
+            postOne();
             storeCredentials();
         }
         event.preventDefault();

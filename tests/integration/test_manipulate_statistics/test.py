@@ -188,7 +188,7 @@ def test_replicated_table_ddl(started_cluster):
 
     assert (
         node2.query("SHOW CREATE TABLE test_stat")
-        == "CREATE TABLE default.test_stat\\n(\\n    `a` Int64 STATISTICS(tdigest, uniq),\\n    `b` Int64,\\n    `c` Int64 STATISTICS(tdigest, uniq)\\n)\\nENGINE = ReplicatedMergeTree(\\'/clickhouse/test/statistics\\', \\'2\\')\\nORDER BY a\\nSETTINGS index_granularity = 8192, auto_statistics_types = ''\n"
+        == "CREATE TABLE default.test_stat\\n(\\n    `a` Int64 STATISTICS(tdigest, uniq),\\n    `b` Int64,\\n    `c` Int64 STATISTICS(tdigest, uniq)\\n)\\nENGINE = ReplicatedMergeTree(\\'/clickhouse/test/statistics\\', \\'2\\')\\nORDER BY a\\nSETTINGS auto_statistics_types = \\\'\\\', index_granularity = 8192\n"
     )
 
     node2.query("insert into test_stat values(1,2,3), (2,3,4)")

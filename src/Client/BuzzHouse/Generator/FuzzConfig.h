@@ -273,6 +273,10 @@ struct DiskInfo
 /// Escape a string for embedding inside a single-quoted SQL literal (doubles single quotes).
 String escapeSQLString(const String & s, char escape_char = '\'');
 
+/// Percent-encode a string for use as a URL query parameter value.
+/// Spaces are encoded as '+'; all other non-unreserved characters as %XX.
+String urlEncodeQueryParam(const String & s);
+
 class FuzzConfig
 {
 private:

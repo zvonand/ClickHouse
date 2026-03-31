@@ -2609,6 +2609,11 @@ message KeyValuePair {
     required string value = 2;
 }
 
+message HTTPHeader {
+    required string name = 1;
+    required string value = 2;
+}
+
 message SetValue {
     required string property = 1;
     required string value = 2;
@@ -2742,6 +2747,7 @@ message ObjectStoreFunc {
     required string credential = 4;
     repeated KeyValuePair params = 5;
     optional SettingValues setting_values = 6;
+    repeated HTTPHeader http_headers = 7;
 }
 
 message URLFunc {
@@ -2758,7 +2764,7 @@ message URLFunc {
         InOutFormat inoutformat = 6;
     }
     optional Expr structure = 7;
-    repeated string http_headers = 8; // Each entry: 'header-name'='value'
+    repeated HTTPHeader http_headers = 8;
 }
 
 message SQLTableFuncCall {

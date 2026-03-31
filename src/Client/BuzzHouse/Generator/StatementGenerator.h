@@ -626,7 +626,27 @@ private:
     String getNextTestingAddress(RandomGenerator & rg, bool secure) const;
     String getNextRandomServerAddresses(RandomGenerator & rg, bool secure);
     String getNextHTTPURL(RandomGenerator & rg, bool secure);
-    void addRandomURLFuncHeaders(RandomGenerator & rg, URLFunc * ufunc);
+    template <typename T>
+    void addRandomHTTPHeaders(RandomGenerator & rg, T * func)
+    {
+        static const std::array<const char *, 5> accept_encodings = {"gzip", "zstd", "br", "deflate", "lz4"};
+        using Candidate = std::pair<const char *, String>;
+        std::array<Candidate, 3> candidates = {{
+            {"Accept-Encoding", String(rg.pickRandomly(accept_encodings))},
+            {"X-ClickHouse-Compress", rg.nextBool() ? "1" : "0"},
+            {"X-ClickHouse-Progress", rg.nextBool() ? "1" : "0"},
+        }};
+        std::shuffle(candidates.begin(), candidates.end(), rg.generator);
+        for (const auto & [name, value] : candidates)
+        {
+            if (rg.nextSmallNumber() < 4)
+            {
+                auto * hdr = func->add_http_headers();
+                hdr->set_name(name);
+                hdr->set_value(value);
+            }
+        }
+    }
     struct FromSourceInfo
     {
         bool supports_final = false;

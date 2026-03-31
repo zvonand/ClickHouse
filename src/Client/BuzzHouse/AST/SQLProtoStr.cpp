@@ -1950,6 +1950,31 @@ CONV_FN(KeyValuePair, kvp)
     appendSQLStringLiteral(ret, kvp.value());
 }
 
+CONV_FN(HTTPHeader, hdr)
+{
+    appendSQLStringLiteral(ret, hdr.name());
+    ret += "=";
+    appendSQLStringLiteral(ret, hdr.value());
+}
+
+template <typename T>
+static void appendHTTPHeaders(String & ret, const T & msg)
+{
+    if (msg.http_headers_size() > 0)
+    {
+        ret += ", headers(";
+        for (int i = 0; i < msg.http_headers_size(); i++)
+        {
+            if (i > 0)
+            {
+                ret += ", ";
+            }
+            HTTPHeaderToString(ret, msg.http_headers(i));
+        }
+        ret += ")";
+    }
+}
+
 CONV_FN(SetValue, setv)
 {
     ret += setv.property();
@@ -2214,6 +2239,7 @@ CONV_FN(ObjectStoreFunc, ofunc)
         ret += ", ";
         KeyValuePairToString(ret, ofunc.params(i));
     }
+    appendHTTPHeaders(ret, ofunc);
     if (ofunc.has_setting_values())
     {
         ret += ", SETTINGS ";
@@ -2251,18 +2277,9 @@ CONV_FN(URLFunc, url)
         ret += ", ";
         ExprToString(ret, url.structure());
     }
-    if (url.has_structure() && url.http_headers_size() > 0)
+    if (url.has_structure())
     {
-        ret += ", headers(";
-        for (int i = 0; i < url.http_headers_size(); i++)
-        {
-            if (i > 0)
-            {
-                ret += ", ";
-            }
-            ret += url.http_headers(i);
-        }
-        ret += ")";
+        appendHTTPHeaders(ret, url);
     }
     ret += ")";
 }

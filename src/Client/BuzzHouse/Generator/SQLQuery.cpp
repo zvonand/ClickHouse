@@ -384,7 +384,7 @@ void StatementGenerator::setTableFunction(RandomGenerator & rg, const TableFunct
             structure = rg.nextMediumNumber() < 96 ? ufunc->mutable_structure() : nullptr;
             if (structure)
             {
-                addRandomURLFuncHeaders(rg, ufunc);
+                addRandomHTTPHeaders(rg, ufunc);
             }
         }
         else if (t.isRedisEngine())
@@ -466,6 +466,7 @@ void StatementGenerator::setTableFunction(RandomGenerator & rg, const TableFunct
                 t.isS3QueueEngine() ? TableEngineValues::S3 : (t.isAzureQueueEngine() ? TableEngineValues::AzureBlobStorage : t.teng));
 
             setObjectStoreParams<SQLTable, ObjectStoreFunc>(rg, t, ofunc);
+            addRandomHTTPHeaders(rg, ofunc);
             if (!engineSettings.empty() && rg.nextSmallNumber() < 8)
             {
                 generateSettingValues(rg, engineSettings, ofunc->mutable_setting_values());
@@ -700,25 +701,6 @@ String StatementGenerator::getNextHTTPURL(RandomGenerator & rg, const bool secur
     return ret;
 }
 
-void StatementGenerator::addRandomURLFuncHeaders(RandomGenerator & rg, URLFunc * ufunc)
-{
-    /// Accept-Encoding triggers HTTP-level compression (WriteBufferDecorator path)
-    static const std::array<const char *, 5> accept_encodings = {"gzip", "zstd", "br", "deflate", "lz4"};
-    if (rg.nextSmallNumber() < 4)
-    {
-        ufunc->add_http_headers(fmt::format("'Accept-Encoding'='{}'", rg.pickRandomly(accept_encodings)));
-    }
-    /// X-ClickHouse-Compress: native LZ4 compression via header (alternative to compress=1 URL param)
-    if (rg.nextSmallNumber() < 4)
-    {
-        ufunc->add_http_headers("'X-ClickHouse-Compress'='1'");
-    }
-    /// X-ClickHouse-Progress: deliver query progress in response headers
-    if (rg.nextSmallNumber() < 4)
-    {
-        ufunc->add_http_headers("'X-ClickHouse-Progress'='1'");
-    }
-}
 
 StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
     RandomGenerator & rg, const String & rel_name, const uint32_t allowed_clauses, const bool under_remote, TableOrFunction * tof)
@@ -1117,28 +1099,29 @@ StatementGenerator::FromSourceInfo StatementGenerator::joinedTableOrFunction(
             {
                 ufunc->set_fname(URLFunc_FName::URLFunc_FName_url);
             }
-            url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "query=SELECT+";
+            String sql = "SELECT ";
             flatTableColumnPath(to_remote_entries, tt.cols, [](const SQLColumn &) { return true; });
             std::shuffle(this->remote_entries.begin(), this->remote_entries.end(), rg.generator);
             for (const auto & entry : this->remote_entries)
             {
-                url += fmt::format("{}{}", first ? "" : ",", entry.getBottomNameSQL());
+                sql += fmt::format("{}{}", first ? "" : ",", entry.getBottomNameSQL());
                 buf += fmt::format("{}{} {}", first ? "" : ", ", entry.getBottomNameSQL(), entry.getBottomType()->typeName(false, false));
                 first = false;
             }
             this->remote_entries.clear();
-            url += "+FROM+`" + escapeSQLString(tt.getDatabaseName(), '`') + "`.`" + escapeSQLString(tt.name, '`') + "`";
+            sql += " FROM `" + escapeSQLString(tt.getDatabaseName(), '`') + "`.`" + escapeSQLString(tt.name, '`') + "`";
             if (rg.nextMediumNumber() < 91)
             {
-                url += "+FORMAT+" + InFormat_Name(iinf).substr(3);
+                sql += " FORMAT " + InFormat_Name(iinf).substr(3);
             }
+            url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "query=" + urlEncodeQueryParam(sql);
             ufunc->set_uurl(std::move(url));
             if (rg.nextMediumNumber() < 91)
             {
                 ufunc->set_outformat(outf);
             }
             ufunc->mutable_structure()->mutable_lit_val()->set_string_lit(std::move(buf));
-            addRandomURLFuncHeaders(rg, ufunc);
+            addRandomHTTPHeaders(rg, ufunc);
             addTableRelation(rg, rg.nextMediumNumber() < 4, rel_name, tt);
         }
         break;

@@ -36,6 +36,28 @@ String escapeSQLString(const String & s, const char escape_char)
     return out;
 }
 
+String urlEncodeQueryParam(const String & s)
+{
+    String out;
+    out.reserve(s.size() * 3);
+    for (const unsigned char c : s)
+    {
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~')
+        {
+            out += static_cast<char>(c);
+        }
+        else if (c == ' ')
+        {
+            out += '+';
+        }
+        else
+        {
+            out += fmt::format("%{:02X}", c);
+        }
+    }
+    return out;
+}
+
 void SystemTable::setName(ExprSchemaTable * est) const
 {
     est->mutable_database()->set_value(schema_name);

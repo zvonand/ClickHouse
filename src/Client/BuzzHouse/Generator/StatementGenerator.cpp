@@ -1046,16 +1046,15 @@ bool StatementGenerator::tableOrFunctionRef(
               {
                   ufunc->set_fname(URLFunc_FName::URLFunc_FName_url);
               }
-              url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "query=INSERT+INTO+`" + escapeSQLString(t.getDatabaseName(), '`')
-                  + "`.`" + escapeSQLString(t.name, '`') + "`";
+              String sql = "INSERT INTO `" + escapeSQLString(t.getDatabaseName(), '`') + "`.`" + escapeSQLString(t.name, '`') + "`";
               if (!this->entries.empty())
               {
                   bool first = true;
 
-                  url += "+(";
+                  sql += " (";
                   for (const auto & entry : this->entries)
                   {
-                      url += fmt::format("{}{}", first ? "" : ",", entry.columnPathRef());
+                      sql += fmt::format("{}{}", first ? "" : ",", entry.columnPathRef());
                       buf += fmt::format(
                           "{}{} {}{}{}",
                           first ? "" : ", ",
@@ -1065,19 +1064,20 @@ bool StatementGenerator::tableOrFunctionRef(
                           entry.path.size() > 1 ? ")" : "");
                       first = false;
                   }
-                  url += ")";
+                  sql += ")";
               }
               if (rg.nextMediumNumber() < 91)
               {
-                  url += "+FORMAT+" + InFormat_Name(iinf).substr(3);
+                  sql += " FORMAT " + InFormat_Name(iinf).substr(3);
               }
+              url += getNextHTTPURL(rg, rg.nextSmallNumber() < 4) + "query=" + urlEncodeQueryParam(sql);
               ufunc->set_uurl(std::move(url));
               if (rg.nextMediumNumber() < 91)
               {
                   ufunc->set_outformat(outf);
               }
               ufunc->mutable_structure()->mutable_lit_val()->set_string_lit(std::move(buf));
-              addRandomURLFuncHeaders(rg, ufunc);
+              addRandomHTTPHeaders(rg, ufunc);
           }},
          {simple_est,
           [&]

@@ -93,6 +93,7 @@ public:
 
     bool isCancelled() const { return is_cancelled && is_cancelled->load(std::memory_order_acquire); }
     void cancel() noexcept;
+    void resetCancellation();
 
     /// Get a list of input columns.
     Names getRequiredColumns() const;

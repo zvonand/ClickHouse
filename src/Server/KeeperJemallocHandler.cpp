@@ -18,6 +18,7 @@
 #include <Poco/JSON/Stringifier.h>
 #include <base/scope_guard.h>
 #include <filesystem>
+#include <optional>
 #endif
 
 /// Reuse the server's jemalloc HTML — the page auto-adapts via window.JEMALLOC_CONFIG.
@@ -181,7 +182,7 @@ try
     Poco::JSON::Object json;
     Poco::JSON::Array errors;
 
-    auto readMallctl = [&]<typename T>(const char * name, T default_value) -> T
+    auto read_mallctl = [&]<typename T>(const char * name, std::type_identity<T>) -> std::optional<T>
     {
         try
         {
@@ -191,19 +192,20 @@ try
         {
             tryLogCurrentException("KeeperJemallocStatusHandler", std::string("Failed to read mallctl '") + name + "'");
             errors.add(std::string(name));
-            return default_value;
+            return std::nullopt;
         }
     };
 
-    bool prof_enabled = readMallctl("opt.prof", false);
-    bool prof_active = false;
-    bool thread_active_init = false;
-    size_t lg_sample = 0;
+    auto prof_enabled = read_mallctl("opt.prof", std::type_identity<bool>{});
 
-    if (prof_enabled)
+    std::optional<bool> prof_active;
+    std::optional<bool> thread_active_init;
+    std::optional<size_t> lg_sample;
+
+    if (prof_enabled.value_or(false))
     {
-        prof_active = readMallctl("prof.active", false);
-        lg_sample = readMallctl("prof.lg_sample", size_t(0));
+        prof_active = read_mallctl("prof.active", std::type_identity<bool>{});
+        lg_sample = read_mallctl("prof.lg_sample", std::type_identity<size_t>{});
         try
         {
             thread_active_init = Jemalloc::getThreadProfileInitMib().getValue();
@@ -214,11 +216,29 @@ try
             errors.add("prof.thread_active_init");
         }
     }
+    else if (prof_enabled.has_value())
+    {
+        prof_active = false;
+        thread_active_init = false;
+        lg_sample = size_t(0);
+    }
 
-    json.set("prof_enabled", prof_enabled);
-    json.set("prof_active", prof_active);
-    json.set("thread_active_init", thread_active_init);
-    json.set("lg_sample", static_cast<Poco::UInt64>(lg_sample));
+    auto set_opt_bool = [&json](const char * key, const std::optional<bool> & opt)
+    {
+        if (opt.has_value())
+            json.set(key, *opt);
+        else
+            json.set(key, Poco::Dynamic::Var());
+    };
+
+    set_opt_bool("prof_enabled", prof_enabled);
+    set_opt_bool("prof_active", prof_active);
+    set_opt_bool("thread_active_init", thread_active_init);
+    if (lg_sample.has_value())
+        json.set("lg_sample", static_cast<Poco::UInt64>(*lg_sample));
+    else
+        json.set("lg_sample", Poco::Dynamic::Var());
+
     if (errors.size() > 0)
         json.set("errors", errors);
 

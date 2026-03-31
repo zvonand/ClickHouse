@@ -2790,7 +2790,6 @@ bool MergeTreeSettings::isReadonlySetting(const String & name)
         || name == "add_minmax_index_for_string_columns"
         || name == "add_minmax_index_for_temporal_columns"
         || name == "table_disk"
-        || name == "compress_per_column_in_compact_parts"
     ;
 }
 

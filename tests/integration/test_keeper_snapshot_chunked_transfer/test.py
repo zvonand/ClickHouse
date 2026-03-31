@@ -282,24 +282,26 @@ def test_recover_after_s3_read_error_during_transfer(started_cluster):
     fill_test_tree(leader_zk, prefix)
 
     node_leader.query("SYSTEM ENABLE FAILPOINT s3_read_buffer_throw_expired_token")
+    try:
+        node_lagging.start_clickhouse(20)
+        keeper_utils.wait_until_connected(cluster, node_lagging)
 
-    node_lagging.start_clickhouse(20)
-    keeper_utils.wait_until_connected(cluster, node_lagging)
+        received = get_received_snapshot_info(node_lagging, kill_time, timeout=30)
+        assert received is not None, "Follower did not receive snapshot after S3 read error"
 
-    received = get_received_snapshot_info(node_lagging, kill_time, timeout=30)
-    assert received is not None, "Follower did not receive snapshot after S3 read error"
+        leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
+        lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
+        verify_test_tree(leader_zk, lagging_zk, prefix)
+        cleanup_test_tree(cluster, node_leader, prefix)
 
-    leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
-    lagging_zk = keeper_utils.get_fake_zk(cluster, node_lagging.name)
-    verify_test_tree(leader_zk, lagging_zk, prefix)
-    cleanup_test_tree(cluster, node_leader, prefix)
+        assert_receiving_snapshot_logged(node_lagging, kill_time, "remote")
 
-    assert_receiving_snapshot_logged(node_lagging, kill_time, "remote")
-
-    errors = int(node_leader.query(
-        "SELECT value FROM system.events WHERE event = 'KeeperSnapshotRemoteLoaderErrors'"
-    ).strip() or "0")
-    assert errors > 0, "Expected KeeperSnapshotRemoteLoaderErrors > 0 on the leader after S3 read error"
+        errors = int(node_leader.query(
+            "SELECT value FROM system.events WHERE event = 'KeeperSnapshotRemoteLoaderErrors'"
+        ).strip() or "0")
+        assert errors > 0, "Expected KeeperSnapshotRemoteLoaderErrors > 0 on the leader after S3 read error"
+    finally:
+        node_leader.query("SYSTEM DISABLE FAILPOINT s3_read_buffer_throw_expired_token")
 
 
 @pytest.mark.parametrize("nodes", COMPAT_PARAMS)

@@ -287,6 +287,51 @@ def test_s3_disk_transaction_path_resource_scheduling():
     node.query("drop table data")
 
 
+def test_s3_disk_move_partition_resource_scheduling():
+    """
+    Test that workload IO scheduling works when data is moved between S3 disks
+    via `ALTER TABLE ... MOVE PARTITION`, which goes through
+    `MultipleDisksObjectStorageTransaction::copyFile`.
+    """
+    import uuid
+
+    node.query(
+        """
+        drop table if exists data_move;
+        create table data_move (key UInt64 CODEC(NONE), value String CODEC(NONE))
+            engine=MergeTree() order by key partition by key
+            settings min_bytes_for_wide_part=1e9, storage_policy='s3_no_fake_tx_move';
+        """
+    )
+
+    node.query(
+        "insert into data_move select 0, randomString(10000000) from numbers(5)"
+        " SETTINGS workload='admin'"
+    )
+
+    query_id = str(uuid.uuid4())
+    node.query(
+        "alter table data_move move partition 0 to disk 's3_no_fake_tx_2'"
+        " SETTINGS workload='admin'",
+        query_id=query_id,
+    )
+
+    node.query("system flush logs")
+
+    read_requests = int(
+        node.query(
+            f"select ProfileEvents['SchedulerIOReadRequests'] from system.query_log"
+            f" where query_id='{query_id}' and type='QueryFinish'"
+        ).strip()
+    )
+
+    assert (
+        read_requests > 0
+    ), "No read requests were scheduled through the workload IO scheduler (MultipleDisksObjectStorageTransaction path)"
+
+    node.query("drop table data_move")
+
+
 def test_s3_disk():
     node.query(
         f"""

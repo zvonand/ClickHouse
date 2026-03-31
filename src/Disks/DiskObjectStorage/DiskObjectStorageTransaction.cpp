@@ -486,6 +486,9 @@ void DiskObjectStorageTransaction::copyFile(const std::string & from_file_path, 
 
 void MultipleDisksObjectStorageTransaction::copyFile(const std::string & from_file_path, const std::string & to_file_path, const ReadSettings & read_settings, const WriteSettings & write_settings)
 {
+    auto enriched_read_settings = updateIOSchedulingSettings(read_settings, read_resource_name, write_resource_name);
+    auto enriched_write_settings = updateIOSchedulingSettings(write_settings, read_resource_name, write_resource_name);
+
     const auto blobs_to_copy = source_metadata_storage->getStorageObjects(from_file_path);
     const auto blobs_to_create = blobs_to_copy
                         | std::views::transform([&](const auto & from) { return StoredObject(metadata_transaction->generateObjectKeyForPath(to_file_path).serialize(), to_file_path, from.bytes_size); })
@@ -500,7 +503,7 @@ void MultipleDisksObjectStorageTransaction::copyFile(const std::string & from_fi
         for (const auto [src_blob, dst_blob] : std::views::zip(blobs_to_copy, blobs_to_create))
         {
             written_blobs[location].push_back(dst_blob);
-            source_object_storages->takePointingTo(source_local_location)->copyObjectToAnotherObjectStorage(src_blob, dst_blob, read_settings, write_settings, *object_storages->takePointingTo(location));
+            source_object_storages->takePointingTo(source_local_location)->copyObjectToAnotherObjectStorage(src_blob, dst_blob, enriched_read_settings, enriched_write_settings, *object_storages->takePointingTo(location));
         }
     }
 

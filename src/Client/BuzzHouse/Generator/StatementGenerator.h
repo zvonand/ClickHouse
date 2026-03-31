@@ -629,12 +629,17 @@ private:
     template <typename T>
     void addRandomHTTPHeaders(RandomGenerator & rg, T * func)
     {
-        static const std::array<const char *, 5> accept_encodings = {"gzip", "zstd", "br", "deflate", "lz4"};
+        static const std::array<const char *, 5> encodings = {"gzip", "zstd", "br", "deflate", "lz4"};
         using Candidate = std::pair<const char *, String>;
-        std::array<Candidate, 3> candidates = {{
-            {"Accept-Encoding", String(rg.pickRandomly(accept_encodings))},
+        std::array<Candidate, 5> candidates = {{
+            {"Accept-Encoding", String(rg.pickRandomly(encodings))},
+            {"Content-Encoding", String(rg.pickRandomly(encodings))},
             {"X-ClickHouse-Compress", rg.nextBool() ? "1" : "0"},
             {"X-ClickHouse-Progress", rg.nextBool() ? "1" : "0"},
+            {"X-ClickHouse-Database",
+             collectionHas<std::shared_ptr<SQLDatabase>>(attached_databases)
+                 ? rg.pickRandomly(filterCollection<std::shared_ptr<SQLDatabase>>(attached_databases)).get()->getName()
+                 : "default"},
         }};
         std::shuffle(candidates.begin(), candidates.end(), rg.generator);
         for (const auto & [name, value] : candidates)

@@ -552,17 +552,21 @@ static String markerHexEncode(const String & s)
 /// Decode a hex string written by markerHexEncode.
 static String markerHexDecode(const String & s)
 {
-    auto nibble = [](const char c) -> uint8_t
+    if (s.size() % 2 != 0)
+        throw Exception(ErrorCodes::CANNOT_PARSE_TEXT, "markerHexDecode: odd-length input '{}'", s);
+    auto nibble = [&](const char c) -> uint8_t
     {
         if (c >= '0' && c <= '9')
             return static_cast<uint8_t>(c - '0');
         if (c >= 'A' && c <= 'F')
             return static_cast<uint8_t>(c - 'A' + 10);
-        return static_cast<uint8_t>(c - 'a' + 10);
+        if (c >= 'a' && c <= 'f')
+            return static_cast<uint8_t>(c - 'a' + 10);
+        throw Exception(ErrorCodes::CANNOT_PARSE_TEXT, "markerHexDecode: invalid hex character '{}' in '{}'", c, s);
     };
     String result;
     result.reserve(s.size() / 2);
-    for (size_t i = 0; i + 1 < s.size(); i += 2)
+    for (size_t i = 0; i < s.size(); i += 2)
         result += static_cast<char>((nibble(s[i]) << 4) | nibble(s[i + 1]));
     return result;
 }

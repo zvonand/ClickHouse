@@ -296,13 +296,14 @@ if __name__ == "__main__":
             _changed_lines_cov = print_res.ext.get("changed_lines_cov", 0.0)
 
             _lbc_lines = print_res.ext.get("lbc_lines", 0)
+            _lbc_fns = print_res.ext.get("lbc_fns", 0)
 
             # Only write coverage_comment.json (and thus post a GitHub comment) when
             # there is something coverage-related to report: either the diff HTML report
             # was generated (C++ source files changed) or LBC was detected (tests removed).
             # Pure non-C++ PRs (scripts, Docker, configs) produce neither and should not
             # generate a comment.
-            _has_coverage_data = _diff_ran or _lbc_lines > 0
+            _has_coverage_data = _diff_ran or _lbc_lines > 0 or _lbc_fns > 0
             if not _has_coverage_data:
                 print("No C/C++ source files changed and no lost baseline coverage — skipping coverage comment.")
             else:

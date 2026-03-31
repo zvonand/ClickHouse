@@ -3362,10 +3362,11 @@ function renderQueryBackdrop() {
     }
 
     const cursor = query_area.selectionStart;
+    const focused = document.activeElement === query_area;
 
-    /// Find which query contains the cursor.
+    /// Find which query contains the cursor (only when textarea is focused).
     let activeIdx = -1;
-    for (let i = 0; i < boundaries.length; ++i) {
+    if (focused) for (let i = 0; i < boundaries.length; ++i) {
         if (cursor >= boundaries[i].start && cursor <= boundaries[i].end) {
             activeIdx = i;
             break;
@@ -3410,6 +3411,8 @@ function renderQueryBackdrop() {
 query_area.addEventListener('click', renderQueryBackdrop);
 query_area.addEventListener('keyup', renderQueryBackdrop);
 query_area.addEventListener('select', renderQueryBackdrop);
+query_area.addEventListener('focus', renderQueryBackdrop);
+query_area.addEventListener('blur', renderQueryBackdrop);
 
 /// Keep backdrop scroll in sync with textarea.
 query_area.addEventListener('scroll', () => {

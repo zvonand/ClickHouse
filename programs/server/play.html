@@ -3256,22 +3256,31 @@ function getQueryBoundaries(tokens, text) {
     let current_offset = 0;
     let has_significant = false;
 
+    let first_significant_offset = -1;
+    let last_significant_end = -1;
+
     for (const elem of tokens) {
         current_offset += elem.token.length;
         if (elem.token == ';') {
             if (has_significant) {
-                boundaries.push({ start: current_query_start, end: current_offset });
+                boundaries.push({ start: first_significant_offset, end: last_significant_end });
             }
             current_query_start = current_offset;
             has_significant = false;
+            first_significant_offset = -1;
+            last_significant_end = -1;
         } else if (elem.significant) {
+            if (!has_significant) {
+                first_significant_offset = current_offset - elem.token.length;
+            }
+            last_significant_end = current_offset;
             has_significant = true;
         }
     }
 
     /// Last query (no trailing semicolon).
     if (has_significant) {
-        boundaries.push({ start: current_query_start, end: text.length });
+        boundaries.push({ start: first_significant_offset, end: last_significant_end });
     }
 
     return boundaries;

@@ -3361,6 +3361,12 @@ function renderQueryBackdrop() {
     queryBackdrop.style.display = 'block';
     query_area.classList.add('has-backdrop');
 
+    /// Match the scrollbar: reserve extra right padding so text wraps identically.
+    /// clientWidth excludes borders and scrollbar; offsetWidth includes borders.
+    /// The border is 1px on each side, so scrollbar = offsetWidth - clientWidth - 2.
+    const scrollbarWidth = query_area.offsetWidth - query_area.clientWidth - 2;
+    queryBackdrop.style.paddingRight = scrollbarWidth > 0 ? 'calc(0.25rem + ' + scrollbarWidth + 'px)' : '';
+
     queryBackdrop.scrollTop = query_area.scrollTop;
     queryBackdrop.scrollLeft = query_area.scrollLeft;
 }

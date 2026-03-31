@@ -181,29 +181,30 @@ namespace
 /// for odd mantissa. This turns "d < h || (d == h && inclusive)" into "d <= h_adj",
 /// eliminating a parameter and multiple branches per power-of-10 check.
 ///
-/// For a given power of 10, find the nearest multiple within [v-lo, v+hi].
-/// rem = distance down, d_up = distance up. If both in range, prefer closer.
-/// Returns from the enclosing function if a candidate is found.
-/// When rem == 0, v is already a multiple of p (d_down = 0 <= lo always holds),
-/// so the normal path returns v - 0 = v. No special case needed.
-/// Uses auto for types so it works with both Int32 (Float32) and Int64 (Float64).
-/// `start` must point to the beginning of the output buffer (before any sign character).
-/// `buffer` points to where digits should be written (after the sign, if any).
-/// `v` must be positive (caller handles the sign).
-#define TRY_ROUND_TO_SHORTEST(p)                              \
-    {                                                         \
-        auto rem = v % (p);                                   \
-        auto d_up = (p) - rem;                                \
-        bool down_ok = rem <= lo;                             \
-        bool up_ok = d_up <= hi;                              \
-        if (down_ok | up_ok)                                  \
-        {                                                     \
-            auto pick = up_ok ? v + d_up : v - rem;           \
-            if (down_ok & up_ok)                              \
-                pick = (rem <= d_up) ? v - rem : v + d_up;    \
-            return itoa(pick, buffer) - start;                \
-        }                                                     \
+/// Try rounding v (positive) to the nearest multiple of compile-time constant p
+/// that falls within [v - lo, v + hi]. If a candidate is found, writes it via
+/// itoa to `buffer`, stores the total length (from `start`) in `result`, and
+/// returns true. Returns false if neither the lower nor upper multiple is in range.
+///
+/// When rem == 0, v is already a multiple of p — down_ok is trivially true
+/// (distance 0 <= lo), so the function returns v unchanged. No special case needed.
+template <auto p, typename IntType>
+ALWAYS_INLINE inline bool tryRoundToShortest(IntType v, IntType lo, IntType hi, char * buffer, const char * start, size_t & result)
+{
+    IntType rem = v % p;
+    IntType d_up = p - rem;
+    bool down_ok = rem <= lo;
+    bool up_ok = d_up <= hi;
+    if (down_ok | up_ok)
+    {
+        /// Prefer "up" when it's in range AND (down is not in range OR up is strictly closer).
+        /// When equidistant (rem == d_up), prefer down (closer to zero).
+        bool prefer_up = up_ok & (!down_ok | (d_up < rem));
+        result = itoa(prefer_up ? v + d_up : v - rem, buffer) - start;
+        return true;
     }
+    return false;
+}
 
 /// Float32 variant: exp 25-30, shift = exp - 23 (2..7), half_ulp 2..64.
 ///   shift=2:    % 10 only
@@ -219,21 +220,21 @@ NO_INLINE size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, 
     UInt32 mantissa = bits & 0x7FFFFFu;
 
     Int32 shift = exp - 23;
-    Int32 half_ulp = Int32(1) << (shift - 1);
+    UInt32 half_ulp = UInt32(1) << (shift - 1);
 
     /// At power-of-2 boundaries (mantissa == 0), the previous float has a smaller
     /// exponent, so the lower half of the valid range is narrower.
-    Int32 half_ulp_lower = (mantissa == 0) ? (half_ulp >> 1) : half_ulp;
+    UInt32 half_ulp_lower = (mantissa == 0) ? (half_ulp >> 1) : half_ulp;
 
     /// Fold the inclusive/exclusive boundary into the half_ulp values:
     /// even mantissa → inclusive boundaries → no adjustment;
     /// odd mantissa → exclusive boundaries → subtract 1, turning < into <=.
-    Int32 adj = mantissa & 1;
-    Int32 lo = half_ulp_lower - adj;
-    Int32 hi = half_ulp - adj;
+    UInt32 adj = mantissa & 1;
+    UInt32 lo = half_ulp_lower - adj;
+    UInt32 hi = half_ulp - adj;
 
-    /// The rounding logic assumes v > 0. Handle negative floats (e.g. BFloat16)
-    /// by writing the sign, then rounding the absolute value.
+    /// Handle negative floats (e.g. BFloat16) by writing the sign, then
+    /// rounding the absolute value.
     Int32 raw = Int32(f32);
     char * start = buffer;
     if (raw < 0)
@@ -241,17 +242,14 @@ NO_INLINE size_t writeFloatTextFastPathFloat32Rounded(Float32 f32, int16_t exp, 
         *buffer++ = '-';
         raw = -raw;
     }
-    Int32 v = raw;
+    UInt32 v = static_cast<UInt32>(raw);
 
     chassert(shift >= 2 && shift <= 7);
 
-    if (shift >= 7)
-        TRY_ROUND_TO_SHORTEST(1000)
-
-    if (shift >= 3)
-        TRY_ROUND_TO_SHORTEST(100)
-
-    TRY_ROUND_TO_SHORTEST(10)
+    size_t result;
+    if (shift >= 7 && tryRoundToShortest<1000>(v, lo, hi, buffer, start, result)) return result;
+    if (shift >= 3 && tryRoundToShortest<100>(v, lo, hi, buffer, start, result)) return result;
+    if (tryRoundToShortest<10>(v, lo, hi, buffer, start, result)) return result;
 
     return itoa(v, buffer) - start;
 }
@@ -273,15 +271,15 @@ NO_INLINE size_t writeFloatTextFastPathFloat64Rounded(Float64 f64, int16_t exp, 
     UInt64 mantissa = bits & ((1ULL << 52) - 1);
 
     Int32 shift = exp - 52;
-    Int64 half_ulp = Int64(1) << (shift - 1);
+    UInt64 half_ulp = UInt64(1) << (shift - 1);
 
     /// At power-of-2 boundaries (mantissa == 0), the lower half of the valid range is narrower.
-    Int64 half_ulp_lower = (mantissa == 0) ? (half_ulp >> 1) : half_ulp;
+    UInt64 half_ulp_lower = (mantissa == 0) ? (half_ulp >> 1) : half_ulp;
 
     /// Fold the inclusive/exclusive boundary into the half_ulp values.
-    Int64 adj = mantissa & 1;
-    Int64 lo = half_ulp_lower - adj;
-    Int64 hi = half_ulp - adj;
+    UInt64 adj = mantissa & 1;
+    UInt64 lo = half_ulp_lower - adj;
+    UInt64 hi = half_ulp - adj;
 
     /// Handle negative values: write sign, then round the absolute value.
     Int64 raw = Int64(f64);
@@ -291,25 +289,18 @@ NO_INLINE size_t writeFloatTextFastPathFloat64Rounded(Float64 f64, int16_t exp, 
         *buffer++ = '-';
         raw = -raw;
     }
-    Int64 v = raw;
+    UInt64 v = static_cast<UInt64>(raw);
 
     chassert(shift >= 2 && shift <= 10);
 
-    if (shift >= 10)
-        TRY_ROUND_TO_SHORTEST(10000)
-
-    if (shift >= 7)
-        TRY_ROUND_TO_SHORTEST(1000)
-
-    if (shift >= 3)
-        TRY_ROUND_TO_SHORTEST(100)
-
-    TRY_ROUND_TO_SHORTEST(10)
+    size_t result;
+    if (shift >= 10 && tryRoundToShortest<10000>(v, lo, hi, buffer, start, result)) return result;
+    if (shift >= 7 && tryRoundToShortest<1000>(v, lo, hi, buffer, start, result)) return result;
+    if (shift >= 3 && tryRoundToShortest<100>(v, lo, hi, buffer, start, result)) return result;
+    if (tryRoundToShortest<10>(v, lo, hi, buffer, start, result)) return result;
 
     return itoa(v, buffer) - start;
 }
-
-#undef TRY_ROUND_TO_SHORTEST
 
 }
 
@@ -357,7 +348,7 @@ size_t writeFloatTextFastPath(T x, char * buffer)
         ///
         ///   exp 25..30: ULP = 4..128. itoa gives the exact value, but dragonbox may
         ///               prefer a "rounder" decimal (more trailing zeros). We use
-        ///               writeFloatTextFastPathFloat32Rounded to adjust, matching
+        ///               writeFloatTextFastPathRounded to adjust, matching
         ///               dragonbox exactly for all ~4.3 billion Float32 values
         ///               (positive and negative, exhaustively verified).
         ///

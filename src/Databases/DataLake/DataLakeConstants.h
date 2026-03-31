@@ -34,5 +34,8 @@ static inline std::unordered_map<String, ValueMaskingFunc> SETTINGS_TO_HIDE =
     {"storage_auth_header", DEFAULT_MASKING_RULE},
     {"storage_aws_access_key_id", DEFAULT_MASKING_RULE},
     {"storage_aws_secret_access_key", DEFAULT_MASKING_RULE},
+    {"warehouse", DEFAULT_MASKING_RULE},
+    {"storage_endpoint", DEFAULT_MASKING_RULE},
+    {"region", DEFAULT_MASKING_RULE},
 };
 }

@@ -3319,15 +3319,19 @@ function updateRunButtons(multi) {
     isMultiQuery = multi;
     const runBtn = document.getElementById('run');
     const runAllBtn = document.getElementById('run-all');
+    const has_selection = query_area.selectionStart !== query_area.selectionEnd;
+    const selects_all = has_selection
+        && query_area.selectionStart === 0
+        && query_area.selectionEnd >= query_area.value.length;
+
     if (!in_flight) {
         if (!multi) {
             runBtn.innerText = 'Run';
         } else {
-            const has_selection = query_area.selectionStart !== query_area.selectionEnd;
             runBtn.innerText = has_selection ? 'Run selected' : 'Run one';
         }
     }
-    runAllBtn.style.display = multi ? 'inline-block' : 'none';
+    runAllBtn.style.display = (multi && !selects_all) ? 'inline-block' : 'none';
 }
 
 /// Update the backdrop div behind the textarea to highlight individual queries

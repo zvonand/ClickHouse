@@ -337,7 +337,10 @@ void MergeTreeDataPartWriterCompact::writeDataBlock(const Block & block, const G
                 stream_getter, stream_mark_getter, granule.start_row, granule.rows_to_write, !data_written, getSerializationSettings());
 
             if (settings.compress_per_column_in_compact_parts)
+            {
                 prev_stream->hashing_buf.next();
+                prev_stream = nullptr;
+            }
         }
 
         if (!settings.compress_per_column_in_compact_parts && prev_stream)

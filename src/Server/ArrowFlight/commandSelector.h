@@ -56,6 +56,8 @@ inline bool isArrowFlightSql(const google::protobuf::Any & any_msg)
 
 inline bool cmdIsArrowFlightSql(const std::string & cmd)
 {
+    if (cmd.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
+        return false;
     google::protobuf::Any any_msg;
     if (!any_msg.ParseFromArray(cmd.data(), static_cast<int>(cmd.size())))
         return false;

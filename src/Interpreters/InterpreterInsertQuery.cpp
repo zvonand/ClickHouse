@@ -47,8 +47,15 @@
 #include <Core/Field.h>
 #include <QueryPipeline/RemoteQueryExecutor.h>
 #include <Processors/Sources/RemoteSource.h>
+#include <Processors/QueryPlan/QueryPlan.h>
+#include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
+#include <Processors/QueryPlan/SourceStepWithFilter.h>
 #include <Storages/IStorageCluster.h>
 #include <Interpreters/JoinedTables.h>
+#include <IO/WriteBufferFromString.h>
+#include <Analyzer/Utils.h>
+#include <Planner/Planner.h>
+#include <Planner/Utils.h>
 
 #include <memory>
 
@@ -776,6 +783,58 @@ QueryPipeline InterpreterInsertQuery::buildInsertPipeline(ASTInsertQuery & query
     return pipeline;
 }
 
+static std::shared_ptr<const ActionsDAG> getFilterActionsDAGFromSelectQuery(const ASTPtr & ast, ContextPtr context)
+{
+    if (!context->getSettingsRef()[Setting::allow_experimental_analyzer])
+        return nullptr;
+
+    auto modified_context = Context::createCopy(context);
+    modified_context->setSetting("enable_parallel_replicas", Field{0});
+
+    SelectQueryOptions analyze_options;
+    analyze_options.only_analyze = true;
+    InterpreterSelectQueryAnalyzer analyzer(ast, modified_context, analyze_options);
+    const auto & resolved_query_tree = analyzer.getQueryTree();
+
+    auto table_expressions = extractTableExpressions(resolved_query_tree, /*add_array_join=*/false, /*recursive=*/true);
+    if (table_expressions.empty())
+        return nullptr;
+
+    ResultReplacementMap replacement_map;
+    auto updated_query_tree = replaceTableExpressionsWithDummyTables(resolved_query_tree, table_expressions, modified_context, &replacement_map);
+
+    SelectQueryOptions select_query_options;
+    Planner planner(updated_query_tree, select_query_options);
+    planner.buildQueryPlanIfNeeded();
+
+    auto & result_plan = planner.getQueryPlan();
+
+    QueryPlanOptimizationSettings optimization_settings(context);
+    optimization_settings.build_sets = false;
+    optimization_settings.materialize_ctes = false;
+    result_plan.optimize(optimization_settings);
+
+    std::vector<QueryPlan::Node *> nodes_to_process;
+    nodes_to_process.push_back(result_plan.getRootNode());
+
+    SourceStepWithFilter * source = nullptr;
+
+    while (!nodes_to_process.empty())
+    {
+        const auto * node = nodes_to_process.back();
+        nodes_to_process.pop_back();
+        nodes_to_process.insert(nodes_to_process.end(), node->children.begin(), node->children.end());
+
+        if (auto * with_filter = dynamic_cast<SourceStepWithFilter *>(node->step.get()))
+            source = with_filter;
+    }
+
+    if (!source)
+        return nullptr;
+
+    return source->detachFilterActionsDAG();
+}
+
 
 std::optional<QueryPipeline> InterpreterInsertQuery::distributedWriteIntoReplicatedMergeTreeOrDataLakeFromClusterStorage(
     const ASTInsertQuery & query, ContextPtr local_context)
@@ -840,8 +899,14 @@ std::optional<QueryPipeline> InterpreterInsertQuery::distributedWriteIntoReplica
     query_context->setSetting("skip_unavailable_shards", true);
 
     src_storage_cluster->updateExternalDynamicMetadataIfExists(local_context);
+
+    auto filter_dag = getFilterActionsDAGFromSelectQuery(query.select, local_context);
+    const ActionsDAG::Node * predicate = nullptr;
+    if (filter_dag)
+        predicate = filter_dag->getOutputs().at(0);
+
     auto extension = src_storage_cluster->getTaskIteratorExtension(
-        nullptr, nullptr, local_context, src_cluster, src_storage_cluster->getInMemoryMetadataPtr());
+        predicate, filter_dag.get(), local_context, src_cluster, src_storage_cluster->getInMemoryMetadataPtr());
 
     /// -Cluster storage treats each replicas as a shard in cluster definition
     /// so, it's enough to consider only shards here

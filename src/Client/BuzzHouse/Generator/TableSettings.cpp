@@ -773,12 +773,33 @@ void loadFuzzerTableSettings(const FuzzConfig & fc)
     {
         codecsEscpated.insert("'" + codec + "'");
     }
-    const auto & compressSetting
-        = CHSetting([](RandomGenerator & rg, FuzzConfig &) { return "'" + generateNextCodecString(rg) + "'"; }, codecsEscpated, false);
+    mergeTreeTableSettings.insert(
+        {{"default_compression_codec",
+          CHSetting([](RandomGenerator & rg, FuzzConfig &) { return "'" + generateNextCodecString(rg) + "'"; }, codecsEscpated, false)}});
 
-    mergeTreeTableSettings.insert({{"default_compression_codec", compressSetting}});
-    mergeTreeTableSettings.insert({{"marks_compression_codec", compressSetting}});
-    mergeTreeTableSettings.insert({{"primary_key_compression_codec", compressSetting}});
+    /// marks and primary key codecs are passed to CompressionCodecFactory::get() directly
+    /// (no type context), so only block-compression codecs are valid — no transform codecs.
+    static const DB::Strings blockCodecs = {"LZ4", "LZ4HC", "ZSTD", "AES_128_GCM_SIV", "AES_256_GCM_SIV", "NONE"};
+    std::unordered_set<String> blockCodecsEscaped;
+    for (const auto & codec : blockCodecs)
+    {
+        blockCodecsEscaped.insert("'" + codec + "'");
+    }
+    const auto & blockCompressSetting = CHSetting(
+        [](RandomGenerator & rg, FuzzConfig &)
+        {
+            const String & codec = rg.pickRandomly(blockCodecs);
+            String res = codec;
+            if (codec == "LZ4HC" && rg.nextBool())
+                res += "(" + std::to_string(rg.randomInt<uint32_t>(0, 12)) + ")";
+            else if (codec == "ZSTD" && rg.nextBool())
+                res += "(" + std::to_string(rg.randomInt<uint32_t>(1, 22)) + ")";
+            return "'" + res + "'";
+        },
+        blockCodecsEscaped,
+        false);
+    mergeTreeTableSettings.insert({{"marks_compression_codec", blockCompressSetting}});
+    mergeTreeTableSettings.insert({{"primary_key_compression_codec", blockCompressSetting}});
 
     if (!fc.storage_policies.empty())
     {

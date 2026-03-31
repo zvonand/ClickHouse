@@ -49,7 +49,7 @@ static String escapeJSON(const String & s)
                 out += "\\t";
                 break;
             default:
-                if (c < 0x20)
+                if (c < 0x20 || c >= 0x80)
                     out += fmt::format("\\u{:04x}", c);
                 else
                     out += static_cast<char>(c);

@@ -821,7 +821,7 @@ static std::shared_ptr<const ActionsDAG> getFilterActionsDAGFromSelectQuery(cons
         nodes_to_process.insert(nodes_to_process.end(), node->children.begin(), node->children.end());
 
         if (auto * with_filter = dynamic_cast<SourceStepWithFilter *>(node->step.get()))
-            return with_filter->detachFilterActionsDAG()
+            return with_filter->detachFilterActionsDAG();
     }
     return nullptr;
 }

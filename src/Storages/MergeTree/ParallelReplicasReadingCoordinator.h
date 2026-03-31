@@ -6,6 +6,7 @@
 #include <mutex>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace DB
@@ -59,6 +60,7 @@ private:
 
     /// Per-table coordinators. Each table gets its own ImplInterface instance.
     std::unordered_map<String, std::shared_ptr<ImplInterface>> table_to_coordinator;
+    std::unordered_set<size_t> ignored_replicas;
 };
 
 using ParallelReplicasReadingCoordinatorPtr = std::shared_ptr<ParallelReplicasReadingCoordinator>;

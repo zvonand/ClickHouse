@@ -1143,6 +1143,16 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
 
     std::lock_guard lock(mutex);
 
+    if (announcement.table_id.empty())
+    {
+        LOG_DEBUG(
+            getLogger("ParallelReplicasReadingCoordinator"),
+            "Got announcement with empty table id from replica {}. Ignore it",
+            announcement.replica_num);
+        ignored_replicas.emplace(announcement.replica_num);
+        return;
+    }
+
     if (!snapshot_replica_num)
     {
         snapshot_replica_num = announcement.replica_num;
@@ -1164,6 +1174,17 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
 
     ParallelReadResponse response;
     response.finish = true;
+
+    if (request.table_id.empty())
+    {
+        if (!ignored_replicas.contains(request.replica_num))
+            throw Exception(
+                ErrorCodes::LOGICAL_ERROR,
+                "Got request from repilca {} with empty table id without ranges announcement",
+                request.replica_num);
+
+        return response;
+    }
 
     if (is_reading_completed)
         return response;

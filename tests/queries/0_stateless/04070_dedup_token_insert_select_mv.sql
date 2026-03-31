@@ -1,4 +1,4 @@
--- Tags: replica
+-- Tags: replica, no-replicated-database
 
 -- Test: dedup token with INSERT SELECT (no ORDER BY ALL) + materialized views
 -- This covers the interaction between insert_deduplication_token and
@@ -10,11 +10,11 @@ DROP TABLE IF EXISTS t_mv_dst_04070 SYNC;
 DROP VIEW IF EXISTS mv_04070;
 
 CREATE TABLE t_src_04070 (k UInt64, v String)
-ENGINE = ReplicatedMergeTree('/clickhouse/test/t_src_04070_99206/r1', 'r1')
+ENGINE = ReplicatedMergeTree('/clickhouse/{database}/t_src_04070_99206/r1', 'r1')
 ORDER BY k;
 
 CREATE TABLE t_mv_dst_04070 (k UInt64, cnt UInt64)
-ENGINE = ReplicatedMergeTree('/clickhouse/test/t_mv_dst_04070_99206/r1', 'r1')
+ENGINE = ReplicatedMergeTree('/clickhouse/{database}/t_mv_dst_04070_99206/r1', 'r1')
 ORDER BY k;
 
 CREATE MATERIALIZED VIEW mv_04070 TO t_mv_dst_04070 AS

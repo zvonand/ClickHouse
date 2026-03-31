@@ -319,10 +319,21 @@ ObjectStorageQueueOrderedFileMetadata::ObjectStorageQueueOrderedFileMetadata(
     , partitioning_mode(partitioning_mode_)
     , parser(parser_)
 {
+    const auto partition_key = getPartitionKeyImpl(path_, partitioning_mode_, parser_);
+    if (!partition_key.empty())
+        processed_watch_path = (std::filesystem::path(processed_node_path) / partition_key).string();
+    else
+        processed_watch_path = processed_node_path;
+
     LOG_TEST(log, "Path: {}, node_name: {}, max_loading_retries: {}, "
              "processed_path: {}, processing_path: {}, failed_path: {}, partitioning_mode: {}",
              path, node_name, max_loading_retries,
              processed_node_path, processing_node_path, failed_node_path, magic_enum::enum_name(partitioning_mode));
+}
+
+const std::string & ObjectStorageQueueOrderedFileMetadata::getProcessedWatchPath() const
+{
+    return processed_watch_path;
 }
 
 bool ObjectStorageQueueOrderedFileMetadata::useBucketsForProcessing() const

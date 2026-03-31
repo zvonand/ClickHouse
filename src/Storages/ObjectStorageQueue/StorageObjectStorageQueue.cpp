@@ -1755,48 +1755,15 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
             "Cannot wait for path to be processed: streaming is disabled for {}",
             getStorageID().getNameForLogs());
 
-    const auto node_name = ObjectStorageQueueIFileMetadata::getNodeName(path);
-
     /// Determine the Keeper paths we need to watch.
     /// For unordered mode each file gets its own node under processed/ and failed/.
     /// For ordered mode the processed pointer is a shared node whose *data* is updated,
     /// while the failed node is still per-file.
     const bool is_ordered = files_metadata->getTableMetadata().getMode() == ObjectStorageQueueMode::ORDERED;
-    const bool uses_buckets = files_metadata->useBucketsForProcessing();
 
-    std::string processed_node_path;
-    if (is_ordered)
-    {
-        const size_t effective_buckets = uses_buckets ? files_metadata->getBucketsNum() : 1;
-        const auto bucket = ObjectStorageQueueOrderedFileMetadata::getBucketForPath(
-            path,
-            effective_buckets,
-            files_metadata->getBucketingMode(),
-            files_metadata->getPartitioningMode(),
-            files_metadata->getFilenameParser());
-        processed_node_path = uses_buckets
-            ? (zk_path / "buckets" / toString(bucket) / "processed").string()
-            : (zk_path / "processed").string();
-    }
-    else
-    {
-        processed_node_path = (zk_path / "processed" / node_name).string();
-    }
-
-    const auto failed_node_path = (zk_path / "failed" / node_name).string();
-
-    /// For ordered mode with HIVE/REGEX partitioning the processed pointer is stored
-    /// under a partition (child) of the processed node, not in the node itself.
-    /// A ZooKeeper watch on a parent node does NOT fire when a child is created or
-    /// modified, so we must watch the child directly.
-    std::string effective_processed_watch_path = processed_node_path;
-    if (is_ordered)
-    {
-        const auto partition_key = ObjectStorageQueueOrderedFileMetadata::getPartitionKey(
-            path, files_metadata->getPartitioningMode(), files_metadata->getFilenameParser());
-        if (!partition_key.empty())
-            effective_processed_watch_path = (fs::path(processed_node_path) / partition_key).string();
-    }
+    auto file_metadata = files_metadata->getFileMetadata(path);
+    const auto & effective_processed_watch_path = file_metadata->getProcessedWatchPath();
+    const auto & failed_node_path = file_metadata->getFailedNodePath();
 
     LOG_DEBUG(log, "Waiting for path '{}' to be processed by {}", path, getStorageID().getNameForLogs());
 
@@ -1834,7 +1801,7 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
                 else
                 {
                     /// Unordered: each file gets its own processed node; watch for its creation.
-                    zk->existsWatch(processed_node_path, nullptr, event);
+                    zk->existsWatch(effective_processed_watch_path, nullptr, event);
                 }
 
                 /// Per-file failed node: watch for creation regardless of mode.
@@ -1844,7 +1811,7 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
         }
 
         std::string failure_message;
-        const auto state = files_metadata->getPathState(path, failure_message);
+        const auto state = file_metadata->getPathState(failure_message);
 
         if (state == ObjectStorageQueueMetadata::PathState::Processed)
         {

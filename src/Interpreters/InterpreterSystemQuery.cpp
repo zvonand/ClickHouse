@@ -2118,18 +2118,19 @@ void InterpreterSystemQuery::flushDistributed(ASTSystemQuery & query)
 
 void InterpreterSystemQuery::flushObjectStorageQueue(ASTSystemQuery & query)
 {
-    getContext()->checkAccess(AccessType::SYSTEM_FLUSH_OBJECT_STORAGE_QUEUE, table_id);
+    auto context = getContext();
+    context->checkAccess(AccessType::SYSTEM_FLUSH_OBJECT_STORAGE_QUEUE, table_id);
 
     if (query.queue_path.empty())
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "PATH must be specified for SYSTEM FLUSH OBJECT STORAGE QUEUE");
 
-    auto table = DatabaseCatalog::instance().getTable(table_id, getContext());
+    auto table = DatabaseCatalog::instance().getTable(table_id, context);
     auto * queue = dynamic_cast<StorageObjectStorageQueue *>(table.get());
     if (!queue)
         throw Exception(ErrorCodes::BAD_ARGUMENTS,
             "Table {} is not an S3Queue or AzureQueue table", table_id.getNameForLogs());
 
-    queue->waitForPathToBeProcessed(query.queue_path, getContext());
+    queue->waitForPathToBeProcessed(query.queue_path, context);
 }
 
 RefreshTaskList InterpreterSystemQuery::getRefreshTasks()

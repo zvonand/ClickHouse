@@ -437,7 +437,10 @@ void addRequestedFileLikeStorageVirtualsToChunk(
         }
         else if (virtual_column.name == "_table")
         {
-            chunk.addColumn(virtual_column.type->createColumnConst(chunk.getNumRows(), virtual_values.table_name)->convertToFullColumnIfConst());
+            if (!virtual_values.storage_id.empty())
+                chunk.addColumn(virtual_column.type->createColumnConst(chunk.getNumRows(), virtual_values.storage_id.getTableName())->convertToFullColumnIfConst());
+            else
+                chunk.addColumn(virtual_column.type->createColumnConstWithDefaultValue(chunk.getNumRows())->convertToFullColumnIfConst());
         }
         else if (auto it = hive_map.find(virtual_column.getNameInStorage()); it != hive_map.end())
         {

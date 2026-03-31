@@ -197,7 +197,7 @@ public:
         const URIParams & params = {},
         bool glob_url = false,
         bool need_only_count_ = false,
-        String table_name_ = {});
+        StorageID storage_id_ = StorageID::createEmpty());
 
     ~StorageURLSource() override;
 
@@ -244,7 +244,7 @@ private:
     FormatFilterInfoPtr format_filter_info;
     HTTPHeaderEntries headers;
     bool need_only_count;
-    String table_name;
+    StorageID storage_id;
     size_t total_rows_in_file = 0;
     NamesAndTypesList hive_partition_columns_to_read_from_file_path;
 

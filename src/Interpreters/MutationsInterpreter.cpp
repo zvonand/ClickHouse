@@ -513,7 +513,7 @@ static void validateUpdateColumns(
 
     const auto & storage_columns = storage_snapshot->metadata->getColumns();
     const auto & virtual_columns = *storage_snapshot->virtual_columns;
-    const auto common_virtual_columns = storage_snapshot->storage.getCommonVirtuals();
+    const auto common_virtual_columns = storage_snapshot->storage.getCommonVirtuals(storage_snapshot->virtual_columns);
 
     for (const auto & column_name : updated_columns)
     {

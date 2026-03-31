@@ -493,8 +493,6 @@ void MergeTreeIndexGranuleText::analyzeDictionaryForPatterns(MergeTreeIndexReade
         size_t num_tokens = block_tokens.size();
 
         matched_indices.clear();
-        if (num_tokens > matched_indices.capacity())
-            matched_indices.reserve(num_tokens);
 
         for (size_t token_idx = 0; token_idx < num_tokens; ++token_idx)
         {
@@ -800,9 +798,9 @@ bool MergeTreeIndexGranuleText::hasAnyQueryPatterns(const TextSearchQuery & quer
     return union_posting.cardinality() > 0;
 }
 
-const std::vector<std::string_view> & MergeTreeIndexGranuleText::getPatternTokensForTextQuery(const TextSearchQuery & query) const
+const std::vector<String> & MergeTreeIndexGranuleText::getPatternTokensForTextQuery(const TextSearchQuery & query) const
 {
-    static const std::vector<std::string_view> empty;
+    static const std::vector<String> empty;
     auto it = pattern_tokens_per_query.find(query.getHash().get128());
     return it == pattern_tokens_per_query.end() ? empty : it->second;
 }

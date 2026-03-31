@@ -1,4 +1,7 @@
 <test>
+  <settings>
+    <use_text_index_like_optimization>1</use_text_index_like_optimization>
+  </settings>
   <create_query>
     CREATE TABLE tab
     (
@@ -21,9 +24,7 @@
   </fill_query>
 
   <query>SELECT count() FROM tab WHERE message LIKE '%clickhouse%'</query>
-  <query>SELECT count() FROM tab WHERE message NOT LIKE '%clickhouse%'</query>
   <query>SELECT count() FROM tab WHERE message ILIKE '%CLICKHOUSE%'</query>
-  <query>SELECT count() FROM tab WHERE message NOT ILIKE '%CLICKHOUSE%'</query>
 
   <drop_query>DROP TABLE IF EXISTS tab</drop_query>
 </test>

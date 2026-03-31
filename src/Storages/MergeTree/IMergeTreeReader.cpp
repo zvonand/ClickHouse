@@ -165,15 +165,17 @@ void IMergeTreeReader::fillMissingColumns(Columns & res_columns, bool & should_e
         {
             NamesAndTypesList available_columns(columns_to_read.begin(), columns_to_read.end());
 
+            bool share_nested = (*storage_settings)[MergeTreeSetting::share_nested_offsets];
             DB::fillMissingColumns(
                 res_columns,
                 num_rows,
                 converted_requested_columns,
-                (*storage_settings)[MergeTreeSetting::share_nested_offsets]
+                share_nested
                 ? Nested::convertToSubcolumns(available_columns)
                 : available_columns,
                 partially_read_columns,
-                storage_snapshot);
+                storage_snapshot,
+                share_nested);
 
             should_evaluate_missing_defaults
                 = std::any_of(res_columns.begin(), res_columns.end(), [](const auto & column) { return column == nullptr; });

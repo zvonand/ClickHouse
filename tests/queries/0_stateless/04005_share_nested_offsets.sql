@@ -103,8 +103,8 @@ SETTINGS share_nested_offsets = false, min_bytes_for_wide_part = 0;
 
 INSERT INTO t_alter VALUES (1, [1, 2, 3]);
 
--- Add a sibling column — old parts don't have it, should read as default.
-ALTER TABLE t_alter ADD COLUMN `n.b` Array(String) DEFAULT [];
+-- Add a sibling column without DEFAULT — old parts don't have it, should read as empty arrays.
+ALTER TABLE t_alter ADD COLUMN `n.b` Array(String);
 
 SELECT id, n.a, n.b FROM t_alter ORDER BY id;
 
@@ -113,6 +113,34 @@ INSERT INTO t_alter VALUES (2, [10], ['x', 'y', 'z']);
 SELECT id, n.a, n.b FROM t_alter ORDER BY id;
 
 DROP TABLE t_alter;
+
+-- =============================================================================
+-- 4b. ALTER ADD COLUMN without DEFAULT on compact parts
+-- =============================================================================
+
+SELECT '--- alter add column (compact, no default) ---';
+
+DROP TABLE IF EXISTS t_alter_compact;
+CREATE TABLE t_alter_compact
+(
+    id UInt64,
+    `n.a` Array(UInt32)
+)
+ENGINE = MergeTree ORDER BY id
+SETTINGS share_nested_offsets = false, min_bytes_for_wide_part = 1000000000;
+
+INSERT INTO t_alter_compact VALUES (1, [1, 2, 3]);
+
+-- Add a sibling column without DEFAULT.
+ALTER TABLE t_alter_compact ADD COLUMN `n.b` Array(String);
+
+SELECT id, n.a, n.b FROM t_alter_compact ORDER BY id;
+
+-- Insert with both columns, different sizes.
+INSERT INTO t_alter_compact VALUES (2, [10], ['x', 'y', 'z']);
+SELECT id, n.a, n.b FROM t_alter_compact ORDER BY id;
+
+DROP TABLE t_alter_compact;
 
 -- =============================================================================
 -- 5. Multiple Nested-like groups are independent

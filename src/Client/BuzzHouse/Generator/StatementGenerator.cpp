@@ -1826,6 +1826,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                          if (target_key != ncol_key)
                          {
                              t.staged_cols[target_key] = std::move(t.staged_cols[ncol_key]);
+                             t.staged_cols[target_key].cname = target_key;
                              t.staged_cols.erase(ncol_key);
                          }
                      }
@@ -3867,6 +3868,7 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                             const String & new_cname = ati.rename_column().new_name().col().column();
 
                             t.cols[new_cname] = std::move(t.cols[old_cname]);
+                            t.cols[new_cname].cname = new_cname;
                             t.cols.erase(old_cname);
                         }
                     }

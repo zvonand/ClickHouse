@@ -117,10 +117,7 @@ public:
         else if (const auto * col_fixed_str = checkAndGetColumn<ColumnFixedString>(&col))
             upper_bound = col_fixed_str->getChars().size();
         else
-            throw Exception(
-                ErrorCodes::ILLEGAL_COLUMN,
-                "Column for function stem must be String or FixedString, got {}",
-                col.getName());
+            chassert(false);
 
         auto col_res = ColumnString::create();
         ColumnString::Chars & res_data = col_res->getChars();

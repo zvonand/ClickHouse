@@ -214,6 +214,13 @@ def should_skip_job(job_name):
         from ci.jobs.scripts.find_tests import Targeting
 
         targeter = Targeting(info=_info_cache)
+        # _info_cache.job_name is the hook runner job, not the flaky check job.
+        # Set job_type explicitly from the job_name argument so CIDB queries use
+        # the correct check_name prefix (e.g. 'Stateless%' instead of None).
+        if "stateless" in job_name.lower():
+            targeter.job_type = Targeting.STATELESS_JOB_TYPE
+        elif "integration" in job_name.lower():
+            targeter.job_type = Targeting.INTEGRATION_JOB_TYPE
         changed_files = _info_cache.get_changed_files()
         if "stateless" in job_name.lower():
             changed_tests = targeter.get_changed_tests()

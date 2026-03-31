@@ -179,6 +179,13 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
     if (isParameterizedView())
         return nullptr;
 
+    /// When called from INSERT ... SELECT context, the context carries insertion table info.
+    /// If we resolve the view's inner query with this context, table functions like file()
+    /// may incorrectly infer schema from the insertion table (via use_structure_from_insertion_table_in_table_functions),
+    /// poisoning the schema cache with wrong column names.
+    if (context->hasInsertionTable())
+        return nullptr;
+
     auto inner_query_ast = getInMemoryMetadataPtr()->getSelectQuery().inner_query;
 
     QueryTreeNodePtr inner_query_tree;

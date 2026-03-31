@@ -4,20 +4,13 @@
 #include <Storages/StorageInMemoryMetadata.h>
 #include <Formats/MarkInCompressedFile.h>
 #include <IO/NullWriteBuffer.h>
-#include <Common/FailPoint.h>
 
 namespace DB
 {
 
-namespace FailPoints
-{
-    extern const char compact_writer_add_streams_throw[];
-}
-
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
-    extern const int FAULT_INJECTED;
 }
 
 MergeTreeDataPartWriterCompact::MergeTreeDataPartWriterCompact(
@@ -90,17 +83,11 @@ void MergeTreeDataPartWriterCompact::addStreams(const NameAndTypePair & name_and
             compression_codec = CompressionCodecFactory::instance().get(effective_codec_desc, nullptr, default_codec, true);
 
         UInt64 codec_id = compression_codec->getHash();
-        auto & stream = streams_by_codec[codec_id];
-        if (!stream)
-        {
-            fiu_do_on(FailPoints::compact_writer_add_streams_throw,
-            {
-                throw Exception(ErrorCodes::FAULT_INJECTED, "Failpoint: simulated exception in addStreams");
-            });
-            stream = std::make_shared<CompressedStream>(plain_hashing, compression_codec);
-        }
+        auto it = streams_by_codec.find(codec_id);
+        if (it == streams_by_codec.end())
+            it = streams_by_codec.emplace(codec_id, std::make_shared<CompressedStream>(plain_hashing, compression_codec)).first;
 
-        compressed_streams.emplace(stream_name, stream);
+        compressed_streams.emplace(stream_name, it->second);
     };
 
     ISerialization::EnumerateStreamsSettings enumerate_settings;
@@ -563,8 +550,6 @@ void MergeTreeDataPartWriterCompact::cancel() noexcept
 {
     for (const auto & [_, stream] : streams_by_codec)
     {
-        if (!stream)
-            continue;
         stream->hashing_buf.cancel();
         stream->compressed_buf.cancel();
     }

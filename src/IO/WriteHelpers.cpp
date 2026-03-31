@@ -348,7 +348,7 @@ size_t writeFloatTextFastPath(T x, char * buffer)
         ///
         ///   exp 25..30: ULP = 4..128. itoa gives the exact value, but dragonbox may
         ///               prefer a "rounder" decimal (more trailing zeros). We use
-        ///               writeFloatTextFastPathRounded to adjust, matching
+        ///               writeFloatTextFastPathFloat32Rounded to adjust, matching
         ///               dragonbox exactly for all ~4.3 billion Float32 values
         ///               (positive and negative, exhaustively verified).
         ///

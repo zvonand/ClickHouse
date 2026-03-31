@@ -653,7 +653,7 @@ size_t MergeTreeIndexGranuleText::memoryUsageBytes() const
         + pattern_tokens.capacity() * sizeof(*pattern_tokens.begin());
 
     for (const auto & [hash, tokens_vec] : pattern_tokens_per_query)
-        memory_usage_bytes += tokens_vec.capacity() * sizeof(std::string_view);
+        memory_usage_bytes += tokens_vec.capacity() * sizeof(String);
 
     return memory_usage_bytes;
 }

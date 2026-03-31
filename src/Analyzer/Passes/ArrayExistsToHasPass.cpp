@@ -2,6 +2,7 @@
 
 #include <Functions/array/has.h>
 
+#include <Analyzer/ConstantNode.h>
 #include <Analyzer/FunctionNode.h>
 #include <Analyzer/InDepthQueryTreeVisitor.h>
 #include <Analyzer/LambdaNode.h>
@@ -101,11 +102,16 @@ public:
         auto nested_type = removeNullable(removeLowCardinality(array_type->getNestedType()));
         auto constant_type = removeNullable(removeLowCardinality(has_constant_element_argument->getResultType()));
 
-        /// Skip rewrite when the constant is NULL (Nullable(Nothing)).
+        /// Skip rewrite when the constant is NULL (either untyped or typed).
         /// arrayExists(x -> x = NULL, [NULL]) returns 0 because equals(NULL, NULL) is NULL,
         /// and arrayExists treats non-true values as false.
         /// But has([NULL], NULL) returns 1, so the rewrite would change semantics.
+        /// This also applies to typed NULLs like CAST(NULL AS Nullable(Int8)).
         if (isNothing(constant_type))
+            return;
+
+        const auto * constant_node = has_constant_element_argument->as<ConstantNode>();
+        if (constant_node && constant_node->getValue().isNull())
             return;
 
         bool types_compatible = (isNativeNumber(nested_type) || isEnum(nested_type)) && isNativeNumber(constant_type);

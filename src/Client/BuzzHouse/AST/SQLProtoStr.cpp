@@ -2277,10 +2277,7 @@ CONV_FN(URLFunc, url)
         ret += ", ";
         ExprToString(ret, url.structure());
     }
-    if (url.has_structure())
-    {
-        appendHTTPHeaders(ret, url);
-    }
+    appendHTTPHeaders(ret, url);
     ret += ")";
 }
 

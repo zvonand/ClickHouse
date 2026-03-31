@@ -252,7 +252,6 @@ void MergeSortingTransform::consume(Chunk chunk)
             {
                 bool have_all_inputs = false;
                 bool use_average_block_sizes = false;
-                bool apply_virtual_row = false;
 
                 external_merging_sorted = std::make_shared<MergingSortedTransform>(
                         shared_header_without_constants,
@@ -267,7 +266,7 @@ void MergeSortingTransform::consume(Chunk chunk)
                         /*out_row_sources_buf=*/ nullptr,
                         /*filter_column_name=*/ std::nullopt,
                         use_average_block_sizes,
-                        apply_virtual_row,
+                        MergingSortedAlgorithm::VirtualRowAction::Skip,
                         have_all_inputs);
 
                 processors.emplace_back(external_merging_sorted);

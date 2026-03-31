@@ -1008,7 +1008,7 @@ Pipe ReadFromMergeTree::readByLayers(
                     /*out_row_sources_buf=*/ nullptr,
                     /*filter_column_name=*/ std::nullopt,
                     /*use_average_block_sizes=*/ false,
-                    /*apply_virtual_row_conversions=*/ false);
+                    MergingSortedAlgorithm::VirtualRowAction::AsIs);
 
                 pipe.addTransform(std::move(transform));
             }
@@ -1438,7 +1438,7 @@ Pipe ReadFromMergeTree::spreadMarkRangesAmongStreamsWithOrder(
                     /*out_row_sources_buf=*/ nullptr,
                     /*filter_column_name=*/ std::nullopt,
                     /*use_average_block_sizes=*/ false,
-                    /*apply_virtual_row_conversions*/ false);
+                    MergingSortedAlgorithm::VirtualRowAction::AsIs);
 
                 pipe.addTransform(std::move(transform));
             }

@@ -126,9 +126,12 @@ class Secret:
             for root, indices in root_to_indices.items():
                 cmd = f"aws secretsmanager get-secret-value --secret-id {root} --query SecretString --output text{region}"
                 secret_string = Shell.get_output(cmd, verbose=True, strict=True)
-                secret_data = json.loads(secret_string)
-                for idx in indices:
-                    key = parsed[idx][1]
+                keys = [parsed[idx][1] for idx in indices]
+                # Only parse JSON when at least one entry requests a specific key;
+                # keyless requests return the raw secret string to stay compatible
+                # with non-JSON secrets.
+                secret_data = json.loads(secret_string) if any(k is not None for k in keys) else None
+                for idx, key in zip(indices, keys):
                     results[idx] = secret_data[key] if key is not None else secret_string
 
             return results

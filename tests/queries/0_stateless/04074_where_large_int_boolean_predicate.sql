@@ -1,4 +1,3 @@
--- Tags: no-parallel
 -- Regression test for https://github.com/ClickHouse/ClickHouse/issues/101269
 -- A large integer constant used as a boolean predicate in WHERE with AND
 -- was incorrectly truncated to UInt8 during MergeTree virtual column filter

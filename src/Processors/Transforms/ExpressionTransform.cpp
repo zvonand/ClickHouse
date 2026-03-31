@@ -22,6 +22,7 @@ ExpressionTransform::ExpressionTransform(
     , expression(std::move(expression_))
     , updater(std::move(updater_))
 {
+    LOG_DEBUG(getLogger("ExpressionTransform"), "ExpressionTransform() enter this={}, expression={}", static_cast<const void*>(this), static_cast<void*>(expression.get()));
 }
 
 void ExpressionTransform::transform(Chunk & chunk)

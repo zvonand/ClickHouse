@@ -227,14 +227,6 @@ void ObjectStorageQueueMetadata::shutdown()
         update_registry_thread->join();
 }
 
-ObjectStorageQueueMetadata::PathState ObjectStorageQueueMetadata::getPathState(
-    const std::string & path,
-    std::string & failure_message) const
-{
-    auto component_guard = Coordination::setCurrentComponent("ObjectStorageQueueMetadata::getPathState");
-    return getFileMetadata(path)->getPathState(failure_message);
-}
-
 ObjectStorageQueueMetadata::FileMetadataPtr ObjectStorageQueueMetadata::getFileMetadata(
     const std::string & path,
     ObjectStorageQueueOrderedFileMetadata::BucketInfoPtr bucket_info)

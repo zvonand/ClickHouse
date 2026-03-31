@@ -114,13 +114,6 @@ public:
 
     using PathState = ObjectStorageQueueIFileMetadata::PathState;
 
-    /// Check Keeper to determine whether `path` has already been processed or failed.
-    /// For unordered mode checks the per-file processed/failed nodes.
-    /// For ordered mode compares `path` against the stored last-processed pointer
-    /// (Processed if path <= last_processed_path), and checks the per-file failed node.
-    /// Sets `failure_message` when the result is `Failed`.
-    PathState getPathState(const std::string & path, std::string & failure_message) const;
-
     /// Get object storage type: s3, azure, local, etc.
     ObjectStorageType getType() const { return storage_type; }
     /// Get base path to keeper metadata.

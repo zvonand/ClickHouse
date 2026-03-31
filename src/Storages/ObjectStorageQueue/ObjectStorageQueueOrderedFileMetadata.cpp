@@ -395,7 +395,7 @@ ObjectStorageQueueOrderedFileMetadata::ProcessingStateFromKeeper
 ObjectStorageQueueOrderedFileMetadata::getProcessingStateFromKeeper(
     Coordination::Stat * processed_node_stat,
     bool check_failed,
-    LoggerPtr log_)
+    LoggerPtr log_) const
 {
     std::optional<std::string> partition_path;
     if (hasPartitioningMode(partitioning_mode))

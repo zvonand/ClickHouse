@@ -139,7 +139,7 @@ private:
     ProcessingStateFromKeeper getProcessingStateFromKeeper(
         Coordination::Stat * processed_node_stat,
         bool check_failed = false,
-        LoggerPtr log_ = nullptr);
+        LoggerPtr log_ = nullptr) const;
 
     /// Read the processed/failed state of `file_path` from Keeper without side-effects.
     /// `processed_node_path_` is the global or per-bucket processed pointer node.

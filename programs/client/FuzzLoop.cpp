@@ -629,7 +629,12 @@ bool Client::buzzHouse()
                 const auto * const last = first + seed_str.size();
                 const auto x = std::from_chars(first, last, seed, 10);
 
-                UNUSED(x);
+                if (x.ec != std::errc{} || x.ptr != last)
+                    throw DB::Exception(
+                        DB::ErrorCodes::BUZZHOUSE,
+                        "Malformed external-command marker: cannot parse seed '{}' ({})",
+                        seed_str,
+                        x.ec == std::errc::result_out_of_range ? "out of range" : "invalid characters");
                 runExternalCommand(
                     external_integrations, seed, !async_flag.empty(), engine, markerHexDecode(database), markerHexDecode(table));
             }

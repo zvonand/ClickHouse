@@ -876,7 +876,7 @@ String StatementGenerator::setMergeTableParameter(RandomGenerator & rg, const St
         {
             const std::shared_ptr<SQLDatabase> & d = rg.pickRandomly(filterCollection<std::shared_ptr<SQLDatabase>>(attached_databases));
 
-            return initial + d->getName();
+            return d->getName();
         }
     }
     else if constexpr (std::is_same_v<T, SQLTable>)
@@ -885,7 +885,7 @@ String StatementGenerator::setMergeTableParameter(RandomGenerator & rg, const St
         {
             const SQLTable & t = rg.pickRandomly(filterCollection<SQLTable>(attached_tables));
 
-            return initial + t.getBaseName();
+            return t.getBaseName();
         }
     }
     else if constexpr (std::is_same_v<T, SQLView>)
@@ -894,7 +894,7 @@ String StatementGenerator::setMergeTableParameter(RandomGenerator & rg, const St
         {
             const SQLView & v = rg.pickRandomly(filterCollection<SQLView>(attached_views));
 
-            return initial + v.getBaseName();
+            return v.getBaseName();
         }
     }
     else if constexpr (std::is_same_v<T, SQLDictionary>)
@@ -903,7 +903,7 @@ String StatementGenerator::setMergeTableParameter(RandomGenerator & rg, const St
         {
             const SQLDictionary & d = rg.pickRandomly(filterCollection<SQLDictionary>(attached_dictionaries));
 
-            return initial + d.getBaseName();
+            return d.getBaseName();
         }
     }
     else

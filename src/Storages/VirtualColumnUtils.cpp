@@ -549,7 +549,7 @@ static const ActionsDAG::Node * splitFilterNodeForAllowedInputs(
                     /// for values like 256, 512, 65536, 2147483648, etc.  See #101269.
                     ActionsDAG tmp_dag;
                     auto zero_column = res->result_type->createColumnConst(1, res->result_type->getDefault());
-                    const auto & zero_node = tmp_dag.addColumn({std::move(zero_column), res->result_type, "0"});
+                    const auto & zero_node = tmp_dag.addColumn({zero_column, res->result_type, "0"});
                     auto ne_func = FunctionFactory::instance().get("notEquals", context);
                     res = &tmp_dag.addFunction(ne_func, {res, &zero_node}, {});
                     additional_nodes.splice(additional_nodes.end(), ActionsDAG::detachNodes(std::move(tmp_dag)));

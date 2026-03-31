@@ -47,6 +47,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"enable_materialized_cte", false, false, "New setting"},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},
             {"optimize_rewrite_array_exists_to_has", false, true, "Enable arrayExists to has rewrite optimization by default, now that type compatibility is checked before rewriting."},
+            {"highlight_max_matches_per_row", 10000, 10000, "New setting to limit the number of highlight matches per row to protect against excessive memory usage."},
         });
         addSettingsChanges(settings_changes_history, "26.3",
         {

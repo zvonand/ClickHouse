@@ -52,7 +52,10 @@ String urlEncodeQueryParam(const String & s)
         }
         else
         {
-            out += fmt::format("%{:02X}", c);
+            static constexpr const char hex[] = "0123456789ABCDEF";
+            out += '%';
+            out += hex[c >> 4];
+            out += hex[c & 0xF];
         }
     }
     return out;

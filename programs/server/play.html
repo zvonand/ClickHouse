@@ -69,6 +69,7 @@
 
             --selection-color: #FFF;
             --selection-background-color: #456;
+            --current-query-background-color: #FFF4E0;
         }
 
         [data-theme="dark"] {
@@ -100,6 +101,7 @@
 
             --selection-color: #000;
             --selection-background-color: #FF8;
+            --current-query-background-color: #442;
         }
 
         ::selection {
@@ -381,7 +383,7 @@
             color: transparent; /* text is invisible; only backgrounds are visible */
         }
 
-        #query-backdrop .q-active { background-color: color-mix(in srgb, var(--selection-background-color) 20%, transparent); }
+        #query-backdrop .q-active { background-color: var(--current-query-background-color); }
 
 
         #inputs
@@ -2185,6 +2187,7 @@ async function loadTables(server_address, user, password, database, container) {
                 postOne();
             } else {
                 query_area.value = value;
+                query_area.dispatchEvent(new Event('input'));
             }
             e.stopPropagation();
         }
@@ -2725,6 +2728,7 @@ async function postMulti(posted_request_num, parsed)
 async function restoreFromHistory(state) {
     clear();
     query_area.value = state.query;
+    query_area.dispatchEvent(new Event('input'));
     resultEl.queryText = state.query;
 
     /// Restore query parameter inputs and their values.
@@ -2812,6 +2816,7 @@ window.onpopstate = function(event) {
 
 if (window.location.hash) {
     query_area.value = fromBase64(window.location.hash.substr(1));
+    query_area.dispatchEvent(new Event('input'));
 }
 
 let in_flight = false;

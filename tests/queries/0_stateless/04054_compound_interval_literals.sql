@@ -66,7 +66,7 @@ SELECT INTERVAL '1:+30' HOUR TO MINUTE; -- { clientError SYNTAX_ERROR }
 -- Large non-negative value (should match regular interval numeric parsing with UInt64 range)
 SELECT INTERVAL '1000000000:59' HOUR TO MINUTE;
 
--- Boundary: maximum UInt64 non-negative component
+-- Boundary: maximum UInt64 non-negative component (positive value stays positive)
 SELECT INTERVAL '18446744073709551615:1' HOUR TO MINUTE;
 
 -- Boundary: overflow beyond UInt64 range (should reject)
@@ -74,3 +74,9 @@ SELECT INTERVAL '18446744073709551616:1' HOUR TO MINUTE; -- { clientError SYNTAX
 
 -- Boundary: large value in non-leading component
 SELECT INTERVAL '1:18446744073709551615' HOUR TO MINUTE;
+
+-- Boundary: negative overflow beyond UInt64 range (should reject)
+SELECT INTERVAL '-18446744073709551616:1' HOUR TO MINUTE; -- { clientError SYNTAX_ERROR }
+
+-- Boundary: negative of maximum UInt64 component (negate wraps back)
+SELECT INTERVAL '-18446744073709551615:1' HOUR TO MINUTE;

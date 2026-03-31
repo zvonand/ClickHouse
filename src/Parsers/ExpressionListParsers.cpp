@@ -2023,18 +2023,9 @@ protected:
 };
 
 
-/// Parses a compound interval literal string such as '1:30' for HOUR TO MINUTE,
-/// '2-6' for YEAR TO MONTH, or '5 12:30:45' for DAY TO SECOND.
-/// Returns a list of (value, IntervalKind) pairs, or empty on failure.
-///
-/// Valid combinations follow the SQL standard:
-///   Year-Month group: YEAR TO MONTH         format: Y-M
-///   Day-Time group:   DAY TO HOUR           format: D H
-///                     DAY TO MINUTE          format: D H:M
-///                     DAY TO SECOND          format: D H:M:S
-///                     HOUR TO MINUTE         format: H:M
-///                     HOUR TO SECOND         format: H:M:S
-///                     MINUTE TO SECOND       format: M:S
+/// Parses a compound interval literal string according to the SQL-standard
+/// field separators. See IntervalLayer::parse for the full list of supported
+/// combinations. Returns nullopt on failure.
 struct ParsedCompoundInterval
 {
     std::vector<std::pair<UInt64, IntervalKind>> parts;
@@ -2148,11 +2139,34 @@ public:
 
     bool parse(IParser::Pos & pos, Expected & expected, Action & action) override
     {
-        /// INTERVAL 1 HOUR or INTERVAL expr HOUR
-        /// INTERVAL '1:30' HOUR TO MINUTE (compound interval with TO syntax)
+        /// Supported INTERVAL syntax variants:
         ///
-        /// 0. Try to parse interval_kind (-> 1)
-        /// 1. Basic parser
+        ///   (a) INTERVAL <expr> <kind>
+        ///       A single expression followed by an interval kind keyword.
+        ///       Example: INTERVAL 1 HOUR, INTERVAL (1 + 2) DAY
+        ///
+        ///   (b) INTERVAL '<number> <kind> [<number> <kind> ...]'
+        ///       A string literal containing one or more <number> <kind> pairs.
+        ///       Example: INTERVAL '1 HOUR', INTERVAL '1 HOUR 30 MINUTE'
+        ///
+        ///   (c) INTERVAL '<compound>' <from_kind> TO <to_kind>
+        ///       A string literal in compound format with a range of interval kinds.
+        ///       The string is parsed according to the SQL-standard field separators:
+        ///         Year-Month group: YEAR TO MONTH         format: Y-M
+        ///         Day-Time group:   DAY TO HOUR           format: D H
+        ///                           DAY TO MINUTE          format: D H:M
+        ///                           DAY TO SECOND          format: D H:M:S
+        ///                           HOUR TO MINUTE         format: H:M
+        ///                           HOUR TO SECOND         format: H:M:S
+        ///                           MINUTE TO SECOND       format: M:S
+        ///       An optional leading +/- sign applies to all components.
+        ///       Example: INTERVAL '1:30' HOUR TO MINUTE
+        ///                INTERVAL '-2-6' YEAR TO MONTH
+        ///                INTERVAL '5 12:30:45' DAY TO SECOND
+        ///
+        /// Parse states:
+        /// 0. Try to parse a string literal for cases (b) and (c) (-> 1)
+        /// 1. Fall back: parse <expr> <kind> for case (a)
 
         if (state == 0)
         {
@@ -2163,9 +2177,9 @@ public:
             ASTPtr string_literal;
             String literal;
 
-            //// A String literal followed INTERVAL keyword,
+            /// A string literal after the INTERVAL keyword:
             /// the literal can be a part of an expression or
-            /// include Number and INTERVAL TYPE at the same time
+            /// include Number and INTERVAL TYPE at the same time.
             if (ParserStringLiteral{}.parse(pos, string_literal, expected)
                 && string_literal->as<ASTLiteral &>().value.tryGet(literal))
             {
@@ -2174,38 +2188,19 @@ public:
                 Expected token_expected;
                 ASTPtr expr;
 
+                /// Case (c) when ParserNumber fails:
+                /// Strings like '-1:30' cause the tokenizer to split '-' as a separate
+                /// token, so ParserNumber does not consume the whole literal.
+                /// Try compound TO syntax directly.
                 if (!ParserNumber{}.parse(token_pos, expr, token_expected))
                 {
-                    /// case: INTERVAL '-1:30' HOUR TO MINUTE
-                    /// ParserNumber fails on strings like '-1:30' where the tokenizer
-                    /// splits '-' as a separate token. Try compound TO syntax directly.
-                    IntervalKind from_kind;
-                    IntervalKind to_kind;
-                    if (!parseIntervalKind(pos, expected, from_kind)
-                        || !ParserKeyword(Keyword::TO).ignore(pos, expected)
-                        || !parseIntervalKind(pos, expected, to_kind))
+                    if (!tryParseCompoundIntervalTO(literal, pos, expected))
                         return false;
-
-                    auto compound = parseCompoundIntervalString(literal, from_kind, to_kind);
-                    if (!compound)
-                        return false;
-
-                    for (const auto & [value, kind] : compound->parts)
-                    {
-                        auto interval_node = makeASTFunction(
-                            kind.toNameOfFunctionToIntervalDataType(),
-                            make_intrusive<ASTLiteral>(Field(value)));
-                        pushResult(compound->is_negative
-                            ? makeASTFunction("negate", std::move(interval_node))
-                            : std::move(interval_node));
-                    }
-
-                    finished = true;
                     return true;
                 }
 
-                /// case: INTERVAL '1' HOUR
-                /// back to begin
+                /// Case (b): INTERVAL '1' HOUR — single number, no interval kind inside.
+                /// Back to begin so the number is re-parsed as a regular expression.
                 if (!token_pos.isValid())
                 {
                     pos = begin;
@@ -2213,38 +2208,20 @@ public:
                     return true;
                 }
 
-                /// case: INTERVAL '1 HOUR'
+                /// Case (b): INTERVAL '1 HOUR' or INTERVAL '1 HOUR 30 MINUTE'
                 if (!parseIntervalKind(token_pos, token_expected, interval_kind))
                 {
-                    /// case: INTERVAL '1:30' HOUR TO MINUTE (compound interval with TO syntax)
-                    IntervalKind from_kind;
-                    IntervalKind to_kind;
-                    if (!parseIntervalKind(pos, expected, from_kind)
-                        || !ParserKeyword(Keyword::TO).ignore(pos, expected)
-                        || !parseIntervalKind(pos, expected, to_kind))
+                    /// Case (c) when ParserNumber succeeds partially:
+                    /// For '1:30', ParserNumber parses '1' but ':30' is not an interval
+                    /// kind. Fall back to compound TO syntax.
+                    if (!tryParseCompoundIntervalTO(literal, pos, expected))
                         return false;
-
-                    auto compound = parseCompoundIntervalString(literal, from_kind, to_kind);
-                    if (!compound)
-                        return false;
-
-                    for (const auto & [value, kind] : compound->parts)
-                    {
-                        auto interval_node = makeASTFunction(
-                            kind.toNameOfFunctionToIntervalDataType(),
-                            make_intrusive<ASTLiteral>(Field(value)));
-                        pushResult(compound->is_negative
-                            ? makeASTFunction("negate", std::move(interval_node))
-                            : std::move(interval_node));
-                    }
-
-                    finished = true;
                     return true;
                 }
 
                 pushResult(makeASTFunction(interval_kind.toNameOfFunctionToIntervalDataType(), expr));
 
-                /// case: INTERVAL '1 HOUR 1 SECOND ...'
+                /// Continue parsing remaining <number> <kind> pairs inside the string.
                 while (token_pos.isValid())
                 {
                     if (!ParserNumber{}.parse(token_pos, expr, token_expected) ||
@@ -2259,6 +2236,7 @@ public:
             return true;
         }
 
+        /// Case (a): INTERVAL <expr> <kind>
         if (state == 1)
         {
             if (action == Action::OPERATOR && parseIntervalKind(pos, expected, interval_kind))
@@ -2287,6 +2265,36 @@ protected:
 
 private:
     IntervalKind interval_kind;
+
+    /// Try to parse INTERVAL '<compound>' <from_kind> TO <to_kind>.
+    /// On success, pushes toInterval*() nodes (wrapped with negate() if needed)
+    /// and sets finished = true. Returns false on parse failure.
+    bool tryParseCompoundIntervalTO(const String & literal, IParser::Pos & pos, Expected & expected)
+    {
+        IntervalKind from_kind;
+        IntervalKind to_kind;
+        if (!parseIntervalKind(pos, expected, from_kind)
+            || !ParserKeyword(Keyword::TO).ignore(pos, expected)
+            || !parseIntervalKind(pos, expected, to_kind))
+            return false;
+
+        auto compound = parseCompoundIntervalString(literal, from_kind, to_kind);
+        if (!compound)
+            return false;
+
+        for (const auto & [value, kind] : compound->parts)
+        {
+            auto interval_node = makeASTFunction(
+                kind.toNameOfFunctionToIntervalDataType(),
+                make_intrusive<ASTLiteral>(Field(value)));
+            pushResult(compound->is_negative
+                ? makeASTFunction("negate", std::move(interval_node))
+                : std::move(interval_node));
+        }
+
+        finished = true;
+        return true;
+    }
 };
 
 class CaseLayer : public Layer

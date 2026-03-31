@@ -238,6 +238,8 @@ void MetadataStorageFromDisk::appendToRemovalLog(RemovalLogEntryType entry_type,
     auto buf = disk->writeFile(String(REMOVAL_LOG_FILE), /* buf_size */ DBMS_DEFAULT_BUFFER_SIZE, WriteMode::Append, /* settings */ {});
 
     /// Write version header if this is a new file.
+    /// An empty or corrupt file cannot exist here because loadRemovalLog on startup
+    /// detects such cases and compactRemovalLog rewrites the file with a valid header.
     if (!file_exists)
     {
         UInt32 version = REMOVAL_LOG_CURRENT_VERSION;

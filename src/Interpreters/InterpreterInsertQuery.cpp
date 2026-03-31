@@ -788,12 +788,9 @@ static std::shared_ptr<const ActionsDAG> getFilterActionsDAGFromSelectQuery(cons
     if (!context->getSettingsRef()[Setting::allow_experimental_analyzer])
         return nullptr;
 
-    auto modified_context = Context::createCopy(context);
-    modified_context->setSetting("enable_parallel_replicas", Field{0});
-
     SelectQueryOptions analyze_options;
     analyze_options.only_analyze = true;
-    InterpreterSelectQueryAnalyzer analyzer(ast, modified_context, analyze_options);
+    InterpreterSelectQueryAnalyzer analyzer(ast, context, analyze_options);
     const auto & resolved_query_tree = analyzer.getQueryTree();
 
     auto table_expressions = extractTableExpressions(resolved_query_tree, /*add_array_join=*/false, /*recursive=*/true);
@@ -801,7 +798,7 @@ static std::shared_ptr<const ActionsDAG> getFilterActionsDAGFromSelectQuery(cons
         return nullptr;
 
     ResultReplacementMap replacement_map;
-    auto updated_query_tree = replaceTableExpressionsWithDummyTables(resolved_query_tree, table_expressions, modified_context, &replacement_map);
+    auto updated_query_tree = replaceTableExpressionsWithDummyTables(resolved_query_tree, table_expressions, context, &replacement_map);
 
     SelectQueryOptions select_query_options;
     Planner planner(updated_query_tree, select_query_options);
@@ -817,8 +814,6 @@ static std::shared_ptr<const ActionsDAG> getFilterActionsDAGFromSelectQuery(cons
     std::vector<QueryPlan::Node *> nodes_to_process;
     nodes_to_process.push_back(result_plan.getRootNode());
 
-    SourceStepWithFilter * source = nullptr;
-
     while (!nodes_to_process.empty())
     {
         const auto * node = nodes_to_process.back();
@@ -826,13 +821,9 @@ static std::shared_ptr<const ActionsDAG> getFilterActionsDAGFromSelectQuery(cons
         nodes_to_process.insert(nodes_to_process.end(), node->children.begin(), node->children.end());
 
         if (auto * with_filter = dynamic_cast<SourceStepWithFilter *>(node->step.get()))
-            source = with_filter;
+            return with_filter->detachFilterActionsDAG()
     }
-
-    if (!source)
-        return nullptr;
-
-    return source->detachFilterActionsDAG();
+    return nullptr;
 }
 
 

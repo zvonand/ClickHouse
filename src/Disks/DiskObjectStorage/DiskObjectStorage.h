@@ -7,6 +7,9 @@
 #include <Disks/DiskObjectStorage/Replication/BlobKillerThread.h>
 #include <Disks/DiskObjectStorage/Replication/BlobCopierThread.h>
 #include <Disks/IDisk.h>
+#include <Common/CurrentThread.h>
+#include <Common/Scheduler/IResourceManager.h>
+#include <Interpreters/Context.h>
 
 #include <base/scope_guard.h>
 
@@ -281,6 +284,24 @@ private:
 };
 
 using DiskObjectStoragePtr = std::shared_ptr<DiskObjectStorage>;
+
+/// Enrich read/write settings with IO scheduling resource links from the workload classifier.
+template <class Settings>
+inline Settings updateIOSchedulingSettings(const Settings & settings, const std::string & read_resource_name, const std::string & write_resource_name)
+{
+    if (read_resource_name.empty() && write_resource_name.empty())
+        return settings;
+    if (auto query_context = CurrentThread::tryGetQueryContext())
+    {
+        Settings result(settings);
+        if (!read_resource_name.empty())
+            result.io_scheduling.read_resource_link = query_context->getWorkloadClassifier()->get(read_resource_name);
+        if (!write_resource_name.empty())
+            result.io_scheduling.write_resource_link = query_context->getWorkloadClassifier()->get(write_resource_name);
+        return result;
+    }
+    return settings;
+}
 
 class DiskObjectStorageReservation final : public IReservation
 {

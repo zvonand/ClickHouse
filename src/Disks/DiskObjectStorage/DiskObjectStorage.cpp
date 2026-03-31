@@ -65,7 +65,7 @@ DiskTransactionPtr DiskObjectStorage::createObjectStorageTransaction()
 
 DiskTransactionPtr DiskObjectStorage::createObjectStorageTransactionToAnotherDisk(DiskObjectStorage & to_disk)
 {
-    return std::make_shared<MultipleDisksObjectStorageTransaction>(cluster, metadata_storage, object_storages, to_disk.cluster, to_disk.metadata_storage, to_disk.object_storages);
+    return std::make_shared<MultipleDisksObjectStorageTransaction>(cluster, metadata_storage, object_storages, to_disk.cluster, to_disk.metadata_storage, to_disk.object_storages, getReadResourceName(), getWriteResourceName());
 }
 
 DiskObjectStorage::DiskObjectStorage(
@@ -718,22 +718,6 @@ bool DiskObjectStorage::supportsHardLinks() const
     return !metadata_storage->isWriteOnce() && !metadata_storage->isPlain();
 }
 
-template <class Settings>
-static inline Settings updateIOSchedulingSettings(const Settings & settings, const String & read_resource_name, const String & write_resource_name)
-{
-    if (read_resource_name.empty() && write_resource_name.empty())
-        return settings;
-    if (auto query_context = CurrentThread::tryGetQueryContext())
-    {
-        Settings result(settings);
-        if (!read_resource_name.empty())
-            result.io_scheduling.read_resource_link = query_context->getWorkloadClassifier()->get(read_resource_name);
-        if (!write_resource_name.empty())
-            result.io_scheduling.write_resource_link = query_context->getWorkloadClassifier()->get(write_resource_name);
-        return result;
-    }
-    return settings;
-}
 
 String DiskObjectStorage::getReadResourceName() const
 {

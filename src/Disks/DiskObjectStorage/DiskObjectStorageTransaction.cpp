@@ -83,9 +83,9 @@ DiskObjectStorageTransaction::DiskObjectStorageTransaction(
     , object_storages(std::move(object_storages_))
     , blob_killer(std::move(blob_killer_))
     , wait_blob_removal(wait_blob_removal_)
-    , metadata_transaction(metadata_storage->createTransaction())
     , read_resource_name(std::move(read_resource_name_))
     , write_resource_name(std::move(write_resource_name_))
+    , metadata_transaction(metadata_storage->createTransaction())
 {
 }
 
@@ -95,8 +95,10 @@ MultipleDisksObjectStorageTransaction::MultipleDisksObjectStorageTransaction(
     ObjectStorageRouterPtr source_object_storages_,
     ClusterConfigurationPtr destination_cluster_,
     MetadataStoragePtr destination_metadata_storage_,
-    ObjectStorageRouterPtr destination_object_storages_)
-    : DiskObjectStorageTransaction(destination_cluster_, destination_metadata_storage_, destination_object_storages_, /*blob_killer=*/nullptr, /*wait_blob_removal=*/false)
+    ObjectStorageRouterPtr destination_object_storages_,
+    std::string read_resource_name_,
+    std::string write_resource_name_)
+    : DiskObjectStorageTransaction(destination_cluster_, destination_metadata_storage_, destination_object_storages_, /*blob_killer=*/nullptr, /*wait_blob_removal=*/false, std::move(read_resource_name_), std::move(write_resource_name_))
     , source_cluster(std::move(source_cluster_))
     , source_metadata_storage(std::move(source_metadata_storage_))
     , source_object_storages(std::move(source_object_storages_))
@@ -260,23 +262,7 @@ std::unique_ptr<WriteBufferFromFileBase> DiskObjectStorageTransaction::writeFile
 {
     LOG_TEST(getLogger("DiskObjectStorageTransaction"), "write file {} mode {} autocommit {}", path, mode, autocommit);
 
-    /// Enrich write settings with IO scheduling resource links so that S3/object-storage writes
-    /// are subject to workload-level bandwidth throttling (CREATE RESOURCE / CREATE WORKLOAD).
-    /// Without this, the resource link is only set when going through DiskObjectStorage::writeFile(),
-    /// but the transactional path (DataPartStorageOnDiskFull::writeFile with a transaction) bypasses
-    /// that and calls this function directly with settings that have no resource link yet.
-    WriteSettings enriched_settings = settings;
-    if (!read_resource_name.empty() || !write_resource_name.empty())
-    {
-        if (auto query_context = CurrentThread::tryGetQueryContext())
-        {
-            auto classifier = query_context->getWorkloadClassifier();
-            if (!read_resource_name.empty())
-                enriched_settings.io_scheduling.read_resource_link = classifier->get(read_resource_name);
-            if (!write_resource_name.empty())
-                enriched_settings.io_scheduling.write_resource_link = classifier->get(write_resource_name);
-        }
-    }
+    WriteSettings enriched_settings = updateIOSchedulingSettings(settings, read_resource_name, write_resource_name);
 
     /// NOTE: We check it here and not after writing blob because in case of plain/plain-rewritable metadata storages
     ///       undo of disk tx will actually remove existing data.

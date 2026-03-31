@@ -8,6 +8,8 @@ select *, (select toDateTime64('1970-01-01 00:45:25.456789', 6)) from remote('12
 select *, (select toDateTime64('1970-01-01 00:53:25.456789123', 9)) from remote('127.0.0.1', system.one) settings prefer_localhost_replica=0;
 select *, (select toDateTime64(null,3)) from remote('127.0.0.1', system.one) settings prefer_localhost_replica=0;
 
+create database if not exists {CLICKHOUSE_DATABASE_1:Identifier};
+
 drop table if exists {CLICKHOUSE_DATABASE:Identifier}.dt64_03222;
 drop table if exists {CLICKHOUSE_DATABASE_1:Identifier}.distr_03222_dt64;
 
@@ -33,3 +35,4 @@ select count(*) from {CLICKHOUSE_DATABASE_1:Identifier}.distr_03222_dt64 where d
 
 drop table if exists {CLICKHOUSE_DATABASE_1:Identifier}.distr_03222_dt64;
 drop table if exists {CLICKHOUSE_DATABASE:Identifier}.dt64_03222;
+drop database if exists {CLICKHOUSE_DATABASE_1:Identifier};

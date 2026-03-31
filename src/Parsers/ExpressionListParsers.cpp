@@ -2121,6 +2121,11 @@ static std::optional<ParsedCompoundInterval> parseCompoundIntervalString(
         if (ec != std::errc() || ptr != literal.data() + str_pos)
             return {};
 
+        /// Reject values that exceed the signed 64-bit range so that
+        /// positive values stay positive after conversion to Int64.
+        if (uvalue > static_cast<UInt64>(std::numeric_limits<Int64>::max()))
+            return {};
+
         parsed.parts.emplace_back(uvalue, IntervalKind{range[i].kind});
     }
 

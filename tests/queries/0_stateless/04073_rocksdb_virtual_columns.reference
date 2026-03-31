@@ -1,0 +1,9 @@
+test_rocksdb_virtuals
+1	test_rocksdb_virtuals
+2	test_rocksdb_virtuals
+3	test_rocksdb_virtuals
+key	UInt64
+value	String
+_table	LowCardinality(String)
+test_rocksdb_virtuals
+test_rocksdb_virtuals

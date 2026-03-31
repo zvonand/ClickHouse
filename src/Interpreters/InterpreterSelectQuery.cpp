@@ -2389,10 +2389,6 @@ RowPolicyFilterPtr InterpreterSelectQuery::getRowPolicyFilter() const
     return row_policy_filter;
 }
 
-void InterpreterSelectQuery::extendQueryLogElemImpl(QueryLogElement & /*elem*/, const ASTPtr & /*ast*/, ContextPtr /*context_*/) const
-{
-}
-
 bool InterpreterSelectQuery::shouldMoveToPrewhere() const
 {
     const Settings & settings = context->getSettingsRef();

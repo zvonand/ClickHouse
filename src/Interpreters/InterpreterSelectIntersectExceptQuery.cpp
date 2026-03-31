@@ -197,10 +197,6 @@ void InterpreterSelectIntersectExceptQuery::ignoreWithTotals()
         interpreter->ignoreWithTotals();
 }
 
-void InterpreterSelectIntersectExceptQuery::extendQueryLogElemImpl(QueryLogElement & /*elem*/, const ASTPtr & /*ast*/, ContextPtr /*context_*/) const
-{
-}
-
 void registerInterpreterSelectIntersectExceptQuery(InterpreterFactory & factory)
 {
     auto create_fn = [] (const InterpreterFactory::Arguments & args)

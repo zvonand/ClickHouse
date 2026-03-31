@@ -386,10 +386,6 @@ void InterpreterSelectQueryAnalyzer::addStorageLimits(const StorageLimitsList & 
     planner.addStorageLimits(storage_limits);
 }
 
-void InterpreterSelectQueryAnalyzer::extendQueryLogElemImpl(QueryLogElement & /*elem*/, const ASTPtr & /*ast*/, ContextPtr /*context*/) const
-{
-}
-
 void registerInterpreterSelectQueryAnalyzer(InterpreterFactory & factory)
 {
     auto create_fn = [] (const InterpreterFactory::Arguments & args)

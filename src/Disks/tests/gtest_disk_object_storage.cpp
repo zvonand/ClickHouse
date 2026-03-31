@@ -76,7 +76,7 @@ void setUpConfig(const std::string & file_name)
                 <metadata_path>metadata_storage_dir</metadata_path>
                 <metadata_type>local</metadata_type>
                 <use_fake_transaction>false</use_fake_transaction>
-                <metadata_persist_removal_queue>true</metadata_persist_removal_queue>
+                <persistent_removal_log>true</persistent_removal_log>
                 <data_background_cleanup>
                     <enabled>true</enabled>
                     <interval_sec>1</interval_sec>

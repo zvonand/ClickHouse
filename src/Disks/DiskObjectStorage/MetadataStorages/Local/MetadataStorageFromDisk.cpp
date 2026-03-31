@@ -240,7 +240,7 @@ void MetadataStorageFromDisk::appendToRemovalLog(RemovalLogEntryType entry_type,
     /// Write version header if this is a new file.
     if (!file_exists)
     {
-        UInt32 version = RemovalLogVersion::V0;
+        UInt32 version = REMOVAL_LOG_CURRENT_VERSION;
         writeBinaryLittleEndian(version, *buf);
     }
 
@@ -262,7 +262,7 @@ void MetadataStorageFromDisk::compactRemovalLog()
 
     auto buf = disk->writeFile(String(REMOVAL_LOG_TMP_FILE), /* buf_size */ DBMS_DEFAULT_BUFFER_SIZE, WriteMode::Rewrite, /* settings */ {});
 
-    UInt32 version = RemovalLogVersion::V0;
+    UInt32 version = REMOVAL_LOG_CURRENT_VERSION;
     writeBinaryLittleEndian(version, *buf);
 
     auto all_blobs = objects_to_remove.takeFirst(0);

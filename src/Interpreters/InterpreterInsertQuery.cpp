@@ -785,9 +785,6 @@ QueryPipeline InterpreterInsertQuery::buildInsertPipeline(ASTInsertQuery & query
 
 static std::shared_ptr<const ActionsDAG> getFilterActionsDAGFromSelectQuery(const ASTPtr & ast, ContextPtr context)
 {
-    if (!context->getSettingsRef()[Setting::allow_experimental_analyzer])
-        return nullptr;
-
     SelectQueryOptions analyze_options;
     analyze_options.only_analyze = true;
     InterpreterSelectQueryAnalyzer analyzer(ast, context, analyze_options);

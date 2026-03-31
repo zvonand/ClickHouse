@@ -1175,17 +1175,6 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
     ParallelReadResponse response;
     response.finish = true;
 
-    if (request.table_id.empty())
-    {
-        if (!ignored_replicas.contains(request.replica_num))
-            throw Exception(
-                ErrorCodes::LOGICAL_ERROR,
-                "Got request from replica {} with empty table id without ranges announcement",
-                request.replica_num);
-
-        return response;
-    }
-
     if (is_reading_completed)
         return response;
 
@@ -1195,6 +1184,17 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
         std::lock_guard lock(mutex);
         if (is_reading_completed)
             return response;
+
+        if (request.table_id.empty())
+        {
+            if (!ignored_replicas.contains(request.replica_num))
+                throw Exception(
+                    ErrorCodes::LOGICAL_ERROR,
+                    "Got request from replica {} with empty table id without ranges announcement",
+                    request.replica_num);
+
+            return response;
+        }
 
         auto coordinator = getCoordinator(request.table_id);
         if (!coordinator)

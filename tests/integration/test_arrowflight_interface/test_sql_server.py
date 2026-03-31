@@ -309,8 +309,10 @@ def test_get_table_types():
     table = reader.read_all()
 
     types = [table.column("table_type")[i].as_py() for i in range(table.num_rows)]
-    assert "MergeTree" in types
-    assert "Memory" in types
+    assert "REMOTE TABLE" in types
+    assert "VIEW" in types
+    assert "UNKNOWN TABLE TYPE" not in types, \
+        "Some engine(s) in system.table_engines are not mapped in engine_to_type (commandSelector.cpp)"
 
 
 def test_get_primary_keys():

@@ -128,7 +128,7 @@ String AuthMiddlewareFactory::TokenStorage::getToken(std::string username, std::
 {
     std::lock_guard<std::mutex> lock(token_mutex);
 
-    unsafeCleanupExpiredTokens();
+    cleanupExpiredTokens();
 
     auto token = toString(UUIDHelpers::generateV4());
     auto expiration_time = std::chrono::steady_clock::now() + std::chrono::seconds(config.getInt("default_session_timeout", 60));
@@ -143,7 +143,7 @@ std::optional<std::pair<std::string, std::string>> AuthMiddlewareFactory::TokenS
 {
     std::lock_guard<std::mutex> lock(token_mutex);
 
-    unsafeCleanupExpiredTokens();
+    cleanupExpiredTokens();
 
     auto it = token_to_credentials.find(token);
     if (it != token_to_credentials.end())
@@ -156,7 +156,7 @@ std::optional<std::pair<std::string, std::string>> AuthMiddlewareFactory::TokenS
     return std::nullopt;
 }
 
-void AuthMiddlewareFactory::TokenStorage::unsafeCleanupExpiredTokens()
+void AuthMiddlewareFactory::TokenStorage::cleanupExpiredTokens()
 {
     auto now = std::chrono::steady_clock::now();
     for (auto it = token_expiration_list.begin(); it != token_expiration_list.end() && it->first <= now;)

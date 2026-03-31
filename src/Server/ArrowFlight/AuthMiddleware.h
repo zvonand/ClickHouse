@@ -55,7 +55,7 @@ class AuthMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory
     class TokenStorage
     {
     public:
-        explicit TokenStorage(Poco::Util::AbstractConfiguration & config_) : config(config_) {}
+        explicit TokenStorage(const Poco::Util::AbstractConfiguration & config_) : config(config_) {}
 
         /// Generates unique token for given credentials and saves it in storage.
         String getToken(std::string username, std::string password);
@@ -65,16 +65,16 @@ class AuthMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory
         std::optional<std::pair<std::string, std::string>> getCredentials(std::string token);
 
     private:
-        void unsafeCleanupExpiredTokens();
+        void cleanupExpiredTokens() TSA_REQUIRES(token_mutex);
 
-        using token_expiration_list_t = std::multimap<std::chrono::steady_clock::time_point, std::string>;
+        using TokenExpirationList = std::multimap<std::chrono::steady_clock::time_point, std::string>;
 
         std::mutex token_mutex;
-        token_expiration_list_t token_expiration_list;
-        std::unordered_map<std::string, token_expiration_list_t::iterator> token_expiration_list_index;
-        std::unordered_map<std::string, std::pair<std::string, std::string>> token_to_credentials;
+        TokenExpirationList token_expiration_list TSA_GUARDED_BY(token_mutex);
+        std::unordered_map<std::string, TokenExpirationList::iterator> token_expiration_list_index TSA_GUARDED_BY(token_mutex);
+        std::unordered_map<std::string, std::pair<std::string, std::string>> token_to_credentials TSA_GUARDED_BY(token_mutex);
 
-        Poco::Util::AbstractConfiguration & config;
+        const Poco::Util::AbstractConfiguration & config;
     };
 
 public:

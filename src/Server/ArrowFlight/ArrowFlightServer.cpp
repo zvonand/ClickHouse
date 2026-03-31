@@ -60,6 +60,39 @@ namespace
     template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; }; // NOLINT
     template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
+    using Timestamp = std::chrono::system_clock::time_point;
+    using Duration = std::chrono::system_clock::duration;
+
+    Timestamp now()
+    {
+        return std::chrono::system_clock::now();
+    }
+
+    /// We use the ALREADY_EXPIRED timestamp (January 1, 1970) as the expiration time of a ticket or a poll descriptor
+    /// which is already expired.
+    const Timestamp ALREADY_EXPIRED = Timestamp{Duration{0}};
+
+    /// We generate tickets with this prefix.
+    /// Method DoGet() accepts a ticket which is either 1) a ticket with this prefix; or 2) a SQL query.
+    /// A valid SQL query can't start with this prefix so method DoGet() can distinguish those cases.
+    const String TICKET_PREFIX = "~TICKET-";
+
+    bool hasTicketPrefix(const String & ticket)
+    {
+        return ticket.starts_with(TICKET_PREFIX);
+    }
+
+    /// We generate poll descriptors with this prefix.
+    /// Methods PollFlightInfo() or GetSchema() accept a flight descriptor which is either
+    /// 1) a normal flight descriptor (a table name or a SQL query); or 2) a poll descriptor with this prefix.
+    /// A valid SQL query can't start with this prefix so methods PollFlightInfo() and GetSchema() can distinguish those cases.
+    const String POLL_DESCRIPTOR_PREFIX = "~POLL-";
+
+    bool hasPollDescriptorPrefix(const String & poll_descriptor)
+    {
+        return poll_descriptor.starts_with(POLL_DESCRIPTOR_PREFIX);
+    }
+
     String readFile(const String & filepath)
     {
         Poco::FileInputStream ifs(filepath);
@@ -94,45 +127,58 @@ namespace
         return std::move(parse_location_status).ValueOrDie();
     }
 
-    /// Extracts an SQL query from a flight descriptor.
-    /// It depends on the flight descriptor's type (PATH/CMD) and on the operation's type (DoPut/DoGet).
-    [[nodiscard]] arrow::Result<String> convertDescriptorToSQL(const arrow::flight::FlightDescriptor & descriptor, bool for_put_operation)
+    [[nodiscard]] arrow::Result<String> convertPathToSQL(const std::vector<std::string> & path, bool for_put_operation)
+    {
+        if (path.size() != 1)
+            return arrow::Status::Invalid("Flight descriptor's path should be one-component (got ", path.size(), " components)");
+        if (path[0].empty())
+            return arrow::Status::Invalid("Flight descriptor's path should specify the name of a table");
+        const String & table_name = path[0];
+        if (for_put_operation)
+            return "INSERT INTO " + backQuoteIfNeed(table_name) + " FORMAT Arrow";
+        return "SELECT * FROM " + backQuoteIfNeed(table_name);
+    }
+
+    [[nodiscard]] arrow::Result<String> convertGetPathToSQL(const std::vector<std::string> & path)
+    {
+        return convertPathToSQL(path, /* for_put_operation = */ false);
+    }
+
+    [[nodiscard]] arrow::Result<String> convertPutPathToSQL(const std::vector<std::string> & path)
+    {
+        return convertPathToSQL(path, /* for_put_operation = */ true);
+    }
+
+    using DecodeResult = std::tuple<std::string, ArrowFlight::SchemaModifier, ArrowFlight::BlockModifier, std::shared_ptr<arrow::Table>>;
+
+    [[nodiscard]]
+    arrow::Result<DecodeResult> decodeDescriptor(const arrow::flight::FlightDescriptor & descriptor, bool for_put_operation)
     {
         switch (descriptor.type)
         {
             case arrow::flight::FlightDescriptor::PATH:
             {
-                const auto & path = descriptor.path;
-                if (path.size() != 1)
-                    return arrow::Status::Invalid("Flight descriptor's path should be one-component (got ", path.size(), " components)");
-                if (path[0].empty())
-                    return arrow::Status::Invalid("Flight descriptor's path should specify the name of a table");
-                const String & table_name = path[0];
-                if (for_put_operation)
-                    return "INSERT INTO " + backQuoteIfNeed(table_name) + " FORMAT Arrow";
-                else
-                    return "SELECT * FROM " + backQuoteIfNeed(table_name);
+                auto sql_res = for_put_operation ? convertPutPathToSQL(descriptor.path) : convertGetPathToSQL(descriptor.path);
+                ARROW_RETURN_NOT_OK(sql_res);
+                return DecodeResult {sql_res.ValueUnsafe(), {}, {}, {}};
             }
             case arrow::flight::FlightDescriptor::CMD:
             {
-                const auto & cmd = descriptor.cmd;
-                if (cmd.empty())
-                    return arrow::Status::Invalid("Flight descriptor's command should specify a SQL query");
-                return cmd;
+                if (!for_put_operation && hasPollDescriptorPrefix(descriptor.cmd))
+                    return arrow::Status::Invalid("Method GetFlightInfo cannot be called with a flight descriptor returned by method PollFlightInfo");
+
+                auto res = ArrowFlight::commandSelector(descriptor.cmd);
+                if (const auto * result_table = res.getTable())
+                {
+                    ARROW_RETURN_NOT_OK(*result_table);
+                    return DecodeResult {{}, {}, {}, result_table->ValueUnsafe()};
+                }
+                const auto * sql_set = res.getSQLSet();
+                return DecodeResult {sql_set->sql, sql_set->schema_modifier, sql_set->block_modifier, {}};
             }
             default:
                 return arrow::Status::TypeError("Flight descriptor has unknown type ", magic_enum::enum_name(descriptor.type));
         }
-    }
-
-    [[nodiscard]] arrow::Result<String> convertGetDescriptorToSQL(const arrow::flight::FlightDescriptor & descriptor)
-    {
-        return convertDescriptorToSQL(descriptor, /* for_put_operation = */ false);
-    }
-
-    [[nodiscard]] arrow::Result<String> convertPutDescriptorToSQL(const arrow::flight::FlightDescriptor & descriptor)
-    {
-        return convertDescriptorToSQL(descriptor, /* for_put_operation = */ true);
     }
 
     /// For method doGet() the pipeline should have an output.
@@ -157,39 +203,6 @@ namespace
                 return arrow::Status::ExecutionError("Invalid format (", insert->format, "), only 'Arrow' format is supported");
         }
         return arrow::Status::OK();
-    }
-
-    using Timestamp = std::chrono::system_clock::time_point;
-    using Duration = std::chrono::system_clock::duration;
-
-    Timestamp now()
-    {
-        return std::chrono::system_clock::now();
-    }
-
-    /// We use the ALREADY_EXPIRED timestamp (January 1, 1970) as the expiration time of a ticket or a poll descriptor
-    /// which is already expired.
-    const Timestamp ALREADY_EXPIRED = Timestamp{Duration{0}};
-
-    /// We generate tickets with this prefix.
-    /// Method DoGet() accepts a ticket which is either 1) a ticket with this prefix; or 2) a SQL query.
-    /// A valid SQL query can't start with this prefix so method DoGet() can distinguish those cases.
-    const String TICKET_PREFIX = "~TICKET-";
-
-    bool hasTicketPrefix(const String & ticket)
-    {
-        return ticket.starts_with(TICKET_PREFIX);
-    }
-
-    /// We generate poll descriptors with this prefix.
-    /// Methods PollFlightInfo() or GetSchema() accept a flight descriptor which is either
-    /// 1) a normal flight descriptor (a table name or a SQL query); or 2) a poll descriptor with this prefix.
-    /// A valid SQL query can't start with this prefix so methods PollFlightInfo() and GetSchema() can distinguish those cases.
-    const String POLL_DESCRIPTOR_PREFIX = "~POLL-";
-
-    bool hasPollDescriptorPrefix(const String & poll_descriptor)
-    {
-        return poll_descriptor.starts_with(POLL_DESCRIPTOR_PREFIX);
     }
 
     /// A ticket name with its expiration time.
@@ -263,8 +276,8 @@ namespace
             ContextPtr query_context_,
             ThreadGroupPtr thread_group_,
             BlockIO && block_io_,
-            std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier = nullptr,
-            std::function<void(ContextPtr, Block &)> block_modifier_ = nullptr)
+            ArrowFlight::SchemaModifier schema_modifier = nullptr,
+            ArrowFlight::BlockModifier block_modifier_ = nullptr)
             : query_context(query_context_)
             , thread_group(thread_group_)
             , block_io(std::move(block_io_))
@@ -319,7 +332,7 @@ namespace
         BlockIO block_io;
         std::optional<PullingPipelineExecutor> executor;
         std::shared_ptr<arrow::Schema> schema;
-        std::function<void(ContextPtr, Block &)> block_modifier;
+        ArrowFlight::BlockModifier block_modifier;
     };
 
     /// Creates a converter to convert ClickHouse blocks to the Arrow format.
@@ -1077,8 +1090,8 @@ static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std:
     const std::shared_ptr<Session> & session,
     const std::string & sql,
     bool single_table,
-    std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier = nullptr,
-    std::function<void(ContextPtr, Block &)> block_modifier = nullptr
+    ArrowFlight::SchemaModifier schema_modifier = nullptr,
+    ArrowFlight::BlockModifier block_modifier = nullptr
 )
 {
     auto query_context = session->makeQueryContext();
@@ -1166,8 +1179,8 @@ static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std:
 static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std::shared_ptr<arrow::Table>>>> executeSQLtoTables(
     const std::shared_ptr<Session> & session,
     const std::string & sql,
-    std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier = nullptr,
-    std::function<void(ContextPtr, Block &)> block_modifier = nullptr
+    ArrowFlight::SchemaModifier schema_modifier = nullptr,
+    ArrowFlight::BlockModifier block_modifier = nullptr
 )
 {
     return executeSQLtoTables_impl(session, sql, false, schema_modifier, block_modifier);
@@ -1176,8 +1189,8 @@ static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::vector<std:
 static arrow::Result<std::tuple<std::shared_ptr<arrow::Schema>, std::shared_ptr<arrow::Table>>> executeSQLtoTable(
     const std::shared_ptr<Session> & session,
     const std::string & sql,
-    std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier = nullptr,
-    std::function<void(ContextPtr, Block &)> block_modifier = nullptr
+    ArrowFlight::SchemaModifier schema_modifier = nullptr,
+    ArrowFlight::BlockModifier block_modifier = nullptr
 )
 {
     auto res = executeSQLtoTables_impl(session, sql, true, schema_modifier, block_modifier);
@@ -1198,48 +1211,13 @@ arrow::Status ArrowFlightServer::GetFlightInfo(
         auto session = auth.getSession();
 
         std::string sql;
-        std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
-        std::function<void(ContextPtr, Block &)> block_modifier;
+        ArrowFlight::SchemaModifier schema_modifier;
+        ArrowFlight::BlockModifier block_modifier;
         std::shared_ptr<arrow::Table> table;
         std::shared_ptr<arrow::Schema> schema;
 
-        if ((request.type == arrow::flight::FlightDescriptor::CMD) && hasPollDescriptorPrefix(request.cmd))
-        {
-            return arrow::Status::Invalid("Method GetFlightInfo cannot be called with a flight descriptor returned by method PollFlightInfo");
-        }
-        else
-        {
-            if (request.cmd.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
-                return arrow::Status::Invalid("Command payload is too large");
-            if (
-                google::protobuf::Any any_msg;
-                    request.type == arrow::flight::FlightDescriptor::CMD
-                    && !request.cmd.empty()
-                    && any_msg.ParseFromArray(request.cmd.data(), static_cast<int>(request.cmd.size()))
-            )
-            {
-                auto res = ArrowFlight::commandSelector(any_msg);
-                if (const auto * sql_set = res.getSQLSet())
-                {
-                    sql = sql_set->sql;
-                    schema_modifier = sql_set->schema_modifier;
-                    block_modifier = sql_set->block_modifier;
-                }
-                else if (const auto * result_table = res.getTable())
-                {
-                    ARROW_RETURN_NOT_OK(*result_table);
-                    table = result_table->ValueUnsafe();
-                }
-            }
-
-
-            if (!table && sql.empty())
-            {
-                auto sql_res = convertGetDescriptorToSQL(request);
-                ARROW_RETURN_NOT_OK(sql_res);
-                sql = sql_res.ValueUnsafe();
-            }
-        }
+        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false))
+        chassert(!sql.empty() || table);
 
         std::vector<arrow::flight::FlightEndpoint> endpoints;
         int64_t total_rows = 0;
@@ -1264,10 +1242,8 @@ arrow::Status ArrowFlightServer::GetFlightInfo(
             // and all endpoints are local. This forces clients to request data through the same connection,
             // and even with gRPC, clients are forced to prioritize the order.
             // TODO: Consider single ticket optimization for ordered local data to reduce overhead (executeSQLtoTable)
-            auto execute_res = executeSQLtoTables(session, sql, schema_modifier, block_modifier);
-            ARROW_RETURN_NOT_OK(execute_res);
             std::vector<std::shared_ptr<arrow::Table>> tables;
-            std::tie(schema, tables) = execute_res.ValueUnsafe();
+            ARROW_ASSIGN_OR_RAISE(std::tie(schema, tables) , executeSQLtoTables(session, sql, schema_modifier, block_modifier))
 
             for (auto & t : tables)
             {
@@ -1290,7 +1266,7 @@ arrow::Status ArrowFlightServer::GetFlightInfo(
             /* ordered = */ true);
 
         ARROW_RETURN_NOT_OK(flight_info_res);
-        *info = std::make_unique<arrow::flight::FlightInfo>(std::move(flight_info_res).ValueOrDie());
+        *info = std::make_unique<arrow::flight::FlightInfo>(std::move(flight_info_res).ValueUnsafe());
 
         LOG_INFO(log, "GetFlightInfo returns flight info {}", (*info)->ToString());
         return arrow::Status::OK();
@@ -1325,42 +1301,17 @@ arrow::Status ArrowFlightServer::GetSchema(
         else
         {
             std::string sql;
-            std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
-            std::function<void(ContextPtr, Block &)> block_modifier;
+            ArrowFlight::SchemaModifier schema_modifier;
+            ArrowFlight::BlockModifier block_modifier;
             std::shared_ptr<arrow::Table> table;
 
-            if (request.cmd.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
-                return arrow::Status::Invalid("Command payload is too large");
-            if (
-                google::protobuf::Any any_msg;
-                    request.type == arrow::flight::FlightDescriptor::CMD
-                    && !request.cmd.empty()
-                    && any_msg.ParseFromArray(request.cmd.data(), static_cast<int>(request.cmd.size()))
-            )
-            {
-                auto res = ArrowFlight::commandSelector(any_msg, true);
-                if (const auto * sql_set = res.getSQLSet())
-                {
-                    sql = sql_set->sql;
-                    schema_modifier = sql_set->schema_modifier;
-                    block_modifier = sql_set->block_modifier;
-                }
-                else if (const auto * result_table = res.getTable())
-                {
-                    ARROW_RETURN_NOT_OK(*result_table);
-                    schema = result_table->ValueUnsafe()->schema();
-                }
-            }
+            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false))
+            chassert(!sql.empty() || table);
 
-            if (!schema)
+            if (table)
+                schema = table->schema();
+            else
             {
-                if (sql.empty())
-                {
-                    auto sql_res = convertGetDescriptorToSQL(request);
-                    ARROW_RETURN_NOT_OK(sql_res);
-                    sql = sql_res.ValueUnsafe();
-                }
-
                 auto query_context = session->makeQueryContext();
                 query_context->setCurrentQueryId(""); /// Empty string means the query id will be autogenerated.
                 QueryScope query_scope = QueryScope::create(query_context);
@@ -1427,11 +1378,6 @@ arrow::Status ArrowFlightServer::PollFlightInfo(
         const auto & auth = AuthMiddleware::get(context);
         auto session = auth.getSession();
 
-        std::string sql;
-        std::function<arrow::Result<std::shared_ptr<arrow::Schema>>(std::shared_ptr<arrow::Schema>)> schema_modifier;
-        std::function<void(ContextPtr, Block &)> block_modifier;
-        std::shared_ptr<arrow::Table> table;
-
         std::shared_ptr<const PollDescriptorInfo> poll_info;
         std::shared_ptr<arrow::Schema> schema;
         std::optional<PollDescriptorWithExpirationTime> next_poll_descriptor;
@@ -1457,28 +1403,13 @@ arrow::Status ArrowFlightServer::PollFlightInfo(
         }
         else
         {
-            if (request.cmd.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
-                return arrow::Status::Invalid("Command payload is too large");
-            if (
-                google::protobuf::Any any_msg;
-                    request.type == arrow::flight::FlightDescriptor::CMD
-                    && !request.cmd.empty()
-                    && any_msg.ParseFromArray(request.cmd.data(), static_cast<int>(request.cmd.size()))
-            )
-            {
-                auto res = ArrowFlight::commandSelector(any_msg);
-                if (const auto * sql_set = res.getSQLSet())
-                {
-                    sql = sql_set->sql;
-                    schema_modifier = sql_set->schema_modifier;
-                    block_modifier = sql_set->block_modifier;
-                }
-                else if (const auto * result_table = res.getTable())
-                {
-                    ARROW_RETURN_NOT_OK(*result_table);
-                    table = result_table->ValueUnsafe();
-                }
-            }
+            std::string sql;
+            ArrowFlight::SchemaModifier schema_modifier;
+            ArrowFlight::BlockModifier block_modifier;
+            std::shared_ptr<arrow::Table> table;
+
+            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false))
+            chassert(!sql.empty() || table);
 
             if (table)
             {
@@ -1496,13 +1427,6 @@ arrow::Status ArrowFlightServer::PollFlightInfo(
 
                 LOG_INFO(log, "PollFlightInfo returns {}", (*info)->ToString());
                 return arrow::Status::OK();
-            }
-
-            if (sql.empty())
-            {
-                auto sql_res = convertGetDescriptorToSQL(request);
-                ARROW_RETURN_NOT_OK(sql_res);
-                sql = sql_res.ValueUnsafe();
             }
 
             auto query_context = session->makeQueryContext();
@@ -1753,69 +1677,16 @@ arrow::Status ArrowFlightServer::DoPut(
         const auto & auth = AuthMiddleware::get(context);
         auto session = auth.getSession();
 
+        bool dont_write_flight_sql_metadata = !ArrowFlight::flightDescriptorIsArrowFlightSqlCommand(request);
+
         std::string sql;
-        if (request.cmd.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
-            return arrow::Status::Invalid("Command payload is too large");
-        if (
-            google::protobuf::Any any_msg;
-                request.type == arrow::flight::FlightDescriptor::CMD
-                && !request.cmd.empty()
-                && any_msg.ParseFromArray(request.cmd.data(), static_cast<int>(request.cmd.size()))
-        )
-        {
-            if (any_msg.Is<arrow::flight::protocol::sql::CommandStatementUpdate>())
-            {
-                arrow::flight::protocol::sql::CommandStatementUpdate command;
-                if (!any_msg.UnpackTo(&command))
-                    return arrow::Status::SerializationError("Deserialization of sql::CommandStatementUpdate failed.");
-                if (command.query().empty())
-                    return arrow::Status::Invalid("CommandStatementUpdate has an empty query");
-                sql = command.query();
-            }
-            else if (any_msg.Is<arrow::flight::protocol::sql::CommandStatementIngest>())
-            {
-                using CommandStatementIngest = arrow::flight::protocol::sql::CommandStatementIngest;
-                CommandStatementIngest command;
-                if (!any_msg.UnpackTo(&command))
-                    return arrow::Status::SerializationError("Deserialization of sql::CommandStatementIngest failed.");
-                if (command.has_table_definition_options())
-                {
-                    const auto & options = command.table_definition_options();
-                    if (options.if_not_exist() != CommandStatementIngest::TableDefinitionOptions::TABLE_NOT_EXIST_OPTION_FAIL ||
-                        options.if_exists() != CommandStatementIngest::TableDefinitionOptions::TABLE_EXISTS_OPTION_APPEND)
-                    {
-                        return arrow::Status::NotImplemented("Only appending to existing tables is supported (TABLE_NOT_EXIST_OPTION_FAIL + TABLE_EXISTS_OPTION_APPEND)");
-                    }
-                }
+        ArrowFlight::SchemaModifier schema_modifier;
+        ArrowFlight::BlockModifier block_modifier;
+        std::shared_ptr<arrow::Table> table;
 
-                if (command.has_catalog())
-                    return arrow::Status::NotImplemented("Catalogs are not supported.");
-
-                if (command.temporary())
-                    return arrow::Status::NotImplemented("Implicit temporary tables are not supported.");
-
-                std::string schema_string;
-                if (command.has_schema())
-                {
-                    if (!isValidIdentifier(command.schema()))
-                        return arrow::Status::Invalid("Invalid schema name: ", command.schema());
-                    schema_string = backQuoteIfNeed(command.schema()) + ".";
-                }
-
-                if (!isValidIdentifier(command.table()))
-                    return arrow::Status::Invalid("Invalid table name: ", command.table());
-
-                sql = "INSERT INTO " + schema_string + backQuoteIfNeed(command.table()) + " FORMAT Arrow";
-            }
-        }
-
-        bool dont_write_flight_sql_metadata = sql.empty();
-        if (sql.empty())
-        {
-            auto sql_res = convertPutDescriptorToSQL(request);
-            ARROW_RETURN_NOT_OK(sql_res);
-            sql = sql_res.ValueOrDie();
-        }
+        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, true))
+        /// DoPut command should only produce sql query
+        chassert(!sql.empty() && !schema_modifier && !block_modifier && !table);
 
         auto query_context = session->makeQueryContext();
         query_context->setCurrentQueryId(""); /// Empty string means the query id will be autogenerated.

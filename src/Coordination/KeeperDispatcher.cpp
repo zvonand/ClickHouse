@@ -395,7 +395,7 @@ void KeeperDispatcher::requestThread()
                     /// TODO: there are a few problems:
                     ///  * There can be multiple forceWaitAndProcessResult calls for different
                     ///    batches between waitCommittedUpto calls.
-                    ///    In such case, the addErrorResponses below would apply only apply to the
+                    ///    In such case, the addErrorResponses below would apply only to the
                     ///    latest of those batches, but they may all be failed.
                     ///  * Of those multiple forceWaitAndProcessResult calls, it's possible that an
                     ///    earlier one succeeds but a later one fails. Then we won't call

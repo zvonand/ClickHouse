@@ -16,8 +16,6 @@
 #include <Common/SipHash.h>
 #include <Common/quoteString.h>
 
-#include <iostream>
-
 static constexpr std::string_view format_avro_schema_registry_url = "format_avro_schema_registry_url";
 
 namespace DB

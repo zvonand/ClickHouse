@@ -4,8 +4,6 @@
 
 #include <shared_mutex>
 #include <stack>
-
-#include <Common/logger_useful.h>
 namespace DB
 {
 
@@ -423,7 +421,6 @@ void ExecutingGraph::cancel(bool cancel_all_processors)
                 if (cancel_all_processors || source_processors.at(proc))
                 {
                     IProcessor * processor = processors->at(proc).get();
-                        LOG_DEBUG(getLogger("ExecutingGraph"), "{} cancel() enter this={}", processor->getName(), static_cast<void*>(processor));
                     processor->cancel();
                 }
             }

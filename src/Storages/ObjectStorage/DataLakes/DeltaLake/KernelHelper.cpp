@@ -276,7 +276,7 @@ private:
             path = path.substr(1);
 
         const auto & prefix = params.endpoint.prefix;
-        std::string full_path = prefix.empty() ? path : (std::filesystem::path(prefix) / path);
+        std::string full_path = prefix.empty() ? path : (std::filesystem::path(prefix) / path).string();
 
         return "az://" + params.endpoint.container_name + "/" + full_path;
     }

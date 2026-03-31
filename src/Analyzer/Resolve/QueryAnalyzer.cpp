@@ -55,6 +55,8 @@
 #include <Storages/IStorage.h>
 #include <Storages/StorageView.h>
 
+#include <Access/EnabledRowPolicies.h>
+
 #include <base/Decimal_fwd.h>
 #include <base/types.h>
 #include <boost/algorithm/string/predicate.hpp>
@@ -4910,6 +4912,12 @@ void QueryAnalyzer::inlineViewSubqueryIfNeeded(QueryTreeNodePtr & join_tree_node
 
     auto view_context = StorageView::getViewSubqueryContext(scope.context, storage_snapshot);
 
+    /// Check for row policies on the view itself.
+    auto storage_id = storage->getStorageID();
+    auto row_policy_filter = scope.context->getRowPolicyFilter(
+        storage_id.getDatabaseName(), storage_id.getTableName(), RowPolicyFilterType::SELECT_FILTER);
+    bool has_row_policy = row_policy_filter && !row_policy_filter->isAlwaysTrue();
+
     /// Build the query tree from the view's inner query AST.
     ASTPtr view_ast = storage_snapshot->metadata->getSelectQuery().inner_query->clone();
     auto view_query_tree = buildQueryTree(view_ast, view_context);
@@ -4991,6 +4999,57 @@ void QueryAnalyzer::inlineViewSubqueryIfNeeded(QueryTreeNodePtr & join_tree_node
     else
     {
         result_node = std::move(view_query_tree);
+    }
+
+    /// If the view has a row policy, wrap result_node with a filter:
+    ///   SELECT <cols> FROM (result_node) WHERE <row_policy_filter>
+    /// Applied after type conversion so the filter sees view column names and types,
+    /// matching the non-inlined path where the Planner applies the filter after `StorageView::read`.
+    if (has_row_policy)
+    {
+        /// Without a type-conversion wrapper, result_node still has the inner query's column names.
+        /// The row policy filter references the view's declared column names.
+        /// If they don't match, we cannot inline.
+        if (!needs_type_conversion)
+        {
+            if (view_columns.size() != subquery_columns.size())
+                return;
+
+            for (size_t i = 0; i < view_columns.size(); ++i)
+                if (view_columns[i].name != subquery_columns[i].name)
+                    return;
+        }
+
+        /// Resolve the row policy filter expression against result_node's columns.
+        auto filter_node = buildQueryTree(row_policy_filter->expression->clone(), scope.context);
+        QueryAnalyzer filter_analyzer(this->only_analyze);
+        filter_analyzer.resolve(filter_node, result_node, scope.context);
+
+        /// Build wrapper: SELECT <cols> FROM (result_node) WHERE <resolved_filter>
+        auto result_columns = result_node->as<QueryNode>()
+            ? result_node->as<QueryNode>()->getProjectionColumns()
+            : result_node->as<UnionNode>()->computeProjectionColumns();
+
+        QueryTreeNodes projection_nodes;
+        NamesAndTypes projection_columns;
+        projection_nodes.reserve(result_columns.size());
+        projection_columns.reserve(result_columns.size());
+
+        for (const auto & col : result_columns)
+        {
+            projection_nodes.push_back(std::make_shared<ColumnNode>(col, result_node));
+            projection_columns.push_back(col);
+        }
+
+        auto wrapper_context = Context::createCopy(scope.context);
+        auto wrapper_query = std::make_shared<QueryNode>(std::move(wrapper_context));
+        wrapper_query->getProjection().getNodes() = std::move(projection_nodes);
+        wrapper_query->resolveProjectionColumns(std::move(projection_columns));
+        wrapper_query->getJoinTree() = result_node;
+        wrapper_query->getWhere() = std::move(filter_node);
+        wrapper_query->setIsSubquery(true);
+
+        result_node = std::move(wrapper_query);
     }
 
     /// Preserve alias: the outer query references columns via the view name or user-provided alias.

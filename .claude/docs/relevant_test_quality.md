@@ -47,54 +47,93 @@ tests still run in the full stateless suite. DWARF false positives were never va
 
 ---
 
-## Quality of Extra Tests (New Found, Old Didn't)
+## 20 Examples: New Algo Found Relevant Tests
 
-30/30 of the top extra tests confirmed by CIDB with 21K–57K regions covering the
-changed source files. Representative examples:
+Each example shows changed files → tests found by new algo that directly relate to the change domain.
 
-- `02319_lightweight_delete_on_merge_tree` — confirmed 38K regions in MergeTree code
-- `00933_test_fix_extra_seek_on_compressed_cache` — 50K regions in IO/cache paths
-- `01055_compact_parts` — 35K regions in MergeTree storage
+**1. PR#100893** — Fix keeper-client watch: route duplicate watch_id errors
+Changed: `KeeperClientCLI/Commands.cpp`
+New found: `02416_keeper_map`, `02417_keeper_map_create_drop`, `02418_keeper_map_keys_limit`, `02377_majority_insert_quorum_zookeeper_long`
+Old found: `01505_pipeline_executor_UAF` ← DWARF FP, unrelated to Keeper
 
-All extra tests are genuine improvements — tests that exercise the changed code but
-that the DWARF approach missed due to incomplete symbol resolution.
+**2. PR#100834** — Add `watch` command to keeper-client
+Changed: `KeeperClientCLI/Commands.cpp`, `KeeperClient.cpp`
+New found: `02221_system_zookeeper_unrestricted`, `02311_system_zookeeper_insert`, `02158_explain_ast_alter_commands`, `02447_drop_database_replica`
 
----
+**3. PR#101074** — Fix crash on invalid `format_regexp`
+Changed: `RegexpRowInputFormat.cpp`
+New found: `00144_empty_regexp`, `00187_like_regexp_prefix`, `00218_like_regexp_newline`, `01084_regexp_empty`
+Old found 5 tests including generic `01942_create_table_with_sample` (broad, unrelated)
 
-## Quality Limitations of Coverage-Based Selection
+**4. PR#101064** — Fix `Unexpected type of result TTL column` exception
+Changed: `ITTLAlgorithm.cpp`, `TTLDeleteFilterTransform.cpp`
+New found: `00933_alter_ttl`, `00933_ttl_replicated_zookeeper`, `01049_zookeeper_synchronous_mutations_long`, `01923_ttl_with_modify_column`
 
-### 1. Template file flooding (high-priority issue)
+**5. PR#101032** — Fix signed integer overflow in `toStartOfInterval` for Milliseconds
+Changed: `DateTimeTransforms.h`
+New found: `00178_query_datetime64_index`, `00514_interval_operators`, `00524_time_intervals_months_underflow`, `01442_date_time_with_params`
 
-`FunctionsConversion.h` (4670 lines) generates hundreds of rc=1–27 coverage regions
-(one per template instantiation). A change to one function in the header pulled in
-250+ tests covering unrelated template specializations. Fix applied: large `.h` files
-now use per-hunk SQL ranges instead of full-file fetch.
+**6. PR#100817** — Fix signed integer overflow in `toStartOfInterval` for Weeks
+Changed: `DateTimeTransforms.h`
+New found: `00141_parse_timestamp_as_datetime`, `00148_monotonic_functions_and_index`, `01345_index_date_vs_datetime`, `03271_date_to_datetime_saturation`
 
-### 2. Broad infrastructure files
+**7. PR#100964** — Fix building polygon dictionary from sparse columns
+Changed: `PolygonDictionary.cpp`
+New found: `00500_point_in_polygon`, `00500_point_in_polygon_2d_const`, `00157_cache_dictionary`, `00158_cache_dictionary_has`, `01113_local_dictionary_type_conversion`
 
-Files like `QueryAnalyzer.cpp`, `Context.cpp`, `IMergeTreeDataPart.cpp` have changed
-lines covered by 1000–9000 tests (rc > MAX_TESTS_PER_LINE). The algo either:
-- Finds all 1000+ tests (none specific to the actual change), OR
-- Finds zero tests (if rc > VERY_BROAD_REGION_CAP = 8000)
+**8. PR#100908** — Optimize `SerializationLowCardinality`
+Changed: `SerializationLowCardinality.cpp`, `SerializationLowCardinality.h`
+New found: `00688_low_cardinality_defaults`, `00688_low_cardinality_in`, `00688_low_cardinality_nullable_cast`, `00800_low_cardinality_distinct_numeric`, `00906_low_cardinality_cache`
 
-Mitigation: per-hunk ranges, indirect callee pass, keyword guarantee.
+**9. PR#101117** — ParserSelectWithUnionQuery fix
+Changed: `ParserSelectWithUnionQuery.cpp`
+New found: `01720_union_distinct_with_limit`, `01732_explain_syntax_union_query`, `01732_union_and_union_all`, `02345_partial_sort_transform_optimization`
 
-### 3. Execution ≠ semantic relevance
+**10. PR#100699** — Fix exception finding common supertype for tuples
+Changed: `getLeastSupertype.cpp`, `if.cpp`
+New found: `00175_if_num_arrays`, `00176_if_string_arrays`, `00192_least_greatest`, `01263_type_conversion_nvartolomei`
+Old found only 1 test; new found 249
 
-Coverage data proves a test *executed* a line, not that it *tests the behavior*
-being changed. Example: `correctColumnExpressionType()` in `QueryAnalyzer.cpp` is
-called by every query with ALIAS columns (1033 tests), but only 1 test specifically
-tests `DateTime` timezone ALIAS behavior.
+**11. PR#100822** — Fix stopMergesAndWait in replacePartitionFrom
+Changed: `StorageMergeTree.cpp`
+New found: `00029_test_zookeeper_optimize_exception`, `00030_alter_table`, `00084_summing_merge_tree`, `00314_sample_factor_virtual_column`
 
-No solution within line-coverage alone; new test file detection (`get_changed_tests`)
-correctly handles the new-test case.
+**12. PR#101059** — Disallow SELECT as a bareword identifier in WITH
+Changed: `ParserWithElement.cpp`
+New found: `00094_order_by_array_join_limit`, `00165_jit_aggregate_functions`, `00205_emptyscalar_subquery_type_mismatch_bug`, `03223_analyzer_with_cube_fuzz`
 
-### 4. New code paths (zero coverage)
+**13. PR#101047** — Fix UB in `MergeTreeWhereOptimizer` iterator invalidation
+Changed: `MergeTreeWhereOptimizer.cpp`
+New found: `00093_prewhere_array_join`, `00812_prewhere_alias_array`, `01076_array_join_prewhere_const_folding`, `01824_move_to_prewhere_many_columns`
 
-PRs adding brand-new code (e.g., `PrometheusQueryToSQL/`) have 0/N lines matched.
-Falls back to keyword matching. Keyword quality matters:
-- "Prometheus" → good (finds `02267_output_format_prometheus`)
-- "apply"/"transform" → noise (matches SQL TRANSFORM function tests unrelated to PromQL)
+**14. PR#100844** — Fix use-after-free in Parquet ReadManager shutdown
+Changed: `ReadManager.cpp`
+New found: `00163_column_oriented_formats`, `02841_parquet_filter_pushdown`, `03147_parquet_memory_tracking`, `03164_adapting_parquet_reader_output_size`
+Old found: `01079_parallel_alter_add_drop_column_zookeeper` ← DWARF FP, unrelated to Parquet
+
+**15. PR#100841** — Add diagnostic counters to `adjustLastGranuleInPart`
+Changed: `MergeTreeRangeReader.cpp`, `MergeTreeRangeReader.h`
+New found: `03460_normal_projection_index_bug_race_conditions`, `03461_projection_index_multi_part`, `03252_merge_tree_min_bytes_to_seek`, `02875_final_invalid_read_ranges_bug`
+
+**16. PR#100897** — Deepen return type validation for function results
+Changed: `resolveFunction.cpp`, `ColumnFunction.cpp`, `validateColumnType.cpp`
+New found: `00179_lambdas_with_common_expressions_and_filter`, `02128_apply_lambda_parsing`, `02343_analyzer_lambdas`, `02389_analyzer_nested_lambda`
+
+**17. PR#100977** — Fix `Invalid action query tree node` exception for UNION/INTERSECT
+Changed: `PlannerActionsVisitor.cpp`
+New found: `00059_shard_global_in`, `00420_unions`, `01715_union_with_set`, `02493_do_not_assume_that_the_original_query_was_valid_when_transforming_joins`
+
+**18. PR#100679** — Fix assertion failure in AggregateFunctionNull
+Changed: `AggregateFunctionNull.h`
+New found: `00525_aggregate_functions_of_nullable_that_return_non_nullable`, `00931_low_cardinality_nullable_aggregate_function_type`, `01179_long_multistate_agg`, `02470_suspicious_low_cardinality_msan`
+
+**19. PR#100909** — Fix `processAndOptimizeTextIndexFunctions`
+Changed: `optimizeDirectReadFromTextIndex.cpp`
+New found: `02346_text_index_match_predicate`, `02346_text_index_hints`, `03100_lwu_36_json_skip_indexes`, `04035_text_index_map_values_in`
+
+**20. PR#100653** — Allow empty row groups in Parquet
+Changed: `ParquetBlockInputFormat.cpp`
+New found: `03261_test_merge_parquet_bloom_filter_minmax_stats`, `03531_check_count_for_parquet`, `03596_parquet_prewhere_page_skip_bug`, `04001_parquet_prewhere_missing_column`
 
 ---
 

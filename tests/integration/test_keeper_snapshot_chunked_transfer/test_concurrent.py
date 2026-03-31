@@ -69,12 +69,13 @@ def test_concurrent_followers_fetch_snapshot(started_cluster, nodes):
 
     cleanup_test_tree(cluster, node_leader, prefix)
 
+    kill_times = {node: get_kill_timestamp(node) for node in lagging}
+
     for node in lagging:
         node.stop_clickhouse(kill=True)
 
     leader_zk = keeper_utils.get_fake_zk(cluster, node_leader.name)
     fill_test_tree(leader_zk, prefix)
-    kill_time = get_kill_timestamp(node_leader)
 
     def start_and_wait(node):
         node.start_clickhouse(20)
@@ -89,7 +90,7 @@ def test_concurrent_followers_fetch_snapshot(started_cluster, nodes):
     for node in lagging:
         node_zk = keeper_utils.get_fake_zk(cluster, node.name)
         verify_test_tree(leader_zk, node_zk, prefix)
-        received = get_received_snapshot_info(node, kill_time)
+        received = get_received_snapshot_info(node, kill_times[node])
         assert received is not None, f"{node.name} did not receive a snapshot"
 
     cleanup_test_tree(cluster, node_leader, prefix)

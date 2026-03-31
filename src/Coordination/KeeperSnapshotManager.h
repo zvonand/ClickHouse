@@ -151,6 +151,7 @@ struct SnapshotReceiveCtx
         std::string snapshot_file_name_,
         uint64_t log_idx_)
         : log_idx(log_idx_)
+        , expected_obj_id(0)
         , snapshot_file_name(std::move(snapshot_file_name_))
         , disk(std::move(disk_))
         , write_buf(std::move(write_buf_))

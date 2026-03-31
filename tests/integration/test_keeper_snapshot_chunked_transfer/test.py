@@ -192,7 +192,7 @@ def test_recover_after_interrupted_transfer(started_cluster, nodes):
         assert False, "Failpoint keeper_save_snapshot_pause_mid_transfer not triggered within 60 s"
     pool.shutdown(wait=False)
 
-    recovery_time = get_kill_timestamp(node_leader)
+    recovery_time = get_kill_timestamp(node_lagging)
     node_lagging.stop_clickhouse(kill=True)
 
     if is_remote:

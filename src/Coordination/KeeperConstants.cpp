@@ -289,6 +289,7 @@
     M(KeeperChangelogFileSyncMicroseconds) \
     M(KeeperSnapshotWrittenBytes) \
     M(KeeperSnapshotFileSyncMicroseconds) \
+    M(KeeperSnapshotRemoteLoaderErrors) \
 \
     M(IOUringSQEsSubmitted) \
     M(IOUringSQEsResubmitsAsync) \

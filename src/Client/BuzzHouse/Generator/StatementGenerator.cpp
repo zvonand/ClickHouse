@@ -1809,7 +1809,28 @@ std::optional<String> StatementGenerator::alterSingleTable(
                      = addTableColumn(rg, t, t.col_counter++, true, true, rg.nextMediumNumber() < 6, ColumnSpecial::NONE, def);
                  this->next_type_mask = type_mask_backup;
 
-                 if (!nested_ids.empty())
+                 if (nested_ids.empty())
+                 {
+                     /// Non-nested MODIFY COLUMN: retarget to an existing top-level column so that
+                     /// generator state (staged_cols key + proto column ref) agree on the same name.
+                     std::vector<String> candidate_keys;
+                     for (const auto & [key, val] : t.cols)
+                     {
+                         if (val.tp->getTypeClass() != SQLTypeClass::NESTED)
+                             candidate_keys.emplace_back(key);
+                     }
+                     if (!candidate_keys.empty())
+                     {
+                         const String & target_key = rg.pickRandomly(candidate_keys);
+                         def->mutable_col()->mutable_col()->set_column(target_key);
+                         if (target_key != ncol_key)
+                         {
+                             t.staged_cols[target_key] = std::move(t.staged_cols[ncol_key]);
+                             t.staged_cols.erase(ncol_key);
+                         }
+                     }
+                 }
+                 else
                  {
                      std::unordered_map<String, SQLColumn> nested_cols;
                      const String nested_key = rg.pickRandomly(nested_ids);
@@ -3497,10 +3518,18 @@ void StatementGenerator::exchangeObjects(const String & tkey1, const String & tk
     {
         T obj1 = std::move(container.at(tkey1));
         T obj2 = std::move(container.at(tkey2));
-        auto db_tmp = obj1.db;
-
-        obj1.db = obj2.db;
-        obj2.db = db_tmp;
+        std::swap(obj1.db, obj2.db);
+        if constexpr (std::is_same_v<T, std::shared_ptr<SQLDatabase>>)
+        {
+            obj1->name = tkey2;
+            obj2->name = tkey1;
+        }
+        else
+        {
+            obj1.name = tkey2;
+            obj2.name = tkey1;
+            std::swap(obj1.counter, obj2.counter);
+        }
         container[tkey2] = std::move(obj1);
         container[tkey1] = std::move(obj2);
     }

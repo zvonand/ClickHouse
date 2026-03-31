@@ -75,6 +75,9 @@ namespace ErrorCodes
     DECLARE(Bool, check_node_acl_on_remove, false, "When trying to remove a node, check ACLs from both the node itself and the parent node. If disabled, default behaviour will be used where only ACL from the parent node is checked", 0) \
     DECLARE(UInt64, write_snapshot_version, 6, "Snapshot format version to write (supported: 6 and above). Increase only after all nodes in the cluster are upgraded to a version that supports the new format", 0) \
     DECLARE(Bool, nuraft_test_mode, false, "Nuraft test mode. not enabled for production use", 0) \
+    DECLARE(Bool, nuraft_streaming_mode, false, "Enable NuRaft streaming mode, which allows multiple in-flight AppendEntries requests to followers instead of strict one-by-one pipeline. Reduces RTT bottleneck under heavy write loads. Beneficial in high-latency environments (e.g. cross-zone Kubernetes).", 0) \
+    DECLARE(UInt64, nuraft_max_log_gap_in_stream, 64, "Maximum number of in-flight log entries per follower when streaming mode is enabled. Acts as a throttling cap. Only effective when nuraft_streaming_mode is true.", 0) \
+    DECLARE(UInt64, nuraft_max_bytes_in_flight_in_stream, 32 * 1024 * 1024, "Maximum bytes of in-flight data per follower when streaming mode is enabled. Acts as a data volume throttle. Only effective when nuraft_streaming_mode is true.", 0) \
 
 DECLARE_SETTINGS_TRAITS(CoordinationSettingsTraits, LIST_OF_COORDINATION_SETTINGS)
 IMPLEMENT_SETTINGS_TRAITS(CoordinationSettingsTraits, LIST_OF_COORDINATION_SETTINGS)
@@ -318,6 +321,13 @@ void KeeperConfigurationAndSettings::dump(WriteBufferFromOwnString & buf) const
     write_int(coordination_settings[CoordinationSetting::write_snapshot_version]);
     writeText("nuraft_test_mode=", buf);
     write_bool(coordination_settings[CoordinationSetting::nuraft_test_mode]);
+
+    writeText("nuraft_streaming_mode=", buf);
+    write_bool(coordination_settings[CoordinationSetting::nuraft_streaming_mode]);
+    writeText("nuraft_max_log_gap_in_stream=", buf);
+    write_int(coordination_settings[CoordinationSetting::nuraft_max_log_gap_in_stream]);
+    writeText("nuraft_max_bytes_in_flight_in_stream=", buf);
+    write_int(coordination_settings[CoordinationSetting::nuraft_max_bytes_in_flight_in_stream]);
 }
 
 KeeperConfigurationAndSettingsPtr

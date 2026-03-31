@@ -1120,7 +1120,7 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
         {
             file_size = info.disk->getFileSize(info.path);
         }
-        catch (...)
+        catch (...) /// Ok: exception is saved and logged via onException
         {
             onException(log_, "Failed to get snapshot size for transfer");
             return false;
@@ -1134,7 +1134,7 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
         {
             reader = info.disk->readFile(info.path, getReadSettings(), file_size);
         }
-        catch (...)
+        catch (...) /// Ok: exception is saved and logged via onException
         {
             onException(log_, "Failed to open snapshot for transfer");
             return false;
@@ -1143,7 +1143,7 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
         {
             buf = nuraft::buffer::alloc(file_size);
         }
-        catch (...)
+        catch (...) /// Ok: exception is saved and logged via onException
         {
             reader.reset();
             onException(log_, fmt::format("Failed to allocate {} bytes for snapshot {} transfer", file_size, log_idx));
@@ -1194,7 +1194,7 @@ struct RemoteSnapshotLoader : public ISnapshotLoader
                     reinterpret_cast<char *>(buf->data_begin()) + current,
                     needed - current);
             }
-            catch (...)
+            catch (...) /// Ok: exception is saved and logged via onException
             {
                 onException(log_, "Failed to read snapshot chunk");
                 ProfileEvents::increment(ProfileEvents::KeeperSnapshotRemoteLoaderErrors);

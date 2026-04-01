@@ -308,7 +308,7 @@ public:
     const TokenToPostingsInfosMap & getPatternTokens() const { return pattern_tokens; }
     const std::vector<String> & getPatternTokensForTextQuery(const TextSearchQuery & query) const;
     PostingListPtr getPostingsForRareToken(std::string_view token) const;
-    bool isPatternScanFinished() const { return pattern_scan_finished; }
+    bool canUseLikeDictionaryScan() const { return can_use_like_dictionary_scan; }
     void setCurrentRange(RowsRange range) { current_range = std::move(range); }
     const String & getIndexIdForCaches() const { return index_id_for_caches; }
 
@@ -334,7 +334,7 @@ private:
 
     bool is_empty = true;
     /// Indicates if pattern scan successfully finished. The LIKE optimization can be used.
-    bool pattern_scan_finished = false;
+    bool can_use_like_dictionary_scan = false;
     /// If adding significantly large members here make sure to add them to memoryUsageBytes()
     MergeTreeIndexTextParams params;
     /// Tokens that are in the index granule after analysis.

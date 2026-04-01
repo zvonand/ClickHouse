@@ -233,7 +233,7 @@ void MergeTreeReaderTextIndex::analyzeTokensCardinality()
         }
         else if (!search_query->patterns.empty())
         {
-            if (!granule_text.isPatternScanFinished())
+            if (!granule_text.canUseLikeDictionaryScan())
             {
                 if (!fallback_reader)
                     throw Exception(ErrorCodes::LOGICAL_ERROR, "The fallback reader for patterns is not initialized.");

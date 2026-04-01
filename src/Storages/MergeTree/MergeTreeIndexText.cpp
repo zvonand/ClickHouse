@@ -355,7 +355,7 @@ void MergeTreeIndexGranuleText::deserializeBinaryWithMultipleStreams(MergeTreeIn
     remaining_tokens.clear();
     pattern_tokens.clear();
     pattern_tokens_per_query.clear();
-    pattern_scan_finished = false;
+    can_use_like_dictionary_scan = false;
 
     analyzeDictionaryForTokens(*index_stream, *dictionary_stream, state);
     analyzeDictionaryForPatterns(*index_stream, *dictionary_stream, state);
@@ -466,14 +466,14 @@ void MergeTreeIndexGranuleText::analyzeDictionaryForPatterns(MergeTreeIndexReade
 
     if (all_search_patterns.empty())
     {
-        pattern_scan_finished = true;
+        can_use_like_dictionary_scan = true;
         return;
     }
 
     auto sparse_index = loadSparseIndex(header_stream, state);
     if (sparse_index->empty())
     {
-        pattern_scan_finished = true;
+        can_use_like_dictionary_scan = true;
         return;
     }
 
@@ -530,8 +530,6 @@ void MergeTreeIndexGranuleText::analyzeDictionaryForPatterns(MergeTreeIndexReade
         }
     }
 
-    pattern_scan_finished = true;
-
     for (const auto & [token, _] : pattern_tokens)
     {
         for (const auto & [query_hash, query] : condition_text.getAllSearchQueries())
@@ -544,6 +542,8 @@ void MergeTreeIndexGranuleText::analyzeDictionaryForPatterns(MergeTreeIndexReade
                 pattern_tokens_per_query[query_hash].push_back(token);
         }
     }
+
+    can_use_like_dictionary_scan = true;
 }
 
 std::vector<String> MergeTreeIndexGranuleText::fillTokensFromCache(MergeTreeIndexDeserializationState & state)
@@ -756,7 +756,7 @@ bool MergeTreeIndexGranuleText::hasAnyQueryPatterns(const TextSearchQuery & quer
 
     /// If the dictionary scan was cut short (too many large-posting tokens), the set of
     /// matched pattern tokens is incomplete. Conservatively assume the pattern may match.
-    if (!pattern_scan_finished)
+    if (!can_use_like_dictionary_scan)
         return true;
 
     const auto & query_tokens = getPatternTokensForTextQuery(query);

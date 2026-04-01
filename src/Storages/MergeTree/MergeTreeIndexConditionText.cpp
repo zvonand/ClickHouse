@@ -769,7 +769,7 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
         && settings[Setting::use_text_index_like_evaluation_by_dictionary_scan])
     {
         const bool has_preprocessor = preprocessor && preprocessor->hasActions();
-        if (has_preprocessor && !preprocessor->isCaseFolding())
+        if (has_preprocessor && !preprocessor->isLowerOrUpper())
             return false;
 
         auto patterns = stringLikeToPatterns(value_field, true);

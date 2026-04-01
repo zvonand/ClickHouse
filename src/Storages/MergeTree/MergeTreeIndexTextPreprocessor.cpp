@@ -194,7 +194,7 @@ MergeTreeIndexTextPreprocessor::MergeTreeIndexTextPreprocessor(ASTPtr expression
             && func->arguments && func->arguments->children.size() == 1)
         {
             const auto * arg = func->arguments->children.front()->as<ASTIdentifier>();
-            is_case_folding = arg && arg->name() == index_description.column_names.front();
+            is_lower_or_upper = arg && arg->name() == index_description.column_names.front();
         }
     }
 }

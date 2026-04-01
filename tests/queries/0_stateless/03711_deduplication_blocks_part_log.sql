@@ -104,6 +104,22 @@ CREATE TABLE 03710_database.03711_type_map (v Map(String, UInt32)) ENGINE = Merg
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03710_database.03711_type_map;
 
+CREATE TABLE 03710_database.03711_type_variant (v Variant(UInt64, String, Array(UInt32))) ENGINE = MergeTree() ORDER BY tuple()
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+SYSTEM STOP MERGES 03710_database.03711_type_variant;
+
+CREATE TABLE 03710_database.03711_type_dynamic (v Dynamic) ENGINE = MergeTree() ORDER BY tuple()
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+SYSTEM STOP MERGES 03710_database.03711_type_dynamic;
+
+CREATE TABLE 03710_database.03711_type_json (v JSON) ENGINE = MergeTree() ORDER BY tuple()
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+SYSTEM STOP MERGES 03710_database.03711_type_json;
+
+CREATE TABLE 03710_database.03711_type_json_mdp0 (v JSON(max_dynamic_paths=0)) ENGINE = MergeTree() ORDER BY tuple()
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+SYSTEM STOP MERGES 03710_database.03711_type_json_mdp0;
+
 CREATE TABLE 03710_database.03711_type_mixed
 (
     id UInt32,
@@ -165,6 +181,10 @@ INSERT INTO 03710_database.03711_type_array VALUES ([1, 2, 3]), ([4, 5]);
 INSERT INTO 03710_database.03711_type_nullable VALUES (42), (NULL);
 INSERT INTO 03710_database.03711_type_tuple VALUES ((1, 100)), ((2, 200));
 INSERT INTO 03710_database.03711_type_map VALUES ({'a': 1, 'b': 2}), ({'c': 3});
+INSERT INTO 03710_database.03711_type_variant VALUES (42::UInt64), ('hello'::String);
+INSERT INTO 03710_database.03711_type_dynamic VALUES (42::UInt64), ('hello'::String);
+INSERT INTO 03710_database.03711_type_json VALUES ('{"a": 1, "b": "hello"}'), ('{"c": [1, 2, 3], "d": 42}');
+INSERT INTO 03710_database.03711_type_json_mdp0 VALUES ('{"a": 1, "b": "hello"}'), ('{"c": [1, 2, 3], "d": 42}');
 INSERT INTO 03710_database.03711_type_mixed VALUES (1, 'hello', 1.23, 3.14, 'abcdefgh', [1, 2, 3], 42, (1, 100), {'a': 1}), (2, 'world', 4.56, 2.72, '12345678', [4, 5], NULL, (2, 200), {'c': 3});
 
 INSERT INTO 03710_database.03711_async_uint SETTINGS async_insert=1, wait_for_async_insert=1 VALUES (42), (99);
@@ -179,6 +199,7 @@ WHERE event_date >= yesterday() AND event_time >= now() - 600 AND
     table IN ['03711_join_with', '03711_table', '03711_mv_table_1', '03711_mv_table_2',
                '03711_type_decimal', '03711_type_float', '03711_type_fixedstr', '03711_type_string',
                '03711_type_array', '03711_type_nullable', '03711_type_tuple', '03711_type_map',
+               '03711_type_variant', '03711_type_dynamic', '03711_type_json', '03711_type_json_mdp0',
                '03711_type_mixed',
                '03711_async_uint', '03711_async_string', '03711_async_array', '03711_async_mixed']
     AND database = '03710_database'

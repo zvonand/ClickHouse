@@ -223,3 +223,15 @@ SELECT c0 FROM file(currentDatabase() || '_04065_arr_unnamed.parquet', 'Parquet'
 -- Parquet V3 native reader unnamed (not yet supported)
 SELECT c0 FROM file(currentDatabase() || '_04065_arr_unnamed.parquet', 'Parquet', 'c0 Array(Nullable(Tuple(UInt32, String)))') SETTINGS input_format_parquet_use_native_reader_v3 = 1; -- { serverError TYPE_MISMATCH }
 DROP TABLE test_nullable_tuple_arr_unnamed;
+-- Array(Nullable(Tuple)) with Array element inside: import_nested flattens, Array defaults to [] at null positions
+DROP TABLE IF EXISTS test_nullable_tuple_arr_nested_elem;
+CREATE TABLE test_nullable_tuple_arr_nested_elem (c0 Array(Nullable(Tuple(a UInt32, b Array(UInt32))))) ENGINE = Memory;
+INSERT INTO test_nullable_tuple_arr_nested_elem VALUES ([(1, [10, 20]), NULL, (3, [30])]);
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04065_arr_nested_elem.parquet', 'Parquet') SELECT c0 FROM test_nullable_tuple_arr_nested_elem;
+-- Parquet Arrow reader import_nested: scalar becomes Nullable, Array defaults to [] at null struct positions
+SELECT * FROM file(currentDatabase() || '_04065_arr_nested_elem.parquet', 'Parquet', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Array(UInt32))') SETTINGS input_format_parquet_use_native_reader_v3 = 0, input_format_parquet_import_nested = 1;
+[1,NULL,3]	[[10,20],[],[30]]
+-- Parquet V3 native reader import_nested
+SELECT * FROM file(currentDatabase() || '_04065_arr_nested_elem.parquet', 'Parquet', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Array(UInt32))') SETTINGS input_format_parquet_use_native_reader_v3 = 1, input_format_parquet_import_nested = 1;
+[1,NULL,3]	[[10,20],[],[30]]
+DROP TABLE test_nullable_tuple_arr_nested_elem;

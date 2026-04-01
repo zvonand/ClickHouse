@@ -333,6 +333,13 @@ INSERT INTO test_nullable_tuple_import_nested VALUES ([(1, 'a'), NULL, (3, 'c')]
 INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_import_nested.arrow', 'Arrow') SELECT c0 FROM test_nullable_tuple_import_nested;
 SELECT * FROM file(currentDatabase() || '_04064_import_nested.arrow', 'Arrow', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Nullable(String))') SETTINGS input_format_arrow_import_nested = 1;
 
+-- ORC import_nested
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_import_nested.orc', 'ORC') SELECT c0 FROM test_nullable_tuple_import_nested;
+SELECT * FROM file(currentDatabase() || '_04064_import_nested.orc', 'ORC', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Nullable(String))') SETTINGS input_format_orc_import_nested = 1;
+
+-- ORC legacy import_nested
+SELECT * FROM file(currentDatabase() || '_04064_import_nested.orc', 'ORC', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Nullable(String))') SETTINGS input_format_orc_import_nested = 1, input_format_orc_use_fast_decoder = 0;
+
 DROP TABLE test_nullable_tuple_import_nested;
 
 -- Array(Nullable(Tuple)) without named elements: round-trip as a single column, no flattening
@@ -348,4 +355,26 @@ SELECT c0 FROM file(currentDatabase() || '_04064_arr_unnamed.arrow', 'Arrow', 'c
 INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_arr_unnamed.orc', 'ORC') SELECT c0 FROM test_nullable_tuple_arr_unnamed;
 SELECT c0 FROM file(currentDatabase() || '_04064_arr_unnamed.orc', 'ORC', 'c0 Array(Nullable(Tuple(UInt32, String)))');
 
+-- ORC legacy unnamed
+SELECT c0 FROM file(currentDatabase() || '_04064_arr_unnamed.orc', 'ORC', 'c0 Array(Nullable(Tuple(UInt32, String)))') SETTINGS input_format_orc_use_fast_decoder = 0;
+
 DROP TABLE test_nullable_tuple_arr_unnamed;
+
+-- Array(Nullable(Tuple)) with Array element inside: import_nested flattens, Array defaults to [] at null positions
+DROP TABLE IF EXISTS test_nullable_tuple_arr_nested_elem;
+CREATE TABLE test_nullable_tuple_arr_nested_elem (c0 Array(Nullable(Tuple(a UInt32, b Array(UInt32))))) ENGINE = Memory;
+INSERT INTO test_nullable_tuple_arr_nested_elem VALUES ([(1, [10, 20]), NULL, (3, [30])]);
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_arr_nested_elem.arrow', 'Arrow') SELECT c0 FROM test_nullable_tuple_arr_nested_elem;
+
+-- Arrow import_nested: scalar becomes Nullable, Array defaults to [] at null struct positions
+SELECT * FROM file(currentDatabase() || '_04064_arr_nested_elem.arrow', 'Arrow', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Array(UInt32))') SETTINGS input_format_arrow_import_nested = 1;
+
+-- ORC import_nested
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_arr_nested_elem.orc', 'ORC') SELECT c0 FROM test_nullable_tuple_arr_nested_elem;
+SELECT * FROM file(currentDatabase() || '_04064_arr_nested_elem.orc', 'ORC', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Array(UInt32))') SETTINGS input_format_orc_import_nested = 1;
+
+-- ORC legacy import_nested
+SELECT * FROM file(currentDatabase() || '_04064_arr_nested_elem.orc', 'ORC', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Array(UInt32))') SETTINGS input_format_orc_import_nested = 1, input_format_orc_use_fast_decoder = 0;
+
+DROP TABLE test_nullable_tuple_arr_nested_elem;

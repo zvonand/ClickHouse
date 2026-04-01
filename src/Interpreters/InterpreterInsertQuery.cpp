@@ -861,12 +861,23 @@ std::optional<QueryPipeline> InterpreterInsertQuery::distributedWriteIntoReplica
 
         if (condition_ast)
         {
-            const auto metadata = src_storage_cluster->getInMemoryMetadataPtr();
-            const auto snapshot = src_storage_cluster->getStorageSnapshot(metadata, local_context);
-            const auto columns = snapshot->getColumns(GetColumnsOptions(GetColumnsOptions::All).withVirtuals());
-            auto syntax = TreeRewriter(local_context).analyze(condition_ast, columns);
-            filter_dag = ExpressionAnalyzer(condition_ast, syntax, local_context).getActionsDAG(true, true);
-            predicate = filter_dag->getOutputs().at(0);
+            try
+            {
+                auto columns = src_storage_cluster->getInMemoryMetadataPtr()->getColumns().getAll();
+                auto syntax = TreeRewriter(local_context).analyze(condition_ast, columns);
+                filter_dag = ExpressionAnalyzer(condition_ast, syntax, local_context).getActionsDAG(true, true);
+                predicate = filter_dag->getOutputs().at(0);
+            }
+            catch (...)
+            {
+                /// Filter extraction is best-effort: if DAG construction fails for any reason
+                /// (e.g. the predicate references columns or functions not available in this
+                /// isolated analysis pass), silently fall back to no pruning so the query
+                /// still executes correctly.
+                tryLogCurrentException(logger, "Failed to build filter DAG for partition pruning in INSERT ... SELECT; continuing without pruning");
+                filter_dag.reset();
+                predicate = nullptr;
+            }
         }
     }
      auto extension = src_storage_cluster->getTaskIteratorExtension(

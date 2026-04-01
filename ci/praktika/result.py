@@ -1,6 +1,7 @@
 import copy
 import dataclasses
 import datetime
+import errno
 import io
 import json
 import os
@@ -238,10 +239,13 @@ class Result(MetaClasses.Serializable):
         name is derived from a long error message.
         """
         try:
-            if Path(self.file_name()).is_file():
-                self.dump()
-        except OSError:
-            pass
+            exists = Path(self.file_name()).is_file()
+        except OSError as e:
+            if e.errno == errno.ENAMETOOLONG:
+                return self
+            raise
+        if exists:
+            self.dump()
         return self
 
     def set_status(self, status) -> "Result":

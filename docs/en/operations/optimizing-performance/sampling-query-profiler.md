@@ -137,7 +137,7 @@ If you need to visualize `trace_log` info, try [flamegraph](/interfaces/third-pa
 
 ## Building flame graphs with the `flameGraph` function {#flamegraph}
 
-ClickHouse provides the [`flameGraph`](/sql-reference/aggregate-functions/reference/flame_graph) aggregate function which builds a flame graph directly from stacktraces stored in `trace_log`.
+ClickHouse provides the [`flameGraph`](/sql-reference/aggregate-functions/reference/flame_graph) aggregate function which builds a flame graph directly from stack traces stored in `trace_log`.
 The output is an array of strings in a format compatible with [flamegraph.pl](https://github.com/brendangregg/FlameGraph).
 
 **Syntax:**

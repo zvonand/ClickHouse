@@ -245,20 +245,18 @@ void SettingsConstraints::checkOrClamp(const Settings & current_settings, Settin
     });
 }
 
+/// Casts `change.value` to the setting's declared type and returns the result. Returns Null if we should skip the setting: either because
+/// the value is unchanged (when `ignore_unchanged_settings` is false) or because the cast failed (when `throw_on_failure` is false).
 template <typename SettingsT>
-bool getNewValueToCheck(const SettingsT & current_settings, SettingChange & change, Field & new_value, bool throw_on_failure, bool * value_unchanged = nullptr)
+Field getNewValueToCheck(const SettingsT & current_settings, const SettingChange & change, bool ignore_unchanged_settings, bool throw_on_failure)
 {
     Field current_value;
     bool has_current_value = current_settings.tryGet(change.name, current_value);
 
-    /// Setting isn't checked if value has not changed.
-    if (has_current_value && change.value == current_value)
-    {
-        if (value_unchanged)
-            *value_unchanged = true;
-        return false;
-    }
+    if (!ignore_unchanged_settings && has_current_value && change.value == current_value)
+        return {};
 
+    Field new_value;
     if (throw_on_failure)
         new_value = SettingsT::castValueUtil(change.name, change.value);
     else
@@ -269,19 +267,14 @@ bool getNewValueToCheck(const SettingsT & current_settings, SettingChange & chan
         }
         catch (...)
         {
-            return false;
+            return {};
         }
     }
 
-    /// Setting isn't checked if value has not changed.
-    if (has_current_value && new_value == current_value)
-    {
-        if (value_unchanged)
-            *value_unchanged = true;
-        return false;
-    }
+    if (!ignore_unchanged_settings && has_current_value && new_value == current_value)
+        return {};
 
-    return true;
+    return new_value;
 }
 
 bool SettingsConstraints::checkImpl(const Settings & current_settings,
@@ -316,20 +309,17 @@ bool SettingsConstraints::checkImpl(const Settings & current_settings,
     else if (!access_control->isSettingNameAllowed(setting_name))
         return false;
 
-    /// `getNewValueToCheck` returns false either because the value is unchanged (no-op) or because the cast failed.
-    /// `value_unchanged` disambiguates: true means unchanged, false means the setting itself is broken.
-    Field new_value;
-    bool value_unchanged = false;
-    if (!getNewValueToCheck(current_settings, change, new_value, reaction == THROW_ON_VIOLATION, &value_unchanged))
-        return ignore_unchanged_settings && value_unchanged;
+    Field new_value = getNewValueToCheck(current_settings, change, ignore_unchanged_settings, reaction == THROW_ON_VIOLATION);
+    if (new_value.isNull())
+        return false;
 
     return getChecker(current_settings, setting_name).check(change, new_value, reaction, source);
 }
 
 bool SettingsConstraints::checkImpl(const MergeTreeSettings & current_settings, SettingChange & change, ReactionOnViolation reaction) const
 {
-    Field new_value;
-    if (!getNewValueToCheck(current_settings, change, new_value, reaction == THROW_ON_VIOLATION))
+    Field new_value = getNewValueToCheck(current_settings, change, /*ignore_unchanged_settings=*/false, reaction == THROW_ON_VIOLATION);
+    if (new_value.isNull())
         return false;
     return getMergeTreeChecker(change.name).check(change, new_value, reaction, SettingSource::QUERY);
 }

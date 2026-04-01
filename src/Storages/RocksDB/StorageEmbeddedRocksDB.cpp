@@ -110,6 +110,7 @@ public:
         : ISource(header)
         , storage(storage_)
         , storage_snapshot(storage_snapshot_)
+        , physical_header(storage_snapshot_->metadata->getSampleBlock())
         , keys(keys_)
         , begin(begin_)
         , end(end_)
@@ -127,6 +128,7 @@ public:
         : ISource(header)
         , storage(storage_)
         , storage_snapshot(storage_snapshot_)
+        , physical_header(storage_snapshot_->metadata->getSampleBlock())
         , iterator(std::move(iterator_))
         , max_block_size(max_block_size_)
     {
@@ -143,7 +145,7 @@ public:
             block = generateFullScan();
 
         if (block.empty())
-            return Chunk(getPort().getHeader().cloneEmpty().detachColumns(), 0);
+            return {};
 
         fillVirtualColumns(block);
         return Chunk(block.getColumns(), block.rows());
@@ -176,7 +178,7 @@ public:
             return {};
         }
         auto raw_keys = serializeKeysToRawString(it, end, storage.getPrimaryKeyTypes(), max_block_size);
-        return storage.getBySerializedKeys(raw_keys, nullptr, storage_snapshot->metadata->getSampleBlock());
+        return storage.getBySerializedKeys(raw_keys, nullptr, physical_header);
     }
 
     Block generateFullScan()
@@ -184,9 +186,7 @@ public:
         if (!iterator->Valid())
             return {};
 
-        auto physical_header = storage_snapshot->metadata->getSampleBlock();
         MutableColumns columns = physical_header.cloneEmptyColumns();
-
         for (size_t rows = 0; iterator->Valid() && rows < max_block_size; ++rows, iterator->Next())
         {
             fillColumns(iterator->key(), storage.getPrimaryKeyPos(), physical_header, columns);
@@ -201,12 +201,14 @@ public:
                 getName(),
                 iterator->status().ToString());
         }
+
         return physical_header.cloneWithColumns(std::move(columns));
     }
 
 private:
     const StorageEmbeddedRocksDB & storage;
     StorageSnapshotPtr storage_snapshot;
+    Block physical_header;
 
     /// For key scan
     FieldVectorPtr keys = nullptr;
@@ -699,7 +701,7 @@ void StorageEmbeddedRocksDB::read(
     size_t num_streams)
 {
     storage_snapshot->check(column_names);
-    Block sample_block = storage_snapshot->getSampleBlockForColumns(column_names);
+    Block sample_block = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getNamesAndTypesList());
 
     auto reading = std::make_unique<ReadFromEmbeddedRocksDB>(
         column_names,

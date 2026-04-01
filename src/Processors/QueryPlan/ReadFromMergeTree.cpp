@@ -208,6 +208,7 @@ namespace Setting
     extern const SettingsBool use_uncompressed_cache;
     extern const SettingsNonZeroUInt64 merge_tree_min_read_task_size;
     extern const SettingsBool read_in_order_use_virtual_row;
+    extern const SettingsBool read_in_order_use_virtual_row_per_block;
     extern const SettingsBool use_skip_indexes_if_final_exact_mode;
     extern const SettingsBool use_skip_indexes_on_data_read;
     extern const SettingsBool use_skip_indexes_for_top_k;
@@ -738,6 +739,7 @@ Pipe ReadFromMergeTree::readInOrder(
         processor->addPartLevelToChunk(isQueryWithFinal());
 
         bool use_virtual_row = virtual_row_conversion && (read_type == ReadType::InOrder || read_type == ReadType::InReverseOrder);
+        bool use_virtual_row_per_block = use_virtual_row && context->getSettingsRef()[Setting::read_in_order_use_virtual_row_per_block];
 
         Block pk_header;
         if (use_virtual_row)
@@ -751,7 +753,9 @@ Pipe ReadFromMergeTree::readInOrder(
                 pk_header_columns.push_back({primary_key.data_types[j]->createColumn(), primary_key.data_types[j], primary_key.column_names[j]});
 
             pk_header = Block(std::move(pk_header_columns));
-            processor->setVirtualRowConversions(virtual_row_conversion, pk_header, read_type == ReadType::InReverseOrder);
+
+            if (use_virtual_row_per_block)
+                processor->setVirtualRowConversions(virtual_row_conversion, pk_header, read_type == ReadType::InReverseOrder);
         }
 
         auto source = std::make_shared<MergeTreeSource>(std::move(processor), data.getLogName());

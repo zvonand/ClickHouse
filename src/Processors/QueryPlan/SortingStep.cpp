@@ -73,6 +73,7 @@ namespace Setting
     extern const SettingsUInt64 min_free_disk_space_for_temporary_data;
     extern const SettingsUInt64 prefer_external_sort_block_bytes;
     extern const SettingsBool read_in_order_use_buffering;
+    extern const SettingsBool read_in_order_use_virtual_row_per_block;
     extern const SettingsFloat remerge_sort_lowered_memory_bytes_ratio;
     extern const SettingsOverflowMode sort_overflow_mode;
     extern const SettingsString temporary_files_codec;
@@ -145,7 +146,7 @@ SortingStep::Settings::Settings(const DB::Settings & settings)
 
     min_free_disk_space = settings[Setting::min_free_disk_space_for_temporary_data];
     max_block_bytes = settings[Setting::prefer_external_sort_block_bytes];
-    read_in_order_use_buffering = settings[Setting::read_in_order_use_buffering];
+    read_in_order_use_buffering = settings[Setting::read_in_order_use_buffering] && !settings[Setting::read_in_order_use_virtual_row_per_block];
     temporary_files_codec = settings[Setting::temporary_files_codec];
     temporary_files_buffer_size = settings[Setting::temporary_files_buffer_size];
 }

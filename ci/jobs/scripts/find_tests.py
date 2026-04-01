@@ -62,8 +62,7 @@ class Targeting:
         result = set()
         if hasattr(self, '_diff_text') and self._diff_text:
             # Reuse already-fetched diff text to extract changed file names — avoids
-            # a second gh API call and works when the PR diff was pre-fetched via
-            # --diff-file or the rate limit is exhausted.
+            # a second diff fetch and works when the diff was pre-fetched via --diff-file.
             changed_files = [
                 m.group(1)
                 for m in re.finditer(r'^\+\+\+ b/(.+)$', self._diff_text, re.MULTILINE)
@@ -121,7 +120,7 @@ class Targeting:
             JOB_TYPE=self.job_type,
             TEST_NAME_PATTERN=test_name_pattern,
         )
-        query_result = cidb.query(query, log_level="")
+        query_result = cidb.query(query, log_level="") or ""
         # Parse test names from the query result
         for line in query_result.strip().split("\n"):
             if line.strip():
@@ -1618,18 +1617,25 @@ class Targeting:
 
     def get_diff_text(self) -> str:
         """Fetch the PR diff text (cached on self._diff_text after first call)."""
-        if not hasattr(self, '_diff_text') or not self._diff_text:
-            assert self.info.pr_number > 0, "Diff fetching applicable for PRs only"
+        if hasattr(self, '_diff_text') and self._diff_text is not None:
+            return self._diff_text
+        assert self.info.pr_number > 0, "Diff fetching applicable for PRs only"
+        if self.info.is_local_run:
             self._diff_text = Shell.get_output(
                 f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse"
+            )
+        else:
+            merge_base = (self.info.get_kv_data() or {}).get("merge_base_commit_sha", "")
+            assert merge_base, "merge_base_commit_sha not found in KV data"
+            self._diff_text = Shell.get_output(
+                f"git diff {merge_base}...HEAD --unified=0"
             )
         return self._diff_text
 
     def get_changed_lines_from_diff(self):
         """
         Return changed lines from the PR diff.
-        Always fetches the diff from GitHub using `gh pr diff` so that results
-        reflect the actual PR regardless of the local checkout state.
+        In CI uses `git diff <merge_base>...HEAD`; for local runs uses `gh pr diff`.
         """
         assert self.info.pr_number > 0, "Find tests by diff applicable for PRs only"
         return self._parse_diff_lines(self.get_diff_text())
@@ -1978,7 +1984,7 @@ if __name__ == "__main__":
 
     # If a pre-fetched diff file is provided, monkey-patch get_diff_text so both
     # get_changed_lines_from_diff and get_most_relevant_tests read from the file
-    # rather than calling gh pr diff.
+    # rather than fetching the diff.
     if args.diff_file:
         import types
         diff_text = Path(args.diff_file).read_text()

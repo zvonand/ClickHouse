@@ -4747,7 +4747,9 @@ void QueryAnalyzer::resolveJoin(QueryTreeNodePtr & join_node, IdentifierResolveS
                     {
                         auto left_subquery = std::make_shared<QueryNode>(query_node->getMutableContext());
                         left_subquery->getProjection().getNodes().push_back(projection_node->clone());
-                        left_subquery->getJoinTree() = left_table_expression;
+                        /// Clone the left table expression to avoid corrupting the original node
+                        /// when resolveQuery re-resolves ARRAY JOIN expressions inside the synthetic subquery.
+                        left_subquery->getJoinTree() = left_table_expression->clone();
 
                         IdentifierResolveScope & left_subquery_scope = createIdentifierResolveScope(left_subquery, nullptr /*parent_scope*/);
                         /// We are using alias column mechanism for USING column from projection.

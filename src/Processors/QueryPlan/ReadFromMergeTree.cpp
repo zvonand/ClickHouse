@@ -3234,6 +3234,8 @@ bool ReadFromMergeTree::supportsSkipIndexesOnDataRead() const
 }
 
 
+static const char * indexTypeToString(ReadFromMergeTree::IndexType type);
+
 void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) const
 {
     UInt64 sample_rate = context->getSettingsRef()[Setting::predicate_statistics_sample_rate];
@@ -3264,20 +3266,6 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
     if (filter_actions_dag)
         filter_expr = filter_actions_dag->dumpDAG();
 
-    auto index_type_to_string = [](IndexType t) -> String
-    {
-        switch (t)
-        {
-            case IndexType::None: return "None";
-            case IndexType::MinMax: return "MinMax";
-            case IndexType::Partition: return "Partition";
-            case IndexType::PrimaryKey: return "PrimaryKey";
-            case IndexType::Skip: return "Skip";
-            case IndexType::PrimaryKeyExpand: return "PrimaryKeyExpand";
-        }
-        return "Other";
-    };
-
     /// single row with arrays for the full index pipeline
     PredicateStatisticsLogElement elem;
     elem.event_date = today;
@@ -3303,8 +3291,8 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
         UInt64 after = stat.num_granules_after;
         Float64 selectivity = total > 0 ? static_cast<Float64>(after) / static_cast<Float64>(total) : 1.0;
 
-        elem.index_names.push_back(stat.name.empty() ? index_type_to_string(stat.type) : stat.name);
-        elem.index_types.push_back(index_type_to_string(stat.type));
+        elem.index_names.push_back(stat.name.empty() ? indexTypeToString(stat.type) : stat.name);
+        elem.index_types.push_back(indexTypeToString(stat.type));
         elem.total_granules.push_back(total);
         elem.granules_after.push_back(after);
         elem.index_selectivities.push_back(selectivity);

@@ -208,53 +208,87 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
     }
 
     const auto & settings = context->getSettingsRef();
-    /// Walk the resolved join tree to find the leftmost leaf table.
-    const IQueryTreeNode * node = inner_query_tree.get();
-    while (node)
+
+    /// Recursively walk the resolved query tree to find the underlying MergeTree storage.
+    /// For UNION nodes, all branches must be eligible.
+    /// Returns nullptr if the view is not suitable for parallel replicas.
+    std::function<StoragePtr(const IQueryTreeNode *)> find_storage = [&](const IQueryTreeNode * node) -> StoragePtr
     {
-        switch (node->getNodeType())
+        while (node)
         {
-            case QueryTreeNodeType::QUERY:
+            switch (node->getNodeType())
             {
-                const auto & query_node = node->as<QueryNode &>();
-                /// Only simple views (no aggregation, ordering, limits, etc.) are eligible.
-                /// Views with GROUP BY, ORDER BY, DISTINCT, or LIMIT would change the
-                /// result semantics if distributed across replicas without proper merging.
-                if (query_node.hasGroupBy() || query_node.hasOrderBy() || query_node.hasHaving()
-                    || query_node.isDistinct() || query_node.hasLimit())
-                    return nullptr;
+                case QueryTreeNodeType::QUERY:
+                {
+                    const auto & query_node = node->as<QueryNode &>();
+                    /// Only simple views (no aggregation, ordering, limits, etc.) are eligible.
+                    /// Views with GROUP BY, ORDER BY, DISTINCT, or LIMIT would change the
+                    /// result semantics if distributed across replicas without proper merging.
+                    if (query_node.hasGroupBy() || query_node.hasOrderBy() || query_node.hasHaving()
+                        || query_node.isDistinct() || query_node.hasLimit())
+                        return nullptr;
 
-                node = query_node.getJoinTree().get();
-                break;
+                    node = query_node.getJoinTree().get();
+                    break;
+                }
+                case QueryTreeNodeType::UNION:
+                {
+                    const auto & queries = node->as<UnionNode &>().getQueries().getNodes();
+                    if (queries.empty())
+                        return nullptr;
+
+                    /// Check ALL branches of the UNION — not just the first one.
+                    /// Every branch must resolve to an eligible MergeTree storage.
+                    /// The branches may reference different tables, but if the same
+                    /// table appears in multiple branches, reject it —
+                    /// we avoid supporting it, since it requires to complicate parallel replicas protocol
+                    /// and considered as not very practical case
+                    StoragePtr result;
+                    std::unordered_set<StorageID, StorageID::DatabaseAndTableNameHash, StorageID::DatabaseAndTableNameEqual> seen_ids;
+                    for (const auto & query : queries)
+                    {
+                        auto branch_storage = find_storage(query.get());
+                        if (!branch_storage)
+                            return nullptr;
+
+                        if (!seen_ids.insert(branch_storage->getStorageID()).second)
+                            return nullptr;
+
+                        if (!result)
+                            result = branch_storage;
+                    }
+                    return result;
+                }
+                case QueryTreeNodeType::TABLE:
+                {
+                    const auto & table_node = node->as<const TableNode &>();
+                    const auto & storage = table_node.getStorage();
+
+                    /// If the table is itself a view, recursively check its inner query.
+                    const auto * nested_view = typeid_cast<const StorageView *>(storage.get());
+                    if (nested_view)
+                        return nested_view->getUnderlyingMergeTreeStorageForParallelReplicas(context);
+
+                    if (!storage->isMergeTree())
+                        return nullptr;
+
+                    if (!storage->supportsReplication() && !settings[Setting::parallel_replicas_for_non_replicated_merge_tree])
+                        return nullptr;
+
+                    /// Parallel replicas not supported with FINAL.
+                    if (table_node.hasTableExpressionModifiers() && table_node.getTableExpressionModifiers()->hasFinal())
+                        return nullptr;
+
+                    return table_node.getStorage();
+                }
+                default:
+                    return nullptr;
             }
-            case QueryTreeNodeType::UNION:
-            {
-                const auto & queries = node->as<UnionNode &>().getQueries().getNodes();
-                node = queries.empty() ? nullptr : queries.front().get();
-                break;
-            }
-            case QueryTreeNodeType::TABLE:
-            {
-                const auto & table_node = node->as<const TableNode &>();
-                const auto & storage = table_node.getStorage();
-
-                if (!storage->isMergeTree())
-                    return nullptr;
-
-                if (!storage->supportsReplication() && !settings[Setting::parallel_replicas_for_non_replicated_merge_tree])
-                    return nullptr;
-
-                /// Parallel replicas not supported with FINAL.
-                if (table_node.hasTableExpressionModifiers() && table_node.getTableExpressionModifiers()->hasFinal())
-                    return nullptr;
-
-                return table_node.getStorage();
-            }
-            default:
-                return nullptr;
         }
-    }
-    return nullptr;
+        return nullptr;
+    };
+
+    return find_storage(inner_query_tree.get());
 }
 
 void StorageView::read(

@@ -128,10 +128,10 @@ IFileCachePriority::IteratorPtr SLRUFileCachePriority::add( /// NOLINT
     size_t size,
     const CachePriorityGuard::WriteLock & lock,
     const CacheStateGuard::Lock * state_lock,
-    bool is_startup)
+    bool is_initial_load)
 {
     bool is_protected = false;
-    if (is_startup)
+    if (is_initial_load)
     {
         chassert(size);
         if (!state_lock)

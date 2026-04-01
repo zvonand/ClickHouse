@@ -212,7 +212,7 @@ public:
         size_t size,
         const CachePriorityGuard::WriteLock &,
         const CacheStateGuard::Lock *,
-        bool best_effort = false) = 0;
+        bool is_initial_load = false) = 0;
 
     /// `reservee` is the entry for which are reserving now.
     /// It does not exist, if it is the first space reservation attempt

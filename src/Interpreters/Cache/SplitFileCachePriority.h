@@ -60,7 +60,7 @@ public:
         size_t size,
         const CachePriorityGuard::WriteLock &,
         const CacheStateGuard::Lock *,
-        bool best_effort = false) override;
+        bool is_initial_load = false) override;
 
     bool tryIncreasePriority(
         Iterator & iterator,

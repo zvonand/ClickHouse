@@ -1093,9 +1093,11 @@ def test_onelake_show_create_table_no_secret(
     )
 
 
-@pytest.mark.xfail(reason="INSERT into DataLakeCatalog table not fully supported yet")
-def test_insert_into_table(node, catalog_manager):
+def test_insert_into_table(node, catalog_manager, request):
     """INSERT INTO a catalog table and verify the row count increases."""
+    backend = request.node.callspec.params.get("catalog_manager")
+    if backend == "biglake":
+        pytest.xfail("INSERT into BigLake DataLakeCatalog does not commit to the catalog")
     data = pa.table(
         {
             "id": pa.array([1, 2], type=pa.int64()),

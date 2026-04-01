@@ -39,7 +39,7 @@ namespace ErrorCodes
 
 DPJoinEntry::DPJoinEntry(size_t id, std::optional<UInt64> rows, std::unordered_map<String, ColumnStats> column_stats_)
     : relations()
-    , cost(static_cast<double>(rows.value_or(0)))
+    , cost(0.0)
     , estimated_rows(rows)
     , column_stats(std::move(column_stats_))
     , relation_id(static_cast<int>(id))

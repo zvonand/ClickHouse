@@ -45,8 +45,9 @@
             counter5 UInt32,
             status UInt8
         ) ENGINE = MergeTree
-        ORDER BY (id, category, value1, datetime)
+        ORDER BY ()
         PARTITION BY toYYYYMMDD(datetime)
+        SETTINGS non_replicated_deduplication_window = 1000
     </create_query>
 
     <!-- ORDER BY ALL makes INSERT SELECT deduplication-eligible.

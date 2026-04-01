@@ -25,7 +25,7 @@ node5 = cluster.add_instance(
     main_configs=["configs/custom_server_config.xml"],
     user_configs=["configs/tightened_custom_profile.xml"]
 )
-# 6. [EXPECTED FAILURE] with default, then created new 'background' profiel, and [EXPECTED SUCCESS] after server restart
+# 6. [EXPECTED FAILURE] with default, then created new 'background' profile, and [EXPECTED SUCCESS] after server restart
 node6 = cluster.add_instance("node6", stay_alive=True)
 # 7. [EXPECTED FAILURE] when trying to ALTER an pre-configured profile on fly via SQL
 node7 = cluster.add_instance("node7", user_configs=["configs/empty_background_profile.xml"])

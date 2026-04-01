@@ -287,12 +287,7 @@ public:
         if constexpr (std::is_same_v<DictionaryAttributeType, Map>)
         {
             if (const auto * map_type = typeid_cast<const DataTypeMap *>(dictionary_attribute.type.get()))
-            {
-                auto base_column = map_type->createColumn();
-                ColumnPtr result;
-                result.reset(typeid_cast<ColumnType *>(base_column.get()));
-                return result;
-            }
+                return map_type->createColumn();
 
             throw Exception(ErrorCodes::TYPE_MISMATCH, "Unsupported Map attribute type.");
         }

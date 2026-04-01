@@ -48,6 +48,8 @@
 #include <QueryPipeline/RemoteQueryExecutor.h>
 #include <Processors/Sources/RemoteSource.h>
 #include <Storages/IStorageCluster.h>
+#include <Storages/StorageSnapshot.h>
+#include <Storages/ColumnsDescription.h>
 #include <Interpreters/JoinedTables.h>
 #include <IO/WriteBufferFromString.h>
 #include <Interpreters/ExpressionAnalyzer.h>
@@ -859,7 +861,9 @@ std::optional<QueryPipeline> InterpreterInsertQuery::distributedWriteIntoReplica
 
         if (condition_ast)
         {
-            auto columns = src_storage_cluster->getInMemoryMetadataPtr()->getColumns().getAll();
+            const auto metadata = src_storage_cluster->getInMemoryMetadataPtr();
+            const auto snapshot = src_storage_cluster->getStorageSnapshot(metadata, local_context);
+            const auto columns = snapshot->getColumns(GetColumnsOptions(GetColumnsOptions::All).withVirtuals());
             auto syntax = TreeRewriter(local_context).analyze(condition_ast, columns);
             filter_dag = ExpressionAnalyzer(condition_ast, syntax, local_context).getActionsDAG(true, true);
             predicate = filter_dag->getOutputs().at(0);

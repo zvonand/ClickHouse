@@ -4952,7 +4952,7 @@ def test_insert_select_from_cluster_with_partition_pruning(started_cluster, allo
         settings={"allow_experimental_delta_kernel_rs": 1, "delta_lake_enable_engine_predicate": 0, "allow_experimental_analyzer" : allow_experimental_analyzer},
     )
 
-    node.query("SYSTEM FLUSH LOGS")
+    node.query("SYSTEM FLUSH LOGS ON CLUSTER 'cluster'")
 
     result = int(
         node.query(
@@ -4979,3 +4979,49 @@ def test_insert_select_from_cluster_with_partition_pruning(started_cluster, allo
     )
     assert pruned >= 2
     node.query(f"DROP TABLE IF EXISTS {table_name}_dst ON CLUSTER cluster")
+    table_name2 = randomize_table_name("test_insert_select_cluster_pruning_virt")
+    zk_path2 = f"/clickhouse/tables/{{shard}}/{table_name2}_dst"
+    query_id = f"{table_name2}-insert-{uuid.uuid4()}"
+
+    node.query(
+        f"""
+        CREATE TABLE {table_name2}_dst ON CLUSTER cluster
+        (
+            event_time Nullable(Date),
+            account_id Nullable(String),
+            impressions Nullable(Int64),
+            file_path LowCardinality(String)
+        )
+        ENGINE = ReplicatedMergeTree('{zk_path2}', '{{replica}}') ORDER BY tuple()
+        """
+    )
+
+    node.query(
+        f"""
+        INSERT INTO {table_name2}_dst (event_time, account_id, impressions, file_path)
+        SELECT event_time, account_id, impressions, _path
+        FROM {table_function}
+        WHERE _path LIKE '%2026-02-01%'
+        """,
+        query_id=query_id,
+        settings={
+            "allow_experimental_delta_kernel_rs": 1,
+            "delta_lake_enable_engine_predicate": 0,
+            "allow_experimental_analyzer": allow_experimental_analyzer,
+        },
+    )
+
+    result = int(
+        node.query(
+            f"SELECT count() FROM {table_name2}_dst WHERE file_path LIKE '%2026-02-01%'"
+        )
+    )
+    assert result == 5
+
+    result = int(
+        node.query(
+            f"SELECT count() FROM {table_name2}_dst WHERE NOT (file_path LIKE '%2026-02-01%')"
+        )
+    )
+    assert result == 0
+    node.query(f"DROP TABLE IF EXISTS {table_name2}_dst ON CLUSTER cluster")

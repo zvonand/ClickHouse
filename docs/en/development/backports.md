@@ -41,6 +41,16 @@ The long-term goal is to extract this implementation into a standalone open-sour
 - **Distributable** — packaged as a self-contained Python wheel installable from PyPI, with no dependency on ClickHouse's CI infrastructure.
 - **Programmable** — exposing a clean object model for pull requests, labels, and release branches so that users can script custom workflows on top of the core engine.
 
+### Testing
+
+A planned part of the standalone tool is a dedicated test suite together with a lightweight testing infrastructure. The infrastructure will be able to spin up temporary GitHub repositories (or local equivalents) pre-populated with:
+
+- a configurable set of branches representing release lines,
+- pull requests carrying various combinations of backport labels,
+- release PRs with the `release` label pointing at the release branches.
+
+This lets tests exercise the full automation loop — label detection, cherry-pick branch creation, conflict handling, backport PR creation, assignee logic, rolling-out skip, and delay policy — against a real but disposable repository, without touching production state. The same infrastructure can be reused to regression-test policy changes before they are deployed.
+
 ## Active Release Branches
 
 An active release brunch is any branch whose corresponding release PR (carrying the `release` label) is still open on GitHub. The backport automation discovers these dynamically on each run, so no configuration changes are needed when a new release is cut or an old one reaches end-of-life.

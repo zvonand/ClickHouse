@@ -57,7 +57,6 @@ ExpressionActions::ExpressionActions(ActionsDAG actions_dag_, const ExpressionAc
     , settings(settings_)
     , is_cancelled(std::make_unique<std::atomic<bool>>(false))
 {
-    LOG_DEBUG(getLogger("ExpressionActions"), "ExpressionActions() this={}", static_cast<const void*>(this));
     /// It's important to determine lazy executed nodes before compiling expressions.
     std::unordered_set<const ActionsDAG::Node *> lazy_executed_nodes = processShortCircuitFunctions(actions_dag, settings.short_circuit_function_evaluation);
 
@@ -99,12 +98,6 @@ void ExpressionActions::cancel() noexcept
     LOG_DEBUG(getLogger("ExpressionActions"), "cancel() normal exit this={}", static_cast<const void*>(this));
 }
 
-void ExpressionActions::resetCancellation()
-{
-    if (is_cancelled)
-        is_cancelled->store(false, std::memory_order_release);
-}
-
 ExpressionActionsPtr ExpressionActions::clone() const
 {
     LOG_DEBUG(getLogger("ExpressionActions"), "clone() this={}", static_cast<const void*>(this));
@@ -127,9 +120,9 @@ ExpressionActionsPtr ExpressionActions::clone() const
 
     copy->project_inputs = project_inputs;
     copy->settings = settings;
-    copy->is_cancelled = std::make_unique<std::atomic<bool>>(false);
+    // copy->is_cancelled = std::make_unique<std::atomic<bool>>(false);
     // copy->is_cancelled = std::make_unique<std::atomic<bool>>(is_cancelled->load());
-    // copy->is_cancelled = std::make_unique<std::atomic<bool>>(is_cancelled->load(std::memory_order_acquire));
+    copy->is_cancelled = std::make_unique<std::atomic<bool>>(is_cancelled->load(std::memory_order_acquire));
 
     return copy;
 }
@@ -839,8 +832,6 @@ static void executeAction(const ExpressionActions::Action & action, ExecutionCon
 void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, bool allow_duplicates_in_input) const
 {
     LOG_DEBUG(getLogger("ExpressionActions"), "execute() enter this={}", static_cast<const void*>(this));
-    // is_cancelled = std::make_unique<std::atomic<bool>>(false);
-
     ExecutionContext execution_context
     {
         .inputs = block.data,

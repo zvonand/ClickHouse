@@ -25,13 +25,11 @@ extern const int NOT_IMPLEMENTED;
 
 IProcessor::IProcessor()
 {
-    LOG_DEBUG(getLogger("IProcessor"), "IProcessor() this={}", static_cast<const void*>(this));
     processor_index = CurrentThread::isInitialized() ? CurrentThread::get().getNextPipelineProcessorIndex() : 0;
 }
 
 IProcessor::IProcessor(InputPorts inputs_, OutputPorts outputs_) : inputs(std::move(inputs_)), outputs(std::move(outputs_))
 {
-    LOG_DEBUG(getLogger("IProcessor"), "IProcessor(InputPorts inputs_, OutputPorts outputs_) this={}", static_cast<const void*>(this));
     for (auto & port : inputs)
         port.processor = this;
     for (auto & port : outputs)

@@ -454,11 +454,13 @@ ColumnPtr IExecutableFunction::execute(
         /// If we have only constants and replicated columns with the same indexes
         /// we can execute function on nested columns and create replicated column
         /// from the result using common indexes.
+        DataTypesWithConstInfo argument_types;
         ColumnPtr common_replicated_indexes;
         Columns nested_columns;
         bool has_full_columns = false;
         for (const auto & argument : arguments)
         {
+            argument_types.push_back({argument.type, isColumnConst(*argument.column)});
             if (const auto * column_replicated = typeid_cast<const ColumnReplicated *>(argument.column.get()))
             {
                 nested_columns.push_back(column_replicated->getNestedColumn());
@@ -484,17 +486,23 @@ ColumnPtr IExecutableFunction::execute(
             return executeWithoutReplicatedColumns(arguments_without_replicated, result_type, input_rows_count, dry_run);
         }
 
-        /// Filter out unreferenced rows from nested columns.
-        ColumnIndex column_index(common_replicated_indexes);
-        auto [compact_common_replicated_indexes, filtered_nested_columns] = column_index.buildCompactIndexedColumns(nested_columns);
-        size_t nested_column_size = filtered_nested_columns.empty() ? 0 : filtered_nested_columns[0]->size();
+        /// In case the function might throw an exception replicated columns must be compacted 
+        // to avoid throwing on unused rows in the nested data.
+        if (canThrow(argument_types))
+        {
+            ColumnIndex column_index(common_replicated_indexes);
+            auto res = column_index.buildCompactIndexedColumns(nested_columns);
+            common_replicated_indexes = std::move(res.compact_indexes);
+            nested_columns = std::move(res.compact_indexed_columns);
+        }
 
+        size_t nested_column_size = nested_columns.empty() ? 0 : nested_columns[0]->size();
         size_t col_idx = 0;
         for (auto & argument : arguments_without_replicated)
         {
             /// Replace replicated columns to their filtered nested columns.
             if (typeid_cast<const ColumnReplicated *>(argument.column.get()))
-                argument.column = filtered_nested_columns[col_idx++];
+                argument.column = nested_columns[col_idx++];
             /// Change size for constants.
             else if (const auto * column_const = checkAndGetColumn<ColumnConst>(argument.column.get()))
                 argument.column = ColumnConst::create(column_const->getDataColumnPtr(), nested_column_size);
@@ -503,9 +511,9 @@ ColumnPtr IExecutableFunction::execute(
         auto result = executeWithoutReplicatedColumns(arguments_without_replicated, result_type, nested_column_size, dry_run);
 
         if (isLazyReplicationUseful(result))
-            return ColumnReplicated::create(result, compact_common_replicated_indexes);
+            return ColumnReplicated::create(result, common_replicated_indexes);
 
-        return result->index(*compact_common_replicated_indexes, 0);
+        return result->index(*common_replicated_indexes, 0);
     }
 
     return executeWithoutReplicatedColumns(arguments, result_type, input_rows_count, dry_run);

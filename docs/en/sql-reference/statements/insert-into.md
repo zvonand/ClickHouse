@@ -108,9 +108,9 @@ If a table has [constraints](../../sql-reference/statements/create/table.md#cons
 
 ## Data Type Validation {#data-type-validation}
 
-ClickHouse validates experimental and suspicious data types (controlled by settings like `allow_experimental_time_time64_type`, `allow_experimental_nullable_tuple_type`, `allow_suspicious_low_cardinality_types`, `allow_suspicious_fixed_string_types`, etc.) only during table creation (`CREATE TABLE`) and schema modification (`ALTER TABLE`), not during `INSERT`.
+ClickHouse validates allowed data types (controlled by settings like `enable_time_time64_type`, `allow_suspicious_low_cardinality_types`, `allow_suspicious_fixed_string_types`, etc.) only during table creation (`CREATE TABLE`) and schema modification (`ALTER TABLE`), not during `INSERT`.
 
-This means that if a table with an experimental data type already exists, data can be inserted into it even when the corresponding setting is disabled on the server. This is by design — once a table is created, inserts should not be blocked by settings that control type creation.
+This means that if a table with not allowed data type already exists, data can be inserted into it even when the corresponding setting is disabled on the server. This is by design — once a table is created, inserts should not be blocked by settings that control type creation.
 
 For example:
 

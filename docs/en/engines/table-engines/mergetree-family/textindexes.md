@@ -427,17 +427,9 @@ SELECT count() FROM table WHERE comment LIKE ' support %'; -- or `% support %`
 
 The spaces left and right of `support` make sure that the term can be extracted as a token.
 
-Fortunately, there is a special case that ClickHouse leverages the inverted index to speed up the LIKE queries significantly.
+Fortunately, there is a special case where ClickHouse can leverage the inverted index to speed up LIKE queries significantly.
 
-:::note
-This optimization can be applied when the text index tokenizer is `splitByNonAlpha` and the LIKE/ILIKE pattern is `%<alpha-numeric-characters-without-spaces>%`.
-:::
-
-In such cases, the inverted index dictionary is directly scanned to find the matching LIKE pattern tokens.
-
-The optimization depends on the setting [use_text_index_like_evaluation_by_dictionary_scan](../../../operations/settings/settings#use_text_index_like_evaluation_by_dictionary_scan) (enabled by default). When enabled, LIKE queries should be significantly faster than a full-table scan. However, when a token matches to most of the dictionary tokens, the performance can be worse compare to a full-table scan. Luckily, there is a fallback mechanism to prevent that.
-Refer these settings to control the fallback mechanism behavior: [text_index_like_min_pattern_length](../../../operations/settings/settings#text_index_like_min_pattern_length) and
-[text_index_like_max_postings_to_read](../../../operations/settings/settings#text_index_like_max_postings_to_read).
+See the [LIKE/ILIKE performance tuning section](#like-ilike-queries-perf) for details.
 
 #### `startsWith` and `endsWith` {#functions-example-startswith-endswith}
 
@@ -788,6 +780,21 @@ In the second EXPLAIN PLAN output, you can see that an additional conjunct (`__t
 Thanks to the [PREWHERE](/sql-reference/statements/select/prewhere) optimization, the filter condition is broken down into three separate conjuncts, which are applied in order of increasing computational complexity.
 For this query, the application order is `__text_index_...`, then `greaterOrEquals(...)`, and finally `like(...)`.
 This ordering enables skipping even more data granules than the granules skipped by the text index and the original filter, before reading the heavy columns used in the query after `WHERE` clause further reducing the amount of data to read.
+
+### LIKE/ILIKE queries {#like-ilike-queries-perf}
+
+When a LIKE/ILIKE query pattern is `%<alpha-numeric-characters-without-spaces>%` and the text index tokenizer is `splitByNonAlpha`, ClickHouse leverages the inverted index to speed up LIKE/ILIKE queries significantly. To achieve that, ClickHouse scans the inverted index dictionary instead of a full-table scan to find the matching pattern.
+
+When the optimization is enabled, LIKE/ILIKE queries should be significantly faster than a full-table scan. However, when the pattern matches most dictionary tokens, the performance can be worse compared to a full-table scan. Luckily, there is a fallback mechanism to prevent that.
+
+The optimization is controlled by a setting:
+- [use_text_index_like_evaluation_by_dictionary_scan](../../../operations/settings/settings#use_text_index_like_evaluation_by_dictionary_scan)
+
+The fallback mechanism is controlled by two settings:
+- [text_index_like_min_pattern_length](../../../operations/settings/settings#text_index_like_min_pattern_length)
+- [text_index_like_max_postings_to_read](../../../operations/settings/settings#text_index_like_max_postings_to_read)
+
+This optimization supports only functions `like` and `ilike`.
 
 ### Caching {#caching}
 

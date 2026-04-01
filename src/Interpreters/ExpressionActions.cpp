@@ -21,6 +21,8 @@
 #include <Common/JSONBuilder.h>
 #include <Functions/FunctionsMiscellaneous.h>
 
+#include <Common/logger_useful.h>
+
 #if defined(MEMORY_SANITIZER)
     #include <sanitizer/msan_interface.h>
 #endif
@@ -55,6 +57,7 @@ ExpressionActions::ExpressionActions(ActionsDAG actions_dag_, const ExpressionAc
     , settings(settings_)
     , is_cancelled(std::make_unique<std::atomic<bool>>(false))
 {
+    LOG_DEBUG(getLogger("ExpressionActions"), "ExpressionActions() this={}", static_cast<const void*>(this));
     /// It's important to determine lazy executed nodes before compiling expressions.
     std::unordered_set<const ActionsDAG::Node *> lazy_executed_nodes = processShortCircuitFunctions(actions_dag, settings.short_circuit_function_evaluation);
 
@@ -73,12 +76,19 @@ ExpressionActions::ExpressionActions(ActionsDAG actions_dag_, const ExpressionAc
 
 void ExpressionActions::cancel() noexcept
 {
+    LOG_DEBUG(getLogger("ExpressionActions"), "cancel() enter this={}", static_cast<const void*>(this));
     if (!is_cancelled)
+    {
+        LOG_DEBUG(getLogger("ExpressionActions"), "cancel() exit in if (!is_cancelled) this={}", static_cast<const void*>(this));
         return;
+    }
 
     bool already_cancelled = is_cancelled->exchange(true, std::memory_order_acq_rel);
     if (already_cancelled)
+    {
+        LOG_DEBUG(getLogger("ExpressionActions"), "cancel() exit in if (already_cancelled) this={}", static_cast<const void*>(this));
         return;
+    }
 
     const auto & nodes = getNodes();
     for (const auto & node : nodes)
@@ -86,6 +96,7 @@ void ExpressionActions::cancel() noexcept
         if (node.type == ActionsDAG::ActionType::FUNCTION && node.function)
             node.function->cancelExecution();
     }
+    LOG_DEBUG(getLogger("ExpressionActions"), "cancel() normal exit this={}", static_cast<const void*>(this));
 }
 
 void ExpressionActions::resetCancellation()
@@ -96,6 +107,7 @@ void ExpressionActions::resetCancellation()
 
 ExpressionActionsPtr ExpressionActions::clone() const
 {
+    LOG_DEBUG(getLogger("ExpressionActions"), "clone() this={}", static_cast<const void*>(this));
     auto copy = std::make_shared<ExpressionActions>(ExpressionActions());
 
     std::unordered_map<const Node *, const Node *> copy_map;
@@ -826,6 +838,9 @@ static void executeAction(const ExpressionActions::Action & action, ExecutionCon
 
 void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, bool allow_duplicates_in_input) const
 {
+    LOG_DEBUG(getLogger("ExpressionActions"), "execute() enter this={}", static_cast<const void*>(this));
+    // is_cancelled = std::make_unique<std::atomic<bool>>(false);
+
     ExecutionContext execution_context
     {
         .inputs = block.data,
@@ -858,6 +873,7 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
     {
         try
         {
+            LOG_DEBUG(getLogger("ExpressionActions"), "executeAction={}, this={}", action.toString(), static_cast<const void*>(this));
             executeAction(action, execution_context, dry_run, allow_duplicates_in_input, settings.enable_lazy_columns_replication);
             checkLimits(execution_context.columns);
         }
@@ -869,6 +885,7 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
 
         if (isCancelled())
         {
+            LOG_DEBUG(getLogger("ExpressionActions"), "execute() inside if isCancelled() this={}", static_cast<const void*>(this));
             /// Return an empty block with the names and types of result columns
             block = sample_block.cloneWithColumns(sample_block.cloneEmptyColumns());
             num_rows = 0;
@@ -906,6 +923,7 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
     block.swap(res);
 
     num_rows = execution_context.num_rows;
+    LOG_DEBUG(getLogger("ExpressionActions"), "execute() normal exit this={}", static_cast<const void*>(this));
 }
 
 void ExpressionActions::execute(Block & block, bool dry_run, bool allow_duplicates_in_input) const

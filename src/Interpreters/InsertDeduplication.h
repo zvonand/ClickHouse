@@ -127,6 +127,7 @@ private:
     DeduplicationInfo(bool async_insert_, InsertDeduplicationVersions unification_stage_);
 
     UInt128 calculateDataHash(size_t offset, const Block & block) const;
+    UInt128 calculateDataHashBatch(size_t offset, const Block & block) const;
     // the old one hash
     DeduplicationHash getBlockHash(size_t offset, const std::string & partition_) const;
     // the new unified hash
@@ -180,6 +181,7 @@ private:
         std::optional<UInt128> by_part_writer;
 
         std::optional<UInt128> data_hash;
+        std::optional<UInt128> data_hash_batch;
 
         struct Extra
         {

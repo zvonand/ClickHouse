@@ -376,6 +376,11 @@ public:
     ///  passed bytes to hash must identify sequence of values unambiguously.
     virtual void updateHashWithValue(size_t n, SipHash & hash) const = 0;
 
+    /// Update state of hash function with values in range [begin, end).
+    /// Default implementation calls updateHashWithValue for each element.
+    /// Overridden in ColumnVector to feed contiguous memory in one call.
+    virtual void updateHashWithValueRange(size_t begin, size_t end, SipHash & hash) const;
+
     /// Get hash function value. Hash is calculated for each element.
     /// It's a fast weak hash function. Mainly need to scatter data between threads.
     /// WeakHash32 must have the same size as column.

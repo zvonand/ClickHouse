@@ -355,14 +355,28 @@ UInt128 DeduplicationInfo::calculateDataHash(size_t offset, const Block & block)
 
     /// be careful, hash.get128() method is not const because of caching of calculated hash in token, so it can return different results on multiple calls
     tokens[offset].data_hash = hash.get128();
-
-    /// For sync single-token insert: release block columns now that hash is cached.
-    /// The block data is no longer needed — hash is stored in data_hash.
-    /// This restores the memory optimization that was previously done eagerly in updateOriginalBlock.
-    if (!is_async_insert && getCount() == 1)
-        original_block = std::make_shared<Block>(original_block->cloneEmpty());
-
     return tokens[offset].data_hash.value();
+}
+
+UInt128 DeduplicationInfo::calculateDataHashBatch(size_t offset, const Block & block) const
+{
+    chassert(offset < offsets.size());
+
+    if (tokens[offset].data_hash_batch.has_value())
+        return tokens[offset].data_hash_batch.value();
+
+    chassert(block.rows() == getRows());
+
+    auto cols = block.getColumns();
+
+    SipHash hash;
+    size_t begin = getTokenBegin(offset);
+    size_t end = getTokenEnd(offset);
+    for (const auto & col : cols)
+        col->updateHashWithValueRange(begin, end, hash);
+
+    tokens[offset].data_hash_batch = hash.get128();
+    return tokens[offset].data_hash_batch.value();
 }
 
 
@@ -380,7 +394,7 @@ DeduplicationHash DeduplicationInfo::getBlockUnifiedHash(size_t offset, const st
     }
     else
     {
-        auto data_hash = calculateDataHash(offset, *original_block);
+        auto data_hash = calculateDataHashBatch(offset, *original_block);
         extension = fmt::format("{}_{}", data_hash.items[0], data_hash.items[1]);
     }
 
@@ -510,6 +524,12 @@ std::vector<DeduplicationHash> DeduplicationInfo::getDeduplicationHashes(const s
         for (auto & block_hash : chooseDeduplicationHashes(offset, partition_id))
             result.push_back(std::move(block_hash));
     }
+
+    /// Release block columns now that all hashes are cached.
+    /// The block data is no longer needed — hashes are stored in tokens.
+    /// This restores the memory optimization that was previously done eagerly in updateOriginalBlock.
+    if (!is_async_insert && getCount() == 1 && original_block && original_block->rows() > 0)
+        original_block = std::make_shared<Block>(original_block->cloneEmpty());
 
     return result;
 }

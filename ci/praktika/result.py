@@ -229,9 +229,24 @@ class Result(MetaClasses.Serializable):
     def is_dropped(self):
         return self.status in (Result.Status.DROPPED,)
 
+    def _dump_if_persisted(self) -> "Result":
+        """Dump only if a result file already exists on disk.
+
+        Setters use this so that job-level results (already dumped by `complete_job`
+        or `copy_result_to_s3`) are kept up-to-date, while sub-results (tasks) never
+        create their own files — avoiding `OSError: File name too long` when a result
+        name is derived from a long error message.
+        """
+        try:
+            if Path(self.file_name()).is_file():
+                self.dump()
+        except OSError:
+            pass
+        return self
+
     def set_status(self, status) -> "Result":
         self.status = status
-        self.dump()
+        self._dump_if_persisted()
         return self
 
     def set_success(self) -> "Result":
@@ -245,7 +260,7 @@ class Result(MetaClasses.Serializable):
 
     def set_results(self, results: List["Result"]) -> "Result":
         self.results = results
-        self.dump()
+        self._dump_if_persisted()
         return self
 
     def set_files(self, files, strict=True) -> "Result":
@@ -265,7 +280,7 @@ class Result(MetaClasses.Serializable):
                 )
                 files.remove(file)
         self.files += files
-        self.dump()
+        self._dump_if_persisted()
         return self
 
     def set_on_error_hook(self, hook: str) -> "Result":
@@ -296,12 +311,12 @@ class Result(MetaClasses.Serializable):
         if self.info:
             self.info += "\n"
         self.info += info
-        self.dump()
+        self._dump_if_persisted()
         return self
 
     def set_link(self, link) -> "Result":
         self.links.append(link)
-        self.dump()
+        self._dump_if_persisted()
         return self
 
     def _add_job_summary_to_info(self):

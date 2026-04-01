@@ -243,6 +243,7 @@ protected:
             return res;
 
         Columns columns;
+        columns.reserve(getPort().getHeader().columns());
         for (const auto & [name, type] : getPort().getHeader().getNamesAndTypes())
         {
             if (buffer.data.has(name))
@@ -329,8 +330,8 @@ void StorageBuffer::read(
 
         auto destination_metadata_snapshot = destination->getInMemoryMetadataPtr();
         auto destination_snapshot = destination->getStorageSnapshot(destination_metadata_snapshot, local_context);
-        auto destination_columns = destination_snapshot->getColumns(GetColumnsOptions(GetColumnsOptions::AllPhysical).withSubcolumns().withVirtuals());
-        auto our_columns = storage_snapshot->getColumns(GetColumnsOptions(GetColumnsOptions::AllPhysical).withSubcolumns().withVirtuals());
+        auto destination_columns = destination_snapshot->getColumns(GetColumnsOptions(GetColumnsOptions::AllPhysicalAndAliases).withSubcolumns().withVirtuals());
+        auto our_columns = storage_snapshot->getColumns(GetColumnsOptions(GetColumnsOptions::AllPhysicalAndAliases).withSubcolumns().withVirtuals());
 
         const bool dst_has_same_structure = std::all_of(column_names.begin(), column_names.end(), [&](const String & column_name)
         {

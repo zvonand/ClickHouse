@@ -22,8 +22,6 @@ constexpr uint8_t BASE58_INVALID_CHAR = 255;
 constexpr uint8_t BASE58_INVERSE_TABLE_OFFSET = '1';
 constexpr uint8_t BASE58_INVERSE_TABLE_SENTINEL = (1UL + ('z' - BASE58_INVERSE_TABLE_OFFSET));
 
-constexpr char base58_chars[] = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
 // clang-format off
 #define BAD BASE58_INVALID_CHAR
 constexpr uint8_t base58_inverse[] = {
@@ -115,6 +113,8 @@ inline uint32_t b58_load_u32_be(const uint8_t * p)
 }
 
 #if !defined(__AVX2__)
+constexpr char base58_chars[] = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
 size_t encodeBase58_32_fd(const uint8_t * src, uint8_t * dst)
 {
     constexpr size_t BINARY_SZ = 8;

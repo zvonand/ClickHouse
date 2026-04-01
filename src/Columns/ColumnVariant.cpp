@@ -572,7 +572,7 @@ void ColumnVariant::insertRangeFromImpl(const DB::IColumn & src_, size_t start, 
         }
         else
         {
-            /// If we see this discriminator for the first time, set its range start.
+            /// If we see this discriminator for thupe first time, set its range start.
             if (!nested_ranges[src_local_discr].second)
                 nested_ranges[src_local_discr].first = src_offsets_data[i];
             /// Update offsets column with correct offset.
@@ -909,8 +909,8 @@ void ColumnVariant::updateHashWithValueRange(size_t begin, size_t end, SipHash &
     /// Within a contiguous row range, offsets for each variant are also contiguous,
     /// so the sub-column range is [first_offset, first_offset + count).
     const auto & offsets_data = getOffsets();
-    std::vector<size_t> variant_first_offset(num_variants, 0);
-    std::vector<size_t> variant_count(num_variants, 0);
+    VectorWithMemoryTracking<size_t> variant_first_offset(num_variants, 0);
+    VectorWithMemoryTracking<size_t> variant_count(num_variants, 0);
 
     for (size_t i = begin; i < end; ++i)
     {

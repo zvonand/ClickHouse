@@ -1963,18 +1963,7 @@ void StatementGenerator::addTableProjection(RandomGenerator & rg, SQLTable & t, 
         this->levels.clear();
         /// Add projection settings
         if (rg.nextSmallNumber() < 4)
-        {
-            const auto & engineSettings = allTableSettings.at(t.teng);
-
-            if (!engineSettings.empty() && rg.nextSmallNumber() < 9)
-            {
-                generateSettingValues(rg, engineSettings, psdef->mutable_setting_values());
-            }
-            if (t.isMergeTreeFamily() && !fc.hot_table_settings.empty() && rg.nextBool())
-            {
-                generateHotTableSettingsValues(rg, false, psdef->mutable_setting_values());
-            }
-        }
+            generateSettingValues(rg, projectionSettings, psdef->mutable_setting_values());
     }
     else
     {

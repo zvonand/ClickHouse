@@ -321,7 +321,19 @@ class Result(MetaClasses.Serializable):
         if not name:
             return cls.experimental_file_name_static()
         else:
-            return f"{Settings.TEMP_DIR}/result_{Utils.normalize_string(name)}.json"
+            normalized = Utils.normalize_string(name)
+            # Linux filesystems limit filenames to 255 bytes.
+            # prefix "result_" (7) + suffix ".json" (5) = 12, leaving 243 for the name.
+            # Reserve 9 chars for a uniqueness hash when truncating.
+            max_len = 243
+            if len(normalized) > max_len:
+                import hashlib
+
+                digest = hashlib.md5(
+                    normalized.encode(), usedforsecurity=False
+                ).hexdigest()[:8]
+                normalized = f"{normalized[:max_len - 9]}_{digest}"
+            return f"{Settings.TEMP_DIR}/result_{normalized}.json"
 
     @classmethod
     def experimental_file_name_static(cls):

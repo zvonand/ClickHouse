@@ -212,3 +212,34 @@ SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04065_describe.parque
 SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04065_describe.parquet', 'Parquet') SETTINGS input_format_parquet_use_native_reader_v3 = 1;
 
 DROP TABLE test_nullable_tuple_describe;
+
+-- Array(Nullable(Tuple)) flattened via import_nested: struct-level NULLs should propagate to elements
+DROP TABLE IF EXISTS test_nullable_tuple_import_nested;
+CREATE TABLE test_nullable_tuple_import_nested (c0 Array(Nullable(Tuple(a UInt32, b String)))) ENGINE = Memory;
+INSERT INTO test_nullable_tuple_import_nested VALUES ([(1, 'a'), NULL, (3, 'c')]);
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04065_import_nested.parquet', 'Parquet') SELECT c0 FROM test_nullable_tuple_import_nested;
+
+-- Parquet Arrow reader import_nested
+SELECT * FROM file(currentDatabase() || '_04065_import_nested.parquet', 'Parquet', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Nullable(String))') SETTINGS input_format_parquet_use_native_reader_v3 = 0, input_format_parquet_import_nested = 1;
+
+-- Parquet V3 native reader import_nested
+-- This works because V3 reader sees the already-flattened column names (c0.a, c0.b), not the Nullable(Tuple(...))
+SELECT * FROM file(currentDatabase() || '_04065_import_nested.parquet', 'Parquet', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Nullable(String))') SETTINGS input_format_parquet_use_native_reader_v3 = 1, input_format_parquet_import_nested = 1;
+
+DROP TABLE test_nullable_tuple_import_nested;
+
+-- Array(Nullable(Tuple)) without named elements: round-trip as a single column, no flattening
+DROP TABLE IF EXISTS test_nullable_tuple_arr_unnamed;
+CREATE TABLE test_nullable_tuple_arr_unnamed (c0 Array(Nullable(Tuple(UInt32, String)))) ENGINE = Memory;
+INSERT INTO test_nullable_tuple_arr_unnamed VALUES ([(1, 'a'), NULL, (3, 'c')]);
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04065_arr_unnamed.parquet', 'Parquet') SELECT c0 FROM test_nullable_tuple_arr_unnamed;
+
+-- Parquet Arrow reader unnamed
+SELECT c0 FROM file(currentDatabase() || '_04065_arr_unnamed.parquet', 'Parquet', 'c0 Array(Nullable(Tuple(UInt32, String)))') SETTINGS input_format_parquet_use_native_reader_v3 = 0;
+
+-- Parquet V3 native reader unnamed (not yet supported)
+SELECT c0 FROM file(currentDatabase() || '_04065_arr_unnamed.parquet', 'Parquet', 'c0 Array(Nullable(Tuple(UInt32, String)))') SETTINGS input_format_parquet_use_native_reader_v3 = 1; -- { serverError TYPE_MISMATCH }
+
+DROP TABLE test_nullable_tuple_arr_unnamed;

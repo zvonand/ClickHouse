@@ -323,3 +323,29 @@ SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_describe.arrow'
 SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_describe.orc', 'ORC');
 
 DROP TABLE test_nullable_tuple_describe;
+
+-- Array(Nullable(Tuple)) flattened via import_nested: struct-level NULLs should propagate to elements
+DROP TABLE IF EXISTS test_nullable_tuple_import_nested;
+CREATE TABLE test_nullable_tuple_import_nested (c0 Array(Nullable(Tuple(a UInt32, b String)))) ENGINE = Memory;
+INSERT INTO test_nullable_tuple_import_nested VALUES ([(1, 'a'), NULL, (3, 'c')]);
+
+-- Arrow import_nested
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_import_nested.arrow', 'Arrow') SELECT c0 FROM test_nullable_tuple_import_nested;
+SELECT * FROM file(currentDatabase() || '_04064_import_nested.arrow', 'Arrow', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Nullable(String))') SETTINGS input_format_arrow_import_nested = 1;
+
+DROP TABLE test_nullable_tuple_import_nested;
+
+-- Array(Nullable(Tuple)) without named elements: round-trip as a single column, no flattening
+DROP TABLE IF EXISTS test_nullable_tuple_arr_unnamed;
+CREATE TABLE test_nullable_tuple_arr_unnamed (c0 Array(Nullable(Tuple(UInt32, String)))) ENGINE = Memory;
+INSERT INTO test_nullable_tuple_arr_unnamed VALUES ([(1, 'a'), NULL, (3, 'c')]);
+
+-- Arrow unnamed
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_arr_unnamed.arrow', 'Arrow') SELECT c0 FROM test_nullable_tuple_arr_unnamed;
+SELECT c0 FROM file(currentDatabase() || '_04064_arr_unnamed.arrow', 'Arrow', 'c0 Array(Nullable(Tuple(UInt32, String)))');
+
+-- ORC unnamed
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_arr_unnamed.orc', 'ORC') SELECT c0 FROM test_nullable_tuple_arr_unnamed;
+SELECT c0 FROM file(currentDatabase() || '_04064_arr_unnamed.orc', 'ORC', 'c0 Array(Nullable(Tuple(UInt32, String)))');
+
+DROP TABLE test_nullable_tuple_arr_unnamed;

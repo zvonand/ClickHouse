@@ -1321,24 +1321,27 @@ static ColumnWithTypeAndName readNonNullableColumnFromArrowColumn(
                         return readOffsetsFromArrowListColumn<arrow::ListArray>(arrow_column);
                 }
             }();
-            auto array_column = ColumnArray::create(nested_column.column, offsets_column);
-
             DataTypePtr array_type;
+            ColumnPtr array_data_column = nested_column.column;
             /// If type hint is Nested and the element is a named Tuple, return the Nested type
             /// so that `Nested::flatten` can decompose it into separate arrays.
-            /// When the element is Nullable(Tuple(...)), `flatten` handles this case
-            /// by propagating the struct null map to each element.
+            /// When the element is Nullable(Tuple(...)) (e.g. from Arrow's default nullable schema),
+            /// unwrap it and propagate the struct null map to each element via `unwrapNullableTuple`.
             const auto * tuple_type = type_hint && isNested(type_hint)
-                ? typeid_cast<const DataTypeTuple *>(nested_column.type.get())
+                ? typeid_cast<const DataTypeTuple *>(removeNullable(nested_column.type).get())
                 : nullptr;
             if (tuple_type)
             {
-                array_type = createNested(tuple_type->getElements(), tuple_type->getElementNames());
+                auto unwrapped = Nested::unwrapNullableTuple({array_data_column, nested_column.type, column_name});
+                array_data_column = unwrapped.column;
+                const auto & result_tuple = assert_cast<const DataTypeTuple &>(*unwrapped.type);
+                array_type = createNested(result_tuple.getElements(), result_tuple.getElementNames());
             }
             else
             {
                 array_type = std::make_shared<DataTypeArray>(nested_column.type);
             }
+            auto array_column = ColumnArray::create(array_data_column, offsets_column);
             return {std::move(array_column), array_type, column_name};
         }
         case arrow::Type::STRUCT:

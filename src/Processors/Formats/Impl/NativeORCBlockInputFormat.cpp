@@ -1936,18 +1936,6 @@ ColumnWithTypeAndName ORCColumnToCHColumn::readColumnFromORCColumn(
                 const auto * nested_orc_type = orc_type->getSubtype(i);
                 auto element = readColumnFromORCColumn(nested_orc_column, nested_orc_type, field_name, false, nested_type_hint);
 
-                /// In ORC, child values at null struct positions are marked as null. This causes
-                /// `readColumnFromORCColumn` to wrap the child in Nullable even though the type hint says
-                /// the element is non-nullable (e.g. the user requested `Tuple(UInt32, String)`, not
-                /// `Tuple(Nullable(UInt32), Nullable(String))`). In that case, we should remove Nullable
-                /// from the child column and type, so that we return the correct type according to the type
-                /// hint. If the type hint says the element is Nullable, we keep it as is.
-                if (nested_type_hint && !isNullableOrLowCardinalityNullable(nested_type_hint) && element.type->isNullable())
-                {
-                    element.column = assert_cast<const ColumnNullable &>(*element.column).getNestedColumnPtr();
-                    element.type = removeNullable(element.type);
-                }
-
                 tuple_elements.emplace_back(std::move(element.column));
                 tuple_types.emplace_back(std::move(element.type));
                 tuple_names.emplace_back(std::move(element.name));

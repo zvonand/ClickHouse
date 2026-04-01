@@ -1444,81 +1444,191 @@ void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
     }
 }
 
-void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projection)
+void QueryFuzzer::fuzzProjectionWithSettings(ASTProjectionDeclaration & projection)
 {
-    if (!projection.query)
-        return;
-    auto * select = typeid_cast<ASTProjectionSelectQuery *>(projection.query);
-    if (!select || !select->select())
-        return;
+    static const UInt64 granularity_values[] = {1, 64, 128, 256, 512, 1024, 4096, 8192, 65536};
+    static const UInt64 granularity_bytes_values[] = {1024, 4096, 8192, 65536, 1048576, 10485760};
 
-    /// Occasionally add _part_offset to SELECT before fuzzing,
-    /// so the fuzz passes can move/replace it along with other expressions.
-    /// _part_offset is valid in projection SELECT and GROUP BY, but NOT in ORDER BY.
-    if (fuzz_rand() % 20 == 0)
+    if (!projection.with_settings)
     {
-        select->select()->children.emplace_back(make_intrusive<ASTIdentifier>("_part_offset"));
+        /// Occasionally add a WITH SETTINGS clause from scratch.
+        if (fuzz_rand() % 20 != 0)
+            return;
+
+        auto new_settings = make_intrusive<ASTSetQuery>();
+        new_settings->is_standalone = false;
+        projection.set(projection.with_settings, new_settings);
     }
-    fuzzColumnLikeExpressionList(select->select().get());
-    /// GROUP BY — ASTProjectionSelectQuery has no ROLLUP/CUBE/GROUPING SETS/TOTALS/HAVING/WHERE
-    if (select->groupBy().get())
+
+    auto & changes = projection.with_settings->changes;
+
+    /// Drop the entire WITH SETTINGS clause occasionally.
+    if (changes.empty() || fuzz_rand() % 50 == 0)
     {
-        if (fuzz_rand() % 50 == 0)
-        {
-            select->groupBy()->children.clear();
-            select->setExpression(ASTProjectionSelectQuery::Expression::GROUP_BY, {});
-        }
-        else
-        {
-            if (fuzz_rand() % 20 == 0)
-            {
-                /// Occasionally add _part_offset to GROUP BY,
-                select->groupBy()->children.emplace_back(make_intrusive<ASTIdentifier>("_part_offset"));
-            }
-            fuzzColumnLikeExpressionList(select->groupBy().get());
-        }
+        auto it = std::find_if(
+            projection.children.begin(),
+            projection.children.end(),
+            [&](const ASTPtr & ch) { return ch.get() == projection.with_settings; });
+        if (it != projection.children.end())
+            projection.children.erase(it);
+        projection.with_settings = nullptr;
+        return;
     }
-    else if (fuzz_rand() % 50 == 0)
+
+    /// Mutate existing setting values.
+    for (auto & change : changes)
     {
-        /// Add a GROUP BY when the projection has none.
-        select->setExpression(ASTProjectionSelectQuery::Expression::GROUP_BY, getRandomExpressionList(select->select()->children.size()));
+        if (fuzz_rand() % 5 != 0)
+            continue;
+        if (change.name == "index_granularity")
+            change.value = granularity_values[fuzz_rand() % std::size(granularity_values)];
+        else if (change.name == "index_granularity_bytes")
+            change.value = granularity_bytes_values[fuzz_rand() % std::size(granularity_bytes_values)];
     }
-    if (select->orderBy().get())
-    {
-        if (fuzz_rand() % 50 == 0)
-        {
-            select->orderBy()->children.clear();
-            select->setExpression(ASTProjectionSelectQuery::Expression::ORDER_BY, {});
-        }
-        else
-        {
-            /// ASTProjectionSelectQuery stores ORDER BY as either a bare ASTOrderByElement
-            /// (single key) or an ASTFunction("tuple", arguments=ASTExpressionList)
-            /// (multiple keys) — never as a bare ASTExpressionList like ASTSelectQuery.
-            auto * as_func = select->orderBy().get()->as<ASTFunction>();
-            if (as_func && as_func->name == "tuple" && as_func->arguments)
-            {
-                fuzzOrderByList(as_func->arguments.get(), 0);
-            }
-        }
-    }
-    else if (fuzz_rand() % 50 == 0)
-    {
-        /// Add an ORDER BY when the projection has none.
-        const auto col = getRandomColumnLike();
-        if (col)
-        {
-            auto elem = make_intrusive<ASTOrderByElement>();
-            elem->children.emplace_back(col);
-            elem->direction = 1;
-            elem->nulls_direction = 1;
-            elem->nulls_direction_was_explicitly_specified = false;
-            elem->with_fill = false;
-            select->setExpression(ASTProjectionSelectQuery::Expression::ORDER_BY, std::move(elem));
-        }
-    }
+
+    /// Occasionally add a missing setting.
+    auto hasSetting = [&](std::string_view name)
+    { return std::any_of(changes.begin(), changes.end(), [&](const auto & c) { return c.name == name; }); };
+    if (!hasSetting("index_granularity") && fuzz_rand() % 5 == 0)
+        changes.emplace_back("index_granularity", granularity_values[fuzz_rand() % std::size(granularity_values)]);
+    if (!hasSetting("index_granularity_bytes") && fuzz_rand() % 5 == 0)
+        changes.emplace_back("index_granularity_bytes", granularity_bytes_values[fuzz_rand() % std::size(granularity_bytes_values)]);
+
+    /// Occasionally remove one setting to exercise single-setting and no-setting paths.
+    if (changes.size() > 1 && fuzz_rand() % 10 == 0)
+        changes.erase(changes.begin() + fuzz_rand() % changes.size());
 }
 
+void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projection)
+{
+    static const Strings projection_index_types = {"basic", "commit_order"};
+    /// Occasionally swap between the two projection forms:
+    ///   query-based:  PROJECTION p (SELECT ...)
+    ///   index-based:  PROJECTION p INDEX expr TYPE type
+    if (fuzz_rand() % 30 == 0)
+    {
+        /// Clear children first to avoid orphaned nodes being visited during recursion.
+        projection.children.clear();
+        projection.query = nullptr;
+        projection.index = nullptr;
+        projection.type = nullptr;
+        projection.with_settings = nullptr;
+
+        if (projection.query)
+        {
+            /// Query → Index: build a minimal INDEX * TYPE basic|commit_order form.
+            auto index_list = make_intrusive<ASTExpressionList>();
+            index_list->children.emplace_back(make_intrusive<ASTAsterisk>());
+            projection.set(projection.index, index_list);
+
+            auto type_func = make_intrusive<ASTFunction>();
+            type_func->name = pickRandomly(fuzz_rand, projection_index_types);
+            projection.set(projection.type, type_func);
+        }
+        else
+        {
+            /// Index → Query: build a minimal SELECT * projection.
+            auto select_query = make_intrusive<ASTProjectionSelectQuery>();
+            auto select_list = make_intrusive<ASTExpressionList>();
+            select_list->children.emplace_back(make_intrusive<ASTAsterisk>());
+            select_query->setExpression(ASTProjectionSelectQuery::Expression::SELECT, std::move(select_list));
+            projection.set(projection.query, select_query);
+        }
+    }
+    else if (projection.query)
+    {
+        auto * select = typeid_cast<ASTProjectionSelectQuery *>(projection.query);
+        if (!select || !select->select())
+            return;
+
+        /// Occasionally add _part_offset to SELECT before fuzzing,
+        /// so the fuzz passes can move/replace it along with other expressions.
+        /// _part_offset is valid in projection SELECT and GROUP BY, but NOT in ORDER BY.
+        if (fuzz_rand() % 20 == 0)
+        {
+            select->select()->children.emplace_back(make_intrusive<ASTIdentifier>("_part_offset"));
+        }
+        fuzzColumnLikeExpressionList(select->select().get());
+        /// GROUP BY — ASTProjectionSelectQuery has no ROLLUP/CUBE/GROUPING SETS/TOTALS/HAVING/WHERE
+        if (select->groupBy().get())
+        {
+            if (fuzz_rand() % 50 == 0)
+            {
+                select->groupBy()->children.clear();
+                select->setExpression(ASTProjectionSelectQuery::Expression::GROUP_BY, {});
+            }
+            else
+            {
+                if (fuzz_rand() % 20 == 0)
+                {
+                    /// Occasionally add _part_offset to GROUP BY,
+                    select->groupBy()->children.emplace_back(make_intrusive<ASTIdentifier>("_part_offset"));
+                }
+                fuzzColumnLikeExpressionList(select->groupBy().get());
+            }
+        }
+        else if (fuzz_rand() % 50 == 0)
+        {
+            /// Add a GROUP BY when the projection has none.
+            select->setExpression(
+                ASTProjectionSelectQuery::Expression::GROUP_BY, getRandomExpressionList(select->select()->children.size()));
+        }
+        if (select->orderBy().get())
+        {
+            if (fuzz_rand() % 50 == 0)
+            {
+                select->orderBy()->children.clear();
+                select->setExpression(ASTProjectionSelectQuery::Expression::ORDER_BY, {});
+            }
+            else
+            {
+                /// ASTProjectionSelectQuery stores ORDER BY as either a bare ASTOrderByElement
+                /// (single key) or an ASTFunction("tuple", arguments=ASTExpressionList)
+                /// (multiple keys) — never as a bare ASTExpressionList like ASTSelectQuery.
+                auto * as_func = select->orderBy().get()->as<ASTFunction>();
+                if (as_func && as_func->name == "tuple" && as_func->arguments)
+                {
+                    fuzzOrderByList(as_func->arguments.get(), 0);
+                }
+            }
+        }
+        else if (fuzz_rand() % 50 == 0)
+        {
+            /// Add an ORDER BY when the projection has none.
+            const auto col = getRandomColumnLike();
+            if (col)
+            {
+                auto elem = make_intrusive<ASTOrderByElement>();
+                elem->children.emplace_back(col);
+                elem->direction = 1;
+                elem->nulls_direction = 1;
+                elem->nulls_direction_was_explicitly_specified = false;
+                elem->with_fill = false;
+                select->setExpression(ASTProjectionSelectQuery::Expression::ORDER_BY, std::move(elem));
+            }
+        }
+    }
+    else
+    {
+        /// Index-based projection: PROJECTION name INDEX expr_list TYPE type [WITH SETTINGS (...)]
+        /// projection.query is null for this form; projection.index and projection.type are set.
+        if (projection.index && fuzz_rand() % 5 == 0)
+            fuzzColumnLikeExpressionList(projection.index);
+
+        if (projection.type && fuzz_rand() % 10 == 0)
+        {
+            /// Swap between the two valid projection index types.
+            projection.type->name = pickRandomly(fuzz_rand, projection_index_types);
+            if (projection.type->arguments)
+                projection.type->arguments->children.clear();
+        }
+    }
+
+    /// Fuzz WITH SETTINGS (index_granularity = N, index_granularity_bytes = N).
+    /// These are the only two settings accepted by ProjectionDescription::loadSettings.
+    /// Valid ranges: index_granularity >= 1; index_granularity_bytes >= 1024.
+    fuzzProjectionWithSettings(projection);
+}
 
 DataTypePtr QueryFuzzer::fuzzDataType(DataTypePtr type)
 {

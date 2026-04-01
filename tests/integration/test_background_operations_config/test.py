@@ -27,7 +27,7 @@ node5 = cluster.add_instance(
 )
 # 6. [EXPECTED FAILURE] with default, then created new 'background' profile, and [EXPECTED SUCCESS] after server restart
 node6 = cluster.add_instance("node6", stay_alive=True)
-# 7. [EXPECTED FAILURE] when trying to ALTER an pre-configured profile on fly via SQL
+# 7. [EXPECTED FAILURE] when trying to ALTER a pre-configured profile on fly via SQL
 node7 = cluster.add_instance("node7", user_configs=["configs/empty_background_profile.xml"])
 
 

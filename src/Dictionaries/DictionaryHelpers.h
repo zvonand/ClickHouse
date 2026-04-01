@@ -295,12 +295,7 @@ public:
         {
             auto non_nullable_type = removeNullable(dictionary_attribute.type);
             if (const auto * object_type = typeid_cast<const DataTypeObject *>(non_nullable_type.get()))
-            {
-                auto base_column = object_type->createColumn();
-                ColumnPtr result;
-                result.reset(typeid_cast<ColumnType *>(base_column.get()));
-                return result;
-            }
+                return object_type->createColumn();
 
             throw Exception(ErrorCodes::TYPE_MISMATCH, "Unsupported Object attribute type.");
         }

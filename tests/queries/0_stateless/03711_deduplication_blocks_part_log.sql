@@ -119,6 +119,35 @@ CREATE TABLE 03710_database.03711_type_mixed
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03710_database.03711_type_mixed;
 
+-- Async insert tables: async path computes data hash directly from the block
+-- (not via MergeTreePartWriter), exercising calculateDataHashBatch.
+CREATE TABLE 03710_database.03711_async_uint (v UInt32) ENGINE = MergeTree() ORDER BY v
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+SYSTEM STOP MERGES 03710_database.03711_async_uint;
+
+CREATE TABLE 03710_database.03711_async_string (v String) ENGINE = MergeTree() ORDER BY v
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+SYSTEM STOP MERGES 03710_database.03711_async_string;
+
+CREATE TABLE 03710_database.03711_async_array (v Array(UInt32)) ENGINE = MergeTree() ORDER BY tuple()
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+SYSTEM STOP MERGES 03710_database.03711_async_array;
+
+CREATE TABLE 03710_database.03711_async_mixed
+(
+    id UInt32,
+    name String,
+    amount Decimal64(2),
+    ratio Float64,
+    tag FixedString(8),
+    tags Array(UInt32),
+    nullable_val Nullable(UInt64),
+    pair Tuple(UInt32, UInt64),
+    kv Map(String, UInt32)
+) ENGINE = MergeTree() ORDER BY id
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+SYSTEM STOP MERGES 03710_database.03711_async_mixed;
+
 SET deduplicate_blocks_in_dependent_materialized_views=1;
 
 SET max_block_size=1;
@@ -138,6 +167,11 @@ INSERT INTO 03710_database.03711_type_tuple VALUES ((1, 100)), ((2, 200));
 INSERT INTO 03710_database.03711_type_map VALUES ({'a': 1, 'b': 2}), ({'c': 3});
 INSERT INTO 03710_database.03711_type_mixed VALUES (1, 'hello', 1.23, 3.14, 'abcdefgh', [1, 2, 3], 42, (1, 100), {'a': 1}), (2, 'world', 4.56, 2.72, '12345678', [4, 5], NULL, (2, 200), {'c': 3});
 
+INSERT INTO 03710_database.03711_async_uint SETTINGS async_insert=1, wait_for_async_insert=1 VALUES (42), (99);
+INSERT INTO 03710_database.03711_async_string SETTINGS async_insert=1, wait_for_async_insert=1 VALUES ('hello'), ('world');
+INSERT INTO 03710_database.03711_async_array SETTINGS async_insert=1, wait_for_async_insert=1 VALUES ([1, 2, 3]), ([4, 5]);
+INSERT INTO 03710_database.03711_async_mixed SETTINGS async_insert=1, wait_for_async_insert=1 VALUES (1, 'hello', 1.23, 3.14, 'abcdefgh', [1, 2, 3], 42, (1, 100), {'a': 1}), (2, 'world', 4.56, 2.72, '12345678', [4, 5], NULL, (2, 200), {'c': 3});
+
 SYSTEM FLUSH LOGS part_log;
 
 SELECT table, name, argMax(part_type, event_time_microseconds), argMax(deduplication_block_ids, event_time_microseconds) FROM system.part_log
@@ -145,7 +179,8 @@ WHERE event_date >= yesterday() AND event_time >= now() - 600 AND
     table IN ['03711_join_with', '03711_table', '03711_mv_table_1', '03711_mv_table_2',
                '03711_type_decimal', '03711_type_float', '03711_type_fixedstr', '03711_type_string',
                '03711_type_array', '03711_type_nullable', '03711_type_tuple', '03711_type_map',
-               '03711_type_mixed']
+               '03711_type_mixed',
+               '03711_async_uint', '03711_async_string', '03711_async_array', '03711_async_mixed']
     AND database = '03710_database'
 group BY database, table, name
 ORDER BY ALL;

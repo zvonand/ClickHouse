@@ -38,7 +38,7 @@ Columns:
 - `sorting_key` ([String](/sql-reference/data-types/string)) — The sorting key expression specified in the table.
 - `primary_key` ([String](/sql-reference/data-types/string)) — The primary key expression specified in the table.
 - `sampling_key` ([String](/sql-reference/data-types/string)) — The sampling key expression specified in the table.
-- `storage_policy` ([String](/sql-reference/data-types/string)) — The storage policy.
+- `storage_policy` ([String](/sql-reference/data-types/string)) — The storage policy. Relevant for tables using MergeTree and Distributed engines.
 - `total_rows` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — Total number of rows, if it is possible to quickly determine exact number of rows in the table, otherwise NULL (including underlying Buffer table).
 - `total_bytes` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — Total number of bytes, if it is possible to quickly determine exact number of bytes for the table on storage, otherwise NULL (does not includes any underlying storage). If the table stores data on disk, returns used space on disk (i.e. compressed). If the table stores data in memory, returns approximated number of used bytes in memory.
 - `total_bytes_uncompressed` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — Total number of uncompressed bytes, if it\'s possible to quickly determine the exact number of bytes from the part checksums for the table on storage, otherwise NULL (does not take underlying storage (if any) into account).

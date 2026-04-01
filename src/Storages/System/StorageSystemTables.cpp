@@ -186,7 +186,7 @@ StorageSystemTables::StorageSystemTables(const StorageID & table_id_)
         {"sorting_key", std::make_shared<DataTypeString>(), "The sorting key expression specified in the table."},
         {"primary_key", std::make_shared<DataTypeString>(), "The primary key expression specified in the table."},
         {"sampling_key", std::make_shared<DataTypeString>(), "The sampling key expression specified in the table."},
-        {"storage_policy", std::make_shared<DataTypeString>(), "The storage policy."},
+        {"storage_policy", std::make_shared<DataTypeString>(), "The storage policy. Relevant for tables using MergeTree and Distributed engines."},
         {"total_rows", std::make_shared<DataTypeNullable>(std::make_shared<DataTypeUInt64>()),
             "Total number of rows, if it is possible to quickly determine exact number of rows in the table, otherwise NULL (including underlying Buffer table)."
         },

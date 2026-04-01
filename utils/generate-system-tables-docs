@@ -95,7 +95,7 @@ def unescape_tsv(value):
     return "".join(result)
 
 
-def run_query(binary, config, query, use_client=False):
+def run_query(binary, config, query, use_client=False, extra_args=None):
     """Run a query via clickhouse-local (or clickhouse-client) and return TSV rows."""
     if use_client:
         cmd = [binary, "client", "--query", query, "--format", "TSVWithNamesAndTypes"]
@@ -103,6 +103,8 @@ def run_query(binary, config, query, use_client=False):
         cmd = [binary, "local", "--query", query, "--format", "TSVWithNamesAndTypes"]
     if config and not use_client:
         cmd.extend(["--config-file", config])
+    if extra_args:
+        cmd.extend(extra_args)
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
         print(f"Error running query: {query}", file=sys.stderr)
@@ -312,12 +314,20 @@ def main():
         action="store_true",
         help="Use clickhouse-client instead of clickhouse-local (requires a running server).",
     )
+    parser.add_argument(
+        "--port",
+        default=None,
+        help="Port for clickhouse-client connection (default: 9000).",
+    )
     args = parser.parse_args()
 
     binary = os.path.abspath(args.binary)
     docs_dir = os.path.abspath(args.docs_dir)
     config = os.path.abspath(args.config) if args.config else None
     use_client = args.use_client
+    extra_args = []
+    if args.port:
+        extra_args.extend(["--port", args.port])
 
     if not os.path.isfile(binary):
         print(f"Error: binary not found: {binary}", file=sys.stderr)
@@ -341,6 +351,7 @@ def main():
         " AND NOT match(name, '_\\\\d+$')"
         " ORDER BY name",
         use_client,
+        extra_args,
     )
 
     # Build set of known table names to filter columns.
@@ -355,6 +366,7 @@ def main():
         " FROM system.columns WHERE database = 'system'"
         " AND default_kind NOT IN ('ALIAS')",
         use_client,
+        extra_args,
     )
     columns = [c for c in columns if c["table"] in known_tables]
 
@@ -367,6 +379,7 @@ def main():
         " FROM system.columns WHERE database = 'system'"
         " AND default_kind = 'ALIAS'",
         use_client,
+        extra_args,
     )
     aliases = [a for a in aliases if a["table"] in known_tables]
 

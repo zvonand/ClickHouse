@@ -36,7 +36,7 @@ ColumnsDescription StorageSystemMutations::getColumnsDescription()
         },
         { "parts_in_progress_names",        std::make_shared<DataTypeArray>(std::make_shared<DataTypeString>()), "An array of names of data parts that are currently being mutated."},
         { "parts_to_do_names",             std::make_shared<DataTypeArray>(std::make_shared<DataTypeString>()), "An array of names of data parts that need to be mutated for the mutation to complete."},
-        { "parts_to_do",                   std::make_shared<DataTypeInt64>(), "The number of data parts that need to be mutated for the mutation to complete."},
+        { "parts_to_do",                   std::make_shared<DataTypeInt64>(), "The number of data parts that need to be mutated for the mutation to complete. Note: even if `parts_to_do` = 0, a mutation of a replicated table may not be completed yet due to a long-running INSERT that is creating a new data part that will need to be mutated."},
         { "parts_postpone_reasons",        std::make_shared<DataTypeMap>(std::make_shared<DataTypeString>(), std::make_shared<DataTypeString>()), "A map of part names to reasons why they are postponed."},
         { "is_done",                       std::make_shared<DataTypeUInt8>(),
             "The flag whether the mutation is done or not. Possible values: "

@@ -18,7 +18,7 @@ Columns:
 - `type` ([String](/sql-reference/data-types/string)) — Index type.
 - `type_full` ([String](/sql-reference/data-types/string)) — Index type expression from create statement.
 - `expr` ([String](/sql-reference/data-types/string)) — Expression for the index calculation.
-- `creation` ([Enum8(\'Explicit\' = 0, \'Implicit\' = 1)](/sql-reference/data-types/enum)) — Whether the index was created implicitly (via add_minmax_index_for_numeric_columns or similar)
+- `creation` ([Enum8('Explicit' = 0, 'Implicit' = 1)](/sql-reference/data-types/enum)) — Whether the index was created implicitly (via add_minmax_index_for_numeric_columns or similar)
 - `granularity` ([UInt64](/sql-reference/data-types/int-uint)) — The number of granules in the block.
 - `data_compressed_bytes` ([UInt64](/sql-reference/data-types/int-uint)) — The size of compressed data, in bytes.
 - `data_uncompressed_bytes` ([UInt64](/sql-reference/data-types/int-uint)) — The size of decompressed data, in bytes.

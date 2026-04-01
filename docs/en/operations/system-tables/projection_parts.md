@@ -19,7 +19,7 @@ This table contains information about projection parts for tables of the MergeTr
 - `parent_name` ([String](/sql-reference/data-types/string)) — The name of the source (parent) data part.
 - `parent_uuid` ([UUID](/sql-reference/data-types/uuid)) — The UUID of the source (parent) data part.
 - `parent_part_type` ([String](/sql-reference/data-types/string)) — The source (parent) data part storing format.
-- `active` ([UInt8](/sql-reference/data-types/int-uint)) — Flag that indicates whether the data part is active. If a data part is active, it\'s used in a table. Otherwise, it\'s about to be deleted. Inactive data parts appear after merging and mutating operations.
+- `active` ([UInt8](/sql-reference/data-types/int-uint)) — Flag that indicates whether the data part is active. If a data part is active, it's used in a table. Otherwise, it's about to be deleted. Inactive data parts appear after merging and mutating operations.
 - `marks` ([UInt64](/sql-reference/data-types/int-uint)) — The number of marks. To get the approximate number of rows in a data part, multiply marks by the index granularity (usually 8192) (this hint does not work for adaptive granularity).
 - `rows` ([UInt64](/sql-reference/data-types/int-uint)) — The number of rows.
 - `bytes_on_disk` ([UInt64](/sql-reference/data-types/int-uint)) — Total size of all the data part files in bytes.

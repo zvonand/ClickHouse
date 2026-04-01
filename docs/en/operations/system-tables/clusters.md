@@ -30,7 +30,7 @@ Columns:
 - `database_shard_name` ([String](/sql-reference/data-types/string)) — The name of the `Replicated` database shard (for clusters that belong to a `Replicated` database).
 - `database_replica_name` ([String](/sql-reference/data-types/string)) — The name of the `Replicated` database replica (for clusters that belong to a `Replicated` database).
 - `is_shared_catalog_cluster` ([UInt8](/sql-reference/data-types/int-uint)) — Bool indicating if the cluster belongs to shared catalog.
-- `is_active` ([Nullable(UInt8)](/sql-reference/data-types/nullable)) — The status of the Replicated database replica (for clusters that belong to a Replicated database): 1 means \'replica is online\', 0 means \'replica is offline\', NULL means \'unknown\'.
+- `is_active` ([Nullable(UInt8)](/sql-reference/data-types/nullable)) — The status of the Replicated database replica (for clusters that belong to a Replicated database): 1 means 'replica is online', 0 means 'replica is offline', NULL means 'unknown'.
 - `unsynced_after_recovery` ([Nullable(UInt8)](/sql-reference/data-types/nullable)) — Indicates if a Replicated database replica has replication lag more than max_replication_lag_to_enqueue after creating or recovering the replica.
 - `replication_lag` ([Nullable(UInt32)](/sql-reference/data-types/nullable)) — The replication lag of the `Replicated` database replica (for clusters that belong to a Replicated database).
 - `recovery_time` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — The recovery time of the `Replicated` database replica (for clusters that belong to a Replicated database), in milliseconds.

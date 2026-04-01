@@ -16,7 +16,7 @@ Columns:
 - `case_insensitive` ([UInt8](/sql-reference/data-types/int-uint)) — Whether the function name can be used case-insensitively.
 - `alias_to` ([String](/sql-reference/data-types/string)) — The original function name, if the function name is an alias.
 - `create_query` ([String](/sql-reference/data-types/string)) — Obsolete.
-- `origin` ([Enum8(\'System\' = 0, \'SQLUserDefined\' = 1, \'ExecutableUserDefined\' = 2)](/sql-reference/data-types/enum)) — Obsolete.
+- `origin` ([Enum8('System' = 0, 'SQLUserDefined' = 1, 'ExecutableUserDefined' = 2)](/sql-reference/data-types/enum)) — Obsolete.
 - `description` ([String](/sql-reference/data-types/string)) — A high-level description what the function does.
 - `syntax` ([String](/sql-reference/data-types/string)) — Signature of the function.
 - `arguments` ([String](/sql-reference/data-types/string)) — The function arguments.

@@ -63,7 +63,7 @@ Columns:
 - `path` ([String](/sql-reference/data-types/string)) — Path to a scheduling node within this resource scheduling hierarchy
 - `type` ([String](/sql-reference/data-types/string)) — Type of a scheduling node.
 - `weight` ([Float64](/sql-reference/data-types/float)) — Weight of a node, used by a parent node of `fair` type.
-- `priority` ([Int64](/sql-reference/data-types/int-uint)) — Priority of a node, used by a parent node of \'priority\' type (Lower value means higher priority).
+- `priority` ([Int64](/sql-reference/data-types/int-uint)) — Priority of a node, used by a parent node of 'priority' type (Lower value means higher priority).
 - `is_active` ([UInt8](/sql-reference/data-types/int-uint)) — Whether this node is currently active - has resource requests to be dequeued and constraints satisfied.
 - `active_children` ([UInt64](/sql-reference/data-types/int-uint)) — The number of children in active state.
 - `dequeued_requests` ([UInt64](/sql-reference/data-types/int-uint)) — The total number of resource requests dequeued from this node.
@@ -76,7 +76,7 @@ Columns:
 - `system_vruntime` ([Nullable(Float64)](/sql-reference/data-types/nullable)) — For `fair` nodes only. Virtual runtime showing `vruntime` of the last processed resource request. Used during child activation as the new value of `vruntime`.
 - `queue_length` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — For `fifo` nodes only. Current number of resource requests residing in the queue.
 - `queue_cost` ([Nullable(Int64)](/sql-reference/data-types/nullable)) — For fifo nodes only. Sum of costs (e.g. size in bytes) of all requests residing in the queue.
-- `budget` ([Nullable(Int64)](/sql-reference/data-types/nullable)) — For fifo nodes only. The number of available \'cost units\' for new resource requests. Can appear in case of discrepancy of estimated and real costs of resource requests (e.g. after read/write failure)
+- `budget` ([Nullable(Int64)](/sql-reference/data-types/nullable)) — For fifo nodes only. The number of available 'cost units' for new resource requests. Can appear in case of discrepancy of estimated and real costs of resource requests (e.g. after read/write failure)
 - `is_satisfied` ([Nullable(UInt8)](/sql-reference/data-types/nullable)) — For constraint nodes only (e.g. `inflight_limit`). Equals to `1` if all the constraint of this node are satisfied.
 - `inflight_requests` ([Nullable(Int64)](/sql-reference/data-types/nullable)) — For `inflight_limit` nodes only. The number of resource requests dequeued from this node, that are currently in consumption state.
 - `inflight_cost` ([Nullable(Int64)](/sql-reference/data-types/nullable)) — For `inflight_limit` nodes only. The sum of costs (e.g. bytes) of all resource requests dequeued from this node, that are currently in consumption state.

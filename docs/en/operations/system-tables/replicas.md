@@ -75,13 +75,13 @@ Columns:
 - `is_readonly` ([UInt8](/sql-reference/data-types/int-uint)) — Whether the replica is in read-only mode. This mode is turned on if the config does not have sections with ClickHouse Keeper, if an unknown error occurred when reinitializing sessions in ClickHouse Keeper, and during session reinitialization in ClickHouse Keeper.
 - `readonly_start_time` ([Nullable(DateTime)](/sql-reference/data-types/nullable)) — The timestamp when the replica transitioned into readonly mode. Null if the replica is not in readonly mode.
 - `is_session_expired` ([UInt8](/sql-reference/data-types/int-uint)) — Whether the session with ClickHouse Keeper has expired. Basically the same as `is_readonly`.
-- `future_parts` ([UInt32](/sql-reference/data-types/int-uint)) — The number of data parts that will appear as the result of INSERTs or merges that haven\'t been done yet.
+- `future_parts` ([UInt32](/sql-reference/data-types/int-uint)) — The number of data parts that will appear as the result of INSERTs or merges that haven't been done yet.
 - `parts_to_check` ([UInt32](/sql-reference/data-types/int-uint)) — The number of data parts in the queue for verification. A part is put in the verification queue if there is suspicion that it might be damaged.
-- `zookeeper_name` ([String](/sql-reference/data-types/string)) — The name of the [Zoo]Keeper cluster (possibly auxiliary one) where the table\'s metadata is stored
+- `zookeeper_name` ([String](/sql-reference/data-types/string)) — The name of the [Zoo]Keeper cluster (possibly auxiliary one) where the table's metadata is stored
 - `zookeeper_path` ([String](/sql-reference/data-types/string)) — Path to table data in ClickHouse Keeper.
 - `replica_name` ([String](/sql-reference/data-types/string)) — Replica name in ClickHouse Keeper. Different replicas of the same table have different names.
-- `replica_path` ([String](/sql-reference/data-types/string)) — Path to replica data in ClickHouse Keeper. The same as concatenating \'zookeeper_path/replicas/replica_path\'.
-- `columns_version` ([Int32](/sql-reference/data-types/int-uint)) — Version number of the table structure. Indicates how many times ALTER was performed. If replicas have different versions, it means some replicas haven\'t made all of the ALTERs yet.
+- `replica_path` ([String](/sql-reference/data-types/string)) — Path to replica data in ClickHouse Keeper. The same as concatenating 'zookeeper_path/replicas/replica_path'.
+- `columns_version` ([Int32](/sql-reference/data-types/int-uint)) — Version number of the table structure. Indicates how many times ALTER was performed. If replicas have different versions, it means some replicas haven't made all of the ALTERs yet.
 - `queue_size` ([UInt32](/sql-reference/data-types/int-uint)) — Size of the queue for operations waiting to be performed. Operations include inserting blocks of data, merges, and certain other actions. It usually coincides with future_parts.
 - `inserts_in_queue` ([UInt32](/sql-reference/data-types/int-uint)) — Number of inserts of blocks of data that need to be made. Insertions are usually replicated fairly quickly. If this number is large, it means something is wrong.
 - `merges_in_queue` ([UInt32](/sql-reference/data-types/int-uint)) — The number of merges waiting to be made. Sometimes merges are lengthy, so this value may be greater than zero for a long time.
@@ -100,7 +100,7 @@ Columns:
 - `total_replicas` ([UInt32](/sql-reference/data-types/int-uint)) — The total number of known replicas of this table.
 - `active_replicas` ([UInt32](/sql-reference/data-types/int-uint)) — The number of replicas of this table that have a session in ClickHouse Keeper (i.e., the number of functioning replicas).
 - `lost_part_count` ([UInt64](/sql-reference/data-types/int-uint)) — The number of data parts lost in the table by all replicas in total since table creation. Value is persisted in ClickHouse Keeper and can only increase.
-- `last_queue_update_exception` ([String](/sql-reference/data-types/string)) — When the queue contains broken entries. Especially important when ClickHouse breaks backward compatibility between versions and log entries written by newer versions aren\'t parseable by old versions.
+- `last_queue_update_exception` ([String](/sql-reference/data-types/string)) — When the queue contains broken entries. Especially important when ClickHouse breaks backward compatibility between versions and log entries written by newer versions aren't parseable by old versions.
 - `zookeeper_exception` ([String](/sql-reference/data-types/string)) — The last exception message, got if the error happened when fetching the info from ClickHouse Keeper.
 - `replica_is_active` ([Map(String, UInt8)](/sql-reference/data-types/map)) — Map between replica name and is replica active.
 

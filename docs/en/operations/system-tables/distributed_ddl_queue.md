@@ -22,7 +22,7 @@ Columns:
 - `query_create_time` ([DateTime](/sql-reference/data-types/datetime)) — Query created time.
 - `host` ([Nullable(String)](/sql-reference/data-types/nullable)) — Hostname.
 - `port` ([Nullable(UInt16)](/sql-reference/data-types/nullable)) — Host Port.
-- `status` ([Nullable(Enum8(\'Inactive\' = 0, \'Active\' = 1, \'Finished\' = 2, \'Removing\' = 3, \'Unknown\' = 4))](/sql-reference/data-types/nullable)) — Status of the query.
+- `status` ([Nullable(Enum8('Inactive' = 0, 'Active' = 1, 'Finished' = 2, 'Removing' = 3, 'Unknown' = 4))](/sql-reference/data-types/nullable)) — Status of the query.
 - `exception_code` ([Nullable(UInt16)](/sql-reference/data-types/nullable)) — Exception code.
 - `exception_text` ([Nullable(String)](/sql-reference/data-types/nullable)) — Exception message.
 - `query_finish_time` ([Nullable(DateTime)](/sql-reference/data-types/nullable)) — Query finish time.

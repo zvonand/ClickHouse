@@ -17,7 +17,7 @@ Columns:
 - `database` ([String](/sql-reference/data-types/string)) — Database name.
 - `table` ([String](/sql-reference/data-types/string)) — Table name.
 - `name` ([String](/sql-reference/data-types/string)) — Projection name.
-- `type` ([Enum8(\'Normal\' = 0, \'Aggregate\' = 1)](/sql-reference/data-types/enum)) — Projection type.
+- `type` ([Enum8('Normal' = 0, 'Aggregate' = 1)](/sql-reference/data-types/enum)) — Projection type.
 - `sorting_key` ([Array(String)](/sql-reference/data-types/array)) — Projection sorting key.
 - `query` ([String](/sql-reference/data-types/string)) — Projection query.
 - `settings` ([Map(String, String)](/sql-reference/data-types/map)) — Projection settings.

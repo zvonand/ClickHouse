@@ -22,12 +22,12 @@ Columns:
 - `min` ([Nullable(String)](/sql-reference/data-types/nullable)) — Minimum value of the setting, if any is set via constraints. If the setting has no minimum value, contains NULL.
 - `max` ([Nullable(String)](/sql-reference/data-types/nullable)) — Maximum value of the setting, if any is set via constraints. If the setting has no maximum value, contains NULL.
 - `disallowed_values` ([Array(String)](/sql-reference/data-types/array)) — List of disallowed values
-- `readonly` ([UInt8](/sql-reference/data-types/int-uint)) — Shows whether the current user can change the setting: 0 — Current user can change the setting, 1 — Current user can\'t change the setting.
+- `readonly` ([UInt8](/sql-reference/data-types/int-uint)) — Shows whether the current user can change the setting: 0 — Current user can change the setting, 1 — Current user can't change the setting.
 - `type` ([String](/sql-reference/data-types/string)) — The type of the value that can be assigned to this setting.
 - `default` ([String](/sql-reference/data-types/string)) — Setting default value.
 - `alias_for` ([String](/sql-reference/data-types/string)) — The name of the original setting if the setting is an alias for another setting.
 - `is_obsolete` ([UInt8](/sql-reference/data-types/int-uint)) — Shows whether a setting is obsolete.
-- `tier` ([Enum8(\'Production\' = 0, \'Obsolete\' = 4, \'Experimental\' = 8, \'Beta\' = 12)](/sql-reference/data-types/enum)) — Support level for this feature. ClickHouse features are organized in tiers, varying depending on the current status of their
+- `tier` ([Enum8('Production' = 0, 'Obsolete' = 4, 'Experimental' = 8, 'Beta' = 12)](/sql-reference/data-types/enum)) — Support level for this feature. ClickHouse features are organized in tiers, varying depending on the current status of their
     development and the expectations one might have when using them:
     * PRODUCTION: The feature is stable, safe to use and does not have issues interacting with other PRODUCTION features.
     * BETA: The feature is stable and safe. The outcome of using it together with other features is unknown and correctness is not guaranteed. Testing and reports are welcome.

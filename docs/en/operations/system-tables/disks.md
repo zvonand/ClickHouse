@@ -25,7 +25,7 @@ Columns:
 - `type` ([String](/sql-reference/data-types/string)) — The disk type which tells where this disk stores the data - RAM, local drive or remote storage.
 - `object_storage_type` ([String](/sql-reference/data-types/string)) — Type of object storage if disk type is object_storage
 - `metadata_type` ([String](/sql-reference/data-types/string)) — Type of metadata storage if disk type is object_storage
-- `is_encrypted` ([UInt8](/sql-reference/data-types/int-uint)) — Flag which shows whether this disk ecrypts the underlying data.
+- `is_encrypted` ([UInt8](/sql-reference/data-types/int-uint)) — Flag which shows whether this disk encrypts the underlying data.
 - `is_read_only` ([UInt8](/sql-reference/data-types/int-uint)) — Flag which indicates that you can only perform read operations with this disk.
 - `is_write_once` ([UInt8](/sql-reference/data-types/int-uint)) — Flag which indicates if disk is write-once. Which means that it does support BACKUP to this disk, but does not support INSERT into MergeTree table on this disk.
 - `is_remote` ([UInt8](/sql-reference/data-types/int-uint)) — Flag which indicated what operations with this disk involve network interaction.

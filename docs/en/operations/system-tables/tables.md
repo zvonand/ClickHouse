@@ -41,12 +41,12 @@ Columns:
 - `storage_policy` ([String](/sql-reference/data-types/string)) — The storage policy. Relevant for tables using MergeTree and Distributed engines.
 - `total_rows` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — Total number of rows, if it is possible to quickly determine exact number of rows in the table, otherwise NULL (including underlying Buffer table).
 - `total_bytes` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — Total number of bytes, if it is possible to quickly determine exact number of bytes for the table on storage, otherwise NULL (does not includes any underlying storage). If the table stores data on disk, returns used space on disk (i.e. compressed). If the table stores data in memory, returns approximated number of used bytes in memory.
-- `total_bytes_uncompressed` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — Total number of uncompressed bytes, if it\'s possible to quickly determine the exact number of bytes from the part checksums for the table on storage, otherwise NULL (does not take underlying storage (if any) into account).
+- `total_bytes_uncompressed` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — Total number of uncompressed bytes, if it's possible to quickly determine the exact number of bytes from the part checksums for the table on storage, otherwise NULL (does not take underlying storage (if any) into account).
 - `parts` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — The total number of parts in this table.
 - `active_parts` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — The number of active parts in this table.
 - `total_marks` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — The total number of marks in all parts in this table.
 - `active_on_fly_data_mutations` ([UInt64](/sql-reference/data-types/int-uint)) — Total number of active data mutations (UPDATEs and DELETEs) suitable for applying on the fly.
-- `active_on_fly_alter_mutations` ([UInt64](/sql-reference/data-types/int-uint)) — Total number of active alter mutations (MODIFY COLUMNs) suitable for applying on the fly.
+- `active_on_fly_alter_mutations` ([UInt64](/sql-reference/data-types/int-uint)) — Total number of active alter mutations (MODIFY COLUMN) suitable for applying on the fly.
 - `active_on_fly_metadata_mutations` ([UInt64](/sql-reference/data-types/int-uint)) — Total number of active metadata mutations (RENAMEs) suitable for applying on the fly.
 - `columns_descriptions_cache_size` ([UInt64](/sql-reference/data-types/int-uint)) — Size of columns description cache for *MergeTree tables
 - `lifetime_rows` ([Nullable(UInt64)](/sql-reference/data-types/nullable)) — Total number of rows INSERTed since server start (only for Buffer tables).
@@ -57,7 +57,7 @@ Columns:
 - `loading_dependencies_table` ([Array(String)](/sql-reference/data-types/array)) — Table loading dependencies (list of objects which should be loaded before the current object).
 - `loading_dependent_database` ([Array(String)](/sql-reference/data-types/array)) — Dependent loading database.
 - `loading_dependent_table` ([Array(String)](/sql-reference/data-types/array)) — Dependent loading table.
-- `definer` ([String](/sql-reference/data-types/string)) — SQL security definer\'s name used for the table.
+- `definer` ([String](/sql-reference/data-types/string)) — SQL security definer's name used for the table.
 
 **Aliases:**
 

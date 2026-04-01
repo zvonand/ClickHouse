@@ -64,12 +64,7 @@ TYPE_LINKS = {
 }
 
 # Tables to skip in documentation generation (internal/helper tables).
-SKIP_TABLES = {
-    "transposed_metric_log",
-    # unicode table has hundreds of dynamically-generated columns from ICU
-    # property names that trigger spell-check failures.
-    "unicode",
-}
+SKIP_TABLES = {"transposed_metric_log"}
 
 
 def unescape_tsv(value):
@@ -93,6 +88,10 @@ def unescape_tsv(value):
                 continue
             elif next_char == "\\":
                 result.append("\\")
+                i += 2
+                continue
+            elif next_char == "'":
+                result.append("'")
                 i += 2
                 continue
         result.append(value[i])

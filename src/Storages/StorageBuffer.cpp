@@ -244,10 +244,12 @@ protected:
 
         Columns columns;
         columns.reserve(getPort().getHeader().columns());
-        for (const auto & [name, type] : getPort().getHeader().getNamesAndTypes())
+        for (const auto & packed : getPort().getHeader().getNamesAndTypes())
         {
+            const auto & [name, type] = packed;
+
             if (buffer.data.has(name))
-                columns.emplace_back(getColumnFromBlock(buffer.data, {name, type}));
+                columns.emplace_back(getColumnFromBlock(buffer.data, packed));
             else
                 columns.emplace_back(fillVirtualColumn(name, type, buffer.data.rows()));
         }

@@ -9,6 +9,7 @@
 #include <Common/SettingSource.h>
 #include <IO/WriteHelpers.h>
 
+#include <bitset>
 #include <string_view>
 #include <unordered_map>
 
@@ -265,7 +266,7 @@ Field getNewValueToCheck(const SettingsT & current_settings, const SettingChange
         {
             new_value = SettingsT::castValueUtil(change.name, change.value);
         }
-        catch (...)
+        catch (const Exception &)
         {
             return {};
         }
@@ -346,7 +347,7 @@ bool SettingsConstraints::Checker::check(SettingChange & change,
         {
             return accurateLess(left, right);
         }
-        catch (...)
+        catch (const Exception &)
         {
             return true;
         }
@@ -360,7 +361,7 @@ bool SettingsConstraints::Checker::check(SettingChange & change,
         {
             return accurateEquals(left, right);
         }
-        catch (...)
+        catch (const Exception &)
         {
             return true;
         }

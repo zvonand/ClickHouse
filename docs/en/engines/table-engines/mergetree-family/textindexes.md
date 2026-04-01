@@ -427,6 +427,18 @@ SELECT count() FROM table WHERE comment LIKE ' support %'; -- or `% support %`
 
 The spaces left and right of `support` make sure that the term can be extracted as a token.
 
+Fortunately, there is a special case that ClickHouse leverages the inverted index to speed up the LIKE queries significantly.
+
+:::note
+This optimization can be applied when the text index tokenizer is `splitByNonAlpha` and the LIKE/ILIKE pattern is `%<alpha-numeric-characters-without-spaces>%`.
+:::
+
+In such cases, the inverted index dictionary is directly scanned to find the matching LIKE pattern tokens.
+
+The optimization depends on the setting [use_text_index_like_evaluation_by_dictionary_scan](../../../operations/settings/settings#use_text_index_like_evaluation_by_dictionary_scan) (enabled by default). When enabled, LIKE queries should be significantly faster than a full-table scan. However, when a token matches to most of the dictionary tokens, the performance can be worse compare to a full-table scan. Luckily, there is a fallback mechanism to prevent that.
+Refer these settings to control the fallback mechanism behavior: [text_index_like_min_pattern_length](../../../operations/settings/settings#text_index_like_min_pattern_length) and
+[text_index_like_max_postings_to_read](../../../operations/settings/settings#text_index_like_max_postings_to_read).
+
 #### `startsWith` and `endsWith` {#functions-example-startswith-endswith}
 
 Similar to `LIKE`, functions [startsWith](/sql-reference/functions/string-functions.md/#startsWith) and [endsWith](/sql-reference/functions/string-functions.md/#endsWith) can only use a text index, if complete tokens can be extracted from the search term.

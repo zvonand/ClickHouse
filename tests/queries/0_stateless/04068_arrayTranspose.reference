@@ -60,6 +60,13 @@ SELECT arrayTranspose([[tuple(1, 'a'), tuple(2, 'b')], [tuple(3, 'c'), tuple(4, 
 -- Double transpose returns the initial input
 SELECT arrayTranspose(arrayTranspose([[1, 2, 3], [4, 5, 6]]));
 [[1,2,3],[4,5,6]]
+-- Large matrices to check cache-oblivious recursion (both row-split and column-split branches)
+WITH arrayMap(i -> arrayMap(j -> toUInt64(i * 100 + j), range(128)), range(128)) AS mat
+SELECT arrayTranspose(mat) = arrayMap(j -> arrayMap(i -> toUInt64(i * 100 + j), range(128)), range(128));
+1
+WITH arrayMap(i -> arrayMap(j -> toFixedString(concat('a_', toString(i), '_', toString(j)), 9), range(128)), range(128)) AS mat
+SELECT arrayTranspose(mat) = arrayMap(j -> arrayMap(i -> toFixedString(concat('a_', toString(i), '_', toString(j)), 9), range(128)), range(128));
+1
 -- Error: inner arrays of different sizes
 SELECT arrayTranspose([[1, 2], [3]]); -- { serverError SIZES_OF_ARRAYS_DONT_MATCH }
 -- Error: not a 2D array

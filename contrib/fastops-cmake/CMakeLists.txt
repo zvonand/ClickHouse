@@ -16,7 +16,7 @@ set(SRCS
     "${LIBRARY_DIR}/fastops/fastops.cpp"
 )
 
-if (X86_ARCH_LEVEL VERSION_LESS 3)
+if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_LESS 3)
     # Below v3: need runtime dispatch with AVX-only and Plain fallbacks.
     list(APPEND SRCS
         "${LIBRARY_DIR}/fastops/avx/ops_avx.cpp"

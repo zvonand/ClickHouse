@@ -1457,6 +1457,13 @@ void QueryFuzzer::fuzzProjectionWithSettings(ASTProjectionDeclaration & projecti
 
         auto new_settings = make_intrusive<ASTSetQuery>();
         new_settings->is_standalone = false;
+        /// Seed one setting immediately so the empty-changes guard below does not
+        /// discard the node we just created.
+        if (fuzz_rand() % 2 == 0)
+            new_settings->changes.emplace_back("index_granularity", granularity_values[fuzz_rand() % std::size(granularity_values)]);
+        else
+            new_settings->changes.emplace_back(
+                "index_granularity_bytes", granularity_bytes_values[fuzz_rand() % std::size(granularity_bytes_values)]);
         projection.set(projection.with_settings, new_settings);
     }
 
@@ -1507,6 +1514,9 @@ void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projectio
     ///   index-based:  PROJECTION p INDEX expr TYPE type
     if (fuzz_rand() % 30 == 0)
     {
+        /// Capture the original form before clearing so the branch below can act on it.
+        const bool was_query = (projection.query != nullptr);
+
         /// Clear children first to avoid orphaned nodes being visited during recursion.
         projection.children.clear();
         projection.query = nullptr;
@@ -1514,7 +1524,7 @@ void QueryFuzzer::fuzzProjectionDeclaration(ASTProjectionDeclaration & projectio
         projection.type = nullptr;
         projection.with_settings = nullptr;
 
-        if (projection.query)
+        if (was_query)
         {
             /// Query → Index: build a minimal INDEX * TYPE basic|commit_order form.
             auto index_list = make_intrusive<ASTExpressionList>();

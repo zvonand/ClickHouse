@@ -124,9 +124,9 @@ DROP TABLE IF EXISTS t_str3;
 CREATE TABLE t_u32  (x UInt32) ENGINE = MergeTree ORDER BY x;
 CREATE TABLE t_u64  (x UInt64) ENGINE = MergeTree ORDER BY x;
 CREATE TABLE t_i32  (x Int32)  ENGINE = MergeTree ORDER BY x;
-CREATE TABLE t_str  (x String) ENGINE = MergeTree ORDER BY x;
-CREATE TABLE t_str2 (x String) ENGINE = MergeTree ORDER BY x;
-CREATE TABLE t_str3 (x String) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE t_str  (x String STATISTICS(uniq)) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE t_str2 (x String STATISTICS(uniq)) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE t_str3 (x String STATISTICS(uniq)) ENGINE = MergeTree ORDER BY x;
 
 INSERT INTO t_u32  SELECT number FROM numbers(5);
 INSERT INTO t_u64  SELECT number FROM numbers(5);
@@ -172,16 +172,18 @@ ORDER BY t_str.x
 SETTINGS enable_join_transitive_predicates = 0;
 
 -- 13b plan: bias sizes so optimizer pairs t_str+t_str3 first, forcing synthesized predicate.
--- Need |t_str3| < |t_str| < |t_str2| so cost(t_str, t_str3) is strictly minimal.
-INSERT INTO t_str  SELECT toString(number % 5) FROM numbers(100);
+-- With column statistics (NDV via uniq), selectivity = 1/NDV for all pairs and cost is purely
+-- proportional to |L|*|R|. Keeping t_str and t_str3 small while making t_str2 large guarantees
+-- that the transitive pair (t_str, t_str3) has the lowest cost regardless of FROM clause order.
 INSERT INTO t_str2 SELECT toString(number % 5) FROM numbers(10000);
 SELECT '-- Case 13b: plan';
 SELECT explain FROM (
     EXPLAIN actions = 1
     SELECT count() FROM t_str, t_str2, t_str3
     WHERE t_str.x = t_str2.x AND t_str2.x = t_str3.x
-    SETTINGS query_plan_optimize_join_order_algorithm = 'greedy',
-             query_plan_join_swap_table = 'false'
+    SETTINGS query_plan_optimize_join_order_algorithm = 'dpsize',
+             query_plan_join_swap_table = 'false',
+             use_statistics = 1
 ) WHERE explain LIKE '%Clauses%';
 
 DROP TABLE t_u32;
@@ -206,9 +208,9 @@ DROP TABLE IF EXISTS nu2;
 DROP TABLE IF EXISTS nlc3;
 
 -- 14a: Nullable(UInt32) all same — transitivity works
-CREATE TABLE n1 (x Nullable(UInt32)) ENGINE = MergeTree ORDER BY tuple();
-CREATE TABLE n2 (x Nullable(UInt32)) ENGINE = MergeTree ORDER BY tuple();
-CREATE TABLE n3 (x Nullable(UInt32)) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE n1 (x Nullable(UInt32) STATISTICS(uniq)) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE n2 (x Nullable(UInt32) STATISTICS(uniq)) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE n3 (x Nullable(UInt32) STATISTICS(uniq)) ENGINE = MergeTree ORDER BY tuple();
 INSERT INTO n1 SELECT if(number % 3 = 0, NULL, number) FROM numbers(6);
 INSERT INTO n2 SELECT if(number % 4 = 0, NULL, number) FROM numbers(6);
 INSERT INTO n3 SELECT number FROM numbers(6);
@@ -221,16 +223,15 @@ SELECT n1.x, n2.x, n3.x FROM n1, n2, n3
 WHERE n1.x = n2.x AND n2.x = n3.x ORDER BY n1.x
 SETTINGS enable_join_transitive_predicates = 0;
 
--- 14a plan: bias sizes so optimizer pairs n1+n3 first, forcing synthesized predicate.
--- Need |n3| < |n1| < |n2| so cost(n1, n3) is strictly minimal.
-INSERT INTO n1 SELECT number % 6 FROM numbers(100);
+-- 14a plan: with column statistics, cost(n1,n3) << cost(n1,n2) and cost(n2,n3).
 INSERT INTO n2 SELECT number % 6 FROM numbers(10000);
 SELECT '-- Case 14a: plan';
 SELECT explain FROM (
     EXPLAIN actions = 1
     SELECT count() FROM n1, n2, n3 WHERE n1.x = n2.x AND n2.x = n3.x
-    SETTINGS query_plan_optimize_join_order_algorithm = 'greedy',
-             query_plan_join_swap_table = 'false'
+    SETTINGS query_plan_optimize_join_order_algorithm = 'dpsize',
+             query_plan_join_swap_table = 'false',
+             use_statistics = 1
 ) WHERE explain LIKE '%Clauses%';
 
 DROP TABLE n1; DROP TABLE n2; DROP TABLE n3;
@@ -262,9 +263,9 @@ SELECT explain FROM (
 DROP TABLE nlc1; DROP TABLE nu2; DROP TABLE nlc3;
 
 -- 14c: LowCardinality(String) all same — transitivity works
-CREATE TABLE lc1 (x LowCardinality(String)) ENGINE = MergeTree ORDER BY x;
-CREATE TABLE lc2 (x LowCardinality(String)) ENGINE = MergeTree ORDER BY x;
-CREATE TABLE lc3 (x LowCardinality(String)) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE lc1 (x LowCardinality(String) STATISTICS(uniq)) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE lc2 (x LowCardinality(String) STATISTICS(uniq)) ENGINE = MergeTree ORDER BY x;
+CREATE TABLE lc3 (x LowCardinality(String) STATISTICS(uniq)) ENGINE = MergeTree ORDER BY x;
 INSERT INTO lc1 SELECT toString(number) FROM numbers(5);
 INSERT INTO lc2 SELECT toString(number) FROM numbers(5);
 INSERT INTO lc3 SELECT toString(number) FROM numbers(5);
@@ -277,16 +278,15 @@ SELECT lc1.x, lc2.x, lc3.x FROM lc1, lc2, lc3
 WHERE lc1.x = lc2.x AND lc2.x = lc3.x ORDER BY lc1.x
 SETTINGS enable_join_transitive_predicates = 0;
 
--- 14c plan: bias sizes so optimizer pairs lc1+lc3 first, forcing synthesized predicate.
--- Need |lc3| < |lc1| < |lc2| so cost(lc1, lc3) is strictly minimal.
-INSERT INTO lc1 SELECT toString(number % 5) FROM numbers(100);
+-- 14c plan: with column statistics, cost(lc1,lc3) << cost(lc1,lc2) and cost(lc2,lc3).
 INSERT INTO lc2 SELECT toString(number % 5) FROM numbers(10000);
 SELECT '-- Case 14c: plan';
 SELECT explain FROM (
     EXPLAIN actions = 1
     SELECT count() FROM lc1, lc2, lc3 WHERE lc1.x = lc2.x AND lc2.x = lc3.x
-    SETTINGS query_plan_optimize_join_order_algorithm = 'greedy',
-             query_plan_join_swap_table = 'false'
+    SETTINGS query_plan_optimize_join_order_algorithm = 'dpsize',
+             query_plan_join_swap_table = 'false',
+             use_statistics = 1
 ) WHERE explain LIKE '%Clauses%';
 
 DROP TABLE lc1; DROP TABLE lc2; DROP TABLE lc3;

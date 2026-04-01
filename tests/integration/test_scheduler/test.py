@@ -324,10 +324,28 @@ def test_s3_disk_move_partition_resource_scheduling():
             f" where query_id='{query_id}' and type='QueryFinish'"
         ).strip()
     )
+    write_requests = int(
+        node.query(
+            f"select ProfileEvents['SchedulerIOWriteRequests'] from system.query_log"
+            f" where query_id='{query_id}' and type='QueryFinish'"
+        ).strip()
+    )
+    write_bytes = int(
+        node.query(
+            f"select ProfileEvents['SchedulerIOWriteBytes'] from system.query_log"
+            f" where query_id='{query_id}' and type='QueryFinish'"
+        ).strip()
+    )
 
     assert (
         read_requests > 0
     ), "No read requests were scheduled through the workload IO scheduler (MultipleDisksObjectStorageTransaction path)"
+    assert (
+        write_requests > 0
+    ), "No write requests were scheduled through the workload IO scheduler (MultipleDisksObjectStorageTransaction path)"
+    assert (
+        write_bytes > 0
+    ), "No write bytes were scheduled through the workload IO scheduler (MultipleDisksObjectStorageTransaction path)"
 
     node.query("drop table data_move")
 

@@ -154,7 +154,7 @@ StatementGenerator::StatementGenerator(
               {0.01, 0.05} /// MergeIndexAnalyzeUDF
           }},
           "SQL queries"))
-    , SQLMask(static_cast<size_t>(SQLOp::CreatePolicy) + 1, true)
+    , SQLMask(static_cast<size_t>(SQLOp::SnapshotQuery) + 1, true)
     , litMask(static_cast<size_t>(LitOp::LitFraction) + 1, true)
     , expMask(static_cast<size_t>(ExpOp::LitAccurateCast) + 1, true)
     , predMask(static_cast<size_t>(PredOp::OtherExpr) + 1, true)

@@ -236,17 +236,12 @@ void SettingsConstraints::clamp(const Settings & current_settings, SettingsChang
 
 void SettingsConstraints::checkOrClamp(const Settings & current_settings, SettingsChanges & changes, ReactionOnViolation reaction, SettingSource source) const
 {
-    /// Normally, settings whose value already matches the server default are filtered out as no-ops.
-    /// But `compatibility` is applied later and retroactively changes defaults (e.g. `compatibility='23.8'` resets `enable_analyzer` to 0).
-    /// If we erase `enable_analyzer=1` here because it matches the current default, `compatibility` will silently override it.
-    /// The user asked for analyzer=1 but gets 0.
-    ///
-    /// Thus, when `compatibility` is present, we keep unchanged settings so they get marked as explicitly `changed` and take precedence.
-    /// Genuinely rejected settings (unknown names, cast failures, constraint violations) are still erased.
-    bool has_compatibility = changes.tryGet("compatibility") != nullptr;
+    /// If we filter out settings that match the current default here, `compatibility` will silently override them.
+    /// So when `compatibility` is present, we keep unchanged settings so they are applied after `compatibility`.
+    bool has_compatibility_setting = changes.tryGet("compatibility") != nullptr;
     std::erase_if(changes, [&](SettingChange & change)
     {
-        return !checkImpl(current_settings, change, reaction, source, /*ignore_unchanged_settings=*/has_compatibility);
+        return !checkImpl(current_settings, change, reaction, source, /*ignore_unchanged_settings=*/has_compatibility_setting);
     });
 }
 

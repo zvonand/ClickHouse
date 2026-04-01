@@ -1025,19 +1025,18 @@ void ZooKeeper::receiveEvent()
                     /// And that's why new watch may be already fired by old event,
                     ///  but then the server will actually register new watch
                     ///  and will send event again later.
+                    return;
                 }
-                else
-                {
-                    /// NOTE We may process callbacks not under mutex.
-                    for (const auto & event_or_callback : it->second)
-                    {
-                        if (event_or_callback)
-                            event_or_callback(watch_response);
-                    }
 
-                    CurrentMetrics::sub(CurrentMetrics::ZooKeeperWatch, it->second.size());
-                    watches_container.erase(it);
+                /// NOTE We may process callbacks not under mutex.
+                for (const auto & event_or_callback : it->second)
+                {
+                    if (event_or_callback)
+                        event_or_callback(watch_response);
                 }
+
+                CurrentMetrics::sub(CurrentMetrics::ZooKeeperWatch, it->second.size());
+                watches_container.erase(it);
             };
 
             std::lock_guard lock(watches_mutex);

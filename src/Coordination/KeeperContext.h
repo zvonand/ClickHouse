@@ -186,7 +186,7 @@ private:
     int64_t precommit_sleep_ms_for_testing = 0;
     double precommit_sleep_probability_for_testing = 0.0;
 
-    alignas(DB::CH_CACHE_LINE_SIZE) std::atomic<int64_t> settings_version;
+    alignas(DB::CH_CACHE_LINE_SIZE) std::atomic<uint64_t> settings_version;
     alignas(DB::CH_CACHE_LINE_SIZE) mutable SharedMutex settings_mutex;
     CoordinationSettingsPtr fixed_settings; // immutable
     CoordinationSettingsPtr dynamic_settings; // hot-reloaded on config file change

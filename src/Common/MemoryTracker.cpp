@@ -383,10 +383,10 @@ AllocationTrace MemoryTracker::allocImpl(Int64 size, bool throw_if_memory_exceed
                 }
                 else if (jemalloc_flush_profile_on_memory_exceeded_interval_s)
                 {
-                    static std::atomic<time_t> last_flush_time{0};
-                    time_t now = time(nullptr);
-                    time_t last = last_flush_time.load(std::memory_order_relaxed);
-                    if (now - last >= static_cast<time_t>(jemalloc_flush_profile_on_memory_exceeded_interval_s)
+                    static std::atomic<UInt64> last_flush_time{0};
+                    UInt64 now = static_cast<UInt64>(time(nullptr));
+                    UInt64 last = last_flush_time.load(std::memory_order_relaxed);
+                    if (now - last >= jemalloc_flush_profile_on_memory_exceeded_interval_s
                         && last_flush_time.compare_exchange_strong(last, now, std::memory_order_relaxed))
                     {
                         auto flushed_profile = DB::Jemalloc::flushProfile(flush_prefix);

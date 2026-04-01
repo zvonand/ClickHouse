@@ -1,6 +1,6 @@
 <test>
   <settings>
-    <use_text_index_like_optimization>1</use_text_index_like_optimization>
+    <use_text_index_like_evaluation_by_dictionary_scan>1</use_text_index_like_evaluation_by_dictionary_scan>
   </settings>
   <create_query>
     CREATE TABLE tab

@@ -34,7 +34,7 @@ namespace Setting
     extern const SettingsBool use_text_index_header_cache;
     extern const SettingsBool use_text_index_postings_cache;
     extern const SettingsUInt64 max_memory_usage;
-    extern const SettingsBool use_text_index_like_optimization;
+    extern const SettingsBool use_text_index_like_evaluation_by_dictionary_scan;
     extern const SettingsUInt64 text_index_like_min_pattern_length;
 }
 
@@ -734,9 +734,9 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
     {
         const bool has_preprocessor = preprocessor && preprocessor->hasActions();
         /// like/notLike optimization is only supported for the SplitByNonAlpha tokenizer.
-        /// Requires explicit opt-in via use_text_index_like_optimization because scanning
+        /// Requires explicit opt-in via use_text_index_like_evaluation_by_dictionary_scan because scanning
         /// the index dictionary for pattern-matching tokens has non-trivial overhead.
-        if (tokenizer->getType() == ITokenizer::Type::SplitByNonAlpha && settings[Setting::use_text_index_like_optimization]
+        if (tokenizer->getType() == ITokenizer::Type::SplitByNonAlpha && settings[Setting::use_text_index_like_evaluation_by_dictionary_scan]
             && !has_preprocessor)
         {
             /// TODO(ahmadov): Only '%foo%' pattern is eligible for direct read mode. An empty vector means the pattern is too complex.
@@ -766,7 +766,7 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
     }
     /// Currently, only SplitByNonAlpha tokenizer is supported with ilike/notilike functions for the like optimization.
     if (function_name == "ilike" && tokenizer->getType() == ITokenizer::Type::SplitByNonAlpha
-        && settings[Setting::use_text_index_like_optimization])
+        && settings[Setting::use_text_index_like_evaluation_by_dictionary_scan])
     {
         const bool has_preprocessor = preprocessor && preprocessor->hasActions();
         if (has_preprocessor && !preprocessor->isCaseFolding())

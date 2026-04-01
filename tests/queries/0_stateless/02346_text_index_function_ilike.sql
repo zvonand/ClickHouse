@@ -24,7 +24,7 @@ INSERT INTO tab(id, message) VALUES
     (4, 'abc baz bar'),
     (5, 'xyz');
 
-SET use_text_index_like_optimization = 0;
+SET use_text_index_like_evaluation_by_dictionary_scan = 0;
 
 SELECT '-- without optimization';
 
@@ -43,7 +43,7 @@ SELECT groupArray(id) FROM tab WHERE hasAllTokens(message, ['foo', 'abc']) AND m
 
 SELECT '-- with optimization';
 
-SET use_text_index_like_optimization = 1;
+SET use_text_index_like_evaluation_by_dictionary_scan = 1;
 
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%FOO%';
@@ -80,7 +80,7 @@ INSERT INTO tab(id, message) VALUES
     (4, 'abc baz bar'),
     (5, 'xyz');
 
-SET use_text_index_like_optimization = 0;
+SET use_text_index_like_evaluation_by_dictionary_scan = 0;
 
 SELECT '-- without optimization';
 
@@ -91,7 +91,7 @@ SELECT groupArray(id) FROM tab WHERE message ILIKE '%abc%' AND message NOT ILIKE
 
 SELECT '-- with optimization';
 
-SET use_text_index_like_optimization = 1;
+SET use_text_index_like_evaluation_by_dictionary_scan = 1;
 
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%FOO%';
@@ -102,7 +102,7 @@ DROP TABLE tab;
 
 SELECT 'Text index analysis';
 
-SET use_text_index_like_optimization = 1;
+SET use_text_index_like_evaluation_by_dictionary_scan = 1;
 
 CREATE TABLE tab
 (
@@ -158,7 +158,7 @@ DROP TABLE tab;
 
 SELECT 'Tests fallback when threshold (text_index_like_max_postings_to_read) is exceeded for reading large postings';
 
-SET use_text_index_like_optimization = 1;
+SET use_text_index_like_evaluation_by_dictionary_scan = 1;
 
 DROP TABLE IF EXISTS tab;
 
@@ -203,7 +203,7 @@ INSERT INTO tab(id, message) VALUES
 
 SELECT '-- without optimization';
 
-SET use_text_index_like_optimization = 0;
+SET use_text_index_like_evaluation_by_dictionary_scan = 0;
 
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%FOO%';
@@ -213,7 +213,7 @@ SELECT groupArray(id) FROM tab WHERE message ILIKE '%abc%' AND message NOT ILIKE
 
 SELECT '-- with optimization';
 
-SET use_text_index_like_optimization = 1;
+SET use_text_index_like_evaluation_by_dictionary_scan = 1;
 
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%FOO%';
@@ -225,7 +225,7 @@ DROP TABLE tab;
 
 SELECT 'Tests fallback when threshold (text_index_like_min_pattern_length) is exceeded for expression index';
 
-SET use_text_index_like_optimization = 1;
+SET use_text_index_like_evaluation_by_dictionary_scan = 1;
 
 DROP TABLE IF EXISTS tab;
 
@@ -266,14 +266,14 @@ ENGINE = MergeTree ORDER BY id;
 
 INSERT INTO tab(id, message) VALUES (1, 'FOO BAR'), (2, 'XYZ');
 
-SET use_text_index_like_optimization = 0;
+SET use_text_index_like_evaluation_by_dictionary_scan = 0;
 
 SELECT '-- without optimization';
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%FOO%';
 SELECT groupArray(id) FROM tab WHERE message NOT ILIKE '%foo%';
 
-SET use_text_index_like_optimization = 1;
+SET use_text_index_like_evaluation_by_dictionary_scan = 1;
 
 SELECT '-- with optimization (must produce same results)';
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
@@ -299,13 +299,13 @@ ENGINE = MergeTree ORDER BY id;
 
 INSERT INTO tab(id, message) VALUES (1, 'foo bar'), (2, 'xyz');
 
-SET use_text_index_like_optimization = 0;
+SET use_text_index_like_evaluation_by_dictionary_scan = 0;
 
 SELECT '-- without optimization';
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';
 SELECT groupArray(id) FROM tab WHERE message NOT ILIKE '%foo%';
 
-SET use_text_index_like_optimization = 1;
+SET use_text_index_like_evaluation_by_dictionary_scan = 1;
 
 SELECT '-- with optimization (must produce same results)';
 SELECT groupArray(id) FROM tab WHERE message ILIKE '%foo%';

@@ -15,7 +15,7 @@ class ArrowFlightConnection;
 
 class ArrowFlightSource : public ISource
 {
-    void initializeEndpoints(const String & dataset_name_, ContextPtr context_);
+    void initializeEndpoints(const String & dataset_name_);
     bool nextEndpoint();
     void initializeSchema();
     Block fillVirtualColumns(Block result_block);

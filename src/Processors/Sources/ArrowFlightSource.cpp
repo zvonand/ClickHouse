@@ -66,7 +66,7 @@ ArrowFlightSource::ArrowFlightSource(
     , storage_id(std::move(storage_id_))
     , context(context_)
 {
-    initializeEndpoints(dataset_name_, context_);
+    initializeEndpoints(dataset_name_);
 }
 
 ArrowFlightSource::ArrowFlightSource(
@@ -96,13 +96,13 @@ ArrowFlightSource::ArrowFlightSource(
     initializeSchema();
 }
 
-void ArrowFlightSource::initializeEndpoints(const String & dataset_name_, ContextPtr context_)
+void ArrowFlightSource::initializeEndpoints(const String & dataset_name_)
 {
     auto client = connection->getClient();
     auto options = connection->getOptions();
 
     arrow::flight::FlightDescriptor descriptor;
-    if (context_ && context_->getSettingsRef()[Setting::arrow_flight_request_descriptor_type] == ArrowFlightDescriptorType::Command)
+    if (context && context->getSettingsRef()[Setting::arrow_flight_request_descriptor_type] == ArrowFlightDescriptorType::Command)
     {
         String query = "SELECT * FROM " + dataset_name_;
         descriptor = arrow::flight::FlightDescriptor::Command(query);

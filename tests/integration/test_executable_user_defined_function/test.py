@@ -445,9 +445,10 @@ def test_executable_function_python_exception_in_query_log(started_cluster):
 @pytest.mark.parametrize("func_name", [
     "test_function_stderr_log_last_reaction",
     "test_function_stderr_log_first_reaction",
+    "test_function_stderr_none_reaction",
 ])
 def test_executable_function_stderr_no_throw_on_success(started_cluster, func_name):
-    '''Test that UDFs writing to stderr succeed under log_last/log_first when exit code is 0'''
+    '''Test that UDFs writing to stderr succeed under log_last/log_first/none when exit code is 0'''
     skip_test_msan(node)
 
     assert node.query(f"SELECT {func_name}('abc')") == "Key abc\n"

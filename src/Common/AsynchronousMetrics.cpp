@@ -1187,6 +1187,12 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
             "When userspace page cache is disabled, this value equals MemoryResident."
         };
 
+        new_values["MemoryUserSpacePageCache"] = {
+            page_cache_bytes,
+            "The amount of memory used by the ClickHouse userspace page cache, in bytes. "
+            "This is also available in system.metrics as PageCacheBytes."
+        };
+
 #if !defined(OS_FREEBSD)
         new_values["MemoryShared"] = { data.shared,
             "The amount of memory used by the server process, that is also shared by another processes, in bytes."

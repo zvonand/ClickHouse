@@ -72,21 +72,25 @@ ArrowFlightSource::ArrowFlightSource(
 ArrowFlightSource::ArrowFlightSource(
     std::shared_ptr<ArrowFlightConnection> connection_,
     std::vector<arrow::flight::FlightEndpoint> endpoints_,
-    const Block & sample_block_)
+    const Block & sample_block_,
+    ContextPtr context_)
     : ISource(std::make_shared<const Block>(sample_block_.cloneEmpty()))
     , connection(connection_)
     , sample_block(sample_block_)
     , storage_id(StorageID::createEmpty())
+    , context(context_)
     , endpoints(std::move(endpoints_))
 {
 }
 
 ArrowFlightSource::ArrowFlightSource(
     std::unique_ptr<arrow::flight::MetadataRecordBatchReader> stream_reader_,
-    const Block & sample_block_)
+    const Block & sample_block_,
+    ContextPtr context_)
     : ISource(std::make_shared<const Block>(sample_block_.cloneEmpty()))
     , sample_block(sample_block_)
     , storage_id(StorageID::createEmpty())
+    , context(context_)
     , stream_reader(std::move(stream_reader_))
 {
     initializeSchema();
@@ -203,8 +207,6 @@ Chunk ArrowFlightSource::generate()
             stream_reader = nullptr;
         }
     }
-
-    MutableColumns columns;
 
     ArrowColumnToCHColumn converter(sample_block, "Arrow",
                                     /* format_settings= */ {},

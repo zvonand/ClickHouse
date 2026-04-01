@@ -1,7 +1,8 @@
 -- Tags: no-parallel-replicas
 
+-- Tests if a text index ILIKE evaluation by scanning the inverted index dictionary is properly applied.
+
 SET enable_analyzer = 1;
-SET use_query_condition_cache = 0;
 
 SELECT 'Test results are same with/without the like optimization';
 
@@ -155,7 +156,7 @@ LIMIT 2, 3;
 
 DROP TABLE tab;
 
-SELECT 'Tests fallback when threshold is exceeded for reading large postings';
+SELECT 'Tests fallback when threshold (text_index_like_max_postings_to_read) is exceeded for reading large postings';
 
 SET use_text_index_like_optimization = 1;
 
@@ -222,7 +223,7 @@ SELECT groupArray(id) FROM tab WHERE message ILIKE '%abc%' AND message NOT ILIKE
 
 DROP TABLE tab;
 
-SELECT 'Tests fallback when threshold is exceeded for expression index';
+SELECT 'Tests fallback when threshold (text_index_like_min_pattern_length) is exceeded for expression index';
 
 SET use_text_index_like_optimization = 1;
 

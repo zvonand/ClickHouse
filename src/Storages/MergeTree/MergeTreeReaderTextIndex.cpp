@@ -501,11 +501,8 @@ double MergeTreeReaderTextIndex::estimateCardinality(const TextSearchQuery & que
             for (const auto & token : query.tokens)
             {
                 auto it = remaining_tokens.find(token);
-                /// If a token is absent from the sparse index it means it is too common
-                /// (appears in more rows than the sparse-index threshold). Treat it as
-                /// matching all rows so the hint is discarded via the selectivity check.
                 if (it == remaining_tokens.end())
-                    return static_cast<double>(total_rows);
+                    return 0;
 
                 log_cardinality += std::log(static_cast<double>(it->second->cardinality));
             }

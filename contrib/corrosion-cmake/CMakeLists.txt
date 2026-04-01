@@ -288,10 +288,10 @@ function(clickhouse_config_crate_flags target_name)
         add_custom_target(localize_rust_c_${target_name}
             COMMAND bash "${ClickHouse_SOURCE_DIR}/cmake/localize_rust_c_symbols.sh"
                 "${_rust_lib_path}" "${CMAKE_OBJCOPY}"
-            DEPENDS cargo-build_${target_name}
             COMMENT "Localizing C-namespace symbols in ${target_name}"
             VERBATIM
         )
+        add_dependencies(localize_rust_c_${target_name} cargo-build_${target_name})
         add_dependencies(${target_name} localize_rust_c_${target_name})
     endif()
 endfunction()

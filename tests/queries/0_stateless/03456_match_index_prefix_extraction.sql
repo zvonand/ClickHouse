@@ -65,9 +65,9 @@ SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE m
 SELECT count() FROM foo WHERE match(path, '^xxx\\-zzz') SETTINGS force_primary_key = 1;
 
 
--- those regex chars prevent the index use (only 3 first chars used during index scan)
+-- NUL bytes in regex are unsupported: no optimization
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^xxx\0bla')) WHERE explain like '%Condition%';
-SELECT count() FROM foo WHERE match(path, '^xxx\0bla') SETTINGS force_primary_key = 1;
+SELECT count() FROM foo WHERE match(path, '^xxx\0bla') SETTINGS force_primary_key = 1; -- {serverError INDEX_NOT_USED}
 
 -- plain groups are treated as no-ops, so full prefix "xxxbla" is extracted
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^xxx(bla)')) WHERE explain like '%Condition%';

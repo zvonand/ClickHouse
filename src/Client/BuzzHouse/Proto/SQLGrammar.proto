@@ -3324,7 +3324,9 @@ enum IndexType {
     IDX_ngrambf_v1 = 5;
     IDX_tokenbf_v1 = 6;
     IDX_text = 7;
+    /// Indexes for projections
     IDX_basic = 8;
+    IDX_commit_order = 9;
 }
 
 message IndexDef {

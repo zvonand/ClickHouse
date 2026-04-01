@@ -1728,16 +1728,11 @@ String StatementGenerator::addTableColumn(
 void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const bool projection, IndexDef * idef)
 {
     Expr * expr = idef->mutable_expr();
-    std::uniform_int_distribution<uint32_t> idx_range(1, static_cast<uint32_t>(IndexType::IDX_text));
-    auto generate_idx = [&]() -> IndexType
-    {
-        auto raw_idx = idx_range(rg.generator);
-        /// Value 3 was previously IDX_hypothesis which has been removed; remap to IDX_minmax.
-        if (raw_idx == 3)
-            raw_idx = static_cast<uint32_t>(IndexType::IDX_minmax);
-        return static_cast<IndexType>(raw_idx);
-    };
-    const IndexType itpe = projection ? IndexType::IDX_basic : ((rg.nextMediumNumber() < 21) ? IndexType::IDX_text : generate_idx());
+    std::uniform_int_distribution<uint32_t> idx_range(
+        static_cast<uint32_t>(projection ? IndexType::IDX_basic : IndexType::IDX_set),
+        static_cast<uint32_t>(projection ? IndexType::IDX_commit_order : IndexType::IDX_text));
+    const IndexType itpe
+        = (!projection && rg.nextMediumNumber() < 21) ? IndexType::IDX_text : static_cast<IndexType>(idx_range(rg.generator));
 
     chassert(!t.cols.empty());
     idef->set_type(itpe);
@@ -1917,8 +1912,7 @@ void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const
             }
         }
         break;
-        case IndexType::IDX_minmax:
-        case IndexType::IDX_basic:
+        default:
             break;
     }
     if (!projection)

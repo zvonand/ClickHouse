@@ -717,8 +717,6 @@ std::vector<PartMovesBetweenShardsOrchestrator::Entry> PartMovesBetweenShardsOrc
 
 PartMovesBetweenShardsOrchestrator::Entry PartMovesBetweenShardsOrchestrator::getEntryByUUID(const UUID & task_uuid)
 {
-    auto component_guard = Coordination::setCurrentComponent("PartMovesBetweenShardsOrchestrator");
-
     /// Need latest state in case user tries to kill a move observed on a different replica.
     syncStateFromZK();
 

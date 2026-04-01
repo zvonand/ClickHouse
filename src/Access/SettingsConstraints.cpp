@@ -246,7 +246,7 @@ void SettingsConstraints::checkOrClamp(const Settings & current_settings, Settin
     bool has_compatibility = changes.tryGet("compatibility") != nullptr;
     std::erase_if(changes, [&](SettingChange & change)
     {
-        return !checkImpl(current_settings, change, reaction, source, /*keep_if_unchanged=*/has_compatibility);
+        return !checkImpl(current_settings, change, reaction, source, /*ignore_unchanged_settings=*/has_compatibility);
     });
 }
 
@@ -293,7 +293,7 @@ bool SettingsConstraints::checkImpl(const Settings & current_settings,
                                     SettingChange & change,
                                     ReactionOnViolation reaction,
                                     SettingSource source,
-                                    bool keep_if_unchanged) const
+                                    bool ignore_unchanged_settings) const
 {
     std::string_view setting_name = Settings::resolveName(change.name);
 
@@ -326,7 +326,7 @@ bool SettingsConstraints::checkImpl(const Settings & current_settings,
     Field new_value;
     bool value_unchanged = false;
     if (!getNewValueToCheck(current_settings, change, new_value, reaction == THROW_ON_VIOLATION, &value_unchanged))
-        return keep_if_unchanged && value_unchanged;
+        return ignore_unchanged_settings && value_unchanged;
 
     return getChecker(current_settings, setting_name).check(change, new_value, reaction, source);
 }

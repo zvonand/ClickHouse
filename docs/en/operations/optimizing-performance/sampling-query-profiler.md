@@ -236,7 +236,7 @@ SET memory_profiler_sample_probability = 1, max_untracked_memory = 1;
 ```sql
 SELECT
     event_time,
-    formatReadableSize(max(s) AS m)
+    formatReadableSize(max(s)) AS m
 FROM (
     SELECT
         event_time,
@@ -278,7 +278,7 @@ clickhouse client --allow_introspection_functions=1 \
     | flamegraph.pl --countname=bytes --color=mem > flame_mem_time_point_pos.svg
 ```
 
-#### Build a flame graph of deallocations after that time point** (to understand what was freed later) {#build-flame-graph-deallocations}
+#### Build a flame graph of deallocations after that time point (to understand what was freed later) {#build-flame-graph-deallocations}
 
 ```bash
 clickhouse client --allow_introspection_functions=1 \
@@ -307,7 +307,7 @@ SELECT
     count(),
     arrayStringConcat(arrayMap(x -> concat(demangle(addressToSymbol(x)), '\n    ', addressToLine(x)), trace), '\n') AS sym
 FROM system.trace_log
-WHERE (query_id = '<query_Id>') AND (event_date = today())
+WHERE (query_id = '<query_id>') AND (event_date = today())
 GROUP BY trace
 ORDER BY count() DESC
 LIMIT 10

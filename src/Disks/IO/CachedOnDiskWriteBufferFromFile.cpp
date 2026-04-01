@@ -275,6 +275,13 @@ void FileSegmentRangeWriter::appendFilesystemCacheLog(const FileSegment & file_s
         return;
 
     auto file_segment_range = file_segment.range();
+    /// Skip empty segments: `left + downloaded_size - 1` would wrap to `SIZE_MAX` when
+    /// `downloaded_size == 0`, producing an invalid range in the log.
+    /// This can happen when `jumpToPosition` calls `completeFileSegment` on a segment that was
+    /// allocated but never written to.
+    if (!file_segment.getDownloadedSize())
+        return;
+
     size_t file_segment_right_bound = file_segment_range.left + file_segment.getDownloadedSize() - 1;
 
     FilesystemCacheLogElement elem

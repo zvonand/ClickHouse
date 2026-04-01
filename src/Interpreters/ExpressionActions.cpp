@@ -869,8 +869,19 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
 
     execution_context.columns.resize(num_columns);
 
-    for (const auto & action : actions)
+    // for (const auto & action : actions)
+    for (size_t i = 0; i < actions.size(); ++i)
     {
+        // if (isCancelled())
+        // {
+        //     LOG_DEBUG(getLogger("ExpressionActions"), "execute() begin inside if isCancelled() this={}", static_cast<const void*>(this));
+        //     /// Return an empty block with the names and types of result columns
+        //     block = sample_block.cloneWithColumns(sample_block.cloneEmptyColumns());
+        //     num_rows = 0;
+        //     return;
+        // }
+        const auto & action = actions[i];
+
         try
         {
             LOG_DEBUG(getLogger("ExpressionActions"), "executeAction={}, this={}", action.toString(), static_cast<const void*>(this));
@@ -883,6 +894,7 @@ void ExpressionActions::execute(Block & block, size_t & num_rows, bool dry_run, 
             throw;
         }
 
+        // if (i < actions.size() - 1 && isCancelled())
         if (isCancelled())
         {
             LOG_DEBUG(getLogger("ExpressionActions"), "execute() inside if isCancelled() this={}", static_cast<const void*>(this));

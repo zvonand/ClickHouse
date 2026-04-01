@@ -486,7 +486,7 @@ ColumnPtr IExecutableFunction::execute(
             return executeWithoutReplicatedColumns(arguments_without_replicated, result_type, input_rows_count, dry_run);
         }
 
-        /// In case the function might throw an exception replicated columns must be compacted 
+        /// In case the function might throw an exception replicated columns must be compacted
         // to avoid throwing on unused rows in the nested data.
         if (canThrow(argument_types))
         {

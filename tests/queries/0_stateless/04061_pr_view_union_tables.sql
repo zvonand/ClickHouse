@@ -18,7 +18,7 @@ CREATE TABLE t_rtb_hourly_1
 ENGINE = MergeTree()
 PARTITION BY toYearWeek(Hour)
 ORDER BY (Hour, NetworkId, BundleDomain, AppSiteChannelId, DeviceTypeId)
-SETTINGS index_granularity=1;
+SETTINGS index_granularity=10;
 
 CREATE TABLE t_rtb_hourly_2
 (
@@ -33,7 +33,7 @@ CREATE TABLE t_rtb_hourly_2
 ENGINE = MergeTree()
 PARTITION BY toYearWeek(Hour)
 ORDER BY (Hour, NetworkId, BundleDomain, AppSiteChannelId, DeviceTypeId)
-SETTINGS index_granularity=1;
+SETTINGS index_granularity=10;
 
 INSERT INTO t_rtb_hourly_1
     SELECT

@@ -201,7 +201,21 @@ static Block flattenImpl(const Block & block, bool flatten_named_tuple)
                         element_col = ColumnNullable::create(element_col, struct_null_map);
                         element_type = std::make_shared<DataTypeNullable>(element_type);
                     }
-                    /// else: Array, Map, etc. cannot be Nullable — pass through as-is.
+                    else
+                    {
+                        /// Array, Map, etc. cannot be Nullable — replace values at null struct
+                        /// positions with type defaults (e.g. empty [] for Array, {} for Map).
+                        const auto & null_map_data = assert_cast<const ColumnUInt8 &>(*struct_null_map).getData();
+                        auto mutable_col = element_col->cloneEmpty();
+                        for (size_t j = 0; j < element_col->size(); ++j)
+                        {
+                            if (null_map_data[j])
+                                mutable_col->insertDefault();
+                            else
+                                mutable_col->insertFrom(*element_col, j);
+                        }
+                        element_col = std::move(mutable_col);
+                    }
                 }
 
                 ColumnPtr column_array_of_element = ColumnArray::create(element_col, column_offsets);

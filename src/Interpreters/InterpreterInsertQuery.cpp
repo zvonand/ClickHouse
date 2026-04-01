@@ -859,7 +859,7 @@ std::optional<QueryPipeline> InterpreterInsertQuery::distributedWriteIntoReplica
 
         if (condition_ast)
         {
-            auto columns = src_storage_cluster->getInMemoryMetadataPtr()->getColumns().getAllPhysical();
+            auto columns = src_storage_cluster->getInMemoryMetadataPtr()->getColumns().getAll();
             auto syntax = TreeRewriter(local_context).analyze(condition_ast, columns);
             filter_dag = ExpressionAnalyzer(condition_ast, syntax, local_context).getActionsDAG(true, true);
             predicate = filter_dag->getOutputs().at(0);

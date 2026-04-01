@@ -324,15 +324,18 @@ class Result(MetaClasses.Serializable):
             normalized = Utils.normalize_string(name)
             # Linux filesystems limit filenames to 255 bytes.
             # prefix "result_" (7) + suffix ".json" (5) = 12, leaving 243 for the name.
-            # Reserve 9 chars for a uniqueness hash when truncating.
-            max_len = 243
-            if len(normalized) > max_len:
+            # Reserve 9 bytes for a uniqueness hash suffix when truncating.
+            max_bytes = 243
+            encoded = normalized.encode("utf-8")
+            if len(encoded) > max_bytes:
                 import hashlib
 
                 digest = hashlib.md5(
-                    normalized.encode(), usedforsecurity=False
+                    encoded, usedforsecurity=False
                 ).hexdigest()[:8]
-                normalized = f"{normalized[:max_len - 9]}_{digest}"
+                # Truncate bytes and decode safely to avoid splitting a multibyte char
+                truncated = encoded[: max_bytes - 9].decode("utf-8", errors="ignore")
+                normalized = f"{truncated}_{digest}"
             return f"{Settings.TEMP_DIR}/result_{normalized}.json"
 
     @classmethod

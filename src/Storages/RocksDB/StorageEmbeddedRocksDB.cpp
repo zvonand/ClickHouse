@@ -154,19 +154,15 @@ public:
     void fillVirtualColumns(Block & block) const
     {
         auto num_rows = block.rows();
-        for (const auto & column : getPort().getHeader())
+        for (const auto & [name, type] : storage_snapshot->virtual_columns->getNamesAndTypesList())
         {
-            if (block.has(column.name))
+            if (block.has(name))
                 continue;
 
-            auto virtual_column = storage_snapshot->virtual_columns->tryGet(column.name);
-            if (!virtual_column)
-                throw Exception(ErrorCodes::LOGICAL_ERROR, "Column '{}' is not physical nor virtual", column.name);
-
-            if (virtual_column->name == "_table")
-                block.insert({virtual_column->type->createColumnConst(num_rows, storage.getStorageID().getTableName())->convertToFullColumnIfConst(), virtual_column->type, virtual_column->name});
+            if (name == "_table")
+                block.insert({type->createColumnConst(num_rows, storage.getStorageID().getTableName())->convertToFullColumnIfConst(), type, name});
             else
-                throw Exception(ErrorCodes::LOGICAL_ERROR, "Unsupported virtual column '{}'", virtual_column->name);
+                throw Exception(ErrorCodes::LOGICAL_ERROR, "Unsupported virtual column '{}'", name);
         }
     }
 

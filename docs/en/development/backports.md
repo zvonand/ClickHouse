@@ -1,6 +1,6 @@
 # Backport System
 
-This document describes the ClickHouse backport policy and the automated sistem that implements it.
+This document describes the ClickHouse backport policy and the automated system that implements it.
 
 ## Release Model
 
@@ -13,11 +13,11 @@ There are two release tracks:
 - **Stable** releases are published roughly monthly. The three most recent stable releases receive patches, giving approximately three months of active support per release.
 - **LTS (Long-Term Support)** releases are published in March and August each year. Two LTS versions are supported simultaneously, each for at least 12 months.
 
-Users running production workloads are encouraged to use either the latest stable or an LTS release, and to upgrade to new patch versions promptly, as patch releses do not introduce breaking changes.
+Users running production workloads are encouraged to use either the latest stable or an LTS release, and to upgrade to new patch versions promptly, as patch releases do not introduce breaking changes.
 
 ## Backport Policy
 
-Not all changes are backported. The goal is to keep releese branches stable, so the scope of backports is intentionally narrow:
+Not all changes are backported. The goal is to keep release branches stable, so the scope of backports is intentionally narrow:
 
 - **Security fixes** — always backported.
 - **Critical bug fixes** (crashes, data loss, wrong results, RBAC issues) — always backported; identified by the `pr-critical-bugfix` label, which triggers backporting automatically.
@@ -33,13 +33,35 @@ The label `pr-must-backport` is the manual override used by maintainers to mark 
 
 ## Backport Tool
 
-The backport policy described above is implemented by the automated tool in `tests/ci/cherry_pick.py`. The tool runs as a GitHub Actions workflow on ClickHouse infrastucture and covers all the requirements: discovering active release branches, selecting PRs that qualify for backporting, performing the two-stage cherry-pick and backport procedure, managing conflicts, enforcing the delay policy, and keeping labels in sync.
+The backport policy described above is implemented by the automated tool in `tests/ci/cherry_pick.py`. The tool runs as a GitHub Actions workflow on ClickHouse infrastructure and covers all the requirements: discovering active release branches, selecting PRs that qualify for backporting, performing the two-stage cherry-pick and backport procedure, managing conflicts, enforcing the delay policy, and keeping labels in sync.
 
 The long-term goal is to extract this implementation into a standalone open-source Python tool that other projects can adopt. The target design is:
 
 - **Configurable** — all policy parameters (qualifying labels, delay window, stale PR thresholds, rolling-out behaviour, etc.) expressed as a configuration file so the tool can be adapted to match any project's backport requirements without code changes.
 - **Distributable** — packaged as a self-contained Python wheel installable from PyPI, with no dependency on ClickHouse's CI infrastructure.
 - **Programmable** — exposing a clean object model for pull requests, labels, and release branches so that users can script custom workflows on top of the core engine.
+
+### Gaps Compared to Popular Backport Tools
+
+Surveying widely-used backport tools (sorenlouv/backport, OpenJDK Skara `git-backport`, kiegroup/git-backporting, tibdex/backport) reveals the following capabilities they provide that the current ClickHouse implementation does not cover and that the standalone tool should address:
+
+- **Project-level configuration file.** All popular tools ship a per-repository config file (`.backportrc.json` or equivalent) that encodes which labels trigger backporting, target branch patterns, PR title and body templates, assignee rules, and so on. The ClickHouse tool has this logic hardcoded and cannot be adopted by other projects without code changes.
+
+- **Configurable label-to-branch mapping.** sorenlouv and kiegroup both use a configurable regex (`branchLabelMapping`, `--target-branch-pattern`) to extract the target release branch from a label name. The ClickHouse tool relies on a fixed naming convention (`v{VER}-must-backport`) and cannot be reconfigured for different label schemes.
+
+- **Configurable PR title and body templates.** Popular tools allow Handlebars or Lodash templates for the backport PR title, body, and branch name, so teams can match their own conventions. The ClickHouse tool produces fixed-format titles (`Backport #N to release/X.Y: …`) with no customisation point.
+
+- **Configurable conflict resolution strategy.** kiegroup exposes `--strategy` and `--strategy-option` for the underlying cherry-pick, allowing auto-resolution with `theirs` as a team policy. The ClickHouse tool always stops at a conflict and waits for a human; there is no option to resolve automatically in favour of the incoming change.
+
+- **Success and failure comments on the original PR.** sorenlouv and kiegroup post a status comment directly on the source PR when a backport succeeds or fails. The ClickHouse tool only pings assignees on stale cherry-pick PRs and posts no feedback on the original PR.
+
+- **Multi-platform support.** kiegroup supports GitHub, GitLab, and Codeberg. The ClickHouse tool is tightly coupled to GitHub's API and branch model.
+
+- **Backport by commit SHA.** sorenlouv and `git-backport` can cherry-pick a specific commit hash rather than a whole merged PR. The ClickHouse tool operates exclusively at the PR level.
+
+- **Forward-porting.** sorenlouv supports porting changes from an older branch to a newer one (e.g. from a release branch back to master). The ClickHouse tool only backports from master to release branches.
+
+- **GitHub Enterprise / self-hosted support.** sorenlouv exposes configurable API base URLs for GitHub Enterprise instances. The ClickHouse tool assumes `github.com`.
 
 ### Testing
 
@@ -53,7 +75,7 @@ This lets tests exercise the full automation loop — label detection, cherry-pi
 
 ## Active Release Branches
 
-An active release brunch is any branch whose corresponding release PR (carrying the `release` label) is still open on GitHub. The backport automation discovers these dynamically on each run, so no configuration changes are needed when a new release is cut or an old one reaches end-of-life.
+An active release branch is any branch whose corresponding release PR (carrying the `release` label) is still open on GitHub. The backport automation discovers these dynamically on each run, so no configuration changes are needed when a new release is cut or an old one reaches end-of-life.
 
 A release branch can be in a **rolling-out** state (its release PR carries the `rolling-out` label) during the period when a new release is being deployed. General backports are paused for rolling-out branches to avoid complicating the rollout. Version-specific labels (e.g. `v25.3-must-backport`) override this and force backporting even during a rollout.
 

@@ -55,7 +55,8 @@ StatementGenerator::StatementGenerator(
               {0.30, 0.90}, /// SelectQuery
               {0.01, 0.10}, /// Kill
               {0.01, 0.08}, /// ShowStatement
-              {0.02, 0.08} /// CreatePolicy
+              {0.02, 0.08}, /// CreatePolicy
+              {0.01, 0.15} /// SnapshotQuery
           }},
           "SQL statements"))
     , litGen(ProbabilityGenerator(
@@ -2654,8 +2655,14 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
         {3 * static_cast<uint32_t>(supports_cloud_features && freeze_counter > 0),
          [&]
          {
+             UnlockSnapshot * us = sc->mutable_unlock_snapshot();
+
              chassert(freeze_counter > 0);
-             sc->set_unlock_snapshot("f" + std::to_string(rg.randomInt<uint32_t>(0, freeze_counter - 1)));
+             us->set_name("f" + std::to_string(rg.randomInt<uint32_t>(0, freeze_counter - 1)));
+             if (!snapshots.empty() && rg.nextSmallNumber() < 4)
+             {
+                 us->mutable_from()->CopyFrom(rg.pickValueRandomlyFromMap(snapshots));
+             }
          }},
     });
     /// Set cluster option when that's the case
@@ -2821,7 +2828,7 @@ static std::optional<String> backupOrRestoreDatabase(BackupRestoreObject * bro, 
     return d->getCluster();
 }
 
-void StatementGenerator::setBackupDestination(RandomGenerator & rg, BackupRestore * br)
+void StatementGenerator::setBackupOut(RandomGenerator & rg, BackupOut * bout)
 {
     const uint32_t out_to_disk = 10 * static_cast<uint32_t>(!fc.disks.empty());
     const uint32_t out_to_file = 10;
@@ -2831,7 +2838,6 @@ void StatementGenerator::setBackupDestination(RandomGenerator & rg, BackupRestor
     const uint32_t out_to_null = 3;
     String backup_file = "backup";
     BackupOut_BackupOutput outf = BackupOut_BackupOutput_Null;
-    BackupOut * bout = br->mutable_out();
 
     /// Set backup file
     bout->set_backup_number(backup_counter++);
@@ -2950,7 +2956,7 @@ void StatementGenerator::generateNextBackup(RandomGenerator & rg, BackupRestore 
           }},
          {everything, [&] { bre->set_all(true); }}});
     setClusterClause(rg, cluster, br->mutable_cluster());
-    setBackupDestination(rg, br);
+    setBackupOut(rg, br->mutable_out());
 
     if (rg.nextBool())
     {
@@ -3035,9 +3041,16 @@ void StatementGenerator::generateNextRestore(RandomGenerator & rg, BackupRestore
 
 void StatementGenerator::generateNextBackupOrRestore(RandomGenerator & rg, BackupRestore * br)
 {
-    const bool isBackup = backups.empty() || rg.nextBool();
+    const bool from_snapshot = !snapshots.empty() && rg.nextSmallNumber() < 4;
+    const bool isBackup = from_snapshot || backups.empty() || rg.nextBool();
 
-    if (isBackup)
+    if (from_snapshot)
+    {
+        br->set_command(BackupRestore_BackupCommand_BACKUP);
+        br->mutable_from_snapshot()->CopyFrom(rg.pickValueRandomlyFromMap(snapshots));
+        setBackupOut(rg, br->mutable_out());
+    }
+    else if (isBackup)
     {
         generateNextBackup(rg, br);
     }
@@ -3049,7 +3062,7 @@ void StatementGenerator::generateNextBackupOrRestore(RandomGenerator & rg, Backu
     {
         generateSettingValues(rg, isBackup ? backupSettings : restoreSettings, br->mutable_setting_values());
     }
-    if (isBackup && !backups.empty() && rg.nextBool())
+    if (!from_snapshot && isBackup && !backups.empty() && rg.nextBool())
     {
         /// Do an incremental backup
         String info;
@@ -3069,6 +3082,27 @@ void StatementGenerator::generateNextBackupOrRestore(RandomGenerator & rg, Backu
     {
         generateSettingValues(rg, formatSettings, br->mutable_setting_values());
     }
+}
+
+void StatementGenerator::generateNextSnapshot(RandomGenerator & rg, SnapshotQuery * sq)
+{
+    const bool has_tables = collectionHas<SQLTable>(attached_tables);
+    const bool use_all = !has_tables || rg.nextSmallNumber() < 3;
+    BackupRestoreElement * bre = sq->mutable_element();
+
+    if (use_all)
+    {
+        bre->set_all(true);
+    }
+    else
+    {
+        BackupRestoreObject * bro = bre->mutable_bobject();
+        const SQLTable & t = rg.pickRandomly(filterCollection<SQLTable>(attached_tables));
+
+        t.setName(bro->mutable_object()->mutable_est(), false);
+        bro->set_sobject(SQLObject::TABLE);
+    }
+    setBackupOut(rg, sq->mutable_out());
 }
 
 void StatementGenerator::generateNextRename(RandomGenerator & rg, Rename * ren)
@@ -3208,6 +3242,7 @@ void StatementGenerator::generateNextQuery(RandomGenerator & rg, const bool in_p
     SQLMask[static_cast<size_t>(SQLOp::CreateFunction)] = static_cast<uint32_t>(functions.size()) < this->fc.max_functions;
     /// SQLMask[static_cast<size_t>(SQLOp::SystemStmt)] = true;
     SQLMask[static_cast<size_t>(SQLOp::BackupOrRestore)] = this->fc.enable_backups;
+    SQLMask[static_cast<size_t>(SQLOp::SnapshotQuery)] = this->fc.enable_backups;
     SQLMask[static_cast<size_t>(SQLOp::CreateDictionary)] = static_cast<uint32_t>(dictionaries.size()) < this->fc.max_dictionaries;
     SQLMask[static_cast<size_t>(SQLOp::Rename)] = this->fc.enable_renames && !in_parallel
         && (collectionHas<SQLTable>(exchange_table_lambda) || has_views || has_dictionaries || has_databases);
@@ -3295,6 +3330,9 @@ void StatementGenerator::generateNextQuery(RandomGenerator & rg, const bool in_p
             break;
         case SQLOp::CreatePolicy:
             generateNextCreatePolicy(rg, !supports_cloud_features || rg.nextBool(), sq->mutable_create_policy());
+            break;
+        case SQLOp::SnapshotQuery:
+            generateNextSnapshot(rg, sq->mutable_snapshot_query());
             break;
     }
 }
@@ -4127,12 +4165,12 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
     else if (ssq.has_explain() && query.has_backup_restore() && !ssq.explain().is_explain() && success)
     {
         const BackupRestore & br = query.backup_restore();
-        const BackupRestoreElement & bre = br.backup_element();
         const uint32_t backup_number = br.out().backup_number();
 
-        if (br.command() == BackupRestore_BackupCommand_BACKUP)
+        if (br.command() == BackupRestore_BackupCommand_BACKUP && !br.has_from_snapshot())
         {
             CatalogBackup newb;
+            const BackupRestoreElement & bre = br.backup_element();
 
             newb.bout.CopyFrom(br.out());
             if (br.has_outformat())
@@ -4264,6 +4302,11 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 }
             }
         }
+    }
+    else if (ssq.has_explain() && query.has_snapshot_query() && !ssq.explain().is_explain() && success)
+    {
+        const SnapshotQuery & sq = query.snapshot_query();
+        this->snapshots[sq.out().backup_number()].CopyFrom(sq.out());
     }
     else if (ssq.has_start_trans() && success)
     {

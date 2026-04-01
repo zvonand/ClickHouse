@@ -5491,7 +5491,12 @@ CONV_FN(SystemCommand, cmd)
             break;
         case CmdType::kUnlockSnapshot:
             ret += "UNLOCK SNAPSHOT ";
-            appendSQLStringLiteral(ret, cmd.unlock_snapshot());
+            appendSQLStringLiteral(ret, cmd.unlock_snapshot().name());
+            if (cmd.unlock_snapshot().has_from())
+            {
+                ret += " FROM ";
+                BackupOutToString(ret, cmd.unlock_snapshot().from());
+            }
             break;
         default:
             ret += "FLUSH LOGS";
@@ -5563,21 +5568,30 @@ CONV_FN(BackupRestoreElement, backup)
 CONV_FN(BackupRestore, backup)
 {
     const BackupRestore_BackupCommand & command = backup.command();
+    const bool backup_cmd = command == BackupRestore_BackupCommand_BACKUP;
 
     ret += BackupRestore_BackupCommand_Name(command);
     ret += " ";
-    BackupRestoreElementToString(ret, backup.backup_element());
-    for (int i = 0; i < backup.other_elements_size(); i++)
+    if (backup_cmd && backup.has_from_snapshot())
     {
-        ret += ", ";
-        BackupRestoreElementToString(ret, backup.other_elements(i));
+        ret += "FROM SNAPSHOT ";
+        BackupOutToString(ret, backup.from_snapshot());
+    }
+    else
+    {
+        BackupRestoreElementToString(ret, backup.backup_element());
+        for (int i = 0; i < backup.other_elements_size(); i++)
+        {
+            ret += ", ";
+            BackupRestoreElementToString(ret, backup.other_elements(i));
+        }
     }
     if (backup.has_cluster())
     {
         ClusterToString(ret, true, backup.cluster());
     }
     ret += " ";
-    ret += command == BackupRestore_BackupCommand_BACKUP ? "TO" : "FROM";
+    ret += backup_cmd ? "TO" : "FROM";
     ret += " ";
     BackupOutToString(ret, backup.out());
     if (backup.has_setting_values())
@@ -5600,6 +5614,14 @@ CONV_FN(BackupRestore, backup)
         ret += " FORMAT ";
         ret += OutFormat_Name(backup.outformat()).substr(4);
     }
+}
+
+CONV_FN(SnapshotQuery, sq)
+{
+    ret += "SNAPSHOT ";
+    BackupRestoreElementToString(ret, sq.element());
+    ret += " TO ";
+    BackupOutToString(ret, sq.out());
 }
 
 CONV_FN(Rename, ren)
@@ -5941,6 +5963,9 @@ CONV_FN(SQLQueryInner, query)
             break;
         case QueryType::kCreatePolicy:
             CreatePolicyToString(ret, query.create_policy());
+            break;
+        case QueryType::kSnapshotQuery:
+            SnapshotQueryToString(ret, query.snapshot_query());
             break;
         default:
             ret += "SELECT 1";

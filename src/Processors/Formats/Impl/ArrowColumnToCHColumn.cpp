@@ -1324,10 +1324,12 @@ static ColumnWithTypeAndName readNonNullableColumnFromArrowColumn(
             auto array_column = ColumnArray::create(nested_column.column, offsets_column);
 
             DataTypePtr array_type;
-            /// If type hint is Nested, we should return Nested type,
-            /// because we differentiate Nested and simple Array(Tuple)
+            /// If type hint is Nested and the element is a named Tuple, return the Nested type
+            /// so that `Nested::flatten` can decompose it into separate arrays.
+            /// When the element is Nullable(Tuple(...)), `flatten` handles this case
+            /// by propagating the struct null map to each element.
             const auto * tuple_type = type_hint && isNested(type_hint)
-                ? typeid_cast<const DataTypeTuple *>(removeNullable(nested_column.type).get())
+                ? typeid_cast<const DataTypeTuple *>(nested_column.type.get())
                 : nullptr;
             if (tuple_type)
             {

@@ -7,11 +7,13 @@
 #include <Common/typeid_cast.h>
 
 #include <DataTypes/DataTypeArray.h>
+#include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/NestedUtils.h>
 #include <DataTypes/DataTypeNested.h>
 
 #include <Columns/ColumnArray.h>
+#include <Columns/ColumnNullable.h>
 #include <Columns/ColumnTuple.h>
 #include <Columns/ColumnConst.h>
 
@@ -127,59 +129,105 @@ static Block flattenImpl(const Block & block, bool flatten_named_tuple)
 
     for (const auto & elem : block)
     {
+        const DataTypeTuple * type_tuple = nullptr;
+        const ColumnTuple * column_tuple = nullptr;
+        ColumnPtr struct_null_map;
+
         if (isNested(elem.type))
         {
-            const DataTypeArray * type_arr = assert_cast<const DataTypeArray *>(elem.type.get());
-            const DataTypeTuple * type_tuple = assert_cast<const DataTypeTuple *>(type_arr->getNestedType().get());
-            if (type_tuple->hasExplicitNames())
+            /// Array(Tuple(...)) with the Nested custom name — always flatten.
+            const auto * type_arr = assert_cast<const DataTypeArray *>(elem.type.get());
+            type_tuple = assert_cast<const DataTypeTuple *>(type_arr->getNestedType().get());
+        }
+        else if (flatten_named_tuple && isArray(elem.type))
+        {
+            /// Array(Nullable(Tuple(...))) — flatten and propagate the struct null map to each element.
+            /// This occurs when reading from formats like Arrow/ORC where struct elements inside
+            /// arrays may be nullable.
+            const auto * type_arr = assert_cast<const DataTypeArray *>(elem.type.get());
+            if (const auto * type_nullable = typeid_cast<const DataTypeNullable *>(type_arr->getNestedType().get()))
+                type_tuple = typeid_cast<const DataTypeTuple *>(type_nullable->getNestedType().get());
+        }
+
+        if (type_tuple && type_tuple->hasExplicitNames())
+        {
+            bool is_const = isColumnConst(*elem.column);
+            const ColumnArray * column_array;
+            if (is_const)
+                column_array = typeid_cast<const ColumnArray *>(&assert_cast<const ColumnConst &>(*elem.column).getDataColumn());
+            else
+                column_array = typeid_cast<const ColumnArray *>(elem.column.get());
+
+            /// Unwrap Nullable from the array data if present.
+            const auto & array_data = column_array->getData();
+            if (const auto * col_nullable = typeid_cast<const ColumnNullable *>(&array_data))
             {
-                const DataTypes & element_types = type_tuple->getElements();
-                const Strings & names = type_tuple->getElementNames();
-                size_t tuple_size = element_types.size();
-
-                bool is_const = isColumnConst(*elem.column);
-                const ColumnArray * column_array;
-                if (is_const)
-                    column_array = typeid_cast<const ColumnArray *>(&assert_cast<const ColumnConst &>(*elem.column).getDataColumn());
-                else
-                    column_array = typeid_cast<const ColumnArray *>(elem.column.get());
-
-                const ColumnPtr & column_offsets = column_array->getOffsetsPtr();
-
-                const ColumnTuple & column_tuple = typeid_cast<const ColumnTuple &>(column_array->getData());
-                const auto & element_columns = column_tuple.getColumns();
-
-                for (size_t i = 0; i < tuple_size; ++i)
-                {
-                    String nested_name = concatenateName(elem.name, names[i]);
-                    ColumnPtr column_array_of_element = ColumnArray::create(element_columns[i], column_offsets);
-
-                    res.insert(ColumnWithTypeAndName(
-                        is_const
-                            ? ColumnConst::create(column_array_of_element, block.rows())
-                            : column_array_of_element,
-                        std::make_shared<DataTypeArray>(element_types[i]),
-                        nested_name));
-                }
+                column_tuple = &assert_cast<const ColumnTuple &>(col_nullable->getNestedColumn());
+                struct_null_map = col_nullable->getNullMapColumnPtr();
             }
             else
-                res.insert(elem);
-        }
-        else if (const DataTypeTuple * type_tuple = typeid_cast<const DataTypeTuple *>(elem.type.get()); type_tuple && flatten_named_tuple)
-        {
-            if (type_tuple->hasExplicitNames())
             {
-                const DataTypes & element_types = type_tuple->getElements();
-                const Strings & names = type_tuple->getElementNames();
-                const ColumnTuple * column_tuple;
+                column_tuple = &typeid_cast<const ColumnTuple &>(array_data);
+            }
+
+            const ColumnPtr & column_offsets = column_array->getOffsetsPtr();
+            const DataTypes & element_types = type_tuple->getElements();
+            const Strings & names = type_tuple->getElementNames();
+            const auto & element_columns = column_tuple->getColumns();
+
+            for (size_t i = 0; i < element_types.size(); ++i)
+            {
+                String nested_name = concatenateName(elem.name, names[i]);
+                ColumnPtr element_col = element_columns[i];
+                DataTypePtr element_type = element_types[i];
+
+                /// For Array(Nullable(Tuple(...))), propagate the struct null map to each element.
+                if (struct_null_map)
+                {
+                    if (element_type->isNullable())
+                    {
+                        /// Element already Nullable — merge null maps (struct null OR element null).
+                        const auto & existing = assert_cast<const ColumnNullable &>(*element_col);
+                        auto merged = ColumnUInt8::create(struct_null_map->size());
+                        const auto & s = assert_cast<const ColumnUInt8 &>(*struct_null_map).getData();
+                        const auto & e = existing.getNullMapData();
+                        auto & m = merged->getData();
+                        for (size_t j = 0; j < s.size(); ++j)
+                            m[j] = s[j] | e[j];
+                        element_col = ColumnNullable::create(existing.getNestedColumnPtr(), std::move(merged));
+                    }
+                    else if (element_type->canBeInsideNullable())
+                    {
+                        element_col = ColumnNullable::create(element_col, struct_null_map);
+                        element_type = std::make_shared<DataTypeNullable>(element_type);
+                    }
+                    /// else: Array, Map, etc. cannot be Nullable — pass through as-is.
+                }
+
+                ColumnPtr column_array_of_element = ColumnArray::create(element_col, column_offsets);
+                res.insert(ColumnWithTypeAndName(
+                    is_const
+                        ? ColumnConst::create(column_array_of_element, block.rows())
+                        : column_array_of_element,
+                    std::make_shared<DataTypeArray>(element_type),
+                    nested_name));
+            }
+        }
+        else if (const DataTypeTuple * named_tuple = typeid_cast<const DataTypeTuple *>(elem.type.get()); named_tuple && flatten_named_tuple)
+        {
+            if (named_tuple->hasExplicitNames())
+            {
+                const DataTypes & element_types = named_tuple->getElements();
+                const Strings & names = named_tuple->getElementNames();
+                const ColumnTuple * standalone_tuple;
                 if (isColumnConst(*elem.column))
-                    column_tuple = typeid_cast<const ColumnTuple *>(&assert_cast<const ColumnConst &>(*elem.column).getDataColumn());
+                    standalone_tuple = typeid_cast<const ColumnTuple *>(&assert_cast<const ColumnConst &>(*elem.column).getDataColumn());
                 else
-                    column_tuple = typeid_cast<const ColumnTuple *>(elem.column.get());
-                size_t tuple_size = column_tuple->tupleSize();
+                    standalone_tuple = typeid_cast<const ColumnTuple *>(elem.column.get());
+                size_t tuple_size = standalone_tuple->tupleSize();
                 for (size_t i = 0; i < tuple_size; ++i)
                 {
-                    const auto & element_column = column_tuple->getColumn(i);
+                    const auto & element_column = standalone_tuple->getColumn(i);
                     String nested_name = concatenateName(elem.name, names[i]);
                     res.insert(ColumnWithTypeAndName(element_column.getPtr(), element_types[i], nested_name));
                 }

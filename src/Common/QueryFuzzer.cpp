@@ -2935,7 +2935,7 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// Comparison operators
         {"equals", "notEquals", "greater", "greaterOrEquals", "less", "lessOrEquals", "isNotDistinctFrom"},
         /// Arithmetic and string operators
-        {"concat", "divide", "intDiv", "intDivOrZero", "minus", "modulo", "moduloOrZero", "multiply", "plus"},
+        {"concat", "concatAssumeInjective", "divide", "intDiv", "intDivOrZero", "minus", "modulo", "moduloOrZero", "multiply", "plus"},
         /// Date/time component extractors and truncators (date/datetime → numeric or date)
         {"toDayOfMonth",
          "toDayOfWeek",
@@ -2997,29 +2997,42 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
          "toIntervalYear"},
         /// Unix timestamp at sub-second precision (datetime64 → Int64)
         {"toUnixTimestamp64Micro", "toUnixTimestamp64Milli", "toUnixTimestamp64Nano", "toUnixTimestamp64Second"},
+        /// Unix timestamp to DateTime64 (Int64 → DateTime64)
+        {"fromUnixTimestamp64Micro", "fromUnixTimestamp64Milli", "fromUnixTimestamp64Nano"},
+        /// Date/time difference functions (unit, t1, t2 → Int64)
+        {"dateDiff", "date_diff", "age"},
         /// Date arithmetic: add/subtract intervals (date/datetime, number → datetime)
         {"addDays",         "addHours",       "addInterval",         "addMicroseconds",  "addMilliseconds",      "addMinutes",
          "addMonths",       "addNanoseconds", "addQuarters",         "addSeconds",       "addTupleOfIntervals",  "addWeeks",
          "addYears",        "subtractDays",   "subtractHours",       "subtractInterval", "subtractMicroseconds", "subtractMilliseconds",
          "subtractMinutes", "subtractMonths", "subtractNanoseconds", "subtractQuarters", "subtractSeconds",      "subtractTupleOfIntervals",
          "subtractWeeks",   "subtractYears"},
-        /// Decimal type casts (value, precision, scale → Decimal)
-        {"toDecimal32", "toDecimal64", "toDecimal128", "toDecimal256"},
-        /// Integer type casts
-        {"toInt8",
-         "toInt16",
-         "toInt32",
-         "toInt64",
-         "toInt128",
-         "toInt256",
-         "toUInt8",
-         "toUInt16",
-         "toUInt32",
-         "toUInt64",
-         "toUInt128",
-         "toUInt256"},
-        /// Floating-point type casts
-        {"toBFloat16", "toFloat32", "toFloat64"},
+        /// Decimal type casts (value, precision, scale → Decimal; bare, OrNull, OrZero, OrDefault variants)
+        {"toDecimal32",
+         "toDecimal32OrNull",
+         "toDecimal32OrZero",
+         "toDecimal32OrDefault",
+         "toDecimal64",
+         "toDecimal64OrNull",
+         "toDecimal64OrZero",
+         "toDecimal64OrDefault",
+         "toDecimal128",
+         "toDecimal128OrNull",
+         "toDecimal128OrZero",
+         "toDecimal128OrDefault",
+         "toDecimal256",
+         "toDecimal256OrNull",
+         "toDecimal256OrZero",
+         "toDecimal256OrDefault"},
+        /// Integer type casts (bare, OrNull, and OrZero variants)
+        {"toInt8",    "toInt8OrNull",    "toInt8OrZero",    "toInt16",   "toInt16OrNull",   "toInt16OrZero",
+         "toInt32",   "toInt32OrNull",   "toInt32OrZero",   "toInt64",   "toInt64OrNull",   "toInt64OrZero",
+         "toInt128",  "toInt128OrNull",  "toInt128OrZero",  "toInt256",  "toInt256OrNull",  "toInt256OrZero",
+         "toUInt8",   "toUInt8OrNull",   "toUInt8OrZero",   "toUInt16",  "toUInt16OrNull",  "toUInt16OrZero",
+         "toUInt32",  "toUInt32OrNull",  "toUInt32OrZero",  "toUInt64",  "toUInt64OrNull",  "toUInt64OrZero",
+         "toUInt128", "toUInt128OrNull", "toUInt128OrZero", "toUInt256", "toUInt256OrNull", "toUInt256OrZero"},
+        /// Floating-point type casts (bare, OrNull, and OrZero variants)
+        {"toBFloat16", "toFloat32", "toFloat32OrNull", "toFloat32OrZero", "toFloat64", "toFloat64OrNull", "toFloat64OrZero"},
         /// Date/datetime type casts
         {"toDate",
          "toDate32",
@@ -3046,15 +3059,15 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         {"bitAnd", "bitOr", "bitXor"},
         /// Bit shift operators
         {"bitShiftLeft", "bitShiftRight"},
-        /// String case, length, validity and normalization functions (string → string or UInt64)
+        /// String case, validity and normalization functions (string → string or UInt8)
         {"upper",
          "lower",
          "lowerUTF8",
          "upperUTF8",
+         "initcap",
+         "initcapUTF8",
          "reverse",
          "reverseUTF8",
-         "length",
-         "lengthUTF8",
          "isValidASCII",
          "isValidUTF8",
          "normalizeUTF8NFC",
@@ -3067,8 +3080,8 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         {"right", "rightPad", "rightPadUTF8", "rightUTF8", "left", "leftPad", "leftPadUTF8", "leftUTF8"},
         /// Whitespace trimming
         {"trim", "trimBoth", "trimLeft", "trimRight"},
-        /// Emptiness predicates (string/array → UInt8)
-        {"empty", "notEmpty"},
+        /// Emptiness and length predicates (String, Array, or Map → UInt8/UInt64; all single-arg)
+        {"empty", "notEmpty", "length", "lengthUTF8"},
         /// Array/string containment checks
         {"has",
          "hasAll",
@@ -3089,32 +3102,27 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
          "endsWith",
          "endsWithUTF8",
          "endsWithCaseInsensitive",
-         "endsWithCaseInsensitiveUTF8"},
+         "endsWithCaseInsensitiveUTF8",
+         "extract",
+         "extractAll"},
         /// Vector distance metrics
         {"cosineDistance", "L1Distance", "L2Distance", "L2SquaredDistance", "LinfDistance"},
         /// Vector norms (single array → Float64)
         {"L1Norm", "L2Norm", "L2SquaredNorm", "LinfNorm"},
         /// Array scalar reductions (array → scalar)
         {"arrayMin", "arrayMax", "arraySum", "arrayProduct", "arrayAvg", "arrayUniq"},
-        /// Array transform functions (array → array)
-        {"arraySort",
-         "arrayReverseSort",
-         "arrayReverse",
-         "arrayShuffle",
-         "arrayDistinct",
-         "arrayCompact",
-         "arrayFlatten",
-         "arrayPopFront",
-         "arrayPopBack",
-         "arrayEnumerate",
-         "arrayEnumerateUniq"},
+        /// Array transform functions (array → array, no lambda)
+        {"arrayReverse",           "arrayShuffle",   "arrayDistinct", "arrayCompact",   "arrayFlatten",       "arrayConcat",
+         "arrayIntersect",         "arrayPopFront",  "arrayPopBack",  "arrayPushFront", "arrayPushBack",      "arrayRotateLeft",
+         "arrayRotateRight",       "arraySlice",     "arrayZip",      "arrayEnumerate", "arrayEnumerateUniq", "arrayCumSum",
+         "arrayCumSumNonNegative", "arrayDifference"},
         /// URL hierarchy generators (url → Array(String))
         {"URLHierarchy", "URLPathHierarchy"},
         /// Trig functions, logarithms, exponentials and roots (number → Float64)
         {"sin",   "sinh",    "cos",     "cosh",  "tan",   "tanh",   "asin",     "asinh",   "acos",   "acosh",  "atan",
          "atanh", "log",     "log2",    "log1p", "log10", "lgamma", "intExp10", "intExp2", "ln",     "exp",    "exp2",
          "exp10", "degrees", "radians", "sqrt",  "cbrt",  "erf",    "erfc",     "power",   "tgamma", "sigmoid"},
-        /// Non-cryptographic hash functions
+        /// Non-cryptographic hash functions (→ UInt32/UInt64)
         {"cityHash64",
          "CRC32",
          "CRC32IEEE",
@@ -3123,26 +3131,38 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
          "halfMD5",
          "intHash32",
          "intHash64",
+         "metroHash64",
          "murmurHash2_32",
          "murmurHash2_64",
          "murmurHash3_64",
          "sipHash64",
+         "wyHash64",
          "xxHash32",
          "xxHash64"},
+        /// Non-cryptographic 128-bit hash functions (→ FixedString(16))
+        {"sipHash128", "murmurHash3_128"},
         /// Cryptographic hashes (string → FixedString)
         {"MD5", "SHA1", "SHA224", "SHA256", "SHA384", "SHA512", "SHA512_256"},
         /// String position search (haystack, needle → UInt64)
         {"position", "positionCaseInsensitive", "positionUTF8", "positionCaseInsensitiveUTF8"},
-        /// URL component extractors (url → String)
+        /// URL component extractors (url → String or UInt16)
         {"domain",
          "domainWithoutWWW",
+         "domainWithoutWWWRFC",
          "topLevelDomain",
+         "topLevelDomainRFC",
          "protocol",
+         "port",
          "path",
          "queryString",
+         "queryStringAndFragment",
          "fragment",
          "firstSignificantSubdomain",
-         "cutToFirstSignificantSubdomain"},
+         "firstSignificantSubdomainRFC",
+         "cutToFirstSignificantSubdomain",
+         "cutToFirstSignificantSubdomainRFC"},
+        /// URL strip functions (url → url with component removed)
+        {"cutFragment", "cutQueryString", "cutQueryStringAndFragment", "cutWWW"},
         /// Float classification
         {"isNaN", "isInfinite", "isFinite"},
         /// Map accessors (map → array)
@@ -3181,15 +3201,23 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         {"splitByChar", "splitByString", "splitByRegexp", "splitByWhitespace", "splitByNonAlpha"},
         /// Substring occurrence count (haystack, needle → UInt64)
         {"countSubstrings", "countSubstringsCaseInsensitive"},
-        /// UTF-8 normalization (String → String)
-        {"normalizeUTF8NFC", "normalizeUTF8NFD", "normalizeUTF8NFKC", "normalizeUTF8NFKD"},
+        /// Multi-pattern search (haystack, [needles] → UInt8/UInt64)
+        {"multiSearchAny", "multiSearchFirstIndex", "multiSearchFirstPosition", "multiSearchAllPositions"},
+        /// Integer GCD / LCM
+        {"gcd", "lcm"},
         /// Bitwise unary (integer → integer)
         {"bitNot", "bitCount"},
         /// Bitmap binary operations (Bitmap, Bitmap → Bitmap)
         {"bitmapAnd", "bitmapOr", "bitmapXor", "bitmapAndnot"},
+        /// Bitmap ↔ Array conversion (single-arg)
+        {"bitmapBuild", "bitmapToArray"},
         /// IP address type casts (String → IPv4/IPv6)
         {"toIPv4", "toIPv4OrNull", "toIPv4OrZero"},
         {"toIPv6", "toIPv6OrNull", "toIPv6OrZero"},
+        /// IPv4 numeric ↔ string conversions
+        {"IPv4NumToString", "IPv4NumToStringClassC"},
+        /// IPv6 numeric ↔ string conversions
+        {"IPv6NumToString", "IPv6StringToNum"},
         /// Best-effort datetime parsers (string → DateTime/DateTime64; all accept 1 arg)
         {"parseDateTimeBestEffort",
          "parseDateTimeBestEffortOrNull",
@@ -3205,7 +3233,48 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
          "parseDateTime64BestEffortOrNull",
          "parseDateTime64BestEffortOrZero",
          "parseDateTime64BestEffortUSOrNull",
-         "parseDateTime64BestEffortUSOrZero"}};
+         "parseDateTime64BestEffortUSOrZero"},
+        /// Logical binary operators (same variadic Boolean signature)
+        {"and", "or", "xor"},
+        /// Conditional branching (if: 3 args; multiIf: 2n+1 args — errors on mismatch are fine)
+        {"if", "multiIf"},
+        /// Array higher-order functions ([lambda,] array → array or scalar)
+        {"arraySort",
+         "arrayReverseSort",
+         "arrayFilter",
+         "arrayMap",
+         "arrayCount",
+         "arrayExists",
+         "arrayAll",
+         "arrayAny",
+         "arrayFirst",
+         "arrayLast",
+         "arrayFirstIndex",
+         "arrayLastIndex",
+         "arrayFill",
+         "arrayReverseFill"},
+        /// Window ranking functions (no arguments, window clause required)
+        {"rank", "dense_rank", "row_number", "percent_rank", "cume_dist"},
+        /// Window lag/lead functions (expr[, offset[, default]])
+        {"lagInFrame", "leadInFrame"},
+        /// Array search / index (array, value → UInt64)
+        {"indexOf", "countEqual"},
+        /// Human-readable formatting (number → String)
+        {"formatReadableSize", "formatReadableQuantity", "formatReadableTimeDelta", "formatReadableDecimalSize"},
+        /// Bitmap scalar reductions (Bitmap → UInt64)
+        {"bitmapCardinality", "bitmapMin", "bitmapMax"},
+        /// Bitmap membership tests (Bitmap, Bitmap → UInt8)
+        {"bitmapContains", "bitmapHasAny", "bitmapHasAll"},
+        /// UUID type casts (String → UUID, with error-handling variants)
+        {"toUUID", "toUUIDOrNull", "toUUIDOrZero"},
+        /// String/type conversion (arity mismatch for toFixedString is intentional)
+        {"toString", "toFixedString"},
+        /// Type name introspection (any → String)
+        {"toTypeName", "toColumnTypeName"},
+        /// URL percent-encoding (String → String)
+        {"encodeURLComponent", "decodeURLComponent", "decodeURLFormComponent"},
+        /// XML encoding (String → String)
+        {"encodeXMLComponent", "decodeXMLComponent"}};
 
 void QueryFuzzer::fuzz(ASTPtr & ast)
 {

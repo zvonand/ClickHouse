@@ -1546,7 +1546,22 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
             uint64_t usage = cgroupmem_reader->readMemoryUsage();
 
             new_values["CGroupMemoryTotal"] = { limit, "The total amount of memory in cgroup, in bytes. If stated zero, the limit is the same as OSMemoryTotal." };
-            new_values["CGroupMemoryUsed"] = { usage, "The amount of memory used in cgroup, in bytes (excluding page cache)." };
+            new_values["CGroupMemoryUsed"] = { usage, "The amount of memory used in cgroup, in bytes. This excludes the kernel page cache (OS-level file cache) because cgroup memory.stat does not include the 'file' field in its accounting." };
+
+            UInt64 cgroup_page_cache_bytes = 0;
+            if (context && context->getPageCache())
+                cgroup_page_cache_bytes = context->getPageCache()->sizeInBytes();
+
+            UInt64 cgroup_usage_without_page_cache = (usage > cgroup_page_cache_bytes)
+                                                   ? (usage - cgroup_page_cache_bytes)
+                                                   : 0;
+
+            new_values["CGroupMemoryUsedWithoutPageCache"] = {
+                cgroup_usage_without_page_cache,
+                "The amount of memory used in cgroup, in bytes, excluding both the kernel page cache and the userspace page cache. "
+                "This provides a more accurate view of actual memory consumption when the ClickHouse userspace page cache is enabled. "
+                "When userspace page cache is disabled, this value equals CGroupMemoryUsed."
+            };
         }
         catch (...)
         {

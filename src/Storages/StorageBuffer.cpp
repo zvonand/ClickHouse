@@ -334,8 +334,8 @@ void StorageBuffer::read(
 
         const bool dst_has_same_structure = std::all_of(column_names.begin(), column_names.end(), [&](const String & column_name)
         {
-            auto dest_columm = destination_columns.tryGetByName(column_name);
-            return dest_columm && dest_columm->type->equals(*our_columns.tryGetByName(column_name)->type);
+            auto dest_column = destination_columns.tryGetByName(column_name);
+            return dest_column && dest_column->type->equals(*our_columns.tryGetByName(column_name)->type);
         });
 
         if (dst_has_same_structure)

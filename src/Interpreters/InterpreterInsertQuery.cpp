@@ -129,7 +129,6 @@ InterpreterInsertQuery::InterpreterInsertQuery(
     max_insert_threads = std::min(std::max<size_t>(1, settings[Setting::max_insert_threads]), max_threads);
 }
 
-
 StoragePtr InterpreterInsertQuery::getTable(ASTInsertQuery & query)
 {
     auto current_context = getContext();

@@ -564,7 +564,7 @@ void QueryPlan::explainPlan(
 
     std::deque<ExplainPlan::Frame> stack;
 
-    if (settings.pretty && is_last_child_plan)
+    if (settings.pretty && parent_tree_prefix.empty())
     {
         QueryPlanFormat::formatOutputColumns(settings.out, *root->step, settings.header_prefix);
         settings.out << '\n';
@@ -596,7 +596,8 @@ void QueryPlan::explainPlan(
         {
             size_t child_idx = frame.next_child;
 
-            bool is_last = (frame.next_child + 1) == (frame.node->children.size());
+            bool has_child_plans_below = !frame.node->step->getChildPlans().empty();
+            bool is_last = (frame.next_child + 1) == (frame.node->children.size()) && !has_child_plans_below;
             /// Skip the expression steps if we are in the compact mode
             auto * next_node = skip_expressions(frame.node->children[child_idx]);
 

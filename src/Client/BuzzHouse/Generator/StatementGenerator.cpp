@@ -2661,7 +2661,7 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
              us->set_name("f" + std::to_string(rg.randomInt<uint32_t>(0, freeze_counter - 1)));
              if (!snapshots.empty() && rg.nextSmallNumber() < 4)
              {
-                 us->mutable_from()->CopyFrom(rg.pickValueRandomlyFromMap(snapshots));
+                 us->mutable_from()->CopyFrom(rg.pickValueRandomlyFromMap(snapshots).bout);
              }
          }},
     });
@@ -3047,7 +3047,7 @@ void StatementGenerator::generateNextBackupOrRestore(RandomGenerator & rg, Backu
     if (from_snapshot)
     {
         br->set_command(BackupRestore_BackupCommand_BACKUP);
-        br->mutable_from_snapshot()->CopyFrom(rg.pickValueRandomlyFromMap(snapshots));
+        br->mutable_from_snapshot()->CopyFrom(rg.pickValueRandomlyFromMap(snapshots).bout);
         setBackupOut(rg, br->mutable_out());
     }
     else if (isBackup)
@@ -4167,7 +4167,25 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
         const BackupRestore & br = query.backup_restore();
         const uint32_t backup_number = br.out().backup_number();
 
-        if (br.command() == BackupRestore_BackupCommand_BACKUP && !br.has_from_snapshot())
+        if (br.command() == BackupRestore_BackupCommand_BACKUP && br.has_from_snapshot())
+        {
+            /// BACKUP FROM SNAPSHOT produces a real backup usable for RESTORE and incremental backups.
+            /// Clone the source snapshot's catalog metadata so the scope is accurate.
+            const uint32_t snap_number = br.from_snapshot().backup_number();
+
+            if (this->snapshots.contains(snap_number))
+            {
+                CatalogBackup newb = this->snapshots.at(snap_number);
+
+                newb.bout.CopyFrom(br.out());
+                if (br.has_outformat())
+                {
+                    newb.out_format = br.outformat();
+                }
+                this->backups[backup_number] = std::move(newb);
+            }
+        }
+        else if (br.command() == BackupRestore_BackupCommand_BACKUP)
         {
             CatalogBackup newb;
             const BackupRestoreElement & bre = br.backup_element();
@@ -4306,7 +4324,32 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
     else if (ssq.has_explain() && query.has_snapshot_query() && !ssq.explain().is_explain() && success)
     {
         const SnapshotQuery & sq = query.snapshot_query();
-        this->snapshots[sq.out().backup_number()].CopyFrom(sq.out());
+        const BackupRestoreElement & bre = sq.element();
+        CatalogBackup newsnap;
+
+        newsnap.bout.CopyFrom(sq.out());
+        if (bre.has_all())
+        {
+            newsnap.tables = this->tables;
+            newsnap.views = this->views;
+            newsnap.databases = this->databases;
+            newsnap.dictionaries = this->dictionaries;
+            newsnap.everything = true;
+        }
+        else if (bre.has_bobject() && bre.bobject().sobject() == SQLObject::TABLE)
+        {
+            const String tkey = getNameFromProto(bre.bobject().object().est().table().value());
+
+            if (this->tables.contains(tkey))
+            {
+                newsnap.tables[tkey] = this->tables[tkey];
+            }
+        }
+        if (!newsnap.databases.empty() || !newsnap.tables.empty() || !newsnap.views.empty() || !newsnap.dictionaries.empty()
+            || newsnap.everything)
+        {
+            this->snapshots[sq.out().backup_number()] = std::move(newsnap);
+        }
     }
     else if (ssq.has_start_trans() && success)
     {

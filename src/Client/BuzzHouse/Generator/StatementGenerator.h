@@ -205,7 +205,7 @@ private:
     std::unordered_map<String, SQLFunction> staged_functions;
     std::unordered_map<String, SQLFunction> functions;
     std::unordered_map<uint32_t, CatalogBackup> backups;
-    std::unordered_map<uint32_t, BackupOut> snapshots;
+    std::unordered_map<uint32_t, CatalogBackup> snapshots;
     std::unordered_map<String, SQLPolicy> staged_policies;
     std::unordered_map<String, SQLPolicy> policies;
 

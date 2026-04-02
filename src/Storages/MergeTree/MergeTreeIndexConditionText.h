@@ -130,6 +130,10 @@ private:
 
     TextIndexDirectReadMode getHintOrNoneMode() const;
 
+    bool traverseMapElementKeyNode(const RPNBuilderFunctionTreeNode & function_node, RPNElement & out) const;
+    bool traverseMapElementValueNode(const RPNBuilderTreeNode & index_column_node, const Field & const_value) const;
+    bool traverseJSONSubcolumnKeyNode(const RPNBuilderFunctionTreeNode & function_node, RPNElement & out) const;
+
     /// Returns true if the node represents `arrayElement(map_col, 'key')`
     /// and there is a text index built on `mapValues(map_col)`.
     bool hasIndexForMapElementValue(const RPNBuilderTreeNode & node) const;
@@ -137,9 +141,6 @@ private:
     /// Returns true if the column_name is a subcolumn of a JSON column
     /// that has a text index built on `JSONAllValues(json_column)`.
     bool hasIndexForJSONSubcolumn(const RPNBuilderTreeNode & node) const;
-
-    bool traverseMapElementKeyNode(const RPNBuilderFunctionTreeNode & function_node, RPNElement & out) const;
-    bool traverseMapElementValueNode(const RPNBuilderTreeNode & index_column_node, const Field & const_value) const;
 
     std::vector<String> stringToTokens(const Field & field) const;
     std::vector<String> substringToTokens(const Field & field, bool is_prefix, bool is_suffix) const;

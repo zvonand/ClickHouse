@@ -1,10 +1,12 @@
 #include <algorithm>
 #include <limits>
 #include <Columns/ColumnArray.h>
+#include <Columns/ColumnDecimal.h>
 #include <Columns/ColumnNothing.h>
 #include <Columns/ColumnVector.h>
 #include <Columns/ColumnsNumber.h>
 #include <Columns/IColumn.h>
+#include <Core/DecimalFunctions.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeNothing.h>
 #include <DataTypes/DataTypesNumber.h>
@@ -52,10 +54,11 @@ public:
 
         const auto & nested_type = array_type->getNestedType();
 
-        if (!isInteger(nested_type) && !isNativeFloat(nested_type) && !typeid_cast<const DataTypeNothing *>(nested_type.get()))
+        if (!isInteger(nested_type) && !isNativeFloat(nested_type) && !isDecimal(nested_type)
+            && !typeid_cast<const DataTypeNothing *>(nested_type.get()))
             throw Exception(
                 ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                "Function {} only accepts arrays of standard integers or floating-point numbers.",
+                "Function {} only accepts arrays of integers, floating-point numbers, or decimals.",
                 getName());
 
         if (arguments.size() == 2)
@@ -179,6 +182,24 @@ public:
         return ColumnArray::create(std::move(res_data_col), std::move(res_offsets_col));
     }
 
+    /// Convert Decimal array to Float64 using the column's scale, then delegate to executeType<Float64>.
+    template <typename DecimalType>
+    ColumnPtr executeDecimalType(const ColumnArray & col_array, const IColumn * col_max_lag, const DataTypePtr & max_lag_type) const
+    {
+        const auto & col_data = assert_cast<const ColumnDecimal<DecimalType> &>(col_array.getData());
+        const auto & data = col_data.getData();
+        UInt32 scale = col_data.getScale();
+
+        Float64 scale_factor = static_cast<Float64>(DecimalUtils::scaleMultiplier<typename DecimalType::NativeType>(scale));
+        auto float_col = ColumnFloat64::create(data.size());
+        auto & float_data = float_col->getData();
+        for (size_t i = 0; i < data.size(); ++i)
+            float_data[i] = static_cast<Float64>(data[i].value) / scale_factor;
+
+        auto converted_array = ColumnArray::create(std::move(float_col), col_array.getOffsetsPtr());
+        return executeType<Float64>(*converted_array, col_max_lag, max_lag_type);
+    }
+
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t /*input_rows_count*/) const override
     {
         ColumnPtr array_col_ptr = arguments[0].column->convertToFullColumnIfConst();
@@ -231,11 +252,19 @@ public:
             return executeType<Float32>(*col_array, col_max_lag, max_lag_type);
         else if (checkColumn<ColumnVector<Float64>>(nested_column))
             return executeType<Float64>(*col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnDecimal<Decimal32>>(nested_column))
+            return executeDecimalType<Decimal32>(*col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnDecimal<Decimal64>>(nested_column))
+            return executeDecimalType<Decimal64>(*col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnDecimal<Decimal128>>(nested_column))
+            return executeDecimalType<Decimal128>(*col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnDecimal<Decimal256>>(nested_column))
+            return executeDecimalType<Decimal256>(*col_array, col_max_lag, max_lag_type);
         else
             throw Exception(
                 ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                "arrayAutocorrelation only accepts arrays of standard integers or floating-point numbers (UInt*, Int*, Float*). "
-                "For Decimal types, please cast to Float64. Unsupported type: {}",
+                "arrayAutocorrelation only accepts arrays of integers, floating-point numbers, or decimals. "
+                "Unsupported type: {}",
                 nested_column.getFamilyName());
     }
 };

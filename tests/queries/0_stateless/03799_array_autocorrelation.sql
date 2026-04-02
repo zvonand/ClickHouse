@@ -31,6 +31,13 @@ SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Int256)'));
 SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Float32)'));
 SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Float64)'));
 
+SELECT '--- Decimal Support ---';
+SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Decimal32(2))'));
+SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Decimal64(4))'));
+SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Decimal128(6))'));
+SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Decimal256(8))'));
+SELECT arrayAutocorrelation(CAST([1.5, 2.5, 3.5], 'Array(Decimal64(2))'));
+
 SELECT '--- Table Execution ---';
 DROP TABLE IF EXISTS test_autocorr;
 CREATE TABLE test_autocorr (id UInt64, data Array(Float64), lag UInt64) ENGINE = Memory;

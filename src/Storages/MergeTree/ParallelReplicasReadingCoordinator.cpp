@@ -1287,13 +1287,15 @@ void ParallelReplicasReadingCoordinator::markReplicaAsUnavailable(size_t replica
 
     std::lock_guard lock(mutex);
 
-    unavailable_replicas.push_back(replica_number);
+    auto [_, inserted] = unavailable_replicas.insert(replica_number);
+    if (!inserted)
+        return;
+
     if (unavailable_replicas.size() == replicas_count)
         throw Exception(ErrorCodes::ALL_CONNECTION_TRIES_FAILED, "Can't connect to any replica chosen for query execution");
 
-    for (auto replica : unavailable_replicas)
-        for (auto & [_, coordinator] : table_to_coordinator)
-            coordinator->markReplicaAsUnavailable(replica);
+    for (auto & [table, coordinator] : table_to_coordinator)
+        coordinator->markReplicaAsUnavailable(replica_number);
 }
 
 std::shared_ptr<ParallelReplicasReadingCoordinator::ImplInterface>

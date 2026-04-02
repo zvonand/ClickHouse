@@ -1552,7 +1552,7 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
             uint64_t usage = cgroupmem_reader->readMemoryUsage();
 
             new_values["CGroupMemoryTotal"] = { limit, "The total amount of memory in cgroup, in bytes. If stated zero, the limit is the same as OSMemoryTotal." };
-            new_values["CGroupMemoryUsed"] = { usage, "The amount of memory used in cgroup, in bytes. This excludes the kernel page cache (OS-level file cache) because cgroup memory.stat does not include the 'file' field in its accounting." };
+            new_values["CGroupMemoryUsed"] = { usage, "The amount of memory used in cgroup, in bytes. ClickHouse computes this by summing selected fields from cgroup memory.stat (anonymous memory, socket buffers, and non-reclaimable kernel memory), which excludes the kernel page cache (OS-level file cache)." };
 
             const auto * page_cache_metric = getAsynchronousMetricValue(new_values, "MemoryUserSpacePageCache");
             UInt64 cgroup_page_cache_bytes = page_cache_metric ? static_cast<UInt64>(page_cache_metric->value) : 0;

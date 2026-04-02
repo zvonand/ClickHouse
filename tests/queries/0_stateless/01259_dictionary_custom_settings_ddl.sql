@@ -1,5 +1,10 @@
 -- Tags: no-fasttest
 
+DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
+
+CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
+
 CREATE TABLE table_for_dict
 (
   key_column UInt64,
@@ -10,11 +15,6 @@ ENGINE = MergeTree()
 ORDER BY key_column;
 
 INSERT INTO table_for_dict VALUES (100500, 10000000, 'Hello world');
-
-DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
-
-CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
-USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 DROP DICTIONARY IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier}.dict1;
 
@@ -36,5 +36,3 @@ SELECT dictGetUInt64('dict1', 'second_column', toUInt64(100500)); -- { serverErr
 SELECT 'END';
 
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
-
-DROP TABLE IF EXISTS table_for_dict;

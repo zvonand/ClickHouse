@@ -34,37 +34,46 @@ clickhouse-client -q "SELECT 1" 2>&1
 
 If the server is not reachable, report an error and stop. Do **not** attempt to start the server — ask the user to start it first.
 
-### 3. Set up hits and/or visits
+### 3. Check for conflicting tables
+
+Before making any changes, check whether any target tables already exist. Query `system.tables` once:
+
+```bash
+clickhouse-client -q "SELECT database || '.' || name FROM system.tables WHERE
+    (database = 'test' AND name IN ('hits', 'visits'))
+    OR (database = 'tpcds')
+    OR (database = 'tpch')"
+```
+
+Build a list of conflicting tables based on what was requested:
+- If `hits` is requested: `test.hits` must not exist.
+- If `visits` is requested: `test.visits` must not exist.
+- If `tpcds` is requested: the `tpcds` database must have no tables.
+- If `tpch` is requested: the `tpch` database must have no tables.
+
+If any conflicts are found, report all of them to the user and stop. Do **not** drop or overwrite anything. Suggest the user drop the conflicting tables manually and rerun the skill.
+
+### 4. Set up hits and/or visits
 
 Only execute this step if `hits` or `visits` (or both) are in the requested set.
 
-Run the full `create.sql` script:
-```bash
-clickhouse-client --multiquery < tests/docker_scripts/create.sql
-```
+The file `tests/docker_scripts/create.sql` contains two `CREATE TABLE` statements: one for `datasets.hits_v1` and one for `datasets.visits_v1`. For each requested dataset, extract only the corresponding statement, replace the table name to create it directly as `test.hits` or `test.visits`, and execute it. This avoids creating unnecessary intermediate tables.
 
-This creates `datasets.hits_v1` and `datasets.visits_v1`.
-
-Then create the `test` database and rename only the requested tables:
 ```bash
 clickhouse-client -q "CREATE DATABASE IF NOT EXISTS test"
 ```
 
-If `hits` is requested:
+If `hits` is requested — extract the `datasets.hits_v1` statement, replace the name, and execute:
 ```bash
-clickhouse-client -q "RENAME TABLE datasets.hits_v1 TO test.hits"
+clickhouse-client --multiquery <<< "$(sed -n '/^CREATE TABLE datasets\.hits_v1/,/);/p' tests/docker_scripts/create.sql | sed 's/datasets\.hits_v1/test.hits/')"
 ```
 
-If `visits` is requested:
+If `visits` is requested — extract the `datasets.visits_v1` statement, replace the name, and execute:
 ```bash
-clickhouse-client -q "RENAME TABLE datasets.visits_v1 TO test.visits"
+clickhouse-client --multiquery <<< "$(sed -n '/^CREATE TABLE datasets\.visits_v1/,/);/p' tests/docker_scripts/create.sql | sed 's/datasets\.visits_v1/test.visits/')"
 ```
 
-If only one of `hits`/`visits` was requested, drop the unrequested table to avoid leaving orphans:
-- If `hits` requested but not `visits`: `DROP TABLE IF EXISTS datasets.visits_v1`
-- If `visits` requested but not `hits`: `DROP TABLE IF EXISTS datasets.hits_v1`
-
-### 4. Set up TPC-DS
+### 5. Set up TPC-DS
 
 Only execute this step if `tpcds` is in the requested set.
 
@@ -72,7 +81,7 @@ Only execute this step if `tpcds` is in the requested set.
 bash tests/docker_scripts/create_tpcds.sh
 ```
 
-### 5. Set up TPC-H
+### 6. Set up TPC-H
 
 Only execute this step if `tpch` is in the requested set.
 
@@ -80,7 +89,7 @@ Only execute this step if `tpch` is in the requested set.
 bash tests/docker_scripts/create_tpch.sh
 ```
 
-### 6. Verify
+### 7. Verify
 
 For each dataset that was set up, confirm it exists and report row counts:
 

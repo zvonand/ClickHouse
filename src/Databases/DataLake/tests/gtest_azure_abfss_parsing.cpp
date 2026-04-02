@@ -130,7 +130,7 @@ TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationNonPolarisContainerInPathW
     metadata.setLocation("abfss://c@account.dfs.core.windows.net/c/table");
     metadata.setEndpoint("https://account.dfs.core.windows.net");
 
-    EXPECT_EQ(metadata.getLocation(), "https://account.dfs.core.windows.net/c/c/table/");
+    EXPECT_EQ(metadata.getLocation(), "https://account.dfs.core.windows.net/c/table/");
 }
 
 TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationNonPolarisContainerInPath)

@@ -334,8 +334,12 @@ if __name__ == "__main__":
                 _curr_info = f"{TEMP_DIR}/llvm_coverage.info"
                 if not _diff_ran and Path(_base_info).exists() and Path(_curr_info).exists():
                     try:
-                        b_line_cov, b_function_cov, b_branch_cov = get_lcov_summary_percentages(_base_info)
-                        c_line_cov, c_function_cov, c_branch_cov = get_lcov_summary_percentages(_curr_info)
+                        (b_line_cov, b_line_hit, b_line_total), \
+                        (b_function_cov, b_func_hit, b_func_total), \
+                        (b_branch_cov, b_branch_hit, b_branch_total) = get_lcov_summary(_base_info)
+                        (c_line_cov, c_line_hit, c_line_total), \
+                        (c_function_cov, c_func_hit, c_func_total), \
+                        (c_branch_cov, c_branch_hit, c_branch_total) = get_lcov_summary(_curr_info)
                         delta = c_line_cov - b_line_cov
                     except Exception as e:
                         print(f"Warning: could not compute global coverage percentages: {e}")

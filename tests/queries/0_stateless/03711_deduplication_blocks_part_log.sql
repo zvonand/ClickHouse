@@ -74,51 +74,51 @@ SELECT r.id as id, r.value as value FROM 03711_database.03711_table as l JOIN 03
 -- across all updateHashWithValueRange overrides.
 
 CREATE TABLE 03711_database.03711_type_decimal (v Decimal64(2)) ENGINE = MergeTree() ORDER BY v
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_decimal;
 
 CREATE TABLE 03711_database.03711_type_float (v Float64) ENGINE = MergeTree() ORDER BY v
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_float;
 
 CREATE TABLE 03711_database.03711_type_fixedstr (v FixedString(8)) ENGINE = MergeTree() ORDER BY v
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_fixedstr;
 
 CREATE TABLE 03711_database.03711_type_string (v String) ENGINE = MergeTree() ORDER BY v
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_string;
 
 CREATE TABLE 03711_database.03711_type_array (v Array(UInt32)) ENGINE = MergeTree() ORDER BY tuple()
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_array;
 
 CREATE TABLE 03711_database.03711_type_nullable (v Nullable(UInt64)) ENGINE = MergeTree() ORDER BY tuple()
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_nullable;
 
 CREATE TABLE 03711_database.03711_type_tuple (v Tuple(UInt32, UInt64)) ENGINE = MergeTree() ORDER BY tuple()
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_tuple;
 
 CREATE TABLE 03711_database.03711_type_map (v Map(String, UInt32)) ENGINE = MergeTree() ORDER BY tuple()
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_map;
 
 CREATE TABLE 03711_database.03711_type_variant (v Variant(UInt64, String, Array(UInt32))) ENGINE = MergeTree() ORDER BY tuple()
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_variant;
 
 CREATE TABLE 03711_database.03711_type_dynamic (v Dynamic) ENGINE = MergeTree() ORDER BY tuple()
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream', dynamic_serialization_version = 'v2';
 SYSTEM STOP MERGES 03711_database.03711_type_dynamic;
 
 CREATE TABLE 03711_database.03711_type_json (v JSON) ENGINE = MergeTree() ORDER BY tuple()
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream', dynamic_serialization_version = 'v2', object_serialization_version = 'v3', object_shared_data_serialization_version = 'map', object_shared_data_serialization_version_for_zero_level_parts = 'map';
 SYSTEM STOP MERGES 03711_database.03711_type_json;
 
 CREATE TABLE 03711_database.03711_type_json_mdp0 (v JSON(max_dynamic_paths=0)) ENGINE = MergeTree() ORDER BY tuple()
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream', dynamic_serialization_version = 'v2', object_serialization_version = 'v3', object_shared_data_serialization_version = 'map', object_shared_data_serialization_version_for_zero_level_parts = 'map';
 SYSTEM STOP MERGES 03711_database.03711_type_json_mdp0;
 
 CREATE TABLE 03711_database.03711_type_mixed
@@ -133,21 +133,21 @@ CREATE TABLE 03711_database.03711_type_mixed
     pair Tuple(UInt32, UInt64),
     kv Map(String, UInt32)
 ) ENGINE = MergeTree() ORDER BY id
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_type_mixed;
 
 -- Async insert tables: async path computes data hash directly from the block
 -- (not via MergeTreePartWriter), exercising calculateDataHashBatch.
 CREATE TABLE 03711_database.03711_async_uint (v UInt32) ENGINE = MergeTree() ORDER BY v
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_async_uint;
 
 CREATE TABLE 03711_database.03711_async_string (v String) ENGINE = MergeTree() ORDER BY v
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_async_string;
 
 CREATE TABLE 03711_database.03711_async_array (v Array(UInt32)) ENGINE = MergeTree() ORDER BY tuple()
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_async_array;
 
 CREATE TABLE 03711_database.03711_async_mixed
@@ -162,7 +162,7 @@ CREATE TABLE 03711_database.03711_async_mixed
     pair Tuple(UInt32, UInt64),
     kv Map(String, UInt32)
 ) ENGINE = MergeTree() ORDER BY id
-    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
+    SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, index_granularity = 8192, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
 SYSTEM STOP MERGES 03711_database.03711_async_mixed;
 
 SET deduplicate_blocks_in_dependent_materialized_views=1;

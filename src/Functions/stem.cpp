@@ -116,7 +116,7 @@ public:
         else if (const auto * col_fixed_str = checkAndGetColumn<ColumnFixedString>(&col))
             upper_bound = col_fixed_str->getChars().size();
         else
-            chassert(false);
+            UNREACHABLE();
 
         auto col_res = ColumnString::create();
         ColumnString::Chars & res_data = col_res->getChars();

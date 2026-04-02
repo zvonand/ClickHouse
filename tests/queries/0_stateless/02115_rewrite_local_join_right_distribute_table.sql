@@ -10,8 +10,8 @@ DROP TABLE IF EXISTS t2_all;
 create table t1_local(a Int32) engine=MergeTree() order by a;
 create table t2_local as t1_local;
 
-create table t1_all as t1_local engine Distributed(test_cluster_two_shards_localhost, test_02115, t1_local, rand());
-create table t2_all as t2_local engine Distributed(test_cluster_two_shards_localhost, test_02115, t2_local, rand());
+create table t1_all as t1_local engine Distributed(test_cluster_two_shards_localhost, {CLICKHOUSE_DATABASE_1:Identifier}, t1_local, rand());
+create table t2_all as t2_local engine Distributed(test_cluster_two_shards_localhost, {CLICKHOUSE_DATABASE_1:Identifier}, t2_local, rand());
 
 insert into t1_local values (1), (2), (3);
 insert into t2_local values (1), (2), (3);

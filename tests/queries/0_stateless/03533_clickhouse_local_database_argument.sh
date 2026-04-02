@@ -17,7 +17,7 @@ SELECT * FROM t;
 $CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --query "SELECT * FROM ${CLICKHOUSE_DATABASE_1}.t;"
 $CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --query "USE ${CLICKHOUSE_DATABASE_1}; SELECT * FROM t;"
 $CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --database default --query "USE ${CLICKHOUSE_DATABASE_1}; SELECT * FROM t;"
-$CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --database test --query "SELECT * FROM t;"
+$CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --database ${CLICKHOUSE_DATABASE_1} --query "SELECT * FROM t;"
 $CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --database system --query "USE ${CLICKHOUSE_DATABASE_1}; SELECT * FROM t;"
 
 # Only default database is configured as a filesystem overlay:
@@ -26,6 +26,6 @@ echo "Hello from a file" > "${CLICKHOUSE_TMP}/file.csv"
 
 $CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --query "SELECT * FROM '${CLICKHOUSE_TMP}/file.csv'"
 $CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --query "SELECT * FROM default.\`${CLICKHOUSE_TMP}/file.csv\`"
-$CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --database test --query "SELECT * FROM default.\`${CLICKHOUSE_TMP}/file.csv\`"
+$CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --database ${CLICKHOUSE_DATABASE_1} --query "SELECT * FROM default.\`${CLICKHOUSE_TMP}/file.csv\`"
 
 $CLICKHOUSE_LOCAL --path "${CLICKHOUSE_TMP}" --query "DROP DATABASE ${CLICKHOUSE_DATABASE_1};"

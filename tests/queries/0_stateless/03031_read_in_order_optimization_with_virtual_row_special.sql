@@ -11,7 +11,7 @@ SET read_in_order_use_virtual_row = 1;
 
 CREATE TABLE src (s String) ENGINE = MergeTree() ORDER BY s;
 INSERT INTO src(s) VALUES ('before moving tables');
-CREATE TABLE dist (s String) ENGINE = Distributed(test_shard_localhost, test_03031, src);
+CREATE TABLE dist (s String) ENGINE = Distributed(test_shard_localhost, {CLICKHOUSE_DATABASE_1:Identifier}, src);
 
 SET enable_analyzer=0;
 SELECT _table FROM merge({CLICKHOUSE_DATABASE_1:String}, '') ORDER BY _table, s;

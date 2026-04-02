@@ -60,12 +60,11 @@ SELECT '';
 
 DROP database IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 CREATE database {CLICKHOUSE_DATABASE_1:Identifier} ENGINE=Atomic;
-USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 SYSTEM FLUSH LOGS query_log;
 SELECT used_database_engines
 FROM system.query_log
-WHERE event_date >= yesterday() AND event_time >= now() - 600 AND current_database = currentDatabase() AND type == 'QueryFinish' AND (query LIKE '%database test_query_log_factories_info%')
+WHERE event_date >= yesterday() AND event_time >= now() - 600 AND current_database = currentDatabase() AND type == 'QueryFinish' AND (query LIKE 'CREATE%database%ENGINE=Atomic%')
 ORDER BY query_start_time DESC LIMIT 1 FORMAT TabSeparatedWithNames;
 SELECT '';
 

@@ -995,9 +995,6 @@ def test_onelake_warehouse_id_as_data_item(node, catalog_manager):
 
 
 @only_onelake
-@pytest.mark.xfail(
-    reason="credentials leak in system.databases engine_full"
-)
 def test_onelake_system_databases(node, catalog_manager):
     """All system.databases fields are correct for a DataLakeCatalog database."""
 
@@ -1035,7 +1032,6 @@ def test_onelake_system_databases(node, catalog_manager):
 
 
 @only_onelake
-@pytest.mark.xfail(reason="credentials leak in SHOW CREATE DATABASE")
 def test_onelake_show_create_no_secret(node, catalog_manager, sales_table):
     """SHOW CREATE DATABASE must not expose client_secret."""
 
@@ -1046,7 +1042,6 @@ def test_onelake_show_create_no_secret(node, catalog_manager, sales_table):
 
 
 @only_onelake
-@pytest.mark.xfail(reason="credentials leak in SHOW CREATE DATABASE")
 def test_onelake_show_create_table_no_secret(
     node, shared_db, sales_table, catalog_manager,
 ):

@@ -14,6 +14,15 @@ SELECT '--- Max Lag Argument ---';
 SELECT arrayAutocorrelation([1, 2, 3, 4, 5], 2);
 SELECT arrayAutocorrelation([1, 2, 3, 4, 5], 0);
 SELECT arrayAutocorrelation([1, 2, 3, 4, 5], 100);
+-- Extreme unsigned: UINT64_MAX, clamped to array size
+SELECT arrayAutocorrelation([1, 2, 3], toUInt64('18446744073709551615'));
+-- 2^63: previously caused silent wraparound via getInt
+SELECT arrayAutocorrelation([1, 2, 3], toUInt64('9223372036854775808'));
+-- Signed type with positive value works
+SELECT arrayAutocorrelation([1, 2, 3], toInt64(2));
+-- Negative values are rejected at runtime
+SELECT arrayAutocorrelation([1, 2, 3], toInt64(-1)); -- { serverError BAD_ARGUMENTS }
+SELECT arrayAutocorrelation([1, 2, 3], toInt64('-9223372036854775808')); -- { serverError BAD_ARGUMENTS }
 
 SELECT '--- Type Dispatch Coverage ---';
 SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(UInt8)'));
@@ -51,6 +60,8 @@ SELECT '--- Const Array Optimization ---';
 SELECT arrayAutocorrelation(arrayMap(x -> x + number, [1, 2, 3]), 2) FROM numbers(3);
 -- Const array with non-const max_lag
 SELECT arrayAutocorrelation([1, 2, 3], number) FROM numbers(3);
+-- Const array with non-const signed max_lag, one row negative
+SELECT arrayAutocorrelation([1, 2, 3], toInt64(number) - 1) FROM numbers(3); -- { serverError BAD_ARGUMENTS }
 -- 10-element const array across 100K rows: would OOM/TLE if materialized (10 * 100K = 1M elements)
 SELECT sum(length(arrayAutocorrelation([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], number % 5))) FROM numbers(100000);
 -- Same for Decimal const array

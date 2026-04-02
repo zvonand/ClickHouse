@@ -24,6 +24,18 @@ SELECT arrayAutocorrelation([1, 2, 3, 4, 5], 0);
 []
 SELECT arrayAutocorrelation([1, 2, 3, 4, 5], 100);
 [1,0.4,-0.1,-0.4,-0.4]
+-- Extreme unsigned: UINT64_MAX, clamped to array size
+SELECT arrayAutocorrelation([1, 2, 3], toUInt64('18446744073709551615'));
+[1,0,-0.5]
+-- 2^63: previously caused silent wraparound via getInt
+SELECT arrayAutocorrelation([1, 2, 3], toUInt64('9223372036854775808'));
+[1,0,-0.5]
+-- Signed type with positive value works
+SELECT arrayAutocorrelation([1, 2, 3], toInt64(2));
+[1,0]
+-- Negative values are rejected at runtime
+SELECT arrayAutocorrelation([1, 2, 3], toInt64(-1)); -- { serverError BAD_ARGUMENTS }
+SELECT arrayAutocorrelation([1, 2, 3], toInt64('-9223372036854775808')); -- { serverError BAD_ARGUMENTS }
 SELECT '--- Type Dispatch Coverage ---';
 --- Type Dispatch Coverage ---
 SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(UInt8)'));
@@ -82,16 +94,22 @@ SELECT id, arrayAutocorrelation(data, lag) FROM test_autocorr ORDER BY id;
 DROP TABLE test_autocorr;
 SELECT '--- Const Array Optimization ---';
 --- Const Array Optimization ---
+-- Non-const array with const max_lag
 SELECT arrayAutocorrelation(arrayMap(x -> x + number, [1, 2, 3]), 2) FROM numbers(3);
 [1,0]
 [1,0]
 [1,0]
+-- Const array with non-const max_lag
 SELECT arrayAutocorrelation([1, 2, 3], number) FROM numbers(3);
 []
 [1]
 [1,0]
+-- Const array with non-const signed max_lag, one row negative
+SELECT arrayAutocorrelation([1, 2, 3], toInt64(number) - 1) FROM numbers(3); -- { serverError BAD_ARGUMENTS }
+-- 10-element const array across 100K rows: would OOM/TLE if materialized (10 * 100K = 1M elements)
 SELECT sum(length(arrayAutocorrelation([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], number % 5))) FROM numbers(100000);
 200000
+-- Same for Decimal const array
 SELECT sum(length(arrayAutocorrelation(CAST([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 'Array(Decimal64(2))'), number % 5))) FROM numbers(100000);
 200000
 SELECT '--- NaN and Inf Handling ---';

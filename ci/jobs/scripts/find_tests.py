@@ -1616,7 +1616,12 @@ class Targeting:
         return hunks
 
     def get_diff_text(self) -> str:
-        """Fetch the PR diff text (cached on self._diff_text after first call)."""
+        """Fetch the PR diff text (cached on self._diff_text after first call).
+
+        CI containers have no .git directory and no gh auth, so both `git diff`
+        and `gh pr diff` fail there.  Use the public GitHub API via curl instead,
+        which requires no authentication for public repos.
+        """
         if hasattr(self, '_diff_text') and self._diff_text is not None:
             return self._diff_text
         assert self.info.pr_number > 0, "Diff fetching applicable for PRs only"
@@ -1625,17 +1630,15 @@ class Targeting:
                 f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse"
             )
         else:
-            merge_base = (self.info.get_kv_data() or {}).get("merge_base_commit_sha", "")
-            assert merge_base, "merge_base_commit_sha not found in KV data"
             self._diff_text = Shell.get_output(
-                f"git diff {merge_base}...HEAD --unified=0"
+                f"curl -sSf 'https://patch-diff.githubusercontent.com/raw/ClickHouse/ClickHouse/pull/{self.info.pr_number}.diff'"
             )
         return self._diff_text
 
     def get_changed_lines_from_diff(self):
         """
         Return changed lines from the PR diff.
-        In CI uses `git diff <merge_base>...HEAD`; for local runs uses `gh pr diff`.
+        In CI fetches the diff from GitHub API; for local runs uses `gh pr diff`.
         """
         assert self.info.pr_number > 0, "Find tests by diff applicable for PRs only"
         return self._parse_diff_lines(self.get_diff_text())

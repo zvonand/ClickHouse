@@ -3229,9 +3229,10 @@ bool ReadFromMergeTree::supportsSkipIndexesOnDataRead() const
     if (!indexes || !indexes->use_skip_indexes || indexes->skip_indexes.empty())
         return false;
 
-    /// Vector similarity indexes are "statically" analyzed.
+    /// Vector similarity indexes are "statically" analyzed; top-k filtering with a threshold tracker needs a reader.
     const bool will_have_skip_index_reader =
-        std::ranges::any_of(indexes->skip_indexes.useful_indices, [](const auto & idx)
+        indexes->skip_indexes.skip_index_for_top_k_filtering
+        || std::ranges::any_of(indexes->skip_indexes.useful_indices, [](const auto & idx)
         {
             return !idx.index->isVectorSimilarityIndex();
         });

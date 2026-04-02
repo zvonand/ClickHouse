@@ -11,7 +11,10 @@ select accurateCastOrDefault(dynamic, 'UInt32'), multiIf(number % 4 == 0, NULL, 
 select accurateCastOrNull(dynamic, 'UInt32'), multiIf(number % 4 == 0, NULL, number % 4 == 1, number, number % 4 == 2, 'str_' || toString(number), range(number))::Dynamic as dynamic from numbers(8);
 
 drop table if exists t;
-create table t (id UInt64 DEFAULT generateSerialID('03212_variant_seq'), d Dynamic) engine=MergeTree order by id;
+-- Pin map_buckets_strategy to prevent non-deterministic Map key ordering when
+-- ratio_of_defaults_for_sparse_serialization + map_buckets_strategy=constant + map_buckets_min_avg_size
+-- combine to route Map serialization through hash buckets, reordering keys.
+create table t (id UInt64 DEFAULT generateSerialID('03212_variant_seq'), d Dynamic) engine=MergeTree order by id settings map_buckets_strategy = 'sqrt';
 
 -- Integer types: signed and unsigned integers (UInt8, UInt16, UInt32, UInt64, UInt128, UInt256, Int8, Int16, Int32, Int64, Int128, Int256)
 INSERT INTO t (d) VALUES (-128::Int8), (-127::Int8), (-1::Int8), (0::Int8), (1::Int8), (126::Int8), (127::Int8);

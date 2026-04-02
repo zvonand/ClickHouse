@@ -2105,20 +2105,22 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
         else if (range <= (1ULL << 17))
         {
             if ((1ULL << 17) > key_count * MAX_RANGE_SPARSITY_FACTOR)
-                return;
+                return false;
             convert_to_fixed_hash_map.template operator()<17>(range17, type17);
         }
         else
         {
             if ((1ULL << 18) > key_count * MAX_RANGE_SPARSITY_FACTOR)
-                return;
+                return false;
             convert_to_fixed_hash_map.template operator()<18>(range18, type18);
         }
         source.reset();
+        return true;
     };
 
+    bool result = false;
     if constexpr (std::is_same_v<Key, UInt32>)
-        dispatch_conversion(
+        result = dispatch_conversion(
             maps.range8_key32,
             Type::range8_key32,
             maps.range16_key32,
@@ -2129,7 +2131,7 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
             Type::range18_key32,
             maps.key32);
     else
-        dispatch_conversion(
+        result = dispatch_conversion(
             maps.range8_key64,
             Type::range8_key64,
             maps.range16_key64,
@@ -2140,12 +2142,8 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
             Type::range18_key64,
             maps.key64);
 
-    LOG_DEBUG(
-        log,
-        "{}Converted join hash map to fixed hash map (range: {}, keys: {})",
-        instance_log_id,
-        range,
-        key_count);
+    if (result)
+        LOG_DEBUG(log, "{}Converted join hash map to fixed hash map (range: {}, keys: {})", instance_log_id, range, key_count);
 }
 
 void HashJoin::tryConvertToFixedHashMap()

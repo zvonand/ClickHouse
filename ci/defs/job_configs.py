@@ -197,6 +197,9 @@ class JobConfigs:
         digest_config=fast_test_digest_config,
         result_name_for_cidb="Darwin tests",
         allow_merge_on_failure=True,
+        post_hooks=[
+            "python3 ./ci/jobs/scripts/job_hooks/clickhouse_test_cleanup_hook.py"
+        ],
     ).parametrize(
         Job.ParamSet(
             parameter=BuildTypes.AMD_DARWIN,

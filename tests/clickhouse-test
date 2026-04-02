@@ -2759,7 +2759,20 @@ class TestCase:
             preexec_fn = setup_cgroup_with_memory_limit_cb(cgroup_name, self.memory_limit)
 
         # pylint:disable-next=consider-using-with; TODO: fix
-        proc = Popen(command, shell=True, env=tests_env, start_new_session=True, preexec_fn=preexec_fn)
+        # Use os.setpgrp instead of start_new_session=True so that the test
+        # subprocess gets its own process group (enabling os.killpg for
+        # per-test cleanup) but stays inside the session created by setsid()
+        # at startup.  This lets the caller kill all surviving descendants by
+        # session ID after clickhouse-test itself exits, even if processes were
+        # re-parented to init/launchd (which preserves session membership).
+        orig_preexec_fn = preexec_fn
+
+        def _preexec_with_setpgrp():
+            os.setpgrp()
+            if orig_preexec_fn is not None:
+                orig_preexec_fn()
+
+        proc = Popen(command, shell=True, env=tests_env, preexec_fn=_preexec_with_setpgrp)
 
         try:
             proc.wait(args.timeout)
@@ -5469,10 +5482,13 @@ def signal_handler(signal, frame):
 
 
 if __name__ == "__main__":
-    # Move to a new process group and kill it at exit so that we don't have any
-    # infinite tests processes left
-    # (new process group is required to avoid killing some parent processes)
-    os.setpgid(0, 0)
+    # Become a new session leader so that all child processes (including .sh tests
+    # started with preexec_fn=os.setpgrp) inherit this session.  The session ID
+    # equals our PID, which lets the caller kill every surviving descendant by
+    # session after we exit – even if they were re-parented to init/launchd.
+    # (setsid also creates a new process group, so we are still isolated from the
+    # parent process group and cannot accidentally kill our caller.)
+    os.setsid()
 
     check_name = os.environ.get("CHECK_NAME")
     if check_name and "aarch" in check_name:

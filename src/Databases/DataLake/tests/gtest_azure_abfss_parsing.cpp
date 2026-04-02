@@ -144,6 +144,17 @@ TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationNonPolarisContaine
     EXPECT_EQ(metadata.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
 }
 
+TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationPolarisStyle)
+{
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation("abfss://mycontainer@mystorageaccount.dfs.core.windows.net/mycontainer/actual/path");
+
+    const std::string metadata_file =
+        "abfss://mycontainer@mystorageaccount.dfs.core.windows.net/mycontainer/actual/path/metadata/v1.metadata.json";
+    EXPECT_EQ(metadata.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
+}
+
 TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationPolarisStyle)
 {
     const std::string location = "abfss://mycontainer@mystorageaccount.dfs.core.windows.net/mycontainer/actual/path";

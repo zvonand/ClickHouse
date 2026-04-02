@@ -112,4 +112,59 @@ TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationMissingPath)
     }, DB::Exception);
 }
 
+TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationNonPolarisContainerInPath)
+{
+    const std::string location = "abfss://c@account.dfs.core.windows.net/c/table";
+
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation(location);
+
+    EXPECT_EQ(metadata.getLocation(), location);
+}
+
+TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationNonPolarisContainerInPathWithEndpoint)
+{
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation("abfss://c@account.dfs.core.windows.net/c/table");
+    metadata.setEndpoint("https://account.dfs.core.windows.net");
+
+    EXPECT_EQ(metadata.getLocation(), "https://account.dfs.core.windows.net/c/c/table/");
+}
+
+TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationNonPolarisContainerInPath)
+{
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation("abfss://c@account.dfs.core.windows.net/c/table");
+
+    const std::string metadata_file =
+        "abfss://c@account.dfs.core.windows.net/c/table/metadata/v1.metadata.json";
+    EXPECT_EQ(metadata.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
+}
+
+TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationPolarisStyle)
+{
+    const std::string location = "abfss://mycontainer@mystorageaccount.dfs.core.windows.net/mycontainer/actual/path";
+
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation(location);
+
+    EXPECT_EQ(metadata.getLocation(), location);
+}
+
+TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationPolarisStyleWithEndpoint)
+{
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation("abfss://mycontainer@mystorageaccount.dfs.core.windows.net/mycontainer/actual/path");
+    metadata.setEndpoint("https://mystorageaccount.dfs.core.windows.net");
+
+    EXPECT_EQ(
+        metadata.getLocation(),
+        "https://mystorageaccount.dfs.core.windows.net/mycontainer/actual/path/");
+}
+
 }

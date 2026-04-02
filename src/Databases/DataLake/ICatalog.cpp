@@ -122,10 +122,13 @@ void TableMetadata::setLocation(const std::string & location_)
         /// Some catalogs (e.g., Apache Polaris) follow the ADLS Gen2 filesystem convention
         /// of including the container name as the first segment of the path in abfss:// locations,
         /// e.g. abfss://container@account.dfs.core.windows.net/container/actual/path.
-        /// Since the container is already captured in `bucket`, strip the redundant prefix
-        /// from `path` to avoid doubling the container name when constructing storage URLs.
+        /// We record this as a flag rather than stripping `path` here, so that `getLocation`
+        /// remains a round-trip of `setLocation` for legitimate inputs such as
+        /// abfss://c@account.dfs.core.windows.net/c/table (where "/c/" is a real path segment).
+        /// The duplicate prefix is stripped only where it matters: URL construction
+        /// (`constructLocation`) and metadata-location prefix comparison (`getMetadataLocation`).
         if (path.starts_with(bucket + "/"))
-            path = path.substr(bucket.size() + 1);
+            abfss_has_container_path_prefix = true;
 
         LOG_TEST(getLogger("TableMetadata"),
                  "Parsed Azure location - container: {}, account: {}, path: {}",
@@ -175,10 +178,15 @@ std::string TableMetadata::constructLocation(const std::string & endpoint_) cons
     if (!azure_account_with_suffix.empty())
     {
         /// Azure storage - endpoint should be https://<account>.dfs.core.windows.net
-        /// Construct the full URL with container and path
+        /// Construct the full URL with container and path.
+        /// When the path carries a Polaris-style redundant container prefix (e.g. "c/actual/path"
+        /// for container "c"), strip it before prepending the container, so we don't double it.
+        std::string_view effective_path = path;
+        if (abfss_has_container_path_prefix && effective_path.starts_with(bucket + "/"))
+            effective_path = effective_path.substr(bucket.size() + 1);
         if (location.ends_with(bucket))
-            return std::filesystem::path(location) / path / "";
-        return std::filesystem::path(location) / bucket / path / "";
+            return std::filesystem::path(location) / effective_path / "";
+        return std::filesystem::path(location) / bucket / effective_path / "";
     }
 
     if (location.ends_with(bucket))
@@ -270,11 +278,13 @@ std::string TableMetadata::getMetadataLocation(const std::string & iceberg_metad
         else if (!endpoint.empty() && data_location.starts_with(endpoint))
             data_location = data_location.substr(endpoint.size());
 
-        /// For Azure ABFSS, some catalogs (e.g., Apache Polaris) include the container name
-        /// as the first segment of the path. The setLocation fix strips this from `path`, but
-        /// the metadata-location from the catalog may still include it. Strip it here too
-        /// so the prefix comparison below succeeds.
-        if (!azure_account_with_suffix.empty() && !bucket.empty())
+        /// For Azure ABFSS with Polaris-style paths the container name appears as the first
+        /// segment of both the table location and the metadata location returned by the catalog.
+        /// Normalize both sides by stripping that redundant prefix before doing the prefix
+        /// comparison below, so we correctly identify the relative metadata path.
+        /// This is guarded by `abfss_has_container_path_prefix` so that legitimate locations
+        /// like abfss://c@account/c/table (where "/c/" is a real directory) are left untouched.
+        if (abfss_has_container_path_prefix && !azure_account_with_suffix.empty() && !bucket.empty())
         {
             /// The host part after stripping the protocol is: bucket@azure_account_with_suffix
             std::string azure_host_prefix = bucket + "@" + azure_account_with_suffix + "/";

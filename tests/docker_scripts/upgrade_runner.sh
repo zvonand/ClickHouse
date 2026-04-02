@@ -319,6 +319,16 @@ cp /var/log/clickhouse-server/clickhouse-server.upgrade.log /test_output/clickho
 #       the wrapping `MergeTreeBackgroundExecutor` line also needs to be excluded.
 # `NO_SUCH_INTERSERVER_IO_ENDPOINT` is expected during upgrades because replicated tables try to fetch parts
 # from replicas that are being restarted and whose interserver endpoints are temporarily unavailable.
+# `Unknown tokenizer` can appear when a tokenizer is renamed between versions (e.g. unicode_word -> unicodeWord).
+# `DNS_ERROR` is a transient infrastructure issue (Azure/S3 DNS resolution failure).
+# `SystemLogQueue` overflow happens under heavy stress test load and is not a compatibility bug.
+# `TraceCollector` bad file descriptor errors are transient and unrelated to upgrade compatibility.
+# `This engine is deprecated and is not supported in transactions` appears for Ordinary engine tables from old versions.
+# `Prevent converting Nullable type to non-Nullable type inside mutation` is from stricter validation in new versions
+#       applied to old mutations that were created before the validation existed.
+# `failed to parse response body` is a transient blob storage (Azure/S3) error.
+# `stale file format version` appears when statistics file format changes between versions.
+# `rdk:FAIL` is librdkafka connection errors when Kafka broker is unavailable during upgrade.
 echo "Check for Error messages in server log:"
 rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
            -e "Code: 236. DB::Exception: Cancelled mutating parts" \
@@ -379,6 +389,15 @@ rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
            -e "Cannot parse projection test_projection" \
            -e "Key expressions cannot contain subqueries" \
            -e "Expression must be deterministic but it contains non-deterministic part" \
+           -e "Unknown tokenizer" \
+           -e "DNS_ERROR" \
+           -e "SystemLogQueue" \
+           -e "TraceCollector" \
+           -e "This engine is deprecated and is not supported in transactions" \
+           -e "Prevent converting Nullable type to non-Nullable type inside mutation" \
+           -e "failed to parse response body" \
+           -e "stale file format version" \
+           -e "rdk:FAIL" \
     /test_output/clickhouse-server.upgrade.log \
     | grep -av -e "_repl_01111_.*Mapping for table with UUID" \
     | grep -Fa "<Error>" > /test_output/upgrade_error_messages.txt || true

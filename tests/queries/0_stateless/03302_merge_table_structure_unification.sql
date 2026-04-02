@@ -48,5 +48,19 @@ SELECT * FROM merge('^test_') ORDER BY a;
 
 DROP TABLE test_merge;
 
+-- With explicit columns, AS merge() should use them even when inference is limited
+CREATE TABLE test_merge
+(
+    a Int32,
+    b String,
+    c Array(Nullable(String)),
+    d DateTime('UTC') DEFAULT now()
+) AS merge(currentDatabase(), '^test_[ab]$');
+
+SELECT '--- explicit columns with AS merge()';
+SELECT * FROM test_merge ORDER BY a;
+
+DROP TABLE test_merge;
+
 DROP TABLE test_a;
 DROP TABLE test_b;

@@ -2,11 +2,13 @@
 #include <atomic>
 #include <mutex>
 #include <Interpreters/MergeTreeTransaction/VersionMetadata.h>
-#include <Storages/MergeTree/IMergeTreeDataPart.h>
 #include <base/types.h>
 
 namespace DB
 {
+
+class MergeTreeData;
+class IDataPartStorage;
 /// Subclass of `VersionMetadata` that persists transactional metadata to disk alongside the data part.
 /// Stores metadata in `txn_version.txt` file within the data part's storage directory.
 /// Provides optimizations like deferred persistence for non-transactional parts and atomic file operations.
@@ -66,10 +68,11 @@ protected:
     /// Thread-safe: acquires `persisted_info_mutex` before calling `storeInfoUnlocked`.
     std::expected<Int32, StaleVersion> storeInfo(const VersionInfo & new_info) override;
 
-    /// Reads transactional metadata directly from `txn_version.txt` file on disk.
-    /// If `deferred_persist_info` is set, flushes it to disk first before reading.
-    /// Thread-safe: acquires `persisted_info_mutex` before calling `readMetadataUnlock`.
-    /// @throws Exception if metadata file does not exist
+    /// Reads transactional metadata for this part.
+    /// If `deferred_persist_info` is set (metadata not yet written to disk), returns it directly.
+    /// Otherwise reads from `txn_version.txt` on disk.
+    /// Thread-safe: acquires `persisted_info_mutex` before calling `readMetadataUnlocked`.
+    /// @throws Exception if neither deferred metadata nor the metadata file exists
     VersionInfo readMetadata() override;
 
 private:

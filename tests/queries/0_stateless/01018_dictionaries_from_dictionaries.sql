@@ -96,8 +96,8 @@ LAYOUT(HASHED());
 
 SELECT count(*) FROM {CLICKHOUSE_DATABASE_1:Identifier}.dict4; -- {serverError UNKNOWN_TABLE}
 
-SELECT name from system.tables WHERE database = {CLICKHOUSE_DATABASE_1:String} ORDER BY name;
-SELECT name from system.dictionaries WHERE database = {CLICKHOUSE_DATABASE_1:String} ORDER BY name;
+SELECT name from system.tables WHERE database = currentDatabase() ORDER BY name;
+SELECT name from system.dictionaries WHERE database = currentDatabase() ORDER BY name;
 
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 

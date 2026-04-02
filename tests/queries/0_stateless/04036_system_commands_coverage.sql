@@ -1,3 +1,4 @@
+-- Tags: no-parallel
 -- Tests for SYSTEM commands that lacked coverage in InterpreterSystemQuery.cpp.
 -- Covers: CLEAR_PRIMARY_INDEX_CACHE, CLEAR_PAGE_CACHE, START/STOP_THREAD_FUZZER,
 -- RELOAD_FUNCTIONS, RELOAD_EMBEDDED_DICTIONARIES.

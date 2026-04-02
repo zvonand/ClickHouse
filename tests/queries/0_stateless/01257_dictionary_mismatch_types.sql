@@ -58,7 +58,7 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.table1_dict
  col20 String
 )
 PRIMARY KEY col1,col2,col3,col4,col5
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() DB test_dict_db TABLE table1 USER 'default'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() DB currentDatabase() TABLE table1 USER 'default'))
 LIFETIME(MIN 0 MAX 0) LAYOUT(COMPLEX_KEY_HASHED());
 
 SELECT

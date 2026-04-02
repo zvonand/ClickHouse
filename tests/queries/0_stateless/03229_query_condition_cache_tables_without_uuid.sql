@@ -21,7 +21,7 @@ SETTINGS index_granularity = 8;
 INSERT INTO tab SELECT number, number * 8 FROM numbers(100);
 
 -- Prints 00000000-0000-0000-0000-000000000000.
-SELECT uuid FROM system.parts WHERE database = {CLICKHOUSE_DATABASE_1:String};
+SELECT uuid FROM system.parts WHERE database = currentDatabase();
 
 SET use_query_condition_cache = 1;
 

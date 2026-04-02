@@ -2790,7 +2790,12 @@ class TestCase:
         db_suffix = "_" + database.split("_", 1)[1] if "_" in database else "_" + database
         with open(self.case_file, "r", errors="replace") as _f:
             _test_content = _f.read()
-        _extra_dbs = find_extra_databases(_test_content)
+        # Skip mangling for tests tagged no-parallel — they never run
+        # concurrently with themselves so name collisions cannot occur.
+        if "no-parallel" in self.tags:
+            _extra_dbs = []
+        else:
+            _extra_dbs = find_extra_databases(_test_content)
         # Exclude the primary test database (handled elsewhere).
         _extra_dbs = [n for n in _extra_dbs if n != database]
         if _extra_dbs:

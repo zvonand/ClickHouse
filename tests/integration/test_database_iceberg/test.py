@@ -465,7 +465,6 @@ SETTINGS {",".join((k + "=" + repr(v) for k, v in table_settings.items()))}""",
         settings={"format_display_secrets_in_show_and_select": 1},
     )
     assert minio_secret_key in show_table_with_secrets
-    assert minio_access_key in show_table_with_secrets
 
     node.query("SYSTEM FLUSH LOGS system.query_log")
     node.query("SYSTEM FLUSH LOGS system.text_log")

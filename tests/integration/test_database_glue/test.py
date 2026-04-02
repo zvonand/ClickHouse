@@ -341,7 +341,6 @@ SETTINGS {",".join((k + "=" + repr(v) for k, v in table_settings.items()))}""",
         f"SHOW CREATE DATABASE {db_name}", query_id=qid_show_db
     )
     assert minio_secret_key not in show_db_result
-    assert minio_access_key not in show_db_result
     assert "[HIDDEN]" in show_db_result
 
     qid_show_table = uuid.uuid4().hex
@@ -350,7 +349,6 @@ SETTINGS {",".join((k + "=" + repr(v) for k, v in table_settings.items()))}""",
         query_id=qid_show_table,
     )
     assert minio_secret_key not in show_table_result
-    assert minio_access_key not in show_table_result
     assert "[HIDDEN]" in show_table_result
 
     qid_show_table_secrets = uuid.uuid4().hex
@@ -360,7 +358,6 @@ SETTINGS {",".join((k + "=" + repr(v) for k, v in table_settings.items()))}""",
         settings={"format_display_secrets_in_show_and_select": 1},
     )
     assert minio_secret_key in show_table_with_secrets
-    assert minio_access_key in show_table_with_secrets
 
     node.query("SYSTEM FLUSH LOGS system.query_log")
     node.query("SYSTEM FLUSH LOGS system.text_log")

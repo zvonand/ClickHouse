@@ -483,12 +483,14 @@ std::vector<String> CallsData::collectPollDescriptorsForQueryId(const String & q
     return {it->second.begin(), it->second.end()};
 }
 
-void CallsData::waitNextExpirationTime() const
+/// TSA_NO_THREAD_SAFETY_ANALYSIS because TSA doesn't support std::unique_lock used with condition_variable.
+void CallsData::waitNextExpirationTime() const TSA_NO_THREAD_SAFETY_ANALYSIS
 {
     auto current_time = now();
     std::unique_lock lock{mutex};
     auto expiration_time = next_expiration_time;
-    auto is_ready = [&]
+    /// TSA_NO_THREAD_SAFETY_ANALYSIS because the mutex is held by the enclosing unique_lock, but TSA can't see that inside a lambda.
+    auto is_ready = [&]() TSA_NO_THREAD_SAFETY_ANALYSIS
     {
         if (stop_waiting_next_expiration_time)
             return true;

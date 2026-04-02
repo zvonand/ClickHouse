@@ -173,7 +173,8 @@ public:
     std::vector<String> collectPollDescriptorsForQueryId(const String & query_id) const;
 
     /// Waits until maybe it's time to cancel expired tickets or poll descriptors.
-    void waitNextExpirationTime() const;
+    /// TSA_NO_THREAD_SAFETY_ANALYSIS because TSA doesn't support std::unique_lock used with condition_variable.
+    void waitNextExpirationTime() const TSA_NO_THREAD_SAFETY_ANALYSIS;
 
     void stopWaitingNextExpirationTime();
 

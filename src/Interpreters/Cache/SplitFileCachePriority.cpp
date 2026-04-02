@@ -183,11 +183,11 @@ bool SplitFileCachePriority::canFit( /// NOLINT
     const CacheStateGuard::Lock & lock,
     IteratorPtr reservee,
     const OriginInfo & origin_info,
-    bool best_effort) const
+    bool is_initial_load) const
 {
     const auto type = getPriorityType(origin_info.segment_type);
     return priorities_holder.at(type)->canFit(
-        size, elements, lock, reservee, origin_info, best_effort);
+        size, elements, lock, reservee, origin_info, is_initial_load);
 }
 
 EvictionInfoPtr SplitFileCachePriority::collectEvictionInfo(

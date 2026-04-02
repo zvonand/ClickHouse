@@ -52,7 +52,7 @@ public:
         const CacheStateGuard::Lock &,
         IteratorPtr reservee = nullptr,
         const OriginInfo & origin_info = {},
-        bool best_effort = false) const override;
+        bool is_initial_load = false) const override;
 
     IteratorPtr add( /// NOLINT
         KeyMetadataPtr key_metadata,

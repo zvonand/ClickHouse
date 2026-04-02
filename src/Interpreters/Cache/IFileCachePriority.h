@@ -223,7 +223,7 @@ public:
         const CacheStateGuard::Lock &,
         IteratorPtr reservee = nullptr,
         const OriginInfo & origin_info = {},
-        bool best_effort = false) const = 0;
+        bool is_initial_load = false) const = 0;
 
     virtual bool tryIncreasePriority(
         Iterator & iterator,

@@ -70,7 +70,7 @@ public:
         const CacheStateGuard::Lock &,
         IteratorPtr reservee = nullptr,
         const OriginInfo & origin_info = {},
-        bool best_effort = false) const override;
+        bool is_initial_load = false) const override;
 
     /// Create a queue entry for given key and offset.
     /// Write priority lock is required.

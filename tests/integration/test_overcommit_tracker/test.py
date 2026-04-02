@@ -21,7 +21,7 @@ def start_cluster():
         cluster.shutdown()
 
 
-# Use larger queries (40 MB each) and a lower user memory limit (300 MB) so that
+# Use larger queries (128 MB each) and a lower user memory limit (300 MB) so that
 # memory pressure is reached even when only a handful of queries overlap in time.
 # This prevents flakiness on slow builds (coverage, ARM) where fewer queries run
 # concurrently and the old 2 GB limit was rarely hit.

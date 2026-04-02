@@ -4,15 +4,22 @@
 #include <Common/tests/gtest_global_register.h>
 
 #include <Columns/IColumn.h>
+#include <Columns/ColumnNullable.h>
 #include <DataTypes/DataTypesNumber.h>
+#include <DataTypes/DataTypeNullable.h>
+#include <IO/ReadBufferFromString.h>
+#include <IO/WriteBufferFromString.h>
 #include <Interpreters/convertFieldToType.h>
 #include <Storages/MergeTree/RPNBuilder.h>
 #include <Storages/Statistics/Statistics.h>
 #include <Storages/Statistics/StatisticsMinMax.h>
+#include <Storages/Statistics/StatisticsNullCount.h>
 #include <Storages/StatisticsDescription.h>
 #include <Storages/ColumnsDescription.h>
 #include <Storages/Statistics/StatisticsTDigest.h>
 #include <Storages/Statistics/ConditionSelectivityEstimator.h>
+#include <Storages/Statistics/StatisticsPartPruner.h>
+#include <Core/Range.h>
 #include <Parsers/parseQuery.h>
 #include <Parsers/ExpressionListParsers.h>
 
@@ -184,4 +191,544 @@ TEST(Statistics, MinMaxEstimateLess)
     /// estimateLess returns nullopt when row_count = 0
     StatisticsMinMax empty(Field{}, Field{}, 0);
     EXPECT_FALSE(empty.estimateLess(Field(UInt64(42))).has_value());
+}
+
+namespace
+{
+/// Helper to create ColumnStatistics with specified types for merge testing
+ColumnStatisticsPtr createTestStats(
+    const std::vector<StatisticsType> & types,
+    const DataTypePtr & data_type = std::make_shared<DataTypeInt32>())
+{
+    ColumnStatisticsDescription desc;
+    desc.data_type = data_type;
+    for (auto type : types)
+        desc.types_to_desc.emplace(type, SingleStatisticsDescription(type, nullptr, false));
+
+    return MergeTreeStatisticsFactory::instance().get(desc);
+}
+}
+
+TEST(Statistics, MergeDropOnOneSidedMinMax)
+{
+    auto data_type = std::make_shared<DataTypeInt32>();
+
+    /// Build column data for testing
+    MutableColumnPtr col = data_type->createColumn();
+    for (Int32 i = 0; i < 100; ++i)
+        col->insert(i);
+
+    /// Case 1: Both sides have MinMax -> should merge normally
+    {
+        auto stats_a = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
+        auto stats_b = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
+        stats_a->build(col->cloneResized(col->size()));
+        stats_b->build(col->cloneResized(col->size()));
+
+        stats_a->merge(stats_b);
+
+        const auto & result_stats = stats_a->getStats();
+        EXPECT_TRUE(result_stats.contains(StatisticsType::MinMax)) << "Both sides have MinMax, should keep";
+        EXPECT_TRUE(result_stats.contains(StatisticsType::TDigest)) << "Both sides have TDigest, should keep";
+        EXPECT_EQ(stats_a->getNumRows(), 200u);
+    }
+
+    /// Case 2: this has MinMax, other doesn't -> should drop MinMax
+    {
+        auto stats_a = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
+        auto stats_b = createTestStats({StatisticsType::TDigest}, data_type);
+        stats_a->build(col->cloneResized(col->size()));
+        stats_b->build(col->cloneResized(col->size()));
+
+        stats_a->merge(stats_b);
+
+        const auto & result_stats = stats_a->getStats();
+        EXPECT_FALSE(result_stats.contains(StatisticsType::MinMax)) << "this has MinMax but other doesn't, should drop";
+        EXPECT_TRUE(result_stats.contains(StatisticsType::TDigest)) << "Both sides have TDigest, should keep";
+    }
+
+    /// Case 3: this doesn't have MinMax, other does -> should NOT inherit MinMax
+    {
+        auto stats_a = createTestStats({StatisticsType::TDigest}, data_type);
+        auto stats_b = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
+        stats_a->build(col->cloneResized(col->size()));
+        stats_b->build(col->cloneResized(col->size()));
+
+        stats_a->merge(stats_b);
+
+        const auto & result_stats = stats_a->getStats();
+        EXPECT_FALSE(result_stats.contains(StatisticsType::MinMax)) << "this lacks MinMax, should NOT inherit from other";
+        EXPECT_TRUE(result_stats.contains(StatisticsType::TDigest)) << "Both sides have TDigest, should keep";
+    }
+
+    /// Case 4: TDigest one-sided inheritance should work (dropOnOneSidedMerge = false)
+    {
+        auto stats_a = createTestStats({StatisticsType::MinMax}, data_type);
+        auto stats_b = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
+        stats_a->build(col->cloneResized(col->size()));
+        stats_b->build(col->cloneResized(col->size()));
+
+        stats_a->merge(stats_b);
+
+        const auto & result_stats = stats_a->getStats();
+        EXPECT_TRUE(result_stats.contains(StatisticsType::MinMax)) << "Both sides have MinMax, should keep";
+        EXPECT_TRUE(result_stats.contains(StatisticsType::TDigest)) << "TDigest allows one-sided inheritance";
+    }
+}
+
+TEST(Statistics, MergeDropOnOneSidedNullCount)
+{
+    auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
+
+    /// Build nullable column data
+    MutableColumnPtr col = data_type->createColumn();
+    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
+    for (Int32 i = 0; i < 100; ++i)
+    {
+        if (i % 10 == 0)
+            nullable_col->insertDefault(); /// NULL
+        else
+            nullable_col->insert(i);
+    }
+
+    /// Case 1: Both sides have NullCount -> should merge normally
+    {
+        auto stats_a = createTestStats({StatisticsType::NullCount}, data_type);
+        auto stats_b = createTestStats({StatisticsType::NullCount}, data_type);
+        stats_a->build(col->cloneResized(col->size()));
+        stats_b->build(col->cloneResized(col->size()));
+
+        stats_a->merge(stats_b);
+
+        const auto & result_stats = stats_a->getStats();
+        EXPECT_TRUE(result_stats.contains(StatisticsType::NullCount)) << "Both sides have NullCount, should keep";
+    }
+
+    /// Case 2: this has NullCount, other doesn't -> should drop NullCount
+    {
+        auto stats_a = createTestStats({StatisticsType::NullCount}, data_type);
+        auto stats_b = createTestStats({}, data_type);
+        stats_a->build(col->cloneResized(col->size()));
+
+        stats_a->merge(stats_b);
+
+        const auto & result_stats = stats_a->getStats();
+        EXPECT_FALSE(result_stats.contains(StatisticsType::NullCount)) << "this has NullCount but other doesn't, should drop";
+    }
+
+    /// Case 3: this doesn't have NullCount, other does -> should NOT inherit NullCount
+    {
+        auto stats_a = createTestStats({}, data_type);
+        auto stats_b = createTestStats({StatisticsType::NullCount}, data_type);
+        stats_b->build(col->cloneResized(col->size()));
+
+        stats_a->merge(stats_b);
+
+        const auto & result_stats = stats_a->getStats();
+        EXPECT_FALSE(result_stats.contains(StatisticsType::NullCount)) << "this lacks NullCount, should NOT inherit from other";
+    }
+}
+
+TEST(Statistics, NullPredicateContradictionAndTautology)
+{
+    /// Test that x IS NULL AND x IS NOT NULL estimates to 0 (contradiction)
+    /// and x IS NULL OR x IS NOT NULL estimates to 1 (tautology).
+
+    auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
+
+    /// Column x: 50% NULL, 50% non-NULL values 0..49
+    MutableColumnPtr x = data_type->createColumn();
+    auto * nullable_col = assert_cast<ColumnNullable *>(x.get());
+    for (Int32 i = 0; i < 100; ++i)
+    {
+        if (i % 2 == 0)
+            nullable_col->insertDefault(); /// NULL
+        else
+            nullable_col->insert(i);
+    }
+
+    ColumnStatisticsDescription desc;
+    desc.data_type = data_type;
+    desc.types_to_desc.emplace(StatisticsType::NullCount, SingleStatisticsDescription(StatisticsType::NullCount, nullptr, false));
+    ColumnDescription column_desc;
+    column_desc.name = "x";
+    column_desc.type = data_type;
+    column_desc.statistics = desc;
+
+    ColumnStatisticsPtr stats_x = MergeTreeStatisticsFactory::instance().get(column_desc);
+    stats_x->build(std::move(x));
+
+    ConditionSelectivityEstimatorBuilder estimator_builder(getContext().context);
+    estimator_builder.addStatistics("x", stats_x);
+    estimator_builder.incrementRowCount(100);
+
+    auto estimator = estimator_builder.getEstimator();
+
+    auto test_impl = [&](const String & expression, Float64 expected_selectivity, Float64 eps)
+    {
+        ParserExpressionWithOptionalAlias exp_parser(false);
+        ContextPtr context = getContext().context;
+        RPNBuilderTreeContext tree_context(context, Block{{ DataTypeUInt8().createColumnConstWithDefaultValue(1), std::make_shared<DataTypeUInt8>(), "_dummy" }}, {});
+        ASTPtr ast = parseQuery(exp_parser, expression, 10000, 10000, 10000);
+        RPNBuilderTreeNode node(ast.get(), tree_context);
+        auto estimate_result = estimator->estimateRelationProfile(nullptr, node);
+        Float64 actual_selectivity = static_cast<Float64>(estimate_result.rows) / 100.0;
+        EXPECT_NEAR(actual_selectivity, expected_selectivity, eps)
+            << "Expression: " << expression << " expected_selectivity=" << expected_selectivity
+            << " actual_selectivity=" << actual_selectivity << " rows=" << estimate_result.rows;
+    };
+
+    /// x IS NULL AND x IS NOT NULL → contradiction, selectivity must be 0
+    test_impl("x IS NULL AND x IS NOT NULL", 0.0, 1e-9);
+
+    /// x IS NOT NULL AND x IS NULL → same contradiction (different order)
+    test_impl("x IS NOT NULL AND x IS NULL", 0.0, 1e-9);
+
+    /// x IS NULL OR x IS NOT NULL → tautology, selectivity must be 1
+    test_impl("x IS NULL OR x IS NOT NULL", 1.0, 1e-9);
+
+    /// x IS NOT NULL OR x IS NULL → same tautology (different order)
+    test_impl("x IS NOT NULL OR x IS NULL", 1.0, 1e-9);
+
+    /// Equivalent forms via NOT:
+    /// NOT (x IS NULL) is x IS NOT NULL, so NOT (x IS NULL) AND x IS NULL → contradiction
+    test_impl("NOT x IS NULL AND x IS NULL", 0.0, 1e-9);
+
+    /// NOT (x IS NOT NULL) is x IS NULL, so NOT (x IS NOT NULL) OR x IS NOT NULL → tautology
+    test_impl("NOT (x IS NOT NULL) OR x IS NOT NULL", 1.0, 1e-9);
+}
+
+TEST(Statistics, CreateRangeFromEstimate)
+{
+    auto data_type = std::make_shared<DataTypeInt64>();
+
+    /// Normal case: min < max, non-nullable → precise [min, max] range
+    {
+        Estimate est;
+        est.rows_count = 100;
+        est.estimated_min = Int64(10);
+        est.estimated_max = Int64(90);
+        auto range = createRangeFromEstimate(est, data_type, false);
+        ASSERT_TRUE(range.has_value());
+        EXPECT_EQ((*range).left, Field(Int64(10)));
+        EXPECT_EQ((*range).right, Field(Int64(90)));
+        EXPECT_TRUE((*range).left_included);
+        EXPECT_TRUE((*range).right_included);
+    }
+
+    /// Normal case: min == max, non-nullable → singleton range
+    {
+        Estimate est;
+        est.rows_count = 10;
+        est.estimated_min = Int64(42);
+        est.estimated_max = Int64(42);
+        auto range = createRangeFromEstimate(est, data_type, false);
+        ASSERT_TRUE(range.has_value());
+        EXPECT_EQ((*range).left, Field(Int64(42)));
+        EXPECT_EQ((*range).right, Field(Int64(42)));
+    }
+
+    /// Corrupted stats: min > max → should return nullopt (safe fallback)
+    {
+        Estimate est;
+        est.rows_count = 100;
+        est.estimated_min = Int64(90);
+        est.estimated_max = Int64(10);
+        auto range = createRangeFromEstimate(est, data_type, false);
+        EXPECT_FALSE(range.has_value()) << "Corrupted min > max should return nullopt";
+    }
+
+    /// Corrupted stats: min > max, nullable column → should return nullopt
+    {
+        Estimate est;
+        est.rows_count = 100;
+        est.estimated_min = Int64(90);
+        est.estimated_max = Int64(10);
+        est.estimated_null_count = UInt64(5);
+        auto range = createRangeFromEstimate(est, data_type, true);
+        EXPECT_FALSE(range.has_value()) << "Corrupted min > max with nullable should return nullopt";
+    }
+
+    /// Zero rows → nullopt
+    {
+        Estimate est;
+        est.rows_count = 0;
+        est.estimated_min = Int64(0);
+        est.estimated_max = Int64(100);
+        auto range = createRangeFromEstimate(est, data_type, false);
+        EXPECT_FALSE(range.has_value()) << "Zero rows should return nullopt";
+    }
+
+    /// No min/max → nullopt
+    {
+        Estimate est;
+        est.rows_count = 100;
+        auto range = createRangeFromEstimate(est, data_type, false);
+        EXPECT_FALSE(range.has_value()) << "Missing min/max should return nullopt";
+    }
+
+    /// Nullable with null_count == 0 → precise [min, max] (not [min, +inf])
+    {
+        Estimate est;
+        est.rows_count = 100;
+        est.estimated_min = Int64(10);
+        est.estimated_max = Int64(90);
+        est.estimated_null_count = UInt64(0);
+        auto range = createRangeFromEstimate(est, data_type, true);
+        ASSERT_TRUE(range.has_value());
+        EXPECT_EQ((*range).left, Field(Int64(10)));
+        EXPECT_EQ((*range).right, Field(Int64(90))) << "null_count==0 should give precise [min,max]";
+        EXPECT_TRUE((*range).left_included);
+        EXPECT_TRUE((*range).right_included);
+    }
+
+    /// Nullable with null_count > 0 → [min, +inf]
+    {
+        Estimate est;
+        est.rows_count = 100;
+        est.estimated_min = Int64(10);
+        est.estimated_max = Int64(90);
+        est.estimated_null_count = UInt64(5);
+        auto range = createRangeFromEstimate(est, data_type, true);
+        ASSERT_TRUE(range.has_value());
+        EXPECT_EQ((*range).left, Field(Int64(10)));
+        EXPECT_EQ((*range).right, POSITIVE_INFINITY);
+    }
+
+    /// NullCount-only, all NULL → [+inf, +inf]
+    {
+        Estimate est;
+        est.rows_count = 50;
+        est.estimated_null_count = UInt64(50);
+        auto range = createRangeFromEstimate(est, data_type, true);
+        ASSERT_TRUE(range.has_value());
+        EXPECT_EQ((*range).left, POSITIVE_INFINITY);
+        EXPECT_EQ((*range).right, POSITIVE_INFINITY);
+    }
+
+    /// NullCount-only, no NULLs → whole universe without null
+    {
+        Estimate est;
+        est.rows_count = 50;
+        est.estimated_null_count = UInt64(0);
+        auto range = createRangeFromEstimate(est, data_type, true);
+        ASSERT_TRUE(range.has_value());
+        EXPECT_TRUE((*range).left == NEGATIVE_INFINITY);
+        EXPECT_TRUE((*range).right == POSITIVE_INFINITY);
+        EXPECT_FALSE((*range).left_included);
+        EXPECT_FALSE((*range).right_included);
+    }
+
+    /// Corrupted: min > max using UInt64 fields
+    {
+        Estimate est;
+        est.rows_count = 100;
+        est.estimated_min = UInt64(200);
+        est.estimated_max = UInt64(50);
+        auto range = createRangeFromEstimate(est, data_type, false);
+        EXPECT_FALSE(range.has_value()) << "Corrupted UInt64 min > max should return nullopt";
+    }
+
+    /// Corrupted: min > max using Float64 fields
+    {
+        auto float_type = std::make_shared<DataTypeFloat64>();
+        Estimate est;
+        est.rows_count = 100;
+        est.estimated_min = Float64(99.5);
+        est.estimated_max = Float64(1.5);
+        auto range = createRangeFromEstimate(est, float_type, false);
+        EXPECT_FALSE(range.has_value()) << "Corrupted Float64 min > max should return nullopt";
+    }
+}
+
+TEST(Statistics, SerializeDeserializeRoundTrip)
+{
+    /// Test that ColumnStatistics survives a serialize-deserialize round-trip
+    /// with V3 format (per-type size prefix).
+
+    auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
+
+    MutableColumnPtr col = data_type->createColumn();
+    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
+    for (Int32 i = 0; i < 100; ++i)
+    {
+        if (i % 10 == 0)
+            nullable_col->insertDefault(); /// NULL
+        else
+            nullable_col->insert(i);
+    }
+
+    auto stats = createTestStats({StatisticsType::MinMax, StatisticsType::NullCount, StatisticsType::TDigest}, data_type);
+    stats->build(std::move(col));
+
+    UInt64 original_rows = stats->getNumRows();
+    auto original_null_count = stats->getNullCount();
+
+    /// Serialize
+    String serialized;
+    WriteBufferFromString write_buf(serialized);
+    stats->serialize(write_buf);
+    write_buf.finalize();
+
+    /// Deserialize
+    ReadBufferFromString read_buf(serialized);
+    auto deserialized = ColumnStatistics::deserialize(read_buf, data_type);
+
+    /// Verify row count
+    EXPECT_EQ(deserialized->getNumRows(), original_rows);
+
+    /// Verify NullCount
+    EXPECT_EQ(deserialized->getNullCount(), original_null_count);
+
+    /// Verify all stat types present
+    const auto & deserialized_stats = deserialized->getStats();
+    EXPECT_TRUE(deserialized_stats.contains(StatisticsType::MinMax));
+    EXPECT_TRUE(deserialized_stats.contains(StatisticsType::NullCount));
+    EXPECT_TRUE(deserialized_stats.contains(StatisticsType::TDigest));
+
+    /// Verify buffer fully consumed
+    EXPECT_TRUE(read_buf.eof());
+}
+
+TEST(Statistics, DeserializeV3SkipsTrailingBytes)
+{
+    /// Test that V3 deserialization correctly skips trailing bytes when a known
+    /// stat type's deserialize consumes fewer bytes than stat_size.
+    /// This simulates forward compatibility: a newer version may write extra
+    /// bytes after a known stat, and an older version should skip them.
+
+    auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
+
+    /// Build a stats object and serialize it
+    MutableColumnPtr col = data_type->createColumn();
+    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
+    for (Int32 i = 0; i < 50; ++i)
+    {
+        if (i % 5 == 0)
+            nullable_col->insertDefault();
+        else
+            nullable_col->insert(i);
+    }
+
+    auto stats = createTestStats({StatisticsType::NullCount}, data_type);
+    stats->build(std::move(col));
+
+    String serialized;
+    WriteBufferFromString write_buf(serialized);
+    stats->serialize(write_buf);
+    write_buf.finalize();
+
+    /// Now manually inject trailing bytes after the NullCount stat payload.
+    /// V3 format: version(2) + mask(8) + rows(8) + [stat_size(8) + stat_data(stat_size)]*
+    /// We need to find where the NullCount stat_data ends and insert extra bytes,
+    /// adjusting stat_size accordingly.
+
+    /// Parse the serialized V3 format to locate stat_size and stat_data boundaries.
+    /// Layout:
+    ///   offset 0: UInt16 version
+    ///   offset 2: UInt64 stat_types_mask
+    ///   offset 10: UInt64 rows
+    ///   offset 18: UInt64 stat_size (for the first stat)
+    ///   offset 26: stat_data (stat_size bytes)
+    ///   ...next stat or end
+
+    ReadBufferFromString orig_buf(serialized);
+
+    UInt16 version_raw;
+    readIntBinary(version_raw, orig_buf);
+    ASSERT_EQ(version_raw, static_cast<UInt16>(StatisticsFileVersion::V3));
+
+    UInt64 stat_types_mask = 0;
+    readIntBinary(stat_types_mask, orig_buf);
+
+    UInt64 rows_value = 0;
+    readIntBinary(rows_value, orig_buf);
+
+    /// Read the stat_size for the first (and only) stat
+    UInt64 stat_size = 0;
+    readIntBinary(stat_size, orig_buf);
+
+    /// Record the start of stat_data
+    const char * stat_data_start = orig_buf.position();
+    String stat_data(stat_data_start, stat_size);
+
+    /// Now build a new serialized buffer with extra trailing bytes
+    UInt64 new_stat_size = stat_size + 7; /// 7 extra trailing bytes
+    String modified;
+    WriteBufferFromString mod_buf(modified);
+    writeIntBinary(version_raw, mod_buf);
+    writeIntBinary(stat_types_mask, mod_buf);
+    writeIntBinary(rows_value, mod_buf);
+    writeIntBinary(new_stat_size, mod_buf);
+    mod_buf.write(stat_data.data(), stat_size);
+    /// Write 7 trailing bytes (simulating forward-compatible extra data)
+    const char trailing[7] = {static_cast<char>(0xAA), static_cast<char>(0xBB), static_cast<char>(0xCC), static_cast<char>(0xDD), static_cast<char>(0xEE), static_cast<char>(0xFF), 0x00};
+    mod_buf.write(trailing, 7);
+    mod_buf.finalize();
+
+    /// Deserialize from modified buffer — should successfully skip the 7 trailing bytes
+    ReadBufferFromString mod_read_buf(modified);
+    auto deserialized = ColumnStatistics::deserialize(mod_read_buf, data_type);
+
+    EXPECT_EQ(deserialized->getNumRows(), rows_value);
+    EXPECT_TRUE(deserialized->getStats().contains(StatisticsType::NullCount));
+    EXPECT_EQ(deserialized->getNullCount(), stats->getNullCount());
+
+    /// Buffer should be fully consumed (no leftover)
+    EXPECT_TRUE(mod_read_buf.eof());
+}
+
+TEST(Statistics, DeserializeV3ThrowsOnOversizedStat)
+{
+    /// Test that V3 deserialization throws when a known stat type consumes
+    /// more bytes than stat_size indicates (corrupted data).
+
+    auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
+
+    /// Build and serialize a stats object with MinMax (which has a non-trivial payload)
+    MutableColumnPtr col = data_type->createColumn();
+    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
+    for (Int32 i = 0; i < 50; ++i)
+        nullable_col->insert(i);
+
+    auto stats = createTestStats({StatisticsType::MinMax}, data_type);
+    stats->build(std::move(col));
+
+    String serialized;
+    WriteBufferFromString write_buf(serialized);
+    stats->serialize(write_buf);
+    write_buf.finalize();
+
+    /// Parse the V3 header to find stat_size and stat_data
+    ReadBufferFromString orig_buf(serialized);
+
+    UInt16 version_raw;
+    readIntBinary(version_raw, orig_buf);
+
+    UInt64 stat_types_mask = 0;
+    readIntBinary(stat_types_mask, orig_buf);
+
+    UInt64 rows_value = 0;
+    readIntBinary(rows_value, orig_buf);
+
+    UInt64 stat_size = 0;
+    readIntBinary(stat_size, orig_buf);
+
+    String stat_data(orig_buf.position(), stat_size);
+
+    /// Build a modified buffer with stat_size smaller than actual payload
+    UInt64 shrunk_stat_size = stat_size > 2 ? stat_size - 2 : 1;
+    String modified;
+    WriteBufferFromString mod_buf(modified);
+    writeIntBinary(version_raw, mod_buf);
+    writeIntBinary(stat_types_mask, mod_buf);
+    writeIntBinary(rows_value, mod_buf);
+    writeIntBinary(shrunk_stat_size, mod_buf);
+    /// Write the full stat_data (more than shrunk_stat_size)
+    mod_buf.write(stat_data.data(), stat_size);
+    mod_buf.finalize();
+
+    /// Deserialization should throw ILLEGAL_STATISTICS because consumed > stat_size
+    ReadBufferFromString mod_read_buf(modified);
+    EXPECT_THROW(ColumnStatistics::deserialize(mod_read_buf, data_type), DB::Exception);
 }

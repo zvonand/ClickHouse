@@ -1,0 +1,12 @@
+Nullable column with tdigest: nullcount should be auto-added
+a	['TDigest','Uniq','MinMax','NullCount']
+Both Nullable columns should get nullcount auto-added
+a	['TDigest','Uniq','MinMax','NullCount']
+b	['Uniq','MinMax','NullCount']
+Non-Nullable columns should NOT get nullcount
+a	['TDigest','Uniq','MinMax']
+b	['Uniq']
+With nullcount disabled in auto_statistics_types
+a	['TDigest','Uniq','MinMax']
+LowCardinality(Nullable) should also get nullcount auto-added
+a	['TDigest','Uniq','MinMax','NullCount']

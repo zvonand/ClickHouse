@@ -1,0 +1,16 @@
+Test 1a: IS NULL without nullcount (suboptimal: low_null first)
+0
+Test 1b: IS NULL with nullcount (optimal: high_null first)
+0
+Test 2a: IS NOT NULL without nullcount (suboptimal)
+0
+Test 2b: IS NOT NULL with nullcount (optimal: high_null first)
+1
+Test 3a: IS NULL + range without nullcount on high_null
+0
+Test 3b: IS NULL + range with nullcount
+1
+Mixed predicates: IS NULL + range (a IS NULL AND c < 100)
+1
+Mixed predicates: IS NULL + range (b IS NULL AND c < 100)
+1

@@ -916,6 +916,7 @@ NonMonotonic
 NonZeroUInt
 Nonspacing
 NotPruned
+NullCount
 NuRaft
 Nukta
 NumHexagons

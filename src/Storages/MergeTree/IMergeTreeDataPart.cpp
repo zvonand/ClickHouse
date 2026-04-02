@@ -56,6 +56,7 @@
 
 #include <Disks/IO/CachedOnDiskReadBufferFromFile.h>
 
+#include <algorithm>
 #include <atomic>
 #include <exception>
 #include <mutex>
@@ -1045,7 +1046,17 @@ static const ColumnDescription * getColumnForStatisticsFile(const String & filen
     String column_name = unescapeForFileName(filename.substr(STATS_FILE_PREFIX.size(), filename.size() - num_chars_to_truncate));
 
     if (!required_columns.empty() && !required_columns.contains(column_name))
-        return nullptr;
+    {
+        /// When optimize_functions_to_subcolumns=1, required_columns may contain
+        /// subcolumn names like "col.null" instead of the physical column name "col".
+        /// Check if any required column references this column as a parent.
+        String prefix = column_name + ".";
+        bool has_subcolumn_ref = std::any_of(
+            required_columns.begin(), required_columns.end(),
+            [&prefix](const String & req_col) { return req_col.starts_with(prefix); });
+        if (!has_subcolumn_ref)
+            return nullptr;
+    }
 
     return all_columns.tryGet(column_name);
 }

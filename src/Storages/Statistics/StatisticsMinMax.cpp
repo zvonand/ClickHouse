@@ -1,4 +1,5 @@
 #include <Storages/Statistics/StatisticsMinMax.h>
+#include <Columns/ColumnNullable.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeNullable.h>
@@ -46,7 +47,17 @@ void StatisticsMinMax::build(const ColumnPtr & column)
             max = max_field;
     }
 
-    row_count += column->size();
+    // Count only non-NULL rows for semantic consistency with TDigest (Issue 5a).
+    // Use null_map + std::count for ColumnNullable (avoids per-row virtual call overhead),
+    // and direct size() for non-Nullable columns.
+    if (const auto * nullable_col = checkAndGetColumn<ColumnNullable>(column.get()))
+    {
+        row_count += column->size() - std::count(nullable_col->getNullMapData().begin(), nullable_col->getNullMapData().end(), 1);
+    }
+    else
+    {
+        row_count += column->size();
+    }
 }
 
 void StatisticsMinMax::merge(const StatisticsPtr & other_stats)

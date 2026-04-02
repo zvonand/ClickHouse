@@ -1,9 +1,9 @@
 -- Tags: no-parallel
 
 -- CNF optimization uses QueryNodeHash to order conditions. We need fixed database.table.column identifier name to stabilize result
-DROP DATABASE IF EXISTS db_memory_01625;
-CREATE DATABASE db_memory_01625 ENGINE = Memory;
-USE db_memory_01625;
+DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
+CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier} ENGINE = Memory;
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 DROP TABLE IF EXISTS index_append_test_test;
 
@@ -30,4 +30,4 @@ SELECT replaceRegexpAll(explain, '__table1\.|_UInt8', '') FROM (EXPLAIN actions=
 SELECT replaceRegexpAll(explain, '__table1\.|_UInt8', '') FROM (EXPLAIN actions=1 SELECT i FROM index_append_test_test WHERE 2 * b < 100) WHERE explain LIKE '%Prewhere%' OR explain LIKE '%Filter column%' SETTINGS enable_analyzer=1;
 
 DROP TABLE index_append_test_test;
-DROP DATABASE db_memory_01625;
+DROP DATABASE {CLICKHOUSE_DATABASE_1:Identifier};

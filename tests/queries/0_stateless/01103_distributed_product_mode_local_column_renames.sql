@@ -1,7 +1,7 @@
 -- Tags: distributed, no-parallel
 
-CREATE DATABASE IF NOT EXISTS test_01103;
-USE test_01103;
+CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 DROP TABLE IF EXISTS t1_shard;
 DROP TABLE IF EXISTS t2_shard;
@@ -41,15 +41,15 @@ where t1_distr.id in
     order by t1_distr.id
 );
 
-select test_01103.t1_distr.id
-from test_01103.t1_distr
-where test_01103.t1_distr.id in
+select {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id
+from {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr
+where {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id in
 (
-    select test_01103.t1_distr.id
-    from test_01103.t1_distr as d1
-    inner join test_01103.t2_distr as d2 on test_01103.t1_distr.id = test_01103.t2_distr.id
-    where test_01103.t1_distr.id  > 0
-    order by test_01103.t1_distr.id
+    select {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id
+    from {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr as d1
+    inner join {CLICKHOUSE_DATABASE_1:Identifier}.t2_distr as d2 on {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id = {CLICKHOUSE_DATABASE_1:Identifier}.t2_distr.id
+    where {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id  > 0
+    order by {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id
 );
 
 select d0.id
@@ -72,18 +72,18 @@ join (
     order by t1_distr.id
 ) s0 using id;
 
-select test_01103.t1_distr.id
-from test_01103.t1_distr
+select {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id
+from {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr
 join (
-    select test_01103.t1_distr.id
-    from test_01103.t1_distr as d1
-    inner join test_01103.t2_distr as d2 on test_01103.t1_distr.id = test_01103.t2_distr.id
-    where test_01103.t1_distr.id  > 0
-    order by test_01103.t1_distr.id
+    select {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id
+    from {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr as d1
+    inner join {CLICKHOUSE_DATABASE_1:Identifier}.t2_distr as d2 on {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id = {CLICKHOUSE_DATABASE_1:Identifier}.t2_distr.id
+    where {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id  > 0
+    order by {CLICKHOUSE_DATABASE_1:Identifier}.t1_distr.id
 ) s0 using id;
 
 DROP TABLE t1_shard;
 DROP TABLE t2_shard;
 DROP TABLE t1_distr;
 DROP TABLE t2_distr;
-DROP DATABASE test_01103;
+DROP DATABASE {CLICKHOUSE_DATABASE_1:Identifier};

@@ -1294,6 +1294,7 @@ void DeduplicationInfo::TokenDefinition::doExtend(const TokenDefinition & right)
         return;
 
     data_hash.reset(); // invalidate data hash as token is changed
+    data_hash_batch.reset();
 
     // type is equal but values are different
     switch (left_last_extra.type)

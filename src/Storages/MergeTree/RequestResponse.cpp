@@ -51,7 +51,8 @@ void ParallelReadRequest::serialize(WriteBuffer & out, UInt64 initiator_pr_proto
 
 String ParallelReadRequest::describe() const
 {
-    String result = fmt::format("replica_num {}, min_num_of_marks {}, ", replica_num, min_marks_per_request);
+    String result
+        = fmt::format("replica_num {}, table {}, min_num_of_marks {}, ", replica_num, table_id.getFullTableName(), min_marks_per_request);
     result += description.describe();
     return result;
 }
@@ -86,14 +87,6 @@ ParallelReadRequest ParallelReadRequest::deserialize(ReadBuffer & in, UInt64 rep
         readStringBinary(table_id.table_name, in);
     }
     return ParallelReadRequest(mode, replica_num, min_marks_per_request, std::move(description), table_id);
-}
-
-void ParallelReadRequest::merge(ParallelReadRequest & other)
-{
-    assert(mode == other.mode);
-    assert(replica_num == other.replica_num);
-    assert(min_marks_per_request == other.min_marks_per_request);
-    description.merge(other.description);
 }
 
 void ParallelReadResponse::serialize(WriteBuffer & out, UInt64 replica_pr_protocol_version, UInt64 replica_tcp_protocol_version) const

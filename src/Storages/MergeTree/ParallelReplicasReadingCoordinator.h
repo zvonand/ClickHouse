@@ -56,7 +56,7 @@ private:
 
     /// `markReplicaAsUnavailable` might be called before any coordinator is created.
     /// In this case we remember the unavailable replicas and apply when coordinators are created.
-    std::vector<size_t> unavailable_nodes_registered_before_initialization;
+    std::vector<size_t> unavailable_replicas;
 
     /// Per-table coordinators. Each table gets its own ImplInterface instance.
     std::unordered_map<String, std::shared_ptr<ImplInterface>> table_to_coordinator;

@@ -442,11 +442,15 @@ void DefaultCoordinator::initializeReadingState(InitialAllRangesAnnouncement ann
 
 void DefaultCoordinator::markReplicaAsUnavailable(size_t replica_number)
 {
-    LOG_DEBUG(log, "Replica number {} is unavailable", replica_number);
     chassert(replica_number < replicas_count);
 
-    ++unavailable_replicas_count;
+    if (stats[replica_number].is_unavailable)
+        return;
+
+    LOG_DEBUG(log, "Replica number {} is unavailable", replica_number);
+
     stats[replica_number].is_unavailable = true;
+    ++unavailable_replicas_count;
 
     for (const auto & segment : distribution_by_hash_queue[replica_number])
     {
@@ -1283,17 +1287,13 @@ void ParallelReplicasReadingCoordinator::markReplicaAsUnavailable(size_t replica
 
     std::lock_guard lock(mutex);
 
-    if (table_to_coordinator.empty())
-    {
-        unavailable_nodes_registered_before_initialization.push_back(replica_number);
-        if (unavailable_nodes_registered_before_initialization.size() == replicas_count)
-            throw Exception(ErrorCodes::ALL_CONNECTION_TRIES_FAILED, "Can't connect to any replica chosen for query execution");
-    }
-    else
-    {
+    unavailable_replicas.push_back(replica_number);
+    if (unavailable_replicas.size() == replicas_count)
+        throw Exception(ErrorCodes::ALL_CONNECTION_TRIES_FAILED, "Can't connect to any replica chosen for query execution");
+
+    for (auto replica : unavailable_replicas)
         for (auto & [_, coordinator] : table_to_coordinator)
-            coordinator->markReplicaAsUnavailable(replica_number);
-    }
+            coordinator->markReplicaAsUnavailable(replica);
 }
 
 std::shared_ptr<ParallelReplicasReadingCoordinator::ImplInterface>
@@ -1331,7 +1331,7 @@ ParallelReplicasReadingCoordinator::getOrCreateCoordinator(const StorageID & tab
     if (progress_callback)
         coordinator->setProgressCallback(progress_callback);
 
-    for (const auto replica : unavailable_nodes_registered_before_initialization)
+    for (const auto replica : unavailable_replicas)
         coordinator->markReplicaAsUnavailable(replica);
 
     table_to_coordinator[key] = coordinator;

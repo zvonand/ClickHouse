@@ -3901,6 +3901,9 @@ message DictionarySourceDetails {
     optional string user = 5;
     optional string password = 6;
     optional RedisStorageType redis_storage = 7;
+    optional string invalidate_query = 8;
+    optional ColumnPath update_field = 9;
+    optional uint32 update_lag = 10;
 }
 
 message DictionarySource {

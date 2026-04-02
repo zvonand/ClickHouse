@@ -2531,6 +2531,9 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     uint32_t col_counter = 0;
     const DictionaryLayouts & dl = rg.pickRandomly(allDictionaryLayoutSettings);
     const bool isRange = dl == COMPLEX_KEY_RANGE_HASHED || dl == RANGE_HASHED;
+    const bool is_complex_key
+        = (dl == COMPLEX_KEY_CACHE || dl == COMPLEX_KEY_DIRECT || dl == COMPLEX_KEY_HASHED || dl == COMPLEX_KEY_HASHED_ARRAY
+           || dl == COMPLEX_KEY_RANGE_HASHED || dl == COMPLEX_KEY_SPARSE_HASHED || dl == COMPLEX_KEY_SSD_CACHE);
     /// Range requires 2 cols for min and max
     const uint32_t dictionary_ncols = std::max(rg.randomInt<uint32_t>(1, fc.max_columns), isRange ? UINT32_C(2) : UINT32_C(1));
     SettingValues * svs = nullptr;
@@ -2583,6 +2586,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     const uint32_t dict_view = 5 * static_cast<uint32_t>(has_view);
     const uint32_t dict_dict = 5 * static_cast<uint32_t>(has_dictionary);
     const uint32_t null_src = 5;
+    DictionarySourceDetails * clickhouse_dsd = nullptr;
 
     rg.pickWeighted(
         {{dict_table,
@@ -2651,6 +2655,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
               {
                   t.setName(dsd->mutable_est(), false);
                   dsd->set_source(DictionarySourceDetails::CLICKHOUSE);
+                  clickhouse_dsd = dsd;
               }
           }},
          {dict_system_table,
@@ -2663,6 +2668,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
               est->mutable_database()->set_value(ntable.schema_name);
               est->mutable_table()->set_value(ntable.table_name);
               dsd->set_source(DictionarySourceDetails::CLICKHOUSE);
+              clickhouse_dsd = dsd;
           }},
          {dict_view,
           [&]
@@ -2672,6 +2678,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
 
               v.setName(dsd->mutable_est(), false);
               dsd->set_source(DictionarySourceDetails::CLICKHOUSE);
+              clickhouse_dsd = dsd;
           }},
          {dict_dict,
           [&]
@@ -2681,6 +2688,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
 
               d.setName(dsd->mutable_est(), false);
               dsd->set_source(DictionarySourceDetails::CLICKHOUSE);
+              clickhouse_dsd = dsd;
           }},
          {null_src, [&] { cd->mutable_source()->set_null_src(true); }}});
 
@@ -2698,7 +2706,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         /// Many types are not allowed in dictionaries
         this->next_type_mask = fc.type_mask
             & ~(allow_JSON | allow_variant | allow_dynamic | allow_tuple | allow_low_cardinality | allow_map | allow_enum | allow_geo
-                | allow_fixed_strings | allow_time);
+                | allow_time | allow_array | (is_complex_key ? UINT64_C(0) : allow_fixed_strings));
         col.tp = randomNextType(rg, this->next_type_mask, col_counter, dc->mutable_type()->mutable_type());
         this->next_type_mask = type_mask_backup;
 
@@ -2770,7 +2778,54 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
 
     /// Add Primary Key
     flatTableColumnPath(flat_tuple | flat_nested | flat_json | skip_nested_node, next.cols, [](const SQLColumn &) { return true; });
-    const size_t kcols = dl == IP_TRIE ? 1 : ((rg.nextLargeNumber() % std::min<size_t>(entries.size(), UINT32_C(3))) + 1);
+    if (clickhouse_dsd && !next.cols.empty())
+    {
+        if (rg.nextSmallNumber() < 4)
+        {
+            clickhouse_dsd->set_invalidate_query("SELECT 1");
+        }
+        else if (rg.nextSmallNumber() < 4)
+        {
+            columnPathRef(rg.pickRandomly(this->entries), clickhouse_dsd->mutable_update_field());
+            clickhouse_dsd->set_update_lag(rg.randomInt<uint32_t>(0, 3600));
+        }
+    }
+    if (dl == IP_TRIE)
+    {
+        /// IP_TRIE requires a String primary key
+        std::vector<ColumnPathChain> str_entries;
+        for (const auto & e : this->entries)
+        {
+            const SQLType * tp = e.getBottomType();
+            if (tp && tp->getTypeClass() == SQLTypeClass::NULLABLE)
+                tp = static_cast<const Nullable *>(tp)->subtype.get();
+            if (tp && tp->getTypeClass() == SQLTypeClass::STRING)
+                str_entries.push_back(e);
+        }
+        if (!str_entries.empty())
+            this->entries = std::move(str_entries);
+    }
+    else if (!is_complex_key)
+    {
+        /// Non-complex-key layouts require a single UInt64 primary key
+        std::vector<ColumnPathChain> uint64_entries;
+        for (const auto & e : this->entries)
+        {
+            const SQLType * tp = e.getBottomType();
+            if (tp && tp->getTypeClass() == SQLTypeClass::NULLABLE)
+                tp = static_cast<const Nullable *>(tp)->subtype.get();
+            if (tp && tp->getTypeClass() == SQLTypeClass::INT)
+            {
+                const auto * itp = static_cast<const IntType *>(tp);
+                if (itp->is_unsigned && itp->size == 64)
+                    uint64_entries.push_back(e);
+            }
+        }
+        if (!uint64_entries.empty())
+            this->entries = std::move(uint64_entries);
+    }
+    const size_t kcols
+        = (dl == IP_TRIE || !is_complex_key) ? 1 : ((rg.nextLargeNumber() % std::min<size_t>(entries.size(), UINT32_C(3))) + 1);
     std::shuffle(entries.begin(), entries.end(), rg.generator);
     TableKey * tkey = cd->mutable_primary_key();
     for (size_t i = 0; i < kcols; i++)
@@ -2779,9 +2834,25 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     }
     if (isRange)
     {
-        /// Range properties
+        /// Range properties — min/max must be numeric or date type
         DictionaryRange * dr = cd->mutable_range();
+        std::vector<ColumnPathChain> range_entries;
 
+        for (const auto & e : this->entries)
+        {
+            const SQLType * tp = e.getBottomType();
+            if (tp && tp->getTypeClass() == SQLTypeClass::NULLABLE)
+                tp = static_cast<const Nullable *>(tp)->subtype.get();
+            if (tp)
+            {
+                const auto cls = tp->getTypeClass();
+                if (cls == SQLTypeClass::INT || cls == SQLTypeClass::BOOL || cls == SQLTypeClass::DATE || cls == SQLTypeClass::DATETIME
+                    || cls == SQLTypeClass::FLOAT || cls == SQLTypeClass::DECIMAL)
+                    range_entries.push_back(e);
+            }
+        }
+        if (range_entries.size() >= 2)
+            std::swap(this->entries, range_entries);
         std::shuffle(entries.begin(), entries.end(), rg.generator);
         columnPathRef(this->entries[0], dr->mutable_min());
         columnPathRef(this->entries[1], dr->mutable_max());

@@ -210,9 +210,9 @@ private:
     /// `tickets_by_expiration_time` and `poll_descriptors_by_expiration_time` are sorted by `expiration_time` so `std::set` is used.
     std::set<std::pair<Timestamp, String>> tickets_by_expiration_time TSA_GUARDED_BY(mutex);
     std::set<std::pair<Timestamp, String>> poll_descriptors_by_expiration_time TSA_GUARDED_BY(mutex);
-    std::optional<Timestamp> next_expiration_time;
+    std::optional<Timestamp> next_expiration_time TSA_GUARDED_BY(mutex);
     mutable std::condition_variable next_expiration_time_updated;
-    bool stop_waiting_next_expiration_time = false;
+    bool stop_waiting_next_expiration_time TSA_GUARDED_BY(mutex) = false;
 };
 
 } /// namespace DB::ArrowFlight

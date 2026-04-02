@@ -7,7 +7,7 @@ title: 'system.aggregated_zookeeper_log'
 doc_type: 'reference'
 ---
 
-## Description {#columns}
+## Description {#description}
 
 This table contains aggregated statistics of ZooKeeper operations (e.g. number of operations, average latency, errors) grouped by `(session_id, parent_path, operation, component, is_subrequest)` and periodically flushed to disk.
 

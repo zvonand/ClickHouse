@@ -80,4 +80,3 @@ This table contains information about projection parts for tables of the MergeTr
 - `bytes` — Alias for `bytes_on_disk`.
 - `marks_size` — Alias for `marks_bytes`.
 - `part_name` — Alias for `name`.
-

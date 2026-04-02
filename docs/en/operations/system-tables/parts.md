@@ -18,16 +18,16 @@ Each row describes one data part.
 - `partition` ([String](/sql-reference/data-types/string)) — The partition name. Formats: `YYYYMM` for automatic partitioning by month, or an arbitrary string when partitioning manually.
 - `name` ([String](/sql-reference/data-types/string)) — Name of the data part. The part naming structure can be used to determine many aspects of the data, ingest, and merge patterns. The part naming format is the following:
 
-    ```
-    <partition_id>_<minimum_block_number>_<maximum_block_number>_<level>_<data_version>
-    ```
+  ```text
+  <partition_id>_<minimum_block_number>_<maximum_block_number>_<level>_<data_version>
+  ```
 
-    * Definitions:
-        - `partition_id` - identifies the partition key
-        - `minimum_block_number` - identifies the minimum block number in the part. ClickHouse always merges continuous blocks
-        - `maximum_block_number` - identifies the maximum block number in the part
-        - `level` - incremented by one with each additional merge on the part. A level of 0 indicates this is a new part that has not been merged. It is important to remember that all parts in ClickHouse are always immutable
-        - `data_version` - optional value, incremented when a part is mutated (again, mutated data is always only written to a new part, since parts are immutable)
+  * Definitions:
+    - `partition_id` - identifies the partition key
+    - `minimum_block_number` - identifies the minimum block number in the part. ClickHouse always merges continuous blocks
+    - `maximum_block_number` - identifies the maximum block number in the part
+    - `level` - incremented by one with each additional merge on the part. A level of 0 indicates this is a new part that has not been merged. It is important to remember that all parts in ClickHouse are always immutable
+    - `data_version` - optional value, incremented when a part is mutated (again, mutated data is always only written to a new part, since parts are immutable)
 - `uuid` ([UUID](/sql-reference/data-types/uuid)) — The UUID of data part.
 - `part_type` ([String](/sql-reference/data-types/string)) — The data part storing format. Possible values: `Wide` — each column is stored in a separate file, `Compact` — all columns are stored in one file. Data storing format is controlled by the `min_bytes_for_wide_part` and `min_rows_for_wide_part` settings of the MergeTree table.
 - `active` ([UInt8](/sql-reference/data-types/int-uint)) — Flag that indicates whether the data part is active. If a data part is active, it's used in a table. Otherwise, it's about to be deleted. Inactive data parts appear after merging and mutating operations.

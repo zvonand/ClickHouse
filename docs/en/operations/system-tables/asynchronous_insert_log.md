@@ -11,7 +11,7 @@ import SystemTableCloud from '@site/docs/_snippets/_system_table_cloud.md';
 
 <SystemTableCloud/>
 
-## Description {#columns}
+## Description {#description}
 
 Contains information about async inserts. Each entry represents an insert query buffered into an async insert query.
 

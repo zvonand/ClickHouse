@@ -44,6 +44,9 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"optimize_truncate_order_by_after_group_by_keys", false, true, "Remove trailing ORDER BY elements once all GROUP BY keys are covered in the ORDER BY prefix."},
             {"use_statistics_for_part_pruning", false, true, "New setting to use statistics for part pruning during query execution."},
             {"distributed_index_analysis_only_on_coordinator", false, false, "New setting."},
+            {"query_plan_optimize_lazy_final", false, false, "New setting to optimize reading with FINAL from ReplacingMergeTree using set-based index analysis"},
+            {"max_rows_for_lazy_final", 10000000, 10000000, "New setting for maximum number of rows in the set for lazy FINAL optimization"},
+            {"max_bytes_for_lazy_final", 256000000, 256000000, "New setting for maximum number of bytes in the set for lazy FINAL optimization"},
             {"enable_materialized_cte", false, false, "New setting"},
             {"use_strict_insert_block_limits", false, false, "New setting to use strict min and max insert bounds on inserts. When min < max, max limits take precedence."},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},
@@ -84,10 +87,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         });
         addSettingsChanges(settings_changes_history, "26.2",
         {
-            {"query_plan_optimize_lazy_final", false, false, "New setting to optimize reading with FINAL from ReplacingMergeTree using set-based index analysis"},
-            {"max_rows_for_lazy_final", 10000000, 10000000, "New setting for maximum number of rows in the set for lazy FINAL optimization"},
-            {"max_bytes_for_lazy_final", 256000000, 256000000, "New setting for maximum number of bytes in the set for lazy FINAL optimization"},
-            {"allow_calculating_subcolumns_sizes_for_merge_tree_reading", false, true, "Allow calculating subcolumns sizes for merge tree reading to improve read tasks splitting"},
             {"allow_fuzz_query_functions", false, false, "New setting to enable the fuzzQuery function."},
             {"ast_fuzzer_runs", 0, 0, "New setting to enable server-side AST fuzzer."},
             {"ast_fuzzer_any_query", false, false, "New setting to allow fuzzing all query types, not just read-only."},

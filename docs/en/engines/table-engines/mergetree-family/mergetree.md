@@ -693,6 +693,12 @@ The `TTL` clause can be set for the whole table and for each individual column. 
 
 Expressions must evaluate to [Date](/sql-reference/data-types/date.md), [Date32](/sql-reference/data-types/date32.md), [DateTime](/sql-reference/data-types/datetime.md) or [DateTime64](/sql-reference/data-types/datetime64.md) data type.
 
+:::tip[Avoid non-deterministic functions in TTL expressions]
+TTL is evaluated during background merges, and not at insert time.
+Functions like `rand()`, `now()`, or `now64()` will be re-evaluated on every merge, leading to unpredictable deletion behavior.
+ClickHouse blocks expressions with no column dependency at all, but does not currently reject non-deterministic functions mixed with a column reference (e.g. `ts + rand()`). TTL expressions should be based solely on deterministic, column-derived values for predictable results.
+:::
+
 **Syntax**
 
 Setting time-to-live for a column:

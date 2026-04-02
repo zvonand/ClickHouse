@@ -520,7 +520,7 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
         /// because we have to match the specific key to the value and therefore execute a real filter.
         direct_read_mode = getHintOrNoneMode();
     }
-    else if (hasIndexForJSONSubcolumn(index_column_node))
+    else if (tryMatchNodeToJSONIndex(index_column_node, header, "JSONAllValues"))
     {
         has_index_column = true;
         direct_read_mode = getHintOrNoneMode();
@@ -834,33 +834,6 @@ bool MergeTreeIndexConditionText::hasIndexForMapElementValue(const RPNBuilderTre
     return header.has(fmt::format("mapValues({})", map_column_name));
 }
 
-bool MergeTreeIndexConditionText::hasIndexForJSONSubcolumn(const RPNBuilderTreeNode & node) const
-{
-    auto has_index = [&](const String & column_name)
-    {
-        for (const auto & [storage_column_name, _] : Nested::getAllColumnAndSubcolumnPairs(column_name))
-        {
-            if (header.has(fmt::format("JSONAllValues({})", storage_column_name)))
-                return true;
-        }
-        return false;
-    };
-
-    /// Support direct access to the column (e.g. data.key1).
-    if (has_index(node.getColumnName()))
-        return true;
-
-    /// Support CAST (e.g. `data.key1::String`) by looking through to the inner column.
-    if (node.isFunction())
-    {
-        const auto function = node.toFunctionNode();
-        if (function.getFunctionName() == "CAST" && function.getArgumentsSize() >= 1)
-            return has_index(function.getArgumentAt(0).getColumnName());
-    }
-
-    return false;
-}
-
 bool MergeTreeIndexConditionText::traverseMapElementValueNode(const RPNBuilderTreeNode & index_column_node, const Field & const_value) const
 {
     /// Here we check whether we can use index defined for `mapValues(m)`
@@ -896,7 +869,7 @@ bool MergeTreeIndexConditionText::traverseJSONSubcolumnKeyNode(
     auto output_column_name = outputs.front()->result_name;
 
     /// Try to match the required column to a JSON subcolumn with JSONAllPaths index.
-    auto json_info = tryMatchJSONSubcolumnToIndex(required_column.name, header);
+    auto json_info = tryMatchJSONSubcolumnToIndex(required_column.name, header, "JSONAllPaths");
     if (!json_info)
         return false;
 
@@ -951,7 +924,7 @@ bool MergeTreeIndexConditionText::tryPrepareSetForTextSearch(
     {
         return header.has(node.getColumnName())
             || hasIndexForMapElementValue(node)
-            || hasIndexForJSONSubcolumn(node);
+            || tryMatchNodeToJSONIndex(node, header, "JSONAllValues");
     };
 
     if (lhs.isFunction() && lhs.toFunctionNode().getFunctionName() == "tuple")

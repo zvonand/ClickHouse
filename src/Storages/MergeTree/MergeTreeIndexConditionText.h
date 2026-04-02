@@ -138,10 +138,6 @@ private:
     /// and there is a text index built on `mapValues(map_col)`.
     bool hasIndexForMapElementValue(const RPNBuilderTreeNode & node) const;
 
-    /// Returns true if the column_name is a subcolumn of a JSON column
-    /// that has a text index built on `JSONAllValues(json_column)`.
-    bool hasIndexForJSONSubcolumn(const RPNBuilderTreeNode & node) const;
-
     std::vector<String> stringToTokens(const Field & field) const;
     std::vector<String> substringToTokens(const Field & field, bool is_prefix, bool is_suffix) const;
     std::vector<String> stringLikeToTokens(const Field & field) const;

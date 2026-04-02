@@ -39,7 +39,7 @@ $MY_CLICKHOUSE_CLIENT --query "
     CREATE TABLE ghdata
     (
         data JSON(max_dynamic_paths=100),
-        INDEX json_idx JSONAllValues(data) TYPE text(tokenizer = splitByNonAlpha)
+        INDEX json_idx JSONAllValues(data) TYPE text(tokenizer = splitByNonAlpha, preprocessor = lowerUTF8(JSONAllValues(data)))
     )
     ENGINE = MergeTree
     ORDER BY tuple()

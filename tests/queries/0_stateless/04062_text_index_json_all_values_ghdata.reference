@@ -13,7 +13,7 @@ Granules: 2/50
 -- Equality on event type
 SELECT count() FROM ghdata WHERE data.type = 'WatchEvent'
 282
-Condition: (mode: All; tokens: ["WatchEvent"])
+Condition: (mode: All; tokens: ["watchevent"])
 Parts: 1/1
 Granules: 50/50
 -- Equality on nested path
@@ -37,7 +37,7 @@ Granules: 28/50
 -- hasAllTokens on string field with cast
 SELECT count() FROM ghdata WHERE hasAllTokens(data.payload.pull_request.title::String, 'Fix spelling')
 4
-Condition: (mode: All; tokens: ["Fix", "spelling"])
+Condition: (mode: All; tokens: ["fix", "spelling"])
 Parts: 1/1
 Granules: 4/50
 -- hasAnyTokens on string field with cast
@@ -49,7 +49,7 @@ Granules: 50/50
 -- IN operator on string field (rare values, granules should be skipped)
 SELECT count() FROM ghdata WHERE data.type::String IN ('MemberEvent', 'ForkEvent')
 112
-Condition: (mode: Any; tokens: ["ForkEvent", "MemberEvent"])
+Condition: (mode: Any; tokens: ["forkevent", "memberevent"])
 Parts: 1/1
 Granules: 45/50
 -- IN operator on nested path (rare values, granules should be skipped)
@@ -61,7 +61,7 @@ Granules: 32/50
 -- Combined conditions on different paths
 SELECT count() FROM ghdata WHERE data.type = 'WatchEvent' AND data.repo.name = 'leonardomso/33-js-concepts'
 3
-Condition: (mode: All; tokens: ["33", "WatchEvent", "concepts", "js", "leonardomso"])
+Condition: (mode: All; tokens: ["33", "concepts", "js", "leonardomso", "watchevent"])
 Parts: 1/1
 Granules: 3/50
 -- Schema-agnostic search with JSONAllValues and hasAllTokens
@@ -81,19 +81,19 @@ SELECT count() FROM ghdata WHERE has(data.payload.pull_request.labels[].name::Ar
 3
 Condition: (mode: All; tokens: ["bug"])
 Parts: 1/1
-Granules: 38/50
+Granules: 42/50
 -- Array: has() on nested array of labels in issues
 SELECT count() FROM ghdata WHERE has(data.payload.issue.labels[].name::Array(String), 'bug')
 14
 Condition: (mode: All; tokens: ["bug"])
 Parts: 1/1
-Granules: 38/50
+Granules: 42/50
 -- Array: has() with a less common label
 SELECT count() FROM ghdata WHERE has(data.payload.pull_request.labels[].name::Array(String), 'enhancement')
 2
 Condition: (mode: All; tokens: ["enhancement"])
 Parts: 1/1
-Granules: 23/50
+Granules: 25/50
 -- Array: equality on array subcolumn
 SELECT count() FROM ghdata WHERE data.payload.pull_request.labels[].name = ['dependencies', 'submodules']
 5

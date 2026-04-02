@@ -3488,6 +3488,56 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                         fn->name = fn->name + distinctSuffix;
                     }
                 }
+                if (fuzz_rand() % 20 == 0)
+                {
+                    /// Add or remove a single aggregate combinator suffix
+                    static const Strings combinators = {"If", "Array", "State", "SimpleState", "Merge", "ForEach", "ArgMin", "ArgMax"};
+                    const String & combo = combinators[fuzz_rand() % combinators.size()];
+                    if (endsWith(fn->name, combo))
+                    {
+                        fn->name = fn->name.substr(0, fn->name.size() - combo.size());
+                        /// When removing If/ArgMin/ArgMax: drop the last argument
+                        if ((combo == "If" || combo == "ArgMin" || combo == "ArgMax") && fn->arguments && !fn->arguments->children.empty())
+                            fn->arguments->children.pop_back();
+                    }
+                    else
+                    {
+                        fn->name += combo;
+                        if (fn->arguments)
+                        {
+                            /// When adding If: append a random predicate as the extra condition argument
+                            if (combo == "If")
+                            {
+                                if (ASTPtr cond = generatePredicate())
+                                    fn->arguments->children.push_back(std::move(cond));
+                            }
+                            /// When adding ArgMin/ArgMax: append a random column-like as the key argument
+                            else if (combo == "ArgMin" || combo == "ArgMax")
+                            {
+                                if (ASTPtr key = getRandomColumnLike())
+                                    fn->arguments->children.push_back(std::move(key));
+                            }
+                        }
+                    }
+                }
+                if (fuzz_rand() % 20 == 0)
+                {
+                    /// Toggle OrNull / OrDefault suffix (mutually exclusive return-on-empty variants)
+                    static const std::array<String, 2> orVariants = {"OrNull", "OrDefault"};
+                    bool found = false;
+                    for (size_t i = 0; i < orVariants.size(); ++i)
+                    {
+                        if (endsWith(fn->name, orVariants[i]))
+                        {
+                            const String base = fn->name.substr(0, fn->name.size() - orVariants[i].size());
+                            fn->name = (fuzz_rand() % 2 == 0) ? base + orVariants[1 - i] : base;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found)
+                        fn->name += orVariants[fuzz_rand() % orVariants.size()];
+                }
             }
             fn->setNullsAction(fuzzNullsAction(fn->getNullsAction()));
         }
@@ -3638,6 +3688,67 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                 auto * list = assert_cast<ASTExpressionList *>(select->groupBy().get());
 
                 std::shuffle(list->children.begin(), list->children.end(), fuzz_rand);
+            }
+            if (select->groupBy().get())
+            {
+                auto * outer = assert_cast<ASTExpressionList *>(select->groupBy().get());
+                if (select->group_by_with_grouping_sets)
+                {
+                    auto & sets = outer->children;
+
+                    /// Inject an empty grouping set () — valid in GROUPING SETS, produces totals row
+                    if (fuzz_rand() % 50 == 0)
+                    {
+                        auto empty_set = make_intrusive<ASTExpressionList>();
+                        auto pos = sets.empty() ? sets.begin() : sets.begin() + fuzz_rand() % sets.size();
+                        sets.insert(pos, std::move(empty_set));
+                    }
+                    /// Clone an existing set (possibly with one expression removed) and insert it
+                    if (!sets.empty() && fuzz_rand() % 30 == 0)
+                    {
+                        ASTPtr cloned = sets[fuzz_rand() % sets.size()]->clone();
+                        auto * clone_list = assert_cast<ASTExpressionList *>(cloned.get());
+                        if (!clone_list->children.empty() && fuzz_rand() % 2 == 0)
+                            clone_list->children.erase(clone_list->children.begin() + fuzz_rand() % clone_list->children.size());
+                        auto pos = sets.begin() + fuzz_rand() % (sets.size() + 1);
+                        sets.insert(pos, std::move(cloned));
+                    }
+                    /// Remove one grouping set (keep at least one to avoid empty GROUPING SETS)
+                    if (sets.size() > 1 && fuzz_rand() % 30 == 0)
+                        sets.erase(sets.begin() + fuzz_rand() % sets.size());
+                    /// Per-set: add or remove one expression
+                    for (auto & set_ast : sets)
+                    {
+                        auto * set_list = assert_cast<ASTExpressionList *>(set_ast.get());
+                        if (!set_list->children.empty() && fuzz_rand() % 20 == 0)
+                            set_list->children.erase(set_list->children.begin() + fuzz_rand() % set_list->children.size());
+                        if (fuzz_rand() % 20 == 0)
+                        {
+                            if (auto col = getRandomColumnLike())
+                            {
+                                auto pos = set_list->children.empty()
+                                    ? set_list->children.begin()
+                                    : set_list->children.begin() + fuzz_rand() % set_list->children.size();
+                                set_list->children.insert(pos, std::move(col));
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    /// For ROLLUP / CUBE / plain GROUP BY: add or remove one top-level expression
+                    if (!outer->children.empty() && fuzz_rand() % 20 == 0)
+                        outer->children.erase(outer->children.begin() + fuzz_rand() % outer->children.size());
+                    if (fuzz_rand() % 20 == 0)
+                    {
+                        if (auto col = getRandomColumnLike())
+                        {
+                            auto pos = outer->children.empty() ? outer->children.begin()
+                                                               : outer->children.begin() + fuzz_rand() % outer->children.size();
+                            outer->children.insert(pos, std::move(col));
+                        }
+                    }
+                }
             }
             if (select->having().get())
             {

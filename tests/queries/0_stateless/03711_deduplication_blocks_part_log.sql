@@ -73,55 +73,55 @@ SELECT r.id as id, r.value as value FROM 03711_database.03711_table as l JOIN 03
 -- Tables with different column types to verify deduplication hash stability
 -- across all updateHashWithValueRange overrides.
 
-CREATE TABLE 03711_type_decimal (v Decimal64(2)) ENGINE = MergeTree() ORDER BY v
+CREATE TABLE 03711_database.03711_type_decimal (v Decimal64(2)) ENGINE = MergeTree() ORDER BY v
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_decimal;
+SYSTEM STOP MERGES 03711_database.03711_type_decimal;
 
-CREATE TABLE 03711_type_float (v Float64) ENGINE = MergeTree() ORDER BY v
+CREATE TABLE 03711_database.03711_type_float (v Float64) ENGINE = MergeTree() ORDER BY v
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_float;
+SYSTEM STOP MERGES 03711_database.03711_type_float;
 
-CREATE TABLE 03711_type_fixedstr (v FixedString(8)) ENGINE = MergeTree() ORDER BY v
+CREATE TABLE 03711_database.03711_type_fixedstr (v FixedString(8)) ENGINE = MergeTree() ORDER BY v
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_fixedstr;
+SYSTEM STOP MERGES 03711_database.03711_type_fixedstr;
 
-CREATE TABLE 03711_type_string (v String) ENGINE = MergeTree() ORDER BY v
+CREATE TABLE 03711_database.03711_type_string (v String) ENGINE = MergeTree() ORDER BY v
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_string;
+SYSTEM STOP MERGES 03711_database.03711_type_string;
 
-CREATE TABLE 03711_type_array (v Array(UInt32)) ENGINE = MergeTree() ORDER BY tuple()
+CREATE TABLE 03711_database.03711_type_array (v Array(UInt32)) ENGINE = MergeTree() ORDER BY tuple()
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_array;
+SYSTEM STOP MERGES 03711_database.03711_type_array;
 
-CREATE TABLE 03711_type_nullable (v Nullable(UInt64)) ENGINE = MergeTree() ORDER BY tuple()
+CREATE TABLE 03711_database.03711_type_nullable (v Nullable(UInt64)) ENGINE = MergeTree() ORDER BY tuple()
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_nullable;
+SYSTEM STOP MERGES 03711_database.03711_type_nullable;
 
-CREATE TABLE 03711_type_tuple (v Tuple(UInt32, UInt64)) ENGINE = MergeTree() ORDER BY tuple()
+CREATE TABLE 03711_database.03711_type_tuple (v Tuple(UInt32, UInt64)) ENGINE = MergeTree() ORDER BY tuple()
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_tuple;
+SYSTEM STOP MERGES 03711_database.03711_type_tuple;
 
-CREATE TABLE 03711_type_map (v Map(String, UInt32)) ENGINE = MergeTree() ORDER BY tuple()
+CREATE TABLE 03711_database.03711_type_map (v Map(String, UInt32)) ENGINE = MergeTree() ORDER BY tuple()
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_map;
+SYSTEM STOP MERGES 03711_database.03711_type_map;
 
-CREATE TABLE 03711_type_variant (v Variant(UInt64, String, Array(UInt32))) ENGINE = MergeTree() ORDER BY tuple()
+CREATE TABLE 03711_database.03711_type_variant (v Variant(UInt64, String, Array(UInt32))) ENGINE = MergeTree() ORDER BY tuple()
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_variant;
+SYSTEM STOP MERGES 03711_database.03711_type_variant;
 
-CREATE TABLE 03711_type_dynamic (v Dynamic) ENGINE = MergeTree() ORDER BY tuple()
+CREATE TABLE 03711_database.03711_type_dynamic (v Dynamic) ENGINE = MergeTree() ORDER BY tuple()
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_dynamic;
+SYSTEM STOP MERGES 03711_database.03711_type_dynamic;
 
-CREATE TABLE 03711_type_json (v JSON) ENGINE = MergeTree() ORDER BY tuple()
+CREATE TABLE 03711_database.03711_type_json (v JSON) ENGINE = MergeTree() ORDER BY tuple()
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_json;
+SYSTEM STOP MERGES 03711_database.03711_type_json;
 
-CREATE TABLE 03711_type_json_mdp0 (v JSON(max_dynamic_paths=0)) ENGINE = MergeTree() ORDER BY tuple()
+CREATE TABLE 03711_database.03711_type_json_mdp0 (v JSON(max_dynamic_paths=0)) ENGINE = MergeTree() ORDER BY tuple()
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_json_mdp0;
+SYSTEM STOP MERGES 03711_database.03711_type_json_mdp0;
 
-CREATE TABLE 03711_type_mixed
+CREATE TABLE 03711_database.03711_type_mixed
 (
     id UInt32,
     name String,
@@ -134,23 +134,23 @@ CREATE TABLE 03711_type_mixed
     kv Map(String, UInt32)
 ) ENGINE = MergeTree() ORDER BY id
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_type_mixed;
+SYSTEM STOP MERGES 03711_database.03711_type_mixed;
 
 -- Async insert tables: async path computes data hash directly from the block
 -- (not via MergeTreePartWriter), exercising calculateDataHashBatch.
-CREATE TABLE 03711_async_uint (v UInt32) ENGINE = MergeTree() ORDER BY v
+CREATE TABLE 03711_database.03711_async_uint (v UInt32) ENGINE = MergeTree() ORDER BY v
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_async_uint;
+SYSTEM STOP MERGES 03711_database.03711_async_uint;
 
-CREATE TABLE 03711_async_string (v String) ENGINE = MergeTree() ORDER BY v
+CREATE TABLE 03711_database.03711_async_string (v String) ENGINE = MergeTree() ORDER BY v
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_async_string;
+SYSTEM STOP MERGES 03711_database.03711_async_string;
 
-CREATE TABLE 03711_async_array (v Array(UInt32)) ENGINE = MergeTree() ORDER BY tuple()
+CREATE TABLE 03711_database.03711_async_array (v Array(UInt32)) ENGINE = MergeTree() ORDER BY tuple()
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_async_array;
+SYSTEM STOP MERGES 03711_database.03711_async_array;
 
-CREATE TABLE 03711_async_mixed
+CREATE TABLE 03711_database.03711_async_mixed
 (
     id UInt32,
     name String,
@@ -163,7 +163,7 @@ CREATE TABLE 03711_async_mixed
     kv Map(String, UInt32)
 ) ENGINE = MergeTree() ORDER BY id
     SETTINGS non_replicated_deduplication_window = 1000, min_bytes_for_wide_part = 10000, min_rows_for_wide_part = 10000, serialization_info_version = 'basic', string_serialization_version = 'with_size_stream';
-SYSTEM STOP MERGES 03711_async_mixed;
+SYSTEM STOP MERGES 03711_database.03711_async_mixed;
 
 SET deduplicate_blocks_in_dependent_materialized_views=1;
 
@@ -174,24 +174,24 @@ SET min_insert_block_size_bytes=0;
 
 INSERT INTO 03711_database.03711_table VALUES (1), (2);
 
-INSERT INTO 03711_type_decimal VALUES (1.23), (4.56);
-INSERT INTO 03711_type_float VALUES (3.14), (2.72);
-INSERT INTO 03711_type_fixedstr VALUES ('abcdefgh'), ('12345678');
-INSERT INTO 03711_type_string VALUES ('hello'), ('world');
-INSERT INTO 03711_type_array VALUES ([1, 2, 3]), ([4, 5]);
-INSERT INTO 03711_type_nullable VALUES (42), (NULL);
-INSERT INTO 03711_type_tuple VALUES ((1, 100)), ((2, 200));
-INSERT INTO 03711_type_map VALUES ({'a': 1, 'b': 2}), ({'c': 3});
-INSERT INTO 03711_type_variant VALUES (42::UInt64), ('hello'::String);
-INSERT INTO 03711_type_dynamic VALUES (42::UInt64), ('hello'::String);
-INSERT INTO 03711_type_json VALUES ('{"a": 1, "b": "hello"}'), ('{"c": [1, 2, 3], "d": 42}');
-INSERT INTO 03711_type_json_mdp0 VALUES ('{"a": 1, "b": "hello"}'), ('{"c": [1, 2, 3], "d": 42}');
-INSERT INTO 03711_type_mixed VALUES (1, 'hello', 1.23, 3.14, 'abcdefgh', [1, 2, 3], 42, (1, 100), {'a': 1}), (2, 'world', 4.56, 2.72, '12345678', [4, 5], NULL, (2, 200), {'c': 3});
+INSERT INTO 03711_database.03711_type_decimal VALUES (1.23), (4.56);
+INSERT INTO 03711_database.03711_type_float VALUES (3.14), (2.72);
+INSERT INTO 03711_database.03711_type_fixedstr VALUES ('abcdefgh'), ('12345678');
+INSERT INTO 03711_database.03711_type_string VALUES ('hello'), ('world');
+INSERT INTO 03711_database.03711_type_array VALUES ([1, 2, 3]), ([4, 5]);
+INSERT INTO 03711_database.03711_type_nullable VALUES (42), (NULL);
+INSERT INTO 03711_database.03711_type_tuple VALUES ((1, 100)), ((2, 200));
+INSERT INTO 03711_database.03711_type_map VALUES ({'a': 1, 'b': 2}), ({'c': 3});
+INSERT INTO 03711_database.03711_type_variant VALUES (42::UInt64), ('hello'::String);
+INSERT INTO 03711_database.03711_type_dynamic VALUES (42::UInt64), ('hello'::String);
+INSERT INTO 03711_database.03711_type_json VALUES ('{"a": 1, "b": "hello"}'), ('{"c": [1, 2, 3], "d": 42}');
+INSERT INTO 03711_database.03711_type_json_mdp0 VALUES ('{"a": 1, "b": "hello"}'), ('{"c": [1, 2, 3], "d": 42}');
+INSERT INTO 03711_database.03711_type_mixed VALUES (1, 'hello', 1.23, 3.14, 'abcdefgh', [1, 2, 3], 42, (1, 100), {'a': 1}), (2, 'world', 4.56, 2.72, '12345678', [4, 5], NULL, (2, 200), {'c': 3});
 
-INSERT INTO 03711_async_uint SETTINGS async_insert=1, wait_for_async_insert=1 VALUES (42), (99);
-INSERT INTO 03711_async_string SETTINGS async_insert=1, wait_for_async_insert=1 VALUES ('hello'), ('world');
-INSERT INTO 03711_async_array SETTINGS async_insert=1, wait_for_async_insert=1 VALUES ([1, 2, 3]), ([4, 5]);
-INSERT INTO 03711_async_mixed SETTINGS async_insert=1, wait_for_async_insert=1 VALUES (1, 'hello', 1.23, 3.14, 'abcdefgh', [1, 2, 3], 42, (1, 100), {'a': 1}), (2, 'world', 4.56, 2.72, '12345678', [4, 5], NULL, (2, 200), {'c': 3});
+INSERT INTO 03711_database.03711_async_uint SETTINGS async_insert=1, wait_for_async_insert=1 VALUES (42), (99);
+INSERT INTO 03711_database.03711_async_string SETTINGS async_insert=1, wait_for_async_insert=1 VALUES ('hello'), ('world');
+INSERT INTO 03711_database.03711_async_array SETTINGS async_insert=1, wait_for_async_insert=1 VALUES ([1, 2, 3]), ([4, 5]);
+INSERT INTO 03711_database.03711_async_mixed SETTINGS async_insert=1, wait_for_async_insert=1 VALUES (1, 'hello', 1.23, 3.14, 'abcdefgh', [1, 2, 3], 42, (1, 100), {'a': 1}), (2, 'world', 4.56, 2.72, '12345678', [4, 5], NULL, (2, 200), {'c': 3});
 
 SYSTEM FLUSH LOGS part_log;
 

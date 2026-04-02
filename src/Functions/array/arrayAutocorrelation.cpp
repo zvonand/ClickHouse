@@ -287,7 +287,7 @@ If `max_lag` is not provided, calculates for all possible lags.
            {"Constant", "SELECT arrayAutocorrelation([5, 5, 5]);", "[nan, nan, nan]"},
            {"Limited", "SELECT arrayAutocorrelation([1, 2, 3, 4, 5], 2);", "[1, 0.4]"}};
 
-    FunctionDocumentation::IntroducedIn introduced_in = {26, 2};
+    FunctionDocumentation::IntroducedIn introduced_in = {26, 4};
     FunctionDocumentation::Category category = FunctionDocumentation::Category::Array;
     FunctionDocumentation documentation = {description, syntax, arguments, {}, returned_value, examples, introduced_in, category};
 

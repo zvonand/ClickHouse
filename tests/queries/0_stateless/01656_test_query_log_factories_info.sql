@@ -1,4 +1,4 @@
--- Tags: no-parallel, memory-engine
+-- Tags: no-parallel, no-flaky-check, memory-engine
 
 SET database_atomic_wait_for_drop_and_detach_synchronously=1;
 SET log_queries=1;
@@ -58,17 +58,17 @@ FROM system.query_log WHERE event_date >= yesterday() AND event_time >= now() - 
 ORDER BY query_start_time DESC LIMIT 1 FORMAT TabSeparatedWithNames;
 SELECT '';
 
-DROP database IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
-CREATE database {CLICKHOUSE_DATABASE_1:Identifier} ENGINE=Atomic;
+DROP database IF EXISTS test_query_log_factories_info1;
+CREATE database test_query_log_factories_info1 ENGINE=Atomic;
 
 SYSTEM FLUSH LOGS query_log;
 SELECT used_database_engines
 FROM system.query_log
-WHERE event_date >= yesterday() AND event_time >= now() - 600 AND current_database = currentDatabase() AND type == 'QueryFinish' AND (query LIKE 'CREATE%database%ENGINE=Atomic%')
+WHERE event_date >= yesterday() AND event_time >= now() - 600 AND current_database = currentDatabase() AND type == 'QueryFinish' AND (query LIKE '%database test_query_log_factories_info%')
 ORDER BY query_start_time DESC LIMIT 1 FORMAT TabSeparatedWithNames;
 SELECT '';
 
-CREATE OR REPLACE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.memory_table (id BIGINT, date DATETIME, date2 DateTime) ENGINE=Memory();
+CREATE OR REPLACE TABLE test_query_log_factories_info1.memory_table (id BIGINT, date DATETIME, date2 DateTime) ENGINE=Memory();
 
 SYSTEM FLUSH LOGS query_log;
 SELECT arraySort(used_data_type_families), used_storages
@@ -77,5 +77,5 @@ WHERE event_date >= yesterday() AND event_time >= now() - 600 AND current_databa
 ORDER BY query_start_time DESC LIMIT 1 FORMAT TabSeparatedWithNames;
 SELECT '';
 
-DROP TABLE {CLICKHOUSE_DATABASE_1:Identifier}.memory_table;
-DROP DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
+DROP TABLE test_query_log_factories_info1.memory_table;
+DROP DATABASE test_query_log_factories_info1;

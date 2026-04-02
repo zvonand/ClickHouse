@@ -90,6 +90,18 @@ SELECT '--- Computation Limit ---';
 SELECT length(arrayAutocorrelation(range(toUInt64(20000)), 5));
 SELECT arrayAutocorrelation(range(toUInt64(20000))); -- { serverError BAD_ARGUMENTS }
 
+SELECT '--- Nullable and LowCardinality ---';
+SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Nullable(UInt32))')); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT arrayAutocorrelation([1, 2, 3], CAST(2, 'Nullable(UInt32)')); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SET allow_suspicious_low_cardinality_types = 1;
+SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(LowCardinality(UInt32))'));
+SELECT arrayAutocorrelation([1, 2, 3], CAST(2, 'LowCardinality(UInt32)'));
+-- LowCardinality signed lag: positive works, negative rejected
+SELECT arrayAutocorrelation([1, 2, 3], CAST(2, 'LowCardinality(Int64)'));
+SELECT arrayAutocorrelation([1, 2, 3], CAST(-1, 'LowCardinality(Int64)')); -- { serverError BAD_ARGUMENTS }
+-- LowCardinality non-const lag
+SELECT arrayAutocorrelation([1, 2, 3], CAST(number, 'LowCardinality(UInt64)')) FROM numbers(3);
+
 SELECT '--- Negative Tests ---';
 SELECT arrayAutocorrelation(['a', 'b']); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT arrayAutocorrelation([NULL, 1]); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

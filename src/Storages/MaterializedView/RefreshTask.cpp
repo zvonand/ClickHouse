@@ -62,6 +62,8 @@ namespace ServerSetting
 namespace RefreshSetting
 {
     extern const RefreshSettingsBool all_replicas;
+    extern const RefreshSettingsBool prefer_dependency_replica;
+    extern const RefreshSettingsUInt64 prefer_dependency_replica_delay_ms;
     extern const RefreshSettingsInt64 refresh_retries;
     extern const RefreshSettingsUInt64 refresh_retry_initial_backoff_ms;
     extern const RefreshSettingsUInt64 refresh_retry_max_backoff_ms;
@@ -464,6 +466,18 @@ void RefreshTask::notify()
     scheduleRefresh(guard);
 }
 
+void RefreshTask::notifyDependencyCompleted(const String & completed_replica)
+{
+    std::lock_guard guard(mutex);
+    if (view && view->getContext()->getRefreshSet().refreshesStopped())
+        interruptExecution();
+    scheduling.dependencies_satisfied_until = std::chrono::sys_seconds(std::chrono::seconds(-1));
+    scheduling.affinity_delay_applied = false;
+    scheduling.notified_locally = (!completed_replica.empty()
+        && completed_replica == coordination.replica_name);
+    scheduleRefresh(guard);
+}
+
 void RefreshTask::setFakeTime(std::optional<Int64> t)
 {
     std::unique_lock lock(mutex);
@@ -561,6 +575,26 @@ void RefreshTask::refreshTask()
                 break;
             }
 
+            /// Pod affinity for dependency chains: if the setting is enabled and we have dependencies,
+            /// delay this replica's attempt if a different replica ran the parent refresh.
+            /// This gives the parent's replica a head start at winning the Keeper race,
+            /// so the dependent refresh reads locally-visible data.
+            if (refresh_settings[RefreshSetting::prefer_dependency_replica]
+                && !set_handle.getDependencies().empty()
+                && !scheduling.notified_locally
+                && !scheduling.affinity_delay_applied
+                && !out_of_schedule
+                && coordination.coordinated)
+            {
+                scheduling.affinity_delay_applied = true;
+                UInt64 delay_ms = refresh_settings[RefreshSetting::prefer_dependency_replica_delay_ms];
+                LOG_DEBUG(log, "Delaying {} ms for pod affinity (non-preferred replica for dependency chain)", delay_ms);
+                refresh_task->scheduleAfter(delay_ms);
+                setState(RefreshState::Scheduled, lock);
+                break;
+            }
+            scheduling.notified_locally = false;
+
             if (refreshed_just_now)
             {
                 /// If doing two refreshes in a row, go through Scheduled state first,
@@ -624,7 +658,7 @@ void RefreshTask::refreshTask()
             if (refreshed)
             {
                 lock.unlock();
-                view->getContext()->getRefreshSet().notifyDependents(view->getStorageID());
+                view->getContext()->getRefreshSet().notifyDependents(view->getStorageID(), coordination.replica_name);
                 lock.lock();
             }
 
@@ -984,8 +1018,9 @@ void RefreshTask::readZnodesIfNeeded(std::shared_ptr<zkutil::ZooKeeper> zookeepe
 
     if (coordination.root_znode.last_completed_timeslot != prev_last_completed_timeslot)
     {
+        String parent_replica = coordination.root_znode.last_attempt_replica;
         lock.unlock();
-        view->getContext()->getRefreshSet().notifyDependents(view->getStorageID());
+        view->getContext()->getRefreshSet().notifyDependents(view->getStorageID(), parent_replica);
         lock.lock();
     }
 }

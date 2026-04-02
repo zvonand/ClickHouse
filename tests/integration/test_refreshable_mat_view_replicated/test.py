@@ -491,6 +491,109 @@ def test_query_fail(fn3_setup_tables):
     )
 
 
+def test_prefer_dependency_replica(module_setup_tables):
+    """When prefer_dependency_replica is enabled, a dependent RMV should run on
+    the same replica that ran the parent RMV.
+
+    Deterministic strategy: stop the parent on node2 so the parent is guaranteed
+    to run on node1. The dependent on node1 gets the in-process notification
+    (notified_locally=true, no delay), while node2 gets notified via Keeper watch
+    (notified_locally=false, delayed by 2s). Node1 wins the race deterministically.
+    """
+
+    node.query("DROP TABLE IF EXISTS parent_src ON CLUSTER default SYNC")
+    node.query("DROP TABLE IF EXISTS parent_tgt ON CLUSTER default SYNC")
+    node.query("DROP TABLE IF EXISTS dep_tgt ON CLUSTER default SYNC")
+    node.query("DROP TABLE IF EXISTS parent_rmv ON CLUSTER default SYNC")
+    node.query("DROP TABLE IF EXISTS dep_rmv ON CLUSTER default SYNC")
+
+    node.query(
+        "CREATE TABLE parent_src ON CLUSTER default (x UInt64) "
+        "ENGINE = ReplicatedMergeTree ORDER BY x AS SELECT 1"
+    )
+    node.query(
+        "CREATE TABLE parent_tgt ON CLUSTER default (x UInt64) "
+        "ENGINE = ReplicatedMergeTree ORDER BY x"
+    )
+    node.query(
+        "CREATE TABLE dep_tgt ON CLUSTER default (x UInt64) "
+        "ENGINE = ReplicatedMergeTree ORDER BY x"
+    )
+
+    # Parent RMV: refresh far in the future so it only runs when we trigger it.
+    node.query(
+        "CREATE MATERIALIZED VIEW parent_rmv ON CLUSTER default "
+        "REFRESH EVERY 10 YEAR APPEND TO parent_tgt "
+        "EMPTY AS SELECT x FROM parent_src"
+    )
+
+    # Dependent RMV with pod affinity enabled (default 2s delay for non-preferred).
+    node.query(
+        "CREATE MATERIALIZED VIEW dep_rmv ON CLUSTER default "
+        "REFRESH EVERY 10 YEAR DEPENDS ON parent_rmv "
+        "SETTINGS prefer_dependency_replica = 1 "
+        "APPEND TO dep_tgt "
+        "EMPTY AS SELECT x FROM parent_tgt"
+    )
+
+    # Stop parent on node2 so the parent is guaranteed to run on node1.
+    node2.query("SYSTEM STOP VIEW parent_rmv")
+
+    # Trigger parent refresh on node1 and wait for it to complete.
+    node.query("SYSTEM REFRESH VIEW parent_rmv")
+    node.query("SYSTEM WAIT VIEW parent_rmv")
+
+    # Wait for dependent to complete (triggered by parent via DEPENDS ON).
+    # Node1 gets in-process notification and runs immediately.
+    # Node2 would be delayed by 2s, so node1 wins the race.
+    for _ in range(30):
+        result = node.query(
+            "SELECT last_success_time IS NOT NULL FROM system.view_refreshes "
+            "WHERE view = 'dep_rmv'"
+        ).strip()
+        if result == "1":
+            break
+        time.sleep(0.5)
+    else:
+        assert False, "Dependent RMV did not complete within timeout"
+
+    # Verify both ran on the same replica.
+    parent_replica = node.query(
+        "SELECT last_refresh_replica FROM system.view_refreshes "
+        "WHERE view = 'parent_rmv'"
+    ).strip()
+    dep_replica = node.query(
+        "SELECT last_refresh_replica FROM system.view_refreshes "
+        "WHERE view = 'dep_rmv'"
+    ).strip()
+
+    assert parent_replica != "", "Parent should have a replica recorded"
+    assert dep_replica != "", "Dependent should have a replica recorded"
+    assert parent_replica == dep_replica, (
+        f"Dependent should run on the same replica as parent: "
+        f"parent={parent_replica}, dependent={dep_replica}"
+    )
+
+    # Verify data flowed through.
+    assert node.query("SELECT count() FROM dep_tgt") == "1\n"
+
+    # Verify node2 logged the affinity delay (proves the mechanism fired).
+    node2.query("SYSTEM FLUSH LOGS")
+    delay_logged = node2.query(
+        "SELECT count() > 0 FROM system.text_log "
+        "WHERE message LIKE '%pod affinity%' AND event_date = today()"
+    ).strip()
+    assert delay_logged == "1", "Node2 should have logged the pod affinity delay"
+
+    # Cleanup.
+    node2.query("SYSTEM START VIEW parent_rmv")
+    node.query("DROP TABLE IF EXISTS dep_rmv ON CLUSTER default SYNC")
+    node.query("DROP TABLE IF EXISTS parent_rmv ON CLUSTER default SYNC")
+    node.query("DROP TABLE IF EXISTS dep_tgt ON CLUSTER default SYNC")
+    node.query("DROP TABLE IF EXISTS parent_tgt ON CLUSTER default SYNC")
+    node.query("DROP TABLE IF EXISTS parent_src ON CLUSTER default SYNC")
+
+
 def test_query_retry(fn3_setup_tables):
     if node.is_built_with_sanitizer():
         pytest.skip("Disabled for sanitizers")

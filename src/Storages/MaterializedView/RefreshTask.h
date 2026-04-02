@@ -103,6 +103,11 @@ public:
     /// any task that this task depends on.
     void notify();
 
+    /// Called when a dependency has completed its refresh. `completed_replica` is the replica
+    /// that ran the parent refresh. Used for pod affinity: if this replica matches, it gets
+    /// priority for running the dependent refresh (no delay).
+    void notifyDependencyCompleted(const String & completed_replica);
+
     /// For tests
     void setFakeTime(std::optional<Int64> t);
 
@@ -235,6 +240,13 @@ private:
 
         /// Used in tests. If not INT64_MIN, we pretend that this is the current time, instead of calling system_clock::now().
         std::atomic<Int64> fake_clock {INT64_MIN};
+
+        /// Pod affinity for dependency chains (prefer_dependency_replica setting).
+        /// Set to true when a dependency completed on the same replica as this task.
+        bool notified_locally = false;
+        /// Set to true after the affinity delay has been applied for the current dependency trigger,
+        /// to prevent re-delaying on the next scheduling cycle.
+        bool affinity_delay_applied = false;
     };
 
     LoggerPtr log = nullptr;

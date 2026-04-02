@@ -166,7 +166,7 @@ RefreshTaskPtr RefreshSet::tryGetTaskForInnerTable(const StorageID & inner_table
     return *it->second.begin();
 }
 
-void RefreshSet::notifyDependents(const StorageID & id) const
+void RefreshSet::notifyDependents(const StorageID & id, const String & completed_replica) const
 {
     std::vector<RefreshTaskPtr> res;
     {
@@ -178,7 +178,12 @@ void RefreshSet::notifyDependents(const StorageID & id) const
             res.push_back(task);
     }
     for (const RefreshTaskPtr & t : res)
-        t->notify();
+    {
+        if (completed_replica.empty())
+            t->notify();
+        else
+            t->notifyDependencyCompleted(completed_replica);
+    }
 }
 
 void RefreshSet::setRefreshesStopped(bool stopped)

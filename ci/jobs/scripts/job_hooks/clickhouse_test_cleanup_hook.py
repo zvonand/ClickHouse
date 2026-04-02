@@ -35,20 +35,24 @@ except ValueError as e:
 print(f"Post-hook: cleaning up session {session_id} left by fast_test.py")
 
 try:
+    # ps -o sess is unreliable on macOS (shows tty device number, not session ID),
+    # so enumerate all PIDs and use os.getsid() directly — works on both platforms.
     result = subprocess.run(
-        ["ps", "-A", "-o", "pid=,sess="],
+        ["ps", "-A", "-o", "pid="],
         capture_output=True,
         text=True,
     )
     pids = []
     for line in result.stdout.strip().splitlines():
-        parts = line.split()
-        if len(parts) == 2:
-            try:
-                if int(parts[1]) == session_id:
-                    pids.append(int(parts[0]))
-            except ValueError:
-                pass
+        line = line.strip()
+        if not line.isdigit():
+            continue
+        pid = int(line)
+        try:
+            if os.getsid(pid) == session_id:
+                pids.append(pid)
+        except (ProcessLookupError, PermissionError):
+            pass
     if pids:
         print(f"Killing {len(pids)} leftover process(es): {pids}")
         for pid in pids:

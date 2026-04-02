@@ -5488,7 +5488,11 @@ if __name__ == "__main__":
     # session after we exit – even if they were re-parented to init/launchd.
     # (setsid also creates a new process group, so we are still isolated from the
     # parent process group and cannot accidentally kill our caller.)
-    os.setsid()
+    # If the caller already used start_new_session=True (as run_test() does), we
+    # are already a session leader and setsid() would raise PermissionError.
+    # That is fine: session ID already equals our PID in that case.
+    if os.getpid() != os.getsid(0):
+        os.setsid()
 
     check_name = os.environ.get("CHECK_NAME")
     if check_name and "aarch" in check_name:

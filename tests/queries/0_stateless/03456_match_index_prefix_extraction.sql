@@ -69,7 +69,7 @@ SELECT count() FROM foo WHERE match(path, '^xxx\\-zzz') SETTINGS force_primary_k
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^xxx\0bla')) WHERE explain like '%Condition%';
 SELECT count() FROM foo WHERE match(path, '^xxx\0bla') SETTINGS force_primary_key = 1; -- {serverError INDEX_NOT_USED}
 
--- plain groups are treated as no-ops, so full prefix "xxxbla" is extracted
+-- '(' is a stop character, prefix is "xxx"
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^xxx(bla)')) WHERE explain like '%Condition%';
 SELECT count() FROM foo WHERE match(path, '^xxx(bla)') SETTINGS force_primary_key = 1;
 
@@ -104,19 +104,19 @@ SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE m
 SELECT count() FROM foo WHERE match(path, '^xxx\w+') SETTINGS force_primary_key = 1;
 
 
--- plain groups: parentheses are skipped, full prefix is extracted
+-- '(' stops extraction — no prefix for ^(xxx)
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^(xxx)')) WHERE explain like '%Condition%';
 
--- group with quantifier inside: '^(xxx*)' — the '*' pops the last 'x', prefix is 'xx'
+-- '(' stops extraction — no prefix for ^(xxx*)
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^(xxx*)')) WHERE explain like '%Condition%';
 
--- optional group: '^xxx(bla)?' — group may not appear, prefix is 'xxx'
+-- optional group: '^xxx(bla)?' — prefix stops at '(', giving 'xxx'
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^xxx(bla)?')) WHERE explain like '%Condition%';
 
--- nested groups: '^((xxx))' — both parens skipped, prefix is 'xxx'
+-- '(' stops extraction — no prefix for ^((xxx))
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^((xxx))')) WHERE explain like '%Condition%';
 
--- non-capturing group: '^(?:xxx)' — bail out safely
+-- non-capturing group: '^(?:xxx)' — no prefix
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^(?:xxx)')) WHERE explain like '%Condition%';
 
 SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM foo WHERE match(path, '^xxx\\|zzz')) WHERE explain like '%Condition%';

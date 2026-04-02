@@ -53,7 +53,7 @@ private:
     BlockModifier block_modifier;
 };
 
-} /// namespace ArrowFlight
-} /// namespace DB
+}
+}
 
 #endif

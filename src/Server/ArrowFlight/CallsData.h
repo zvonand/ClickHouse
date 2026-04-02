@@ -216,6 +216,6 @@ private:
     bool stop_waiting_next_expiration_time TSA_GUARDED_BY(mutex) = false;
 };
 
-} /// namespace DB::ArrowFlight
+}
 
 #endif

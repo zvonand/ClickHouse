@@ -556,7 +556,7 @@ void CallsData::updateNextExpirationTime()
         next_expiration_time_updated.notify_all();
 }
 
-} /// namespace ArrowFlight
-} /// namespace DB
+}
+}
 
 #endif

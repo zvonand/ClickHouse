@@ -85,7 +85,7 @@ void PollSession::onException() { block_io.onException(); }
 
 void PollSession::onCancelOrConnectionLoss() { block_io.onCancelOrConnectionLoss(); }
 
-} /// namespace ArrowFlight
-} /// namespace DB
+}
+}
 
 #endif

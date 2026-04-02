@@ -1,3 +1,5 @@
+-- { echo }
+
 SELECT '--- Basic Examples ---';
 SELECT arrayAutocorrelation([1, 2, 3, 4, 5]);
 SELECT arrayAutocorrelation([10, 20, 10]);
@@ -31,19 +33,23 @@ SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Float64)'));
 
 SELECT '--- Table Execution ---';
 DROP TABLE IF EXISTS test_autocorr;
-CREATE TABLE test_autocorr (
-    id UInt64,
-    data Array(Float64),
-    lag UInt64
-) ENGINE = Memory;
-
+CREATE TABLE test_autocorr (id UInt64, data Array(Float64), lag UInt64) ENGINE = Memory;
 INSERT INTO test_autocorr VALUES (1, [1, 2, 3, 4, 5], 2), (2, [10, 20, 10], 5), (3, [5, 5, 5], 2);
-
 SELECT id, arrayAutocorrelation(data) FROM test_autocorr ORDER BY id;
 SELECT id, arrayAutocorrelation(data, lag) FROM test_autocorr ORDER BY id;
-
 DROP TABLE test_autocorr;
 
-SELECT '--- Negative Tests (Expect Errors) ---';
+SELECT '--- NaN and Inf Handling ---';
+SELECT arrayAutocorrelation([1.0, nan, 3.0]);
+SELECT arrayAutocorrelation([1.0, inf, 3.0]);
+SELECT arrayAutocorrelation([nan, nan, nan]);
+
+SELECT '--- Computation Limit ---';
+SELECT length(arrayAutocorrelation(range(toUInt64(20000)), 5));
+SELECT arrayAutocorrelation(range(toUInt64(20000))); -- { serverError BAD_ARGUMENTS }
+
+SELECT '--- Negative Tests ---';
 SELECT arrayAutocorrelation(['a', 'b']); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT arrayAutocorrelation([NULL, 1]); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT arrayAutocorrelation(); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+SELECT arrayAutocorrelation([1], 2, 3); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }

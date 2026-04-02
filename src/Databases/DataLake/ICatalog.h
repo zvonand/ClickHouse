@@ -33,7 +33,6 @@ public:
     TableMetadata & withSchema() { with_schema = true; return *this; }
     TableMetadata & withStorageCredentials() { with_storage_credentials = true; return *this; }
     TableMetadata & withDataLakeSpecificProperties() { with_datalake_specific_metadata = true; return *this; }
-    TableMetadata & withAbfssContainerPathPrefix() { with_abfss_container_path_prefix = true; return *this; }
 
     bool hasLocation() const;
     bool hasSchema() const;
@@ -94,14 +93,14 @@ private:
     /// For Azure ABFSS URLs: stores the account with suffix (e.g., "account.dfs.core.windows.net")
     /// This is extracted from URLs like: abfss://container@account.dfs.core.windows.net/path
     std::string azure_account_with_suffix;
-    /// Set by `withAbfssContainerPathPrefix()` before `setLocation` is called.
-    /// Signals that the caller knows the location follows the Polaris / ADLS Gen2 filesystem-path
-    /// convention and that the leading `<container>/` in the path is redundant.
-    bool with_abfss_container_path_prefix = false;
-    /// Derived by `setLocation` from `with_abfss_container_path_prefix` plus a check that the
-    /// parsed path actually starts with `<container>/`. Used by `constructLocation` and
-    /// `getMetadataLocation` to strip the redundant prefix when building Azure HTTPS URLs
-    /// or comparing metadata-file prefixes.
+    /// True when `setLocation` detected that the ABFSS path starts with the container name
+    /// as a redundant first segment — a convention used by some catalogs (e.g. Apache Polaris /
+    /// ADLS Gen2 filesystem paths).
+    /// Example: abfss://c@account.dfs.core.windows.net/c/actual/path — `c` appears in both
+    /// the authority and the first path segment.
+    /// When set, `constructLocation` and `getMetadataLocation` strip that prefix when building
+    /// Azure HTTPS URLs or comparing metadata-file prefixes, but `path` itself is left intact so
+    /// that `getLocation` remains a round-trip of `setLocation`.
     bool abfss_has_container_path_prefix = false;
     /// Endpoint is set and used in case we have non-AWS storage implementation, for example, Minio.
     /// Also not all catalogs support non-AWS storages.

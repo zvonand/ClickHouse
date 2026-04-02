@@ -121,15 +121,13 @@ void TableMetadata::setLocation(const std::string & location_)
         bucket = bucket_part.substr(0, at_pos);
         azure_account_with_suffix = bucket_part.substr(at_pos + 1);
 
-        /// Some catalogs (e.g., Apache Polaris) follow the ADLS Gen2 filesystem convention
+        /// Some catalogs (e.g. Apache Polaris) follow the ADLS Gen2 filesystem convention
         /// of including the container name as the first segment of the path in abfss:// locations,
         /// e.g. abfss://container@account.dfs.core.windows.net/container/actual/path.
-        /// This cannot be detected from the URL alone — "c/table" under container "c" is
-        /// ambiguous: the "c/" could be a real directory or the Polaris redundant prefix.
-        /// The flag is therefore only set when the caller has explicitly opted in via
-        /// `withAbfssContainerPathPrefix()`, indicating they have catalog-level knowledge
-        /// that the prefix is redundant. Without the opt-in, the path is treated literally.
-        if (with_abfss_container_path_prefix && path.starts_with(bucket + "/"))
+        /// We record this as a flag so that `constructLocation` and `getMetadataLocation` can
+        /// strip the redundant prefix when needed, while `path` itself is left intact so that
+        /// `getLocation` remains a round-trip of `setLocation`.
+        if (path.starts_with(bucket + "/"))
             abfss_has_container_path_prefix = true;
 
         LOG_TEST(getLogger("TableMetadata"),

@@ -36,10 +36,9 @@ def test_user_overcommit():
         node.is_built_with_memory_sanitizer()
         or node.is_built_with_address_sanitizer()
         or node.is_built_with_thread_sanitizer()
-        or node.is_built_with_llvm_coverage()
     ):
         pytest.skip(
-            "doesn't fit in memory limits under sanitizers/coverage (memory overhead causes timeouts)"
+            "sanitizers inflate per-query memory 2-10x, making individual queries exceed the 300 MB user limit"
         )
 
     node.query("CREATE USER IF NOT EXISTS A")

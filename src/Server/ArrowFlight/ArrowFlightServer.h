@@ -12,6 +12,8 @@
 namespace DB
 {
 
+namespace ArrowFlight { class CallsData; }
+
 class ArrowFlightServer : public IGRPCServer, public arrow::flight::FlightServerBase
 {
 public:
@@ -76,8 +78,7 @@ private:
     const UInt64 poll_descriptors_lifetime_seconds;
     const bool cancel_poll_descriptor_after_poll_flight_info;
 
-    class CallsData;
-    std::unique_ptr<CallsData> calls_data;
+    std::unique_ptr<ArrowFlight::CallsData> calls_data;
 };
 
 }

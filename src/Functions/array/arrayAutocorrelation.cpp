@@ -61,10 +61,10 @@ public:
 
         if (arguments.size() == 2)
         {
-            if (!isInteger(arguments[1]))
+            if (!isNativeInteger(arguments[1]))
                 throw Exception(
                     ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                    "Second argument (max_lag) of function {} must be an integer, got {}.",
+                    "Second argument (max_lag) of function {} must be an integer (up to 64-bit), got {}.",
                     getName(),
                     arguments[1]->getName());
         }
@@ -76,7 +76,6 @@ public:
     static constexpr size_t MAX_AUTOCORRELATION_OPERATIONS = 100'000'000;
 
     /// Validate that a signed max_lag column contains no negative values.
-    /// Uses typed access to avoid truncation for wide integer types (Int128, Int256).
     template <typename T>
     static void validateMaxLagNotNegativeTyped(const IColumn * col_max_lag, size_t rows)
     {
@@ -105,14 +104,11 @@ public:
             validateMaxLagNotNegativeTyped<Int32>(col_max_lag, rows);
         else if (checkColumn<ColumnVector<Int64>>(*col_max_lag))
             validateMaxLagNotNegativeTyped<Int64>(col_max_lag, rows);
-        else if (checkColumn<ColumnVector<Int128>>(*col_max_lag))
-            validateMaxLagNotNegativeTyped<Int128>(col_max_lag, rows);
-        else if (checkColumn<ColumnVector<Int256>>(*col_max_lag))
-            validateMaxLagNotNegativeTyped<Int256>(col_max_lag, rows);
         else
             throw Exception(
                 ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                "Second argument (max_lag) of function {} has unsupported column type: {}", name,
+                "Second argument (max_lag) of function {} has unsupported column type: {}",
+                name,
                 col_max_lag->getFamilyName());
     }
 
@@ -127,16 +123,22 @@ public:
         if (limit == 0)
             return;
 
-        /// Guard against O(n * limit) computation for large inputs without explicit max_lag.
-        if (size > MAX_AUTOCORRELATION_OPERATIONS / limit)
-            throw Exception(
-                ErrorCodes::BAD_ARGUMENTS,
-                "{}: estimated computation ({} * {}) exceeds the safety limit of {}. "
-                "Use the max_lag argument to reduce the number of lags.",
-                name,
-                size,
-                limit,
-                MAX_AUTOCORRELATION_OPERATIONS);
+        bool all_equal = true;
+        for (size_t i = 1; i < size; ++i)
+        {
+            if (src[i] != src[0])
+            {
+                all_equal = false;
+                break;
+            }
+        }
+
+        if (all_equal)
+        {
+            for (size_t i = 0; i < limit; ++i)
+                res_values.push_back(std::numeric_limits<Float64>::quiet_NaN());
+            return;
+        }
 
         /// Calculate mean
         Float64 sum = 0.0;
@@ -159,6 +161,17 @@ public:
                 res_values.push_back(std::numeric_limits<Float64>::quiet_NaN());
             return;
         }
+
+        /// Guard against O(n * limit) computation for large inputs.
+        if (size > MAX_AUTOCORRELATION_OPERATIONS / limit)
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "{}: estimated computation ({} * {}) exceeds the safety limit of {}. "
+                "Use the max_lag argument to reduce the number of lags.",
+                name,
+                size,
+                limit,
+                MAX_AUTOCORRELATION_OPERATIONS);
 
         /// Calculate autocorrelation for each lag
         for (size_t lag = 0; lag < limit; ++lag)
@@ -273,10 +286,10 @@ public:
         const IColumn * col_max_lag = nullptr;
         if (arguments.size() > 1)
         {
-            if (!isInteger(arguments[1].type))
+            if (!isNativeInteger(arguments[1].type))
                 throw Exception(
                     ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                    "Second argument (max_lag) of function {} must be an integer, got {}.",
+                    "Second argument (max_lag) of function {} must be an integer (up to 64-bit), got {}.",
                     getName(),
                     arguments[1].type->getName());
 

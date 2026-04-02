@@ -4,6 +4,7 @@
 
 #include <Server/ArrowFlight/AuthMiddleware.h>
 #include <Server/ArrowFlight/commandSelector.h>
+#include <Server/ArrowFlight/PollSession.h>
 
 #include <Core/Settings.h>
 #include <Common/logger_useful.h>
@@ -270,73 +271,6 @@ namespace
         std::optional<String> next_poll_descriptor;
     };
 
-    /// Keeps a query context and a pipeline executor for PollFlightInfo.
-    class PollSession
-    {
-    public:
-        PollSession(
-            ContextPtr query_context_,
-            ThreadGroupPtr thread_group_,
-            BlockIO && block_io_,
-            ArrowFlight::SchemaModifier schema_modifier = nullptr,
-            ArrowFlight::BlockModifier block_modifier_ = nullptr)
-            : query_context(query_context_)
-            , thread_group(thread_group_)
-            , block_io(std::move(block_io_))
-            , block_modifier(block_modifier_)
-        {
-            try
-            {
-                executor.emplace(block_io.pipeline);
-                schema = CHColumnToArrowColumn::calculateArrowSchema(
-                    executor->getHeader().getColumnsWithTypeAndName(),
-                    "Arrow",
-                    nullptr,
-                    {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]});
-
-                if (schema_modifier)
-                {
-                    auto result = schema_modifier(schema);
-                    if (!result.ok())
-                        throw Exception(ErrorCodes::UNKNOWN_EXCEPTION, "Failed to convert Arrow schema: {} (schema: {})", result.status().ToString(), schema->ToString());
-                    schema = result.ValueUnsafe();
-                }
-            }
-            catch (...)
-            {
-                try { block_io.onException(); }
-                catch (...) { tryLogCurrentException("PollSession: block_io.onException() failed during constructor rollback"); }
-                throw;
-            }
-        }
-
-        ~PollSession() = default;
-
-        ContextPtr queryContext() { return query_context; }
-
-        ThreadGroupPtr getThreadGroup() const { return thread_group; }
-        std::shared_ptr<arrow::Schema> getSchema() const { return schema; }
-        bool getNextBlock(Block & block)
-        {
-            if (!executor->pull(block))
-                return false;
-            if (block_modifier)
-                block_modifier(query_context, block);
-            return true;
-        }
-        void onFinish() { block_io.onFinish(); }
-        void onException() { block_io.onException(); }
-        void onCancelOrConnectionLoss() { block_io.onCancelOrConnectionLoss(); }
-
-    private:
-        ContextPtr query_context;
-        ThreadGroupPtr thread_group;
-        BlockIO block_io;
-        std::optional<PullingPipelineExecutor> executor;
-        std::shared_ptr<arrow::Schema> schema;
-        ArrowFlight::BlockModifier block_modifier;
-    };
-
     /// Creates a converter to convert ClickHouse blocks to the Arrow format.
     std::shared_ptr<CHColumnToArrowColumn> createCHToArrowConverter(const Block & header, ContextPtr query_context)
     {
@@ -349,6 +283,7 @@ namespace
     }
 }
 
+using ArrowFlight::PollSession;
 
 /// Keeps information about calls - e.g. blocks extracted from query pipelines, flight tickets, poll descriptors.
 class ArrowFlightServer::CallsData

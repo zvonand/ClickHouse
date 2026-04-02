@@ -287,7 +287,7 @@ public:
         if constexpr (std::is_same_v<DictionaryAttributeType, Map>)
         {
             if (const auto * map_type = typeid_cast<const DataTypeMap *>(dictionary_attribute.type.get()))
-                return map_type->createColumn();
+                return ColumnMap::create(map_type->getNestedType()->createColumn());
 
             throw Exception(ErrorCodes::TYPE_MISMATCH, "Unsupported Map attribute type.");
         }
@@ -295,7 +295,14 @@ public:
         {
             auto non_nullable_type = removeNullable(dictionary_attribute.type);
             if (const auto * object_type = typeid_cast<const DataTypeObject *>(non_nullable_type.get()))
-                return object_type->createColumn();
+            {
+                UnorderedMapWithMemoryTracking<String, MutableColumnPtr> typed_path_columns;
+                typed_path_columns.reserve(object_type->getTypedPaths().size());
+                for (const auto & [path, type] : object_type->getTypedPaths())
+                    typed_path_columns[path] = type->createColumn();
+
+                return ColumnObject::create(std::move(typed_path_columns), object_type->getMaxDynamicPaths(), object_type->getMaxDynamicTypes());
+            }
 
             throw Exception(ErrorCodes::TYPE_MISMATCH, "Unsupported Object attribute type.");
         }

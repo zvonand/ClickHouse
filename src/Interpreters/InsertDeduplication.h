@@ -228,7 +228,7 @@ private:
     mutable std::vector<TokenDefinition> tokens;
     std::vector<size_t> offsets; // points to the last row for each offset
 
-    /// Mutable because calculateDataHash releases columns after caching the hash.
+    /// Mutable because getDeduplicationHashes releases columns after caching all hashes.
     mutable std::shared_ptr<Block> original_block;
     StorageIDMaybeEmpty original_block_view_id;
 

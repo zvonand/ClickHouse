@@ -939,10 +939,9 @@ bool IcebergMetadata::isDataSortedBySortingKey(StorageMetadataPtr storage_metada
     auto table_state_snapshot = extractIcebergSnapshotIdFromMetadataObject(storage_metadata_snapshot);
     if (table_state_snapshot == nullptr)
     {
-        throw Exception(
-            ErrorCodes::LOGICAL_ERROR,
-            "Can't extract iceberg table state from storage snapshot for table location {}",
-            persistent_components.table_location);
+        /// Fallback: see the comment in iterate() for the rationale.
+        auto [actual_data_snapshot, actual_table_state_snapshot] = getRelevantState(context);
+        table_state_snapshot = std::make_shared<TableStateSnapshot>(actual_table_state_snapshot);
     }
 
     /// Empty table is sorted table
@@ -1034,10 +1033,14 @@ ObjectIterator IcebergMetadata::iterate(
     auto iceberg_table_state = extractIcebergSnapshotIdFromMetadataObject(storage_metadata);
     if (iceberg_table_state == nullptr)
     {
-        throw Exception(
-            ErrorCodes::LOGICAL_ERROR,
-            "Can't extract iceberg table state from storage snapshot for table location {}",
-            persistent_components.table_location);
+        /// The caller did not pin a snapshot in the metadata object.
+        /// This can happen when reading through a materialized view whose
+        /// target is a datalake table: the view's
+        /// updateExternalDynamicMetadataIfExists() is a no-op, so the
+        /// datalake_table_state is never set on the metadata.
+        /// Fall back to the current table state instead of crashing.
+        auto [actual_data_snapshot, actual_table_state_snapshot] = getRelevantState(local_context);
+        iceberg_table_state = std::make_shared<TableStateSnapshot>(actual_table_state_snapshot);
     }
 
     ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::IcebergIteratorInitializationMicroseconds);

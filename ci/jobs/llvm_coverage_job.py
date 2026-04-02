@@ -215,6 +215,9 @@ if __name__ == "__main__":
         _diff_ran = _diff_report_dir.exists()
 
         b_line_cov = c_line_cov = b_function_cov = c_function_cov = b_branch_cov = c_branch_cov = delta = 0.0
+        b_line_hit = b_line_total = c_line_hit = c_line_total = 0
+        b_func_hit = b_func_total = c_func_hit = c_func_total = 0
+        b_branch_hit = b_branch_total = c_branch_hit = c_branch_total = 0
 
         if _diff_ran:
             # Baseline coverage for the current branch (from the merged report)

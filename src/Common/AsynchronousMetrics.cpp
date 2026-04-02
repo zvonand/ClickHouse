@@ -1176,12 +1176,6 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
         if (context && context->getPageCache())
             page_cache_bytes = context->getPageCache()->sizeInBytes();
 
-        new_values["MemoryUserSpacePageCache"] = {
-            page_cache_bytes,
-            "The amount of memory used by the ClickHouse userspace page cache, in bytes. "
-            "This is also available in system.metrics as PageCacheBytes."
-        };
-
         UInt64 resident_without_page_cache = (data.resident > page_cache_bytes)
                                           ? (data.resident - page_cache_bytes)
                                           : 0;
@@ -1552,18 +1546,15 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
             uint64_t usage = cgroupmem_reader->readMemoryUsage();
 
             new_values["CGroupMemoryTotal"] = { limit, "The total amount of memory in cgroup, in bytes. If stated zero, the limit is the same as OSMemoryTotal." };
-            new_values["CGroupMemoryUsed"] = { usage, "The amount of memory used in cgroup, in bytes. ClickHouse computes this by summing selected fields from cgroup memory.stat (anonymous memory, socket buffers, and non-reclaimable kernel memory), which excludes the kernel page cache (OS-level file cache)." };
+            new_values["CGroupMemoryUsed"] = { usage, "The amount of memory used in cgroup, in bytes, excluding the kernel OS page cache." };
 
-            const auto * page_cache_metric = getAsynchronousMetricValue(new_values, "MemoryUserSpacePageCache");
-            UInt64 cgroup_page_cache_bytes = page_cache_metric ? static_cast<UInt64>(page_cache_metric->value) : 0;
-
-            UInt64 cgroup_usage_without_page_cache = (usage > cgroup_page_cache_bytes)
-                                                   ? (usage - cgroup_page_cache_bytes)
+            UInt64 cgroup_usage_without_page_cache = (usage > page_cache_bytes)
+                                                   ? (usage - page_cache_bytes)
                                                    : 0;
 
             new_values["CGroupMemoryUsedWithoutPageCache"] = {
                 cgroup_usage_without_page_cache,
-                "The amount of memory used in cgroup, in bytes, excluding both the kernel page cache and the userspace page cache. "
+                "The amount of memory used in cgroup, in bytes, excluding both the kernel OS page cache and the userspace page cache. "
                 "This provides a more accurate view of actual memory consumption when the ClickHouse userspace page cache is enabled. "
                 "When userspace page cache is disabled, this value equals CGroupMemoryUsed."
             };

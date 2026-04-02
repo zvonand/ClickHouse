@@ -1,6 +1,3 @@
--- Verify MemoryUserSpacePageCache is present in system.asynchronous_metrics.
-SELECT count() > 0 FROM system.asynchronous_metrics WHERE metric = 'MemoryUserSpacePageCache';
-
 -- Verify CGroupMemoryUsedWithoutPageCache is present when CGroup metrics are available.
 -- Uses if() to produce a deterministic result regardless of cgroup availability.
 SELECT if(

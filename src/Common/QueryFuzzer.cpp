@@ -3706,12 +3706,16 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                     /// Clone an existing set (possibly with one expression removed) and insert it
                     if (!sets.empty() && fuzz_rand() % 30 == 0)
                     {
-                        ASTPtr cloned = sets[fuzz_rand() % sets.size()]->clone();
-                        auto * clone_list = assert_cast<ASTExpressionList *>(cloned.get());
-                        if (!clone_list->children.empty() && fuzz_rand() % 2 == 0)
-                            clone_list->children.erase(clone_list->children.begin() + fuzz_rand() % clone_list->children.size());
-                        auto pos = sets.begin() + fuzz_rand() % (sets.size() + 1);
-                        sets.insert(pos, std::move(cloned));
+                        const auto & src = sets[fuzz_rand() % sets.size()];
+                        if (typeid_cast<ASTExpressionList *>(src.get()))
+                        {
+                            ASTPtr cloned = src->clone();
+                            auto * clone_list = assert_cast<ASTExpressionList *>(cloned.get());
+                            if (!clone_list->children.empty() && fuzz_rand() % 2 == 0)
+                                clone_list->children.erase(clone_list->children.begin() + fuzz_rand() % clone_list->children.size());
+                            auto pos = sets.begin() + fuzz_rand() % (sets.size() + 1);
+                            sets.insert(pos, std::move(cloned));
+                        }
                     }
                     /// Remove one grouping set (keep at least one to avoid empty GROUPING SETS)
                     if (sets.size() > 1 && fuzz_rand() % 30 == 0)
@@ -3719,17 +3723,19 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                     /// Per-set: add or remove one expression
                     for (auto & set_ast : sets)
                     {
-                        auto * set_list = assert_cast<ASTExpressionList *>(set_ast.get());
-                        if (!set_list->children.empty() && fuzz_rand() % 20 == 0)
-                            set_list->children.erase(set_list->children.begin() + fuzz_rand() % set_list->children.size());
-                        if (fuzz_rand() % 20 == 0)
+                        if (auto * set_list = typeid_cast<ASTExpressionList *>(set_ast.get()))
                         {
-                            if (auto col = getRandomColumnLike())
+                            if (!set_list->children.empty() && fuzz_rand() % 20 == 0)
+                                set_list->children.erase(set_list->children.begin() + fuzz_rand() % set_list->children.size());
+                            if (fuzz_rand() % 20 == 0)
                             {
-                                auto pos = set_list->children.empty()
-                                    ? set_list->children.begin()
-                                    : set_list->children.begin() + fuzz_rand() % set_list->children.size();
-                                set_list->children.insert(pos, std::move(col));
+                                if (auto col = getRandomColumnLike())
+                                {
+                                    auto pos = set_list->children.empty()
+                                        ? set_list->children.begin()
+                                        : set_list->children.begin() + fuzz_rand() % set_list->children.size();
+                                    set_list->children.insert(pos, std::move(col));
+                                }
                             }
                         }
                     }

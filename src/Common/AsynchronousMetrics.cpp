@@ -1548,8 +1548,12 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
             new_values["CGroupMemoryTotal"] = { limit, "The total amount of memory in cgroup, in bytes. If stated zero, the limit is the same as OSMemoryTotal." };
             new_values["CGroupMemoryUsed"] = { usage, "The amount of memory used in cgroup, in bytes, excluding the kernel OS page cache." };
 
-            UInt64 cgroup_usage_without_page_cache = (usage > page_cache_bytes)
-                                                   ? (usage - page_cache_bytes)
+            UInt64 userspace_page_cache_bytes = 0;
+            if (context && context->getPageCache())
+                userspace_page_cache_bytes = context->getPageCache()->sizeInBytes();
+
+            UInt64 cgroup_usage_without_page_cache = (usage > userspace_page_cache_bytes)
+                                                   ? (usage - userspace_page_cache_bytes)
                                                    : 0;
 
             new_values["CGroupMemoryUsedWithoutPageCache"] = {

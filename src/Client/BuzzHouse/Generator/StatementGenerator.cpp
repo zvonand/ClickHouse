@@ -4161,6 +4161,10 @@ void StatementGenerator::updateGeneratorFromSingleQuery(const SingleSQLQuery & s
                 this->tables[tkey].can_run_merges = scmd.has_start_merges();
             }
         }
+        else if (scmd.has_unlock_snapshot() && scmd.unlock_snapshot().has_from())
+        {
+            this->snapshots.erase(scmd.unlock_snapshot().from().backup_number());
+        }
     }
     else if (ssq.has_explain() && query.has_backup_restore() && !ssq.explain().is_explain() && success)
     {

@@ -68,7 +68,7 @@ SKIP_TABLES = {"transposed_metric_log"}
 
 
 def unescape_tsv(value):
-    """Unescape TSV escape sequences (\\n, \\t, \\\\).
+    """Unescape TSV escape sequences (\\n, \\t, \\', \\\\).
 
     Order matters: backslash must be replaced last to avoid
     double-unescaping (e.g., \\\\n -> \\n -> newline).
@@ -310,7 +310,7 @@ def main():
     )
     parser.add_argument(
         "--config",
-        default=None,
+        default=DEFAULT_CONFIG,
         help="Path to the config file for clickhouse-local (optional).",
     )
     parser.add_argument(

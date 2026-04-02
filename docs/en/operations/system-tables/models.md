@@ -1,5 +1,5 @@
 ---
-description: 'Contains a list of CatBoost models loaded into a LibraryBridge\''s memory along with time when it was loaded.'
+description: "Contains a list of CatBoost models loaded into a LibraryBridge's memory along with time when it was loaded."
 keywords: ['system table', 'models']
 slug: /operations/system-tables/models
 title: 'system.models'
@@ -8,7 +8,7 @@ doc_type: 'reference'
 
 ## Description {#description}
 
-Contains a list of CatBoost models loaded into a LibraryBridge\'s memory along with time when it was loaded.
+Contains a list of CatBoost models loaded into a LibraryBridge's memory along with time when it was loaded.
 
 ## Columns {#columns}
 

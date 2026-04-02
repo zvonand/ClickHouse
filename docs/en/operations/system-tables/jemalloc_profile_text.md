@@ -1,5 +1,5 @@
 ---
-description: 'Displays the symbolized jemalloc heap profile. Run \''SYSTEM JEMALLOC FLUSH PROFILE\'' to generate a profile first.'
+description: "Displays the symbolized jemalloc heap profile. Run 'SYSTEM JEMALLOC FLUSH PROFILE' to generate a profile first."
 keywords: ['system table', 'jemalloc_profile_text']
 slug: /operations/system-tables/jemalloc_profile_text
 title: 'system.jemalloc_profile_text'
@@ -8,7 +8,7 @@ doc_type: 'reference'
 
 ## Description {#description}
 
-Displays the symbolized jemalloc heap profile. Run \'SYSTEM JEMALLOC FLUSH PROFILE\' to generate a profile first.
+Displays the symbolized jemalloc heap profile. Run 'SYSTEM JEMALLOC FLUSH PROFILE' to generate a profile first.
 
 ## Columns {#columns}
 

@@ -20,8 +20,8 @@ ColumnsDescription StorageSystemObjectStorageQueueSettings<type>::getColumnsDesc
 {
     return ColumnsDescription
     {
-        {"database", std::make_shared<DataTypeString>(), "Database of the table with S3Queue Engine."},
-        {"table", std::make_shared<DataTypeString>(), "Name of the table with S3Queue Engine."},
+        {"database", std::make_shared<DataTypeString>(), "Database of the table with S3Queue/AzureQueue Engine."},
+        {"table", std::make_shared<DataTypeString>(), "Name of the table with S3Queue/AzureQueue Engine."},
         {"name",        std::make_shared<DataTypeString>(), "Setting name."},
         {"value",       std::make_shared<DataTypeString>(), "Setting value."},
         {"type",        std::make_shared<DataTypeString>(), "Setting type (implementation specific string value)."},

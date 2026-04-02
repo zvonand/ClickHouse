@@ -49,11 +49,11 @@ namespace DB
 StorageSystemParts::StorageSystemParts(const StorageID & table_id_)
     : StorageSystemPartsBase(table_id_,
     ColumnsDescription{
-        {"partition",                                   std::make_shared<DataTypeString>(),    "The partition name. Formats: `YYYYMM` for automatic partitioning by month, or an arbitrary string when partitioning manually."},
+        {"partition",                                   std::make_shared<DataTypeString>(),    "Partition identifier (string representation derived from the table partition key expression)."},
         {"name",                                        std::make_shared<DataTypeString>(),    R"(
 Name of the data part. The part naming structure can be used to determine many aspects of the data, ingest, and merge patterns. The part naming format is the following:
 
-```
+```text
 <partition_id>_<minimum_block_number>_<maximum_block_number>_<level>_<data_version>
 ```
 

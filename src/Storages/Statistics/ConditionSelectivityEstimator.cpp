@@ -209,7 +209,19 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
 
         String func_name = func.getFunctionName();
         if (atom_map.find(func_name) == std::end(atom_map))
+        {
+            /// LIKE/ILIKE cannot be represented as a range. Pre-set selectivity
+            /// so the estimator uses a tighter default than `default_unknown_cond_factor`.
+            if (func_name == "like" || func_name == "ilike")
+                out.selectivity = default_like_factor;
+            else if (func_name == "notLike" || func_name == "notIlike")
+                out.selectivity = 1.0 - default_like_factor;
+            else
+                return false;
+
+            out.finalized = true;
             return false;
+        }
 
         if (num_args == 2)
         {

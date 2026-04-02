@@ -335,7 +335,7 @@ DeduplicationInfo::FilterResult DeduplicationInfo::filterImpl(const std::set<siz
 }
 
 
-UInt128 DeduplicationInfo::calculateDataHash(size_t offset, const Block & block) const
+UInt128 DeduplicationInfo::calculateDataHashRowWise(size_t offset, const Block & block) const
 {
     chassert(offset < offsets.size());
 
@@ -358,7 +358,7 @@ UInt128 DeduplicationInfo::calculateDataHash(size_t offset, const Block & block)
     return tokens[offset].data_hash.value();
 }
 
-UInt128 DeduplicationInfo::calculateDataHashBatch(size_t offset, const Block & block) const
+UInt128 DeduplicationInfo::calculateDataHashColumnWise(size_t offset, const Block & block) const
 {
     chassert(offset < offsets.size());
 
@@ -394,7 +394,7 @@ DeduplicationHash DeduplicationInfo::getBlockUnifiedHash(size_t offset, const st
     }
     else
     {
-        auto data_hash = calculateDataHashBatch(offset, *original_block);
+        auto data_hash = calculateDataHashColumnWise(offset, *original_block);
         extension = fmt::format("{}_{}", data_hash.items[0], data_hash.items[1]);
     }
 
@@ -427,7 +427,7 @@ DeduplicationHash DeduplicationInfo::getBlockHash(size_t offset, const std::stri
     if (token.empty())
     {
         chassert(level == Level::SOURCE);
-        token.by_part_writer = calculateDataHash(offset, *original_block);
+        token.by_part_writer = calculateDataHashRowWise(offset, *original_block);
     }
 
     if (token.by_part_writer.has_value() && level == Level::SOURCE)
@@ -706,7 +706,7 @@ void DeduplicationInfo::redefineTokensWithDataHash(const Block & /*block*/)
         if (token.empty())
         {
             /// calculate tokens from data
-            token.by_part_writer = calculateDataHash(i, *original_block);
+            token.by_part_writer = calculateDataHashRowWise(i, *original_block);
         }
     }
 }

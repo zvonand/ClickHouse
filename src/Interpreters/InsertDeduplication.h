@@ -126,8 +126,11 @@ public:
 private:
     DeduplicationInfo(bool async_insert_, InsertDeduplicationVersions unification_stage_);
 
-    UInt128 calculateDataHash(size_t offset, const Block & block) const;
-    UInt128 calculateDataHashBatch(size_t offset, const Block & block) const;
+    /// Row-major hash: for each row, hash all columns. Used by the old compatibility path.
+    UInt128 calculateDataHashRowWise(size_t offset, const Block & block) const;
+    /// Column-major hash: for each column, hash the row range. Used by the unified path.
+    /// Produces a different hash than row-wise for the same data.
+    UInt128 calculateDataHashColumnWise(size_t offset, const Block & block) const;
     // the old one hash
     DeduplicationHash getBlockHash(size_t offset, const std::string & partition_) const;
     // the new unified hash

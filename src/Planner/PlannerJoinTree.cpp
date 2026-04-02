@@ -1295,6 +1295,10 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                             if (reading)
                                 break;
 
+                            /// Empty table or all data pruned — nothing to read, skip parallel replicas.
+                            if (typeid_cast<ReadNothingStep *>(node->step.get()))
+                                break;
+
                             QueryPlan::Node * prev_node = node;
                             if (!node->children.empty())
                             {
@@ -1309,10 +1313,9 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                             }
                         }
 
-                        chassert(reading);
-
                         // (2) if it's ReadFromMergeTree - run index analysis and check number of rows to read
-                        if (settings[Setting::parallel_replicas_min_number_of_rows_per_replica] > 0)
+                        // ReadNothingStep means empty table / all data pruned — skip parallel replicas.
+                        if (reading && settings[Setting::parallel_replicas_min_number_of_rows_per_replica] > 0)
                         {
                             auto result_ptr = reading->selectRangesToRead();
                             UInt64 rows_to_read = result_ptr->selected_rows;
@@ -1346,7 +1349,7 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                         }
 
                         // (3) if parallel replicas still enabled - replace reading step
-                        if (planner_context->getQueryContext()->canUseParallelReplicasOnInitiator())
+                        if (reading && planner_context->getQueryContext()->canUseParallelReplicasOnInitiator())
                         {
                             till_stage = QueryProcessingStage::WithMergeableState;
                             QueryPlan query_plan_parallel_replicas;

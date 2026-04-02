@@ -1,5 +1,3 @@
-#include <algorithm>
-#include <limits>
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnDecimal.h>
 #include <Columns/ColumnNothing.h>
@@ -13,8 +11,6 @@
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
 #include <Functions/IFunction.h>
-#include <base/types.h>
-#include <Common/NaNUtils.h>
 
 namespace DB
 {

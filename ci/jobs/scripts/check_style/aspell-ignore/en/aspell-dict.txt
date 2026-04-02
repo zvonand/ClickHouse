@@ -1,4 +1,4 @@
-personal_ws-1.1 en 3599
+personal_ws-1.1 en 3600
 AArch
 ABIs
 ACLs
@@ -1665,6 +1665,7 @@ cli
 clickcache
 clickcat
 clickhouse
+clickhousectl
 clickhousedb
 clickhousex
 clickmate

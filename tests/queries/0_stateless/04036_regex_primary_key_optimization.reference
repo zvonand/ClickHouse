@@ -607,3 +607,60 @@ SELECT count() FROM test_regex_negative WHERE match(id, '(abc|def)') SETTINGS fo
 -- No optimization: non-capturing group
 SELECT count() FROM test_regex_negative WHERE match(id, '^(?:abc|def)') SETTINGS force_primary_key = 1; -- {serverError INDEX_NOT_USED}
 DROP TABLE test_regex_negative;
+-- Optional group containing wildcard: "^xx(abc.*)?def"
+-- The group may or may not appear, so both "xxabcZdef" and "xxdef" match.
+-- Sorted: other, xxabcZdef, xxdef (3 rows/granules)
+DROP TABLE IF EXISTS test_regex_optgroup;
+CREATE TABLE test_regex_optgroup (id String) ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 1;
+INSERT INTO test_regex_optgroup VALUES ('xxabcZdef'), ('xxdef'), ('other');
+SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM test_regex_optgroup WHERE match(id, '^xx(abc.*)?def')) WHERE explain LIKE '%Condition%' OR explain LIKE '%Granules%';
+Condition: (id in [\'xx\', \'xy\'))
+Granules: 3/3
+SELECT count() FROM test_regex_optgroup WHERE match(id, '^xx(abc.*)?def') SETTINGS force_primary_key = 1, max_rows_to_read = 3;
+2
+SELECT * FROM test_regex_optgroup WHERE match(id, '^xx(abc.*)?def') ORDER BY id SETTINGS force_primary_key = 1, max_rows_to_read = 3;
+xxabcZdef
+xxdef
+-- Confirm: same result with pruning disabled
+SELECT count() FROM test_regex_optgroup WHERE match(id, '^xx(abc.*)?def') SETTINGS use_primary_key = 0;
+2
+DROP TABLE test_regex_optgroup;
+-- Top-level alternation with wildcard: "^ab.*|cd"
+-- Parsed as (^ab.*) | (cd) — the "cd" branch matches anywhere in the string.
+-- Sorted: abXXX, mmmmcd, zzzzcd (3 rows/granules)
+DROP TABLE IF EXISTS test_regex_toplevel_alt;
+CREATE TABLE test_regex_toplevel_alt (id String) ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 1;
+INSERT INTO test_regex_toplevel_alt VALUES ('abXXX'), ('mmmmcd'), ('zzzzcd');
+SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM test_regex_toplevel_alt WHERE match(id, '^ab.*|cd')) WHERE explain LIKE '%Condition%' OR explain LIKE '%Granules%';
+Condition: true
+Granules: 3/3
+SELECT count() FROM test_regex_toplevel_alt WHERE match(id, '^ab.*|cd');
+3
+SELECT * FROM test_regex_toplevel_alt WHERE match(id, '^ab.*|cd') ORDER BY id;
+abXXX
+mmmmcd
+zzzzcd
+-- Confirm: same result with pruning disabled
+SELECT count() FROM test_regex_toplevel_alt WHERE match(id, '^ab.*|cd') SETTINGS use_primary_key = 0;
+3
+DROP TABLE test_regex_toplevel_alt;
+-- Regression: top-level alternation after a grouped alternation.
+-- ^(ab|ac)|zz parses as (^(ab|ac))|(zz) — the "zz" branch is unanchored.
+-- The alternation helper must not return a prefix from the grouped part.
+-- Sorted: abXX, mmzz, zzzz (3 rows/granules)
+DROP TABLE IF EXISTS test_regex_group_then_alt;
+CREATE TABLE test_regex_group_then_alt (id String) ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 1;
+INSERT INTO test_regex_group_then_alt VALUES ('abXX'), ('mmzz'), ('zzzz');
+SELECT trimLeft(explain) FROM (EXPLAIN PLAN indexes=1 SELECT id FROM test_regex_group_then_alt WHERE match(id, '^(ab|ac)|zz')) WHERE explain LIKE '%Condition%' OR explain LIKE '%Granules%';
+Condition: true
+Granules: 3/3
+SELECT count() FROM test_regex_group_then_alt WHERE match(id, '^(ab|ac)|zz');
+3
+SELECT * FROM test_regex_group_then_alt WHERE match(id, '^(ab|ac)|zz') ORDER BY id;
+abXX
+mmzz
+zzzz
+-- Confirm: same result with pruning disabled
+SELECT count() FROM test_regex_group_then_alt WHERE match(id, '^(ab|ac)|zz') SETTINGS use_primary_key = 0;
+3
+DROP TABLE test_regex_group_then_alt;

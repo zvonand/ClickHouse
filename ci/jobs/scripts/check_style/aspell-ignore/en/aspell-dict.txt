@@ -1743,6 +1743,7 @@ libmetrohash
 libpq
 libpqxx
 LibraryBridge
+LibraryBridge's
 librdkafka
 libs
 libunwind

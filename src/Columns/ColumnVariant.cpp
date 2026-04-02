@@ -572,7 +572,7 @@ void ColumnVariant::insertRangeFromImpl(const DB::IColumn & src_, size_t start, 
         }
         else
         {
-            /// If we see this discriminator for thupe first time, set its range start.
+            /// If we see this discriminator for the first time, set its range start.
             if (!nested_ranges[src_local_discr].second)
                 nested_ranges[src_local_discr].first = src_offsets_data[i];
             /// Update offsets column with correct offset.

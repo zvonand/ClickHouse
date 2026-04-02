@@ -490,11 +490,11 @@ TEST(ColumnObject, TryInsertRestoresSortedDynamicPaths)
     /// Without the fix the stale "a_new" entry causes a crash here (see comment above).
     Arena arena;
     const char * begin = nullptr;
-    auto ref = col_object.serializeValueIntoArena(0, arena, begin);
+    auto ref = col_object.serializeValueIntoArena(0, arena, begin, nullptr);
 
     /// Round-trip sanity check.
-    const char * pos = ref.data;
-    col_object.deserializeAndInsertFromArena(pos);
+    ReadBufferFromMemory buf(ref.data(), ref.size());
+    col_object.deserializeAndInsertFromArena(buf, nullptr);
     ASSERT_EQ(col_object.size(), 2u);
     ASSERT_EQ(col_object[1], col_object[0]);
 }

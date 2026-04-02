@@ -873,6 +873,16 @@ FROM
 )
 ORDER BY id;
 
+-- Q13. Test NULL value detection reading `RANGE_HASHED` dictionary as a table
+-- This exercises `getColumnInternal` (the dictionary-as-table path) rather than `dictGet`.
+SELECT '=== Testing NULL Value Detection - RANGE_HASHED (table read) ===' as test;
+SELECT
+    id,
+    isNull(profile) AS profile_is_null,
+    isNull(email) AS email_is_null
+FROM nullable_json_test_range_hashed
+ORDER BY id;
+
 -- ============================================
 -- Section R. `IP_TRIE` layout tests
 -- ============================================

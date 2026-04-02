@@ -408,13 +408,23 @@ ColumnPtr RangeHashedDictionary<dictionary_key_type>::getColumnInternal(
         {
             auto * out = column.get();
 
-            getItemsInternalImpl<ValueType, false>(
-                attribute,
-                key_to_index,
-                [&](size_t, const Object & value, bool)
-                {
-                    out->insert(value);
-                });
+            if (is_attribute_nullable)
+                getItemsInternalImpl<ValueType, true>(
+                    attribute,
+                    key_to_index,
+                    [&](size_t row, const Object & value, bool is_null)
+                    {
+                        (*vec_null_map_to)[row] = is_null;
+                        out->insert(value);
+                    });
+            else
+                getItemsInternalImpl<ValueType, false>(
+                    attribute,
+                    key_to_index,
+                    [&](size_t, const Object & value, bool)
+                    {
+                        out->insert(value);
+                    });
         }
         else if constexpr (std::is_same_v<ValueType, std::string_view>)
         {

@@ -4,11 +4,6 @@ SET optimize_move_to_prewhere = 1, query_plan_optimize_prewhere = 1;
 SET enable_analyzer = 1;
 SET use_statistics = 1;
 
--- Statistics loading happens inside optimizePrewhere(), which requires
--- the Filter→ReadFromMergeTree pattern. query_plan_merge_expressions = 0
--- inserts an intermediate Expression step that breaks this pattern.
-SET query_plan_merge_expressions = 1;
-
 DROP TABLE IF EXISTS sc_core SYNC;
 
 CREATE TABLE sc_core

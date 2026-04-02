@@ -22,7 +22,7 @@ DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
 USE {CLICKHOUSE_DATABASE_1:Identifier};
 
-CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.input (key UInt64, val UInt64) Engine=Memory();
+CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.dict_source (key UInt64, val UInt64) Engine=Memory();
 
 CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict
 (
@@ -30,7 +30,7 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict
   val UInt64 DEFAULT 1
 )
 PRIMARY KEY key
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'input' PASSWORD '' DB currentDatabase()))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'dict_source' PASSWORD '' DB currentDatabase()))
 LIFETIME(MIN 0 MAX 0)
 LAYOUT(HASHED());
 
@@ -53,5 +53,5 @@ DROP TABLE buffer_;
 DROP TABLE null_;
 DROP TABLE input;
 DROP DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict;
-DROP TABLE {CLICKHOUSE_DATABASE_1:Identifier}.input;
+DROP TABLE {CLICKHOUSE_DATABASE_1:Identifier}.dict_source;
 DROP DATABASE {CLICKHOUSE_DATABASE_1:Identifier};

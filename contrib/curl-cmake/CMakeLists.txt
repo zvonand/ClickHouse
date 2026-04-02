@@ -118,7 +118,6 @@ set (SRCS
     "${LIBRARY_DIR}/lib/socks_sspi.c"
     "${LIBRARY_DIR}/lib/splay.c"
     "${LIBRARY_DIR}/lib/strcase.c"
-    "${LIBRARY_DIR}/lib/strdup.c"
     "${LIBRARY_DIR}/lib/strequal.c"
     "${LIBRARY_DIR}/lib/strerror.c"
     "${LIBRARY_DIR}/lib/system_win32.c"

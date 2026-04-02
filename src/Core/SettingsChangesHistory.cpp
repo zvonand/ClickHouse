@@ -99,6 +99,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"enable_automatic_decision_for_merging_across_partitions_for_final", true, true, "New setting"},
             {"enable_full_text_index", true, true, "The text index is now GA"},
             {"allow_experimental_full_text_index", true, true, "The text index is now GA"},
+            {"query_plan_direct_read_from_text_index", true, true, "The text index is now GA"},
+            {"use_skip_indexes_on_data_read", true, true, "The text index is now GA"},
             {"use_page_cache_for_local_disks", false, false, "New setting to use userspace page cache for local disks"},
             {"use_page_cache_for_object_storage", false, false, "New setting to use userspace page cache for object storage table functions"},
             {"use_statistics_cache", false, true, "Enable statistics cache"},

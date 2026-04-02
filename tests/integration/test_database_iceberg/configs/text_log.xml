@@ -3,6 +3,6 @@
         <database>system</database>
         <table>text_log</table>
         <flush_interval_milliseconds>7500</flush_interval_milliseconds>
-        <level>debug</level>
+        <level>trace</level>
     </text_log>
 </clickhouse>

@@ -305,6 +305,7 @@ def test_no_secrets_in_logs(started_cluster):
         "storage_endpoint": "http://minio:9000/warehouse-glue",
         "region": "us-east-1",
     }
+
     qid_db = uuid.uuid4().hex
     node.query(f"DROP DATABASE IF EXISTS {db_name}")
     node.query(
@@ -335,10 +336,36 @@ SETTINGS {",".join((k + "=" + repr(v) for k, v in table_settings.items()))}""",
         },
     )
 
+    qid_show_db = uuid.uuid4().hex
+    show_db_result = node.query(
+        f"SHOW CREATE DATABASE {db_name}", query_id=qid_show_db
+    )
+    assert minio_secret_key not in show_db_result
+    assert minio_access_key not in show_db_result
+    assert "[HIDDEN]" in show_db_result
+
+    qid_show_table = uuid.uuid4().hex
+    show_table_result = node.query(
+        f"SHOW CREATE TABLE {db_name}.`{root_namespace}.{table_name}`",
+        query_id=qid_show_table,
+    )
+    assert minio_secret_key not in show_table_result
+    assert minio_access_key not in show_table_result
+    assert "[HIDDEN]" in show_table_result
+
+    qid_show_table_secrets = uuid.uuid4().hex
+    show_table_with_secrets = node.query(
+        f"SHOW CREATE TABLE {db_name}.`{root_namespace}.{table_name}`",
+        query_id=qid_show_table_secrets,
+        settings={"format_display_secrets_in_show_and_select": 1},
+    )
+    assert minio_secret_key in show_table_with_secrets
+    assert minio_access_key in show_table_with_secrets
+
     node.query("SYSTEM FLUSH LOGS system.query_log")
     node.query("SYSTEM FLUSH LOGS system.text_log")
 
-    for qid in (qid_db, qid_table):
+    for qid in (qid_db, qid_table, qid_show_db, qid_show_table, qid_show_table_secrets):
         assert (
             int(
                 node.query(
@@ -351,14 +378,13 @@ SETTINGS {",".join((k + "=" + repr(v) for k, v in table_settings.items()))}""",
             f"SELECT arrayStringConcat(groupArray(query), '\\n') FROM system.query_log WHERE query_id = '{qid}' AND type = 'QueryFinish'"
         ).strip()
         assert minio_secret_key not in query_text
-        assert "[HIDDEN]" in query_text
+        assert minio_access_key not in query_text
 
-    ## MinIO password must not appear in SQL sent to the server (Detect passwords in tests).
     text_log_rows = node.query(
         f"""
 SELECT message, value1, value2, value3, value4, value5, value6, value7, value8, value9, value10
 FROM system.text_log
-WHERE query_id IN ('{qid_db}', '{qid_table}') AND level = 'Debug'
+WHERE query_id IN ('{qid_db}', '{qid_table}', '{qid_show_db}', '{qid_show_table}', '{qid_show_table_secrets}')
 FORMAT JSONEachRow
 """
     ).strip()
@@ -368,6 +394,7 @@ FORMAT JSONEachRow
         for val in row.values():
             if isinstance(val, str):
                 assert minio_secret_key not in val
+                assert minio_access_key not in val
 
 
 def test_list_tables(started_cluster):

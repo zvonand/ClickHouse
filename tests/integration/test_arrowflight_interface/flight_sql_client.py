@@ -403,11 +403,17 @@ class FlightSQLClient:
         return self.client.get_schema(flight_descriptor(cmd), options)
 
     def set_session_options(self, options: Dict[str, Any]) -> SetSessionOptionsResult:
-        """Set session options via the SetSessionOptions action."""
+        """Set session options via the SetSessionOptions action.
+
+        Use None as a value to reset a setting to its default (sends a valueless
+        SessionOptionValue, which the server interprets as SET setting = DEFAULT).
+        """
         req = SetSessionOptionsRequest()
         for key, value in options.items():
             opt_val = SessionOptionValue()
-            if isinstance(value, str):
+            if value is None:
+                pass  # leave opt_val empty — server treats this as "reset to default"
+            elif isinstance(value, str):
                 opt_val.string_value = value
             elif isinstance(value, bool):
                 opt_val.bool_value = value

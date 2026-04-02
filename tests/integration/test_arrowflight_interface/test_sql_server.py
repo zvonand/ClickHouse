@@ -361,6 +361,47 @@ def test_get_session_options():
     assert result.session_options["max_threads"].string_value != ""
 
 
+def _query_setting(client, name):
+    """Read the current value of a setting via SQL query."""
+    flight_info = client.execute(f"SELECT value FROM system.settings WHERE name = '{name}'")
+    reader = client.do_get(flight_info.endpoints[0].ticket)
+    table = reader.read_all()
+    return table.column(0)[0].as_py()
+
+
+def test_set_session_options_persistence():
+    """SetSessionOptions changes persist and are visible in subsequent queries."""
+    client = get_client()
+
+    # Reset max_threads to default first (previous tests may have modified it)
+    result = client.set_session_options({"max_threads": None})
+    assert len(result.errors) == 0
+
+    # Read the default value
+    default_value = _query_setting(client, "max_threads")
+
+    # Pick a value that differs from the default
+    new_value = "7" if default_value != "7" else "5"
+
+    # Set the setting via SetSessionOptions
+    result = client.set_session_options({"max_threads": new_value})
+    assert len(result.errors) == 0
+
+    # Verify the setting persists via SQL query
+    assert _query_setting(client, "max_threads") == new_value
+
+    # Verify via GetSessionOptions as well
+    options = client.get_session_options()
+    assert options.session_options["max_threads"].string_value == new_value
+
+    # Reset to default
+    result = client.set_session_options({"max_threads": None})
+    assert len(result.errors) == 0
+
+    # Verify the setting was restored to the original default
+    assert _query_setting(client, "max_threads") == default_value
+
+
 def test_cancel_flight_info():
     client = get_client()
 

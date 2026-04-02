@@ -20,9 +20,23 @@ SELECT arrayAutocorrelation([1, 2, 3], toUInt64('18446744073709551615'));
 SELECT arrayAutocorrelation([1, 2, 3], toUInt64('9223372036854775808'));
 -- Signed type with positive value works
 SELECT arrayAutocorrelation([1, 2, 3], toInt64(2));
+-- Wide integer max_lag types
+SELECT arrayAutocorrelation([1, 2, 3], toUInt128(2));
+SELECT arrayAutocorrelation([1, 2, 3], toUInt256(2));
+SELECT arrayAutocorrelation([1, 2, 3], toInt128(2));
+SELECT arrayAutocorrelation([1, 2, 3], toInt256(2));
+-- Large positive Int128/Int256 values clamped to array size
+SELECT arrayAutocorrelation([1, 2, 3], toInt128('170141183460469231731687303715884105727'));
+SELECT arrayAutocorrelation([1, 2, 3], toInt256('57896044618658097711785492504343953926634992332820282019728792003956564819967'));
+-- Max UInt128/UInt256, clamped to array size
+SELECT arrayAutocorrelation([1, 2, 3], toUInt128('340282366920938463463374607431768211455'));
+SELECT arrayAutocorrelation([1, 2, 3], toUInt256('115792089237316195423570985008687907853269984665640564039457584007913129639935'));
 -- Negative values are rejected at runtime
 SELECT arrayAutocorrelation([1, 2, 3], toInt64(-1)); -- { serverError BAD_ARGUMENTS }
 SELECT arrayAutocorrelation([1, 2, 3], toInt64('-9223372036854775808')); -- { serverError BAD_ARGUMENTS }
+-- Wide signed negative
+SELECT arrayAutocorrelation([1, 2, 3], toInt128(-1)); -- { serverError BAD_ARGUMENTS }
+SELECT arrayAutocorrelation([1, 2, 3], toInt256(-1)); -- { serverError BAD_ARGUMENTS }
 
 SELECT '--- Type Dispatch Coverage ---';
 SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(UInt8)'));

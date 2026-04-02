@@ -66,8 +66,9 @@ public:
             if (!isInteger(arguments[1]))
                 throw Exception(
                     ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                    "Second argument (max_lag) of function {} must be a non-negative integer.",
-                    getName());
+                    "Second argument (max_lag) of function {} must be an integer, got {}.",
+                    getName(),
+                    arguments[1]->getName());
         }
 
         /// Always return Array(Float64)
@@ -77,14 +78,44 @@ public:
     static constexpr size_t MAX_AUTOCORRELATION_OPERATIONS = 100'000'000;
 
     /// Validate that a signed max_lag column contains no negative values.
-    static void validateMaxLagNotNegative(const IColumn * col_max_lag, size_t rows)
+    /// Uses typed access to avoid truncation for wide integer types (Int128, Int256).
+    template <typename T>
+    static void validateMaxLagNotNegativeTyped(const IColumn * col_max_lag, size_t rows)
     {
+        const auto & data = assert_cast<const ColumnVector<T> &>(*col_max_lag).getData();
         for (size_t i = 0; i < rows; ++i)
         {
-            Int64 val = col_max_lag->getInt(i);
-            if (val < 0)
-                throw Exception(ErrorCodes::BAD_ARGUMENTS, "arrayAutocorrelation: max_lag must be non-negative, got {}", val);
+            if (data[i] < 0)
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "{}: max_lag must be non-negative", name);
         }
+    }
+
+    static void validateMaxLagNotNegative(const IColumn * col_max_lag, size_t rows)
+    {
+        /// For ColumnConst, unwrap and validate the single inner value.
+        if (const auto * col_const = typeid_cast<const ColumnConst *>(col_max_lag))
+        {
+            validateMaxLagNotNegative(&col_const->getDataColumn(), 1);
+            return;
+        }
+
+        if (checkColumn<ColumnVector<Int8>>(*col_max_lag))
+            validateMaxLagNotNegativeTyped<Int8>(col_max_lag, rows);
+        else if (checkColumn<ColumnVector<Int16>>(*col_max_lag))
+            validateMaxLagNotNegativeTyped<Int16>(col_max_lag, rows);
+        else if (checkColumn<ColumnVector<Int32>>(*col_max_lag))
+            validateMaxLagNotNegativeTyped<Int32>(col_max_lag, rows);
+        else if (checkColumn<ColumnVector<Int64>>(*col_max_lag))
+            validateMaxLagNotNegativeTyped<Int64>(col_max_lag, rows);
+        else if (checkColumn<ColumnVector<Int128>>(*col_max_lag))
+            validateMaxLagNotNegativeTyped<Int128>(col_max_lag, rows);
+        else if (checkColumn<ColumnVector<Int256>>(*col_max_lag))
+            validateMaxLagNotNegativeTyped<Int256>(col_max_lag, rows);
+        else
+            throw Exception(
+                ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+                "Second argument (max_lag) of function {} has unsupported column type: {}", name,
+                col_max_lag->getFamilyName());
     }
 
     template <typename Element>
@@ -102,8 +133,9 @@ public:
         if (size > MAX_AUTOCORRELATION_OPERATIONS / limit)
             throw Exception(
                 ErrorCodes::BAD_ARGUMENTS,
-                "arrayAutocorrelation: estimated computation ({} * {}) exceeds the safety limit of {}. "
+                "{}: estimated computation ({} * {}) exceeds the safety limit of {}. "
                 "Use the max_lag argument to reduce the number of lags.",
+                name,
                 size,
                 limit,
                 MAX_AUTOCORRELATION_OPERATIONS);
@@ -243,6 +275,13 @@ public:
         const IColumn * col_max_lag = nullptr;
         if (arguments.size() > 1)
         {
+            if (!isInteger(arguments[1].type))
+                throw Exception(
+                    ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+                    "Second argument (max_lag) of function {} must be an integer, got {}.",
+                    getName(),
+                    arguments[1].type->getName());
+
             col_max_lag = arguments[1].column.get();
             if (!arguments[1].type->isValueRepresentedByUnsignedInteger())
                 validateMaxLagNotNegative(col_max_lag, input_rows_count);
@@ -311,7 +350,8 @@ public:
 
         throw Exception(
             ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-            "arrayAutocorrelation only accepts arrays of integers, floating-point numbers, or decimals. Unsupported type: {}",
+            "Function {} only accepts arrays of integers, floating-point numbers, or decimals. Unsupported type: {}",
+            getName(),
             nested.getFamilyName());
     }
 
@@ -361,7 +401,8 @@ public:
 
         throw Exception(
             ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-            "arrayAutocorrelation only accepts arrays of integers, floating-point numbers, or decimals. Unsupported type: {}",
+            "Function {} only accepts arrays of integers, floating-point numbers, or decimals. Unsupported type: {}",
+            getName(),
             nested.getFamilyName());
     }
 };

@@ -85,6 +85,8 @@ void TableMetadata::setLocation(const std::string & location_)
     if (!with_location)
         throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Data location was not requested");
 
+    abfss_has_container_path_prefix = false;
+
     /// Location has format:
     /// s3://<bucket>/path/to/table/data.
     /// We want to split s3://<bucket> and path/to/table/data.

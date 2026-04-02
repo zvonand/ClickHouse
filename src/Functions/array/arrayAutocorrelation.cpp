@@ -200,72 +200,193 @@ public:
         return executeType<Float64>(*converted_array, col_max_lag, max_lag_type);
     }
 
-    ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t /*input_rows_count*/) const override
+    /// Const array path: operate on the single array for each row without materializing.
+    template <typename Element>
+    ColumnPtr executeTypeConstArray(
+        const ColumnArray & single_array, const IColumn * col_max_lag, const DataTypePtr & max_lag_type, size_t input_rows_count) const
     {
-        ColumnPtr array_col_ptr = arguments[0].column->convertToFullColumnIfConst();
-        const ColumnArray * col_array = checkAndGetColumn<ColumnArray>(array_col_ptr.get());
-        if (!col_array)
-            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "First argument of function {} must be an array", getName());
+        const auto & data = assert_cast<const ColumnVector<Element> &>(single_array.getData()).getData();
+        size_t array_size = data.size();
 
+        auto res_data_col = ColumnFloat64::create();
+        auto & res_data = res_data_col->getData();
+        auto res_offsets_col = ColumnArray::ColumnOffsets::create();
+        auto & res_offsets = res_offsets_col->getData();
+
+        res_offsets.reserve(input_rows_count);
+
+        bool is_signed_lag = false;
+        if (max_lag_type)
+            is_signed_lag = !max_lag_type->isValueRepresentedByUnsignedInteger();
+
+        for (size_t i = 0; i < input_rows_count; ++i)
+        {
+            size_t max_lag = array_size;
+            if (col_max_lag)
+            {
+                if (is_signed_lag)
+                {
+                    Int64 val = col_max_lag->getInt(i);
+                    max_lag = (val < 0) ? 0 : static_cast<size_t>(val);
+                }
+                else
+                {
+                    max_lag = static_cast<size_t>(col_max_lag->getUInt(i));
+                }
+            }
+
+            impl(data.data(), array_size, max_lag, res_data);
+            res_offsets.push_back(res_data.size());
+        }
+
+        return ColumnArray::create(std::move(res_data_col), std::move(res_offsets_col));
+    }
+
+    template <typename DecimalType>
+    ColumnPtr executeDecimalTypeConstArray(
+        const ColumnArray & single_array, const IColumn * col_max_lag, const DataTypePtr & max_lag_type, size_t input_rows_count) const
+    {
+        const auto & col_data = assert_cast<const ColumnDecimal<DecimalType> &>(single_array.getData());
+        const auto & data = col_data.getData();
+        UInt32 scale = col_data.getScale();
+        size_t array_size = data.size();
+
+        Float64 scale_factor = static_cast<Float64>(DecimalUtils::scaleMultiplier<typename DecimalType::NativeType>(scale));
+        auto float_col = ColumnFloat64::create(array_size);
+        auto & float_data = float_col->getData();
+        for (size_t i = 0; i < array_size; ++i)
+            float_data[i] = static_cast<Float64>(data[i].value) / scale_factor;
+
+        auto converted = ColumnArray::create(std::move(float_col), single_array.getOffsetsPtr());
+        return executeTypeConstArray<Float64>(*converted, col_max_lag, max_lag_type, input_rows_count);
+    }
+
+    ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const override
+    {
         const IColumn * col_max_lag = nullptr;
         DataTypePtr max_lag_type = nullptr;
-
         if (arguments.size() > 1)
         {
             col_max_lag = arguments[1].column.get();
             max_lag_type = arguments[1].type;
         }
 
-        const IColumn & nested_column = col_array->getData();
-
-        if (checkColumn<ColumnNothing>(nested_column))
+        /// When the array argument is constant, extract the single array to avoid materializing it.
+        if (const auto * col_const = typeid_cast<const ColumnConst *>(arguments[0].column.get()))
         {
-            return ColumnArray::create(ColumnFloat64::create(), col_array->getOffsetsPtr());
+            const auto & single_array = assert_cast<const ColumnArray &>(col_const->getDataColumn());
+            return dispatchConstArray(single_array, col_max_lag, max_lag_type, input_rows_count);
         }
 
-        /// Dispatch based on nested element type
-        if (checkColumn<ColumnVector<UInt8>>(nested_column))
-            return executeType<UInt8>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<UInt16>>(nested_column))
-            return executeType<UInt16>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<UInt32>>(nested_column))
-            return executeType<UInt32>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<UInt64>>(nested_column))
-            return executeType<UInt64>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<UInt128>>(nested_column))
-            return executeType<UInt128>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<UInt256>>(nested_column))
-            return executeType<UInt256>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<Int8>>(nested_column))
-            return executeType<Int8>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<Int16>>(nested_column))
-            return executeType<Int16>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<Int32>>(nested_column))
-            return executeType<Int32>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<Int64>>(nested_column))
-            return executeType<Int64>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<Int128>>(nested_column))
-            return executeType<Int128>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<Int256>>(nested_column))
-            return executeType<Int256>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<Float32>>(nested_column))
-            return executeType<Float32>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnVector<Float64>>(nested_column))
-            return executeType<Float64>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnDecimal<Decimal32>>(nested_column))
-            return executeDecimalType<Decimal32>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnDecimal<Decimal64>>(nested_column))
-            return executeDecimalType<Decimal64>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnDecimal<Decimal128>>(nested_column))
-            return executeDecimalType<Decimal128>(*col_array, col_max_lag, max_lag_type);
-        else if (checkColumn<ColumnDecimal<Decimal256>>(nested_column))
-            return executeDecimalType<Decimal256>(*col_array, col_max_lag, max_lag_type);
-        else
-            throw Exception(
-                ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                "arrayAutocorrelation only accepts arrays of integers, floating-point numbers, or decimals. "
-                "Unsupported type: {}",
-                nested_column.getFamilyName());
+        const auto * col_array = checkAndGetColumn<ColumnArray>(arguments[0].column.get());
+        if (!col_array)
+            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "First argument of function {} must be an array", getName());
+
+        return dispatchNonConstArray(*col_array, col_max_lag, max_lag_type);
+    }
+
+    ColumnPtr dispatchConstArray(
+        const ColumnArray & single_array, const IColumn * col_max_lag, const DataTypePtr & max_lag_type, size_t input_rows_count) const
+    {
+        const IColumn & nested = single_array.getData();
+
+        if (checkColumn<ColumnNothing>(nested))
+        {
+            auto offsets = ColumnArray::ColumnOffsets::create(input_rows_count, 0);
+            return ColumnArray::create(ColumnFloat64::create(), std::move(offsets));
+        }
+
+        if (checkColumn<ColumnVector<UInt8>>(nested))
+            return executeTypeConstArray<UInt8>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<UInt16>>(nested))
+            return executeTypeConstArray<UInt16>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<UInt32>>(nested))
+            return executeTypeConstArray<UInt32>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<UInt64>>(nested))
+            return executeTypeConstArray<UInt64>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<UInt128>>(nested))
+            return executeTypeConstArray<UInt128>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<UInt256>>(nested))
+            return executeTypeConstArray<UInt256>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<Int8>>(nested))
+            return executeTypeConstArray<Int8>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<Int16>>(nested))
+            return executeTypeConstArray<Int16>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<Int32>>(nested))
+            return executeTypeConstArray<Int32>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<Int64>>(nested))
+            return executeTypeConstArray<Int64>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<Int128>>(nested))
+            return executeTypeConstArray<Int128>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<Int256>>(nested))
+            return executeTypeConstArray<Int256>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<Float32>>(nested))
+            return executeTypeConstArray<Float32>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnVector<Float64>>(nested))
+            return executeTypeConstArray<Float64>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnDecimal<Decimal32>>(nested))
+            return executeDecimalTypeConstArray<Decimal32>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnDecimal<Decimal64>>(nested))
+            return executeDecimalTypeConstArray<Decimal64>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnDecimal<Decimal128>>(nested))
+            return executeDecimalTypeConstArray<Decimal128>(single_array, col_max_lag, max_lag_type, input_rows_count);
+        else if (checkColumn<ColumnDecimal<Decimal256>>(nested))
+            return executeDecimalTypeConstArray<Decimal256>(single_array, col_max_lag, max_lag_type, input_rows_count);
+
+        throw Exception(
+            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+            "arrayAutocorrelation only accepts arrays of integers, floating-point numbers, or decimals. Unsupported type: {}",
+            nested.getFamilyName());
+    }
+
+    ColumnPtr dispatchNonConstArray(const ColumnArray & col_array, const IColumn * col_max_lag, const DataTypePtr & max_lag_type) const
+    {
+        const IColumn & nested = col_array.getData();
+
+        if (checkColumn<ColumnNothing>(nested))
+            return ColumnArray::create(ColumnFloat64::create(), col_array.getOffsetsPtr());
+
+        if (checkColumn<ColumnVector<UInt8>>(nested))
+            return executeType<UInt8>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<UInt16>>(nested))
+            return executeType<UInt16>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<UInt32>>(nested))
+            return executeType<UInt32>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<UInt64>>(nested))
+            return executeType<UInt64>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<UInt128>>(nested))
+            return executeType<UInt128>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<UInt256>>(nested))
+            return executeType<UInt256>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<Int8>>(nested))
+            return executeType<Int8>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<Int16>>(nested))
+            return executeType<Int16>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<Int32>>(nested))
+            return executeType<Int32>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<Int64>>(nested))
+            return executeType<Int64>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<Int128>>(nested))
+            return executeType<Int128>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<Int256>>(nested))
+            return executeType<Int256>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<Float32>>(nested))
+            return executeType<Float32>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnVector<Float64>>(nested))
+            return executeType<Float64>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnDecimal<Decimal32>>(nested))
+            return executeDecimalType<Decimal32>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnDecimal<Decimal64>>(nested))
+            return executeDecimalType<Decimal64>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnDecimal<Decimal128>>(nested))
+            return executeDecimalType<Decimal128>(col_array, col_max_lag, max_lag_type);
+        else if (checkColumn<ColumnDecimal<Decimal256>>(nested))
+            return executeDecimalType<Decimal256>(col_array, col_max_lag, max_lag_type);
+
+        throw Exception(
+            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+            "arrayAutocorrelation only accepts arrays of integers, floating-point numbers, or decimals. Unsupported type: {}",
+            nested.getFamilyName());
     }
 };
 

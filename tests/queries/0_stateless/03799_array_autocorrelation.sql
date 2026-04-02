@@ -46,6 +46,16 @@ SELECT id, arrayAutocorrelation(data) FROM test_autocorr ORDER BY id;
 SELECT id, arrayAutocorrelation(data, lag) FROM test_autocorr ORDER BY id;
 DROP TABLE test_autocorr;
 
+SELECT '--- Const Array Optimization ---';
+-- Non-const array with const max_lag
+SELECT arrayAutocorrelation(arrayMap(x -> x + number, [1, 2, 3]), 2) FROM numbers(3);
+-- Const array with non-const max_lag
+SELECT arrayAutocorrelation([1, 2, 3], number) FROM numbers(3);
+-- 10-element const array across 100K rows: would OOM/TLE if materialized (10 * 100K = 1M elements)
+SELECT sum(length(arrayAutocorrelation([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], number % 5))) FROM numbers(100000);
+-- Same for Decimal const array
+SELECT sum(length(arrayAutocorrelation(CAST([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 'Array(Decimal64(2))'), number % 5))) FROM numbers(100000);
+
 SELECT '--- NaN and Inf Handling ---';
 SELECT arrayAutocorrelation([1.0, nan, 3.0]);
 SELECT arrayAutocorrelation([1.0, inf, 3.0]);

@@ -96,6 +96,7 @@ namespace Setting
     extern const SettingsUInt64 query_plan_max_optimizations_to_apply;
     extern const SettingsUInt64 query_plan_optimize_join_order_limit;
     extern const SettingsUInt64 query_plan_optimize_join_order_randomize;
+    extern const SettingsBool enable_join_transitive_predicates;
     extern const SettingsUInt64 use_index_for_in_with_subqueries_max_values;
     extern const SettingsVectorSearchFilterStrategy vector_search_filter_strategy;
     extern const SettingsBool parallel_replicas_filter_pushdown;
@@ -158,6 +159,7 @@ QueryPlanOptimizationSettings::QueryPlanOptimizationSettings(
     {
         LOG_DEBUG(getLogger("QueryPlanOptimizationSettings"), "Using random seed {} for randomizing join order optimizations", query_plan_optimize_join_order_randomize);
     }
+    enable_join_transitive_predicates = from[Setting::enable_join_transitive_predicates];
 
     join_swap_table = from[Setting::query_plan_join_swap_table].is_auto
         ? std::nullopt

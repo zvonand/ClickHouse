@@ -2804,6 +2804,8 @@ class TestCase:
             _mangled_file = os.path.join(args.test_tmp_dir, os.path.basename(self.case_file))
             with open(_mangled_file, "w") as _f:
                 _f.write(_mangled_content)
+            # Preserve executable bit so .sh / .expect tests can be run directly.
+            os.chmod(_mangled_file, os.stat(self.case_file).st_mode)
             _test_file = _mangled_file
             # Write mangled reference to a per-run temp file and redirect the
             # comparison to it so stdout (with mangled names) matches directly.

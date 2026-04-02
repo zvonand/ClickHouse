@@ -60,6 +60,7 @@ SELECT '';
 
 DROP database IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 CREATE database {CLICKHOUSE_DATABASE_1:Identifier} ENGINE=Atomic;
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 SYSTEM FLUSH LOGS query_log;
 SELECT used_database_engines

@@ -1,6 +1,7 @@
 -- Tags: no-parallel
 
 CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.test_for_dictionary (value String) ENGINE=TinyLog;
 INSERT INTO {CLICKHOUSE_DATABASE_1:Identifier}.test_for_dictionary VALUES ('Test1'), ('Test2'), ('Test3');
@@ -13,7 +14,7 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.test_query_log_dictionary_s
     `value` String
 )
 PRIMARY KEY value_id
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'test_for_dictionary' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'test_for_dictionary' DB currentDatabase()))
 LIFETIME(MIN 1 MAX 10)
 LAYOUT(HASHED());
 
@@ -30,7 +31,7 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.test_query_log_dictionary_c
     `value` String
 )
 PRIMARY KEY value_id, value_length
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'test_for_dictionary' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'test_for_dictionary' DB currentDatabase()))
 LIFETIME(MIN 1 MAX 10)
 LAYOUT(COMPLEX_KEY_HASHED());
 

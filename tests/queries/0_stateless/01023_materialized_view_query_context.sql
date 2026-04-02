@@ -20,6 +20,7 @@ set distributed_foreground_insert=1;
 DROP TABLE IF EXISTS mv;
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.input (key UInt64, val UInt64) Engine=Memory();
 
@@ -29,7 +30,7 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict
   val UInt64 DEFAULT 1
 )
 PRIMARY KEY key
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'input' PASSWORD '' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'input' PASSWORD '' DB currentDatabase()))
 LIFETIME(MIN 0 MAX 0)
 LAYOUT(HASHED());
 
@@ -39,7 +40,7 @@ CREATE TABLE buffer_  (key UInt64) Engine=Buffer(currentDatabase(), dist_out, 1,
 CREATE TABLE dist_out (key UInt64) Engine=Distributed(test_shard_localhost, currentDatabase(), null_, key);
 
 CREATE TABLE output (key UInt64, val UInt64) Engine=Memory();
-CREATE MATERIALIZED VIEW mv TO output AS SELECT key, dictGetUInt64('{CLICKHOUSE_DATABASE_1:Identifier}.dict', 'val', key) val FROM dist_out;
+CREATE MATERIALIZED VIEW mv TO output AS SELECT key, dictGetUInt64('dict', 'val', key) val FROM dist_out;
 
 INSERT INTO input VALUES (1);
 

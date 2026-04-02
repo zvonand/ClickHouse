@@ -5,6 +5,7 @@ SET send_logs_level = 'fatal';
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 
 CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.table_for_dict
 (
@@ -26,7 +27,7 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict1
   fourth_column Float64 DEFAULT 42.0
 )
 PRIMARY KEY key_column
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'table_for_dict' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'table_for_dict' DB currentDatabase()))
 LIFETIME(0)
 LAYOUT(FLAT());
 
@@ -40,7 +41,7 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict2
   fourth_column Float64 DEFAULT 42.0
 )
 PRIMARY KEY key_column
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'dict1' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'dict1' DB currentDatabase()))
 LIFETIME(0)
 LAYOUT(HASHED());
 
@@ -63,7 +64,7 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict3
   fourth_column Float64 DEFAULT 42.0
 )
 PRIMARY KEY key_column
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'dict2' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'dict2' DB currentDatabase()))
 LIFETIME(0)
 LAYOUT(HASHED());
 
@@ -89,14 +90,14 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict4
   fourth_column Float64 DEFAULT 42.0
 )
 PRIMARY KEY key_column
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'non_existing_table' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'non_existing_table' DB currentDatabase()))
 LIFETIME(0)
 LAYOUT(HASHED());
 
 SELECT count(*) FROM {CLICKHOUSE_DATABASE_1:Identifier}.dict4; -- {serverError UNKNOWN_TABLE}
 
-SELECT name from system.tables WHERE database = '{CLICKHOUSE_DATABASE_1}' ORDER BY name;
-SELECT name from system.dictionaries WHERE database = '{CLICKHOUSE_DATABASE_1}' ORDER BY name;
+SELECT name from system.tables WHERE database = {CLICKHOUSE_DATABASE_1:String} ORDER BY name;
+SELECT name from system.dictionaries WHERE database = {CLICKHOUSE_DATABASE_1:String} ORDER BY name;
 
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 

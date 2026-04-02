@@ -2,6 +2,7 @@
 
 drop database if exists {CLICKHOUSE_DATABASE_1:Identifier};
 create database {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.table_cache_dict(
 KeyField UInt64,
@@ -47,7 +48,7 @@ CREATE DICTIONARY IF NOT EXISTS {CLICKHOUSE_DATABASE_1:Identifier}.cache_dict (
 	Decimal128_ Decimal128(35) DEFAULT 555.11,
 	ParentKeyField UInt64 DEFAULT 444)
 PRIMARY KEY KeyField
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'table_cache_dict' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'table_cache_dict' DB currentDatabase()))
 LIFETIME(5) LAYOUT(CACHE(SIZE_IN_CELLS 20));
 
 
@@ -58,60 +59,60 @@ INSERT INTO {CLICKHOUSE_DATABASE_1:Identifier}.table_cache_dict VALUES (4, 2222,
 INSERT INTO {CLICKHOUSE_DATABASE_1:Identifier}.table_cache_dict VALUES (5, 22222, 33333, 44444, 55555, -11111, -22222, -33333, -44444, 'ff99a408-78bb-4939-93cc-65e657e347c6', '1991-06-28', '2007-02-28 23:42:25', 'dictionary', 33.333, 3222193713.7, toDecimal32('5e-5', 5), toDecimal64('5e-15', 15), toDecimal128('5e-35', 35), 1);
 
 
-SELECT arrayDistinct(groupArray(dictGetUInt8('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'UInt8_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetUInt8('cache_dict', 'UInt8_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetUInt16('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'UInt16_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetUInt16('cache_dict', 'UInt16_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetUInt32('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'UInt32_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetUInt32('cache_dict', 'UInt32_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetUInt64('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'UInt64_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetUInt64('cache_dict', 'UInt64_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetInt8('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Int8_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetInt8('cache_dict', 'Int8_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetInt16('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Int16_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetInt16('cache_dict', 'Int16_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetInt32('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Int32_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetInt32('cache_dict', 'Int32_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetInt64('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Int64_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetInt64('cache_dict', 'Int64_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetFloat32('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Float32_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetFloat32('cache_dict', 'Float32_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetFloat64('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Float64_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetFloat64('cache_dict', 'Float64_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Decimal32_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGet('cache_dict', 'Decimal32_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Decimal64_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGet('cache_dict', 'Decimal64_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Decimal128_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGet('cache_dict', 'Decimal128_', toUInt64(number)))) from numbers(10);
 system reload dictionaries;
-SELECT arrayDistinct(groupArray(dictGetString('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'String_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetString('cache_dict', 'String_', toUInt64(number)))) from numbers(10);
 
 
 
-SELECT arrayDistinct(groupArray(dictGetUInt8('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'UInt8_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetUInt16('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'UInt16_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetUInt32('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'UInt32_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetUInt64('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'UInt64_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetInt8('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Int8_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetInt16('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Int16_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetInt32('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Int32_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetInt64('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Int64_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetFloat32('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Float32_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetFloat64('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Float64_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Decimal32_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Decimal64_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'Decimal128_', toUInt64(number)))) from numbers(10);
-SELECT arrayDistinct(groupArray(dictGetString('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', 'String_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetUInt8('cache_dict', 'UInt8_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetUInt16('cache_dict', 'UInt16_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetUInt32('cache_dict', 'UInt32_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetUInt64('cache_dict', 'UInt64_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetInt8('cache_dict', 'Int8_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetInt16('cache_dict', 'Int16_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetInt32('cache_dict', 'Int32_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetInt64('cache_dict', 'Int64_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetFloat32('cache_dict', 'Float32_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetFloat64('cache_dict', 'Float64_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGet('cache_dict', 'Decimal32_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGet('cache_dict', 'Decimal64_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGet('cache_dict', 'Decimal128_', toUInt64(number)))) from numbers(10);
+SELECT arrayDistinct(groupArray(dictGetString('cache_dict', 'String_', toUInt64(number)))) from numbers(10);
 
 
 system reload dictionaries;
 
 
-SELECT groupArray(dictHas('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', toUInt64(number))) from numbers(10);
-SELECT groupArray(dictHas('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', toUInt64(number))) from numbers(10);
-SELECT groupArray(dictHas('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', toUInt64(number))) from numbers(10);
-SELECT groupArray(dictHas('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', toUInt64(number))) from numbers(10);
-SELECT groupArray(dictHas('{CLICKHOUSE_DATABASE_1:Identifier}.cache_dict', toUInt64(number))) from numbers(10);
+SELECT groupArray(dictHas('cache_dict', toUInt64(number))) from numbers(10);
+SELECT groupArray(dictHas('cache_dict', toUInt64(number))) from numbers(10);
+SELECT groupArray(dictHas('cache_dict', toUInt64(number))) from numbers(10);
+SELECT groupArray(dictHas('cache_dict', toUInt64(number))) from numbers(10);
+SELECT groupArray(dictHas('cache_dict', toUInt64(number))) from numbers(10);
 
 drop dictionary {CLICKHOUSE_DATABASE_1:Identifier}.cache_dict;
 drop table {CLICKHOUSE_DATABASE_1:Identifier}.table_cache_dict;

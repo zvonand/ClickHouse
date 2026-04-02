@@ -2,6 +2,7 @@
 
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier} ENGINE=Atomic;
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 DROP TABLE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier}.test_source_table_1;
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.test_source_table_1
@@ -20,7 +21,7 @@ CREATE OR REPLACE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.test_dictionary
 )
 PRIMARY KEY id
 LAYOUT(DIRECT())
-SOURCE(CLICKHOUSE(DB '{CLICKHOUSE_DATABASE_1}' TABLE 'test_source_table_1'));
+SOURCE(CLICKHOUSE(DB currentDatabase() TABLE 'test_source_table_1'));
 
 SELECT * FROM {CLICKHOUSE_DATABASE_1:Identifier}.test_dictionary;
 
@@ -40,7 +41,7 @@ CREATE OR REPLACE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.test_dictionary
 )
 PRIMARY KEY id
 LAYOUT(HASHED())
-SOURCE(CLICKHOUSE(DB '{CLICKHOUSE_DATABASE_1}' TABLE 'test_source_table_2'))
+SOURCE(CLICKHOUSE(DB currentDatabase() TABLE 'test_source_table_2'))
 LIFETIME(0);
 
 SELECT * FROM {CLICKHOUSE_DATABASE_1:Identifier}.test_dictionary;

@@ -14,7 +14,7 @@ INSERT INTO src(s) VALUES ('before moving tables');
 CREATE TABLE dist (s String) ENGINE = Distributed(test_shard_localhost, test_03031, src);
 
 SET enable_analyzer=0;
-SELECT _table FROM merge('{CLICKHOUSE_DATABASE_1}', '') ORDER BY _table, s;
+SELECT _table FROM merge({CLICKHOUSE_DATABASE_1:String}, '') ORDER BY _table, s;
 
 DROP TABLE src;
 DROP TABLE dist;

@@ -3,6 +3,7 @@
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 
 CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.table_for_dict1
@@ -23,11 +24,11 @@ CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict1
   third_column String DEFAULT 'qqq'
 )
 PRIMARY KEY key_column, second_column
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'table_for_dict1' PASSWORD '' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'table_for_dict1' PASSWORD '' DB currentDatabase()))
 LAYOUT(COMPLEX_KEY_DIRECT());
 
-SELECT dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.dict1', 'third_column', (number, number + 1)) FROM numbers(4);
-SELECT dictHas('{CLICKHOUSE_DATABASE_1:Identifier}.dict1', (toUInt64(1), toUInt64(3)));
+SELECT dictGet('dict1', 'third_column', (number, number + 1)) FROM numbers(4);
+SELECT dictHas('dict1', (toUInt64(1), toUInt64(3)));
 
 DROP DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.dict1;
 DROP TABLE {CLICKHOUSE_DATABASE_1:Identifier}.table_for_dict1;

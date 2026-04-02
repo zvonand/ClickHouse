@@ -2,6 +2,7 @@
 
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.dictionary_source_table
 (
@@ -15,15 +16,15 @@ INSERT INTO {CLICKHOUSE_DATABASE_1:Identifier}.dictionary_source_table VALUES (0
 
 CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.test_dictionary(key UInt64, value1 UInt64, value1 UInt64)
 PRIMARY KEY key
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'dictionary_source_table' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'dictionary_source_table' DB currentDatabase()))
 LAYOUT(COMPLEX_KEY_DIRECT()); -- {serverError BAD_ARGUMENTS}
 
 CREATE DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.test_dictionary(key UInt64, value1 UInt64, value2 UInt64)
 PRIMARY KEY key
-SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'dictionary_source_table' DB '{CLICKHOUSE_DATABASE_1}'))
+SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() USER 'default' TABLE 'dictionary_source_table' DB currentDatabase()))
 LAYOUT(COMPLEX_KEY_DIRECT());
 
-SELECT number, dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.test_dictionary', 'value1', tuple(number)) as value1,
-   dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.test_dictionary', 'value2', tuple(number)) as value2 FROM system.numbers LIMIT 3;
+SELECT number, dictGet('test_dictionary', 'value1', tuple(number)) as value1,
+   dictGet('test_dictionary', 'value2', tuple(number)) as value2 FROM system.numbers LIMIT 3;
 
 DROP DATABASE {CLICKHOUSE_DATABASE_1:Identifier};

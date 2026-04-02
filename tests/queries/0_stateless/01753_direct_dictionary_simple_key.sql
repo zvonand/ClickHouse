@@ -2,6 +2,7 @@
 
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.simple_key_simple_attributes_source_table
 (
@@ -27,19 +28,19 @@ LAYOUT(DIRECT());
 
 SELECT 'Dictionary direct_dictionary_simple_key_simple_attributes';
 SELECT 'dictGet existing value';
-SELECT dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes', 'value_first', number) as value_first,
-    dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes', 'value_second', number) as value_second FROM system.numbers LIMIT 3;
+SELECT dictGet('direct_dictionary_simple_key_simple_attributes', 'value_first', number) as value_first,
+    dictGet('direct_dictionary_simple_key_simple_attributes', 'value_second', number) as value_second FROM system.numbers LIMIT 3;
 SELECT 'dictGet with non existing value';
-SELECT dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes', 'value_first', number) as value_first,
-    dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes', 'value_second', number) as value_second FROM system.numbers LIMIT 4;
+SELECT dictGet('direct_dictionary_simple_key_simple_attributes', 'value_first', number) as value_first,
+    dictGet('direct_dictionary_simple_key_simple_attributes', 'value_second', number) as value_second FROM system.numbers LIMIT 4;
 SELECT 'dictGetOrDefault existing value';
-SELECT dictGetOrDefault('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes', 'value_first', number, toString('default')) as value_first,
-    dictGetOrDefault('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes', 'value_second', number, toString('default')) as value_second FROM system.numbers LIMIT 3;
+SELECT dictGetOrDefault('direct_dictionary_simple_key_simple_attributes', 'value_first', number, toString('default')) as value_first,
+    dictGetOrDefault('direct_dictionary_simple_key_simple_attributes', 'value_second', number, toString('default')) as value_second FROM system.numbers LIMIT 3;
 SELECT 'dictGetOrDefault non existing value';
-SELECT dictGetOrDefault('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes', 'value_first', number, toString('default')) as value_first,
-    dictGetOrDefault('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes', 'value_second', number, toString('default')) as value_second FROM system.numbers LIMIT 4;
+SELECT dictGetOrDefault('direct_dictionary_simple_key_simple_attributes', 'value_first', number, toString('default')) as value_first,
+    dictGetOrDefault('direct_dictionary_simple_key_simple_attributes', 'value_second', number, toString('default')) as value_second FROM system.numbers LIMIT 4;
 SELECT 'dictHas';
-SELECT dictHas('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes', number) FROM system.numbers LIMIT 4;
+SELECT dictHas('direct_dictionary_simple_key_simple_attributes', number) FROM system.numbers LIMIT 4;
 SELECT 'select all values as input stream';
 SELECT * FROM {CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_simple_attributes ORDER BY ALL;
 
@@ -70,19 +71,19 @@ LAYOUT(DIRECT());
 
 SELECT 'Dictionary direct_dictionary_simple_key_complex_attributes';
 SELECT 'dictGet existing value';
-SELECT dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes', 'value_first', number) as value_first,
-    dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes', 'value_second', number) as value_second FROM system.numbers LIMIT 3;
+SELECT dictGet('direct_dictionary_simple_key_complex_attributes', 'value_first', number) as value_first,
+    dictGet('direct_dictionary_simple_key_complex_attributes', 'value_second', number) as value_second FROM system.numbers LIMIT 3;
 SELECT 'dictGet with non existing value';
-SELECT dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes', 'value_first', number) as value_first,
-    dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes', 'value_second', number) as value_second FROM system.numbers LIMIT 4;
+SELECT dictGet('direct_dictionary_simple_key_complex_attributes', 'value_first', number) as value_first,
+    dictGet('direct_dictionary_simple_key_complex_attributes', 'value_second', number) as value_second FROM system.numbers LIMIT 4;
 SELECT 'dictGetOrDefault existing value';
-SELECT dictGetOrDefault('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes', 'value_first', number, toString('default')) as value_first,
-    dictGetOrDefault('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes', 'value_second', number, toString('default')) as value_second FROM system.numbers LIMIT 3;
+SELECT dictGetOrDefault('direct_dictionary_simple_key_complex_attributes', 'value_first', number, toString('default')) as value_first,
+    dictGetOrDefault('direct_dictionary_simple_key_complex_attributes', 'value_second', number, toString('default')) as value_second FROM system.numbers LIMIT 3;
 SELECT 'dictGetOrDefault non existing value';
-SELECT dictGetOrDefault('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes', 'value_first', number, toString('default')) as value_first,
-    dictGetOrDefault('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes', 'value_second', number, toString('default')) as value_second FROM system.numbers LIMIT 4;
+SELECT dictGetOrDefault('direct_dictionary_simple_key_complex_attributes', 'value_first', number, toString('default')) as value_first,
+    dictGetOrDefault('direct_dictionary_simple_key_complex_attributes', 'value_second', number, toString('default')) as value_second FROM system.numbers LIMIT 4;
 SELECT 'dictHas';
-SELECT dictHas('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes', number) FROM system.numbers LIMIT 4;
+SELECT dictHas('direct_dictionary_simple_key_complex_attributes', number) FROM system.numbers LIMIT 4;
 SELECT 'select all values as input stream';
 SELECT * FROM {CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_complex_attributes ORDER BY ALL;
 
@@ -111,10 +112,10 @@ LAYOUT(DIRECT());
 
 SELECT 'Dictionary direct_dictionary_simple_key_hierarchy';
 SELECT 'dictGet';
-SELECT dictGet('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_hierarchy', 'parent_id', number) FROM system.numbers LIMIT 5;
+SELECT dictGet('direct_dictionary_simple_key_hierarchy', 'parent_id', number) FROM system.numbers LIMIT 5;
 SELECT 'dictGetHierarchy';
-SELECT dictGetHierarchy('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_hierarchy', toUInt64(1));
-SELECT dictGetHierarchy('{CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_hierarchy', toUInt64(4));
+SELECT dictGetHierarchy('direct_dictionary_simple_key_hierarchy', toUInt64(1));
+SELECT dictGetHierarchy('direct_dictionary_simple_key_hierarchy', toUInt64(4));
 
 DROP DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.direct_dictionary_simple_key_hierarchy;
 DROP TABLE {CLICKHOUSE_DATABASE_1:Identifier}.simple_key_hierarchy_table;

@@ -5,6 +5,7 @@
 -- quirk for ON CLUSTER does not uses currentDatabase()
 drop database if exists {CLICKHOUSE_DATABASE_1:Identifier};
 create database {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 set distributed_ddl_output_mode='throw';
 
 drop table if exists {CLICKHOUSE_DATABASE_1:Identifier}.dist_01294;

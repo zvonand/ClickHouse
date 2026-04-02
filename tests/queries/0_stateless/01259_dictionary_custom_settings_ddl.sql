@@ -14,6 +14,7 @@ INSERT INTO table_for_dict VALUES (100500, 10000000, 'Hello world');
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};
 
 CREATE DATABASE {CLICKHOUSE_DATABASE_1:Identifier};
+USE {CLICKHOUSE_DATABASE_1:Identifier};
 
 DROP DICTIONARY IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier}.dict1;
 
@@ -30,7 +31,7 @@ LAYOUT(FLAT()) SETTINGS(max_result_bytes=1);
 
 SELECT 'INITIALIZING DICTIONARY';
 
-SELECT dictGetUInt64('{CLICKHOUSE_DATABASE_1:Identifier}.dict1', 'second_column', toUInt64(100500)); -- { serverError TOO_MANY_ROWS_OR_BYTES }
+SELECT dictGetUInt64('dict1', 'second_column', toUInt64(100500)); -- { serverError TOO_MANY_ROWS_OR_BYTES }
 
 SELECT 'END';
 

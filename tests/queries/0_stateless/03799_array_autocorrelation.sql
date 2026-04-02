@@ -9,6 +9,9 @@ SELECT arrayAutocorrelation([5, 5, 5]);
 SELECT arrayAutocorrelation([5, 5]);
 SELECT arrayAutocorrelation([5]);
 SELECT arrayAutocorrelation([]);
+-- Constant floats: 0.1 is not exactly representable, but all elements are bitwise identical
+SELECT arrayAutocorrelation([0.1, 0.1, 0.1]);
+SELECT arrayAutocorrelation(CAST([0.1, 0.1, 0.1], 'Array(Decimal64(1))'));
 
 SELECT '--- Max Lag Argument ---';
 SELECT arrayAutocorrelation([1, 2, 3, 4, 5], 2);
@@ -20,23 +23,14 @@ SELECT arrayAutocorrelation([1, 2, 3], toUInt64('18446744073709551615'));
 SELECT arrayAutocorrelation([1, 2, 3], toUInt64('9223372036854775808'));
 -- Signed type with positive value works
 SELECT arrayAutocorrelation([1, 2, 3], toInt64(2));
--- Wide integer max_lag types
-SELECT arrayAutocorrelation([1, 2, 3], toUInt128(2));
-SELECT arrayAutocorrelation([1, 2, 3], toUInt256(2));
-SELECT arrayAutocorrelation([1, 2, 3], toInt128(2));
-SELECT arrayAutocorrelation([1, 2, 3], toInt256(2));
--- Large positive Int128/Int256 values clamped to array size
-SELECT arrayAutocorrelation([1, 2, 3], toInt128('170141183460469231731687303715884105727'));
-SELECT arrayAutocorrelation([1, 2, 3], toInt256('57896044618658097711785492504343953926634992332820282019728792003956564819967'));
--- Max UInt128/UInt256, clamped to array size
-SELECT arrayAutocorrelation([1, 2, 3], toUInt128('340282366920938463463374607431768211455'));
-SELECT arrayAutocorrelation([1, 2, 3], toUInt256('115792089237316195423570985008687907853269984665640564039457584007913129639935'));
+-- Wide integer max_lag types are rejected (only up to 64-bit)
+SELECT arrayAutocorrelation([1, 2, 3], toUInt128(2)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT arrayAutocorrelation([1, 2, 3], toUInt256(2)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT arrayAutocorrelation([1, 2, 3], toInt128(2)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT arrayAutocorrelation([1, 2, 3], toInt256(2)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 -- Negative values are rejected at runtime
 SELECT arrayAutocorrelation([1, 2, 3], toInt64(-1)); -- { serverError BAD_ARGUMENTS }
 SELECT arrayAutocorrelation([1, 2, 3], toInt64('-9223372036854775808')); -- { serverError BAD_ARGUMENTS }
--- Wide signed negative
-SELECT arrayAutocorrelation([1, 2, 3], toInt128(-1)); -- { serverError BAD_ARGUMENTS }
-SELECT arrayAutocorrelation([1, 2, 3], toInt256(-1)); -- { serverError BAD_ARGUMENTS }
 
 SELECT '--- Type Dispatch Coverage ---';
 SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(UInt8)'));
@@ -89,6 +83,8 @@ SELECT arrayAutocorrelation([nan, nan, nan]);
 SELECT '--- Computation Limit ---';
 SELECT length(arrayAutocorrelation(range(toUInt64(20000)), 5));
 SELECT arrayAutocorrelation(range(toUInt64(20000))); -- { serverError BAD_ARGUMENTS }
+-- Large constant array: variance=0 detected in O(n) before hitting computation limit
+SELECT length(arrayAutocorrelation(arrayMap(x -> 5, range(toUInt64(20000)))));
 
 SELECT '--- Nullable and LowCardinality ---';
 SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(Nullable(UInt32))')); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

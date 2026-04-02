@@ -2781,23 +2781,38 @@ class TestCase:
                     query_params += f" --param_{env_to_param}={value}"
 
         # Mangle hardcoded extra database names so parallel reruns of the same
-        # test don't collide.  The suffix is derived from the per-run unique
-        # database name (e.g. "test_a1b2c3d4" → suffix "_a1b2c3d4").
-        # After the test we normalize mangled names back to the originals in
-        # stdout so that output still matches the reference files unchanged.
+        # test don't collide.  The unique suffix comes from the per-run primary
+        # database name: "test_a1b2c3d4" → suffix "_a1b2c3d4".
+        #
+        # Both the test file and the reference file are mangled identically so
+        # that the test output (containing mangled names) compares directly
+        # against the mangled reference — no stdout post-processing needed.
         db_suffix = "_" + database.split("_", 1)[1] if "_" in database else "_" + database
         with open(self.case_file, "r", errors="replace") as _f:
             _test_content = _f.read()
         _extra_dbs = find_extra_databases(_test_content)
-        # Also exclude the primary test database (already handled by the
-        # existing replace_in_file(stdout, database, "default") call).
+        # Exclude the primary test database (handled elsewhere).
         _extra_dbs = [n for n in _extra_dbs if n != database]
         if _extra_dbs:
+            # Write mangled test to a per-run temp file.
             _mangled_content = mangle_extra_databases(_test_content, _extra_dbs, db_suffix)
             _mangled_file = os.path.join(args.test_tmp_dir, os.path.basename(self.case_file))
             with open(_mangled_file, "w") as _f:
                 _f.write(_mangled_content)
             _test_file = _mangled_file
+            # Write mangled reference to a per-run temp file and redirect the
+            # comparison to it so stdout (with mangled names) matches directly.
+            if self.reference_file is not None and os.path.exists(self.reference_file):
+                with open(self.reference_file, "r", errors="replace") as _f:
+                    _ref_content = _f.read()
+                _mangled_ref = mangle_extra_databases(_ref_content, _extra_dbs, db_suffix)
+                _mangled_ref_file = os.path.join(
+                    args.test_tmp_dir,
+                    os.path.basename(self.reference_file),
+                )
+                with open(_mangled_ref_file, "w") as _f:
+                    _f.write(_mangled_ref)
+                self.reference_file = _mangled_ref_file
         else:
             _test_file = self.case_file
 
@@ -2853,12 +2868,6 @@ class TestCase:
         replace_in_file(self.stdout_file, database, "default")
         if args.hide_db_name:
             replace_in_file(self.stderr_file, database, "default")
-        # Normalize mangled extra database names back to their original names so
-        # that stdout still matches the reference files.
-        for _orig_name in _extra_dbs:
-            replace_in_file(self.stdout_file, _orig_name + db_suffix, _orig_name)
-            if args.hide_db_name:
-                replace_in_file(self.stderr_file, _orig_name + db_suffix, _orig_name)
         if args.replicated_database:
             replace_in_file(self.stdout_file, "/auto_{shard}", "")
             replace_in_file(self.stdout_file, "auto_{replica}", "")

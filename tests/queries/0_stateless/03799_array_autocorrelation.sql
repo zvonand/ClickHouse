@@ -51,5 +51,6 @@ SELECT arrayAutocorrelation(range(toUInt64(20000))); -- { serverError BAD_ARGUME
 SELECT '--- Negative Tests ---';
 SELECT arrayAutocorrelation(['a', 'b']); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT arrayAutocorrelation([NULL, 1]); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT arrayAutocorrelation(CAST([1, 2, 3], 'Array(BFloat16)')); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT arrayAutocorrelation(); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
 SELECT arrayAutocorrelation([1], 2, 3); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }

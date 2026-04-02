@@ -52,7 +52,7 @@ public:
 
         const auto & nested_type = array_type->getNestedType();
 
-        if (!isInteger(nested_type) && !isFloat(nested_type) && !typeid_cast<const DataTypeNothing *>(nested_type.get()))
+        if (!isInteger(nested_type) && !isNativeFloat(nested_type) && !typeid_cast<const DataTypeNothing *>(nested_type.get()))
             throw Exception(
                 ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
                 "Function {} only accepts arrays of standard integers or floating-point numbers.",

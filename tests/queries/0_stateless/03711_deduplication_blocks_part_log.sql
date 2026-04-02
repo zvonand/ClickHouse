@@ -1,10 +1,10 @@
 -- Tags: long, no-sanitizers, no-parallel, no-parallel-replicas, no-async-insert
 
 -- no-parallel-replicas -- https://github.com/ClickHouse/ClickHouse/issues/90063
--- no-parallel -- the test requires fixed database hame and table names to check deduplication blocks in part_log, which makes it incompatible with parallel execution of tests
+-- no-parallel -- the test requires fixed database name and table names to check deduplication blocks in part_log, which makes it incompatible with parallel execution of tests
 
 -- Tags: deduplication blocks have different values for sync and async inserts,
--- async insert calculates it as a has of data in the block,
+-- async insert calculates it as a hash of data in the block,
 -- sync insert uses MergeTreePartWriter's hash which covers only data in the partition.
 
 DROP DATABASE IF EXISTS 03711_database;

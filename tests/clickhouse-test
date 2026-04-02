@@ -1573,68 +1573,6 @@ def replace_in_file(filename, what, with_what):
 def replace_in_file_re(filename, what, with_what):
     os.system(f"LC_ALL=C sed -i -e 's/{what}/{with_what}/' {filename}")
 
-
-# Pattern to find hardcoded (static) database names in CREATE DATABASE statements.
-# Captures the identifier after CREATE DATABASE [IF NOT EXISTS].
-# Matches both bare identifiers (word chars) and backtick-quoted identifiers.
-# Excludes query-parameter syntax like {VAR:Type} and function calls like currentDatabase().
-_CREATE_DB_RE = re.compile(
-    r'CREATE\s+DATABASE\s+(?:IF\s+NOT\s+EXISTS\s+)?'
-    r'(?:`([^`]+)`|([a-zA-Z_][a-zA-Z0-9_]*))',
-    re.IGNORECASE,
-)
-
-
-def find_extra_databases(content: str) -> list:
-    """Return unique static database names found in CREATE DATABASE statements.
-
-    Filters out:
-    - SQL keywords (IF, NOT, EXISTS) that may be captured when the optional
-      'IF NOT EXISTS' group backtracks because the name is a query parameter
-      like {VAR:Type} that doesn't match the identifier pattern.
-    - Names immediately followed by '$' or '{', indicating a shell variable
-      or query-parameter continuation (e.g. 'parallel_ddl_${DB_SUFFIX}').
-    - ClickHouse built-in databases: default, system, information_schema.
-    """
-    _BUILTIN_DBS = frozenset({"default", "system", "information_schema", "INFORMATION_SCHEMA"})
-    # Words that are SQL or natural-language keywords, not real database names.
-    # These arise from false matches inside comments ("# create database with ...")
-    # or string literals, or from regex backtracking when IF NOT EXISTS precedes a
-    # query parameter like {VAR:Type} that doesn't match [a-zA-Z_][a-zA-Z0-9_]*.
-    _SKIP_WORDS = frozenset({
-        "IF", "NOT", "EXISTS", "ON", "WITH", "AND", "OR", "AS", "BY", "TO",
-        "ENGINE", "FROM", "WHERE", "WHEN", "THEN", "ELSE", "END",
-        "TABLE", "VIEW", "SET", "ALL", "ANY", "IN", "AT", "IS", "OF",
-    })
-    seen = []
-    for m in _CREATE_DB_RE.finditer(content):
-        # Group 1: backtick-quoted name; group 2: bare identifier.
-        name = m.group(1) if m.group(1) is not None else m.group(2)
-        if name.upper() in _SKIP_WORDS:
-            continue
-        if len(name) < 3:
-            continue
-        # Skip names immediately followed by '$' or '{', meaning the identifier
-        # continues as a shell variable / query parameter (e.g. 'db_${SUFFIX}').
-        end_pos = m.end()
-        if end_pos < len(content) and content[end_pos] in ('$', '{'):
-            continue
-        if name not in _BUILTIN_DBS and name not in seen:
-            seen.append(name)
-    return seen
-
-
-def mangle_extra_databases(content: str, extra_dbs: list, suffix: str) -> str:
-    """Replace every occurrence of each extra database name (bare or backtick-quoted)."""
-    for name in extra_dbs:
-        mangled = name + suffix
-        # Replace bare word-boundary occurrences: db1 → db1_sfx (not inside db10)
-        content = re.sub(r'\b' + re.escape(name) + r'\b', mangled, content)
-        # Replace backtick-quoted occurrences: `db1` → `db1_sfx`
-        content = content.replace(f'`{name}`', f'`{mangled}`')
-    return content
-
-
 def str_to_numeric(v: str):
     vl = v.lower()
     if vl in ("true", "false"):
@@ -2785,55 +2723,11 @@ class TestCase:
                 if value:
                     query_params += f" --param_{env_to_param}={value}"
 
-        # Mangle hardcoded extra database names so parallel reruns of the same
-        # test don't collide.  The unique suffix comes from the per-run primary
-        # database name: "test_a1b2c3d4" → suffix "_a1b2c3d4".
-        #
-        # Both the test file and the reference file are mangled identically so
-        # that the test output (containing mangled names) compares directly
-        # against the mangled reference — no stdout post-processing needed.
-        db_suffix = "_" + database.split("_", 1)[1] if "_" in database else "_" + database
-        with open(self.case_file, "r", errors="replace") as _f:
-            _test_content = _f.read()
-        # Skip mangling for tests tagged no-parallel — they never run
-        # concurrently with themselves so name collisions cannot occur.
-        if "no-parallel" in self.tags:
-            _extra_dbs = []
-        else:
-            _extra_dbs = find_extra_databases(_test_content)
-        # Exclude the primary test database (handled elsewhere).
-        _extra_dbs = [n for n in _extra_dbs if n != database]
-        if _extra_dbs and self.ext == ".sql":
-            # Write mangled test to a per-run temp file.
-            # Only .sql tests are safe to copy: .sh/.expect scripts source
-            # ../shell_config.sh relative to their own location, so moving them
-            # into test_tmp_dir breaks that relative path.
-            _mangled_content = mangle_extra_databases(_test_content, _extra_dbs, db_suffix)
-            _mangled_file = os.path.join(args.test_tmp_dir, os.path.basename(self.case_file))
-            with open(_mangled_file, "w") as _f:
-                _f.write(_mangled_content)
-            _test_file = _mangled_file
-            # Write mangled reference to a per-run temp file and redirect the
-            # comparison to it so stdout (with mangled names) matches directly.
-            if self.reference_file is not None and os.path.exists(self.reference_file):
-                with open(self.reference_file, "r", errors="replace") as _f:
-                    _ref_content = _f.read()
-                _mangled_ref = mangle_extra_databases(_ref_content, _extra_dbs, db_suffix)
-                _mangled_ref_file = os.path.join(
-                    args.test_tmp_dir,
-                    os.path.basename(self.reference_file),
-                )
-                with open(_mangled_ref_file, "w") as _f:
-                    _f.write(_mangled_ref)
-                self.reference_file = _mangled_ref_file
-        else:
-            _test_file = self.case_file
-
         params = {
             "client": client + " --database=" + database + query_params,
             "logs_level": server_logs_level,
             "options": client_options,
-            "test": _test_file,
+            "test": self.case_file,
             "stdout": self.stdout_file,
             "stderr": self.stderr_file,
             "secure": (

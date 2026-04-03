@@ -725,12 +725,11 @@ std::pair<Block, Block> splitPhysicalAndVirtualColumns(
 {
     Block physical_header;
     Block virtuals_header;
-    auto physical_options = GetColumnsOptions(GetColumnsOptions::All).withSubcolumns();
     for (const auto & name : column_names)
     {
         /// If the column exists in the table schema, treat it as physical even if
         /// a virtual column with the same name is registered.
-        if (auto column = storage_snapshot->tryGetColumn(physical_options, name))
+        if (auto column = storage_snapshot->tryGetColumn(GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(), name))
         {
             physical_header.insert({column->type->createColumn(), column->type, column->name});
         }
@@ -744,8 +743,7 @@ std::pair<Block, Block> splitPhysicalAndVirtualColumns(
         }
     }
 
-    /// We must always read at least one physical column to determine the number of rows,
-    /// even if only virtual columns were requested.
+    /// We must always read at least one physical column to determine the number of rows
     if (!physical_header.columns())
     {
         auto smallest = ExpressionActions::getSmallestColumn(storage_snapshot->metadata->getColumns().getAllPhysical());

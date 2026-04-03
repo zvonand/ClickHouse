@@ -1985,8 +1985,24 @@ Returns a tuple of the moduli (remainders) of division operations of a tuple and
     FunctionDocumentation documentation_tupleModuloByNumber = {description_tupleModuloByNumber, syntax_tupleModuloByNumber, arguments_tupleModuloByNumber, {}, returned_value_tupleModuloByNumber, examples_tupleModuloByNumber, introduced_in_tupleModuloByNumber, category_tupleModuloByNumber};
     factory.registerFunction<FunctionTupleModuloByNumber>(documentation_tupleModuloByNumber);
 
-    /// tuplePositiveModuloByNumber
-    factory.registerFunction<FunctionTuplePositiveModuloByNumber>();
+    /// tuplePositiveModuloByNumber documentation
+    FunctionDocumentation::Description description_tuplePositiveModuloByNumber = R"(
+Returns a tuple of the positive moduli (remainders) of division operations of a tuple and a given divisor.
+Unlike tupleModuloByNumber, the result is always non-negative.
+)";
+    FunctionDocumentation::Syntax syntax_tuplePositiveModuloByNumber = "tuplePositiveModuloByNumber(tuple_num, div)";
+    FunctionDocumentation::Arguments arguments_tuplePositiveModuloByNumber = {
+        {"tuple_num", "Tuple of numerator values.", {"Tuple((U)Int*)", "Tuple(Float*)", "Tuple(Decimal)"}},
+        {"div", "The divisor value.", {"(U)Int*", "Float*", "Decimal"}}
+    };
+    FunctionDocumentation::ReturnedValue returned_value_tuplePositiveModuloByNumber = {"Returns a tuple of the non-negative remainders.", {"Tuple((U)Int*)", "Tuple(Float*)", "Tuple(Decimal)"}};
+    FunctionDocumentation::Examples examples_tuplePositiveModuloByNumber = {
+        {"Basic usage", "SELECT tuplePositiveModuloByNumber((15, 10, 5), 2)", "(1, 0, 1)"}
+    };
+    FunctionDocumentation::IntroducedIn introduced_in_tuplePositiveModuloByNumber = {26, 4};
+    FunctionDocumentation::Category category_tuplePositiveModuloByNumber = FunctionDocumentation::Category::Tuple;
+    FunctionDocumentation documentation_tuplePositiveModuloByNumber = {description_tuplePositiveModuloByNumber, syntax_tuplePositiveModuloByNumber, arguments_tuplePositiveModuloByNumber, {}, returned_value_tuplePositiveModuloByNumber, examples_tuplePositiveModuloByNumber, introduced_in_tuplePositiveModuloByNumber, category_tuplePositiveModuloByNumber};
+    factory.registerFunction<FunctionTuplePositiveModuloByNumber>(documentation_tuplePositiveModuloByNumber);
 
     /// tupleIntDivByNumber documentation
     FunctionDocumentation::Description description_tupleIntDivByNumber = R"(

@@ -151,6 +151,7 @@ std::shared_ptr<const PollDescriptorInfo>
 CallsData::createPollDescriptorImpl(std::unique_ptr<PollSession> poll_session, std::shared_ptr<const PollDescriptorInfo> previous_info, std::optional<arrow::flight::FlightDescriptor> flight_descriptor, std::optional<String> query_id)
 {
     String poll_descriptor;
+    std::lock_guard lock{mutex};
     if (previous_info)
     {
         if (!previous_info->evaluated)
@@ -158,7 +159,7 @@ CallsData::createPollDescriptorImpl(std::unique_ptr<PollSession> poll_session, s
         if (!previous_info->next_poll_descriptor)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "Adding a poll descriptor while the previous poll descriptor is final");
         poll_descriptor = *previous_info->next_poll_descriptor;
-        query_id = getQueryIdByFlightDescriptor(previous_info->poll_descriptor);
+        query_id = getQueryIdByFlightDescriptorLocked(previous_info->poll_descriptor);
         if (!query_id)
             throw Exception(ErrorCodes::QUERY_WAS_CANCELLED,
                 "Cannot create continuation poll descriptor: previous poll descriptor {} was expired or cancelled",
@@ -181,7 +182,6 @@ CallsData::createPollDescriptorImpl(std::unique_ptr<PollSession> poll_session, s
         info->original_flight_descriptor = previous_info->original_flight_descriptor;
     else
         info->original_flight_descriptor = *flight_descriptor;
-    std::lock_guard lock{mutex};
     bool inserted = poll_descriptors.try_emplace(poll_descriptor, info).second;  /// NOLINT(clang-analyzer-deadcode.DeadStores)
     chassert(inserted); /// Poll descriptors are unique.
     inserted = poll_sessions.try_emplace(poll_descriptor, std::move(poll_session)).second;  /// NOLINT(clang-analyzer-deadcode.DeadStores)
@@ -218,13 +218,18 @@ arrow::Result<std::shared_ptr<const PollDescriptorInfo>> CallsData::getPollDescr
     return it->second;
 }
 
-std::optional<String> CallsData::getQueryIdByFlightDescriptor(const String & flight_descriptor) const
+std::optional<String> CallsData::getQueryIdByFlightDescriptorLocked(const String & flight_descriptor) const
 {
-    std::lock_guard lock{mutex};
     auto it = flight_descriptor_to_query_id.find(flight_descriptor);
     if (it == flight_descriptor_to_query_id.end())
         return std::nullopt;
     return it->second;
+}
+
+std::optional<String> CallsData::getQueryIdByFlightDescriptor(const String & flight_descriptor) const
+{
+    std::lock_guard lock{mutex};
+    return getQueryIdByFlightDescriptorLocked(flight_descriptor);
 }
 
 PollDescriptorWithExpirationTime CallsData::getPollDescriptorWithExpirationTime(const String & poll_descriptor) const

@@ -191,6 +191,7 @@ private:
     void eraseFlightDescriptorMapByQueryIdLocked(const String & query_id) TSA_REQUIRES(mutex);
     void eraseFlightDescriptorMapByDescriptorLocked(const String & flight_descriptor) TSA_REQUIRES(mutex);
     void eraseFlightDescriptorMapEntryLocked(const String & flight_descriptor) TSA_REQUIRES(mutex);
+    std::optional<String> getQueryIdByFlightDescriptorLocked(const String & flight_descriptor) const TSA_REQUIRES(mutex);
 
     std::shared_ptr<const PollDescriptorInfo>
     createPollDescriptorImpl(std::unique_ptr<PollSession> poll_session, std::shared_ptr<const PollDescriptorInfo> previous_info, std::optional<arrow::flight::FlightDescriptor> flight_descriptor = std::nullopt, std::optional<String> query_id = std::nullopt);

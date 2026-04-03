@@ -137,6 +137,10 @@ std::unordered_map<uint64_t, TCPSocketMemInfo> getTCPSocketMemInfoByInode()
     if (bind(nl_fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) < 0)
         return result;
 
+    /// Set receive timeout so recv does not block indefinitely
+    timeval tv{.tv_sec = 1, .tv_usec = 0};
+    (void)setsockopt(nl_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
     /// Query IPv4 sockets
     if (sendDiagRequest(nl_fd, AF_INET))
         recvDiagResponse(nl_fd, result);

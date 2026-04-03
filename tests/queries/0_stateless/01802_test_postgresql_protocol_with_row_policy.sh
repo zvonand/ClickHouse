@@ -30,7 +30,7 @@ SELECT '';
 SELECT 'after row policy with no password';
 " | $CLICKHOUSE_CLIENT
 
-psql --host localhost --port ${CLICKHOUSE_PORT_POSTGRESQL} db01802 --user postgresql_user -c "SELECT * FROM postgresql;"
+psql --host localhost --port ${CLICKHOUSE_PORT_POSTGRESQL} ${CLICKHOUSE_DATABASE_1} --user postgresql_user -c "SELECT * FROM postgresql;"
 
 echo "
 DROP USER IF EXISTS postgresql_user;
@@ -42,7 +42,7 @@ CREATE ROW POLICY IF NOT EXISTS test_policy ON ${CLICKHOUSE_DATABASE_1}.postgres
 SELECT 'after row policy with plaintext_password';
 " | $CLICKHOUSE_CLIENT
 
-psql "postgresql://postgresql_user:qwerty@localhost:${CLICKHOUSE_PORT_POSTGRESQL}/db01802" -c "SELECT * FROM postgresql;"
+psql "postgresql://postgresql_user:qwerty@localhost:${CLICKHOUSE_PORT_POSTGRESQL}/${CLICKHOUSE_DATABASE_1}" -c "SELECT * FROM postgresql;"
 
 $CLICKHOUSE_CLIENT -q "DROP TABLE ${CLICKHOUSE_DATABASE_1}.postgresql"
 $CLICKHOUSE_CLIENT -q "DROP DATABASE ${CLICKHOUSE_DATABASE_1}"

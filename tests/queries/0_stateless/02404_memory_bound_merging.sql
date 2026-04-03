@@ -1,8 +1,8 @@
--- Tags: no-parallel, no-random-merge-tree-settings, long
+-- Tags: no-parallel, no-random-merge-tree-settings, no-flaky-check, long
 
 drop table if exists pr_t;
 drop table if exists dist_t_different_dbs;
-drop table if exists {CLICKHOUSE_DATABASE_1:Identifier}.t_different_dbs;
+drop table if exists shard_1.t_different_dbs;
 drop table if exists t_different_dbs;
 drop table if exists dist_t;
 drop table if exists t;
@@ -41,12 +41,12 @@ set max_block_size = 500;
 select max(bs) < 70000 from (select avg(a), max(blockSize()) as bs from remote(test_cluster_two_shards, currentDatabase(), t) group by a);
 
 -- beautiful case when we have different sorting key definitions in tables involved in distributed query => different plans => different sorting properties of local aggregation results --
-create database if not exists {CLICKHOUSE_DATABASE_1:Identifier};
+create database if not exists shard_1;
 create table t_different_dbs(a UInt64, b UInt64) engine = MergeTree order by a;
-create table {CLICKHOUSE_DATABASE_1:Identifier}.t_different_dbs(a UInt64, b UInt64) engine = MergeTree order by tuple();
+create table shard_1.t_different_dbs(a UInt64, b UInt64) engine = MergeTree order by tuple();
 
 insert into t_different_dbs select number % 1000, number % 1000 from numbers_mt(1e6);
-insert into {CLICKHOUSE_DATABASE_1:Identifier}.t_different_dbs select number % 1000, number % 1000 from numbers_mt(1e6);
+insert into shard_1.t_different_dbs select number % 1000, number % 1000 from numbers_mt(1e6);
 
 create table dist_t_different_dbs as t engine = Distributed(test_cluster_two_shards_different_databases_with_local, '', t_different_dbs);
 
@@ -84,7 +84,7 @@ select a, count() from pr_t group by a, b order by a limit 5 offset 500;
 
 drop table if exists pr_t;
 drop table if exists dist_t_different_dbs;
-drop table if exists {CLICKHOUSE_DATABASE_1:Identifier}.t_different_dbs;
+drop table if exists shard_1.t_different_dbs;
 drop table if exists t_different_dbs;
 drop table if exists dist_t;
 drop table if exists t;

@@ -17,9 +17,9 @@ function thread_detach_attach {
     local TIMELIMIT=$((SECONDS+20))
     while [ $SECONDS -lt "$TIMELIMIT" ]
     do
-        $CLICKHOUSE_CLIENT --query "DETACH DATABASE test_01150" 2>&1 | grep -v -F -e 'Received exception from server' -e 'Code: 219' -e 'Code: 741' -e '(query: '
+        $CLICKHOUSE_CLIENT --query "DETACH DATABASE ${CLICKHOUSE_DATABASE_1}" 2>&1 | grep -v -F -e 'Received exception from server' -e 'Code: 219' -e 'Code: 741' -e '(query: '
         sleep 0.0$RANDOM
-        $CLICKHOUSE_CLIENT --query "ATTACH DATABASE test_01150" 2>&1 | grep -v -F -e 'Received exception from server' -e 'Code: 82' -e 'Code: 741' -e '(query: '
+        $CLICKHOUSE_CLIENT --query "ATTACH DATABASE ${CLICKHOUSE_DATABASE_1}" 2>&1 | grep -v -F -e 'Received exception from server' -e 'Code: 82' -e 'Code: 741' -e '(query: '
         sleep 0.0$RANDOM
     done
 }
@@ -42,6 +42,6 @@ thread_rename &
 wait
 sleep 1
 
-$CLICKHOUSE_CLIENT --query "DETACH DATABASE IF EXISTS test_01150"
-$CLICKHOUSE_CLIENT --query "ATTACH DATABASE IF NOT EXISTS test_01150"
+$CLICKHOUSE_CLIENT --query "DETACH DATABASE IF EXISTS ${CLICKHOUSE_DATABASE_1}"
+$CLICKHOUSE_CLIENT --query "ATTACH DATABASE IF NOT EXISTS ${CLICKHOUSE_DATABASE_1}"
 $CLICKHOUSE_CLIENT --query "DROP DATABASE ${CLICKHOUSE_DATABASE_1}"

@@ -58,6 +58,7 @@ struct MinusName { static constexpr auto name = "minus"; };
 struct MultiplyName { static constexpr auto name = "multiply"; };
 struct DivideName { static constexpr auto name = "divide"; };
 struct ModuloName { static constexpr auto name = "modulo"; };
+struct PositiveModuloName { static constexpr auto name = "positiveModulo"; };
 struct IntDivName { static constexpr auto name = "intDiv"; };
 struct IntDivOrZeroName { static constexpr auto name = "intDivOrZero"; };
 
@@ -313,6 +314,7 @@ public:
 using FunctionTupleMultiplyByNumber = FunctionTupleOperatorByNumber<MultiplyName>;
 using FunctionTupleDivideByNumber = FunctionTupleOperatorByNumber<DivideName>;
 using FunctionTupleModuloByNumber = FunctionTupleOperatorByNumber<ModuloName>;
+using FunctionTuplePositiveModuloByNumber = FunctionTupleOperatorByNumber<PositiveModuloName>;
 using FunctionTupleIntDivByNumber = FunctionTupleOperatorByNumber<IntDivName>;
 using FunctionTupleIntDivOrZeroByNumber = FunctionTupleOperatorByNumber<IntDivOrZeroName>;
 
@@ -1982,6 +1984,9 @@ Returns a tuple of the moduli (remainders) of division operations of a tuple and
     FunctionDocumentation::Category category_tupleModuloByNumber = FunctionDocumentation::Category::Tuple;
     FunctionDocumentation documentation_tupleModuloByNumber = {description_tupleModuloByNumber, syntax_tupleModuloByNumber, arguments_tupleModuloByNumber, {}, returned_value_tupleModuloByNumber, examples_tupleModuloByNumber, introduced_in_tupleModuloByNumber, category_tupleModuloByNumber};
     factory.registerFunction<FunctionTupleModuloByNumber>(documentation_tupleModuloByNumber);
+
+    /// tuplePositiveModuloByNumber
+    factory.registerFunction<FunctionTuplePositiveModuloByNumber>();
 
     /// tupleIntDivByNumber documentation
     FunctionDocumentation::Description description_tupleIntDivByNumber = R"(

@@ -12,7 +12,6 @@ SET query_plan_optimize_join_order_algorithm = 'dpsize,greedy'; -- greedy as fal
 SET query_plan_join_swap_table = 'auto';
 SET enable_join_runtime_filters = 0;
 SET query_plan_convert_any_join_to_semi_or_anti_join = 0; -- SEMI/ANTI join ordering constraints cause dpsize solver to fail
-SET query_plan_merge_filter_into_join_condition = 0; -- CI may inject True; absorbing WHERE l_quantity < (correlated scalar) INTO the RIGHT ANY join condition creates a non-equality constraint that dpsize cannot order
 
 CREATE TABLE lineitem (
     l_orderkey       Int32,

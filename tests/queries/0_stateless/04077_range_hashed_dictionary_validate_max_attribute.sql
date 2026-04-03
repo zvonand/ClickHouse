@@ -35,7 +35,29 @@ LIFETIME(MIN 0 MAX 100)
 LAYOUT(RANGE_HASHED())
 RANGE(MIN nonexistent_col MAX end_date); -- { serverError INCORRECT_DICTIONARY_DEFINITION }
 
--- Test 3: Valid dictionary with matching min/max attributes must succeed.
+-- Test 3: Different types for MIN and MAX must be rejected at dictionary creation.
+-- Previously, the bug caused both range_min and range_max to get the MIN attribute's
+-- type, so this type mismatch was silently masked and the dictionary was created.
+DROP TABLE IF EXISTS source_04077_types;
+CREATE TABLE source_04077_types (id UInt64, start_date Date, end_ts DateTime, value String) ENGINE = Memory;
+
+DROP DICTIONARY IF EXISTS dict_04077_type_mismatch;
+CREATE DICTIONARY dict_04077_type_mismatch
+(
+    id UInt64,
+    start_date Date,
+    end_ts DateTime,
+    value String DEFAULT ''
+)
+PRIMARY KEY id
+SOURCE(CLICKHOUSE(TABLE 'source_04077_types'))
+LIFETIME(MIN 0 MAX 100)
+LAYOUT(RANGE_HASHED())
+RANGE(MIN start_date MAX end_ts); -- { serverError BAD_ARGUMENTS }
+
+DROP TABLE IF EXISTS source_04077_types;
+
+-- Test 4: Valid dictionary with matching min/max attributes must succeed.
 DROP DICTIONARY IF EXISTS dict_04077_good;
 CREATE DICTIONARY dict_04077_good
 (

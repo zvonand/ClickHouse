@@ -1255,7 +1255,7 @@ void InterpreterCreateQuery::setEngine(ASTCreateQuery & create) const
             }
             else
                 throw Exception(ErrorCodes::LOGICAL_ERROR, "Storage should not be created yet, it's a bug.");
-            create.as_table_function = nullptr;
+            create.reset(create.as_table_function);
             setNullTableEngine(*create.storage);
         }
         return;

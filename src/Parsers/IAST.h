@@ -239,6 +239,27 @@ public:
         field = nullptr;
     }
 
+    void reset(ASTPtr & field)
+    {
+        if (!field)
+            return;
+
+        auto child = children.begin();
+        while (child != children.end())
+        {
+            if (child->get() == field.get())
+                break;
+
+            child++;
+        }
+
+        if (child == children.end())
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "AST subtree not found in children");
+
+        children.erase(child);
+        field.reset();
+    }
+
     /// After changing one of `children` elements, update the corresponding member pointer if needed.
     void updatePointerToChild(const IAST * old_ptr, const ASTPtr & new_ptr)
     {

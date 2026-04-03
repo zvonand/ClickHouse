@@ -224,8 +224,7 @@ ASTPtr DatabaseMySQL::getCreateTableQueryImpl(const String & table_name, Context
         }
 
         /// Unset settings
-        std::erase_if(storage_children, [&](const ASTPtr & element) { return element.get() == ast_storage->settings; });
-        ast_storage->settings = nullptr;
+        ast_storage->reset(ast_storage->settings);
     }
 
     const Settings & settings = getContext()->getSettingsRef();

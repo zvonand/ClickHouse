@@ -116,9 +116,6 @@ INSERT INTO json_test FORMAT JSONEachRow {"ID": 0, "user": {"age": 20}, "USER": 
 
 INSERT INTO json_test FORMAT JSONEachRow {"ID": 0, "uSeR": {"age": 25}, "UsEr": {"name": "dddd"}}; -- { serverError 117 }
 
--- TODO: nested json seems to always need to match the case perfectly
--- INSERT INTO json_test FORMAT JSONEachRow {"ID": 0, "user": {"age": 21, "AGE": 401}}; -- { serverError 117 }
-
 SELECT * FROM json_test;
 
 DROP TABLE json_test;

@@ -1,5 +1,4 @@
--- Test that parallel replicas work with a view containing UNION ALL of two MergeTree tables.
--- The walker follows the first query in the UNION to find the underlying MergeTree table.
+-- Test that parallel replicas work with a view containing UNION ALL of two MergeTree tables
 
 DROP TABLE IF EXISTS t_rtb_hourly_1;
 DROP TABLE IF EXISTS t_rtb_hourly_2;

@@ -1382,8 +1382,7 @@ void ParallelReplicasReadingCoordinator::setReadCompletedCallback(ReadCompletedC
 
 bool ParallelReplicasReadingCoordinator::isReadingCompleted() const
 {
-    if (table_to_coordinator.empty())
-        return false;
+    chassert(!table_to_coordinator.empty());
 
     for (const auto & [_, coordinator] : table_to_coordinator)
     {

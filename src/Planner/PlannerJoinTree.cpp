@@ -1098,28 +1098,22 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                         && table_node != planner_context->getGlobalPlannerContext()->parallel_replicas_table;
                     if (no_tables_or_another_table_chosen_for_reading_with_parallel_replicas_mode)
                     {
+                        bool disable_parallel_replicas_for_storage = true;
                         ContextPtr updated_context = query_context;
                         if (const UnionNode * table_union = planner_context->getGlobalPlannerContext()->parallel_replicas_table_union)
                         {
-                            bool table_found = false;
                             SelectQueryOptions options;
                             for (const auto & child : table_union->getQueries().getNodes())
                             {
                                 if (table_node == findTableForParallelReplicas(child, options))
                                 {
-                                    table_found = true;
+                                    disable_parallel_replicas_for_storage = false;
                                     break;
                                 }
                             }
-
-                            if (!table_found)
-                            {
-                                auto mutable_context = Context::createCopy(query_context);
-                                mutable_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));
-                                updated_context = mutable_context;
-                            }
                         }
-                        else
+
+                        if (disable_parallel_replicas_for_storage)
                         {
                             auto mutable_context = Context::createCopy(query_context);
                             mutable_context->setSetting("allow_experimental_parallel_reading_from_replicas", Field(0));

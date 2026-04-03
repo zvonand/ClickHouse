@@ -54,7 +54,7 @@ static bool canUseTableForParallelReplicas(const TableNode & table_node, const C
             if (!underlying_storage)
                 return false;
 
-            storage = underlying_storage;
+            return true;
         }
     }
 

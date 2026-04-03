@@ -2179,7 +2179,7 @@ class TestCase:
         ):
             return FailureReason.SKIP
 
-        if "no-flaky-check" in tags and args.flaky_check:
+        if "no-flaky-check" in tags and args.flaky_check and not args.no_flaky_check_sequential:
             # skip for flaky and targeted check
             #  main reason for using this tag - a test is not compatible with the thread fuzzer which is used in both jobs
             return FailureReason.SKIP
@@ -3384,6 +3384,7 @@ class TestSuite:
         long_test_runs = max(
             int(self.args.test_runs * self.args.long_test_runs_ratio), 1
         )
+        sequential_runs = self.args.sequential_test_runs if self.args.sequential_test_runs is not None else max(test_runs // 2, 1)
 
         newly_modified_runs = {}
         if (
@@ -3398,7 +3399,12 @@ class TestSuite:
                 )
 
         def get_runs(test):
-            base = long_test_runs if self.is_long_test(test) else test_runs
+            if self.is_long_test(test):
+                base = long_test_runs
+            elif self.is_sequential_test(test):
+                base = sequential_runs
+            else:
+                base = test_runs
             extra = newly_modified_runs.get(test, 0)
             return max(base, extra)
 
@@ -3441,9 +3447,12 @@ class TestSuite:
         if test_name not in self.all_tags:
             return False
 
-        return ("no-parallel" in self.all_tags[test_name]) or (
-            "sequential" in self.all_tags[test_name]
-        )
+        tags = self.all_tags[test_name]
+        if "no-parallel" in tags or "sequential" in tags:
+            return True
+        if "no-flaky-check" in tags and args.flaky_check and args.no_flaky_check_sequential:
+            return True
+        return False
 
     def get_selected_tests(self, filter_func):
         """
@@ -5099,6 +5108,21 @@ def parse_args():
         nargs="?",
         type=float,
         help="Ratio from --test-runs for long tests",
+    )
+    parser.add_argument(
+        "--sequential-test-runs",
+        default=None,
+        nargs="?",
+        type=int,
+        help="Number of runs for sequential (no-parallel) and no-flaky-check tests. "
+             "Defaults to half of --test-runs.",
+    )
+    parser.add_argument(
+        "--no-flaky-check-sequential",
+        action="store_true",
+        default=False,
+        help="In flaky check mode, run no-flaky-check tests sequentially (like no-parallel) "
+             "with --sequential-test-runs runs instead of skipping them.",
     )
     parser.add_argument(
         "--repeat-newly-modified-tests",

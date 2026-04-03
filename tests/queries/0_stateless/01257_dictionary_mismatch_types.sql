@@ -62,12 +62,12 @@ SOURCE(CLICKHOUSE(HOST 'localhost' PORT tcpPort() DB currentDatabase() TABLE tab
 LIFETIME(MIN 0 MAX 0) LAYOUT(COMPLEX_KEY_HASHED());
 
 SELECT
-    dictGet('table1_dict', 'col6', (col1, col2, col3, col4, col5)),
-    dictGet('table1_dict', 'col7', (col1, col2, col3, col4, col5)),
-    dictGet('table1_dict', 'col8', (col1, col2, col3, col4, col5)),
-    dictGet('table1_dict', 'col9', (col1, col2, col3, col4, col5))
+    dictGet(currentDatabase() || '.table1_dict', 'col6', (col1, col2, col3, col4, col5)),
+    dictGet(currentDatabase() || '.table1_dict', 'col7', (col1, col2, col3, col4, col5)),
+    dictGet(currentDatabase() || '.table1_dict', 'col8', (col1, col2, col3, col4, col5)),
+    dictGet(currentDatabase() || '.table1_dict', 'col9', (col1, col2, col3, col4, col5))
 FROM {CLICKHOUSE_DATABASE_1:Identifier}.table1
-WHERE dictHas('table1_dict', (col1, col2, col3, col4, col5)); -- { serverError CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN }
+WHERE dictHas(currentDatabase() || '.table1_dict', (col1, col2, col3, col4, col5)); -- { serverError CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN }
 
 DROP TABLE {CLICKHOUSE_DATABASE_1:Identifier}.table1;
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.table1
@@ -102,12 +102,12 @@ INSERT INTO {CLICKHOUSE_DATABASE_1:Identifier}.table1 VALUES ('id1',1,'20200127-
 SYSTEM RELOAD DICTIONARY {CLICKHOUSE_DATABASE_1:Identifier}.table1_dict;
 
 SELECT
-    dictGet('table1_dict', 'col6', (col1, col2, col3, col4, col5)),
-    dictGet('table1_dict', 'col7', (col1, col2, col3, col4, col5)),
-    dictGet('table1_dict', 'col8', (col1, col2, col3, col4, col5)),
-    dictGet('table1_dict', 'col9', (col1, col2, col3, col4, col5))
+    dictGet(currentDatabase() || '.table1_dict', 'col6', (col1, col2, col3, col4, col5)),
+    dictGet(currentDatabase() || '.table1_dict', 'col7', (col1, col2, col3, col4, col5)),
+    dictGet(currentDatabase() || '.table1_dict', 'col8', (col1, col2, col3, col4, col5)),
+    dictGet(currentDatabase() || '.table1_dict', 'col9', (col1, col2, col3, col4, col5))
 FROM {CLICKHOUSE_DATABASE_1:Identifier}.table1
-WHERE dictHas('table1_dict', (col1, col2, col3, col4, col5))
+WHERE dictHas(currentDatabase() || '.table1_dict', (col1, col2, col3, col4, col5))
 ORDER BY col1, col2, col3, col4, col5, col14, col17;
 
 DROP DATABASE IF EXISTS {CLICKHOUSE_DATABASE_1:Identifier};

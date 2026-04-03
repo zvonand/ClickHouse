@@ -2179,10 +2179,11 @@ class TestCase:
         ):
             return FailureReason.SKIP
 
-        if "no-flaky-check" in tags and args.flaky_check and not args.no_flaky_check_sequential:
-            # skip for flaky and targeted check
-            #  main reason for using this tag - a test is not compatible with the thread fuzzer which is used in both jobs
-            return FailureReason.SKIP
+        if "no-flaky-check" in tags and args.flaky_check:
+            # In flaky check mode, no-flaky-check tests run sequentially (like no-parallel)
+            # with --sequential-test-runs runs instead of being skipped entirely.
+            # They are still excluded from parallel execution — see is_sequential_test().
+            pass
         if "stateful" in tags and args.no_stateful:
             return FailureReason.NO_STATEFUL
         if "stateful" not in tags and args.no_stateless:
@@ -3450,7 +3451,7 @@ class TestSuite:
         tags = self.all_tags[test_name]
         if "no-parallel" in tags or "sequential" in tags:
             return True
-        if "no-flaky-check" in tags and args.flaky_check and args.no_flaky_check_sequential:
+        if "no-flaky-check" in tags and args.flaky_check:
             return True
         return False
 
@@ -5116,13 +5117,6 @@ def parse_args():
         type=int,
         help="Number of runs for sequential (no-parallel) and no-flaky-check tests. "
              "Defaults to half of --test-runs.",
-    )
-    parser.add_argument(
-        "--no-flaky-check-sequential",
-        action="store_true",
-        default=False,
-        help="In flaky check mode, run no-flaky-check tests sequentially (like no-parallel) "
-             "with --sequential-test-runs runs instead of skipping them.",
     )
     parser.add_argument(
         "--repeat-newly-modified-tests",

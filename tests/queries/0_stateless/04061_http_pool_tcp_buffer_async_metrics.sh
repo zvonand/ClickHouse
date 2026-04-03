@@ -2,8 +2,8 @@
 # Tags: no-fasttest, linux
 
 # Verify that asynchronous metrics for HTTP connection pool TCP buffer memory
-# (HTTPConnectionPool*TCP{Rcv,Snd}BufBytes_{p50,p75,p90,p95}) are populated
-# when there are active HTTP connection pool connections.
+# (HTTPConnectionPool*TCP{Rcv,Snd}BufBytes_{p50,p75,p90,p95} and TotalBytes)
+# are populated when there are active HTTP connection pool connections.
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -25,6 +25,7 @@ ${CLICKHOUSE_CLIENT} -q "
     SELECT metric, value >= 0
     FROM system.asynchronous_metrics
     WHERE metric LIKE 'HTTPConnectionPoolStorageTCP%BufBytes\_%'
+       OR metric LIKE 'HTTPConnectionPoolStorageTCP%BufTotalBytes'
     ORDER BY metric
 "
 

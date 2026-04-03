@@ -89,66 +89,27 @@ StoragePtr TableFunctionGenerateSeries<alias_num>::executeImpl(
 
         StorageID storage_id(getDatabaseName(), table_name);
 
-        /// Compute the number of stepped values, guarding against UInt64 overflow.
-        /// The formula is `range / abs_step + 1`, but `+ 1` can wrap to 0
-        /// when `range / abs_step == UInt64_MAX` (i.e. step is 1 and range spans the entire UInt64 domain).
-        auto compute_count = [&](UInt64 range) -> UInt64
+        /// Check whether the series direction matches the step sign.
+        /// Otherwise, nothing to generate.
+        bool empty = step.negative ? (start < stop) : (start > stop);
+
+        /// Domain window size: the number of consecutive integers between start and stop (inclusive).
+        /// Stored as UInt128 so that `generate_series(0, UInt64_MAX)` (domain size = 2^64) is representable.
+        UInt128 domain_size = empty ? UInt128(0) : (step.negative ? UInt128(start - stop) + 1 : UInt128(stop - start) + 1);
+
+        /// Guard against generating more values than can be represented in UInt64.
+        if (!empty)
         {
-            UInt64 quotient = range / step.abs_value;
-            if (quotient == std::numeric_limits<UInt64>::max())
+            UInt128 count = (domain_size + step.abs_value - 1) / step.abs_value;
+            if (count > std::numeric_limits<UInt64>::max())
                 throw Exception(
                     ErrorCodes::BAD_ARGUMENTS,
                     "Table function '{}' would generate more values than can be represented in UInt64",
                     getName());
-            return quotient + 1;
-        };
-
-        /// Check whether the series direction matches the step sign.
-        /// Otherwise, nothing to generate.
-        bool empty = step.negative ? (start < stop) : (start > stop);
-        if (empty)
-        {
-            auto res = std::make_shared<StorageSystemNumbers>(storage_id, false, std::string{"generate_series"}, 0, 0, 1);
-            res->startup();
-            return res;
         }
 
-        StoragePtr res;
-        if (step.negative)
-        {
-            /// Negative step: use the `SimpleSteppedNumbersSource` path via the count constructor
-            /// of `StorageSystemNumbers`. The step must be negated into a wrapping UInt64 value
-            /// because the source advances by unsigned addition — adding `UInt64(0) - abs_step`
-            /// is equivalent to subtracting `abs_step`.
-            /// TODO: Support filter pushdown for negative step as well.
-            UInt64 count = compute_count(start - stop);
-            UInt64 wrapping_step = UInt64(0) - step.abs_value;
-            res = std::make_shared<StorageSystemNumbers>(storage_id, std::string{"generate_series"}, count, start, wrapping_step);
-        }
-        else
-        {
-            UInt64 range = stop - start;
-            if (range < std::numeric_limits<UInt64>::max())
-            {
-                /// The standard `StorageSystemNumbers` constructor takes a domain window size
-                /// (number of consecutive integers). This feeds into `NumbersRangedSource`
-                /// which supports WHERE filter pushdown — so we prefer this path when
-                /// possible. The window size is `range + 1` stored
-                /// as `UInt64` in `StorageSystemNumbers::limit`, which overflows when
-                /// `range == UInt64_MAX`, so this path requires `range < UInt64_MAX`.
-                /// TODO: Consider refactoring `StorageSystemNumbers` and `ReadFromSystemNumbersStep` to
-                ///       avoid this workaround.
-                res = std::make_shared<StorageSystemNumbers>(
-                    storage_id, false, std::string{"generate_series"}, range + 1, start, step.abs_value);
-            }
-            else
-            {
-                /// Fall back to `SimpleSteppedNumbersSource` which takes the exact output count
-                /// directly. This loses filter pushdown but this should be quite rare case.
-                UInt64 count = compute_count(range);
-                res = std::make_shared<StorageSystemNumbers>(storage_id, std::string{"generate_series"}, count, start, step.abs_value);
-            }
-        }
+        auto res = std::make_shared<StorageSystemNumbers>(
+            storage_id, false, std::string{"generate_series"}, domain_size, start, step.abs_value, step.negative);
         res->startup();
         return res;
     }

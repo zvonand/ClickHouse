@@ -81,9 +81,7 @@ private:
 /// The step is applied as-is using unsigned arithmetic, which means wrapping steps can be used
 /// to produce descending sequences (e.g. UInt64(0) - abs_step wraps so that addition becomes subtraction).
 ///
-/// This source is used by `generate_series` for descending series (negative step) and for
-/// ascending series that span the full UInt64 range with step > 1, where the normal
-/// domain-window path with `NumbersRangedSource` cannot be used.
+/// This source is used by `generate_series` for descending series (negative step).
 class SimpleSteppedNumbersSource : public ISource
 {
 public:
@@ -495,11 +493,20 @@ Pipe ReadFromSystemNumbersStep::makePipe()
 
     chassert(numbers_storage.step != UInt64{0});
 
-    /// Simple stepped mode: pre-computed row count, single-stream, no filter pushdown.
-    /// Used by `generate_series` for descending series and full-range ascending with step > 1.
-    if (numbers_storage.use_stepped_source)
+    /// Descending series (e.g. `generate_series(10, 0, -1)`): compute exact output count
+    /// from domain size and step, then use `SimpleSteppedNumbersSource` with a wrapping step.
+    /// The step stored in storage is always the positive absolute value; the wrapping trick
+    /// (UInt64(0) - step) makes unsigned addition equivalent to subtraction.
+    /// TODO: Support filter pushdown for negative step as well.
+    if (numbers_storage.descending)
     {
-        UInt64 total_count = numbers_storage.count;
+        chassert(numbers_storage.limit.has_value());
+        UInt128 domain_size = *numbers_storage.limit;
+        UInt128 count128 = (domain_size + numbers_storage.step - 1) / numbers_storage.step;
+
+        chassert(count128 <= std::numeric_limits<UInt64>::max());
+
+        UInt64 total_count = static_cast<UInt64>(count128);
 
         /// We cannot push down LIMIT if we have a filter. Consider:
         ///   SELECT * FROM generate_series(10, 0, -1) WHERE generate_series < 3 LIMIT 1
@@ -516,8 +523,9 @@ Pipe ReadFromSystemNumbersStep::makePipe()
 
         NumbersLikeUtils::checkLimits(context->getSettingsRef(), total_count);
 
+        UInt64 wrapping_step = UInt64(0) - numbers_storage.step;
         auto source = std::make_shared<SimpleSteppedNumbersSource>(
-            max_block_size, numbers_storage.offset, numbers_storage.step, total_count, numbers_storage.column_name);
+            max_block_size, numbers_storage.offset, wrapping_step, total_count, numbers_storage.column_name);
         source->addTotalRowsApprox(total_count);
         pipe.addSource(std::move(source));
         return pipe;
@@ -598,13 +606,13 @@ Pipe ReadFromSystemNumbersStep::makePipe()
 
     if (numbers_storage.limit.has_value())
     {
-        const UInt64 storage_limit = *numbers_storage.limit;
+        const UInt128 storage_limit = *numbers_storage.limit;
 
         /// Domain of `numbers(offset, limit[, step])` is [offset, offset + limit), potentially wrapping at 2^64.
-        if (std::numeric_limits<UInt64>::max() - numbers_storage.offset >= storage_limit)
+        if (static_cast<UInt128>(std::numeric_limits<UInt64>::max() - numbers_storage.offset) >= storage_limit)
         {
             append_stepped_intersections(
-                Range(FieldRef(numbers_storage.offset), true, FieldRef(numbers_storage.offset + storage_limit), false), remainder);
+                Range(FieldRef(numbers_storage.offset), true, FieldRef(static_cast<UInt64>(numbers_storage.offset + storage_limit)), false), remainder);
         }
         /// Wrap-around case, for example: numbers(18446744073709551614, 5) produces:
         /// [18446744073709551614, 18446744073709551615] then [0, 2].
@@ -614,8 +622,8 @@ Pipe ReadFromSystemNumbersStep::makePipe()
             append_stepped_intersections(
                 Range(FieldRef(numbers_storage.offset), true, FieldRef(std::numeric_limits<UInt64>::max()), true), remainder);
 
-            auto overflow_end = UInt128(numbers_storage.offset) + UInt128(storage_limit);
-            UInt64 wrapped_end = UInt64(overflow_end - std::numeric_limits<UInt64>::max() - 1);
+            auto overflow_end = static_cast<UInt128>(numbers_storage.offset) + storage_limit;
+            UInt64 wrapped_end = static_cast<UInt64>(overflow_end - std::numeric_limits<UInt64>::max() - 1);
 
             /// Wrapped segment starts at 0 and ends at `wrapped_end` (exclusive).
 

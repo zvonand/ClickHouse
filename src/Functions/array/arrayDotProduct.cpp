@@ -29,9 +29,9 @@ MULTITARGET_FUNCTION_X86_V4_V3(
     dotProductImpl,
     MULTITARGET_FUNCTION_BODY((const ResultType * __restrict data_x, const ResultType * __restrict data_y, size_t count) {
         /// Manual unrolling with independent accumulators to break FP dependency chains.
-        /// The number of partial sums is chosen to fill SIMD registers across all targets:
-        /// - Float32: 128 / 4 = 32 accumulators
-        /// - Float64: 128 / 8 = 16 accumulators
+        /// With FMA latency ~4 cycles and throughput 1/cycle, we need >= 4 independent
+        /// chains to saturate the pipeline. We use more (32 for Float32, 16 for Float64)
+        /// so the compiler can map them to multiple SIMD registers across all targets.
         constexpr size_t unroll_count = 128 / sizeof(ResultType);
         ResultType partial_sums[unroll_count]{};
 
@@ -283,12 +283,12 @@ private:
                 /// SIMD-optimized path for same-type floating point
 #if USE_MULTITARGET_CODE
                 if (isArchSupported(TargetArch::x86_64_v4))
-                    result_data[row] = dotProductImpl_x86_64_v4<ResultType>(&data_x[current_offset], &data_y[current_offset], array_size);
+                    result_data[row] = dotProductImpl_x86_64_v4<ResultType>(data_x.data() + current_offset, data_y.data() + current_offset, array_size);
                 else if (isArchSupported(TargetArch::x86_64_v3))
-                    result_data[row] = dotProductImpl_x86_64_v3<ResultType>(&data_x[current_offset], &data_y[current_offset], array_size);
+                    result_data[row] = dotProductImpl_x86_64_v3<ResultType>(data_x.data() + current_offset, data_y.data() + current_offset, array_size);
                 else
 #endif
-                    result_data[row] = dotProductImpl<ResultType>(&data_x[current_offset], &data_y[current_offset], array_size);
+                    result_data[row] = dotProductImpl<ResultType>(data_x.data() + current_offset, data_y.data() + current_offset, array_size);
             }
             else
             {
@@ -369,20 +369,41 @@ private:
                 /// SIMD-optimized path for same-type floating point
 #if USE_MULTITARGET_CODE
                 if (isArchSupported(TargetArch::x86_64_v4))
-                    result[row] = dotProductImpl_x86_64_v4<ResultType>(&data_x[0], &data_y[current_offset], array_size);
+                    result[row] = dotProductImpl_x86_64_v4<ResultType>(data_x.data(), data_y.data() + current_offset, array_size);
                 else if (isArchSupported(TargetArch::x86_64_v3))
-                    result[row] = dotProductImpl_x86_64_v3<ResultType>(&data_x[0], &data_y[current_offset], array_size);
+                    result[row] = dotProductImpl_x86_64_v3<ResultType>(data_x.data(), data_y.data() + current_offset, array_size);
                 else
 #endif
-                    result[row] = dotProductImpl<ResultType>(&data_x[0], &data_y[current_offset], array_size);
+                    result[row] = dotProductImpl<ResultType>(data_x.data(), data_y.data() + current_offset, array_size);
             }
             else
             {
-                /// Scalar path for mixed types / integer types
+                /// Scalar path for mixed types / integer types.
+                /// This branch is only reached when left and right have different types
+                /// (e.g. Int32 × Float64) — not a hot path, but we keep the same
+                /// multi-accumulator structure as the non-const path for consistency.
+                size_t i = 0;
+
+                static constexpr size_t VEC_SIZE = 4;
+                typename Kernel::template State<ResultType> states[VEC_SIZE];
+                for (; i + VEC_SIZE < array_size; i += VEC_SIZE)
+                {
+                    for (size_t j = 0; j < VEC_SIZE; ++j)
+                        Kernel::template accumulate<ResultType>(
+                            states[j],
+                            static_cast<ResultType>(data_x[i + j]),
+                            static_cast<ResultType>(data_y[current_offset + i + j]));
+                }
+
                 typename Kernel::template State<ResultType> state;
-                for (size_t i = 0; i < array_size; ++i)
+                for (const auto & other_state : states)
+                    Kernel::template combine<ResultType>(state, other_state);
+
+                /// Process the tail
+                for (; i < array_size; ++i)
                     Kernel::template accumulate<ResultType>(
                         state, static_cast<ResultType>(data_x[i]), static_cast<ResultType>(data_y[current_offset + i]));
+
                 result[row] = Kernel::template finalize<ResultType>(state);
             }
 

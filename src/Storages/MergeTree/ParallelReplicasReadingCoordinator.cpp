@@ -1219,6 +1219,13 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
         const auto replica_num = request.replica_num;
         const auto request_table_id = request.table_id;
 
+        if (replica_num >= replicas_count)
+            throw Exception(
+                ErrorCodes::LOGICAL_ERROR,
+                "Replica number ({}) is bigger than total replicas count ({})",
+                replica_num,
+                replicas_count);
+
         if (coordinator->replica_status[replica_num].is_finished)
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,

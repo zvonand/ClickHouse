@@ -1333,19 +1333,6 @@ void StorageLog::restoreDataImpl(const BackupPtr & backup, const String & data_p
     }
 }
 
-namespace
-{
-
-SharedHeader getHeader(
-    const Names & column_names,
-    const StorageSnapshotPtr & storage_snapshot
-)
-{
-    return std::make_shared<const Block>(storage_snapshot->getSampleBlockForColumns(column_names));
-}
-
-}
-
 ReadFromStorageLogStep::ReadFromStorageLogStep(
         const Names & column_names_,
         ContextPtr local_context_,
@@ -1354,7 +1341,7 @@ ReadFromStorageLogStep::ReadFromStorageLogStep(
         size_t max_block_size_,
         size_t num_streams_
 )
-    : ISourceStep(getHeader(column_names_, storage_snapshot_))
+    : ISourceStep(std::make_shared<const Block>(storage_snapshot_->getSampleBlockForColumns(column_names_)))
     , column_names(column_names_)
     , local_context(local_context_)
     , storage(std::move(storage_))

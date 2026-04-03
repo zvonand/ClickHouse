@@ -720,8 +720,7 @@ DataPartsVector filterDataPartsWithExpression(
     return filtered_parts;
 }
 
-std::pair<Names, Names> splitPhysicalAndVirtualColumnNames(
-    const Names & column_names, const StorageSnapshotPtr & storage_snapshot)
+std::pair<Names, Names> splitPhysicalAndVirtualColumnNames(const Names & column_names, const StorageSnapshotPtr & storage_snapshot)
 {
     Names physical_names;
     Names virtual_names;

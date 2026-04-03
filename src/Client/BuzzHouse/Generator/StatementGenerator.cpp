@@ -2652,13 +2652,12 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
         {3, [&] { sc->set_stop_thread_fuzzer(true); }},
         {3, [&] { sc->set_drop_parquet_metadata_cache(true); }},
         {3 * static_cast<uint32_t>(supports_cloud_features), [&] { sc->set_drop_distributed_cache(true); }},
-        {3 * static_cast<uint32_t>(supports_cloud_features && freeze_counter > 0),
+        {3 * static_cast<uint32_t>(supports_cloud_features && !freeze_names.empty()),
          [&]
          {
              UnlockSnapshot * us = sc->mutable_unlock_snapshot();
 
-             chassert(freeze_counter > 0);
-             us->set_name("f" + std::to_string(rg.randomInt<uint32_t>(0, freeze_counter - 1)));
+             us->set_name(rg.pickRandomly(freeze_names));
              if (!snapshots.empty() && rg.nextSmallNumber() < 4)
              {
                  us->mutable_from()->CopyFrom(rg.pickValueRandomlyFromMap(snapshots).bout);

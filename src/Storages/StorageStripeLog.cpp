@@ -5,6 +5,7 @@
 #include <Common/Exception.h>
 #include <Common/FailPoint.h>
 #include <Common/assert_cast.h>
+#include <Common/logger_useful.h>
 
 #include <Core/Settings.h>
 
@@ -20,12 +21,15 @@
 #include <Formats/NativeWriter.h>
 
 #include <DataTypes/DataTypeFactory.h>
+#include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeString.h>
 
 #include <Interpreters/Context.h>
 
 #include <Storages/StorageFactory.h>
 #include <Storages/StorageStripeLog.h>
 #include <Storages/StorageLogSettings.h>
+#include <Storages/VirtualColumnUtils.h>
 #include <Processors/ISource.h>
 #include <Processors/Sources/NullSource.h>
 #include <Processors/Sinks/SinkToStorage.h>
@@ -60,6 +64,7 @@ namespace ErrorCodes
 {
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
     extern const int INCORRECT_FILE_NAME;
+    extern const int LOGICAL_ERROR;
     extern const int TIMEOUT_EXCEEDED;
     extern const int CANNOT_RESTORE_TABLE;
     extern const int NOT_IMPLEMENTED;
@@ -75,41 +80,28 @@ namespace FailPoints
 /// because we read ranges of data that do not change.
 class StripeLogSource final : public ISource
 {
-public:
-    static Block getHeader(
-        const StorageSnapshotPtr & storage_snapshot,
-        const Names & column_names,
-        IndexForNativeFormat::Blocks::const_iterator index_begin,
-        IndexForNativeFormat::Blocks::const_iterator index_end)
+    static Block buildHeader(const Block & physical_header, const Block & virtuals_header)
     {
-        if (index_begin == index_end)
-            return storage_snapshot->getSampleBlockForColumns(column_names);
-
-        /// TODO: check if possible to always return storage.getSampleBlock()
-
-        Block header;
-
-        for (const auto & column : index_begin->columns)
-        {
-            auto type = DataTypeFactory::instance().get(column.type);
-            header.insert(ColumnWithTypeAndName{ type, column.name });
-        }
-
+        Block header = physical_header;
+        for (const auto & col : virtuals_header)
+            header.insert(col);
         return header;
     }
 
+public:
     StripeLogSource(
+        Block physical_header_,
+        Block virtuals_header_,
         std::shared_ptr<const StorageStripeLog> storage_,
-        const StorageSnapshotPtr & storage_snapshot_,
-        const Names & column_names,
         ReadSettings read_settings_,
         std::shared_ptr<const IndexForNativeFormat> indices_,
         IndexForNativeFormat::Blocks::const_iterator index_begin_,
         IndexForNativeFormat::Blocks::const_iterator index_end_,
         size_t file_size_)
-        : ISource(std::make_shared<const Block>(getHeader(storage_snapshot_, column_names, index_begin_, index_end_)))
+        : ISource(std::make_shared<const Block>(buildHeader(physical_header_, virtuals_header_)))
+        , physical_header(std::move(physical_header_))
+        , virtuals_header(std::move(virtuals_header_))
         , storage(std::move(storage_))
-        , storage_snapshot(storage_snapshot_)
         , read_settings(std::move(read_settings_))
         , indices(indices_)
         , index_begin(index_begin_)
@@ -123,36 +115,29 @@ public:
 protected:
     Chunk generate() override
     {
-        Block res;
-        start();
+        Columns result_columns;
+        result_columns.reserve(getPort().getHeader().columns());
+        fillPhysicalColumns(result_columns);
 
-        if (block_in)
-        {
-            res = block_in->read();
+        if (result_columns.empty())
+            return {};
 
-            /// Freeing memory before destroying the object.
-            if (res.empty())
-            {
-                block_in.reset();
-                data_in.reset();
-                indices.reset();
-            }
-        }
+        UInt64 num_rows = result_columns.empty() ? 0 : result_columns.front()->size();
+        fillVirtualColumns(result_columns, num_rows);
 
-        return Chunk(res.getColumns(), res.rows());
+        return Chunk(std::move(result_columns), num_rows);
     }
 
 private:
+    const Block physical_header;
+    const Block virtuals_header;
     const std::shared_ptr<const StorageStripeLog> storage;
-    StorageSnapshotPtr storage_snapshot;
     ReadSettings read_settings;
 
     std::shared_ptr<const IndexForNativeFormat> indices;
     IndexForNativeFormat::Blocks::const_iterator index_begin;
     IndexForNativeFormat::Blocks::const_iterator index_end;
     size_t file_size;
-
-    Block header;
 
     /** optional - to create objects only on first reading
       *  and delete objects (release buffers) after the source is exhausted
@@ -177,6 +162,39 @@ private:
             data_in->setReadUntilPosition(file_size);
 
             block_in.emplace(*data_in, 0, index_begin, index_end);
+        }
+    }
+
+    void fillPhysicalColumns(Columns & result_columns)
+    {
+        start();
+
+        if (!block_in)
+            return;
+
+        Block res = block_in->read();
+
+        /// Freeing memory before destroying the object.
+        if (res.empty())
+        {
+            block_in.reset();
+            data_in.reset();
+            indices.reset();
+            return;
+        }
+
+        for (const auto & col : physical_header)
+            result_columns.emplace_back(res.getByName(col.name).column);
+    }
+
+    void fillVirtualColumns(Columns & result_columns, UInt64 num_rows) const
+    {
+        for (const auto & col : virtuals_header)
+        {
+            if (col.name == "_table")
+                result_columns.emplace_back(col.type->createColumnConst(num_rows, storage->getStorageID().getTableName())->convertToFullColumnIfConst());
+            else
+                throw Exception(ErrorCodes::LOGICAL_ERROR, "Unknown virtual column: '{}'", col.name);
         }
     }
 };
@@ -311,6 +329,7 @@ StorageStripeLog::StorageStripeLog(
     storage_metadata.setConstraints(constraints_);
     storage_metadata.setComment(comment);
     setInMemoryMetadata(storage_metadata);
+    setVirtuals(createVirtuals());
 
     if (relative_path_.empty())
         throw Exception(ErrorCodes::INCORRECT_FILE_NAME, "Storage {} requires data path", getName());
@@ -371,6 +390,12 @@ static std::chrono::seconds getLockTimeout(ContextPtr local_context)
     return std::chrono::seconds{lock_timeout};
 }
 
+VirtualColumnsDescription StorageStripeLog::createVirtuals()
+{
+    VirtualColumnsDescription desc;
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    return desc;
+}
 
 Pipe StorageStripeLog::read(
     const Names & column_names,
@@ -394,8 +419,9 @@ Pipe StorageStripeLog::read(
     if (!data_file_size)
         return Pipe(std::make_shared<NullSource>(std::make_shared<const Block>(storage_snapshot->getSampleBlockForColumns(column_names))));
 
-    auto indices_for_selected_columns
-        = std::make_shared<IndexForNativeFormat>(indices.extractIndexForColumns(NameSet{column_names.begin(), column_names.end()}));
+    /// Filter out virtual columns - they are not stored on disk and not in the index.
+    auto [physical_header, virtuals_header] = VirtualColumnUtils::splitPhysicalAndVirtualColumns(column_names, storage_snapshot);
+    auto indices_for_selected_columns = std::make_shared<IndexForNativeFormat>(indices.extractIndexForColumns(physical_header.getNameSet()));
 
     size_t size = indices_for_selected_columns->blocks.size();
     num_streams = std::min(num_streams, size);
@@ -412,7 +438,10 @@ Pipe StorageStripeLog::read(
         std::advance(end, (stream + 1) * size / num_streams);
 
         pipes.emplace_back(std::make_shared<StripeLogSource>(
-            std::static_pointer_cast<const StorageStripeLog>(shared_from_this()), storage_snapshot, column_names, read_settings, indices_for_selected_columns, begin, end, data_file_size));
+            physical_header, virtuals_header,
+            std::static_pointer_cast<const StorageStripeLog>(shared_from_this()),
+            read_settings,
+            indices_for_selected_columns, begin, end, data_file_size));
     }
 
     /// We do not keep read lock directly at the time of reading, because we read ranges of data that do not change.

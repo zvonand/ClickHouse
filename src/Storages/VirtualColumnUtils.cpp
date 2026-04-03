@@ -44,6 +44,7 @@
 #include <IO/WriteHelpers.h>
 #include <Storages/HivePartitioningUtils.h>
 #include <Storages/MergeTree/IMergeTreeDataPart.h>
+#include <Storages/StorageSnapshot.h>
 #include <Common/HashTable/HashSet.h>
 
 
@@ -717,6 +718,41 @@ DataPartsVector filterDataPartsWithExpression(
             filtered_parts.push_back(part);
 
     return filtered_parts;
+}
+
+std::pair<Block, Block> splitPhysicalAndVirtualColumns(
+    const Names & column_names, const StorageSnapshotPtr & storage_snapshot)
+{
+    Block physical_header;
+    Block virtuals_header;
+    auto physical_options = GetColumnsOptions(GetColumnsOptions::All).withSubcolumns();
+    for (const auto & name : column_names)
+    {
+        /// If the column exists in the table schema, treat it as physical even if
+        /// a virtual column with the same name is registered.
+        if (auto column = storage_snapshot->tryGetColumn(physical_options, name))
+        {
+            physical_header.insert({column->type->createColumn(), column->type, column->name});
+        }
+        else if (const auto * virtual_desc = storage_snapshot->virtual_columns->tryGetDescription(name))
+        {
+            virtuals_header.insert({virtual_desc->type->createColumn(), virtual_desc->type, name});
+        }
+        else
+        {
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Column '{}' is neither physical nor virtual", name);
+        }
+    }
+
+    /// We must always read at least one physical column to determine the number of rows,
+    /// even if only virtual columns were requested.
+    if (!physical_header.columns())
+    {
+        auto smallest = ExpressionActions::getSmallestColumn(storage_snapshot->metadata->getColumns().getAllPhysical());
+        physical_header.insert({smallest.type->createColumn(), smallest.type, smallest.name});
+    }
+
+    return {std::move(physical_header), std::move(virtuals_header)};
 }
 
 }

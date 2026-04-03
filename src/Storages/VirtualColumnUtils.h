@@ -161,6 +161,9 @@ DataPartsVector filterDataPartsWithExpression(
     const DataPartsVector & data_parts,
     const std::shared_ptr<ExpressionActions> & virtual_columns_filter);
 
+/// Splits requested column names into a physical sample block and a virtual columns header.
+std::pair<Block, Block> splitPhysicalAndVirtualColumns(const Names & column_names, const StorageSnapshotPtr & storage_snapshot);
+
 }
 
 }

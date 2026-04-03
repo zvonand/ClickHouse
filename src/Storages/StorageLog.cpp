@@ -1,6 +1,7 @@
 #include <Storages/StorageLog.h>
 #include <Storages/StorageFactory.h>
 #include <Storages/StorageLogSettings.h>
+#include <Storages/VirtualColumnUtils.h>
 
 #include <Columns/IColumn.h>
 #include <Common/Exception.h>
@@ -21,6 +22,8 @@
 #include <IO/WriteHelpers.h>
 #include <IO/copyData.h>
 
+#include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeString.h>
 #include <DataTypes/NestedUtils.h>
 
 #include <Interpreters/Context.h>
@@ -77,29 +80,29 @@ namespace ErrorCodes
 /// because we read ranges of data that do not change.
 class LogSource final : public ISource
 {
-public:
-    static Block getHeader(const NamesAndTypesList & columns)
+    static Block buildHeader(const Block & physical_header, const Block & virtuals_header)
     {
-        Block res;
-
-        for (const auto & name_type : columns)
-            res.insert({ name_type.type->createColumn(), name_type.type, name_type.name });
-
-        return res;
+        Block header = physical_header;
+        for (const auto & col : virtuals_header)
+            header.insert(col);
+        return header;
     }
 
+public:
     LogSource(
+        Block physical_header_,
+        Block virtuals_header_,
         size_t block_size_,
-        const NamesAndTypesList & columns_,
         std::shared_ptr<const StorageLog> storage_,
         size_t rows_limit_,
         const std::vector<size_t> & offsets_,
         const std::vector<size_t> & file_sizes_,
         bool limited_by_file_sizes_,
         ReadSettings read_settings_)
-        : ISource(std::make_shared<const Block>(getHeader(columns_)))
+        : ISource(std::make_shared<const Block>(buildHeader(physical_header_, virtuals_header_)))
+        , physical_header(std::move(physical_header_))
+        , virtuals_header(std::move(virtuals_header_))
         , block_size(block_size_)
-        , columns(columns_)
         , storage(std::move(storage_))
         , rows_limit(rows_limit_)
         , offsets(offsets_)
@@ -122,9 +125,12 @@ private:
     /// so that shared substreams (like Nested array offsets) are read only once
     /// from the underlying file stream.
     String getCacheKey(const NameAndTypePair & name_and_type_on_disk) const;
+    void fillPhysicalColumns(Columns & result_columns, size_t max_rows_to_read);
+    void fillVirtualColumns(Columns & result_columns, UInt64 num_rows) const;
 
+    const Block physical_header;
+    const Block virtuals_header;
     const size_t block_size;
-    const NamesAndTypesList columns;
     const std::shared_ptr<const StorageLog> storage;
     const size_t rows_limit;      /// The maximum number of rows that can be read
     size_t rows_read = 0;
@@ -216,22 +222,51 @@ Chunk LogSource::generate()
         return {};
     }
 
-    /// How many rows to read for the next block.
     size_t max_rows_to_read = std::min(block_size, rows_limit - rows_read);
+
+    Columns result_columns;
+    result_columns.reserve(getPort().getHeader().columns());
+    fillPhysicalColumns(result_columns, max_rows_to_read);
+
+    if (result_columns.empty())
+        return {};
+
+    UInt64 num_rows = result_columns.empty() ? 0 : result_columns.front()->size();
+    fillVirtualColumns(result_columns, num_rows);
+
+    if (num_rows)
+        rows_read += num_rows;
+    else
+        is_finished = true;
+
+    if (isFinished())
+    {
+        /// Close the files (before destroying the object).
+        /// When many sources are created, but simultaneously reading only a few of them,
+        /// buffers don't waste memory.
+        streams.clear();
+    }
+
+    return Chunk(std::move(result_columns), num_rows);
+}
+
+void LogSource::fillPhysicalColumns(Columns & result_columns, size_t max_rows_to_read)
+{
     std::unordered_map<String, ISerialization::SubstreamsCache> caches;
     std::unordered_map<String, ISerialization::SubstreamsDeserializeStatesCache> deserialize_states_caches;
-    Block res;
 
-    /// First, read prefixes for all columns/subcolumns.
-    for (const auto & name_and_type : columns)
+    auto physical_columns = physical_header.getNamesAndTypes();
+
+    /// First, read prefixes for all physical columns/subcolumns.
+    for (const auto & name_and_type : physical_columns)
     {
         auto name_and_type_on_disk = getColumnOnDisk(name_and_type);
         auto cache_key = getCacheKey(name_and_type_on_disk);
         readPrefix(name_and_type_on_disk, caches[cache_key], deserialize_states_caches[cache_key]);
     }
 
-    /// Second, read the data of all columns/subcolumns.
-    for (const auto & name_type : columns)
+    /// Second, read the data of all physical columns/subcolumns.
+    for (const auto & name_type : physical_columns)
     {
         ColumnPtr column;
         auto name_type_on_disk = getColumnOnDisk(name_type);
@@ -248,25 +283,19 @@ Chunk LogSource::generate()
         }
 
         if (!column->empty())
-            res.insert(ColumnWithTypeAndName(column, name_type_on_disk.type, name_type_on_disk.name));
+            result_columns.emplace_back(std::move(column));
     }
+}
 
-    if (!res.empty())
-        rows_read += res.rows();
-
-    if (res.empty())
-        is_finished = true;
-
-    if (isFinished())
+void LogSource::fillVirtualColumns(Columns & result_columns, UInt64 num_rows) const
+{
+    for (const auto & col : virtuals_header)
     {
-        /// Close the files (before destroying the object).
-        /// When many sources are created, but simultaneously reading only a few of them,
-        /// buffers don't waste memory.
-        streams.clear();
+        if (col.name == "_table")
+            result_columns.emplace_back(col.type->createColumnConst(num_rows, storage->getStorageID().getTableName())->convertToFullColumnIfConst());
+        else
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Unknown virtual column: '{}'", col.name);
     }
-
-    UInt64 num_rows = res.rows();
-    return Chunk(res.getColumns(), num_rows);
 }
 
 void LogSource::readPrefix(const NameAndTypePair & name_and_type, ISerialization::SubstreamsCache & cache, ISerialization::SubstreamsDeserializeStatesCache & deserialize_state_cache)
@@ -713,6 +742,7 @@ StorageLog::StorageLog(
     storage_metadata.setConstraints(constraints_);
     storage_metadata.setComment(comment);
     setInMemoryMetadata(storage_metadata);
+    setVirtuals(createVirtuals());
 
     if (relative_path_.empty())
         throw Exception(ErrorCodes::INCORRECT_FILE_NAME, "Storage {} requires data path", getName());
@@ -751,6 +781,12 @@ StorageLog::StorageLog(
     total_bytes = file_checker.getTotalSize();
 }
 
+VirtualColumnsDescription StorageLog::createVirtuals()
+{
+    VirtualColumnsDescription desc;
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    return desc;
+}
 
 void StorageLog::addDataFiles(const NameAndTypePair & column)
 {
@@ -996,9 +1032,10 @@ Pipe StorageLog::createReadingPipe(
 
     /// Converting to subcolumns of Nested is needed for
     /// correct reading of parts of Nested with shared offsets.
-    auto options = GetColumnsOptions(GetColumnsOptions::AllPhysical).withSubcolumns();
-    auto all_columns = storage_snapshot->getColumnsByNames(options, column_names);
-    all_columns = Nested::convertToSubcolumns(all_columns);
+    auto [physical_header, virtuals_header] = VirtualColumnUtils::splitPhysicalAndVirtualColumns(column_names, storage_snapshot);
+    Block physical_header_nested;
+    for (const auto & col : Nested::convertToSubcolumns(physical_header.getNamesAndTypesList()))
+        physical_header_nested.insert({col.type->createColumn(), col.type, col.name});
 
     for (size_t stream = 0; stream < num_streams; ++stream)
     {
@@ -1014,8 +1051,9 @@ Pipe StorageLog::createReadingPipe(
         }
 
         pipes.emplace_back(std::make_shared<LogSource>(
+            physical_header_nested,
+            virtuals_header,
             max_block_size,
-            all_columns,
             std::static_pointer_cast<const StorageLog>(shared_from_this()),
             row_limit,
             offsets,
@@ -1308,11 +1346,7 @@ SharedHeader getHeader(
     const StorageSnapshotPtr & storage_snapshot
 )
 {
-    auto options = GetColumnsOptions(GetColumnsOptions::AllPhysical).withSubcolumns();
-    auto all_columns = storage_snapshot->getColumnsByNames(options, column_names);
-    all_columns = Nested::convertToSubcolumns(all_columns);
-
-    return std::make_shared<const Block>(LogSource::getHeader(all_columns));
+    return std::make_shared<const Block>(storage_snapshot->getSampleBlockForColumns(column_names));
 }
 
 }

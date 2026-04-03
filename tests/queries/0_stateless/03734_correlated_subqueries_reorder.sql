@@ -8,7 +8,7 @@ SET correlated_subqueries_use_in_memory_buffer = 1;
 
 SET enable_parallel_replicas = 0;
 
-SET query_plan_optimize_join_order_algorithm = 'dpsize';
+SET query_plan_optimize_join_order_algorithm = 'dpsize,greedy'; -- greedy as fallback: dpsize fails on correlated subquery join graphs with certain structures
 SET query_plan_join_swap_table = 'auto';
 SET enable_join_runtime_filters = 0;
 SET query_plan_convert_any_join_to_semi_or_anti_join = 0; -- SEMI/ANTI join ordering constraints cause dpsize solver to fail

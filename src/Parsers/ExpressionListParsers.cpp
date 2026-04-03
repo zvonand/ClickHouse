@@ -1736,6 +1736,100 @@ protected:
     }
 };
 
+class OverlayLayer : public Layer
+{
+    String function_name;
+public:
+    explicit OverlayLayer(String function_name_)
+        : Layer(/*allow_alias*/ true, /*allow_alias_without_as_keyword*/ true)
+        , function_name(std::move(function_name_))
+    {}
+
+    bool parse(IParser::Pos & pos, Expected & expected, Action & action) override
+    {
+        /// Either OVERLAY(string PLACING replacement FROM start [FOR length]) or overlay(string, replacement, start[, length])
+        ///
+        /// 0: Parse first separator: PLACING or comma (-> 1)
+        /// 1: Parse second separator: FROM or comma (-> 2)
+        /// 2: Parse third separator: FOR or comma (-> 3)
+        /// 2 or 3: Parse closing bracket (finished)
+
+        if (state == 0)
+        {
+            if (ParserToken(TokenType::Comma).ignore(pos, expected)
+                || ParserKeyword(Keyword::PLACING).ignore(pos, expected))
+            {
+                action = Action::OPERAND;
+
+                if (!mergeElement())
+                    return false;
+
+                state = 1;
+            }
+        }
+
+        if (state == 1)
+        {
+            if (ParserToken(TokenType::Comma).ignore(pos, expected)
+                || ParserKeyword(Keyword::FROM).ignore(pos, expected))
+            {
+                action = Action::OPERAND;
+
+                if (!mergeElement())
+                    return false;
+
+                state = 2;
+            }
+        }
+
+        if (state == 2)
+        {
+            if (ParserToken(TokenType::Comma).ignore(pos, expected)
+                || ParserKeyword(Keyword::FOR).ignore(pos, expected))
+            {
+                action = Action::OPERAND;
+
+                if (!mergeElement())
+                    return false;
+
+                state = 3;
+            }
+        }
+
+        /// Accept extra comma-separated arguments beyond the 4th so the function
+        /// itself can report NUMBER_OF_ARGUMENTS_DOESNT_MATCH instead of a syntax error.
+        if (state == 3)
+        {
+            if (ParserToken(TokenType::Comma).ignore(pos, expected))
+            {
+                action = Action::OPERAND;
+
+                if (!mergeElement())
+                    return false;
+            }
+        }
+
+        /// Allow closing bracket in any state so that calls with too few arguments
+        /// (e.g. overlay('a', 'b')) are rejected by the function, not the parser.
+        if (!finished && ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
+        {
+            if (!mergeElement())
+                return false;
+
+            finished = true;
+        }
+
+        return true;
+    }
+
+protected:
+    bool getResultImpl(ASTPtr & node) override
+    {
+        node = makeASTFunction(function_name, std::move(elements));
+        return true;
+    }
+};
+
 class PositionLayer : public Layer
 {
 public:
@@ -2453,6 +2547,8 @@ std::unique_ptr<Layer> getFunctionLayer(ASTPtr identifier, bool is_table_functio
     /// TRIM(BOTH|LEADING|TRAILING x FROM y)
     /// SUBSTRING(x FROM a)
     /// SUBSTRING(x FROM a FOR b)
+    /// OVERLAY(x PLACING y FROM a)
+    /// OVERLAY(x PLACING y FROM a FOR b)
 
     String function_name = getIdentifierName(identifier);
     String function_name_lowercase = Poco::toLower(function_name);
@@ -2476,6 +2572,10 @@ std::unique_ptr<Layer> getFunctionLayer(ASTPtr identifier, bool is_table_functio
         return std::make_unique<ExtractLayer>();
     if (function_name_lowercase == "substring")
         return std::make_unique<SubstringLayer>();
+    if (function_name_lowercase == "overlay")
+        return std::make_unique<OverlayLayer>("overlay");
+    if (function_name_lowercase == "overlayutf8")
+        return std::make_unique<OverlayLayer>("overlayUTF8");
     if (function_name_lowercase == "position")
         return std::make_unique<PositionLayer>();
     if (function_name_lowercase == "exists")

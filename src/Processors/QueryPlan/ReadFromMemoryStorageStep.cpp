@@ -53,7 +53,7 @@ public:
         InitializerFunc initializer_func_ = {},
         MaterializedCTEPtr materialized_cte_ = {})
         : ISource(std::make_shared<const Block>(getHeader(physical_columns_, virtual_columns_)))
-        , requested_column_names_and_types(std::move(physical_columns_))
+        , physical_columns(std::move(physical_columns_))
         , virtual_columns(std::move(virtual_columns_))
         , storage_id(std::move(storage_id_))
         , data(data_)
@@ -81,7 +81,7 @@ protected:
         }
 
         Columns columns;
-        columns.reserve(requested_column_names_and_types.size() + virtual_columns.size());
+        columns.reserve(physical_columns.size() + virtual_columns.size());
         fillPhysicalColumns(columns);
 
         UInt64 num_rows = columns.empty() ? 0 : columns.front()->size();
@@ -111,7 +111,7 @@ private:
 
         const Block & src = (*data)[current_index];
 
-        for (const auto & name_and_type : requested_column_names_and_types)
+        for (const auto & name_and_type : physical_columns)
         {
             if (name_and_type.isSubcolumn())
                 result_columns.emplace_back(tryGetSubcolumnFromBlock(src, name_and_type.getTypeInStorage(), name_and_type));
@@ -119,7 +119,7 @@ private:
                 result_columns.emplace_back(tryGetColumnFromBlock(src, name_and_type));
         }
 
-        fillMissingColumns(result_columns, src.rows(), requested_column_names_and_types, requested_column_names_and_types, {}, nullptr);
+        fillMissingColumns(result_columns, src.rows(), physical_columns, physical_columns, {}, nullptr);
         assert(std::all_of(result_columns.begin(), result_columns.end(), [](const auto & column) { return column != nullptr; }));
     }
 
@@ -134,7 +134,7 @@ private:
         }
     }
 
-    const NamesAndTypesList requested_column_names_and_types;
+    const NamesAndTypesList physical_columns;
     const NamesAndTypesList virtual_columns;
     const StorageID storage_id;
     size_t execution_index = 0;

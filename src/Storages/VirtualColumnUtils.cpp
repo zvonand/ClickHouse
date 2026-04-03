@@ -720,37 +720,31 @@ DataPartsVector filterDataPartsWithExpression(
     return filtered_parts;
 }
 
-std::pair<Block, Block> splitPhysicalAndVirtualColumns(
+std::pair<Names, Names> splitPhysicalAndVirtualColumnNames(
     const Names & column_names, const StorageSnapshotPtr & storage_snapshot)
 {
-    Block physical_header;
-    Block virtuals_header;
+    Names physical_names;
+    Names virtual_names;
     for (const auto & name : column_names)
     {
         /// If the column exists in the table schema, treat it as physical even if
         /// a virtual column with the same name is registered.
-        if (auto column = storage_snapshot->tryGetColumn(GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(), name))
-        {
-            physical_header.insert({column->type->createColumn(), column->type, column->name});
-        }
-        else if (const auto * virtual_desc = storage_snapshot->virtual_columns->tryGetDescription(name))
-        {
-            virtuals_header.insert({virtual_desc->type->createColumn(), virtual_desc->type, name});
-        }
+        if (storage_snapshot->tryGetColumn(GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(), name))
+            physical_names.push_back(name);
+        else if (storage_snapshot->virtual_columns->tryGetDescription(name))
+            virtual_names.push_back(name);
         else
-        {
             throw Exception(ErrorCodes::LOGICAL_ERROR, "Column '{}' is neither physical nor virtual", name);
-        }
     }
 
-    /// We must always read at least one physical column to determine the number of rows
-    if (!physical_header.columns())
+    /// We must always read at least one physical column to determine the number of rows.
+    if (physical_names.empty())
     {
         auto smallest = ExpressionActions::getSmallestColumn(storage_snapshot->metadata->getColumns().getAllPhysical());
-        physical_header.insert({smallest.type->createColumn(), smallest.type, smallest.name});
+        physical_names.push_back(smallest.name);
     }
 
-    return {std::move(physical_header), std::move(virtuals_header)};
+    return {std::move(physical_names), std::move(virtual_names)};
 }
 
 }

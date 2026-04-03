@@ -80,27 +80,29 @@ namespace FailPoints
 /// because we read ranges of data that do not change.
 class StripeLogSource final : public ISource
 {
-    static Block buildHeader(const Block & physical_header, const Block & virtuals_header)
+    static Block getHeader(const NamesAndTypesList & physical, const NamesAndTypesList & virtuals)
     {
-        Block header = physical_header;
-        for (const auto & col : virtuals_header)
-            header.insert(col);
-        return header;
+        Block res;
+        for (const auto & name_type : physical)
+            res.insert({name_type.type->createColumn(), name_type.type, name_type.name});
+        for (const auto & name_type : virtuals)
+            res.insert({name_type.type->createColumn(), name_type.type, name_type.name});
+        return res;
     }
 
 public:
     StripeLogSource(
-        Block physical_header_,
-        Block virtuals_header_,
+        NamesAndTypesList physical_columns_,
+        NamesAndTypesList virtual_columns_,
         std::shared_ptr<const StorageStripeLog> storage_,
         ReadSettings read_settings_,
         std::shared_ptr<const IndexForNativeFormat> indices_,
         IndexForNativeFormat::Blocks::const_iterator index_begin_,
         IndexForNativeFormat::Blocks::const_iterator index_end_,
         size_t file_size_)
-        : ISource(std::make_shared<const Block>(buildHeader(physical_header_, virtuals_header_)))
-        , physical_header(std::move(physical_header_))
-        , virtuals_header(std::move(virtuals_header_))
+        : ISource(std::make_shared<const Block>(getHeader(physical_columns_, virtual_columns_)))
+        , physical_columns(std::move(physical_columns_))
+        , virtual_columns(std::move(virtual_columns_))
         , storage(std::move(storage_))
         , read_settings(std::move(read_settings_))
         , indices(indices_)
@@ -119,18 +121,16 @@ protected:
         result_columns.reserve(getPort().getHeader().columns());
         fillPhysicalColumns(result_columns);
 
-        if (result_columns.empty())
-            return {};
-
         UInt64 num_rows = result_columns.empty() ? 0 : result_columns.front()->size();
-        fillVirtualColumns(result_columns, num_rows);
+        if (!result_columns.empty())
+            fillVirtualColumns(result_columns, num_rows);
 
         return Chunk(std::move(result_columns), num_rows);
     }
 
 private:
-    const Block physical_header;
-    const Block virtuals_header;
+    const NamesAndTypesList physical_columns;
+    const NamesAndTypesList virtual_columns;
     const std::shared_ptr<const StorageStripeLog> storage;
     ReadSettings read_settings;
 
@@ -183,13 +183,13 @@ private:
             return;
         }
 
-        for (const auto & col : physical_header)
+        for (const auto & col : physical_columns)
             result_columns.emplace_back(res.getByName(col.name).column);
     }
 
     void fillVirtualColumns(Columns & result_columns, UInt64 num_rows) const
     {
-        for (const auto & col : virtuals_header)
+        for (const auto & col : virtual_columns)
         {
             if (col.name == "_table")
                 result_columns.emplace_back(col.type->createColumnConst(num_rows, storage->getStorageID().getTableName())->convertToFullColumnIfConst());
@@ -420,8 +420,10 @@ Pipe StorageStripeLog::read(
         return Pipe(std::make_shared<NullSource>(std::make_shared<const Block>(storage_snapshot->getSampleBlockForColumns(column_names))));
 
     /// Filter out virtual columns - they are not stored on disk and not in the index.
-    auto [physical_header, virtuals_header] = VirtualColumnUtils::splitPhysicalAndVirtualColumns(column_names, storage_snapshot);
-    auto indices_for_selected_columns = std::make_shared<IndexForNativeFormat>(indices.extractIndexForColumns(physical_header.getNameSet()));
+    auto [physical_column_names, virtual_column_names] = VirtualColumnUtils::splitPhysicalAndVirtualColumnNames(column_names, storage_snapshot);
+    auto indices_for_selected_columns = std::make_shared<IndexForNativeFormat>(indices.extractIndexForColumns(NameSet{physical_column_names.begin(), physical_column_names.end()}));
+    auto physical_columns = storage_snapshot->getColumnsByNames(GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(), physical_column_names);
+    auto virtual_columns = storage_snapshot->getColumnsByNames(GetColumnsOptions(GetColumnsOptions::All).withVirtuals(), virtual_column_names);
 
     size_t size = indices_for_selected_columns->blocks.size();
     num_streams = std::min(num_streams, size);
@@ -438,7 +440,7 @@ Pipe StorageStripeLog::read(
         std::advance(end, (stream + 1) * size / num_streams);
 
         pipes.emplace_back(std::make_shared<StripeLogSource>(
-            physical_header, virtuals_header,
+            physical_columns, virtual_columns,
             std::static_pointer_cast<const StorageStripeLog>(shared_from_this()),
             read_settings,
             indices_for_selected_columns, begin, end, data_file_size));

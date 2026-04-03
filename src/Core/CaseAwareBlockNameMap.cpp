@@ -114,7 +114,9 @@ public:
 
     void add(const std::string_view key, size_t idx) override
     {
-        if (map.find(key) != map.end())
+        auto it = map.find(key);
+        // If the key exists and points to the same idx, then it is not ambiguous
+        if (it != map.end() && it->second != idx)
         {
             ambiguous_keys.insert(key);
         }

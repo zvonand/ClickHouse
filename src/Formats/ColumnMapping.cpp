@@ -67,11 +67,6 @@ void addColumnsInternal(
 }
 }
 
-namespace ErrorCodes
-{
-extern const int INCORRECT_DATA;
-}
-
 void ColumnMapping::setupByHeader(const Block & header)
 {
     column_indexes_for_input_fields.resize(header.columns());

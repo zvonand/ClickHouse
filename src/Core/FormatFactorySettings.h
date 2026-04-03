@@ -1567,7 +1567,7 @@ Allow to write information about geo columns in parquet metadata and encode colu
 Automatically create parent directories when using INTO OUTFILE if they do not already exists.
 )", 0) \
     DECLARE(InputFormatColumnMatchingCaseSensitivity, input_format_column_name_matching_mode, FormatSettings::InputFormatColumnMatchingCaseSensitivity::MATCH_CASE, R"(
-Defines the column name matching mode when ingesting data through various formats (JSONEachRow, CSVWithNames, JSONColumns, BSONEachRow, RowBinaryWithNames).
+Defines the column name matching mode when ingesting data through various formats (including but not limited to JSONEachRow, CSVWithNames, JSONColumns, BSONEachRow, RowBinaryWithNames).
 Supported modes:
     - MATCH_CASE: match case-sensitively
     - IGNORE_CASE: match case-insensitively

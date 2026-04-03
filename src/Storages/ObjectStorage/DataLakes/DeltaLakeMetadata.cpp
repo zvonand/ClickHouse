@@ -59,6 +59,7 @@ namespace ErrorCodes
     extern const int INCORRECT_DATA;
     extern const int BAD_ARGUMENTS;
     extern const int LOGICAL_ERROR;
+    extern const int NOT_IMPLEMENTED;
     extern const int UNSUPPORTED_METHOD;
 }
 
@@ -301,8 +302,10 @@ struct DeltaLakeMetadataImpl
                 }
                 else if (file_schema != current_schema)
                 {
-                    LOG_INFO(log, "Schema evolved: {} -> {}", file_schema.toString(), current_schema.toString());
-                    file_schema = current_schema;
+                    throw Exception(ErrorCodes::NOT_IMPLEMENTED,
+                                    "Reading from files with different schema is not possible "
+                                    "({} is different from {})",
+                                    file_schema.toString(), current_schema.toString());
                 }
             }
 
@@ -548,8 +551,10 @@ struct DeltaLakeMetadataImpl
                 }
                 else if (file_schema != current_schema)
                 {
-                    LOG_INFO(log, "Schema evolved in checkpoint: {} -> {}", file_schema.toString(), current_schema.toString());
-                    file_schema = current_schema;
+                    throw Exception(ErrorCodes::NOT_IMPLEMENTED,
+                                    "Reading from files with different schema is not possible "
+                                    "({} is different from {})",
+                                    file_schema.toString(), current_schema.toString());
                 }
             }
         }

@@ -104,6 +104,20 @@ void emitTCPBufferPercentiles(
             = {percentile(wmem_values, p),
                "Kernel TCP transmit buffer memory (sk_wmem_alloc) for HTTP connection pool sockets."};
     }
+
+    uint64_t rmem_total = 0;
+    for (uint32_t v : rmem_values)
+        rmem_total += v;
+    uint64_t wmem_total = 0;
+    for (uint32_t v : wmem_values)
+        wmem_total += v;
+
+    new_values[fmt::format("HTTPConnectionPool{}TCPRcvBufTotalBytes", group_name)]
+        = {static_cast<double>(rmem_total),
+           "Total kernel TCP receive buffer memory (sk_rmem_alloc) across all HTTP connection pool sockets."};
+    new_values[fmt::format("HTTPConnectionPool{}TCPSndBufTotalBytes", group_name)]
+        = {static_cast<double>(wmem_total),
+           "Total kernel TCP transmit buffer memory (sk_wmem_alloc) across all HTTP connection pool sockets."};
 }
 
 /// Emit p50/p75/p90/p95 metrics for kernel TCP buffer memory of HTTP connection pool sockets.

@@ -45,7 +45,7 @@ WHERE (ts >= '2024-01-01 00:00:00') AND (ts < '2024-01-02 00:00:00')
     AND (round(arraySum(x -> if(x.account = 'acct1' AND x.after > x.before,
                                  toFloat64(x.after - x.before), toFloat64(0)),
                         balance_changes) / 1000000000) > 0)
-SETTINGS use_statistics = 0, allow_experimental_statistics = 1;
+SETTINGS use_statistics = 0, allow_experimental_statistics = 1, allow_reorder_prewhere_conditions = 0; -- CI injects True which reorders Decimal arithmetic before NOT-IN guard, causing overflow
 
 -- Bug: statistics move `arraySum` before the NOT-IN guard → DECIMAL_OVERFLOW.
 SELECT sig

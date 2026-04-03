@@ -4,6 +4,7 @@ SET enable_join_runtime_filters = 0;
 SET enable_parallel_replicas = 0;
 SET correlated_subqueries_default_join_kind = 'left';
 SET correlated_subqueries_use_in_memory_buffer = 0;
+SET query_plan_convert_any_join_to_semi_or_anti_join = 1; -- test specifically validates ANY→SEMI/ANTI conversion
 
 CREATE TABLE users1 (uid Int16, name String, age Int16) ENGINE=Memory;
 INSERT INTO users1 SELECT number as uid, 'Alice' as name, 30 as age FROM numbers(100000);

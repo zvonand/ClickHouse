@@ -26,7 +26,7 @@ FROM (
         WHERE c_nationkey = n_nationkey
     )
 )
-SETTINGS correlated_subqueries_default_join_kind = 'right';
+SETTINGS correlated_subqueries_default_join_kind = 'right', execute_exists_as_scalar_subquery = 0, query_plan_convert_any_join_to_semi_or_anti_join = 1;
 
 SELECT count()
 FROM customer
@@ -49,7 +49,7 @@ FROM (
         WHERE c_nationkey = n_nationkey
     )
 )
-SETTINGS correlated_subqueries_default_join_kind = 'left';
+SETTINGS correlated_subqueries_default_join_kind = 'left', execute_exists_as_scalar_subquery = 0, query_plan_convert_any_join_to_semi_or_anti_join = 1;
 
 SELECT count()
 FROM customer

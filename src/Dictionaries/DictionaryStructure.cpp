@@ -401,6 +401,9 @@ void DictionaryStructure::parseRangeConfiguration(const Poco::Util::AbstractConf
     if (!range_min)
         return;
 
+    range_min->type = removeNullable(range_min->type);
+    range_max->type = removeNullable(range_max->type);
+
     if (!range_min->type->equals(*range_max->type))
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS,

@@ -2778,7 +2778,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
 
     /// Add Primary Key
     flatTableColumnPath(flat_tuple | flat_nested | flat_json | skip_nested_node, next.cols, [](const SQLColumn &) { return true; });
-    if (clickhouse_dsd && !next.cols.empty())
+    if (clickhouse_dsd)
     {
         if (rg.nextSmallNumber() < 4)
         {
@@ -2821,7 +2821,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
                     uint64_entries.push_back(e);
             }
         }
-        if (!uint64_entries.empty())
+        if (!uint64_entries.empty() && !isRange)
             this->entries = std::move(uint64_entries);
     }
     const size_t kcols
@@ -2832,7 +2832,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     {
         columnPathRef(this->entries[i], tkey->add_exprs()->mutable_expr());
     }
-    if (isRange)
+    if (isRange && this->entries.size() > 1)
     {
         /// Range properties — min/max must be numeric or date type
         DictionaryRange * dr = cd->mutable_range();

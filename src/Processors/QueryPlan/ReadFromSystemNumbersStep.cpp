@@ -506,7 +506,7 @@ Pipe ReadFromSystemNumbersStep::makePipe()
         /// Pushing LIMIT 1 would generate only {10}, which the filter discards, returning
         /// empty instead of the correct {2}.
         if (limit.has_value() && !filter_actions_dag)
-            total_count = std::min(total_count, *limit);
+            total_count = std::min(total_count, static_cast<UInt64>(*limit));
 
         if (total_count == 0)
         {

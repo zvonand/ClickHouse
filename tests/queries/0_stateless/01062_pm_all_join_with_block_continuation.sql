@@ -39,11 +39,11 @@ SELECT count(1) FROM (
 SELECT count(1) FROM (
     SELECT materialize(1) as k, n FROM numbers(10) nums
     JOIN (SELECT materialize(1) AS k, number n FROM numbers(100000)) j
-    USING k) SETTINGS enable_analyzer = 1;
+    USING k) SETTINGS enable_analyzer = 1, max_block_size = 8192, max_joined_block_size_rows = 0;
 SELECT count(1) FROM (
     SELECT materialize(1) as k, n FROM numbers(100) nums
     JOIN (SELECT materialize(1) AS k, number n FROM numbers(10000)) j
-    USING k) SETTINGS enable_analyzer = 1;
+    USING k) SETTINGS enable_analyzer = 1, max_block_size = 8192, max_joined_block_size_rows = 0;
 
 SELECT 'max_joined_block_size_rows = 2000';
 SET max_joined_block_size_rows = 2000;

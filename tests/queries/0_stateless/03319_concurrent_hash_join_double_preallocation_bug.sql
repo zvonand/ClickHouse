@@ -16,7 +16,9 @@ set max_threads = 8, query_plan_join_swap_table = 1, join_algorithm = 'parallel_
 select * from lhs as t1 join rhs as t2 on t1.a = t2.a format Null;
 
 -- For the next run we will preallocate the space
-select * from lhs as t1 join rhs as t2 on t1.a = t2.a format Null settings log_comment = '03319_second_query';
+-- Inline SETTINGS resets all unlisted settings to CLI defaults, so repeat the critical session settings here:
+-- CI injects enable_join_runtime_filters=True (bypasses preallocation), query_plan_join_swap_table=false, max_threads=1
+select * from lhs as t1 join rhs as t2 on t1.a = t2.a format Null settings log_comment = '03319_second_query', join_algorithm = 'parallel_hash', enable_join_runtime_filters = 0, query_plan_read_in_order_through_join = 0, query_plan_join_swap_table = 1, max_threads = 8;
 
 system flush logs query_log;
 

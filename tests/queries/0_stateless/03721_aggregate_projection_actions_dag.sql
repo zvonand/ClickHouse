@@ -11,6 +11,7 @@ INSERT INTO test SELECT cityHash64(number) AS key, number AS value FROM numbers(
 SET enable_parallel_replicas = 0;
 SET enable_analyzer = 1;
 SET enable_join_runtime_filters = 0;
+SET query_plan_enable_multithreading_after_window_functions = 0; -- inserts extra Expression node after window step, changing EXPLAIN output
 EXPLAIN PLAN
 WITH
     view_1 AS

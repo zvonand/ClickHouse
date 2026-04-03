@@ -6,6 +6,7 @@ SET correlated_subqueries_use_in_memory_buffer = 0;
 
 -- Disable table swaps during query planning
 SET query_plan_join_swap_table = false;
+SET execute_exists_as_scalar_subquery = 0; -- test is about correlated EXISTS join planning; scalar rewrite changes INNER JOIN → CROSS JOIN + Filter
 
 DROP TABLE IF EXISTS test;
 CREATE TABLE test(

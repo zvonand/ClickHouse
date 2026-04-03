@@ -7,6 +7,7 @@ SET enable_analyzer = 1;
 SET analyzer_compatibility_join_using_top_level_identifier = 1;
 SET enable_parallel_replicas = 0;
 SET enable_join_runtime_filters = 0; -- runtime filters can trigger outer→inner join conversion, causing constant USING join to succeed instead of error
+SET prefer_localhost_replica = 1; -- with 0, remote('localhost:9000',...) uses TCP and may follow a different planning path that bypasses the join validation
 
 SELECT generate_series AS c0
 FROM remote('localhost', generateSeries(1, 3)) AS t

@@ -13,6 +13,7 @@ SET enable_analyzer = 1;
 SET enable_join_runtime_filters = 0;
 SET query_plan_enable_multithreading_after_window_functions = 0; -- inserts extra Expression node after window step, changing EXPLAIN output
 SET query_plan_reuse_storage_ordering_for_window_functions = 1; -- when False, planner inserts extra Expression node due to inability to reuse storage ordering
+SET query_plan_optimize_join_order_limit = 10; -- CI may inject 0, causing chooseJoinOrder to be skipped, leaving intermediate unnamed Expression steps un-eliminated
 EXPLAIN PLAN
 WITH
     view_1 AS

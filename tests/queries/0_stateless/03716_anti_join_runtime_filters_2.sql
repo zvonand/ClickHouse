@@ -3,6 +3,7 @@
 SET enable_analyzer = 1;
 SET enable_join_runtime_filters = 1;
 SET execute_exists_as_scalar_subquery = 0; -- scalar rewrite changes EXISTS column flow, producing different plan actions/positions
+SET query_plan_remove_unused_columns = 1; -- CI may inject False; exists(__table2) column is then not pruned/replaced by __join_result_dummy, changing actions/positions throughout the plan
 
 CREATE TABLE nation(n_nationkey Int32, n_name String) ENGINE MergeTree ORDER BY n_nationkey;
 CREATE TABLE customer(c_custkey Int32, c_nationkey Int32) ENGINE MergeTree ORDER BY c_custkey;

@@ -42,7 +42,7 @@ from argparse import ArgumentParser, Namespace
 from ast import literal_eval as make_tuple
 from contextlib import contextmanager, redirect_stdout
 from datetime import datetime, timedelta
-from errno import ESRCH
+from errno import EPERM, ESRCH
 from ssl import SSLEOFError
 from subprocess import PIPE, Popen
 from time import sleep, time
@@ -655,7 +655,17 @@ def kill_process_group(pgid, fatal_log):
         # We need minimal delay to let processes handle SIGTERM - 0.1 (this may
         # not be enough, but at least something)
         sleep(0.1)
-        os.killpg(pgid, signal.SIGKILL)
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except OSError as e:
+            # SIGTERM above succeeded, so we have permission to signal this group.
+            # EPERM here is a macOS-specific behavior: killpg returns EPERM when
+            # the group contains zombie processes (already exited after SIGTERM
+            # but not yet reaped). Linux ignores zombies in killpg instead.
+            if e.errno in (ESRCH, EPERM):
+                print(f"Got {e.strerror} while sending SIGKILL to {pgid}. Ignoring.")
+            else:
+                raise
     except OSError as e:
         if e.errno == ESRCH:
             print(f"Got ESRCH while killing {pgid}. Ignoring.")

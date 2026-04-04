@@ -388,14 +388,14 @@ void StorageMaterializedView::read(
     if (query_plan.isInitialized())
     {
         /// MaterializedView must use it's StorageId table and database names when reading
-        if (std::ranges::contains(column_names, "_table"))
+        if (std::ranges::contains(column_names, "_table") && !query_plan.getCurrentHeader()->has("_table"))
         {
             auto step = std::make_unique<ExpressionStep>(query_plan.getCurrentHeader(), ActionsDAG::makeAddingConstantColumnActions("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), getStorageID().getTableName()));
             step->setStepDescription("Add _table virtual column for MaterializedView");
             query_plan.addStep(std::move(step));
         }
 
-        if (std::ranges::contains(column_names, "_database"))
+        if (std::ranges::contains(column_names, "_database") && !query_plan.getCurrentHeader()->has("_database"))
         {
             auto step = std::make_unique<ExpressionStep>(query_plan.getCurrentHeader(), ActionsDAG::makeAddingConstantColumnActions("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), getStorageID().getDatabaseName()));
             step->setStepDescription("Add _database virtual column for MaterializedView");

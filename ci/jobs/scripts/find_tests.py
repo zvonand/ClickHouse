@@ -1636,9 +1636,19 @@ class Targeting:
                 f"gh pr diff {self.info.pr_number} --repo {repo}"
             )
         else:
-            self._diff_text = Shell.get_output(
-                f"curl -sSf 'https://patch-diff.githubusercontent.com/raw/{repo}/pull/{self.info.pr_number}.diff'"
-            )
+            # In CI, use git diff against the stored merge-base SHA.
+            # This works for both public and private repos without requiring
+            # a GitHub token. The merge_base_commit_sha is stored by store_data.py.
+            merge_base = self.info.get_kv_data("merge_base_commit_sha") or ""
+            if merge_base:
+                self._diff_text = Shell.get_output(
+                    f"git diff {merge_base}...HEAD"
+                )
+            else:
+                # Fallback: fetch diff via GitHub API (public repos only).
+                self._diff_text = Shell.get_output(
+                    f"curl -sSf 'https://patch-diff.githubusercontent.com/raw/{repo}/pull/{self.info.pr_number}.diff'"
+                )
         return self._diff_text
 
     def get_changed_lines_from_diff(self):

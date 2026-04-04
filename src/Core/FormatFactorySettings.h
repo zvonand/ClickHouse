@@ -1569,9 +1569,9 @@ Automatically create parent directories when using INTO OUTFILE if they do not a
     DECLARE(InputFormatColumnMatchingCaseSensitivity, input_format_column_name_matching_mode, FormatSettings::InputFormatColumnMatchingCaseSensitivity::MATCH_CASE, R"(
 Defines the column name matching mode when ingesting data through various formats (including but not limited to JSONEachRow, CSVWithNames, JSONColumns, BSONEachRow, RowBinaryWithNames).
 Supported modes:
-    - MATCH_CASE: match case-sensitively
-    - IGNORE_CASE: match case-insensitively
-    - AUTO: first tries to match case-sensitively, if fails, tries to match case-insensitively.
+    - match_case: match case-sensitively
+    - ignore_case: match case-insensitively
+    - auto: first tries to match case-sensitively, if fails, tries to match case-insensitively.
 )", 0) \
 
 

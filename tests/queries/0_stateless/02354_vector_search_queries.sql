@@ -76,7 +76,7 @@ SELECT id, vec, cosineDistance(vec, reference_vec)
 FROM tab
 ORDER BY cosineDistance(vec, reference_vec)
 LIMIT 3
-SETTINGS max_limit_for_vector_search_queries = 2, query_plan_max_limit_for_lazy_materialization = 10000; -- LIMIT 3 > 2 --> don't use the ann index; CI may inject max_limit_for_lazy_materialization=1, disabling lazy mat
+SETTINGS max_limit_for_vector_search_queries = 2, query_plan_max_limit_for_lazy_materialization = 10000; -- LIMIT 3 > 2 --> don't use the ann index; CI may inject query_plan_max_limit_for_lazy_materialization=1, disabling lazy mat
 
 DROP TABLE tab;
 

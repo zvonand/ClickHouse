@@ -274,7 +274,7 @@ nuraft::ptr<nuraft::buffer> KeeperStateMachine<Storage>::pre_commit(uint64_t log
 
     request_for_session->log_idx = log_idx;
 
-    const auto maybe_log_opentelemetery_span = [&](OpenTelemetry::SpanStatus status, const std::string & error_message)
+    const auto maybe_log_opentelemetry_span = [&](OpenTelemetry::SpanStatus status, const std::string & error_message)
     {
         ZooKeeperOpentelemetrySpans::maybeInitialize(
             request_for_session->request->spans.pre_commit,
@@ -302,11 +302,11 @@ nuraft::ptr<nuraft::buffer> KeeperStateMachine<Storage>::pre_commit(uint64_t log
     }
     catch (...)
     {
-        maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::ERROR, getCurrentExceptionMessage(true));
+        maybe_log_opentelemetry_span(OpenTelemetry::SpanStatus::ERROR, getCurrentExceptionMessage(true));
         throw;
     }
 
-    maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::OK, "");
+    maybe_log_opentelemetry_span(OpenTelemetry::SpanStatus::OK, "");
 
     return result;
 }
@@ -638,7 +638,7 @@ nuraft::ptr<nuraft::buffer> KeeperStateMachine<Storage>::commit(const uint64_t l
         }
     };
 
-    const auto maybe_log_opentelemetery_span = [&](OpenTelemetry::SpanStatus status, const std::string & error_message)
+    const auto maybe_log_opentelemetry_span = [&](OpenTelemetry::SpanStatus status, const std::string & error_message)
     {
         ZooKeeperOpentelemetrySpans::maybeInitialize(
             request_for_session->request->spans.commit,
@@ -721,12 +721,12 @@ nuraft::ptr<nuraft::buffer> KeeperStateMachine<Storage>::commit(const uint64_t l
     }
     catch (...)
     {
-        maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::ERROR, getCurrentExceptionMessage(true));
+        maybe_log_opentelemetry_span(OpenTelemetry::SpanStatus::ERROR, getCurrentExceptionMessage(true));
         tryLogCurrentException(log, fmt::format("Failed to commit stored log at index {}", log_idx));
         throw;
     }
 
-    maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::OK, "");
+    maybe_log_opentelemetry_span(OpenTelemetry::SpanStatus::OK, "");
 
     return nullptr;
 }
@@ -1477,8 +1477,11 @@ void KeeperStateMachine<Storage>::processReadRequests(const KeeperRequestsForSes
     for (auto & response_for_session : responses)
     {
         response_for_session.response->enqueue_ts = std::chrono::steady_clock::now();
-        chassert(response_for_session.request);
-        ZooKeeperOpentelemetrySpans::maybeInitialize(response_for_session.request->spans.dispatcher_responses_queue, response_for_session.request->tracing_context);
+        if (response_for_session.response->xid != Coordination::WATCH_XID)
+        {
+            chassert(response_for_session.request);
+            ZooKeeperOpentelemetrySpans::maybeInitialize(response_for_session.request->spans.dispatcher_responses_queue, response_for_session.request->tracing_context);
+        }
         if (!responses_queue.push(response_for_session))
             LOG_WARNING(log, "Failed to push response with session id {} to the queue, probably because of shutdown", response_for_session.session_id);
     }

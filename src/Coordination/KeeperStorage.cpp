@@ -4063,7 +4063,7 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
             }
             else
             {
-                const auto maybe_log_opentelemetery_span = [&](OpenTelemetry::SpanStatus status, const std::string & error_message)
+                const auto maybe_log_opentelemetry_span = [&](OpenTelemetry::SpanStatus status, const std::string & error_message)
                 {
                     ZooKeeperOpentelemetrySpans::maybeInitialize(
                         concrete_zk_request.spans.read_process,
@@ -4089,11 +4089,11 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
                 }
                 catch (...)
                 {
-                    maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::ERROR, getCurrentExceptionMessage(true));
+                    maybe_log_opentelemetry_span(OpenTelemetry::SpanStatus::ERROR, getCurrentExceptionMessage(true));
                     throw;
                 }
 
-                maybe_log_opentelemetery_span(OpenTelemetry::SpanStatus::OK, "");
+                maybe_log_opentelemetry_span(OpenTelemetry::SpanStatus::OK, "");
             }
         };
 

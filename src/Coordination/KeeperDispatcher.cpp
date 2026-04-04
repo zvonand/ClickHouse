@@ -177,7 +177,7 @@ void KeeperDispatcher::requestThread()
 
     while (!shutdown_called)
     {
-        const auto handle_opentelemetery_spans = [this](const Coordination::ZooKeeperRequestPtr & request, int64_t session_id)
+        const auto handle_opentelemetry_spans = [this](const Coordination::ZooKeeperRequestPtr & request, int64_t session_id)
         {
             ZooKeeperOpentelemetrySpans::maybeFinalize(
                 request->spans.dispatcher_requests_queue,
@@ -251,7 +251,7 @@ void KeeperDispatcher::requestThread()
 
                         /// Finalize the dispatcher_requests_queue span that was initialized
                         /// when the request was enqueued. Without this the span leaks because
-                        /// handle_opentelemetery_spans (which normally finalizes it) is skipped.
+                        /// handle_opentelemetry_spans (which normally finalizes it) is skipped.
                         ZooKeeperOpentelemetrySpans::maybeFinalize(
                             req.request->spans.dispatcher_requests_queue,
                             [&]
@@ -275,7 +275,7 @@ void KeeperDispatcher::requestThread()
             if (is_stale_session_request(request))
                 continue;
 
-            handle_opentelemetery_spans(request.request, request.session_id);
+            handle_opentelemetry_spans(request.request, request.session_id);
 
             Int64 mem_soft_limit = keeper_context->getKeeperMemorySoftLimit();
             if (configuration_and_settings->standalone_keeper && isExceedingMemorySoftLimit() && checkIfRequestIncreaseMem(request.request))
@@ -321,7 +321,7 @@ void KeeperDispatcher::requestThread()
                         if (is_stale_session_request(request))
                             return true; // consumed, keep draining
 
-                        handle_opentelemetery_spans(request.request, request.session_id);
+                        handle_opentelemetry_spans(request.request, request.session_id);
 
                         /// Don't append read request into batch, we have to process them separately
                         if (!coordination_settings[CoordinationSetting::quorum_reads] && request.request->isReadRequest())
@@ -385,7 +385,7 @@ void KeeperDispatcher::requestThread()
                     if (is_stale_session_request(next))
                         continue;
 
-                    handle_opentelemetery_spans(next.request, next.session_id);
+                    handle_opentelemetry_spans(next.request, next.session_id);
 
                     if (next.request->isReadRequest())
                     {

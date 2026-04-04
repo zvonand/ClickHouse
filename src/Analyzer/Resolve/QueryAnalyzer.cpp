@@ -3410,8 +3410,7 @@ void QueryAnalyzer::validateSortingKeyType(const DataTypePtr & sorting_key_type,
     };
 
     check(*sorting_key_type);
-    if (sorting_key_type->haveSubtypes())
-        sorting_key_type->forEachChild(check);
+    sorting_key_type->forEachChild(check);
 }
 
 namespace

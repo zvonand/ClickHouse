@@ -65,7 +65,7 @@ FROM
                 (day_))
     ) AS t
 )
-WHERE type_1 = 'all' settings enable_analyzer=0, query_plan_merge_filters=1; -- CI may inject False; separate filters change pipeline structure
+WHERE type_1 = 'all' settings enable_analyzer=0, query_plan_merge_filters=1, enable_optimize_predicate_expression=1; -- CI may inject False for either; merge_filters=False: separate filters; enable_optimize_predicate_expression=False: predicate stays as single outer filter (× 8) instead of being pushed per-grouping-set branch (× 24)
 
 -- Query plan with analyzer has less Filter steps (which is more optimal)
 EXPLAIN PIPELINE

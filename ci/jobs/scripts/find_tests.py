@@ -1630,13 +1630,14 @@ class Targeting:
         if hasattr(self, '_diff_text') and self._diff_text is not None:
             return self._diff_text
         assert self.info.pr_number > 0, "Diff fetching applicable for PRs only"
+        repo = self.info.repo_name or "ClickHouse/ClickHouse"
         if self.info.is_local_run:
             self._diff_text = Shell.get_output(
-                f"gh pr diff {self.info.pr_number} --repo ClickHouse/ClickHouse"
+                f"gh pr diff {self.info.pr_number} --repo {repo}"
             )
         else:
             self._diff_text = Shell.get_output(
-                f"curl -sSf 'https://patch-diff.githubusercontent.com/raw/ClickHouse/ClickHouse/pull/{self.info.pr_number}.diff'"
+                f"curl -sSf 'https://patch-diff.githubusercontent.com/raw/{repo}/pull/{self.info.pr_number}.diff'"
             )
         return self._diff_text
 

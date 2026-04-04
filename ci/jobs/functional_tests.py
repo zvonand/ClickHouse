@@ -234,6 +234,8 @@ def main():
         # Stop after 5 total failures across all parallel workers (fast feedback on broken PRs).
         # The 45-min global_time_limit is the primary stopping condition for healthy PRs.
         runner_options += " --max-failures 5"
+        # Run no-parallel and no-flaky-check tests sequentially with fewer iterations.
+        runner_options += " --sequential-test-runs 30"
 
     if is_llvm_coverage:
         # Randomization makes coverage non-deterministic, long tests are slow to collect coverage

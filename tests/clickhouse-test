@@ -3385,7 +3385,7 @@ class TestSuite:
         long_test_runs = max(
             int(self.args.test_runs * self.args.long_test_runs_ratio), 1
         )
-        sequential_runs = self.args.sequential_test_runs if self.args.sequential_test_runs is not None else max(test_runs // 2, 1)
+        sequential_runs = self.args.sequential_test_runs if self.args.sequential_test_runs is not None else test_runs
 
         newly_modified_runs = {}
         if (

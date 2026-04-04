@@ -37,7 +37,7 @@ WHERE EXISTS (
     SELECT * FROM test AS t2
     WHERE t1.i1 = t2.i2
 )
-SETTINGS  enable_join_runtime_filters = 0;
+SETTINGS enable_join_runtime_filters = 0, query_plan_merge_filter_into_join_condition = 1; -- CI may inject False; correlated subquery WHERE condition not pushed into inner JOIN clause → stays CROSS with Filter above instead of INNER, losing the ' + ' label suffix
 
 SELECT 1 FROM test AS t1
 WHERE EXISTS (

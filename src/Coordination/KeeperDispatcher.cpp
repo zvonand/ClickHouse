@@ -331,7 +331,7 @@ void KeeperDispatcher::requestThread()
                             ProfiledMutexLock lock(read_request_queue_mutex, ProfileEvents::KeeperReadRequestQueueLockWaitMicroseconds);
                             reads_count += 1;
                             reads_bytes_size += request.request->bytesSize();
-                            read_request_queue[last_request.session_id][last_request.request->xid].push_back(request);
+                            read_request_queue[{last_request.session_id, last_request.request->xid}].push_back(request);
                         }
                         else if (request.request->getOpNum() == Coordination::OpNum::Reconfig)
                         {

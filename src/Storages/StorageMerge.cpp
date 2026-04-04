@@ -47,6 +47,8 @@
 #include <QueryPipeline/QueryPipelineBuilder.h>
 #include <QueryPipeline/narrowPipe.h>
 #include <Storages/AlterCommands.h>
+#include <Storages/ColumnDefault.h>
+#include <Storages/ColumnsDescription.h>
 #include <Storages/ReadInOrderOptimizer.h>
 #include <Storages/SelectQueryInfo.h>
 #include <Storages/StorageDistributed.h>
@@ -710,12 +712,13 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
 
             Names column_names_as_aliases;
             Names real_column_names = column_names;
-            bool use_analyzer = context->getSettingsRef()[Setting::allow_experimental_analyzer];
-            if (use_analyzer && has_table_virtual_column
-                && (common_processed_stage != QueryProcessingStage::FetchColumns
-                    || std::dynamic_pointer_cast<StorageMerge>(storage)
-                    || std::dynamic_pointer_cast<StorageDistributed>(storage)))
-                real_column_names.emplace_back("_table");
+            {
+                if (has_table_virtual_column && (nested_storage_snapshot->metadata->columns.hasColumnOrSubcolumn(GetColumnsOptions::All, "_table") || nested_storage_snapshot->virtual_columns->has("_table")))
+                    real_column_names.emplace_back("_table");
+
+                if (has_database_virtual_column && (nested_storage_snapshot->metadata->columns.hasColumnOrSubcolumn(GetColumnsOptions::All, "_database") || nested_storage_snapshot->virtual_columns->has("_database")))
+                    real_column_names.emplace_back("_database");
+            }
 
             /// If there are no real columns requested from this table, we will read the smallest column.
             /// We should remember it to not include this column in the result.
@@ -992,27 +995,21 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
         modified_query_info.table_expression = replacement_table_expression;
         modified_query_info.planner_context->getOrCreateTableExpressionData(replacement_table_expression);
 
-        auto get_column_options = GetColumnsOptions(GetColumnsOptions::All)
-            .withSubcolumns(storage_snapshot_->storage.supportsSubcolumns());
-
         std::unordered_map<std::string, QueryTreeNodePtr> column_name_to_node;
+        if (!storage_snapshot_->metadata->columns.hasColumnOrSubcolumn(GetColumnsOptions::All, "_table") && !storage_snapshot_->virtual_columns->has("_table"))
+        {
+            auto table_name_node = std::make_shared<ConstantNode>(current_storage_id.table_name);
+            auto table_name_alias = std::make_shared<ConstantNode>("__table1._table");
 
-        /// Consider only non-virtual columns of storage while checking for _table and _database columns.
-        /// I.e. always override virtual columns with these names from underlying table (if any).
-        /// if (!storage_snapshot_->tryGetColumn(get_column_options, "_table"))
-        /// {
-        ///     auto table_name_node = std::make_shared<ConstantNode>(current_storage_id.table_name);
-        ///     auto table_name_alias = std::make_shared<ConstantNode>("__table1._table");
+            auto function_node = std::make_shared<FunctionNode>("__actionName");
+            function_node->getArguments().getNodes().push_back(std::move(table_name_node));
+            function_node->getArguments().getNodes().push_back(std::move(table_name_alias));
+            function_node->resolveAsFunction(FunctionFactory::instance().get("__actionName", context));
 
-        ///     auto function_node = std::make_shared<FunctionNode>("__actionName");
-        ///     function_node->getArguments().getNodes().push_back(std::move(table_name_node));
-        ///     function_node->getArguments().getNodes().push_back(std::move(table_name_alias));
-        ///     function_node->resolveAsFunction(FunctionFactory::instance().get("__actionName", context));
+            column_name_to_node.emplace("_table", function_node);
+        }
 
-        ///     column_name_to_node.emplace("_table", function_node);
-        /// }
-
-        if (!storage_snapshot_->tryGetColumn(get_column_options, "_database"))
+        if (!storage_snapshot_->metadata->columns.hasColumnOrSubcolumn(GetColumnsOptions::All, "_database") && !storage_snapshot_->virtual_columns->has("_database"))
         {
             auto database_name_node = std::make_shared<ConstantNode>(current_storage_id.database_name);
             auto database_name_alias = std::make_shared<ConstantNode>("__table1._database");
@@ -1025,7 +1022,7 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
             column_name_to_node.emplace("_database", function_node);
         }
 
-        get_column_options.withVirtuals();
+        auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(storage_snapshot_->storage.supportsSubcolumns()).withVirtuals();
         auto storage_columns = storage_snapshot_->metadata->getColumns();
 
         bool with_aliases = /* common_processed_stage == QueryProcessingStage::FetchColumns && */ !storage_columns.getAliases().empty();
@@ -1094,7 +1091,6 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
     }
     else
     {
-        bool is_storage_merge_engine = storage->as<StorageMerge>();
         modified_query_info.query = query_info.query->clone();
 
         /// Original query could contain JOIN but we need only the first joined table and its columns.
@@ -1103,11 +1099,11 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
         removeJoin(modified_select, new_analyzer_res, modified_context);
         modified_query_info.syntax_analyzer_result = std::make_shared<TreeRewriterResult>(std::move(new_analyzer_res));
 
-        if (!is_storage_merge_engine)
-        {
+        if (!storage_snapshot_->metadata->columns.hasColumnOrSubcolumn(GetColumnsOptions::All, "_table") && !storage_snapshot_->virtual_columns->has("_table"))
             rewriteEntityInAst(modified_query_info.query, "_table", current_storage_id.table_name);
+
+        if (!storage_snapshot_->metadata->columns.hasColumnOrSubcolumn(GetColumnsOptions::All, "_database") && !storage_snapshot_->virtual_columns->has("_database"))
             rewriteEntityInAst(modified_query_info.query, "_database", current_storage_id.database_name);
-        }
     }
 
     return modified_query_info;

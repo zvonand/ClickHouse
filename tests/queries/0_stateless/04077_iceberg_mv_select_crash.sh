@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest
+# Tags: no-fasttest, no-replicated-database
+# Tag no-replicated-database: IcebergLocal is non-replicated; REFRESH MV + replicated database + non-replicated target is rejected.
 
 # Regression test for https://github.com/ClickHouse/ClickHouse/issues/93278
 # SELECT from a materialized view backed by IcebergLocal engine used to crash

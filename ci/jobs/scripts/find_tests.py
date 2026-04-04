@@ -13,6 +13,11 @@ from ci.praktika.result import Result
 from ci.praktika.settings import Settings
 from ci.praktika.utils import Shell
 
+# Coverage data lives in the public ClickHouse CIDB, accessible from any CI environment.
+# Use this URL for all coverage queries so that private-repo CI (which may not have
+# access to an internal CIDB) can still query test coverage data.
+_PUBLIC_CIDB_URL = "https://play.clickhouse.com"
+
 # Query to fetch failed tests from CIDB for a given PR.
 # Pre-filters out commit/check_name combinations with >= 20 failures — these indicate
 # widespread failures (e.g. build broken, environment issue) where every test failed,
@@ -338,7 +343,7 @@ class Targeting:
         HAVING region_test_count <= {BROAD_REGION_HARD_CAP}
         """
 
-        cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+        cidb = CIDB(url=_PUBLIC_CIDB_URL, user="play", passwd="")
         t_query = time.monotonic()
         raw = cidb.query(query, log_level="") or ""
         print(f"[find_tests] CIDB query: {time.monotonic()-t_query:.2f}s, response={len(raw)} bytes")
@@ -953,7 +958,7 @@ class Targeting:
         if sparse_files:
             from ci.praktika.cidb import CIDB
             from ci.praktika.settings import Settings
-            _cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+            _cidb = CIDB(url=_PUBLIC_CIDB_URL, user="play", passwd="")
             # sparse_files are already stored-paths (./src/...)
             sparse_conds = " OR ".join(
                 f"file = '{self._escape_sql_string(f)}'"
@@ -1098,7 +1103,7 @@ class Targeting:
         try:
             from ci.praktika.cidb import CIDB
             from ci.praktika.settings import Settings
-            cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+            cidb = CIDB(url=_PUBLIC_CIDB_URL, user="play", passwd="")
             t0 = time.monotonic()
             raw = cidb.query(query, log_level="") or ""
             elapsed = time.monotonic() - t0
@@ -1293,7 +1298,7 @@ class Targeting:
         try:
             from ci.praktika.cidb import CIDB
             from ci.praktika.settings import Settings
-            cidb = CIDB(url=Settings.CI_DB_READ_URL, user="play", passwd="")
+            cidb = CIDB(url=_PUBLIC_CIDB_URL, user="play", passwd="")
             t0 = time.monotonic()
             raw = cidb.query(query, log_level="") or ""
             print(

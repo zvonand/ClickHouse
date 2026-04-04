@@ -719,6 +719,32 @@ DataPartsVector filterDataPartsWithExpression(
     return filtered_parts;
 }
 
+Names filterVirtualColumns(
+    const Names & column_names,
+    const NameSet & to_filter,
+    const StorageMetadataPtr & metadata_snapshot,
+    const VirtualsDescriptionPtr & virtual_columns)
+{
+    Names result;
+    result.reserve(column_names.size());
+    for (const auto & name : column_names)
+    {
+        if (!metadata_snapshot->getColumns().has(name) && virtual_columns->has(name))
+            if (to_filter.contains(name))
+                continue;
+
+        result.push_back(name);
+    }
+
+    /// If all requested columns were common virtuals, we still need at least one
+    /// physical column so the storage has something to read.
+    if (result.empty())
+        if (const auto & all_physical = metadata_snapshot->getColumns().getAllPhysical(); !all_physical.empty())
+            result.push_back(ExpressionActions::getSmallestColumn(all_physical).name);
+
+    return result;
+}
+
 }
 
 }

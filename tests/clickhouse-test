@@ -1946,9 +1946,16 @@ class TestCase:
         self.testcase_args = None
         self.runs_count = 0
 
-        has_no_random_settings_tag = self.tags and "no-random-settings" in self.tags
+        # In flaky check mode, ignore no-random-settings/no-random-merge-tree-settings
+        # tags so every test run gets different settings — maximizing coverage.
+        ignore_no_random_tags = args.flaky_check
+        has_no_random_settings_tag = (
+            self.tags and "no-random-settings" in self.tags and not ignore_no_random_tags
+        )
         has_no_random_merge_tree_settings_tag = (
-            self.tags and "no-random-merge-tree-settings" in self.tags
+            self.tags
+            and "no-random-merge-tree-settings" in self.tags
+            and not ignore_no_random_tags
         )
 
         allow_random_settings = not (args.no_random_settings or has_no_random_settings_tag)

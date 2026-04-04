@@ -3409,9 +3409,17 @@ class TestSuite:
             extra = newly_modified_runs.get(test, 0)
             return max(base, extra)
 
-        all_tests = [[test] * get_runs(test) for test in all_tests]
-        all_tests = [item for sublist in all_tests for item in sublist]
-        return all_tests
+        # Build a round-robin list so each run-slot interleaves all tests before
+        # starting the next slot. E.g. [t1,t2,t3, t1,t2,t3, t1,t2] instead of
+        # [t1,t1,t1, t2,t2,t2, t3,t3], so tests with different run counts still
+        # start at the same time. This guarantees no test monopolizes consecutive
+        # runs regardless of --order.
+        runs_per_test = {test: get_runs(test) for test in all_tests}
+        max_runs = max(runs_per_test.values()) if runs_per_test else 0
+        result = []
+        for slot in range(max_runs):
+            result.extend(test for test in all_tests if slot < runs_per_test[test])
+        return result
 
     def get_newly_modified_test_runs(self, all_tests):
         """Get repetition counts for recently added tests based on test name order.

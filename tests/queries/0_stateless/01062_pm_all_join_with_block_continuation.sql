@@ -40,11 +40,11 @@ SELECT count(1) FROM (
 SELECT count(1) FROM (
     SELECT materialize(1) as k, n FROM numbers(10) nums
     JOIN (SELECT materialize(1) AS k, number n FROM numbers(100000)) j
-    USING k) SETTINGS enable_analyzer = 1, max_block_size = 8192, max_joined_block_size_rows = 0, enable_join_runtime_filters = 0; -- CI may inject True; runtime filter bloom structures add memory overhead pushing partial_merge join over the 12 MB limit
+    USING k) SETTINGS enable_analyzer = 1, max_block_size = 8192, max_joined_block_size_rows = 0, enable_join_runtime_filters = 0, max_threads = 1; -- CI may inject enable_join_runtime_filters=True (bloom overhead) or max_threads>1 (each thread holds separate sort-merge buffers); with max_joined_block_size_rows=0 either pushes partial_merge join over the 12 MB limit
 SELECT count(1) FROM (
     SELECT materialize(1) as k, n FROM numbers(100) nums
     JOIN (SELECT materialize(1) AS k, number n FROM numbers(10000)) j
-    USING k) SETTINGS enable_analyzer = 1, max_block_size = 8192, max_joined_block_size_rows = 0, enable_join_runtime_filters = 0; -- CI may inject True; runtime filter bloom structures add memory overhead pushing partial_merge join over the 12 MB limit
+    USING k) SETTINGS enable_analyzer = 1, max_block_size = 8192, max_joined_block_size_rows = 0, enable_join_runtime_filters = 0, max_threads = 1; -- CI may inject enable_join_runtime_filters=True (bloom overhead) or max_threads>1 (each thread holds separate sort-merge buffers); with max_joined_block_size_rows=0 either pushes partial_merge join over the 12 MB limit
 
 SELECT 'max_joined_block_size_rows = 2000';
 SET max_joined_block_size_rows = 2000;

@@ -222,12 +222,14 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
                 case QueryTreeNodeType::QUERY:
                 {
                     const auto & query_node = node->as<QueryNode &>();
-                    /// Only simple views (no aggregation, ordering, limits, windows, etc.) are eligible.
-                    /// Views with GROUP BY, ORDER BY, DISTINCT, LIMIT, LIMIT BY, or WINDOW would
-                    /// change the result semantics if distributed across replicas without proper merging.
-                    if (query_node.hasGroupBy() || query_node.hasOrderBy() || query_node.hasHaving()
-                        || query_node.isDistinct() || query_node.hasLimit() || query_node.hasLimitBy()
-                        || query_node.hasWindow())
+                    /// Only simple pass-through views are eligible. Any clause that changes
+                    /// result semantics when evaluated per-replica must disqualify the view.
+                    if (query_node.hasGroupBy() || query_node.hasHaving()
+                        || query_node.hasWindow() || query_node.hasQualify()
+                        || query_node.hasOrderBy() || query_node.isDistinct()
+                        || query_node.hasLimitByLimit() || query_node.hasLimitByOffset()
+                        || query_node.hasLimitBy()
+                        || query_node.hasLimit() || query_node.hasOffset())
                         return nullptr;
 
                     node = query_node.getJoinTree().get();

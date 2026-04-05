@@ -96,8 +96,8 @@ FROM viewExplain('EXPLAIN', '', (
 ))
 WHERE explain LIKE '%ReadFromRemoteParallelReplicas%';
 
--- Correctness check: results with optimization enabled must match disabled.
--- EXCEPT should produce zero rows if they match.
+SET enable_parallel_replicas = 0;
+-- Correctness: EXCEPT should produce zero rows.
 SELECT '-- correctness';
 (
     SELECT sum(bids) AS Bids, sum(bid_requests) AS BidRequests, sum(impressions) AS Impressions, sum(clicks) AS Clicks, toStartOfDay(hour, 'Europe/Paris') AS Day
@@ -105,7 +105,8 @@ SELECT '-- correctness';
     WHERE hour >= toDateTime('2026-01-01 00:00:00', 'Europe/Paris') AND hour < toDateTime('2026-03-01 00:00:00', 'Europe/Paris')
         AND if(child_deal_id != 0, child_deal_id, deal_id) IN (200) AND network_id IN (3050)
     GROUP BY Day HAVING Impressions != 0 OR Bids != 0
-    SETTINGS parallel_replicas_allow_view_over_mergetree = 0
+    ORDER BY ALL
+    SETTINGS enable_parallel_replicas = 1, parallel_replicas_allow_view_over_mergetree = 0
 )
 EXCEPT
 (
@@ -114,7 +115,8 @@ EXCEPT
     WHERE hour >= toDateTime('2026-01-01 00:00:00', 'Europe/Paris') AND hour < toDateTime('2026-03-01 00:00:00', 'Europe/Paris')
         AND if(child_deal_id != 0, child_deal_id, deal_id) IN (200) AND network_id IN (3050)
     GROUP BY Day HAVING Impressions != 0 OR Bids != 0
-    SETTINGS parallel_replicas_allow_view_over_mergetree = 1
+    ORDER BY ALL
+    SETTINGS enable_parallel_replicas = 1, parallel_replicas_allow_view_over_mergetree = 1
 );
 
 DROP VIEW dv_dashboard;

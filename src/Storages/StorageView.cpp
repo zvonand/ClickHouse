@@ -39,6 +39,7 @@
 #include <Analyzer/QueryNode.h>
 #include <Analyzer/TableNode.h>
 #include <Analyzer/UnionNode.h>
+#include <Analyzer/WindowFunctionsUtils.h>
 
 namespace DB
 {
@@ -229,7 +230,8 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
                         || query_node.hasOrderBy() || query_node.isDistinct()
                         || query_node.hasLimitByLimit() || query_node.hasLimitByOffset()
                         || query_node.hasLimitBy()
-                        || query_node.hasLimit() || query_node.hasOffset())
+                        || query_node.hasLimit() || query_node.hasOffset()
+                        || hasWindowFunctionNodes(query_node.getProjectionNode()))
                         return nullptr;
 
                     node = query_node.getJoinTree().get();

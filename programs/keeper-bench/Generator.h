@@ -72,6 +72,7 @@ struct ZooKeeperRequestWithCallbacks
     Coordination::ZooKeeperRequestPtr request;
     std::vector<std::function<void()>> on_success_callbacks;
     std::vector<std::function<void()>> on_failure_callbacks;
+    bool has_watch = false;
 };
 
 struct RequestGenerator
@@ -149,6 +150,9 @@ private:
     void setSeedImpl(uint64_t seed) override;
 
     PathGetter path;
+    std::optional<double> watch_probability;
+    pcg64 watch_rng{randomSeed()};
+    std::uniform_real_distribution<double> watch_picker{0, 1.0};
 };
 
 struct ListRequestGenerator final : public RequestGenerator
@@ -161,6 +165,9 @@ private:
     void setSeedImpl(uint64_t seed) override;
 
     PathGetter path;
+    std::optional<double> watch_probability;
+    pcg64 watch_rng{randomSeed()};
+    std::uniform_real_distribution<double> watch_picker{0, 1.0};
 };
 
 struct RequestGetter

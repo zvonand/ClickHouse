@@ -406,12 +406,23 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
             request->tracing_context = tracing_context;
         }
 
+        Coordination::WatchCallbackPtrOrEventPtr watch_callback;
+        if (request_with_callbacks.has_watch)
+        {
+            info->watches_set.fetch_add(1, std::memory_order_relaxed);
+            watch_callback = std::make_shared<Coordination::WatchCallback>(
+                [stats = info](const Coordination::WatchResponse &)
+                {
+                    stats->watches_fired.fetch_add(1, std::memory_order_relaxed);
+                });
+        }
+
         InFlightRequest slot;
         slot.request = std::move(request);
 
         try
         {
-            zk->executeGenericRequest(slot.request, callback);
+            zk->executeGenericRequest(slot.request, callback, watch_callback);
             slot.future = std::move(future);
             in_flight.push_back(std::move(slot));
         }

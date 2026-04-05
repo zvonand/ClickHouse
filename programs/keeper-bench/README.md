@@ -324,14 +324,22 @@ set:
 ```yaml
 get:
     path: PathGetter
+    watch_probability: 0.5           # in [0.0, 1.0], default: 0 (no watches)
 ```
+
+When `watch_probability` is set, each request has that probability of setting a watch on the node.
+Watch fire events are counted and reported in stats.
 
 ### `list`
 
 ```yaml
 list:
     path: PathGetter
+    watch_probability: 0.5           # in [0.0, 1.0], default: 0 (no watches)
 ```
+
+When `watch_probability` is set, each request has that probability of setting a watch on the node.
+Watch fire events are counted and reported in stats.
 
 ### `multi`
 
@@ -420,6 +428,7 @@ Periodic stderr reports (controlled by `report_delay`) include:
 - Read/write RPS and throughput.
 - Read/write latency percentiles (`0, 10, ..., 90, 95, 99, 99.9, 99.99`).
 - Per-operation breakdown (requests, RPS, p50, p99).
+- Watches set and fired (when `watch_probability` is configured).
 
 ### JSON output
 
@@ -441,6 +450,7 @@ JSON fields:
 - `read_results` (present only if read requests exist).
 - `write_results` (present only if write requests exist).
 - `per_op_results` (present only if per-op stats exist).
+- `watches_set`, `watches_fired` (present only when watches are used).
 
 Each result object contains:
 
@@ -461,5 +471,6 @@ Common configuration exceptions:
 - `PathGetter has no paths after initialization`: `children_of` parent has no children and no explicit `path` entries were supplied.
 - `Generator weight must be >= 1`: use positive weights only.
 - `remove_factor must be in [0.0, 1.0]`: keep probability in range.
+- `watch_probability must be in [0.0, 1.0]`: keep probability in range.
 - `Nested multi requests are not allowed`: only one `multi` level is supported.
 - `Repeating node creation ..., but name is not randomly generated`: use random `name` when `repeat` is set.

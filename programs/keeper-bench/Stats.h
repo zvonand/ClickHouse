@@ -31,6 +31,8 @@ struct Stats
     };
 
     std::atomic<size_t> errors{0};
+    std::atomic<size_t> watches_set{0};
+    std::atomic<size_t> watches_fired{0};
 
     Stopwatch elapsed;
 

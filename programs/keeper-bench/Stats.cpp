@@ -36,6 +36,8 @@ void Stats::merge(Stats & from)
     std::scoped_lock lock(mutex, from.mutex);
 
     errors += from.errors;
+    watches_set += from.watches_set;
+    watches_fired += from.watches_fired;
     read_collector.merge(from.read_collector);
     write_collector.merge(from.write_collector);
     for (const auto & [op, s] : from.op_collectors)
@@ -63,6 +65,8 @@ void Stats::clear()
     write_collector.clear();
     op_collectors.clear();
     errors = 0;
+    watches_set = 0;
+    watches_fired = 0;
     elapsed.restart();
 }
 
@@ -105,6 +109,8 @@ void Stats::report()
     std::cerr << "read requests " << read_requests << ", write requests " << write_requests << ", ";
     if (errors)
         std::cerr << "errors " << errors << ", ";
+    if (watches_set)
+        std::cerr << "watches set " << watches_set << ", watches fired " << watches_fired << ", ";
 
     if (0 != read_requests)
     {
@@ -188,6 +194,12 @@ void Stats::writeJSON(DB::WriteBuffer & out, int64_t start_timestamp)
     results.AddMember("timestamp", Value(start_timestamp), allocator);
     results.AddMember("errors", Value(static_cast<uint64_t>(errors.load())), allocator);
     results.AddMember("ops", Value(static_cast<uint64_t>(read_collector.requests + write_collector.requests)), allocator);
+
+    if (watches_set)
+    {
+        results.AddMember("watches_set", Value(static_cast<uint64_t>(watches_set.load())), allocator);
+        results.AddMember("watches_fired", Value(static_cast<uint64_t>(watches_fired.load())), allocator);
+    }
 
     const auto get_results = [&](auto & collector)
     {

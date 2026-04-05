@@ -553,21 +553,31 @@ void SetRequestGenerator::setSeedImpl(uint64_t seed)
 void GetRequestGenerator::getFromConfigImpl(const std::string & key, const Poco::Util::AbstractConfiguration & config)
 {
     path = PathGetter::fromConfig(key, config);
+
+    if (config.has(key + ".watch_probability"))
+    {
+        watch_probability = config.getDouble(key + ".watch_probability");
+        if (*watch_probability < 0.0 || *watch_probability > 1.0)
+            throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "watch_probability must be in [0.0, 1.0], got {}", *watch_probability);
+    }
 }
 
 std::string GetRequestGenerator::descriptionImpl()
 {
+    std::string watch_string = watch_probability.has_value() ? fmt::format("\n- watch probability: {}", *watch_probability) : "";
     return fmt::format(
         "Get Request Generator\n"
-        "- path(s) to get: {}",
-        path.description());
+        "- path(s) to get: {}{}",
+        path.description(),
+        watch_string);
 }
 
 ZooKeeperRequestWithCallbacks GetRequestGenerator::generateImpl(const Coordination::ACLs & /*acls*/)
 {
     auto request = std::make_shared<ZooKeeperGetRequest>();
     request->path = path.getPath();
-    return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}};
+    bool with_watch = watch_probability.has_value() && watch_picker(watch_rng) < *watch_probability;
+    return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}, .has_watch = with_watch};
 }
 
 void GetRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
@@ -578,26 +588,37 @@ void GetRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
 void GetRequestGenerator::setSeedImpl(uint64_t seed)
 {
     path.setSeed(seed + 100003);
+    watch_rng.seed(seed + 400009);
 }
 
 void ListRequestGenerator::getFromConfigImpl(const std::string & key, const Poco::Util::AbstractConfiguration & config)
 {
     path = PathGetter::fromConfig(key, config);
+
+    if (config.has(key + ".watch_probability"))
+    {
+        watch_probability = config.getDouble(key + ".watch_probability");
+        if (*watch_probability < 0.0 || *watch_probability > 1.0)
+            throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "watch_probability must be in [0.0, 1.0], got {}", *watch_probability);
+    }
 }
 
 std::string ListRequestGenerator::descriptionImpl()
 {
+    std::string watch_string = watch_probability.has_value() ? fmt::format("\n- watch probability: {}", *watch_probability) : "";
     return fmt::format(
         "List Request Generator\n"
-        "- path(s) to get: {}",
-        path.description());
+        "- path(s) to get: {}{}",
+        path.description(),
+        watch_string);
 }
 
 ZooKeeperRequestWithCallbacks ListRequestGenerator::generateImpl(const Coordination::ACLs & /*acls*/)
 {
     auto request = std::make_shared<ZooKeeperFilteredListRequest>();
     request->path = path.getPath();
-    return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}};
+    bool with_watch = watch_probability.has_value() && watch_picker(watch_rng) < *watch_probability;
+    return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}, .has_watch = with_watch};
 }
 
 void ListRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
@@ -608,6 +629,7 @@ void ListRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
 void ListRequestGenerator::setSeedImpl(uint64_t seed)
 {
     path.setSeed(seed + 100003);
+    watch_rng.seed(seed + 400009);
 }
 
 void MultiRequestGenerator::getFromConfigImpl(const std::string & key, const Poco::Util::AbstractConfiguration & config)

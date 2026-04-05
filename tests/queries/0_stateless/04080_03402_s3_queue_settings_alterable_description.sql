@@ -1,4 +1,3 @@
--- Tags: no-fasttest
 -- Verify that the 'alterable' column description in system.s3_queue_settings
 -- and system.azure_queue_settings correctly states that 1 = can change (not 0 = can change).
 -- Both tables share the same StorageSystemObjectStorageQueueSettings template.

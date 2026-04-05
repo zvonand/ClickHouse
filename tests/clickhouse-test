@@ -4891,7 +4891,13 @@ ORDER BY (test_name, callee_offset)
         except Exception as e:
             print(f"Coverage indirect calls stats check failed: {e}")
 
-    if int(clickhouse_execute(args, "EXISTS system.trace_log")):
+    try:
+        has_trace_log = int(clickhouse_execute(args, "EXISTS system.trace_log"))
+    except Exception as e:
+        print(f"Failed to check trace_log existence: {e}")
+        has_trace_log = 0
+
+    if has_trace_log:
         try:
             clickhouse_execute(args, "SYSTEM FLUSH LOGS system.trace_log")
 

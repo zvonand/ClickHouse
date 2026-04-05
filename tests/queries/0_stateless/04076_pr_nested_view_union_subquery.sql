@@ -211,7 +211,6 @@ FROM viewExplain('EXPLAIN', '', (
 ))
 WHERE explain LIKE '%ReadFromRemoteParallelReplicas%';
 
-SET enable_parallel_replicas = 0;
 -- Correctness: EXCEPT should produce zero rows.
 SELECT '-- correctness';
 (
@@ -221,7 +220,7 @@ SELECT '-- correctness';
         AND if(internal_child_deal_id != 0, internal_child_deal_id, internal_deal_id) IN (200) AND network_id IN (3050)
     GROUP BY Day HAVING Impressions != 0 OR Bids != 0
     ORDER BY ALL
-    SETTINGS enable_parallel_replicas = 1, parallel_replicas_allow_view_over_mergetree = 0
+    SETTINGS parallel_replicas_allow_view_over_mergetree = 0
 )
 EXCEPT
 (
@@ -231,7 +230,7 @@ EXCEPT
         AND if(internal_child_deal_id != 0, internal_child_deal_id, internal_deal_id) IN (200) AND network_id IN (3050)
     GROUP BY Day HAVING Impressions != 0 OR Bids != 0
     ORDER BY ALL
-    SETTINGS enable_parallel_replicas = 1, parallel_replicas_allow_view_over_mergetree = 1
+    SETTINGS parallel_replicas_allow_view_over_mergetree = 1
 );
 
 DROP VIEW dv_dashboard;

@@ -1623,9 +1623,8 @@ class Targeting:
     def get_diff_text(self) -> str:
         """Fetch the PR diff text (cached on self._diff_text after first call).
 
-        CI containers have no .git directory and no gh auth, so both `git diff`
-        and `gh pr diff` fail there.  Use the public GitHub API via curl instead,
-        which requires no authentication for public repos.
+        CI containers have no .git directory. Use the GitHub API via curl.
+        For public repos no auth is needed; for private repos GITHUB_TOKEN is used.
         """
         if hasattr(self, '_diff_text') and self._diff_text is not None:
             return self._diff_text
@@ -1636,19 +1635,15 @@ class Targeting:
                 f"gh pr diff {self.info.pr_number} --repo {repo}"
             )
         else:
-            # In CI, use git diff against the stored merge-base SHA.
-            # This works for both public and private repos without requiring
-            # a GitHub token. The merge_base_commit_sha is stored by store_data.py.
-            merge_base = self.info.get_kv_data("merge_base_commit_sha") or ""
-            if merge_base:
-                self._diff_text = Shell.get_output(
-                    f"git diff {merge_base}...HEAD"
-                )
-            else:
-                # Fallback: fetch diff via GitHub API (public repos only).
-                self._diff_text = Shell.get_output(
-                    f"curl -sSf 'https://patch-diff.githubusercontent.com/raw/{repo}/pull/{self.info.pr_number}.diff'"
-                )
+            # Use GitHub REST API to get the diff. Works for both public and private
+            # repos; private repos require GITHUB_TOKEN (available in Actions env).
+            token = os.environ.get("GITHUB_TOKEN", "")
+            auth = f'-H "Authorization: Bearer {token}"' if token else ""
+            self._diff_text = Shell.get_output(
+                f"curl -sSf {auth} "
+                f"-H 'Accept: application/vnd.github.v3.diff' "
+                f"'https://api.github.com/repos/{repo}/pulls/{self.info.pr_number}'"
+            )
         return self._diff_text
 
     def get_changed_lines_from_diff(self):

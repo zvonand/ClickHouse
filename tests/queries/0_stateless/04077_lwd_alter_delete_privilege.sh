@@ -25,8 +25,10 @@ GRANT SELECT ON ${CLICKHOUSE_DATABASE}.t_lwd_rbac TO '${USER_WITH_PRIV}';
 GRANT ALTER DELETE ON ${CLICKHOUSE_DATABASE}.t_lwd_rbac TO '${USER_WITH_PRIV}';
 "
 
-# User without ALTER DELETE privilege must be denied
-${CLICKHOUSE_CLIENT} --user "${USER_NO_PRIV}" --password test123 -q "
+# User without ALTER DELETE privilege must be denied.
+# Use --send_logs_level=fatal to prevent the ACCESS_DENIED server error from
+# being forwarded as a log message to --client_logs_file and failing the test.
+${CLICKHOUSE_CLIENT} --send_logs_level=fatal --user "${USER_NO_PRIV}" --password test123 -q "
 DELETE FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac WHERE a < 10;
 " 2>&1 | grep -o "ACCESS_DENIED" | head -1
 
@@ -42,7 +44,8 @@ SELECT count() = 90 FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac;
 REVOKE ALTER DELETE ON ${CLICKHOUSE_DATABASE}.t_lwd_rbac FROM '${USER_WITH_PRIV}';
 "
 
-${CLICKHOUSE_CLIENT} --user "${USER_WITH_PRIV}" --password test123 -q "
+# Same: suppress server error log forwarding for the expected-failure invocation
+${CLICKHOUSE_CLIENT} --send_logs_level=fatal --user "${USER_WITH_PRIV}" --password test123 -q "
 DELETE FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac WHERE a < 20;
 " 2>&1 | grep -o "ACCESS_DENIED" | head -1
 

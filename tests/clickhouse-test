@@ -3361,9 +3361,11 @@ class TestSuite:
         self.sequential_tests = []
         self.parallel_tests = []
 
+        # Sort unique test names first, then expand to repeated runs.
+        # Sorting after expansion would re-group equal names together
+        # (for asc/desc order), destroying the round-robin interleaving.
+        all_tests.sort(key=self.tests_in_suite_key_func)
         self.all_tests = self.apply_test_runs(all_tests)
-
-        self.all_tests.sort(key=self.tests_in_suite_key_func)
 
         post_run_check_tests = []
 

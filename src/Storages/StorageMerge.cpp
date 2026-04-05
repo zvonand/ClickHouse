@@ -1130,7 +1130,7 @@ bool recursivelyApplyToReadingSteps(QueryPlan::Node * node, const std::function<
 void ReadFromMerge::addVirtualColumns(
     ChildPlan & child,
     SelectQueryInfo & modified_query_info,
-    QueryProcessingStage::Enum processed_stage,
+    [[maybe_unused]] QueryProcessingStage::Enum processed_stage,
     const StorageWithLockAndName & storage_with_lock) const
 {
     const auto & [database_name, _, storage, table_name] = storage_with_lock;
@@ -1143,11 +1143,10 @@ void ReadFromMerge::addVirtualColumns(
     {
         String table_alias = modified_query_info.query_tree->as<QueryNode>()->getJoinTree()->as<TableNode>()->getAlias();
 
-        String database_column = table_alias.empty() || processed_stage == QueryProcessingStage::FetchColumns ? "_database" : table_alias + "._database";
-        String table_column = table_alias.empty() || processed_stage == QueryProcessingStage::FetchColumns ? "_table" : table_alias + "._table";
+        String database_column = table_alias.empty() ? "_database" : table_alias + "._database";
+        String table_column = table_alias.empty() ? "_table" : table_alias + "._table";
 
-        if (has_database_virtual_column && common_header->has(database_column)
-            && child.stage == QueryProcessingStage::FetchColumns && !plan_header->has(database_column))
+        if (has_database_virtual_column && common_header->has(database_column) && !plan_header->has(database_column))
         {
             ColumnWithTypeAndName column;
             column.name = database_column;
@@ -1156,12 +1155,12 @@ void ReadFromMerge::addVirtualColumns(
 
             auto adding_column_dag = ActionsDAG::makeAddingColumnActions(std::move(column));
             auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(adding_column_dag));
+            expression_step->setStepDescription("Add _database virtual column for Merge");
             child.plan.addStep(std::move(expression_step));
             plan_header = child.plan.getCurrentHeader();
         }
 
-        if (has_table_virtual_column && common_header->has(table_column)
-            && processed_stage == QueryProcessingStage::FetchColumns && !plan_header->has(table_column))
+        if (has_table_virtual_column && common_header->has(table_column) && !plan_header->has(table_column))
         {
             ColumnWithTypeAndName column;
             column.name = table_column;
@@ -1170,6 +1169,7 @@ void ReadFromMerge::addVirtualColumns(
 
             auto adding_column_dag = ActionsDAG::makeAddingColumnActions(std::move(column));
             auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(adding_column_dag));
+            expression_step->setStepDescription("Add _table virtual column for Merge");
             child.plan.addStep(std::move(expression_step));
             plan_header = child.plan.getCurrentHeader();
         }
@@ -1185,6 +1185,7 @@ void ReadFromMerge::addVirtualColumns(
 
             auto adding_column_dag = ActionsDAG::makeAddingColumnActions(std::move(column));
             auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(adding_column_dag));
+            expression_step->setStepDescription("Add _database virtual column for Merge");
             child.plan.addStep(std::move(expression_step));
             plan_header = child.plan.getCurrentHeader();
         }
@@ -1198,6 +1199,7 @@ void ReadFromMerge::addVirtualColumns(
 
             auto adding_column_dag = ActionsDAG::makeAddingColumnActions(std::move(column));
             auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(adding_column_dag));
+            expression_step->setStepDescription("Add _table virtual column for Merge");
             child.plan.addStep(std::move(expression_step));
             plan_header = child.plan.getCurrentHeader();
         }

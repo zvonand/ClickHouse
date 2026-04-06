@@ -1157,9 +1157,9 @@ void ReadFromMerge::addVirtualColumns(
         if (header.has(base_name))
             return base_name;
 
-        /// Check format __table{N}.{base_name}
+        const std::string suffix = "." + base_name;
         for (const auto & col : header)
-            if (col.name.starts_with("__table") && col.name.contains(".") && col.name.ends_with(base_name))
+            if (col.name.ends_with(suffix))
                 return col.name;
 
         return "";

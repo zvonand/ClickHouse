@@ -10,6 +10,7 @@
 #include <Common/ZooKeeper/IKeeper.h>
 #include <Common/ZooKeeper/KeeperException.h>
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
+#include <Common/ZooKeeper/ZooKeeperRetries.h>
 #include <Common/escapeForFileName.h>
 #include <Common/logger_useful.h>
 #include <Common/quoteString.h>
@@ -364,6 +365,17 @@ ASTPtr UserDefinedSQLObjectsZooKeeperStorage::tryLoadObject(
 
         return parseObjectData(object_data, object_type);
     }
+    catch (const zkutil::KeeperException & e)
+    {
+        if (Coordination::isHardwareError(e.code))
+        {
+            LOG_WARNING(log, "Keeper hardware error while loading user defined SQL object {}: {}",
+                backQuote(object_name), e.message());
+            throw; /// Re-throw hardware errors so the caller can handle them properly
+        }
+        tryLogCurrentException(log, fmt::format("while loading user defined SQL object {}", backQuote(object_name)));
+        return nullptr; /// Non-hardware Keeper errors — treat as missing
+    }
     catch (...)
     {
         tryLogCurrentException(log, fmt::format("while loading user defined SQL object {}", backQuote(object_name)));
@@ -414,16 +426,34 @@ void UserDefinedSQLObjectsZooKeeperStorage::refreshAllObjects(const zkutil::ZooK
 void UserDefinedSQLObjectsZooKeeperStorage::refreshObjects(const zkutil::ZooKeeperPtr & zookeeper, UserDefinedSQLObjectType object_type)
 {
     LOG_DEBUG(log, "Refreshing all user-defined {} objects", object_type);
-    Strings object_names = getObjectNamesAndSetWatch(zookeeper, object_type);
 
-    /// Read & parse all SQL objects from ZooKeeper
+    constexpr size_t max_retries = 10;
+    constexpr size_t initial_backoff_ms = 200;
+    constexpr size_t max_backoff_ms = 5000;
+
+    ZooKeeperRetriesInfo retries_info{max_retries, initial_backoff_ms, max_backoff_ms, /*query_status=*/ nullptr};
+    ZooKeeperRetriesControl retries_ctl("refreshObjects", log, retries_info);
+
     std::vector<std::pair<String, ASTPtr>> function_names_and_asts;
-    for (const auto & function_name : object_names)
-    {
-        if (auto ast = tryLoadObject(zookeeper, UserDefinedSQLObjectType::Function, function_name))
-            function_names_and_asts.emplace_back(function_name, ast);
-    }
 
+    retries_ctl.retryLoop([&]()
+    {
+        function_names_and_asts.clear();
+
+        Strings object_names = getObjectNamesAndSetWatch(zookeeper, object_type);
+
+        /// Read & parse all SQL objects from ZooKeeper.
+        /// tryLoadObject now re-throws Keeper hardware errors (session expired, connection loss),
+        /// which will be caught by retryLoop and retried with backoff.
+        for (const auto & function_name : object_names)
+        {
+            if (auto ast = tryLoadObject(zookeeper, UserDefinedSQLObjectType::Function, function_name))
+                function_names_and_asts.emplace_back(function_name, ast);
+        }
+    });
+
+    /// Only replace the registry if we completed the loop without Keeper errors.
+    /// If retries were exhausted, retryLoop will have thrown — we never reach setAllObjects with a partial set.
     setAllObjects(function_names_and_asts);
 
     LOG_DEBUG(log, "All user-defined {} objects refreshed", object_type);

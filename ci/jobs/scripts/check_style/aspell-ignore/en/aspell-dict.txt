@@ -3617,7 +3617,7 @@ hardcoded
 kiegroup
 Lodash
 OpenJDK
-PR
+PR's
 PyGithub
 PyPI
 rollout

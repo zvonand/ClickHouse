@@ -5,6 +5,10 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
+# Suppress server log forwarding for all calls: LWD mutations can emit warnings
+# that land in --client_logs_file and trigger the "having stderror" check.
+CLICKHOUSE_CLIENT="${CLICKHOUSE_CLIENT} --send_logs_level=fatal"
+
 # Use unique user names per test run to avoid conflicts in parallel execution
 USER_NO_PRIV="lwd_no_priv_${CLICKHOUSE_DATABASE}"
 USER_WITH_PRIV="lwd_with_priv_${CLICKHOUSE_DATABASE}"
@@ -25,10 +29,8 @@ GRANT SELECT ON ${CLICKHOUSE_DATABASE}.t_lwd_rbac TO '${USER_WITH_PRIV}';
 GRANT ALTER DELETE ON ${CLICKHOUSE_DATABASE}.t_lwd_rbac TO '${USER_WITH_PRIV}';
 "
 
-# User without ALTER DELETE privilege must be denied.
-# Use --send_logs_level=fatal to prevent the ACCESS_DENIED server error from
-# being forwarded as a log message to --client_logs_file and failing the test.
-${CLICKHOUSE_CLIENT} --send_logs_level=fatal --user "${USER_NO_PRIV}" --password test123 -q "
+# User without ALTER DELETE privilege must be denied
+${CLICKHOUSE_CLIENT} --user "${USER_NO_PRIV}" --password test123 -q "
 DELETE FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac WHERE a < 10;
 " 2>&1 | grep -o "ACCESS_DENIED" | head -1
 
@@ -39,13 +41,11 @@ DELETE FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac WHERE a < 10;
 
 ${CLICKHOUSE_CLIENT} -q "
 SELECT count() = 90 FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac;
-
--- REVOKE and verify denial
 REVOKE ALTER DELETE ON ${CLICKHOUSE_DATABASE}.t_lwd_rbac FROM '${USER_WITH_PRIV}';
 "
 
-# Same: suppress server error log forwarding for the expected-failure invocation
-${CLICKHOUSE_CLIENT} --send_logs_level=fatal --user "${USER_WITH_PRIV}" --password test123 -q "
+# After revoke: same user must be denied
+${CLICKHOUSE_CLIENT} --user "${USER_WITH_PRIV}" --password test123 -q "
 DELETE FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac WHERE a < 20;
 " 2>&1 | grep -o "ACCESS_DENIED" | head -1
 

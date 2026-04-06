@@ -1227,7 +1227,7 @@ void ClientBase::processOrdinaryQuery(String query, ASTPtr parsed_query)
             const auto & out_file_node = query_with_output->out_file->as<ASTLiteral &>();
             out_file = out_file_node.value.safeGet<std::string>();
 
-            if (query_with_output->isOutfileTruncate())
+            if (query_with_output->isOutfileTruncate() && fs::is_regular_file(out_file))
             {
                 out_file_if_truncated = out_file;
                 fs::path out_file_path(out_file);
@@ -1343,8 +1343,8 @@ void ClientBase::processOrdinaryQuery(String query, ASTPtr parsed_query)
             }
             catch (const NetException &)
             {
-                // Clean up temporary file if it exists
-                cleanupTempFile(parsed_query, out_file);
+                if (!out_file_if_truncated.empty())
+                    cleanupTempFile(parsed_query, out_file);
 
                 // We still want to attempt to process whatever we already received or can receive (socket receive buffer can be not empty)
                 receiveResult(parsed_query, signals_before_stop, settings[Setting::partial_result_on_first_cancel]);
@@ -1353,17 +1353,20 @@ void ClientBase::processOrdinaryQuery(String query, ASTPtr parsed_query)
 
             receiveResult(parsed_query, signals_before_stop, settings[Setting::partial_result_on_first_cancel]);
 
-            if (have_error)
-                cleanupTempFile(parsed_query, out_file);
-            else
-                performAtomicRename(parsed_query, out_file_if_truncated);
+            if (!out_file_if_truncated.empty())
+            {
+                if (have_error)
+                    cleanupTempFile(parsed_query, out_file);
+                else
+                    performAtomicRename(parsed_query, out_file_if_truncated);
+            }
 
             break;
         }
         catch (const Exception & e)
         {
-            // Clean up temporary file if it exists
-            cleanupTempFile(parsed_query, out_file);
+            if (!out_file_if_truncated.empty())
+                cleanupTempFile(parsed_query, out_file);
 
             /// Retry when the server said "Client should retry" and no rows
             /// has been received yet.

@@ -29,7 +29,7 @@ The label `pr-must-backport` is the manual override used by maintainers to mark 
 
 **Conflict escalation.** When automatic backporting cannot resolve merge conflicts, a cherry-pick PR must still be created and assigned to the author, merger, and existing assignees of the original PR so that a human can resolve the conflicts and complete the backport.
 
-**Delay policy (optional).** By default, a merged PR is not backported immediately. The automation waits 7 days after the merge before creating backport branches. This grace period allows a bad commit to be reverted on the master branch before the backport machinery engages, avoiding the extra work of backporting a change that will be reverted anyway.
+**Delay policy.** By default, a merged PR is not backported immediately. The automation waits 7 days after the merge before creating backport branches. This grace period allows a bad commit to be reverted on the master branch before the backport machinery engages, avoiding the extra work of backporting a change that will be reverted anyway. The delay window is configurable and can be set to zero to backport immediately.
 
 ## Backport Tool {#backport-tool}
 

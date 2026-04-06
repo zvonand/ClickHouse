@@ -15,7 +15,7 @@ public:
     /// `in_` should be seekable and should be able to read the whole file from 0 to in_->getFileSize();
     /// in particular, don't call setReadUntilPosition() on `in_` directly, call
     /// CachedInMemoryReadBufferFromFile::setReadUntilPosition().
-    CachedInMemoryReadBufferFromFile(PageCacheKey cache_key_, PageCachePtr cache_, std::unique_ptr<ReadBufferFromFileBase> in_, const ReadSettings & settings_);
+    CachedInMemoryReadBufferFromFile(PageCacheFile cache_file_, PageCachePtr cache_, std::unique_ptr<ReadBufferFromFileBase> in_, const ReadSettings & settings_);
 
     String getFileName() const override;
     String getInfoForLog() override;
@@ -40,7 +40,9 @@ public:
     PageCachePtr getPageCache() const { return cache; }
 
 private:
-    PageCacheKey cache_key; // .offset is offset of `chunk` start
+    const PageCacheFile cache_file;
+    PageCacheByteRange cache_range; // offset is offset of `chunk` start
+    SipHash cache_key_base_hash;
     PageCachePtr cache;
     ReadSettings settings;
     std::unique_ptr<ReadBufferFromFileBase> in;
@@ -58,7 +60,10 @@ private:
     /// Ensures all cache blocks covering [offset, offset+n) are populated.
     /// Returns a vector of MappedPtr, one per block. Each missing block is read
     /// individually via `readBigAt` directly into its cache cell.
-    std::vector<PageCache::MappedPtr> populateBlockRange(size_t offset, size_t n) const;
+    /// `block_callback` is called after reading each cell, in sequence.
+    /// The callback may move the cell out; then the returned vector will have nullptr.
+    /// If `block_callback` returns true, reading stops.
+    std::vector<PageCache::MappedPtr> populateBlockRange(size_t offset, size_t n, const std::function<bool(PageCache::MappedPtr &)> & block_callback = nullptr) const;
 
     bool nextImpl() override;
 };

@@ -402,7 +402,7 @@ void Prefetcher::decreaseTaskRefcount(Task * task, size_t amount)
     if (task->state.exchange(Task::State::Deallocated) != Task::State::Running)
     {
         task->buf = {};
-        task->cached_regions = {};
+        task->cached_region.reset();
     }
 }
 
@@ -446,36 +446,18 @@ std::span<const char> Prefetcher::getRangeData(const PrefetchHandle & request)
         rethrowException(task);
     chassert(s == Task::State::Done);
 
-    if (!task->cached_regions.empty())
+    if (task->cached_region.has_value())
     {
         /// Zero-copy path: serve data directly from cache cells.
         size_t req_file_offset = task->offset + req->task_offset;
 
-        /// Find the first region that contains req_file_offset.
-        /// Regions are sorted by file_offset and cover the task range contiguously.
-        size_t region_idx = 0;
-        for (; region_idx < task->cached_regions.size(); ++region_idx)
-        {
-            const auto & r = task->cached_regions[region_idx];
-            if (r.file_offset + r.size > req_file_offset)
-                break;
-        }
-        chassert(region_idx < task->cached_regions.size());
-        const auto & first_region = task->cached_regions[region_idx];
-        chassert(first_region.file_offset <= req_file_offset);
+        const auto & r = task->cached_region.value();
+        chassert(r.file_offset <= req_file_offset);
+        chassert(r.file_offset + r.size >= req_file_offset + req->length);
 
-        size_t offset_in_region = req_file_offset - first_region.file_offset;
-        size_t available_in_first = first_region.size - offset_in_region;
+        size_t offset_in_region = req_file_offset - r.file_offset;
 
-        if (req->length <= available_in_first && task->buf.empty())
-        {
-            /// Fast path: request fits entirely within one cache block — true zero-copy.
-            return std::span(first_region.data + offset_in_region, req->length);
-        }
-
-        /// Multi-region path: task->buf was pre-populated in runTask to avoid data races.
-        chassert(!task->buf.empty());
-        return std::span(task->buf.data() + req->task_offset, req->length);
+        return std::span(r.data + offset_in_region, req->length);
     }
 
     chassert(req->task_offset + req->length <= task->buf.size());
@@ -494,21 +476,29 @@ Prefetcher::Task::State Prefetcher::runTask(Task * task)
         /// instead of allocating a buffer and copying data into it.
         if (read_mode == ReadMode::RandomRead && reader->supportsReadAtRetainCells())
         {
-            task->cached_regions = reader->readBigAtRetainCells(task->length, task->offset);
+            auto cached_regions = reader->readBigAtRetainCells(task->length, task->offset);
 
-            /// If the data spans multiple cache blocks, pre-assemble it into task->buf now
-            /// (on the single-threaded producer side) to avoid a data race in getRangeData,
-            /// where multiple consumer threads could try to lazily populate task->buf concurrently.
-            if (task->cached_regions.size() > 1)
+            if (cached_regions.size() == 1)
             {
-                task->buf.resize(task->length);
-                size_t copied = 0;
-                for (const auto & region : task->cached_regions)
+                /// We got lucky and the Task's range is all in one cache cell. Zero-copy it.
+                task->cached_region = std::move(cached_regions[0]);
+            }
+            else
+            {
+                /// If the data spans multiple cache blocks, pre-assemble it into task->buf now
+                /// (on the single-threaded producer side) to avoid a data race in getRangeData,
+                /// where multiple consumer threads could try to lazily populate task->buf concurrently.
+                if (cached_regions.size() > 1)
                 {
-                    memcpy(task->buf.data() + copied, region.data, region.size);
-                    copied += region.size;
+                    task->buf.resize(task->length);
+                    size_t copied = 0;
+                    for (const auto & region : cached_regions)
+                    {
+                        memcpy(task->buf.data() + copied, region.data, region.size);
+                        copied += region.size;
+                    }
+                    chassert(copied == task->length);
                 }
-                chassert(copied == task->length);
             }
 
             ProfileEvents::increment(ProfileEvents::ParquetPrefetcherReadRandomRead);
@@ -535,7 +525,7 @@ Prefetcher::Task::State Prefetcher::runTask(Task * task)
     {
         chassert(s == Task::State::Deallocated);
         task->buf = {};
-        task->cached_regions = {};
+        task->cached_region.reset();
     }
 
     task->completion.notify();

@@ -132,10 +132,9 @@ private:
         ///       chunk with no offset index, and we're reading over network.
         PaddedPODArray<char> buf;
 
-        /// When the underlying read buffer supports zero-copy cached reads, the data is stored
-        /// in retained cache cells instead of `buf`. Each region is a contiguous piece of an
-        /// in-memory cache block; together they cover [offset, offset+length) without gaps.
-        std::vector<SeekableReadBuffer::CachedRegion> cached_regions;
+        /// When the underlying read buffer supports zero-copy cached reads, and the Task's range
+        /// happens to fit in one retained cache cell, we reference that cell here and don't use `buf`.
+        std::optional<SeekableReadBuffer::CachedRegion> cached_region;
 
         std::atomic<State> state {State::Scheduled};
         /// How many RequestState-s in HasTask state point to this Task.

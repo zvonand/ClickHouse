@@ -20,10 +20,10 @@
 namespace DB
 {
 
-/// Identifies a chunk of a file or object.
+/// Identifies a file or object.
 /// We assume that contents of such file/object don't change (without file_version changing), so
 /// cache invalidation is not needed.
-struct PageCacheKey
+struct PageCacheFile
 {
     /// Path, usually prefixed with storage system name and anything else needed to make it unique.
     /// E.g. "s3:<bucket>/<path>"
@@ -31,6 +31,18 @@ struct PageCacheKey
     /// Optional string with ETag, or file modification time, or anything else.
     std::string file_version {};
 
+    /// PageCache key is SipHash of concatenation of PageCacheFile and PageCacheByteRange.
+    /// This function returns SipHash state with PageCacheFile hashed.
+    /// It can then be finalized with a PageCacheByteRange to produce a key.
+    /// The intermediate SipHash can be copied and reused for different blocks of the same file.
+    SipHash baseHash() const;
+
+    std::string toString() const;
+    size_t capacity() const { return path.capacity() + file_version.capacity(); }
+};
+
+struct PageCacheByteRange
+{
     /// Byte range in the file: [offset, offset + size).
     ///
     /// Note: for simplicity, PageCache doesn't do any interval-based lookup to handle partially
@@ -44,27 +56,20 @@ struct PageCacheKey
     size_t offset = 0;
     size_t size = 0;
 
-    UInt128 hash() const;
-
-    /// Returns a SipHash state with path and file_version already hashed.
-    /// This can be copied cheaply and then finalized with offset+size per block,
-    /// avoiding repeated string hashing and string copies in hot loops.
-    SipHash baseHash() const;
-
     /// Computes full hash from a precomputed base hash state and block offset+size.
-    static UInt128 hashForBlock(SipHash base, size_t block_offset, size_t block_size);
+    UInt128 hash(SipHash base) const;
 
     std::string toString() const;
-    size_t capacity() const { return path.capacity() + file_version.capacity(); }
 };
 
 class PageCacheCell
 {
 public:
-    PageCacheKey key;
+    PageCacheFile file;
+    PageCacheByteRange range;
 
     size_t size() const { return m_size; }
-    size_t capacity() const { return sizeof(*this) + key.capacity() + m_size; }
+    size_t capacity() const { return sizeof(*this) + file.capacity() + m_size; }
     const char * data() const { return m_data; }
     char * data() { return m_data; }
 
@@ -72,7 +77,7 @@ public:
     PageCacheCell(const PageCacheCell &) = delete;
     PageCacheCell & operator=(const PageCacheCell &) = delete;
 
-    PageCacheCell(PageCacheKey key_, bool temporary);
+    PageCacheCell(PageCacheFile file_, PageCacheByteRange range_, bool temporary);
 
 private:
     size_t m_size = 0;
@@ -90,7 +95,7 @@ struct PageCacheWeightFunction
 
 extern template class CacheBase<UInt128, PageCacheCell, UInt128TrivialHash, PageCacheWeightFunction>;
 
-/// The key is hash of PageCacheKey.
+/// The key is hash of PageCacheFile + PageCacheByteRange.
 ///
 /// Experimentally sharded, to reduce mutex contention. Contention seems unlikely to be a problem as
 /// the blocks are pretty big (typically 1 MiB), and the main mutex is only locked during lookup,
@@ -132,20 +137,10 @@ public:
     ///
     /// If detached_if_missing = true, and the key is not present in the cache, the returned chunk
     /// will be just a standalone PageCacheCell not connected to the cache.
-    MappedPtr getOrSet(const PageCacheKey & key, bool detached_if_missing, bool inject_eviction, std::function<void(const MappedPtr &)> load);
+    MappedPtr getOrSet(const PageCacheFile & file, const PageCacheByteRange & range, bool detached_if_missing, bool inject_eviction, std::function<void(const MappedPtr &)> load, std::optional<UInt128> key_hash_opt = {});
 
-    /// Same as above, but accepts a precomputed hash and a key factory.
-    /// The key factory is only called on cache miss, avoiding string copies on cache hits.
-    MappedPtr getOrSet(UInt128 key_hash, std::function<PageCacheKey()> make_key, bool detached_if_missing, bool inject_eviction, std::function<void(const MappedPtr &)> load);
-
-    MappedPtr get(const PageCacheKey & key, bool inject_eviction);
-
-    /// Lookup by precomputed hash. Avoids constructing a PageCacheKey.
     MappedPtr get(UInt128 key_hash, bool inject_eviction);
 
-    bool contains(const PageCacheKey & key, bool inject_eviction) const;
-
-    /// Lookup by precomputed hash. Avoids constructing a PageCacheKey.
     bool contains(UInt128 key_hash, bool inject_eviction) const;
 
     /// Make the cache smaller by `memory_limit - memory_usage` bytes.

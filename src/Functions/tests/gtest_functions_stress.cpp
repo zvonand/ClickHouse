@@ -103,6 +103,8 @@ enum Problem
     P_BROKEN_DETERMINISM,
     P_BROKEN_INJECTIVITY,
     P_BROKEN_MONOTONICITY,
+    P_FIELD_COMPARISON_INCONSISTENCY,
+    P_VALIDATION_INFRASTRUCTURE,
     P_UNEXPECTED_ERROR,
 
     P_COUNT,
@@ -132,6 +134,10 @@ std::pair<String, String> problemInfo(Problem p)
             "function threw from unexpected place or with unexpected error code, or misc test failure"};
         case P_BROKEN_INJECTIVITY: return {"broken_injectivity", "function said it's injective, but returned the same value on different inputs"};
         case P_BROKEN_MONOTONICITY: return {"broken_monotonicity", "function said it's monotonic, but returned nonmonotonic values"};
+        case P_FIELD_COMPARISON_INCONSISTENCY: return {"field_comparison_inconsistency",
+            "Field-level comparison (accurateLess etc.) disagrees with IColumn::compareAt, e.g. due to NaN or type-specific logic"};
+        case P_VALIDATION_INFRASTRUCTURE: return {"validation_infrastructure",
+            "exception from validation infrastructure (sorting, Field comparisons, monotonicity checks) rather than the tested function itself"};
 
         case P_COUNT: std::abort();
     }
@@ -1227,7 +1233,7 @@ struct FunctionsStressTestThread
                         /// The validation infrastructure (sorting, Field comparisons,
                         /// monotonicity checks, row-by-row re-execution) can throw
                         /// various exceptions that are not bugs in the tested functions.
-                        stats.reportProblem(P_LATE_TYPECHECK, fmt::format("exception during validation: {} {}", operation.describe(), getCurrentExceptionMessage(false)));
+                        stats.reportProblem(P_VALIDATION_INFRASTRUCTURE, fmt::format("exception during validation: {} {}", operation.describe(), getCurrentExceptionMessage(false)));
                     }
                 }
             }
@@ -1923,15 +1929,19 @@ struct FunctionsStressTestThread
         }
 
         bool injective = resolved_function->isInjective(valid_args);
-        /// Skip isInjective mismatch check for Dynamic/Variant/Object types: the resolver doesn't have full
-        /// type information before build(), so it may return a different (default) answer than the resolved function.
-        if (!isAnyArgumentDynamicallyTyped(valid_args))
+        bool resolver_injective = resolver->isInjective(valid_args);
+        if (resolver_injective && !injective)
         {
-            if (injective != resolver->isInjective(valid_args))
+            stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("isInjective is false with arguments but true without; {}", operation.describe()));
+        }
+        else if (!resolver_injective && injective)
+        {
+            /// Skip isInjective mismatch check for Dynamic/Variant/Object types: the resolver doesn't have full
+            /// type information before build(), so it may return a different (default) answer than the resolved function.
+            if (!isAnyArgumentDynamicallyTyped(valid_args))
+            {
                 stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("isInjective mismatch between IFunctionOverloadResolver and IFunctionBase; {}", operation.describe()));
-            if (!injective && resolved_function->isInjective({}))
-                /// isInjective({}) means "all overloads are injective", not "at least one overload is injective", right?
-                stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("isInjective is false with arguments but true without; {}", operation.describe()));
+            }
         }
 
         bool has_monotonicity = resolved_function->hasInformationAboutMonotonicity();
@@ -2025,10 +2035,6 @@ struct FunctionsStressTestThread
                         int cmp = result->compareAt(perm[row], perm[row + 1], *result, /*nan_direction_hint=*/ -1);
 
                         /// Check that Field comparison works the same way as IColumn::compareAt.
-                        /// Skip when result type can contain NaN, Variant, IPv4/IPv6, etc. because
-                        /// IColumn::compareAt uses nan_direction_hint and type-specific logic
-                        /// that Field-level comparisons (accurateLess etc.) don't support.
-                        if (!result_type_has_nan_or_incomparable)
                         {
                             Field lhs = (*result)[perm[row]];
                             Field rhs = (*result)[perm[row + 1]];
@@ -2040,7 +2046,13 @@ struct FunctionsStressTestThread
                                 bool field_leq = accurateLessOrEqual(lhs, rhs);
                                 bool field_geq = accurateLessOrEqual(rhs, lhs);
                                 if (field_less != (cmp < 0) || field_greater != (cmp > 0) || field_equal != (cmp == 0) || field_leq != (cmp <= 0) || field_geq != (cmp >= 0))
-                                    stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("Field comparison inconsistent with IColumn comparison: compareAt says {} {} {} (type: {}), but accurateLess etc say: less={}, greater={}, equal={}, leq={}, geq={}", valueToString(result_type, result, perm[row]), cmp < 0 ? "<" : cmp > 0 ? ">" : "==", valueToString(result_type, result, perm[row + 1]), result_type->getName(), field_less, field_greater, field_equal, field_leq, field_geq));
+                                {
+                                    /// IColumn::compareAt uses nan_direction_hint and type-specific logic
+                                    /// that Field-level comparisons (accurateLess etc.) don't support.
+                                    /// Report under a separate category for such types.
+                                    Problem p = result_type_has_nan_or_incomparable ? P_FIELD_COMPARISON_INCONSISTENCY : P_UNEXPECTED_ERROR;
+                                    stats.reportProblem(p, fmt::format("Field comparison inconsistent with IColumn comparison: compareAt says {} {} {} (type: {}), but accurateLess etc say: less={}, greater={}, equal={}, leq={}, geq={}", valueToString(result_type, result, perm[row]), cmp < 0 ? "<" : cmp > 0 ? ">" : "==", valueToString(result_type, result, perm[row + 1]), result_type->getName(), field_less, field_greater, field_equal, field_leq, field_geq));
+                                }
                             }
                         }
 

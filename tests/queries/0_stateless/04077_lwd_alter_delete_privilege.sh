@@ -5,6 +5,11 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
+# Suppress forwarding of server ERROR logs to --client_logs_file.
+# Even with -- { serverError N }, the server still logs the exception at ERROR
+# level and forwards it when send_logs_level <= error, failing "having stderror".
+CLICKHOUSE_CLIENT=$(echo "${CLICKHOUSE_CLIENT}" | sed "s/--send_logs_level=${CLICKHOUSE_CLIENT_SERVER_LOGS_LEVEL}/--send_logs_level=fatal/g")
+
 # Use unique user names per test run to avoid conflicts in parallel execution
 USER_NO_PRIV="lwd_no_priv_${CLICKHOUSE_DATABASE}"
 USER_WITH_PRIV="lwd_with_priv_${CLICKHOUSE_DATABASE}"

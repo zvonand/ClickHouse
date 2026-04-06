@@ -152,8 +152,6 @@ bool CachedInMemoryReadBufferFromFile::nextImpl()
                     if (inner_read_until_position < cache_range.offset + cache_range.size ||
                         inner_read_until_position > lookahead_block_end)
                     {
-                        /// Use precomputed base hash to probe lookahead blocks without
-                        /// constructing full key objects (avoids string copies).
                         PageCacheByteRange probe = cache_range;
                         do
                         {
@@ -348,7 +346,6 @@ bool CachedInMemoryReadBufferFromFile::isContentCached(size_t offset, size_t /*s
 
     /// Use get() instead of contains() to populate `chunk`, so the subsequent nextImpl() call
     /// can reuse it without a second cache lookup.
-    /// Use hash-based lookup to avoid recomputing hash from the full key.
     UInt128 key_hash = cache_range.hash(cache_key_base_hash);
     chunk = cache->get(key_hash, settings.page_cache_inject_eviction);
 

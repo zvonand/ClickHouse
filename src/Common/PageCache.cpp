@@ -75,9 +75,9 @@ PageCache::PageCache(
 
 PageCache::MappedPtr PageCache::getOrSet(const PageCacheFile & file, const PageCacheByteRange & range, bool detached_if_missing, bool inject_eviction, std::function<void(const MappedPtr &)> load, std::optional<UInt128> key_hash_opt)
 {
-    Key key_hash = key_hash_opt.has_value() ? *key_hash_opt : range.hash(file.baseHash());
-
     MemoryTrackerBlockerInThread blocker(VariableContext::Global);
+
+    Key key_hash = key_hash_opt.has_value() ? *key_hash_opt : range.hash(file.baseHash());
 
     Shard & shard = *shards[getShardIdx(key_hash)];
 
@@ -91,7 +91,7 @@ PageCache::MappedPtr PageCache::getOrSet(const PageCacheFile & file, const PageC
         result = shard.get(key_hash);
         if (!result)
         {
-            blocker.reset();
+            blocker.reset(); // allow throwing out-of-memory exception when allocating or loading cell
 
             miss = true;
             result = std::make_shared<PageCacheCell>(file, range, /*temporary*/ true);
@@ -102,6 +102,8 @@ PageCache::MappedPtr PageCache::getOrSet(const PageCacheFile & file, const PageC
     {
         std::tie(result, miss) = shard.getOrSet(key_hash, [&]() -> MappedPtr
         {
+            /// At this point CacheBase is not holding the mutex, so it's ok to let MemoryTracker
+            /// call autoResize.
             blocker.reset();
 
             MappedPtr cell;
@@ -149,6 +151,9 @@ PageCache::MappedPtr PageCache::get(UInt128 key_hash, bool inject_eviction)
 
 bool PageCache::contains(UInt128 key_hash, bool inject_eviction) const
 {
+    /// Avoid deadlock if MemoryTracker calls PageCache::autoResize.
+    /// (If you're here because it turned out that CacheBase::contains actually needs to allocate,
+    ///  just replace this with MemoryTrackerBlockerInThread, like in the other methods here.)
     DENY_ALLOCATIONS_IN_SCOPE;
 
     if (inject_eviction && thread_local_rng() % 10 == 0)

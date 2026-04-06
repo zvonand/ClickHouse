@@ -37,7 +37,7 @@ struct PageCacheFile
     /// The intermediate SipHash can be copied and reused for different blocks of the same file.
     SipHash baseHash() const;
 
-    size_t capacity() const { return path.capacity() + file_version.capacity(); }
+    size_t heapMemoryUsage() const { return path.capacity() + file_version.capacity(); }
 };
 
 struct PageCacheByteRange
@@ -66,7 +66,7 @@ public:
     PageCacheByteRange range;
 
     size_t size() const { return m_size; }
-    size_t capacity() const { return sizeof(*this) + file.capacity() + m_size; }
+    size_t memoryUsage() const { return sizeof(*this) + file.heapMemoryUsage() + m_size; }
     const char * data() const { return m_data; }
     char * data() { return m_data; }
 
@@ -86,7 +86,7 @@ struct PageCacheWeightFunction
 {
     size_t operator()(const PageCacheCell & x) const
     {
-        return x.capacity();
+        return x.memoryUsage();
     }
 };
 

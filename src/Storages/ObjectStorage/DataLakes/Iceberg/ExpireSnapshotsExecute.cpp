@@ -60,7 +60,7 @@ namespace Iceberg
 namespace
 {
 
-static constexpr auto MAX_TRANSACTION_RETRIES = 1000;
+constexpr auto MAX_TRANSACTION_RETRIES = 1000;
 
 // ---------------------------------------------------------------------------
 // Argument parsing
@@ -284,11 +284,19 @@ std::pair<std::set<Int64>, Strings> applyRetentionPolicy(
 
             bool is_main = (ref_name == Iceberg::f_main);
 
-            if (!is_main && !graph.hasSnapshot(ref_snap_id))
+            if (!graph.hasSnapshot(ref_snap_id))
             {
-                LOG_WARNING(getLogger("IcebergExpireSnapshots"),
-                    "Removing invalid ref {}: snapshot {} does not exist", ref_name, ref_snap_id);
-                expired_ref_names.push_back(ref_name);
+                if (!is_main)
+                {
+                    LOG_WARNING(getLogger("IcebergExpireSnapshots"),
+                        "Removing invalid ref {}: snapshot {} does not exist", ref_name, ref_snap_id);
+                    expired_ref_names.push_back(ref_name);
+                }
+                else
+                {
+                    LOG_WARNING(getLogger("IcebergExpireSnapshots"),
+                        "Main ref points to missing snapshot {}; falling back to current_snapshot_id walk", ref_snap_id);
+                }
                 continue;
             }
 

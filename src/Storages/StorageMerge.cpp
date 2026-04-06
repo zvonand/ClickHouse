@@ -722,8 +722,6 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
                     real_column_names.emplace_back("_database");
             }
 
-            LOG_TRACE(logger, "{}, {}", column_names, real_column_names);
-
             /// If there are no real columns requested from this table, we will read the smallest column.
             /// We should remember it to not include this column in the result.
             bool is_smallest_column_requested = false;
@@ -1175,6 +1173,16 @@ void ReadFromMerge::addVirtualColumns(
         if (child_col == common_col)
             return;
 
+        if (child_col != common_col && !child_col.starts_with("__table1"))
+        {
+            WriteBufferFromOwnString wb;
+            child.plan.explainPlan(wb, ExplainPlanOptions{
+                .header=true,
+                .actions=true,
+            });
+            LOG_WARNING(getLogger("StorageMerge"), "Child plan: {}", wb.str());
+        }
+
         if (!child_col.empty())
         /// If column exists in children plan but has different name - rename it.
         {
@@ -1243,12 +1251,6 @@ ReadFromMerge::ChildPlan ReadFromMerge::createPlanForTable(
     size_t streams_num) const
 {
     const auto & [database_name, storage, _, table_name] = storage_with_lock;
-
-    if (modified_query_info.query_tree)
-        LOG_TRACE(getLogger("StorageMerge"), "createPlanForTable {} -- {}", real_column_names_read_from_the_source_table, modified_query_info.query_tree->dumpTree());
-    else
-        LOG_TRACE(getLogger("StorageMerge"), "createPlanForTable {} -- {}", real_column_names_read_from_the_source_table, modified_query_info.query->dumpTree());
-
     auto & modified_select = modified_query_info.query->as<ASTSelectQuery &>();
 
     if (!InterpreterSelectQuery::isQueryWithFinal(modified_query_info) && storage->needRewriteQueryWithFinal(real_column_names_read_from_the_source_table))

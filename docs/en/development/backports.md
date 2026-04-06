@@ -29,7 +29,7 @@ Users running production workloads are encouraged to use either the latest stabl
 Not all changes are backported. The goal is to keep release branches stable, so the scope of backports is intentionally narrow:
 
 - **Security fixes** — always backported.
-- **Critical bug fixes** (crashes, data loss, wrong results, RBAC issues) — always backported; identified by the `pr-critical-bugfix` label, which triggers backporting automatically.
+- **Critical bug fixes** (exceptions (logical errors), data loss, wrong results, RBAC issues) — always backported; identified by the `pr-critical-bugfix` label, which triggers backporting automatically.
 - **Stability and regression fixes** — backported when the risk of the change is low relative to the risk of leaving the bug in place; identified by `pr-must-backport` added manually by maintainers.
 - **Minor bug fixes with an available workaround** — generally not backported to avoid destabilising release branches.
 - **New features, improvements, performance work** — not backported.

@@ -13,17 +13,20 @@
 #include <Poco/JSON/Array.h>
 
 #include <Storages/ObjectStorage/DataLakes/DataLakeStorageSettings.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/PersistentTableComponents.h>
 
 namespace DB::Iceberg
 {
 
+/// Paths collected from Iceberg snapshot metadata, stored as opaque
+/// IcebergPathFromMetadata values that must be resolved through
+/// IcebergPathResolver before I/O operations.
 struct SnapshotReferencedFiles
 {
-    std::unordered_set<String> manifest_list_metadata_paths;
-    std::unordered_set<String> manifest_list_storage_paths;
-    std::unordered_set<String> manifest_paths;
-    std::unordered_set<String> data_file_paths;
+    std::unordered_set<IcebergPathFromMetadata> manifest_list_paths;
+    std::unordered_set<IcebergPathFromMetadata> manifest_paths;
+    std::unordered_set<IcebergPathFromMetadata> data_file_paths;
 };
 
 SnapshotReferencedFiles collectSnapshotReferencedFiles(
@@ -38,7 +41,7 @@ SnapshotReferencedFiles collectSnapshotReferencedFiles(
 ///
 /// Traverses: metadata JSON files (from metadata-log), manifest lists (from snapshots),
 /// manifest files (from manifest lists), data/delete files (from manifest files),
-/// statistics files, and the version-hint file.
+/// and statistics files. All returned paths are resolved storage paths.
 std::unordered_set<String> collectReachableFiles(
     ObjectStoragePtr object_storage,
     const PersistentTableComponents & persistent_table_components,

@@ -112,6 +112,7 @@ OrphanScanResult findOrphanFiles(
     const RelativePathsWithMetadata & actual_files,
     const std::unordered_set<String> & reachable,
     time_t older_than_threshold,
+    ObjectStoragePtr object_storage,
     LoggerPtr log)
 {
     OrphanScanResult scan;
@@ -120,20 +121,26 @@ OrphanScanResult findOrphanFiles(
     {
         const String & path = file_ptr->relative_path;
 
-        if (path.ends_with("version-hint.text"))
+        if (path.ends_with("version-hint.text") || path.ends_with("version-hint.txt"))
             continue;
 
         if (reachable.contains(path))
             continue;
 
+        std::optional<ObjectMetadata> fetched_metadata;
         if (!file_ptr->metadata.has_value())
         {
-            ++scan.skipped_missing_metadata;
-            LOG_DEBUG(log, "Skipping file without metadata (no last_modified): {}", path);
-            continue;
+            fetched_metadata = object_storage->tryGetObjectMetadata(path, /* with_tags = */ false);
+            if (!fetched_metadata)
+            {
+                ++scan.skipped_missing_metadata;
+                LOG_DEBUG(log, "Skipping file without metadata (no last_modified): {}", path);
+                continue;
+            }
         }
 
-        auto file_modified = file_ptr->metadata->last_modified.epochTime();
+        const auto & metadata = file_ptr->metadata.has_value() ? *file_ptr->metadata : *fetched_metadata;
+        auto file_modified = metadata.last_modified.epochTime();
         if (static_cast<time_t>(file_modified) >= older_than_threshold)
             continue;
 
@@ -258,12 +265,14 @@ RemoveOrphanFilesResult removeOrphanFiles(
         object_storage, persistent_table_components, data_lake_settings, context, log);
 
     String scan_path = resolveScanPath(persistent_table_components.table_path, params);
+    if (!object_storage->existsOrHasAnyChild(scan_path))
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Scan path '{}' does not exist", scan_path);
     RelativePathsWithMetadata actual_files;
     object_storage->listObjects(scan_path, actual_files, /* max_keys = */ 0);
     LOG_INFO(log, "Found {} actual files under scan path '{}'", actual_files.size(), scan_path);
 
     chassert(params.older_than.has_value());
-    auto scan = findOrphanFiles(actual_files, reachable, *params.older_than, log);
+    auto scan = findOrphanFiles(actual_files, reachable, *params.older_than, object_storage, log);
     LOG_INFO(log, "Found {} orphan files (dry_run={})", scan.orphan_paths.size(), params.dry_run);
 
     if (params.dry_run || scan.orphan_paths.empty())

@@ -704,7 +704,7 @@ ALTER TABLE iceberg_table EXECUTE remove_orphan_files(
 
 **Output:**
 
-The command returns a table with `metric_name` and `metric_value` columns showing the count of deleted (or would-be-deleted in dry_run mode) files by category:
+The command returns a table with `metric_name` and `metric_value` columns showing the count of deleted (or would-be-deleted in dry_run mode) files by category. File categories are classified using best-effort heuristics based on file naming conventions; files that do not match any specific pattern default to `deleted_data_files_count`:
 
 | metric_name | metric_value |
 |---|---|

@@ -441,6 +441,36 @@ def test_remove_orphan_files_delete_file_categories(started_cluster_iceberg_with
         f"Expected 2 position-delete files, got {counts}"
 
 
+@pytest.mark.parametrize("storage_type", ["local", "s3"])
+def test_remove_orphan_files_location_scoped_deletion(started_cluster_iceberg_with_spark, storage_type):
+    """Files outside the specified location folder must NOT be deleted."""
+    env = make_env(started_cluster_iceberg_with_spark, storage_type, "test_orphan_loc_scope")
+    env.populate(1)
+
+    env.add_orphan("data", "orphan-in-data.parquet")
+    env.add_orphan("data/subdir", "orphan-nested.parquet")
+    env.add_orphan_metadata("v0.metadata.json")
+    time.sleep(2)
+
+    now_ts = env.now_ts()
+    counts = env.remove_orphans(older_than=now_ts, location="data/")
+
+    assert counts["deleted_data_files_count"] >= 1, \
+        f"Orphan in data/ should be deleted, got {counts}"
+    assert not env.exists("data", "orphan-in-data.parquet"), \
+        "Orphan inside scanned location should be deleted"
+
+    assert env.exists("metadata", "v0.metadata.json"), \
+        "Orphan in metadata/ must survive when scanning data/"
+
+    counts2 = env.remove_orphans(older_than=now_ts, location="metadata/")
+    assert counts2["deleted_metadata_files_count"] >= 1
+    assert not env.exists("metadata", "v0.metadata.json"), \
+        "Metadata orphan should be deleted when scanning metadata/"
+
+    env.assert_data_intact()
+
+
 @pytest.mark.parametrize("storage_type", ["azure"])
 def test_remove_orphan_files_azure(started_cluster_iceberg_with_spark, storage_type):
     """Orphan removal on Azure (Azurite) backend: create orphans, verify deletion."""

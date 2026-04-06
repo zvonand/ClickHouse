@@ -112,7 +112,7 @@ FileCategory inspectFileCategory(const String & relative_path)
 {
     if (relative_path.find("/metadata/") != String::npos || relative_path.starts_with("metadata/"))
     {
-        if (relative_path.ends_with(".metadata.json") || relative_path.ends_with(".metadata.json.gz"))
+        if (relative_path.find(".metadata.json") != String::npos)
             return FileCategory::METADATA_JSON;
         if (relative_path.ends_with(".avro"))
         {

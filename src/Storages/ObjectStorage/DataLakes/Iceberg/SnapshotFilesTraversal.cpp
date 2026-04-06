@@ -25,7 +25,6 @@ SnapshotReferencedFiles collectSnapshotReferencedFiles(
     Int32 current_schema_id)
 {
     SnapshotReferencedFiles files;
-    const auto & resolver = persistent_table_components.path_resolver;
 
     for (UInt32 i = 0; i < snapshots->size(); ++i)
     {
@@ -33,27 +32,25 @@ SnapshotReferencedFiles collectSnapshotReferencedFiles(
         if (!snapshot->has(Iceberg::f_manifest_list))
             continue;
 
-        String manifest_list_raw = snapshot->getValue<String>(Iceberg::f_manifest_list);
-        auto manifest_list_path = IcebergPathFromMetadata::deserialize(manifest_list_raw);
-        files.manifest_list_metadata_paths.insert(manifest_list_raw);
-        files.manifest_list_storage_paths.insert(resolver.resolve(manifest_list_path));
+        auto manifest_list_path = IcebergPathFromMetadata::deserialize(snapshot->getValue<String>(Iceberg::f_manifest_list));
+        files.manifest_list_paths.insert(manifest_list_path);
 
         auto manifest_keys = getManifestList(
             object_storage, persistent_table_components, context, manifest_list_path, log);
 
-        for (const auto & mf_key : manifest_keys)
+        for (const auto & manifest_entry : manifest_keys)
         {
-            files.manifest_paths.insert(resolver.resolve(mf_key.manifest_file_path));
+            files.manifest_paths.insert(manifest_entry.manifest_file_path);
 
             auto entries_handle = getManifestFileEntriesHandle(
-                object_storage, persistent_table_components, context, log, mf_key, current_schema_id);
+                object_storage, persistent_table_components, context, log, manifest_entry, current_schema_id);
 
             for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::DATA))
-                files.data_file_paths.insert(resolver.resolve(entry->parsed_entry->file_path_key));
+                files.data_file_paths.insert(entry->parsed_entry->file_path_key);
             for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
-                files.data_file_paths.insert(resolver.resolve(entry->parsed_entry->file_path_key));
+                files.data_file_paths.insert(entry->parsed_entry->file_path_key);
             for (const auto & entry : entries_handle.getFilesWithoutDeleted(FileContentType::EQUALITY_DELETE))
-                files.data_file_paths.insert(resolver.resolve(entry->parsed_entry->file_path_key));
+                files.data_file_paths.insert(entry->parsed_entry->file_path_key);
         }
     }
 
@@ -91,7 +88,6 @@ void collectStatisticsPaths(
 void collectMetadataRootFiles(
     const String & metadata_path,
     const Poco::JSON::Object::Ptr & metadata,
-    const String & table_path,
     const IcebergPathResolver & resolver,
     std::unordered_set<String> & out)
 {
@@ -116,12 +112,6 @@ void collectMetadataRootFiles(
 
     collectStatisticsPaths(metadata, f_statistics, resolver, out);
     collectStatisticsPaths(metadata, f_partition_statistics, resolver, out);
-
-    String version_hint = table_path;
-    if (!version_hint.ends_with('/'))
-        version_hint += '/';
-    version_hint += "metadata/version-hint.text";
-    out.insert(version_hint);
 }
 
 }
@@ -158,7 +148,6 @@ std::unordered_set<String> collectReachableFiles(
 
     collectMetadataRootFiles(
         metadata_path, metadata,
-        persistent_table_components.table_path,
         resolver,
         reachable);
 
@@ -179,9 +168,13 @@ std::unordered_set<String> collectReachableFiles(
 
     auto snapshot_files = collectSnapshotReferencedFiles(
         snapshots, object_storage, persistent_table_components, context, log, current_schema_id);
-    reachable.insert(snapshot_files.manifest_list_storage_paths.begin(), snapshot_files.manifest_list_storage_paths.end());
-    reachable.insert(snapshot_files.manifest_paths.begin(), snapshot_files.manifest_paths.end());
-    reachable.insert(snapshot_files.data_file_paths.begin(), snapshot_files.data_file_paths.end());
+
+    for (const auto & path : snapshot_files.manifest_list_paths)
+        reachable.insert(resolver.resolve(path));
+    for (const auto & path : snapshot_files.manifest_paths)
+        reachable.insert(resolver.resolve(path));
+    for (const auto & path : snapshot_files.data_file_paths)
+        reachable.insert(resolver.resolve(path));
 
     LOG_INFO(log, "Collected {} reachable files from metadata graph", reachable.size());
     return reachable;

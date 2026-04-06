@@ -1,3 +1,12 @@
+---
+description: 'Overview of the ClickHouse backport policy and automation'
+sidebar_label: 'Backport System'
+sidebar_position: 56
+slug: /development/backports
+title: 'Backport System'
+doc_type: 'reference'
+---
+
 # Backport System {#backport-system}
 
 This document describes the ClickHouse backport policy and the automated system that implements it.

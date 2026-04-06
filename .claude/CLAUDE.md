@@ -4,7 +4,7 @@ Do not commit to the master branch. Create a new branch for every task.
 
 When writing text such as documentation, comments, or commit messages, wrap literal names from ClickHouse SQL language, classes and functions, or literal excerpts from log messages inside inline code blocks, such as: `MergeTree`.
 
-When adding headers to documentation files under `docs/`, every header must include an explicit anchor in the form `{#kebab-case-anchor}` at the end of the header line, e.g. `## My Section {#my-section}`. This is mandatory for all heading levels.
+When adding headers to documentation files under `docs/`, every header must include an explicit anchor in the form `{#kebab-case-anchor}` at the end of the header line, e.g. `## My Section {#my-section}`. This is mandatory for all heading levels. New documentation files must also include a frontmatter block at the top (before the first heading) with `description`, `sidebar_label`, `sidebar_position`, `slug`, `title`, and `doc_type` fields, modelled on existing files such as `docs/en/development/continuous-integration.md`.
 
 When writing text such as documentation, comments, or commit messages, write names of functions and methods as `f` instead of `f()` - we prefer it for mathematical purity when it refers a function itself rather than its application.
 

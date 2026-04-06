@@ -10,6 +10,8 @@
 #include <Analyzer/QueryTreeBuilder.h>
 #include <Analyzer/TableNode.h>
 #include <Analyzer/Utils.h>
+#include <Common/Logger.h>
+#include <Common/logger_useful.h>
 #include <Common/quoteString.h>
 #include <Columns/ColumnString.h>
 #include <Core/Settings.h>
@@ -720,6 +722,8 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
                     real_column_names.emplace_back("_database");
             }
 
+            LOG_TRACE(logger, "{}, {}", column_names, real_column_names);
+
             /// If there are no real columns requested from this table, we will read the smallest column.
             /// We should remember it to not include this column in the result.
             bool is_smallest_column_requested = false;
@@ -995,6 +999,8 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
         modified_query_info.table_expression = replacement_table_expression;
         modified_query_info.planner_context->getOrCreateTableExpressionData(replacement_table_expression);
 
+        auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(storage_snapshot_->storage.supportsSubcolumns()).withVirtuals();
+
         std::unordered_map<std::string, QueryTreeNodePtr> column_name_to_node;
         if (!storage_snapshot_->metadata->columns.hasColumnOrSubcolumn(GetColumnsOptions::All, "_table") && !storage_snapshot_->virtual_columns->has("_table"))
         {
@@ -1022,7 +1028,6 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
             column_name_to_node.emplace("_database", function_node);
         }
 
-        auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(storage_snapshot_->storage.supportsSubcolumns()).withVirtuals();
         auto storage_columns = storage_snapshot_->metadata->getColumns();
 
         bool with_aliases = /* common_processed_stage == QueryProcessingStage::FetchColumns && */ !storage_columns.getAliases().empty();
@@ -1129,81 +1134,72 @@ bool recursivelyApplyToReadingSteps(QueryPlan::Node * node, const std::function<
 
 void ReadFromMerge::addVirtualColumns(
     ChildPlan & child,
-    SelectQueryInfo & modified_query_info,
-    [[maybe_unused]] QueryProcessingStage::Enum processed_stage,
+    SelectQueryInfo & /* modified_query_info */,
+    QueryProcessingStage::Enum /* processed_stage */,
     const StorageWithLockAndName & storage_with_lock) const
 {
+    /// Basically what is going on here:
+    /// We need to materialize virtual columns _table and _database but some storages can produce these columns
+    /// in their read step - and because of that we push-down virtual columns request to underlying storages.
+    /// The problem is that some storages based on stage of the query processing and their special engine type (like Distributed)
+    /// can produce columns with different names that were requested - for example __table1._table instead of _table.
+    /// Also this alias __table1 can be different on initiator and shard side because for distributed storage for example
+    /// only subtree of query tree will be send which will produce different table aliases.
+    ///
+    /// Here we are trying to determine if there is a virtual column being emitted by underlying storage and
+    /// rename or materilize it with proper name.
+
     const auto & [database_name, _, storage, table_name] = storage_with_lock;
-
-    /// Add virtual columns if we don't already have them.
-
     auto plan_header = child.plan.getCurrentHeader();
 
-    if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
+    const auto find_column_with_possible_table_alias = [](const Block & header, const String & base_name) -> std::string
     {
-        String table_alias = modified_query_info.query_tree->as<QueryNode>()->getJoinTree()->as<TableNode>()->getAlias();
+        if (header.has(base_name))
+            return base_name;
 
-        String database_column = table_alias.empty() ? "_database" : table_alias + "._database";
-        String table_column = table_alias.empty() ? "_table" : table_alias + "._table";
+        /// Check format __table{N}.{base_name}
+        for (const auto & col : header)
+            if (col.name.starts_with("__table") && col.name.contains(".") && col.name.ends_with(base_name))
+                return col.name;
 
-        if (has_database_virtual_column && common_header->has(database_column) && !plan_header->has(database_column))
-        {
-            ColumnWithTypeAndName column;
-            column.name = database_column;
-            column.type = std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>());
-            column.column = column.type->createColumnConst(0, Field(database_name));
+        return "";
+    };
 
-            auto adding_column_dag = ActionsDAG::makeAddingColumnActions(std::move(column));
-            auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(adding_column_dag));
-            expression_step->setStepDescription("Add _database virtual column for Merge");
-            child.plan.addStep(std::move(expression_step));
-            plan_header = child.plan.getCurrentHeader();
-        }
-
-        if (has_table_virtual_column && common_header->has(table_column) && !plan_header->has(table_column))
-        {
-            ColumnWithTypeAndName column;
-            column.name = table_column;
-            column.type = std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>());
-            column.column = column.type->createColumnConst(0, Field(table_name));
-
-            auto adding_column_dag = ActionsDAG::makeAddingColumnActions(std::move(column));
-            auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(adding_column_dag));
-            expression_step->setStepDescription("Add _table virtual column for Merge");
-            child.plan.addStep(std::move(expression_step));
-            plan_header = child.plan.getCurrentHeader();
-        }
-    }
-    else
+    const auto maybe_add_virtual = [&](const String & base_name, const Field & value)
     {
-        if (has_database_virtual_column && common_header->has("_database") && !plan_header->has("_database"))
-        {
-            ColumnWithTypeAndName column;
-            column.name = "_database";
-            column.type = std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>());
-            column.column = column.type->createColumnConst(0, Field(database_name));
+        String common_col = find_column_with_possible_table_alias(*common_header, base_name);
+        if (common_col.empty())
+            return;
 
-            auto adding_column_dag = ActionsDAG::makeAddingColumnActions(std::move(column));
-            auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(adding_column_dag));
-            expression_step->setStepDescription("Add _database virtual column for Merge");
+        String child_col = find_column_with_possible_table_alias(*plan_header, base_name);
+        if (child_col == common_col)
+            return;
+
+        if (!child_col.empty())
+        /// If column exists in children plan but has different name - rename it.
+        {
+            auto rename_dag = ActionsDAG::makeRenameColumnActions(plan_header->getColumnsWithTypeAndName(), child_col, common_col);
+            auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(rename_dag));
+            expression_step->setStepDescription("Rename virtual column for Merge");
             child.plan.addStep(std::move(expression_step));
             plan_header = child.plan.getCurrentHeader();
         }
-
-        if (has_table_virtual_column && common_header->has("_table") && !plan_header->has("_table"))
+        else
+        /// Otherwise materilize it as a constant.
         {
-            ColumnWithTypeAndName column;
-            column.name = "_table";
-            column.type = std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>());
-            column.column = column.type->createColumnConst(0, Field(table_name));
-
-            auto adding_column_dag = ActionsDAG::makeAddingColumnActions(std::move(column));
+            auto adding_column_dag = ActionsDAG::makeAddingConstantColumnActions(common_col, std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), value);
             auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(adding_column_dag));
-            expression_step->setStepDescription("Add _table virtual column for Merge");
+            expression_step->setStepDescription("Add virtual column for Merge");
             child.plan.addStep(std::move(expression_step));
             plan_header = child.plan.getCurrentHeader();
         }
-    }
+    };
+
+    if (has_database_virtual_column)
+        maybe_add_virtual("_database", Field(database_name));
+
+    if (has_table_virtual_column)
+        maybe_add_virtual("_table", Field(table_name));
 }
 
 QueryPipelineBuilderPtr ReadFromMerge::buildPipeline(
@@ -1247,6 +1243,11 @@ ReadFromMerge::ChildPlan ReadFromMerge::createPlanForTable(
     size_t streams_num) const
 {
     const auto & [database_name, storage, _, table_name] = storage_with_lock;
+
+    if (modified_query_info.query_tree)
+        LOG_TRACE(getLogger("StorageMerge"), "createPlanForTable {} -- {}", real_column_names_read_from_the_source_table, modified_query_info.query_tree->dumpTree());
+    else
+        LOG_TRACE(getLogger("StorageMerge"), "createPlanForTable {} -- {}", real_column_names_read_from_the_source_table, modified_query_info.query->dumpTree());
 
     auto & modified_select = modified_query_info.query->as<ASTSelectQuery &>();
 

@@ -380,6 +380,7 @@ public:
     /// Create expression which add const column and then materialize it.
     static ActionsDAG makeAddingColumnActions(ColumnWithTypeAndName column);
     static ActionsDAG makeAddingConstantColumnActions(const std::string & name, const DataTypePtr & type, const Field & value);
+    static ActionsDAG makeRenameColumnActions(const ColumnsWithTypeAndName & header, const std::string & from, const std::string & to);
 
     /// Create ActionsDAG which represents expression equivalent to applying first and second actions consequently.
     /// Is used to replace `(first -> second)` expression chain to single `merge(first, second)` expression.

@@ -5573,9 +5573,9 @@ def cleanup_test_groups():
     its PGID equals its PID).  `_track_pgid` appends the PGID on launch and
     `_untrack_pgid` removes it when the test exits normally.  If `clickhouse-test`
     is killed with SIGKILL before `_untrack_pgid` runs, the file retains the
-    PGIDs of still-running (or re-parented) test processes.  `os.killpg` reaches
-    them regardless of re-parenting because the kernel stores the PGID directly
-    in the process descriptor — it is never reset when a process is re-parented.
+    PGIDs of still-running (or re-parented) test processes.  The PGID is stored
+    in the kernel process descriptor and is never reset on re-parenting, so
+    `kill_process_group` reaches orphaned processes without session traversal.
     """
     if not _GROUP_PID_FILE.exists():
         print(f"No group pid file at {_GROUP_PID_FILE}, nothing to clean up.")
@@ -5589,17 +5589,8 @@ def cleanup_test_groups():
     except Exception as e:
         print(f"Warning: could not read group pid file: {e}", file=sys.stderr)
         return
-    if pgids:
-        print(
-            f"Killing {len(pgids)} leftover test process group(s): {pgids}"
-        )
-        for pgid in pgids:
-            try:
-                os.killpg(pgid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                pass
-    else:
-        print("No test process groups recorded in the file.")
+    for pgid in pgids:
+        kill_process_group(pgid, None)
     _GROUP_PID_FILE.unlink(missing_ok=True)
 
 

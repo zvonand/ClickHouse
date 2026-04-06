@@ -1232,6 +1232,11 @@ void ClientBase::processOrdinaryQuery(String query, ASTPtr parsed_query)
                 out_file_if_truncated = out_file;
                 fs::path out_file_path(out_file);
                 out_file = (out_file_path.parent_path() / fmt::format("tmp_{}.{}", UUIDHelpers::generateV4(), out_file_path.filename().string())).string();
+
+                /// Update the AST literal so that initOutputFormat writes to the temp file
+                /// and performAtomicRename reads the temp path from the AST.
+                auto & out_file_node_mutable = query_with_output->out_file->as<ASTLiteral &>();
+                out_file_node_mutable.value = out_file;
             }
 
             if (client_context->getSettingsRef()[Setting::into_outfile_create_parent_directories])
@@ -1348,8 +1353,10 @@ void ClientBase::processOrdinaryQuery(String query, ASTPtr parsed_query)
 
             receiveResult(parsed_query, signals_before_stop, settings[Setting::partial_result_on_first_cancel]);
 
-            // After successful query execution, perform atomic rename for TRUNCATE mode
-            performAtomicRename(parsed_query, out_file_if_truncated);
+            if (have_error)
+                cleanupTempFile(parsed_query, out_file);
+            else
+                performAtomicRename(parsed_query, out_file_if_truncated);
 
             break;
         }

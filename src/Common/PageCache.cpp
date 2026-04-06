@@ -94,7 +94,7 @@ PageCache::MappedPtr PageCache::getOrSet(const PageCacheFile & file, const PageC
             blocker.reset();
 
             miss = true;
-            result = std::make_shared<PageCacheCell>(PageCacheFile{file.path, file.file_version}, range, /*temporary*/ true);
+            result = std::make_shared<PageCacheCell>(file, range, /*temporary*/ true);
             load(result);
         }
     }
@@ -107,7 +107,7 @@ PageCache::MappedPtr PageCache::getOrSet(const PageCacheFile & file, const PageC
             MappedPtr cell;
             try
             {
-                cell = std::make_shared<PageCacheCell>(PageCacheFile{file.path, file.file_version}, range, /*temporary*/ false);
+                cell = std::make_shared<PageCacheCell>(file, range, /*temporary*/ false);
                 load(cell);
             }
             catch (...)

@@ -1173,16 +1173,6 @@ void ReadFromMerge::addVirtualColumns(
         if (child_col == common_col)
             return;
 
-        if (child_col != common_col && !child_col.starts_with("__table1"))
-        {
-            WriteBufferFromOwnString wb;
-            child.plan.explainPlan(wb, ExplainPlanOptions{
-                .header=true,
-                .actions=true,
-            });
-            LOG_WARNING(getLogger("StorageMerge"), "Child plan: {}", wb.str());
-        }
-
         if (!child_col.empty())
         /// If column exists in children plan but has different name - rename it.
         {

@@ -36,9 +36,10 @@ ${CLICKHOUSE_CLIENT} --user "${USER_NO_PRIV}" --password test123 -q "
 DELETE FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac WHERE a < 10; -- { serverError 497 }
 "
 
-# User with ALTER DELETE privilege must succeed
+# User with ALTER DELETE privilege must succeed (sync=2 to avoid async race with count check)
 ${CLICKHOUSE_CLIENT} --user "${USER_WITH_PRIV}" --password test123 -q "
-DELETE FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac WHERE a < 10;
+DELETE FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac WHERE a < 10
+SETTINGS lightweight_deletes_sync = 2, mutations_sync = 2;
 "
 
 ${CLICKHOUSE_CLIENT} -q "SELECT count() = 90 FROM ${CLICKHOUSE_DATABASE}.t_lwd_rbac;"

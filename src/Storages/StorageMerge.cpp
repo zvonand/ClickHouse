@@ -1147,7 +1147,7 @@ void ReadFromMerge::addVirtualColumns(
     /// only subtree of query tree will be send which will produce different table aliases.
     ///
     /// Here we are trying to determine if there is a virtual column being emitted by underlying storage and
-    /// rename or materilize it with proper name.
+    /// rename or materialize it with proper name.
 
     const auto & [database_name, _, storage, table_name] = storage_with_lock;
     auto plan_header = child.plan.getCurrentHeader();
@@ -1185,7 +1185,7 @@ void ReadFromMerge::addVirtualColumns(
             plan_header = child.plan.getCurrentHeader();
         }
         else
-        /// Otherwise materilize it as a constant.
+        /// Otherwise materialize it as a constant.
         {
             auto adding_column_dag = ActionsDAG::makeAddingConstantColumnActions(common_col, std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), value);
             auto expression_step = std::make_unique<ExpressionStep>(child.plan.getCurrentHeader(), std::move(adding_column_dag));

@@ -1,3 +1,5 @@
+-- Tags: no-fasttest
+
 -- Reproducer for MSan use-of-uninitialized-value in simsimd_cos_f32_sve
 -- https://github.com/ClickHouse/ClickHouse/issues/101232
 

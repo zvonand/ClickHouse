@@ -37,7 +37,6 @@ struct PageCacheFile
     /// The intermediate SipHash can be copied and reused for different blocks of the same file.
     SipHash baseHash() const;
 
-    std::string toString() const;
     size_t capacity() const { return path.capacity() + file_version.capacity(); }
 };
 
@@ -58,8 +57,6 @@ struct PageCacheByteRange
 
     /// Computes full hash from a precomputed base hash state and block offset+size.
     UInt128 hash(SipHash base) const;
-
-    std::string toString() const;
 };
 
 class PageCacheCell

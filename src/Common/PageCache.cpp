@@ -43,23 +43,11 @@ SipHash PageCacheFile::baseHash() const
     return h;
 }
 
-std::string PageCacheFile::toString() const
-{
-    if (file_version.empty())
-        return path;
-    return fmt::format("{}:{}", path, file_version);
-}
-
 UInt128 PageCacheByteRange::hash(SipHash base) const
 {
     base.update(offset);
     base.update(size);
     return base.get128();
-}
-
-std::string PageCacheByteRange::toString() const
-{
-    return fmt::format("{}:{}", offset, size);
 }
 
 PageCache::PageCache(

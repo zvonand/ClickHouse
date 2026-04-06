@@ -1,4 +1,4 @@
--- Tags: no-parallel
+-- Tags: no-parallel, no-flaky-check
 -- { echoOn }
 
 SET enable_analyzer = 1;

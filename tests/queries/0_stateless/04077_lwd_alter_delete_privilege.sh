@@ -5,9 +5,12 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-# Suppress server log forwarding for all calls: LWD mutations can emit warnings
-# that land in --client_logs_file and trigger the "having stderror" check.
-CLICKHOUSE_CLIENT="${CLICKHOUSE_CLIENT} --send_logs_level=fatal"
+# Suppress server log forwarding for all calls: LWD mutations and ACCESS_DENIED
+# errors emit WARNING/ERROR-level server log messages that get forwarded to
+# --client_logs_file and trigger the "having stderror" check.
+# Replace the log level in-place (appending doesn't work; --allow_repeated_settings
+# applies to query settings only, not client-level options like --send_logs_level).
+CLICKHOUSE_CLIENT=$(echo "${CLICKHOUSE_CLIENT}" | sed "s/--send_logs_level=${CLICKHOUSE_CLIENT_SERVER_LOGS_LEVEL}/--send_logs_level=fatal/g")
 
 # Use unique user names per test run to avoid conflicts in parallel execution
 USER_NO_PRIV="lwd_no_priv_${CLICKHOUSE_DATABASE}"

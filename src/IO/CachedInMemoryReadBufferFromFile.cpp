@@ -218,7 +218,6 @@ std::vector<PageCache::MappedPtr> CachedInMemoryReadBufferFromFile::populateBloc
 
     size_t block_size = settings.page_cache_block_size;
     /// Compute end_offset without overflow: clamp n so that offset + n <= file_size.
-    offset = std::min(offset, file_size.value());
     size_t end_offset = offset + std::min(n, file_size.value() - offset);
 
     size_t first_block_start = offset / block_size * block_size;

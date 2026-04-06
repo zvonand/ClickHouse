@@ -6,12 +6,6 @@
 
 #include <span>
 
-namespace DB
-{
-class ReadBuffer;
-class SeekableReadBuffer;
-}
-
 namespace DB::Parquet
 {
 

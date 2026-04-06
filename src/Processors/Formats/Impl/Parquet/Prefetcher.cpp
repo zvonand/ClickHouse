@@ -477,6 +477,7 @@ Prefetcher::Task::State Prefetcher::runTask(Task * task)
         if (read_mode == ReadMode::RandomRead && reader->supportsReadAtRetainCells())
         {
             auto cached_regions = reader->readBigAtRetainCells(task->length, task->offset);
+            chassert(!cached_regions.empty());
 
             if (cached_regions.size() == 1)
             {

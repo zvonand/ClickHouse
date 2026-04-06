@@ -10,7 +10,6 @@
 #include <Common/ZooKeeper/IKeeper.h>
 #include <Common/ZooKeeper/KeeperException.h>
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
-#include <Common/ZooKeeper/ZooKeeperRetries.h>
 #include <Common/escapeForFileName.h>
 #include <Common/logger_useful.h>
 #include <Common/quoteString.h>
@@ -427,33 +426,19 @@ void UserDefinedSQLObjectsZooKeeperStorage::refreshObjects(const zkutil::ZooKeep
 {
     LOG_DEBUG(log, "Refreshing all user-defined {} objects", object_type);
 
-    constexpr size_t max_retries = 10;
-    constexpr size_t initial_backoff_ms = 200;
-    constexpr size_t max_backoff_ms = 5000;
+    Strings object_names = getObjectNamesAndSetWatch(zookeeper, object_type);
 
-    ZooKeeperRetriesInfo retries_info{max_retries, initial_backoff_ms, max_backoff_ms, /*query_status=*/ nullptr};
-    ZooKeeperRetriesControl retries_ctl("refreshObjects", log, retries_info);
-
+    /// Read & parse all SQL objects from ZooKeeper.
+    /// tryLoadObject re-throws Keeper hardware errors (session expired, connection loss),
+    /// so we never reach setAllObjects with a partial set — the exception propagates
+    /// to the caller (watching thread or getZooKeeper), which handles reconnection.
     std::vector<std::pair<String, ASTPtr>> function_names_and_asts;
-
-    retries_ctl.retryLoop([&]()
+    for (const auto & function_name : object_names)
     {
-        function_names_and_asts.clear();
+        if (auto ast = tryLoadObject(zookeeper, UserDefinedSQLObjectType::Function, function_name))
+            function_names_and_asts.emplace_back(function_name, ast);
+    }
 
-        Strings object_names = getObjectNamesAndSetWatch(zookeeper, object_type);
-
-        /// Read & parse all SQL objects from ZooKeeper.
-        /// tryLoadObject now re-throws Keeper hardware errors (session expired, connection loss),
-        /// which will be caught by retryLoop and retried with backoff.
-        for (const auto & function_name : object_names)
-        {
-            if (auto ast = tryLoadObject(zookeeper, UserDefinedSQLObjectType::Function, function_name))
-                function_names_and_asts.emplace_back(function_name, ast);
-        }
-    });
-
-    /// Only replace the registry if we completed the loop without Keeper errors.
-    /// If retries were exhausted, retryLoop will have thrown — we never reach setAllObjects with a partial set.
     setAllObjects(function_names_and_asts);
 
     LOG_DEBUG(log, "All user-defined {} objects refreshed", object_type);

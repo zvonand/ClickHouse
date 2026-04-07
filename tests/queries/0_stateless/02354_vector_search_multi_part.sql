@@ -50,4 +50,4 @@ ORDER BY L2Distance(vec, reference_vec) ASC
 LIMIT 10
 );
 
---DROP TABLE tab;
+DROP TABLE tab;

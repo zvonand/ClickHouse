@@ -124,8 +124,8 @@ FROM viewExplain('EXPLAIN', '', (
 ))
 WHERE explain LIKE '%ReadFromRemoteParallelReplicas%';
 
-SELECT '-- view with UNION DISTINCT: inner query sent over t_base';
-SELECT if(explain LIKE '%v_union_distinct%', 'v_union_distinct', if(explain LIKE '%t_base%', 't_base', 'other'))
+SELECT '-- view with UNION DISTINCT: inner query sent over t_base/t_base2';
+SELECT if(explain LIKE '%v_union_distinct%', 'v_union_distinct', if(explain LIKE '%t_base2%', 't_base2', if(explain LIKE '%t_base%', 't_base', 'other')))
 FROM viewExplain('EXPLAIN', '', (
     SELECT sum(value) FROM v_union_distinct
     SETTINGS parallel_replicas_local_plan = 1, parallel_replicas_allow_view_over_mergetree = 1

@@ -18,8 +18,9 @@ t_base
 t_base
 -- view with WINDOW (partition): inner query sent over t_base
 t_base
--- view with UNION DISTINCT: inner query sent over t_base
+-- view with UNION DISTINCT: inner query sent over t_base/t_base2
 t_base
+t_base2
 -- correctness check
 4995000
 4995000

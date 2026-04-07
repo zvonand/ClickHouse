@@ -49,9 +49,8 @@ ReadFromMergeTree (default.t1)
 Output: a, b, c, x, y
 
 Join (JOIN FillRightFirst)
-│  t1[1000] ⋈ t2[100]
+│  t1 ⋈ t2
 │  Type: inner | Strictness: all | Algorithm: ConcurrentHashJoin
-│  Result rows: 100
 │  Join conditions: a = x
 │  Output:
 │    Left:  a, b, c

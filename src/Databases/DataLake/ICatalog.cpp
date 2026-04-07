@@ -308,7 +308,7 @@ std::string TableMetadata::getMetadataLocation(const std::string & iceberg_metad
 
         if (metadata_location.starts_with(data_location))
         {
-            size_t remove_slash = metadata_location[data_location.size()] == '/' ? 1 : 0;
+            size_t remove_slash = (metadata_location.size() > data_location.size() && metadata_location[data_location.size()] == '/') ? 1 : 0;
             metadata_location = metadata_location.substr(data_location.size() + remove_slash);
         }
     }

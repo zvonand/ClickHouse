@@ -190,4 +190,14 @@ TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationPolarisStyleWithEn
     EXPECT_EQ(metadata.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
 }
 
+TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationEqualStrings)
+{
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation("abfss://c@account.dfs.core.windows.net/c/table");
+
+    const std::string metadata_file = "abfss://c@account.dfs.core.windows.net/c/table";
+    EXPECT_EQ(metadata.getMetadataLocation(metadata_file), "");
+}
+
 }

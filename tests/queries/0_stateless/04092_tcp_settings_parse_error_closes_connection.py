@@ -16,6 +16,7 @@ which is the only safe option when the input buffer state is unknown.
 """
 
 import os
+import random
 import socket
 import struct
 import subprocess
@@ -152,37 +153,23 @@ def read_exception(sock):
         read_exception(sock)
     return code, message
 
-def get_response(sock, timeout=5.0):
-    """Read server response. Returns (is_exception, message)."""
-    sock.settimeout(timeout)
-    try:
-        pkt_type = read_varuint(sock)
-        if pkt_type == 2:  # Exception
-            code, message = read_exception(sock)
-            return True, f"{code}:{message}"
-        return False, f"pkt_type={pkt_type}"
-    except (socket.timeout, ConnectionError) as e:
-        return True, f"connection_error:{e}"
-
 
 def clickhouse_query(query):
     cmd = CLICKHOUSE_CLIENT.split() + ["--query", query]
     return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.strip()
 
 
-# -- Tests -------------------------------------------------------------------
+# -- Test --------------------------------------------------------------------
 
 def test_connection_closed_after_bad_settings():
     """After a settings parse error, the server must close the connection
     rather than trying to preserve it for reuse.
 
-    We verify this by checking `system.text_log` for the message
-    "The connection is preserved" — which `TCPHandler` logs when it decides
-    to keep a connection alive after an exception. With the fix, the
-    connection is closed before that point, so the message must not appear.
+    We verify this both from the client side (socket must be closed) and
+    from the server side (system.text_log must not show additional errors
+    from reading a desynchronized buffer).
     """
-    # Use a unique setting name per run so we can find our exact error in text_log.
-    setting_name = f"NONEXISTENT_{os.getpid()}"
+    setting_name = f"NONEXISTENT_{os.getpid()}_{random.randint(0, 2**31)}"
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(10)
@@ -203,42 +190,60 @@ def test_connection_closed_after_bad_settings():
         send_empty_block(sock)
 
         # Server should respond with an exception for the unknown setting.
-        is_err, msg = get_response(sock)
-        assert is_err, f"Expected exception, got: {msg}"
-        assert setting_name in msg, f"Unexpected error: {msg}"
+        pkt_type = read_varuint(sock)
+        assert pkt_type == 2, f"Expected Exception packet (2), got {pkt_type}"
+        code, message = read_exception(sock)
+        assert setting_name in message, f"Unexpected error: {code}: {message}"
+
+    except Exception:
+        raise
     finally:
         sock.close()
 
-    clickhouse_query("SYSTEM FLUSH LOGS")
+    clickhouse_query("SYSTEM FLUSH LOGS text_log")
 
     # On the unfixed server, after the UNKNOWN_SETTING error the server
     # attempts to continue reading from the desync'd buffer (skipData, next
     # loop iteration), producing additional errors like CANNOT_READ_ALL_DATA
-    # or UNEXPECTED_PACKET_FROM_CLIENT on the same thread.
-    # With the fix, the connection is closed immediately — only the single
-    # UNKNOWN_SETTING error appears.
+    # or UNEXPECTED_PACKET_FROM_CLIENT before closing the connection.
+    # With the fix, the connection is closed immediately — no additional
+    # errors appear between UNKNOWN_SETTING and "Done processing connection".
+    #
+    # We use the unique setting name to find the exact thread, then count
+    # Error-level TCPHandler messages between our error and the next
+    # "Done processing connection" on that thread.
     error_count = clickhouse_query(
-        f"SELECT count() FROM system.text_log "
-        f"WHERE thread_id IN ("
-        f"  SELECT thread_id FROM system.text_log"
-        f"  WHERE message LIKE '%{setting_name}%'"
+        f"WITH anchor AS ("
+        f"  SELECT thread_id, event_time_microseconds AS t"
+        f"  FROM system.text_log"
+        f"  WHERE event_date >= yesterday()"
+        f"  AND message LIKE '%{setting_name}%'"
+        f"  LIMIT 1"
         f") "
+        f"SELECT count() FROM system.text_log, anchor "
+        f"WHERE event_date >= yesterday() "
+        f"AND system.text_log.thread_id = anchor.thread_id "
         f"AND level = 'Error' "
         f"AND logger_name = 'TCPHandler' "
-        f"AND event_time_microseconds >= ("
-        f"  SELECT min(event_time_microseconds) FROM system.text_log"
-        f"  WHERE message LIKE '%{setting_name}%'"
+        f"AND event_time_microseconds > anchor.t "
+        f"AND event_time_microseconds <= ("
+        f"  SELECT min(event_time_microseconds)"
+        f"  FROM system.text_log, anchor"
+        f"  WHERE event_date >= yesterday()"
+        f"  AND system.text_log.thread_id = anchor.thread_id"
+        f"  AND message LIKE '%Done processing connection%'"
+        f"  AND event_time_microseconds > anchor.t"
         f")"
     )
 
-    if int(error_count) > 1:
-        print(f"FAIL: {error_count} errors logged — server tried to read from desync'd buffer")
+    if int(error_count) > 0:
+        print(f"FAIL: {error_count} extra error(s) — server read from desync'd buffer")
         sys.exit(1)
 
     print("connection closed after settings parse error")
 
 
-def test_server_still_alive_after_bad_settings():
+def test_server_still_alive():
     """Verify the server is still accepting new connections after the bad one."""
     result = clickhouse_query("SELECT 'ok'")
     assert result == "ok", f"Expected 'ok', got: {result}"
@@ -247,7 +252,7 @@ def test_server_still_alive_after_bad_settings():
 
 def main():
     test_connection_closed_after_bad_settings()
-    test_server_still_alive_after_bad_settings()
+    test_server_still_alive()
 
 
 if __name__ == "__main__":

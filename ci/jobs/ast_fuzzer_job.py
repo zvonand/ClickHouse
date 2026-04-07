@@ -224,8 +224,19 @@ def run_fuzz_job(check_name: str):
     fatal_log = workspace_path / "fatal.log"
     server_log = workspace_path / "server.log"
     stderr_log = workspace_path / "stderr.log"
+
+    # Encrypt core dump if present (same as functional tests)
+    core_zst = workspace_path / "core.zst"
+    aes_key = temp_dir / "aes.key"
+    try:
+        if core_zst.exists():
+            Utils.encrypt(str(core_zst), f"{cwd}/ci/defs/public.pem", str(aes_key))
+    except Exception as e:
+        logging.warning("Failed to encrypt core dump: %s", e)
+
     paths = [
-        workspace_path / "core.zst",
+        workspace_path / "core.zst.enc",
+        temp_dir / "aes.key.rsa",
         workspace_path / "dmesg.log",
         fatal_log,
         stderr_log,

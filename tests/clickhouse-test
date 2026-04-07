@@ -2061,11 +2061,41 @@ class TestCase:
         culprit_mt_settings = {}
         minimize_hit_limit = False
 
+        # Determine which category(ies) actually cause the failure before
+        # minimizing, to avoid reporting false culprits from the other category.
+        minimize_regular = bool(failed_settings)
+        minimize_mt = bool(failed_mt_settings)
+
+        if failed_settings and failed_mt_settings:
+            # Test regular settings alone (no MergeTree settings)
+            result_regular_only = self._run_with_settings(
+                args, suite, client_options, failed_settings, {}
+            )
+            # Test MergeTree settings alone (no regular settings)
+            result_mt_only = self._run_with_settings(
+                args, suite, client_options, {}, failed_mt_settings
+            )
+
+            regular_alone_fails = result_regular_only.status == TestStatus.FAIL
+            mt_alone_fails = result_mt_only.status == TestStatus.FAIL
+
+            if regular_alone_fails and not mt_alone_fails:
+                diagnosis_lines.append(
+                    "  Regular settings alone reproduce the failure; skipping MergeTree minimization."
+                )
+                minimize_mt = False
+            elif mt_alone_fails and not regular_alone_fails:
+                diagnosis_lines.append(
+                    "  MergeTree settings alone reproduce the failure; skipping regular minimization."
+                )
+                minimize_regular = False
+            # else: neither alone or both — minimize both categories
+
         # Minimize regular settings (keep all MT settings active during minimization)
-        if failed_settings:
+        if minimize_regular:
             culprit_settings, hit_limit = self._minimize_settings(
                 args, suite, client_options,
-                failed_settings, failed_mt_settings,
+                failed_settings, failed_mt_settings if minimize_mt else {},
                 is_merge_tree=False,
                 deadline=minimize_deadline,
             )
@@ -2073,10 +2103,10 @@ class TestCase:
 
         # Minimize MergeTree settings (keep full regular settings to preserve
         # cross-category interactions)
-        if failed_mt_settings and not minimize_hit_limit:
+        if minimize_mt and not minimize_hit_limit:
             culprit_mt_settings, hit_limit = self._minimize_settings(
                 args, suite, client_options,
-                failed_settings, failed_mt_settings,
+                failed_settings if minimize_regular else {}, failed_mt_settings,
                 is_merge_tree=True,
                 deadline=minimize_deadline,
             )

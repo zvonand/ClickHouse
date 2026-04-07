@@ -301,6 +301,9 @@ std::string TableMetadata::getMetadataLocation(const std::string & iceberg_metad
             };
             strip_container(metadata_location);
             strip_container(data_location);
+
+            if (!endpoint.empty() && metadata_location.starts_with(azure_host_prefix))
+                metadata_location = "/" + bucket + "/" + metadata_location.substr(azure_host_prefix.size());
         }
 
         if (metadata_location.starts_with(data_location))

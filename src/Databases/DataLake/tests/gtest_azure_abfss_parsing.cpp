@@ -178,4 +178,16 @@ TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationPolarisStyleWithEndpoint)
         "https://mystorageaccount.dfs.core.windows.net/mycontainer/actual/path/");
 }
 
+TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationPolarisStyleWithEndpoint)
+{
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation("abfss://mycontainer@account.dfs.core.windows.net/mycontainer/actual/path");
+    metadata.setEndpoint("https://account.dfs.core.windows.net");
+
+    const std::string metadata_file =
+        "abfss://mycontainer@account.dfs.core.windows.net/mycontainer/actual/path/metadata/v1.metadata.json";
+    EXPECT_EQ(metadata.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
+}
+
 }

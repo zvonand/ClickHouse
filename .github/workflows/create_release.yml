@@ -241,6 +241,11 @@ jobs:
             variant=${config%%:*}
             dockerfile=${config##*:}
 
+            if [ ! -f "$dockerfile" ]; then
+              echo "Skipping $variant: $dockerfile not found at this tag"
+              continue
+            fi
+
             VERSION_SUFFIX=$([ "$variant" = "ubuntu" ] && echo "" || echo "-$variant")
             LABEL_VERSION="${CLICKHOUSE_VERSION_STRING}${VERSION_SUFFIX}"
             TAGS=(
@@ -305,6 +310,11 @@ jobs:
             # Split the config into variant and Dockerfile path
             variant=${config%%:*}
             dockerfile=${config##*:}
+
+            if [ ! -f "$dockerfile" ]; then
+              echo "Skipping $variant: $dockerfile not found at this tag"
+              continue
+            fi
 
             VERSION_SUFFIX=$([ "$variant" = "ubuntu" ] && echo "" || echo "-$variant")
             LABEL_VERSION="${CLICKHOUSE_VERSION_STRING}${VERSION_SUFFIX}"

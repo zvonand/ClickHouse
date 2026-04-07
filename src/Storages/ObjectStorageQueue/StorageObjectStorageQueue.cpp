@@ -1808,12 +1808,12 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
         std::string failure_message;
         const auto state = file_metadata->getPathState(failure_message);
 
-        if (state == ObjectStorageQueueMetadata::PathState::Processed)
+        if (state == ObjectStorageQueueIFileMetadata::PathState::Processed)
         {
             LOG_DEBUG(log, "Path '{}' has been processed by {}", path, getStorageID().getNameForLogs());
             return;
         }
-        if (state == ObjectStorageQueueMetadata::PathState::Failed)
+        if (state == ObjectStorageQueueIFileMetadata::PathState::Failed)
         {
             throw Exception(ErrorCodes::ABORTED,
                 "Path '{}' failed to be processed by {}: {}",

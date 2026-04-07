@@ -112,8 +112,6 @@ public:
     /// (rewrites what we write in syncWithKeeper()).
     void alterSettings(const SettingsChanges & changes, const ContextPtr & context);
 
-    using PathState = ObjectStorageQueueIFileMetadata::PathState;
-
     /// Get object storage type: s3, azure, local, etc.
     ObjectStorageType getType() const { return storage_type; }
     /// Get base path to keeper metadata.

@@ -47,7 +47,6 @@ namespace ErrorCodes
     extern const int REPLICA_ALREADY_EXISTS;
     extern const int SUPPORT_IS_DISABLED;
     extern const int TIMEOUT_EXCEEDED;
-
 }
 
 namespace Setting

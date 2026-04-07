@@ -13,7 +13,7 @@ SELECT
     *,
     _table
 FROM merge(currentDatabase(), '^s');
-
+                                                                                                                                              
 DROP TABLE sub_query1;
 DROP TABLE sub_query2;
 DROP TABLE sub_query3;

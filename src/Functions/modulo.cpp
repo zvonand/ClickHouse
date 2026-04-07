@@ -109,8 +109,6 @@ struct ModuloByConstantImpl
         if (b < 0)
             b = static_cast<B>(-b);
 
-        /// Here we failed to make the SSE variant from libdivide give an advantage.
-
         if (b & (b - 1))
         {
             /// BRANCHFREE: the divisor is loop-invariant, so there is no
@@ -149,7 +147,8 @@ struct ModuloByConstantImpl
         }
         else
         {
-            // gcc libdivide doesn't work well for pow2 division
+            /// Power-of-two: a single AND is cheaper than libdivide's
+            /// multiply-shift (BRANCHFREE has no special pow2 fast-path).
             auto mask = b - 1;
             for (size_t i = 0; i < size; ++i)
             {

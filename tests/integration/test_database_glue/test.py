@@ -320,17 +320,9 @@ SETTINGS {",".join((k + "=" + repr(v) for k, v in db_settings.items()))}""",
         },
     )
 
-    table_settings = {
-        "storage_catalog_type": "glue",
-        "storage_warehouse": "test",
-        "object_storage_endpoint": "http://minio:9000/warehouse-glue",
-        "storage_region": "us-east-1",
-        "storage_catalog_url": BASE_URL,
-    }
     qid_table = uuid.uuid4().hex
     node.query(
-        f"""CREATE TABLE {db_name}.`{root_namespace}.{table_name}` (x String) ENGINE = IcebergS3('http://minio:9000/warehouse-glue/{table_name}/', '{minio_access_key}', '{minio_secret_key}')
-SETTINGS {",".join((k + "=" + repr(v) for k, v in table_settings.items()))}""",
+        f"""CREATE TABLE {db_name}.`{root_namespace}.{table_name}` (x String) ENGINE = IcebergS3('http://minio:9000/warehouse-glue/{table_name}/', '{minio_access_key}', '{minio_secret_key}')""",
         query_id=qid_table,
         settings={
             "allow_experimental_database_glue_catalog": 1,

@@ -192,7 +192,7 @@ void MergeTreeDataPartWriterWide::addStreams(
             || (settings.use_adaptive_write_buffer_for_dynamic_subcolumns && ISerialization::isDynamicSubcolumn(substream_path, substream_path.size()));
         query_write_settings.adaptive_write_buffer_initial_size = settings.adaptive_write_buffer_initial_size;
 
-        column_streams[stream_name] = std::make_unique<MergeTreeWriterStream>(
+        column_streams.emplace(stream_name, std::make_unique<MergeTreeWriterStream>(
             stream_name,
             data_part_storage,
             stream_name,
@@ -203,7 +203,7 @@ void MergeTreeDataPartWriterWide::addStreams(
             max_compress_block_size,
             marks_compression_codec,
             settings.marks_compress_block_size,
-            query_write_settings);
+            query_write_settings));
 
         if (columns_to_load_marks.contains(name_and_type.name))
             cached_marks.emplace(stream_name, std::make_unique<MarksInCompressedFile::PlainArray>());
@@ -843,8 +843,9 @@ void MergeTreeDataPartWriterWide::finish(bool sync)
 
 void MergeTreeDataPartWriterWide::cancel() noexcept
 {
-     for (auto & stream : column_streams)
-        stream.second->cancel();
+    for (auto & stream : column_streams)
+        if (stream.second)
+            stream.second->cancel();
 
     column_streams.clear();
     serialization_states.clear();

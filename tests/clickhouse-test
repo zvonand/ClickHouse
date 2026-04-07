@@ -691,7 +691,7 @@ def cleanup_child_processes(pid):
     # But we are hoping that nobody creates session in the tests (though it is
     # possible via timeout(), but we are assuming that they will be killed by
     # timeout).
-    processes = [p[0] for p in pgrep(parent=pid)]
+    processes = [p[0] for p in pgrep(ppid=pid)]
     for child in processes:
         try:
             child_pgid = os.getpgid(child)
@@ -970,13 +970,13 @@ def get_stacktraces_from_clickhouse(args):
         print(f"Error occurred while receiving stack traces from client: {e}")
         return None
 
-def pgrep(parent: int = None, pgid: int = None, command: str = None) -> List[List[str]]:
+def pgrep(ppid: int = None, pgid: int = None, command: str = None) -> List[List[str]]:
     ps = shell_get_output("ps -eo pid,ppid,pgid,command").splitlines()[1:]
     ps = [p.split(None, 3) for p in ps]
     ps = [[int(p[0]), int(p[1]), int(p[2]), p[3]] for p in ps]
 
-    if parent is not None:
-        ps = [p for p in ps if p[1] == parent]
+    if ppid is not None:
+        ps = [p for p in ps if p[1] == ppid]
     if pgid is not None:
         ps = [p for p in ps if p[2] == pgid]
     if command is not None:

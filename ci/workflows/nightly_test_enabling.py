@@ -35,6 +35,7 @@ w_schedule = Workflow.Config(
     cron_schedules=["13 2 * * *"],
 )
 w_dispatch = copy.copy(w_schedule)
+w_dispatch.name = "EnablingDispatch"
 w_dispatch.event = Workflow.Event.DISPATCH
 w_dispatch.branches = []
 w_dispatch.branches = [BASE_BRANCH]

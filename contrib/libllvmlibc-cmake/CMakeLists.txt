@@ -17,7 +17,6 @@ set(SRCS
     "${LIBLLVMLIBC_SOURCE_DIR}/src/math/generic/cos.cpp"
     "${LIBLLVMLIBC_SOURCE_DIR}/src/math/generic/exp.cpp"
     "${LIBLLVMLIBC_SOURCE_DIR}/src/math/generic/exp2.cpp"
-    "${LIBLLVMLIBC_SOURCE_DIR}/src/math/generic/explogxf.cpp"
     "${LIBLLVMLIBC_SOURCE_DIR}/src/math/generic/expm1.cpp"
     "${LIBLLVMLIBC_SOURCE_DIR}/src/math/generic/fabs.cpp"
     "${LIBLLVMLIBC_SOURCE_DIR}/src/math/generic/fabsl.cpp"

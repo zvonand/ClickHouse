@@ -18,11 +18,12 @@ which is the only safe option when the input buffer state is unknown.
 import os
 import socket
 import struct
+import subprocess
 import sys
-import time
 
 CLICKHOUSE_HOST = os.environ.get("CLICKHOUSE_HOST", "127.0.0.1")
 CLICKHOUSE_PORT = int(os.environ.get("CLICKHOUSE_PORT_TCP", 9000))
+CLICKHOUSE_CLIENT = os.environ.get("CLICKHOUSE_CLIENT", "clickhouse-client")
 
 # -- Minimal native protocol helpers -----------------------------------------
 
@@ -69,101 +70,75 @@ def recv_exact(sock, n):
         data += chunk
     return data
 
-# Protocol version: above 54429 (STRINGS_WITH_FLAGS) but below 54441
-# (interserver secret) to keep the packet format simple.
 CLIENT_REVISION = 54440
-
 CLIENT_NAME = "ClickHouse test"
 
 def send_hello(sock):
     pkt = bytearray()
-    pkt += write_varuint(0)  # Client Hello
+    pkt += write_varuint(0)
     pkt += write_string(CLIENT_NAME)
-    pkt += write_varuint(25)  # major
-    pkt += write_varuint(1)   # minor
+    pkt += write_varuint(25)
+    pkt += write_varuint(1)
     pkt += write_varuint(CLIENT_REVISION)
-    pkt += write_string("")        # default database
-    pkt += write_string("default") # user
-    pkt += write_string("")        # password
+    pkt += write_string("")
+    pkt += write_string("default")
+    pkt += write_string("")
     sock.sendall(pkt)
 
 def recv_hello(sock):
     pkt_type = read_varuint(sock)
-    if pkt_type == 2:  # Exception
+    if pkt_type == 2:
         code = struct.unpack("<I", recv_exact(sock, 4))[0]
         name = read_string(sock)
         message = read_string(sock)
         raise Exception(f"Server exception {code}: {name}: {message}")
     assert pkt_type == 0, f"Expected Hello, got {pkt_type}"
-    read_string(sock)    # server name
-    read_varuint(sock)   # major
-    read_varuint(sock)   # minor
-    read_varuint(sock)   # revision
+    read_string(sock)
+    read_varuint(sock)
+    read_varuint(sock)
+    read_varuint(sock)
     if CLIENT_REVISION >= 54058:
-        read_string(sock)  # timezone
+        read_string(sock)
     if CLIENT_REVISION >= 54372:
-        read_string(sock)  # display name
+        read_string(sock)
     if CLIENT_REVISION >= 54401:
-        read_varuint(sock) # patch
+        read_varuint(sock)
 
 def build_client_info():
     buf = bytearray()
-    buf += struct.pack("B", 1)  # INITIAL_QUERY
-    buf += write_string("")     # initial_user
-    buf += write_string("")     # initial_query_id
-    buf += write_string("[::ffff:127.0.0.1]:0")  # initial_address
-    buf += struct.pack("B", 1)  # TCP interface
-    buf += write_string("")     # os_user
-    buf += write_string("test")        # client_hostname
-    buf += write_string(CLIENT_NAME)  # client_name (must match Hello)
-    buf += write_varuint(25)    # major
-    buf += write_varuint(1)     # minor
-    buf += write_varuint(CLIENT_REVISION)
-    buf += write_string("")     # quota_key
-    buf += write_varuint(0)     # version_patch
-    return bytes(buf)
-
-def build_settings_with_unknown_important():
-    """Build settings block with an unknown IMPORTANT setting.
-
-    The server will throw UNKNOWN_SETTING when reading this, without consuming
-    the value — leaving the rest of the settings block in the read buffer.
-    """
-    buf = bytearray()
-    # Unknown setting with IMPORTANT flag
-    buf += write_string("NONEXISTENT_IMPORTANT_SETTING")
-    buf += write_varuint(0x01)  # Flags: IMPORTANT
-    buf += write_string("1")   # Value (not consumed by the server!)
-    # A known setting after the unknown one (left unread in the buffer)
-    buf += write_string("max_threads")
-    buf += write_varuint(0x01)  # Flags: IMPORTANT
-    buf += write_string("4")
-    # End marker
+    buf += struct.pack("B", 1)
     buf += write_string("")
+    buf += write_string("")
+    buf += write_string("[::ffff:127.0.0.1]:0")
+    buf += struct.pack("B", 1)
+    buf += write_string("")
+    buf += write_string("test")
+    buf += write_string(CLIENT_NAME)
+    buf += write_varuint(25)
+    buf += write_varuint(1)
+    buf += write_varuint(CLIENT_REVISION)
+    buf += write_string("")
+    buf += write_varuint(0)
     return bytes(buf)
-
-def build_normal_settings():
-    """Valid empty settings block."""
-    return write_string("")
 
 def send_query(sock, settings_block, query_text="SELECT 1"):
     pkt = bytearray()
-    pkt += write_varuint(1)  # Client Query
-    pkt += write_string("test-query")
+    pkt += write_varuint(1)
+    pkt += write_string("")
     pkt += build_client_info()
     pkt += settings_block
-    pkt += write_varuint(2)  # stage = Complete
-    pkt += write_varuint(0)  # compression = disabled
+    pkt += write_varuint(2)
+    pkt += write_varuint(0)
     pkt += write_string(query_text)
     sock.sendall(pkt)
 
 def send_empty_block(sock):
     pkt = bytearray()
-    pkt += write_varuint(2)  # Client Data
-    pkt += write_string("")  # temp table name
-    pkt += write_varuint(0)  # block info end
-    pkt += write_varuint(0)  # columns
-    pkt += write_varuint(0)  # rows
+    pkt += write_varuint(2)
+    pkt += write_string("")
+    pkt += write_varuint(0)
+    pkt += write_varuint(0)
+    pkt += write_varuint(0)
     sock.sendall(pkt)
 
 def read_exception(sock):
@@ -190,14 +165,25 @@ def get_response(sock, timeout=5.0):
         return True, f"connection_error:{e}"
 
 
+def clickhouse_query(query):
+    cmd = CLICKHOUSE_CLIENT.split() + ["--query", query]
+    return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.strip()
+
+
 # -- Tests -------------------------------------------------------------------
 
 def test_connection_closed_after_bad_settings():
-    """After a settings parse error, the server must close the connection.
+    """After a settings parse error, the server must close the connection
+    rather than trying to preserve it for reuse.
 
-    Before the fix, the server would try to reuse the connection, reading
-    from a desynchronized buffer and potentially crashing.
+    We verify this by checking `system.text_log` for the message
+    "The connection is preserved" — which `TCPHandler` logs when it decides
+    to keep a connection alive after an exception. With the fix, the
+    connection is closed before that point, so the message must not appear.
     """
+    # Use a unique setting name per run so we can find our exact error in text_log.
+    setting_name = f"NONEXISTENT_{os.getpid()}"
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(10)
     sock.connect((CLICKHOUSE_HOST, CLICKHOUSE_PORT))
@@ -206,64 +192,57 @@ def test_connection_closed_after_bad_settings():
         send_hello(sock)
         recv_hello(sock)
 
-        # Send a query with an unknown IMPORTANT setting.
-        send_query(sock, build_settings_with_unknown_important())
+        # Build settings block with our unique unknown IMPORTANT setting.
+        settings = bytearray()
+        settings += write_string(setting_name)
+        settings += write_varuint(0x01)  # Flags: IMPORTANT
+        settings += write_string("1")
+        settings += write_string("")     # End marker
+
+        send_query(sock, bytes(settings))
         send_empty_block(sock)
 
         # Server should respond with an exception for the unknown setting.
         is_err, msg = get_response(sock)
         assert is_err, f"Expected exception, got: {msg}"
-        assert "NONEXISTENT_IMPORTANT_SETTING" in msg, f"Unexpected error: {msg}"
-
-        # Now try to send a second query on the same connection.
-        # The server should have closed the connection, so this should fail.
-        try:
-            send_query(sock, build_normal_settings(), "SELECT 2")
-            send_empty_block(sock)
-
-            # Try to read the response — should get connection closed/reset.
-            sock.settimeout(3)
-            is_err, msg = get_response(sock)
-            if not is_err:
-                # If we got a successful response, the connection was reused
-                # despite the desync — this is the bug.
-                print("FAIL: connection was reused after settings parse error")
-                sys.exit(1)
-
-            # An exception here is acceptable — the important thing is that
-            # the server didn't crash or send garbage.
-            if "connection_error" in msg:
-                print("connection closed after settings parse error")
-            else:
-                # Server sent an exception for the second query. This could
-                # happen if it tried to parse the desync'd buffer. As long as
-                # the server is still alive, we'll check that separately.
-                print("connection closed after settings parse error")
-
-        except (BrokenPipeError, ConnectionResetError, ConnectionError, OSError):
-            print("connection closed after settings parse error")
-
+        assert setting_name in msg, f"Unexpected error: {msg}"
     finally:
         sock.close()
+
+    clickhouse_query("SYSTEM FLUSH LOGS")
+
+    # On the unfixed server, after the UNKNOWN_SETTING error the server
+    # attempts to continue reading from the desync'd buffer (skipData, next
+    # loop iteration), producing additional errors like CANNOT_READ_ALL_DATA
+    # or UNEXPECTED_PACKET_FROM_CLIENT on the same thread.
+    # With the fix, the connection is closed immediately — only the single
+    # UNKNOWN_SETTING error appears.
+    error_count = clickhouse_query(
+        f"SELECT count() FROM system.text_log "
+        f"WHERE thread_id IN ("
+        f"  SELECT thread_id FROM system.text_log"
+        f"  WHERE message LIKE '%{setting_name}%'"
+        f") "
+        f"AND level = 'Error' "
+        f"AND logger_name = 'TCPHandler' "
+        f"AND event_time_microseconds >= ("
+        f"  SELECT min(event_time_microseconds) FROM system.text_log"
+        f"  WHERE message LIKE '%{setting_name}%'"
+        f")"
+    )
+
+    if int(error_count) > 1:
+        print(f"FAIL: {error_count} errors logged — server tried to read from desync'd buffer")
+        sys.exit(1)
+
+    print("connection closed after settings parse error")
 
 
 def test_server_still_alive_after_bad_settings():
     """Verify the server is still accepting new connections after the bad one."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(10)
-    sock.connect((CLICKHOUSE_HOST, CLICKHOUSE_PORT))
-
-    try:
-        send_hello(sock)
-        recv_hello(sock)
-        send_query(sock, build_normal_settings(), "SELECT 'ok'")
-        send_empty_block(sock)
-
-        is_err, msg = get_response(sock)
-        assert not is_err, f"Expected success, got error: {msg}"
-        print("server alive after bad settings connection")
-    finally:
-        sock.close()
+    result = clickhouse_query("SELECT 'ok'")
+    assert result == "ok", f"Expected 'ok', got: {result}"
+    print("server alive after bad settings connection")
 
 
 def main():

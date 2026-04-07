@@ -41,6 +41,9 @@ namespace ProfileEvents
 namespace DB
 {
 
+/// MergingSortedTransform supposed to consume virtual row
+/// When there is no merging (only one stream) and virtual row conversions are enabled, we need to remove virtual row before output,
+/// otherwise it can reach downstream steps and cause issues because of conversions are valid only for current step.
 class RemoveVirtualRowTransform : public ISimpleTransform
 {
 public:
@@ -147,8 +150,8 @@ SortingStep::Settings::Settings(const DB::Settings & settings)
 
     min_free_disk_space = settings[Setting::min_free_disk_space_for_temporary_data];
     max_block_bytes = settings[Setting::prefer_external_sort_block_bytes];
-    bool read_in_order_use_virtual_row_per_block = settings[Setting::read_in_order_use_virtual_row] && settings[Setting::read_in_order_use_virtual_row_per_block];
-    read_in_order_use_buffering = settings[Setting::read_in_order_use_buffering] && !read_in_order_use_virtual_row_per_block;
+    read_in_order_use_virtual_row_per_block = settings[Setting::read_in_order_use_virtual_row] && settings[Setting::read_in_order_use_virtual_row_per_block];
+    read_in_order_use_buffering = settings[Setting::read_in_order_use_buffering];
     temporary_files_codec = settings[Setting::temporary_files_codec];
     temporary_files_buffer_size = settings[Setting::temporary_files_buffer_size];
 }
@@ -376,7 +379,11 @@ void SortingStep::mergingSorted(QueryPipelineBuilder & pipeline, const SortDescr
     /// If there are several streams, then we merge them into one
     if (pipeline.getNumStreams() > 1)
     {
-        if (use_buffering && sort_settings.read_in_order_use_buffering)
+        /// Disable buffering when `read_in_order_use_virtual_row_per_block` is enabled, these optimizations are incompatible.
+        /// Buffering would need to flush virtual rows, otherwise virtual rows lose their purpose while reading from the stream.
+        /// But flushing a virtual row between every block effectively turns buffering into a no-op.
+        bool use_virtual_row_per_block = apply_virtual_row_conversions && sort_settings.read_in_order_use_virtual_row_per_block;
+        if (use_buffering && sort_settings.read_in_order_use_buffering && !use_virtual_row_per_block)
         {
             pipeline.addSimpleTransform([&](const SharedHeader & header)
             {

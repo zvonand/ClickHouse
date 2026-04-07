@@ -1288,7 +1288,8 @@ Pipe ReadFromMergeTree::spreadMarkRangesAmongStreamsWithOrder(
 
     bool need_preliminary_merge = (parts_with_ranges.size() > settings[Setting::read_in_order_two_level_merge_threshold]);
 
-    if (settings[Setting::read_in_order_use_virtual_row] && settings[Setting::read_in_order_use_virtual_row_per_block])
+    /// Preliminary MergingSortedTransform consumes virtual row, so it won't reach downstream sorting and optimization won't work.
+    if (settings[Setting::read_in_order_use_virtual_row_per_block] && virtual_row_conversion)
         need_preliminary_merge = false;
 
     const auto read_type = input_order_info->direction == 1 ? ReadType::InOrder : ReadType::InReverseOrder;

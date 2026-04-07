@@ -48,4 +48,6 @@ message Envelope {
 };
 ```
 
+If the schema does not contain an `Envelope` message, the top-level message type specified in `format_schema` is used directly.
+
 ## Format settings {#format-settings}

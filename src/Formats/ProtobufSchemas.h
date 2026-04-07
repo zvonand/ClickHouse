@@ -41,6 +41,8 @@ public:
         No,
         // Return descriptor for a message with a user-provided name one level
         // below a top-level message with the hardcoded name "Envelope".
+        // If no "Envelope" message exists, the top-level message type
+        // specified in format_schema is used directly.
         // Example: In protobuf schema
         //   message Envelope {
         //     message MessageType {
@@ -82,16 +84,13 @@ public:
 
 private:
     using ImporterKey = std::pair<String, WithEnvelope>;
-    struct ImporterKeyHash
-    {
-        size_t operator()(const ImporterKey & key) const
-        {
-            auto h1 = std::hash<String>{}(key.first);
-            auto h2 = std::hash<uint8_t>{}(static_cast<uint8_t>(key.second));
-            return h1 ^ (h2 << 1);
-        }
-    };
-    std::unordered_map<ImporterKey, std::shared_ptr<ImporterWithSourceTree>, ImporterKeyHash> importers;
+    std::unordered_map<ImporterKey,
+                       std::shared_ptr<ImporterWithSourceTree>,
+                       decltype([](const ImporterKey & key)
+                       {
+                           auto h = std::hash<String>{}(key.first);
+                           return h ^ (static_cast<uint8_t>(key.second));
+                       })> importers;
     std::mutex mutex;
 };
 

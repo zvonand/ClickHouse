@@ -166,15 +166,24 @@ def send_empty_block(sock):
     pkt += write_varuint(0)  # rows
     sock.sendall(pkt)
 
+def read_exception(sock):
+    """Fully consume an Exception packet (after packet type is already read)."""
+    code = struct.unpack("<I", recv_exact(sock, 4))[0]
+    name = read_string(sock)
+    message = read_string(sock)
+    _stack_trace = read_string(sock)
+    has_nested = recv_exact(sock, 1)[0]
+    if has_nested:
+        read_exception(sock)
+    return code, message
+
 def get_response(sock, timeout=5.0):
     """Read server response. Returns (is_exception, message)."""
     sock.settimeout(timeout)
     try:
         pkt_type = read_varuint(sock)
         if pkt_type == 2:  # Exception
-            code = struct.unpack("<I", recv_exact(sock, 4))[0]
-            name = read_string(sock)
-            message = read_string(sock)
+            code, message = read_exception(sock)
             return True, f"{code}:{message}"
         return False, f"pkt_type={pkt_type}"
     except (socket.timeout, ConnectionError) as e:

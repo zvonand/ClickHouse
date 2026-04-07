@@ -6,42 +6,48 @@
 namespace DB
 {
 
-#if defined(LIBDIVIDE_AVX2)
-    #define REG_SIZE 32
-#elif defined(LIBDIVIDE_SSE2)
-    #define REG_SIZE 16
-#endif
-
 template <typename A, typename B, typename ResultType>
 void divideImpl(const A * __restrict a_pos, B b, ResultType * __restrict c_pos, size_t size)
 {
-    libdivide::divider<A> divider(static_cast<A>(b));
-    const A * a_end = a_pos + size;
+    /// BRANCHFREE: the divisor is loop-invariant, so the per-iteration
+    /// algorithm-type branch in BRANCHFULL is pure overhead.  BRANCHFREE
+    /// produces a straight-line multiply-shift sequence that the compiler
+    /// auto-vectorizes to the widest available SIMD.
+    libdivide::divider<A, libdivide::BRANCHFREE> divider(static_cast<A>(b));
 
-#if defined(__SSE2__)
-    static constexpr size_t values_per_simd_register = REG_SIZE / sizeof(A);
-    const A * a_end_simd = a_pos + size / values_per_simd_register * values_per_simd_register;
-
-    while (a_pos < a_end_simd)
+    /// For 64-bit types, auto-vectorization degrades to scalar
+    /// extract/insert sequences.  Use libdivide's explicit AVX2 path
+    /// which has hand-tuned 64-bit vector implementations.
+    if constexpr (sizeof(A) == 8)
     {
-#if defined(__AVX2__)
-        _mm256_storeu_si256(reinterpret_cast<__m256i *>(c_pos),
-            _mm256_loadu_si256(reinterpret_cast<const __m256i *>(a_pos)) / divider);
-#else
-        _mm_storeu_si128(reinterpret_cast<__m128i *>(c_pos),
-            _mm_loadu_si128(reinterpret_cast<const __m128i *>(a_pos)) / divider);
+        const A * a_end = a_pos + size;
+
+#if defined(LIBDIVIDE_AVX2)
+        static constexpr size_t values_per_register = 32 / sizeof(A);
+        const A * a_end_simd = a_pos + size / values_per_register * values_per_register;
+
+        while (a_pos < a_end_simd)
+        {
+            _mm256_storeu_si256(reinterpret_cast<__m256i *>(c_pos),
+                _mm256_loadu_si256(reinterpret_cast<const __m256i *>(a_pos)) / divider);
+            a_pos += values_per_register;
+            c_pos += values_per_register;
+        }
 #endif
 
-        a_pos += values_per_simd_register;
-        c_pos += values_per_simd_register;
+        while (a_pos < a_end)
+        {
+            *c_pos = *a_pos / divider;
+            ++a_pos;
+            ++c_pos;
+        }
     }
-#endif
-
-    while (a_pos < a_end)
+    else
     {
-        *c_pos = *a_pos / divider;
-        ++a_pos;
-        ++c_pos;
+        /// For 32-bit (and narrower) types, the compiler auto-vectorizes
+        /// the branchfree multiply-shift sequence efficiently via vpmuludq.
+        for (size_t i = 0; i < size; ++i)
+            c_pos[i] = a_pos[i] / divider;
     }
 }
 

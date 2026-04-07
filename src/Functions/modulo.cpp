@@ -113,25 +113,39 @@ struct ModuloByConstantImpl
 
         if (b & (b - 1))
         {
-            libdivide::divider<A> divider(static_cast<A>(b));
-            /// On x86-64 v3+ (AVX2), the compiler auto-vectorizes this loop using
-            /// `vpmuludq ymm`, producing a function ~2x larger (e.g. 1801 B vs 977 B
-            /// for UInt64 % UInt8) with marginal throughput benefit.  libdivide's
-            /// multiply+shift sequence is latency-bound rather than throughput-bound,
-            /// so wider SIMD does not help.  The larger code increases i-cache pressure
-            /// and causes measurable regressions (~1.2x) on Intel Sapphire Rapids.
-            ///
-            /// On AArch64, NEON vectorization of this loop is genuinely beneficial:
-            /// wider registers improve throughput without the same i-cache cost, so
-            /// auto-vectorization is left enabled there.
-#if defined(__x86_64__)
-#pragma clang loop vectorize(disable)
-#endif
-            for (size_t i = 0; i < size; ++i)
+            /// BRANCHFREE: the divisor is loop-invariant, so there is no
+            /// benefit from the branch-on-algorithm-type that BRANCHFULL
+            /// does on every iteration.  BRANCHFREE produces a straight-line
+            /// multiply-shift sequence that auto-vectorizes cleanly.
+            libdivide::divider<A, libdivide::BRANCHFREE> divider(static_cast<A>(b));
+
+            /// For 64-bit types, auto-vectorization degrades to scalar
+            /// extract/insert.  Use libdivide's explicit SIMD divide and
+            /// compose the remainder: n - (n / d) * d.
+            size_t i = 0;
+#if defined(LIBDIVIDE_AVX2)
+            if constexpr (sizeof(A) == 8)
             {
-                /// NOTE: perhaps, the division semantics with the remainder of negative numbers is not preserved.
-                dst[i] = static_cast<ResultType>(src[i] - (src[i] / divider) * b);
+                const auto bv = _mm256_set1_epi64x(static_cast<int64_t>(b));
+                const size_t stop = size - size % (32 / sizeof(A));
+                for (; i < stop; i += 32 / sizeof(A))
+                {
+                    auto n = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(src + i));
+                    auto q = n / divider;
+                    /// Compute remainder: n - q * b.
+                    /// There is no _mm256_mullo_epi64 before AVX-512, so
+                    /// use the standard 32×32→64 trick for full 64-bit multiply.
+                    auto b_lo = _mm256_mul_epu32(q, bv);
+                    auto q_hi = _mm256_srli_epi64(q, 32);
+                    auto b_hi = _mm256_mul_epu32(q_hi, bv);
+                    auto qb = _mm256_add_epi64(b_lo, _mm256_slli_epi64(b_hi, 32));
+                    _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst + i), _mm256_sub_epi64(n, qb));
+                }
             }
+#endif
+            /// NOTE: the division semantics with the remainder of negative numbers may not be preserved.
+            for (; i < size; ++i)
+                dst[i] = static_cast<ResultType>(src[i] - (src[i] / divider) * b);
         }
         else
         {

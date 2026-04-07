@@ -7188,7 +7188,7 @@ Allow usage of materialized views with parallel replicas
 Allow pushing down filters to part of query which parallel replicas choose to execute
 )", BETA) \
     DECLARE(Bool, parallel_replicas_allow_view_over_mergetree, true, R"(
-Allow to choose outer query of simple view for execution with parallel replicas, instead of the view inner query. It can help parallelize query better among nodes)", BETA) \
+Allow to choose the outer query of a simple view for execution with parallel replicas, instead of the view's inner query, which increases query parallelization across nodes)", BETA) \
     DECLARE(Bool, distributed_index_analysis, false, R"(
 Index analysis will be distributed across replicas.
 Beneficial for shared storage and huge amount of data in cluster.

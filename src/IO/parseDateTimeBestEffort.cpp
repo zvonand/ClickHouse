@@ -214,7 +214,7 @@ ReturnType parseDateTimeBestEffortImpl(
             }
             if (num_digits == 10 && !year && !has_time)
             {
-                if (strict)
+                if constexpr (strict)
                     return on_error(ErrorCodes::CANNOT_PARSE_DATETIME, "Strict best effort parsing doesn't allow timestamps");
 
                 /// This is unix timestamp.
@@ -222,6 +222,7 @@ ReturnType parseDateTimeBestEffortImpl(
                 if (fractional && !in.eof() && *in.position() == '.')
                 {
                     ++in.position();
+                    // Prevent numeric overflow
                     using FractionalType = typename std::decay_t<decltype(fractional->value)>;
                     fractional->digits = static_cast<UInt8>(std::min(
                         static_cast<size_t>(std::numeric_limits<FractionalType>::digits10),
@@ -232,7 +233,7 @@ ReturnType parseDateTimeBestEffortImpl(
             }
             if (num_digits == 9 && !year && !has_time)
             {
-                if (strict)
+                if constexpr (strict)
                     return on_error(ErrorCodes::CANNOT_PARSE_DATETIME, "Strict best effort parsing doesn't allow timestamps");
 
                 /// This is unix timestamp.
@@ -240,6 +241,7 @@ ReturnType parseDateTimeBestEffortImpl(
                 if (fractional && !in.eof() && *in.position() == '.')
                 {
                     ++in.position();
+                    // Prevent numeric overflow
                     using FractionalType = typename std::decay_t<decltype(fractional->value)>;
                     fractional->digits = static_cast<UInt8>(std::min(
                         static_cast<size_t>(std::numeric_limits<FractionalType>::digits10),
@@ -250,7 +252,7 @@ ReturnType parseDateTimeBestEffortImpl(
             }
             if (num_digits == 14 && !year && !has_time)
             {
-                if (strict)
+                if constexpr (strict)
                     return on_error(
                         ErrorCodes::CANNOT_PARSE_DATETIME, "Strict best effort parsing doesn't allow date times without separators");
 
@@ -265,7 +267,7 @@ ReturnType parseDateTimeBestEffortImpl(
             }
             else if (num_digits == 8 && !year)
             {
-                if (strict)
+                if constexpr (strict)
                     return on_error(
                         ErrorCodes::CANNOT_PARSE_DATETIME, "Strict best effort parsing doesn't allow date times without separators");
 
@@ -276,7 +278,7 @@ ReturnType parseDateTimeBestEffortImpl(
             }
             else if (num_digits == 6)
             {
-                if (strict)
+                if constexpr (strict)
                     return on_error(
                         ErrorCodes::CANNOT_PARSE_DATETIME, "Strict best effort parsing doesn't allow date times without separators");
 
@@ -522,8 +524,9 @@ ReturnType parseDateTimeBestEffortImpl(
                 {
                     if (day_of_month)
                     {
-                        if (strict && hour)
-                            return on_error(ErrorCodes::CANNOT_PARSE_DATETIME, "Cannot read DateTime: hour component is duplicated");
+                        if constexpr (strict)
+                            if (hour)
+                                return on_error(ErrorCodes::CANNOT_PARSE_DATETIME, "Cannot read DateTime: hour component is duplicated");
 
                         hour = hour_or_day_of_month_or_month;
                     }
@@ -564,7 +567,7 @@ ReturnType parseDateTimeBestEffortImpl(
                 if (fractional)
                 {
                     using FractionalType = typename std::decay_t<decltype(fractional->value)>;
-                    // Reading more decimal digits than fits into FractionalType would case an
+                    // Reading more decimal digits than fits into FractionalType would cause an
                     // overflow, so it is better to skip all digits from the right side that do not
                     // fit into result type. To provide less precise value rather than bogus one.
                     num_digits = std::min(static_cast<size_t>(std::numeric_limits<FractionalType>::digits10), num_digits);
@@ -572,7 +575,7 @@ ReturnType parseDateTimeBestEffortImpl(
                     fractional->digits = static_cast<UInt8>(num_digits);
                     readDecimalNumber(fractional->value, num_digits, digits);
                 }
-                else if (strict)
+                else if constexpr (strict)
                 {
                     /// Fractional part is not allowed.
                     return on_error(ErrorCodes::CANNOT_PARSE_DATETIME, "Cannot read DateTime: unexpected fractional part");

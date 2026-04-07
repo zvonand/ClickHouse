@@ -312,7 +312,8 @@ if __name__ == "__main__":
                     f"  →  current {c_branch_hit:,}/{c_branch_total:,}"
                     f"  (Δ {c_branch_hit - b_branch_hit:+,} / {c_branch_total - b_branch_total:+,})\n"
                 )
-        print_res.files.append(_print_log)
+        if _diff_inputs_exist:
+            print_res.files.append(_print_log)
         results.append(print_res)
 
         if not is_local_run:

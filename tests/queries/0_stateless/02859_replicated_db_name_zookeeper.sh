@@ -16,7 +16,7 @@ FROM
 (
     WITH '/clickhouse/databases/' AS prefix
     SELECT
-        toUUID(substr(path, length(prefix) + 1)) AS uuid,
+        toUUIDOrNull(substr(path, length(prefix) + 1)) AS uuid,
         value AS db_name
     FROM system.zookeeper
     WHERE (path IN (

@@ -73,10 +73,12 @@ def recv_exact(sock, n):
 # (interserver secret) to keep the packet format simple.
 CLIENT_REVISION = 54440
 
+CLIENT_NAME = "ClickHouse test"
+
 def send_hello(sock):
     pkt = bytearray()
     pkt += write_varuint(0)  # Client Hello
-    pkt += write_string("ClickHouse test")
+    pkt += write_string(CLIENT_NAME)
     pkt += write_varuint(25)  # major
     pkt += write_varuint(1)   # minor
     pkt += write_varuint(CLIENT_REVISION)
@@ -112,8 +114,8 @@ def build_client_info():
     buf += write_string("[::ffff:127.0.0.1]:0")  # initial_address
     buf += struct.pack("B", 1)  # TCP interface
     buf += write_string("")     # os_user
-    buf += write_string("test") # client_hostname
-    buf += write_string("test") # client_name
+    buf += write_string("test")        # client_hostname
+    buf += write_string(CLIENT_NAME)  # client_name (must match Hello)
     buf += write_varuint(25)    # major
     buf += write_varuint(1)     # minor
     buf += write_varuint(CLIENT_REVISION)

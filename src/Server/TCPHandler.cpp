@@ -978,9 +978,9 @@ void TCPHandler::runImpl()
                     std::lock_guard lock(*callback_mutex);
                     sendException(*exception, send_exception_with_stack_trace);
                 }
-                catch (...)
+                catch (...) // NOLINT(bugprone-empty-catch)
                 {
-                    /// Failed to send the exception, but we're closing anyway.
+                    /// Ok: failed to send the exception, but we're closing anyway.
                 }
                 query_state->cancelOut(out);
                 return;

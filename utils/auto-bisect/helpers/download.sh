@@ -28,6 +28,9 @@ else
   BASE_URL="https://clickhouse-builds.s3.amazonaws.com"
 fi
 
+# Regional S3 endpoint (CI uploads use this, always tried as fallback)
+BASE_URL_REGIONAL="https://clickhouse-builds.s3.us-east-1.amazonaws.com"
+
 # Build Basic Auth header from CH_CI_USER + CH_CI_PASSWORD (validated in bisect.sh)
 BASIC_AUTH_HEADER=""
 if [[ "${PRIVATE:-false}" == "true" ]]; then
@@ -93,6 +96,12 @@ done
 
 # 3. Try "Latest" and Tag-based structures
 try_download "${BASE_URL}/REFs/heads/master/${COMMIT_SHA}/build_amd_release/clickhouse"
+
+# 4. Try regional S3 endpoint (CI uploads go here)
+for BT in "${BUILD_TYPES[@]}"; do
+    try_download "${BASE_URL_REGIONAL}/REFs/master/${COMMIT_SHA}/${BT}/clickhouse"
+    try_download "${BASE_URL_REGIONAL}/PRs/0/${COMMIT_SHA}/${BT}/clickhouse"
+done
 
 echo "Can't find pre-built binary for commit ${COMMIT_SHA} in CI after exhaustive search."
 

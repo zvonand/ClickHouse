@@ -1049,7 +1049,13 @@ bool typeCanHaveNanOrIncomparableFields(const DataTypePtr & type)
     bool found = false;
     auto check = [&](const IDataType & t)
     {
-        found |= isFloat(t) || isVariant(t) || isDynamic(t) || isObject(t) || isIPv4(t) || isIPv6(t);
+        /// Field-level comparison (accurateLess etc.) can disagree with IColumn::compareAt for:
+        /// - Float: NaN handling (nan_direction_hint in IColumn vs special NaN logic in Field)
+        /// - Variant/Dynamic/Object: type-specific comparison in IColumn not replicated in Field
+        /// - IPv4/IPv6: different comparison semantics
+        /// - Decimal/DateTime64: accurateLess/accurateEquals ignore scale (see TODO in FieldAccurateComparison.cpp)
+        found |= isFloat(t) || isVariant(t) || isDynamic(t) || isObject(t) || isIPv4(t) || isIPv6(t)
+            || isDecimal(t) || isDateTime64(t);
     };
     check(*type);
     type->forEachChild(check);

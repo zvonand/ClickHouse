@@ -70,7 +70,7 @@ A release branch can be in a **rolling-out** state (its release PR carries the `
 
 The backport automation runs hourly as the `CherryPick` GitHub Actions workflow (`.github/workflows/cherry_pick.yml`), implemented in `tests/ci/cherry_pick.py`. It operates through the GitHub API and local git operations on a self-hosted `style-checker-aarch64` runner.
 
-The process is two-staged for each (original PR, release branch) pair:
+The process is two-stage for each (original PR, release branch) pair:
 
 1. A **cherry-pick PR** is created to isolate conflict resolution from the actual merge target. If there are no conflicts, it is merged automatically.
 2. A **backport PR** is created against the real release branch, with the cherry-picked changes squashed into a single commit.

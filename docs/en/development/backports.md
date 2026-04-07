@@ -184,7 +184,7 @@ Backport PRs target release branches, so they use a dedicated CI workflow (`Back
 
 ### Authentication {#authentication}
 
-The workflow authenticates with an SSH key (`ROBOT_CLICKHOUSE_SSH_KEY`) for git push operations and a GitHub token (`ROBOT_CLICKHOUSE_COMMIT_TOKEN`) for API calls. The `get_best_robot_token` helper selects the token with the most remaining API quota. Robot accounts (`robot-clickhouse`, `clickhouse-gh`) are excluded when assigning a responsible person.
+The workflow uses an SSH key (`ROBOT_CLICKHOUSE_SSH_KEY`) for git push operations. GitHub API calls are authenticated via `get_best_robot_token`, which selects the token with the most remaining quota from a pool stored in SSM (`/github-tokens`). `ROBOT_CLICKHOUSE_COMMIT_TOKEN` is used by the checkout step in the Actions workflow, not for API calls. Robot accounts (`robot-clickhouse`, `clickhouse-gh`) are excluded when assigning a responsible person.
 
 ### GitHub API Cache {#github-api-cache}
 

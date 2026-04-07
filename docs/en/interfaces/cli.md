@@ -13,7 +13,7 @@ With `clickhousectl` you can:
 - Install and manage local ClickHouse versions
 - Launch and manage local ClickHouse servers
 - Execute queries against ClickHouse servers
-- Setup ClickHouse Cloud and create cloud-managed ClickHouse clusters
+- Set up ClickHouse Cloud and create cloud-managed ClickHouse clusters
 - Manage ClickHouse Cloud resources
 - Install the official ClickHouse agent skills into supported coding agents
 - Push your local ClickHouse development to cloud

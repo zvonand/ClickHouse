@@ -893,7 +893,7 @@ namespace DB
             case TypeIndex::Nullable:
             {
                 const ColumnNullable * column_nullable = assert_cast<const ColumnNullable *>(column.get());
-                ColumnPtr nested_column = column_nullable->getNestedColumnPtr();
+                ColumnPtr nested_column = column_nullable->getNestedColumnWithDefaultOnNull();
                 DataTypePtr nested_type = assert_cast<const DataTypeNullable *>(column_type.get())->getNestedType();
                 const ColumnPtr & null_column = column_nullable->getNullMapColumnPtr();
                 const PaddedPODArray<UInt8> & bytemap = assert_cast<const ColumnVector<UInt8> &>(*null_column).getData();

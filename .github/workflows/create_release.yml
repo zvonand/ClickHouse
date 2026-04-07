@@ -233,6 +233,7 @@ jobs:
           configs=(
             "ubuntu:../../docker/server/Dockerfile.ubuntu"
             "alpine:../../docker/server/Dockerfile.alpine"
+            "distroless:../../docker/server/Dockerfile.distroless"
           )
 
           for config in "${configs[@]}"; do
@@ -297,6 +298,7 @@ jobs:
           configs=(
             "ubuntu:../../docker/keeper/Dockerfile.ubuntu"
             "alpine:../../docker/keeper/Dockerfile.alpine"
+            "distroless:../../docker/keeper/Dockerfile.distroless"
           )
 
           for config in "${configs[@]}"; do

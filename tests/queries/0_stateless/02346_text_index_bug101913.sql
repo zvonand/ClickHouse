@@ -26,6 +26,11 @@ SELECT str FROM tab_merged WHERE
   AND str LIKE '%(par)%'
 SETTINGS query_plan_direct_read_from_text_index = 1;
 
+SELECT str FROM tab_merged PREWHERE
+  hasAllTokens(str, ['par'])
+  AND str LIKE '%(par)%'
+SETTINGS query_plan_direct_read_from_text_index = 1;
+
 DROP TABLE tab_merged;
 DROP TABLE tab_dist;
 DROP TABLE tab;

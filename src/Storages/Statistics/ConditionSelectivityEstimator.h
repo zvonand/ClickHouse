@@ -93,7 +93,7 @@ private:
     UInt64 estimateSelectivity(const RPNBuilderTreeNode & node) const;
 
     /// Magic constants for estimating the selectivity of a condition no statistics exists.
-    static constexpr Float64 default_cond_range_factor = 0.5;
+    static constexpr Float64 default_cond_range_factor = 0.33;
     static constexpr Float64 default_cond_equal_factor = 0.01;
     static constexpr Float64 default_unknown_cond_factor = 0.33;
     static constexpr Float64 default_like_factor = 0.1;

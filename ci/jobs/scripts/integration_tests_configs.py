@@ -33,7 +33,7 @@ TEST_CONFIGS = [
     TC("test_random_inserts/", False, "standard replicated inserts test; cluster is fully isolated"),
     TC("test_server_overload/", True, "uses taskset to pin ClickHouse to specific CPU cores; sensitive to concurrent CPU load"),
     TC("test_storage_kafka/", False, "each cluster has its own Kafka container and Docker network"),
-    TC("test_storage_rabbitmq/", True, "shared RabbitMQ container; tests reset state between runs"),
+    TC("test_storage_rabbitmq/", False, "each cluster has its own RabbitMQ container; tests use unique exchange/db names"),
     TC("test_storage_kerberized_kafka/", False, "each cluster has its own Kafka container and Docker network"),
     TC(
         "test_backup_restore_on_cluster/test_concurrency.py",

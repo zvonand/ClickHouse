@@ -222,6 +222,12 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
                 out.selectivity = default_like_factor;
             else if (func_name == "notLike" || func_name == "notILike")
                 out.selectivity = 1.0 - default_like_factor;
+            else if (func_name == "__applyFilter")
+            {
+                /// Runtime join filter. Selectivity 1.0 keeps it last in prewhere ordering
+                /// (after cheaper column predicates) and neutral for join reorder estimates.
+                out.selectivity = 1.0;
+            }
             else
                 return false;
 

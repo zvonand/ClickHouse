@@ -6,7 +6,7 @@
 #include <Storages/TimeSeries/PrometheusQueryToSQL/ConverterContext.h>
 #include <Storages/TimeSeries/PrometheusQueryToSQL/SelectQueryBuilder.h>
 #include <Storages/TimeSeries/PrometheusQueryToSQL/toVectorGrid.h>
-#include <Storages/TimeSeries/PrometheusQueryToSQL/transformGroupASTWithByWithout.h>
+#include <Storages/TimeSeries/PrometheusQueryToSQL/transformGroupASTForAggregationOperator.h>
 #include <Storages/TimeSeries/timeSeriesTypesToAST.h>
 #include <unordered_map>
 
@@ -171,7 +171,7 @@ SQLQueryPiece applyOneArgumentAggregationOperator(
         context.subqueries.emplace_back(SQLSubquery{context.subqueries.size(), std::move(argument.select_query), SQLSubqueryType::TABLE});
         builder.from_table = context.subqueries.back().name;
 
-        ASTPtr new_group = transformGroupASTWithByWithout(
+        ASTPtr new_group = transformGroupASTForAggregationOperator(
             operator_node, make_intrusive<ASTIdentifier>(ColumnNames::Group), /*drop_metric_name=*/true, res.metric_name_dropped);
 
         builder.select_list.push_back(std::move(new_group));

@@ -1,4 +1,4 @@
-#include <Storages/TimeSeries/PrometheusQueryToSQL/transformGroupASTWithByWithout.h>
+#include <Storages/TimeSeries/PrometheusQueryToSQL/transformGroupASTForAggregationOperator.h>
 
 #include <Parsers/ASTFunction.h>
 #include <Parsers/ASTLiteral.h>
@@ -8,7 +8,7 @@
 namespace DB::PrometheusQueryToSQL
 {
 
-ASTPtr transformGroupASTWithByWithout(
+ASTPtr transformGroupASTForAggregationOperator(
     const PQT::AggregationOperator * operator_node,
     ASTPtr && group,
     bool drop_metric_name,

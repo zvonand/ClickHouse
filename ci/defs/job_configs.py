@@ -857,15 +857,6 @@ class JobConfigs:
         ],
         *[
             Job.ParamSet(
-                parameter=f"amd_binary, {batch}/{total_batches}",
-                runs_on=RunnerLabels.AMD_MEDIUM,
-                requires=[ArtifactNames.CH_AMD_BINARY],
-            )
-            for total_batches in (5,)
-            for batch in range(1, total_batches + 1)
-        ],
-        *[
-            Job.ParamSet(
                 parameter=f"arm_binary, distributed plan, {batch}/{total_batches}",
                 runs_on=RunnerLabels.ARM_MEDIUM,
                 requires=[ArtifactNames.CH_ARM_BINARY],
@@ -954,6 +945,27 @@ class JobConfigs:
                 for total_batches in (LLVM_IT_NUM_BATCHES,)
                 for batch in range(1, total_batches + 1)
             ],
+        )
+    )
+
+    # Jobs that run only the tests normally disabled under LLVM coverage.
+    # They use a regular binary (no coverage instrumentation) since these
+    # tests are too slow or problematic under coverage.
+    functional_test_llvm_coverage_disabled_only_job = common_ft_job_config.parametrize(
+        Job.ParamSet(
+            parameter="amd_binary_disabled_only",
+            runs_on=RunnerLabels.AMD_MEDIUM,
+            requires=[ArtifactNames.CH_AMD_BINARY],
+        ),
+    )
+
+    integration_test_llvm_coverage_disabled_only_job = (
+        common_integration_test_job_config.parametrize(
+            Job.ParamSet(
+                parameter="amd_binary_disabled_only",
+                runs_on=RunnerLabels.AMD_MEDIUM,
+                requires=[ArtifactNames.CH_AMD_BINARY],
+            ),
         )
     )
 

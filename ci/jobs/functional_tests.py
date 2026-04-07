@@ -145,6 +145,7 @@ def main():
     is_encrypted_storage = random.choice([True, False])
     is_parallel_replicas = False
     is_llvm_coverage = False
+    is_llvm_coverage_disabled_only = False
     is_per_test_coverage = False
     runner_options = ""
     # optimal value for most of the jobs
@@ -185,6 +186,8 @@ def main():
             is_bugfix_validation = True
         elif to.startswith("amd_") and "coverage" in to:
             is_llvm_coverage = True
+        if "disabled_only" in to:
+            is_llvm_coverage_disabled_only = True
         if "per_test_coverage" in to:
             is_per_test_coverage = True
         if "s3 storage" in to:
@@ -235,7 +238,10 @@ def main():
         # The 45-min global_time_limit is the primary stopping condition for healthy PRs.
         runner_options += " --max-failures 5"
 
-    if is_llvm_coverage:
+    if is_llvm_coverage_disabled_only:
+        # Run only tests that are normally disabled under LLVM coverage
+        runner_options += " --llvm-coverage-disabled-only"
+    elif is_llvm_coverage:
         # Randomization makes coverage non-deterministic, long tests are slow to collect coverage
         runner_options += " --llvm-coverage"
         os.environ["LLVM_PROFILE_FILE"] = f"ft-{batch_num}-%2m.profraw"

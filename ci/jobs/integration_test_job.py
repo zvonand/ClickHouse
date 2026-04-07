@@ -400,7 +400,18 @@ def get_parallel_sequential_tests_to_run(
         for p in Path("./tests/integration/").glob("test_*/test*.py")
     ]
 
-    if "amd_llvm_coverage" in (job_options or ""):
+    if "disabled_only" in (job_options or ""):
+        test_files = [
+            f
+            for f in test_files
+            if any(f.startswith(prefix) for prefix in LLVM_COVERAGE_SKIP_PREFIXES)
+            or Path(f"./tests/integration/{f}").read_text().find("is_built_with_llvm_coverage") >= 0
+        ]
+        print(
+            f"LLVM coverage disabled-only: found {len(test_files)} test files "
+            f"(from LLVM_COVERAGE_SKIP_PREFIXES or containing is_built_with_llvm_coverage)"
+        )
+    elif "amd_llvm_coverage" in (job_options or ""):
         before = len(test_files)
         test_files = [
             f
@@ -411,7 +422,8 @@ def get_parallel_sequential_tests_to_run(
             f"LLVM coverage: skipped {before - len(test_files)} test files matching LLVM_COVERAGE_SKIP_PREFIXES"
         )
 
-    assert len(test_files) > 100
+    if "disabled_only" not in (job_options or ""):
+        assert len(test_files) > 100
 
     parallel_test_modules, sequential_test_modules = get_optimal_test_batch(
         test_files, total_batches, batch_num, workers, job_options, info

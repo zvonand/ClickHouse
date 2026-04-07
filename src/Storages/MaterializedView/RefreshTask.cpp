@@ -451,7 +451,7 @@ bool RefreshTask::tryJoinBackgroundTask(std::chrono::steady_clock::time_point de
         });
 }
 
-DependencyRefreshInfo RefreshTask::getDependencyInfo() const
+RefreshTask::DependencyRefreshInfo RefreshTask::getDependencyInfo() const
 {
     std::lock_guard guard(mutex);
     DependencyRefreshInfo info;

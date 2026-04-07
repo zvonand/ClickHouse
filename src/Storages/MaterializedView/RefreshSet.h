@@ -62,9 +62,7 @@ public:
     RefreshTaskPtr tryGetTaskForInnerTable(const StorageID & inner_table_id) const;
 
     /// Calls notify() on all tasks that depend on `id`.
-    /// If `completed_replica` is non-empty, calls notifyDependencyCompleted() instead,
-    /// passing the replica name so dependents can apply pod affinity.
-    void notifyDependents(const StorageID & id, const String & completed_replica = "") const;
+    void notifyDependents(const StorageID & id) const;
 
     void setRefreshesStopped(bool stopped);
     bool refreshesStopped() const;

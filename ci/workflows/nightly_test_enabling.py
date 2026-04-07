@@ -35,9 +35,9 @@ w_schedule = Workflow.Config(
     cron_schedules=["13 2 * * *"],
 )
 w_dispatch = copy.copy(w_schedule)
-w_dispatch.event = Workflow.Event.PULL_REQUEST # Workflow.Event.DISPATCH REMOVEME
+w_dispatch.event = Workflow.Event.DISPATCH
 w_dispatch.branches = []
-w_dispatch.base_branches = [BASE_BRANCH]
+w_dispatch.branches = [BASE_BRANCH]
 
 WORKFLOWS = [
     w_schedule,

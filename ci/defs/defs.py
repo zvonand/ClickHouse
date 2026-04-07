@@ -88,6 +88,7 @@ SECRETS = [
     Secret.Config(
         name="woolenwolf_gh_app.installation_id",
         type=Secret.Type.AWS_SSM_SECRET,
+        region="us-east-1",
     ),
 ]
 

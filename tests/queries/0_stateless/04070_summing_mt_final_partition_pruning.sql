@@ -34,7 +34,7 @@ INSERT INTO tab_agg_part VALUES (1, 'y', 15);
 SELECT '--- AggregatingMergeTree FINAL no filter';
 SELECT id, cnt FROM tab_agg_part FINAL ORDER BY id;
 
-SELECT '--- AggregatingMergeTree FINAL WHERE category != x';
-SELECT id, cnt FROM tab_agg_part FINAL WHERE category != 'x' ORDER BY id;
+SELECT '--- AggregatingMergeTree FINAL WHERE category != y';
+SELECT id, cnt FROM tab_agg_part FINAL WHERE category != 'y' ORDER BY id;
 
 DROP TABLE tab_agg_part;

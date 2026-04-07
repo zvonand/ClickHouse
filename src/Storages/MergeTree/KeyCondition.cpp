@@ -65,6 +65,39 @@ namespace ErrorCodes
 extern const int LOGICAL_ERROR;
 }
 
+/// Returns true if '\' followed by this character means "match this character
+/// literally". For example, '\.' matches a literal dot, '\(' matches a
+/// literal '(', '\-' matches a literal '-'.
+/// Returns false for escape sequences where the matched character is different
+/// from what follows '\': '\n' matches a newline (not 'n'), '\d' matches any
+/// digit (not 'd'), '\x41' matches 'A' (not 'x').
+static bool isLiteralEscape(char c)
+{
+    switch (c)
+    {
+        case '|':
+        case '(':
+        case ')':
+        case '^':
+        case '$':
+        case '.':
+        case '[':
+        case ']':
+        case '?':
+        case '*':
+        case '+':
+        case '\\':
+        case '{':
+        case '}':
+        case '-':
+            return true;
+        default:
+            return false;
+    }
+
+    UNREACHABLE();
+}
+
 /// Extracts a conservative fixed literal prefix from a ^-anchored regular expression.
 ///
 /// In regex, '^' means "must start at the beginning of the string".
@@ -139,30 +172,13 @@ static String extractFixedPrefixFromRegularExpression(const String & regexp)
                 if (pos == end)
                     break;
 
-                switch (*pos)
+                if (isLiteralEscape(*pos))
                 {
-                    case '|':
-                    case '(':
-                    case ')':
-                    case '^':
-                    case '$':
-                    case '.':
-                    case '[':
-                    case ']':
-                    case '?':
-                    case '*':
-                    case '+':
-                    case '\\':
-                    case '{':
-                    case '}':
-                    case '-':
-                        fixed_prefix += *pos;
-                        ++pos;
-                    break;
-                    default:
-                        /// all other escape sequences are not supported
-                            pos = end;
+                    fixed_prefix += *pos;
+                    ++pos;
                 }
+                else
+                    pos = end;
 
                 break;
             }
@@ -282,36 +298,14 @@ static String extractCommonPrefixFromAlternationBranches(const String & expressi
     {
         if (*pos == '\\' && pos + 1 < end)
         {
-            /// Only accept escape sequences where the character after '\'
-            /// is the actual character being matched. For example, '\.' matches
-            /// a literal dot, so we can add '.' to the branch.
-            /// But '\n' matches a newline (not 'n'), '\x41' matches 'A' (not 'x'),
-            /// '\d' matches any digit (not 'd'). Taking the character after '\'
-            /// literally would produce a wrong prefix for those.
             char next = *(pos + 1);
-            switch (next)
+            if (isLiteralEscape(next))
             {
-                case '|':
-                case '(':
-                case ')':
-                case '^':
-                case '$':
-                case '.':
-                case '[':
-                case ']':
-                case '?':
-                case '*':
-                case '+':
-                case '\\':
-                case '{':
-                case '}':
-                case '-':
-                    current_branch += next;
-                    pos += 2;
-                    break;
-                default:
-                    return {};
+                current_branch += next;
+                pos += 2;
             }
+            else
+                return {};
         }
         else if (*pos == '|')
         {

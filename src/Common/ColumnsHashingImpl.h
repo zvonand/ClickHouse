@@ -242,7 +242,6 @@ public:
             }
         }
 
-        
         if constexpr (Derived::has_range_check)
         {
             auto [key_holder, in_range] = static_cast<const Derived &>(*this).getKeyHolderInRange(row, pool);

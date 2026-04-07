@@ -792,6 +792,53 @@ def test_types(started_cluster, use_delta_kernel):
 
 
 @pytest.mark.parametrize("use_delta_kernel", ["1", "0"])
+def test_varchar_char_types(started_cluster, use_delta_kernel):
+    """
+    VARCHAR(n) and CHAR(n) are valid Delta Lake column types emitted by Spark/Databricks
+    when tables originate from relational databases. ClickHouse must map them to String.
+    """
+    instance = get_node(started_cluster, use_delta_kernel)
+    TABLE_NAME = randomize_table_name("test_varchar_char_types")
+    spark = started_cluster.spark_session
+    result_file = randomize_table_name(f"{TABLE_NAME}_result")
+
+    # Use the DeltaTable builder with DDL-style type names so that the Delta Lake
+    # schema metadata records varchar/char column types. Using VarcharType/CharType
+    # directly in a StructType would be rejected by Spark's Catalyst planner.
+    delta_table = (
+        DeltaTable.create(spark)
+        .tableName(TABLE_NAME)
+        .location(f"/{result_file}")
+        .addColumn("id", "INT", nullable=False)
+        .addColumn("varchar_col", "VARCHAR(256)", nullable=True)
+        .addColumn("char_col", "CHAR(10)", nullable=True)
+        .execute()
+    )
+    spark.sql(
+        f"INSERT INTO {TABLE_NAME} VALUES (1, 'hello varchar', 'hello char')"
+    )
+
+    minio_client = started_cluster.minio_client
+    bucket = started_cluster.minio_bucket
+    upload_directory(minio_client, bucket, f"/{result_file}", "")
+
+    table_function = f"deltaLake('http://{started_cluster.minio_ip}:{started_cluster.minio_port}/{bucket}/{result_file}/', 'minio', '{minio_secret_key}')"
+
+    # Both varchar and char columns must be readable and resolve to String
+    assert instance.query(f"DESCRIBE {table_function} FORMAT TSV") == TSV(
+        [
+            ["id", "Int32"],
+            ["varchar_col", "Nullable(String)"],
+            ["char_col", "Nullable(String)"],
+        ]
+    )
+    assert (
+        instance.query(f"SELECT id, varchar_col, char_col FROM {table_function}").strip()
+        == "1\thello varchar\thello char"
+    )
+
+
+@pytest.mark.parametrize("use_delta_kernel", ["1", "0"])
 def test_restart_broken(started_cluster, use_delta_kernel):
     instance = get_node(started_cluster, use_delta_kernel)
     spark = started_cluster.spark_session

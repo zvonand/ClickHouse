@@ -3,6 +3,7 @@
 #include <cctype>
 #include <memory>
 #include <string_view>
+#include <unordered_set>
 #include <Core/Block.h>
 #include <Formats/FormatSettings.h>
 #include <base/StringViewHash.h>

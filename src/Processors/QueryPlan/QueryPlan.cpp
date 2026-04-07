@@ -614,6 +614,8 @@ void QueryPlan::explainPlan(
             std::string base_prefix;
             if (options.pretty && !child_plans.empty())
             {
+                if (!parent_tree_prefix.empty())
+                    base_prefix += is_last_child_plan ? "   " : "│  ";
                 for (size_t i = 0; i < stack.size() - 1; ++i)
                     base_prefix += stack[i + 1].is_last_child ? "   " : "│  ";
                 base_prefix = parent_tree_prefix + base_prefix;

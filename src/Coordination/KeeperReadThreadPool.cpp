@@ -26,6 +26,7 @@ void KeeperReadThreadPool::shutdown()
 {
     {
         std::lock_guard lock(mutex);
+        chassert(busy_threads.load() == 0); // no concurrent execute; otherwise it may get stuck
         target_num_threads = 0;
     }
     wake_cv.notify_all();

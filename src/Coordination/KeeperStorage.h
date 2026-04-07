@@ -528,7 +528,7 @@ public:
 
         std::shared_ptr<Node> getNode(std::string_view path, bool should_lock_storage = true) const;
 
-        Coordination::ACLs getACLs(std::string_view path) const;
+        Coordination::ACLs getACLs(std::string_view path, bool should_lock_storage = true) const;
 
         void applyDeltas(const std::list<Delta> & new_deltas, uint64_t * digest);
         void applyDelta(const Delta & delta, uint64_t * digest);
@@ -610,7 +610,11 @@ public:
     // We don't care about the exact failure because we should've caught it during preprocessing
     bool removeNode(const std::string & path, int32_t version, bool update_digest);
 
-    bool checkACL(std::string_view path, int32_t permissions, int64_t session_id, bool is_local);
+    /// 3 modes:
+    ///  * !is_local - we're in the append thread, look at uncommitted state.
+    ///  * is_local && !is_reconfig - we're executing read requests, the caller holds storage_mutex, look at committed state.
+    ///  * is_local && is_reconfig - the callee locks storage_mutex and looks at committed state.
+    bool checkACL(std::string_view path, int32_t permissions, int64_t session_id, bool is_local, bool is_reconfig = false);
 
     KeeperStorage(int64_t tick_time_ms, const String & superdigest_, const KeeperContextPtr & keeper_context_, bool initialize_system_nodes = true);
     ~KeeperStorage();
@@ -678,6 +682,7 @@ public:
         int64_t session_id);
 
     void recalculateStats();
+
 private:
     void removeDigest(const Node & node, std::string_view path);
     void addDigest(const Node & node, std::string_view path);

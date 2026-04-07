@@ -1180,12 +1180,12 @@ std::shared_ptr<typename Container::Node> KeeperStorage<Container>::UncommittedS
 }
 
 template<typename Container>
-Coordination::ACLs KeeperStorage<Container>::UncommittedState::getACLs(std::string_view path) const
+Coordination::ACLs KeeperStorage<Container>::UncommittedState::getACLs(std::string_view path, bool should_lock_storage) const
 {
     auto node_it = nodes.find(path);
     if (node_it == nodes.end())
     {
-        std::shared_ptr<KeeperStorage::Node> node = tryGetNodeFromStorage(path);
+        std::shared_ptr<KeeperStorage::Node> node = tryGetNodeFromStorage(path, should_lock_storage);
 
         if (!node)
             return {};
@@ -1574,11 +1574,14 @@ namespace
 {
 
 template<typename Storage>
-Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is_local)
+Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is_local, bool should_lock_storage)
 {
     if (is_local)
     {
-        std::shared_lock lock(storage.storage_mutex);
+        std::shared_lock lock(storage.storage_mutex, std::defer_lock);
+        if (should_lock_storage)
+            lock.lock();
+
         auto node_it = storage.container.find(path);
         if (node_it == storage.container.end())
             return {};
@@ -1586,7 +1589,7 @@ Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is
         return storage.acl_map.convertNumber(node_it->value.acl_id);
     }
 
-    return storage.uncommitted_state.getACLs(path);
+    return storage.uncommitted_state.getACLs(path, should_lock_storage);
 }
 
 void handleSystemNodeModification(const KeeperContext & keeper_context, std::string_view error_msg)
@@ -1604,9 +1607,9 @@ void handleSystemNodeModification(const KeeperContext & keeper_context, std::str
 }
 
 template<typename Container>
-bool KeeperStorage<Container>::checkACL(std::string_view path, int32_t permission, int64_t session_id, bool is_local)
+bool KeeperStorage<Container>::checkACL(std::string_view path, int32_t permission, int64_t session_id, bool is_local, bool is_reconfig)
 {
-    const auto node_acls = getNodeACLs(*this, path, is_local);
+    const auto node_acls = getNodeACLs(*this, path, is_local, /*should_lock_storage=*/ !is_local || is_reconfig);
     if (node_acls.empty())
         return true;
 
@@ -1637,6 +1640,8 @@ bool KeeperStorage<Container>::checkACL(std::string_view path, int32_t permissio
 /// parallel. So it must be thread-safe and shouldn't depend on the order of requests.
 /// In particular, it shouldn't read or write watches.
 /// Requests that need to access watches are excluded from parallel execution in processLocalRequests.
+/// processLocal is not allowed to lock storage_mutex as the caller is already holding it
+/// (trying to lock it recursively may deadlock if another thread is trying to lock it exclusively).
 template <std::derived_from<Coordination::ZooKeeperRequest> T, typename Storage>
 Coordination::ZooKeeperResponsePtr
 processLocal(const T & zk_request, Storage & /*storage*/, KeeperStorageBase::DeltaRange /*deltas*/, int64_t /*session_id*/)

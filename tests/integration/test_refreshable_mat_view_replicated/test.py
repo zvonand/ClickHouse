@@ -509,8 +509,9 @@ def test_prefer_dependency_replica(module_setup_tables):
 
     node.query(
         "CREATE TABLE parent_src ON CLUSTER default (x UInt64) "
-        "ENGINE = ReplicatedMergeTree ORDER BY x AS SELECT 1"
+        "ENGINE = ReplicatedMergeTree ORDER BY x"
     )
+    node.query("INSERT INTO parent_src VALUES (1)")
     node.query(
         "CREATE TABLE parent_tgt ON CLUSTER default (x UInt64) "
         "ENGINE = ReplicatedMergeTree ORDER BY x"

@@ -1,4 +1,4 @@
-personal_ws-1.1 en 3625
+personal_ws-1.1 en 3617
 AArch
 ABIs
 ACLs
@@ -3611,16 +3611,8 @@ backport
 Backport
 backporting
 backports
-Codeberg
 Distributable
-hardcoded
-kiegroup
-Lodash
-OpenJDK
 PR's
 PyGithub
 PyPI
 rollout
-Skara
-sorenlouv
-tibdex

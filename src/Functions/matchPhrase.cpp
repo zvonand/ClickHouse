@@ -50,11 +50,33 @@ std::vector<String> initializePhraseTokens(const ColumnsWithTypeAndName & argume
     return tokens;
 }
 
-/// Matcher that checks if all phrase tokens appear consecutively in the input's token stream.
+/// KMP style failure array.
+/// For example, phrase "a a b" in input "a a a b" correctly matches at positions 1-3.
+std::vector<size_t> buildFailureFunction(const std::vector<String> & phrase_tokens)
+{
+    size_t n = phrase_tokens.size();
+    std::vector<size_t> failure(n, 0);
+
+    size_t k = 0;
+    for (size_t i = 1; i < n; ++i)
+    {
+        while (k > 0 && phrase_tokens[k] != phrase_tokens[i])
+            k = failure[k - 1];
+
+        if (phrase_tokens[k] == phrase_tokens[i])
+            ++k;
+
+        failure[i] = k;
+    }
+
+    return failure;
+}
+
 struct MatchPhraseMatcher
 {
     explicit MatchPhraseMatcher(const std::vector<String> & phrase_tokens_)
         : phrase_tokens(phrase_tokens_)
+        , failure(buildFailureFunction(phrase_tokens_))
         , match_position(0)
     {
     }
@@ -65,31 +87,18 @@ struct MatchPhraseMatcher
         return [&](const char * token_start, size_t token_len)
         {
             std::string_view current_token(token_start, token_len);
-            const auto & expected = phrase_tokens[match_position];
 
-            if (current_token == expected)
+            /// Follow failure links until we find a match or exhaust the chain.
+            while (match_position > 0 && current_token != phrase_tokens[match_position])
+                match_position = failure[match_position - 1];
+
+            if (current_token == phrase_tokens[match_position])
             {
                 ++match_position;
                 if (match_position == phrase_tokens.size())
                 {
                     onMatchCallback();
                     return true;
-                }
-            }
-            else
-            {
-                if (match_position > 0)
-                {
-                    match_position = 0;
-                    if (current_token == phrase_tokens[0])
-                    {
-                        match_position = 1;
-                        if (phrase_tokens.size() == 1)
-                        {
-                            onMatchCallback();
-                            return true;
-                        }
-                    }
                 }
             }
 
@@ -101,6 +110,7 @@ struct MatchPhraseMatcher
 
 private:
     const std::vector<String> & phrase_tokens;
+    std::vector<size_t> failure;
     size_t match_position;
 };
 

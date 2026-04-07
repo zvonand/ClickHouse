@@ -103,10 +103,11 @@ static bool isLiteralEscape(char c)
 /// In regex, '^' means "must start at the beginning of the string".
 /// This function walks the pattern after '^' and collects characters that
 /// are guaranteed to appear, in order, at the start of every matching string.
-/// It stops as soon as it hits any metacharacter or special construct when it cannot
-/// guarantee a fixed character. The parser is conversative and may miss some cases where we can
-/// derive guaranteed fixed prefixed but is complicated to do so. The result is a prefix that is
-/// common to all possible matching strings.
+/// It stops as soon as it hits any metacharacter or special construct where it
+/// cannot guarantee a fixed character. The parser is conservative and may miss
+/// some cases where a guaranteed fixed prefix could be derived but would be
+/// complicated to do so. The result is a prefix that is common to all possible
+/// matching strings.
 ///
 /// "^abc"
 ///   Every matching string starts with exactly "abc".

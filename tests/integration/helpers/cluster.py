@@ -2135,8 +2135,11 @@ class ClickHouseCluster:
 
         # Code coverage files will be placed in database directory
         # (affect only WITH_COVERAGE=1 build)
+        # Use %p (PID) instead of %4m (merge-mode pool of 4) to avoid
+        # file-lock races between server and docker-exec'd client processes
+        # sharing the same container environment.
         env_variables["LLVM_PROFILE_FILE"] = (
-            "/debug/it-%4m.profraw"
+            "/debug/it-%p.profraw"
         )
 
         clickhouse_start_command = clickhouse_start_cmd

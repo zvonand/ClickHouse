@@ -160,7 +160,7 @@ struct FisherFDistribution
         if (d1 <= 0 || d2 <= 0)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (degrees of freedom) of function {} should be greater than zero", getName());
         if (limits.max_parameter > 0 && (d1 > limits.max_parameter || d2 > limits.max_parameter))
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (degrees of freedom) of function {} is too large", getName());
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Argument (degrees of freedom) of function {} is too large: d1={}, d2={}", getName(), d1, d2);
 
         auto distribution = std::fisher_f_distribution<>(d1, d2);
         for (auto & elem : container)

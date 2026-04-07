@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+#include <DataTypes/DataTypeString.h>
+
 #if USE_DELTA_KERNEL_RS
 
 #include <base/scope_guard.h>
@@ -9,8 +11,6 @@
 #include <Common/tests/gtest_global_context.h>
 #include <Common/tests/gtest_global_register.h>
 #include <Common/logger_useful.h>
-
-#include <DataTypes/DataTypeString.h>
 
 #include <IO/ReadHelpers.h>
 #include <IO/WriteHelpers.h>
@@ -79,7 +79,6 @@ TEST_F(DeltaKernelTest, ExpressionVisitor)
 #include <Storages/ObjectStorage/DataLakes/DeltaLakeMetadata.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeDateTime64.h>
-#include <DataTypes/DataTypeString.h>
 #include <Core/Field.h>
 
 /// Regression test for segfault

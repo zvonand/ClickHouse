@@ -1,3 +1,4 @@
+#include <memory>
 #include <Columns/ColumnFixedString.h>
 #include <Common/StringUtils.h>
 #include <Columns/ColumnString.h>
@@ -35,19 +36,22 @@ namespace
     {
     public:
         explicit PaddingChars(const String & pad_string_)
-            : pad_string(pad_string_)
         {
+            /// Copy pad string data into PaddedPODArray which provides 15 extra bytes of read padding beyond its size.
+            /// This is a requirement of `memcpySmallAllowReadWriteOverflow15` which is called by `writeSlice` in `appendTo`.
+            pad_string.insert(pad_string_.begin(), pad_string_.end());
+
             if constexpr (is_utf8)
             {
                 size_t offset = 0;
-                utf8_offsets.reserve(pad_string.length() + 1);
+                utf8_offsets.reserve(pad_string.size() + 1);
                 while (true)
                 {
                     utf8_offsets.push_back(offset);
-                    if (offset == pad_string.length())
+                    if (offset == pad_string.size())
                         break;
                     offset += UTF8::seqLength(pad_string[offset]);
-                    offset = std::min(offset, pad_string.length());
+                    offset = std::min(offset, pad_string.size());
                 }
             }
 
@@ -57,7 +61,7 @@ namespace
             /// 16 bytes instead of single bytes.
             while (numCharsInPadString() < 16)
             {
-                pad_string += pad_string;
+                pad_string.insertFromItself(pad_string.begin(), pad_string.end());
                 if constexpr (is_utf8)
                 {
                     size_t old_size = utf8_offsets.size();
@@ -74,7 +78,7 @@ namespace
             if constexpr (is_utf8)
                 return utf8_offsets.size() - 1;
             else
-                return pad_string.length();
+                return pad_string.size();
         }
 
         ALWAYS_INLINE size_t numCharsToNumBytes(size_t count) const
@@ -95,16 +99,17 @@ namespace
             {
                 if (num_chars <= step)
                 {
-                    writeSlice(StringSource::Slice{reinterpret_cast<const UInt8 *>(pad_string.data()), numCharsToNumBytes(num_chars)}, res_sink);
+                    writeSlice(StringSource::Slice{pad_string.data(), numCharsToNumBytes(num_chars)}, res_sink);
                     break;
                 }
-                writeSlice(StringSource::Slice{reinterpret_cast<const UInt8 *>(pad_string.data()), numCharsToNumBytes(step)}, res_sink);
+                writeSlice(StringSource::Slice{pad_string.data(), numCharsToNumBytes(step)}, res_sink);
                 num_chars -= step;
             }
         }
 
     private:
-        String pad_string;
+        /// Padded copy of the pad string (pun intended).
+        PaddedPODArray<UInt8> pad_string;
 
         /// Offsets of code points in `pad_string`:
         /// utf8_offsets[0] is the offset of the first code point in `pad_string`, it's always 0;

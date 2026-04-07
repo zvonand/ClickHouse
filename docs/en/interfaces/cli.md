@@ -30,8 +30,6 @@ curl https://clickhouse.com/cli | sh
 
 The install script downloads the correct version for your OS and installs to `~/.local/bin/clickhousectl`. A `chctl` alias is also created automatically for convenience.
 
-```
-
 ## Requirements {#requirements}
 
 - macOS (aarch64, x86_64) or Linux (aarch64, x86_64)
@@ -69,7 +67,7 @@ clickhousectl local remove 26.3.4.3
 
 ClickHouse binaries are stored in a global repository, so they can be used by multiple projects without duplicating storage. Binaries are stored in `~/.clickhousectl/`:
 
-```
+```bash
 ~/.clickhousectl/
 ├── versions/
 │   └── 26.3.4.3/
@@ -137,7 +135,7 @@ clickhousectl local server remove test
 
 All server data lives inside `.clickhousectl/` in your project directory:
 
-```
+```bash
 .clickhousectl/
 ├── .gitignore              # auto-created, ignores everything
 ├── credentials.json        # cloud API credentials (if configured)

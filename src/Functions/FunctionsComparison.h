@@ -1528,7 +1528,7 @@ public:
                 /// If the result type cannot hold NULL values (e.g. LowCardinality(UInt8) when
                 /// comparing with a Variant column that contains NULL but is not Nullable itself),
                 /// don't constant-fold — let the runtime execution path handle NULL correctly.
-                if (!isNullableOrLowCardinalityNullable(result_type))
+                if (!canContainNull(*result_type))
                     return nullptr;
                 return result_type->createColumnConst(1, Null());
             }

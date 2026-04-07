@@ -6,7 +6,19 @@
 namespace DB
 {
 
-SetReadinessSignalStep::SetReadinessSignalStep(SharedHeader input_header_, FutureSetPtr future_set_)
+SetReadinessSignalStep::SetReadinessSignalStep(
+    SharedHeader input_header_,
+    FutureSetPtr future_set_,
+    LazyFinalSharedStatePtr shared_state_,
+    StorageMetadataPtr metadata_snapshot_,
+    MergeTreeData::MutationsSnapshotPtr mutations_snapshot_,
+    StorageSnapshotPtr storage_snapshot_,
+    MergeTreeSettingsPtr data_settings_,
+    const MergeTreeData & data_,
+    PartitionIdToMaxBlockPtr max_block_numbers_to_read_,
+    RangesInDataPartsPtr ranges_,
+    ContextPtr query_context_,
+    float min_filtered_ratio_)
     : ITransformingStep(
         input_header_,
         input_header_,
@@ -15,6 +27,16 @@ SetReadinessSignalStep::SetReadinessSignalStep(SharedHeader input_header_, Futur
             .transform_traits = {.preserves_number_of_rows = false},
         })
     , future_set(std::move(future_set_))
+    , shared_state(std::move(shared_state_))
+    , metadata_snapshot(std::move(metadata_snapshot_))
+    , mutations_snapshot(std::move(mutations_snapshot_))
+    , storage_snapshot(std::move(storage_snapshot_))
+    , data_settings(std::move(data_settings_))
+    , data(data_)
+    , max_block_numbers_to_read(std::move(max_block_numbers_to_read_))
+    , ranges(std::move(ranges_))
+    , query_context(std::move(query_context_))
+    , min_filtered_ratio(min_filtered_ratio_)
 {
 }
 
@@ -22,7 +44,10 @@ void SetReadinessSignalStep::transformPipeline(QueryPipelineBuilder & pipeline, 
 {
     pipeline.addSimpleTransform([&](const SharedHeader &)
     {
-        return std::make_shared<SetReadinessSignalTransform>(future_set);
+        return std::make_shared<SetReadinessSignalTransform>(
+            future_set, shared_state, metadata_snapshot, mutations_snapshot,
+            storage_snapshot, data_settings, data, max_block_numbers_to_read,
+            ranges, query_context, min_filtered_ratio);
     });
 }
 

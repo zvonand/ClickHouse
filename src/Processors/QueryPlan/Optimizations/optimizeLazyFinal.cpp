@@ -10,6 +10,7 @@
 #include <Processors/QueryPlan/LazilyReadFromMergeTree.h>
 #include <Processors/QueryPlan/SetReadinessSignalStep.h>
 #include <Processors/QueryPlan/LazyReadReplacingFinalStep.h>
+#include <Processors/Sources/LazyFinalSharedState.h>
 #include <Processors/QueryPlan/Optimizations/Optimizations.h>
 #include <Processors/QueryPlan/Optimizations/projectionsCommon.h>
 #include <Processors/QueryPlan/QueryPlan.h>
@@ -237,24 +238,33 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         SizeLimits{},
         nullptr));
 
-    /// Checks if the set was built successfully (not truncated) and signals.
+    /// Shared state between SetReadinessSignalTransform and LazyReadReplacingFinalSource.
+    auto shared_state = std::make_shared<LazyFinalSharedState>();
+
+    /// Builds the ReadFromMergeTree step with IN-set filter, runs index analysis,
+    /// checks if enough marks were filtered, and signals.
     set_plan.addStep(std::make_unique<SetReadinessSignalStep>(
         set_plan.getCurrentHeader(),
-        future_set));
+        future_set,
+        shared_state,
+        metadata_snapshot,
+        mutations_snapshot,
+        storage_snapshot,
+        data.getSettings(),
+        data,
+        max_block_numbers_to_read,
+        std::make_shared<RangesInDataParts>(reading_step->getParts()),
+        context,
+        optimization_settings.min_filtered_ratio_for_lazy_final));
 
     /// True branch (signal = set OK): LazyReadReplacingFinalSource + JoinLazyColumnsStep.
     QueryPlan true_plan;
     {
         true_plan.addStep(std::make_unique<LazyReadReplacingFinalStep>(
             metadata_snapshot,
-            mutations_snapshot,
-            storage_snapshot,
-            data.getSettings(),
             data,
-            max_block_numbers_to_read,
-            std::make_shared<RangesInDataParts>(reading_step->getParts()),
             context,
-            future_set));
+            shared_state));
 
         auto lazy_materializing_rows = std::make_shared<LazyMaterializingRows>(reading_step->getParts());
 

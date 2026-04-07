@@ -5997,6 +5997,9 @@ Maximum number of rows in the set for lazy FINAL optimization. If exceeded, fall
     DECLARE(UInt64, max_bytes_for_lazy_final, 256000000, R"(
 Maximum number of bytes in the set for lazy FINAL optimization. If exceeded, falls back to normal FINAL.
 )", 0) \
+    DECLARE(Float, min_filtered_ratio_for_lazy_final, 0.5, R"(
+Minimum ratio of marks filtered by index analysis for lazy FINAL optimization. If less than this fraction of marks is filtered, falls back to normal FINAL. Value 0 disables this check.
+)", 0) \
     DECLARE(Bool, enable_lazy_columns_replication, true, R"(
 Enables lazy columns replication in JOIN and ARRAY JOIN, it allows to avoid unnecessary copy of the same rows multiple times in memory.
 )", 0) \

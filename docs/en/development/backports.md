@@ -38,8 +38,6 @@ The label `pr-must-backport` is the manual override used by maintainers to mark 
 
 **Conflict escalation.** When automatic backporting cannot resolve merge conflicts, a cherry-pick PR must still be created and assigned to the author, merger, and existing assignees of the original PR so that a human can resolve the conflicts and complete the backport.
 
-**Delay policy.** By default, a merged PR is not backported immediately. The automation waits 7 days after the merge before creating backport branches. This grace period allows a bad commit to be reverted on the master branch before the backport machinery engages, avoiding the extra work of backporting a change that will be reverted anyway. The delay window is configurable and can be set to zero to backport immediately.
-
 ## Backport Tool {#backport-tool}
 
 The backport policy described above is implemented by the automated tool in `tests/ci/cherry_pick.py`. The tool runs as a GitHub Actions workflow on ClickHouse infrastructure and covers all the requirements: discovering active release branches, selecting PRs that qualify for backporting, performing the two-stage cherry-pick and backport procedure, managing conflicts, enforcing the delay policy, and keeping labels in sync.
@@ -49,28 +47,6 @@ The long-term goal is to extract this implementation into a standalone open-sour
 - **Configurable** — all policy parameters (qualifying labels, delay window, stale PR thresholds, rolling-out behaviour, etc.) expressed as a configuration file so the tool can be adapted to match any project's backport requirements without code changes.
 - **Distributable** — packaged as a self-contained Python wheel installable from PyPI, with no dependency on ClickHouse's CI infrastructure.
 - **Programmable** — exposing a clean object model for pull requests, labels, and release branches so that users can script custom workflows on top of the core engine.
-
-### Gaps Compared to Popular Backport Tools {#gaps-compared-to-popular-backport-tools}
-
-Surveying widely-used backport tools (sorenlouv/backport, OpenJDK Skara `git-backport`, kiegroup/git-backporting, tibdex/backport) reveals the following capabilities they provide that the current ClickHouse implementation does not cover and that the standalone tool should address:
-
-- **Project-level configuration file.** All popular tools ship a per-repository config file (`.backportrc.json` or equivalent) that encodes which labels trigger backporting, target branch patterns, PR title and body templates, assignee rules, and so on. The ClickHouse tool has this logic hardcoded and cannot be adopted by other projects without code changes.
-
-- **Configurable label-to-branch mapping.** sorenlouv and kiegroup both use a configurable regex (`branchLabelMapping`, `--target-branch-pattern`) to extract the target release branch from a label name. The ClickHouse tool relies on a fixed naming convention (`v{VER}-must-backport`) and cannot be reconfigured for different label schemes.
-
-- **Configurable PR title and body templates.** Popular tools allow Handlebars or Lodash templates for the backport PR title, body, and branch name, so teams can match their own conventions. The ClickHouse tool produces fixed-format titles (`Backport #N to release/X.Y: …`) with no customisation point.
-
-- **Configurable conflict resolution strategy.** kiegroup exposes `--strategy` and `--strategy-option` for the underlying cherry-pick, allowing auto-resolution with `theirs` as a team policy. The ClickHouse tool always stops at a conflict and waits for a human; there is no option to resolve automatically in favour of the incoming change.
-
-- **Success and failure comments on the original PR.** sorenlouv and kiegroup post a status comment directly on the source PR when a backport succeeds or fails. The ClickHouse tool only pings assignees on stale cherry-pick PRs and posts no feedback on the original PR.
-
-- **Multi-platform support.** kiegroup supports GitHub, GitLab, and Codeberg. The ClickHouse tool is tightly coupled to GitHub's API and branch model.
-
-- **Backport by commit SHA.** sorenlouv and `git-backport` can cherry-pick a specific commit hash rather than a whole merged PR. The ClickHouse tool operates exclusively at the PR level.
-
-- **Forward-porting.** sorenlouv supports porting changes from an older branch to a newer one (e.g. from a release branch back to master). The ClickHouse tool only backports from master to release branches.
-
-- **GitHub Enterprise / self-hosted support.** sorenlouv exposes configurable API base URLs for GitHub Enterprise instances. The ClickHouse tool assumes `github.com`.
 
 ### Testing {#testing}
 

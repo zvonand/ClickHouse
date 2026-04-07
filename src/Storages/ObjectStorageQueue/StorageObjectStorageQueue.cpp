@@ -1736,25 +1736,6 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
 {
     auto component_guard = Coordination::setCurrentComponent("StorageObjectStorageQueue::waitForPathToBeProcessed");
 
-    /// for the following cases, fail fast.
-
-    if (!startup_finished || streaming_tasks.empty())
-        throw Exception(ErrorCodes::BAD_ARGUMENTS,
-            "Cannot wait for path to be processed: background streaming for {} "
-            "has not started yet",
-            getStorageID().getNameForLogs());
-
-    if (getDependencies() == 0)
-        throw Exception(ErrorCodes::BAD_ARGUMENTS,
-            "Cannot wait for path to be processed: table {} has no attached "
-            "materialized views and will not consume any files",
-            getStorageID().getNameForLogs());
-
-    if (getContext()->getS3QueueDisableStreaming())
-        throw Exception(ErrorCodes::BAD_ARGUMENTS,
-            "Cannot wait for path to be processed: streaming is disabled for {}",
-            getStorageID().getNameForLogs());
-
     /// Determine the Keeper paths we need to watch.
     /// For unordered mode each file gets its own node under processed/ and failed/.
     /// For ordered mode the processed pointer is a shared node whose *data* is updated,
@@ -1768,7 +1749,6 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
     LOG_DEBUG(log, "Waiting for path '{}' to be processed by {}", path, getStorageID().getNameForLogs());
 
     auto event = std::make_shared<Poco::Event>();
-    bool need_arm = true;
 
     while (true)
     {
@@ -1777,38 +1757,53 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
                 "Table {} is being dropped or server is shutting down",
                 getStorageID().getNameForLogs());
 
+        if (!startup_finished || streaming_tasks.empty())
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Cannot wait for path to be processed: background streaming for {} "
+                "has not started yet",
+                getStorageID().getNameForLogs());
+
+        if (getDependencies() == 0)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Cannot wait for path to be processed: table {} has no attached "
+                "materialized views and will not consume any files",
+                getStorageID().getNameForLogs());
+
+        if (getContext()->getS3QueueDisableStreaming())
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Cannot wait for path to be processed: streaming is disabled for {}",
+                getStorageID().getNameForLogs());
+
         if (auto query_status = local_context->getProcessListElementSafe())
             query_status->checkTimeLimit();
 
-        if (need_arm)
+        /// Register watches before checking state to avoid missing a transition
+        /// that occurs between the state check and watch registration.
+        ObjectStorageQueueMetadata::getKeeperRetriesControl(log).retryLoop([&]
         {
-            ObjectStorageQueueMetadata::getKeeperRetriesControl(log).retryLoop([&]
+            auto zk = files_metadata->getZooKeeper()->getKeeper();
+
+            if (is_ordered)
             {
-                auto zk = files_metadata->getZooKeeper()->getKeeper();
-
-                if (is_ordered)
-                {
-                    /// The ordered processed pointer may or may not exist yet:
-                    /// - Exists   → tryGetWatch registers a data-change watch.
-                    /// - Missing  → fall back to existsWatch so we are notified
-                    ///              when the node is first created.
-                    std::string dummy_data;
-                    Coordination::Stat dummy_stat{};
-                    const bool node_exists = zk->tryGetWatch(effective_processed_watch_path, dummy_data, &dummy_stat, event);
-                    if (!node_exists)
-                        zk->existsWatch(effective_processed_watch_path, nullptr, event);
-                }
-                else
-                {
-                    /// Unordered: each file gets its own processed node; watch for its creation.
+                /// The ordered processed pointer may or may not exist yet:
+                /// - Exists   → tryGetWatch registers a data-change watch.
+                /// - Missing  → fall back to existsWatch so we are notified
+                ///              when the node is first created.
+                std::string dummy_data;
+                Coordination::Stat dummy_stat{};
+                const bool node_exists = zk->tryGetWatch(effective_processed_watch_path, dummy_data, &dummy_stat, event);
+                if (!node_exists)
                     zk->existsWatch(effective_processed_watch_path, nullptr, event);
-                }
+            }
+            else
+            {
+                /// Unordered: each file gets its own processed node; watch for its creation.
+                zk->existsWatch(effective_processed_watch_path, nullptr, event);
+            }
 
-                /// Per-file failed node: watch for creation regardless of mode.
-                zk->existsWatch(failed_node_path, nullptr, event);
-            });
-            need_arm = false;
-        }
+            /// Per-file failed node: watch for creation regardless of mode.
+            zk->existsWatch(failed_node_path, nullptr, event);
+        });
 
         std::string failure_message;
         const auto state = file_metadata->getPathState(failure_message);
@@ -1826,11 +1821,8 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
         }
 
         constexpr UInt64 watch_timeout_ms = 1000;
-        if (event->tryWait(watch_timeout_ms))
-        {
-            (*event).reset();
-            need_arm = true;
-        }
+        event->tryWait(watch_timeout_ms);
+        (*event).reset();
     }
 }
 

@@ -120,10 +120,6 @@ public:
     const std::string & getProcessorInfo() const { return processor_info; }
 
     static std::string generateProcessingID();
-    /// Returns a single-component Keeper node name for the given file path.
-    /// Raw file paths contain '/' and cannot be used directly as Keeper node names,
-    /// so SipHash64 of the path is used instead.
-    static std::string getNodeName(const std::string & path);
 
     enum class PathState
     {
@@ -214,6 +210,11 @@ public:
     };
 
 protected:
+    /// Returns a single-component Keeper node name for the given file path.
+    /// Raw file paths contain '/' and cannot be used directly as Keeper node names,
+    /// so SipHash64 of the path is used instead.
+    static std::string getNodeName(const std::string & path);
+
     virtual std::pair<bool, FileStatus::State> setProcessingImpl() = 0;
     virtual void prepareProcessedRequestsImpl(Coordination::Requests & requests,
         LastProcessedFileInfoMapPtr created_nodes) = 0;

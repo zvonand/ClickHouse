@@ -8,5 +8,5 @@
 1	30
 --- AggregatingMergeTree FINAL no filter
 1	20
---- AggregatingMergeTree FINAL WHERE category != y
+--- AggregatingMergeTree FINAL WHERE category != x
 1	20

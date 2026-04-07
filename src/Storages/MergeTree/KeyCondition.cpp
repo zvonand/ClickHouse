@@ -24,7 +24,6 @@
 #include <Functions/IFunctionDateOrDateTime.h>
 #include <Functions/geometryConverters.h>
 #include <Common/FieldVisitorToString.h>
-#include <Common/OptimizedRegularExpression.h>
 #include <Common/HilbertUtils.h>
 #include <Common/FieldVisitorConvertToNumber.h>
 #include <Common/MortonUtils.h>
@@ -66,24 +65,58 @@ namespace ErrorCodes
 extern const int LOGICAL_ERROR;
 }
 
-static bool hasUnescapedAlternation(const String & regexp)
-{
-    for (size_t i = 0; i < regexp.size(); ++i)
-    {
-        if (regexp[i] == '\\' && i + 1 < regexp.size())
-        {
-            ++i;
-            continue;
-        }
-        if (regexp[i] == '|')
-            return true;
-    }
-    return false;
-}
-
-/// for "^prefix..." string it returns "prefix"
+/// Extracts a conservative fixed literal prefix from a ^-anchored regular expression.
+///
+/// In regex, '^' means "must start at the beginning of the string".
+/// This function walks the pattern after '^' and collects characters that
+/// are guaranteed to appear, in order, at the start of every matching string.
+/// It stops as soon as it hits any metacharacter or special construct when it cannot
+/// guarantee a fixed character. The parser is conversative and may miss some cases where we can
+/// derive guranteed fixed prefixed but is complicated to do so. The result is a prefix that is
+/// common to all possible matching strings.
+///
+/// "^abc"
+///   Every matching string starts with exactly "abc".
+///   Prefix: "abc".
+///
+/// "^abc.*"
+///   '.' means "any single character" and '*' means "zero or more times".
+///   So after "abc" anything can follow. We can only guarantee "abc".
+///   Prefix: "abc".
+///
+/// "^abc\\|def"
+///   A backslash before a special character removes its special meaning.
+///   '|' normally means "or" (see below), but '\\|' means a literal '|'
+///   character. So this matches strings starting with the text "abc|def".
+///   Prefix: "abc|def".
+///
+/// "^abc\\d"
+///   '\\d' means "any digit" (0-9). It is not a single fixed character,
+///   so we stop. We can only guarantee "abc".
+///   Prefix: "abc".
+///
+/// "^abc|def"
+///   '|' means "or" — match the left side or the right side.
+///   This means: (string starts with "abc") OR (string contains "def" anywhere).
+///   The right side has no '^', so it can match in the middle of a string.
+///   We cannot guarantee any prefix at all.
+///   Prefix: "".
+///
+/// "^abc[12]"
+///   '[12]' is a character class — it matches either '1' or '2'.
+///   Since the next character is not fixed, we stop at "abc".
+///   Prefix: "abc".
+///
+/// '(' is treated as a stop character (')' cannot appear unescaped in a
+/// valid regex without a preceding '('). Patterns like
+/// "^(abc)def" could theoretically yield prefix "abcdef", but analyzing
+/// group semantics (optional groups, alternation inside groups, etc.)
+/// is complex and error-prone. The alternation helper
+/// `extractCommonPrefixFromAlternationBranches` handles the important case of
+/// "^(branch1|branch2|...)" separately.
 static String extractFixedPrefixFromRegularExpression(const String & regexp)
 {
+    /// We can only analyze regexes that start with '^' — those are the only ones that guarantee a fixed prefix.
     if (regexp.size() <= 1 || regexp[0] != '^')
         return {};
 
@@ -91,13 +124,6 @@ static String extractFixedPrefixFromRegularExpression(const String & regexp)
     const char * begin = regexp.data() + 1;
     const char * pos = begin;
     const char * end = regexp.data() + regexp.size();
-
-    /// Track parenthesis depth so we can skip plain groups as no-ops.
-    /// Also remember the prefix length at each opening '(' so that if the
-    /// group turns out to be optional (followed by '?', '*', or '{') we can
-    /// truncate the prefix back to that point.
-    int paren_depth = 0;
-    std::vector<size_t> prefix_length_at_open;
 
     while (pos < end)
     {
@@ -141,56 +167,11 @@ static String extractFixedPrefixFromRegularExpression(const String & regexp)
                 break;
             }
 
-            case '(':
-            {
-                /// Special groups like (?i), (?:...), (?=...), (?!...) etc.
-                /// are too complex to handle — bail out.
-                if (pos + 1 < end && *(pos + 1) == '?')
-                {
-                    pos = end;
-                    break;
-                }
-                prefix_length_at_open.push_back(fixed_prefix.size());
-                ++paren_depth;
-                ++pos;
-                break;
-            }
-
-            case ')':
-            {
-                if (paren_depth <= 0)
-                {
-                    /// Unmatched ')' — bail out.
-                    pos = end;
-                    break;
-                }
-                --paren_depth;
-                ++pos;
-
-                /// If the group is followed by a quantifier that allows zero
-                /// occurrences, everything captured inside is not guaranteed
-                /// to appear — truncate the prefix to where the group started.
-                if (pos < end && (*pos == '?' || *pos == '*' || *pos == '{'))
-                {
-                    if (!prefix_length_at_open.empty())
-                    {
-                        fixed_prefix.resize(prefix_length_at_open.back());
-                        prefix_length_at_open.pop_back();
-                    }
-                    pos = end;
-                }
-                else
-                {
-                    if (!prefix_length_at_open.empty())
-                        prefix_length_at_open.pop_back();
-                }
-                break;
-            }
-
             /// non-trivial cases
             case '|':
                 fixed_prefix.clear();
             [[fallthrough]];
+            case '(':
             case '[':
             case '^':
             case '$':
@@ -216,6 +197,175 @@ static String extractFixedPrefixFromRegularExpression(const String & regexp)
     }
 
     return fixed_prefix;
+}
+
+/// Returns true if the expression contains any unescaped '|'.
+static bool expressionHasUnescapedAlternation(const String & expression)
+{
+    for (size_t i = 0; i < expression.size(); ++i)
+    {
+        /// \\| is not an alternation, but a literal '|', so skip the next character after a backslash.
+        if (expression[i] == '\\' && i + 1 < expression.size())
+        {
+            ++i;
+            continue;
+        }
+        if (expression[i] == '|')
+            return true;
+    }
+    return false;
+}
+
+/// Handles the simple alternation pattern "^(branch1|branch2|...)$?" where
+/// each branch is a plain literal string (no metacharacters, no nesting).
+///
+/// This is called when the expression contains an unescaped '|', meaning
+/// `extractFixedPrefixFromRegularExpression` cannot be used (it would stop
+/// at '|' or '('). Returns empty for any pattern more complex than simple
+/// literal branches inside a single group.
+///
+/// "^(abc-xx|abc-yy)"
+///   The '|' gives two alternatives: the string starts with "abc-xx" or "abc-yy".
+///   Both start with "abc-", so every matching string begins with "abc-".
+///   Prefix: "abc-".
+///
+/// "^(abc-xx-1|abc-xx-2|abc-yy-1)"
+///   Three alternatives. All three start with "abc-", but they diverge
+///   after that ('x' vs 'y'). So "abc-" is the longest common start.
+///   Prefix: "abc-".
+///
+/// "^(abc|def)"
+///   Two alternatives: "abc" and "def". They share nothing at the start —
+///   'a' vs 'd' already differ. We cannot guarantee any prefix.
+///   Prefix: "".
+///
+/// "^(abc|def)$"
+///   '$' means "must end at the end of the string". It constrains what
+///   comes after the match, but does not change what the string starts
+///   with. So the prefix analysis is the same as without '$'.
+///   Prefix: "".
+///
+/// Not supported (returns empty — could be improved in the future):
+///
+/// "^(abc.*|abd.*)"
+///   Branches contain '.*' (wildcard). We only handle plain literal branches.
+///   The common prefix "ab" could theoretically be extracted, but is not.
+///   Prefix: "".
+///
+/// "^(abc|abd)+"
+///   The '+' after the group means it must appear at least once.
+///   We only handle patterns where the group is followed by '$' or end
+///   of expression. Prefix: "".
+///
+/// "^(abc(1|2)|abc(3|4))"
+///   Branches contain nested groups. We only handle flat literal branches.
+///   The common prefix "abc" could theoretically be extracted, but is not.
+///   Prefix: "".
+static String extractCommonPrefixFromAlternationBranches(const String & expression)
+{
+    /// We only handle "^(literal1|literal2|...)$?".
+    /// Reject anything that doesn't start with "^(".
+    if (expression.size() < 4 || expression[0] != '^' || expression[1] != '(')
+        return {};
+
+    const char * pos = expression.data() + 2; /// Start right after "^("
+    const char * end = expression.data() + expression.size();
+
+    /// Split branches by '|'. Each branch must be a plain literal —
+    /// no metacharacters, no nested groups, no character classes.
+    /// If we see anything other than a literal char, escaped char, or '|',
+    /// we give up.
+    std::vector<String> branches;
+    String current_branch;
+
+    while (pos < end)
+    {
+        if (*pos == '\\' && pos + 1 < end)
+        {
+            /// Only accept escape sequences where the character after '\'
+            /// is the actual character being matched. For example, '\.' matches
+            /// a literal dot, so we can add '.' to the branch.
+            /// But '\n' matches a newline (not 'n'), '\x41' matches 'A' (not 'x'),
+            /// '\d' matches any digit (not 'd'). Taking the character after '\'
+            /// literally would produce a wrong prefix for those.
+            char next = *(pos + 1);
+            switch (next)
+            {
+                case '|':
+                case '(':
+                case ')':
+                case '^':
+                case '$':
+                case '.':
+                case '[':
+                case ']':
+                case '?':
+                case '*':
+                case '+':
+                case '\\':
+                case '{':
+                case '}':
+                case '-':
+                    current_branch += next;
+                    pos += 2;
+                    break;
+                default:
+                    return {};
+            }
+        }
+        else if (*pos == '|')
+        {
+            /// Branch separator — save the current branch and start a new one.
+            branches.push_back(std::move(current_branch));
+            current_branch.clear();
+            ++pos;
+        }
+        else if (*pos == ')')
+        {
+            /// End of the group. Save the last branch.
+            branches.push_back(std::move(current_branch));
+            ++pos;
+
+            /// Allow only '$' or end of expression after ')'.
+            if (pos < end && *pos == '$')
+                ++pos;
+            if (pos != end)
+                return {};
+
+            break;
+        }
+        else if (
+            *pos == '(' || *pos == '[' || *pos == '.' || *pos == '*' || *pos == '+' || *pos == '?' || *pos == '{' || *pos == '^'
+            || *pos == '$')
+        {
+            /// Any metacharacter inside a branch — too complex, give up.
+            return {};
+        }
+        else
+        {
+            /// Plain literal character.
+            current_branch += *pos;
+            ++pos;
+        }
+    }
+
+    if (branches.size() < 2)
+        return {};
+
+    /// Compute the longest prefix common to all branches.
+    String common_prefix = branches[0];
+    for (size_t i = 1; i < branches.size(); ++i)
+    {
+        size_t common_len = 0;
+        size_t max_len = std::min(common_prefix.size(), branches[i].size());
+        while (common_len < max_len && common_prefix[common_len] == branches[i][common_len])
+            ++common_len;
+        common_prefix.resize(common_len);
+        if (common_prefix.empty())
+            return {};
+    }
+
+    return common_prefix;
 }
 
 const KeyCondition::AtomMap KeyCondition::atom_map
@@ -466,36 +616,16 @@ const KeyCondition::AtomMap KeyCondition::atom_map
 
                 const String & expression = value.safeGet<String>();
 
-                const bool has_alternation = hasUnescapedAlternation(expression);
+                /// ClickHouse `match` patterns must not contain NUL bytes.
+                /// Do not attempt to optimize such patterns.
+                if (expression.find('\0') != String::npos)
+                    return false;
 
                 String prefix;
-                if (!has_alternation)
+                if (!expressionHasUnescapedAlternation(expression))
                     prefix = extractFixedPrefixFromRegularExpression(expression);
-
-                if (prefix.empty()
-                    && has_alternation
-                    && expression.size() >= 3
-                    && expression[0] == '^'
-                    && expression[1] == '('
-                    && expression[2] != '?')
-                {
-                    auto analysis = OptimizedRegularExpression::analyze(expression);
-
-                    if (!analysis.alternatives.empty())
-                    {
-                        prefix = analysis.alternatives[0];
-                        for (size_t i = 1; i < analysis.alternatives.size(); ++i)
-                        {
-                            size_t common_len = 0;
-                            size_t max_len = std::min(prefix.size(), analysis.alternatives[i].size());
-                            while (common_len < max_len && prefix[common_len] == analysis.alternatives[i][common_len])
-                                ++common_len;
-                            prefix = prefix.substr(0, common_len);
-                            if (prefix.empty())
-                                break;
-                        }
-                    }
-                }
+                else
+                    prefix = extractCommonPrefixFromAlternationBranches(expression);
 
                 if (prefix.empty())
                     return false;

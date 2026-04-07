@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest, long, no-msan, no-azure-blob-storage
+# Tags: no-fasttest, long, no-msan, no-azure-blob-storage, no-parallel-replicas
 # no-azure-blob-storage: too slow
 # no-msan: it is too slow
+# no-parallel-replicas: the SELECT queries piped to INSERT hang with parallel replicas under TSan
 
 set -e
 

@@ -34,7 +34,7 @@ template <class Comparator> using NativeComparator = typename NativeComparatorT<
 }
 
 template <has_find_extreme_implementation T, typename ComparatorClass, bool add_all_elements, bool add_if_cond_zero>
-ALWAYS_INLINE inline static std::optional<T> findExtremeImpl(const T * __restrict ptr, const UInt8 * __restrict condition_map [[maybe_unused]], size_t row_begin, size_t row_end) /// NOLINT
+static std::optional<T> findExtremeImpl(const T * __restrict ptr, const UInt8 * __restrict condition_map [[maybe_unused]], size_t row_begin, size_t row_end)
 {
     size_t count = row_end - row_begin;
     ptr += row_begin;

@@ -121,7 +121,7 @@ RelationProfile ConditionSelectivityEstimator::estimateRelationProfileImpl(std::
             case RPNElement::FUNCTION_NOT:
             {
                 auto* last_element = rpn_stack.top();
-                if (last_element->finalized && last_element->function != RPNElement::FUNCTION_UNKNOWN)
+                if (last_element->finalized)
                     last_element->selectivity = 1 - last_element->selectivity;
                 else
                 {
@@ -220,7 +220,7 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
             /// so the estimator uses a tighter default than `default_unknown_cond_factor`.
             if (func_name == "like" || func_name == "ilike")
                 out.selectivity = default_like_factor;
-            else if (func_name == "notLike" || func_name == "notIlike")
+            else if (func_name == "notLike" || func_name == "notILike")
                 out.selectivity = 1.0 - default_like_factor;
             else
                 return false;

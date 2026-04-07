@@ -1,4 +1,3 @@
--- Tags: no-parallel
 -- Regression test for https://github.com/ClickHouse/ClickHouse/issues/101666
 -- materialize_skip_indexes_on_merge=false must suppress text (full-text) indexes during merge,
 -- not only minmax/set/bloom_filter etc. Text indexes use a separate container

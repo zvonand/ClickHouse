@@ -3464,6 +3464,7 @@ unencoded
 unencrypted
 unescaped
 unescaping
+unfreed
 unhex
 unicode
 unidimensional

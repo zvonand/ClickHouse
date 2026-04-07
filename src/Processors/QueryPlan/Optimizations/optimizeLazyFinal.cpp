@@ -166,6 +166,9 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
             /*analyzed_result_ptr=*/ nullptr,
             /*enable_parallel_reading=*/ false);
 
+        /// This is an internal read — don't pollute or use the query condition cache.
+        set_reading->disableQueryConditionCache();
+
         /// Apply primary key analysis: add filters from prewhere, row policy, and the FilterStep.
         /// Without FINAL, PK analysis can be more aggressive.
         if (const auto & row_level_filter = set_query_info.row_level_filter)

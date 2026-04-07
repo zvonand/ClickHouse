@@ -170,6 +170,9 @@ void LazyReadReplacingFinalSource::work()
             nullptr,
             false);
 
+        /// This is an internal read — don't pollute or use the query condition cache.
+        reading->disableQueryConditionCache();
+
         /// Apply IN filter from the set so that ReadFromMergeTree can use index analysis.
         /// Build a filter DAG that computes primary key from source columns, then applies IN.
         if (future_set)

@@ -121,6 +121,7 @@ DROP TABLE IF EXISTS t_lazy_final_tiebreak;
 CREATE TABLE t_lazy_final_tiebreak (key UInt64, version UInt64, value String)
 ENGINE = ReplacingMergeTree(version) ORDER BY key SETTINGS index_granularity = 256;
 
+SYSTEM STOP MERGES t_lazy_final_tiebreak;
 INSERT INTO t_lazy_final_tiebreak VALUES (1, 1, 'first');
 INSERT INTO t_lazy_final_tiebreak VALUES (1, 1, 'second');
 INSERT INTO t_lazy_final_tiebreak VALUES (1, 1, 'third');
@@ -138,6 +139,7 @@ DROP TABLE IF EXISTS t_lazy_final_signed;
 CREATE TABLE t_lazy_final_signed (key UInt64, version Int64, value String)
 ENGINE = ReplacingMergeTree(version) ORDER BY key SETTINGS index_granularity = 256;
 
+SYSTEM STOP MERGES t_lazy_final_signed;
 INSERT INTO t_lazy_final_signed VALUES (1, -1, 'negative');
 INSERT INTO t_lazy_final_signed VALUES (1, 5, 'positive');
 INSERT INTO t_lazy_final_signed VALUES (1, 5, 'positive_last');
@@ -155,6 +157,7 @@ DROP TABLE IF EXISTS t_lazy_final_int32;
 CREATE TABLE t_lazy_final_int32 (key UInt64, version Int32, value String)
 ENGINE = ReplacingMergeTree(version) ORDER BY key SETTINGS index_granularity = 256;
 
+SYSTEM STOP MERGES t_lazy_final_int32;
 INSERT INTO t_lazy_final_int32 VALUES (1, -100, 'negative');
 INSERT INTO t_lazy_final_int32 VALUES (1, 10, 'positive');
 INSERT INTO t_lazy_final_int32 VALUES (1, 10, 'positive_last');
@@ -172,6 +175,7 @@ DROP TABLE IF EXISTS t_lazy_final_uint128;
 CREATE TABLE t_lazy_final_uint128 (key UInt64, version UInt128, value String)
 ENGINE = ReplacingMergeTree(version) ORDER BY key SETTINGS index_granularity = 256;
 
+SYSTEM STOP MERGES t_lazy_final_uint128;
 INSERT INTO t_lazy_final_uint128 VALUES (1, 1, 'first');
 INSERT INTO t_lazy_final_uint128 VALUES (1, 100, 'second');
 INSERT INTO t_lazy_final_uint128 VALUES (1, 100, 'second_last');
@@ -189,6 +193,7 @@ DROP TABLE IF EXISTS t_lazy_final_int128;
 CREATE TABLE t_lazy_final_int128 (key UInt64, version Int128, value String)
 ENGINE = ReplacingMergeTree(version) ORDER BY key SETTINGS index_granularity = 256;
 
+SYSTEM STOP MERGES t_lazy_final_int128;
 INSERT INTO t_lazy_final_int128 VALUES (1, -1000, 'negative');
 INSERT INTO t_lazy_final_int128 VALUES (1, 50, 'positive');
 INSERT INTO t_lazy_final_int128 VALUES (1, 50, 'positive_last');
@@ -206,6 +211,7 @@ DROP TABLE IF EXISTS t_lazy_final_noversion;
 CREATE TABLE t_lazy_final_noversion (key UInt64, value String)
 ENGINE = ReplacingMergeTree() ORDER BY key SETTINGS index_granularity = 256;
 
+SYSTEM STOP MERGES t_lazy_final_noversion;
 INSERT INTO t_lazy_final_noversion VALUES (1, 'first');
 INSERT INTO t_lazy_final_noversion VALUES (1, 'second');
 

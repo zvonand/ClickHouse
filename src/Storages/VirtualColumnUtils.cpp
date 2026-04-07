@@ -44,6 +44,7 @@
 #include <IO/WriteHelpers.h>
 #include <Storages/HivePartitioningUtils.h>
 #include <Storages/MergeTree/IMergeTreeDataPart.h>
+#include <Storages/StorageSnapshot.h>
 #include <Common/HashTable/HashSet.h>
 
 
@@ -149,6 +150,7 @@ static NamesAndTypesList getCommonVirtualsForFileLikeStorage()
         {"_data_lake_snapshot_version", makeNullable(std::make_shared<DataTypeUInt64>())},
         {"_row_number", makeNullable(std::make_shared<DataTypeInt64>())},
         {"_iceberg_metadata_file_path", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>())},
+        {"_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>())},
     };
 }
 
@@ -435,6 +437,13 @@ void addRequestedFileLikeStorageVirtualsToChunk(
             else
                 chunk.addColumn(virtual_column.type->createColumnConstWithDefaultValue(chunk.getNumRows())->convertToFullColumnIfConst());
         }
+        else if (virtual_column.name == "_table")
+        {
+            if (!virtual_values.storage_id.empty())
+                chunk.addColumn(virtual_column.type->createColumnConst(chunk.getNumRows(), virtual_values.storage_id.getTableName())->convertToFullColumnIfConst());
+            else
+                chunk.addColumn(virtual_column.type->createColumnConstWithDefaultValue(chunk.getNumRows())->convertToFullColumnIfConst());
+        }
         else if (auto it = hive_map.find(virtual_column.getNameInStorage()); it != hive_map.end())
         {
             FormatSettings hive_format_settings;
@@ -709,6 +718,32 @@ DataPartsVector filterDataPartsWithExpression(
             filtered_parts.push_back(part);
 
     return filtered_parts;
+}
+
+std::pair<Names, Names> splitPhysicalAndVirtualColumnNames(const Names & column_names, const StorageSnapshotPtr & storage_snapshot)
+{
+    Names physical_names;
+    Names virtual_names;
+    for (const auto & name : column_names)
+    {
+        /// If the column exists in the table schema, treat it as physical even if
+        /// a virtual column with the same name is registered.
+        if (storage_snapshot->tryGetColumn(GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(), name))
+            physical_names.push_back(name);
+        else if (storage_snapshot->virtual_columns->tryGetDescription(name))
+            virtual_names.push_back(name);
+        else
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Column '{}' is neither physical nor virtual", name);
+    }
+
+    /// We must always read at least one physical column to determine the number of rows.
+    if (physical_names.empty())
+    {
+        auto smallest = ExpressionActions::getSmallestColumn(storage_snapshot->metadata->getColumns().getAllPhysical());
+        physical_names.push_back(smallest.name);
+    }
+
+    return {std::move(physical_names), std::move(virtual_names)};
 }
 
 }

@@ -239,7 +239,13 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
                 }
                 case QueryTreeNodeType::UNION:
                 {
-                    const auto & queries = node->as<UnionNode &>().getQueries().getNodes();
+                    const auto & union_node = node->as<UnionNode &>();
+
+                    /// Only UNION ALL is safe to parallelize.
+                    if (union_node.getUnionMode() != SelectUnionMode::UNION_ALL)
+                        return nullptr;
+
+                    const auto & queries = union_node.getQueries().getNodes();
                     if (queries.empty())
                         return nullptr;
 

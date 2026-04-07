@@ -1,0 +1,261 @@
+#include <Functions/matchPhrase.h>
+
+#include <Columns/ColumnFixedString.h>
+#include <Columns/ColumnNullable.h>
+#include <Columns/ColumnString.h>
+#include <DataTypes/DataTypeNullable.h>
+#include <DataTypes/DataTypesNumber.h>
+#include <Functions/FunctionFactory.h>
+#include <Functions/FunctionHelpers.h>
+#include <Interpreters/Context.h>
+#include <Interpreters/ITokenizer.h>
+#include <Interpreters/TokenizerFactory.h>
+#include <Common/FunctionDocumentation.h>
+
+#include <ranges>
+
+namespace DB
+{
+
+namespace ErrorCodes
+{
+    extern const int BAD_ARGUMENTS;
+}
+
+namespace
+{
+
+constexpr size_t arg_input = 0;
+constexpr size_t arg_phrase = 1;
+constexpr size_t arg_tokenizer = 2;
+
+std::vector<String> initializePhraseTokens(const ColumnsWithTypeAndName & arguments, const ITokenizer & tokenizer, std::string_view function_name)
+{
+    if (arguments.size() < 2)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' requires at least 2 arguments", function_name);
+
+    auto column_phrase = arguments[arg_phrase].column;
+    if (!column_phrase || column_phrase->empty())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' requires a non-empty constant phrase argument", function_name);
+
+    Field phrase_field = (*column_phrase)[0];
+    if (phrase_field.isNull() || phrase_field.getType() != Field::Types::String)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' requires a String phrase argument, got: {}", function_name, column_phrase->getFamilyName());
+
+    auto phrase_str = phrase_field.safeGet<String>();
+
+    /// Tokenize the phrase, preserving order (no deduplication).
+    std::vector<String> tokens;
+    tokenizer.stringToTokens(phrase_str.data(), phrase_str.size(), tokens);
+    return tokens;
+}
+
+/// Matcher that checks if all phrase tokens appear consecutively in the input's token stream.
+struct MatchPhraseMatcher
+{
+    explicit MatchPhraseMatcher(const std::vector<String> & phrase_tokens_)
+        : phrase_tokens(phrase_tokens_)
+        , match_position(0)
+    {
+    }
+
+    template <typename OnMatchCallback>
+    auto operator()(OnMatchCallback && onMatchCallback)
+    {
+        return [&](const char * token_start, size_t token_len)
+        {
+            std::string_view current_token(token_start, token_len);
+            const auto & expected = phrase_tokens[match_position];
+
+            if (current_token == expected)
+            {
+                ++match_position;
+                if (match_position == phrase_tokens.size())
+                {
+                    onMatchCallback();
+                    return true;
+                }
+            }
+            else
+            {
+                if (match_position > 0)
+                {
+                    match_position = 0;
+                    if (current_token == phrase_tokens[0])
+                    {
+                        match_position = 1;
+                        if (phrase_tokens.size() == 1)
+                        {
+                            onMatchCallback();
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        };
+    }
+
+    void reset() { match_position = 0; }
+
+private:
+    const std::vector<String> & phrase_tokens;
+    size_t match_position;
+};
+
+}
+
+template <typename StringColumn>
+requires std::same_as<StringColumn, ColumnString> || std::same_as<StringColumn, ColumnFixedString>
+void executeMatchPhrase(
+    const StringColumn & col_input,
+    PaddedPODArray<UInt8> & col_result,
+    size_t input_rows_count,
+    const ITokenizer * tokenizer,
+    const std::vector<String> & phrase_tokens)
+{
+    MatchPhraseMatcher matcher(phrase_tokens);
+
+    col_result.resize(input_rows_count);
+
+    for (size_t i = 0; i < input_rows_count; ++i)
+    {
+        std::string_view input = col_input.getDataAt(i);
+        col_result[i] = 0;
+        matcher.reset();
+
+        forEachToken(*tokenizer, input.data(), input.size(), matcher([&] { col_result[i] = 1; }));
+    }
+}
+
+void executeMatchPhraseOnColumn(
+    ColumnPtr col_input,
+    PaddedPODArray<UInt8> & col_result,
+    size_t input_rows_count,
+    const ITokenizer * tokenizer,
+    const std::vector<String> & phrase_tokens)
+{
+    if (phrase_tokens.empty())
+    {
+        col_result.assign(input_rows_count, UInt8(0));
+        return;
+    }
+
+    if (const auto * col_input_string = checkAndGetColumn<ColumnString>(col_input.get()))
+        executeMatchPhrase(*col_input_string, col_result, input_rows_count, tokenizer, phrase_tokens);
+    else if (const auto * col_input_fixedstring = checkAndGetColumn<ColumnFixedString>(col_input.get()))
+        executeMatchPhrase(*col_input_fixedstring, col_result, input_rows_count, tokenizer, phrase_tokens);
+}
+
+FunctionMatchPhraseOverloadResolver::FunctionMatchPhraseOverloadResolver(ContextPtr)
+{
+}
+
+DataTypePtr FunctionMatchPhraseOverloadResolver::getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const
+{
+    FunctionArgumentDescriptors mandatory_args{
+        {"input", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isStringOrFixedString), nullptr, "String or FixedString"},
+        {"phrase", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), isColumnConst, "const String"}};
+
+    FunctionArgumentDescriptors optional_args{
+        {"tokenizer", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), isColumnConst, "const String"}};
+
+    validateFunctionArguments(name, arguments, mandatory_args, optional_args);
+
+    DataTypePtr return_type = std::make_shared<DataTypeNumber<UInt8>>();
+
+    if (arguments[arg_input].type->isNullable())
+        return_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeNumber<UInt8>>());
+
+    return return_type;
+}
+
+FunctionBasePtr
+FunctionMatchPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const
+{
+    const auto tokenizer_name = arguments.size() < 3 || !arguments[arg_tokenizer].column ? SplitByNonAlphaTokenizer::getExternalName()
+                                                                                         : arguments[arg_tokenizer].column->getDataAt(0);
+    if (tokenizer_name == SparseGramsTokenizer::getExternalName())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' does not support the {} tokenizer.", name, SparseGramsTokenizer::getExternalName());
+
+    auto tokenizer = TokenizerFactory::instance().get(tokenizer_name);
+    auto phrase_tokens = initializePhraseTokens(arguments, *tokenizer, getName());
+    DataTypes argument_types{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })};
+    return std::make_shared<FunctionBaseMatchPhrase>(
+        std::move(tokenizer), std::move(phrase_tokens), std::move(argument_types), return_type);
+}
+
+ExecutableFunctionPtr FunctionBaseMatchPhrase::prepare(const ColumnsWithTypeAndName &) const
+{
+    return std::make_unique<ExecutableFunctionMatchPhrase>(tokenizer, phrase_tokens);
+}
+
+ColumnPtr
+ExecutableFunctionMatchPhrase::executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const
+{
+    if (input_rows_count == 0)
+        return ColumnVector<UInt8>::create();
+
+    auto col_result = ColumnVector<UInt8>::create();
+
+    if (phrase_tokens.empty())
+    {
+        col_result->getData().assign(input_rows_count, UInt8(0));
+        return col_result;
+    }
+
+    ColumnPtr col_input = arguments[arg_input].column;
+    executeMatchPhraseOnColumn(col_input, col_result->getData(), input_rows_count, tokenizer.get(), phrase_tokens);
+
+    return col_result;
+}
+
+REGISTER_FUNCTION(MatchPhrase)
+{
+    FunctionDocumentation::Description description = R"(
+Checks if the haystack contains all tokens from the phrase in consecutive order.
+
+Prior to searching, the function tokenizes both the `input` and the `phrase` arguments
+using the tokenizer specified as the optional third argument.
+If no tokenizer is specified, by default the `splitByNonAlpha` tokenizer would be used.
+
+Unlike [`hasToken`](#hasToken), [`hasAnyTokens`](#hasAnyTokens) and [`hasAllTokens`](#hasAllTokens), `matchPhrase` requires the tokens to appear in the same order
+and without any intervening tokens. For example, `matchPhrase('the quick brown fox', 'quick fox')` returns 0
+because "brown" appears between "quick" and "fox".
+
+:::note
+Column `input` should have a [text index](../../engines/table-engines/mergetree-family/textindexes) defined for optimal performance.
+:::
+    )";
+    FunctionDocumentation::Syntax syntax = "matchPhrase(input, phrase[, tokenizer])";
+    FunctionDocumentation::Arguments arguments = {
+        {"input", "The input column.", {"String", "FixedString"}},
+        {"phrase", "Phrase to search for.", {"const String"}},
+        {"tokenizer", "The tokenizer to use. Optional, defaults to `splitByNonAlpha`.", {"const String"}},
+    };
+    FunctionDocumentation::ReturnedValue returned_value
+        = {"Returns `1` if the phrase is found as a consecutive token sequence, `0` otherwise.", {"UInt8"}};
+    FunctionDocumentation::Examples examples
+        = {{"Phrase match",
+            "SELECT matchPhrase('the quick brown fox jumps', 'quick brown')",
+            R"(
+┌─matchPhrase('the quick brown fox jumps', 'quick brown')─┐
+│                                                        1 │
+└──────────────────────────────────────────────────────────┘
+        )"},
+           {"Non-consecutive tokens",
+            "SELECT matchPhrase('the quick brown fox jumps', 'quick fox')",
+            R"(
+┌─matchPhrase('the quick brown fox jumps', 'quick fox')─┐
+│                                                      0 │
+└────────────────────────────────────────────────────────┘
+        )"}};
+    FunctionDocumentation::IntroducedIn introduced_in = {26, 4};
+    FunctionDocumentation::Category category = FunctionDocumentation::Category::StringSearch;
+    FunctionDocumentation documentation = {description, syntax, arguments, {}, returned_value, examples, introduced_in, category};
+
+    factory.registerFunction<FunctionMatchPhraseOverloadResolver>(documentation);
+}
+
+}

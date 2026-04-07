@@ -697,14 +697,14 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
             && (object_info->getFileFormat().value_or(configuration->format) == "Parquet")
             && !object_info->getObjectMetadata()->etag.empty())
         {
-            /// For files inside archives, relative_path_with_metadata has an empty path
-            /// (since ObjectInfoInArchive doesn't initialize the base ObjectInfo path).
+            /// For files inside archives, ObjectInfoInArchive doesn't initialize the
+            /// base ObjectInfo::relative_path_with_metadata path, leaving it empty.
             /// We must use object_info->getPath() which returns the correct unique path
             /// (e.g. "archive.tar::file.parquet"), otherwise all files in the same archive
             /// would share the same Parquet metadata cache key, causing wrong metadata
             /// to be used and silent data corruption.
             std::optional<RelativePathWithMetadata> object_with_metadata = object_info->relative_path_with_metadata;
-            if (object_with_metadata.has_value() && object_with_metadata->relative_path.empty())
+            if (object_info->isArchive())
                 object_with_metadata->relative_path = object_info->getPath();
             input_format = FormatFactory::instance().getInputWithMetadata(
                 object_info->getFileFormat().value_or(configuration->format),

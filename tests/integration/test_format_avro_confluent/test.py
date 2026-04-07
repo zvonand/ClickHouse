@@ -190,6 +190,91 @@ def test_select_auth_encoded(started_cluster):
     ]
 
 
+def test_output(started_cluster):
+    # type: (ClickHouseCluster) -> None
+
+    instance = started_cluster.instances["dummy"]  # type: ClickHouseInstance
+    schema_registry_url = "http://{}:{}".format(
+        started_cluster.schema_registry_host, started_cluster.schema_registry_port
+    )
+
+    # Write rows using AvroConfluent output format (registers schema automatically),
+    # then read them back using AvroConfluent input format.
+    run_query(instance, "create table avro_output_source(value Int64) engine = Memory()")
+    run_query(instance, "insert into avro_output_source values (10),(20),(30)")
+
+    settings = {
+        "format_avro_schema_registry_url": schema_registry_url,
+        "output_format_avro_confluent_subject": "test_output_subject",
+    }
+    data = run_query(
+        instance, "select * from avro_output_source format AvroConfluent", settings=settings
+    )
+
+    # Feed the Confluent-framed binary back into a table via AvroConfluent input
+    run_query(instance, "create table avro_output_sink(value Int64) engine = Memory()")
+    settings_in = {"format_avro_schema_registry_url": schema_registry_url}
+    run_query(
+        instance,
+        "insert into avro_output_sink format AvroConfluent",
+        data,
+        settings_in,
+    )
+    stdout = run_query(instance, "select * from avro_output_sink")
+    assert list(map(str.split, stdout.splitlines())) == [
+        ["10"],
+        ["20"],
+        ["30"],
+    ]
+
+
+def test_output_multiple_columns(started_cluster):
+    # type: (ClickHouseCluster) -> None
+
+    instance = started_cluster.instances["dummy"]  # type: ClickHouseInstance
+    schema_registry_url = "http://{}:{}".format(
+        started_cluster.schema_registry_host, started_cluster.schema_registry_port
+    )
+
+    run_query(
+        instance,
+        "create table avro_output_multi_source(id Int64, name String) engine = Memory()",
+    )
+    run_query(
+        instance,
+        "insert into avro_output_multi_source values (1,'alice'),(2,'bob'),(3,'charlie')",
+    )
+
+    settings = {
+        "format_avro_schema_registry_url": schema_registry_url,
+        "output_format_avro_confluent_subject": "test_output_multi_subject",
+        "output_format_avro_string_column_pattern": "^name$",
+    }
+    data = run_query(
+        instance,
+        "select * from avro_output_multi_source format AvroConfluent",
+        settings=settings,
+    )
+
+    run_query(
+        instance,
+        "create table avro_output_multi_sink(id Int64, name String) engine = Memory()",
+    )
+    settings_in = {"format_avro_schema_registry_url": schema_registry_url}
+    run_query(
+        instance,
+        "insert into avro_output_multi_sink format AvroConfluent",
+        data,
+        settings_in,
+    )
+    stdout = run_query(instance, "select * from avro_output_multi_sink")
+    assert list(map(str.split, stdout.splitlines())) == [
+        ["1", "alice"],
+        ["2", "bob"],
+        ["3", "charlie"],
+    ]
+
+
 def test_select_auth_encoded_complex(started_cluster):
     # type: (ClickHouseCluster) -> None
 

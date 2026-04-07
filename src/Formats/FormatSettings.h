@@ -179,6 +179,7 @@ struct FormatSettings
         bool allow_missing_fields = false;
         String string_column_pattern;
         UInt64 output_rows_in_file = 1;
+        String output_confluent_subject;
     } avro{};
 
     String bool_true_representation = "true";

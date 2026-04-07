@@ -1220,6 +1220,9 @@ For Avro format: regexp of String columns to select as AVRO string.
     DECLARE(UInt64, output_format_avro_rows_in_file, 1, R"(
 Max rows in a file (if permitted by storage)
 )", 0) \
+    DECLARE(String, output_format_avro_confluent_subject, "", R"(
+For AvroConfluent output format: the subject name under which the schema is registered in the Confluent Schema Registry. Required when writing AvroConfluent output.
+)", 0) \
     DECLARE(Bool, output_format_tsv_crlf_end_of_line, false, R"(
 If it is set true, end of line in TSV format will be \\r\\n instead of \\n.
 )", 0) \

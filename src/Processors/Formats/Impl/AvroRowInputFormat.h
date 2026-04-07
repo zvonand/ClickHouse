@@ -10,6 +10,7 @@
 
 #include <Formats/FormatSettings.h>
 #include <Formats/FormatSchemaInfo.h>
+#include <Processors/Formats/Impl/AvroConfluentSchemaRegistry.h>
 #include <Processors/Formats/IRowInputFormat.h>
 #include <Processors/Formats/ISchemaReader.h>
 
@@ -185,8 +186,6 @@ public:
     AvroConfluentRowInputFormat(SharedHeader header_, ReadBuffer & in_, Params params_, const FormatSettings & format_settings_);
     String getName() const override { return "AvroConfluentRowInputFormat"; }
 
-    class SchemaRegistry;
-
 private:
     bool readRow(MutableColumns & columns, RowReadExtension & ext) override;
     void readPrefix() override;
@@ -194,7 +193,7 @@ private:
     bool allowSyncAfterError() const override { return true; }
     void syncAfterError() override;
 
-    std::shared_ptr<SchemaRegistry> schema_registry;
+    std::shared_ptr<ConfluentSchemaRegistry> schema_registry;
     using SchemaId = uint32_t;
     std::unordered_map<SchemaId, AvroDeserializer> deserializer_cache;
     const AvroDeserializer & getOrCreateDeserializer(SchemaId schema_id);

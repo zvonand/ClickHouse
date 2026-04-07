@@ -1,0 +1,57 @@
+#pragma once
+
+#include "config.h"
+
+#if USE_AVRO
+
+#include <memory>
+#include <string>
+
+#include <Common/CacheBase.h>
+#include <Common/CurrentMetrics.h>
+
+#include <ValidSchema.hh>
+
+#include <Poco/URI.h>
+#include <Poco/Net/HTTPRequest.h>
+
+
+namespace DB
+{
+
+struct FormatSettings;
+
+/// Client for the Confluent Schema Registry.
+/// Supports fetching schemas by ID and registering new schemas under a subject.
+/// Thread-safe: the internal schema cache uses locking, and HTTP calls are stateless.
+class ConfluentSchemaRegistry
+{
+public:
+    explicit ConfluentSchemaRegistry(const std::string & base_url_, size_t schema_cache_max_size = 1000);
+
+    /// Fetch a schema by ID (GET /schemas/ids/{id}). Results are cached.
+    avro::ValidSchema getSchema(uint32_t id);
+
+    /// Register a schema under a subject (POST /subjects/{subject}/versions).
+    /// Returns the global schema ID. The call is idempotent: if the schema
+    /// already exists under the subject, the existing ID is returned.
+    uint32_t registerSchema(const std::string & subject, const avro::ValidSchema & schema);
+
+private:
+    avro::ValidSchema fetchSchema(uint32_t id);
+
+    /// Apply HTTP Basic Auth credentials extracted from the base URL.
+    void applyAuth(const Poco::URI & url, Poco::Net::HTTPRequest & request) const;
+
+    Poco::URI base_url;
+    CacheBase<uint32_t, avro::ValidSchema> schema_cache;
+};
+
+/// Global cache of ConfluentSchemaRegistry instances, keyed by base URL.
+/// Ensures that multiple format instances talking to the same registry share
+/// the schema cache and HTTP connection pool.
+std::shared_ptr<ConfluentSchemaRegistry> getConfluentSchemaRegistry(const FormatSettings & format_settings);
+
+}
+
+#endif

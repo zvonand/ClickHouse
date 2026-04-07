@@ -617,6 +617,42 @@ void AvroRowOutputFormat::resetFormatterImpl()
     file_writer_ptr.reset();
 }
 
+AvroConfluentRowOutputFormat::AvroConfluentRowOutputFormat(
+    WriteBuffer & out_, SharedHeader header_, const FormatSettings & settings_)
+    : IRowOutputFormat(header_, out_)
+    , settings(settings_)
+    , serializer(header_->getColumnsWithTypeAndName(), std::make_unique<AvroSerializerTraits>(settings), settings)
+    , schema_registry(getConfluentSchemaRegistry(settings_))
+    , output_stream(std::make_unique<OutputStreamWriteBufferAdapter>(out_))
+    , encoder(avro::binaryEncoder())
+{
+    if (settings.avro.output_confluent_subject.empty())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS,
+            "output_format_avro_confluent_subject must be set for AvroConfluent output format");
+}
+
+AvroConfluentRowOutputFormat::~AvroConfluentRowOutputFormat() = default;
+
+void AvroConfluentRowOutputFormat::write(const Columns & columns, size_t row_num)
+{
+    if (!schema_registered)
+    {
+        schema_id = schema_registry->registerSchema(settings.avro.output_confluent_subject, serializer.getSchema());
+        schema_registered = true;
+    }
+
+    /// Write the Confluent wire format header for each row:
+    /// [magic byte 0x00] [schema_id 4 bytes big-endian]
+    writeBinaryBigEndian(static_cast<uint8_t>(0x00), out);
+    writeBinaryBigEndian(schema_id, out);
+
+    /// Re-init the encoder so it picks up the current buffer position
+    /// (after the 5-byte header we just wrote).
+    encoder->init(*output_stream);
+    serializer.serializeRow(columns, row_num, *encoder);
+    encoder->flush();
+}
+
 void registerOutputFormatAvro(FormatFactory & factory)
 {
     factory.registerOutputFormat("Avro", [](
@@ -630,6 +666,18 @@ void registerOutputFormatAvro(FormatFactory & factory)
     factory.markFormatHasNoAppendSupport("Avro");
     factory.markOutputFormatNotTTYFriendly("Avro");
     factory.setContentType("Avro", "application/octet-stream");
+
+    factory.registerOutputFormat("AvroConfluent", [](
+        WriteBuffer & buf,
+        const Block & sample,
+        const FormatSettings & settings,
+        FormatFilterInfoPtr /*format_filter_info*/)
+    {
+        return std::make_shared<AvroConfluentRowOutputFormat>(buf, std::make_shared<const Block>(sample), settings);
+    });
+    factory.markFormatHasNoAppendSupport("AvroConfluent");
+    factory.markOutputFormatNotTTYFriendly("AvroConfluent");
+    factory.setContentType("AvroConfluent", "application/octet-stream");
 }
 
 }

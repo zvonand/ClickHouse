@@ -2076,6 +2076,8 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
             return;
     }
 
+    size_t range = static_cast<size_t>(max_key - min_key) + 1;
+
     using Mapped = typename std::decay_t<decltype(source_map)>::mapped_type;
     auto convert_to_fixed_hash_map = [&]<size_t size_bits>(auto & dst_map, Type type)
     {
@@ -2090,11 +2092,10 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
                 res->getMapped() = source_map_it->getMapped();
         }
         dst_map = std::move(range_map);
-        data->min_key = min_key;
+        data->key_range = {min_key, range};
         data->type = type;
     };
 
-    size_t range = static_cast<size_t>(max_key - min_key) + 1;
     auto dispatch_conversion =
         [&](auto & range8, Type type8, auto & range16, Type type16, auto & range17, Type type17, auto & range18, Type type18, auto & source)
     {

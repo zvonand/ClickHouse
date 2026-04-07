@@ -98,7 +98,7 @@ public:
 
 private:
     template <typename KeyGetter, bool is_asof_join>
-    static KeyGetter createKeyGetter(const ColumnRawPtrs & key_columns, const Sizes & key_sizes, UInt64 min_key = 0);
+    static KeyGetter createKeyGetter(const ColumnRawPtrs & key_columns, const Sizes & key_sizes, HashJoin::RightTableData::KeyRange key_range = {});
 
     template <typename KeyGetter, typename HashMap, typename Selector>
     static void insertFromBlockImplTypeCase(
@@ -121,7 +121,7 @@ private:
         const ScatteredBlock::Selector & selector,
         HashJoin::Type type,
         JoinStuff::JoinUsedFlags & used_flags,
-        UInt64 min_key);
+        HashJoin::RightTableData::KeyRange key_range);
 
     template <typename KeyGetter, typename Map, typename AddedColumns>
     static size_t joinRightColumnsSwitchNullability(

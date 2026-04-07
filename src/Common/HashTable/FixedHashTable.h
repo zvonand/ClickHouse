@@ -6,7 +6,6 @@ namespace DB
 {
     namespace ErrorCodes
     {
-        extern const int LOGICAL_ERROR;
         extern const int NO_AVAILABLE_DATA;
     }
 }
@@ -115,7 +114,6 @@ template <typename Key, typename Cell, typename Size, typename Allocator, size_t
 class FixedHashTable : private boost::noncopyable, protected Allocator, protected Cell::State, protected Size
 {
     static constexpr size_t NUM_CELLS = 1ULL << size_bits;
-    static constexpr bool NEEDS_BOUNDS_CHECK = size_bits < sizeof(Key) * 8;
 
     /// We maintain min and max values inserted into the hash table to then limit the amount of cells to traverse to the [min; max] range.
     /// Both values could be efficiently calculated only within `emplace` calls (and not when we populate the hash table in `read` method for example), so we update them only within `emplace` and track if any other method was called.
@@ -346,12 +344,6 @@ public:
     /// The last parameter is unused but exists for compatibility with HashTable interface.
     void ALWAYS_INLINE emplace(const Key & x, LookupResult & it, bool & inserted, size_t /* hash */ = 0)
     {
-        if constexpr (NEEDS_BOUNDS_CHECK)
-        {
-            if (static_cast<size_t>(x) >= NUM_CELLS)
-                throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Emplaced key out of range");
-        }
-
         it = &buf[x];
 
         if (!buf[x].isZero(*this))
@@ -382,52 +374,19 @@ public:
         return res;
     }
 
-    LookupResult ALWAYS_INLINE find(const Key & x)
-    {
-        if constexpr (NEEDS_BOUNDS_CHECK)
-        {
-            if (static_cast<size_t>(x) >= NUM_CELLS)
-                return nullptr;
-        }
-        return !buf[x].isZero(*this) ? &buf[x] : nullptr;
-    }
+    LookupResult ALWAYS_INLINE find(const Key & x) { return !buf[x].isZero(*this) ? &buf[x] : nullptr; }
 
     ConstLookupResult ALWAYS_INLINE find(const Key & x) const { return const_cast<std::decay_t<decltype(*this)> *>(this)->find(x); }
 
-    LookupResult ALWAYS_INLINE find(const Key &, size_t hash_value)
-    {
-        if constexpr (NEEDS_BOUNDS_CHECK)
-        {
-            if (hash_value >= NUM_CELLS)
-                return nullptr;
-        }
-        return !buf[hash_value].isZero(*this) ? &buf[hash_value] : nullptr;
-    }
+    LookupResult ALWAYS_INLINE find(const Key &, size_t hash_value) { return !buf[hash_value].isZero(*this) ? &buf[hash_value] : nullptr; }
 
     ConstLookupResult ALWAYS_INLINE find(const Key & key, size_t hash_value) const
     {
         return const_cast<std::decay_t<decltype(*this)> *>(this)->find(key, hash_value);
     }
 
-    bool ALWAYS_INLINE has(const Key & x) const
-    {
-        if constexpr (NEEDS_BOUNDS_CHECK)
-        {
-            if (static_cast<size_t>(x) >= NUM_CELLS)
-                return false;
-        }
-        return !buf[x].isZero(*this);
-    }
-
-    bool ALWAYS_INLINE has(const Key &, size_t hash_value) const
-    {
-        if constexpr (NEEDS_BOUNDS_CHECK)
-        {
-            if (hash_value >= NUM_CELLS)
-                return false;
-        }
-        return !buf[hash_value].isZero(*this);
-    }
+    bool ALWAYS_INLINE has(const Key & x) const { return !buf[x].isZero(*this); }
+    bool ALWAYS_INLINE has(const Key &, size_t hash_value) const { return !buf[hash_value].isZero(*this); }
 
     /// Decide if we use the min/max optimization. `max < min` means the FixedHashtable is empty. The flag `only_emplace_was_used_to_insert_data`
     /// will check if the FixedHashTable will only use `emplace()` to insert the raw data.

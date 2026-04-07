@@ -430,8 +430,14 @@ public:
         /// Whether the right table reranged by key
         bool sorted = false;
 
-        /// For range types: the minimum key value in the right table. Keys are stored as (key - min_key).
-        UInt64 min_key = 0;
+        /// For range types: the minimum key value and the range size from min_key to max_key.
+        struct KeyRange
+        {
+            UInt64 min_key = 0;
+            UInt64 size = 0;
+        };
+
+        KeyRange key_range;
 
         size_t avgPerKeyRows() const
         {

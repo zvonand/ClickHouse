@@ -10,7 +10,7 @@ CREATE TABLE t_right_i32 (id Int32, rval String) ENGINE = MergeTree ORDER BY id;
 CREATE TABLE t_right_i64 (id Int64, rval String) ENGINE = MergeTree ORDER BY id;
 CREATE TABLE t_right_neg (id Int32, rval String) ENGINE = MergeTree ORDER BY id;
 
-INSERT INTO t_left SELECT number, 'l' || toString(number) FROM numbers(5);
+INSERT INTO t_left SELECT number - 5, 'l' || toString(number - 5) FROM numbers(10);
 INSERT INTO t_right_i32 VALUES (0, 'r0'), (2, 'r2'), (4, 'r4');
 INSERT INTO t_right_i64 VALUES (0, 'r0'), (2, 'r2'), (4, 'r4');
 INSERT INTO t_right_neg VALUES (-2, 'r-2'), (0, 'r0'), (2, 'r2');

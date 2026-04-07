@@ -208,7 +208,6 @@ ASTPtr DatabaseMySQL::getCreateTableQueryImpl(const String & table_name, Context
     {
         ASTStorage * ast_storage = table_storage_define->as<ASTStorage>();
         ast_storage->engine->setKind(ASTFunction::Kind::TABLE_ENGINE);
-        ASTs storage_children = ast_storage->children;
         auto storage_engine_arguments = ast_storage->engine->arguments;
 
         /// Add table_name to engine arguments

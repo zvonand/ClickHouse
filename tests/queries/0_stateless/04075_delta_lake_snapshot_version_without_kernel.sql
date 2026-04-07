@@ -12,6 +12,11 @@ SELECT count()
 FROM deltaLake('http://localhost:11111/test/delta_table', NOSIGN)
 SETTINGS delta_lake_snapshot_version = 0; -- { serverError UNSUPPORTED_METHOD }
 
+-- Negative non-default value must also fail
+SELECT count()
+FROM deltaLake('http://localhost:11111/test/delta_table', NOSIGN)
+SETTINGS delta_lake_snapshot_version = -2; -- { serverError UNSUPPORTED_METHOD }
+
 -- CDF start version without kernel must fail
 SELECT count()
 FROM deltaLake('http://localhost:11111/test/delta_table', NOSIGN)

@@ -650,15 +650,15 @@ DataLakeMetadataPtr DeltaLakeMetadata::create(
     }
 #endif
     const auto & settings = local_context->getSettingsRef();
-    if (settings[Setting::delta_lake_snapshot_version].value >= 0)
+    if (settings[Setting::delta_lake_snapshot_version].value != -1)
         throw Exception(
             ErrorCodes::UNSUPPORTED_METHOD,
             "Time travel (delta_lake_snapshot_version) is not supported "
             "without DeltaKernel. Use S3 or Local storage with "
             "allow_experimental_delta_kernel_rs = 1");
 
-    if (settings[Setting::delta_lake_snapshot_start_version].value >= 0
-        || settings[Setting::delta_lake_snapshot_end_version].value >= 0)
+    if (settings[Setting::delta_lake_snapshot_start_version].value != -1
+        || settings[Setting::delta_lake_snapshot_end_version].value != -1)
         throw Exception(
             ErrorCodes::UNSUPPORTED_METHOD,
             "Change data feed (delta_lake_snapshot_start_version / "

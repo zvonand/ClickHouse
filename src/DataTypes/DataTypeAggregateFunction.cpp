@@ -178,6 +178,9 @@ bool DataTypeAggregateFunction::strictEquals(const DataTypePtr & lhs_state_type,
         if (!lhs_state->argument_types[i]->equals(*rhs_state->argument_types[i]))
             return false;
 
+    if (lhs_state->function->getStateVariant() != rhs_state->function->getStateVariant())
+        return false;
+
     return true;
 }
 
@@ -192,6 +195,7 @@ void DataTypeAggregateFunction::updateHashImpl(SipHash & hash) const
         arg_type->updateHash(hash);
     if (version)
         hash.update(*version);
+    hash.update(static_cast<UInt8>(function->getStateVariant()));
 }
 
 bool DataTypeAggregateFunction::equals(const IDataType & rhs) const

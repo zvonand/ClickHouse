@@ -32,6 +32,7 @@ def cleanup_after_test():
         instance.query("DROP USER IF EXISTS A, B")
         instance.query("DROP TABLE IF EXISTS test.table1")
         instance.query("DROP DATABASE IF EXISTS test_db")
+        instance.query("DROP DATABASE IF EXISTS test_user_db")
 
 
 def test_table_engine_and_source_grant():
@@ -149,14 +150,18 @@ def test_grant_table_engine_option():
 
 
 def test_create_database_does_not_require_table_engine_grant():
-    """Regression test: CREATE DATABASE must not fail with ACCESS_DENIED when
-    table_engines_require_grant=false.  Database engines (Atomic, etc.) live
-    in DatabaseFactory, not StorageFactory, so they must be granted implicitly."""
+    # Regression test for PR #98984: `CREATE DATABASE` must not require `TABLE ENGINE` grants
+    # even when `table_engines_require_grant = false`. Database engines (e.g. `Atomic`) are not
+    # table engines. Before the fix, `getAllStorages()` incorrectly included database engines in
+    # the grant check, so `ACCESS_DENIED` was raised despite the setting being disabled.
     instance.query("DROP USER IF EXISTS A")
     instance.query("CREATE USER A")
-    instance.query("GRANT CREATE DATABASE ON test_db.* TO A")
+    instance.query("GRANT CREATE DATABASE ON *.* TO A")
 
-    instance.query("CREATE DATABASE IF NOT EXISTS test_db ENGINE = Atomic", user="A")
+    # `CREATE DATABASE` with the default engine must succeed.
+    instance.query("CREATE DATABASE test_user_db", user="A")
+    instance.query("DROP DATABASE test_user_db")
 
-    instance.query("DROP DATABASE IF EXISTS test_db")
-    instance.query("DROP USER IF EXISTS A")
+    # Explicitly specifying `Atomic` must also succeed — it is a database engine, not a table engine.
+    instance.query("CREATE DATABASE test_user_db ENGINE = Atomic", user="A")
+    instance.query("DROP DATABASE test_user_db")

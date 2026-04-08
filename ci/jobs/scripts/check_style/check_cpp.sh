@@ -83,8 +83,11 @@ EXTERN_TYPES_EXCLUDES=(
     ProfileEvents::CountersIncrement
     ProfileEvents::size
     ProfileEvents::checkCPUOverload
+    ProfileEvents::getDocumentation
+    ProfileEvents::NAME
 
     CurrentMetrics::add
+    CurrentMetrics::max
     CurrentMetrics::sub
     CurrentMetrics::get
     CurrentMetrics::set

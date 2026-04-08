@@ -101,6 +101,17 @@ void AggregateDescription::explainPretty(ExplainFormatSettings & settings) const
     if (function)
         out << function->getName();
 
+    const Array & aggregate_parameters = function ? function->getParameters() : parameters;
+    bool first_param = true;
+    for (const auto & param : aggregate_parameters)
+    {
+        out << (first_param ? "(" : ", ");
+        first_param = false;
+        out << applyVisitor(FieldVisitorToString(), param);
+    }
+    if (!aggregate_parameters.empty())
+        out << ')';
+
     out << '(';
     bool first = true;
     for (const auto & arg : argument_names)

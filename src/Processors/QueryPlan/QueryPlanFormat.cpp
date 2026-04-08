@@ -9,6 +9,7 @@
 #include <Interpreters/Aggregator.h>
 #include <Interpreters/PreparedSets.h>
 #include <Functions/FunctionHelpers.h>
+#include <Parsers/ExpressionOperatorPrettyLookup.h>
 #include <Processors/QueryPlan/AggregatingStep.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/FilterStep.h>
@@ -192,39 +193,8 @@ namespace QueryPlanFormat
 
         std::optional<OperatorInfo> getOperatorInfo(const std::string & func_name)
         {
-            if (func_name == "or")                return OperatorInfo{"OR", 3};
-            if (func_name == "and")               return OperatorInfo{"AND", 4};
-            if (func_name == "not")               return OperatorInfo{{}, 5};
-            if (func_name == "isNull")            return OperatorInfo{{}, 6};
-            if (func_name == "isNotNull")         return OperatorInfo{{}, 6};
-            if (func_name == "isNotDistinctFrom") return OperatorInfo{"<=>", 6};
-            if (func_name == "isDistinctFrom")    return OperatorInfo{"IS DISTINCT FROM", 6};
-            if (func_name == "equals")            return OperatorInfo{"=", 9};
-            if (func_name == "notEquals")         return OperatorInfo{"!=", 9};
-            if (func_name == "less")              return OperatorInfo{"<", 9};
-            if (func_name == "greater")           return OperatorInfo{">", 9};
-            if (func_name == "lessOrEquals")      return OperatorInfo{"<=", 9};
-            if (func_name == "greaterOrEquals")    return OperatorInfo{">=", 9};
-            if (func_name == "like")              return OperatorInfo{"LIKE", 9};
-            if (func_name == "notLike")           return OperatorInfo{"NOT LIKE", 9};
-            if (func_name == "ilike")             return OperatorInfo{"ILIKE", 9};
-            if (func_name == "notILike")          return OperatorInfo{"NOT ILIKE", 9};
-            if (func_name == "in" || func_name == "globalIn"
-                || func_name == "nullIn" || func_name == "globalNullIn")
-                                                  return OperatorInfo{"IN", 9};
-            if (func_name == "notIn" || func_name == "globalNotIn"
-                || func_name == "notNullIn" || func_name == "globalNotNullIn")
-                                                  return OperatorInfo{"NOT IN", 9};
-            if (func_name == "concat")            return OperatorInfo{"||", 10};
-            if (func_name == "plus")              return OperatorInfo{"+", 11};
-            if (func_name == "minus")             return OperatorInfo{"-", 11};
-            if (func_name == "multiply")          return OperatorInfo{"*", 12};
-            if (func_name == "divide")            return OperatorInfo{"/", 12};
-            if (func_name == "modulo")            return OperatorInfo{"%", 12};
-            if (func_name == "intDiv")            return OperatorInfo{"DIV", 12};
-            if (func_name == "negate")            return OperatorInfo{{}, 13};
-            if (func_name == "tupleElement")      return OperatorInfo{{}, 14};
-            if (func_name == "arrayElement")      return OperatorInfo{{}, 14};
+            if (auto info = tryGetExpressionOperatorPrettyInfo(func_name))
+                return OperatorInfo{info->symbol, info->precedence};
             return std::nullopt;
         }
 
@@ -500,6 +470,18 @@ namespace QueryPlanFormat
             String pretty;
             if (agg.function)
                 pretty += agg.function->getName();
+
+            const Array & aggregate_parameters = agg.function ? agg.function->getParameters() : agg.parameters;
+            bool first_param = true;
+            for (const auto & param : aggregate_parameters)
+            {
+                pretty += first_param ? "(" : ", ";
+                first_param = false;
+                pretty += applyVisitor(FieldVisitorToString(), param);
+            }
+            if (!aggregate_parameters.empty())
+                pretty += ')';
+
             pretty += '(';
             bool first = true;
             for (const auto & arg : agg.argument_names)

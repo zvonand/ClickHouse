@@ -1,5 +1,5 @@
 --- Arithmetic operators ---
-Output: a + 1, a - 2, a * 3, a / 4, a % 5, a DIV 6
+Output: a + 1, a − 2, a * 3, a / 4, a MOD 5, a DIV 6
 
 ReadFromMergeTree (default.t1)
    Read type: Default

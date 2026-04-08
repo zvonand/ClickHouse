@@ -52,6 +52,7 @@ private:
     ContextPtr query_context;
     float min_filtered_ratio;
 
+    LoggerPtr log;
     bool is_done = false;
     bool should_signal = false;
 };

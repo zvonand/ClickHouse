@@ -31,7 +31,7 @@ $CLICKHOUSE_CLIENT $settings -q "
     SELECT count() FROM t_lazy_log FINAL WHERE category = 1
     SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10
 " --send_logs_level='trace' 2>&1 \
-    | grep 'LazyFinalKeyAnalysisTransform' \
+    | grep 'LazyFinalKeyAnalysisTransform.*Lazy FINAL' \
     | sed 's/.*Lazy FINAL/Lazy FINAL/' \
     | sed -E 's/=[0-9]+/=N/g' \
     | head -1
@@ -42,7 +42,7 @@ $CLICKHOUSE_CLIENT $settings -q "
     SELECT count() FROM t_lazy_log FINAL WHERE category = 2
     SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0.5
 " --send_logs_level='trace' 2>&1 \
-    | grep 'LazyFinalKeyAnalysisTransform' \
+    | grep 'LazyFinalKeyAnalysisTransform.*Lazy FINAL' \
     | sed 's/.*Lazy FINAL/Lazy FINAL/' \
     | sed -E 's/[0-9]+\.[0-9]+/N.NN/g; s/=[0-9]+/=N/g' \
     | head -1
@@ -53,7 +53,7 @@ $CLICKHOUSE_CLIENT $settings -q "
     SELECT count() FROM t_lazy_log FINAL WHERE category = 1
     SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0.5
 " --send_logs_level='trace' 2>&1 \
-    | grep 'LazyFinalKeyAnalysisTransform' \
+    | grep 'LazyFinalKeyAnalysisTransform.*Lazy FINAL' \
     | sed 's/.*Lazy FINAL/Lazy FINAL/' \
     | sed -E 's/[0-9]+\.[0-9]+/N.NN/g; s/=[0-9]+/=N/g' \
     | head -1

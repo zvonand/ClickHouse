@@ -43,6 +43,7 @@ LazyFinalKeyAnalysisTransform::LazyFinalKeyAnalysisTransform(
     , ranges(std::move(ranges_))
     , query_context(std::move(query_context_))
     , min_filtered_ratio(min_filtered_ratio_)
+    , log(getLogger("LazyFinalKeyAnalysisTransform"))
 {
 }
 
@@ -65,12 +66,11 @@ IProcessor::Status LazyFinalKeyAnalysisTransform::prepare()
         auto set = future_set->get();
         if (!set)
         {
-            LOG_TRACE(getLogger("LazyFinalKeyAnalysisTransform"),
-                "Lazy FINAL disabled: set is not available");
+            LOG_TRACE(log, "Lazy FINAL disabled: set is not available");
         }
         else if (set->isTruncated())
         {
-            LOG_TRACE(getLogger("LazyFinalKeyAnalysisTransform"),
+            LOG_TRACE(log,
                 "Lazy FINAL disabled: set was truncated (rows={}, bytes={}, max_rows={}, max_bytes={})",
                 set->getTotalRowCount(), set->getTotalByteCount(),
                 set->limits.max_rows, set->limits.max_bytes);
@@ -136,7 +136,7 @@ void LazyFinalKeyAnalysisTransform::work()
         settings[Setting::max_block_size],
         settings[Setting::max_threads],
         max_block_numbers_to_read,
-        getLogger("LazyReadReplacingFinalSource"),
+        log,
         nullptr,
         false);
 
@@ -185,7 +185,7 @@ void LazyFinalKeyAnalysisTransform::work()
 
     if (min_filtered_ratio > 0 && filtered_ratio < min_filtered_ratio)
     {
-        LOG_TRACE(getLogger("LazyFinalKeyAnalysisTransform"),
+        LOG_TRACE(log,
             "Lazy FINAL disabled: filtered ratio {:.2f} is below threshold {:.2f} "
             "(total_marks={}, selected_marks={}, set_rows={})",
             filtered_ratio, min_filtered_ratio,
@@ -194,7 +194,7 @@ void LazyFinalKeyAnalysisTransform::work()
     }
     else
     {
-        LOG_TRACE(getLogger("LazyFinalKeyAnalysisTransform"),
+        LOG_TRACE(log,
             "Lazy FINAL enabled: filtered ratio {:.2f} (threshold {:.2f}), "
             "total_marks={}, selected_marks={}, set_rows={}",
             filtered_ratio, min_filtered_ratio,

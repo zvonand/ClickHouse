@@ -10,6 +10,8 @@
 #include <Processors/QueryPlan/LazilyReadFromMergeTree.h>
 #include <Processors/QueryPlan/LazyFinalKeyAnalysisStep.h>
 #include <Processors/QueryPlan/LazyReadReplacingFinalStep.h>
+#include <Processors/QueryPlan/PartsSplitter.h>
+#include <Processors/QueryPlan/UnionStep.h>
 #include <Processors/Sources/LazyFinalSharedState.h>
 #include <Processors/QueryPlan/Optimizations/Optimizations.h>
 #include <Processors/QueryPlan/Optimizations/projectionsCommon.h>
@@ -80,10 +82,136 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
 
     const auto & metadata_snapshot = reading_step->getStorageMetadata();
     const auto & primary_key = metadata_snapshot->getPrimaryKey();
+    const auto & sorting_key = metadata_snapshot->getSortingKey();
     const auto & context = reading_step->getContext();
     const auto & storage_snapshot = reading_step->getStorageSnapshot();
     auto mutations_snapshot = reading_step->getMutationsSnapshot();
     auto max_block_numbers_to_read = getMaxAddedBlocks(reading_step);
+    const auto & merging_params = data.merging_params;
+
+    /// Run early index analysis so we can split the analyzed (PK-filtered) parts.
+    auto analyzed_result = reading_step->selectRangesToRead();
+
+    /// Split parts into non-intersecting (unique key ranges, no FINAL needed) and
+    /// intersecting (overlapping, need FINAL). This avoids running the expensive
+    /// aggregation-based FINAL on parts that have no duplicates.
+    std::unique_ptr<QueryPlan> non_intersecting_plan;
+
+    if (isSafePrimaryKey(primary_key))
+    {
+        bool in_reverse_order = false;
+        bool can_split = true;
+        if (!sorting_key.reverse_flags.empty())
+        {
+            size_t num_pk = primary_key.expression_list_ast->children.size();
+            in_reverse_order = sorting_key.reverse_flags[0];
+            for (size_t i = 1; i < num_pk && i < sorting_key.reverse_flags.size(); ++i)
+            {
+                if (in_reverse_order != sorting_key.reverse_flags[i])
+                {
+                    can_split = false;
+                    break;
+                }
+            }
+        }
+
+        if (can_split)
+        {
+            auto split = splitPartsRanges(reading_step->getParts(), in_reverse_order, getLogger("optimizeLazyFinal"));
+
+            if (split.intersecting_parts_ranges.empty())
+            {
+                /// All parts are non-intersecting — no FINAL needed at all.
+                /// Replace with a simple non-FINAL read.
+                SelectQueryInfo non_final_query_info = reading_step->getQueryInfo();
+                if (non_final_query_info.table_expression_modifiers)
+                    non_final_query_info.table_expression_modifiers->setHasFinal(false);
+
+                auto non_final_reading = std::make_unique<ReadFromMergeTree>(
+                    std::make_shared<RangesInDataParts>(std::move(split.non_intersecting_parts_ranges)),
+                    mutations_snapshot,
+                    reading_step->getAllColumnNames(),
+                    data,
+                    data.getSettings(),
+                    non_final_query_info,
+                    storage_snapshot,
+                    context,
+                    reading_step->getMaxBlockSize(),
+                    reading_step->getNumStreams(),
+                    max_block_numbers_to_read,
+                    getLogger("optimizeLazyFinal"),
+                    nullptr,
+                    false);
+
+                non_final_reading->disableQueryConditionCache();
+
+                if (filter_step)
+                    non_final_reading->addFilter(filter_step->getExpression().clone(), filter_step->getFilterColumnName());
+                non_final_reading->SourceStepWithFilterBase::applyFilters();
+
+                auto expected_header = reading_step->getOutputHeader();
+                QueryPlan plan;
+                plan.addStep(std::move(non_final_reading));
+
+                /// Filter is_deleted rows if needed.
+                if (!merging_params.is_deleted_column.empty())
+                {
+                    /// TODO: add is_deleted filter
+                }
+
+                query_plan.replaceNodeWithPlan(read_node, std::move(plan), expected_header);
+                return;
+            }
+
+            if (!split.non_intersecting_parts_ranges.empty())
+            {
+                /// Update the original reading step to only have intersecting parts.
+                if (analyzed_result)
+                {
+                    analyzed_result->parts_with_ranges = std::move(split.intersecting_parts_ranges);
+                    reading_step->setAnalyzedResult(analyzed_result);
+                }
+
+                SelectQueryInfo non_final_query_info = reading_step->getQueryInfo();
+                if (non_final_query_info.table_expression_modifiers)
+                    non_final_query_info.table_expression_modifiers->setHasFinal(false);
+
+                auto non_final_reading = std::make_unique<ReadFromMergeTree>(
+                    std::make_shared<RangesInDataParts>(std::move(split.non_intersecting_parts_ranges)),
+                    mutations_snapshot,
+                    reading_step->getAllColumnNames(),
+                    data,
+                    data.getSettings(),
+                    non_final_query_info,
+                    storage_snapshot,
+                    context,
+                    reading_step->getMaxBlockSize(),
+                    reading_step->getNumStreams(),
+                    max_block_numbers_to_read,
+                    getLogger("optimizeLazyFinal"),
+                    nullptr,
+                    false);
+
+                non_final_reading->disableQueryConditionCache();
+
+                if (filter_step)
+                    non_final_reading->addFilter(filter_step->getExpression().clone(), filter_step->getFilterColumnName());
+                non_final_reading->SourceStepWithFilterBase::applyFilters();
+
+                non_intersecting_plan = std::make_unique<QueryPlan>();
+                non_intersecting_plan->addStep(std::move(non_final_reading));
+
+                /// Filter is_deleted rows if needed.
+                if (!merging_params.is_deleted_column.empty())
+                {
+                    /// TODO: add is_deleted filter
+                }
+            }
+        }
+    }
+
+    /// Use parts from the (possibly updated) reading step.
+    const auto & parts_for_set = reading_step->getParts();
 
     /// Build the set for primary key columns only (PK is a prefix of sorting key;
     /// the remaining sorting key columns are useless for index analysis).
@@ -152,7 +280,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         }
 
         auto set_reading = std::make_unique<ReadFromMergeTree>(
-            std::make_shared<RangesInDataParts>(reading_step->getParts()),
+            std::make_shared<RangesInDataParts>(parts_for_set),
             mutations_snapshot,
             set_columns,
             data,
@@ -253,7 +381,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         data.getSettings(),
         data,
         max_block_numbers_to_read,
-        std::make_shared<RangesInDataParts>(reading_step->getParts()),
+        std::make_shared<RangesInDataParts>(parts_for_set),
         context,
         optimization_settings.min_filtered_ratio_for_lazy_final));
 
@@ -266,7 +394,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
             context,
             shared_state));
 
-        auto lazy_materializing_rows = std::make_shared<LazyMaterializingRows>(reading_step->getParts());
+        auto lazy_materializing_rows = std::make_shared<LazyMaterializingRows>(parts_for_set);
 
         /// Read all original columns lazily, plus columns needed by prewhere/row_policy
         /// which are applied as FilterSteps on top of the join.
@@ -359,6 +487,21 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     selector_plans.emplace_back(std::make_unique<QueryPlan>(std::move(true_plan)));
     selector_plans.emplace_back(std::make_unique<QueryPlan>(std::move(false_plan)));
     result_plan.unitePlans(std::move(input_selector), {std::move(selector_plans)});
+
+    /// If we split non-intersecting parts, union them with the entire result.
+    /// Both true and false branches now handle only intersecting parts.
+    if (non_intersecting_plan)
+    {
+        auto union_step = std::make_unique<UnionStep>(
+            SharedHeaders{result_plan.getCurrentHeader(), non_intersecting_plan->getCurrentHeader()});
+
+        QueryPlan combined;
+        std::vector<QueryPlanPtr> union_plans;
+        union_plans.emplace_back(std::make_unique<QueryPlan>(std::move(result_plan)));
+        union_plans.emplace_back(std::move(non_intersecting_plan));
+        combined.unitePlans(std::move(union_step), {std::move(union_plans)});
+        result_plan = std::move(combined);
+    }
 
     query_plan.replaceNodeWithPlan(read_node, std::move(result_plan), expected_header);
 }

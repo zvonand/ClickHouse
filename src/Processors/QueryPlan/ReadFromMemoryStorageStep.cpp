@@ -194,9 +194,10 @@ Pipe ReadFromMemoryStorageStep::makePipe()
     auto storage_id = storage->getStorageID();
 
     /// Use temporary table name if storage is temporary.
-    if (auto * table_node = query_info.table_expression->as<TableNode>())
-        if (table_node->isTemporaryTable())
-            storage_id.table_name = table_node->getTemporaryTableName();
+    if (query_info.table_expression)
+        if (auto * table_node = query_info.table_expression->as<TableNode>())
+            if (table_node->isTemporaryTable())
+                storage_id.table_name = table_node->getTemporaryTableName();
 
     const auto & snapshot_data = assert_cast<const StorageMemory::SnapshotData &>(*storage_snapshot->data);
     auto current_data = snapshot_data.blocks;

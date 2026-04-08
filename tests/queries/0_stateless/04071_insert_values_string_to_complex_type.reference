@@ -1,0 +1,32 @@
+Map(String, Float32) - basic insert and order by key
+{'key1':1,'key2':10}
+{'key1':2,'key2':20}
+Map with nested quoting (key contains apostrophe)
+{'it\'s':1}
+Empty Map
+{}
+Array(UInt32) - with empty array
+[]
+[1,2,3]
+Tuple(String, UInt32)
+('hello',42)
+Multiple columns: one complex, one simple
+1	{'a':1}
+2	{'b':2}
+Array of Maps (nested complex types)
+[{'a':1},{'b':2}]
+Map with Array values (nested complex types)
+{'key':[1,2,3]}
+Fast path with input_format_values_interpret_expressions=0
+{'key':1}
+Native syntax - verify no regression
+{'key1':1,'key2':10}
+Map with LowCardinality key type
+{'a':1}
+{'b':2}
+Nested (Array(Tuple(...)) internally)
+['a','b']	[1,2]
+Multiple rows in single INSERT (batch)
+{'a':1}
+{'b':2}
+{'c':3}

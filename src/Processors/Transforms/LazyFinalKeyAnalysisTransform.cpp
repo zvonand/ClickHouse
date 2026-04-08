@@ -6,7 +6,7 @@
 #include <Interpreters/ExpressionActions.h>
 #include <Interpreters/Set.h>
 #include <Processors/Port.h>
-#include <Processors/Transforms/SetReadinessSignalTransform.h>
+#include <Processors/Transforms/LazyFinalKeyAnalysisTransform.h>
 #include <Storages/StorageInMemoryMetadata.h>
 #include <Common/logger_useful.h>
 
@@ -19,7 +19,7 @@ namespace Setting
     extern const SettingsNonZeroUInt64 max_block_size;
 }
 
-SetReadinessSignalTransform::SetReadinessSignalTransform(
+LazyFinalKeyAnalysisTransform::LazyFinalKeyAnalysisTransform(
     FutureSetPtr future_set_,
     LazyFinalSharedStatePtr shared_state_,
     StorageMetadataPtr metadata_snapshot_,
@@ -46,7 +46,7 @@ SetReadinessSignalTransform::SetReadinessSignalTransform(
 {
 }
 
-IProcessor::Status SetReadinessSignalTransform::prepare()
+IProcessor::Status LazyFinalKeyAnalysisTransform::prepare()
 {
     auto & input = inputs.front();
     auto & output = outputs.front();
@@ -84,7 +84,7 @@ IProcessor::Status SetReadinessSignalTransform::prepare()
     return Status::NeedData;
 }
 
-void SetReadinessSignalTransform::work()
+void LazyFinalKeyAnalysisTransform::work()
 {
     const auto & settings = query_context->getSettingsRef();
     const auto & sorting_key = metadata_snapshot->getSortingKey();
@@ -172,7 +172,7 @@ void SetReadinessSignalTransform::work()
     float filtered_ratio = total_marks > 0 ? 1.0f - static_cast<float>(selected_marks) / static_cast<float>(total_marks) : 0.0f;
 
     LOG_DEBUG(
-        getLogger("SetReadinessSignalTransform"),
+        getLogger("LazyFinalKeyAnalysisTransform"),
         "Index analysis: total_marks={}, selected_marks={}, filtered_ratio={:.2f}, threshold={:.2f}",
         total_marks, selected_marks, filtered_ratio, min_filtered_ratio);
 

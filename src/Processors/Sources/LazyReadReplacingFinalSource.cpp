@@ -116,7 +116,7 @@ void LazyReadReplacingFinalSource::work()
 
     {
         /// Use the pre-built ReadFromMergeTree step from the shared state
-        /// (created by SetReadinessSignalTransform with index analysis already applied).
+        /// (created by LazyFinalKeyAnalysisTransform with index analysis already applied).
         auto & reading = shared_state->reading_step;
         chassert(reading);
 

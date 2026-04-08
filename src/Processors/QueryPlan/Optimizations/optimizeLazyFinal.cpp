@@ -8,7 +8,7 @@
 #include <Processors/QueryPlan/InputSelectorStep.h>
 #include <Processors/QueryPlan/JoinLazyColumnsStep.h>
 #include <Processors/QueryPlan/LazilyReadFromMergeTree.h>
-#include <Processors/QueryPlan/SetReadinessSignalStep.h>
+#include <Processors/QueryPlan/LazyFinalKeyAnalysisStep.h>
 #include <Processors/QueryPlan/LazyReadReplacingFinalStep.h>
 #include <Processors/Sources/LazyFinalSharedState.h>
 #include <Processors/QueryPlan/Optimizations/Optimizations.h>
@@ -94,7 +94,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     auto set_and_key = std::make_shared<SetAndKey>(SetAndKey{.key = "__lazy_final_set", .set = set, .external_table = nullptr});
 
     /// Use FutureSetFromStorage — the Set will be filled by CreatingSetStep before
-    /// SetReadinessSignalStep runs (they are in the same pipeline).
+    /// LazyFinalKeyAnalysisStep runs (they are in the same pipeline).
     auto future_set = std::make_shared<FutureSetFromStorage>(FutureSet::Hash{}, /*ast=*/ nullptr, set, /*storage_id=*/ std::nullopt);
 
     /// Build the set-building sub-plan: read columns needed for predicates
@@ -238,12 +238,12 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         SizeLimits{},
         nullptr));
 
-    /// Shared state between SetReadinessSignalTransform and LazyReadReplacingFinalSource.
+    /// Shared state between LazyFinalKeyAnalysisTransform and LazyReadReplacingFinalSource.
     auto shared_state = std::make_shared<LazyFinalSharedState>();
 
     /// Builds the ReadFromMergeTree step with IN-set filter, runs index analysis,
     /// checks if enough marks were filtered, and signals.
-    set_plan.addStep(std::make_unique<SetReadinessSignalStep>(
+    set_plan.addStep(std::make_unique<LazyFinalKeyAnalysisStep>(
         set_plan.getCurrentHeader(),
         future_set,
         shared_state,

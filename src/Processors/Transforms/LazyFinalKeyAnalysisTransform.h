@@ -1,8 +1,9 @@
 #pragma once
 
+#include <Core/Block.h>
 #include <Interpreters/Context_fwd.h>
 #include <Interpreters/PreparedSets.h>
-#include <Processors/QueryPlan/ITransformingStep.h>
+#include <Processors/IProcessor.h>
 #include <Processors/Sources/LazyFinalSharedState.h>
 #include <Storages/MergeTree/MergeTreeData.h>
 
@@ -12,11 +13,16 @@ namespace DB
 struct StorageInMemoryMetadata;
 using StorageMetadataPtr = std::shared_ptr<const StorageInMemoryMetadata>;
 
-class SetReadinessSignalStep : public ITransformingStep
+/// Waits for the set to be built, then:
+/// 1. Creates a ReadFromMergeTree step with an IN-set filter
+/// 2. Runs index analysis to prune parts/granules
+/// 3. Checks if enough marks were filtered (`min_filtered_ratio`)
+/// 4. If OK, stores the step in shared state and signals the optimized path
+/// 5. Otherwise, signals fallback
+class LazyFinalKeyAnalysisTransform : public IProcessor
 {
 public:
-    SetReadinessSignalStep(
-        SharedHeader input_header_,
+    LazyFinalKeyAnalysisTransform(
         FutureSetPtr future_set_,
         LazyFinalSharedStatePtr shared_state_,
         StorageMetadataPtr metadata_snapshot_,
@@ -29,12 +35,11 @@ public:
         ContextPtr query_context_,
         float min_filtered_ratio_);
 
-    String getName() const override { return "SetReadinessSignal"; }
-    void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings & settings) override;
+    String getName() const override { return "LazyFinalKeyAnalysisTransform"; }
+    Status prepare() override;
+    void work() override;
 
 private:
-    void updateOutputHeader() override {}
-
     FutureSetPtr future_set;
     LazyFinalSharedStatePtr shared_state;
     StorageMetadataPtr metadata_snapshot;
@@ -46,6 +51,9 @@ private:
     RangesInDataPartsPtr ranges;
     ContextPtr query_context;
     float min_filtered_ratio;
+
+    bool is_done = false;
+    bool should_signal = false;
 };
 
 }

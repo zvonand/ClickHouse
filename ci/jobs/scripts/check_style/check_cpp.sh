@@ -157,7 +157,7 @@ with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
 
 # Three or more consecutive empty lines (pre-filter with grep to avoid reading all files through awk)
 xargs < "$STYLE_TMPDIR/all_excluded" grep -Plz '\n\n\n\n' 2>/dev/null | \
-    xargs awk 'FNR==1 { i = 0 } /^$/ { ++i; if (i > 2) { print "More than two consecutive empty lines in file " FILENAME } } /./ { i = 0 }'
+    xargs -0 awk 'FNR==1 { i = 0 } /^$/ { ++i; if (i > 2) { print "More than two consecutive empty lines in file " FILENAME } } /./ { i = 0 }'
 
 # Check that every header file has #pragma once in first line
 xargs < "$STYLE_TMPDIR/nobase_headers_excluded" awk 'FNR==1 && !/^#pragma once$/ { print "File " FILENAME " must have '"'"'#pragma once'"'"' in first line" }'
@@ -175,7 +175,7 @@ xargs < "$STYLE_TMPDIR/all_excluded" grep -n ' $' | grep . && echo "^ Trailing w
 xargs < "$STYLE_TMPDIR/nobase_excluded" grep -E 'std::[io]?stringstream' | grep -v "STYLE_CHECK_ALLOW_STD_STRING_STREAM" && echo "Use WriteBufferFromOwnString or ReadBufferFromString instead of std::stringstream"
 
 # Forbid hardware_destructive_interference_size because it provides unrealistic values for ARM (see https://github.com/ClickHouse/ClickHouse/pull/97357)
-xargs < "$STYLE_TMPDIR/nobase_excluded" grep -E '(hardware_destructive_interference_size|hardware_constructive_interference_size)' | grep -v ':\s*//' && echo "Use CH_CACHE_LINE_SIZE from Common/CacheLine.h instead"
+xargs < "$STYLE_TMPDIR/nobase_excluded" grep -E '(hardware_destructive_interference_size|hardware_constructive_interference_size)' | grep -vE ':[[:space:]]*//' && echo "Use CH_CACHE_LINE_SIZE from Common/CacheLine.h instead"
 
 directories_to_lint_std_containers_usages=(
     src/AggregateFunctions
@@ -227,7 +227,7 @@ std_cerr_cout_excludes=(
     src/IO/Ask.cpp
 )
 grep -F -v $(printf -- "-e %s " "${std_cerr_cout_excludes[@]}") "$STYLE_TMPDIR/srcbase_excluded" | \
-    xargs grep -P -l '^\s*(?!//).*std::c(err|out)' | \
+    xargs grep -P -l '^\s*(?!//)([^/]|/[^/])*std::c(err|out)' | \
     while read -r src; do echo "$src: uses std::cerr/std::cout"; done
 
 expect_tests=( $(find $ROOT_PATH/tests/queries -name '*.expect') )

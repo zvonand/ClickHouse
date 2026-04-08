@@ -1,0 +1,63 @@
+-- { echo }
+
+-- cramersV
+DROP TABLE IF EXISTS test_cramers_v;
+CREATE TABLE test_cramers_v (s AggregateFunction(cramersV, UInt8, UInt8)) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_cramers_v SELECT cramersVState(toUInt8(number % 10), toUInt8(number % 6)) OVER () FROM numbers(100) LIMIT 1;
+SELECT round(cramersVMerge(s), 4) FROM test_cramers_v;
+
+-- contingency
+DROP TABLE IF EXISTS test_contingency;
+CREATE TABLE test_contingency (s AggregateFunction(contingency, UInt8, UInt8)) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_contingency SELECT contingencyState(toUInt8(number % 10), toUInt8(number % 6)) OVER () FROM numbers(100) LIMIT 1;
+SELECT round(contingencyMerge(s), 4) FROM test_contingency;
+
+-- cramersVBiasCorrected
+DROP TABLE IF EXISTS test_cramers_v_bc;
+CREATE TABLE test_cramers_v_bc (s AggregateFunction(cramersVBiasCorrected, UInt8, UInt8)) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_cramers_v_bc SELECT cramersVBiasCorrectedState(toUInt8(number % 10), toUInt8(number % 6)) OVER () FROM numbers(100) LIMIT 1;
+SELECT round(cramersVBiasCorrectedMerge(s), 4) FROM test_cramers_v_bc;
+
+-- theilsU
+DROP TABLE IF EXISTS test_theils_u;
+CREATE TABLE test_theils_u (s AggregateFunction(theilsU, UInt8, UInt8)) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_theils_u SELECT theilsUState(toUInt8(number % 10), toUInt8(number % 6)) OVER () FROM numbers(100) LIMIT 1;
+SELECT round(theilsUMerge(s), 4) FROM test_theils_u;
+
+-- Verify results match direct aggregation
+SELECT
+    round(cramersV(toUInt8(number % 10), toUInt8(number % 6)), 4) = 0.4557,
+    round(contingency(toUInt8(number % 10), toUInt8(number % 6)), 4) = 0.7137,
+    round(cramersVBiasCorrected(toUInt8(number % 10), toUInt8(number % 6)), 4) = 0.3506,
+    round(theilsU(toUInt8(number % 10), toUInt8(number % 6)), 4) = 0.3051
+FROM numbers(100);
+
+-- Materialized view: window state inserted into AggregateFunction column
+DROP VIEW IF EXISTS test_mv;
+DROP TABLE IF EXISTS test_mv_dst;
+DROP TABLE IF EXISTS test_mv_src;
+CREATE TABLE test_mv_src (a UInt8, b UInt8) ENGINE = MergeTree ORDER BY tuple();
+CREATE TABLE test_mv_dst (s AggregateFunction(cramersV, UInt8, UInt8)) ENGINE = AggregatingMergeTree ORDER BY tuple();
+CREATE MATERIALIZED VIEW test_mv TO test_mv_dst AS SELECT cramersVState(a, b) OVER () AS s FROM test_mv_src;
+INSERT INTO test_mv_src SELECT number % 10, number % 6 FROM numbers(100);
+SELECT round(cramersVMerge(s), 4) FROM test_mv_dst;
+
+-- AggregatingMergeTree: merge of two parts both inserted from window states
+DROP TABLE IF EXISTS test_amt;
+CREATE TABLE test_amt (k UInt8, s AggregateFunction(cramersV, UInt8, UInt8)) ENGINE = AggregatingMergeTree ORDER BY k;
+INSERT INTO test_amt SELECT 1, cramersVState(toUInt8(number % 10), toUInt8(number % 6)) OVER () FROM numbers(100) LIMIT 1;
+INSERT INTO test_amt SELECT 1, cramersVState(toUInt8(number % 5), toUInt8(number % 3)) OVER () FROM numbers(50) LIMIT 1;
+OPTIMIZE TABLE test_amt FINAL;
+SELECT round(cramersVMerge(s), 4) FROM test_amt;
+
+-- Subquery
+SELECT round(cramersVMerge(s), 4) FROM (
+    SELECT cramersVState(toUInt8(number % 10), toUInt8(number % 6)) OVER () AS s FROM numbers(100) LIMIT 1
+);
+
+-- UNION ALL
+SELECT count() FROM (
+    SELECT cramersVState(toUInt8(number % 10), toUInt8(number % 6)) OVER () AS s FROM numbers(50) LIMIT 1
+    UNION ALL
+    SELECT cramersVState(toUInt8(number % 10), toUInt8(number % 6)) AS s FROM numbers(50)
+);

@@ -255,7 +255,6 @@ LARGE_FILE_WHITELIST=(
     # Legitimate test data that is hard to generate at runtime
     tests/queries/0_stateless/data_parquet/multi_column_bf.gz.parquet
     tests/queries/0_stateless/data_json/ghdata_sample.json
-    tests/stress/keeper/workloads/zookeeper_log.parquet
     tests/integration/test_catboost_evaluate/model/libcatboostmodel.so_aarch64
     tests/integration/test_catboost_evaluate/model/libcatboostmodel.so_x86_64
     tests/queries/0_stateless/data_zstd/test_01946.zstd

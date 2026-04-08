@@ -10,7 +10,6 @@
 #include <Common/ZooKeeper/IKeeper.h>
 #include <Common/ZooKeeper/KeeperException.h>
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
-#include <Common/ZooKeeper/ZooKeeperRetries.h>
 #include <Common/escapeForFileName.h>
 #include <Common/logger_useful.h>
 #include <Common/quoteString.h>
@@ -430,32 +429,17 @@ void UserDefinedSQLObjectsZooKeeperStorage::refreshObjects(const zkutil::ZooKeep
     Strings object_names = getObjectNamesAndSetWatch(zookeeper, object_type);
 
     /// Read & parse all SQL objects from ZooKeeper.
-    /// Use ZooKeeperRetriesControl so that transient Keeper hiccups (brief connection
-    /// blips, session jitter) are retried with backoff instead of aborting the entire
-    /// refresh cycle and falling back to the 5-second sleep in processWatchQueue.
-    /// tryLoadObject re-throws Keeper hardware errors, which ZooKeeperRetriesControl
-    /// catches and retries automatically.  If retries are exhausted the exception
-    /// propagates to the caller, so we never reach setAllObjects with a partial set.
-    static constexpr UInt64 max_retries = 5;
-    static constexpr UInt64 initial_backoff_ms = 200;
-    static constexpr UInt64 max_backoff_ms = 5000;
-
+    /// tryLoadObject re-throws Keeper hardware errors (session expired, connection loss),
+    /// so the exception propagates to processWatchQueue's catch-all which resets the
+    /// session and retries.  This guarantees setAllObjects is never called with a partial
+    /// set — either all objects load successfully, or the whole refresh is retried from
+    /// scratch with a fresh session.
     std::vector<std::pair<String, ASTPtr>> function_names_and_asts;
-
-    ZooKeeperRetriesControl retries_ctl(
-        "refreshObjects",
-        log,
-        ZooKeeperRetriesInfo{max_retries, initial_backoff_ms, max_backoff_ms, /*query_status=*/nullptr});
-
-    retries_ctl.retryLoop([&]
+    for (const auto & function_name : object_names)
     {
-        function_names_and_asts.clear();
-        for (const auto & function_name : object_names)
-        {
-            if (auto ast = tryLoadObject(zookeeper, UserDefinedSQLObjectType::Function, function_name))
-                function_names_and_asts.emplace_back(function_name, ast);
-        }
-    });
+        if (auto ast = tryLoadObject(zookeeper, UserDefinedSQLObjectType::Function, function_name))
+            function_names_and_asts.emplace_back(function_name, ast);
+    }
 
     setAllObjects(function_names_and_asts);
 

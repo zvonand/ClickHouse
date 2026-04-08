@@ -9,20 +9,15 @@ namespace DB
 template <typename A, typename B, typename ResultType>
 void divideImpl(const A * __restrict a_pos, B b, ResultType * __restrict c_pos, size_t size)
 {
-    /// BRANCHFREE: the divisor is loop-invariant, so the per-iteration
-    /// algorithm-type branch in BRANCHFULL is pure overhead.  BRANCHFREE
-    /// produces a straight-line multiply-shift sequence that the compiler
-    /// auto-vectorizes to the widest available SIMD.
-    libdivide::divider<A, libdivide::BRANCHFREE> divider(static_cast<A>(b));
-
-    /// For 64-bit types, auto-vectorization degrades to scalar
-    /// extract/insert sequences.  Use libdivide's explicit AVX2 path
-    /// which has hand-tuned 64-bit vector implementations.
-    if constexpr (sizeof(A) == 8)
+#if defined(LIBDIVIDE_AVX2)
+    if constexpr (sizeof(A) >= 8)
     {
+        /// For 64-bit types on AVX2, auto-vectorization degrades to scalar
+        /// extract/insert (no vpmuludq for 64-bit).  Use BRANCHFREE with
+        /// libdivide's hand-tuned divide(__m256i).
+        libdivide::divider<A, libdivide::BRANCHFREE> divider(static_cast<A>(b));
         const A * a_end = a_pos + size;
 
-#if defined(LIBDIVIDE_AVX2)
         static constexpr size_t values_per_register = 32 / sizeof(A);
         const A * a_end_simd = a_pos + size / values_per_register * values_per_register;
 
@@ -33,7 +28,6 @@ void divideImpl(const A * __restrict a_pos, B b, ResultType * __restrict c_pos, 
             a_pos += values_per_register;
             c_pos += values_per_register;
         }
-#endif
 
         while (a_pos < a_end)
         {
@@ -43,9 +37,14 @@ void divideImpl(const A * __restrict a_pos, B b, ResultType * __restrict c_pos, 
         }
     }
     else
+#endif
     {
-        /// For 32-bit (and narrower) types, the compiler auto-vectorizes
-        /// the branchfree multiply-shift sequence efficiently via vpmuludq.
+        /// BRANCHFULL: the per-iteration algorithm-type branch is perfectly
+        /// predicted (loop-invariant) and lets most divisors take the fast
+        /// `mullhi >> shift` path (2 ops vs BRANCHFREE's 5 ops).  The
+        /// compiler auto-vectorizes each path independently (vpmuludq on
+        /// x86 for 32-bit, NEON on ARM).
+        libdivide::divider<A, libdivide::BRANCHFULL> divider(static_cast<A>(b));
         for (size_t i = 0; i < size; ++i)
             c_pos[i] = a_pos[i] / divider;
     }

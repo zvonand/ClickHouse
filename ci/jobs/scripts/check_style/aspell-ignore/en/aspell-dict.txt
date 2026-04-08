@@ -1009,6 +1009,7 @@ ReferenceKeyed
 Refreshable
 RegexpTree
 RemoteRead
+ReplicatedCoalescingMergeTree
 ReplacingMergeTree
 ReplicasMaxAbsoluteDelay
 ReplicasMaxInsertsInQueue

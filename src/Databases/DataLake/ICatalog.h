@@ -33,6 +33,10 @@ public:
     TableMetadata & withSchema() { with_schema = true; return *this; }
     TableMetadata & withStorageCredentials() { with_storage_credentials = true; return *this; }
     TableMetadata & withDataLakeSpecificProperties() { with_datalake_specific_metadata = true; return *this; }
+    /// Enable Polaris/ADLS Gen2 convention: when `setLocation` sees an ABFSS URL where the
+    /// first path segment equals the container name, treat it as a redundant prefix and record
+    /// it so that `constructLocation` and `getMetadataLocation` can strip it.
+    TableMetadata & withPolarisStyleAbfssPaths() { polaris_style_abfss_paths = true; return *this; }
 
     bool hasLocation() const;
     bool hasSchema() const;
@@ -101,6 +105,7 @@ private:
     /// When set, `constructLocation` and `getMetadataLocation` strip that prefix when building
     /// Azure HTTPS URLs or comparing metadata-file prefixes, but `path` itself is left intact so
     /// that `getLocation` remains a round-trip of `setLocation`.
+    bool polaris_style_abfss_paths = false;
     bool abfss_has_container_path_prefix = false;
     /// Endpoint is set and used in case we have non-AWS storage implementation, for example, Minio.
     /// Also not all catalogs support non-AWS storages.

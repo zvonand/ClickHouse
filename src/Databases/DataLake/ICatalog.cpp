@@ -125,7 +125,7 @@ void TableMetadata::setLocation(const std::string & location_)
         /// We record this as a flag so that `constructLocation` and `getMetadataLocation` can
         /// strip the redundant prefix when needed, while `path` itself is left intact so that
         /// `getLocation` remains a round-trip of `setLocation`.
-        if (path.starts_with(bucket + "/"))
+        if (polaris_style_abfss_paths && path.starts_with(bucket + "/"))
             abfss_has_container_path_prefix = true;
 
         LOG_TEST(getLogger("TableMetadata"),

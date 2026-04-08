@@ -497,6 +497,8 @@ StoragePtr DatabaseDataLake::tryGetTableImpl(const String & name, ContextPtr con
 {
     auto catalog = getCatalog();
     auto table_metadata = DataLake::TableMetadata().withSchema().withLocation().withDataLakeSpecificProperties();
+    if (settings[DatabaseDataLakeSetting::polaris_style_paths])
+        table_metadata.withPolarisStyleAbfssPaths();
 
     /// This is added to test that lightweight queries like 'SHOW TABLES' dont end up fetching the table
     fiu_do_on(FailPoints::lightweight_show_tables,
@@ -870,6 +872,8 @@ ASTPtr DatabaseDataLake::getCreateTableQueryImpl(
 {
     auto catalog = getCatalog();
     auto table_metadata = DataLake::TableMetadata().withLocation().withSchema();
+    if (settings[DatabaseDataLakeSetting::polaris_style_paths])
+        table_metadata.withPolarisStyleAbfssPaths();
 
     const auto [namespace_name, table_name] = DataLake::parseTableName(name);
 

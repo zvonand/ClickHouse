@@ -147,7 +147,7 @@ TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationNonPolarisContaine
 TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationPolarisStyle)
 {
     TableMetadata metadata;
-    metadata.withLocation();
+    metadata.withLocation().withPolarisStyleAbfssPaths();
     metadata.setLocation("abfss://mycontainer@mystorageaccount.dfs.core.windows.net/mycontainer/actual/path");
 
     const std::string metadata_file =
@@ -160,16 +160,17 @@ TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationPolarisStyle)
     const std::string location = "abfss://mycontainer@mystorageaccount.dfs.core.windows.net/mycontainer/actual/path";
 
     TableMetadata metadata;
-    metadata.withLocation();
+    metadata.withLocation().withPolarisStyleAbfssPaths();
     metadata.setLocation(location);
 
+    /// `getLocation` without endpoint is always a round-trip regardless of the Polaris flag.
     EXPECT_EQ(metadata.getLocation(), location);
 }
 
 TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationPolarisStyleWithEndpoint)
 {
     TableMetadata metadata;
-    metadata.withLocation();
+    metadata.withLocation().withPolarisStyleAbfssPaths();
     metadata.setLocation("abfss://mycontainer@mystorageaccount.dfs.core.windows.net/mycontainer/actual/path");
     metadata.setEndpoint("https://mystorageaccount.dfs.core.windows.net");
 
@@ -181,7 +182,7 @@ TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationPolarisStyleWithEndpoint)
 TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationPolarisStyleWithEndpoint)
 {
     TableMetadata metadata;
-    metadata.withLocation();
+    metadata.withLocation().withPolarisStyleAbfssPaths();
     metadata.setLocation("abfss://mycontainer@account.dfs.core.windows.net/mycontainer/actual/path");
     metadata.setEndpoint("https://account.dfs.core.windows.net");
 
@@ -203,12 +204,12 @@ TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationEqualStrings)
 TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationPolarisStyleEndpointTrailingSlash)
 {
     TableMetadata metadata_no_slash;
-    metadata_no_slash.withLocation();
+    metadata_no_slash.withLocation().withPolarisStyleAbfssPaths();
     metadata_no_slash.setLocation("abfss://mycontainer@account.dfs.core.windows.net/mycontainer/actual/path");
     metadata_no_slash.setEndpoint("https://account.dfs.core.windows.net");
 
     TableMetadata metadata_with_slash;
-    metadata_with_slash.withLocation();
+    metadata_with_slash.withLocation().withPolarisStyleAbfssPaths();
     metadata_with_slash.setLocation("abfss://mycontainer@account.dfs.core.windows.net/mycontainer/actual/path");
     metadata_with_slash.setEndpoint("https://account.dfs.core.windows.net/");
 
@@ -217,6 +218,38 @@ TEST_F(AzureAbfssParsingTest, TableMetadataGetMetadataLocationPolarisStyleEndpoi
 
     EXPECT_EQ(metadata_no_slash.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
     EXPECT_EQ(metadata_with_slash.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
+}
+
+TEST_F(AzureAbfssParsingTest, TableMetadataContainerNamedDirNotStrippedWithoutPolarisFlag)
+{
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation("abfss://mycontainer@account.dfs.core.windows.net/mycontainer/data/table");
+    metadata.setEndpoint("https://account.dfs.core.windows.net");
+
+    EXPECT_EQ(
+        metadata.getLocation(),
+        "https://account.dfs.core.windows.net/mycontainer/mycontainer/data/table/");
+
+    const std::string metadata_file =
+        "abfss://mycontainer@account.dfs.core.windows.net/mycontainer/data/table/metadata/v1.metadata.json";
+    EXPECT_EQ(metadata.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
+}
+
+TEST_F(AzureAbfssParsingTest, TableMetadataContainerNamedDirStrippedWithPolarisFlag)
+{
+    TableMetadata metadata;
+    metadata.withLocation().withPolarisStyleAbfssPaths();
+    metadata.setLocation("abfss://mycontainer@account.dfs.core.windows.net/mycontainer/data/table");
+    metadata.setEndpoint("https://account.dfs.core.windows.net");
+
+    EXPECT_EQ(
+        metadata.getLocation(),
+        "https://account.dfs.core.windows.net/mycontainer/data/table/");
+
+    const std::string metadata_file =
+        "abfss://mycontainer@account.dfs.core.windows.net/mycontainer/data/table/metadata/v1.metadata.json";
+    EXPECT_EQ(metadata.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
 }
 
 }

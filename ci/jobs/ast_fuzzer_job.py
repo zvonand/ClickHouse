@@ -229,27 +229,30 @@ def run_fuzz_job(check_name: str):
     core_zst = workspace_path / "core.zst"
     core_zst_enc = workspace_path / "core.zst.enc"
     aes_key = temp_dir / "aes.key"
-    try:
-        if core_zst.exists():
-            Utils.encrypt(str(core_zst), f"{cwd}/ci/defs/public.pem", str(aes_key))
-            if not core_zst_enc.exists():
-                logging.warning(
-                    "Core dump encryption did not produce expected artifact: %s",
-                    core_zst_enc,
-                )
-    except Exception as e:
-        logging.warning("Failed to encrypt core dump: %s", e)
+    aes_key_rsa = temp_dir / "aes.key.rsa"
+    paths = []
 
-    paths = [
-        workspace_path / "core.zst.enc",
-        temp_dir / "aes.key.rsa",
+    if core_zst.exists():
+        try:
+            Utils.encrypt(str(core_zst), f"{cwd}/ci/defs/public.pem", str(aes_key))
+        except Exception as e:
+            logging.warning("Failed to encrypt core dump: %s", e)
+        if not core_zst_enc.exists():
+            logging.warning(
+                "Core dump encryption did not produce expected artifact: %s",
+                core_zst_enc,
+            )
+        else:
+            paths = [core_zst_enc, aes_key_rsa]
+
+    paths.extend([
         workspace_path / "dmesg.log",
         fatal_log,
         stderr_log,
         server_log,
         fuzzer_log,
         dmesg_log,
-    ]
+    ])
     if buzzhouse:
         paths.extend([workspace_path / "fuzzerout.sql", workspace_path / "fuzz.json"])
 

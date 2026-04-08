@@ -13,6 +13,8 @@ INSERT INTO test_s3_metrics SELECT number, repeat('x', 1000) FROM numbers(10000)
 -- Force a read from S3.
 SELECT count() FROM test_s3_metrics WHERE NOT ignore(value) FORMAT Null;
 
+SYSTEM FLUSH LOGS system.histogram_metrics;
+
 -- Check that duration metric has observations (+Inf bucket is cumulative total count).
 SELECT value > 0
 FROM system.histogram_metrics

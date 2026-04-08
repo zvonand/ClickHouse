@@ -1722,18 +1722,10 @@ def test_rabbitmq_virtual_columns(rabbitmq_cluster, db, unique):
     """
     )
 
-    expected = """\
-0	0	virtuals	1_0	1	0
-1	1	virtuals	1_0	2	0
-2	2	virtuals	1_0	3	0
-3	3	virtuals	1_0	4	0
-4	4	virtuals	1_0	5	0
-5	5	virtuals	1_0	6	0
-6	6	virtuals	1_0	7	0
-7	7	virtuals	1_0	8	0
-8	8	virtuals	1_0	9	0
-9	9	virtuals	1_0	10	0
-"""
+    exchange = f"{unique}_virtuals"
+    expected = "\n".join(
+        [f"{i}\t{i}\t{exchange}\t1_0\t{i+1}\t0" for i in range(10)]
+    ) + "\n"
 
     instance.query(
         f"""
@@ -1788,18 +1780,10 @@ def test_rabbitmq_virtual_columns_with_materialized_view(rabbitmq_cluster, db, u
     result = instance.query(
         f"SELECT key, value, exchange_name, SUBSTRING(channel_id, 1, 3), delivery_tag, redelivered FROM {db}.view ORDER BY delivery_tag"
     )
-    expected = """\
-0	0	virtuals_mv	1_0	1	0
-1	1	virtuals_mv	1_0	2	0
-2	2	virtuals_mv	1_0	3	0
-3	3	virtuals_mv	1_0	4	0
-4	4	virtuals_mv	1_0	5	0
-5	5	virtuals_mv	1_0	6	0
-6	6	virtuals_mv	1_0	7	0
-7	7	virtuals_mv	1_0	8	0
-8	8	virtuals_mv	1_0	9	0
-9	9	virtuals_mv	1_0	10	0
-"""
+    exchange = f"{unique}_virtuals_mv"
+    expected = "\n".join(
+        [f"{i}\t{i}\t{exchange}\t1_0\t{i+1}\t0" for i in range(10)]
+    ) + "\n"
 
     instance.query(
         f"""
@@ -3148,7 +3132,7 @@ def test_rabbitmq_flush_by_block_size(rabbitmq_cluster, db, unique):
         if (
             int(
                 instance.query(
-                    "SELECT count() FROM system.parts WHERE database = 'test' AND table = 'view' AND name = 'all_1_1_0'"
+                    f"SELECT count() FROM system.parts WHERE database = '{db}' AND table = 'view' AND name = 'all_1_1_0'"
                 )
             )
             != 0
@@ -3242,12 +3226,12 @@ def test_rabbitmq_flush_by_time(rabbitmq_cluster, db, unique):
     while time.monotonic() < deadline:
         time.sleep(0.2)
         total_count = instance.query(
-            "SELECT count() FROM system.parts WHERE database = 'test' AND table = 'view'"
+            f"SELECT count() FROM system.parts WHERE database = '{db}' AND table = 'view'"
         )
         logging.debug(f"kssenii total count: {total_count}")
         count = int(
             instance.query(
-                "SELECT count() FROM system.parts WHERE database = 'test' AND table = 'view' AND name = 'all_1_1_0'"
+                f"SELECT count() FROM system.parts WHERE database = '{db}' AND table = 'view' AND name = 'all_1_1_0'"
             )
         )
         logging.debug(f"kssenii count: {count}")

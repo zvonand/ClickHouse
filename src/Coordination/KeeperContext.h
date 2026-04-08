@@ -106,13 +106,15 @@ public:
     bool waitCommittedUpto(uint64_t log_idx, uint64_t wait_timeout_ms);
 
     /// Settings that were loaded on startup. Can be used for non-hot-reloadable settings.
-    const CoordinationSettings & getCoordinationSettings() const;
+    /// Returns a reference that remains valid for the lifetime of KeeperContext.
+    const CoordinationSettings & getFixedCoordinationSettings() const;
 
     /// Settings that reflect hot-reloaded config changes.
     /// Only settings marked with HOT_RELOAD flag are updated.
     /// The returned reference is valid only until the next call to this function in the same thread.
-    /// A little slower than getCoordinationSettings(), but not by much, can be used in hot loops.
-    const CoordinationSettings & getDynamicSettings() const;
+    /// A little slower than getFixedCoordinationSettings(), but not by much, can be used in hot loops.
+    /// Do not retain the returned reference; use the value immediately or copy it.
+    const CoordinationSettings & getCoordinationSettings() const;
 
     int64_t getPrecommitSleepMillisecondsForTesting() const;
 

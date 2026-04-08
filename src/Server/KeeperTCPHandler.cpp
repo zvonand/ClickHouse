@@ -724,7 +724,7 @@ std::pair<Coordination::OpNum, Coordination::XID> KeeperTCPHandler::receiveReque
 {
     const UInt64 receive_start_time = ZooKeeperOpentelemetrySpans::now();
 
-    const size_t max_request_size = static_cast<size_t>(keeper_context->getDynamicSettings()[CoordinationSetting::max_request_size]);
+    const size_t max_request_size = static_cast<size_t>(keeper_context->getCoordinationSettings()[CoordinationSetting::max_request_size]);
 
     std::optional<LimitReadBuffer> limited_buffer_holder;
     /// Wrap regular read buffer with LimitReadBuffer to apply max_request_size

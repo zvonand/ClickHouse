@@ -70,7 +70,7 @@ std::string getRawBytesFromRequest(HTTPServerRequest & request, const KeeperCont
     std::string request_data;
     auto stream = request.getStream();
 
-    size_t max_request_size = keeper_context->getDynamicSettings()[CoordinationSetting::max_request_size];
+    size_t max_request_size = keeper_context->getCoordinationSettings()[CoordinationSetting::max_request_size];
     if (max_request_size > 0)
     {
         LimitReadBuffer limited_stream(*stream, LimitReadBuffer::Settings{

@@ -415,7 +415,7 @@ SnapshotVersion KeeperContext::getWriteSnapshotVersion() const
 
 void KeeperContext::dumpConfiguration(WriteBufferFromOwnString & buf) const
 {
-    getDynamicSettings().dump(buf);
+    getCoordinationSettings().dump(buf);
 
     auto dump_disk_info = [&](const std::string_view prefix, const IDisk & disk)
     {
@@ -667,12 +667,12 @@ void KeeperContext::waitLocalLogsPreprocessedOrShutdown()
     local_logs_preprocessed_cv.wait(lock, [this]{ return shutdown_called || local_logs_preprocessed; });
 }
 
-const CoordinationSettings & KeeperContext::getCoordinationSettings() const
+const CoordinationSettings & KeeperContext::getFixedCoordinationSettings() const
 {
     return *fixed_settings;
 }
 
-const CoordinationSettings & KeeperContext::getDynamicSettings() const
+const CoordinationSettings & KeeperContext::getCoordinationSettings() const
 {
     /// Fast path: just a few memory reads, no shared memory writes.
     /// Note: if multiple KeeperContext instances are in use by the same thread (which shouldn't

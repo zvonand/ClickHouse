@@ -187,7 +187,7 @@ void KeeperDispatcher::requestThread()
 
         KeeperRequestForSession request;
 
-        const auto & dynamic_settings = keeper_context->getDynamicSettings();
+        const auto & dynamic_settings = keeper_context->getCoordinationSettings();
         uint64_t operation_timeout_ms = dynamic_settings[CoordinationSetting::operation_timeout_ms].totalMilliseconds();
         uint64_t max_batch_bytes_size = dynamic_settings[CoordinationSetting::max_requests_batch_bytes_size];
         size_t max_batch_size = dynamic_settings[CoordinationSetting::max_requests_batch_size];

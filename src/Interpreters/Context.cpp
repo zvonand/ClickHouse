@@ -931,13 +931,14 @@ struct ContextSharedPart : boost::noncopyable
         LOG_TRACE(log, "Shutting down caches");
         for (const auto & cache_data : FileCacheFactory::instance().getUniqueInstances())
             cache_data->cache->deactivateBackgroundOperations();
-        FileCacheFactory::instance().clear();
 
         LOG_TRACE(log, "Shutting down database catalog");
         DatabaseCatalog::shutdown([this]()
         {
             SHUTDOWN(log, "system logs", TSA_SUPPRESS_WARNING_FOR_READ(system_logs), flushAndShutdown());
         });
+
+        FileCacheFactory::instance().clear();
 
         NamedCollectionFactory::instance().shutdown();
 

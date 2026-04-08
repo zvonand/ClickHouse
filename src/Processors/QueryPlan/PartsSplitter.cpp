@@ -105,7 +105,7 @@ bool isSafePrimaryKey(const KeyDescription & primary_key)
     return true;
 }
 
-} /// namespace DB
+}
 
 namespace
 {

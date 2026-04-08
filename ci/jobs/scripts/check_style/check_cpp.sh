@@ -115,48 +115,71 @@ EXTERN_TYPES_EXCLUDES=(
 # Check unused/undefined/duplicate ErrorCodes, ProfileEvents, CurrentMetrics declarations.
 # NOTE: the unused check is pretty dumb and distinguishes only by the type_of_extern,
 # and this matches with zkutil::CreateMode
-grep -v -e 'src/Common/ZooKeeper/Types.h' -e 'src/Coordination/KeeperConstants.cpp' "$STYLE_TMPDIR/all_excluded" | \
-    xargs rg -l 'extern const (int|Event|Metric) [_A-Za-z0-9]+|ErrorCodes::|ProfileEvents::|CurrentMetrics::' | \
-    xargs python3 -c '
-import sys, re, os
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from collections import Counter
+grep -v -e 'src/Common/ZooKeeper/Types.h' -e 'src/Coordination/KeeperConstants.cpp' "$STYLE_TMPDIR/all_excluded" > "$STYLE_TMPDIR/extern_files"
 
-TYPES = {"ErrorCodes": "int", "ProfileEvents": "Event", "CurrentMetrics": "Metric"}
-EXCLUDES = set("""'"${EXTERN_TYPES_EXCLUDES[*]}"'""".split())
+# Extract declarations: "filepath:D TYPE NAME"
+xargs < "$STYLE_TMPDIR/extern_files" rg -o --no-line-number \
+    'extern const (int|Event|Metric) ([_A-Za-z0-9]+);' -r 'D $1 $2' > "$STYLE_TMPDIR/extern_combined"
 
-decl_re = {ext: re.compile(r"extern const " + typ + r" ([_A-Za-z0-9]+);") for ext, typ in TYPES.items()}
-usage_re = {ext: re.compile(ext + r"::([_A-Za-z0-9]+)") for ext in TYPES}
+# Extract usages (skipping comment lines): "filepath:U NS NAME"
+xargs < "$STYLE_TMPDIR/extern_files" rg --no-line-number \
+    '(ErrorCodes|ProfileEvents|CurrentMetrics)::[_A-Za-z0-9]+' | \
+    awk -F: '{
+        file = $1
+        line = ""
+        for (i = 2; i <= NF; i++) line = line (i > 2 ? ":" : "") $i
+        sub(/^[[:space:]]+/, "", line)
+        if (substr(line, 1, 2) == "//") next
+        while (match(line, /(ErrorCodes|ProfileEvents|CurrentMetrics)::[_A-Za-z0-9]+/)) {
+            ns = substr(line, RSTART, RLENGTH)
+            sep = index(ns, "::")
+            print file ":U " substr(ns, 1, sep - 1) " " substr(ns, sep + 2)
+            line = substr(line, RSTART + RLENGTH)
+        }
+    }' >> "$STYLE_TMPDIR/extern_combined"
 
-def check_file(path):
-    try:
-        with open(path) as f:
-            lines = f.readlines()
-    except (OSError, UnicodeDecodeError):
-        return []
-    results = []
-    content = "".join(lines)
-    code_lines = "".join(l for l in lines if not l.lstrip().startswith("//"))
-    for ext in TYPES:
-        decls = Counter(m.group(1) for m in decl_re[ext].finditer(content))
-        usages = set(m.group(1) for m in usage_re[ext].finditer(code_lines))
-        for name, count in decls.items():
-            if name not in usages:
-                if not (ext == "ProfileEvents" and name.startswith("Perf")):
-                    results.append(f"{ext}::{name} is defined but not used in file {path}")
-            if count > 1:
-                results.append(f"Duplicate {ext} in file {path}")
-        for name in usages:
-            if name not in decls and f"{ext}::{name}" not in EXCLUDES:
-                results.append(f"{ext}::{name} is used in file {path} but not defined")
-    return results
-
-with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
-    futures = {pool.submit(check_file, p): p for p in sys.argv[1:]}
-    for f in as_completed(futures):
-        for line in f.result():
-            print(line)
-'
+# Compare declarations vs usages per file
+awk -v excludes="${EXTERN_TYPES_EXCLUDES[*]}" '
+BEGIN {
+    split(excludes, exc_arr, " ")
+    for (i in exc_arr) exc_set[exc_arr[i]] = 1
+    type_to_ns["int"] = "ErrorCodes"
+    type_to_ns["Event"] = "ProfileEvents"
+    type_to_ns["Metric"] = "CurrentMetrics"
+}
+{
+    colon = index($0, ":")
+    file = substr($0, 1, colon - 1)
+    rest = substr($0, colon + 1)
+    split(rest, p, " ")
+    if (p[1] == "D") {
+        ns = type_to_ns[p[2]]
+        key = file SUBSEP ns SUBSEP p[3]
+        decl[key]++
+    } else {
+        key = file SUBSEP p[2] SUBSEP p[3]
+        used[key] = 1
+    }
+}
+END {
+    for (key in decl) {
+        split(key, k, SUBSEP)
+        file = k[1]; ns = k[2]; name = k[3]
+        if (!(key in used))
+            if (!(ns == "ProfileEvents" && substr(name, 1, 4) == "Perf"))
+                print ns "::" name " is defined but not used in file " file
+        if (decl[key] > 1)
+            print "Duplicate " ns " in file " file
+    }
+    for (key in used) {
+        if (!(key in decl)) {
+            split(key, k, SUBSEP)
+            if (!((k[2] "::" k[3]) in exc_set))
+                print k[2] "::" k[3] " is used in file " k[1] " but not defined"
+        }
+    }
+}
+' "$STYLE_TMPDIR/extern_combined"
 
 # Three or more consecutive empty lines (pre-filter with grep to avoid reading all files through awk)
 xargs < "$STYLE_TMPDIR/all_excluded" grep -PlzZ '\n\n\n\n' 2>/dev/null | \

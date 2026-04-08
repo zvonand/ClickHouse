@@ -50,11 +50,11 @@ struct SmallStringView
             data_big = data_;
     }
 
-    SmallStringView(const unsigned char * data_, size_t size_) : SmallStringView(reinterpret_cast<const char *>(data_), size_) {} // NOLINT(clang-diagnostic-unused-member-function)
-    explicit SmallStringView(const std::string & s) : SmallStringView(s.data(), s.size()) {} // NOLINT(clang-diagnostic-unused-member-function)
+    [[maybe_unused]] SmallStringView(const unsigned char * data_, size_t size_) : SmallStringView(reinterpret_cast<const char *>(data_), size_) {}
+    [[maybe_unused]] explicit SmallStringView(const std::string & s) : SmallStringView(s.data(), s.size()) {}
     SmallStringView() = default;
 
-    std::string toString() const { return std::string(data(), size); } // NOLINT(clang-diagnostic-unused-member-function)
+    [[maybe_unused]] std::string toString() const { return std::string(data(), size); }
 };
 
 
@@ -78,10 +78,10 @@ inline bool operator==(SmallStringView lhs, SmallStringView rhs)
 namespace ZeroTraits
 {
     template <>
-    inline bool check<SmallStringView>(SmallStringView x) { return x.size == 0; }
+    [[maybe_unused]] inline bool check<SmallStringView>(SmallStringView x) { return x.size == 0; }
 
     template <>
-    inline void set<SmallStringView>(SmallStringView & x) { x.size = 0; }
+    [[maybe_unused]] inline void set<SmallStringView>(SmallStringView & x) { x.size = 0; }
 }
 
 template <>

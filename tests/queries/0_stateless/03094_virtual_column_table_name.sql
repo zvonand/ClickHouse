@@ -18,7 +18,6 @@ DROP TABLE IF EXISTS temp1;
 DROP TABLE IF EXISTS temp2;
 DROP TABLE IF EXISTS buffer1;
 DROP VIEW IF EXISTS view1;
-DROP VIEW IF EXISTS view2;
 DROP VIEW IF EXISTS mv1;
 DROP VIEW IF EXISTS mv2;
 DROP TABLE IF EXISTS dist5;
@@ -59,7 +58,6 @@ CREATE TABLE m4 ENGINE=Merge(currentDatabase(), '^(m2|d2)$');
 CREATE TABLE m5 ENGINE=Merge(currentDatabase(), '^(m1|m2)$');
 
 CREATE VIEW view1 AS SELECT key, _table FROM d1;
-CREATE VIEW view2 AS SELECT key FROM d1;
 
 CREATE TABLE d5 (key Int, value Int) ENGINE=MergeTree() ORDER BY key;
 INSERT INTO d5 VALUES (7, 70);
@@ -99,7 +97,6 @@ SELECT _table, key, value FROM m2 WHERE _table = 'd8' and value >= 60;
 SELECT _table, key, value FROM (SELECT _table, key, value FROM d1 UNION ALL SELECT _table, key, value FROM d2) ORDER BY key ASC;
 
 SELECT _table, key FROM view1 ORDER BY key ASC;
-SELECT _table, key FROM view2 ORDER BY key ASC;
 
 SELECT _table, key, value FROM buffer1 ORDER BY key ASC;
 

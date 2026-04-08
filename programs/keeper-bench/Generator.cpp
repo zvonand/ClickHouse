@@ -630,7 +630,7 @@ std::string ListRequestGenerator::descriptionImpl()
     std::string watch_string = watch_probability.has_value() ? fmt::format("\n- watch probability: {}", *watch_probability) : "";
     return fmt::format(
         "List Request Generator\n"
-        "- path(s) to get: {}{}",
+        "- path(s) to list: {}{}",
         path.description(),
         watch_string);
 }

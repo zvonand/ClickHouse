@@ -170,7 +170,7 @@ namespace
                 {"length", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isInteger), nullptr, "const UInt*"},
             };
             FunctionArgumentDescriptors optional_args{
-                {"pad_string", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isStringOrFixedString), isColumnConst, "Array"}
+                {"pad_string", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), isColumnConst, "Array"}
             };
 
             validateFunctionArguments(*this, arguments, mandatory_args, optional_args);
@@ -211,7 +211,11 @@ namespace
             else if (const ColumnConst * col_const_fixed = checkAndGetColumnConst<ColumnFixedString>(column_string.get()))
                 executeForSource(ConstSource<FixedStringSource>{*col_const_fixed}, column_length, pad_string, res_sink);
             else
-                chassert(false);
+                throw Exception(
+                    ErrorCodes::ILLEGAL_COLUMN,
+                    "Illegal column {}, first argument of function {} must be a String or FixedString",
+                    arguments[0].column->getName(),
+                    getName());
 
             return col_res;
         }

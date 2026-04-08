@@ -403,6 +403,10 @@ class CommitStatusCheck:
     @staticmethod
     def process_sync_status(commit_status_data: Optional[GH.CommitStatus], sha: str):
         if not commit_status_data:
+            if not UserPrompt.confirm(
+                "CH Inc sync status is missing. Override to success?"
+            ):
+                sys.exit(0)
             GH.post_commit_status(
                 CheckStatuses.CH_INC_SYNC,
                 Result.Status.SUCCESS,

@@ -65,7 +65,7 @@ inline ALWAYS_INLINE bool hasAllIntegralLoopRemainder(
 // AVX2 Int64, UInt64 specialization
 template<typename IntType>
 requires (std::is_same_v<IntType, Int64> || std::is_same_v<IntType, UInt64>)
-bool sliceHasImplAnyAllImplInt64(
+NO_INLINE bool sliceHasImplAnyAllImplInt64(
     const NumericArraySlice<IntType> & first,
     const NumericArraySlice<IntType> & second,
     const UInt8 * first_null_map,
@@ -156,7 +156,7 @@ bool sliceHasImplAnyAllImplInt64(
 // AVX2 Int32, UInt32 specialization
 template<typename IntType>
 requires (std::is_same_v<IntType, Int32> || std::is_same_v<IntType, UInt32>)
-bool sliceHasImplAnyAllImplInt32(
+NO_INLINE bool sliceHasImplAnyAllImplInt32(
     const NumericArraySlice<IntType> & first,
     const NumericArraySlice<IntType> & second,
     const UInt8 * first_null_map,
@@ -270,7 +270,7 @@ bool sliceHasImplAnyAllImplInt32(
 // AVX2 Int16, UInt16 specialization
 template<typename IntType>
 requires (std::is_same_v<IntType, Int16> || std::is_same_v<IntType, UInt16>)
-bool sliceHasImplAnyAllImplInt16(
+NO_INLINE bool sliceHasImplAnyAllImplInt16(
     const NumericArraySlice<IntType> & first,
     const NumericArraySlice<IntType> & second,
     const UInt8 * first_null_map,
@@ -419,7 +419,7 @@ bool sliceHasImplAnyAllImplInt16(
 // making it more complex without clear benefit.
 template<typename IntType>
 requires (std::is_same_v<IntType, Int8> || std::is_same_v<IntType, UInt8>)
-bool sliceHasImplAnyAllImplInt8(
+NO_INLINE bool sliceHasImplAnyAllImplInt8(
     const NumericArraySlice<IntType> & first,
     const NumericArraySlice<IntType> & second,
     const UInt8 * first_null_map,

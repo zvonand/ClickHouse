@@ -222,6 +222,7 @@ std_cerr_cout_excludes=(
     src/Common/OptimizedRegularExpression.cpp
 )
 grep -F -v $(printf -- "-e %s " "${std_cerr_cout_excludes[@]}") "$STYLE_TMPDIR/srcbase_excluded" | \
+    xargs grep -F -l -e 'std::cerr' -e 'std::cout' | \
     xargs grep -P -l '^\s*(?!//)([^/]|/[^/])*std::c(err|out)' | \
     while read -r src; do echo "$src: uses std::cerr/std::cout"; done
 

@@ -165,8 +165,9 @@ for extern_type in ${!EXTERN_TYPES[@]}; do
     done
 done
 
-# Three or more consecutive empty lines
-xargs < "$STYLE_TMPDIR/all_excluded" awk 'FNR==1 { i = 0 } /^$/ { ++i; if (i > 2) { print "More than two consecutive empty lines in file " FILENAME } } /./ { i = 0 }'
+# Three or more consecutive empty lines (pre-filter with grep to avoid reading all files through awk)
+xargs < "$STYLE_TMPDIR/all_excluded" grep -Plz '\n\n\n\n' 2>/dev/null | \
+    xargs awk 'FNR==1 { i = 0 } /^$/ { ++i; if (i > 2) { print "More than two consecutive empty lines in file " FILENAME } } /./ { i = 0 }'
 
 # Check that every header file has #pragma once in first line
 xargs < "$STYLE_TMPDIR/nobase_headers_excluded" awk 'FNR==1 && !/^#pragma once$/ { print "File " FILENAME " must have '"'"'#pragma once'"'"' in first line" }'

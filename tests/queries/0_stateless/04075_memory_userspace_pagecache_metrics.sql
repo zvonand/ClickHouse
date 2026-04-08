@@ -1,11 +1,16 @@
--- Verify CGroupMemoryUsedWithoutPageCache is present and <= CGroupMemoryUsed.
+-- Verify CGroupMemoryUsedWithoutPageCache is registered and <= CGroupMemoryUsed.
 -- Snapshot both metrics in a single read to avoid races between asynchronous_metrics updates.
--- Uses if() to produce a deterministic result regardless of cgroup availability.
+-- On environments without cgroups, both metrics are absent, so we skip value checks.
 WITH
     (SELECT groupArray((metric, value)) FROM system.asynchronous_metrics
      WHERE metric IN ('CGroupMemoryUsed', 'CGroupMemoryUsedWithoutPageCache')) AS metrics,
+    countIf(x -> x.1 = 'CGroupMemoryUsed', metrics) AS has_used,
+    countIf(x -> x.1 = 'CGroupMemoryUsedWithoutPageCache', metrics) AS has_without_cache,
     arrayFirst(x -> x.1 = 'CGroupMemoryUsed', metrics) AS used,
     arrayFirst(x -> x.1 = 'CGroupMemoryUsedWithoutPageCache', metrics) AS without_cache
 SELECT
-    if(used.2 > 0, without_cache.2 > 0, 1),
-    if(used.2 > 0, without_cache.2 <= used.2, 1);
+    -- Both metrics must be either both present or both absent.
+    has_used = has_without_cache,
+    -- When present, without_cache must be positive and <= used.
+    if(has_used = 1, without_cache.2 > 0, 1),
+    if(has_used = 1, without_cache.2 <= used.2, 1);

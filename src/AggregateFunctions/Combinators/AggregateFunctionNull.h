@@ -175,8 +175,13 @@ public:
     void parallelizeMergeMulti(AggregateDataPtrs & places, ThreadPool & thread_pool, std::atomic<bool> & is_cancelled, Arena * arena) const override
     {
         if constexpr (result_is_nullable)
-            if (getFlag(rhs))
-                setFlag(place);
+            for (size_t i = 1; i < places.size(); ++i)
+                if (getFlag(places[i]))
+                {
+                    setFlag(places[0]);
+                    break;
+                }
+
         AggregateDataPtrs nested_places(places.size());
         for (size_t i = 0; i < places.size(); ++i)
             nested_places[i] = nestedPlace(places[i]);

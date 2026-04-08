@@ -63,7 +63,19 @@ IProcessor::Status LazyFinalKeyAnalysisTransform::prepare()
     if (input.isFinished())
     {
         auto set = future_set->get();
-        if (set && !set->isTruncated())
+        if (!set)
+        {
+            LOG_TRACE(getLogger("LazyFinalKeyAnalysisTransform"),
+                "Lazy FINAL disabled: set is not available");
+        }
+        else if (set->isTruncated())
+        {
+            LOG_TRACE(getLogger("LazyFinalKeyAnalysisTransform"),
+                "Lazy FINAL disabled: set was truncated (rows={}, bytes={}, max_rows={}, max_bytes={})",
+                set->getTotalRowCount(), set->getTotalByteCount(),
+                set->limits.max_rows, set->limits.max_bytes);
+        }
+        else
         {
             if (!is_done)
                 return Status::Ready;
@@ -171,17 +183,22 @@ void LazyFinalKeyAnalysisTransform::work()
     /// Check if enough marks were filtered.
     float filtered_ratio = total_marks > 0 ? 1.0f - static_cast<float>(selected_marks) / static_cast<float>(total_marks) : 0.0f;
 
-    LOG_DEBUG(
-        getLogger("LazyFinalKeyAnalysisTransform"),
-        "Index analysis: total_marks={}, selected_marks={}, filtered_ratio={:.2f}, threshold={:.2f}",
-        total_marks, selected_marks, filtered_ratio, min_filtered_ratio);
-
     if (min_filtered_ratio > 0 && filtered_ratio < min_filtered_ratio)
     {
+        LOG_TRACE(getLogger("LazyFinalKeyAnalysisTransform"),
+            "Lazy FINAL disabled: filtered ratio {:.2f} is below threshold {:.2f} "
+            "(total_marks={}, selected_marks={}, set_rows={})",
+            filtered_ratio, min_filtered_ratio,
+            total_marks, selected_marks, future_set->get()->getTotalRowCount());
         should_signal = false;
     }
     else
     {
+        LOG_TRACE(getLogger("LazyFinalKeyAnalysisTransform"),
+            "Lazy FINAL enabled: filtered ratio {:.2f} (threshold {:.2f}), "
+            "total_marks={}, selected_marks={}, set_rows={}",
+            filtered_ratio, min_filtered_ratio,
+            total_marks, selected_marks, future_set->get()->getTotalRowCount());
         should_signal = true;
         shared_state->reading_step = std::move(reading);
     }

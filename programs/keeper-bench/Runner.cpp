@@ -2,7 +2,6 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
-#include <span>
 #include <Poco/Util/AbstractConfiguration.h>
 
 #include <Columns/IColumn.h>
@@ -327,8 +326,6 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
                     thread_state.thread_info.addRead(result.elapsed_microseconds, 1, bytes);
                 else
                     thread_state.thread_info.addWrite(result.elapsed_microseconds, 1, bytes);
-
-                thread_state.thread_info.addOp(slot.request->getOpNum(), result.elapsed_microseconds, 1, bytes);
             }
         }
         catch (...) // Ok: handle_request_exception logs and counts the error
@@ -409,7 +406,6 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
         Coordination::WatchCallbackPtrOrEventPtr watch_callback;
         if (request_with_callbacks.has_watch)
         {
-            info->watches_set.fetch_add(1, std::memory_order_relaxed);
             watch_callback = std::make_shared<Coordination::WatchCallback>(
                 [stats = info](const Coordination::WatchResponse &)
                 {
@@ -1140,7 +1136,7 @@ void Runner::runBenchmarkFromLog()
             dumpStats("Write", stats.write_requests);
             dumpStats("Read", stats.read_requests);
             std::lock_guard lock(mutex);
-            info->report();
+            info->report(*info);
             DB::WriteBufferFromOwnString out;
             info->writeJSON(out, 0);
             writeOutputString(out.str(), 0);
@@ -1247,6 +1243,10 @@ void Runner::runBenchmarkWithGenerator()
     Stopwatch warmup_watch;
     delay_watch.restart();
 
+    /// Accumulates stats across all periods for the final report.
+    auto cumulative_info = std::make_shared<Stats>();
+    cumulative_info->elapsed.restart();
+
     while (!shutdown)
     {
         if (max_time > 0 && total_watch.elapsedSeconds() >= max_time)
@@ -1268,16 +1268,18 @@ void Runner::runBenchmarkWithGenerator()
             printNumberOfRequestsExecuted(requests_started);
 
             std::lock_guard lock(mutex);
-            mergeThreadInfos()->report();
+            auto period_info = mergeThreadInfos();
+            cumulative_info->merge(*period_info);
+            period_info->report(*cumulative_info);
             delay_watch.restart();
         }
 
         if (!warmup_complete && warmup_watch.elapsedSeconds() >= warmup_seconds)
         {
             std::lock_guard lock(mutex);
-            info->clear();
-            for (auto & t : threads)
-                t.thread_info.clear();
+            mergeThreadInfos(); /// discard warmup stats
+            cumulative_info->clear();
+            cumulative_info->elapsed.restart();
             requests_started = 0;
             warmup_complete = true;
             std::cerr << "Warmup complete, starting measurement" << std::endl;
@@ -1295,11 +1297,12 @@ void Runner::runBenchmarkWithGenerator()
     printNumberOfRequestsExecuted(requests_started);
 
     std::lock_guard lock(mutex);
-    auto merged_info = mergeThreadInfos();
-    merged_info->report();
+    auto remaining_info = mergeThreadInfos();
+    cumulative_info->merge(*remaining_info);
+    cumulative_info->report(*cumulative_info);
 
     DB::WriteBufferFromOwnString out;
-    merged_info->writeJSON(out, start_timestamp_ms);
+    cumulative_info->writeJSON(out, start_timestamp_ms);
     auto output_string = std::move(out.str());
     writeOutputString(output_string, start_timestamp_ms);
 }
@@ -1396,13 +1399,12 @@ std::vector<std::shared_ptr<Coordination::ZooKeeper>> Runner::refreshConnections
 
 std::shared_ptr<Stats> Runner::mergeThreadInfos()
 {
-    if (threads.empty())
-        return info;
     auto merged = std::make_shared<Stats>();
-    merged->merge(*info);
     merged->elapsed = info->elapsed;
+    info->extractInto(*merged);
+    info->elapsed.restart();
     for (auto & t : threads)
-        merged->merge(t.thread_info);
+        t.thread_info.extractInto(*merged);
     return merged;
 }
 

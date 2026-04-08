@@ -814,7 +814,7 @@ SETTINGS warehouse = 'unity', catalog_type = 'unity', vended_credentials = false
     describe_result = node1.query(
         f"DESCRIBE TABLE {db_name}.`{schema_name}.{table_name}`"
     ).strip()
-    assert "id\tInt32" in describe_result
+    assert "id\tNullable(Int32)" in describe_result
     assert "name\tNullable(String)" in describe_result
     assert "code\tNullable(String)" in describe_result
 

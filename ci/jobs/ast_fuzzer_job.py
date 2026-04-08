@@ -227,10 +227,16 @@ def run_fuzz_job(check_name: str):
 
     # Encrypt core dump if present (same as functional tests)
     core_zst = workspace_path / "core.zst"
+    core_zst_enc = workspace_path / "core.zst.enc"
     aes_key = temp_dir / "aes.key"
     try:
         if core_zst.exists():
             Utils.encrypt(str(core_zst), f"{cwd}/ci/defs/public.pem", str(aes_key))
+            if not core_zst_enc.exists():
+                logging.warning(
+                    "Core dump encryption did not produce expected artifact: %s",
+                    core_zst_enc,
+                )
     except Exception as e:
         logging.warning("Failed to encrypt core dump: %s", e)
 

@@ -128,6 +128,18 @@ static ColumnWithTypeAndName readColumnWithNumericData(const std::shared_ptr<arr
         std::shared_ptr<arrow::Buffer> buffer = chunk->data()->buffers[1];
         const auto * raw_data = reinterpret_cast<const NumericType *>(buffer->data()) + chunk->offset();
         column_data.insert_assume_reserved(raw_data, raw_data + chunk->length());
+
+        /// Values at null positions are not guaranteed to be initialized in the source buffer.
+        /// Zero them out because downstream code (type conversions, serialization) may read all values.
+        if (chunk->null_count() > 0)
+        {
+            size_t start = column_data.size() - chunk->length();
+            for (int64_t i = 0; i < chunk->length(); ++i)
+            {
+                if (chunk->IsNull(i))
+                    column_data[start + i] = {};
+            }
+        }
     }
     return {std::move(internal_column), std::move(internal_type), column_name};
 }

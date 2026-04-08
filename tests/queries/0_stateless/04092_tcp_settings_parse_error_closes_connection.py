@@ -165,9 +165,11 @@ def test_connection_closed_after_bad_settings():
     """After a settings parse error, the server must close the connection
     rather than trying to preserve it for reuse.
 
-    We verify this both from the client side (socket must be closed) and
-    from the server side (system.text_log must not show additional errors
-    from reading a desynchronized buffer).
+    We verify this from both sides:
+    - Client side: after consuming the Exception packet, recv() must return
+      EOF or a connection error — not another valid server packet.
+    - Server side: system.text_log must not show additional TCPHandler errors
+      from reading a desynchronized buffer after the UNKNOWN_SETTING error.
     """
     setting_name = f"NONEXISTENT_{os.getpid()}_{random.randint(0, 2**31)}"
 
@@ -195,8 +197,18 @@ def test_connection_closed_after_bad_settings():
         code, message = read_exception(sock)
         assert setting_name in message, f"Unexpected error: {code}: {message}"
 
-    except Exception:
-        raise
+        # The server should close the connection after the parse error.
+        # Verify we get EOF — not another valid server packet.
+        sock.settimeout(5)
+        try:
+            data = sock.recv(1)
+            assert not data, (
+                f"Expected EOF after settings parse error, "
+                f"but got data (first byte={data[0]})"
+            )
+        except (ConnectionResetError, ConnectionError, OSError):
+            pass  # Also acceptable — server reset the connection.
+
     finally:
         sock.close()
 

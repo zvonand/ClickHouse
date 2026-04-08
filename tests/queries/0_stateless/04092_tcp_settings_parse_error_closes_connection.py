@@ -224,29 +224,31 @@ def test_connection_closed_after_bad_settings():
     # We use the unique setting name to find the exact thread, then count
     # Error-level TCPHandler messages between our error and the next
     # "Done processing connection" on that thread.
-    error_count = clickhouse_query(
-        f"WITH anchor AS ("
-        f"  SELECT thread_id, event_time_microseconds AS t"
-        f"  FROM system.text_log"
-        f"  WHERE event_date >= yesterday()"
-        f"  AND message LIKE '%{setting_name}%'"
-        f"  LIMIT 1"
-        f") "
-        f"SELECT count() FROM system.text_log, anchor "
-        f"WHERE event_date >= yesterday() "
-        f"AND system.text_log.thread_id = anchor.thread_id "
-        f"AND level = 'Error' "
-        f"AND logger_name = 'TCPHandler' "
-        f"AND event_time_microseconds > anchor.t "
-        f"AND event_time_microseconds <= ("
-        f"  SELECT min(event_time_microseconds)"
-        f"  FROM system.text_log, anchor"
-        f"  WHERE event_date >= yesterday()"
-        f"  AND system.text_log.thread_id = anchor.thread_id"
-        f"  AND message LIKE '%Done processing connection%'"
-        f"  AND event_time_microseconds > anchor.t"
-        f")"
-    )
+    recent = "event_date >= yesterday() AND event_time >= now() - INTERVAL 10 MINUTE"
+    error_count = clickhouse_query(f"""
+        WITH anchor AS (
+            SELECT thread_id, event_time_microseconds AS t
+            FROM system.text_log
+            WHERE {recent}
+            AND message LIKE '%{setting_name}%'
+            ORDER BY event_time_microseconds DESC
+            LIMIT 1
+        )
+        SELECT count() FROM system.text_log, anchor
+        WHERE {recent}
+        AND system.text_log.thread_id = anchor.thread_id
+        AND level = 'Error'
+        AND logger_name = 'TCPHandler'
+        AND event_time_microseconds > anchor.t
+        AND event_time_microseconds <= (
+            SELECT min(event_time_microseconds)
+            FROM system.text_log, anchor
+            WHERE {recent}
+            AND system.text_log.thread_id = anchor.thread_id
+            AND message LIKE '%Done processing connection%'
+            AND event_time_microseconds > anchor.t
+        )
+    """)
 
     if int(error_count) > 0:
         print(f"FAIL: {error_count} extra error(s) — server read from desync'd buffer")

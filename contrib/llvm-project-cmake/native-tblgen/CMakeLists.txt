@@ -66,10 +66,16 @@ else()
     set(HAVE_MALLINFO_DEFINE "/* #undef HAVE_MALLINFO */")
 endif()
 
-# backtrace/execinfo.h - available on glibc Linux and macOS/BSD
-# For native-tblgen we assume the host has it (glibc or macOS)
-set(HAVE_BACKTRACE_DEFINE "#define HAVE_BACKTRACE 1")
-set(BACKTRACE_HEADER_DEFINE "#define BACKTRACE_HEADER <execinfo.h>")
+# backtrace/execinfo.h - available on glibc Linux and macOS/BSD, but NOT on musl
+include(CheckIncludeFile)
+check_include_file(execinfo.h HAVE_EXECINFO_H)
+if (HAVE_EXECINFO_H)
+    set(HAVE_BACKTRACE_DEFINE "#define HAVE_BACKTRACE 1")
+    set(BACKTRACE_HEADER_DEFINE "#define BACKTRACE_HEADER <execinfo.h>")
+else()
+    set(HAVE_BACKTRACE_DEFINE "/* #undef HAVE_BACKTRACE */")
+    set(BACKTRACE_HEADER_DEFINE "/* No backtrace header available */")
+endif()
 
 # getauxval is Linux-specific
 if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
@@ -221,7 +227,10 @@ target_include_directories(llvm-min-tblgen PRIVATE
 target_compile_definitions(llvm-min-tblgen PRIVATE ${LLVM_COMPILE_DEFINITIONS})
 
 if (UNIX)
-    target_link_libraries(llvm-min-tblgen PRIVATE pthread dl)
+    target_link_libraries(llvm-min-tblgen PRIVATE pthread)
+    if (NOT APPLE)
+        target_link_libraries(llvm-min-tblgen PRIVATE dl)
+    endif()
 endif()
 
 #
@@ -352,7 +361,10 @@ target_compile_definitions(llvm-tblgen PRIVATE ${LLVM_COMPILE_DEFINITIONS})
 add_dependencies(llvm-tblgen native_gen_vt)
 
 if (UNIX)
-    target_link_libraries(llvm-tblgen PRIVATE pthread dl)
+    target_link_libraries(llvm-tblgen PRIVATE pthread)
+    if (NOT APPLE)
+        target_link_libraries(llvm-tblgen PRIVATE dl)
+    endif()
 endif()
 
 # Install the executables to the output directory

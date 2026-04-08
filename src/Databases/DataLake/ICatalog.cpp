@@ -85,8 +85,6 @@ void TableMetadata::setLocation(const std::string & location_)
     if (!with_location)
         throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Data location was not requested");
 
-    abfss_has_container_path_prefix = false;
-
     /// Location has format:
     /// s3://<bucket>/path/to/table/data.
     /// We want to split s3://<bucket> and path/to/table/data.
@@ -275,8 +273,14 @@ std::string TableMetadata::getMetadataLocation(const std::string & iceberg_metad
             metadata_location = metadata_location.substr(storage_type_str.size());
         if (data_location.starts_with(storage_type_str))
             data_location = data_location.substr(storage_type_str.size());
-        else if (!endpoint.empty() && data_location.starts_with(endpoint))
-            data_location = data_location.substr(endpoint.size());
+        else if (!endpoint.empty())
+        {
+            std::string normalized_endpoint = endpoint;
+            if (normalized_endpoint.ends_with('/'))
+                normalized_endpoint.pop_back();
+            if (data_location.starts_with(normalized_endpoint))
+                data_location = data_location.substr(normalized_endpoint.size());
+        }
 
         /// For Azure ABFSS with Polaris-style paths the container name appears as the first
         /// segment of both the table location and the metadata location returned by the catalog.

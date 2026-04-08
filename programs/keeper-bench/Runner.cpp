@@ -255,6 +255,11 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
 
     auto generator = std::make_shared<Generator>();
     generator->startup(*config_ptr, *zookeepers[0], thread_state.thread_idx);
+    generator->setWatchCallback(std::make_shared<Coordination::WatchCallback>(
+        [stats = info](const Coordination::WatchResponse &)
+        {
+            stats->watches_fired.fetch_add(1, std::memory_order_relaxed);
+        }));
 
     /// Randomly choosing connection index
     pcg64 rng(randomSeed());
@@ -403,22 +408,12 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
             request->tracing_context = tracing_context;
         }
 
-        Coordination::WatchCallbackPtrOrEventPtr watch_callback;
-        if (request_with_callbacks.has_watch)
-        {
-            watch_callback = std::make_shared<Coordination::WatchCallback>(
-                [stats = info](const Coordination::WatchResponse &)
-                {
-                    stats->watches_fired.fetch_add(1, std::memory_order_relaxed);
-                });
-        }
-
         InFlightRequest slot;
         slot.request = std::move(request);
 
         try
         {
-            zk->executeGenericRequest(slot.request, callback, watch_callback);
+            zk->executeGenericRequest(slot.request, callback, slot.request->watch_callback);
             slot.future = std::move(future);
             in_flight.push_back(std::move(slot));
         }

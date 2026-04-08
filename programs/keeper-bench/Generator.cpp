@@ -343,6 +343,12 @@ void RequestGetter::setSeed(uint64_t seed)
         request_generators[i]->setSeed(seed + i + 1);
 }
 
+void RequestGetter::setWatchCallback(Coordination::WatchCallbackPtr callback)
+{
+    for (auto & gen : request_generators)
+        gen->setWatchCallback(callback);
+}
+
 const std::vector<RequestGeneratorPtr> & RequestGetter::requestGenerators() const
 {
     return request_generators;
@@ -380,6 +386,12 @@ void RequestGenerator::setSeed(uint64_t seed)
     setSeedImpl(seed);
 }
 
+void RequestGenerator::setWatchCallback(Coordination::WatchCallbackPtr callback)
+{
+    watch_callback_ptr = callback;
+    setWatchCallbackImpl(std::move(callback));
+}
+
 size_t RequestGenerator::getWeight() const
 {
     return weight;
@@ -392,6 +404,9 @@ CreateRequestGenerator::CreateRequestGenerator()
 
 void CreateRequestGenerator::getFromConfigImpl(const std::string & key, const Poco::Util::AbstractConfiguration & config)
 {
+    if (config.has(key + ".watch_probability"))
+        throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "watch_probability is not supported for create requests (key '{}')", key);
+
     parent_path = PathGetter::fromConfig(key, config);
 
     name = StringGetter(NumberGetter::fromConfig(key + ".name_length", config, 5));
@@ -516,6 +531,9 @@ ZooKeeperRequestWithCallbacks CreateRequestGenerator::generateImpl(const Coordin
 
 void SetRequestGenerator::getFromConfigImpl(const std::string & key, const Poco::Util::AbstractConfiguration & config)
 {
+    if (config.has(key + ".watch_probability"))
+        throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "watch_probability is not supported for set requests (key '{}')", key);
+
     path = PathGetter::fromConfig(key, config);
 
     data = StringGetter::fromConfig(key + ".data", config);
@@ -576,8 +594,12 @@ ZooKeeperRequestWithCallbacks GetRequestGenerator::generateImpl(const Coordinati
 {
     auto request = std::make_shared<ZooKeeperGetRequest>();
     request->path = path.getPath();
-    bool with_watch = watch_probability.has_value() && watch_picker(watch_rng) < *watch_probability;
-    return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}, .has_watch = with_watch};
+    if (watch_probability.has_value() && watch_picker(watch_rng) < *watch_probability)
+    {
+        request->has_watch = true;
+        request->watch_callback = watch_callback_ptr;
+    }
+    return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}};
 }
 
 void GetRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
@@ -617,8 +639,12 @@ ZooKeeperRequestWithCallbacks ListRequestGenerator::generateImpl(const Coordinat
 {
     auto request = std::make_shared<ZooKeeperFilteredListRequest>();
     request->path = path.getPath();
-    bool with_watch = watch_probability.has_value() && watch_picker(watch_rng) < *watch_probability;
-    return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}, .has_watch = with_watch};
+    if (watch_probability.has_value() && watch_picker(watch_rng) < *watch_probability)
+    {
+        request->has_watch = true;
+        request->watch_callback = watch_callback_ptr;
+    }
+    return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}};
 }
 
 void ListRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
@@ -634,6 +660,9 @@ void ListRequestGenerator::setSeedImpl(uint64_t seed)
 
 void MultiRequestGenerator::getFromConfigImpl(const std::string & key, const Poco::Util::AbstractConfiguration & config)
 {
+    if (config.has(key + ".watch_probability"))
+        throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "watch_probability is not supported on multi requests directly; set it on individual get/list sub-requests instead (key '{}')", key);
+
     if (config.has(key + ".size"))
         size = NumberGetter::fromConfig(key + ".size", config);
 
@@ -707,6 +736,11 @@ void MultiRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
     request_getter.startup(zookeeper);
 }
 
+void MultiRequestGenerator::setWatchCallbackImpl(Coordination::WatchCallbackPtr callback)
+{
+    request_getter.setWatchCallback(std::move(callback));
+}
+
 void MultiRequestGenerator::setSeedImpl(uint64_t seed)
 {
     /// Use a large offset to avoid seed collisions with sibling generators.
@@ -737,6 +771,11 @@ void Generator::startup(const Poco::Util::AbstractConfiguration & config, Coordi
     }
 
     request_getter.startup(zookeeper);
+}
+
+void Generator::setWatchCallback(Coordination::WatchCallbackPtr callback)
+{
+    request_getter.setWatchCallback(std::move(callback));
 }
 
 ZooKeeperRequestWithCallbacks Generator::generate()

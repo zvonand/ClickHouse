@@ -99,7 +99,7 @@ bool insertNullAsDefaultIfNeeded(ColumnWithTypeAndName & input_column, const Col
     if (input_column.type->isNullable() && header_column.type->isNullable())
     {
         ColumnWithTypeAndName nested_input;
-        nested_input.column = assert_cast<const ColumnNullable *>(input_column.column.get())->getNestedColumnWithDefaultOnNull();
+        nested_input.column = assert_cast<const ColumnNullable *>(input_column.column.get())->getNestedColumnPtr();
         nested_input.type = removeNullable(input_column.type);
 
         ColumnWithTypeAndName nested_header;

@@ -292,12 +292,13 @@ private:
             }
             else
             {
-                /// Scalar path for mixed types / integer types
+                /// Scalar path for non-same-type-float inputs (mixed types or same-type
+                /// integers whose ResultType is widened, e.g. Int32 × Int32 → Int64).
                 size_t i = 0;
 
                 static constexpr size_t VEC_SIZE = 4;
                 typename Kernel::template State<ResultType> states[VEC_SIZE];
-                for (; i + VEC_SIZE < array_size; i += VEC_SIZE)
+                for (; i + VEC_SIZE <= array_size; i += VEC_SIZE)
                 {
                     for (size_t j = 0; j < VEC_SIZE; ++j)
                         Kernel::template accumulate<ResultType>(
@@ -378,15 +379,15 @@ private:
             }
             else
             {
-                /// Scalar path for mixed types / integer types.
-                /// This branch is only reached when left and right have different types
-                /// (e.g. Int32 × Float64) — not a hot path, but we keep the same
-                /// multi-accumulator structure as the non-const path for consistency.
+                /// Scalar path for non-same-type-float inputs (mixed types or same-type
+                /// integers whose ResultType is widened, e.g. Int32 × Int32 → Int64).
+                /// Not a hot path, but we keep the same multi-accumulator structure
+                /// as the non-const path for consistency.
                 size_t i = 0;
 
                 static constexpr size_t VEC_SIZE = 4;
                 typename Kernel::template State<ResultType> states[VEC_SIZE];
-                for (; i + VEC_SIZE < array_size; i += VEC_SIZE)
+                for (; i + VEC_SIZE <= array_size; i += VEC_SIZE)
                 {
                     for (size_t j = 0; j < VEC_SIZE; ++j)
                         Kernel::template accumulate<ResultType>(

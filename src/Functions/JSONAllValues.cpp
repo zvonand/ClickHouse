@@ -97,8 +97,8 @@ private:
 
         for (const auto & [path, type] : typed_path_types)
         {
-            auto it = typed_path_columns.find(path);
-            sorted_paths.push_back({path, it->second.get(), type->getDefaultSerialization(), false});
+            const auto & column = typed_path_columns.at(path);
+            sorted_paths.push_back({path, column.get(), type->getDefaultSerialization(), false});
         }
 
         for (const auto & [path, column] : dynamic_path_columns)

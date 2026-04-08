@@ -53,7 +53,7 @@ SELECT -0.0::Float64;
 -- Float64: Subnormal
 SELECT '--- Float64 subnormal ---';
 SELECT reinterpretAsFloat64(unhex('0100000000000000')); -- smallest subnormal (5e-324)
-SELECT reinterpretAsFloat64(unhex('FFFFFFFFFFFFFF00')); -- largest subnormal
+SELECT reinterpretAsFloat64(unhex('FFFFFFFFFFFF0F00')); -- largest subnormal
 SELECT 2.2250738585072014e-308; -- smallest normal
 
 -- Float32: Fixed notation boundaries

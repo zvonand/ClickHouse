@@ -892,7 +892,7 @@ void RefreshTask::updateDependenciesIfNeeded(std::unique_lock<std::mutex> & lock
             if (need_delay)
             {
                 UInt64 delay_ms = refresh_settings[RefreshSetting::prefer_dependency_replica_delay_ms];
-                scheduling.dependencies_delay = std::chrono::system_clock::now() + std::chrono::milliseconds(Int64(delay_ms));
+                scheduling.dependencies_delay = currentTime() + std::chrono::milliseconds(Int64(delay_ms));
                 LOG_DEBUG(log, "Delaying {} ms for pod affinity (non-preferred replica for dependency chain)", delay_ms);
             }
             else

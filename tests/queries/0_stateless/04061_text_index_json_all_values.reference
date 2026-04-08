@@ -16,8 +16,8 @@ SELECT id FROM tab WHERE data.key1 LIKE '%quick%' ORDER BY id
 2
 Description: text GRANULARITY 100000000
 Condition: (mode: All; tokens: [])
-Parts: 4/4
-Granules: 4/4
+Parts: 2/4
+Granules: 2/4
 SELECT id FROM tab WHERE startsWith(data.key1, 'lazy') ORDER BY id
 1
 Description: text GRANULARITY 100000000
@@ -55,8 +55,8 @@ SELECT id FROM tab WHERE data.key1::String LIKE '%quick%' ORDER BY id
 2
 Description: text GRANULARITY 100000000
 Condition: (mode: All; tokens: [])
-Parts: 4/4
-Granules: 4/4
+Parts: 2/4
+Granules: 2/4
 SELECT id FROM tab WHERE startsWith(data.key1::String, 'lazy') ORDER BY id
 1
 Description: text GRANULARITY 100000000

@@ -15,14 +15,14 @@ ${CLICKHOUSE_CLIENT} -n -q "
     ALTER USER ${USER} SETTINGS PROFILE ${PROFILE};
 "
 
-${CLICKHOUSE_CLIENT} -q "SELECT * FROM system.settings_profile_elements WHERE user_name='${USER}' OR profile_name='${PROFILE}'" | sed "s/${USER}/USER/g; s/${PROFILE}/PROFILE/g"
+${CLICKHOUSE_CLIENT} -q "SELECT * FROM system.settings_profile_elements WHERE user_name='${USER}' OR profile_name='${PROFILE}'" | sed "s/${USER}/test_01605/g; s/${PROFILE}/test_01605/g"
 
 ${CLICKHOUSE_CLIENT} -n -q "
     DROP SETTINGS PROFILE ${PROFILE};
     SELECT 'PROFILE DROPPED';
 "
 
-${CLICKHOUSE_CLIENT} -q "SELECT * FROM system.settings_profile_elements WHERE user_name='${USER}' OR profile_name='${PROFILE}'" | sed "s/${USER}/USER/g; s/${PROFILE}/PROFILE/g"
+${CLICKHOUSE_CLIENT} -q "SELECT * FROM system.settings_profile_elements WHERE user_name='${USER}' OR profile_name='${PROFILE}'" | sed "s/${USER}/test_01605/g; s/${PROFILE}/test_01605/g"
 
 ${CLICKHOUSE_CLIENT} -n -q "
     DROP USER IF EXISTS ${USER};

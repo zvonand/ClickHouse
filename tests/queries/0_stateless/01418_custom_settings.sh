@@ -7,9 +7,7 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROFILE1="s1_${CLICKHOUSE_TEST_UNIQUE_NAME}"
 PROFILE2="s2_${CLICKHOUSE_TEST_UNIQUE_NAME}"
 
-# Run the main block with --ignore-error to keep session state across expected errors.
-# Errors go to stderr which is discarded, matching the original .sql test behavior.
-${CLICKHOUSE_CLIENT} --ignore-error -n -q "
+${CLICKHOUSE_CLIENT} -n -q "
 DROP SETTINGS PROFILE IF EXISTS ${PROFILE1}, ${PROFILE2};
 
 SELECT '--- assigning ---';
@@ -35,12 +33,24 @@ SELECT getSetting('custom_d') as v, toTypeName(v);
 SELECT name, value FROM system.settings WHERE name LIKE 'custom_%' ORDER BY name;
 
 SELECT '--- undefined setting ---';
-SELECT getSetting('custom_e') as v, toTypeName(v);
+"
+
+# Expected error: custom_e is not yet defined
+${CLICKHOUSE_CLIENT} -q "SELECT getSetting('custom_e') as v, toTypeName(v)" 2>/dev/null
+
+${CLICKHOUSE_CLIENT} -n -q "
 SET custom_e = 404;
 SELECT getSetting('custom_e') as v, toTypeName(v);
 
 SELECT '--- wrong prefix ---';
-SET invalid_custom = 8;
+"
+
+# Expected error: invalid_custom is not a valid prefix
+${CLICKHOUSE_CLIENT} -q "SET invalid_custom = 8" 2>/dev/null
+
+# Re-SET custom_e since it was in a previous session
+${CLICKHOUSE_CLIENT} -n -q "
+SET custom_e = 404;
 
 SELECT '--- using query context ---';
 SELECT getSetting('custom_e') as v, toTypeName(v) SETTINGS custom_e = -0.333;
@@ -50,7 +60,12 @@ SELECT name, value FROM system.settings WHERE name = 'custom_e';
 
 SELECT getSetting('custom_f') as v, toTypeName(v) SETTINGS custom_f = 'word';
 SELECT name, value FROM system.settings WHERE name = 'custom_f' SETTINGS custom_f = 'word';
-SELECT getSetting('custom_f') as v, toTypeName(v);
+"
+
+# Expected error: custom_f is not set in session
+${CLICKHOUSE_CLIENT} -q "SELECT getSetting('custom_f') as v, toTypeName(v)" 2>/dev/null
+
+${CLICKHOUSE_CLIENT} -n -q "
 SELECT COUNT() FROM system.settings WHERE name = 'custom_f';
 
 SELECT '--- compound identifier ---';
@@ -59,9 +74,9 @@ SELECT getSetting('custom_compound.identifier.v1') as v, toTypeName(v);
 SELECT name, value FROM system.settings WHERE name = 'custom_compound.identifier.v1';
 
 CREATE SETTINGS PROFILE ${PROFILE1} SETTINGS custom_compound.identifier.v2 = 100;
-" 2>/dev/null
+"
 
-${CLICKHOUSE_CLIENT} -q "SHOW CREATE SETTINGS PROFILE ${PROFILE1}" | sed "s/${PROFILE1}/PROFILE1/g"
+${CLICKHOUSE_CLIENT} -q "SHOW CREATE SETTINGS PROFILE ${PROFILE1}" | sed "s/${PROFILE1}/s1_01418/g"
 
 ${CLICKHOUSE_CLIENT} -n -q "
 DROP SETTINGS PROFILE ${PROFILE1};
@@ -77,6 +92,6 @@ SELECT name, value FROM system.settings WHERE name = 'custom_null';
 CREATE SETTINGS PROFILE ${PROFILE2} SETTINGS custom_null = NULL;
 "
 
-${CLICKHOUSE_CLIENT} -q "SHOW CREATE SETTINGS PROFILE ${PROFILE2}" | sed "s/${PROFILE2}/PROFILE2/g"
+${CLICKHOUSE_CLIENT} -q "SHOW CREATE SETTINGS PROFILE ${PROFILE2}" | sed "s/${PROFILE2}/s2_01418/g"
 
 ${CLICKHOUSE_CLIENT} -q "DROP SETTINGS PROFILE ${PROFILE2}"

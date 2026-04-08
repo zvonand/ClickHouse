@@ -1,8 +1,10 @@
-#include<Processors/QueryPlan/ReadFromMemoryStorageStep.h>
+#include <Processors/QueryPlan/ReadFromMemoryStorageStep.h>
 
 #include <atomic>
 #include <functional>
 #include <memory>
+
+#include <Analyzer/TableNode.h>
 
 #include <Common/typeid_cast.h>
 
@@ -190,6 +192,11 @@ Pipe ReadFromMemoryStorageStep::makePipe()
     auto physical_columns = storage_snapshot->getColumnsByNames(GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(), physical_column_names);
     auto virtual_columns = storage_snapshot->getColumnsByNames(GetColumnsOptions(GetColumnsOptions::All).withVirtuals(), virtual_column_names);
     auto storage_id = storage->getStorageID();
+
+    /// Use temporary table name if storage is temporary.
+    if (auto * table_node = query_info.table_expression->as<TableNode>())
+        if (table_node->isTemporaryTable())
+            storage_id.table_name = table_node->getTemporaryTableName();
 
     const auto & snapshot_data = assert_cast<const StorageMemory::SnapshotData &>(*storage_snapshot->data);
     auto current_data = snapshot_data.blocks;

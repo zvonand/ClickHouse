@@ -24,6 +24,8 @@ struct IcebergObjectSerializableInfo
     String file_format;
     std::vector<Iceberg::PositionDeleteObject> position_deletes_objects;
     std::vector<Iceberg::EqualityDeleteObject> equality_deletes_objects;
+    std::optional<Int64> record_count;
+    std::optional<Int64> file_size_in_bytes;
 
     /// Set to true by the coordinator when the file is outside of the table location
     bool requires_external_storage = false;

@@ -1,7 +1,15 @@
 #include <Common/EnvironmentChecks.h>
+#include <Common/IO.h>
 
 #include <fmt/format.h>
 
+#include <csignal>
+#include <csetjmp>
+#include <cstdint>
+
+#include <tuple>
+
+#include <stdlib.h>
 #include <unistd.h>
 
 #if !defined(USE_MUSL)

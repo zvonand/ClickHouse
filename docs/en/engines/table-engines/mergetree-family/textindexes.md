@@ -82,6 +82,7 @@ CREATE TABLE table
                                 tokenizer = splitByNonAlpha
                                             | splitByString[(S)]
                                             | ngrams[(N)]
+                                            | asciiCJK
                                             | sparseGrams[(min_length[, max_length[, min_cutoff_length]])]
                                             | array
                                 -- Optional parameters:
@@ -113,6 +114,7 @@ ALTER TABLE table
                                 -- Mandatory parameters:
                                 tokenizer = splitByNonAlpha
                                             | splitByString[(S)]
+                                            | asciiCJK
                                             | ngrams[(N)]
                                             | sparseGrams[(min_length[, max_length[, min_cutoff_length]])]
                                             | array
@@ -146,6 +148,7 @@ ALTER TABLE table DROP INDEX text_idx;
   The separators can be specified using an optional parameter, for example, `tokenizer = splitByString([', ', '; ', '\n', '\\'])`.
   Note that each string can consist of multiple characters (`', '` in the example).
   The default separator list, if not specified explicitly (for example, `tokenizer = splitByString`), is a single whitespace `[' ']`.
+- `asciiCJK` splits strings into tokens using Unicode word boundary rules (similar to [Unicode Text Segmentation (UAX #29)](https://unicode.org/reports/tr29/)). ASCII alphanumeric characters and underscores form tokens with connectors (ASCII `:` for letters, `.` and `'` for same-type characters). Non-ASCII Unicode characters, including [CJK](https://en.wikipedia.org/wiki/CJK_characters) characters, become single-character tokens.
 - `ngrams(N)` splits strings into equally large `N`-grams (see function [ngrams](/sql-reference/functions/splitting-merging-functions.md/#ngrams)).
   The ngram length can be specified using an optional integer parameter between 1 and 8, for example, `tokenizer = ngrams(3)`.
   The default ngram size, if not specified explicitly (for example, `tokenizer = ngrams`), is 3.
@@ -155,7 +158,6 @@ ALTER TABLE table DROP INDEX text_idx;
   Compared to `ngrams(N)`, the `sparseGrams` tokenizer produces variable-length N-grams, allowing for a more flexible representation of the original text.
   For example, `tokenizer = sparseGrams(3, 5, 4)` internally generates 3-, 4-, 5-grams from the input string but only the 4- and 5-grams are returned.
 - `array` performs no tokenization, i.e. every row value is a token (see function [array](/sql-reference/functions/array-functions.md/#array)).
-- `asciiCJK` splits strings into tokens using Unicode word boundary rules (similar to [Unicode Text Segmentation (UAX #29)](https://unicode.org/reports/tr29/)). ASCII alphanumeric characters and underscores form tokens with connectors (ASCII `:` for letters, `.` and `'` for same-type characters). Non-ASCII Unicode characters, including [CJK](https://en.wikipedia.org/wiki/CJK_characters) characters, become single-character tokens.
 
 All available tokenizers are listed in [system.tokenizers](../../../operations/system-tables/tokenizers.md).
 
@@ -411,6 +413,10 @@ SELECT count() FROM table WHERE comment LIKE ' support %'; -- or `% support %`
 ```
 
 The spaces left and right of `support` make sure that the term can be extracted as a token.
+
+Fortunately, there is a special case where ClickHouse can leverage the inverted index to speed up LIKE queries significantly.
+
+See the [LIKE/ILIKE performance tuning section](#like-ilike-queries-perf) for details.
 
 #### `startsWith` and `endsWith` {#functions-example-startswith-endswith}
 
@@ -895,6 +901,21 @@ In the second EXPLAIN PLAN output, you can see that an additional conjunct (`__t
 Thanks to the [PREWHERE](/sql-reference/statements/select/prewhere) optimization, the filter condition is broken down into three separate conjuncts, which are applied in order of increasing computational complexity.
 For this query, the application order is `__text_index_...`, then `greaterOrEquals(...)`, and finally `like(...)`.
 This ordering enables skipping even more data granules than the granules skipped by the text index and the original filter, before reading the heavy columns used in the query after `WHERE` clause further reducing the amount of data to read.
+
+### LIKE/ILIKE queries {#like-ilike-queries-perf}
+
+When a LIKE/ILIKE query pattern is `%<alpha-numeric-characters-without-spaces>%` and the text index tokenizer is `splitByNonAlpha`, ClickHouse leverages the inverted index to speed up LIKE/ILIKE queries significantly. To achieve that, ClickHouse scans the inverted index dictionary instead of a full-table scan to find the matching pattern.
+
+When the optimization is enabled, LIKE/ILIKE queries should be significantly faster than a full-table scan. However, when the pattern matches most dictionary tokens, the performance can be worse compared to a full-table scan. Luckily, there is a fallback mechanism to prevent that.
+
+The optimization is controlled by a setting:
+- [use_text_index_like_evaluation_by_dictionary_scan](../../../operations/settings/settings#use_text_index_like_evaluation_by_dictionary_scan)
+
+The fallback mechanism is controlled by two settings:
+- [text_index_like_min_pattern_length](../../../operations/settings/settings#text_index_like_min_pattern_length)
+- [text_index_like_max_postings_to_read](../../../operations/settings/settings#text_index_like_max_postings_to_read)
+
+This optimization supports only functions `like` and `ilike`.
 
 ### Caching {#caching}
 

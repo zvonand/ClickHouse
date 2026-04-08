@@ -951,18 +951,18 @@ class JobConfigs:
     # Jobs that run only the tests normally disabled under LLVM coverage.
     # They use a regular binary (no coverage instrumentation) since these
     # tests are too slow or problematic under coverage.
-    functional_test_llvm_coverage_disabled_only_job = common_ft_job_config.parametrize(
+    functional_test_excluded_from_llvm_job = common_ft_job_config.parametrize(
         Job.ParamSet(
-            parameter="amd_binary_disabled_only",
+            parameter="amd_binary_excluded_from_llvm",
             runs_on=RunnerLabels.AMD_MEDIUM,
             requires=[ArtifactNames.CH_AMD_BINARY],
         ),
     )
 
-    integration_test_llvm_coverage_disabled_only_job = (
+    integration_test_excluded_from_llvm_job = (
         common_integration_test_job_config.parametrize(
             Job.ParamSet(
-                parameter="amd_binary_disabled_only",
+                parameter="amd_binary_excluded_from_llvm",
                 runs_on=RunnerLabels.AMD_MEDIUM,
                 requires=[ArtifactNames.CH_AMD_BINARY],
             ),

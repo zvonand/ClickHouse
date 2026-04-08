@@ -2113,12 +2113,12 @@ class TestCase:
             tags
             and ("no-llvm-coverage" in tags)
             and args.llvm_coverage
-            and not args.llvm_coverage_disabled_only
+            and not args.excluded_from_llvm
         ):
             # Skip tests that are incompatible with LLVM coverage
             return FailureReason.NO_LLVM_COVERAGE
 
-        if args.llvm_coverage_disabled_only and (
+        if args.excluded_from_llvm and (
             not tags or "no-llvm-coverage" not in tags
         ):
             # Run only tests that are normally disabled under LLVM coverage
@@ -5256,7 +5256,7 @@ def parse_args():
         help="This run will be used to collect code coverage with llvm-cov",
     )
     parser.add_argument(
-        "--llvm-coverage-disabled-only",
+        "--excluded-from-llvm",
         action="store_true",
         default=False,
         help="Run only tests that are normally disabled under LLVM coverage (tagged no-llvm-coverage)",

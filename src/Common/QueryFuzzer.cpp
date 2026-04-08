@@ -37,7 +37,6 @@
 #include <Parsers/ASTDictionaryAttributeDeclaration.h>
 #include <Parsers/ASTDropQuery.h>
 #include <Parsers/ASTExpressionList.h>
-#include <Parsers/ASTFunction.h>
 #include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTIndexDeclaration.h>
 #include <Parsers/ASTInsertQuery.h>
@@ -55,6 +54,8 @@
 #include <Parsers/ASTSelectIntersectExceptQuery.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Parsers/ASTSetQuery.h>
+#include <Parsers/ASTConstraintDeclaration.h>
+#include <Parsers/ASTDataType.h>
 #include <Parsers/ASTStatisticsDeclaration.h>
 #include <Parsers/ASTSubquery.h>
 #include <Parsers/ASTSystemQuery.h>
@@ -861,6 +862,7 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
                 static const Strings safe_mergetree_engines = {
                     "MergeTree",
                     "AggregatingMergeTree",
+                    "CoalescingMergeTree",
                     "SummingMergeTree",
                     "ReplacingMergeTree",
                 };
@@ -1216,6 +1218,41 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
 
 static const Strings stat_types = {"tdigest", "countmin", "minmax", "uniq"};
 
+void QueryFuzzer::fuzzCodecFunction(ASTFunction & codec_fn)
+{
+    if (codec_fn.name != "CODEC" || !codec_fn.arguments || fuzz_rand() % 5 != 0)
+        return;
+
+    codec_fn.arguments->children.clear();
+
+    static const Strings pool = {
+        "NONE", "LZ4", "LZ4HC", "ZSTD",
+        "AES_128_GCM_SIV", "AES_256_GCM_SIV",
+        "Delta", "DoubleDelta", "T64", "GCD",
+        "Gorilla", "FPC", "ALP"};
+
+    const String chosen = pickRandomly(fuzz_rand, pool);
+    if (chosen == "ZSTD" && fuzz_rand() % 2 == 0)
+        codec_fn.arguments->children.push_back(
+            makeASTFunction("ZSTD", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 22 + 1))));
+    else if (chosen == "LZ4HC" && fuzz_rand() % 2 == 0)
+        codec_fn.arguments->children.push_back(
+            makeASTFunction("LZ4HC", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 12 + 1))));
+    else if (chosen == "Delta" && fuzz_rand() % 2 == 0)
+    {
+        static const UInt64 delta_sizes[] = {1, 2, 4, 8};
+        codec_fn.arguments->children.push_back(
+            makeASTFunction("Delta", make_intrusive<ASTLiteral>(delta_sizes[fuzz_rand() % 4])));
+    }
+    else if (chosen == "FPC" && fuzz_rand() % 2 == 0)
+        codec_fn.arguments->children.push_back(
+            makeASTFunction("FPC",
+                make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 28 + 1)),
+                make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 2 == 0 ? 4 : 8))));
+    else
+        codec_fn.arguments->children.push_back(makeASTFunction(chosen));
+}
+
 void QueryFuzzer::fuzzColumnDeclaration(ASTColumnDeclaration & column)
 {
     if (auto type = column.getType())
@@ -1241,42 +1278,8 @@ void QueryFuzzer::fuzzColumnDeclaration(ASTColumnDeclaration & column)
     }
 
     if (auto codec = column.getCodec())
-    {
-        auto * codec_fn = codec->as<ASTFunction>();
-        if (codec_fn && codec_fn->name == "CODEC" && codec_fn->arguments && fuzz_rand() % 5 == 0)
-        {
-            codec_fn->arguments->children.clear();
-            /// No-argument codecs — select uniformly, then fall through to a compression codec.
-            static const Strings simple_codecs = {"NONE", "LZ4", "DoubleDelta", "Gorilla", "T64", "FPC", "GCD"};
-            switch (fuzz_rand() % 4)
-            {
-                case 0:
-                    codec_fn->arguments->children.push_back(makeASTFunction(pickRandomly(fuzz_rand, simple_codecs)));
-                    break;
-                case 1:
-                    codec_fn->arguments->children.push_back(
-                        makeASTFunction("ZSTD", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 22 + 1))));
-                    break;
-                case 2:
-                    codec_fn->arguments->children.push_back(
-                        makeASTFunction("LZ4HC", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 12 + 1))));
-                    break;
-                case 3:
-                    /// Delta(N): N in {1,2,4,8} bytes; no argument = auto-detect
-                    if (fuzz_rand() % 2 == 0)
-                        codec_fn->arguments->children.push_back(makeASTFunction("Delta"));
-                    else
-                    {
-                        static const UInt64 delta_sizes[] = {1, 2, 4, 8};
-                        codec_fn->arguments->children.push_back(
-                            makeASTFunction("Delta", make_intrusive<ASTLiteral>(delta_sizes[fuzz_rand() % 4])));
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
+        if (auto * codec_fn = codec->as<ASTFunction>())
+            fuzzCodecFunction(*codec_fn);
 
     if (column.default_specifier != ColumnDefaultSpecifier::Empty && column.default_specifier != ColumnDefaultSpecifier::AutoIncrement
         && column.getDefaultExpression() && fuzz_rand() % 5 == 0)
@@ -3560,6 +3563,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             fuzzWindowDefinition(def);
         }
 
+        fuzzCodecFunction(*fn);
         fuzz(fn->children);
     }
     else if (auto * aj = typeid_cast<ASTArrayJoin *>(ast.get()))
@@ -4169,13 +4173,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                 break;
             case ASTAlterCommand::ADD_STATISTICS:
             case ASTAlterCommand::MODIFY_STATISTICS:
-                /// Fuzz stat types the same way fuzzColumnDeclaration does
-                if (alter_cmd->statistics_decl)
-                    if (auto * stats = alter_cmd->statistics_decl->as<ASTStatisticsDeclaration>())
-                        if (stats->types)
-                            for (auto & type_ast : stats->types->children)
-                                if (auto * afn = type_ast->as<ASTFunction>(); afn && fuzz_rand() % 5 == 0)
-                                    afn->name = pickRandomly(fuzz_rand, stat_types);
+                /// Stat type fuzzing is handled by the ASTStatisticsDeclaration dispatch in fuzz().
                 break;
             case ASTAlterCommand::DROP_STATISTICS:
                 if (fuzz_rand() % 20 == 0)
@@ -4625,6 +4623,57 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             }
         }
         fuzz(system_query->children);
+    }
+    else if (auto * ttl_elem = typeid_cast<ASTTTLElement *>(ast.get()))
+    {
+        /// Cycle through TTL action modes (DELETE / MOVE / GROUP_BY / RECOMPRESS).
+        if (fuzz_rand() % 10 == 0)
+        {
+            static const TTLMode all_modes[] = {TTLMode::DELETE, TTLMode::MOVE, TTLMode::GROUP_BY, TTLMode::RECOMPRESS};
+            ttl_elem->mode = all_modes[fuzz_rand() % std::size(all_modes)];
+
+            /// MOVE requires a destination; toggle between DISK and VOLUME.
+            if (ttl_elem->mode == TTLMode::MOVE)
+                ttl_elem->destination_type
+                    = (fuzz_rand() % 2 == 0) ? DataDestinationType::DISK : DataDestinationType::VOLUME;
+        }
+        /// Toggle IF EXISTS on MOVE rules.
+        if (ttl_elem->mode == TTLMode::MOVE && fuzz_rand() % 10 == 0)
+            ttl_elem->if_exists = !ttl_elem->if_exists;
+        fuzz(ttl_elem->children);
+    }
+    else if (auto * stats_decl = typeid_cast<ASTStatisticsDeclaration *>(ast.get()))
+    {
+        /// Mutate statistic type names (tdigest / countmin / minmax / uniq) with low probability.
+        if (stats_decl->types)
+            for (auto & type_ast : stats_decl->types->children)
+                if (auto * afn = type_ast->as<ASTFunction>(); afn && fuzz_rand() % 5 == 0)
+                    afn->name = pickRandomly(fuzz_rand, stat_types);
+        fuzz(stats_decl->children);
+    }
+    else if (auto * constraint = typeid_cast<ASTConstraintDeclaration *>(ast.get()))
+    {
+        /// Toggle between CHECK (enforced at insert time) and ASSUME (optimizer hint only).
+        if (fuzz_rand() % 20 == 0)
+            constraint->type = (constraint->type == ASTConstraintDeclaration::Type::CHECK)
+                ? ASTConstraintDeclaration::Type::ASSUME
+                : ASTConstraintDeclaration::Type::CHECK;
+        fuzz(constraint->children);
+    }
+    else if (typeid_cast<ASTDataType *>(ast.get()) && fuzz_rand() % 10 == 0)
+    {
+        /// Re-fuzz the data type via the DataType layer, which produces structurally valid
+        /// mutations (nullable wrappers, array nesting, precision changes, etc.).
+        const auto old_type = DataTypeFactory::instance().tryGet(ast);
+        if (old_type)
+        {
+            const auto new_type = fuzzDataType(old_type);
+            ParserDataType parser;
+            ast = parseQuery(
+                parser, new_type->getName(), DBMS_DEFAULT_MAX_QUERY_SIZE, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS);
+        }
+        else
+            fuzz(ast->children);
     }
     else
     {

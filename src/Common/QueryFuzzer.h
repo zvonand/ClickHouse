@@ -6,6 +6,7 @@
 
 #include <Core/Field.h>
 #include <Core/Names.h>
+#include <Parsers/ASTFunction.h>
 #include <Parsers/ASTExplainQuery.h>
 #include <Parsers/ASTSelectQuery.h>
 #include <Parsers/ASTTablesInSelectQuery.h>
@@ -230,6 +231,7 @@ private:
     void fuzzExplainQuery(ASTExplainQuery & explain);
     ASTExplainQuery::ExplainKind fuzzExplainKind(ASTExplainQuery::ExplainKind kind = ASTExplainQuery::ExplainKind::QueryPipeline);
     void fuzzExplainSettings(ASTSetQuery & settings_ast, ASTExplainQuery::ExplainKind kind);
+    void fuzzCodecFunction(ASTFunction & codec_fn);
     void fuzzColumnDeclaration(ASTColumnDeclaration & column);
     void fuzzIndexDeclaration(ASTIndexDeclaration & index);
     void fuzzProjectionDeclaration(ASTProjectionDeclaration & projection);

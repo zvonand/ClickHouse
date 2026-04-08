@@ -1642,8 +1642,7 @@ void ZooKeeper::removeRecursive(
 void ZooKeeper::getChildrenRecursive(
     const String & path,
     uint32_t get_children_recursive_nodes_limit,
-    GetChildrenRecursiveCallback callback,
-    WatchCallbackPtrOrEventPtr watch)
+    GetChildrenRecursiveCallback callback)
 {
     if (!isFeatureEnabled(KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
         throw Exception::fromMessage(Error::ZBADARGUMENTS, "GetChildrenRecursive request type cannot be used because it's not supported by the server");
@@ -1657,9 +1656,8 @@ void ZooKeeper::getChildrenRecursive(
     RequestInfo request_info;
     request_info.request = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>(std::move(request));
     request_info.callback = [callback](const Response & response) { callback(dynamic_cast<const GetChildrenRecursiveResponse &>(response)); };
-    request_info.watch = watch;
     pushRequest(std::move(request_info));
-    ProfileEvents::increment(ProfileEvents::ZooKeeperGet);
+    ProfileEvents::increment(ProfileEvents::ZooKeeperGetChildrenRecursive);
 }
 
 void ZooKeeper::exists(

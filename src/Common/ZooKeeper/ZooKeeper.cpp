@@ -1193,6 +1193,20 @@ Coordination::Error ZooKeeper::tryGetChildrenRecursive(const std::string & path,
     if (!isFeatureEnabled(DB::KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
         return Coordination::Error::ZBADARGUMENTS;
 
+    std::optional<DB::OpenTelemetry::SpanHolder> maybe_span;
+    if (sampleForOpenTelemetryTracing())
+    {
+        maybe_span.emplace(
+            "zookeeper.get_children_recursive",
+            DB::OpenTelemetry::SpanKind::CLIENT,
+            std::vector<DB::OpenTelemetry::SpanAttribute>{
+                {"zk.path", path},
+            },
+            /*create_trace_if_not_exists=*/ true
+        );
+        DB::OpenTelemetry::SetTraceFlagInCurrentContext(DB::OpenTelemetry::TRACE_FLAG_KEEPER_SPANS, true);
+    }
+
     auto promise = std::make_shared<std::promise<Coordination::GetChildrenRecursiveResponse>>();
     auto future = promise->get_future();
 
@@ -1201,16 +1215,19 @@ Coordination::Error ZooKeeper::tryGetChildrenRecursive(const std::string & path,
         promise->set_value(response);
     };
 
-    impl->getChildrenRecursive(path, children_nodes_limit, std::move(callback), {});
+    impl->getChildrenRecursive(path, children_nodes_limit, std::move(callback));
 
     if (future.wait_for(std::chrono::milliseconds(args.operation_timeout_ms)) != std::future_status::ready)
     {
+        maybeSetSpanStatus(maybe_span, Coordination::Error::ZOPERATIONTIMEOUT);
         impl->finalize(fmt::format("Operation timeout on {} {}", Coordination::OpNum::GetChildrenRecursive, path));
         return Coordination::Error::ZOPERATIONTIMEOUT;
     }
 
     auto response = future.get();
     Coordination::Error code = response.error;
+
+    maybeSetSpanStatus(maybe_span, code);
     res = std::move(response.children);
     return code;
 }
@@ -1985,10 +2002,11 @@ Coordination::RequestPtr makeRemoveRecursiveRequest(const Client & client, const
 template Coordination::RequestPtr makeRemoveRecursiveRequest<zkutil::ZooKeeper>(const zkutil::ZooKeeper & client, const std::string & path, uint32_t remove_nodes_limit);
 template Coordination::RequestPtr makeRemoveRecursiveRequest<DB::ZooKeeperWithFaultInjection>(const DB::ZooKeeperWithFaultInjection & client, const std::string & path, uint32_t remove_nodes_limit);
 
-Coordination::RequestPtr makeGetChildrenRecursiveRequest(const std::string & path)
+Coordination::RequestPtr makeGetChildrenRecursiveRequest(const std::string & path, uint32_t children_nodes_limit)
 {
     auto request = std::make_shared<Coordination::ZooKeeperGetChildrenRecursiveRequest>();
     request->path = path;
+    request->children_nodes_limit = children_nodes_limit;
     return request;
 }
 

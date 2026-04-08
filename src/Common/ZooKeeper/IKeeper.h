@@ -459,18 +459,6 @@ struct RemoveRecursiveResponse : virtual Response
 {
 };
 
-struct GetChildrenRecursiveRequest : virtual Request
-{
-    String path;
-
-    /// strict limit for number of returned children nodes
-    uint32_t children_nodes_limit = std::numeric_limits<uint32_t>::max();
-
-    void addRootPath(const String & root_path) override;
-    String getPath() const override { return path; }
-
-    size_t bytesSize() const override { return path.size() + sizeof(children_nodes_limit); }
-};
 
 struct GetChildrenRecursiveResponse : virtual Response
 {
@@ -577,6 +565,14 @@ struct ListResponse : virtual Response
             size += child_data.size();
         return size;
     }
+};
+
+struct GetChildrenRecursiveRequest : virtual ListRequest
+{
+    /// strict limit for number of listed nodes
+    uint32_t children_nodes_limit = std::numeric_limits<uint32_t>::max();
+
+    size_t bytesSize() const override { return ListRequest::bytesSize() + sizeof(children_nodes_limit); }
 };
 
 struct CheckRequest : virtual Request
@@ -803,8 +799,7 @@ public:
     virtual void getChildrenRecursive(
         const String & path,
         uint32_t get_children_recursive_nodes_limit,
-        GetChildrenRecursiveCallback callback,
-        WatchCallbackPtrOrEventPtr watch) = 0;
+        GetChildrenRecursiveCallback callback) = 0;
 
     virtual void exists(
         const String & path,

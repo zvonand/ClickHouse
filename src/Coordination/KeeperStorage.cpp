@@ -2478,29 +2478,29 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
         return response;
     }
 
-    std::queue<std::string> traverse;
-    traverse.push(std::string{zk_request.path});
+    response->children.push_back(std::string{zk_request.path});
+    size_t frontier = 0;
 
-    while (!traverse.empty())
+    while (frontier < response->children.size())
     {
-        auto current_path = std::move(traverse.front());
-        traverse.pop();
+        const std::string & current_path = response->children[frontier++];
+        std::filesystem::path current_path_fs(current_path);
 
         if constexpr (Storage::use_rocksdb)
         {
             auto children = container.getChildren(current_path, /*read_meta=*/false, /*read_data=*/false);
             for (auto && [child_name, _] : children)
             {
-                auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
+                auto child_path = (current_path_fs / child_name).generic_string();
                 if (storage.checkACL(child_path, Coordination::ACL::Read, session_id, local, false))
                 {
-                    if (response->children.size() >= zk_request.children_nodes_limit)
+                    if (response->children.size() - 1 >= zk_request.children_nodes_limit)
                     {
                         response->error = Coordination::Error::ZOK;
+                        response->children.erase(response->children.begin());
                         return response;
                     }
-                    response->children.push_back(child_path);
-                    traverse.push(std::move(child_path));
+                    response->children.push_back(std::move(child_path));
                 }
             }
         }
@@ -2511,20 +2511,23 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
                 continue;
             for (const auto & child_name : it->value.getChildren())
             {
-                auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
+                auto child_path = (current_path_fs / child_name).generic_string();
                 if (storage.checkACL(child_path, Coordination::ACL::Read, session_id, local, false))
                 {
-                    if (response->children.size() >= zk_request.children_nodes_limit)
+                    if (response->children.size() - 1 >= zk_request.children_nodes_limit)
                     {
                         response->error = Coordination::Error::ZOK;
+                        response->children.erase(response->children.begin());
                         return response;
                     }
-                    response->children.push_back(child_path);
-                    traverse.push(child_path);
+                    response->children.push_back(std::move(child_path));
                 }
             }
         }
     }
+
+    /// Remove the root path
+    response->children.erase(response->children.begin());
 
     response->error = Coordination::Error::ZOK;
     return response;

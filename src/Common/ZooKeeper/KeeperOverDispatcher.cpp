@@ -179,11 +179,8 @@ void KeeperOverDispatcher::get(
 void KeeperOverDispatcher::getChildrenRecursive(
     const String & path,
     uint32_t get_children_recursive_nodes_limit,
-    GetChildrenRecursiveCallback callback,
-    WatchCallbackPtrOrEventPtr watch)
+    GetChildrenRecursiveCallback callback)
 {
-    if (watch)
-        throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Watch is not implemented");
 
     const auto request = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>();
     request->path = path;

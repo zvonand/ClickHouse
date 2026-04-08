@@ -67,8 +67,7 @@ public:
     void getChildrenRecursive(
         const String & path,
         uint32_t get_children_recursive_nodes_limit,
-        GetChildrenRecursiveCallback callback,
-        WatchCallbackPtrOrEventPtr watch) override;
+        GetChildrenRecursiveCallback callback) override;
 
     void exists(
         const String & path,

@@ -280,6 +280,11 @@ struct TestKeeperMultiRequest final : MultiRequest<RequestPtr>, TestKeeperReques
                 validateOrSpecifyRequestType(/*is_read=*/true);
                 requests.push_back(std::make_shared<TestKeeperGetRequest>(*concrete_request_get));
             }
+            else if (const auto * concrete_request_get_children_recursive = dynamic_cast<const GetChildrenRecursiveRequest *>(generic_request.get()))
+            {
+                validateOrSpecifyRequestType(/*is_read=*/true);
+                requests.push_back(std::make_shared<TestKeeperGetChildrenRecursiveRequest>(*concrete_request_get_children_recursive));
+            }
             else if (const auto * concrete_request_list = dynamic_cast<const ListRequest *>(generic_request.get()))
             {
                 validateOrSpecifyRequestType(/*is_read=*/true);
@@ -533,14 +538,8 @@ std::pair<ResponsePtr, Undo> TestKeeperGetChildrenRecursiveRequest::process(Test
     std::vector<String> children;
     for (auto child_it = std::next(it); child_it != container.end(); ++child_it)
     {
-        if (!child_it->first.starts_with(path_with_slash))
+        if (!child_it->first.starts_with(path_with_slash) || children.size() >= children_nodes_limit)
             break;
-        if (children.size() >= children_nodes_limit)
-        {
-            response.error = Error::ZOK;
-            response.children = std::move(children);
-            return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
-        }
         children.push_back(child_it->first);
     }
 
@@ -1092,8 +1091,7 @@ void TestKeeper::removeRecursive(
 void TestKeeper::getChildrenRecursive(
     const String & path,
     uint32_t get_children_recursive_nodes_limit,
-    GetChildrenRecursiveCallback callback,
-    WatchCallbackPtrOrEventPtr /*watch*/)
+    GetChildrenRecursiveCallback callback)
 {
     TestKeeperGetChildrenRecursiveRequest request;
     request.path = path;

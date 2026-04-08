@@ -1,24 +1,8 @@
-# Lean LLVM build for ClickHouse - Prototype
+# Lean LLVM build for ClickHouse
 #
-# This file demonstrates building LLVM without including their CMake definitions.
-#
-# Key challenges:
-# 1. TableGen: LLVM uses tablegen to generate .inc files from .td files. These
-#    include instruction definitions, register info, calling conventions, etc.
-#    The generated files are ~1.3M lines for X86 alone.
-#
-# 2. Options for handling tablegen:
-#    a) Pre-generate .inc files and commit them (increases repo size by ~200MB+ per arch)
-#    b) Build llvm-tblgen first, then generate .inc files at build time
-#    c) Use a pre-built llvm-tblgen binary (requires external dependency)
-#
-# This prototype uses option (b) - building llvm-tblgen from sources.
-#
-# Note: This is a PROTOTYPE. Production use would require:
-# - Proper handling of cross-compilation
-# - Testing on all supported platforms
-
-cmake_minimum_required(VERSION 3.20)
+# Builds LLVM libraries without including LLVM's own CMake definitions.
+# Uses llvm-tblgen built from sources to generate .inc files at build time.
+>>>>>>> 561935018b3 (Sync with current LLVM CMake on `master`)
 
 if (APPLE OR SANITIZE STREQUAL "memory")
     set (ENABLE_EMBEDDED_COMPILER_DEFAULT OFF)
@@ -49,28 +33,38 @@ set (LLVM_INCLUDE_DIRS
     "${LLVM_BINARY_DIR}/include"
     "${ClickHouse_SOURCE_DIR}/contrib/llvm-project/third-party/siphash/include"
 )
+if (ENABLE_XRAY)
+    list(APPEND LLVM_INCLUDE_DIRS "${ClickHouse_SOURCE_DIR}/contrib/llvm-project/compiler-rt/include")
+endif()
 
 # Target architecture
 if (ARCH_AMD64)
     set (LLVM_TARGET_ARCH "X86")
-    set (LLVM_HOST_TRIPLE "x86_64-unknown-linux-gnu")
+    set (LLVM_HOST_TRIPLE_DEFAULT "x86_64-unknown-linux-gnu")
 elseif (ARCH_AARCH64)
     set (LLVM_TARGET_ARCH "AArch64")
-    set (LLVM_HOST_TRIPLE "aarch64-unknown-linux-gnu")
+    set (LLVM_HOST_TRIPLE_DEFAULT "aarch64-unknown-linux-gnu")
 elseif (ARCH_PPC64LE)
     set (LLVM_TARGET_ARCH "PowerPC")
-    set (LLVM_HOST_TRIPLE "powerpc64le-unknown-linux-gnu")
+    set (LLVM_HOST_TRIPLE_DEFAULT "powerpc64le-unknown-linux-gnu")
 elseif (ARCH_S390X)
     set (LLVM_TARGET_ARCH "SystemZ")
-    set (LLVM_HOST_TRIPLE "s390x-unknown-linux-gnu")
+    set (LLVM_HOST_TRIPLE_DEFAULT "s390x-unknown-linux-gnu")
 elseif (ARCH_RISCV64)
     set (LLVM_TARGET_ARCH "RISCV")
-    set (LLVM_HOST_TRIPLE "riscv64-unknown-linux-gnu")
+    set (LLVM_HOST_TRIPLE_DEFAULT "riscv64-unknown-linux-gnu")
 elseif (ARCH_LOONGARCH64)
     set (LLVM_TARGET_ARCH "LoongArch")
-    set (LLVM_HOST_TRIPLE "loongarch64-unknown-linux-gnu")
+    set (LLVM_HOST_TRIPLE_DEFAULT "loongarch64-unknown-linux-gnu")
 else()
     message(FATAL_ERROR "Unsupported architecture for LLVM")
+endif()
+
+# Use the compiler target triple when cross-compiling (handles musl, macOS, FreeBSD, etc.)
+if (CMAKE_CROSSCOMPILING AND CMAKE_C_COMPILER_TARGET)
+    set (LLVM_HOST_TRIPLE "${CMAKE_C_COMPILER_TARGET}")
+else()
+    set (LLVM_HOST_TRIPLE "${LLVM_HOST_TRIPLE_DEFAULT}")
 endif()
 
 message(STATUS "LLVM target: ${LLVM_TARGET_ARCH}")

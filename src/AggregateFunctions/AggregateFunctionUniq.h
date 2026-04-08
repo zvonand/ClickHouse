@@ -485,13 +485,7 @@ public:
     {
         if constexpr (is_parallelize_merge_prepare_needed)
         {
-            VectorWithMemoryTracking<DataSet *> data_vec;
-            data_vec.resize(places.size());
-
-            for (size_t i = 0; i < data_vec.size(); ++i)
-                data_vec[i] = &this->data(places[i]).set;
-
-            DataSet::parallelizeMergePrepare(data_vec, thread_pool, is_cancelled);
+            DataSet::parallelizeMergePrepare(places, [this](AggregateDataPtr p) { return &this->data(p).set; }, thread_pool, is_cancelled);
         }
         else
         {
@@ -519,13 +513,7 @@ public:
     {
         if constexpr (is_able_to_parallelize_merge)
         {
-            std::vector<DataSet *> data_vec; // STYLE_CHECK_ALLOW_STD_CONTAINERS
-            data_vec.resize(places.size());
-
-            for (size_t i = 0; i < data_vec.size(); ++i)
-                data_vec[i] = &this->data(places[i]).set;
-
-            DataSet::parallelizeMergeMulti(data_vec, thread_pool, is_cancelled);
+            DataSet::parallelizeMergeMulti(places, [this](AggregateDataPtr p) { return &this->data(p).set; }, thread_pool, is_cancelled);
         }
         else
         {
@@ -632,13 +620,7 @@ public:
         if constexpr (is_able_to_parallelize_merge)
         {
             using DataSet = typename Data::Set;
-            std::vector<DataSet *> data_vec; // STYLE_CHECK_ALLOW_STD_CONTAINERS
-            data_vec.resize(places.size());
-
-            for (size_t i = 0; i < data_vec.size(); ++i)
-                data_vec[i] = &this->data(places[i]).set;
-
-            DataSet::parallelizeMergeMulti(data_vec, thread_pool, is_cancelled);
+            DataSet::parallelizeMergeMulti(places, [this](AggregateDataPtr p) { return &this->data(p).set; }, thread_pool, is_cancelled);
         }
         else
         {

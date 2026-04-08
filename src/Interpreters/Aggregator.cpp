@@ -40,6 +40,7 @@
 #include <Common/setThreadName.h>
 #include <Common/threadPoolCallbackRunner.h>
 #include <Common/typeid_cast.h>
+#include <Common/VectorWithMemoryTracking.h>
 
 
 namespace ProfileEvents
@@ -3162,7 +3163,7 @@ void NO_INLINE Aggregator::mergeWithoutKeyDataImpl(
     /// Helper to collect aggregate data pointers for all states.
     auto collect_data_vec = [&](size_t aggregate_index)
     {
-        std::vector<AggregateDataPtr> data_vec; // STYLE_CHECK_ALLOW_STD_CONTAINERS
+        VectorWithMemoryTracking<AggregateDataPtr> data_vec;
         data_vec.reserve(non_empty_data.size());
         for (const auto & result : non_empty_data)
             data_vec.emplace_back(result->without_key + offsets_of_aggregate_states[aggregate_index]);
@@ -3640,7 +3641,7 @@ void NO_INLINE Aggregator::mergeWithoutKeyStreamsImpl(
         {
             if (aggregate_functions[i]->isParallelizeMergePrepareNeeded())
             {
-                std::vector<AggregateDataPtr> data_vec{res + offsets_of_aggregate_states[i], (*aggregate_columns_data[i])[row]};
+                AggregateDataPtrs data_vec{res + offsets_of_aggregate_states[i], (*aggregate_columns_data[i])[row]};
                 aggregate_functions[i]->parallelizeMergePrepare(data_vec, thread_pool, is_cancelled);
             }
 

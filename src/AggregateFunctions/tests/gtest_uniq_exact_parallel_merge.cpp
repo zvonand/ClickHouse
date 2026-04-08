@@ -1,6 +1,7 @@
 #include <AggregateFunctions/UniqExactSet.h>
 #include <Common/HashTable/HashSet.h>
 #include <Common/ThreadPool.h>
+#include <Common/VectorWithMemoryTracking.h>
 
 #include <gtest/gtest.h>
 
@@ -61,7 +62,7 @@ TEST(UniqExactParallelMerge, BatchMergeMulti)
         set.convertToTwoLevel();
 
     /// Collect pointers.
-    std::vector<TestSet *> ptrs;
+    VectorWithMemoryTracking<TestSet *> ptrs;
     ptrs.reserve(NUM_SETS);
     for (auto & set : sets)
         ptrs.push_back(&set);
@@ -69,7 +70,7 @@ TEST(UniqExactParallelMerge, BatchMergeMulti)
     ThreadPool pool(CurrentMetrics::end(), CurrentMetrics::end(), CurrentMetrics::end(), 4);
     std::atomic<bool> is_cancelled{false};
 
-    TestSet::parallelizeMergeMulti(ptrs, pool, is_cancelled);
+    TestSet::parallelizeMergeMulti(ptrs, [](TestSet * p) { return p; }, pool, is_cancelled);
 
     /// Compute expected size: union of ranges [s * ELEMENTS_PER_SET/2, s * ELEMENTS_PER_SET/2 + ELEMENTS_PER_SET)
     size_t max_val = (NUM_SETS - 1) * (ELEMENTS_PER_SET / 2) + ELEMENTS_PER_SET;
@@ -85,11 +86,11 @@ TEST(UniqExactParallelMerge, BatchMergeSingleSet)
     fillSet(a, 0, N);
     a.convertToTwoLevel();
 
-    std::vector<TestSet *> ptrs = {&a};
+    VectorWithMemoryTracking<TestSet *> ptrs = {&a};
     ThreadPool pool(CurrentMetrics::end(), CurrentMetrics::end(), CurrentMetrics::end(), 4);
     std::atomic<bool> is_cancelled{false};
 
-    TestSet::parallelizeMergeMulti(ptrs, pool, is_cancelled);
+    TestSet::parallelizeMergeMulti(ptrs, [](TestSet * p) { return p; }, pool, is_cancelled);
     ASSERT_EQ(a.size(), N);
 }
 
@@ -106,11 +107,11 @@ TEST(UniqExactParallelMerge, BatchMergeMixedLevels)
     /// a is two-level (large), b stays at its natural level.
     a.convertToTwoLevel();
 
-    std::vector<TestSet *> ptrs = {&a, &b};
+    VectorWithMemoryTracking<TestSet *> ptrs = {&a, &b};
     ThreadPool pool(CurrentMetrics::end(), CurrentMetrics::end(), CurrentMetrics::end(), 4);
     std::atomic<bool> is_cancelled{false};
 
-    TestSet::parallelizeMergeMulti(ptrs, pool, is_cancelled);
+    TestSet::parallelizeMergeMulti(ptrs, [](TestSet * p) { return p; }, pool, is_cancelled);
     ASSERT_EQ(a.size(), 2 * N);
 }
 
@@ -126,11 +127,11 @@ TEST(UniqExactParallelMerge, BatchMergeCancellation)
     a.convertToTwoLevel();
     b.convertToTwoLevel();
 
-    std::vector<TestSet *> ptrs = {&a, &b};
+    VectorWithMemoryTracking<TestSet *> ptrs = {&a, &b};
     ThreadPool pool(CurrentMetrics::end(), CurrentMetrics::end(), CurrentMetrics::end(), 4);
     std::atomic<bool> is_cancelled{true}; /// Pre-cancelled.
 
-    TestSet::parallelizeMergeMulti(ptrs, pool, is_cancelled);
+    TestSet::parallelizeMergeMulti(ptrs, [](TestSet * p) { return p; }, pool, is_cancelled);
     /// With cancellation, the merge may be partial or empty — just verify no crash.
     ASSERT_LE(a.size(), 2 * N);
 }

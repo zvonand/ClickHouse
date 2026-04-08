@@ -1947,18 +1947,6 @@ ActionsDAG ActionsDAG::makeAddingConstantColumnActions(const std::string & name,
     return makeAddingColumnActions(ColumnWithTypeAndName{type->createColumnConst(0, value), type, name});
 }
 
-ActionsDAG ActionsDAG::makeRenameColumnActions(const ColumnsWithTypeAndName & header, const std::string & from, const std::string & to)
-{
-    ActionsDAG rename_dag(header);
-    const auto * input = &rename_dag.findInOutputs(from);
-    const auto & alias_node = rename_dag.addAlias(*input, to);
-    for (auto & output : rename_dag.getOutputs())
-        if (output == input)
-            output = &alias_node;
-
-    return rename_dag;
-}
-
 ActionsDAG ActionsDAG::merge(ActionsDAG && first, ActionsDAG && second)
 {
     first.mergeInplace(std::move(second));

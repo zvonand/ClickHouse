@@ -754,7 +754,7 @@ std::pair<Names, Names> splitPhysicalAndVirtualColumnNames(const Names & column_
     {
         /// If the column exists in the table schema, treat it as physical even if
         /// a virtual column with the same name is registered.
-        if (storage_snapshot->tryGetColumn(GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(), name))
+        if (storage_snapshot->tryGetColumn(GetColumnsOptions(GetColumnsOptions::AllPhysical).withSubcolumns(), name))
             physical_names.push_back(name);
         else if (storage_snapshot->virtual_columns->tryGetDescription(name))
             virtual_names.push_back(name);

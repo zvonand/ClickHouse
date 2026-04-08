@@ -66,6 +66,7 @@ class _Settings:
     SECRET_GH_APP_ID: str = ""
     SECRET_GH_APP_PEM_KEY: str = ""
     SECRET_GH_APP_INSTALLATION_ID: str = ""
+    SECRET_GH_APP_REGION: str = ""
 
     ENV_SETUP_SCRIPT: str = f"{TEMP_DIR}/praktika_setup_env.sh"
     WORKFLOW_JOB_FILE: str = f"{TEMP_DIR}/workflow_job.json"
@@ -85,8 +86,7 @@ class _Settings:
     #        Report settings             #
     ######################################
     HTML_S3_PATH: str = ""
-    # Legacy plain JSON viewer page. The React/Click UI-based page is report.html (see ci/praktika/report-click-ui).
-    HTML_PAGE_FILE: str = "json.html"
+    HTML_PAGE_FILE: str = "./ci/praktika/json.html"
     S3_BUCKET_TO_HTTP_ENDPOINT: Optional[Dict[str, str]] = None
     TEXT_CONTENT_EXTENSIONS: Iterable[str] = frozenset([".txt", ".log"])
     # Compress if text file size exceeds this threshold (in MB, 0 - disable compression)
@@ -168,6 +168,7 @@ _USER_DEFINED_SETTINGS = [
     "SECRET_GH_APP_ID",
     "SECRET_GH_APP_PEM_KEY",
     "SECRET_GH_APP_INSTALLATION_ID",
+    "SECRET_GH_APP_REGION",
     "MAIN_BRANCH",
     "DISABLED_WORKFLOWS",
     "ENABLED_WORKFLOWS",
@@ -178,7 +179,6 @@ _USER_DEFINED_SETTINGS = [
     "CI_DB_READ_USER",
     "CI_DB_READ_URL",
     "TEST_FAILURE_PATTERNS",
-    "HTML_PAGE_FILE",
 ]
 
 

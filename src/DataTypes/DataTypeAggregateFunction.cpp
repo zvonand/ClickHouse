@@ -153,12 +153,15 @@ Field DataTypeAggregateFunction::getDefault() const
     return field;
 }
 
-bool DataTypeAggregateFunction::strictEquals(const DataTypePtr & lhs_state_type, const DataTypePtr & rhs_state_type)
+bool DataTypeAggregateFunction::strictEquals(const DataTypePtr & lhs_state_type, const DataTypePtr & rhs_state_type, bool ignore_variant)
 {
     const auto * lhs_state = typeid_cast<const DataTypeAggregateFunction *>(lhs_state_type.get());
     const auto * rhs_state = typeid_cast<const DataTypeAggregateFunction *>(rhs_state_type.get());
 
     if (!lhs_state || !rhs_state)
+        return false;
+
+    if (!ignore_variant && lhs_state->function->getStateVariant() != rhs_state->function->getStateVariant())
         return false;
 
     if (lhs_state->function->getName() != rhs_state->function->getName())
@@ -178,9 +181,6 @@ bool DataTypeAggregateFunction::strictEquals(const DataTypePtr & lhs_state_type,
         if (!lhs_state->argument_types[i]->equals(*rhs_state->argument_types[i]))
             return false;
 
-    if (lhs_state->function->getStateVariant() != rhs_state->function->getStateVariant())
-        return false;
-
     return true;
 }
 
@@ -196,6 +196,17 @@ void DataTypeAggregateFunction::updateHashImpl(SipHash & hash) const
     if (version)
         hash.update(*version);
     hash.update(static_cast<UInt8>(function->getStateVariant()));
+}
+
+bool DataTypeAggregateFunction::equalsIgnoringVariant(const IDataType & rhs) const
+{
+    if (typeid(rhs) != typeid(*this))
+        return false;
+
+    auto lhs_state_type = function->getNormalizedStateType();
+    auto rhs_state_type = typeid_cast<const DataTypeAggregateFunction &>(rhs).function->getNormalizedStateType();
+
+    return strictEquals(lhs_state_type, rhs_state_type, /*ignore_variant=*/ true);
 }
 
 bool DataTypeAggregateFunction::equals(const IDataType & rhs) const

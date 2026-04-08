@@ -137,6 +137,11 @@ public:
 
     virtual const IAggregateFunction & getBaseAggregateFunctionWithSameStateRepresentation() const { return *this; }
 
+    /// Returns true if two aggregate functions have the same definition: name, parameters, and argument types.
+    /// Unlike haveSameStateRepresentation, this ignores the state variant (Aggregation vs Window),
+    /// making it suitable for canMergeStateFromDifferentVariant where the variant intentionally differs.
+    virtual bool haveSameDefinition(const IAggregateFunction & rhs) const;
+
     bool haveEqualArgumentTypes(const IAggregateFunction & rhs) const;
 
     /// Get type which will be used for prediction result in case if function is an ML method.

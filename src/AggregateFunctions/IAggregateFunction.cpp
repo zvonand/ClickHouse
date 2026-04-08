@@ -87,16 +87,17 @@ bool IAggregateFunction::haveSameStateRepresentation(const IAggregateFunction & 
     const auto & lhs_base = getBaseAggregateFunctionWithSameStateRepresentation();
     const auto & rhs_base = rhs.getBaseAggregateFunctionWithSameStateRepresentation();
 
-    /// Consider Window vs Aggregation variants as different state representations.
-    if (lhs_base.getStateVariant() != rhs_base.getStateVariant())
-        return false;
-
     return lhs_base.haveSameStateRepresentationImpl(rhs_base);
 }
 
 bool IAggregateFunction::haveSameStateRepresentationImpl(const IAggregateFunction & rhs) const
 {
     return getStateType()->equals(*rhs.getStateType());
+}
+
+bool IAggregateFunction::haveSameDefinition(const IAggregateFunction & rhs) const
+{
+    return assert_cast<const DataTypeAggregateFunction &>(*getStateType()).equalsIgnoringVariant(*rhs.getStateType());
 }
 
 void IAggregateFunction::parallelizeMergePrepare(

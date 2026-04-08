@@ -54,24 +54,6 @@ def test_table_engine_and_source_grant():
 
     instance.query("REVOKE READ, WRITE ON POSTGRES FROM A")
 
-    grants_after_revoke = instance.query("SHOW GRANTS FOR A")
-    print(f"DEBUG grants after revoke: [{grants_after_revoke.strip()}]")
-
-    access_rights = instance.query("SHOW ACCESS")
-    print(f"DEBUG show access: [{access_rights.strip()[:500]}]")
-
-    # Try creating a simple MergeTree table as A (should succeed - non-source engine)
-    instance.query("CREATE TABLE IF NOT EXISTS test.debug_mt (x Int32) ENGINE = MergeTree ORDER BY x", user="A")
-    instance.query("DROP TABLE IF EXISTS test.debug_mt")
-    print("DEBUG: MergeTree creation succeeded for user A")
-
-    # Try creating a URL table as A (source engine, should fail after revoke of all sources)
-    url_error = instance.query_and_get_error(
-        "CREATE TABLE test.debug_url (x Int32) ENGINE = URL('http://localhost:1/x', 'CSV')",
-        user="A",
-    )
-    print(f"DEBUG URL engine error: [{url_error.strip()[:200]}]")
-
     assert "Not enough privileges" in instance.query_and_get_error(
         """
         CREATE TABLE test.table1(a Integer)
@@ -151,9 +133,10 @@ def test_grant_table_engine_option():
 
 def test_create_database_does_not_require_table_engine_grant():
     # Regression test for PR #98984: `CREATE DATABASE` must not require `TABLE ENGINE` grants
-    # even when `table_engines_require_grant = false`. Database engines (e.g. `Atomic`) are not
-    # table engines. Before the fix, `getAllStorages()` incorrectly included database engines in
-    # the grant check, so `ACCESS_DENIED` was raised despite the setting being disabled.
+    # even when `table_engines_require_grant = false`. Database engines (e.g. `Atomic`) are
+    # registered in `DatabaseFactory`, not `StorageFactory`. Before the fix, only
+    # `StorageFactory::getAllStorages()` was iterated for implicit grants, omitting database
+    # engines and causing `ACCESS_DENIED` on `CREATE DATABASE`.
     instance.query("DROP USER IF EXISTS A")
     instance.query("CREATE USER A")
     instance.query("GRANT CREATE DATABASE ON *.* TO A")

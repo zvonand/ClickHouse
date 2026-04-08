@@ -165,12 +165,12 @@ done
 # Three or more consecutive empty lines
 find $ROOT_PATH/{src,base,programs,utils} -name '*.h' -or -name '*.cpp' |
     grep -vP $EXCLUDE |
-    while read file; do awk '/^$/ { ++i; if (i > 2) { print "More than two consecutive empty lines in file '$file'" } } /./ { i = 0 }' $file; done
+    xargs awk 'FNR==1 { i = 0 } /^$/ { ++i; if (i > 2) { print "More than two consecutive empty lines in file " FILENAME } } /./ { i = 0 }'
 
 # Check that every header file has #pragma once in first line
 find $ROOT_PATH/{src,programs,utils} -name '*.h' |
     grep -vP $EXCLUDE |
-    while read file; do [[ $(head -n1 $file) != '#pragma once' ]] && echo "File $file must have '#pragma once' in first line"; done
+    xargs awk 'FNR==1 && !/^#pragma once$/ { print "File " FILENAME " must have '"'"'#pragma once'"'"' in first line" }'
 
 # Too many exclamation marks
 find $ROOT_PATH/{src,base,programs,utils} -name '*.h' -or -name '*.cpp' |

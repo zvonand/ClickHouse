@@ -85,7 +85,7 @@ clickhousectl local init
 
 It creates the following structure:
 
-```
+```bash
 clickhouse/
 ├── tables/                 # Table definitions (CREATE TABLE ...)
 ├── materialized_views/     # Materialized view definitions

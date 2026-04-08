@@ -295,12 +295,6 @@ FiltersForTableExpressionMap collectFiltersForAnalysis(const QueryTreeNodePtr & 
                 all_inputs_present = false;
                 break;
             }
-            /// The filter DAG was compiled for the view's metadata types, but
-            /// the inner plan may produce different types (e.g. Nullable from
-            /// LEFT JOIN with join_use_nulls, or type promotion).  Applying the
-            /// filter with mismatched types causes a wild-pointer SIGSEGV in
-            /// function execution.  Skip injection when types diverge — the
-            /// query still works, just without the pushdown optimisation.
             if (!input->result_type->equals(*header.getByName(input->result_name).type))
             {
                 all_inputs_present = false;

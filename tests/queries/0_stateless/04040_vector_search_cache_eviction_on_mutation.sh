@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest, no-ordinary-database, no-parallel, no-s3-storage
+# Tags: no-fasttest, no-ordinary-database, no-parallel, no-random-settings
 # no-parallel: checks server-wide VectorSimilarityIndexCacheBytes metric
-# no-s3-storage: S3 part cleanup timing is non-deterministic and can exceed the polling window
+# no-random-settings: old_parts_lifetime = 0 must not be overridden
 
 # Regression test: verify that VectorSimilarityIndexCache entries are evicted
 # when old parts are removed after a mutation (not only on DROP TABLE).
+# Uses S3 storage (MinIO) so the cache-key mismatch between getFullPath() and
+# getRelativePathOfActivePart() manifests, allowing bugfix validation to
+# reproduce the bug on unpatched master.
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -23,7 +26,7 @@ $CLICKHOUSE_CLIENT --query "
         INDEX idx vec TYPE vector_similarity('hnsw', 'L2Distance', 2)
     )
     ENGINE = MergeTree ORDER BY id
-    SETTINGS index_granularity = 8192, old_parts_lifetime = 0, merge_tree_clear_old_parts_interval_seconds = 1, cleanup_delay_period = 0, cleanup_delay_period_random_add = 0, cleanup_thread_preferred_points_per_iteration = 0
+    SETTINGS index_granularity = 8192, old_parts_lifetime = 0, merge_tree_clear_old_parts_interval_seconds = 1, cleanup_delay_period = 0, cleanup_delay_period_random_add = 0, cleanup_thread_preferred_points_per_iteration = 0, storage_policy = 's3_no_cache'
 "
 
 $CLICKHOUSE_CLIENT --query "

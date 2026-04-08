@@ -163,19 +163,19 @@ xargs < "$STYLE_TMPDIR/all_excluded" grep -Plz '\n\n\n\n' 2>/dev/null | \
 xargs < "$STYLE_TMPDIR/nobase_headers_excluded" awk 'FNR==1 && !/^#pragma once$/ { print "File " FILENAME " must have '"'"'#pragma once'"'"' in first line" }'
 
 # Too many exclamation marks
-xargs < "$STYLE_TMPDIR/all_excluded" grep -F '!!!' | grep -P '.' && echo "Too many exclamation marks (looks dirty, unconfident)."
+xargs < "$STYLE_TMPDIR/all_excluded" grep -F '!!!' | grep . && echo "Too many exclamation marks (looks dirty, unconfident)."
 
 # Exclamation mark in a message
-xargs < "$STYLE_TMPDIR/all_excluded" grep -F '!",' | grep -P '.' && echo "No need for an exclamation mark (looks dirty, unconfident)."
+xargs < "$STYLE_TMPDIR/all_excluded" grep -F '!",' | grep . && echo "No need for an exclamation mark (looks dirty, unconfident)."
 
 # Trailing whitespaces
-xargs < "$STYLE_TMPDIR/all_excluded" grep -n ' $' | grep -P '.' && echo "^ Trailing whitespaces."
+xargs < "$STYLE_TMPDIR/all_excluded" grep -n ' $' | grep . && echo "^ Trailing whitespaces."
 
 # Forbid stringstream because it's easy to use them incorrectly and hard to debug possible issues
-xargs < "$STYLE_TMPDIR/nobase_excluded" grep -P 'std::[io]?stringstream' | grep -v "STYLE_CHECK_ALLOW_STD_STRING_STREAM" && echo "Use WriteBufferFromOwnString or ReadBufferFromString instead of std::stringstream"
+xargs < "$STYLE_TMPDIR/nobase_excluded" grep -E 'std::[io]?stringstream' | grep -v "STYLE_CHECK_ALLOW_STD_STRING_STREAM" && echo "Use WriteBufferFromOwnString or ReadBufferFromString instead of std::stringstream"
 
 # Forbid hardware_destructive_interference_size because it provides unrealistic values for ARM (see https://github.com/ClickHouse/ClickHouse/pull/97357)
-xargs < "$STYLE_TMPDIR/nobase_excluded" grep -P '(hardware_destructive_interference_size|hardware_constructive_interference_size)' | grep -vP ':\s*//' && echo "Use CH_CACHE_LINE_SIZE from Common/CacheLine.h instead"
+xargs < "$STYLE_TMPDIR/nobase_excluded" grep -E '(hardware_destructive_interference_size|hardware_constructive_interference_size)' | grep -v ':\s*//' && echo "Use CH_CACHE_LINE_SIZE from Common/CacheLine.h instead"
 
 directories_to_lint_std_containers_usages=(
     src/AggregateFunctions
@@ -185,7 +185,7 @@ directories_to_lint_std_containers_usages=(
 
 for dir in "${directories_to_lint_std_containers_usages[@]}"; do
     grep "/$dir/" "$STYLE_TMPDIR/all_excluded" |
-        xargs grep -Hn -P 'std::(deque|list|map|multimap|multiset|queue|set|unordered_map|unordered_multimap|unordered_multiset|unordered_set|vector)<' |
+        xargs grep -Hn -E 'std::(deque|list|map|multimap|multiset|queue|set|unordered_map|unordered_multimap|unordered_multiset|unordered_set|vector)<' |
         grep -v "STYLE_CHECK_ALLOW_STD_CONTAINERS" && echo "Use an -WithMemoryTracking alternative or mark these usages with STYLE_CHECK_ALLOW_STD_CONTAINERS"
 done
 
@@ -265,13 +265,13 @@ if git grep -e find_path -e find_library -- :**CMakeLists.txt; then
 fi
 
 # Forbid std::filesystem::is_symlink and std::filesystem::read_symlink, because it's easy to use them incorrectly
-xargs < "$STYLE_TMPDIR/nobase_excluded" grep -P '::(is|read)_symlink' | grep -v "STYLE_CHECK_ALLOW_STD_FS_SYMLINK" && echo "Use DB::FS::isSymlink and DB::FS::readSymlink instead"
+xargs < "$STYLE_TMPDIR/nobase_excluded" grep -E '::(is|read)_symlink' | grep -v "STYLE_CHECK_ALLOW_STD_FS_SYMLINK" && echo "Use DB::FS::isSymlink and DB::FS::readSymlink instead"
 
 # Forbid __builtin_unreachable(), because it's hard to debug when it becomes reachable
-xargs < "$STYLE_TMPDIR/nobase_excluded" grep -P '__builtin_unreachable' && echo "Use UNREACHABLE() from defines.h instead"
+xargs < "$STYLE_TMPDIR/nobase_excluded" grep -F '__builtin_unreachable' && echo "Use UNREACHABLE() from defines.h instead"
 
 # Forbid mt19937() and random_device() which are outdated and slow
-xargs < "$STYLE_TMPDIR/nobase_excluded" grep -P '(std::mt19937|std::mersenne_twister_engine|std::random_device)' && echo "Use pcg64_fast (from pcg_random.h) and randomSeed (from Common/randomSeed.h) instead"
+xargs < "$STYLE_TMPDIR/nobase_excluded" grep -E '(std::mt19937|std::mersenne_twister_engine|std::random_device)' && echo "Use pcg64_fast (from pcg_random.h) and randomSeed (from Common/randomSeed.h) instead"
 
 # Require checking return value of close(),
 # since it can hide fd misuse and break other places.
@@ -281,13 +281,13 @@ xargs < "$STYLE_TMPDIR/nobase_excluded" grep -e ' close(.*fd' -e ' ::close(' | g
 xargs < "$STYLE_TMPDIR/nobase_all" grep -l -F '#ifdef NDEBUG' | xargs -I@FILE awk '/#ifdef NDEBUG/ { inside = 1; dirty = 1 } /#endif/ { if (inside && dirty) { print "File @FILE has suspicious #ifdef NDEBUG, possibly confused with #ifndef NDEBUG" }; inside = 0 } /#else/ { dirty = 0 }' @FILE
 
 # If a user is doing dynamic or typeid cast with a pointer, and immediately dereferencing it, it is unsafe.
-xargs < "$STYLE_TMPDIR/nobase_all" grep --line-number -P '(dynamic|typeid)_cast<[^>]+\*>\([^\(\)]+\)->' | grep -P '.' && echo "It's suspicious when you are doing a dynamic_cast or typeid_cast with a pointer and immediately dereferencing it. Use references instead of pointers or check a pointer to nullptr."
+xargs < "$STYLE_TMPDIR/nobase_all" grep --line-number -P '(dynamic|typeid)_cast<[^>]+\*>\([^\(\)]+\)->' | grep . && echo "It's suspicious when you are doing a dynamic_cast or typeid_cast with a pointer and immediately dereferencing it. Use references instead of pointers or check a pointer to nullptr."
 
 # Check for bad punctuation: whitespace before comma.
 xargs < "$STYLE_TMPDIR/nobase_all" grep -P --line-number '\w ,' | grep -v 'bad punctuation is ok here' && echo "^ There is bad punctuation: whitespace before comma. You should write it like this: 'Hello, world!'"
 
 # Check usage of std::regex which is too bloated and slow.
-xargs < "$STYLE_TMPDIR/nobase_all" grep -P --line-number 'std::regex' | grep -P '.' && echo "^ Please use re2 instead of std::regex"
+xargs < "$STYLE_TMPDIR/nobase_all" grep -F --line-number 'std::regex' | grep . && echo "^ Please use re2 instead of std::regex"
 
 # Cyrillic characters hiding inside Latin.
 grep -v StorageSystemContributors.generated.cpp "$STYLE_TMPDIR/nobase_all" | xargs grep -P --line-number '[a-zA-Z][а-яА-ЯёЁ]|[а-яА-ЯёЁ][a-zA-Z]' && echo "^ Cyrillic characters found in unexpected place."
@@ -297,10 +297,10 @@ join -v1 <(grep '\.h$' "$STYLE_TMPDIR/nobase_all" | xargs -I{} basename {} | sor
     grep . && echo '^ Found orphan header files.'
 
 # Don't allow dynamic compiler check with CMake, because we are using hermetic, reproducible, cross-compiled, static (TLDR, good) builds.
-find $ROOT_PATH/contrib/*-cmake -name 'CMakeLists.txt' -or -name '*.cmake' | xargs grep --with-filename -i -P 'check_c_compiler_flag|check_cxx_compiler_flag|check_c_source_compiles|check_cxx_source_compiles|check_include_file|check_symbol_exists|cmake_push_check_state|cmake_pop_check_state|find_package|CMAKE_REQUIRED_FLAGS|CheckIncludeFile|CheckCCompilerFlag|CheckCXXCompilerFlag|CheckCSourceCompiles|CheckCXXSourceCompiles|CheckCSymbolExists|CheckCXXSymbolExists' | grep -v Rust && echo "^ It's not allowed to have dynamic compiler checks with CMake."
+find $ROOT_PATH/contrib/*-cmake -name 'CMakeLists.txt' -or -name '*.cmake' | xargs grep --with-filename -i -E 'check_c_compiler_flag|check_cxx_compiler_flag|check_c_source_compiles|check_cxx_source_compiles|check_include_file|check_symbol_exists|cmake_push_check_state|cmake_pop_check_state|find_package|CMAKE_REQUIRED_FLAGS|CheckIncludeFile|CheckCCompilerFlag|CheckCXXCompilerFlag|CheckCSourceCompiles|CheckCXXSourceCompiles|CheckCSymbolExists|CheckCXXSymbolExists' | grep -v Rust && echo "^ It's not allowed to have dynamic compiler checks with CMake."
 
 # Wrong spelling of abbreviations, e.g. SQL is right, Sql is wrong. XMLHttpRequest is very wrong.
-xargs < "$STYLE_TMPDIR/all_excluded" grep -P 'Sql|Html|Xml|Cpu|Tcp|Udp|Http|Db|Json|Yaml' | grep -v -P 'RabbitMQ|Azure|Aws|aws|Avro|IO/S3|ai::JsonValue|IcebergWrites|arrow::flight|TcpExtListenOverflows' &&
+xargs < "$STYLE_TMPDIR/all_excluded" grep -E 'Sql|Html|Xml|Cpu|Tcp|Udp|Http|Db|Json|Yaml' | grep -v -E 'RabbitMQ|Azure|Aws|aws|Avro|IO/S3|ai::JsonValue|IcebergWrites|arrow::flight|TcpExtListenOverflows' &&
     echo "Abbreviations such as SQL, XML, HTTP, should be in all caps. For example, SQL is right, Sql is wrong. XMLHttpRequest is very wrong."
 
 xargs < "$STYLE_TMPDIR/all_excluded" grep -F -i 'ErrorCodes::LOGICAL_ERROR, "Logical error:' &&

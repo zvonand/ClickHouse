@@ -16,6 +16,7 @@ using namespace GatherUtils;
 
 namespace ErrorCodes
 {
+    extern const int ILLEGAL_COLUMN;
     extern const int TOO_LARGE_STRING_SIZE;
     extern const int INDEX_OF_POSITIONAL_ARGUMENT_IS_OUT_OF_RANGE;
 }

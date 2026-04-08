@@ -70,6 +70,7 @@ namespace ProfileEvents
     extern const Event ZooKeeperSync;
     extern const Event ZooKeeperClose;
     extern const Event ZooKeeperGetACL;
+    extern const Event ZooKeeperGetChildrenRecursive;
     extern const Event ZooKeeperWaitMicroseconds;
     extern const Event ZooKeeperBytesSent;
     extern const Event ZooKeeperBytesReceived;

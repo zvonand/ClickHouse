@@ -228,6 +228,10 @@ std_cerr_cout_excludes=(
     src/Common/ProgressIndication.h
     src/Common/ZooKeeper/KeeperClientCLI/KeeperClient.h
     src/IO/Ask.cpp
+    # Only in block comments (/* ... */)
+    src/Storages/IStorage.h
+    src/Common/mysqlxx/mysqlxx/Query.h
+    src/Common/OptimizedRegularExpression.cpp
 )
 grep -F -v $(printf -- "-e %s " "${std_cerr_cout_excludes[@]}") "$STYLE_TMPDIR/srcbase_excluded" | \
     xargs grep -P -l '^\s*(?!//)([^/]|/[^/])*std::c(err|out)' | \

@@ -11,7 +11,6 @@
 #include <Storages/MergeTree/MarkRange.h>
 #include <Storages/MergeTree/RangesInDataPart.h>
 
-#include <Interpreters/StorageID.h>
 
 namespace DB
 {
@@ -51,12 +50,12 @@ struct ParallelReadRequest
         size_t replica_num_,
         size_t min_marks_per_request_,
         RangesInDataPartsDescription description_,
-        const StorageID & table_id_)
+        String stream_id_)
         : mode(mode_)
         , replica_num(replica_num_)
         , min_marks_per_request(min_marks_per_request_)
         , description(std::move(description_))
-        , table_id(table_id_)
+        , stream_id(std::move(stream_id_))
     {
     }
 
@@ -72,7 +71,8 @@ struct ParallelReadRequest
     /// Contains only data part names without mark ranges.
     RangesInDataPartsDescription description;
 
-    StorageID table_id;
+    /// Identifies the data stream for coordinator dispatch (e.g. table name, projection name).
+    String stream_id;
 
     void serialize(WriteBuffer & out, UInt64 initiator_pr_protocol_version, UInt64 initiator_tcp_protocol_version) const;
     String describe() const;
@@ -87,7 +87,7 @@ struct ParallelReadResponse
 {
     bool finish{false};
     RangesInDataPartsDescription description;
-    StorageID table_id = StorageID::createEmpty();
+    String stream_id;
 
     void serialize(WriteBuffer & out, UInt64 replica_pr_protocol_version, UInt64 replica_tcp_protocol_version) const;
     String describe() const;
@@ -109,13 +109,13 @@ struct InitialAllRangesAnnouncement
         size_t replica_num_,
         size_t mark_segment_size_,
         size_t min_marks_per_request_,
-        const StorageID & table_id_)
+        String stream_id_)
         : mode(mode_)
         , description(std::move(description_))
         , replica_num(replica_num_)
         , mark_segment_size(mark_segment_size_)
         , min_marks_per_request(min_marks_per_request_)
-        , table_id(table_id_)
+        , stream_id(std::move(stream_id_))
     {
     }
 
@@ -129,7 +129,8 @@ struct InitialAllRangesAnnouncement
     /// Total number of marks the replica wants per coordinator request.
     size_t min_marks_per_request;
 
-    StorageID table_id;
+    /// Identifies the data stream for coordinator dispatch (e.g. table name, projection name).
+    String stream_id;
 
     void serialize(WriteBuffer & out, UInt64 initiator_pr_protocol_version, UInt64 initiator_tcp_protocol_version) const;
     String describe();

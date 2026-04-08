@@ -43,8 +43,8 @@ public:
 
 private:
     bool isReadingCompleted() const;
-    std::shared_ptr<ImplInterface> getCoordinator(const StorageID & table_id) const;
-    std::shared_ptr<ImplInterface> getOrCreateCoordinator(const StorageID & table_id, CoordinationMode mode);
+    std::shared_ptr<ImplInterface> getCoordinator(const String & stream_id) const;
+    std::shared_ptr<ImplInterface> getOrCreateCoordinator(const String & stream_id, CoordinationMode mode);
 
     std::mutex mutex;
     const size_t replicas_count{0};
@@ -59,7 +59,7 @@ private:
     std::unordered_set<size_t> unavailable_replicas;
 
     /// Per-table coordinators. Each table gets its own ImplInterface instance.
-    std::unordered_map<String, std::shared_ptr<ImplInterface>> table_to_coordinator;
+    std::unordered_map<String, std::shared_ptr<ImplInterface>> stream_to_coordinator;
     std::unordered_set<size_t> ignored_replicas;
 };
 

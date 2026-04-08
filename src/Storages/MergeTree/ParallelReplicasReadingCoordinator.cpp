@@ -1147,11 +1147,11 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
 
     std::lock_guard lock(mutex);
 
-    if (announcement.table_id.empty())
+    if (announcement.stream_id.empty())
     {
         LOG_DEBUG(
             getLogger("ParallelReplicasReadingCoordinator"),
-            "Got announcement with empty table id from replica {}. Ignore it",
+            "Got announcement with empty stream id from replica {}. Ignore it",
             announcement.replica_num);
         ignored_replicas.emplace(announcement.replica_num);
         return;
@@ -1163,7 +1163,7 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
         LOG_DEBUG(getLogger("ParallelReplicasReadingCoordinator"), "Using snapshot from replica num {}", snapshot_replica_num.value());
     }
 
-    auto coordinator = getOrCreateCoordinator(announcement.table_id, announcement.mode);
+    auto coordinator = getOrCreateCoordinator(announcement.stream_id, announcement.mode);
 
     if (is_reading_completed)
         return;
@@ -1189,24 +1189,24 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
         if (is_reading_completed)
             return response;
 
-        if (request.table_id.empty())
+        if (request.stream_id.empty())
         {
             if (!ignored_replicas.contains(request.replica_num))
                 throw Exception(
                     ErrorCodes::LOGICAL_ERROR,
-                    "Got request from replica {} with empty table id without ranges announcement",
+                    "Got request from replica {} with empty stream id without ranges announcement",
                     request.replica_num);
 
             return response;
         }
 
-        auto coordinator = getCoordinator(request.table_id);
+        auto coordinator = getCoordinator(request.stream_id);
         if (!coordinator)
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,
-                "Got read request from replica {} for table {} without ranges announcement",
+                "Got read request from replica {} for stream {} without ranges announcement",
                 request.replica_num,
-                request.table_id.getFullTableName());
+                request.stream_id);
 
         if (request.mode != coordinator->getCoordinationMode())
             throw Exception(
@@ -1217,7 +1217,7 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
                 magic_enum::enum_name(coordinator->getCoordinationMode()));
 
         const auto replica_num = request.replica_num;
-        const auto request_table_id = request.table_id;
+        const auto request_stream_id = request.stream_id;
 
         if (replica_num >= replicas_count)
             throw Exception(
@@ -1229,12 +1229,12 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
         if (coordinator->replica_status[replica_num].is_finished)
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,
-                "Got request from replica {} for table {} after ranges assignment has been completed for the replica",
+                "Got request from replica {} for stream {} after ranges assignment has been completed for the replica",
                 replica_num,
-                request_table_id.getFullTableName());
+                request_stream_id);
 
         response = coordinator->handleRequest(std::move(request));
-        response.table_id = request_table_id;
+        response.stream_id = request_stream_id;
 
         if (!response.finish)
         {
@@ -1275,7 +1275,7 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
                 replicas);
 
             bool all_initialized_with_empty_ranges = std::all_of(
-                table_to_coordinator.begin(), table_to_coordinator.end(),
+                stream_to_coordinator.begin(), stream_to_coordinator.end(),
                 [](const auto & p) { return p.second->initializedWithEmptyRanges(); });
             if (!all_initialized_with_empty_ranges)
                 chassert(!replicas_used.empty());
@@ -1301,21 +1301,21 @@ void ParallelReplicasReadingCoordinator::markReplicaAsUnavailable(size_t replica
     if (unavailable_replicas.size() == replicas_count)
         throw Exception(ErrorCodes::ALL_CONNECTION_TRIES_FAILED, "Can't connect to any replica chosen for query execution");
 
-    for (auto & [table, coordinator] : table_to_coordinator)
+    for (auto & [table, coordinator] : stream_to_coordinator)
         coordinator->markReplicaAsUnavailable(replica_number);
 }
 
 std::shared_ptr<ParallelReplicasReadingCoordinator::ImplInterface>
-ParallelReplicasReadingCoordinator::getOrCreateCoordinator(const StorageID & table_id, CoordinationMode mode)
+ParallelReplicasReadingCoordinator::getOrCreateCoordinator(const String & stream_id, CoordinationMode mode)
 {
-    auto key = table_id.getFullTableName();
-    auto it = table_to_coordinator.find(key);
-    if (it != table_to_coordinator.end())
+    const auto & key = stream_id;
+    auto it = stream_to_coordinator.find(key);
+    if (it != stream_to_coordinator.end())
     {
         if (mode != it->second->getCoordinationMode())
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,
-                "Coordination mode mismatch for table {}: got {}, expected {}",
+                "Coordination mode mismatch for stream {}: got {}, expected {}",
                 key,
                 magic_enum::enum_name(mode),
                 magic_enum::enum_name(it->second->getCoordinationMode()));
@@ -1343,14 +1343,14 @@ ParallelReplicasReadingCoordinator::getOrCreateCoordinator(const StorageID & tab
     for (const auto replica : unavailable_replicas)
         coordinator->markReplicaAsUnavailable(replica);
 
-    table_to_coordinator[key] = coordinator;
+    stream_to_coordinator[key] = coordinator;
 
     LOG_DEBUG(
         getLogger("ParallelReplicasReadingCoordinator"),
-        "Created coordinator for table {} with mode {}, total tables: {}",
+        "Created coordinator for stream {} with mode {}, total streams: {}",
         key,
         magic_enum::enum_name(mode),
-        table_to_coordinator.size());
+        stream_to_coordinator.size());
 
     return coordinator;
 }
@@ -1371,7 +1371,7 @@ void ParallelReplicasReadingCoordinator::setProgressCallback(ProgressCallback ca
     std::lock_guard lock(mutex);
     // store callback since coordinators may not be instantiated yet
     progress_callback = std::move(callback);
-    for (auto & [_, coordinator] : table_to_coordinator)
+    for (auto & [_, coordinator] : stream_to_coordinator)
         coordinator->setProgressCallback(progress_callback);
 }
 
@@ -1382,9 +1382,9 @@ void ParallelReplicasReadingCoordinator::setReadCompletedCallback(ReadCompletedC
 
 bool ParallelReplicasReadingCoordinator::isReadingCompleted() const
 {
-    chassert(!table_to_coordinator.empty());
+    chassert(!stream_to_coordinator.empty());
 
-    for (const auto & [_, coordinator] : table_to_coordinator)
+    for (const auto & [_, coordinator] : stream_to_coordinator)
     {
         if (!coordinator->isReadingCompleted())
             return false;
@@ -1393,11 +1393,11 @@ bool ParallelReplicasReadingCoordinator::isReadingCompleted() const
 }
 
 std::shared_ptr<ParallelReplicasReadingCoordinator::ImplInterface>
-ParallelReplicasReadingCoordinator::getCoordinator(const StorageID & table_id) const
+ParallelReplicasReadingCoordinator::getCoordinator(const String & stream_id) const
 {
-    auto key = table_id.getFullTableName();
-    auto it = table_to_coordinator.find(key);
-    if (it != table_to_coordinator.end())
+    const auto & key = stream_id;
+    auto it = stream_to_coordinator.find(key);
+    if (it != stream_to_coordinator.end())
         return it->second;
     return nullptr;
 }

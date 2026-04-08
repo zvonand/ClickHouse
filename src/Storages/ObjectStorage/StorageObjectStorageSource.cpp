@@ -32,6 +32,7 @@
 #include <Storages/HivePartitioningUtils.h>
 #include <Storages/ObjectStorage/DataLakes/DataLakeConfiguration.h>
 #include <Storages/ObjectStorage/DataLakes/DeletionVectorTransform.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergDataObjectInfo.h>
 #include <Storages/ObjectStorage/StorageObjectStorage.h>
 #include <Storages/ObjectStorage/StorageObjectStorageSource.h>
 #include <Storages/ObjectStorage/Utils.h>
@@ -90,6 +91,23 @@ namespace ErrorCodes
     extern const int BAD_ARGUMENTS;
     extern const int LOGICAL_ERROR;
     extern const int FILE_DOESNT_EXIST;
+}
+
+void logIcebergFileStats(const ObjectInfoPtr & object_info, const LoggerPtr & log)
+{
+#if USE_AVRO
+    if (auto iceberg_object = std::dynamic_pointer_cast<IcebergDataObjectInfo>(object_info))
+    {
+        const auto & info = iceberg_object->info;
+        if (info.record_count.has_value())
+            LOG_TEST(log, "Iceberg record_count for '{}': {}", object_info->getPath(), *info.record_count);
+        if (info.file_size_in_bytes.has_value())
+            LOG_TEST(log, "Iceberg file_size_in_bytes for '{}': {}", object_info->getPath(), *info.file_size_in_bytes);
+    }
+#else
+    UNUSED(object_info);
+    UNUSED(log);
+#endif
 }
 
 StorageObjectStorageSource::StorageObjectStorageSource(
@@ -385,17 +403,25 @@ Chunk StorageObjectStorageSource::generate()
                     path);
             }
 
+            const String * iceberg_metadata_file_path = nullptr;
+#if USE_AVRO
+            if (const auto * iceberg_info = dynamic_cast<const IcebergDataObjectInfo *>(object_info.get()))
+                iceberg_metadata_file_path = &iceberg_info->info.data_object_file_path_key.serialize();
+#endif
+
             VirtualColumnUtils::addRequestedFileLikeStorageVirtualsToChunk(
                 chunk,
                 read_from_format_info.requested_virtual_columns,
                 {
                     .path = path,
+                    .storage_id = storage_snapshot->storage.getStorageID(),
                     .size = object_info->isArchive() ? object_info->fileSizeInArchive() : object_metadata->size_bytes,
                     .filename = &filename,
                     .last_modified = object_metadata->last_modified,
                     .etag = &(object_metadata->etag),
                     .tags = &(object_metadata->tags),
                     .data_lake_snapshot_version = file_iterator->getSnapshotVersion(),
+                    .iceberg_metadata_file_path = iceberg_metadata_file_path,
                 },
                 read_context);
 
@@ -659,6 +685,8 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
             object_info->getPath(),
             object_info->getObjectMetadata()->size_bytes,
             object_info->getFileFormat().value_or(configuration->format));
+
+        logIcebergFileStats(object_info, log);
 
         bool use_native_reader_v3 = format_settings.has_value()
             ? format_settings->parquet.use_native_reader_v3

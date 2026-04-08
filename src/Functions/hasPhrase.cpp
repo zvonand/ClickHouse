@@ -75,9 +75,9 @@ std::vector<size_t> buildFailureFunction(const std::vector<String> & phrase_toke
 /// Matcher that checks if all phrase tokens appear consecutively in the input's token stream.
 struct MatchPhraseMatcher
 {
-    explicit MatchPhraseMatcher(const std::vector<String> & phrase_tokens_)
+    MatchPhraseMatcher(const std::vector<String> & phrase_tokens_, const std::vector<size_t> & failure_)
         : phrase_tokens(phrase_tokens_)
-        , failure(buildFailureFunction(phrase_tokens_))
+        , failure(failure_)
         , match_position(0)
     {
     }
@@ -111,7 +111,7 @@ struct MatchPhraseMatcher
 
 private:
     const std::vector<String> & phrase_tokens;
-    std::vector<size_t> failure;
+    const std::vector<size_t> & failure;
     size_t match_position;
 };
 
@@ -122,9 +122,10 @@ void executeMatchPhrase(
     PaddedPODArray<UInt8> & col_result,
     size_t input_rows_count,
     const ITokenizer * tokenizer,
-    const std::vector<String> & phrase_tokens)
+    const std::vector<String> & phrase_tokens,
+    const std::vector<size_t> & failure_table)
 {
-    MatchPhraseMatcher matcher(phrase_tokens);
+    MatchPhraseMatcher matcher(phrase_tokens, failure_table);
 
     col_result.resize(input_rows_count);
 
@@ -176,7 +177,8 @@ FunctionHasPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & argu
 
 ExecutableFunctionPtr FunctionBaseHasPhrase::prepare(const ColumnsWithTypeAndName &) const
 {
-    return std::make_unique<ExecutableFunctionHasPhrase>(tokenizer, phrase_tokens);
+    auto failure_table = buildFailureFunction(phrase_tokens);
+    return std::make_unique<ExecutableFunctionHasPhrase>(tokenizer, phrase_tokens, std::move(failure_table));
 }
 
 ColumnPtr
@@ -194,9 +196,9 @@ ExecutableFunctionHasPhrase::executeImpl(const ColumnsWithTypeAndName & argument
 
     ColumnPtr col_input = arguments[arg_input].column;
     if (const auto * col_input_string = checkAndGetColumn<ColumnString>(col_input.get()))
-        executeMatchPhrase(*col_input_string, col_result->getData(), input_rows_count, tokenizer.get(), phrase_tokens);
+        executeMatchPhrase(*col_input_string, col_result->getData(), input_rows_count, tokenizer.get(), phrase_tokens, failure_table);
     else if (const auto * col_input_fixedstring = checkAndGetColumn<ColumnFixedString>(col_input.get()))
-        executeMatchPhrase(*col_input_fixedstring, col_result->getData(), input_rows_count, tokenizer.get(), phrase_tokens);
+        executeMatchPhrase(*col_input_fixedstring, col_result->getData(), input_rows_count, tokenizer.get(), phrase_tokens, failure_table);
 
     return col_result;
 }

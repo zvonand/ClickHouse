@@ -152,3 +152,8 @@ SELECT id FROM tab WHERE hasPhrase(message, 'abc', 'ngrams(3)') ORDER BY id;
 SELECT id FROM tab WHERE hasPhrase(message, 'cde', 'ngrams(3)') ORDER BY id;
 
 DROP TABLE tab;
+
+SELECT 'matchPhrase alias';
+
+SELECT hasPhrase('the quick brown fox', 'quick brown');
+SELECT matchPhrase('the quick brown fox', 'quick brown');

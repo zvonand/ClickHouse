@@ -197,10 +197,6 @@ std_cerr_cout_excludes=(
     /examples/
     /tests/
     _fuzzer
-    # OK
-    base/base/ask.cpp
-    src/Common/ProgressIndication.cpp
-    src/Common/ProgressTable.cpp
     # only under #ifdef DBMS_HASH_MAP_DEBUG_RESIZES, that is used only in tests
     src/Common/HashTable/HashTable.h
     # SensitiveDataMasker::printStats()
@@ -212,21 +208,13 @@ std_cerr_cout_excludes=(
     # IProcessor::dump()
     src/Processors/IProcessor.cpp
     src/Client/ClientApplicationBase.cpp
-    src/Client/ClientBase.cpp
     src/Common/ProgressIndication.h
     src/Client/LineReader.h
-    src/Client/LineReader.cpp
     src/Client/ReplxxLineReader.h
-    src/Client/QueryFuzzer.cpp
     src/Client/Suggest.cpp
     src/Client/ClientBase.h
-    src/Client/LineReader.h
-    src/Client/ReplxxLineReader.h
-    src/Bridge/IBridge.cpp
     src/Daemon/BaseDaemon.cpp
     src/Loggers/Loggers.cpp
-    src/Common/ProgressIndication.h
-    src/Common/ZooKeeper/KeeperClientCLI/KeeperClient.h
     src/IO/Ask.cpp
     # Only in block comments (/* ... */)
     src/Storages/IStorage.h

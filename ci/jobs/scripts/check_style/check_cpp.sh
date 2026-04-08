@@ -169,7 +169,7 @@ xargs < "$STYLE_TMPDIR/all_excluded" grep -F '!!!' | grep -P '.' && echo "Too ma
 xargs < "$STYLE_TMPDIR/all_excluded" grep -F '!",' | grep -P '.' && echo "No need for an exclamation mark (looks dirty, unconfident)."
 
 # Trailing whitespaces
-xargs < "$STYLE_TMPDIR/all_excluded" grep -n -P ' $' | grep -n -P '.' && echo "^ Trailing whitespaces."
+xargs < "$STYLE_TMPDIR/all_excluded" grep -n ' $' | grep -P '.' && echo "^ Trailing whitespaces."
 
 # Forbid stringstream because it's easy to use them incorrectly and hard to debug possible issues
 xargs < "$STYLE_TMPDIR/nobase_excluded" grep -P 'std::[io]?stringstream' | grep -v "STYLE_CHECK_ALLOW_STD_STRING_STREAM" && echo "Use WriteBufferFromOwnString or ReadBufferFromString instead of std::stringstream"

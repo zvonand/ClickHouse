@@ -235,14 +235,24 @@
             color: #606060;
         }
 
-        #theme-toggle, #status-filter-toggle, #sort-toggle {
+        #theme-toggle, #status-filter-toggle, #sort-toggle, #proxy-toggle {
             cursor: pointer;
             color: var(--footer-text-color);
             margin-left: 10px;
         }
 
-        #theme-toggle:hover, #sort-toggle:hover {
+        #theme-toggle:hover, #sort-toggle:hover, #proxy-toggle:hover {
             color: #FAFF69;
+        }
+
+        .downstream-info {
+            padding: 8px 16px;
+            margin: 8px 0;
+            font-size: 13px;
+            border-radius: 4px;
+            background-color: var(--info-background);
+            color: var(--text-color);
+            opacity: 0.8;
         }
 
         #footer a:hover {
@@ -363,6 +373,7 @@
         <div class="left"></div>
         <div class="right"></div>
         <div class="settings">
+            <span id="proxy-toggle" title="Configure downstream proxy URL">🔗</span>
             <span id="status-filter-toggle"></span>
             <span id="sort-toggle">🔼</span>
             <span id="theme-toggle">🔆️</span>
@@ -509,6 +520,34 @@
     document.getElementById('status-filter-toggle').addEventListener('click', toggleStatusFilter);
     document.getElementById('sort-toggle').addEventListener('click', toggleSortByStatus);
     document.getElementById('toggle-status-bar').addEventListener('click', toggleStatusBar);
+    document.getElementById('proxy-toggle').addEventListener('click', toggleProxy);
+
+    function toggleProxy() {
+        const current = localStorage.getItem('privateBaseUrl') || '';
+        const value = prompt(
+            'Downstream proxy base URL\n(e.g. https://ci-reports.<tailnet>.ts.net/clickhouse-test-reports-private)\nLeave empty to disable:',
+            current
+        );
+        if (value === null) return; // cancelled
+        if (value.trim()) {
+            localStorage.setItem('privateBaseUrl', value.trim().replace(/\/+$/, ''));
+        } else {
+            localStorage.removeItem('privateBaseUrl');
+        }
+        updateProxyToggleIcon();
+        location.reload();
+    }
+
+    function updateProxyToggleIcon() {
+        const toggle = document.getElementById('proxy-toggle');
+        const hasProxy = !!localStorage.getItem('privateBaseUrl');
+        if (toggle) {
+            toggle.style.opacity = hasProxy ? '1' : '0.4';
+            toggle.title = hasProxy
+                ? 'Downstream proxy: ' + localStorage.getItem('privateBaseUrl')
+                : 'Configure downstream proxy URL';
+        }
+    }
 
     function toggleSortByStatus() {
         const current = localStorage.getItem('sortByStatus');
@@ -1384,7 +1423,15 @@
                 } else if (column === 'name') {
                     const statusValue = result["status"] ? result["status"].toLowerCase() : "";
 
-                    if (
+                    if (result._downstreamHref) {
+                        // Downstream result: link to private json.html via proxy
+                        const link = document.createElement('a');
+                        link.href = result._downstreamHref;
+                        link.textContent = value;
+                        link.target = '_blank';
+                        td.classList.add('name-column');
+                        td.appendChild(link);
+                    } else if (
                         (nest_level === 1 && ["pending", "skipped", "running"].includes(statusValue)) ||
                         (nest_level > 1 && (!Array.isArray(result.results) || result.results.length === 0) ||
                             nest_level === 0)
@@ -1611,7 +1658,8 @@
         prLink: null,
         commitLink: null,
         runLink: null,
-        sha: null
+        sha: null,
+        downstreamResults: null
     };
 
     function storeLink(link) {
@@ -1897,11 +1945,82 @@
         return hasNewData;
     }
 
+    // Fetch downstream (private sync) results via proxy.
+    // Returns { data: [...results], error: null } or { data: null, error: "message" }
+    async function fetchDownstreamData(sha, privateBaseUrl) {
+        // Step 1: Fetch sync metadata
+        let metaResult;
+        try {
+            metaResult = await fetchJson(`${privateBaseUrl}/sync_metadata/${sha}.json`);
+        } catch (e) {
+            return { data: null, error: 'Downstream: proxy unreachable' };
+        }
+        if (metaResult.status === 0) {
+            return { data: null, error: 'Downstream: proxy unreachable' };
+        }
+        if (metaResult.status === 403 || !metaResult.data) {
+            return { data: null, error: 'Downstream: no sync metadata for this commit' };
+        }
+
+        const { private_pr_number, private_sha } = metaResult.data;
+        if (!private_pr_number || !private_sha) {
+            return { data: null, error: 'Downstream: invalid sync metadata' };
+        }
+
+        // Step 2: Fetch private PR result
+        let resultResult;
+        try {
+            resultResult = await fetchJson(
+                `${privateBaseUrl}/PRs/${encodeURIComponent(private_pr_number)}/${encodeURIComponent(private_sha)}/result_pr.json`
+            );
+        } catch (e) {
+            return { data: null, error: 'Downstream: proxy unreachable' };
+        }
+        if (resultResult.status === 0) {
+            return { data: null, error: 'Downstream: proxy unreachable' };
+        }
+        if (resultResult.status === 403 || !resultResult.data) {
+            return { data: null, error: 'Downstream: sync PR results not available yet' };
+        }
+
+        const privateResults = resultResult.data.results || [];
+
+        // Step 3: Transform results — prefix names, add downstream href, rewrite links
+        const transformed = privateResults.map(r => {
+            const originalName = r.name;
+            const copy = Object.assign({}, r);
+            copy.name = 'Downstream: ' + originalName;
+            copy._downstreamHref = `${privateBaseUrl}/json.html?PR=${encodeURIComponent(private_pr_number)}&sha=${encodeURIComponent(private_sha)}&name_0=PR&name_1=${encodeURIComponent(originalName)}`;
+
+            // Rewrite links: replace CloudFront/S3 private bucket prefix with proxy
+            if (Array.isArray(copy.links)) {
+                copy.links = copy.links.map(link =>
+                    link.replace(/^https?:\/\/[^\/]+\/clickhouse-test-reports-private/, privateBaseUrl)
+                );
+            }
+            return copy;
+        });
+
+        return { data: transformed, error: null };
+    }
+
+    function showDownstreamInfo(message) {
+        const container = document.getElementById('result-container');
+        // Remove any existing downstream info bar
+        const existing = container.querySelector('.downstream-info');
+        if (existing) existing.remove();
+
+        const bar = document.createElement('div');
+        bar.className = 'downstream-info';
+        bar.textContent = message;
+        container.insertBefore(bar, container.firstChild);
+    }
+
     // Track for autorefresh toggle
     let openedInfoCnt = 0;
     let closedInfoCnt = 0;
 
-    async function renderResultsAuto(PR, REF, sha, nameParams, base_url) {
+    async function renderResultsAuto(PR, REF, sha, nameParams, base_url, privateBaseUrl) {
         function clearPage() {
             // First, clean up any existing timers and event listeners
             activeTimers.clearAll();
@@ -1961,7 +2080,7 @@
                 // Clear timers, event listeners, and DOM before refreshing content
                 clearPage();
 
-                // Rebuild the page with new data
+                // Rebuild the page with new data (public results render immediately)
                 await renderResults(PR, sha, nameParams);
 
                 // Restore scroll position
@@ -1970,6 +2089,39 @@
                 }
 
                 console.log(`Data refreshed at ${new Date().toLocaleTimeString()}`);
+
+                // Fetch downstream (private sync) results asynchronously
+                if (nameParams.length === 1 && privateBaseUrl) {
+                    const resolvedSha = runtimeCache.commits
+                        ? ((sha === 'latest')
+                            ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
+                            : sha)
+                        : sha;
+                    if (resolvedSha) {
+                        fetchDownstreamData(resolvedSha, privateBaseUrl).then(result => {
+                            if (result.error) {
+                                runtimeCache.downstreamResults = null;
+                                showDownstreamInfo(result.error);
+                            } else if (result.data && result.data.length > 0) {
+                                runtimeCache.downstreamResults = result.data;
+                                // Re-render just the results table with merged data
+                                const resultsDiv = document.getElementById('result-container');
+                                const oldTable = resultsDiv.querySelector('table');
+                                const target = getTargetResults(nameParams);
+                                if (target) {
+                                    const merged = [...(target.results || []), ...result.data];
+                                    const nest_level = 1;
+                                    const newTable = createResultsTable(merged, nest_level);
+                                    if (newTable && oldTable) {
+                                        oldTable.replaceWith(newTable);
+                                    } else if (newTable) {
+                                        resultsDiv.appendChild(newTable);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
             }
         }
 
@@ -2006,6 +2158,14 @@
         const REF = urlParams.get('REF');
         const sha = urlParams.get('sha');
         const base_url = urlParams.get('base_url');
+
+        // Proxy URL: from URL param (persisted) or localStorage
+        const proxyParam = urlParams.get('proxy');
+        if (proxyParam) {
+            localStorage.setItem('privateBaseUrl', proxyParam.replace(/\/+$/, ''));
+        }
+        const privateBaseUrl = localStorage.getItem('privateBaseUrl') || null;
+
         const nameParams = [];
         urlParams.forEach((value, key) => {
             if (key.startsWith('name_')) {
@@ -2013,7 +2173,7 @@
                 nameParams[index] = value;
             }
         });
-        await renderResultsAuto(PR, REF, sha, nameParams, base_url);
+        await renderResultsAuto(PR, REF, sha, nameParams, base_url, privateBaseUrl);
         renderFooter(nameParams)
         updatePageTitle(PR, REF, sha, nameParams)
         fetchStatistics(nameParams[0])
@@ -2031,6 +2191,7 @@
         await init();
         toggleStatusFilter(true);
         updateSortToggleIcon();
+        updateProxyToggleIcon();
     });
 
     function createFavicon() {

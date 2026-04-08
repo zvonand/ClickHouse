@@ -15,6 +15,7 @@
 #include <Common/escapeForFileName.h>
 #include <Common/logger_useful.h>
 #include <Common/quoteString.h>
+#include <Common/FailPoint.h>
 #include <IO/NullWriteBuffer.h>
 
 namespace DB
@@ -24,6 +25,12 @@ namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
     extern const int INCORRECT_FILE_NAME;
+    extern const int FAULT_INJECTED;
+}
+
+namespace FailPoints
+{
+    extern const char wide_part_writer_fail_in_add_streams[];
 }
 
 namespace
@@ -191,6 +198,11 @@ void MergeTreeDataPartWriterWide::addStreams(
             (settings.min_columns_to_activate_adaptive_write_buffer && columns_list.size() >= settings.min_columns_to_activate_adaptive_write_buffer)
             || (settings.use_adaptive_write_buffer_for_dynamic_subcolumns && ISerialization::isDynamicSubcolumn(substream_path, substream_path.size()));
         query_write_settings.adaptive_write_buffer_initial_size = settings.adaptive_write_buffer_initial_size;
+
+        fiu_do_on(FailPoints::wide_part_writer_fail_in_add_streams,
+        {
+            throw Exception(ErrorCodes::FAULT_INJECTED, "Injected failure in Wide part writer addStreams");
+        });
 
         column_streams.emplace(stream_name, std::make_unique<MergeTreeWriterStream>(
             stream_name,
@@ -398,7 +410,7 @@ void MergeTreeDataPartWriterWide::writeSingleMark(const NameAndTypePair & name_a
 
 void MergeTreeDataPartWriterWide::flushMarkToFile(const StreamNameAndMark & stream_with_mark, size_t rows_in_mark)
 {
-    auto & stream = *column_streams[stream_with_mark.stream_name];
+    auto & stream = *column_streams.at(stream_with_mark.stream_name);
     WriteBuffer & marks_out = stream.compress_marks ? stream.marks_compressed_hashing : stream.marks_hashing;
 
     writeBinaryLittleEndian(stream_with_mark.mark.offset_in_compressed_file, marks_out);
@@ -438,7 +450,7 @@ StreamsWithMarks MergeTreeDataPartWriterWide::getCurrentMarksForColumn(const Nam
         if (is_offsets && offset_substreams.contains(stream_name))
             return;
 
-        auto & stream = *column_streams[stream_name];
+        auto & stream = *column_streams.at(stream_name);
 
         /// There could already be enough data to compress into the new block.
         if (stream.compressed_hashing.offset() >= min_compress_block_size)

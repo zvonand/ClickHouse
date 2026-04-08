@@ -226,17 +226,9 @@ std_cerr_cout_excludes=(
     src/Common/ZooKeeper/KeeperClientCLI/KeeperClient.h
     src/IO/Ask.cpp
 )
-sources_with_std_cerr_cout=( $(
-    grep -F -v $(printf -- "-e %s " "${std_cerr_cout_excludes[@]}") "$STYLE_TMPDIR/srcbase_excluded" | \
-        xargs grep -F --with-filename -e std::cerr -e std::cout | cut -d: -f1 | sort -u
-) )
-# Exclude comments
-for src in "${sources_with_std_cerr_cout[@]}"; do
-    # suppress stderr, since it may contain warning for #pragma once in headers
-    if gcc -fpreprocessed -dD -E "$src" 2>/dev/null | grep -F -q -e std::cerr -e std::cout; then
-        echo "$src: uses std::cerr/std::cout"
-    fi
-done
+grep -F -v $(printf -- "-e %s " "${std_cerr_cout_excludes[@]}") "$STYLE_TMPDIR/srcbase_excluded" | \
+    xargs grep -P -l '^\s*(?!//).*std::c(err|out)' | \
+    while read -r src; do echo "$src: uses std::cerr/std::cout"; done
 
 expect_tests=( $(find $ROOT_PATH/tests/queries -name '*.expect') )
 for test_case in "${expect_tests[@]}"; do

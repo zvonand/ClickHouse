@@ -1,4 +1,6 @@
+#include <Columns/ColumnConst.h>
 #include <DataTypes/DataTypesNumber.h>
+#include <Functions/FunctionFactory.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Interpreters/PreparedSets.h>
@@ -38,6 +40,48 @@ static ActionsDAG cloneFilterSubDAG(const ActionsDAG & dag, const String & filte
             sub_dag.getOutputs().push_back(input);
 
     return sub_dag;
+}
+
+/// Add a FilterStep that keeps only rows where is_deleted == 0.
+/// If remove_is_deleted_column is true, the is_deleted column is also removed from output
+/// (used when the column was added internally and not requested by the query).
+static void addIsDeletedFilter(QueryPlan & plan, const String & is_deleted_column, const ContextPtr & context, bool remove_is_deleted_column)
+{
+    const auto & header = *plan.getCurrentHeader();
+
+    ActionsDAG dag;
+
+    /// Add columns before is_deleted as inputs/outputs to preserve column order.
+    /// When is_deleted is kept (user requested it), we need explicit inputs
+    /// for preceding columns so their order is maintained relative to is_deleted.
+    const ActionsDAG::Node * col_node = nullptr;
+    for (const auto & col : header)
+    {
+        if (col.name == is_deleted_column)
+        {
+            col_node = &dag.addInput(col.name, col.type);
+            if (!remove_is_deleted_column)
+                dag.getOutputs().push_back(col_node);
+            break;
+        }
+
+        if (!remove_is_deleted_column)
+        {
+            const auto * input = &dag.addInput(col.name, col.type);
+            dag.getOutputs().push_back(input);
+        }
+    }
+
+    const auto * zero_node = &dag.addColumn(
+        ColumnWithTypeAndName(DataTypeUInt8().createColumnConst(1, Field(UInt8(0))), std::make_shared<DataTypeUInt8>(), "__is_deleted_zero"));
+
+    auto equals_func = FunctionFactory::instance().get("equals", context);
+    const auto * filter_node = &dag.addFunction(equals_func, {col_node, zero_node}, "__is_deleted_filter");
+
+    dag.getOutputs().push_back(filter_node);
+
+    plan.addStep(std::make_unique<FilterStep>(
+        plan.getCurrentHeader(), std::move(dag), "__is_deleted_filter", /*remove_filter_column=*/ true));
 }
 
 void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::Nodes & nodes, const QueryPlanOptimizationSettings & optimization_settings)
@@ -127,10 +171,21 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
                 if (non_final_query_info.table_expression_modifiers)
                     non_final_query_info.table_expression_modifiers->setHasFinal(false);
 
+                auto columns = reading_step->getAllColumnNames();
+                bool is_deleted_added = false;
+                if (!merging_params.is_deleted_column.empty())
+                {
+                    if (std::ranges::find(columns, merging_params.is_deleted_column) == columns.end())
+                    {
+                        columns.push_back(merging_params.is_deleted_column);
+                        is_deleted_added = true;
+                    }
+                }
+
                 auto non_final_reading = std::make_unique<ReadFromMergeTree>(
                     std::make_shared<RangesInDataParts>(std::move(split.non_intersecting_parts_ranges)),
                     mutations_snapshot,
-                    reading_step->getAllColumnNames(),
+                    columns,
                     data,
                     data.getSettings(),
                     non_final_query_info,
@@ -155,9 +210,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
 
                 /// Filter is_deleted rows if needed.
                 if (!merging_params.is_deleted_column.empty())
-                {
-                    /// TODO: add is_deleted filter
-                }
+                    addIsDeletedFilter(plan, merging_params.is_deleted_column, context, is_deleted_added);
 
                 query_plan.replaceNodeWithPlan(read_node, std::move(plan), expected_header);
                 return;
@@ -176,10 +229,21 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
                 if (non_final_query_info.table_expression_modifiers)
                     non_final_query_info.table_expression_modifiers->setHasFinal(false);
 
+                auto columns = reading_step->getAllColumnNames();
+                bool is_deleted_added = false;
+                if (!merging_params.is_deleted_column.empty())
+                {
+                    if (std::ranges::find(columns, merging_params.is_deleted_column) == columns.end())
+                    {
+                        columns.push_back(merging_params.is_deleted_column);
+                        is_deleted_added = true;
+                    }
+                }
+
                 auto non_final_reading = std::make_unique<ReadFromMergeTree>(
                     std::make_shared<RangesInDataParts>(std::move(split.non_intersecting_parts_ranges)),
                     mutations_snapshot,
-                    reading_step->getAllColumnNames(),
+                    columns,
                     data,
                     data.getSettings(),
                     non_final_query_info,
@@ -203,9 +267,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
 
                 /// Filter is_deleted rows if needed.
                 if (!merging_params.is_deleted_column.empty())
-                {
-                    /// TODO: add is_deleted filter
-                }
+                    addIsDeletedFilter(*non_intersecting_plan, merging_params.is_deleted_column, context, is_deleted_added);
             }
         }
     }

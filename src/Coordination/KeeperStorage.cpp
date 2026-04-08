@@ -1577,9 +1577,9 @@ Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is
 {
     if (is_local)
     {
-        std::shared_lock lock(storage.storage_mutex, std::defer_lock);
+        std::shared_lock<SharedMutex> lock;
         if (should_lock_storage)
-            lock.lock();
+            lock = std::shared_lock<SharedMutex>(storage.storage_mutex);
         auto node_it = storage.container.find(path);
         if (node_it == storage.container.end())
             return {};
@@ -2494,6 +2494,11 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
                 auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
                 if (storage.checkACL(child_path, Coordination::ACL::Read, session_id, local, false))
                 {
+                    if (response->children.size() >= zk_request.children_nodes_limit)
+                    {
+                        response->error = Coordination::Error::ZOK;
+                        return response;
+                    }
                     response->children.push_back(child_path);
                     traverse.push(std::move(child_path));
                 }
@@ -2509,16 +2514,15 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
                 auto child_path = (std::filesystem::path(current_path) / child_name).generic_string();
                 if (storage.checkACL(child_path, Coordination::ACL::Read, session_id, local, false))
                 {
+                    if (response->children.size() >= zk_request.children_nodes_limit)
+                    {
+                        response->error = Coordination::Error::ZOK;
+                        return response;
+                    }
                     response->children.push_back(child_path);
                     traverse.push(child_path);
                 }
             }
-        }
-
-        if (response->children.size() > zk_request.children_nodes_limit)
-        {
-            response->error = Coordination::Error::ZNOTEMPTY;
-            return response;
         }
     }
 

@@ -1211,8 +1211,7 @@ Coordination::Error ZooKeeper::tryGetChildrenRecursive(const std::string & path,
 
     auto response = future.get();
     Coordination::Error code = response.error;
-    if (code == Coordination::Error::ZOK)
-        res = std::move(response.children);
+    res = std::move(response.children);
     return code;
 }
 
@@ -1986,7 +1985,7 @@ Coordination::RequestPtr makeRemoveRecursiveRequest(const Client & client, const
 template Coordination::RequestPtr makeRemoveRecursiveRequest<zkutil::ZooKeeper>(const zkutil::ZooKeeper & client, const std::string & path, uint32_t remove_nodes_limit);
 template Coordination::RequestPtr makeRemoveRecursiveRequest<DB::ZooKeeperWithFaultInjection>(const DB::ZooKeeperWithFaultInjection & client, const std::string & path, uint32_t remove_nodes_limit);
 
-Coordination::RequestPtr makeGetChildrenRequest(const std::string & path)
+Coordination::RequestPtr makeGetChildrenRecursiveRequest(const std::string & path)
 {
     auto request = std::make_shared<Coordination::ZooKeeperGetChildrenRecursiveRequest>();
     request->path = path;

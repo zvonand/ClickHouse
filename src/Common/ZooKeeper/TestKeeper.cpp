@@ -529,19 +529,19 @@ std::pair<ResponsePtr, Undo> TestKeeperGetChildrenRecursiveRequest::process(Test
         return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
     }
 
-    const auto path_with_slash = path + "/";
+    const auto path_with_slash = (path == "/") ? path : path + "/";
     std::vector<String> children;
     for (auto child_it = std::next(it); child_it != container.end(); ++child_it)
     {
         if (!child_it->first.starts_with(path_with_slash))
             break;
+        if (children.size() >= children_nodes_limit)
+        {
+            response.error = Error::ZOK;
+            response.children = std::move(children);
+            return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
+        }
         children.push_back(child_it->first);
-    }
-
-    if (children.size() > children_nodes_limit)
-    {
-        response.error = Error::ZNOTEMPTY;
-        return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
     }
 
     response.children = std::move(children);

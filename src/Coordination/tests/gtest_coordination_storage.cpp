@@ -1575,7 +1575,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         EXPECT_EQ(responses[0].response->error, Coordination::Error::ZOK) << "Failed to create " << path;
     };
 
-    const auto get_children_recursive = [&](const String & path, uint32_t limit) -> std::vector<String>
+    const auto get_children_recursive = [&](const String & path, uint32_t limit) -> std::pair<Error, std::vector<String>>
     {
         int new_zxid = ++zxid;
 
@@ -1588,9 +1588,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
 
         EXPECT_EQ(responses.size(), 1);
         const auto & response = dynamic_cast<ZooKeeperGetChildrenRecursiveResponse &>(*responses[0].response);
-        if (response.error != Error::ZOK)
-            return {};
-        return response.children;
+        return {response.error, response.children};
     };
 
     const auto get_children_recursive_error = [&](const String & path, uint32_t limit) -> Error
@@ -1612,7 +1610,8 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         SCOPED_TRACE("Leaf node returns empty list");
         create("/leaf");
 
-        auto children = get_children_recursive("/leaf", 100);
+        auto [error, children] = get_children_recursive("/leaf", 100);
+        ASSERT_EQ(error, Error::ZOK);
         ASSERT_EQ(children.size(), 0);
     }
 
@@ -1629,7 +1628,8 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         create("/parent/B");
         create("/parent/C");
 
-        auto children = get_children_recursive("/parent", 100);
+        auto [error, children] = get_children_recursive("/parent", 100);
+        ASSERT_EQ(error, Error::ZOK);
         ASSERT_EQ(children.size(), 3);
 
         std::unordered_set<String> child_set(children.begin(), children.end());
@@ -1647,7 +1647,8 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         create("/tree/A/D");
         create("/tree/A/C/E");
 
-        auto children = get_children_recursive("/tree", 100);
+        auto [error, children] = get_children_recursive("/tree", 100);
+        ASSERT_EQ(error, Error::ZOK);
         ASSERT_EQ(children.size(), 5);
 
         std::unordered_set<String> child_set(children.begin(), children.end());
@@ -1659,15 +1660,16 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
     }
 
     {
-        SCOPED_TRACE("Limit exceeded returns ZNOTEMPTY");
+        SCOPED_TRACE("Limit exceeded returns truncated list");
         create("/big");
         create("/big/A");
         create("/big/B");
         create("/big/C");
         create("/big/D");
 
-        auto error = get_children_recursive_error("/big", 3);
-        ASSERT_EQ(error, Error::ZNOTEMPTY);
+        auto [error, children] = get_children_recursive("/big", 3);
+        ASSERT_EQ(error, Error::ZOK);
+        ASSERT_EQ(children.size(), 3);
     }
 
     {
@@ -1676,7 +1678,8 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         create("/exact/A");
         create("/exact/B");
 
-        auto children = get_children_recursive("/exact", 2);
+        auto [error, children] = get_children_recursive("/exact", 2);
+        ASSERT_EQ(error, Error::ZOK);
         ASSERT_EQ(children.size(), 2);
     }
 
@@ -1686,7 +1689,8 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         create("/foo/bar");
         create("/foobar");
 
-        auto children = get_children_recursive("/foo", 100);
+        auto [error, children] = get_children_recursive("/foo", 100);
+        ASSERT_EQ(error, Error::ZOK);
         ASSERT_EQ(children.size(), 1);
 
         ASSERT_EQ(children[0], "/foo/bar");
@@ -1698,7 +1702,8 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         create("/mixed/P", zkutil::CreateMode::Persistent);
         create("/mixed/E", zkutil::CreateMode::Ephemeral);
 
-        auto children = get_children_recursive("/mixed", 100);
+        auto [error, children] = get_children_recursive("/mixed", 100);
+        ASSERT_EQ(error, Error::ZOK);
         ASSERT_EQ(children.size(), 2);
 
         std::unordered_set<String> child_set(children.begin(), children.end());
@@ -1712,7 +1717,8 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         create("/mixed_acl/P", zkutil::CreateMode::Persistent);
         create("/mixed_acl/E", zkutil::CreateMode::Ephemeral, ACL::Admin);
 
-        auto children = get_children_recursive("/mixed_acl", 100);
+        auto [error, children] = get_children_recursive("/mixed_acl", 100);
+        ASSERT_EQ(error, Error::ZOK);
         ASSERT_EQ(children.size(), 1);
 
         std::unordered_set<String> child_set(children.begin(), children.end());

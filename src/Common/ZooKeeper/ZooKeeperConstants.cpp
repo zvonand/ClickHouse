@@ -39,6 +39,7 @@ static const std::unordered_set<int32_t> VALID_OPERATIONS =
     static_cast<int32_t>(OpNum::RemoveWatch),
     static_cast<int32_t>(OpNum::SetWatch),
     static_cast<int32_t>(OpNum::SetWatch2),
+    static_cast<int32_t>(OpNum::GetChildrenRecursive),
 };
 
 OpNum getOpNum(int32_t raw_op_num)

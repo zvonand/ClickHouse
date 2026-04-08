@@ -281,7 +281,8 @@ xargs < "$STYLE_TMPDIR/nobase_excluded" grep -E '(std::mt19937|std::mersenne_twi
 xargs < "$STYLE_TMPDIR/nobase_excluded" grep -e ' close(.*fd' -e ' ::close(' | grep -v = && echo "Return value of close() should be checked"
 
 # A small typo can lead to debug code in release builds, see https://github.com/ClickHouse/ClickHouse/pull/47647
-xargs < "$STYLE_TMPDIR/nobase_all" grep -l -F '#ifdef NDEBUG' | xargs -I@FILE awk '/#ifdef NDEBUG/ { inside = 1; dirty = 1 } /#endif/ { if (inside && dirty) { print "File @FILE has suspicious #ifdef NDEBUG, possibly confused with #ifndef NDEBUG" }; inside = 0 } /#else/ { dirty = 0 }' @FILE
+xargs < "$STYLE_TMPDIR/nobase_all" grep -l -F '#ifdef NDEBUG' | \
+    xargs awk '/#ifdef NDEBUG/ { inside = 1; dirty = 1 } /#endif/ { if (inside && dirty) { print "File " FILENAME " has suspicious #ifdef NDEBUG, possibly confused with #ifndef NDEBUG" }; inside = 0 } /#else/ { dirty = 0 }'
 
 # If a user is doing dynamic or typeid cast with a pointer, and immediately dereferencing it, it is unsafe.
 xargs < "$STYLE_TMPDIR/nobase_all" grep --line-number -P '(dynamic|typeid)_cast<[^>]+\*>\([^\(\)]+\)->' | grep . && echo "It's suspicious when you are doing a dynamic_cast or typeid_cast with a pointer and immediately dereferencing it. Use references instead of pointers or check a pointer to nullptr."

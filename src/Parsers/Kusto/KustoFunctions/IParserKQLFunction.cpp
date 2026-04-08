@@ -193,9 +193,18 @@ String IParserKQLFunction::getConvertedArgument(const String & fn_name, IParser:
                     while (isValidKQLPos(pos) && pos->type != TokenType::ClosingSquareBracket)
                     {
                         array_index += getExpression(pos);
+                        if (array_index.size() > DBMS_DEFAULT_MAX_QUERY_SIZE)
+                            throw Exception(ErrorCodes::SYNTAX_ERROR,
+                                "KQL array index expression size {} exceeds maximum allowed size {}",
+                                array_index.size(), DBMS_DEFAULT_MAX_QUERY_SIZE);
                         ++pos;
                     }
                     token = fmt::format("[ {0} >=0 ? {0} + 1 : {0}]", array_index);
+
+                    if (token.size() > DBMS_DEFAULT_MAX_QUERY_SIZE)
+                        throw Exception(ErrorCodes::SYNTAX_ERROR,
+                            "KQL array index expression size {} exceeds maximum allowed size {}",
+                            token.size(), DBMS_DEFAULT_MAX_QUERY_SIZE);
                 }
                 else
                     token = String(pos->begin, pos->end);

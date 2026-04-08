@@ -36,7 +36,7 @@ SELECT '--- undefined setting ---';
 "
 
 # Expected error: custom_e is not yet defined
-${CLICKHOUSE_CLIENT} -q "SELECT getSetting('custom_e') as v, toTypeName(v)" 2>/dev/null
+${CLICKHOUSE_CLIENT} -q "SELECT getSetting('custom_e') as v, toTypeName(v)" 2>&1 | grep -m1 -o 'UNKNOWN_SETTING'
 
 ${CLICKHOUSE_CLIENT} -n -q "
 SET custom_e = 404;
@@ -46,7 +46,7 @@ SELECT '--- wrong prefix ---';
 "
 
 # Expected error: invalid_custom is not a valid prefix
-${CLICKHOUSE_CLIENT} -q "SET invalid_custom = 8" 2>/dev/null
+${CLICKHOUSE_CLIENT} -q "SET invalid_custom = 8" 2>&1 | grep -m1 -o 'UNKNOWN_SETTING'
 
 # Re-SET custom_e since it was in a previous session
 ${CLICKHOUSE_CLIENT} -n -q "
@@ -63,7 +63,7 @@ SELECT name, value FROM system.settings WHERE name = 'custom_f' SETTINGS custom_
 "
 
 # Expected error: custom_f is not set in session
-${CLICKHOUSE_CLIENT} -q "SELECT getSetting('custom_f') as v, toTypeName(v)" 2>/dev/null
+${CLICKHOUSE_CLIENT} -q "SELECT getSetting('custom_f') as v, toTypeName(v)" 2>&1 | grep -m1 -o 'UNKNOWN_SETTING'
 
 ${CLICKHOUSE_CLIENT} -n -q "
 SELECT COUNT() FROM system.settings WHERE name = 'custom_f';

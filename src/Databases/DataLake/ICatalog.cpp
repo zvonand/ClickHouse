@@ -282,30 +282,39 @@ std::string TableMetadata::getMetadataLocation(const std::string & iceberg_metad
                 data_location = data_location.substr(normalized_endpoint.size());
         }
 
-        /// For Azure ABFSS with Polaris-style paths the container name appears as the first
-        /// segment of both the table location and the metadata location returned by the catalog.
-        /// Normalize both sides by stripping that redundant prefix before doing the prefix
-        /// comparison below, so we correctly identify the relative metadata path.
-        /// This is guarded by `abfss_has_container_path_prefix` so that legitimate locations
-        /// like abfss://c@account/c/table (where "/c/" is a real directory) are left untouched.
-        if (abfss_has_container_path_prefix && !azure_account_with_suffix.empty() && !bucket.empty())
+        /// For Azure ABFSS locations we need to reconcile two different formats:
+        ///   - metadata_location (from catalog): "container@account.host/path/..."
+        ///   - data_location (with endpoint set): "/container/path/" (HTTPS path after endpoint stripped)
+        /// When no endpoint is set both sides are in ABFSS authority form and compare directly.
+        if (!azure_account_with_suffix.empty() && !bucket.empty())
         {
-            /// The host part after stripping the protocol is: bucket@azure_account_with_suffix
+            /// The host part after stripping the ABFSS protocol is: bucket@azure_account_with_suffix/
             std::string azure_host_prefix = bucket + "@" + azure_account_with_suffix + "/";
-            auto strip_container = [&](std::string & location_str)
-            {
-                if (location_str.starts_with(azure_host_prefix))
-                {
-                    std::string_view after_host = std::string_view(location_str).substr(azure_host_prefix.size());
-                    if (after_host.starts_with(bucket + "/"))
-                    {
-                        location_str = std::string(azure_host_prefix) + std::string(after_host.substr(bucket.size() + 1));
-                    }
-                }
-            };
-            strip_container(metadata_location);
-            strip_container(data_location);
 
+            /// For Polaris-style paths: the container name is repeated as the first path segment
+            /// (e.g. abfss://c@account/c/actual/path). Strip that redundant prefix from both sides
+            /// before the comparison below so we identify the correct relative path.
+            /// This runs for both with-endpoint and without-endpoint cases.
+            if (abfss_has_container_path_prefix)
+            {
+                auto strip_container = [&](std::string & location_str)
+                {
+                    if (location_str.starts_with(azure_host_prefix))
+                    {
+                        std::string_view after_host = std::string_view(location_str).substr(azure_host_prefix.size());
+                        if (after_host.starts_with(bucket + "/"))
+                        {
+                            location_str = std::string(azure_host_prefix) + std::string(after_host.substr(bucket.size() + 1));
+                        }
+                    }
+                };
+                strip_container(metadata_location);
+                strip_container(data_location);
+            }
+
+            /// With endpoint: data_location is now in HTTPS path form ("/container/path/").
+            /// Convert metadata_location from ABFSS authority form ("container@account.host/path")
+            /// to the matching HTTPS path form ("/container/path") so the prefix comparison works.
             if (!endpoint.empty() && metadata_location.starts_with(azure_host_prefix))
                 metadata_location = "/" + bucket + "/" + metadata_location.substr(azure_host_prefix.size());
         }

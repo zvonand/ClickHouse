@@ -126,7 +126,7 @@ TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationNonPolarisContainerInPath)
 TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationNonPolarisContainerInPathWithEndpoint)
 {
     TableMetadata metadata;
-    metadata.withLocation();
+    metadata.withLocation().withPolarisStyleAbfssPaths();
     metadata.setLocation("abfss://c@account.dfs.core.windows.net/c/table");
     metadata.setEndpoint("https://account.dfs.core.windows.net");
 

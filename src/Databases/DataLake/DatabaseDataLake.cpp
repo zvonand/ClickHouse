@@ -79,6 +79,7 @@ namespace DatabaseDataLakeSetting
     extern const DatabaseDataLakeSettingsString google_adc_refresh_token;
     extern const DatabaseDataLakeSettingsString google_adc_quota_project_id;
     extern const DatabaseDataLakeSettingsString google_adc_credentials_file;
+    extern const DatabaseDataLakeSettingsBool polaris_style_paths;
 }
 
 namespace Setting

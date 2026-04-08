@@ -55,7 +55,7 @@ CREATE TABLE test_merge
     b String,
     c Array(Nullable(String)),
     d DateTime('UTC') DEFAULT now()
-) AS merge(currentDatabase(), '^test_');
+) AS merge(currentDatabase(), '^test_[ab]$');
 
 SELECT '--- explicit columns with AS merge()';
 SELECT * FROM test_merge ORDER BY a;

@@ -1424,7 +1424,7 @@ Runner::~Runner()
 namespace
 {
 
-void flushBatch(Coordination::ZooKeeper & zookeeper, Coordination::Requests & batch)
+void flushMulti(Coordination::ZooKeeper & zookeeper, Coordination::Requests & batch)
 {
     if (batch.empty())
         return;
@@ -1437,56 +1437,25 @@ void flushBatch(Coordination::ZooKeeper & zookeeper, Coordination::Requests & ba
     });
     auto response = future.get();
     if (response.error != Coordination::Error::ZOK)
-        throw zkutil::KeeperException(response.error, "Failed to remove batch of {} nodes, first path in batch: {}", batch.size(), batch.front()->getPath());
-
-    /// Defensive: also verify individual sub-request results for better error messages.
-    for (size_t i = 0; i < response.responses.size(); ++i)
-    {
-        if (response.responses[i]->error != Coordination::Error::ZOK)
-            throw zkutil::KeeperException(response.responses[i]->error, "Failed to remove node: {}", batch[i]->getPath());
-    }
+        throw zkutil::KeeperException(response.error, "Multi request failed");
 
     batch.clear();
 }
 
-void removeRecursiveImpl(Coordination::ZooKeeper & zookeeper, const std::string & path,
-                         Coordination::Requests & batch)
-{
-    namespace fs = std::filesystem;
-
-    auto promise = std::make_shared<std::promise<Coordination::Error>>();
-    auto future = promise->get_future();
-
-    Strings children;
-    auto list_callback = [promise, &children](const Coordination::ListResponse & response)
-    {
-        children = response.names;
-        promise->set_value(response.error);
-    };
-    zookeeper.list(path, Coordination::ListRequestType::ALL, list_callback, {}, false, false);
-    auto error = future.get();
-    if (error == Coordination::Error::ZNONODE)
-        return; /// Node doesn't exist, nothing to remove
-    if (error != Coordination::Error::ZOK)
-        throw zkutil::KeeperException(error, "Failed to list children of {}", path);
-
-    /// Recurse into children first (post-order)
-    for (const auto & child : children)
-        removeRecursiveImpl(zookeeper, fs::path(path) / child, batch);
-
-    /// Append this node to the batch
-    batch.emplace_back(zkutil::makeRemoveRequest(path, -1));
-
-    /// Flush when batch is full
-    if (batch.size() >= 1000)
-        flushBatch(zookeeper, batch);
-}
-
 void removeRecursive(Coordination::ZooKeeper & zookeeper, const std::string & path)
 {
-    Coordination::Requests batch;
-    removeRecursiveImpl(zookeeper, path, batch);
-    flushBatch(zookeeper, batch);
+    auto promise = std::make_shared<std::promise<Coordination::Error>>();
+    auto future = promise->get_future();
+    zookeeper.removeRecursive(path, /*remove_nodes_limit=*/ 100000000,
+        [promise](const Coordination::RemoveRecursiveResponse & response)
+        {
+            promise->set_value(response.error);
+        });
+    auto error = future.get();
+    if (error == Coordination::Error::ZNONODE)
+        return;
+    if (error != Coordination::Error::ZOK)
+        throw zkutil::KeeperException(error, "Failed to recursively remove {}", path);
 }
 
 }
@@ -1592,23 +1561,18 @@ std::shared_ptr<BenchmarkContext::Node> BenchmarkContext::Node::clone() const
     return new_node;
 }
 
-void BenchmarkContext::Node::createNode(Coordination::ZooKeeper & zookeeper, const std::string & parent_path, const Coordination::ACLs & acls) const
+void BenchmarkContext::Node::collectCreateRequests(Coordination::Requests & batch, const std::string & parent_path, const Coordination::ACLs & acls) const
 {
     auto path = std::filesystem::path(parent_path) / name.getString();
-    auto promise = std::make_shared<std::promise<void>>();
-    auto future = promise->get_future();
-    auto create_callback = [promise] (const Coordination::CreateResponse & response)
-    {
-        if (response.error != Coordination::Error::ZOK)
-            promise->set_exception(std::make_exception_ptr(zkutil::KeeperException(response.error)));
-        else
-            promise->set_value();
-    };
-    zookeeper.create(path, data ? data->getString() : "", false, false, acls, create_callback);
-    future.get();
+
+    auto request = std::make_shared<Coordination::ZooKeeperCreateRequest>();
+    request->path = path;
+    request->data = data ? data->getString() : "";
+    request->acls = acls;
+    batch.push_back(std::move(request));
 
     for (const auto & child : children)
-        child->createNode(zookeeper, path, acls);
+        child->collectCreateRequests(batch, path, acls);
 }
 
 void BenchmarkContext::startup(Coordination::ZooKeeper & zookeeper)
@@ -1626,7 +1590,9 @@ void BenchmarkContext::startup(Coordination::ZooKeeper & zookeeper)
         std::cerr << "Cleaning up " << root_path << std::endl;
         removeRecursive(zookeeper, root_path);
 
-        node->createNode(zookeeper, "/", default_acls);
+        Coordination::Requests batch;
+        node->collectCreateRequests(batch, "/", default_acls);
+        flushMulti(zookeeper, batch);
     }
     std::cerr << "---- Created test data ----\n" << std::endl;
 }

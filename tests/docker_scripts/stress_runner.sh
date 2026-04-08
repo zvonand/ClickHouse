@@ -265,7 +265,7 @@ if [ "$cache_policy" = "SLRU" ]; then
 fi
 
 # Randomize async_load_databases
-if [ $(( $(date +%-d) % 2 )) -eq 0 ]; then
+if [ $((RANDOM % 2)) -eq 0 ]; then
     sudo echo "<clickhouse><async_load_databases>false</async_load_databases></clickhouse>" \
         > /etc/clickhouse-server/config.d/enable_async_load_databases.xml
 fi

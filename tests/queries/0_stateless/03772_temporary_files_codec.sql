@@ -12,7 +12,7 @@ CREATE TEMPORARY TABLE start_ts AS ( SELECT now() AS ts );
 
 SELECT * FROM (SELECT number, 'payload' FROM numbers(2_000_000)) ORDER BY number
 SETTINGS log_comment='03772_temporary_files_codec/sort', temporary_files_codec = 'NONE',
-    max_bytes_before_external_sort = '1M', max_bytes_ratio_before_external_sort = 0 -- CI may inject 0; external sort disabled → no temporary files
+    max_bytes_before_external_sort = '1M', max_bytes_ratio_before_external_sort = 0 -- CI may inject 0 for bytes and ratio; pin bytes threshold to ensure spill occurs
 FORMAT Null;
 
 SELECT * FROM (SELECT number, 'payload' FROM numbers(2_000_000)) ORDER BY number
@@ -22,7 +22,7 @@ FORMAT Null;
 
 SELECT key, sum(val) FROM (SELECT number AS key, number as val FROM numbers(2_000_000)) GROUP BY key
 SETTINGS log_comment='03772_temporary_files_codec/agg', temporary_files_codec = 'NONE',
-    max_bytes_before_external_group_by = '1M', max_bytes_ratio_before_external_group_by = 0 -- CI may inject 0; external group_by disabled → no temporary files
+    max_bytes_before_external_group_by = '1M', max_bytes_ratio_before_external_group_by = 0 -- CI may inject 0 for bytes and ratio; pin bytes threshold to ensure spill occurs
 FORMAT Null;
 
 SELECT key, sum(val) FROM (SELECT number AS key, number as val FROM numbers(2_000_000)) GROUP BY key

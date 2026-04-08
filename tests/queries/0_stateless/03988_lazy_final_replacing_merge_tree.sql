@@ -47,19 +47,19 @@ SELECT '-- filter on status';
 SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE status = 'active'
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE status = 'active'
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 SELECT '-- filter on timestamp range';
 SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE toStartOfDay(timestamp) = '2024-01-01'
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE toStartOfDay(timestamp) = '2024-01-01'
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 SELECT '-- combined filter';
 SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE status = 'active' AND id < 100
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE status = 'active' AND id < 100
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 -- Fallback: set row limit so small that the set will be truncated. Results must still be correct.
 SELECT '-- small row limit (fallback)';
@@ -69,14 +69,14 @@ SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10;
 -- Fallback: set byte limit very small.
 SELECT '-- small byte limit (fallback)';
 SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE status = 'active'
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, max_bytes_for_lazy_final = 100;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0, max_bytes_for_lazy_final = 100;
 
 -- PREWHERE.
 SELECT '-- prewhere';
 SELECT count(), sum(value) FROM t_lazy_final FINAL PREWHERE id < 200 WHERE status = 'active'
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT count(), sum(value) FROM t_lazy_final FINAL PREWHERE id < 200 WHERE status = 'active'
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 -- Row policy.
 DROP ROW POLICY IF EXISTS policy_lazy_final ON t_lazy_final;
@@ -86,7 +86,7 @@ SELECT '-- row policy';
 SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE status = 'active'
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE status = 'active'
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 DROP ROW POLICY policy_lazy_final ON t_lazy_final;
 
@@ -95,7 +95,7 @@ SELECT '-- plan: optimization has InputSelector';
 SELECT explain LIKE '%InputSelector%' FROM (
     EXPLAIN actions = 0
     SELECT count(), sum(value) FROM t_lazy_final FINAL WHERE status = 'active'
-    SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000
+    SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0
 ) WHERE explain LIKE '%InputSelector%';
 
 -- Plan checks: optimization disabled should not have InputSelector.
@@ -111,7 +111,7 @@ SELECT '-- plan: no filter has no InputSelector';
 SELECT count() FROM (
     EXPLAIN actions = 0
     SELECT count(), sum(value) FROM t_lazy_final FINAL
-    SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000
+    SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0
 ) WHERE explain LIKE '%InputSelector%';
 
 DROP TABLE t_lazy_final;
@@ -130,7 +130,7 @@ SELECT '-- tiebreaker: same version';
 SELECT value FROM t_lazy_final_tiebreak FINAL WHERE value != ''
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT value FROM t_lazy_final_tiebreak FINAL WHERE value != ''
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 DROP TABLE t_lazy_final_tiebreak;
 
@@ -148,7 +148,7 @@ SELECT '-- signed version';
 SELECT value FROM t_lazy_final_signed FINAL WHERE value != ''
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT value FROM t_lazy_final_signed FINAL WHERE value != ''
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 DROP TABLE t_lazy_final_signed;
 
@@ -166,7 +166,7 @@ SELECT '-- Int32 version';
 SELECT value FROM t_lazy_final_int32 FINAL WHERE value != ''
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT value FROM t_lazy_final_int32 FINAL WHERE value != ''
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 DROP TABLE t_lazy_final_int32;
 
@@ -184,7 +184,7 @@ SELECT '-- UInt128 version';
 SELECT value FROM t_lazy_final_uint128 FINAL WHERE value != ''
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT value FROM t_lazy_final_uint128 FINAL WHERE value != ''
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 DROP TABLE t_lazy_final_uint128;
 
@@ -202,7 +202,7 @@ SELECT '-- Int128 version';
 SELECT value FROM t_lazy_final_int128 FINAL WHERE value != ''
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT value FROM t_lazy_final_int128 FINAL WHERE value != ''
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 DROP TABLE t_lazy_final_int128;
 
@@ -219,6 +219,6 @@ SELECT '-- no version column';
 SELECT value FROM t_lazy_final_noversion FINAL WHERE value != ''
 SETTINGS query_plan_optimize_lazy_final = 0;
 SELECT value FROM t_lazy_final_noversion FINAL WHERE value != ''
-SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000;
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
 
 DROP TABLE t_lazy_final_noversion;

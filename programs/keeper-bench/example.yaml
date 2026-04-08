@@ -40,8 +40,10 @@ setup:
             max_value: 20
     node:
       repeat: 2
+      tag: "inner"
       node:
         repeat: 2
+        tag: "leaves"
         name:
           random_string:
             size: 12
@@ -112,6 +114,13 @@ generator:
       path:
         children_of: "/test"
       watch_probability: 1.0
+
+    set:
+      path:
+        tagged: "leaves"
+      data:
+        random_string:
+          size: 10
 
 output:
   file: 

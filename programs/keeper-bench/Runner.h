@@ -26,17 +26,24 @@ public:
     void startup(Coordination::ZooKeeper & zookeeper);
     void cleanup(Coordination::ZooKeeper & zookeeper);
 
+    const TaggedPaths & getTaggedPaths() const { return tagged_paths; }
+
 private:
     struct Node
     {
         StringGetter name;
         std::optional<StringGetter> data;
+        std::optional<std::string> tag;
         std::vector<std::shared_ptr<Node>> children;
         size_t repeat_count = 0;
 
         std::shared_ptr<Node> clone() const;
 
-        void collectCreateRequests(Coordination::Requests & batch, const std::string & parent_path, const Coordination::ACLs & acls) const;
+        void collectCreateRequests(
+            Coordination::Requests & batch,
+            const std::string & parent_path,
+            const Coordination::ACLs & acls,
+            TaggedPaths & tagged_paths) const;
         void dumpTree(int level = 0) const;
     };
 
@@ -44,6 +51,7 @@ private:
 
     std::vector<std::shared_ptr<Node>> root_nodes;
     Coordination::ACLs default_acls;
+    TaggedPaths tagged_paths;
 };
 
 class Runner

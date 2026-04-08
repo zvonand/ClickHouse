@@ -146,7 +146,7 @@ key:
 
 ### `PathGetter`
 
-One or more ZooKeeper paths. Paths can be explicit or expanded from children of a parent.
+One or more ZooKeeper paths. Paths can be explicit, expanded from children of a parent, or drawn from a tagged set of paths created during setup.
 
 ```yaml
 # explicit paths
@@ -157,14 +157,19 @@ path:
 # children of a parent node
 path:
     children_of: "/path3"
+
+# paths collected by tag during setup (see Setup section)
+path:
+    tagged: "my_tag"
 ```
 
-Both forms can be used together and merged into one candidate set.
+All forms can be used together and merged into one candidate set.
 
 Notes:
 
 - Paths must start with `/`.
 - `children_of` is resolved at startup; if it has no children and no explicit paths are provided, an exception is raised.
+- `tagged` references a tag name assigned to setup nodes via the `tag` field. All paths created with that tag are included. If the tag is not found, an exception is raised.
 - Duplicate `path` keys in one section are supported when parsed by ClickHouse config loader (Poco-style key indexing).
 
 ---
@@ -257,28 +262,40 @@ node:
     name: StringGetter
     data: StringGetter           # optional
     repeat: integer              # optional, requires random name
+    tag: string                  # optional, collects created paths under this tag
     node: ...                    # nested children
 ```
+
+The `tag` field labels a node so that all paths created from it (including repeated copies) are collected into a named set. Generators can reference this set with `tagged` in their `PathGetter` config, allowing requests to target specific nodes from the setup tree.
 
 Example:
 
 ```yaml
 setup:
     node:
-        name: "node1"
+        name: "tree"
         node:
-            repeat: 4
+            repeat: 10
             name:
                 random_string:
                     size: 20
-            data: "payload"
+            tag: "inner"
+            node:
+                repeat: 3
+                name:
+                    random_string:
+                        size: 10
+                tag: "leaves"
 
-    node:
-        name:
-            random_string:
-                size: 10
-        repeat: 2
+generator:
+    requests:
+        set:
+            path:
+                tagged: "leaves"
+            data: "updated"
 ```
+
+In this example, `set` requests target the 30 leaf nodes (3 per each of 10 inner nodes), selected randomly from all paths tagged `"leaves"` during setup.
 
 ---
 
@@ -471,4 +488,5 @@ Common configuration exceptions:
 - `remove_factor must be in [0.0, 1.0]`: keep probability in range.
 - `watch_probability must be in [0.0, 1.0]`: keep probability in range.
 - `Nested multi requests are not allowed`: only one `multi` level is supported.
+- `Tag '...' not found in setup`: a `tagged` path reference names a tag that no setup node defines. Check spelling and ensure the setup section includes nodes with matching `tag` values.
 - `Repeating node creation ..., but name is not randomly generated`: use random `name` when `repeat` is set.

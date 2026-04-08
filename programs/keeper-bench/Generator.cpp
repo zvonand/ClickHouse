@@ -152,12 +152,20 @@ PathGetter PathGetter::fromConfig(const std::string & key, const Poco::Util::Abs
 
         const auto current_path_key_string = key + "." + path_key;
         const auto children_of_key = current_path_key_string + ".children_of";
+        const auto tagged_key = current_path_key_string + ".tagged";
         if (config.has(children_of_key))
         {
             auto parent_node = config.getString(children_of_key);
             if (parent_node.empty() || parent_node[0] != '/')
                 throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Invalid path for request generator: '{}'", parent_node);
             path_getter.parent_paths.push_back(std::move(parent_node));
+        }
+        else if (config.has(tagged_key))
+        {
+            auto tag_name = config.getString(tagged_key);
+            if (tag_name.empty())
+                throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Empty tag name for request generator in key '{}'", current_path_key_string);
+            path_getter.tag_names.push_back(std::move(tag_name));
         }
         else
         {
@@ -170,7 +178,7 @@ PathGetter PathGetter::fromConfig(const std::string & key, const Poco::Util::Abs
         }
     }
 
-    if (path_getter.paths.empty() && path_getter.parent_paths.empty())
+    if (path_getter.paths.empty() && path_getter.parent_paths.empty() && path_getter.tag_names.empty())
         throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "PathGetter has no paths configured for key '{}'", key);
 
     if (!path_getter.paths.empty())
@@ -178,7 +186,7 @@ PathGetter PathGetter::fromConfig(const std::string & key, const Poco::Util::Abs
     return path_getter;
 }
 
-void PathGetter::initialize(Coordination::ZooKeeper & zookeeper)
+void PathGetter::initialize(Coordination::ZooKeeper & zookeeper, const TaggedPaths * tagged_paths)
 {
     for (const auto & parent_path : parent_paths)
     {
@@ -198,11 +206,34 @@ void PathGetter::initialize(Coordination::ZooKeeper & zookeeper)
             paths.push_back(std::filesystem::path(parent_path) / child);
     }
 
+    for (const auto & tag_name : tag_names)
+    {
+        if (!tagged_paths)
+            throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Tag '{}' referenced but no tagged paths available (is setup missing?)", tag_name);
+
+        auto it = tagged_paths->find(tag_name);
+        if (it == tagged_paths->end())
+            throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Tag '{}' not found in setup. Available tags: {}", tag_name, [&]
+            {
+                std::string available;
+                for (const auto & [name, _] : *tagged_paths)
+                {
+                    if (!available.empty())
+                        available += ", ";
+                    available += name;
+                }
+                return available.empty() ? "(none)" : available;
+            }());
+
+        for (const auto & path : it->second)
+            paths.push_back(path);
+    }
+
     if (paths.empty())
         throw DB::Exception(
             DB::ErrorCodes::BAD_ARGUMENTS,
             "PathGetter has no paths after initialization. "
-            "Check that children_of targets have children, or add explicit path entries");
+            "Check that children_of targets have children, tagged nodes exist, or add explicit path entries");
 
     path_picker = std::uniform_int_distribution<size_t>(0, paths.size() - 1);
     initialized = true;
@@ -227,6 +258,13 @@ std::string PathGetter::description() const
         if (!description.empty())
             description += ", ";
         description += fmt::format("children of {}", path);
+    }
+
+    for (const auto & tag_name : tag_names)
+    {
+        if (!description.empty())
+            description += ", ";
+        description += fmt::format("tagged \"{}\"", tag_name);
     }
 
     for (const auto & path : paths)
@@ -330,10 +368,10 @@ std::string RequestGetter::description() const
     return description + guard;
 }
 
-void RequestGetter::startup(Coordination::ZooKeeper & zookeeper)
+void RequestGetter::startup(Coordination::ZooKeeper & zookeeper, const TaggedPaths * tagged_paths)
 {
     for (const auto & request_generator : request_generators)
-        request_generator->startup(zookeeper);
+        request_generator->startup(zookeeper, tagged_paths);
 }
 
 void RequestGetter::setSeed(uint64_t seed)
@@ -376,9 +414,9 @@ ZooKeeperRequestWithCallbacks RequestGenerator::generate(const Coordination::ACL
     return generateImpl(acls);
 }
 
-void RequestGenerator::startup(Coordination::ZooKeeper & zookeeper)
+void RequestGenerator::startup(Coordination::ZooKeeper & zookeeper, const TaggedPaths * tagged_paths)
 {
-    startupImpl(zookeeper);
+    startupImpl(zookeeper, tagged_paths);
 }
 
 void RequestGenerator::setSeed(uint64_t seed)
@@ -440,9 +478,9 @@ std::string CreateRequestGenerator::descriptionImpl()
         remove_factor_string);
 }
 
-void CreateRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
+void CreateRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper, const TaggedPaths * tagged_paths)
 {
-    parent_path.initialize(zookeeper);
+    parent_path.initialize(zookeeper, tagged_paths);
 }
 
 void CreateRequestGenerator::setSeedImpl(uint64_t seed)
@@ -557,9 +595,9 @@ ZooKeeperRequestWithCallbacks SetRequestGenerator::generateImpl(const Coordinati
     return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}};
 }
 
-void SetRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
+void SetRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper, const TaggedPaths * tagged_paths)
 {
-    path.initialize(zookeeper);
+    path.initialize(zookeeper, tagged_paths);
 }
 
 void SetRequestGenerator::setSeedImpl(uint64_t seed)
@@ -602,9 +640,9 @@ ZooKeeperRequestWithCallbacks GetRequestGenerator::generateImpl(const Coordinati
     return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}};
 }
 
-void GetRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
+void GetRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper, const TaggedPaths * tagged_paths)
 {
-    path.initialize(zookeeper);
+    path.initialize(zookeeper, tagged_paths);
 }
 
 void GetRequestGenerator::setSeedImpl(uint64_t seed)
@@ -647,9 +685,9 @@ ZooKeeperRequestWithCallbacks ListRequestGenerator::generateImpl(const Coordinat
     return {.request = request, .on_success_callbacks = {}, .on_failure_callbacks = {}};
 }
 
-void ListRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
+void ListRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper, const TaggedPaths * tagged_paths)
 {
-    path.initialize(zookeeper);
+    path.initialize(zookeeper, tagged_paths);
 }
 
 void ListRequestGenerator::setSeedImpl(uint64_t seed)
@@ -731,9 +769,9 @@ ZooKeeperRequestWithCallbacks MultiRequestGenerator::generateImpl(const Coordina
         .on_failure_callbacks = std::move(on_failure_callbacks)};
 }
 
-void MultiRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper)
+void MultiRequestGenerator::startupImpl(Coordination::ZooKeeper & zookeeper, const TaggedPaths * tagged_paths)
 {
-    request_getter.startup(zookeeper);
+    request_getter.startup(zookeeper, tagged_paths);
 }
 
 void MultiRequestGenerator::setWatchCallbackImpl(Coordination::WatchCallbackPtr callback)
@@ -751,7 +789,7 @@ void MultiRequestGenerator::setSeedImpl(uint64_t seed)
         size->setSeed(seed + 100003);
 }
 
-void Generator::startup(const Poco::Util::AbstractConfiguration & config, Coordination::ZooKeeper & zookeeper, size_t thread_idx)
+void Generator::startup(const Poco::Util::AbstractConfiguration & config, Coordination::ZooKeeper & zookeeper, size_t thread_idx, const TaggedPaths * tagged_paths)
 {
     if (config.has("generator.seed"))
         seed = config.getUInt64("generator.seed") + thread_idx;
@@ -770,7 +808,7 @@ void Generator::startup(const Poco::Util::AbstractConfiguration & config, Coordi
         std::cerr << request_getter.description() << std::endl;
     }
 
-    request_getter.startup(zookeeper);
+    request_getter.startup(zookeeper, tagged_paths);
 }
 
 void Generator::setWatchCallback(Coordination::WatchCallbackPtr callback)

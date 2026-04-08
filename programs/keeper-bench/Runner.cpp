@@ -254,7 +254,8 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
     };
 
     auto generator = std::make_shared<Generator>();
-    generator->startup(*config_ptr, *zookeepers[0], thread_state.thread_idx);
+    const auto * tagged_paths = benchmark_context.getTaggedPaths().empty() ? nullptr : &benchmark_context.getTaggedPaths();
+    generator->startup(*config_ptr, *zookeepers[0], thread_state.thread_idx, tagged_paths);
     generator->setWatchCallback(std::make_shared<Coordination::WatchCallback>(
         [stats = info](const Coordination::WatchResponse &)
         {
@@ -1504,6 +1505,9 @@ std::shared_ptr<BenchmarkContext::Node> BenchmarkContext::parseNode(const std::s
     if (config.has(key + ".data"))
         node->data = StringGetter::fromConfig(key + ".data", config);
 
+    if (config.has(key + ".tag"))
+        node->tag = config.getString(key + ".tag");
+
     Poco::Util::AbstractConfiguration::Keys node_keys;
     config.keys(key, node_keys);
 
@@ -1538,7 +1542,9 @@ void BenchmarkContext::Node::dumpTree(int level) const
 
     std::string repeat_count_string = repeat_count != 0 ? fmt::format(", repeated {} times", repeat_count) : "";
 
-    std::cerr << fmt::format("{}name: {}, data: {}{}", std::string(level, '\t'), name.description(), data_string, repeat_count_string) << std::endl;
+    std::string tag_string = tag.has_value() ? fmt::format(", tag: \"{}\"", *tag) : "";
+
+    std::cerr << fmt::format("{}name: {}, data: {}{}{}", std::string(level, '\t'), name.description(), data_string, repeat_count_string, tag_string) << std::endl;
 
     for (auto it = children.begin(); it != children.end();)
     {
@@ -1553,6 +1559,7 @@ std::shared_ptr<BenchmarkContext::Node> BenchmarkContext::Node::clone() const
     auto new_node = std::make_shared<Node>();
     new_node->name = name;
     new_node->data = data;
+    new_node->tag = tag;
     new_node->repeat_count = repeat_count;
 
     // don't do deep copy of children because we will do clone only for root nodes
@@ -1561,7 +1568,11 @@ std::shared_ptr<BenchmarkContext::Node> BenchmarkContext::Node::clone() const
     return new_node;
 }
 
-void BenchmarkContext::Node::collectCreateRequests(Coordination::Requests & batch, const std::string & parent_path, const Coordination::ACLs & acls) const
+void BenchmarkContext::Node::collectCreateRequests(
+    Coordination::Requests & batch,
+    const std::string & parent_path,
+    const Coordination::ACLs & acls,
+    TaggedPaths & tagged_paths_out) const
 {
     auto path = std::filesystem::path(parent_path) / name.getString();
 
@@ -1571,8 +1582,11 @@ void BenchmarkContext::Node::collectCreateRequests(Coordination::Requests & batc
     request->acls = acls;
     batch.push_back(std::move(request));
 
+    if (tag.has_value())
+        tagged_paths_out[*tag].push_back(path);
+
     for (const auto & child : children)
-        child->collectCreateRequests(batch, path, acls);
+        child->collectCreateRequests(batch, path, acls, tagged_paths_out);
 }
 
 void BenchmarkContext::startup(Coordination::ZooKeeper & zookeeper)
@@ -1591,9 +1605,17 @@ void BenchmarkContext::startup(Coordination::ZooKeeper & zookeeper)
         removeRecursive(zookeeper, root_path);
 
         Coordination::Requests batch;
-        node->collectCreateRequests(batch, "/", default_acls);
+        node->collectCreateRequests(batch, "/", default_acls, tagged_paths);
         flushMulti(zookeeper, batch);
     }
+
+    if (!tagged_paths.empty())
+    {
+        std::cerr << "Tagged paths:" << std::endl;
+        for (const auto & [tag_name, paths] : tagged_paths)
+            std::cerr << fmt::format("  \"{}\": {} paths", tag_name, paths.size()) << std::endl;
+    }
+
     std::cerr << "---- Created test data ----\n" << std::endl;
 }
 

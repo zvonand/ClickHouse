@@ -1670,6 +1670,7 @@ cli
 clickcache
 clickcat
 clickhouse
+clickhousectl
 clickhousedb
 clickhousex
 clickmate

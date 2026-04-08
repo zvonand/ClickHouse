@@ -287,7 +287,8 @@ xargs < "$STYLE_TMPDIR/nobase_all" grep -P --line-number '\w ,' | grep -v 'bad p
 xargs < "$STYLE_TMPDIR/nobase_all" grep -F --line-number 'std::regex' | grep . && echo "^ Please use re2 instead of std::regex"
 
 # Cyrillic characters hiding inside Latin.
-grep -v StorageSystemContributors.generated.cpp "$STYLE_TMPDIR/nobase_all" | xargs grep -P --line-number '[a-zA-Z][а-яА-ЯёЁ]|[а-яА-ЯёЁ][a-zA-Z]' && echo "^ Cyrillic characters found in unexpected place."
+grep -v StorageSystemContributors.generated.cpp "$STYLE_TMPDIR/nobase_all" | \
+    xargs rg --line-number '[a-zA-Z][а-яА-ЯёЁ]|[а-яА-ЯёЁ][a-zA-Z]' && echo "^ Cyrillic characters found in unexpected place."
 
 # Orphaned header files.
 join -v1 <(grep '\.h$' "$STYLE_TMPDIR/nobase_all" | sed 's:.*/::'  | sort -u) <(find $ROOT_PATH/{src,programs,utils,tests/lexer} -name '*.cpp' -or -name '*.c' -or -name '*.h' -or -name '*.S' | xargs grep --no-filename -o -P '[\w-]+\.h' | sort -u) |

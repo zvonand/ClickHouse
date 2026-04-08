@@ -72,7 +72,6 @@ struct ZooKeeperRequestWithCallbacks
     Coordination::ZooKeeperRequestPtr request;
     std::vector<std::function<void()>> on_success_callbacks;
     std::vector<std::function<void()>> on_failure_callbacks;
-    bool has_watch = false;
 };
 
 struct RequestGenerator
@@ -87,6 +86,7 @@ struct RequestGenerator
 
     void startup(Coordination::ZooKeeper & zookeeper);
     void setSeed(uint64_t seed);
+    void setWatchCallback(Coordination::WatchCallbackPtr callback);
 
     size_t getWeight() const;
 private:
@@ -95,8 +95,11 @@ private:
     virtual ZooKeeperRequestWithCallbacks generateImpl(const Coordination::ACLs & acls) = 0;
     virtual void startupImpl(Coordination::ZooKeeper &) {}
     virtual void setSeedImpl(uint64_t) {}
+    virtual void setWatchCallbackImpl(Coordination::WatchCallbackPtr) {}
 
     size_t weight = 1;
+protected:
+    Coordination::WatchCallbackPtr watch_callback_ptr;
 };
 
 using RequestGeneratorPtr = std::shared_ptr<RequestGenerator>;
@@ -182,6 +185,7 @@ struct RequestGetter
     std::string description() const;
     void startup(Coordination::ZooKeeper & zookeeper);
     void setSeed(uint64_t seed);
+    void setWatchCallback(Coordination::WatchCallbackPtr callback);
     const std::vector<RequestGeneratorPtr> & requestGenerators() const;
 private:
     std::vector<RequestGeneratorPtr> request_generators;
@@ -198,6 +202,7 @@ private:
     ZooKeeperRequestWithCallbacks generateImpl(const Coordination::ACLs & acls) override;
     void startupImpl(Coordination::ZooKeeper & zookeeper) override;
     void setSeedImpl(uint64_t seed) override;
+    void setWatchCallbackImpl(Coordination::WatchCallbackPtr callback) override;
 
     std::optional<NumberGetter> size;
     RequestGetter request_getter;
@@ -209,6 +214,7 @@ public:
     Generator() = default;
 
     void startup(const Poco::Util::AbstractConfiguration & config, Coordination::ZooKeeper & zookeeper, size_t thread_idx);
+    void setWatchCallback(Coordination::WatchCallbackPtr callback);
     ZooKeeperRequestWithCallbacks generate();
 
     uint64_t getSeed() const { return seed; }

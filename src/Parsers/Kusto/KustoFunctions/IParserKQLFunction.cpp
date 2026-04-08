@@ -227,7 +227,13 @@ String IParserKQLFunction::getConvertedArgument(const String & fn_name, IParser:
 
     String converted_arg;
     for (const auto & token : tokens)
+    {
         converted_arg.append((converted_arg.empty() ? "" : " ") + token);
+        if (converted_arg.size() > DBMS_DEFAULT_MAX_QUERY_SIZE)
+            throw Exception(ErrorCodes::SYNTAX_ERROR,
+                "KQL array index expression size {} exceeds maximum allowed size {}",
+                converted_arg.size(), DBMS_DEFAULT_MAX_QUERY_SIZE);
+    }
 
     return converted_arg;
 }

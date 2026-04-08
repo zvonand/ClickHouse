@@ -1,15 +1,9 @@
 -- Tags: no-random-settings
 
--- Regression test for Block structure mismatch in UnionStep when using
--- normal projections with parallel replicas.
---
--- When optimizePrewhere moves the WHERE condition to PREWHERE, it may
--- restore columns consumed by the filter as extra outputs via
--- splitAndFillPrewhereInfo. These extra columns propagate through
--- ActionsDAG::mergeInplace into the projection query DAG because later
--- ExpressionSteps do not consume them. When the projection chain replaces
--- the local read plan, these extra columns cause a header mismatch with
--- the remote replica plan in the UnionStep.
+-- Regression test for normal projections with parallel replicas.
+-- Verifies that the projection optimization is applied and produces
+-- correct results when PREWHERE is involved (the WHERE filter on a
+-- column not in SELECT gets moved to PREWHERE by optimizePrewhere).
 
 SET enable_analyzer = 1;
 SET allow_experimental_parallel_reading_from_replicas = 2;
@@ -19,8 +13,6 @@ SET cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_local
 SET parallel_replicas_local_plan = 1;
 SET optimize_aggregation_in_order = 0;
 SET parallel_replicas_support_projection = 1;
--- Disable lazy materialization so it does not mask the header mismatch
--- (lazy materialization adds its own projection step that strips extra PREWHERE columns).
 SET query_plan_optimize_lazy_materialization = 0;
 
 DROP TABLE IF EXISTS test_projection_pr;
@@ -55,9 +47,6 @@ OPTIMIZE TABLE test_projection_pr FINAL;
 
 -- The query selects only `url` and filters on `region`.
 -- The projection is ordered by `region`, giving it fewer marks to read.
--- Since `region` is NOT in SELECT, optimizePrewhere restores it as an
--- extra column that persists in the projection query DAG, causing a
--- header mismatch with the remote plan in the parallel replicas UnionStep.
 SELECT url FROM test_projection_pr WHERE region = 'europe' ORDER BY url LIMIT 1;
 
 -- Verify that the projection optimization is actually applied: the plan must

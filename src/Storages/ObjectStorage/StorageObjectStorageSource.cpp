@@ -52,6 +52,9 @@
 #include <Common/ProfileEvents.h>
 #include <Core/SettingsEnums.h>
 
+#include <Storages/MergeTree/MarkRange.h>
+#include <Interpreters/Cache/QueryConditionCache.h>
+
 namespace fs = std::filesystem;
 namespace ProfileEvents
 {
@@ -83,6 +86,11 @@ namespace Setting
     extern const SettingsBool table_engine_read_through_distributed_cache;
     extern const SettingsUInt64 s3_path_filter_limit;
     extern const SettingsBool use_parquet_metadata_cache;
+<<<<<<< HEAD
+=======
+    extern const SettingsBool input_format_parquet_use_native_reader_v3;
+    extern const SettingsBool use_query_condition_cache;
+>>>>>>> bdb0c65746f (add query condition cache)
 }
 
 namespace ErrorCodes
@@ -111,6 +119,7 @@ void logIcebergFileStats(const ObjectInfoPtr & object_info, const LoggerPtr & lo
 }
 
 StorageObjectStorageSource::StorageObjectStorageSource(
+    const StorageID & storage_id_,
     String name_,
     ObjectStoragePtr object_storage_,
     StorageObjectStorageConfigurationPtr configuration_,
@@ -124,6 +133,7 @@ StorageObjectStorageSource::StorageObjectStorageSource(
     FormatFilterInfoPtr format_filter_info_,
     bool need_only_count_)
     : ISource(std::make_shared<const Block>(info.source_header), false)
+    , storage_id(storage_id_)
     , name(std::move(name_))
     , object_storage(object_storage_)
     , configuration(configuration_)
@@ -501,6 +511,30 @@ Chunk StorageObjectStorageSource::generate()
 
             return chunk;
         }
+        else if (format_filter_info->condition_hash)
+        {
+            const auto & object_info = reader.getObjectInfo();
+            auto unmarked_row_groups = reader.getInputFormat()->getMatchedBuckets();
+            MarkRanges unmatched_ranges;
+            for (size_t rg : unmarked_row_groups)
+            {
+                if (!unmatched_ranges.empty() && unmatched_ranges.back().end == rg)
+                    unmatched_ranges.back().end++;
+                else
+                    unmatched_ranges.push_back({UInt64(rg), UInt64(rg + 1)});
+            }
+            auto query_condition_cache = Context::getGlobalContextInstance()->getQueryConditionCache();
+            std::cerr << "write to cache " << storage_id.getNameForLogs() << ' ' << object_info->getFileName() << '\n';
+            query_condition_cache->write(
+                storage_id.uuid,
+                object_info->getFileName(),
+                *format_filter_info->condition_hash,
+                format_filter_info->filter_actions_dag->dumpNames(),
+                unmatched_ranges,
+                unmatched_ranges.size(),
+                false
+            );
+        }
 
         if (reader.getInputFormat() && read_context->getSettingsRef()[Setting::use_cache_for_count_from_files]
             && !format_filter_info->filter_actions_dag)
@@ -539,6 +573,7 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
 {
     return createReader(
         0,
+        storage_id,
         file_iterator,
         configuration,
         object_storage,
@@ -555,6 +590,7 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
 
 StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReader(
     size_t processor,
+    const StorageID & storage_id,
     const std::shared_ptr<IObjectIterator> & file_iterator,
     const StorageObjectStorageConfigurationPtr & configuration,
     const ObjectStoragePtr & object_storage,
@@ -571,13 +607,17 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
     ObjectInfoPtr object_info;
     auto query_settings = configuration->getQuerySettings(context_);
 
+    QueryConditionCachePtr query_condition_cache;
+    if (format_filter_info && format_filter_info->condition_hash
+        && context_->getSettingsRef()[Setting::use_query_condition_cache])
+        query_condition_cache = Context::getGlobalContextInstance()->getQueryConditionCache();
+
     do
     {
         object_info = file_iterator->next(processor);
 
         if (!object_info || object_info->getPath().empty())
             return {};
-
         if (!object_info->getObjectMetadata())
         {
             bool with_tags = read_from_format_info.requested_virtual_columns.contains("_tags");
@@ -594,9 +634,48 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
             else
                 object_info->setObjectMetadata(object_storage->getObjectMetadata(path, with_tags));
         }
-    } while (query_settings.skip_empty_files
-             && object_info->getObjectMetadata()->size_bytes == 0
-             && object_info->getObjectMetadata()->is_size_known);
+
+        if (query_settings.skip_empty_files && object_info->getObjectMetadata()->size_bytes == 0)
+            continue;
+
+        if (query_condition_cache)
+        {
+            auto matching_marks = query_condition_cache->read(
+                storage_id.uuid, object_info->getFileName(), *format_filter_info->condition_hash);
+            if (matching_marks.has_value())
+            {
+                const auto & marks = *matching_marks;
+
+                std::vector<size_t> matching_row_groups;
+                for (size_t i = 0; i < marks.size(); ++i)
+                    if (marks[i])
+                        matching_row_groups.push_back(i);
+
+                if (matching_row_groups.empty())
+                    continue;
+
+                if (object_info->file_bucket_info)
+                {
+                    auto filtered = object_info->file_bucket_info->filterByMatchingRowGroups(matching_row_groups);
+                    if (!filtered)
+                        continue;
+                    object_info->file_bucket_info = std::move(filtered);
+                }
+                else
+                {
+                    auto prototype = FormatFactory::instance().getFileBucketInfo(
+                        object_info->getFileFormat().value_or(configuration->format));
+                    if (prototype)
+                    {
+                        auto filtered = prototype->filterByMatchingRowGroups(matching_row_groups);
+                        if (!filtered)
+                            continue;
+                        object_info->file_bucket_info = std::move(filtered);
+                    }
+                }
+            }
+        }
+    } while (query_settings.skip_empty_files && object_info->getObjectMetadata()->size_bytes == 0 && object_info->getObjectMetadata()->is_size_known);
 
     QueryPipelineBuilder builder;
     std::shared_ptr<ISource> source;

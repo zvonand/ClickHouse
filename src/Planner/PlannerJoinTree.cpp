@@ -1308,7 +1308,6 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                         }
 
                         // (2) if it's ReadFromMergeTree - run index analysis and check number of rows to read
-                        // ReadNothingStep means empty table / all data pruned — skip parallel replicas.
                         if (reading && settings[Setting::parallel_replicas_min_number_of_rows_per_replica] > 0)
                         {
                             auto result_ptr = reading->selectRangesToRead();

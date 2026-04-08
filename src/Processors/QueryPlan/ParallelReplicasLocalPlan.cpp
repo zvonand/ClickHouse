@@ -62,8 +62,8 @@ static QueryPlan::Node * findReadingStep(QueryPlan::Node * node)
 }
 
 /// Walk the plan using the same traversal as findReadingStep (following LEFT/RIGHT JOIN logic),
-/// but look for a UnionStep. If found, collect all ReadFromMergeTree steps — one per union child.
-/// This handles views with UNION ALL where each branch reads from a different MergeTree table.
+/// but look for a UnionStep. If found, collect all ReadFromMergeTree steps from each child branch,
+/// recursively handling nested views with their own UNION ALL.
 template <class ReadingStep>
 static std::vector<QueryPlan::Node *> findReadingStepsUnderUnion(QueryPlan::Node * root, bool allow_view_over_mergetree)
 {
@@ -81,13 +81,13 @@ static std::vector<QueryPlan::Node *> findReadingStepsUnderUnion(QueryPlan::Node
         /// Only consider union steps when parallel_replicas_allow_view_over_mergetree is enabled.
         if (allow_view_over_mergetree && node != root && typeid_cast<UnionStep *>(node->step.get()))
         {
-            /// Found a UnionStep from a view — collect ReadFromMergeTree from each child branch.
+            /// Found a UnionStep from a view — recursively collect ReadFromMergeTree from each
+            /// child branch. This handles nested views whose inner queries also contain UNION ALL.
             std::vector<QueryPlan::Node *> result;
             for (auto * child : node->children)
             {
-                auto * reading_node = findReadingStep<ReadingStep>(child);
-                if (reading_node)
-                    result.push_back(reading_node);
+                auto child_results = findReadingStepsUnderUnion<ReadingStep>(child, allow_view_over_mergetree);
+                result.insert(result.end(), child_results.begin(), child_results.end());
             }
             return result;
         }

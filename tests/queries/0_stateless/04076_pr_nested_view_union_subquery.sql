@@ -211,26 +211,50 @@ FROM viewExplain('EXPLAIN', '', (
 ))
 WHERE explain LIKE '%ReadFromRemoteParallelReplicas%';
 
+-- Pipeline check: all 4 base tables should use ReadPoolParallelReplicas in the local plan.
+SELECT '-- pipeline check: all tables use ReadPoolParallelReplicas';
+SELECT count()
+FROM viewExplain('EXPLAIN PIPELINE', '', (
+    SELECT
+        sum(bids) AS Bids,
+        sum(bid_requests) AS BidRequests,
+        sum(impressions) AS Impressions,
+        sum(clicks) AS Clicks,
+        toStartOfDay(hour, 'Europe/Paris') AS Day
+    FROM dv_dashboard
+    WHERE
+        hour >= toDateTime('2025-01-01 00:00:00', 'Europe/Paris')
+        AND hour < toDateTime('2026-03-01 00:00:00', 'Europe/Paris')
+        AND if(internal_child_deal_id != 0, internal_child_deal_id, internal_deal_id) IN (200)
+        AND network_id IN (3050)
+    GROUP BY Day
+    HAVING Impressions != 0 OR Bids != 0
+    ORDER BY Day ASC
+    SETTINGS parallel_replicas_local_plan = 1, parallel_replicas_allow_view_over_mergetree = 1
+))
+WHERE explain LIKE '%ReadPoolParallelReplicas%';
+
 -- Correctness: EXCEPT should produce zero rows.
 SELECT '-- correctness';
-
-SELECT '-- disabled parallel replicas';
-SELECT sum(bids) AS Bids, sum(bid_requests) AS BidRequests, sum(impressions) AS Impressions, sum(clicks) AS Clicks, toStartOfDay(hour, 'Europe/Paris') AS Day
-FROM dv_dashboard
-WHERE hour >= toDateTime('2025-01-01 00:00:00', 'Europe/Paris') AND hour < toDateTime('2026-03-01 00:00:00', 'Europe/Paris')
-    AND if(internal_child_deal_id != 0, internal_child_deal_id, internal_deal_id) IN (200) AND network_id IN (3050)
-GROUP BY Day HAVING Impressions != 0 OR Bids != 0
-ORDER BY ALL
-SETTINGS enable_parallel_replicas = 0;
-
-SELECT '-- enabled parallel replicas with parallel_replicas_allow_view_over_mergetree = 1';
-SELECT sum(bids) AS Bids, sum(bid_requests) AS BidRequests, sum(impressions) AS Impressions, sum(clicks) AS Clicks, toStartOfDay(hour, 'Europe/Paris') AS Day
-FROM dv_dashboard
-WHERE hour >= toDateTime('2025-01-01 00:00:00', 'Europe/Paris') AND hour < toDateTime('2026-03-01 00:00:00', 'Europe/Paris')
-    AND if(internal_child_deal_id != 0, internal_child_deal_id, internal_deal_id) IN (200) AND network_id IN (3050)
-GROUP BY Day HAVING Impressions != 0 OR Bids != 0
-ORDER BY ALL
-SETTINGS enable_parallel_replicas = 1, parallel_replicas_allow_view_over_mergetree = 1;
+(
+    SELECT sum(bids) AS Bids, sum(bid_requests) AS BidRequests, sum(impressions) AS Impressions, sum(clicks) AS Clicks, toStartOfDay(hour, 'Europe/Paris') AS Day
+    FROM dv_dashboard
+    WHERE hour >= toDateTime('2025-01-01 00:00:00', 'Europe/Paris') AND hour < toDateTime('2026-03-01 00:00:00', 'Europe/Paris')
+        AND if(internal_child_deal_id != 0, internal_child_deal_id, internal_deal_id) IN (200) AND network_id IN (3050)
+    GROUP BY Day HAVING Impressions != 0 OR Bids != 0
+    ORDER BY ALL
+    SETTINGS enable_parallel_replicas = 0
+)
+EXCEPT
+(
+    SELECT sum(bids) AS Bids, sum(bid_requests) AS BidRequests, sum(impressions) AS Impressions, sum(clicks) AS Clicks, toStartOfDay(hour, 'Europe/Paris') AS Day
+    FROM dv_dashboard
+    WHERE hour >= toDateTime('2025-01-01 00:00:00', 'Europe/Paris') AND hour < toDateTime('2026-03-01 00:00:00', 'Europe/Paris')
+        AND if(internal_child_deal_id != 0, internal_child_deal_id, internal_deal_id) IN (200) AND network_id IN (3050)
+    GROUP BY Day HAVING Impressions != 0 OR Bids != 0
+    ORDER BY ALL
+    SETTINGS enable_parallel_replicas = 1, parallel_replicas_allow_view_over_mergetree = 1
+);
 
 DROP VIEW dv_dashboard;
 DROP VIEW v_dashboard;

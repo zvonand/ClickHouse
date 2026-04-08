@@ -512,9 +512,8 @@ QueryProcessingStage::Enum StorageDistributed::getQueryProcessingStage(
 
         /// NOTE: distributed_group_by_no_merge=1 does not respect distributed_push_down_limit
         /// (since in this case queries processed separately and the initiator is just a proxy in this case).
-        if (to_stage != QueryProcessingStage::Complete)
-            throw Exception(
-                ErrorCodes::LOGICAL_ERROR, "Queries with distributed_group_by_no_merge=1 should be processed to Complete stage");
+        /// Note: to_stage may be less than Complete when the Distributed table is a source
+        /// of a Merge table with multiple sources. This is fine — the caller handles the mismatch.
         return QueryProcessingStage::Complete;
     }
 

@@ -314,6 +314,13 @@ bool SettingsConstraints::checkImpl(const Settings & current_settings,
     if (new_value.isNull())
         return false;
 
+    if (ignore_unchanged_settings)
+    {
+        Field current_value;
+        if (current_settings.tryGet(change.name, current_value) && new_value == current_value)
+            return true;
+    }
+
     return getChecker(current_settings, setting_name).check(change, new_value, reaction, source);
 }
 

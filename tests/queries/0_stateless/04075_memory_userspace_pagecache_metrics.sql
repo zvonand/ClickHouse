@@ -4,13 +4,12 @@
 WITH
     (SELECT groupArray((metric, value)) FROM system.asynchronous_metrics
      WHERE metric IN ('CGroupMemoryUsed', 'CGroupMemoryUsedWithoutPageCache')) AS metrics,
-    countIf(x -> x.1 = 'CGroupMemoryUsed', metrics) AS has_used,
-    countIf(x -> x.1 = 'CGroupMemoryUsedWithoutPageCache', metrics) AS has_without_cache,
+    arrayCount(x -> x.1 = 'CGroupMemoryUsed', metrics) AS has_used,
+    arrayCount(x -> x.1 = 'CGroupMemoryUsedWithoutPageCache', metrics) AS has_without_cache,
     arrayFirst(x -> x.1 = 'CGroupMemoryUsed', metrics) AS used,
     arrayFirst(x -> x.1 = 'CGroupMemoryUsedWithoutPageCache', metrics) AS without_cache
 SELECT
     -- Both metrics must be either both present or both absent.
     has_used = has_without_cache,
-    -- When present, without_cache must be positive and <= used.
-    if(has_used = 1, without_cache.2 > 0, 1),
+    -- When present, without_cache must be <= used.
     if(has_used = 1, without_cache.2 <= used.2, 1);

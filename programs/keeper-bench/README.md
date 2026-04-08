@@ -424,11 +424,10 @@ If `--setup-nodes-snapshot-path` is provided during replay, the tool can infer r
 
 Periodic stderr reports (controlled by `report_delay`) include:
 
-- Total read/write request counts.
-- Read/write RPS and throughput.
+- Total read/write request counts (cumulative).
+- Read/write RPS and throughput (for the last reporting period).
 - Read/write latency percentiles (`0, 10, ..., 90, 95, 99, 99.9, 99.99`).
-- Per-operation breakdown (requests, RPS, p50, p99).
-- Watches set and fired (when `watch_probability` is configured).
+- Watches fired (when `watch_probability` is configured).
 
 ### JSON output
 
@@ -449,8 +448,7 @@ JSON fields:
 - `timestamp` (epoch milliseconds).
 - `read_results` (present only if read requests exist).
 - `write_results` (present only if write requests exist).
-- `per_op_results` (present only if per-op stats exist).
-- `watches_set`, `watches_fired` (present only when watches are used).
+- `watches_fired` (present only when watches are used).
 
 Each result object contains:
 

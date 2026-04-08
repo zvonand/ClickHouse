@@ -159,7 +159,7 @@ with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
 '
 
 # Three or more consecutive empty lines (pre-filter with grep to avoid reading all files through awk)
-xargs < "$STYLE_TMPDIR/all_excluded" grep -Plz '\n\n\n\n' 2>/dev/null | \
+xargs < "$STYLE_TMPDIR/all_excluded" grep -PlzZ '\n\n\n\n' 2>/dev/null | \
     xargs -0 awk 'FNR==1 { i = 0 } /^$/ { ++i; if (i > 2) { print "More than two consecutive empty lines in file " FILENAME } } /./ { i = 0 }'
 
 # Check that every header file has #pragma once in first line

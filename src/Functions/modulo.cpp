@@ -112,7 +112,7 @@ struct ModuloByConstantImpl
         if (b & (b - 1))
         {
 #if defined(LIBDIVIDE_AVX2)
-            if constexpr (sizeof(A) >= 8)
+            if constexpr (sizeof(A) >= 8 && sizeof(A) == sizeof(ResultType))
             {
                 /// For 64-bit types on AVX2, auto-vectorization degrades to
                 /// scalar extract/insert (no vpmuludq for 64-bit).  Use

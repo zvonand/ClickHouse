@@ -32,19 +32,6 @@ grep -v -e '/programs/' -e '/utils/' "$STYLE_TMPDIR/all_excluded" > "$STYLE_TMPD
 # Without base dir, h+cpp, without EXCLUDE filter
 find $ROOT_PATH/{src,programs,utils} -name '*.h' -or -name '*.cpp' 2>/dev/null > "$STYLE_TMPDIR/nobase_all"
 
-# From [1]:
-#     But since array_to_string_internal() in array.c still loops over array
-#     elements and concatenates them into a string, it's probably not more
-#     efficient than the looping solutions proposed, but it's more readable.
-#
-#  [1]: https://stackoverflow.com/a/15394738/328260
-function in_array()
-{
-    local IFS="|"
-    local value=$1 && shift
-
-    [[ "${IFS}${*}${IFS}" =~ "${IFS}${value}${IFS}" ]]
-}
 
 grep -v 'src/Storages/System/StorageSystemDashboards.cpp' "$STYLE_TMPDIR/all_excluded" |
     grep -vP $EXCLUDE_DOCS |
@@ -122,48 +109,51 @@ EXTERN_TYPES_EXCLUDES=(
     ErrorCodes::getErrorCodeByName
     ErrorCodes::Value
 )
-for extern_type in ${!EXTERN_TYPES[@]}; do
-    type_of_extern=${EXTERN_TYPES[$extern_type]}
-    allowed_chars='[_A-Za-z]+'
+# Check unused/undefined/duplicate ErrorCodes, ProfileEvents, CurrentMetrics declarations.
+# NOTE: the unused check is pretty dumb and distinguishes only by the type_of_extern,
+# and this matches with zkutil::CreateMode
+grep -v -e 'src/Common/ZooKeeper/Types.h' -e 'src/Coordination/KeeperConstants.cpp' "$STYLE_TMPDIR/all_excluded" | \
+    xargs grep -l -P 'extern const (int|Event|Metric) [_A-Za-z0-9]+|ErrorCodes::|ProfileEvents::|CurrentMetrics::' | \
+    xargs python3 -c '
+import sys, re, os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import Counter
 
-    # Unused
-    # NOTE: to fix automatically, replace echo with:
-    # sed -i "/extern const $type_of_extern $val/d" $file
-    # NOTE: the check is pretty dumb and distinguish only by the type_of_extern,
-    # and this matches with zkutil::CreateMode
-    grep -v -e 'src/Common/ZooKeeper/Types.h' -e 'src/Coordination/KeeperConstants.cpp' "$STYLE_TMPDIR/all_excluded" | {
-        xargs grep -l -P "extern const $type_of_extern $allowed_chars"
-    } | while read file; do
-        grep -P "extern const $type_of_extern $allowed_chars;" $file | sed -r -e "s/^.*?extern const $type_of_extern ($allowed_chars);.*?$/\1/" | while read val; do
-            if ! grep -q "$extern_type::$val" $file; then
-                # Excludes for SOFTWARE_EVENT/HARDWARE_EVENT/CACHE_EVENT in ThreadProfileEvents.cpp
-                if [[ ! $extern_type::$val =~ ProfileEvents::Perf.* ]]; then
-                    echo "$extern_type::$val is defined but not used in file $file"
-                fi
-            fi
-        done
-    done
+TYPES = {"ErrorCodes": "int", "ProfileEvents": "Event", "CurrentMetrics": "Metric"}
+EXCLUDES = set("""'"${EXTERN_TYPES_EXCLUDES[*]}"'""".split())
 
-    # Undefined
-    # NOTE: to fix automatically, replace echo with:
-    # ( grep -q -F 'namespace $extern_type' $file && \
-    #   sed -i -r "0,/(\s*)extern const $type_of_extern [$allowed_chars]+/s//\1extern const $type_of_extern $val;\n&/" $file || \
-    #     awk '{ print; if (ns == 1) { ns = 2 }; if (ns == 2) { ns = 0; print "namespace $extern_type\n{\n    extern const $type_of_extern '$val';\n}" } }; /namespace DB/ { ns = 1; };' < $file > ${file}.tmp && mv ${file}.tmp $file )
-    xargs < "$STYLE_TMPDIR/all_excluded" grep -l -P "$extern_type::$allowed_chars" | while read file; do
-        grep -P "$extern_type::$allowed_chars" $file | grep -P -v '^\s*//' | sed -r -e "s/^.*?$extern_type::($allowed_chars).*?$/\1/" | while read val; do
-            if ! grep -q "extern const $type_of_extern $val" $file; then
-                if ! in_array "$extern_type::$val" "${EXTERN_TYPES_EXCLUDES[@]}"; then
-                    echo "$extern_type::$val is used in file $file but not defined"
-                fi
-            fi
-        done
-    done
+decl_re = {ext: re.compile(r"extern const " + typ + r" ([_A-Za-z0-9]+);") for ext, typ in TYPES.items()}
+usage_re = {ext: re.compile(ext + r"::([_A-Za-z0-9]+)") for ext in TYPES}
 
-    # Duplicates
-    xargs < "$STYLE_TMPDIR/all_excluded" grep -l -P "$extern_type::$allowed_chars" | while read file; do
-        grep -P "extern const $type_of_extern $allowed_chars;" $file | sort | uniq -c | grep -v -P ' +1 ' && echo "Duplicate $extern_type in file $file"
-    done
-done
+def check_file(path):
+    try:
+        with open(path) as f:
+            lines = f.readlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    results = []
+    content = "".join(lines)
+    code_lines = "".join(l for l in lines if not l.lstrip().startswith("//"))
+    for ext in TYPES:
+        decls = Counter(m.group(1) for m in decl_re[ext].finditer(content))
+        usages = set(m.group(1) for m in usage_re[ext].finditer(code_lines))
+        for name, count in decls.items():
+            if name not in usages:
+                if not (ext == "ProfileEvents" and name.startswith("Perf")):
+                    results.append(f"{ext}::{name} is defined but not used in file {path}")
+            if count > 1:
+                results.append(f"Duplicate {ext} in file {path}")
+        for name in usages:
+            if name not in decls and f"{ext}::{name}" not in EXCLUDES:
+                results.append(f"{ext}::{name} is used in file {path} but not defined")
+    return results
+
+with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
+    futures = {pool.submit(check_file, p): p for p in sys.argv[1:]}
+    for f in as_completed(futures):
+        for line in f.result():
+            print(line)
+'
 
 # Three or more consecutive empty lines (pre-filter with grep to avoid reading all files through awk)
 xargs < "$STYLE_TMPDIR/all_excluded" grep -Plz '\n\n\n\n' 2>/dev/null | \

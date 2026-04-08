@@ -246,3 +246,47 @@ done
 
 # CLICKHOUSE_URL already includes "?"
 git grep -P 'CLICKHOUSE_URL(|_HTTPS)(}|}/|/|)\?' $ROOT_PATH/tests/queries/0_stateless/*.sh && echo "CLICKHOUSE_URL already includes '?', use '&' to append query parameters"
+
+# Large files checked into git.
+# Every byte committed is cloned by every contributor forever and cannot be removed without history rewriting.
+# Binary blobs (JARs, archives, .so, datasets) should be downloaded at test time or built from source.
+MAX_FILE_SIZE=$((5 * 1024 * 1024))  # 5 MB
+LARGE_FILE_WHITELIST=(
+    # Legitimate test data that is hard to generate at runtime
+    tests/queries/0_stateless/data_parquet/multi_column_bf.gz.parquet
+    tests/queries/0_stateless/data_json/ghdata_sample.json
+    tests/stress/keeper/workloads/zookeeper_log.parquet
+    tests/integration/test_catboost_evaluate/model/libcatboostmodel.so_aarch64
+    tests/integration/test_catboost_evaluate/model/libcatboostmodel.so_x86_64
+    tests/queries/0_stateless/data_zstd/test_01946.zstd
+    contrib/google-cloud-cpp-cmake/googleapis/e60db19f11f94175ac682c5898cce0f77cc508ea.tar.gz
+    tests/queries/0_stateless/data_npy/npy_big.npy
+    tests/queries/0_stateless/data_parquet/string_int_list_inconsistent_offset_multiple_batches.parquet
+    tests/sqllogic/known_failures.txt
+    tests/integration/test_keeper_java_client/java_client/keeper-java-client-test.jar
+    tests/integration/test_catboost_evaluate/model/amazon_model.bin
+    tests/queries/0_stateless/data_json/nbagames_sample.json
+    tests/queries/0_stateless/data_minio/02731.arrow
+    contrib/openssl-cmake/asm/crypto/modes/aes-gcm-avx512.s
+    # TODO: these should be removed and the test should build the JAR from source at runtime
+    tests/integration/test_paimon_rest_catalog/paimon-rest-catalog/chunk_00
+    tests/integration/test_paimon_rest_catalog/paimon-rest-catalog/chunk_01
+    tests/integration/test_paimon_rest_catalog/paimon-rest-catalog/chunk_02
+)
+large_file_whitelist_pattern=$(printf '%s\n' "${LARGE_FILE_WHITELIST[@]}" | paste -sd'|' -)
+# GNU stat (Linux) uses -c, BSD stat (macOS) uses -f — detect once instead of failing per file.
+if stat -c '%s %n' /dev/null >/dev/null 2>&1; then
+    STAT_FMT_FLAG='-c'
+    STAT_FMT='%s %n'
+else
+    STAT_FMT_FLAG='-f'
+    STAT_FMT='%z %N'
+fi
+# Bulk stat all tracked files via xargs (avoids fork-per-file which takes minutes on large repos).
+git ls-files -z "$ROOT_PATH" | xargs -0 stat "$STAT_FMT_FLAG" "$STAT_FMT" 2>/dev/null \
+    | awk -v limit="$MAX_FILE_SIZE" '$1 > limit { print substr($0, index($0, $2)) }' \
+    | while IFS= read -r file; do
+        if ! echo "$file" | grep -qE "^($large_file_whitelist_pattern)$"; then
+            echo "File $file is larger than 5 MB. Large files should not be committed to git — download them at test time or build from source instead."
+        fi
+    done

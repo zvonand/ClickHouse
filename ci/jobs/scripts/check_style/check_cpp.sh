@@ -194,19 +194,20 @@ xargs < "$STYLE_TMPDIR/all_excluded" rg -l0 --multiline '\n\n\n\n' 2>/dev/null |
 xargs < "$STYLE_TMPDIR/nobase_headers_excluded" awk 'FNR==1 && !/^#pragma once$/ { print "File " FILENAME " must have '"'"'#pragma once'"'"' in first line" }'
 } > "$O.05" 2>&1 &
 
-# 06: Exclamation marks and trailing whitespace
+# 06a: Too many exclamation marks
 {
-# Too many exclamation marks
 xargs < "$STYLE_TMPDIR/all_excluded" grep -F '!!!' | grep . && echo "Too many exclamation marks (looks dirty, unconfident)."
 
 # Exclamation mark in a message
 xargs < "$STYLE_TMPDIR/all_excluded" grep -F '!",' | grep . && echo "No need for an exclamation mark (looks dirty, unconfident)."
+} > "$O.06a" 2>&1 &
 
-# Trailing whitespaces
+# 06b: Trailing whitespaces
+{
 xargs < "$STYLE_TMPDIR/all_excluded" grep -n ' $' | grep . && echo "^ Trailing whitespaces."
-} > "$O.06" 2>&1 &
+} > "$O.06b" 2>&1 &
 
-# 07: Forbidden patterns in nobase_excluded
+# 07a: Forbidden patterns in nobase_excluded (part 1)
 {
 # Forbid stringstream because it's easy to use them incorrectly and hard to debug possible issues
 xargs < "$STYLE_TMPDIR/nobase_excluded" rg 'std::[io]?stringstream' | grep -v "STYLE_CHECK_ALLOW_STD_STRING_STREAM" && echo "Use WriteBufferFromOwnString or ReadBufferFromString instead of std::stringstream"
@@ -217,6 +218,13 @@ xargs < "$STYLE_TMPDIR/nobase_excluded" rg '(hardware_destructive_interference_s
 # Forbid std::filesystem::is_symlink and std::filesystem::read_symlink, because it's easy to use them incorrectly
 xargs < "$STYLE_TMPDIR/nobase_excluded" rg '::(is|read)_symlink' | grep -v "STYLE_CHECK_ALLOW_STD_FS_SYMLINK" && echo "Use DB::FS::isSymlink and DB::FS::readSymlink instead"
 
+# Forbid using std::shared_mutex and point to the faster alternative
+xargs < "$STYLE_TMPDIR/nobase_excluded" grep 'std::shared_mutex' | \
+  xargs -I{} echo "Found std::shared_mutex '{}'. Please use DB::SharedMutex instead"
+} > "$O.07a" 2>&1 &
+
+# 07b: Forbidden patterns in nobase_excluded (part 2)
+{
 # Forbid __builtin_unreachable(), because it's hard to debug when it becomes reachable
 xargs < "$STYLE_TMPDIR/nobase_excluded" grep -F '__builtin_unreachable' && echo "Use UNREACHABLE() from defines.h instead"
 
@@ -226,11 +234,7 @@ xargs < "$STYLE_TMPDIR/nobase_excluded" rg '(std::mt19937|std::mersenne_twister_
 # Require checking return value of close(),
 # since it can hide fd misuse and break other places.
 xargs < "$STYLE_TMPDIR/nobase_excluded" rg -e ' close\(.*fd' -e ' ::close\(' | grep -v = && echo "Return value of close() should be checked"
-
-# Forbid using std::shared_mutex and point to the faster alternative
-xargs < "$STYLE_TMPDIR/nobase_excluded" grep 'std::shared_mutex' | \
-  xargs -I{} echo "Found std::shared_mutex '{}'. Please use DB::SharedMutex instead"
-} > "$O.07" 2>&1 &
+} > "$O.07b" 2>&1 &
 
 # 08: std containers lint
 {
@@ -333,7 +337,7 @@ DIFF=$(comm -3 <(grep -o "\b$PATTERN\w*\b" $ROOT_PATH/src/Core/Settings.cpp | so
 [ -n "$DIFF" ] && echo "$DIFF" && echo "^^ Detected 'allow_*' settings that might need to be included in src/Databases/enableAllExperimentalSettings.cpp" && echo "Alternatively, consider adding an exception to ci/jobs/scripts/check_style/experimental_settings_ignore.txt"
 } > "$O.11" 2>&1 &
 
-# 12: Checks on nobase_all (no EXCLUDE filter)
+# 12a: NDEBUG and cast checks on nobase_all
 {
 # A small typo can lead to debug code in release builds, see https://github.com/ClickHouse/ClickHouse/pull/47647
 xargs < "$STYLE_TMPDIR/nobase_all" grep -l -F '#ifdef NDEBUG' | \
@@ -341,7 +345,10 @@ xargs < "$STYLE_TMPDIR/nobase_all" grep -l -F '#ifdef NDEBUG' | \
 
 # If a user is doing dynamic or typeid cast with a pointer, and immediately dereferencing it, it is unsafe.
 xargs < "$STYLE_TMPDIR/nobase_all" rg --line-number '(dynamic|typeid)_cast<[^>]+\*>\([^\(\)]+\)->' | grep . && echo "It's suspicious when you are doing a dynamic_cast or typeid_cast with a pointer and immediately dereferencing it. Use references instead of pointers or check a pointer to nullptr."
+} > "$O.12a" 2>&1 &
 
+# 12b: Punctuation, std::regex, and Cyrillic checks on nobase_all
+{
 # Check for bad punctuation: whitespace before comma.
 xargs < "$STYLE_TMPDIR/nobase_all" rg --line-number '\w ,' | grep -v 'bad punctuation is ok here' && echo "^ There is bad punctuation: whitespace before comma. You should write it like this: 'Hello, world!'"
 
@@ -351,7 +358,7 @@ xargs < "$STYLE_TMPDIR/nobase_all" grep -F --line-number 'std::regex' | grep . &
 # Cyrillic characters hiding inside Latin.
 grep -v StorageSystemContributors.generated.cpp "$STYLE_TMPDIR/nobase_all" | \
     xargs rg --line-number '[a-zA-Z][а-яА-ЯёЁ]|[а-яА-ЯёЁ][a-zA-Z]' && echo "^ Cyrillic characters found in unexpected place."
-} > "$O.12" 2>&1 &
+} > "$O.12b" 2>&1 &
 
 # 13: Orphaned header files
 {

@@ -1103,14 +1103,15 @@ class QueryResultElement extends HTMLElement
                     z-index: 1;
                 }
 
-                tbody tr:first-child .cell-copy
+                /* First row after a sticky header: place to the side to avoid overlap */
+                thead + tbody tr:first-child .cell-copy
                 {
                     bottom: auto;
                     left: 100%;
                     top: -1px;
                 }
 
-                tbody tr:first-child td:last-child .cell-copy
+                thead + tbody tr:first-child td:last-child .cell-copy
                 {
                     left: auto;
                     right: 100%;

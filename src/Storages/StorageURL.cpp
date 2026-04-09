@@ -385,6 +385,12 @@ StorageURLSource::StorageURLSource(
         curr_uri = uri_and_buf.first;
         auto last_mod_time = uri_and_buf.second->tryGetLastModificationTime();
         read_buf = std::move(uri_and_buf.second);
+
+        if (auto * http_buf = dynamic_cast<ReadWriteBufferFromHTTP *>(read_buf.get()))
+        {
+            http_buf->setCancellationCheck([this]() { return isCancelled(); });
+        }
+
         current_file_size = tryGetFileSizeFromReadBuffer(*read_buf);
 
         if (auto file_progress_callback = getContext()->getFileProgressCallback())

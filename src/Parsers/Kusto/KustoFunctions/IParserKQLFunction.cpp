@@ -340,26 +340,35 @@ String IParserKQLFunction::getExpression(IParser::Pos & pos)
 
     if (pos->type == TokenType::BareWord)
     {
-        const auto fun = KQLFunctionFactory::get(arg);
-        if (String new_arg; fun && fun->convert(new_arg, pos))
+        /// Check if this is a let binding
+        auto & bindings = kqlLetBindings();
+        if (auto it = bindings.find(arg); it != bindings.end())
         {
-            validateEndOfFunction(arg, pos);
-            arg = std::move(new_arg);
+            arg = it->second;
         }
         else
         {
-            if (!fun)
+            const auto fun = KQLFunctionFactory::get(arg);
+            if (String new_arg; fun && fun->convert(new_arg, pos))
             {
-                ++pos;
-                if (pos->type == TokenType::OpeningRoundBracket)
-                {
-                    if (Poco::toLower(arg) != "and" && Poco::toLower(arg) != "or")
-                        throw Exception(ErrorCodes::UNKNOWN_FUNCTION, "{} is not a supported kusto function", arg);
-                }
-                --pos;
+                validateEndOfFunction(arg, pos);
+                arg = std::move(new_arg);
             }
+            else
+            {
+                if (!fun)
+                {
+                    ++pos;
+                    if (pos->type == TokenType::OpeningRoundBracket)
+                    {
+                        if (Poco::toLower(arg) != "and" && Poco::toLower(arg) != "or")
+                            throw Exception(ErrorCodes::UNKNOWN_FUNCTION, "{} is not a supported kusto function", arg);
+                    }
+                    --pos;
+                }
 
-            parseConstTimespan();
+                parseConstTimespan();
+            }
         }
     }
     else if (pos->type == TokenType::ErrorWrongNumber)

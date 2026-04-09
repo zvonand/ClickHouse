@@ -7,6 +7,7 @@
 #include <Parsers/Kusto/ParserKQLStatement.h>
 #include <Parsers/Kusto/Utilities.h>
 #include <Parsers/ParserSetQuery.h>
+#include <Parsers/ParserSelectWithUnionQuery.h>
 #include <Parsers/ASTLiteral.h>
 
 
@@ -15,6 +16,42 @@ namespace DB
 
 bool ParserKQLStatement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 {
+    /// Handle KQL let statements: let name = value;
+    /// Store the binding and generate a no-op SELECT
+    if (isValidKQLPos(pos) && pos->type == TokenType::BareWord && String(pos->begin, pos->end) == "let")
+    {
+        auto let_pos = pos;
+        ++pos;
+        if (isValidKQLPos(pos) && pos->type == TokenType::BareWord)
+        {
+            String name(pos->begin, pos->end);
+            ++pos;
+            if (isValidKQLPos(pos) && String(pos->begin, pos->end) == "=")
+            {
+                ++pos;
+                /// Collect the value until semicolon
+                String value;
+                while (isValidKQLPos(pos) && pos->type != TokenType::Semicolon)
+                {
+                    if (!value.empty()) value += " ";
+                    if (pos->type == TokenType::StringLiteral)
+                        value += String(pos->begin, pos->end);
+                    else
+                        value += String(pos->begin, pos->end);
+                    ++pos;
+                }
+                kqlLetBindings()[name] = value;
+                /// Generate a no-op SELECT to consume the statement
+                String noop_query = "SELECT 'ok' WHERE 0";
+                Tokens noop_tokens(noop_query.data(), noop_query.data() + noop_query.size(), 0, true);
+                IParser::Pos noop_pos(noop_tokens, pos.max_depth, pos.max_backtracks);
+                ParserSelectWithUnionQuery select_p;
+                return select_p.parse(noop_pos, node, expected);
+            }
+        }
+        pos = let_pos;
+    }
+
     ParserKQLWithOutput query_with_output_p(end, allow_settings_after_format_in_insert);
     ParserSetQuery set_p;
 

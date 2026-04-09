@@ -79,4 +79,15 @@ bool isValidKQLPos(IParser::Pos & pos)
             pos->type == TokenType::ErrorWrongNumber || // allow kql timespan data type with decimal like 2.6h
             std::string_view(pos->begin, pos->end) == "~");  // allow kql Case-Sensitive operators
 }
+
+std::unordered_map<String, String> & kqlLetBindings()
+{
+    static thread_local std::unordered_map<String, String> bindings;
+    return bindings;
+}
+
+void kqlLetBindingsClear()
+{
+    kqlLetBindings().clear();
+}
 }

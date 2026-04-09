@@ -160,44 +160,26 @@ bool Extract::convertImpl(String & out, IParser::Pos & pos)
 
     if (capture_group == 0)
     {
-        String tmp_regex;
-        for (auto c : regex)
+        /// Group 0 = entire match. Use extract with non-capturing groups.
+        String no_groups_regex;
+        for (size_t i = 0; i < regex.length(); ++i)
         {
-            if (c != '(' && c != ')')
-                tmp_regex += c;
+            auto c = regex[i];
+            /// Replace ( with (?: to make all groups non-capturing, but keep the char classes
+            if (c == '(' && i + 1 < regex.length() && regex[i + 1] != '?')
+                no_groups_regex += "(?:";
+            else
+                no_groups_regex += c;
         }
-        regex = std::move(tmp_regex);
+        out = "extract(" + source + ", " + no_groups_regex + ")";
     }
     else
     {
-        size_t group_idx = 0;
-        size_t str_idx = -1;
-        for (size_t i = 0; i < regex.length(); ++i)
-        {
-            if (regex[i] == '(')
-            {
-                ++group_idx;
-                if (group_idx == capture_group)
-                {
-                    str_idx = i + 1;
-                    break;
-                }
-            }
-        }
-        String tmp_regex;
-        if (str_idx > 0)
-        {
-            for (size_t i = str_idx; i < regex.length(); ++i)
-            {
-                if (regex[i] == ')')
-                    break;
-                tmp_regex += regex[i];
-            }
-        }
-        regex = "'" + tmp_regex + "'";
+        /// Use extractAllGroupsHorizontal to get specific capture group
+        out = fmt::format(
+            "if(length(extractAllGroupsHorizontal({0}, {1})) >= {2}, extractAllGroupsHorizontal({0}, {1})[{2}][1], '')",
+            source, regex, capture_group);
     }
-
-    out = "extract(" + source + ", " + regex + ")";
 
     if (type_literal == "Decimal")
     {

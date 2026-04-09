@@ -606,21 +606,30 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "step")
             return false;
         ++pos;
-        /// Handle negative step: -N
+        /// Handle negative step: -N (may be single ErrorWrongNumber token or Minus + Number)
         String step_sign;
-        if (isValidKQLPos(pos) && pos->type == TokenType::Minus)
+        String step_raw;
+        String step_val;
+        if (isValidKQLPos(pos) && (pos->type == TokenType::Minus || String(pos->begin, pos->end) == "-"))
         {
             step_sign = "-";
             ++pos;
+            step_raw = String(pos->begin, pos->end);
+            step_val = step_sign + IParserKQLFunction::getExpression(pos);
         }
-        String step_raw(pos->begin, pos->end);
-        String step_val = step_sign + IParserKQLFunction::getExpression(pos);
+        else
+        {
+            step_raw = String(pos->begin, pos->end);
+            step_val = IParserKQLFunction::getExpression(pos);
+        }
         /// Advance past the step value if needed
         if (isValidKQLPos(pos) && pos->type != TokenType::PipeMark && pos->type != TokenType::Semicolon)
             ++pos;
 
         /// Detect if this is a timespan range (original tokens were timespan literals)
-        bool is_timespan_range = (start_raw != start_val || step_raw != step_val);
+        /// A negative sign difference (step_raw="1" vs step_val="-1") is NOT a timespan
+        bool is_timespan_range = (start_raw != start_val)
+            || (step_raw != step_val && step_sign.empty());
 
         /// Build range as a SQL subquery
         String range_expr = fmt::format(
@@ -634,15 +643,14 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         String range_sql;
         if (is_timespan_range)
         {
-            range_sql = fmt::format(
+            range_sql =
                 "SELECT concat("
                 "if((_v) < 0, '-', ''), "
                 "if(abs(toInt64(_v)) >= 86400, concat(toString(intDiv(abs(toInt64(_v)), 86400)), '.'), ''), "
-                "leftPad(toString(intDiv(abs(toInt64(_v)) %% 86400, 3600)), 2, '0'), ':', "
-                "leftPad(toString(intDiv(abs(toInt64(_v)) %% 3600, 60)), 2, '0'), ':', "
-                "leftPad(toString(abs(toInt64(_v)) %% 60), 2, '0')) AS {0} "
-                "FROM (SELECT {1} AS _v)",
-                col_name, range_expr);
+                "leftPad(toString(intDiv(abs(toInt64(_v)) % 86400, 3600)), 2, '0'), ':', "
+                "leftPad(toString(intDiv(abs(toInt64(_v)) % 3600, 60)), 2, '0'), ':', "
+                "leftPad(toString(abs(toInt64(_v)) % 60), 2, '0')) AS " + col_name + " "
+                "FROM (SELECT " + range_expr + " AS _v)";
         }
         else
             range_sql = fmt::format("SELECT {} AS {}", range_expr, col_name);

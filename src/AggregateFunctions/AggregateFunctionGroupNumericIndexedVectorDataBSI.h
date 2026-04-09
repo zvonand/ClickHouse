@@ -1315,37 +1315,30 @@ public:
 
         res_bm = lhs.getAllNonZeroIndex();
 
-        UInt64 long_value;
+        /// Convert the scalar to the same fixed-point two's complement representation
+        /// used by initializeFromVectorAndValue, then compare bit by bit.
+        using ScaledValueType = std::conditional_t<std::is_floating_point_v<ValueType>, ValueType, UInt64>;
+        UInt64 scaling = 1ULL << lhs.fraction_bit_num;
+
+        Int64 scaled_value;
         if constexpr (std::is_floating_point_v<ValueType>)
         {
-            auto floored = std::floor(rhs);
-            long_value = floored >= 0 ? static_cast<UInt64>(floored) : static_cast<UInt64>(static_cast<Int64>(floored));
+            constexpr Float64 lim = static_cast<Float64>(std::numeric_limits<Int64>::max());
+            if (fabs(rhs) > lim / static_cast<Float64>(scaling))
+                return std::make_shared<Roaring>(); /// Out of representable range, no element can match.
+            scaled_value = static_cast<Int64>(rhs * static_cast<ValueType>(scaling));
         }
         else
         {
-            long_value = static_cast<UInt64>(rhs);
+            scaled_value = static_cast<Int64>(rhs * static_cast<ScaledValueType>(scaling));
         }
-        /// if ValueType is floating point, use ValueType for calculation, otherwise use UInt64
-        using CalculationType = std::conditional_t<std::is_floating_point_v<ValueType>, ValueType, UInt64>;
-        UInt64 decimal_value = static_cast<UInt64>((rhs - static_cast<CalculationType>(long_value)) * static_cast<CalculationType>(1ULL << lhs.fraction_bit_num));
 
-        size_t i = 0;
-        for (; i < lhs.fraction_bit_num; ++i)
-        {
-            if ((decimal_value & 1L) == 1)
-            {
-                res_bm->rb_and(*lhs.getDataArrayAt(i));
-            }
-            else
-            {
-                res_bm->rb_andnot(*lhs.getDataArrayAt(i));
-            }
-            decimal_value >>= 1;
-        }
+        UInt64 bit_pattern = static_cast<UInt64>(scaled_value);
+
         const UInt32 total_bit_num = lhs.getTotalBitNum();
-        for (; i < total_bit_num; ++i)
+        for (size_t i = 0; i < total_bit_num; ++i)
         {
-            if ((long_value & 1L) == 1)
+            if ((bit_pattern >> i) & 1)
             {
                 res_bm->rb_and(*lhs.getDataArrayAt(i));
             }
@@ -1353,13 +1346,22 @@ public:
             {
                 res_bm->rb_andnot(*lhs.getDataArrayAt(i));
             }
-            long_value >>= 1;
         }
-        if (long_value != 0)
+
+        /// Check if the value has significant bits beyond what BSI stores.
+        /// For signed two's complement, the remaining upper bits must all match the sign bit.
+        if (total_bit_num < 64)
         {
-            Roaring for_clear;
-            res_bm->rb_and(for_clear);
+            UInt64 remaining = bit_pattern >> total_bit_num;
+            bool sign_bit = (bit_pattern >> (total_bit_num - 1)) & 1;
+            UInt64 expected = sign_bit ? (UINT64_MAX >> total_bit_num) : 0;
+            if (remaining != expected)
+            {
+                Roaring for_clear;
+                res_bm->rb_and(for_clear);
+            }
         }
+
         return res_bm;
     }
 

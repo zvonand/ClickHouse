@@ -93,3 +93,26 @@ CREATE TABLE t_batch (m Map(String, UInt32)) ENGINE = Memory;
 INSERT INTO t_batch VALUES ('{\'a\':1}'), ('{\'b\':2}'), ('{\'c\':3}');
 SELECT m FROM t_batch ORDER BY toString(m);
 DROP TABLE t_batch;
+
+SELECT 'SQL-style doubled single quote escape (Map)';
+SET input_format_values_interpret_expressions = 0;
+DROP TABLE IF EXISTS t_map_sql;
+CREATE TABLE t_map_sql (m Map(String, UInt32)) ENGINE = Memory;
+INSERT INTO t_map_sql VALUES ('{''key1'':1, ''key2'':2}');
+SELECT m FROM t_map_sql;
+DROP TABLE t_map_sql;
+
+SELECT 'SQL-style doubled single quote escape (Array)';
+DROP TABLE IF EXISTS t_arr_sql;
+CREATE TABLE t_arr_sql (a Array(String)) ENGINE = Memory;
+INSERT INTO t_arr_sql VALUES ('[''a'', ''b'', ''c'']');
+SELECT a FROM t_arr_sql;
+DROP TABLE t_arr_sql;
+
+SELECT 'SQL-style doubled single quote escape (Tuple)';
+DROP TABLE IF EXISTS t_tup_sql;
+CREATE TABLE t_tup_sql (t Tuple(String, UInt32)) ENGINE = Memory;
+INSERT INTO t_tup_sql VALUES ('(''hello'', 42)');
+SELECT t FROM t_tup_sql;
+DROP TABLE t_tup_sql;
+SET input_format_values_interpret_expressions = 1;

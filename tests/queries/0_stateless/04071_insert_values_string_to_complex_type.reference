@@ -30,3 +30,9 @@ Multiple rows in single INSERT (batch)
 {'a':1}
 {'b':2}
 {'c':3}
+SQL-style doubled single quote escape (Map)
+{'key1':1,'key2':2}
+SQL-style doubled single quote escape (Array)
+['a','b','c']
+SQL-style doubled single quote escape (Tuple)
+('hello',42)

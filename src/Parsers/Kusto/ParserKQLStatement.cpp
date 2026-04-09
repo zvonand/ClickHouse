@@ -70,7 +70,14 @@ bool ParserKQLStatement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
     ParserKQLWithOutput query_with_output_p(end, allow_settings_after_format_in_insert);
     ParserSetQuery set_p;
 
-    bool res = query_with_output_p.parse(pos, node, expected) || set_p.parse(pos, node, expected);
+    if (set_p.parse(pos, node, expected))
+    {
+        /// Clear let bindings when settings change (e.g., dialect switch)
+        kqlLetBindingsClear();
+        return true;
+    }
+
+    bool res = query_with_output_p.parse(pos, node, expected);
 
     return res;
 }

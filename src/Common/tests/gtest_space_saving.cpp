@@ -1,10 +1,11 @@
-#include <Common/FailPoint.h>
 #include <Common/SpaceSaving.h>
 
 #include <set>
 #include <string>
 
 #include <gtest/gtest.h>
+
+#include <Common/FailPoint.h>
 
 namespace DB::FailPoints
 {

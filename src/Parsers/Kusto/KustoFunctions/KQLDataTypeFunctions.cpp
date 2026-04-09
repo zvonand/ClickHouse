@@ -140,8 +140,14 @@ bool DatatypeDynamic::convertImpl(String & out, IParser::Pos & pos)
     }
 
     /// For arrays, cast to Array(Dynamic) to support mixed types
+    /// But handle empty arrays specially since [] can't be cast to Array(Dynamic)
     if (is_array)
-        out = fmt::format("CAST({} AS Array(Dynamic))", out);
+    {
+        if (out == "[]")
+            out = "CAST('[]' AS Array(Dynamic))";
+        else
+            out = fmt::format("CAST({} AS Array(Dynamic))", out);
+    }
 
     return true;
 }

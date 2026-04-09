@@ -58,7 +58,8 @@ bool ToInt::convertImpl(String & out, IParser::Pos & pos)
     out = fmt::format(
         "multiIf(isNull({0}), NULL, "
         "isNotNull(toInt32OrNull(toString({0}))), toInt32OrNull(toString({0})), "
-        "isNotNull(toFloat64OrNull(toString({0}))), CAST(toFloat64OrNull(toString({0})) AS Nullable(Int32)), NULL)",
+        "isNotNull(toFloat64OrNull(toString({0}))) AND NOT isNaN(toFloat64OrNull(toString({0}))), "
+        "CAST(toFloat64OrNull(toString({0})) AS Nullable(Int32)), NULL)",
         param);
     return true;
 }
@@ -70,13 +71,13 @@ bool ToLong::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     const auto param = getArgument(function_name, pos);
-    /// KQL tolong truncates floats to int, parses hex strings
     out = fmt::format(
         "multiIf(isNull({0}), NULL, "
         "isNotNull(toInt64OrNull(toString({0}))), toInt64OrNull(toString({0})), "
         "startsWith(toString({0}), '0x') OR startsWith(toString({0}), '0X'), "
         "reinterpretAsInt64(reverse(unhex(substr(toString({0}), 3)))), "
-        "isNotNull(toFloat64OrNull(toString({0}))), CAST(toFloat64OrNull(toString({0})) AS Nullable(Int64)), NULL)",
+        "isNotNull(toFloat64OrNull(toString({0}))) AND NOT isNaN(toFloat64OrNull(toString({0}))), "
+        "CAST(toFloat64OrNull(toString({0})) AS Nullable(Int64)), NULL)",
         param);
     return true;
 }

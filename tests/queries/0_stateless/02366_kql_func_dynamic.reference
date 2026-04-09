@@ -14,10 +14,14 @@ true
 -- array_concat()
 [1,2,3,4,5,6]
 -- array_reverse()
+[]
 [1]
 [4,3,2,1]
 ['example','an','is','this']
 -- array_rotate_left()
+[]
+[]
+[]
 [3,4,5,1,2]
 [1,2,3,4,5]
 [3,4,5,1,2]
@@ -25,6 +29,9 @@ true
 [1,2,3,4,5]
 [4,5,1,2,3]
 -- array_rotate_right()
+[]
+[]
+[]
 [4,5,1,2,3]
 [1,2,3,4,5]
 [4,5,1,2,3]
@@ -32,11 +39,17 @@ true
 [1,2,3,4,5]
 [3,4,5,1,2]
 -- array_shift_left()
+[]
+[]
+[]
 [3,4,5,NULL,NULL]
 [NULL,NULL,1,2,3]
 [3,4,5,-1,-1]
 ['c',NULL,NULL]
 -- array_shift_right()
+[]
+[]
+[]
 [3,4,5,NULL,NULL]
 [NULL,NULL,1,2,3]
 [3,4,5,-1,-1]
@@ -51,6 +64,9 @@ true
 (['Ringo','Paul','John','George'])
 -- jaccard_index()
 0.75
+0
+0
+nan
 0
 0.75
 0.25
@@ -67,16 +83,23 @@ true
 [NULL]
 -- set_difference()
 []
+[]
+[]
+[]
 [4]
 -- set_has_element()
+0
 1
 0
 1
 0
 -- set_intersect()
 []
+[]
 [5]
+[]
 ['a']
 ['Darth Vader']
 -- set_union()
+[]
 -- zip()

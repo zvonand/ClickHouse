@@ -323,6 +323,7 @@ asd
 -- replace_regex
 Number was: 1
 -- has_any_index()
+0	1	-1	-1
 -- parse_version()
 1000000020000000300000040
 1000000020000000000000000
@@ -345,6 +346,7 @@ Number was: 1
 43.321
 
 dsa
+][
 ]3,2,1[
 ]\'redaV\',\'htraD\'[
 0000000.00:00:21T51-01-7102

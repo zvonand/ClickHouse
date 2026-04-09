@@ -1397,9 +1397,9 @@
         let displayResults = [...results];
         if (sortByStatus) {
             displayResults.sort((a, b) => {
-                const statusA = a.status || '';
-                const statusB = b.status || '';
-                return getStatusPriority(statusA) - getStatusPriority(statusB);
+                const statusDiff = getStatusPriority(a.status || '') - getStatusPriority(b.status || '');
+                if (statusDiff !== 0) return statusDiff;
+                return (a.name || '').localeCompare(b.name || '');
             });
         }
 

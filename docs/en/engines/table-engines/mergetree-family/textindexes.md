@@ -539,9 +539,7 @@ SELECT count() FROM table WHERE map['engine'] = 'clickhouse';
 
 See the following examples for using columns of type `Array(T)` and `Map(K, V)` with the text index.
 
-### Examples for `Array` and `Map` columns with text indexes {#text-index-array-and-map-examples}
-
-#### Indexing Array(String) columns {#text-index-example-array}
+### Indexing Array(String) columns {#text-index-example-array}
 
 Imagine a blogging platform, where authors categorize their blog posts using keywords.
 We like users to discover related content by searching for or clicking on topics.
@@ -574,7 +572,7 @@ ALTER TABLE posts ADD INDEX keywords_idx(keywords) TYPE text(tokenizer = splitBy
 ALTER TABLE posts MATERIALIZE INDEX keywords_idx; -- Don't forget to rebuild the index for existing data
 ```
 
-#### Indexing Map columns {#text-index-example-map}
+### Indexing Map columns {#text-index-example-map}
 
 In many observability use cases, log messages are split into "components" and stored as appropriate data types, e.g. date time for the timestamp, enum for the log level etc.
 Metrics fields are best stored as key-value pairs.

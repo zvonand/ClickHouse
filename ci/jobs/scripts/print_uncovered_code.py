@@ -20,6 +20,19 @@ _NOISE_PATTERNS = [
     re.compile(r"\babortOnFailedAssertion\s*\("),  # chassert failure handler
 ]
 
+# Stripped line content that carries no executable semantics.
+# lcov sometimes emits DA: entries for these (e.g. for `{` after `else`, or for
+# blank lines between statements), but marking them as "uncovered" is misleading.
+_STRUCTURAL_LINES = frozenset({
+    "",       # blank line
+    "{",      # opening brace
+    "}",      # closing brace
+    "};",     # closing brace + semicolon (struct/class/lambda end)
+    "else",   # bare else keyword (the branch body is on the next line)
+    "else{",  # else immediately followed by brace
+    "else {", # else with space before brace
+})
+
 # Lazily-loaded source file cache: relpath -> list of raw lines
 _source_cache: dict[str, list[str]] = {}
 
@@ -40,6 +53,8 @@ def _is_noise(relpath: str, lineno: int) -> bool:
     if not (1 <= lineno <= len(lines)):
         return False
     text = lines[lineno - 1].strip()
+    if text in _STRUCTURAL_LINES:
+        return True
     return any(p.search(text) for p in _NOISE_PATTERNS)
 
 

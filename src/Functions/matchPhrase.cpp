@@ -166,8 +166,8 @@ FunctionMatchPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & ar
 {
     const auto tokenizer_name = arguments.size() < 3 || !arguments[arg_tokenizer].column ? SplitByNonAlphaTokenizer::getExternalName()
                                                                                          : arguments[arg_tokenizer].column->getDataAt(0);
-    if (tokenizer_name == SparseGramsTokenizer::getExternalName())
-        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' does not support the {} tokenizer.", name, SparseGramsTokenizer::getExternalName());
+    if (tokenizer_name == SparseGramsTokenizer::getExternalName() || tokenizer_name == ArrayTokenizer::getExternalName())
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' does not support the '{}' tokenizer.", name, tokenizer_name);
 
     auto tokenizer = TokenizerFactory::instance().get(tokenizer_name);
     auto phrase_tokens = initializePhraseTokens(arguments, *tokenizer, getName());

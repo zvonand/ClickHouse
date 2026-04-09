@@ -13,6 +13,7 @@ SELECT matchPhrase('a', 'b', 1); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT matchPhrase('a', 'b', 'unsupported_tokenizer'); -- { serverError BAD_ARGUMENTS }
 -- sparseGrams is not supported because gram ordering depends on context
 SELECT matchPhrase('a', 'b', 'sparseGrams'); -- { serverError BAD_ARGUMENTS }
+SELECT matchPhrase('a', 'b', 'array'); -- { serverError BAD_ARGUMENTS }
 
 SELECT 'Constants: matchPhrase should be constant';
 
@@ -63,11 +64,6 @@ SELECT matchPhrase('abcdef', 'bcd', 'ngrams(3)');
 SELECT matchPhrase('abcdef', 'abc', 'ngrams(3)');
 SELECT matchPhrase('abcdef', 'cde', 'ngrams(3)');
 
-SELECT 'array tokenizer';
-
-SELECT matchPhrase('hello world', 'hello world', 'array');
-SELECT matchPhrase('hello world', 'hello', 'array');
-
 SELECT 'Column values: matchPhrase should be non-constant';
 
 SELECT 'Default tokenizer (splitByNonAlpha)';
@@ -115,19 +111,5 @@ INSERT INTO tab VALUES
 
 SELECT id FROM tab WHERE matchPhrase(message, 'abc', 'ngrams(3)') ORDER BY id;
 SELECT id FROM tab WHERE matchPhrase(message, 'cde', 'ngrams(3)') ORDER BY id;
-
-DROP TABLE tab;
-
-SELECT 'array tokenizer';
-
-DROP TABLE IF EXISTS tab;
-CREATE TABLE tab (id UInt64, message String) ENGINE = MergeTree() ORDER BY id;
-INSERT INTO tab VALUES
-    (1, 'hello world'),
-    (2, 'hello'),
-    (3, 'world');
-
-SELECT id FROM tab WHERE matchPhrase(message, 'hello world', 'array') ORDER BY id;
-SELECT id FROM tab WHERE matchPhrase(message, 'hello', 'array') ORDER BY id;
 
 DROP TABLE tab;

@@ -42,7 +42,7 @@ void ParallelReadRequest::serialize(WriteBuffer & out, UInt64 initiator_pr_proto
     writeIntBinary(replica_num, out);
     writeIntBinary(min_marks_per_request, out);
     description.serialize(out, initiator_pr_protocol_version);
-    if (initiator_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    if (initiator_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_STREAM_ID)
         writeStringBinary(stream_id, out);
 }
 
@@ -78,7 +78,7 @@ ParallelReadRequest ParallelReadRequest::deserialize(ReadBuffer & in, UInt64 rep
     description.deserialize(in, replica_pr_protocol_version);
 
     String stream_id;
-    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_STREAM_ID)
         readStringBinary(stream_id, in);
     return ParallelReadRequest(mode, replica_num, min_marks_per_request, std::move(description), std::move(stream_id));
 }
@@ -96,7 +96,7 @@ void ParallelReadResponse::serialize(WriteBuffer & out, UInt64 replica_pr_protoc
 
     writeBoolText(finish, out);
     description.serialize(out, replica_pr_protocol_version);
-    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_STREAM_ID)
         writeStringBinary(stream_id, out);
 }
 
@@ -118,7 +118,7 @@ void ParallelReadResponse::deserialize(ReadBuffer & in, UInt64 replica_pr_protoc
 
     readBoolText(finish, in);
     description.deserialize(in, replica_pr_protocol_version);
-    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_STREAM_ID)
         readStringBinary(stream_id, in);
 }
 
@@ -141,7 +141,7 @@ void InitialAllRangesAnnouncement::serialize(
         writeIntBinary(mark_segment_size, out);
     if (initiator_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MIN_MARKS_PER_TASK)
         writeIntBinary(min_marks_per_request, out);
-    if (initiator_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    if (initiator_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_STREAM_ID)
         writeStringBinary(stream_id, out);
 }
 
@@ -181,7 +181,7 @@ InitialAllRangesAnnouncement InitialAllRangesAnnouncement::deserialize(ReadBuffe
         readIntBinary(min_marks_per_request, in);
 
     String stream_id;
-    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_MULTIPLE_TABLES_SUPPORT)
+    if (replica_pr_protocol_version >= DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_STREAM_ID)
         readStringBinary(stream_id, in);
     return InitialAllRangesAnnouncement{mode, description, replica_num, mark_segment_size, min_marks_per_request, std::move(stream_id)};
 }

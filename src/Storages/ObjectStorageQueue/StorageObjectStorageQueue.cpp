@@ -1748,6 +1748,22 @@ void StorageObjectStorageQueue::waitForPathToBeProcessed(
 
     LOG_DEBUG(log, "Waiting for path '{}' to be processed by {}", path, getStorageID().getNameForLogs());
 
+    /// Check terminal state first — if the file is already processed or permanently
+    /// failed, return or throw immediately regardless of dependency/streaming guards.
+    {
+        std::string failure_message;
+        const auto state = file_metadata->getPathState(failure_message);
+        if (state == ObjectStorageQueueIFileMetadata::PathState::Processed)
+        {
+            LOG_DEBUG(log, "Path '{}' has been processed by {}", path, getStorageID().getNameForLogs());
+            return;
+        }
+        if (state == ObjectStorageQueueIFileMetadata::PathState::Failed)
+            throw Exception(ErrorCodes::ABORTED,
+                "Path '{}' failed to be processed by {}: {}",
+                path, getStorageID().getNameForLogs(), failure_message);
+    }
+
     auto event = std::make_shared<Poco::Event>();
 
     while (true)

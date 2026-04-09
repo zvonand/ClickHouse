@@ -1035,7 +1035,8 @@ static std::shared_ptr<IJoin> tryCreateJoin(
     {
         const auto & settings = context->getSettingsRef();
 
-        if (settings[Setting::max_bytes_before_external_join] > 0 && GraceHashJoin::isSupported(analyzed_join))
+        if (settings[Setting::max_bytes_before_external_join] > 0 && context->getTempDataOnDisk()
+            && GraceHashJoin::isSupported(analyzed_join))
         {
             Block left_sample_block(left_sample_columns);
             if (sanitizeBlock(left_sample_block, false))
@@ -1075,6 +1076,11 @@ static std::shared_ptr<IJoin> tryCreateJoin(
 
     if (algorithm == JoinAlgorithm::GRACE_HASH)
     {
+        if (!context->getTempDataOnDisk())
+            throw Exception(
+                ErrorCodes::NOT_IMPLEMENTED,
+                "Grace hash join requires temporary storage. Set `tmp_path` or `tmp_policy` in server configuration");
+
         // Grace hash join requires that columns exist in left_sample_block.
         Block left_sample_block(left_sample_columns);
         if (sanitizeBlock(left_sample_block, false) && GraceHashJoin::isSupported(analyzed_join))
@@ -1088,7 +1094,8 @@ static std::shared_ptr<IJoin> tryCreateJoin(
     {
         const auto & settings = context->getSettingsRef();
 
-        if (settings[Setting::max_bytes_before_external_join] > 0 && GraceHashJoin::isSupported(analyzed_join))
+        if (settings[Setting::max_bytes_before_external_join] > 0 && context->getTempDataOnDisk()
+            && GraceHashJoin::isSupported(analyzed_join))
         {
             Block left_sample_block(left_sample_columns);
             if (sanitizeBlock(left_sample_block, false))

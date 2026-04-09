@@ -1163,8 +1163,7 @@ static std::shared_ptr<IJoin> tryCreateJoin(
         algorithm == JoinAlgorithm::PARALLEL_HASH ||
         algorithm == JoinAlgorithm::DEFAULT)
     {
-        if (params.max_bytes_before_external_join > 0
-            && GraceHashJoin::isSupported(table_join))
+        if (params.max_bytes_before_external_join > 0 && table_join->getTempDataOnDisk() && GraceHashJoin::isSupported(table_join))
         {
             if (table_join->allowParallelHashJoin())
             {
@@ -1225,6 +1224,11 @@ static std::shared_ptr<IJoin> tryCreateJoin(
 
     if (algorithm == JoinAlgorithm::GRACE_HASH)
     {
+        if (!table_join->getTempDataOnDisk())
+            throw Exception(
+                ErrorCodes::NOT_IMPLEMENTED,
+                "Grace hash join requires temporary storage. Set `tmp_path` or `tmp_policy` in server configuration");
+
         if (GraceHashJoin::isSupported(table_join))
         {
             return std::make_shared<GraceHashJoin>(
@@ -1239,8 +1243,7 @@ static std::shared_ptr<IJoin> tryCreateJoin(
 
     if (algorithm == JoinAlgorithm::AUTO)
     {
-        if (params.max_bytes_before_external_join > 0
-            && GraceHashJoin::isSupported(table_join))
+        if (params.max_bytes_before_external_join > 0 && table_join->getTempDataOnDisk() && GraceHashJoin::isSupported(table_join))
         {
             if (table_join->allowParallelHashJoin())
             {

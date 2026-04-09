@@ -1102,8 +1102,7 @@ class QueryResultElement extends HTMLElement
                     position: absolute;
                     top: 0;
                     left: 0;
-                    width: 100%;
-                    box-sizing: content-box; /* So width: 100% matches the td content area; avoids collapsed border shrinking it */
+                    width: calc(100% + 2px); /* Compensate for collapsed border (1px each side) */
                     min-height: 100%;
                     max-height: 50vh;
                     white-space: pre-wrap;

@@ -54,7 +54,7 @@ bool ToInt::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     const auto param = getArgument(function_name, pos);
-    out = fmt::format("toInt32OrNull(toString({0}))", param);
+    out = fmt::format("multiIf(isNull({0}), NULL, isNotNull(toInt32OrNull(toString({0}))), toInt32OrNull(toString({0})), isNotNull(toFloat64OrNull(toString({0}))), toInt32(toFloat64({0})), NULL)", param);
     return true;
 }
 
@@ -65,7 +65,7 @@ bool ToLong::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     const auto param = getArgument(function_name, pos);
-    out = fmt::format("toInt64OrNull(toString({0}))", param);
+    out = fmt::format("multiIf(isNull({0}), NULL, isNotNull(toInt64OrNull(toString({0}))), toInt64OrNull(toString({0})), isNotNull(toFloat64OrNull(toString({0}))), toInt64(toFloat64({0})), NULL)", param);
     return true;
 }
 

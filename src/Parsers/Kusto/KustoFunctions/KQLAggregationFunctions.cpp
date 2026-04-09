@@ -460,16 +460,12 @@ bool SumIf::convertImpl(String & out, IParser::Pos & pos)
 
 bool TakeAny::convertImpl(String & out, IParser::Pos & pos)
 {
-    String res = String(pos->begin, pos->end);
-    out = res;
-    return false;
+    return directMapping(out, pos, "any");
 }
 
 bool TakeAnyIf::convertImpl(String & out, IParser::Pos & pos)
 {
-    String res = String(pos->begin, pos->end);
-    out = res;
-    return false;
+    return directMapping(out, pos, "anyIf");
 }
 
 bool Variance::convertImpl(String & out, IParser::Pos & pos)

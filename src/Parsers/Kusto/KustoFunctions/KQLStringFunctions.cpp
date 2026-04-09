@@ -388,17 +388,32 @@ bool IndexOf::convertImpl(String & out, IParser::Pos & pos)
 
 bool IsEmpty::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "empty");
+    const auto fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    const auto arg = getArgument(fn_name, pos);
+    out = fmt::format("toBool(empty({}))", arg);
+    return true;
 }
 
 bool IsNotEmpty::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "notEmpty");
+    const auto fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    const auto arg = getArgument(fn_name, pos);
+    out = fmt::format("toBool(notEmpty({}))", arg);
+    return true;
 }
 
 bool IsNotNull::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "isNotNull");
+    const auto fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    const auto arg = getArgument(fn_name, pos);
+    out = fmt::format("toBool(isNotNull({}))", arg);
+    return true;
 }
 
 bool ParseCommandLine::convertImpl(String & out, IParser::Pos & pos)
@@ -424,7 +439,12 @@ bool ParseCommandLine::convertImpl(String & out, IParser::Pos & pos)
 
 bool IsNull::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "isNull");
+    const auto fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    const auto arg = getArgument(fn_name, pos);
+    out = fmt::format("toBool(isNull({}))", arg);
+    return true;
 }
 
 bool ParseCSV::convertImpl(String & out, IParser::Pos & pos)

@@ -186,6 +186,18 @@ String IParserKQLFunction::getConvertedArgument(const String & fn_name, IParser:
                 String token;
                 if (pos->type == TokenType::QuotedIdentifier)
                     token = "'" + escapeSingleQuotes(String(pos->begin + 1, pos->end - 1)) + "'";
+                else if (pos->type == TokenType::At)
+                {
+                    /// KQL verbatim string: @'...' — skip the @ and use the string literal
+                    ++pos;
+                    if (isValidKQLPos(pos) && pos->type == TokenType::StringLiteral)
+                        token = String(pos->begin, pos->end);
+                    else
+                    {
+                        --pos;
+                        token = String(pos->begin, pos->end);
+                    }
+                }
                 else if (pos->type == TokenType::OpeningSquareBracket)
                 {
                     ++pos;
@@ -352,6 +364,18 @@ String IParserKQLFunction::getExpression(IParser::Pos & pos)
     }
     else if (pos->type == TokenType::ErrorWrongNumber)
         parseConstTimespan();
+    else if (pos->type == TokenType::At)
+    {
+        /// KQL verbatim string: @'...' — just skip the @ and use the string literal
+        ++pos;
+        if (isValidKQLPos(pos) && pos->type == TokenType::StringLiteral)
+            arg = String(pos->begin, pos->end);
+        else
+        {
+            --pos;
+            arg = String(pos->begin, pos->end);
+        }
+    }
     else if (pos->type == TokenType::QuotedIdentifier)
         arg = "'" + escapeSingleQuotes(String(pos->begin + 1, pos->end - 1)) + "'";
     else if (pos->type == TokenType::OpeningSquareBracket)

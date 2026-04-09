@@ -13,7 +13,11 @@
 #include <Parsers/Kusto/ParserKQLMVExpand.h>
 #include <Parsers/Kusto/ParserKQLMakeSeries.h>
 #include <Parsers/Kusto/ParserKQLOperators.h>
+#include <Parsers/Kusto/ParserKQLCount.h>
+#include <Parsers/Kusto/ParserKQLJoin.h>
 #include <Parsers/Kusto/ParserKQLPrint.h>
+#include <Parsers/Kusto/ParserKQLTop.h>
+#include <Parsers/Kusto/ParserKQLUnion.h>
 #include <Parsers/Kusto/ParserKQLProject.h>
 #include <Parsers/Kusto/ParserKQLQuery.h>
 #include <Parsers/Kusto/ParserKQLSort.h>
@@ -330,11 +334,198 @@ std::unique_ptr<IParserBase> ParserKQLQuery::getOperator(String & op_name)
         return std::make_unique<ParserKQLMVExpand>();
     if (op_name == "print")
         return std::make_unique<ParserKQLPrint>();
+    if (op_name == "count")
+        return std::make_unique<ParserKQLCount>();
+    if (op_name == "top")
+        return std::make_unique<ParserKQLTop>();
+    if (op_name == "join")
+        return std::make_unique<ParserKQLJoin>();
+    if (op_name == "union")
+        return std::make_unique<ParserKQLUnion>();
     return nullptr;
+}
+
+/// Preprocess a KQL query to handle union and join operators by rewriting
+/// the query into a form that the standard pipe parser can handle.
+/// Returns true if rewriting was done and the query was reparsed.
+static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & expected)
+{
+    /// Scan for | union or | join at bracket depth 0
+    auto scan_pos = pos;
+    int bracket_depth = 0;
+    bool found = false;
+    auto pipe_pos = scan_pos;
+    String op_type;
+
+    while (isValidKQLPos(scan_pos) && scan_pos->type != TokenType::Semicolon)
+    {
+        if (scan_pos->type == TokenType::OpeningRoundBracket)
+            ++bracket_depth;
+        if (scan_pos->type == TokenType::ClosingRoundBracket)
+            --bracket_depth;
+
+        if (scan_pos->type == TokenType::PipeMark && bracket_depth == 0)
+        {
+            pipe_pos = scan_pos;
+            auto next = scan_pos;
+            ++next;
+            if (isValidKQLPos(next))
+            {
+                String token(next->begin, next->end);
+                if (token == "union" || token == "join")
+                {
+                    found = true;
+                    op_type = token;
+                    break;
+                }
+            }
+        }
+        ++scan_pos;
+    }
+
+    if (!found)
+        return false;
+
+    /// Extract left-side query (everything before | union/join)
+    auto left_end = pipe_pos;
+    --left_end;
+    String left_query(pos->begin, left_end->end);
+
+    /// Move past | and the operator keyword
+    scan_pos = pipe_pos;
+    ++scan_pos; /// skip |
+    ++scan_pos; /// skip union/join keyword
+
+    /// For join: parse kind=X
+    String join_kind;
+    if (op_type == "join" && isValidKQLPos(scan_pos) && String(scan_pos->begin, scan_pos->end) == "kind")
+    {
+        ++scan_pos; /// skip kind
+        ++scan_pos; /// skip =
+        join_kind = String(scan_pos->begin, scan_pos->end);
+        ++scan_pos; /// skip kind value
+    }
+
+    /// Parse parenthesized right-side subquery
+    if (!isValidKQLPos(scan_pos) || scan_pos->type != TokenType::OpeningRoundBracket)
+        return false;
+    int depth = 1;
+    ++scan_pos;
+    auto right_start = scan_pos;
+    while (isValidKQLPos(scan_pos) && depth > 0)
+    {
+        if (scan_pos->type == TokenType::OpeningRoundBracket) ++depth;
+        if (scan_pos->type == TokenType::ClosingRoundBracket) --depth;
+        if (depth > 0) ++scan_pos;
+    }
+    auto right_end_pos = scan_pos;
+    --right_end_pos;
+    String right_query(right_start->begin, right_end_pos->end);
+    ++scan_pos; /// skip closing bracket
+
+    /// For join: parse "on" clause
+    String join_on;
+    if (op_type == "join" && isValidKQLPos(scan_pos) && String(scan_pos->begin, scan_pos->end) == "on")
+    {
+        ++scan_pos;
+        while (isValidKQLPos(scan_pos) && scan_pos->type != TokenType::PipeMark && scan_pos->type != TokenType::Semicolon)
+        {
+            if (!join_on.empty()) join_on += " ";
+            join_on += String(scan_pos->begin, scan_pos->end);
+            ++scan_pos;
+        }
+    }
+
+    /// Parse left and right as KQL to get SQL
+    ASTPtr left_ast, right_ast;
+
+    Tokens left_tokens(left_query.data(), left_query.data() + left_query.size(), 0, true);
+    IParser::Pos left_pos(left_tokens, pos.max_depth, pos.max_backtracks);
+    if (!ParserKQLWithUnionQuery().parse(left_pos, left_ast, expected))
+        return false;
+
+    Tokens right_tokens(right_query.data(), right_query.data() + right_query.size(), 0, true);
+    IParser::Pos right_pos(right_tokens, pos.max_depth, pos.max_backtracks);
+    if (!ParserKQLWithUnionQuery().parse(right_pos, right_ast, expected))
+        return false;
+
+    String left_sql = left_ast->formatWithSecretsOneLine();
+    String right_sql = right_ast->formatWithSecretsOneLine();
+
+    /// Build combined SQL
+    String combined;
+    if (op_type == "union")
+    {
+        combined = fmt::format("({} UNION ALL {})", left_sql, right_sql);
+    }
+    else
+    {
+        String ch_join = "INNER";
+        if (join_kind == "fullouter") ch_join = "FULL";
+        else if (join_kind == "leftouter") ch_join = "LEFT";
+        else if (join_kind == "rightouter") ch_join = "RIGHT";
+        else if (join_kind == "leftanti" || join_kind == "leftantisemi") ch_join = "LEFT ANTI";
+        else if (join_kind == "leftsemi") ch_join = "LEFT SEMI";
+        else if (join_kind == "rightanti" || join_kind == "rightantisemi") ch_join = "RIGHT ANTI";
+        else if (join_kind == "rightsemi") ch_join = "RIGHT SEMI";
+
+        String on_clause;
+        if (join_on.find("==") == String::npos && join_on.find("=") == String::npos)
+            on_clause = fmt::format("{0} = {0}1", join_on);
+        else
+            on_clause = join_on;
+
+        combined = fmt::format("(SELECT * FROM ({}) ALL {} JOIN ({}) ON {})", left_sql, ch_join, right_sql, on_clause);
+    }
+
+    /// Build new KQL query: combined_source | remaining_pipes
+    String remaining;
+    if (isValidKQLPos(scan_pos) && scan_pos->type == TokenType::PipeMark)
+    {
+        auto rest_start = scan_pos;
+        while (isValidKQLPos(scan_pos) && scan_pos->type != TokenType::Semicolon)
+            ++scan_pos;
+        --scan_pos;
+        remaining = String(rest_start->begin, scan_pos->end);
+        ++scan_pos;
+    }
+
+    /// Build final query as SQL-based table source with KQL pipes
+    /// Use a CH subquery as the source, then apply remaining KQL pipes
+    String new_query;
+    if (remaining.empty())
+        new_query = fmt::format("SELECT * FROM {}", combined);
+    else
+    {
+        /// The remaining pipes are KQL operators applied to the combined source
+        /// We need to make the combined source into something the KQL parser can use
+        /// Simplest: use it as a ClickHouse subquery
+        /// Format: KQL query starting with a subquery source
+        /// But KQL parser expects a table name, not a subquery at the start
+        /// Solution: parse the combined as SQL and set as the table source in the KQL AST
+        /// Then parse remaining KQL operations on top
+        new_query = fmt::format("SELECT * FROM {} {}", combined, remaining);
+    }
+
+    /// Parse the combined query as standard SQL
+    Tokens new_tokens(new_query.data(), new_query.data() + new_query.size(), 0, true);
+    IParser::Pos new_pos(new_tokens, pos.max_depth, pos.max_backtracks);
+
+    ParserSelectWithUnionQuery sql_parser;
+    if (!sql_parser.parse(new_pos, node, expected))
+        return false;
+
+    pos = scan_pos;
+    return true;
 }
 
 bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 {
+    /// First, check if the query contains union or join operators at top level.
+    /// If so, preprocess them by rewriting into SQL subqueries.
+    if (preprocessUnionJoin(pos, node, expected))
+        return true;
+
     struct KQLOperatorDataFlowState
     {
         String operator_name;
@@ -361,7 +552,10 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
            {"print", {"print", false, true, 3}},
            {"summarize", {"summarize", true, true, 3}},
            {"make-series", {"make-series", true, true, 5}},
-           {"mv-expand", {"mv-expand", true, true, 5}}};
+           {"mv-expand", {"mv-expand", true, true, 5}},
+           {"count", {"count", true, true, 2}},
+           {"top", {"top", false, true, 3}},
+           };
 
     std::vector<std::pair<String, Pos>> operation_pos;
 
@@ -411,7 +605,11 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
                     auto op_pos_begin = pos;
                     ++pos;
                     if (!isValidKQLPos(pos))
-                        return false;
+                    {
+                        /// Operator is the last token — check if it's valid as-is
+                        --pos;
+                        return kql_parser.contains(kql_operator);
+                    }
 
                     ParserToken s_dash(TokenType::Minus);
                     if (s_dash.ignore(pos, expected))
@@ -430,7 +628,23 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 
             if (!validate_kql_operator())
                 return false;
+
+            /// count operator may have no arguments - handle specially
+            if (kql_operator == "count")
+            {
+                /// pos currently points to "count" keyword
+                auto count_pos = pos;
+                ++pos;
+                /// Store a valid position for count (the keyword itself, not what follows)
+                operation_pos.push_back(std::make_pair(kql_operator, count_pos));
+                /// If at end of query/pipe, just continue
+                if (!isValidKQLPos(pos) || pos->type == TokenType::Semicolon || pos->type == TokenType::PipeMark)
+                    continue;
+                continue;
+            }
+
             ++pos;
+
             if (!isValidKQLPos(pos))
                 return false;
 

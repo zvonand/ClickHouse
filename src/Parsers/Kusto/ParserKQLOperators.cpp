@@ -315,13 +315,13 @@ String KQLOperators::genHaystackOpExpr(
     ++token_pos;
 
     if (!tokens.empty() && ((token_pos)->type == TokenType::StringLiteral || token_pos->type == TokenType::QuotedIdentifier))
-        new_expr = ch_op + "(" + tokens.back() + ", '" + left_wildcards + left_space + String(token_pos->begin + 1, token_pos->end - 1)
-            + right_space + right_wildcards + "')";
+        new_expr = "toBool(" + ch_op + "(" + tokens.back() + ", '" + left_wildcards + left_space + String(token_pos->begin + 1, token_pos->end - 1)
+            + right_space + right_wildcards + "'))";
     else if (!tokens.empty() && ((token_pos)->type == TokenType::BareWord))
     {
         auto tmp_arg = IParserKQLFunction::getExpression(token_pos);
-        new_expr = ch_op + "(" + tokens.back() + ", concat('" + left_wildcards + left_space + "', " + tmp_arg + ", '" + right_space
-            + right_wildcards + "'))";
+        new_expr = "toBool(" + ch_op + "(" + tokens.back() + ", concat('" + left_wildcards + left_space + "', " + tmp_arg + ", '" + right_space
+            + right_wildcards + "')))";
     }
     else
         throw Exception(ErrorCodes::SYNTAX_ERROR, "Syntax error near {}", kql_op);
@@ -396,6 +396,40 @@ bool KQLOperators::convert(std::vector<String> & tokens, IParser::Pos & pos)
 
             switch (op_value)
             {
+                case KQLOperatorValue::between:
+                case KQLOperatorValue::not_between:
+                {
+                    /// between (low .. high) or !between (low .. high)
+                    ++pos;
+                    if (!isValidKQLPos(pos) || pos->type != TokenType::OpeningRoundBracket)
+                        throw Exception(ErrorCodes::SYNTAX_ERROR, "Syntax error near {}", op);
+                    ++pos;
+
+                    String low = IParserKQLFunction::getExpression(pos);
+                    ++pos;
+
+                    /// Skip ".." (Dot Dot)
+                    if (isValidKQLPos(pos) && String(pos->begin, pos->end) == ".")
+                        ++pos;
+                    if (isValidKQLPos(pos) && String(pos->begin, pos->end) == ".")
+                        ++pos;
+
+                    String high = IParserKQLFunction::getExpression(pos);
+                    ++pos;
+                    /// Skip closing bracket
+                    if (isValidKQLPos(pos) && pos->type == TokenType::ClosingRoundBracket)
+                        ;
+                    else
+                        --pos;
+
+                    if (op_value == KQLOperatorValue::between)
+                        new_expr = fmt::format("toBool({0} >= {1} and {0} <= {2})", tokens.back(), low, high);
+                    else
+                        new_expr = fmt::format("toBool({0} < {1} or {0} > {2})", tokens.back(), low, high);
+                    tokens.pop_back();
+                    break;
+                }
+
                 case KQLOperatorValue::contains:
                     new_expr = genHaystackOpExpr(tokens, pos, op, "ilike", WildcardsPos::both);
                     break;

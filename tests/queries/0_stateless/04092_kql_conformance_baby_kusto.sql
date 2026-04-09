@@ -3,6 +3,7 @@
 -- Source: test/BabyKusto.Core.Tests/EndToEndTests.cs
 
 set allow_experimental_kusto_dialect=1;
+set joined_subquery_requires_alias=0;
 set dialect='kusto';
 
 print '-- Print1 --';
@@ -508,12 +509,12 @@ set dialect='kusto';
 print '-- BuiltIns_bin_Narrowing --';
 _dt | project v = bin(a, 10);
 print '-- BuiltIns_geo_distance_2points_Scalar --';
-print d1=tolong(geo_distance_2points(-122.3518577,47.6205099,-122.3519241,47.6097268)), // Space Needle to Pike Place Market
-      d2=geo_distance_2points(300,0,0,0), // Invalid lon1
-      d3=geo_distance_2points(0,-300,0,0), // Invalid lat1
-      d4=geo_distance_2points(0,0,-300,0), // Invalid lon2
-      d5=geo_distance_2points(0,0,0,300), // Invalid lat2
-      d6=geo_distance_2points(0,real(null),0,0) // Something is null;
+print d1=tolong(geo_distance_2points(-122.3518577,47.6205099,-122.3519241,47.6097268)),
+      d2=geo_distance_2points(300,0,0,0),
+      d3=geo_distance_2points(0,-300,0,0),
+      d4=geo_distance_2points(0,0,-300,0),
+      d5=geo_distance_2points(0,0,0,300),
+      d6=geo_distance_2points(0,real(null),0,0);
 set dialect='clickhouse';
 DROP TABLE IF EXISTS _dt;
 CREATE TABLE _dt (lon1 Nullable(Float64), lat1 Nullable(Float64), lon2 Nullable(Float64), lat2 Nullable(Float64)) ENGINE = Memory;

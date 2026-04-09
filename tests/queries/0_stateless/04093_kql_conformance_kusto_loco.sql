@@ -3,6 +3,7 @@
 -- Source: test/BasicTests/
 
 set allow_experimental_kusto_dialect=1;
+set joined_subquery_requires_alias=0;
 set dialect='kusto';
 
 print '-- AdditionalFunctionTests::SqrtFunction_Scalar --';

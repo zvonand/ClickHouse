@@ -288,10 +288,24 @@ AccessRights ContextAccess::addImplicitAccessRights(const AccessRights & access,
     /// Database engines (Atomic, Replicated, Shared, etc.) are registered in DatabaseFactory,
     /// not StorageFactory, but CREATE DATABASE checks TABLE_ENGINE in InterpreterCreateQuery.
     /// Grant them implicitly when table_engines_require_grant is disabled.
+    ///
+    /// NOTE: Some database engines share names with source storage engines (e.g. PostgreSQL,
+    /// MySQL, SQLite, S3). Those were already handled by the StorageFactory loop above — either
+    /// granted (if the user has READ/WRITE on the source) or deliberately skipped. We must not
+    /// re-grant them here unconditionally, or it would bypass source access checks.
+    ///
+    /// TODO: DatabaseFactory should gain its own source_access_type (like StorageFactory has),
+    /// so that CREATE DATABASE ENGINE = PostgreSQL(...) also requires source grants. Currently
+    /// only CREATE TABLE checks source access; CREATE DATABASE with source engines does not.
     if (!access_control.doesTableEnginesRequireGrant())
     {
+        const auto & all_storages = StorageFactory::instance().getAllStorages();
         for (const auto & name : DatabaseFactory::instance().getAllRegisteredNames())
+        {
+            if (all_storages.contains(name))
+                continue;
             res.grant(AccessType::TABLE_ENGINE, name);
+        }
     }
 
     return res;

@@ -1125,7 +1125,7 @@
             return;
         }
 
-        const lineWidth = 5;
+        const lineWidth = 1;
         const padding = 1;
         const totalHeight = (lineWidth + padding) * results.length;
 
@@ -1216,8 +1216,14 @@
 
             // Draw failure markers on top
             failedMarkers.forEach(({ x, y }) => {
-                ctx.font = "8px sans-serif";
-                ctx.fillText("❌", Math.max(x - 14, 0), y + 4);
+                ctx.fillStyle = "#ff3333";
+                ctx.beginPath();
+                const s = 3;
+                ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y + s);
+                ctx.moveTo(x + s, y - s); ctx.lineTo(x - s, y + s);
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = "#ff3333";
+                ctx.stroke();
             });
         }
 
@@ -1438,7 +1444,7 @@
                         // Downstream result: link to private json.html via proxy
                         const link = document.createElement('a');
                         link.href = result._downstreamHref;
-                        link.textContent = value;
+                        link.textContent = '🔗 ' + value;
                         link.target = '_blank';
                         td.classList.add('name-column');
                         td.appendChild(link);
@@ -1671,7 +1677,8 @@
         runLink: null,
         sha: null,
         downstreamResults: null,
-        downstreamSha: null
+        downstreamSha: null,
+        downstreamError: null
     };
 
     function storeLink(link) {
@@ -1802,9 +1809,9 @@
             resultsDiv.appendChild(textDiv);
         }
 
-        // Merge cached downstream results if available for this SHA
+        // Merge cached downstream results if available
         let resultsData = result.results;
-        if (nameParams.length === 1 && runtimeCache.downstreamResults && runtimeCache.downstreamSha === sha) {
+        if (nameParams.length === 1 && runtimeCache.downstreamResults) {
             resultsData = [...resultsData, ...runtimeCache.downstreamResults];
         }
         if (Array.isArray(resultsData) && resultsData.length > 0) {
@@ -2092,26 +2099,10 @@
                 return;
             }
 
-            if (fetchResult) {
-                // Clear timers, event listeners, and DOM before refreshing content
-                clearPage();
-
-                // Rebuild the page with new data (public results render immediately).
-                // If we already have cached downstream results for this SHA, merge them
-                // into the initial render to avoid a visual jump.
-                await renderResults(PR, sha, nameParams);
-
-                // Restore scroll position
-                if (statusContainer) {
-                    statusContainer.scrollTop = scrollTop;
-                }
-
-                console.log(`Data refreshed at ${new Date().toLocaleTimeString()}`);
-            }
-
-            // Fetch downstream (private sync) results independently of upstream updates.
+            // Fetch downstream data into cache (no DOM changes here).
             // Only supported for PRs to main trunk (name_0=PR).
             // Runs on every tick so late-arriving downstream results are picked up.
+            let downstreamChanged = false;
             if (nameParams.length === 1 && nameParams[0] === 'PR' && privateBaseUrl) {
                 const resolvedSha = runtimeCache.commits
                     ? ((sha === 'latest')
@@ -2119,39 +2110,46 @@
                         : sha)
                     : sha;
                 if (resolvedSha) {
-                    fetchDownstreamData(resolvedSha, privateBaseUrl).then(result => {
-                        // Stale response guard: ignore if SHA changed since request started
-                        const currentSha = runtimeCache.commits
-                            ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
-                            : sha;
-                        if (resolvedSha !== currentSha) return;
-
+                    const result = await fetchDownstreamData(resolvedSha, privateBaseUrl);
+                    // Stale response guard
+                    const currentSha = runtimeCache.commits
+                        ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
+                        : sha;
+                    if (resolvedSha === currentSha) {
                         if (result.error) {
+                            if (runtimeCache.downstreamResults !== null || runtimeCache.downstreamError !== result.error) {
+                                downstreamChanged = true;
+                            }
                             runtimeCache.downstreamResults = null;
                             runtimeCache.downstreamSha = null;
-                            showDownstreamInfo(result.error);
+                            runtimeCache.downstreamError = result.error;
                         } else if (result.data && result.data.length > 0) {
+                            downstreamChanged = runtimeCache.downstreamSha !== resolvedSha
+                                || JSON.stringify(runtimeCache.downstreamResults?.map(r => r.status))
+                                   !== JSON.stringify(result.data.map(r => r.status));
                             runtimeCache.downstreamResults = result.data;
                             runtimeCache.downstreamSha = resolvedSha;
-                            // Clear any previous error banner
-                            const banner = document.querySelector('.downstream-info');
-                            if (banner) banner.remove();
-                            // Re-render just the results table with merged data
-                            const resultsDiv = document.getElementById('result-container');
-                            const oldTable = resultsDiv.querySelector('table');
-                            const target = getTargetResults(nameParams);
-                            if (target) {
-                                const merged = [...(target.results || []), ...result.data];
-                                const newTable = createResultsTable(merged, 1);
-                                if (newTable && oldTable) {
-                                    oldTable.replaceWith(newTable);
-                                } else if (newTable) {
-                                    resultsDiv.appendChild(newTable);
-                                }
-                            }
+                            runtimeCache.downstreamError = null;
                         }
-                    });
+                    }
                 }
+            }
+
+            // Single render pass with both upstream and downstream data
+            if (fetchResult || downstreamChanged) {
+                clearPage();
+                await renderResults(PR, sha, nameParams);
+
+                if (statusContainer) {
+                    statusContainer.scrollTop = scrollTop;
+                }
+
+                // Show downstream error if applicable
+                if (runtimeCache.downstreamError) {
+                    showDownstreamInfo(runtimeCache.downstreamError);
+                }
+
+                console.log(`Data refreshed at ${new Date().toLocaleTimeString()}`);
             }
         }
 

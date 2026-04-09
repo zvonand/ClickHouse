@@ -2019,11 +2019,14 @@
             copy.name = originalName;
             copy._downstreamHref = `${privateBaseUrl}/json.html?PR=${encodeURIComponent(private_pr_number)}&sha=${encodeURIComponent(private_sha)}&name_0=PR&name_1=${encodeURIComponent(originalName)}`;
 
-            // Rewrite links: replace CloudFront/S3 private bucket prefix with proxy
+            // Rewrite links: replace origin+bucket prefix with proxy base URL.
+            // privateBaseUrl is e.g. https://proxy/bucket-name, extract /bucket-name
+            const bucketPath = new URL(privateBaseUrl).pathname;
             if (Array.isArray(copy.links)) {
-                copy.links = copy.links.map(link =>
-                    link.replace(/^https?:\/\/[^\/]+\/clickhouse-test-reports-private/, privateBaseUrl)
-                );
+                copy.links = copy.links.map(link => {
+                    const re = new RegExp('^https?://[^/]+' + bucketPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                    return link.replace(re, privateBaseUrl);
+                });
             }
             return copy;
         });

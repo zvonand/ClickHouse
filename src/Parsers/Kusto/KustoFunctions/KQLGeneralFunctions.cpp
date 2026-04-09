@@ -296,10 +296,11 @@ bool GeoPointToGeohash::convertImpl(String & out, IParser::Pos & pos)
     String lat = getConvertedArgument(fn_name, pos);
 
     auto accuracy = getOptionalArgument(fn_name, pos);
+    /// KQL default precision is 5 characters
     if (accuracy)
         out = fmt::format("geohashEncode({}, {}, {})", lon, lat, *accuracy);
     else
-        out = fmt::format("geohashEncode({}, {})", lon, lat);
+        out = fmt::format("geohashEncode({}, {}, 5)", lon, lat);
 
     return true;
 }
@@ -377,7 +378,8 @@ bool ToHex::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     const auto argument = getArgument(fn_name, pos);
-    out = fmt::format("lower(hex(toInt64({})))", argument);
+    /// Remove leading zeros from hex output
+    out = fmt::format("lower(trimLeft(hex(toInt64({})), '0'))", argument);
     return true;
 }
 
@@ -483,8 +485,10 @@ bool Format::convertImpl(String & out, IParser::Pos & pos)
     ++pos;
     String fmt_str = getConvertedArgument(fn_name, pos);
 
-    if (fmt_str == "'x'" || fmt_str == "'X'")
-        out = fmt::format("lower(hex(toInt64({})))", value);
+    if (fmt_str == "'x'")
+        out = fmt::format("lower(trimLeft(hex(toInt64({})), '0'))", value);
+    else if (fmt_str == "'X'")
+        out = fmt::format("upper(trimLeft(hex(toInt64({})), '0'))", value);
     else
         out = fmt::format("toString({})", value);
 
@@ -509,7 +513,7 @@ bool FormatInterp::convertImpl(String & out, IParser::Pos & pos)
     {
         String placeholder_plain = fmt::format("{{{}:x}}", i);
         String placeholder_simple = fmt::format("{{{}}}", i);
-        result = fmt::format("replaceAll({}, '{}', lower(hex(toInt64({}))))", result, placeholder_plain, args[i]);
+        result = fmt::format("replaceAll({}, '{}', lower(trimLeft(hex(toInt64({})), '0')))", result, placeholder_plain, args[i]);
         result = fmt::format("replaceAll({}, '{}', toString({}))", result, placeholder_simple, args[i]);
     }
 

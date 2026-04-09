@@ -27,7 +27,8 @@ public:
         PartitionIdToMaxBlockPtr max_block_numbers_to_read_,
         RangesInDataPartsPtr ranges_,
         ContextPtr query_context_,
-        float min_filtered_ratio_);
+        float min_filtered_ratio_,
+        size_t pk_filtered_marks_);
 
     String getName() const override { return "LazyFinalKeyAnalysis"; }
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings & settings) override;
@@ -46,6 +47,7 @@ private:
     RangesInDataPartsPtr ranges;
     ContextPtr query_context;
     float min_filtered_ratio;
+    size_t pk_filtered_marks;
 };
 
 }

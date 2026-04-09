@@ -86,7 +86,8 @@ static void addIsDeletedFilter(QueryPlan & plan, const String & is_deleted_colum
 
 /// Create a non-FINAL ReadFromMergeTree plan for non-intersecting parts,
 /// with optional is_deleted filter and WHERE filter applied.
-static QueryPlan createNonIntersectingPlan(
+/// Returns nullopt if PK analysis prunes all granules (nothing to read).
+static std::optional<QueryPlan> createNonIntersectingPlan(
     RangesInDataParts parts,
     ReadFromMergeTree * reading_step,
     FilterStep * filter_step)
@@ -131,6 +132,11 @@ static QueryPlan createNonIntersectingPlan(
     if (filter_step)
         non_final_reading->addFilter(filter_step->getExpression().clone(), filter_step->getFilterColumnName());
     non_final_reading->SourceStepWithFilterBase::applyFilters();
+
+    /// Skip if PK analysis prunes all granules — nothing to read.
+    auto analysis = non_final_reading->selectRangesToRead();
+    if (analysis && analysis->parts_with_ranges.empty())
+        return std::nullopt;
 
     QueryPlan plan;
     plan.addStep(std::move(non_final_reading));
@@ -185,8 +191,11 @@ static SplitResult trySplitNonIntersectingParts(
         auto plan = createNonIntersectingPlan(
             std::move(split.non_intersecting_parts_ranges), reading_step, filter_step);
 
+        if (!plan)
+            return {};
+
         auto expected_header = reading_step->getOutputHeader();
-        query_plan.replaceNodeWithPlan(read_node, std::move(plan), expected_header);
+        query_plan.replaceNodeWithPlan(read_node, std::move(*plan), expected_header);
         return {.non_intersecting_plan = nullptr, .fully_replaced = true};
     }
 
@@ -194,24 +203,36 @@ static SplitResult trySplitNonIntersectingParts(
         return {};
 
     /// Update the original reading step to only have intersecting parts.
-    /// Recompute derived stats to keep them consistent with the new part set.
+    /// Recompute all derived stats to keep them consistent with the new part set.
     if (analyzed_result)
     {
         analyzed_result->parts_with_ranges = std::move(split.intersecting_parts_ranges);
 
-        analyzed_result->selected_parts = 0;
-        analyzed_result->selected_ranges = 0;
-        analyzed_result->selected_marks = 0;
-        analyzed_result->selected_marks_pk = 0;
-        analyzed_result->selected_rows = 0;
+        size_t total_marks = 0;
+        size_t total_ranges = 0;
+        size_t total_rows = 0;
         for (const auto & part : analyzed_result->parts_with_ranges)
         {
-            ++analyzed_result->selected_parts;
-            analyzed_result->selected_ranges += part.ranges.size();
-            auto marks = part.getMarksCount();
-            analyzed_result->selected_marks += marks;
-            analyzed_result->selected_marks_pk += marks;
-            analyzed_result->selected_rows += part.getRowsCount();
+            total_marks += part.getMarksCount();
+            total_ranges += part.ranges.size();
+            total_rows += part.getRowsCount();
+        }
+
+        auto num_parts = analyzed_result->parts_with_ranges.size();
+        analyzed_result->total_parts = num_parts;
+        analyzed_result->parts_before_pk = num_parts;
+        analyzed_result->selected_parts = num_parts;
+        analyzed_result->selected_ranges = total_ranges;
+        analyzed_result->selected_marks = total_marks;
+        analyzed_result->selected_marks_pk = total_marks;
+        analyzed_result->total_marks_pk = total_marks;
+        analyzed_result->selected_rows = total_rows;
+
+        /// Update index_stats so EXPLAIN shows consistent numbers.
+        for (auto & stat : analyzed_result->index_stats)
+        {
+            stat.num_parts_after = num_parts;
+            stat.num_granules_after = total_marks;
         }
 
         reading_step->setAnalyzedResult(analyzed_result);
@@ -220,7 +241,10 @@ static SplitResult trySplitNonIntersectingParts(
     auto plan = createNonIntersectingPlan(
         std::move(split.non_intersecting_parts_ranges), reading_step, filter_step);
 
-    return {.non_intersecting_plan = std::make_unique<QueryPlan>(std::move(plan))};
+    if (!plan)
+        return {};
+
+    return {.non_intersecting_plan = std::make_unique<QueryPlan>(std::move(*plan))};
 }
 
 void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::Nodes & nodes, const QueryPlanOptimizationSettings & optimization_settings)
@@ -330,6 +354,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     }
 
     QueryPlan set_plan;
+    size_t pk_filtered_marks = 0;
 
     {
         SelectQueryInfo set_query_info = reading_step->getQueryInfo();
@@ -383,6 +408,13 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         if (filter_step)
             set_reading->addFilter(filter_step->getExpression().clone(), filter_step->getFilterColumnName());
         set_reading->SourceStepWithFilterBase::applyFilters();
+
+        /// Count PK-filtered marks as the baseline for the filtered ratio check.
+        /// The IN-set filter in LazyFinalKeyAnalysisTransform measures additional
+        /// pruning beyond what the WHERE clause's PK conditions already provide.
+        if (auto set_analysis = set_reading->selectRangesToRead())
+            for (const auto & part : set_analysis->parts_with_ranges)
+                pk_filtered_marks += part.getMarksCount();
 
         set_plan.addStep(std::move(set_reading));
     }
@@ -459,7 +491,8 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         max_block_numbers_to_read,
         parts_for_set,
         context,
-        optimization_settings.min_filtered_ratio_for_lazy_final));
+        optimization_settings.min_filtered_ratio_for_lazy_final,
+        pk_filtered_marks));
 
     /// True branch (signal = set OK): LazyReadReplacingFinalSource + JoinLazyColumnsStep.
     QueryPlan true_plan;

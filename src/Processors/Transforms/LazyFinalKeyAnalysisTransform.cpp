@@ -30,7 +30,8 @@ LazyFinalKeyAnalysisTransform::LazyFinalKeyAnalysisTransform(
     PartitionIdToMaxBlockPtr max_block_numbers_to_read_,
     RangesInDataPartsPtr ranges_,
     ContextPtr query_context_,
-    float min_filtered_ratio_)
+    float min_filtered_ratio_,
+    size_t pk_filtered_marks_)
     : IProcessor(InputPorts{InputPort(Block())}, OutputPorts{OutputPort(Block())})
     , future_set(std::move(future_set_))
     , shared_state(std::move(shared_state_))
@@ -43,6 +44,7 @@ LazyFinalKeyAnalysisTransform::LazyFinalKeyAnalysisTransform(
     , ranges(std::move(ranges_))
     , query_context(std::move(query_context_))
     , min_filtered_ratio(min_filtered_ratio_)
+    , pk_filtered_marks(pk_filtered_marks_)
     , log(getLogger("LazyFinalKeyAnalysisTransform"))
 {
 }
@@ -180,25 +182,27 @@ void LazyFinalKeyAnalysisTransform::work()
         for (const auto & part : analysis_result->parts_with_ranges)
             selected_marks += part.getMarksCount();
 
-    /// Check if enough marks were filtered.
-    float filtered_ratio = total_marks > 0 ? 1.0f - static_cast<float>(selected_marks) / static_cast<float>(total_marks) : 0.0f;
+    /// Use PK-filtered mark count as the baseline for the ratio.
+    /// This measures additional pruning by the IN-set filter beyond
+    /// what the WHERE clause's PK conditions already provide.
+    float filtered_ratio = 1.0f - static_cast<float>(selected_marks) / static_cast<float>(pk_filtered_marks);
 
     if (min_filtered_ratio > 0 && filtered_ratio < min_filtered_ratio)
     {
         LOG_TRACE(log,
             "Lazy FINAL disabled: filtered ratio {:.2f} is below threshold {:.2f} "
-            "(total_marks={}, selected_marks={}, set_rows={})",
+            "(total_marks={}, pk_filtered_marks={}, selected_marks={}, set_rows={})",
             filtered_ratio, min_filtered_ratio,
-            total_marks, selected_marks, future_set->get()->getTotalRowCount());
+            total_marks, pk_filtered_marks, selected_marks, future_set->get()->getTotalRowCount());
         should_signal = false;
     }
     else
     {
         LOG_TRACE(log,
             "Lazy FINAL enabled: filtered ratio {:.2f} (threshold {:.2f}), "
-            "total_marks={}, selected_marks={}, set_rows={}",
+            "total_marks={}, pk_filtered_marks={}, selected_marks={}, set_rows={}",
             filtered_ratio, min_filtered_ratio,
-            total_marks, selected_marks, future_set->get()->getTotalRowCount());
+            total_marks, pk_filtered_marks, selected_marks, future_set->get()->getTotalRowCount());
         should_signal = true;
         shared_state->reading_step = std::move(reading);
     }

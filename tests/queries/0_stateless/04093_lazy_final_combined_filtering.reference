@@ -1,12 +1,12 @@
 === Correctness ===
-2250	41046750
-2250	41046750
+250	1872500
+250	1872500
 === Plan structure ===
 1
 1
-=== PK pruning ===
-total_marks=62, selected_marks=48, set_rows=N
+=== PK and IN-set pruning ===
+total_marks=62, pk_filtered_marks=56, selected_marks=10, set_rows=N
 === Selected after index ===
-Selected 2/2 parts by partition key, 2 parts by primary key, 48/62 marks by primary key, 48 marks to read from 2 ranges
+Selected 2/2 parts by partition key, 2 parts by primary key, 10/62 marks by primary key, 10 marks to read from 2 ranges
 === Fallback (set truncated) ===
-2250	41046750
+250	1872500

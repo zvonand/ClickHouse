@@ -184,12 +184,6 @@ DOCKERS = [
         depends_on=[],
     ),
     Docker.Config(
-        name="clickhouse/integration-test-with-paimon-rest-catalog",
-        path="./ci/docker/integration/clickhouse_with_paimon_rest_catalog",
-        platforms=Docker.Platforms.arm_amd,
-        depends_on=[],
-    ),
-    Docker.Config(
         name="clickhouse/integration-helper",
         path="./ci/docker/integration/helper_container",
         platforms=Docker.Platforms.arm_amd,

@@ -1,6 +1,6 @@
 Negative tests
 \N
-Constants: matchPhrase should be constant
+Constants: hasPhrase should be constant
 Default tokenizer (splitByNonAlpha)
 1
 1
@@ -68,7 +68,7 @@ ngrams tokenizer
 1
 1
 1
-Column values: matchPhrase should be non-constant
+Column values: hasPhrase should be non-constant
 Default tokenizer (splitByNonAlpha)
 1
 5

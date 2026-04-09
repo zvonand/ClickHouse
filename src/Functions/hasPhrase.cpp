@@ -1,4 +1,4 @@
-#include <Functions/matchPhrase.h>
+#include <Functions/hasPhrase.h>
 
 #include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnNullable.h>
@@ -139,11 +139,11 @@ void executeMatchPhrase(
 }
 }
 
-FunctionMatchPhraseOverloadResolver::FunctionMatchPhraseOverloadResolver(ContextPtr)
+FunctionHasPhraseOverloadResolver::FunctionHasPhraseOverloadResolver(ContextPtr)
 {
 }
 
-DataTypePtr FunctionMatchPhraseOverloadResolver::getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const
+DataTypePtr FunctionHasPhraseOverloadResolver::getReturnTypeImpl(const ColumnsWithTypeAndName & arguments) const
 {
     FunctionArgumentDescriptors mandatory_args{
         {"input", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isStringOrFixedString), nullptr, "String or FixedString"},
@@ -158,7 +158,7 @@ DataTypePtr FunctionMatchPhraseOverloadResolver::getReturnTypeImpl(const Columns
 }
 
 FunctionBasePtr
-FunctionMatchPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const
+FunctionHasPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const
 {
     if (arguments.size() < 2)
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' requires at least 2 arguments, got {}", name, arguments.size());
@@ -171,16 +171,16 @@ FunctionMatchPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & ar
     auto tokenizer = TokenizerFactory::instance().get(tokenizer_name);
     auto phrase_tokens = initializePhraseTokens(arguments, *tokenizer, getName());
     DataTypes argument_types{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })};
-    return std::make_shared<FunctionBaseMatchPhrase>(std::move(tokenizer), std::move(phrase_tokens), std::move(argument_types), return_type);
+    return std::make_shared<FunctionBaseHasPhrase>(std::move(tokenizer), std::move(phrase_tokens), std::move(argument_types), return_type);
 }
 
-ExecutableFunctionPtr FunctionBaseMatchPhrase::prepare(const ColumnsWithTypeAndName &) const
+ExecutableFunctionPtr FunctionBaseHasPhrase::prepare(const ColumnsWithTypeAndName &) const
 {
-    return std::make_unique<ExecutableFunctionMatchPhrase>(tokenizer, phrase_tokens);
+    return std::make_unique<ExecutableFunctionHasPhrase>(tokenizer, phrase_tokens);
 }
 
 ColumnPtr
-ExecutableFunctionMatchPhrase::executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const
+ExecutableFunctionHasPhrase::executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t input_rows_count) const
 {
     if (input_rows_count == 0)
         return ColumnVector<UInt8>::create();
@@ -201,7 +201,7 @@ ExecutableFunctionMatchPhrase::executeImpl(const ColumnsWithTypeAndName & argume
     return col_result;
 }
 
-REGISTER_FUNCTION(MatchPhrase)
+REGISTER_FUNCTION(HasPhrase)
 {
     FunctionDocumentation::Description description = R"(
 Checks if the haystack contains all tokens from the phrase in consecutive order.
@@ -209,11 +209,11 @@ Checks if the haystack contains all tokens from the phrase in consecutive order.
 Prior to searching, the function tokenizes both the `input` and the `phrase` arguments using the tokenizer specified as the optional third argument.
 If no tokenizer is specified, by default the `splitByNonAlpha` tokenizer would be used.
 
-Unlike [`hasToken`](#hasToken), [`hasAnyTokens`](#hasAnyTokens) and [`hasAllTokens`](#hasAllTokens), `matchPhrase` requires the tokens to appear in the same order
-and without any intervening tokens. For example, `matchPhrase('the quick brown fox', 'quick fox')` returns 0
+Unlike [`hasToken`](#hasToken), [`hasAnyTokens`](#hasAnyTokens) and [`hasAllTokens`](#hasAllTokens), `hasPhrase` requires the tokens to appear in the same order
+and without any intervening tokens. For example, `hasPhrase('the quick brown fox', 'quick fox')` returns 0
 because "brown" appears between "quick" and "fox".
     )";
-    FunctionDocumentation::Syntax syntax = "matchPhrase(input, phrase[, tokenizer])";
+    FunctionDocumentation::Syntax syntax = "hasPhrase(input, phrase[, tokenizer])";
     FunctionDocumentation::Arguments arguments = {
         {"input", "The input column.", {"String", "FixedString"}},
         {"phrase", "Phrase to search for.", {"const String"}},
@@ -223,24 +223,25 @@ because "brown" appears between "quick" and "fox".
         = {"Returns `1` if the phrase is found as a consecutive token sequence, `0` otherwise.", {"UInt8"}};
     FunctionDocumentation::Examples examples
         = {{"Phrase match",
-            "SELECT matchPhrase('the quick brown fox jumps', 'quick brown')",
+            "SELECT hasPhrase('the quick brown fox jumps', 'quick brown')",
             R"(
-┌─matchPhrase('the quick brown fox jumps', 'quick brown')─┐
-│                                                        1 │
-└──────────────────────────────────────────────────────────┘
+┌─hasPhrase('the quick brown fox jumps', 'quick brown')─┐
+│                                                      1 │
+└────────────────────────────────────────────────────────┘
         )"},
            {"Non-consecutive tokens",
-            "SELECT matchPhrase('the quick brown fox jumps', 'quick fox')",
+            "SELECT hasPhrase('the quick brown fox jumps', 'quick fox')",
             R"(
-┌─matchPhrase('the quick brown fox jumps', 'quick fox')─┐
-│                                                      0 │
-└────────────────────────────────────────────────────────┘
+┌─hasPhrase('the quick brown fox jumps', 'quick fox')─┐
+│                                                    0 │
+└──────────────────────────────────────────────────────┘
         )"}};
     FunctionDocumentation::IntroducedIn introduced_in = {26, 4};
     FunctionDocumentation::Category category = FunctionDocumentation::Category::StringSearch;
     FunctionDocumentation documentation = {description, syntax, arguments, {}, returned_value, examples, introduced_in, category};
 
-    factory.registerFunction<FunctionMatchPhraseOverloadResolver>(documentation);
+    factory.registerFunction<FunctionHasPhraseOverloadResolver>(documentation);
+    factory.registerAlias("matchPhrase", FunctionHasPhraseOverloadResolver::name);
 }
 
 }

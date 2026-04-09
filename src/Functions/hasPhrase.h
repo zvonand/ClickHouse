@@ -8,12 +8,12 @@ namespace DB
 
 struct ITokenizer;
 
-class ExecutableFunctionMatchPhrase : public IExecutableFunction
+class ExecutableFunctionHasPhrase : public IExecutableFunction
 {
 public:
-    static constexpr auto name = "matchPhrase";
+    static constexpr auto name = "hasPhrase";
 
-    explicit ExecutableFunctionMatchPhrase(
+    explicit ExecutableFunctionHasPhrase(
         std::shared_ptr<const ITokenizer> tokenizer_, std::vector<String> phrase_tokens_)
         : tokenizer(std::move(tokenizer_))
         , phrase_tokens(std::move(phrase_tokens_))
@@ -29,12 +29,12 @@ private:
     std::vector<String> phrase_tokens;
 };
 
-class FunctionBaseMatchPhrase : public IFunctionBase
+class FunctionBaseHasPhrase : public IFunctionBase
 {
 public:
-    static constexpr auto name = "matchPhrase";
+    static constexpr auto name = "hasPhrase";
 
-    FunctionBaseMatchPhrase(
+    FunctionBaseHasPhrase(
         std::shared_ptr<const ITokenizer> tokenizer_,
         std::vector<String> phrase_tokens_,
         DataTypes argument_types_,
@@ -60,17 +60,17 @@ private:
     DataTypePtr result_type;
 };
 
-class FunctionMatchPhraseOverloadResolver : public IFunctionOverloadResolver
+class FunctionHasPhraseOverloadResolver : public IFunctionOverloadResolver
 {
 public:
-    static constexpr auto name = "matchPhrase";
+    static constexpr auto name = "hasPhrase";
 
     static FunctionOverloadResolverPtr create(ContextPtr context)
     {
-        return std::make_unique<FunctionMatchPhraseOverloadResolver>(context);
+        return std::make_unique<FunctionHasPhraseOverloadResolver>(context);
     }
 
-    explicit FunctionMatchPhraseOverloadResolver(ContextPtr context);
+    explicit FunctionHasPhraseOverloadResolver(ContextPtr context);
 
     String getName() const override { return name; }
     size_t getNumberOfArguments() const override { return 0; }

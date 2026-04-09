@@ -44,10 +44,13 @@ bool DatatypeDatetime::convertImpl(String & out, IParser::Pos & pos)
         if (Poco::toUpper(datetime_str) == "NULL")
             out = "NULL";
         else
-            out = fmt::format(
+        {
+            auto inner = fmt::format(
                 "if(toTypeName({0}) = 'Int64' OR toTypeName({0}) = 'Int32'OR toTypeName({0}) = 'Float64' OR  toTypeName({0}) = 'UInt32' OR "
                 " toTypeName({0}) = 'UInt64', toDateTime64({0},9,'UTC'), parseDateTime64BestEffortOrNull({0}::String,9,'UTC'))",
                 datetime_str);
+            out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
+        }
         return true;
     }
     else
@@ -62,7 +65,8 @@ bool DatatypeDatetime::convertImpl(String & out, IParser::Pos & pos)
         --pos;
         datetime_str = fmt::format("'{}'", String(start->begin, pos->end));
     }
-    out = fmt::format("parseDateTime64BestEffortOrNull({},9,'UTC')", datetime_str);
+    auto inner = fmt::format("parseDateTime64BestEffortOrNull({},9,'UTC')", datetime_str);
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     ++pos;
     return true;
 }

@@ -599,7 +599,8 @@ bool MakeDateTime::convertImpl(String & out, IParser::Pos & pos)
     }
 
     arguments = arguments + "7,'UTC'";
-    out = fmt::format("makeDateTime64({})", arguments);
+    auto inner = fmt::format("makeDateTime64({})", arguments);
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
 
     return true;
 }

@@ -32,7 +32,8 @@ bool ToDateTime::convertImpl(String & out, IParser::Pos & pos)
 
     const auto param = getArgument(function_name, pos);
 
-    out = fmt::format("parseDateTime64BestEffortOrNull(toString({0}),9,'UTC')", param);
+    auto inner = fmt::format("parseDateTime64BestEffortOrNull(toString({0}),9,'UTC')", param);
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
 

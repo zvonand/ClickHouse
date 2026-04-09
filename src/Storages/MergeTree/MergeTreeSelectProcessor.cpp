@@ -269,12 +269,6 @@ MergeTreeSelectProcessor::readCurrentTask(MergeTreeReadTask & current_task, IMer
         auto chunk = Chunk(ordered_columns, res.row_count);
         const auto & data_part = current_task.getInfo().data_part;
 
-        if (!storage_id_resolved)
-        {
-            cached_storage_id = data_part->storage.getStorageID();
-            storage_id_resolved = true;
-        }
-
         if (add_part_level)
             chunk.getChunkInfos().add(std::make_shared<MergeTreeReadInfo>(data_part->info.level));
 
@@ -414,7 +408,11 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     if (!predicate_stats_log)
         return;
 
-    if (!storage_id_resolved || cached_storage_id.database_name.empty())
+    if (!task)
+        return;
+
+    auto storage_id = task->getInfo().data_part->storage.getStorageID();
+    if (storage_id.database_name.empty())
         return;
 
     const auto & counters = read_steps_performance_counters.getCounters();
@@ -471,8 +469,8 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
             PredicateStatisticsLogElement elem;
             elem.event_date = today;
             elem.event_time = now;
-            elem.database = cached_storage_id.database_name;
-            elem.table = cached_storage_id.table_name;
+            elem.database = storage_id.database_name;
+            elem.table = storage_id.table_name;
             elem.query_id = query_id;
             elem.filter_expression = filter_expr;
             elem.column_name = atom.column_name;

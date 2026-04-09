@@ -173,9 +173,6 @@ private:
 
     LazyMaterializingRowsPtr lazy_materializing_rows;
 
-    mutable StorageID cached_storage_id = StorageID::createEmpty();
-    mutable bool storage_id_resolved = false;
-
     void logPredicateStatistics() const;
 
     LoggerPtr log = getLogger("MergeTreeSelectProcessor");

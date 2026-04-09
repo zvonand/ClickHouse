@@ -3275,6 +3275,8 @@ bool ReadFromMergeTree::supportsSkipIndexesOnDataRead() const
 }
 
 
+static const char * indexTypeToString(ReadFromMergeTree::IndexType type);
+
 void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) const
 {
     UInt64 sample_rate = context->getSettingsRef()[Setting::predicate_statistics_sample_rate];

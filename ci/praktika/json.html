@@ -245,6 +245,13 @@
             color: #FAFF69;
         }
 
+        tr.downstream-row {
+            background-color: color-mix(in srgb, var(--tile-background) 50%, #e0d8f0);
+        }
+        .night-theme tr.downstream-row {
+            background-color: color-mix(in srgb, var(--tile-background) 70%, #3a2d5c);
+        }
+
         .downstream-info {
             padding: 8px 16px;
             margin: 8px 0;
@@ -368,15 +375,15 @@
 <body>
     <div id="status-container"></div>
     <div id="result-container"></div>
-    <button id="toggle-status-bar">‖</button>
+    <button id="toggle-status-bar" title="Toggle sidebar">‖</button>
     <footer id="footer">
         <div class="left"></div>
         <div class="right"></div>
         <div class="settings">
             <span id="proxy-toggle" title="Configure downstream proxy URL">🔗</span>
-            <span id="status-filter-toggle"></span>
-            <span id="sort-toggle">🔼</span>
-            <span id="theme-toggle">🔆️</span>
+            <span id="status-filter-toggle" title="Filter by status"></span>
+            <span id="sort-toggle" title="Sort by status">🔼</span>
+            <span id="theme-toggle" title="Toggle day/night theme">🔆️</span>
         </div>
     </footer>
     <script>
@@ -1398,6 +1405,7 @@
 
         displayResults.forEach((result, _index) => {
             const row = document.createElement('tr');
+            if (result._downstreamHref) row.classList.add('downstream-row');
             const labels = result?.ext?.labels;
             const linklabels = result?.ext?.hlabels;
 

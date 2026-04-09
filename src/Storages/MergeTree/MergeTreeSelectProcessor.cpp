@@ -446,6 +446,10 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     UInt16 today = static_cast<UInt16>(DateLUT::instance().toDayNum(now));
     String query_id(CurrentThread::getQueryId());
 
+    String filter_expr;
+    if (prewhere_info)
+        filter_expr = prewhere_info->prewhere_actions.dumpDAG();
+
     for (size_t idx = 0; idx < filter_step_indices.size(); ++idx)
     {
         size_t step_i = filter_step_indices[idx];
@@ -470,6 +474,7 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
             elem.database = cached_storage_id.database_name;
             elem.table = cached_storage_id.table_name;
             elem.query_id = query_id;
+            elem.filter_expression = filter_expr;
             elem.column_name = atom.column_name;
             elem.predicate_class = atom.predicate_class;
             elem.function_name = atom.function_name;

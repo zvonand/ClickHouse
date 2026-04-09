@@ -1365,19 +1365,21 @@ class QueryResultElement extends HTMLElement
                     if (i > 0 && i % 3 == 0) { c = `<u>${c}<\/u>`; }; ++i; return c;
                 }).reverse().join('');
                 td.appendChild(div);
-                this._appendCopyButton(td, text);
+                this._appendCopyButton(td, text, value);
                 return td;
             }
         }
 
         div.appendChild(node);
         td.appendChild(div);
-        this._appendCopyButton(td, text);
+        this._appendCopyButton(td, text, value);
         return td;
     }
 
-    _appendCopyButton(td, text)
+    _appendCopyButton(td, text, value)
     {
+        if (value === null || value === '' || value === 0 || value === '0') return;
+
         let btn = document.createElement('span');
         btn.className = 'cell-copy';
         btn.title = 'Copy to clipboard';

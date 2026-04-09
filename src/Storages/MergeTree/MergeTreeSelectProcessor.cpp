@@ -6,6 +6,7 @@
 #include <DataTypes/DataTypeUUID.h>
 #include <Common/CurrentThread.h>
 #include <Common/DateLUT.h>
+#include <city.h>
 #include <Core/Settings.h>
 #include <Interpreters/Cache/QueryConditionCache.h>
 #include <Interpreters/Context.h>
@@ -401,6 +402,13 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     UInt64 sample_rate = query_context->getSettingsRef()[Setting::predicate_statistics_sample_rate];
     if (sample_rate == 0)
         return;
+
+    if (sample_rate > 1)
+    {
+        auto qid = CurrentThread::getQueryId();
+        if (CityHash_v1_0_2::CityHash64(qid.data(), qid.size()) % sample_rate != 0)
+            return;
+    }
 
     auto predicate_stats_log = query_context->getPredicateStatisticsLog();
     if (!predicate_stats_log)

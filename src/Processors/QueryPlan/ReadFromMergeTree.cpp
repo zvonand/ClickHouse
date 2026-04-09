@@ -3262,54 +3262,54 @@ bool ReadFromMergeTree::supportsSkipIndexesOnDataRead() const
 }
 
 
-void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) const                                                                                                                                                     
-{                                                                                                                                                                                                                                       
+void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) const
+{
     UInt64 sample_rate = context->getSettingsRef()[Setting::predicate_statistics_sample_rate];
-    if (sample_rate == 0)                                                                                                                                                                                                               
+    if (sample_rate == 0)
         return;
-                                                                                                                                                                                                                                        
+
     auto predicate_stats_log = context->getPredicateStatisticsLog();
     if (!predicate_stats_log)
         return;
-                                                                                                                                                                                                                                        
+
     if (result.index_stats.empty())
-        return;                                                                                                                                                                                                                         
-                                                        
+        return;
+
     auto storage_id = data.getStorageID();
     if (storage_id.database_name.empty())
         return;
 
-    PredicateStatisticsLogElement elem;                                                                                                                                                                                                 
+    PredicateStatisticsLogElement elem;
     elem.event_date = static_cast<UInt16>(DateLUT::instance().toDayNum(time(nullptr)));
-    elem.event_time = time(nullptr);                                                                                                                                                                                                    
-    elem.database = storage_id.database_name;             
-    elem.table = storage_id.table_name;                                                                                                                                                                                                 
+    elem.event_time = time(nullptr);
+    elem.database = storage_id.database_name;
+    elem.table = storage_id.table_name;
     elem.query_id = String(CurrentThread::getQueryId());
-                                                                                                                                                                                                                                        
-    UInt64 prev_granules = 0;                             
+
+    UInt64 prev_granules = 0;
     for (const auto & stat : result.index_stats)
-    {                                                                                                                                                                                                                                   
+
         if (stat.type == IndexType::None)
-        {                                                                                                                                                                                                                               
-            prev_granules = stat.num_granules_after;      
+        {
+            prev_granules = stat.num_granules_after;
             continue;
         }
 
-        if (!stat.part_name.empty())                                                                                                                                                                                                    
+        if (!stat.part_name.empty())
             continue;
-                                                                                                                                                                                                                                        
+
         UInt64 total = prev_granules > 0 ? prev_granules : stat.num_granules_after;
         UInt64 after = stat.num_granules_after;
-                                                                                                                                                                                                                                        
+
         elem.index_names.push_back(stat.name.empty() ? indexTypeToString(stat.type) : stat.name);
-        elem.index_types.push_back(indexTypeToString(stat.type));                                                                                                                                                                       
-        elem.total_granules.push_back(total);                                                                                                                                                                                           
+        elem.index_types.push_back(indexTypeToString(stat.type));
+        elem.total_granules.push_back(total);
         elem.granules_after.push_back(after);
-        elem.index_selectivities.push_back(total > 0 ? static_cast<Float64>(after) / static_cast<Float64>(total) : 1.0);                                                                                                                
-                                                                                                                                                                                                                                        
+        elem.index_selectivities.push_back(total > 0 ? static_cast<Float64>(after) / static_cast<Float64>(total) : 1.0);
+
         prev_granules = after;
-    }                                                                                                                                                                                                                                   
-                                                        
+    }
+
     if (!elem.index_names.empty())
         predicate_stats_log->add(std::move(elem));
 }

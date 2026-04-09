@@ -42,7 +42,10 @@ bool DatatypeDatetime::convertImpl(String & out, IParser::Pos & pos)
     {
         datetime_str = getConvertedArgument(fn_name, pos);
         if (Poco::toUpper(datetime_str) == "NULL")
-            out = "NULL";
+        {
+            out = "''";
+            return true;
+        }
         else
         {
             auto inner = fmt::format(
@@ -103,7 +106,8 @@ bool DatatypeDynamic::convertImpl(String & out, IParser::Pos & pos)
             ++pos;
         }
         json_str += '}';
-        out = fmt::format("'{}'", json_str);
+        /// Cast to JSON type for native member access (o.field)
+        out = fmt::format("CAST('{}' AS JSON)", json_str);
         ++pos; /// skip past closing brace to closing paren
         return true;
     }

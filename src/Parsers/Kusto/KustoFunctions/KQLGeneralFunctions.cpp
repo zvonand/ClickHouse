@@ -108,7 +108,11 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
         auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : round_to;
         String bin_value = fmt::format("toInt64({0}/{1}) * {1}", t, bin_sz);
         out = fmt::format(
-            "concat(toString(toInt32((({}) as x) / 3600)),':', toString(toInt32(x % 3600 / 60)),':',toString(toInt32(x % 3600 % 60)))",
+            "concat("
+            "if(abs(toInt64((({0}) as _bv))) >= 86400, concat(toString(intDiv(abs(toInt64(_bv)), 86400)), '.'), ''), "
+            "leftPad(toString(intDiv(abs(toInt64(_bv)) % 86400, 3600)), 2, '0'), ':', "
+            "leftPad(toString(intDiv(abs(toInt64(_bv)) % 3600, 60)), 2, '0'), ':', "
+            "leftPad(toString(abs(toInt64(_bv)) % 60), 2, '0'))",
             bin_value);
     }
     else
@@ -152,7 +156,6 @@ bool BinAt::convertImpl(String & out, IParser::Pos & pos)
 
     auto t1 = fmt::format("toFloat64({})", fixed_point_str);
     auto t2 = fmt::format("toFloat64({})", expression_str);
-    int dir = t2 >= t1 ? 0 : -1;
 
     try
     {
@@ -172,18 +175,24 @@ bool BinAt::convertImpl(String & out, IParser::Pos & pos)
 
     if (original_expr == "datetime" || original_expr == "date")
     {
-        out = fmt::format("toDateTime64({} + toInt64(({} - {}) / {} + {}) * {}, 9, 'UTC')", t1, t2, t1, bin_size, dir, bin_size);
+        auto inner = fmt::format("{0} + toInt64(floor(({1} - {0}) / {2})) * {2}", t1, t2, bin_size);
+        out = fmt::format("substring(replaceOne(toString(toDateTime64({}, 9, 'UTC')), ' ', 'T'), 1, 27)", inner);
     }
     else if (original_expr == "timespan" || original_expr == "time" || ParserKQLDateTypeTimespan().parseConstKQLTimespan(original_expr))
     {
-        String bin_value = fmt::format("{} + toInt64(({} - {}) / {} + {}) * {}", t1, t2, t1, bin_size, dir, bin_size);
+        String bin_value = fmt::format("{0} + toInt64(floor(({1} - {0}) / {2})) * {2}", t1, t2, bin_size);
         out = fmt::format(
-            "concat(toString(toInt32((({}) as x) / 3600)),':', toString(toInt32(x % 3600 / 60)), ':', toString(toInt32(x % 3600 % 60)))",
+            "concat("
+            "if((({0}) as _bv) < 0, '-', ''), "
+            "if(abs(toInt64(_bv)) >= 86400, concat(toString(intDiv(abs(toInt64(_bv)), 86400)), '.'), ''), "
+            "leftPad(toString(intDiv(abs(toInt64(_bv)) % 86400, 3600)), 2, '0'), ':', "
+            "leftPad(toString(intDiv(abs(toInt64(_bv)) % 3600, 60)), 2, '0'), ':', "
+            "leftPad(toString(abs(toInt64(_bv)) % 60), 2, '0'))",
             bin_value);
     }
     else
     {
-        out = fmt::format("{} + toInt64(({} - {}) / {} + {}) * {}", t1, t2, t1, bin_size, dir, bin_size);
+        out = fmt::format("{0} + toInt64(floor(({1} - {0}) / {2})) * {2}", t1, t2, bin_size);
     }
     return true;
 }
@@ -444,7 +453,8 @@ bool ToDateTimeFmt::convertImpl(String & out, IParser::Pos & pos)
     ++pos;
     String format_str = getConvertedArgument(fn_name, pos);
 
-    out = fmt::format("parseDateTimeBestEffort({})", datetime_str);
+    auto inner = fmt::format("parseDateTime64BestEffortOrNull({}, 9, 'UTC')", datetime_str);
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
 

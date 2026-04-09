@@ -462,7 +462,8 @@ bool ParseJSON::convertImpl(String & out, IParser::Pos & pos)
     else
     {
         auto arg = getConvertedArgument(fn_name, pos);
-        out = fmt::format("if (isValidJSON({0}) , JSON_QUERY({0}, '$') , toJSONString({0}))", arg);
+        /// Cast to JSON type for native member access (o.field)
+        out = fmt::format("CAST({0} AS JSON)", arg);
     }
     return true;
 }

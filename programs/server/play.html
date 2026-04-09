@@ -2897,13 +2897,10 @@ async function postOne()
         const selStart = query_area.selectionStart;
         const selEnd = query_area.selectionEnd;
 
-        /// Use boundaries to find which queries overlap with the selection.
-        const tokens = await tokenize(all_text);
-        const boundaries = getQueryBoundaries(tokens, all_text);
+        /// Use start/end offsets from splitAllQueries to find which queries overlap with the selection.
         const selected = [];
-        for (let i = 0; i < boundaries.length && i < parsed.length; ++i) {
-            const b = boundaries[i];
-            if (b.end > selStart && b.start < selEnd) {
+        for (let i = 0; i < parsed.length; ++i) {
+            if (parsed[i].end > selStart && parsed[i].start < selEnd) {
                 selected.push(parsed[i]);
             }
         }
@@ -3286,7 +3283,7 @@ const PARALLELIZABLE_KEYWORDS = new Set([
 /// (after skipping whitespace, comments, and opening brackets).
 async function splitAllQueries(text) {
     if (typeof WebAssembly !== 'object' || typeof WebAssembly.instantiate !== 'function') {
-        return [{ query: text, is_select: PARALLELIZABLE_KEYWORDS.has(text.trimStart().split(/\s/)[0].toUpperCase()) }];
+        return [{ query: text, is_select: PARALLELIZABLE_KEYWORDS.has(text.trimStart().split(/\s/)[0].toUpperCase()), start: 0, end: text.length }];
     }
 
     const tokens = await tokenize(text);
@@ -3294,26 +3291,53 @@ async function splitAllQueries(text) {
     let current_query_start = 0;
     let current_offset = 0;
     let first_keyword = null; /// First significant non-bracket token of the current query.
+    let has_significant = false;
+    let first_significant_offset = -1;
+    let last_significant_end = -1;
 
     for (const elem of tokens) {
         current_offset += elem.token.length;
 
         if (elem.token == ';') {
-            const q = text.substring(current_query_start, current_offset).trim();
-            if (q && q !== ';') {
-                queries.push({ query: q, is_select: first_keyword !== null && PARALLELIZABLE_KEYWORDS.has(first_keyword) });
+            if (has_significant) {
+                const q = text.substring(current_query_start, current_offset).trim();
+                if (q && q !== ';') {
+                    queries.push({
+                        query: q,
+                        is_select: first_keyword !== null && PARALLELIZABLE_KEYWORDS.has(first_keyword),
+                        start: first_significant_offset,
+                        end: last_significant_end,
+                    });
+                }
             }
             current_query_start = current_offset;
             first_keyword = null;
-        } else if (first_keyword === null && elem.significant && elem.token !== '(') {
-            first_keyword = elem.token.toUpperCase();
+            has_significant = false;
+            first_significant_offset = -1;
+            last_significant_end = -1;
+        } else if (elem.significant) {
+            if (!has_significant) {
+                first_significant_offset = current_offset - elem.token.length;
+            }
+            last_significant_end = current_offset;
+            has_significant = true;
+            if (first_keyword === null && elem.token !== '(') {
+                first_keyword = elem.token.toUpperCase();
+            }
         }
     }
 
     /// Last query (no trailing semicolon)
-    const last = text.substring(current_query_start).trim();
-    if (last && last !== ';') {
-        queries.push({ query: last, is_select: first_keyword !== null && PARALLELIZABLE_KEYWORDS.has(first_keyword) });
+    if (has_significant) {
+        const last = text.substring(current_query_start).trim();
+        if (last && last !== ';') {
+            queries.push({
+                query: last,
+                is_select: first_keyword !== null && PARALLELIZABLE_KEYWORDS.has(first_keyword),
+                start: first_significant_offset,
+                end: last_significant_end,
+            });
+        }
     }
 
     return queries;

@@ -157,10 +157,10 @@ public:
         uint32_t remove_nodes_limit,
         RemoveRecursiveCallback callback) override;
 
-    void getChildrenRecursive(
+    void listRecursive(
         const String & path,
         uint32_t get_children_recursive_nodes_limit,
-        GetChildrenRecursiveCallback callback) override;
+        ListRecursiveCallback callback) override;
 
     void exists(
         const String & path,

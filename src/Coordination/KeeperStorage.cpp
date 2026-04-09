@@ -44,7 +44,7 @@ namespace ProfileEvents
     extern const Event KeeperMultiReadRequest;
     extern const Event KeeperGetRequest;
     extern const Event KeeperListRequest;
-    extern const Event KeeperGetChildrenRecursiveRequest;
+    extern const Event KeeperListRecursiveRequest;
     extern const Event KeeperExistsRequest;
     extern const Event KeeperPreprocessElapsedMicroseconds;
     extern const Event KeeperProcessElapsedMicroseconds;
@@ -1529,8 +1529,8 @@ auto callOnConcreteRequestType(Coordination::ZooKeeperRequest & zk_request, F fu
             return function(static_cast<Coordination::ZooKeeperRemoveRequest &>(zk_request));
         case Coordination::OpNum::RemoveRecursive:
             return function(static_cast<Coordination::ZooKeeperRemoveRecursiveRequest &>(zk_request));
-        case Coordination::OpNum::GetChildrenRecursive:
-            return function(static_cast<Coordination::ZooKeeperGetChildrenRecursiveRequest &>(zk_request));
+        case Coordination::OpNum::ListRecursive:
+            return function(static_cast<Coordination::ZooKeeperListRecursiveRequest &>(zk_request));
         case Coordination::OpNum::Exists:
             return function(static_cast<Coordination::ZooKeeperExistsRequest &>(zk_request));
         case Coordination::OpNum::Set:
@@ -2424,14 +2424,14 @@ process(const Coordination::ZooKeeperRemoveRecursiveRequest & zk_request, Storag
 /// GETRECURSIVECHILDREN Request ///
 
 template <typename Storage>
-bool checkAuth(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, int64_t session_id, bool is_local)
+bool checkAuth(const Coordination::ZooKeeperListRecursiveRequest & zk_request, Storage & storage, int64_t session_id, bool is_local)
 {
     return storage.checkACL(zk_request.getPath(), Coordination::ACL::Read, session_id, is_local);
 }
 
 template <typename Storage>
 std::list<KeeperStorageBase::Delta> preprocess(
-    const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request,
+    const Coordination::ZooKeeperListRecursiveRequest & zk_request,
     Storage & storage,
     int64_t zxid,
     int64_t /*session_id*/,
@@ -2439,7 +2439,7 @@ std::list<KeeperStorageBase::Delta> preprocess(
     uint64_t * /*digest*/,
     const KeeperContext & /*keeper_context*/)
 {
-    ProfileEvents::increment(ProfileEvents::KeeperGetChildrenRecursiveRequest);
+    ProfileEvents::increment(ProfileEvents::KeeperListRecursiveRequest);
 
     if (zk_request.path == Coordination::keeper_api_feature_flags_path
         || zk_request.path == Coordination::keeper_config_path
@@ -2454,9 +2454,9 @@ std::list<KeeperStorageBase::Delta> preprocess(
 
 template <bool local, typename Storage>
 Coordination::ZooKeeperResponsePtr
-processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
+processImpl(const Coordination::ZooKeeperListRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
 {
-    auto response = std::make_shared<Coordination::ZooKeeperGetChildrenRecursiveResponse>();
+    auto response = std::make_shared<Coordination::ZooKeeperListRecursiveResponse>();
 
     if constexpr (!local)
     {
@@ -2480,11 +2480,9 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
     }
 
     response->children.push_back(std::string{zk_request.path});
-    size_t frontier = 0;
-
-    while (frontier < response->children.size())
+    for (size_t frontier = 0; frontier < response->children.size(); ++frontier)
     {
-        const std::string & current_path = response->children[frontier++];
+        const std::string & current_path = response->children[frontier];
         std::filesystem::path current_path_fs(current_path);
 
         if constexpr (Storage::use_rocksdb)
@@ -2535,16 +2533,16 @@ processImpl(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_reques
 }
 
 template <typename Storage>
-Coordination::ZooKeeperResponsePtr process(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
+Coordination::ZooKeeperResponsePtr process(const Coordination::ZooKeeperListRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
 {
     return processImpl<false>(zk_request, storage, std::move(deltas), session_id);
 }
 
 template <typename Storage>
 Coordination::ZooKeeperResponsePtr
-processLocal(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
+processLocal(const Coordination::ZooKeeperListRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
 {
-    ProfileEvents::increment(ProfileEvents::KeeperGetChildrenRecursiveRequest);
+    ProfileEvents::increment(ProfileEvents::KeeperListRecursiveRequest);
     return processImpl<true>(zk_request, storage, std::move(deltas), session_id);
 }
 

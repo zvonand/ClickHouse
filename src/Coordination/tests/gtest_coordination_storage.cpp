@@ -1540,7 +1540,7 @@ TYPED_TEST(CoordinationTest, TestTryRemove)
     }
 }
 
-TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
+TYPED_TEST(CoordinationTest, TestListRecursiveRequest)
 {
     using namespace DB;
     using namespace Coordination;
@@ -1579,7 +1579,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
     {
         int new_zxid = ++zxid;
 
-        auto request = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>();
+        auto request = std::make_shared<ZooKeeperListRecursiveRequest>();
         request->path = path;
         request->children_nodes_limit = limit;
 
@@ -1587,7 +1587,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
         auto responses = storage.processRequest(request, 1, new_zxid);
 
         EXPECT_EQ(responses.size(), 1);
-        const auto & response = dynamic_cast<ZooKeeperGetChildrenRecursiveResponse &>(*responses[0].response);
+        const auto & response = dynamic_cast<ZooKeeperListRecursiveResponse &>(*responses[0].response);
         return {response.error, response.children};
     };
 
@@ -1595,7 +1595,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
     {
         int new_zxid = ++zxid;
 
-        auto request = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>();
+        auto request = std::make_shared<ZooKeeperListRecursiveRequest>();
         request->path = path;
         request->children_nodes_limit = limit;
 
@@ -1728,7 +1728,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveRequest)
 
 }
 
-TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveInMultiRequest)
+TYPED_TEST(CoordinationTest, TestListRecursiveInMultiRequest)
 {
     using namespace DB;
     using namespace Coordination;
@@ -1772,9 +1772,9 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveInMultiRequest)
     ASSERT_TRUE(exists("/M/C"));
 
     {
-        SCOPED_TRACE("GetChildrenRecursive in multi-read returns correct results");
+        SCOPED_TRACE("ListRecursive in multi-read returns correct results");
 
-        auto get_req = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>();
+        auto get_req = std::make_shared<ZooKeeperListRecursiveRequest>();
         get_req->path = "/M";
         get_req->children_nodes_limit = 100;
 
@@ -1791,7 +1791,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveInMultiRequest)
         ASSERT_EQ(multi_response->responses.size(), 1);
         ASSERT_EQ(multi_response->responses[0]->error, Error::ZOK);
 
-        const auto & get_response = dynamic_cast<ZooKeeperGetChildrenRecursiveResponse &>(*multi_response->responses[0]);
+        const auto & get_response = dynamic_cast<ZooKeeperListRecursiveResponse &>(*multi_response->responses[0]);
         std::unordered_set<String> child_set(get_response.children.begin(), get_response.children.end());
         ASSERT_EQ(child_set.size(), 3);
         ASSERT_TRUE(child_set.contains("/M/A"));
@@ -1800,7 +1800,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveInMultiRequest)
     }
 }
 
-TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveAcls)
+TYPED_TEST(CoordinationTest, TestListRecursiveAcls)
 {
     using namespace DB;
     using namespace Coordination;
@@ -1841,7 +1841,7 @@ TYPED_TEST(CoordinationTest, TestGetChildrenRecursiveAcls)
     {
         int new_zxid = ++zxid;
 
-        auto get_request = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>();
+        auto get_request = std::make_shared<ZooKeeperListRecursiveRequest>();
         get_request->path = "/acl_node";
         get_request->children_nodes_limit = 100;
 

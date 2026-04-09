@@ -70,7 +70,7 @@ namespace ProfileEvents
     extern const Event ZooKeeperSync;
     extern const Event ZooKeeperClose;
     extern const Event ZooKeeperGetACL;
-    extern const Event ZooKeeperGetChildrenRecursive;
+    extern const Event ZooKeeperListRecursive;
     extern const Event ZooKeeperWaitMicroseconds;
     extern const Event ZooKeeperBytesSent;
     extern const Event ZooKeeperBytesReceived;
@@ -1640,25 +1640,25 @@ void ZooKeeper::removeRecursive(
     ProfileEvents::increment(ProfileEvents::ZooKeeperRemove);
 }
 
-void ZooKeeper::getChildrenRecursive(
+void ZooKeeper::listRecursive(
     const String & path,
     uint32_t get_children_recursive_nodes_limit,
-    GetChildrenRecursiveCallback callback)
+    ListRecursiveCallback callback)
 {
     if (!isFeatureEnabled(KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
-        throw Exception::fromMessage(Error::ZBADARGUMENTS, "GetChildrenRecursive request type cannot be used because it's not supported by the server");
+        throw Exception::fromMessage(Error::ZBADARGUMENTS, "ListRecursive request type cannot be used because it's not supported by the server");
 
-    ZooKeeperGetChildrenRecursiveRequest request;
+    ZooKeeperListRecursiveRequest request;
     request.path = path;
     request.children_nodes_limit = get_children_recursive_nodes_limit;
 
     instrumentResponseTimeMetric(callback, HistogramMetrics::KeeperResponseTimeReadonly);
 
     RequestInfo request_info;
-    request_info.request = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>(std::move(request));
-    request_info.callback = [callback](const Response & response) { callback(dynamic_cast<const GetChildrenRecursiveResponse &>(response)); };
+    request_info.request = std::make_shared<ZooKeeperListRecursiveRequest>(std::move(request));
+    request_info.callback = [callback](const Response & response) { callback(dynamic_cast<const ListRecursiveResponse &>(response)); };
     pushRequest(std::move(request_info));
-    ProfileEvents::increment(ProfileEvents::ZooKeeperGetChildrenRecursive);
+    ProfileEvents::increment(ProfileEvents::ZooKeeperListRecursive);
 }
 
 void ZooKeeper::exists(

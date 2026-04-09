@@ -1181,14 +1181,14 @@ Coordination::Error ZooKeeper::tryRemoveRecursive(const std::string & path, uint
     return code;
 }
 
-Strings ZooKeeper::getChildrenRecursive(const std::string & path, uint32_t children_nodes_limit)
+Strings ZooKeeper::listRecursive(const std::string & path, uint32_t children_nodes_limit)
 {
     Strings res;
-    check(tryGetChildrenRecursive(path, res, children_nodes_limit), path);
+    check(tryListRecursive(path, res, children_nodes_limit), path);
     return res;
 }
 
-Coordination::Error ZooKeeper::tryGetChildrenRecursive(const std::string & path, Strings & res, uint32_t children_nodes_limit)
+Coordination::Error ZooKeeper::tryListRecursive(const std::string & path, Strings & res, uint32_t children_nodes_limit)
 {
     std::optional<DB::OpenTelemetry::SpanHolder> maybe_span;
     if (sampleForOpenTelemetryTracing())
@@ -1206,20 +1206,20 @@ Coordination::Error ZooKeeper::tryGetChildrenRecursive(const std::string & path,
     if (!isFeatureEnabled(DB::KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
         return Coordination::Error::ZBADARGUMENTS;
 
-    auto promise = std::make_shared<std::promise<Coordination::GetChildrenRecursiveResponse>>();
+    auto promise = std::make_shared<std::promise<Coordination::ListRecursiveResponse>>();
     auto future = promise->get_future();
 
-    auto callback = [promise](const Coordination::GetChildrenRecursiveResponse & response) mutable
+    auto callback = [promise](const Coordination::ListRecursiveResponse & response) mutable
     {
         promise->set_value(response);
     };
 
-    impl->getChildrenRecursive(path, children_nodes_limit, std::move(callback));
+    impl->listRecursive(path, children_nodes_limit, std::move(callback));
 
     if (future.wait_for(std::chrono::milliseconds(args.operation_timeout_ms)) != std::future_status::ready)
     {
         maybeSetSpanStatus(maybe_span, Coordination::Error::ZOPERATIONTIMEOUT);
-        impl->finalize(fmt::format("Operation timeout on {} {}", Coordination::OpNum::GetChildrenRecursive, path));
+        impl->finalize(fmt::format("Operation timeout on {} {}", Coordination::OpNum::ListRecursive, path));
         return Coordination::Error::ZOPERATIONTIMEOUT;
     }
 
@@ -2001,9 +2001,9 @@ Coordination::RequestPtr makeRemoveRecursiveRequest(const Client & client, const
 template Coordination::RequestPtr makeRemoveRecursiveRequest<zkutil::ZooKeeper>(const zkutil::ZooKeeper & client, const std::string & path, uint32_t remove_nodes_limit);
 template Coordination::RequestPtr makeRemoveRecursiveRequest<DB::ZooKeeperWithFaultInjection>(const DB::ZooKeeperWithFaultInjection & client, const std::string & path, uint32_t remove_nodes_limit);
 
-Coordination::RequestPtr makeGetChildrenRecursiveRequest(const std::string & path, uint32_t children_nodes_limit)
+Coordination::RequestPtr makeListRecursiveRequest(const std::string & path, uint32_t children_nodes_limit)
 {
-    auto request = std::make_shared<Coordination::ZooKeeperGetChildrenRecursiveRequest>();
+    auto request = std::make_shared<Coordination::ZooKeeperListRecursiveRequest>();
     request->path = path;
     request->children_nodes_limit = children_nodes_limit;
     return request;

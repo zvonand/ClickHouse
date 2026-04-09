@@ -460,7 +460,7 @@ struct RemoveRecursiveResponse : virtual Response
 };
 
 
-struct GetChildrenRecursiveResponse : virtual Response
+struct ListRecursiveResponse : virtual Response
 {
     std::vector<String> children;
 
@@ -567,7 +567,7 @@ struct ListResponse : virtual Response
     }
 };
 
-struct GetChildrenRecursiveRequest : virtual ListRequest
+struct ListRecursiveRequest : virtual ListRequest
 {
     /// strict limit for number of listed nodes
     uint32_t children_nodes_limit = std::numeric_limits<uint32_t>::max();
@@ -691,7 +691,7 @@ using SyncCallback = std::function<void(const SyncResponse &)>;
 using ReconfigCallback = std::function<void(const ReconfigResponse &)>;
 using MultiCallback = std::function<void(const MultiResponse &)>;
 using GetACLCallback = std::function<void(const GetACLResponse &)>;
-using GetChildrenRecursiveCallback = std::function<void(const GetChildrenRecursiveResponse &)>;
+using ListRecursiveCallback = std::function<void(const ListRecursiveResponse &)>;
 
 /// For watches.
 enum State
@@ -796,10 +796,10 @@ public:
         uint32_t remove_nodes_limit,
         RemoveRecursiveCallback callback) = 0;
 
-    virtual void getChildrenRecursive(
+    virtual void listRecursive(
         const String & path,
         uint32_t get_children_recursive_nodes_limit,
-        GetChildrenRecursiveCallback callback) = 0;
+        ListRecursiveCallback callback) = 0;
 
     virtual void exists(
         const String & path,

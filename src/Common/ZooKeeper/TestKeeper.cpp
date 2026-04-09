@@ -133,10 +133,10 @@ struct TestKeeperRemoveRecursiveRequest final : RemoveRecursiveRequest, TestKeep
     }
 };
 
-struct TestKeeperGetChildrenRecursiveRequest final : GetChildrenRecursiveRequest, TestKeeperRequest
+struct TestKeeperListRecursiveRequest final : ListRecursiveRequest, TestKeeperRequest
 {
-    TestKeeperGetChildrenRecursiveRequest() = default;
-    explicit TestKeeperGetChildrenRecursiveRequest(const GetChildrenRecursiveRequest & base) : GetChildrenRecursiveRequest(base) {}
+    TestKeeperListRecursiveRequest() = default;
+    explicit TestKeeperListRecursiveRequest(const ListRecursiveRequest & base) : ListRecursiveRequest(base) {}
     ResponsePtr createResponse() const override;
     std::pair<ResponsePtr, Undo> process(TestKeeper::Container & container, int64_t zxid) const override;
 };
@@ -280,10 +280,10 @@ struct TestKeeperMultiRequest final : MultiRequest<RequestPtr>, TestKeeperReques
                 validateOrSpecifyRequestType(/*is_read=*/true);
                 requests.push_back(std::make_shared<TestKeeperGetRequest>(*concrete_request_get));
             }
-            else if (const auto * concrete_request_get_children_recursive = dynamic_cast<const GetChildrenRecursiveRequest *>(generic_request.get()))
+            else if (const auto * concrete_request_list_recursive = dynamic_cast<const ListRecursiveRequest *>(generic_request.get()))
             {
                 validateOrSpecifyRequestType(/*is_read=*/true);
-                requests.push_back(std::make_shared<TestKeeperGetChildrenRecursiveRequest>(*concrete_request_get_children_recursive));
+                requests.push_back(std::make_shared<TestKeeperListRecursiveRequest>(*concrete_request_list_recursive));
             }
             else if (const auto * concrete_request_list = dynamic_cast<const ListRequest *>(generic_request.get()))
             {
@@ -522,16 +522,16 @@ std::pair<ResponsePtr, Undo> TestKeeperGetRequest::process(TestKeeper::Container
     return { std::make_shared<GetResponse>(response), {} };
 }
 
-std::pair<ResponsePtr, Undo> TestKeeperGetChildrenRecursiveRequest::process(TestKeeper::Container & container, int64_t zxid) const
+std::pair<ResponsePtr, Undo> TestKeeperListRecursiveRequest::process(TestKeeper::Container & container, int64_t zxid) const
 {
-    GetChildrenRecursiveResponse response;
+    ListRecursiveResponse response;
     response.zxid = zxid;
 
     auto it = container.find(path);
     if (it == container.end())
     {
         response.error = Error::ZNONODE;
-        return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
+        return { std::make_shared<ListRecursiveResponse>(response), {} };
     }
 
     const auto path_with_slash = (path == "/") ? path : path + "/";
@@ -545,7 +545,7 @@ std::pair<ResponsePtr, Undo> TestKeeperGetChildrenRecursiveRequest::process(Test
 
     response.children = std::move(children);
     response.error = Error::ZOK;
-    return { std::make_shared<GetChildrenRecursiveResponse>(response), {} };
+    return { std::make_shared<ListRecursiveResponse>(response), {} };
 }
 
 std::pair<ResponsePtr, Undo> TestKeeperSetRequest::process(TestKeeper::Container & container, int64_t zxid) const
@@ -825,7 +825,7 @@ ResponsePtr TestKeeperSyncRequest::createResponse() const { return std::make_sha
 ResponsePtr TestKeeperReconfigRequest::createResponse() const { return std::make_shared<ReconfigResponse>(); }
 ResponsePtr TestKeeperGetACLRequest::createResponse() const { return std::make_shared<GetACLResponse>(); }
 ResponsePtr TestKeeperMultiRequest::createResponse() const { return std::make_shared<MultiResponse>(); }
-ResponsePtr TestKeeperGetChildrenRecursiveRequest::createResponse() const { return std::make_shared<GetChildrenRecursiveResponse>(); }
+ResponsePtr TestKeeperListRecursiveRequest::createResponse() const { return std::make_shared<ListRecursiveResponse>(); }
 
 
 TestKeeper::TestKeeper(const zkutil::ZooKeeperArgs & args_)
@@ -1088,18 +1088,18 @@ void TestKeeper::removeRecursive(
     pushRequest(std::move(request_info));
 }
 
-void TestKeeper::getChildrenRecursive(
+void TestKeeper::listRecursive(
     const String & path,
     uint32_t get_children_recursive_nodes_limit,
-    GetChildrenRecursiveCallback callback)
+    ListRecursiveCallback callback)
 {
-    TestKeeperGetChildrenRecursiveRequest request;
+    TestKeeperListRecursiveRequest request;
     request.path = path;
     request.children_nodes_limit = get_children_recursive_nodes_limit;
 
     RequestInfo request_info;
-    request_info.request = std::make_shared<TestKeeperGetChildrenRecursiveRequest>(std::move(request));
-    request_info.callback = [callback](const Response & response) { callback(dynamic_cast<const GetChildrenRecursiveResponse &>(response)); };
+    request_info.request = std::make_shared<TestKeeperListRecursiveRequest>(std::move(request));
+    request_info.callback = [callback](const Response & response) { callback(dynamic_cast<const ListRecursiveResponse &>(response)); };
     pushRequest(std::move(request_info));
 }
 

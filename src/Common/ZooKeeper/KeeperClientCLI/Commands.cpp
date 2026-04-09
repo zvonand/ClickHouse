@@ -114,7 +114,7 @@ void LSRCommand::execute(const ASTKeeperQuery * query, KeeperClientBase * client
 {
     if (!client->zookeeper->isFeatureEnabled(DB::KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
     {
-        client->cerr << "GetChildrenRecursive is not supported by this Keeper cluster.\n";
+        client->cerr << "ListRecursive is not supported by this Keeper cluster.\n";
         return;
     }
 
@@ -151,7 +151,7 @@ void LSRCommand::execute(const ASTKeeperQuery * query, KeeperClientBase * client
     }
 
     Strings children;
-    auto err = client->zookeeper->tryGetChildrenRecursive(path, children, children_limit);
+    auto err = client->zookeeper->tryListRecursive(path, children, children_limit);
     if (err != Coordination::Error::ZOK)
     {
         client->cerr << "Coordination error: " << Coordination::errorMessage(err) << ", path " << path << '\n';

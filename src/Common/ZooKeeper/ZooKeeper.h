@@ -454,9 +454,9 @@ public:
     Coordination::Error tryRemoveRecursive(const std::string & path, uint32_t remove_nodes_limit = 1000);
 
     /// Lists all descendant paths under `path`.
-    Strings getChildrenRecursive(const std::string & path, uint32_t children_nodes_limit = 1000000);
+    Strings listRecursive(const std::string & path, uint32_t children_nodes_limit = 1000000);
 
-    Coordination::Error tryGetChildrenRecursive(const std::string & path, Strings & res, uint32_t children_nodes_limit = 1000000);
+    Coordination::Error tryListRecursive(const std::string & path, Strings & res, uint32_t children_nodes_limit = 1000000);
 
     /// Similar to removeRecursive(...) and tryRemoveRecursive(...), but does not remove path itself.
     /// Node defined as RemoveException will not be deleted.

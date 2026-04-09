@@ -176,13 +176,13 @@ void KeeperOverDispatcher::get(
     keeper_dispatcher->putLocalReadRequest(request, session_id);
 }
 
-void KeeperOverDispatcher::getChildrenRecursive(
+void KeeperOverDispatcher::listRecursive(
     const String & path,
     uint32_t get_children_recursive_nodes_limit,
-    GetChildrenRecursiveCallback callback)
+    ListRecursiveCallback callback)
 {
 
-    const auto request = std::make_shared<ZooKeeperGetChildrenRecursiveRequest>();
+    const auto request = std::make_shared<ZooKeeperListRecursiveRequest>();
     request->path = path;
     request->children_nodes_limit = get_children_recursive_nodes_limit;
     request->xid = next_xid++;
@@ -191,7 +191,7 @@ void KeeperOverDispatcher::getChildrenRecursive(
         std::lock_guard lock(callback_state->callbacks_mutex);
         callback_state->callbacks[request->xid] = [callback](const ZooKeeperResponsePtr & response)
         {
-            callback(dynamic_cast<const GetChildrenRecursiveResponse &>(*response));
+            callback(dynamic_cast<const ListRecursiveResponse &>(*response));
         };
     }
 

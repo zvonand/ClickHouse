@@ -62,10 +62,10 @@ public:
         GetCallback callback,
         WatchCallbackPtrOrEventPtr watch) override;
 
-    void getChildrenRecursive(
+    void listRecursive(
         const String & path,
         uint32_t get_children_recursive_nodes_limit,
-        GetChildrenRecursiveCallback callback) override;
+        ListRecursiveCallback callback) override;
 
     void set(
         const String & path,

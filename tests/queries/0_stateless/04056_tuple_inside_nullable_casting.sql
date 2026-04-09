@@ -349,3 +349,22 @@ SELECT a, b, accurateCastOrNull((a, b)::Tuple(Int32, Nullable(Int32)), 'Tuple(UI
 SELECT a, accurateCast((a,)::Tuple(Int32), 'Tuple(UInt8)') AS r, toTypeName(r) FROM test_cast_tuple WHERE a >= 0 AND a <= 255;
 SELECT a, b, accurateCastOrDefault((a, b)::Tuple(Int32, Nullable(Int32)), 'Tuple(UInt8, Nullable(UInt8))') AS r, toTypeName(r) FROM test_cast_tuple;
 SELECT a, b, CAST((a, b)::Tuple(Int32, Nullable(Int32)), 'Tuple(UInt8, Nullable(UInt8))') AS r, toTypeName(r) FROM test_cast_tuple;
+
+-- =====================
+-- Point type (alias for Tuple(Float64, Float64)).
+-- =====================
+
+-- Basic: non-null tuple to Point.
+SELECT accurateCastOrNull(tuple(1, 2), 'Point') AS r, toTypeName(r);
+-- Tuple with NULL element: whole tuple becomes NULL.
+SELECT accurateCastOrNull(tuple(NULL, 1), 'Point') AS r, toTypeName(r);
+-- NULL input.
+SELECT accurateCastOrNull(NULL, 'Point') AS r, toTypeName(r);
+-- Verify result type.
+SELECT toTypeName(accurateCastOrNull(tuple(1.5, 2.5), 'Point'));
+-- Verify non-null result is accessible.
+SELECT tupleElement(accurateCastOrNull(tuple(3, 4), 'Point'), 1), tupleElement(accurateCastOrNull(tuple(3, 4), 'Point'), 2);
+-- Nullable target elements inside Tuple.
+SELECT accurateCastOrNull(tuple(1, 2), 'Tuple(Nullable(Float64), Nullable(Float64))') AS r, toTypeName(r);
+SELECT toTypeName(accurateCastOrNull(tuple(1, 2), 'Tuple(Nullable(Float64), Nullable(Float64))'));
+SELECT accurateCastOrNull((SELECT modulo(intDiv(intDiv(plus((SELECT DISTINCT toInt128(2147483646) QUALIFY minus(256, -1) LIMIT 100, 7), accurateCastOrNull('\'', 'Int8')), (SELECT 1023 GROUP BY 1)), intDiv(-2147483648, 100)), NULL), -9223372036854775808 LIMIT -2147483647), 'Point') AS r, toTypeName(r);

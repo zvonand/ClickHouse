@@ -1093,19 +1093,13 @@ class QueryResultElement extends HTMLElement
                 {
                     display: none;
                     position: absolute;
-                    bottom: 100%;
-                    right: -1px;
+                    top: -1px;
+                    left: 100%;
                     padding: 0.25rem;
                     cursor: pointer;
                     filter: invert(1);
                     background-color: var(--element-background-color);
                     z-index: 1;
-                }
-
-                tbody tr:first-child .cell-copy
-                {
-                    bottom: auto;
-                    top: 100%;
                 }
 
                 .cell-copy svg

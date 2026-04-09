@@ -120,7 +120,8 @@ static DB::Strings pickCodecSubset(RandomGenerator & rg, const DB::Strings & poo
     {
         std::vector<uint32_t> ids;
         const uint32_t ncodecs = rg.randomInt<uint32_t>(1, std::min(UINT32_C(4), static_cast<uint32_t>(pool.size())));
-        for (size_t i = 0; i < ncodecs; i++)
+
+        for (size_t i = 0; i < pool.size(); i++)
         {
             ids.emplace_back(static_cast<uint32_t>(i));
         }

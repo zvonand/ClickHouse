@@ -3703,7 +3703,7 @@ def test_rabbitmq_default_mode_nack_on_parse_error(rabbitmq_cluster, db, unique)
         )
 
     # Wait for the error to appear in logs, proving the messages were consumed
-    instance.wait_for_log_line("Failed to push to views.*CANNOT_PARSE_INPUT_ASSERTION_FAILED")
+    instance.wait_for_log_line("Failed to push to views.*Cannot parse input")
 
     # Bad messages must arrive in the dead-letter queue (proving they were nack'd)
     dead_letters = []

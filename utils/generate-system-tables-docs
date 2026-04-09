@@ -233,7 +233,7 @@ def add_markers_to_file(content, columns_md):
         # Major sections are: headings (## or **See Also**, **Example**),
         # or specific patterns that indicate end of column documentation.
         section_pattern = re.compile(
-            r"^(?:#{1,3}\s|\*\*(?:See Also|Example|See also))",
+            r"^(?:#{1,3}\s|\*\*(?:See Also|Example|See also)\*\*)",
             re.MULTILINE,
         )
         section_match = section_pattern.search(rest)

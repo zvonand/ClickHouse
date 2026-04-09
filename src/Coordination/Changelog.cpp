@@ -1874,6 +1874,7 @@ Changelog::Changelog(
     catch (...)
     {
         tryLogCurrentException(log);
+        
         throw;
     }
 }

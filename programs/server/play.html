@@ -1102,10 +1102,11 @@ class QueryResultElement extends HTMLElement
                     position: absolute;
                     top: 0;
                     left: 0;
-                    width: 100%;
+                    right: 0;
                     min-height: 100%;
                     max-height: 50vh;
-                    overflow: auto;
+                    white-space: pre-wrap;
+                    overflow-y: auto;
                     scrollbar-width: thin;
                     filter: invert(1);
                     background-color: var(--element-background-color);

@@ -43,3 +43,12 @@ CREATE TABLE t_extreme_compress (x UInt64)
 INSERT INTO t_extreme_compress SELECT number FROM numbers(1000);
 SELECT count() FROM t_extreme_compress;
 DROP TABLE t_extreme_compress;
+
+-- Test 6: Column-level max_compress_block_size override on wide parts
+-- Covers the clamp in MergeTreeDataPartWriterWide::addStreams
+CREATE TABLE t_extreme_compress (x UInt64, s String SETTINGS (max_compress_block_size = 9223372036854775807))
+    ENGINE = MergeTree() ORDER BY x
+    SETTINGS min_bytes_for_wide_part = 0;
+INSERT INTO t_extreme_compress SELECT number, toString(number) FROM numbers(1000);
+SELECT count() FROM t_extreme_compress;
+DROP TABLE t_extreme_compress;

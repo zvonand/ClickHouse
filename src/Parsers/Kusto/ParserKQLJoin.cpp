@@ -123,14 +123,11 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
             return false;
     }
 
-    /// Format the right subquery as SQL
-    String right_sql = right_select_node->formatWithSecretsOneLine();
-
     /// Build join conditions - handle simple column name joins
     /// In KQL "on col" means "on left.col = right.col"
     /// We add suffix "1" for the right table columns (ClickHouse join convention)
     String sql_on;
-    if (on_conditions.find("==") == String::npos && on_conditions.find("=") == String::npos)
+    if (on_conditions.find("==") == String::npos && on_conditions.find('=') == String::npos)
     {
         /// Simple column name - KQL convention: on col means left.col = right.col
         /// ClickHouse renames duplicate columns with suffix "1" in joins

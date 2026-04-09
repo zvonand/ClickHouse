@@ -593,26 +593,54 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "from")
             return false;
         ++pos;
+        String start_raw(pos->begin, pos->end);
         String start_val = IParserKQLFunction::getExpression(pos);
-        ++pos;
+        /// getExpression may or may not advance pos past the token
+        /// Check if we're already at 'to', if not advance
+        if (isValidKQLPos(pos) && String(pos->begin, pos->end) != "to")
+            ++pos;
         if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "to")
             return false;
         ++pos;
         String end_val = IParserKQLFunction::getExpression(pos);
-        ++pos;
+        if (isValidKQLPos(pos) && String(pos->begin, pos->end) != "step")
+            ++pos;
         if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "step")
             return false;
         ++pos;
+        String step_raw(pos->begin, pos->end);
         String step_val = IParserKQLFunction::getExpression(pos);
-        ++pos;
+        /// Advance past the step value if needed
+        if (isValidKQLPos(pos) && pos->type != TokenType::PipeMark && pos->type != TokenType::Semicolon)
+            ++pos;
+
+        /// Detect if this is a timespan range (original tokens were timespan literals)
+        bool is_timespan_range = (start_raw != start_val || step_raw != step_val);
 
         /// Build range as a SQL subquery
-        String range_sql = fmt::format(
-            "SELECT arrayJoin(if(({3}) > 0, "
+        String range_expr = fmt::format(
+            "arrayJoin(if(({3}) > 0, "
             "arrayMap(x -> ({1}) + x * ({3}), range(0, toUInt64((({2}) - ({1})) / ({3})) + 1)), "
             "arrayMap(x -> ({1}) + x * ({3}), range(0, toUInt64((({1}) - ({2})) / abs({3})) + 1))"
-            ")) AS {0}",
+            "))",
             col_name, start_val, end_val, step_val);
+
+        /// For timespan ranges, wrap output in timespan formatter
+        String range_sql;
+        if (is_timespan_range)
+        {
+            range_sql = fmt::format(
+                "SELECT concat("
+                "if((_v) < 0, '-', ''), "
+                "if(abs(toInt64(_v)) >= 86400, concat(toString(intDiv(abs(toInt64(_v)), 86400)), '.'), ''), "
+                "leftPad(toString(intDiv(abs(toInt64(_v)) %% 86400, 3600)), 2, '0'), ':', "
+                "leftPad(toString(intDiv(abs(toInt64(_v)) %% 3600, 60)), 2, '0'), ':', "
+                "leftPad(toString(abs(toInt64(_v)) %% 60), 2, '0')) AS {0} "
+                "FROM (SELECT {1} AS _v)",
+                col_name, range_expr);
+        }
+        else
+            range_sql = fmt::format("SELECT {} AS {}", range_expr, col_name);
 
         /// Collect remaining text (pipe operations + semicolon)
         String remaining;

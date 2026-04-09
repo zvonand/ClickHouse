@@ -325,9 +325,20 @@ void IParserKQLFunction::validateEndOfFunction(const String & fn_name, IParser::
         throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Too many arguments in function: {}", fn_name);
 }
 
+static String formatTimespanSQL(const String & seconds_expr)
+{
+    return "concat("
+        "if(toInt64(" + seconds_expr + ") < 0, '-', ''), "
+        "if(abs(toInt64(" + seconds_expr + ")) >= 86400, concat(toString(intDiv(abs(toInt64(" + seconds_expr + ")), 86400)), '.'), ''), "
+        "leftPad(toString(intDiv(abs(toInt64(" + seconds_expr + ")) % 86400, 3600)), 2, '0'), ':', "
+        "leftPad(toString(intDiv(abs(toInt64(" + seconds_expr + ")) % 3600, 60)), 2, '0'), ':', "
+        "leftPad(toString(abs(toInt64(" + seconds_expr + ")) % 60), 2, '0'))";
+}
+
 String IParserKQLFunction::getExpression(IParser::Pos & pos)
 {
     String arg(pos->begin, pos->end);
+    bool is_timespan = false;
     auto parseConstTimespan = [&]()
     {
         ParserKQLDateTypeTimespan time_span;
@@ -335,7 +346,10 @@ String IParserKQLFunction::getExpression(IParser::Pos & pos)
         Expected expected;
 
         if (time_span.parse(pos, node, expected))
+        {
             arg = boost::lexical_cast<std::string>(time_span.toSeconds());
+            is_timespan = true;
+        }
     };
 
     if (pos->type == TokenType::BareWord)
@@ -397,6 +411,26 @@ String IParserKQLFunction::getExpression(IParser::Pos & pos)
             ++pos;
         }
         arg = fmt::format("[ {0} >=0 ? {0} + 1 : {0}]", array_index);
+    }
+
+    /// If this was a timespan literal and it's NOT in an arithmetic context,
+    /// format it as a KQL timespan string (d.hh:mm:ss)
+    if (is_timespan)
+    {
+        auto next = pos;
+        ++next;
+        bool next_is_arithmetic = isValidKQLPos(next)
+            && (next->type == TokenType::Plus || next->type == TokenType::Minus
+                || next->type == TokenType::Asterisk || next->type == TokenType::Slash
+                || next->type == TokenType::Percent);
+        auto prev = pos;
+        --prev;
+        bool prev_is_arithmetic = prev.isValid()
+            && (prev->type == TokenType::Plus || prev->type == TokenType::Minus
+                || prev->type == TokenType::Asterisk || prev->type == TokenType::Slash
+                || prev->type == TokenType::Percent);
+        if (!next_is_arithmetic && !prev_is_arithmetic)
+            arg = formatTimespanSQL(arg);
     }
 
     return arg;

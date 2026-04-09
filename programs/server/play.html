@@ -1230,6 +1230,11 @@ class QueryResultElement extends HTMLElement
         this.style.outline = 'none';
         this.addEventListener('keydown', (e) => this._handleKeyDown(e));
 
+        /* Clicking on non-data areas (e.g. table header) deactivates the selected cell */
+        this.shadowRoot.addEventListener('click', (e) => {
+            if (!e.target.closest('td') || e.target.closest('.row-number')) this.clearSelection();
+        });
+
         new ResizeObserver(() => this._resizeChart()).observe(this._chart);
     }
 
@@ -2821,6 +2826,13 @@ function formatReadableRows(rows) {
 document.getElementById('query').addEventListener('focus', e => {
     resultEl.clearSelection();
 });
+
+/* Clicking outside data cells deactivates the selected cell */
+document.addEventListener('click', e => {
+    if (e.target.closest('textarea, input, query-result')) return;
+    resultEl.clearSelection();
+});
+
 
 function appendTextareaResizer() {
     const queryDiv = document.getElementById('query_div');

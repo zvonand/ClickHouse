@@ -40,7 +40,7 @@ struct HighlightQueryImpl
         const char * end = begin + query.size();
 
         Tokens tokens(begin, end, /* max_query_size = */ 0, /* skip_insignificant = */ true);
-        IParser::Pos token_iterator(tokens, settings.max_parser_depth, settings.max_parser_backtracks);
+        IParser::Pos token_iterator(tokens, static_cast<uint32_t>(settings.max_parser_depth), static_cast<uint32_t>(settings.max_parser_backtracks));
 
         Expected expected;
         expected.enable_highlighting = true;
@@ -98,7 +98,7 @@ and escape characters are highlighted separately.
         .syntax = "highlightQuery(query)",
         .arguments = {{"query", "A ClickHouse SQL query string. String."}},
         .returned_value = {"An array of named tuples `(begin UInt64, end UInt64, type Enum8(...))` representing highlighted ranges.", {"Array(Tuple(begin UInt64, end UInt64, type Enum8(...)))"}},
-        .examples = {{"simple", "SELECT highlightQuery('SELECT 1')", R"([('0','6','keyword'),('7','8','number')])"}},
+        .examples = {{"simple", "SELECT highlightQuery('SELECT 1')", R"([(0,6,'keyword'),(7,8,'number')])"}},
         .introduced_in = {26, 4},
         .category = FunctionDocumentation::Category::Other,
     });

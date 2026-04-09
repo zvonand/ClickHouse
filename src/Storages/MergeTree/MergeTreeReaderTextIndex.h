@@ -29,7 +29,8 @@ public:
         const IMergeTreeReader * main_reader_,
         MergeTreeIndexWithCondition index_,
         NamesAndTypesList columns_,
-        bool can_skip_mark_);
+        bool can_skip_mark_,
+        MergeTreeIndexGranulePtr index_granule_);
 
     size_t readRows(
         size_t from_mark,
@@ -43,6 +44,10 @@ public:
     bool canReadIncompleteGranules() const override { return false; }
     void updateAllMarkRanges(const MarkRanges & ranges) override;
     void prefetchBeginOfRange(Priority priority) override;
+
+    /// Sets a pre-computed granule from the skip index reader (Path 2: use_skip_indexes_on_data_read = 1).
+    /// Looks up its own index name in the map.
+    void setPrecomputedGranule(const IndexGranulesMap & granules);
 
 private:
     void createEmptyColumns(Columns & columns) const;
@@ -114,6 +119,7 @@ private:
     roaring::Roaring analyzed_granules;
     roaring::Roaring may_be_true_granules;
 
+    bool is_initialized = false;
     /// Virtual columns that are always true.
     std::vector<bool> is_always_true;
     /// Tokens that are useful for analysis and filling virtual columns.

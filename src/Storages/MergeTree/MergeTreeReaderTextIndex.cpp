@@ -38,7 +38,8 @@ MergeTreeReaderTextIndex::MergeTreeReaderTextIndex(
     const IMergeTreeReader * main_reader_,
     MergeTreeIndexWithCondition index_,
     NamesAndTypesList columns_,
-    bool can_skip_mark_)
+    bool can_skip_mark_,
+    MergeTreeIndexGranulePtr index_granule_)
     : IMergeTreeReader(
         main_reader_->data_part_info_for_read,
         columns_,
@@ -64,21 +65,6 @@ MergeTreeReaderTextIndex::MergeTreeReaderTextIndex(
     }
 
     auto data_part = getDataPart();
-    auto substreams = index.index->getSubstreams();
-
-    auto make_stream = [&](const auto & substream)
-    {
-        return makeTextIndexInputStream(
-            data_part->getDataPartStoragePtr(),
-            index.index->getFileName() + substream.suffix,
-            substream.extension,
-            MergeTreeIndexReader::patchSettings(settings, substream.type));
-    };
-
-    sparse_index_stream = make_stream(substreams[0]);
-    dictionary_stream = make_stream(substreams[1]);
-    small_postings_stream = make_stream(substreams[2]);
-
     auto index_format = index.index->getDeserializedFormat(data_part->checksums, index.index->getFileName());
     chassert(index_format);
 
@@ -91,6 +77,30 @@ MergeTreeReaderTextIndex::MergeTreeReaderTextIndex(
     };
 
     deserialization_state = std::make_unique<MergeTreeIndexDeserializationState>(std::move(state));
+
+    if (index_granule_)
+    {
+        /// Use the pre-computed granule from filterMarksUsingIndex.
+        /// Each reader gets its own shallow copy with independent current_range (thread safety).
+        granule = assert_cast<const MergeTreeIndexGranuleText &>(*index_granule_).shallowCopy();
+    }
+    else
+    {
+        auto substreams = index.index->getSubstreams();
+
+        auto make_stream = [&](const auto & substream)
+        {
+            return makeTextIndexInputStream(
+                data_part->getDataPartStoragePtr(),
+                index.index->getFileName() + substream.suffix,
+                substream.extension,
+                MergeTreeIndexReader::patchSettings(settings, substream.type));
+        };
+
+        sparse_index_stream = make_stream(substreams[0]);
+        dictionary_stream = make_stream(substreams[1]);
+        small_postings_stream = make_stream(substreams[2]);
+    }
 
     const auto & condition_text = assert_cast<const MergeTreeIndexConditionText &>(*index.condition);
     if (!condition_text.getAllSearchPatterns().empty())
@@ -182,6 +192,9 @@ void MergeTreeReaderTextIndex::updateAllMarkRanges(const MarkRanges & ranges)
 
 void MergeTreeReaderTextIndex::prefetchBeginOfRange(Priority priority)
 {
+    if (!sparse_index_stream)
+        return;
+
     sparse_index_stream->seekToStart();
     sparse_index_stream->getDataBuffer()->prefetch(priority);
     is_prefetched = true;
@@ -319,8 +332,13 @@ bool MergeTreeReaderTextIndex::canSkipMark(size_t mark, size_t)
         return true;
 
     if (!granule)
-    {
         readGranule();
+
+    /// analyzeTokensCardinality and initializePostingStreams must run once
+    /// regardless of whether the granule was pre-computed or read from streams.
+    if (!is_initialized)
+    {
+        is_initialized = true;
         analyzeTokensCardinality();
         initializePostingStreams();
     }
@@ -810,13 +828,22 @@ void MergeTreeReaderTextIndex::fillColumnFallback(
     memcpy(&column_data[old_size], result_data.data(), num_rows);
 }
 
+void MergeTreeReaderTextIndex::setPrecomputedGranule(const IndexGranulesMap & granules)
+{
+    auto it = granules.find(index.index->index.name);
+
+    if (it != granules.end() && it->second)
+        granule = typeid_cast<MergeTreeIndexGranuleText &>(*it->second).shallowCopy();
+}
+
 MergeTreeReaderPtr createMergeTreeReaderTextIndex(
     const IMergeTreeReader * main_reader,
     const MergeTreeIndexWithCondition & index,
     const NamesAndTypesList & columns_to_read,
-    bool can_skip_mark)
+    bool can_skip_mark,
+    MergeTreeIndexGranulePtr index_granule)
 {
-    return std::make_unique<MergeTreeReaderTextIndex>(main_reader, index, columns_to_read, can_skip_mark);
+    return std::make_unique<MergeTreeReaderTextIndex>(main_reader, index, columns_to_read, can_skip_mark, std::move(index_granule));
 }
 
 }

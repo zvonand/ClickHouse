@@ -3437,11 +3437,10 @@ void ReadFromMergeTree::initializePipeline(QueryPipelineBuilder & pipeline, cons
     {
         UsefulSkipIndexes applicable_skip_indexes = indexes->skip_indexes;
 
-        std::erase_if(applicable_skip_indexes.useful_indices, [this](const auto & idx)
+        std::erase_if(applicable_skip_indexes.useful_indices, [](const auto & idx)
         {
             /// Vector similarity indexes are not applicable on data reads.
-            /// Indexes for which index read task is created use another mechanism to read index data.
-            return idx.index->isVectorSimilarityIndex() || index_read_tasks.contains(idx.index->index.name);
+            return idx.index->isVectorSimilarityIndex();
         });
 
         if (!applicable_skip_indexes.empty())

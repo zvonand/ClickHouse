@@ -225,8 +225,8 @@ Test output:
                 f"Cannot handle dropped or error status in job [{job_result.name}] - skip"
             )
             return False
-        if len(job_result.results) > 4:
-            print("Cannot handle more than 4 test failures in one job - skip")
+        if len(job_result.results) > 10:
+            print("Cannot handle more than 10 test failures in one job - skip")
             return False
         if any(key in job_result.name for key in ("Stateless", "Integration")):
             return True

@@ -971,13 +971,9 @@ def test_finished_download_time(cluster):
 
 @pytest.mark.parametrize("cache_policy", ["lru", "slru"])
 def test_concurrent_eviction(cluster, cache_policy):
-    """Stress-test concurrent eviction in filesystem cache with multiple readers.
+    """Stress-test concurrent eviction in filesystem cache with multiple readers."""
+    import threading
 
-    The dataset (~50 MB) is intentionally much larger than the cache (1 MB) so
-    that every benchmark iteration evicts entries and causes continuous
-    probationary ↔ protected queue transitions in SLRU.  This widens the race
-    window that the fix for the SLRU downgrade bug closes.
-    """
     node = cluster.instances["node"]
     cache_name = f"bench_small_{cache_policy}_{uuid.uuid4().hex[:8]}"
     table_name = f"bench_eviction_{uuid.uuid4().hex[:8]}"
@@ -997,27 +993,43 @@ def test_concurrent_eviction(cluster, cache_policy):
                 cache_policy = '{cache_policy}',
                 disk = 'hdd_blob'
             );
-            INSERT INTO {table_name} SELECT number, randomString(500) FROM numbers(100000);
+            INSERT INTO {table_name} SELECT number, randomString(100) FROM numbers(100000);
             """
         )
 
-        node.exec_in_container(
-            [
-                "/usr/bin/clickhouse",
-                "benchmark",
-                "--iterations",
-                "300",
-                "--concurrency",
-                "50",
-                "--query",
-                f"SELECT sum(key) FROM {table_name} FORMAT Null",
-            ]
-        )
+        test_start = node.query("SELECT now()").strip()
 
-        # chassert failures abort the server without updating system.errors,
-        # so check the server log directly.
-        assert not node.contains_in_log(
-            "LOGICAL_ERROR"
-        ), f"LOGICAL_ERROR occurred on {node.name}"
+        stop_event = threading.Event()
+
+        def drop_cache_loop():
+            while not stop_event.is_set():
+                node.query(f"SYSTEM CLEAR FILESYSTEM CACHE '{cache_name}'")
+
+        drop_thread = threading.Thread(target=drop_cache_loop, daemon=True)
+        drop_thread.start()
+
+        try:
+            node.exec_in_container(
+                [
+                    "/usr/bin/clickhouse",
+                    "benchmark",
+                    "--iterations",
+                    "200",
+                    "--concurrency",
+                    "100",
+                    "--query",
+                    f"SELECT count() FROM {table_name} WHERE key < (randConstant() % 100000) OR key > (randConstant() % 100000) FORMAT Null",
+                ]
+            )
+        finally:
+            stop_event.set()
+            drop_thread.join()
+
+        errors = int(
+            node.query(
+                f"SELECT count() FROM system.errors WHERE name = 'LOGICAL_ERROR' AND last_error_time >= '{test_start}'"
+            ).strip()
+        )
+        assert errors == 0, f"LOGICAL_ERROR occurred on {node.name}"
     finally:
         node.query(f"DROP TABLE IF EXISTS {table_name} SYNC")

@@ -2099,39 +2099,8 @@
                 return;
             }
 
-            // Fetch downstream data into cache (no DOM changes here).
-            // Only supported for PRs to main trunk (name_0=PR).
-            // Runs on every tick so late-arriving downstream results are picked up.
-            let downstreamChanged = false;
-            if (nameParams.length === 1 && nameParams[0] === 'PR' && privateBaseUrl) {
-                const resolvedSha = runtimeCache.commits
-                    ? ((sha === 'latest')
-                        ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
-                        : sha)
-                    : sha;
-                console.log(`Downstream: resolvedSha=${resolvedSha}, cachedSha=${runtimeCache.downstreamSha}`);
-                if (resolvedSha) {
-                    const result = await fetchDownstreamData(resolvedSha, privateBaseUrl);
-                    console.log(`Downstream fetch: error=${result.error}, dataLen=${result.data?.length}`);
-                    if (result.error) {
-                        if (runtimeCache.downstreamResults !== null || runtimeCache.downstreamError !== result.error) {
-                            downstreamChanged = true;
-                        }
-                        runtimeCache.downstreamResults = null;
-                        runtimeCache.downstreamSha = null;
-                        runtimeCache.downstreamError = result.error;
-                    } else if (result.data && result.data.length > 0) {
-                        downstreamChanged = true;
-                        runtimeCache.downstreamResults = result.data;
-                        runtimeCache.downstreamSha = resolvedSha;
-                        runtimeCache.downstreamError = null;
-                    }
-                }
-            }
-            console.log(`Render decision: fetchResult=${fetchResult}, downstreamChanged=${downstreamChanged}, cachedDownstream=${runtimeCache.downstreamResults?.length}`);
-
-            // Single render pass with both upstream and downstream data
-            if (fetchResult || downstreamChanged) {
+            // Render upstream immediately (+ cached downstream if available)
+            if (fetchResult) {
                 clearPage();
                 await renderResults(PR, sha, nameParams);
 
@@ -2139,12 +2108,41 @@
                     statusContainer.scrollTop = scrollTop;
                 }
 
-                // Show downstream error if applicable
                 if (runtimeCache.downstreamError) {
                     showDownstreamInfo(runtimeCache.downstreamError);
                 }
 
                 console.log(`Data refreshed at ${new Date().toLocaleTimeString()}`);
+            }
+
+            // Fetch downstream asynchronously. Only for PRs to main trunk.
+            // On first load this adds downstream after a brief delay.
+            // On subsequent refreshes, cached data is already merged above.
+            if (nameParams.length === 1 && nameParams[0] === 'PR' && privateBaseUrl) {
+                const resolvedSha = runtimeCache.commits
+                    ? ((sha === 'latest')
+                        ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
+                        : sha)
+                    : sha;
+                if (resolvedSha) {
+                    fetchDownstreamData(resolvedSha, privateBaseUrl).then(result => {
+                        if (result.error) {
+                            runtimeCache.downstreamResults = null;
+                            runtimeCache.downstreamSha = null;
+                            runtimeCache.downstreamError = result.error;
+                            showDownstreamInfo(result.error);
+                        } else if (result.data && result.data.length > 0) {
+                            runtimeCache.downstreamResults = result.data;
+                            runtimeCache.downstreamSha = resolvedSha;
+                            runtimeCache.downstreamError = null;
+                            // Re-render with merged data (only if not already merged)
+                            if (!document.querySelector('.downstream-row')) {
+                                clearPage();
+                                renderResults(PR, sha, nameParams);
+                            }
+                        }
+                    });
+                }
             }
         }
 

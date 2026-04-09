@@ -38,6 +38,8 @@ struct CoordinationSettings
     COORDINATION_SETTINGS_SUPPORTED_TYPES(CoordinationSettings, DECLARE_SETTING_SUBSCRIPT_OPERATOR)
 
 private:
+    friend struct KeeperConfigurationAndSettings;
+
     std::unique_ptr<CoordinationSettingsImpl> impl;
 };
 

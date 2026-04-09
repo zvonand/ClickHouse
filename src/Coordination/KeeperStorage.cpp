@@ -3539,8 +3539,8 @@ KeeperDigest KeeperStorage<Container>::preprocessRequest(
     SCOPE_EXIT({
         watch.stop();
 
-        const auto elapsed_ms = watch.elapsedMilliseconds();
-        const auto elapsed_us = watch.elapsedMicroseconds();
+        UInt64 elapsed_us = watch.elapsedMicroseconds();
+        UInt64 elapsed_ms = elapsed_us / 1000;
 
         if (elapsed_ms > keeper_context->getCoordinationSettings()[CoordinationSetting::log_slow_cpu_threshold_ms])
         {
@@ -3743,8 +3743,8 @@ KeeperResponsesForSessions KeeperStorage<Container>::processRequest(
     SCOPE_EXIT({
         watch.stop();
 
-        const auto elapsed_us = watch.elapsedMicroseconds();
-        const auto elapsed_ms = watch.elapsedMilliseconds();
+        UInt64 elapsed_us = watch.elapsedMicroseconds();
+        UInt64 elapsed_ms = elapsed_us / 1000;
 
         if (elapsed_ms > keeper_context->getCoordinationSettings()[CoordinationSetting::log_slow_cpu_threshold_ms])
         {
@@ -3912,8 +3912,8 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
     SCOPE_EXIT({
         watch.stop();
 
-        const auto elapsed_us = watch.elapsedMicroseconds();
-        const auto elapsed_ms = watch.elapsedMilliseconds();
+        UInt64 elapsed_us = watch.elapsedMicroseconds();
+        UInt64 elapsed_ms = elapsed_us / 1000;
 
         if (elapsed_ms > keeper_context->getCoordinationSettings()[CoordinationSetting::log_slow_cpu_threshold_ms])
         {
@@ -3931,11 +3931,7 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
     if (!initialized)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "KeeperStorage system nodes are not initialized");
 
-    int64_t current_zxid;
-    {
-        std::lock_guard lock(transaction_mutex);
-        current_zxid = zxid;
-    }
+    int64_t current_zxid = getZXID();
 
     std::list<Delta> empty_deltas;
     KeeperStorageBase::DeltaRange deltas_range{.begin_it = empty_deltas.begin(), .end_it = empty_deltas.end()};

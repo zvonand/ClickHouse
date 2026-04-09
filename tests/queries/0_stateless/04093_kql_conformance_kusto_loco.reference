@@ -16,7 +16,7 @@ hello
 HELLO
 -- AdditionalFunctionTests::StrLenFunction_Scalar --
 5
--- AdditionalFunctionTests::Bin_ZeroInterval_ShouldReturnError --
+-- AdditionalFunctionTests::Bin_ZeroInterval_ReturnsNull --
 \N
 -- AdditionalFunctionTests::ReplaceStringFunction_Scalar --
 hello Kusto
@@ -121,7 +121,7 @@ true
 -6
 -- DynamicTests::ArrayAccessWithNegativeIndex --
 2
--- SimpleFunctionTests::Cast --
+-- SimpleFunctionTests::TrimStartVerbatim --
 innerbbba
 -- SimpleFunctionTests::TrimStart --
 innerbbba

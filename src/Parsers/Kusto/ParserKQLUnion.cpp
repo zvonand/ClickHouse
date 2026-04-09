@@ -37,6 +37,9 @@ bool ParserKQLUnion::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
             ++pos;
     }
 
+    /// Guard: if closing bracket was not found, bail out
+    if (!isValidKQLPos(pos) || pos->type != TokenType::ClosingRoundBracket)
+        return false;
     String right_query(content_start->begin, pos->end - 1);
     ++pos; /// skip closing bracket
 
@@ -44,7 +47,7 @@ bool ParserKQLUnion::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     ASTPtr right_select_node;
     Tokens right_tokens(right_query.data(), right_query.data() + right_query.size(), 0, true);
     IParser::Pos right_pos(right_tokens, pos.max_depth, pos.max_backtracks);
-    if (!ParserKQLTableFunction().parse(right_pos, right_select_node, expected))
+    if (!ParserKQLWithUnionQuery().parse(right_pos, right_select_node, expected))
         return false;
 
     /// Get the current select from node and the right select

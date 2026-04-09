@@ -107,7 +107,16 @@ bool DatatypeDynamic::convertImpl(String & out, IParser::Pos & pos)
         }
         json_str += '}';
         /// Cast to JSON type for native member access (o.field)
-        out = fmt::format("CAST('{}' AS JSON)", json_str);
+        /// Escape single quotes in the JSON string to avoid SQL injection
+        String escaped_json;
+        for (char c : json_str)
+        {
+            if (c == '\'')
+                escaped_json += "\\'";
+            else
+                escaped_json += c;
+        }
+        out = fmt::format("CAST('{}' AS JSON)", escaped_json);
         ++pos; /// skip past closing brace to closing paren
         return true;
     }

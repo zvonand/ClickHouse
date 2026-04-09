@@ -80,6 +80,8 @@ bool isValidKQLPos(IParser::Pos & pos)
             std::string_view(pos->begin, pos->end) == "~");  // allow kql Case-Sensitive operators
 }
 
+/// Thread-local storage for KQL let bindings.
+/// Cleared on dialect switch to ClickHouse in ParserKQLStatement::parseImpl.
 std::unordered_map<String, String> & kqlLetBindings()
 {
     static thread_local std::unordered_map<String, String> bindings;

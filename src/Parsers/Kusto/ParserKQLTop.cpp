@@ -42,9 +42,6 @@ bool ParserKQLTop::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     if (sort_expr.empty())
         return false;
 
-    /// Check if direction is specified
-    bool has_explicit_dir = (sort_expr.find("asc") != String::npos || sort_expr.find("desc") != String::npos);
-
     /// Parse order by
     ParserOrderByExpressionList order_list;
     ASTPtr order_expression_list;
@@ -55,15 +52,32 @@ bool ParserKQLTop::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     if (!order_list.parse(sort_pos, order_expression_list, expected))
         return false;
 
-    /// Default to desc if no direction specified
-    if (!has_explicit_dir)
+    /// Default to desc if no direction was explicitly specified.
+    /// We scan tokens for "asc"/"desc" keywords rather than using substring search
+    /// to avoid false positives (e.g. a column named "description").
     {
-        for (auto & child : order_expression_list->children)
+        bool has_explicit_dir = false;
+        Tokens check_tokens(sort_expr.data(), sort_expr.data() + sort_expr.size(), 0, true);
+        IParser::Pos check_pos(check_tokens, pos.max_depth, pos.max_backtracks);
+        while (isValidKQLPos(check_pos))
         {
-            auto * order_expr = child->as<ASTOrderByElement>();
-            order_expr->direction = -1;
-            if (!order_expr->nulls_direction_was_explicitly_specified)
-                order_expr->nulls_direction = -1;
+            String tok(check_pos->begin, check_pos->end);
+            if (check_pos->type == TokenType::BareWord && (tok == "asc" || tok == "desc"))
+            {
+                has_explicit_dir = true;
+                break;
+            }
+            ++check_pos;
+        }
+        if (!has_explicit_dir)
+        {
+            for (auto & child : order_expression_list->children)
+            {
+                auto * order_expr = child->as<ASTOrderByElement>();
+                order_expr->direction = -1;
+                if (!order_expr->nulls_direction_was_explicitly_specified)
+                    order_expr->nulls_direction = -1;
+            }
         }
     }
 

@@ -161,12 +161,26 @@ bool Extract::convertImpl(String & out, IParser::Pos & pos)
     if (capture_group == 0)
     {
         /// Group 0 = entire match. Use extract with non-capturing groups.
+        /// Track character class depth so `(` inside `[...]` is not rewritten.
         String no_groups_regex;
+        bool in_char_class = false;
         for (size_t i = 0; i < regex.length(); ++i)
         {
             auto c = regex[i];
-            /// Replace ( with (?: to make all groups non-capturing, but keep the char classes
-            if (c == '(' && i + 1 < regex.length() && regex[i + 1] != '?')
+            if (c == '\\' && i + 1 < regex.length())
+            {
+                /// Skip escaped characters
+                no_groups_regex += c;
+                no_groups_regex += regex[i + 1];
+                ++i;
+                continue;
+            }
+            if (c == '[')
+                in_char_class = true;
+            else if (c == ']')
+                in_char_class = false;
+            /// Replace ( with (?: to make all groups non-capturing, but only outside character classes
+            if (!in_char_class && c == '(' && i + 1 < regex.length() && regex[i + 1] != '?')
                 no_groups_regex += "(?:";
             else
                 no_groups_regex += c;

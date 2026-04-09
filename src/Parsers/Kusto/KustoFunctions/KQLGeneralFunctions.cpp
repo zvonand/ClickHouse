@@ -101,25 +101,40 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
     {
         auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : round_to;
         auto inner = fmt::format("toDateTime64(toInt64({0}/{1}) * {1}, 9, 'UTC')", t, bin_sz);
-        out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
+        auto result = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
+        /// Guard against runtime division by zero when bin_size is not a constant
+        if (!is_const_bin_size)
+            out = fmt::format("if(({}) <= 0, NULL, {})", bin_sz, result);
+        else
+            out = result;
     }
     else if (original_expr == "timespan" || original_expr == "time" || ParserKQLDateTypeTimespan().parseConstKQLTimespan(original_expr))
     {
         auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : round_to;
         String bin_value = fmt::format("toInt64({0}/{1}) * {1}", t, bin_sz);
-        out = fmt::format(
+        auto result = fmt::format(
             "concat("
             "if(abs(toInt64((({0}) as _bv))) >= 86400, concat(toString(intDiv(abs(toInt64(_bv)), 86400)), '.'), ''), "
             "leftPad(toString(intDiv(abs(toInt64(_bv)) % 86400, 3600)), 2, '0'), ':', "
             "leftPad(toString(intDiv(abs(toInt64(_bv)) % 3600, 60)), 2, '0'), ':', "
             "leftPad(toString(abs(toInt64(_bv)) % 60), 2, '0'))",
             bin_value);
+        /// Guard against runtime division by zero when bin_size is not a constant
+        if (!is_const_bin_size)
+            out = fmt::format("if(({}) <= 0, NULL, {})", bin_sz, result);
+        else
+            out = result;
     }
     else
     {
         auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : fmt::format("toFloat64({})", round_to);
         /// Use floor() for correct behavior with negative numbers
-        out = fmt::format("toInt64(floor({0} / {1})) * {1}", t, bin_sz);
+        auto result = fmt::format("toInt64(floor({0} / {1})) * {1}", t, bin_sz);
+        /// Guard against runtime division by zero when bin_size is not a constant
+        if (!is_const_bin_size)
+            out = fmt::format("if(({}) <= 0, NULL, {})", bin_sz, result);
+        else
+            out = result;
     }
 
     return true;
@@ -418,8 +433,10 @@ bool ToHex::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     const auto argument = getArgument(fn_name, pos);
-    /// Remove leading zeros from hex output
-    out = fmt::format("lower(trimLeft(hex(toInt64({})), '0'))", argument);
+    /// Remove leading zeros from hex output, but preserve at least one digit for zero
+    out = fmt::format(
+        "lower(if(empty(trimLeft(hex(toInt64({0})), '0')), '0', trimLeft(hex(toInt64({0})), '0')))",
+        argument);
     return true;
 }
 
@@ -473,8 +490,10 @@ bool ToDateTimeFmt::convertImpl(String & out, IParser::Pos & pos)
     ++pos;
     String datetime_str = getConvertedArgument(fn_name, pos);
     ++pos;
-    String format_str = getConvertedArgument(fn_name, pos);
+    [[maybe_unused]] String format_str = getConvertedArgument(fn_name, pos);
 
+    /// NOTE: format_str is intentionally unused. ClickHouse's parseDateTimeBestEffort
+    /// already handles most common datetime formats, so the explicit format is not needed.
     auto inner = fmt::format("parseDateTime64BestEffortOrNull({}, 9, 'UTC')", datetime_str);
     out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
@@ -527,9 +546,9 @@ bool Format::convertImpl(String & out, IParser::Pos & pos)
     String fmt_str = getConvertedArgument(fn_name, pos);
 
     if (fmt_str == "'x'")
-        out = fmt::format("lower(trimLeft(hex(toInt64({})), '0'))", value);
+        out = fmt::format("lower(if(empty(trimLeft(hex(toInt64({0})), '0')), '0', trimLeft(hex(toInt64({0})), '0')))", value);
     else if (fmt_str == "'X'")
-        out = fmt::format("upper(trimLeft(hex(toInt64({})), '0'))", value);
+        out = fmt::format("upper(if(empty(trimLeft(hex(toInt64({0})), '0')), '0', trimLeft(hex(toInt64({0})), '0')))", value);
     else
         out = fmt::format("toString({})", value);
 

@@ -1,3 +1,4 @@
+#include <Common/Exception.h>
 #include <Parsers/ASTExpressionList.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Parsers/CommonParsers.h>
@@ -47,7 +48,7 @@ bool ParserKQLStatement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
                     {
                         value = ParserKQLBase::getExprFromToken(val_pos);
                     }
-                    catch (...)
+                    catch (const DB::Exception &)
                     {
                         value = raw_value;
                     }

@@ -78,9 +78,14 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
             ++pos;
     }
 
+    /// Guard: if closing bracket was not found or subquery is empty
+    if (!isValidKQLPos(pos) || pos->type != TokenType::ClosingRoundBracket)
+        return false;
     /// pos is at the closing bracket. Get text from content_start to the token before pos.
     auto end_pos = pos;
     --end_pos;
+    if (end_pos < content_start)
+        return false;
     String right_query(content_start->begin, end_pos->end);
     ++pos; /// skip closing bracket
 
@@ -151,25 +156,50 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     auto table_join = make_intrusive<ASTTableJoin>();
 
     if (ch_join_type == "INNER")
+    {
         table_join->kind = JoinKind::Inner;
+        table_join->strictness = JoinStrictness::All;
+    }
     else if (ch_join_type == "LEFT")
+    {
         table_join->kind = JoinKind::Left;
+        table_join->strictness = JoinStrictness::All;
+    }
     else if (ch_join_type == "RIGHT")
+    {
         table_join->kind = JoinKind::Right;
+        table_join->strictness = JoinStrictness::All;
+    }
     else if (ch_join_type == "FULL")
+    {
         table_join->kind = JoinKind::Full;
+        table_join->strictness = JoinStrictness::All;
+    }
     else if (ch_join_type == "LEFT ANTI")
+    {
         table_join->kind = JoinKind::Left;
+        table_join->strictness = JoinStrictness::Anti;
+    }
     else if (ch_join_type == "LEFT SEMI")
+    {
         table_join->kind = JoinKind::Left;
+        table_join->strictness = JoinStrictness::Semi;
+    }
     else if (ch_join_type == "RIGHT ANTI")
+    {
         table_join->kind = JoinKind::Right;
+        table_join->strictness = JoinStrictness::Anti;
+    }
     else if (ch_join_type == "RIGHT SEMI")
+    {
         table_join->kind = JoinKind::Right;
+        table_join->strictness = JoinStrictness::Semi;
+    }
     else
+    {
         table_join->kind = JoinKind::Inner;
-
-    table_join->strictness = JoinStrictness::All;
+        table_join->strictness = JoinStrictness::All;
+    }
 
     /// Parse on expression
     String on_expr_str = sql_on;

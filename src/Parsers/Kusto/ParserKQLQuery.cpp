@@ -406,6 +406,9 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
         return false;
 
     /// Extract left-side query (everything before | union/join)
+    /// Guard: if the pipe is at the very start, there's no left query
+    if (pipe_pos == pos)
+        return false;
     auto left_end = pipe_pos;
     --left_end;
     String left_query(pos->begin, left_end->end);
@@ -437,8 +440,14 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
         if (scan_pos->type == TokenType::ClosingRoundBracket) --depth;
         if (depth > 0) ++scan_pos;
     }
+    /// Guard: if closing bracket was never found, bail out
+    if (!isValidKQLPos(scan_pos) || scan_pos->type != TokenType::ClosingRoundBracket)
+        return false;
     auto right_end_pos = scan_pos;
     --right_end_pos;
+    /// Guard: empty parenthesized subquery
+    if (right_end_pos < right_start)
+        return false;
     String right_query(right_start->begin, right_end_pos->end);
     ++scan_pos; /// skip closing bracket
 
@@ -631,12 +640,12 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         bool is_timespan_range = (start_raw != start_val)
             || (step_raw != step_val && step_sign.empty());
 
-        /// Build range as a SQL subquery
+        /// Build range as a SQL subquery; guard against step == 0 to avoid division by zero
         String range_expr = fmt::format(
-            "arrayJoin(if(({3}) > 0, "
+            "arrayJoin(if(({3}) = 0, [NULL], if(({3}) > 0, "
             "arrayMap(x -> ({1}) + x * ({3}), range(0, toUInt64((({2}) - ({1})) / ({3})) + 1)), "
             "arrayMap(x -> ({1}) + x * ({3}), range(0, toUInt64((({1}) - ({2})) / abs({3})) + 1))"
-            "))",
+            ")))",
             col_name, start_val, end_val, step_val);
 
         /// For timespan ranges, wrap output in timespan formatter

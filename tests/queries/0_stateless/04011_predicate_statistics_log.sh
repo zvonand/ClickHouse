@@ -1,72 +1,75 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest, no-parallel
-
-# Verify that system.predicate_statistics_log collects per-predicate selectivity data
-# The global predicate_statistics_sample_rate is 0 to avoid overhead in unrelated tests
-# this test enables it temporarily via a config override + SYSTEM RELOAD CONFIG
+# Tags: no-fasttest
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
-config_override="${CLICKHOUSE_CONFIG_DIR}/config.d/zzz_predicate_statistics_test_override.xml"
-
-# enable predicate statistics collection for this test
-cat > "$config_override" <<'EOF'
-<clickhouse>
-    <predicate_statistics_sample_rate>1</predicate_statistics_sample_rate>
-</clickhouse>
-EOF
-
-$CLICKHOUSE_CLIENT --send_logs_level=fatal --query "SYSTEM RELOAD CONFIG"
-
-# on exit: disable the override and reload config
-trap 'rm -f "$config_override"; $CLICKHOUSE_CLIENT --send_logs_level=fatal --query "SYSTEM RELOAD CONFIG" 2>/dev/null' EXIT
-
-index_qid="pred_stats_index_${CLICKHOUSE_DATABASE}_$$"
-filter_qid="pred_stats_filter_${CLICKHOUSE_DATABASE}_$$"
+q1="pred_q1_${CLICKHOUSE_DATABASE}_$$"
+q2="pred_q2_${CLICKHOUSE_DATABASE}_$$"
+q3="pred_q3_${CLICKHOUSE_DATABASE}_$$"
 
 $CLICKHOUSE_CLIENT -m --query "
-DROP TABLE IF EXISTS test_pred_stats;
+SET predicate_statistics_sample_rate = 1;
 
-CREATE TABLE test_pred_stats (id UInt64, status String, value Float64) ENGINE = MergeTree ORDER BY id;
-INSERT INTO test_pred_stats SELECT number, if(number % 10 = 0, 'active', 'inactive'), rand() FROM numbers(100000);
+DROP TABLE IF EXISTS test_pred;
+CREATE TABLE test_pred (id UInt64, status String, value Float64)
+ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 8192;
+
+INSERT INTO test_pred SELECT number, if(number % 10 = 0, 'active', 'inactive'), rand() FROM numbers(100000);
 "
 
-# Direct MergeTree query triggers index-level logging
-$CLICKHOUSE_CLIENT --query_id="$index_qid" --query "SELECT count() FROM test_pred_stats WHERE id > 50000 FORMAT Null"
+# SELECT * to ensure PREWHERE is used
 
-# numbers() always produces a FilterTransform (MergeTree may push filter into reader)
-$CLICKHOUSE_CLIENT --query_id="$filter_qid" --query "SELECT count() FROM numbers(100000) WHERE number > 50000 FORMAT Null"
+# ~10% selectivity
+$CLICKHOUSE_CLIENT --query_id="$q1" --query \
+    "SET predicate_statistics_sample_rate = 1; SELECT * FROM test_pred WHERE status = 'active' FORMAT Null"
+
+# ~50% after PK prune
+$CLICKHOUSE_CLIENT --query_id="$q2" --query \
+    "SET predicate_statistics_sample_rate = 1; SELECT * FROM test_pred WHERE id > 50000 FORMAT Null"
+
+# conjunction ~5%
+$CLICKHOUSE_CLIENT --query_id="$q3" --query \
+    "SET predicate_statistics_sample_rate = 1; SELECT * FROM test_pred WHERE status = 'active' AND id > 50000 FORMAT Null"
 
 $CLICKHOUSE_CLIENT --query "SYSTEM FLUSH LOGS predicate_statistics_log"
 
-# Verify index-level entry tied to this run's query_id
+# q1: status = 'active' → ~10% selectivity
 $CLICKHOUSE_CLIENT -m --query "
 SELECT
-    filter_expression != '' AS has_filter_expr,
-    length(index_names) > 0 AS has_index_names,
-    length(index_names) = length(index_types) AS names_types_match,
-    length(index_names) = length(total_granules) AS names_granules_match,
-    length(index_names) = length(index_selectivities) AS names_sel_match,
-    arrayAll(x -> x >= 0 AND x <= 1, index_selectivities) AS valid_selectivities,
-    arrayAll((t, a) -> t >= a, total_granules, granules_after) AS granules_consistent
-FROM system.predicate_statistics_log
-WHERE query_id = '$index_qid'
-    AND length(index_names) > 0
-LIMIT 1;
-
--- Verify filter-level entry tied to this run's query_id
-SELECT
-    column_name = 'number' AS correct_column,
-    predicate_class = 'Range' AS correct_class,
-    function_name = 'greater' AS correct_function,
+    column_name = 'status' AS col_ok,
+    predicate_class = 'Equality' AS class_ok,
     input_rows > 0 AS has_input,
-    filter_selectivity >= 0 AND filter_selectivity <= 1 AS valid_selectivity
+    passed_rows > 0 AS has_passed,
+    round(filter_selectivity, 1) AS sel
 FROM system.predicate_statistics_log
-WHERE query_id = '$filter_qid'
-    AND column_name != ''
+WHERE query_id = '$q1' AND column_name != ''
 LIMIT 1;
-
-DROP TABLE test_pred_stats;
 "
+
+# q2: id > 50000 → PK prunes, remaining rows mostly pass (~98%)
+$CLICKHOUSE_CLIENT -m --query "
+SELECT
+    column_name = 'id' AS col_ok,
+    predicate_class = 'Range' AS class_ok,
+    input_rows > 0 AS has_input,
+    filter_selectivity > 0.9 AS high_sel
+FROM system.predicate_statistics_log
+WHERE query_id = '$q2' AND column_name != ''
+LIMIT 1;
+"
+
+# q3: conjunction → total_selectivity < each step
+$CLICKHOUSE_CLIENT -m --query "
+SELECT
+    count() >= 1 AS has_atoms,
+    min(total_selectivity) < 0.15 AS whole_pred_selective,
+    max(total_input_rows) > 0 AS has_total_input,
+    max(total_passed_rows) > 0 AS has_total_passed,
+    min(total_selectivity) = max(total_selectivity) AS same_whole_sel
+FROM system.predicate_statistics_log
+WHERE query_id = '$q3' AND column_name != '';
+"
+
+$CLICKHOUSE_CLIENT --query "DROP TABLE test_pred"

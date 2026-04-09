@@ -1,6 +1,7 @@
 #pragma once
 #include <Common/Logger.h>
 #include <Core/Block.h>
+#include <Interpreters/PredicateAtom.h>
 #include <Columns/ColumnVector.h>
 #include <Columns/ColumnsCommon.h>
 #include <Columns/FilterDescription.h>
@@ -45,6 +46,8 @@ struct PrewhereExprStep
 
     /// Version of mutation if step is a part of on-fly mutation.
     std::optional<UInt64> mutation_version;
+
+    std::vector<PredicateAtom> predicate_atoms = {};
 };
 
 using PrewhereExprStepPtr = std::shared_ptr<PrewhereExprStep>;
@@ -62,6 +65,7 @@ struct PrewhereExprInfo
 struct ReadStepPerformanceCounters
 {
     std::atomic<UInt64> rows_read = 0;
+    std::atomic<UInt64> rows_passed_filter = 0;
 };
 
 using ReadStepPerformanceCountersPtr = std::shared_ptr<ReadStepPerformanceCounters>;

@@ -1604,6 +1604,7 @@ void MergeTreeRangeReader::executePrewhereActionsAndFilterColumns(ReadResult & r
             result.columns.erase(result.columns.begin() + filter_column_pos);
 
         FilterWithCachedCount current_filter(current_step_filter);
+        performance_counters->rows_passed_filter += current_filter.countBytesInFilter();
         result.optimize(current_filter, merge_tree_reader->canReadIncompleteGranules(), false);
 
         if (prewhere_info->need_filter && !result.filterWasApplied())

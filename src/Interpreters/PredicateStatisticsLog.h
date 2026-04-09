@@ -9,8 +9,7 @@
 namespace DB
 {
 
-/// Predicate selectivity from `FilterTransform` (row-level) and `ReadFromMergeTree` (index-level).
-/// Filter selectivity is per whole expression, not per atom. Table name needs `use_query_condition_cache`
+/// Predicate selectivity from MergeTree prewhere chain and FilterTransform
 struct PredicateStatisticsLogElement
 {
     UInt16 event_date{};
@@ -19,16 +18,24 @@ struct PredicateStatisticsLogElement
     String database;
     String table;
     String query_id;
-
     String filter_expression;
 
+    /// atom metadata
     String column_name;
     String predicate_class;       /// "Equality", "Range", "In", "LikeSubstring", "IsNull", "Other"
     String function_name;         /// "equals", "less", ...
+
+    /// this step's selectivity
     UInt64 input_rows{};
     UInt64 passed_rows{};
     Float64 filter_selectivity{}; /// passed_rows / input_rows
 
+    /// whole predicate selectivity (across all steps)
+    UInt64 total_input_rows{};
+    UInt64 total_passed_rows{};
+    Float64 total_selectivity{};
+
+    /// index-level granule stats
     std::vector<String> index_names;
     std::vector<String> index_types;
     std::vector<UInt64> total_granules;

@@ -74,8 +74,7 @@ ColumnsDescription PredicateStatisticsLogElement::getColumnsDescription()
             "column_name",
             lc_string,
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Column referenced by a predicate atom extracted from the filter expression. One row per atom; "
-            "input_rows/passed_rows/filter_selectivity reflect the whole filter, not this atom alone."
+            "Column referenced by a predicate atom extracted from the filter expression."
         },
         {
             "predicate_class",
@@ -93,49 +92,69 @@ ColumnsDescription PredicateStatisticsLogElement::getColumnsDescription()
             "input_rows",
             std::make_shared<DataTypeUInt64>(),
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Rows entering the filter chunk. Reflects the whole filter expression, not per-atom."
+            "Rows entering this prewhere/filter step."
         },
         {
             "passed_rows",
             std::make_shared<DataTypeUInt64>(),
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Rows passing the filter chunk. Reflects the whole filter expression, not per-atom."
+            "Rows surviving this prewhere/filter step."
         },
         {
             "filter_selectivity",
             std::make_shared<DataTypeFloat64>(),
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Selectivity of the whole filter expression: passed_rows / input_rows. Shared across all atoms from the same chunk."
+            "Selectivity of this step: passed_rows / input_rows."
         },
+
+        {
+            "total_input_rows",
+            std::make_shared<DataTypeUInt64>(),
+            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            "Rows entering the first prewhere step (total rows read from granules)."
+        },
+        {
+            "total_passed_rows",
+            std::make_shared<DataTypeUInt64>(),
+            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            "Rows surviving all prewhere steps (rows delivered to the query)."
+        },
+        {
+            "total_selectivity",
+            std::make_shared<DataTypeFloat64>(),
+            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            "Selectivity of the whole predicate: total_passed_rows / total_input_rows."
+        },
+
         {
             "index_names",
             array_lc_string,
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Names of indexes applied, e.g. ['PrimaryKey', 'idx_bf_status'] (index source only)."
+            "Names of indexes applied, e.g. ['PrimaryKey', 'idx_bf_status'] (index rows only)."
         },
         {
             "index_types",
             array_lc_string,
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Types of indexes applied: PrimaryKey, Skip, MinMax, Partition (index source only)."
+            "Types of indexes applied: PrimaryKey, Skip, MinMax, Partition (index rows only)."
         },
         {
             "total_granules",
             array_uint64,
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Granules entering each index stage (index source only)."
+            "Granules entering each index stage (index rows only)."
         },
         {
             "granules_after",
             array_uint64,
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Granules remaining after each index stage (index source only)."
+            "Granules remaining after each index stage (index rows only)."
         },
         {
             "index_selectivities",
             array_float64,
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Per-index selectivity: granules_after / total_granules (index source only)."
+            "Per-index selectivity: granules_after / total_granules (index rows only)."
         }
     };
 }
@@ -155,9 +174,14 @@ void PredicateStatisticsLogElement::appendToBlock(MutableColumns & columns) cons
     columns[i++]->insert(column_name);
     columns[i++]->insert(predicate_class);
     columns[i++]->insert(function_name);
+
     columns[i++]->insert(input_rows);
     columns[i++]->insert(passed_rows);
     columns[i++]->insert(filter_selectivity);
+
+    columns[i++]->insert(total_input_rows);
+    columns[i++]->insert(total_passed_rows);
+    columns[i++]->insert(total_selectivity);
 
     /// index-level arrays
     auto fill_string_array = [](const std::vector<String> & data, IColumn & column)

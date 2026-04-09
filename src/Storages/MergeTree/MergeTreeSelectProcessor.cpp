@@ -4,9 +4,14 @@
 #include <Columns/FilterDescription.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeUUID.h>
+#include <Common/CurrentThread.h>
+#include <Common/DateLUT.h>
+#include <Core/Settings.h>
 #include <Interpreters/Cache/QueryConditionCache.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/ExpressionActions.h>
+#include <Interpreters/PredicateAtomExtractor.h>
+#include <Interpreters/PredicateStatisticsLog.h>
 #include <Processors/Chunk.h>
 #include <Processors/Merges/Algorithms/MergeTreeReadInfo.h>
 #include <Processors/QueryPlan/SourceStepWithFilter.h>
@@ -57,6 +62,11 @@ extern const Event ParallelReplicasReadRequestMicroseconds;
 
 namespace DB
 {
+
+namespace Setting
+{
+    extern const SettingsUInt64 predicate_statistics_sample_rate;
+}
 
 namespace ErrorCodes
 {
@@ -220,6 +230,19 @@ PrewhereExprInfo MergeTreeSelectProcessor::getPrewhereActions(
         prewhere_actions.steps.emplace_back(std::make_shared<PrewhereExprStep>(std::move(prewhere_step)));
     }
 
+    /// extract predicate atoms for selectivity logging
+    for (auto & step : prewhere_actions.steps)
+    {
+        if (step->type == PrewhereExprStep::Filter && !step->filter_column_name.empty() && step->actions)
+        {
+            const auto & dag = step->actions->getActionsDAG();
+            const auto * node = &dag.findInOutputs(step->filter_column_name);
+            while (node->type == ActionsDAG::ActionType::ALIAS)
+                node = node->children[0];
+            step->predicate_atoms = extractPredicateAtoms(node);
+        }
+    }
+
     return prewhere_actions;
 }
 
@@ -244,6 +267,13 @@ MergeTreeSelectProcessor::readCurrentTask(MergeTreeReadTask & current_task, IMer
 
         auto chunk = Chunk(ordered_columns, res.row_count);
         const auto & data_part = current_task.getInfo().data_part;
+
+        if (!storage_id_resolved)
+        {
+            cached_storage_id = data_part->storage.getStorageID();
+            storage_id_resolved = true;
+        }
+
         if (add_part_level)
             chunk.getChunkInfos().add(std::make_shared<MergeTreeReadInfo>(data_part->info.level));
 
@@ -354,16 +384,102 @@ static String dumpStatistics(const ReadStepsPerformanceCounters & counters)
     const auto & all_counters = counters.getCounters();
     for (size_t i = 0; i < all_counters.size(); ++i)
     {
-        out << fmt::format("step {} rows_read: {}", i, all_counters[i]->rows_read.load());
+        out << fmt::format("step {} rows_read: {} rows_passed: {}", i,
+            all_counters[i]->rows_read.load(), all_counters[i]->rows_passed_filter.load());
         if (i + 1 < all_counters.size())
             out << ", ";
     }
     return out.str();
 }
 
+void MergeTreeSelectProcessor::logPredicateStatistics() const
+{
+    auto query_context = CurrentThread::tryGetQueryContext();
+    if (!query_context)
+        return;
+
+    UInt64 sample_rate = query_context->getSettingsRef()[Setting::predicate_statistics_sample_rate];
+    if (sample_rate == 0)
+        return;
+
+    auto predicate_stats_log = query_context->getPredicateStatisticsLog();
+    if (!predicate_stats_log)
+        return;
+
+    if (!storage_id_resolved || cached_storage_id.database_name.empty())
+        return;
+
+    const auto & counters = read_steps_performance_counters.getCounters();
+    std::vector<size_t> filter_step_indices;
+    for (size_t i = 0; i < prewhere_actions.steps.size(); ++i)
+    {
+        const auto & step = prewhere_actions.steps[i];
+        if (step->type == PrewhereExprStep::Filter && !step->predicate_atoms.empty())
+            filter_step_indices.push_back(i);
+    }
+
+    if (filter_step_indices.empty())
+        return;
+
+    size_t first_step = filter_step_indices.front();
+    size_t last_step = filter_step_indices.back();
+
+    UInt64 whole_input = (first_step < counters.size() && counters[first_step])
+        ? counters[first_step]->rows_read.load() : 0;
+    UInt64 whole_passed = (last_step < counters.size() && counters[last_step])
+        ? counters[last_step]->rows_passed_filter.load() : 0;
+
+    if (whole_input == 0)
+        return;
+
+    Float64 whole_selectivity = static_cast<Float64>(whole_passed) / static_cast<Float64>(whole_input);
+
+    time_t now = time(nullptr);
+    UInt16 today = static_cast<UInt16>(DateLUT::instance().toDayNum(now));
+    String query_id(CurrentThread::getQueryId());
+
+    for (size_t idx = 0; idx < filter_step_indices.size(); ++idx)
+    {
+        size_t step_i = filter_step_indices[idx];
+        const auto & step = prewhere_actions.steps[step_i];
+
+        if (step_i >= counters.size() || !counters[step_i])
+            continue;
+
+        UInt64 input_rows = counters[step_i]->rows_read.load();
+        UInt64 passed_rows = counters[step_i]->rows_passed_filter.load();
+
+        if (input_rows == 0)
+            continue;
+
+        Float64 step_selectivity = static_cast<Float64>(passed_rows) / static_cast<Float64>(input_rows);
+
+        for (const auto & atom : step->predicate_atoms)
+        {
+            PredicateStatisticsLogElement elem;
+            elem.event_date = today;
+            elem.event_time = now;
+            elem.database = cached_storage_id.database_name;
+            elem.table = cached_storage_id.table_name;
+            elem.query_id = query_id;
+            elem.column_name = atom.column_name;
+            elem.predicate_class = atom.predicate_class;
+            elem.function_name = atom.function_name;
+            elem.input_rows = input_rows;
+            elem.passed_rows = passed_rows;
+            elem.filter_selectivity = step_selectivity;
+            elem.total_input_rows = whole_input;
+            elem.total_passed_rows = whole_passed;
+            elem.total_selectivity = whole_selectivity;
+            predicate_stats_log->add(std::move(elem));
+        }
+    }
+}
+
 void MergeTreeSelectProcessor::onFinish() const
 {
     LOG_TEST(log, "Read steps statistics: {}", dumpStatistics(read_steps_performance_counters));
+    logPredicateStatistics();
 }
 
 }

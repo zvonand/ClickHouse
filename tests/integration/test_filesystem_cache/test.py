@@ -966,6 +966,7 @@ def test_finished_download_time(cluster):
     )
     assert len(elapsed_time) > 0
     assert int(elapsed_time) > 1
+    assert int(elapsed_time) < 5
 
 
 @pytest.mark.parametrize("cache_policy", ["lru", "slru"])

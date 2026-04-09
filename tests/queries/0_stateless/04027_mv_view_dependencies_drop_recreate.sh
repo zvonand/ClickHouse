@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tags: no-replicated-database
+# Tags: no-replicated-database, no-fasttest
 # Test that modifying a materialized view's query does not leak stale view dependency edges.
 # The root cause: in updateDependencies, view dependency removal was inside
 # if (!new_view_dependencies.empty()), so ALTER TABLE mv MODIFY QUERY SELECT 1 c0

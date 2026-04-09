@@ -1032,13 +1032,17 @@ class QueryResultElement extends HTMLElement
                     user-select: none;
                     left: 0;
                     top: -1px;
-                    transform: translateY(-100%);
                     font-size: 75%;
                     font-weight: normal;
                     color: var(--misc-text-color);
                     background: var(--element-background-color);
                     max-height: 5em;
                     white-space: pre;
+                }
+
+                thead .type-hint
+                {
+                    transform: translateY(-100%);
                 }
 
                 th:hover .type-hint

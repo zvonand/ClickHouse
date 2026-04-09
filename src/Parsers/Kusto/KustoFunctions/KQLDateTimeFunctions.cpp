@@ -144,7 +144,12 @@ bool DayOfWeek::convertImpl(String & out, IParser::Pos & pos)
     ++pos;
     const String datetime_str = getConvertedArgument(fn_name, pos);
 
-    out = fmt::format("concat((toDayOfWeek({})%7)::String, '.00:00:00')", datetime_str);
+    /// KQL dayofweek returns a timespan: N.00:00:00 for N days, or 00:00:00 for Sunday
+    out = fmt::format(
+        "concat("
+        "if(toDayOfWeek({0}) % 7 > 0, concat(toString(toDayOfWeek({0}) % 7), '.'), ''), "
+        "'00:00:00')",
+        datetime_str);
     return true;
 }
 

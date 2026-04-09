@@ -69,37 +69,44 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
 
     auto t = fmt::format("toFloat64({})", value);
 
+    bool is_const_bin_size = false;
     try
     {
         bin_size = std::stod(round_to);
+        is_const_bin_size = true;
     }
     catch (const std::exception &)
     {
         ParserKQLDateTypeTimespan time_span_parser;
-        if (!time_span_parser.parseConstKQLTimespan(round_to))
-            return false;
-        bin_size = time_span_parser.toSeconds();
+        if (time_span_parser.parseConstKQLTimespan(round_to))
+        {
+            bin_size = time_span_parser.toSeconds();
+            is_const_bin_size = true;
+        }
     }
 
-    if (bin_size <= 0)
+    if (is_const_bin_size && bin_size <= 0)
         return false;
 
     // Use datetime output whenever first argument is datetime/date (whether bin size is numeric or timespan)
     if (original_expr == "datetime" || original_expr == "date")
     {
-        auto inner = fmt::format("toDateTime64(toInt64({0}/{1}) * {1}, 9, 'UTC')", t, bin_size);
+        auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : round_to;
+        auto inner = fmt::format("toDateTime64(toInt64({0}/{1}) * {1}, 9, 'UTC')", t, bin_sz);
         out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     }
     else if (original_expr == "timespan" || original_expr == "time" || ParserKQLDateTypeTimespan().parseConstKQLTimespan(original_expr))
     {
-        String bin_value = fmt::format("toInt64({0}/{1}) * {1}", t, bin_size);
+        auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : round_to;
+        String bin_value = fmt::format("toInt64({0}/{1}) * {1}", t, bin_sz);
         out = fmt::format(
             "concat(toString(toInt32((({}) as x) / 3600)),':', toString(toInt32(x % 3600 / 60)),':',toString(toInt32(x % 3600 % 60)))",
             bin_value);
     }
     else
     {
-        out = fmt::format("toInt64({0} / {1}) * {1}", t, bin_size);
+        auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : fmt::format("toFloat64({})", round_to);
+        out = fmt::format("toInt64({0} / {1}) * {1}", t, bin_sz);
     }
 
     return true;
@@ -267,7 +274,13 @@ bool GeoDistance2Points::convertImpl(String & out, IParser::Pos & pos)
     ++pos;
     String lat2 = getConvertedArgument(fn_name, pos);
 
-    out = fmt::format("geoDistance({}, {}, {}, {})", lon1, lat1, lon2, lat2);
+    /// KQL returns NULL for invalid coordinates or NULL inputs
+    out = fmt::format(
+        "if(isNull({0}) or isNull({1}) or isNull({2}) or isNull({3}) or "
+        "({0}) < -180 or ({0}) > 180 or ({1}) < -90 or ({1}) > 90 or "
+        "({2}) < -180 or ({2}) > 180 or ({3}) < -90 or ({3}) > 90, "
+        "NULL, geoDistance({0}, {1}, {2}, {3}))",
+        lon1, lat1, lon2, lat2);
     return true;
 }
 

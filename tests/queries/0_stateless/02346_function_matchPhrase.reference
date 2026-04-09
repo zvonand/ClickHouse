@@ -32,6 +32,24 @@ Default tokenizer (splitByNonAlpha)
 1
 -- non-const input
 1
+-- Nullable(String) input
+1
+\N
+-- Nullable(FixedString) input
+1
+\N
+-- Nullable(String) column values
+1
+\N
+1
+\N
+0
+-- Nullable(FixedString) column values
+1
+\N
+1
+\N
+0
 splitByString tokenizer
 1
 0

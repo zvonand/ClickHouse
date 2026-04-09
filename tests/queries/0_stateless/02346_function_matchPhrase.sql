@@ -50,6 +50,32 @@ SELECT '-- FixedString input';
 SELECT matchPhrase(toFixedString('the quick brown fox', 19), 'quick brown');
 SELECT '-- non-const input';
 SELECT matchPhrase(materialize('the quick brown fox'), 'quick brown');
+SELECT '-- Nullable(String) input';
+SELECT matchPhrase(toNullable('the quick brown fox'), 'quick brown');
+SELECT matchPhrase(CAST(NULL AS Nullable(String)), 'quick brown');
+SELECT '-- Nullable(FixedString) input';
+SELECT matchPhrase(toNullable(toFixedString('the quick brown fox', 19)), 'quick brown');
+SELECT matchPhrase(CAST(NULL AS Nullable(FixedString(19))), 'quick brown');
+
+SELECT '-- Nullable(String) column values';
+
+DROP TABLE IF EXISTS tab;
+CREATE TABLE tab (id UInt64, message Nullable(String)) ENGINE = MergeTree() ORDER BY id;
+INSERT INTO tab VALUES (1, 'the quick brown fox'), (2, NULL), (3, 'quick brown eyes'), (4, NULL), (5, 'no match here');
+
+SELECT matchPhrase(message, 'quick brown') FROM tab ORDER BY id;
+
+DROP TABLE tab;
+
+SELECT '-- Nullable(FixedString) column values';
+
+DROP TABLE IF EXISTS tab;
+CREATE TABLE tab (id UInt64, message Nullable(FixedString(50))) ENGINE = MergeTree() ORDER BY id;
+INSERT INTO tab VALUES (1, 'the quick brown fox'), (2, NULL), (3, 'quick brown eyes'), (4, NULL), (5, 'no match here');
+
+SELECT matchPhrase(message, 'quick brown') FROM tab ORDER BY id;
+
+DROP TABLE tab;
 
 SELECT 'splitByString tokenizer';
 

@@ -153,12 +153,7 @@ DataTypePtr FunctionMatchPhraseOverloadResolver::getReturnTypeImpl(const Columns
 
     validateFunctionArguments(name, arguments, mandatory_args, optional_args);
 
-    DataTypePtr return_type = std::make_shared<DataTypeNumber<UInt8>>();
-
-    if (arguments[arg_input].type->isNullable())
-        return_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeNumber<UInt8>>());
-
-    return return_type;
+    return std::make_shared<DataTypeNumber<UInt8>>();
 }
 
 FunctionBasePtr

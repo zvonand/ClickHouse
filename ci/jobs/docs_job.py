@@ -70,7 +70,7 @@ if __name__ == "__main__":
             command=[
                 f"python3 {os.getcwd()}/utils/generate-system-tables-docs"
                 f" --binary {temp_dir}clickhouse"
-                f" --docs-dir /opt/clickhouse-docs/docs/operations/system-tables/"
+                f" --docs-dir /opt/clickhouse-docs/docs/en/operations/system-tables/"
             ],
             workdir=os.getcwd(),
         )

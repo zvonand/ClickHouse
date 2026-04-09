@@ -55,6 +55,8 @@ void OwnSplitChannel::log(Poco::Message && msg)
     {
         auto fmt = msg.getFormatString();
         __msan_check_mem_is_initialized(&fmt, sizeof(fmt));
+        if (fmt.data())
+            __msan_check_mem_is_initialized(fmt.data(), fmt.size());
     }
 #endif
     if (stop_logging)
@@ -414,6 +416,8 @@ void OwnAsyncSplitChannel::log(Poco::Message && msg)
         {
             auto fmt = msg.getFormatString();
             __msan_check_mem_is_initialized(&fmt, sizeof(fmt));
+            if (fmt.data())
+                __msan_check_mem_is_initialized(fmt.data(), fmt.size());
         }
 #endif
         /// Based on logger_useful.h this won't be called if the message is not needed

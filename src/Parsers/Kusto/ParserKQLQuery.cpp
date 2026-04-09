@@ -682,45 +682,45 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
             return true;
         }
 
-        /// Has pipe operations — parse them as KQL applied to a subquery source
-        /// Build KQL text where the subquery acts as table: (subquery) | pipe_ops
-        String formatted_sql = range_ast->formatWithSecretsOneLine();
-
-        /// Parse the remaining KQL pipe operations by building a new KQL query
-        /// with the range as a subquery table source
-        /// We'll parse: _kql_range | pipe_ops  (with _kql_range being the subquery)
-        /// by first parsing the range as the table, then applying pipes
-
-        /// Create a KQL query from scratch:
-        /// Set the range as table source, then parse pipe operations
+        /// Has pipe operations — set range as subquery source and parse pipes
         auto range_select_query = make_intrusive<ASTSelectQuery>();
         node = range_select_query;
 
-        /// Set the range subquery as table source
         ASTPtr range_subquery_node = make_intrusive<ASTSubquery>(std::move(range_ast));
-        ASTPtr table_expr = make_intrusive<ASTTableExpression>();
-        table_expr->as<ASTTableExpression>()->subquery = range_subquery_node;
-        table_expr->children.emplace_back(range_subquery_node);
-        auto range_table_element = make_intrusive<ASTTablesInSelectQueryElement>();
-        range_table_element->as<ASTTablesInSelectQueryElement>()->table_expression = table_expr;
-        range_table_element->children.emplace_back(table_expr);
-        auto range_tables = make_intrusive<ASTTablesInSelectQuery>();
-        range_tables->children.emplace_back(range_table_element);
-        range_select_query->setExpression(ASTSelectQuery::Expression::TABLES, std::move(range_tables));
+        ASTPtr rte = make_intrusive<ASTTableExpression>();
+        rte->as<ASTTableExpression>()->subquery = range_subquery_node;
+        rte->children.emplace_back(range_subquery_node);
+        auto rte_elem = make_intrusive<ASTTablesInSelectQueryElement>();
+        rte_elem->as<ASTTablesInSelectQueryElement>()->table_expression = rte;
+        rte_elem->children.emplace_back(rte);
+        auto rtables = make_intrusive<ASTTablesInSelectQuery>();
+        rtables->children.emplace_back(rte_elem);
+        range_select_query->setExpression(ASTSelectQuery::Expression::TABLES, std::move(rtables));
 
-        /// Now parse the pipe operations
+        /// Parse remaining pipe operations using getExprFromPipe + operator parsers
         Tokens pipe_tokens(remaining.data(), remaining.data() + remaining.size(), 0, true);
         IParser::Pos pipe_pos(pipe_tokens, pos.max_depth, pos.max_backtracks);
 
-        /// Skip the initial | mark
         if (isValidKQLPos(pipe_pos) && pipe_pos->type == TokenType::PipeMark)
             ++pipe_pos;
 
-        /// Parse pipe operations one at a time
+        /// Use the standard operator parsing loop
         while (isValidKQLPos(pipe_pos) && pipe_pos->type != TokenType::Semicolon)
         {
             String op_name(pipe_pos->begin, pipe_pos->end);
-            ++pipe_pos;
+
+            /// Handle "sort by" / "order by"
+            if (op_name == "sort" || op_name == "order")
+            {
+                ++pipe_pos;
+                if (isValidKQLPos(pipe_pos))
+                {
+                    op_name += " by";
+                    ++pipe_pos;
+                }
+            }
+            else
+                ++pipe_pos;
 
             auto kql_op = getOperator(op_name);
             if (kql_op)
@@ -729,14 +729,12 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
                     return false;
             }
 
-            /// Skip to next pipe or end
             while (isValidKQLPos(pipe_pos) && pipe_pos->type != TokenType::PipeMark && pipe_pos->type != TokenType::Semicolon)
                 ++pipe_pos;
             if (isValidKQLPos(pipe_pos) && pipe_pos->type == TokenType::PipeMark)
                 ++pipe_pos;
         }
 
-        /// Set default SELECT * if no project was specified
         if (!range_select_query->select())
         {
             String star = "*";

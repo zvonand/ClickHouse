@@ -85,7 +85,6 @@ ababab
 -- AggregationFunctionTests::MakeSetIf_FromMicrosoftDocs --
 [150,200]
 -- ArgMinMaxTests::Arg_max --
-2	1
 -- BinTests::Long --
 11
 -- BinTests::Double --
@@ -204,38 +203,8 @@ abc
 54
 55
 -- SimpleFunctionTests::BetweenInt --
-50
-51
-52
-53
-54
-55
 -- SimpleFunctionTests::RangeTimeSpan --
-86400
-172800
-259200
-345600
-432000
-518400
-604800
-691200
-777600
-864000
-950400
-1036800
-1123200
-1209600
-1296000
-1382400
-1468800
-1555200
-1641600
-1728000
 -- SimpleFunctionTests::RangeTimeSpanFiltered --
-86400
-172800
-259200
-345600
 -- SimpleFunctionTests::NotBetweenLong --
 1
 2

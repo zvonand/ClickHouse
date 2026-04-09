@@ -336,6 +336,7 @@ rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
            -e "DistributedInsertQueue" \
            -e "TABLE_IS_READ_ONLY" \
            -e "Code: 1000, e.code() = 111, Connection refused" \
+           -e "StorageKafka" \
            -e "UNFINISHED" \
            -e "NETLINK_ERROR" \
            -e "Renaming unexpected part" \

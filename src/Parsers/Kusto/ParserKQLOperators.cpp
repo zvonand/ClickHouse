@@ -345,42 +345,44 @@ String KQLOperators::genHaystackOpExpr(
     bool haystack_is_literal = !haystack.empty() && haystack.front() == '\'' && haystack.back() == '\'';
     if (haystack_is_literal && !needle_is_literal)
     {
+        /// Wrap nullable column in ifNull to avoid type errors
+        auto safe_needle = fmt::format("ifNull(toString({}), '')", raw_needle);
         if (ch_op == "ilike" || ch_op == "not ilike")
         {
             bool negated = (ch_op == "not ilike");
             if (wildcards_pos == WildcardsPos::both)
-                new_expr = fmt::format("toBool({}positionCaseInsensitive({}, {}) > 0)", negated ? "not " : "", haystack, raw_needle);
+                new_expr = fmt::format("toBool({}(positionCaseInsensitive({}, {}) > 0))", negated ? "not " : "", haystack, safe_needle);
             else if (wildcards_pos == WildcardsPos::right)
-                new_expr = fmt::format("toBool({}startsWith(lower({}), lower({})))", negated ? "not " : "", haystack, raw_needle);
+                new_expr = fmt::format("toBool({}(startsWith(lower({}), lower({}))))", negated ? "not " : "", haystack, safe_needle);
             else if (wildcards_pos == WildcardsPos::left)
-                new_expr = fmt::format("toBool({}endsWith(lower({}), lower({})))", negated ? "not " : "", haystack, raw_needle);
+                new_expr = fmt::format("toBool({}(endsWith(lower({}), lower({}))))", negated ? "not " : "", haystack, safe_needle);
             else
-                new_expr = fmt::format("toBool({}(lower({}) = lower({})))", negated ? "not " : "", haystack, raw_needle);
+                new_expr = fmt::format("toBool({}(lower({}) = lower({})))", negated ? "not " : "", haystack, safe_needle);
         }
         else if (ch_op == "like" || ch_op == "not like")
         {
             bool negated = (ch_op == "not like");
             if (wildcards_pos == WildcardsPos::both)
-                new_expr = fmt::format("toBool({}position({}, {}) > 0)", negated ? "not " : "", haystack, raw_needle);
+                new_expr = fmt::format("toBool({}(position({}, {}) > 0))", negated ? "not " : "", haystack, safe_needle);
             else if (wildcards_pos == WildcardsPos::right)
-                new_expr = fmt::format("toBool({}startsWith({}, {}))", negated ? "not " : "", haystack, raw_needle);
+                new_expr = fmt::format("toBool({}(startsWith({}, {})))", negated ? "not " : "", haystack, safe_needle);
             else if (wildcards_pos == WildcardsPos::left)
-                new_expr = fmt::format("toBool({}endsWith({}, {}))", negated ? "not " : "", haystack, raw_needle);
+                new_expr = fmt::format("toBool({}(endsWith({}, {})))", negated ? "not " : "", haystack, safe_needle);
             else
-                new_expr = fmt::format("toBool({}({} = {}))", negated ? "not " : "", haystack, raw_needle);
+                new_expr = fmt::format("toBool({}({} = {}))", negated ? "not " : "", haystack, safe_needle);
         }
         else if (ch_op == "startsWith" || ch_op == "not startsWith")
         {
             bool negated = ch_op.find("not") != String::npos;
-            new_expr = fmt::format("toBool({}startsWith({}, {}))", negated ? "not " : "", haystack, raw_needle);
+            new_expr = fmt::format("toBool({}startsWith({}, {}))", negated ? "not " : "", haystack, safe_needle);
         }
         else if (ch_op == "endsWith" || ch_op == "not endsWith")
         {
             bool negated = ch_op.find("not") != String::npos;
-            new_expr = fmt::format("toBool({}endsWith({}, {}))", negated ? "not " : "", haystack, raw_needle);
+            new_expr = fmt::format("toBool({}endsWith({}, {}))", negated ? "not " : "", haystack, safe_needle);
         }
         else if (ch_op == "match")
-            new_expr = fmt::format("toBool(match({}, {}))", haystack, raw_needle);
+            new_expr = fmt::format("toBool(match({}, {}))", haystack, safe_needle);
         else
             new_expr = "toBool(" + ch_op + "(" + haystack + ", " + needle + "))";
     }

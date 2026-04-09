@@ -42,7 +42,7 @@ def collect_and_encrypt_cores(directory, key_path: str, aes_key_path: str = None
     if aes_key_path is None:
         aes_key_path = str(Path(directory) / "aes.key")
     encrypted = []
-    for core in sorted(Path(directory).glob("core.*")):
+    for core in sorted(Path(directory).glob("core.*"))[:3]:
         if not core.name.endswith(".zst") and not core.name.endswith(".enc"):
             zst_path = Utils.compress_zst(core)
             encrypted.append(Utils.encrypt(str(zst_path), key_path, aes_key_path))

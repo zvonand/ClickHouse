@@ -1,11 +1,12 @@
 #include "config.h"
 
+#include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeString.h>
 #include <QueryPipeline/Pipe.h>
 #include <Storages/System/StorageSystemJemallocProfileText.h>
 
 #if USE_JEMALLOC
 #    include <Core/Settings.h>
-#    include <DataTypes/DataTypeString.h>
 #    include <Interpreters/Context.h>
 #    include <Processors/Sources/JemallocProfileSource.h>
 #    include <Common/Jemalloc.h>
@@ -29,11 +30,20 @@ namespace ErrorCodes
 }
 
 StorageSystemJemallocProfileText::StorageSystemJemallocProfileText(const StorageID & table_id_)
-    : IStorage(table_id_)
+    : StorageWithCommonVirtualColumns(table_id_)
 {
     StorageInMemoryMetadata storage_metadata;
     storage_metadata.setColumns(getColumnsDescription());
     setInMemoryMetadata(storage_metadata);
+    setVirtuals(createVirtuals());
+}
+
+VirtualColumnsDescription StorageSystemJemallocProfileText::createVirtuals()
+{
+    VirtualColumnsDescription desc;
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    return desc;
 }
 
 ColumnsDescription StorageSystemJemallocProfileText::getColumnsDescription()

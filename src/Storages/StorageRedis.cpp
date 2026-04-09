@@ -30,6 +30,9 @@
 #include <Common/parseAddress.h>
 #include <Common/JSONBuilder.h>
 
+#include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeString.h>
+
 namespace DB
 {
 
@@ -209,7 +212,7 @@ StorageRedis::StorageRedis(
     ContextPtr context_,
     const StorageInMemoryMetadata & storage_metadata,
     const String & primary_key_)
-    : IStorage(table_id_)
+    : StorageWithCommonVirtualColumns(table_id_)
     , WithContext(context_->getGlobalContext())
     , configuration(configuration_)
     , log(getLogger("StorageRedis"))
@@ -217,6 +220,15 @@ StorageRedis::StorageRedis(
 {
     pool = std::make_shared<RedisPool>(configuration.pool_size);
     setInMemoryMetadata(storage_metadata);
+    setVirtuals(createVirtuals());
+}
+
+VirtualColumnsDescription StorageRedis::createVirtuals()
+{
+    VirtualColumnsDescription desc;
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    return desc;
 }
 
 class ReadFromRedis : public SourceStepWithFilter
@@ -254,7 +266,7 @@ private:
     bool all_scan = true;
 };
 
-void StorageRedis::read(
+void StorageRedis::readImpl(
         QueryPlan & query_plan,
         const Names & column_names,
         const StorageSnapshotPtr & storage_snapshot,

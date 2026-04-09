@@ -3,6 +3,8 @@
 // #include <DataTypes/DataTypeString.h>
 // #include <Storages/ColumnsDescription.h>
 // #include <Storages/IStorage.h>
+#include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeString.h>
 #include <Storages/SelectQueryInfo.h>
 #include <Storages/System/getQueriedColumnsMaskAndHeader.h>
 #include <Storages/VirtualColumnUtils.h>
@@ -48,7 +50,7 @@ private:
     std::optional<ActionsDAG> filter;
 };
 
-void IStorageSystemOneBlock::read(
+void IStorageSystemOneBlock::readImpl(
     QueryPlan & query_plan,
     const Names & column_names,
     const StorageSnapshotPtr & storage_snapshot,
@@ -110,6 +112,14 @@ void ReadFromSystemOneBlock::applyFilters(ActionDAGNodes added_filter_nodes)
     /// Must prepare sets here, initializePipeline() would be too late, see comment on FutureSetFromSubquery.
     if (filter)
         VirtualColumnUtils::buildSetsForDAG(*filter, context);
+}
+
+VirtualColumnsDescription IStorageSystemOneBlock::createVirtuals()
+{
+    VirtualColumnsDescription desc;
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    return desc;
 }
 
 }

@@ -7,6 +7,7 @@
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/SourceStepWithFilter.h>
 #include <Columns/ColumnString.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeDateTime.h>
@@ -290,7 +291,7 @@ void ReadFromSystemPartsBase::applyFilters(ActionDAGNodes added_filter_nodes)
     }
 }
 
-void StorageSystemPartsBase::read(
+void StorageSystemPartsBase::readImpl(
     QueryPlan & query_plan,
     const Names & column_names,
     const StorageSnapshotPtr & storage_snapshot,
@@ -339,7 +340,7 @@ void ReadFromSystemPartsBase::initializePipeline(QueryPipelineBuilder & pipeline
 
 
 StorageSystemPartsBase::StorageSystemPartsBase(const StorageID & table_id_, ColumnsDescription && columns)
-    : IStorage(table_id_)
+    : StorageWithCommonVirtualColumns(table_id_)
 {
     auto add_alias = [&](const String & alias_name, const String & column_name)
     {
@@ -360,9 +361,17 @@ StorageSystemPartsBase::StorageSystemPartsBase(const StorageID & table_id_, Colu
     storage_metadata.setColumns(columns);
     setInMemoryMetadata(storage_metadata);
 
-    VirtualColumnsDescription virtuals;
+    VirtualColumnsDescription virtuals = createVirtuals();
     virtuals.addEphemeral("_state", std::make_shared<DataTypeString>(), "");
     setVirtuals(std::move(virtuals));
+}
+
+VirtualColumnsDescription StorageSystemPartsBase::createVirtuals()
+{
+    VirtualColumnsDescription desc;
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    return desc;
 }
 
 bool StoragesInfoStreamBase::tryLockTable(StoragesInfo & info)

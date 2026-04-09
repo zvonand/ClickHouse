@@ -64,8 +64,8 @@
             --job-name-color: var(--text-color);
             --link-color: #FAFF69;
             --link-hover-color: #e6eb5e;
-            --file-link-color: #7ab3ff;
-            --file-link-hover-color: #a3cbff;
+            --file-link-color: #FAFF69;
+            --file-link-hover-color: #e6eb5e;
             --footer-background: #151515;
             --footer-text-color: #F9F9F9;
         }
@@ -131,7 +131,12 @@
             max-width: 100%;              /* make sure it doesn’t overflow parent */
         }
 
-        .file-link:hover {
+        .file-link a {
+            color: var(--file-link-color);
+            text-decoration: none;
+        }
+
+        .file-link a:hover, .file-link:hover {
             color: var(--file-link-hover-color);
             text-decoration: none;
         }
@@ -249,7 +254,7 @@
             background-color: color-mix(in srgb, var(--tile-background) 50%, #e0d8f0);
         }
         .night-theme tr.downstream-row {
-            background-color: color-mix(in srgb, var(--tile-background) 70%, #3a2d5c);
+            background-color: #2a2820;
         }
 
         .downstream-info {
@@ -531,10 +536,7 @@
 
     function toggleProxy() {
         const current = localStorage.getItem('privateBaseUrl') || '';
-        const value = prompt(
-            'Downstream proxy base URL\n(e.g. https://ci-reports.<tailnet>.ts.net/clickhouse-test-reports-private)\nLeave empty to disable:',
-            current
-        );
+        const value = prompt('Downstream proxy base URL (leave empty to disable):', current);
         if (value === null) return; // cancelled
         if (value.trim()) {
             localStorage.setItem('privateBaseUrl', value.trim().replace(/\/+$/, ''));
@@ -592,13 +594,14 @@
 
     function getStatusPriority(status) {
         const statusLower = (status || '').toLowerCase();
-        // Priority order: errors/failures first, then warnings, then success, then others
+        // Priority order: errors/failures, running, pending, success, then others
         if (statusLower === 'xpass') return 0;  // unexpected pass: treat as failure
-        if (statusLower === 'xfail') return 2;  // expected failure: treat as success
+        if (statusLower === 'xfail') return 3;  // expected failure: treat as success
         if (statusLower.includes('error') || statusLower.includes('fail') || statusLower.includes('dropped')) return 0;
-        if (statusLower.includes('pending') || statusLower.includes('running')) return 1;
-        if (statusLower.includes('success') || statusLower === 'ok') return 2;
-        return 3; // other statuses
+        if (statusLower.includes('running')) return 1;
+        if (statusLower.includes('pending')) return 2;
+        if (statusLower.includes('success') || statusLower === 'ok') return 3;
+        return 4; // other statuses
     }
 
     function formatTimestamp(timestamp, showDate = true) {
@@ -1997,7 +2000,7 @@
         const transformed = privateResults.map(r => {
             const originalName = r.name;
             const copy = Object.assign({}, r);
-            copy.name = 'Downstream: ' + originalName;
+            copy.name = originalName;
             copy._downstreamHref = `${privateBaseUrl}/json.html?PR=${encodeURIComponent(private_pr_number)}&sha=${encodeURIComponent(private_sha)}&name_0=PR&name_1=${encodeURIComponent(originalName)}`;
 
             // Rewrite links: replace CloudFront/S3 private bucket prefix with proxy
@@ -2098,8 +2101,9 @@
 
                 console.log(`Data refreshed at ${new Date().toLocaleTimeString()}`);
 
-                // Fetch downstream (private sync) results asynchronously
-                if (nameParams.length === 1 && privateBaseUrl) {
+                // Fetch downstream (private sync) results asynchronously.
+                // Only supported for PRs to main trunk (name_0=PR).
+                if (nameParams.length === 1 && nameParams[0] === 'PR' && privateBaseUrl) {
                     const resolvedSha = runtimeCache.commits
                         ? ((sha === 'latest')
                             ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha

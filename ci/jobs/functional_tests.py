@@ -598,7 +598,7 @@ def main():
         tests_to_run = list(tests) if tests else tests
 
         for cnt in range(run_sets_cnt):
-            if global_time_limit > 0 and run_sets_cnt > 1:
+            if run_sets_cnt > 1 and cnt > 0:
                 if is_targeted_check:
                     job_timeout = int(3600 * 2.5)
                     soft_limit_margin = 3600

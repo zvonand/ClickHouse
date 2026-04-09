@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <base/scope_guard.h>
 #include <Common/FailPoint.h>
 
 namespace DB::FailPoints
@@ -81,12 +82,11 @@ TEST(SpaceSaving, StringViewCopyAssignmentExceptionSafety)
 
         FailPointInjection::enableFailPoint(
             FailPoints::space_saving_copy_arena_throw);
+        SCOPE_EXIT({ FailPointInjection::disableFailPoint(
+            FailPoints::space_saving_copy_arena_throw); });
 
         /// merge calls operator= since dst is empty; should throw
         ASSERT_THROW(dst.merge(src), Exception);
-
-        FailPointInjection::disableFailPoint(
-            FailPoints::space_saving_copy_arena_throw);
 
         /// dst is destroyed here -- must not double-free / SEGFAULT
     }

@@ -637,7 +637,7 @@ SELECT * FROM logs WHERE mapContainsValueLike(attributes, '% error %'); -- fast
 Text indexes can be used with `JSON` columns in three ways:
 
 1. **Indexes on specific subcolumns** — create a text index on a known JSON path, just like on a regular column. This indexes the *values* at that path.
-2. **Path-based indexes with [JSONAllPaths](/sql-reference/functions/json-functions.md/#JSONAllPaths)** — indexes the *all paths* present in each granule to skip granules that cannot contain the queried path. Similar to `Map` columns.
+2. **Path-based indexes with [JSONAllPaths](/sql-reference/functions/json-functions.md/#JSONAllPaths)** — indexes *all paths* present in each granule to skip granules that cannot contain the queried path. Similar to `Map` columns.
 3. **Value-based indexes with [JSONAllValues](/sql-reference/functions/json-functions.md#JSONAllValues)** — indexes *all values* across all JSON paths to accelerate full-text search on any JSON subcolumn with a single index.
 
 #### Indexes on specific subcolumns {#json-indexes-on-subcolumns}
@@ -793,7 +793,7 @@ Result:
 Text indexes can be used to accelerate searches on [JSON](/sql-reference/data-types/newjson.md) columns via function [`JSONAllValues`](/sql-reference/functions/json-functions.md#JSONAllValues).
 
 `JSONAllValues` returns all values from a JSON column as `Array(String)`.
-Values of non-string datatypes, (integers and arrays), are converted to their text representation.
+Values of non-string datatypes (e.g. integers and arrays) are converted to their text representation.
 A text index build using `JSONAllValues` indexes these text representations across all JSON paths in each row.
 This index can then accelerate queries that filter on individual JSON subcolumns.
 When a query filters on a specific subcolumn (e.g. `data.user_name = 'alice'`), the text index can quickly skip rows (and granules) that do not contain the search tokens in any of their JSON values.

@@ -2109,31 +2109,26 @@
                         ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
                         : sha)
                     : sha;
+                console.log(`Downstream: resolvedSha=${resolvedSha}, cachedSha=${runtimeCache.downstreamSha}`);
                 if (resolvedSha) {
                     const result = await fetchDownstreamData(resolvedSha, privateBaseUrl);
-                    // Stale response guard
-                    const currentSha = runtimeCache.commits
-                        ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
-                        : sha;
-                    if (resolvedSha === currentSha) {
-                        if (result.error) {
-                            if (runtimeCache.downstreamResults !== null || runtimeCache.downstreamError !== result.error) {
-                                downstreamChanged = true;
-                            }
-                            runtimeCache.downstreamResults = null;
-                            runtimeCache.downstreamSha = null;
-                            runtimeCache.downstreamError = result.error;
-                        } else if (result.data && result.data.length > 0) {
-                            downstreamChanged = runtimeCache.downstreamSha !== resolvedSha
-                                || JSON.stringify(runtimeCache.downstreamResults?.map(r => r.status))
-                                   !== JSON.stringify(result.data.map(r => r.status));
-                            runtimeCache.downstreamResults = result.data;
-                            runtimeCache.downstreamSha = resolvedSha;
-                            runtimeCache.downstreamError = null;
+                    console.log(`Downstream fetch: error=${result.error}, dataLen=${result.data?.length}`);
+                    if (result.error) {
+                        if (runtimeCache.downstreamResults !== null || runtimeCache.downstreamError !== result.error) {
+                            downstreamChanged = true;
                         }
+                        runtimeCache.downstreamResults = null;
+                        runtimeCache.downstreamSha = null;
+                        runtimeCache.downstreamError = result.error;
+                    } else if (result.data && result.data.length > 0) {
+                        downstreamChanged = true;
+                        runtimeCache.downstreamResults = result.data;
+                        runtimeCache.downstreamSha = resolvedSha;
+                        runtimeCache.downstreamError = null;
                     }
                 }
             }
+            console.log(`Render decision: fetchResult=${fetchResult}, downstreamChanged=${downstreamChanged}, cachedDownstream=${runtimeCache.downstreamResults?.length}`);
 
             // Single render pass with both upstream and downstream data
             if (fetchResult || downstreamChanged) {

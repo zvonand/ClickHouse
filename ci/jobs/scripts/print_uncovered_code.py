@@ -370,7 +370,13 @@ if __name__ == "__main__":
                 new_ln = _remap_line(old_ln, hunks)
                 if new_ln is None:
                     continue  # line was deleted by this PR — expected
-                if c["lines"].get(new_ln, 0) == 0 and not _is_noise(rel, new_ln):
+                # Only report if the current build actually has a DA entry for
+                # new_ln (count == 0 means coverable but not hit).  A missing
+                # entry means the line is not coverable (blank line, comment,
+                # preprocessor directive) — often caused by imprecise line
+                # remapping landing on such a line.
+                curr_cnt = c["lines"].get(new_ln)
+                if curr_cnt is not None and curr_cnt == 0 and not _is_noise(rel, new_ln):
                     lbc_lines.append((rel, new_ln))
 
             for fn, bcnt in b["fns"].items():

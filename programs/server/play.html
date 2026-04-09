@@ -639,6 +639,7 @@
             line-height: 0.75;
             position: sticky;
             left: 0;
+            z-index: -1;
         }
 
         #url_status
@@ -982,13 +983,29 @@ class QueryResultElement extends HTMLElement
                 td
                 {
                     background-color: var(--element-background-color);
-                    max-width: 50vw;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    padding: 0.25rem 0.5rem;
+                    max-width: 40vw;
+                    padding: 0;
                     border: 1px solid var(--border-color);
                     white-space: pre;
                     vertical-align: top;
+                }
+
+                .cell-content
+                {
+                    padding: 0.25rem 0.5rem;
+                    max-height: 3lh;
+                    overflow: hidden;
+                }
+
+                .cell-content:hover
+                {
+                    overflow-y: auto;
+                    scrollbar-width: none;
+                }
+
+                .cell-content:hover::-webkit-scrollbar
+                {
+                    display: none;
                 }
 
                 td u
@@ -1056,12 +1073,18 @@ class QueryResultElement extends HTMLElement
                     background-color: var(--border-color-selected);
                 }
 
-                tr:hover
+                tr:hover td:not(.td-selected)
                 {
                     filter: var(--table-hover-filter);
                 }
 
                 .tr-selected
+                {
+                    position: relative;
+                    z-index: 1;
+                }
+
+                .tr-selected td:not(.td-selected)
                 {
                     filter: var(--table-hover-filter);
                 }
@@ -1076,10 +1099,26 @@ class QueryResultElement extends HTMLElement
 
                 .td-selected
                 {
-                    white-space: pre-wrap;
-                    max-width: none;
+                    position: relative;
+                    z-index: 10;
                     outline: 2px solid var(--border-color-selected);
                     outline-offset: -2px;
+                }
+
+                .td-selected .cell-content
+                {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    min-height: 100%;
+                    max-height: 50vh;
+                    white-space: pre-wrap;
+                    word-break: break-all;
+                    overflow-y: auto;
+                    scrollbar-width: thin;
+                    filter: invert(1);
+                    background-color: var(--element-background-color);
                 }
 
                 td.empty-result
@@ -1092,6 +1131,7 @@ class QueryResultElement extends HTMLElement
                 {
                     width: 1%;
                     text-align: right;
+                    padding: 0.25rem 0.5rem;
                     background-color: var(--table-header-color);
                     color: var(--misc-text-color);
                 }
@@ -1243,8 +1283,11 @@ class QueryResultElement extends HTMLElement
 
     clearSelection()
     {
-        this._current_selected_cell?.classList.remove('td-selected');
-        this._current_selected_cell?.parentElement.classList.remove('tr-selected');
+        if (this._current_selected_cell)
+        {
+            this._current_selected_cell.classList.remove('td-selected');
+            this._current_selected_cell.parentElement.classList.remove('tr-selected');
+        }
         this._current_selected_cell = null;
     }
 
@@ -1256,6 +1299,9 @@ class QueryResultElement extends HTMLElement
     _renderCell(name, value)
     {
         let td = document.createElement('td');
+        let div = document.createElement('div');
+        div.className = 'cell-content';
+
         let is_null = (value === null);
         let is_link = false;
 
@@ -1294,14 +1340,16 @@ class QueryResultElement extends HTMLElement
             if (text.length >= 5 && text.match(/^[\d]{5,}$/))
             {
                 let i = 0;
-                td.innerHTML = text.split('').reverse().map(c => {
+                div.innerHTML = text.split('').reverse().map(c => {
                     if (i > 0 && i % 3 == 0) { c = `<u>${c}<\/u>`; }; ++i; return c;
                 }).reverse().join('');
+                td.appendChild(div);
                 return td;
             }
         }
 
-        td.appendChild(node);
+        div.appendChild(node);
+        td.appendChild(div);
         return td;
     }
 
@@ -1373,12 +1421,15 @@ class QueryResultElement extends HTMLElement
             const td = this._renderCell(column.name, row[column.name]);
 
             td.onclick = () => {
-                this._current_selected_cell?.classList.remove('td-selected');
-                this._current_selected_cell?.parentElement.classList.remove('tr-selected');
+                if (this._current_selected_cell)
+                {
+                    this._current_selected_cell.classList.remove('td-selected');
+                    this._current_selected_cell.parentElement.classList.remove('tr-selected');
+                }
                 this._current_selected_cell = td;
-                this._current_selected_cell.classList.add('td-selected');
-                this._current_selected_cell.parentElement.classList.add('tr-selected');
-                this._current_selected_cell.scrollIntoView({ block: 'nearest' });
+                td.classList.add('td-selected');
+                td.parentElement.classList.add('tr-selected');
+                (td.querySelector('.cell-content') || td).scrollIntoView({ block: 'nearest' });
                 this.focus();
             };
 
@@ -1419,6 +1470,7 @@ class QueryResultElement extends HTMLElement
                 for (let row of table.rows)
                 {
                     let cell = row.cells[col_idx];
+                    let div = cell.querySelector('.cell-content') || cell;
                     let value = +cell.innerText;
 
                     if (!double_sided)
@@ -1427,7 +1479,7 @@ class QueryResultElement extends HTMLElement
                         {
                             const ratio = value / this._extremes.max[name];
 
-                            cell.style.cssText = `
+                            div.style.cssText = `
                                 background-size: 100% 50%;
                                 background-position: center;
                                 background-repeat: no-repeat;
@@ -1442,7 +1494,7 @@ class QueryResultElement extends HTMLElement
                         {
                             const ratio = value / this._extremes.max[name];
 
-                            cell.style.cssText = `
+                            div.style.cssText = `
                                 background-size: 100% 50%;
                                 background-position: center;
                                 background-repeat: no-repeat;
@@ -1455,7 +1507,7 @@ class QueryResultElement extends HTMLElement
                         {
                             const ratio = value / this._extremes.min[name];
 
-                            cell.style.cssText = `
+                            div.style.cssText = `
                                 background-size: 100% 50%;
                                 background-position: center;
                                 background-repeat: no-repeat;
@@ -1525,12 +1577,24 @@ class QueryResultElement extends HTMLElement
             columnWidths.push(header.offsetWidth);
         });
 
+        let rowHeights = [];
+        for (let row of table.rows)
+        {
+            rowHeights.push(row.offsetHeight);
+        }
+
         table.classList.add('fixed');
         this._dataDiv.classList.add('fixed');
 
         headers.forEach((header, index) => {
             header.style.width = `${columnWidths[index]}px`;
         });
+
+        let i = 0;
+        for (let row of table.rows)
+        {
+            row.style.height = `${rowHeights[i++]}px`;
+        }
     }
 
     _appendHeaderResizer(header)
@@ -1675,7 +1739,7 @@ class QueryResultElement extends HTMLElement
         cell.parentElement.classList.remove('tr-selected');
         new_cell.classList.add('td-selected');
         new_cell.parentElement.classList.add('tr-selected');
-        new_cell.scrollIntoView({ block: 'nearest' });
+        (new_cell.querySelector('.cell-content') || new_cell).scrollIntoView({ block: 'nearest' });
         this._current_selected_cell = new_cell;
     }
 
@@ -2440,6 +2504,7 @@ async function postImpl(posted_request_num, query)
     } else {
         if (resultEl._extremes['min'] && resultEl._extremes['max']) resultEl.renderExtremes();
         if (is_table) resultEl.transposeIfNeeded();
+        if (is_table) resultEl._changeTableLayout();
     }
 
     progressEl.finish();
@@ -2562,6 +2627,7 @@ async function restoreFromHistory(state) {
     } else {
         if (resultEl._extremes['min'] && resultEl._extremes['max']) resultEl.renderExtremes();
         if (is_table) resultEl.transposeIfNeeded();
+        if (is_table) resultEl._changeTableLayout();
     }
 
     progressEl.finish();

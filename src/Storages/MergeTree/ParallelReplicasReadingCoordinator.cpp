@@ -1157,6 +1157,13 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
         return;
     }
 
+    if (announcement.replica_num >= replicas_count)
+        throw Exception(
+            ErrorCodes::LOGICAL_ERROR,
+            "Replica number ({}) is bigger than total replicas count ({})",
+            announcement.replica_num,
+            replicas_count);
+
     if (!snapshot_replica_num)
     {
         snapshot_replica_num = announcement.replica_num;

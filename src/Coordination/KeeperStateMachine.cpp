@@ -1506,7 +1506,6 @@ std::vector<int64_t> KeeperStateMachine<Storage>::getDeadSessions()
 template<typename Storage>
 int64_t KeeperStateMachine<Storage>::getNextZxid() const
 {
-    KEEPER_STORAGE_LOCK_SHARED(lock);
     return storage->getNextZXID();
 }
 
@@ -1520,7 +1519,7 @@ KeeperDigest KeeperStateMachine<Storage>::getNodesDigest() const
 template<typename Storage>
 int64_t KeeperStateMachine<Storage>::getLastProcessedZxid() const
 {
-    KEEPER_STORAGE_LOCK_EXCLUSIVE(lock);
+    KEEPER_STORAGE_LOCK_SHARED(lock);
     return storage->getZXID();
 }
 

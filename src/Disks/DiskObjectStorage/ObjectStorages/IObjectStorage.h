@@ -316,12 +316,12 @@ public:
         throw Exception(ErrorCodes::NOT_IMPLEMENTED, "This function is only implemented for AzureBlobStorage");
     }
 
-    virtual AzureBlobStorage::AuthMethod getAzureBlobStorageAuthMethod() const
+    virtual const AzureBlobStorage::ConnectionParams & getAzureBlobStorageConnectionParams() const
     {
         throw Exception(ErrorCodes::NOT_IMPLEMENTED, "This function is only implemented for AzureBlobStorage");
     }
 
-    virtual const AzureBlobStorage::ConnectionParams & getAzureBlobStorageConnectionParams() const
+    virtual AzureBlobStorage::AuthMethod getAzureBlobStorageAuthMethod() const
     {
         throw Exception(ErrorCodes::NOT_IMPLEMENTED, "This function is only implemented for AzureBlobStorage");
     }

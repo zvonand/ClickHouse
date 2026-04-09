@@ -807,12 +807,7 @@ FunctionCast::WrapperType FunctionCast::createTupleWrapper(const DataTypePtr & f
                 {
                     /// Non-Nullable target: all result NULLs are conversion failures.
                     for (size_t row = 0; row < input_rows_count; ++row)
-                    {
-                        if (result_null_map[row])
-                        {
-                            null_map_data[row] = 1;
-                        }
-                    }
+                        null_map_data[row] |= result_null_map[row];
                     converted_columns[i] = nullable_col->getNestedColumnPtr();
                 }
                 else if (to_reverse_index[i])
@@ -822,14 +817,16 @@ FunctionCast::WrapperType FunctionCast::createTupleWrapper(const DataTypePtr & f
                     size_t from_idx = *to_reverse_index[i];
                     const auto * src_nullable = checkAndGetColumn<ColumnNullable>(column_tuple.getColumns()[from_idx].get());
 
-                    for (size_t row = 0; row < input_rows_count; ++row)
+                    if (src_nullable)
                     {
-                        bool result_is_null = result_null_map[row];
-                        bool source_is_null = src_nullable && src_nullable->getNullMapData()[row];
-                        if (result_is_null && !source_is_null)
-                        {
-                            null_map_data[row] = 1;
-                        }
+                        const auto & source_null_map = src_nullable->getNullMapData();
+                        for (size_t row = 0; row < input_rows_count; ++row)
+                            null_map_data[row] |= result_null_map[row] & ~source_null_map[row];
+                    }
+                    else
+                    {
+                        for (size_t row = 0; row < input_rows_count; ++row)
+                            null_map_data[row] |= result_null_map[row];
                     }
                     /// Keep ColumnNullable — target type is Nullable.
                 }

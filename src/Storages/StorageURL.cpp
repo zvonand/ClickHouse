@@ -1681,12 +1681,30 @@ String StorageURL::resolveURLBase(const String & url, const String & base)
         return url;
 
     /// If the URL already contains a scheme at the beginning, return as-is.
-    /// Only check the prefix before any '/', '?', or '#' to avoid false positives
+    /// A scheme is [A-Za-z][A-Za-z0-9+.-]*: per RFC 3986.
+    /// We check that the colon appears before any '/', '?', or '#' to avoid false positives
     /// from embedded URLs in query parameters (e.g. "data.csv?next=https://other/a").
-    auto first_special = url.find_first_of("/?#");
-    auto scheme_in_url = url.find("://");
-    if (scheme_in_url != String::npos && (first_special == String::npos || scheme_in_url < first_special))
-        return url;
+    if (!url.empty() && std::isalpha(static_cast<unsigned char>(url[0])))
+    {
+        auto colon_pos = url.find(':');
+        auto first_special = url.find_first_of("/?#");
+        if (colon_pos != String::npos && (first_special == String::npos || colon_pos < first_special))
+        {
+            /// Verify all characters before the colon are valid scheme characters.
+            bool valid_scheme = true;
+            for (size_t i = 1; i < colon_pos; ++i)
+            {
+                char c = url[i];
+                if (!std::isalnum(static_cast<unsigned char>(c)) && c != '+' && c != '-' && c != '.')
+                {
+                    valid_scheme = false;
+                    break;
+                }
+            }
+            if (valid_scheme)
+                return url;
+        }
+    }
 
     auto scheme_end = base.find("://");
     if (scheme_end == String::npos)

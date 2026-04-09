@@ -297,7 +297,7 @@ Kusto1
 -- strcmp()
 0	1	-1	1
 -- substring()
-CD
+AB
 -- translate()
 kusto		xxx
 -- trim()

@@ -691,18 +691,18 @@ bool SubString::convertImpl(String & out, IParser::Pos & pos)
             throw Exception(ErrorCodes::SYNTAX_ERROR, "number of arguments do not match in function: {}", fn_name);
 
         /// KQL substring(source, startingIndex, length):
+        /// - If startingIndex < 0, clamp to 0
         /// - If startingIndex >= length(source), return empty
-        /// - If startingIndex < 0, clamp to max(0, length(source) + startingIndex)
         /// - length is clamped to available characters
         out = fmt::format(
-            "if(toInt64(length({0})) <= 0 OR {1} >= toInt64(length({0})), '', "
-            "substr({0}, greatest(if({1} < 0, toInt64(length({0})) + {1}, {1}), 0) + 1, {2}))",
+            "if(toInt64(length({0})) <= 0 OR greatest({1}, 0) >= toInt64(length({0})), '', "
+            "substr({0}, greatest({1}, 0) + 1, {2}))",
             source, starting_index, len);
     }
     else
         out = fmt::format(
-            "if(toInt64(length({0})) <= 0 OR {1} >= toInt64(length({0})), '', "
-            "substr({0}, greatest(if({1} < 0, toInt64(length({0})) + {1}, {1}), 0) + 1))",
+            "if(toInt64(length({0})) <= 0 OR greatest({1}, 0) >= toInt64(length({0})), '', "
+            "substr({0}, greatest({1}, 0) + 1))",
             source, starting_index);
 
     return true;

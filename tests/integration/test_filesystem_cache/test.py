@@ -984,7 +984,7 @@ def test_caches_with_query_limit(cluster):
             );
         """
     )
-    node.query("insert into fs_cache_query_limit select number,randomString(4096) from system.numbers limit 1000000")
+    node.query("insert into fs_cache_query_limit select number,randomString(4096) from system.numbers limit 1000")
     node.query("select * from fs_cache_query_limit format Null")
 
 

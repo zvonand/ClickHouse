@@ -232,6 +232,23 @@ String ParserKQLBase::getExprFromToken(Pos & pos)
         for (const auto & token : tokens)
             column_str = column_str.empty() ? token : column_str + " " + token;
 
+        /// Wrap expressions containing comparison/logical operators in toBool()
+        /// so they output true/false instead of 0/1 in KQL mode
+        {
+            bool has_comparison = false;
+            for (const auto & token : tokens)
+            {
+                if (token == ">" || token == "<" || token == ">=" || token == "<="
+                    || token == "and" || token == "or")
+                {
+                    has_comparison = true;
+                    break;
+                }
+            }
+            if (has_comparison && !column_str.empty())
+                column_str = fmt::format("toBool({})", column_str);
+        }
+
         if (has_alias)
         {
             --equal_pos;

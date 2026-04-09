@@ -32,7 +32,7 @@ public class RESTCatalogServerStarter {
             String host = args[3];
             String port = args[4];
             AuthProvider authProvider = createAuthProvider(tokenType);
-            Map<String,String> token_map = Map.of(
+            Map<String,String> token_map = ImmutableMap.of(
                     "fs.oss.accessKeyId", "accessKeyId",
                     "fs.oss.accessKeySecret", "accessKeySecret",
                     "fs.oss.securityToken", "securityToken"

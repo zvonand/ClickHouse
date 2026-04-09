@@ -30,13 +30,16 @@
 #include <Parsers/ASTAsterisk.h>
 #include <Parsers/ASTColumnDeclaration.h>
 #include <Parsers/ASTColumnsTransformers.h>
+#include <Parsers/ASTConstraintDeclaration.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ASTCreateSQLFunctionQuery.h>
+#include <Parsers/ASTDataType.h>
 #include <Parsers/ASTDeleteQuery.h>
 #include <Parsers/ASTDictionary.h>
 #include <Parsers/ASTDictionaryAttributeDeclaration.h>
 #include <Parsers/ASTDropQuery.h>
 #include <Parsers/ASTExpressionList.h>
+#include <Parsers/ASTFunction.h>
 #include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTIndexDeclaration.h>
 #include <Parsers/ASTInsertQuery.h>
@@ -54,8 +57,6 @@
 #include <Parsers/ASTSelectIntersectExceptQuery.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Parsers/ASTSetQuery.h>
-#include <Parsers/ASTConstraintDeclaration.h>
-#include <Parsers/ASTDataType.h>
 #include <Parsers/ASTStatisticsDeclaration.h>
 #include <Parsers/ASTSubquery.h>
 #include <Parsers/ASTSystemQuery.h>
@@ -69,6 +70,7 @@
 #include <Parsers/SyncReplicaMode.h>
 #include <TableFunctions/TableFunctionFactory.h>
 #include <pcg_random.hpp>
+#include <Common/SettingsChanges.h>
 #include <Common/SipHash.h>
 #include <Common/assert_cast.h>
 #include <Common/typeid_cast.h>
@@ -1225,30 +1227,36 @@ void QueryFuzzer::fuzzCodecFunction(ASTFunction & codec_fn)
 
     codec_fn.arguments->children.clear();
 
-    static const Strings pool = {
-        "NONE", "LZ4", "LZ4HC", "ZSTD",
-        "AES_128_GCM_SIV", "AES_256_GCM_SIV",
-        "Delta", "DoubleDelta", "T64", "GCD",
-        "Gorilla", "FPC", "ALP"};
+    static const Strings pool
+        = {"NONE",
+           "LZ4",
+           "LZ4HC",
+           "ZSTD",
+           "AES_128_GCM_SIV",
+           "AES_256_GCM_SIV",
+           "Delta",
+           "DoubleDelta",
+           "T64",
+           "GCD",
+           "Gorilla",
+           "FPC",
+           "ALP"};
 
     const String chosen = pickRandomly(fuzz_rand, pool);
     if (chosen == "ZSTD" && fuzz_rand() % 2 == 0)
-        codec_fn.arguments->children.push_back(
-            makeASTFunction("ZSTD", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 22 + 1))));
+        codec_fn.arguments->children.push_back(makeASTFunction("ZSTD", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 22 + 1))));
     else if (chosen == "LZ4HC" && fuzz_rand() % 2 == 0)
-        codec_fn.arguments->children.push_back(
-            makeASTFunction("LZ4HC", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 12 + 1))));
+        codec_fn.arguments->children.push_back(makeASTFunction("LZ4HC", make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 12 + 1))));
     else if (chosen == "Delta" && fuzz_rand() % 2 == 0)
     {
         static const UInt64 delta_sizes[] = {1, 2, 4, 8};
-        codec_fn.arguments->children.push_back(
-            makeASTFunction("Delta", make_intrusive<ASTLiteral>(delta_sizes[fuzz_rand() % 4])));
+        codec_fn.arguments->children.push_back(makeASTFunction("Delta", make_intrusive<ASTLiteral>(delta_sizes[fuzz_rand() % 4])));
     }
     else if (chosen == "FPC" && fuzz_rand() % 2 == 0)
-        codec_fn.arguments->children.push_back(
-            makeASTFunction("FPC",
-                make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 28 + 1)),
-                make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 2 == 0 ? 4 : 8))));
+        codec_fn.arguments->children.push_back(makeASTFunction(
+            "FPC",
+            make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 28 + 1)),
+            make_intrusive<ASTLiteral>(UInt64(fuzz_rand() % 2 == 0 ? 4 : 8))));
     else
         codec_fn.arguments->children.push_back(makeASTFunction(chosen));
 }
@@ -4634,8 +4642,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
 
             /// MOVE requires a destination; toggle between DISK and VOLUME.
             if (ttl_elem->mode == TTLMode::MOVE)
-                ttl_elem->destination_type
-                    = (fuzz_rand() % 2 == 0) ? DataDestinationType::DISK : DataDestinationType::VOLUME;
+                ttl_elem->destination_type = (fuzz_rand() % 2 == 0) ? DataDestinationType::DISK : DataDestinationType::VOLUME;
         }
         /// Toggle IF EXISTS on MOVE rules.
         if (ttl_elem->mode == TTLMode::MOVE && fuzz_rand() % 10 == 0)
@@ -4655,9 +4662,8 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
     {
         /// Toggle between CHECK (enforced at insert time) and ASSUME (optimizer hint only).
         if (fuzz_rand() % 20 == 0)
-            constraint->type = (constraint->type == ASTConstraintDeclaration::Type::CHECK)
-                ? ASTConstraintDeclaration::Type::ASSUME
-                : ASTConstraintDeclaration::Type::CHECK;
+            constraint->type = (constraint->type == ASTConstraintDeclaration::Type::CHECK) ? ASTConstraintDeclaration::Type::ASSUME
+                                                                                           : ASTConstraintDeclaration::Type::CHECK;
         fuzz(constraint->children);
     }
     else if (typeid_cast<ASTDataType *>(ast.get()) && fuzz_rand() % 10 == 0)
@@ -4670,7 +4676,11 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             const auto new_type = fuzzDataType(old_type);
             ParserDataType parser;
             ast = parseQuery(
-                parser, new_type->getName(), DBMS_DEFAULT_MAX_QUERY_SIZE, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS);
+                parser,
+                new_type->getName(),
+                DBMS_DEFAULT_MAX_QUERY_SIZE,
+                DBMS_DEFAULT_MAX_PARSER_DEPTH,
+                DBMS_DEFAULT_MAX_PARSER_BACKTRACKS);
         }
         else
             fuzz(ast->children);

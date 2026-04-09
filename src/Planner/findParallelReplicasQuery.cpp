@@ -580,7 +580,11 @@ const UnionNode * findTableUnionForParallelReplicas(const QueryTreeNodePtr & que
 
     auto context = query_node ? query_node->getContext() : union_node->getContext();
 
-    if (!context->getSettingsRef()[Setting::serialize_query_plan] && !context->canUseParallelReplicasOnFollower())
+    const auto & settings = context->getSettingsRef();
+    if (!settings[Setting::parallel_replicas_allow_view_over_mergetree])
+        return nullptr;
+
+    if (!settings[Setting::serialize_query_plan] && !context->canUseParallelReplicasOnFollower())
         return nullptr;
 
     return findTableUnionForParallelReplicas(query_tree_node.get(), context);

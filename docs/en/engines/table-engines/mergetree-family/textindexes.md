@@ -637,8 +637,8 @@ SELECT * FROM logs WHERE mapContainsValueLike(attributes, '% error %'); -- fast
 Text indexes can be used with `JSON` columns in three ways:
 
 1. **Indexes on specific subcolumns** — create a text index on a known JSON path, just like on a regular column. This indexes the *values* at that path.
-2. **Path-based indexes with `JSONAllPaths`** — index the *set of paths* present in each granule to skip granules that cannot contain the queried path. Similar to `Map` columns.
-3. **Value-based indexes with `JSONAllValues`** — index *all values* across all JSON paths to accelerate full-text search on any JSON subcolumn with a single index.
+2. **Path-based indexes with [JSONAllPaths](/sql-reference/functions/json-functions.md/#JSONAllPaths)** — indexes the *all paths* present in each granule to skip granules that cannot contain the queried path. Similar to `Map` columns.
+3. **Value-based indexes with [JSONAllValues](/sql-reference/functions/json-functions.md#JSONAllValues)** — indexes *all values* across all JSON paths to accelerate full-text search on any JSON subcolumn with a single index.
 
 #### Indexes on specific subcolumns {#json-indexes-on-subcolumns}
 
@@ -649,7 +649,7 @@ There are two ways to reference a JSON subcolumn in an index expression:
 - **Typed path** declared in the JSON type hint — access by name directly: `json.a`.
 - **Dynamic path** with explicit cast — use the `::` cast syntax: `json.b::String`.
 
-Example queries:
+Example index definition:
 
 ```sql
 CREATE TABLE sensor_data
@@ -666,11 +666,15 @@ INSERT INTO sensor_data SELECT toJSONString(map('sensor_id', 'id_' || number , '
 INSERT INTO sensor_data SELECT toJSONString(map('sensor_id', 'id_' || number, 'location', 'room_' || toString(number))) FROM numbers(4, 4);
 ```
 
-```sql title="Query"
+Example query:
+
+```sql
 EXPLAIN indexes = 1 SELECT * FROM sensor_data WHERE data.sensor_id = 'id_5';
 ```
 
-```text title="Response"
+Result:
+
+```text
 ...
     Indexes:
       Skip
@@ -681,11 +685,15 @@ EXPLAIN indexes = 1 SELECT * FROM sensor_data WHERE data.sensor_id = 'id_5';
         Granules: 1/8
 ```
 
-```sql title="Query"
+Example query:
+
+```sql
 EXPLAIN indexes = 1 SELECT * FROM sensor_data WHERE data.location::String = 'room_5';
 ```
 
-```text title="Response"
+Result:
+
+```text
 ...
     Indexes:
       Skip
@@ -701,7 +709,7 @@ EXPLAIN indexes = 1 SELECT * FROM sensor_data WHERE data.location::String = 'roo
 Similar to `Map` columns, text indexes can be created on [JSON](/sql-reference/data-types/newjson.md) columns using [`JSONAllPaths`](/sql-reference/functions/json-functions.md/#JSONAllPaths).
 The index stores the set of JSON paths present in each granule and uses them to skip granules where a queried path is absent.
 
-Example queries:
+Example index definition:
 
 ```sql
 CREATE TABLE events
@@ -716,13 +724,18 @@ INSERT INTO events VALUES ('{"user": {"name": "Alice"}, "action": "login"}');
 INSERT INTO events VALUES ('{"metric": {"cpu": 0.95}, "host": "srv1"}');
 ```
 
-You can use `EXPLAIN indexes = 1` to verify that the skip index is being used. When a path exists only in one part, the index skips the other part:
+You can use `EXPLAIN indexes = 1` to verify that the skip index is being used.
+When a path exists only in one part, the index skips the other part.
 
-```sql title="Query"
+Example:
+
+```sql
 EXPLAIN indexes = 1 SELECT * FROM events WHERE data.user.name = 'Alice';
 ```
 
-```text title="Response"
+Result:
+
+```text
 ...
     Indexes:
       Skip
@@ -733,11 +746,15 @@ EXPLAIN indexes = 1 SELECT * FROM events WHERE data.user.name = 'Alice';
         Granules: 1/2
 ```
 
-When a path does not exist in any part, all parts and granules are skipped:
+When a path does not exist in any part, all parts and granules are skipped.
 
-```sql title="Query"
+Example:
+
+```sql
 EXPLAIN indexes = 1 SELECT * FROM events WHERE data.nonexistent = 1;
 ```
+
+Result:
 
 ```text title="Response"
 ...
@@ -752,11 +769,15 @@ EXPLAIN indexes = 1 SELECT * FROM events WHERE data.nonexistent = 1;
 
 `IS NOT NULL` also uses the index — it skips granules where the path is absent (since the value would be `NULL`):
 
-```sql title="Query"
+Example:
+
+```sql
 EXPLAIN indexes = 1 SELECT * FROM events WHERE data.user.name IS NOT NULL;
 ```
 
-```text title="Response"
+Result:
+
+```text
 ...
     Indexes:
       Skip
@@ -771,11 +792,22 @@ EXPLAIN indexes = 1 SELECT * FROM events WHERE data.user.name IS NOT NULL;
 
 Text indexes can be used to accelerate searches on [JSON](/sql-reference/data-types/newjson.md) columns via function [`JSONAllValues`](/sql-reference/functions/json-functions.md#JSONAllValues).
 
-`JSONAllValues` returns all values from a JSON column as `Array(String)`, with values serialized in their text representation.
-When a text index is built on `JSONAllValues(json_column)`, all values across all JSON paths are tokenized and indexed together.
-This single index can then accelerate queries that filter on individual JSON subcolumns.
+`JSONAllValues` returns all values from a JSON column as `Array(String)`.
+Values of non-string datatypes, (integers and arrays), are converted to their text representation.
+A text index build using `JSONAllValues` indexes these text representations across all JSON paths in each row.
+This index can then accelerate queries that filter on individual JSON subcolumns.
+When a query filters on a specific subcolumn (e.g. `data.user_name = 'alice'`), the text index can quickly skip rows (and granules) that do not contain the search tokens in any of their JSON values.
+
+:::note
+The index may produce false positives when different JSON paths contain the same tokens.
+For example, if row 1 has `{"a": "hello", "b": "world"}` and a query searches for `data.a = 'world'`, the text index cannot distinguish that `world` belongs to path `b`, not `a`.
+In such cases, the index will not skip the row, and the filter on the actual column data will handle the final evaluation.
+This is the same behavior as with other text index use cases where the index acts as a fast pre-filter.
+:::
 
 ##### Creating the index {#json-all-values-creating-the-index}
+
+Example index definition:
 
 ```sql
 CREATE TABLE events
@@ -814,21 +846,6 @@ SELECT * FROM events WHERE has(data.tags::Array(String), 'bug')
 ```sql
 SELECT * FROM events WHERE data.level IN ('error', 'critical');
 ```
-
-##### How it works {#json-all-values-how-it-works}
-
-`JSONAllValues` serializes every value to its text representation, so values of all types (strings, integers, arrays, etc.) are indexed as text tokens.
-
-The text index on `JSONAllValues` indexes these text representations across all JSON paths in each row.
-When a query filters on a specific subcolumn (e.g. `data.user_name = 'alice'`), the text index can quickly skip rows (and granules) that do not contain the search tokens in any of their JSON values.
-Since the index covers all paths, a single index definition is sufficient to accelerate searches across any JSON subcolumn.
-
-:::note
-The index may produce false positives when different JSON paths contain the same tokens.
-For example, if row 1 has `{"a": "hello", "b": "world"}` and a query searches for `data.a = 'world'`, the text index cannot distinguish that `world` belongs to path `b`, not `a`.
-In such cases, the index will not skip the row, and the filter on the actual column data will handle the final evaluation.
-This is the same behavior as with other text index use cases where the index acts as a fast pre-filter.
-:::
 
 ## Performance Tuning {#performance-tuning}
 

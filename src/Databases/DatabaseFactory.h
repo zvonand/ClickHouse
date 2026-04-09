@@ -64,7 +64,12 @@ public:
 
     using DatabaseEngines = std::unordered_map<std::string, Creator>;
 
-    void registerDatabase(const std::string & name, CreatorFn creator_fn, EngineFeatures features = {});
+    void registerDatabase(const std::string & name, CreatorFn creator_fn, EngineFeatures features = EngineFeatures{
+        .supports_arguments = false,
+        .supports_settings = false,
+        .supports_table_overrides = false,
+        .source_access_type = std::nullopt,
+    });
 
     const DatabaseEngines & getDatabaseEngines() const { return database_engines; }
 

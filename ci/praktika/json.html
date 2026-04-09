@@ -1809,9 +1809,13 @@
             resultsDiv.appendChild(textDiv);
         }
 
-        // Merge cached downstream results if available
+        // Merge cached downstream results if available and matching current SHA
         let resultsData = result.results;
-        if (nameParams.length === 1 && runtimeCache.downstreamResults) {
+        const resolvedSha = (sha === 'latest' && runtimeCache.commits)
+            ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
+            : sha;
+        if (nameParams.length === 1 && runtimeCache.downstreamResults
+                && runtimeCache.downstreamSha === resolvedSha) {
             resultsData = [...resultsData, ...runtimeCache.downstreamResults];
         }
         if (Array.isArray(resultsData) && resultsData.length > 0) {
@@ -2127,9 +2131,15 @@
                 if (resolvedSha) {
                     fetchDownstreamData(resolvedSha, privateBaseUrl).then(result => {
                         if (result.error) {
+                            const hadDownstream = runtimeCache.downstreamResults !== null;
                             runtimeCache.downstreamResults = null;
                             runtimeCache.downstreamSha = null;
                             runtimeCache.downstreamError = result.error;
+                            // Re-render to clear stale downstream rows
+                            if (hadDownstream) {
+                                clearPage();
+                                renderResults(PR, sha, nameParams);
+                            }
                             showDownstreamInfo(result.error);
                         } else if (result.data && result.data.length > 0) {
                             runtimeCache.downstreamResults = result.data;

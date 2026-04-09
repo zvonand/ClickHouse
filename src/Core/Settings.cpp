@@ -6926,7 +6926,7 @@ See also:
 Write information about blob storage operations to system.blob_storage_log table
 )", 0) \
     DECLARE(UInt64, predicate_statistics_sample_rate, 0, R"(
-Collect predicate selectivity statistics and write them to `system.predicate_statistics_log`. Filter-level statistics are sampled every N chunks. Index-level statistics are logged once per MergeTree read when enabled. 0 means disabled, 1 means every chunk/query.
+Collect predicate selectivity statistics into `system.predicate_statistics_log`. When set to N > 0, approximately 1/N of queries are sampled (by the query ID). 0 means disabled.
 )", 0) \
     DECLARE(Bool, allow_create_index_without_type, false, R"(
 Allow CREATE INDEX query without TYPE. Query will be ignored. Made for SQL compatibility tests.

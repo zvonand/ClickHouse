@@ -7,6 +7,8 @@
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeString.h>
 
+#include <set>
+
 using namespace DB;
 
 /// Helper to build a simple DAG node: function(column, constant)

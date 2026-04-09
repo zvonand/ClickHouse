@@ -63,6 +63,7 @@
 #include <Common/thread_local_rng.h>
 
 #include <algorithm>
+#include <city.h>
 #include <iterator>
 #include <memory>
 #include <string_view>
@@ -3283,6 +3284,13 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
     if (sample_rate == 0)
         return;
 
+    if (sample_rate > 1)
+    {
+        auto qid = CurrentThread::getQueryId();
+        if (CityHash_v1_0_2::CityHash64(qid.data(), qid.size()) % sample_rate != 0)
+            return;
+    }
+
     auto predicate_stats_log = context->getPredicateStatisticsLog();
     if (!predicate_stats_log)
         return;
@@ -3295,8 +3303,9 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
         return;
 
     PredicateStatisticsLogElement elem;
-    elem.event_date = static_cast<UInt16>(DateLUT::instance().toDayNum(time(nullptr)));
-    elem.event_time = time(nullptr);
+    auto now = time(nullptr);
+    elem.event_date = static_cast<UInt16>(DateLUT::instance().toDayNum(now));
+    elem.event_time = now;
     elem.database = storage_id.database_name;
     elem.table = storage_id.table_name;
     elem.query_id = String(CurrentThread::getQueryId());

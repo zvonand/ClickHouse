@@ -337,6 +337,9 @@ ChunkAndProgress MergeTreeSelectProcessor::read()
 
             if (!task)
                 break;
+
+            if (storage_id.empty())
+                storage_id = task->getInfo().data_part->storage.getStorageID();
         }
         catch (const Exception & e)
         {
@@ -408,10 +411,6 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     if (!predicate_stats_log)
         return;
 
-    if (!task)
-        return;
-
-    auto storage_id = task->getInfo().data_part->storage.getStorageID();
     if (storage_id.database_name.empty())
         return;
 

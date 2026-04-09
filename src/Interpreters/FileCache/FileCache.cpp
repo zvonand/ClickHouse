@@ -1,16 +1,16 @@
-#include <Interpreters/Cache/FileCache.h>
+#include <Interpreters/FileCache/FileCache.h>
 
 #include <IO/Operators.h>
 #include <IO/ReadHelpers.h>
 #include <IO/ReadSettings.h>
 #include <IO/WriteBufferFromFile.h>
 #include <IO/WriteBufferFromString.h>
-#include <Interpreters/Cache/FileCacheSettings.h>
-#include <Interpreters/Cache/IFileCachePriority.h>
-#include <Interpreters/Cache/LRUFileCachePriority.h>
-#include <Interpreters/Cache/SLRUFileCachePriority.h>
-#include <Interpreters/Cache/FileCacheUtils.h>
-#include <Interpreters/Cache/EvictionCandidates.h>
+#include <Interpreters/FileCache/FileCacheSettings.h>
+#include <Interpreters/FileCache/IFileCachePriority.h>
+#include <Interpreters/FileCache/LRUFileCachePriority.h>
+#include <Interpreters/FileCache/SLRUFileCachePriority.h>
+#include <Interpreters/FileCache/FileCacheUtils.h>
+#include <Interpreters/FileCache/EvictionCandidates.h>
 #include <Interpreters/Context.h>
 #include <base/hex.h>
 #include <Common/callOnce.h>
@@ -22,7 +22,7 @@
 #include <Core/ServerUUID.h>
 #include <Core/BackgroundSchedulePool.h>
 #if ENABLE_DISTRIBUTED_CACHE
-#include <Interpreters/Cache/OvercommitFileCachePriority.h>
+#include <Interpreters/FileCache/OvercommitFileCachePriority.h>
 #endif
 
 #include <exception>
@@ -32,7 +32,7 @@
 #include <mutex>
 #include <tuple>
 #include <vector>
-#include <Interpreters/Cache/FileSegmentInfo.h>
+#include <Interpreters/FileCache/FileSegmentInfo.h>
 
 
 namespace fs = std::filesystem;

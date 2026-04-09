@@ -1,10 +1,10 @@
-#include <Interpreters/Cache/FileSegment.h>
+#include <Interpreters/FileCache/FileSegment.h>
 
 #include <filesystem>
 #include <IO/Operators.h>
 #include <IO/WriteBufferFromString.h>
-#include <Interpreters/Cache/FileCache.h>
-#include <Interpreters/Cache/FileCacheUtils.h>
+#include <Interpreters/FileCache/FileCache.h>
+#include <Interpreters/FileCache/FileCacheUtils.h>
 #include <base/EnumReflection.h>
 #include <base/getThreadId.h>
 #include <base/hex.h>

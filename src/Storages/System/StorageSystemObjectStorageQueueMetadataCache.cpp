@@ -6,9 +6,9 @@
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeDateTime.h>
 #include <DataTypes/DataTypeMap.h>
-#include <Interpreters/Cache/FileCache.h>
-#include <Interpreters/Cache/FileSegment.h>
-#include <Interpreters/Cache/FileCacheFactory.h>
+#include <Interpreters/FileCache/FileCache.h>
+#include <Interpreters/FileCache/FileSegment.h>
+#include <Interpreters/FileCache/FileCacheFactory.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/ProfileEventsExt.h>
 #include <Storages/ObjectStorageQueue/ObjectStorageQueueMetadata.h>

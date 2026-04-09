@@ -1,7 +1,7 @@
-#include <Interpreters/Cache/IFileCachePriority.h>
-#include <Interpreters/Cache/SLRUFileCachePriority.h>
-#include <Interpreters/Cache/FileCache.h>
-#include <Interpreters/Cache/EvictionCandidates.h>
+#include <Interpreters/FileCache/IFileCachePriority.h>
+#include <Interpreters/FileCache/SLRUFileCachePriority.h>
+#include <Interpreters/FileCache/FileCache.h>
+#include <Interpreters/FileCache/EvictionCandidates.h>
 #include <Common/CurrentMetrics.h>
 #include <Common/randomSeed.h>
 #include <Common/logger_useful.h>

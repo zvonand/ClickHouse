@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Interpreters/Cache/LRUFileCachePriority.h>
+#include <Interpreters/FileCache/LRUFileCachePriority.h>
 #include <Common/logger_useful.h>
 
 

@@ -1,4 +1,4 @@
-#include <Interpreters/Cache/FileCacheSettings.h>
+#include <Interpreters/FileCache/FileCacheSettings.h>
 
 #include <Core/BaseSettings.h>
 #include <Core/BaseSettingsFwdMacrosImpl.h>
@@ -8,7 +8,7 @@
 #include <Common/logger_useful.h>
 #include <Common/filesystemHelpers.h>
 #include <Storages/System/MutableColumnsAndConstraints.h>
-#include <Interpreters/Cache/FileCache.h>
+#include <Interpreters/FileCache/FileCache.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <boost/algorithm/string/case_conv.hpp>

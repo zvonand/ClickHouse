@@ -1,8 +1,8 @@
 #pragma once
 #include <cctype>
-#include <Interpreters/Cache/FileCache_fwd.h>
-#include <Interpreters/Cache/FileCacheKey.h>
-#include <Interpreters/Cache/FileCacheOriginInfo.h>
+#include <Interpreters/FileCache/FileCache_fwd.h>
+#include <Interpreters/FileCache/FileCacheKey.h>
+#include <Interpreters/FileCache/FileCacheOriginInfo.h>
 
 namespace DB
 {

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <boost/noncopyable.hpp>
-#include <Interpreters/Cache/FileCacheKey.h>
-#include <Interpreters/Cache/Guards.h>
+#include <Interpreters/FileCache/FileCacheKey.h>
+#include <Interpreters/FileCache/Guards.h>
 
 #include <IO/WriteBufferFromFile.h>
 #include <IO/ReadBufferFromFileBase.h>
@@ -10,9 +10,9 @@
 #include <IO/Operators.h>
 #include <IO/OpenedFileCache.h>
 #include <base/getThreadId.h>
-#include <Interpreters/Cache/IFileCachePriority.h>
-#include <Interpreters/Cache/FileSegmentInfo.h>
-#include <Interpreters/Cache/FileCache_fwd_internal.h>
+#include <Interpreters/FileCache/IFileCachePriority.h>
+#include <Interpreters/FileCache/FileSegmentInfo.h>
+#include <Interpreters/FileCache/FileCache_fwd_internal.h>
 
 
 namespace Poco { class Logger; }

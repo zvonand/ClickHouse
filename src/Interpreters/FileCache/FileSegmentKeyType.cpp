@@ -1,4 +1,4 @@
-#include <Interpreters/Cache/FileSegmentKeyType.h>
+#include <Interpreters/FileCache/FileSegmentKeyType.h>
 #include <base/EnumReflection.h>
 
 namespace DB

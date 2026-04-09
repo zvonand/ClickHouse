@@ -1,10 +1,10 @@
 #pragma once
 
-#include <Interpreters/Cache/FileCacheOriginInfo.h>
+#include <Interpreters/FileCache/FileCacheOriginInfo.h>
 #include <Core/Types.h>
-#include <Interpreters/Cache/FileSegmentInfo.h>
-#include <Interpreters/Cache/Guards.h>
-#include <Interpreters/Cache/FileCache_fwd_internal.h>
+#include <Interpreters/FileCache/FileSegmentInfo.h>
+#include <Interpreters/FileCache/Guards.h>
+#include <Interpreters/FileCache/FileCache_fwd_internal.h>
 
 #include <atomic>
 #include <memory>

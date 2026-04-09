@@ -1,7 +1,7 @@
 #pragma once
 
 #include <IO/WriteBufferFromFileDecorator.h>
-#include <Interpreters/Cache/FileSegment.h>
+#include <Interpreters/FileCache/FileSegment.h>
 #include <IO/IReadableWriteBuffer.h>
 #include <Disks/IO/CachedOnDiskWriteBufferFromFile.h>
 

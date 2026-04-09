@@ -687,7 +687,6 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
 
         logIcebergFileStats(object_info, log);
 
-
         InputFormatPtr input_format;
         if (context_->getSettingsRef()[Setting::use_parquet_metadata_cache]
             && (object_info->getFileFormat().value_or(configuration->format) == "Parquet")

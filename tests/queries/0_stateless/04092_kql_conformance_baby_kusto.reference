@@ -269,9 +269,9 @@ nan
 10
 10
 -- BuiltIns_geo_distance_2points_Scalar --
-1199	\N	\N	\N	\N	\N
+1198	\N	\N	\N	\N	\N
 -- BuiltIns_geo_distance_2points_Columnar --
-1199
+1198
 \N
 \N
 \N

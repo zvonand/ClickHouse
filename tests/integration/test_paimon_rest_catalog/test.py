@@ -1,6 +1,7 @@
 # coding: utf-8
 
 import os
+import time
 
 import pytest
 import requests
@@ -19,10 +20,24 @@ cluster.base_cmd.extend(
 )
 
 
+def wait_for_healthy(cluster, service_name, timeout=60):
+    docker_id = cluster.get_instance_docker_id(service_name)
+    container = cluster.get_docker_handle(docker_id)
+    start = time.time()
+    while time.time() - start < timeout:
+        info = container.client.api.inspect_container(container.name)
+        if info["State"]["Health"]["Status"] == "healthy":
+            return
+        time.sleep(1)
+    raise Exception(f"Container {service_name} did not become healthy in {timeout}s")
+
+
 @pytest.fixture(scope="module")
 def started_cluster():
     cluster.start()
     try:
+        wait_for_healthy(cluster, "paimon-rest-bearer")
+        wait_for_healthy(cluster, "paimon-rest-dlf")
         yield cluster
     finally:
         cluster.shutdown()

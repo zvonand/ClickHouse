@@ -15,11 +15,28 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-static void materializeConstantColumn(QueryPlan & query_plan, const std::string & name, const DataTypePtr & type, const Field & value)
+namespace
+{
+
+const NameSet common_virtual_names = {"_table", "_database"};
+
+void materializeConstantColumn(QueryPlan & query_plan, const std::string & name, const DataTypePtr & type, const Field & value)
 {
     auto step = std::make_unique<ExpressionStep>(query_plan.getCurrentHeader(), ActionsDAG::makeAddingConstantColumnActions(name, type, value));
     step->setStepDescription(fmt::format("Materialize {} virtual column", name), 100);
     query_plan.addStep(std::move(step));
+}
+
+VirtualsDescriptionPtr filterCommonVirtuals(VirtualsDescriptionPtr initial)
+{
+    auto filtered_virtuals = std::make_unique<VirtualColumnsDescription>();
+    for (const auto & col : initial->getNamesAndTypesList())
+        if (!common_virtual_names.contains(col.name))
+            filtered_virtuals->add(initial->getDescription(col.name));
+
+    return filtered_virtuals;
+}
+
 }
 
 void StorageWithCommonVirtualColumns::read(
@@ -32,10 +49,10 @@ void StorageWithCommonVirtualColumns::read(
     size_t max_block_size,
     size_t num_streams)
 {
-    /// Proxy to implementation storage
-    const auto physical_columns = VirtualColumnUtils::filterVirtualColumns(column_names, {"_table", "_database"}, storage_snapshot->metadata, getVirtualsPtr());
-    readImpl(query_plan, physical_columns, storage_snapshot, query_info,
-             context, processed_stage, max_block_size, num_streams);
+    /// Build a snapshot without common virtuals so readImpl doesn't see them.
+    const auto filtered_columns = VirtualColumnUtils::filterVirtualColumns(column_names, common_virtual_names, storage_snapshot->metadata, storage_snapshot->virtual_columns);
+    const auto filtered_snapshot = std::make_shared<StorageSnapshot>(storage_snapshot->storage, storage_snapshot->metadata, filterCommonVirtuals(storage_snapshot->virtual_columns), std::exchange(storage_snapshot->data, nullptr));
+    readImpl(query_plan, filtered_columns, filtered_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
 
     /// Materialize constant virtuals
     if (query_plan.isInitialized())

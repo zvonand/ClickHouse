@@ -61,7 +61,7 @@ void IStorageSystemOneBlock::readImpl(
     size_t /*num_streams*/)
 {
     storage_snapshot->check(column_names);
-    Block sample_block = storage_snapshot->metadata->getSampleBlockWithVirtuals(getVirtualsList());
+    Block sample_block = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getNamesAndTypesList());
     std::vector<UInt8> columns_mask;
 
     if (supportsColumnsMask())

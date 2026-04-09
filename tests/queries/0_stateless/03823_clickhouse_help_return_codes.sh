@@ -66,7 +66,7 @@ $CLICKHOUSE_BINARY server --help >/dev/null 2>&1
 echo "clickhouse server --help: $?"
 
 # Test that clickhouse keeper --help returns 0 (keeper is optional)
-if $CLICKHOUSE_BINARY help 2>&1 | grep -q 'keeper'; then
+if $CLICKHOUSE_BINARY help 2>&1 | grep -qF 'clickhouse keeper [args]'; then
     $CLICKHOUSE_BINARY keeper --help >/dev/null 2>&1
     echo "clickhouse keeper --help: $?"
 else

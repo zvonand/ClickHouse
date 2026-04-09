@@ -1059,7 +1059,7 @@ namespace
             {
                 /// Sometimes there is no sudo available like in some Docker images.
                 /// We will use clickhouse su instead.
-                command = fmt::format("{} su {}:{} {}", binary.string(), user, group, command);
+                command = fmt::format("'{}' su '{}:{}' {}", binary.string(), user, group, command);
             }
             else
             {

@@ -149,17 +149,17 @@ namespace
 using MainFunc = int (*)(int, char**);
 
 /// Forward declaration, since clickhouse_applications is defined after this function.
-void printHelp();
+void printHelp(std::ostream & out);
 
 int mainEntryHelp(int, char **)
 {
-    printHelp();
+    printHelp(std::cout);
     return 0;
 }
 
 int printHelpOnError(int, char **)
 {
-    printHelp();
+    printHelp(std::cerr);
     return -1;
 }
 
@@ -219,11 +219,11 @@ std::pair<std::string_view, MainFunc> clickhouse_applications[] =
     {"help", mainEntryHelp},
 };
 
-void printHelp()
+void printHelp(std::ostream & out)
 {
-    std::cout << "Use one of the following commands:" << std::endl;
+    out << "Use one of the following commands:" << std::endl;
     for (const auto & application : clickhouse_applications)
-        std::cout << "clickhouse " << application.first << " [args] " << std::endl;
+        out << "clickhouse " << application.first << " [args] " << std::endl;
 }
 
 /// Add an item here to register a new short name

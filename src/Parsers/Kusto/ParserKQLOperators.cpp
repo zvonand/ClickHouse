@@ -346,7 +346,9 @@ String KQLOperators::genHaystackOpExpr(
     if (haystack_is_literal && !needle_is_literal)
     {
         /// Wrap nullable column in ifNull to avoid type errors
+        /// Use materialize() on the constant haystack to allow non-constant needle matching
         auto safe_needle = fmt::format("ifNull(toString({}), '')", raw_needle);
+        auto mat_haystack = fmt::format("materialize({})", haystack);
         if (ch_op == "ilike" || ch_op == "not ilike")
         {
             bool negated = (ch_op == "not ilike");
@@ -382,7 +384,7 @@ String KQLOperators::genHaystackOpExpr(
             new_expr = fmt::format("toBool({}endsWith({}, {}))", negated ? "not " : "", haystack, safe_needle);
         }
         else if (ch_op == "match")
-            new_expr = fmt::format("toBool(match({}, {}))", haystack, safe_needle);
+            new_expr = fmt::format("toBool(match({}, {}))", mat_haystack, safe_needle);
         else
             new_expr = "toBool(" + ch_op + "(" + haystack + ", " + needle + "))";
     }

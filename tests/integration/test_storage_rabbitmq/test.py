@@ -3740,26 +3740,25 @@ def test_rabbitmq_default_mode_nack_on_parse_error(rabbitmq_cluster, db, unique)
     channel.queue_delete(deadletter_queue)
     channel.exchange_delete(deadletter_exchange)
     connection.close()
-<<<<<<< HEAD
 
 
-def test_connection_info_logging_with_rabbitmq_address(started_cluster):
+def test_connection_info_logging_with_rabbitmq_address(rabbitmq_cluster, db, unique):
     """Verify that reconnection logs show the actual connection address,
     not ':0', when rabbitmq_address is used instead of rabbitmq_host_port."""
 
     # Create a table using rabbitmq_address (connection string)
-    instance.query("""
-        CREATE TABLE test.rmq_addr_log (key UInt64, value String)
+    instance.query(f"""
+        CREATE TABLE {db}.rmq_addr_log (key UInt64, value String)
         ENGINE = RabbitMQ
-        SETTINGS rabbitmq_address = 'amqp://root:clickhouse@{}:5672/',
-                rabbitmq_exchange_name = 'addr_log_exchange',
+        SETTINGS rabbitmq_address = 'amqp://root:clickhouse@{rabbitmq_cluster.rabbitmq_host}:5672/',
+                rabbitmq_exchange_name = '{unique}_addr_log_exchange',
                 rabbitmq_format = 'JSONEachRow';
-    """.format(cluster.rabbitmq_host))
+    """)
 
     # Force a disconnect/reconnect by briefly stopping RabbitMQ
-    cluster.pause_container('rabbitmq1')
+    rabbitmq_cluster.pause_container('rabbitmq1')
     time.sleep(3)
-    cluster.unpause_container('rabbitmq1')
+    rabbitmq_cluster.unpause_container('rabbitmq1')
     time.sleep(5)
 
     # Check server logs for the reconnection message
@@ -3771,4 +3770,4 @@ def test_connection_info_logging_with_rabbitmq_address(started_cluster):
     assert 'root' not in log
     assert 'clickhouse' not in log
 
-    instance.query("DROP TABLE test.rmq_addr_log")
+    instance.query(f"DROP TABLE {db}.rmq_addr_log")

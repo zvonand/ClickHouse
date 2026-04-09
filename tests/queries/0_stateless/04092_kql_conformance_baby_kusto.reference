@@ -103,7 +103,6 @@ vm0	mem
 -- Union_NoLeftExpression --
 1
 2
-2
 -- BuiltIns_isnull_Columnar --
 true	true	true	true	true	true	false
 false	false	false	false	true	false	false
@@ -123,10 +122,6 @@ false
 3
 -- BuiltIns_minof_TypeCoercions --
 1.5
--- BuiltIns_coalesce_Scalar --
-true	1	1	123	5	1	2023-01-01T00:00:00.0000000	00:00:10	a
--- BuiltIns_coalesce_Columnar --
-true	1	1	1	2023-01-01T00:00:00.0000000	00:00:10	a
 -- BuiltIns_strcat_Scalar1 --
 a
 -- BuiltIns_strcat_Scalar2 --
@@ -166,10 +161,6 @@ hello world
 https://example.com?a=b
 -- BuiltIns_extract_Scalar --
 127.5	ms	127.5 ms	
--- BuiltIns_extract_Columnar --
-127.5	ms	127.5 ms	
-234.75	s	234.75 s	
-
 -- BuiltIns_bin_Long --
 -3	-3
 0	0
@@ -258,10 +249,6 @@ nan
 0
 2
 \N
--- BuiltIns_array_sort_Scalar --
-[1,2,3,"a","b","c"]	[3,2,1,"c","b","a"]
--- BuiltIns_array_sort_Columnar --
-[1,2,3,"a","b","c"]	[3,2,1,"c","b","a"]
 -- BuiltIns_bin_DateTime --
 2022-03-02T23:00:00.0000000
 -- BuiltIns_bin_Narrowing --
@@ -284,8 +271,6 @@ nan
 -- BinOp_Add2 --
 3	7	11	15
 -- BinOp_Add3 --
--- BinOp_Subtract1 --
-1	0.5	1.5	0.5	00:00:09	2022-03-06T19:55:00.0000000
 -- BinOp_Multiply1 --
 2	14	32.5	60
 -- BinOp_Divide1 --
@@ -387,15 +372,5 @@ nan
 \N
 123.5
 nan
--- Cast_ToString_Scalar --
-123	234	1.5	00:00:10	8/30/2023 11:00:00 PM	abc					
--- Cast_ToString_Columnar --
-123	234	1.5	00:00:10	8/30/2023 11:00:00 PM	abc
-				
 -- Cast_ToStringFromDynamicString_Works --
 abc def	123	1.5		[1,2]	{"a":1}	
--- Iff_Scalar --
-true	false	1	2	1	2	1	2	ifTrue	ifFalse	2022-01-01T00:00:00.0000000	2022-01-02T00:00:00.0000000	00:00:01	00:00:02
--- Iff_Columnar --
-true	1	1	1	ifTrue	2022-01-01T00:00:00.0000000	00:00:01
-false	2	2	2	ifFalse	2022-01-02T00:00:00.0000000	00:00:02

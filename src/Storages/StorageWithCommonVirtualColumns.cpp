@@ -45,9 +45,14 @@ void StorageWithCommonVirtualColumns::read(
     size_t num_streams)
 {
     /// Build a snapshot without common virtuals so readImpl doesn't see them.
-    const auto filtered_columns = VirtualColumnUtils::filterVirtualColumns(column_names, common_virtual_names, storage_snapshot->metadata, storage_snapshot->virtual_columns);
-    const auto filtered_snapshot = std::make_shared<StorageSnapshot>(storage_snapshot->storage, storage_snapshot->metadata, filterCommonVirtuals(storage_snapshot->virtual_columns), std::exchange(storage_snapshot->data, nullptr));
+    auto filtered_columns = VirtualColumnUtils::filterVirtualColumns(column_names, common_virtual_names, storage_snapshot->metadata, storage_snapshot->virtual_columns);
+    auto filtered_snapshot = std::make_shared<StorageSnapshot>(storage_snapshot->storage, storage_snapshot->metadata, filterCommonVirtuals(storage_snapshot->virtual_columns));
+    std::swap(filtered_snapshot->data, storage_snapshot->data);
+
     readImpl(query_plan, filtered_columns, filtered_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
+
+    /// Rollback data to initial snapshot
+    std::swap(filtered_snapshot->data, storage_snapshot->data);
 
     /// Materialize constant virtuals
     if (query_plan.isInitialized())

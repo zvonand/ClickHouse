@@ -541,7 +541,7 @@ public class UserDefinedRESTCatalogServer {
                     }
                     return new MockResponse()
                             .setResponseCode(500)
-                            .setBody(e.getCause().getMessage());
+                            .setBody(e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
                 }
             }
         };

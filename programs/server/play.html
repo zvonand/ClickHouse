@@ -997,17 +997,6 @@ class QueryResultElement extends HTMLElement
                     overflow: hidden;
                 }
 
-                .cell-content:hover
-                {
-                    overflow-y: auto;
-                    scrollbar-width: none;
-                }
-
-                .cell-content:hover::-webkit-scrollbar
-                {
-                    display: none;
-                }
-
                 td u
                 {
                     text-decoration-color: var(--misc-text-color);
@@ -1101,8 +1090,6 @@ class QueryResultElement extends HTMLElement
                 {
                     position: relative;
                     z-index: 10;
-                    outline: 2px solid var(--border-color-selected);
-                    outline-offset: -2px;
                 }
 
                 .td-selected .cell-content
@@ -1114,7 +1101,6 @@ class QueryResultElement extends HTMLElement
                     min-height: 100%;
                     max-height: 50vh;
                     white-space: pre-wrap;
-                    word-break: break-all;
                     overflow-y: auto;
                     scrollbar-width: thin;
                     filter: invert(1);

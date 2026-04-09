@@ -448,9 +448,8 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     if (prewhere_info)
         filter_expr = prewhere_info->prewhere_actions.dumpDAG();
 
-    for (size_t idx = 0; idx < filter_step_indices.size(); ++idx)
+    for (unsigned long step_i : filter_step_indices)
     {
-        size_t step_i = filter_step_indices[idx];
         const auto & step = prewhere_actions.steps[step_i];
 
         if (step_i >= counters.size() || !counters[step_i])

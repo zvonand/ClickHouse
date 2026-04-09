@@ -100,6 +100,7 @@
 #include <Disks/registerDisks.h>
 #include <Common/Scheduler/Nodes/registerSchedulerNodes.h>
 #include <Common/Scheduler/Workload/IWorkloadEntityStorage.h>
+#include <Coordination/KeeperContext.h>
 #include <Common/Config/ConfigReloader.h>
 #include <Server/HTTPHandlerFactory.h>
 #include <Common/ReplicasReconnector.h>
@@ -129,6 +130,7 @@
 #include <unordered_set>
 
 #include <Common/Jemalloc.h>
+#include <Common/JemallocCacheArena.h>
 
 #include "config.h"
 #include <Common/config_version.h>
@@ -352,6 +354,7 @@ namespace ServerSetting
     extern const ServerSettingsString uncompressed_cache_policy;
     extern const ServerSettingsUInt64 uncompressed_cache_size;
     extern const ServerSettingsDouble uncompressed_cache_size_ratio;
+    extern const ServerSettingsBool use_separate_cache_arena;
     extern const ServerSettingsString primary_index_cache_policy;
     extern const ServerSettingsUInt64 primary_index_cache_size;
     extern const ServerSettingsDouble primary_index_cache_size_ratio;
@@ -370,7 +373,6 @@ namespace ServerSetting
     extern const ServerSettingsUInt64 page_cache_max_size;
     extern const ServerSettingsDouble page_cache_free_memory_ratio;
     extern const ServerSettingsUInt64 page_cache_shards;
-    extern const ServerSettingsUInt64 predicate_statistics_sample_rate;
     extern const ServerSettingsUInt64 os_cpu_busy_time_threshold;
     extern const ServerSettingsFloat min_os_cpu_wait_time_ratio_to_drop_connection;
     extern const ServerSettingsFloat max_os_cpu_wait_time_ratio_to_drop_connection;
@@ -1331,7 +1333,7 @@ try
         PreformattedMessage::create("Server was built with {}. It will work slowly.", log_message));
 #endif
 
-#if defined(SANITIZE_COVERAGE) || WITH_COVERAGE
+#if WITH_COVERAGE
     global_context->addOrUpdateWarningMessage(
         Context::WarningType::SERVER_BUILT_WITH_COVERAGE,
         PreformattedMessage::create("Server was built with code coverage. It will work slowly."));
@@ -1656,6 +1658,11 @@ try
     zkutil::validateZooKeeperConfig(config());
     bool has_zookeeper = zkutil::hasZooKeeperConfig(config());
 
+    if (has_zookeeper && config().getBool("keeper_server.standalone_keeper", false))
+        throw Exception(ErrorCodes::BAD_ARGUMENTS,
+            "Cannot use standalone_keeper=true with a configured zookeeper client connection. "
+            "A standalone keeper should not have a <zookeeper> section in its config.");
+
     auto main_config_zk_node_cache = std::make_unique<zkutil::ZooKeeperNodeCache>([&] { return global_context->getZooKeeper(); });
     Coordination::EventPtr main_config_zk_changed_event = std::make_shared<Poco::Event>();
     if (loaded_config.has_zk_includes)
@@ -1933,6 +1940,8 @@ try
     global_context->updateInterserverCredentials(config());
 
     /// Set up caches.
+
+    JemallocCacheArena::setEnabled(server_settings[ServerSetting::use_separate_cache_arena]);
 
     const size_t max_cache_size = static_cast<size_t>(static_cast<double>(physical_server_memory) * server_settings[ServerSetting::cache_size_to_ram_max_ratio]);
 
@@ -2275,9 +2284,6 @@ try
 
             global_context->setS3QueueDisableStreaming(new_server_settings[ServerSetting::s3queue_disable_streaming]);
 
-            global_context->setServerSetting("predicate_statistics_sample_rate",
-                new_server_settings[ServerSetting::predicate_statistics_sample_rate].value);
-
             global_context->setOSCPUOverloadSettings(new_server_settings[ServerSetting::min_os_cpu_wait_time_ratio_to_drop_connection], new_server_settings[ServerSetting::max_os_cpu_wait_time_ratio_to_drop_connection]);
 
             size_t remote_read_bandwidth = new_server_settings[ServerSetting::max_remote_read_network_bandwidth_for_server];
@@ -2311,7 +2317,13 @@ try
             global_context->getProcessList().setMaxWaitingQueriesAmount(new_server_settings[ServerSetting::max_waiting_queries]);
 
             if (config().has("keeper_server"))
+            {
+#if USE_NURAFT
+                if (config().getBool("keeper_server.standalone_keeper", false))
+                    KeeperContext::initializeKeeperMemorySoftLimit(config(), log);
+#endif
                 global_context->updateKeeperConfiguration(config());
+            }
 
             /// Reload the number of threads for global pools.
             /// Note: If you specified it in the top level config (not it config of default profile)
@@ -2433,15 +2445,29 @@ try
             global_context->updateStorageConfiguration(config());
             global_context->updateInterserverCredentials(config());
 
-            global_context->updateUncompressedCacheConfiguration(config());
-            global_context->updateMarkCacheConfiguration(config());
-            global_context->updatePrimaryIndexCacheConfiguration(config());
-            global_context->updateIndexUncompressedCacheConfiguration(config());
-            global_context->updateIndexMarkCacheConfiguration(config());
-            global_context->updateVectorSimilarityIndexCacheConfiguration(config());
-            global_context->updateMMappedFileCacheConfiguration(config());
-            global_context->updateQueryResultCacheConfiguration(config());
-            global_context->updateQueryConditionCacheConfiguration(config());
+            {
+                const size_t max_cache_size_in_bytes = static_cast<size_t>(
+                    static_cast<double>(current_physical_server_memory) * new_server_settings[ServerSetting::cache_size_to_ram_max_ratio]);
+
+                global_context->updateUncompressedCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateMarkCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updatePrimaryIndexCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateIndexUncompressedCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateIndexMarkCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateVectorSimilarityIndexCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateTextIndexTokensCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateTextIndexHeaderCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateTextIndexPostingsCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateMMappedFileCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateQueryResultCacheConfiguration(config(), max_cache_size_in_bytes);
+                global_context->updateQueryConditionCacheConfiguration(config(), max_cache_size_in_bytes);
+#if USE_AVRO
+                global_context->updateIcebergMetadataFilesCacheConfiguration(config(), max_cache_size_in_bytes);
+#endif
+#if USE_PARQUET
+                global_context->updateParquetMetadataCacheConfiguration(config(), max_cache_size_in_bytes);
+#endif
+            }
 
 #if USE_SSL
             CertificateReloader::instance().tryReloadAll(config());

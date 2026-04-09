@@ -2824,12 +2824,11 @@ function formatReadableRows(rows) {
 }
 
 document.getElementById('query').addEventListener('focus', e => {
-    resultEl.clearSelection();
 });
 
 /* Clicking outside data cells deactivates the selected cell */
 document.addEventListener('click', e => {
-    if (e.target.closest('textarea, input, query-result')) return;
+    if (e.target.closest('textarea, input, query-result, #menu')) return;
     resultEl.clearSelection();
 });
 

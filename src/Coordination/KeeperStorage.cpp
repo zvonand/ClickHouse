@@ -44,6 +44,7 @@ namespace ProfileEvents
     extern const Event KeeperMultiReadRequest;
     extern const Event KeeperGetRequest;
     extern const Event KeeperListRequest;
+    extern const Event KeeperGetChildrenRecursiveRequest;
     extern const Event KeeperExistsRequest;
     extern const Event KeeperPreprocessElapsedMicroseconds;
     extern const Event KeeperProcessElapsedMicroseconds;
@@ -2438,7 +2439,7 @@ std::list<KeeperStorageBase::Delta> preprocess(
     uint64_t * /*digest*/,
     const KeeperContext & /*keeper_context*/)
 {
-    ProfileEvents::increment(ProfileEvents::KeeperGetRequest);
+    ProfileEvents::increment(ProfileEvents::KeeperGetChildrenRecursiveRequest);
 
     if (zk_request.path == Coordination::keeper_api_feature_flags_path
         || zk_request.path == Coordination::keeper_config_path
@@ -2543,7 +2544,7 @@ template <typename Storage>
 Coordination::ZooKeeperResponsePtr
 processLocal(const Coordination::ZooKeeperGetChildrenRecursiveRequest & zk_request, Storage & storage, KeeperStorageBase::DeltaRange deltas, int64_t session_id)
 {
-    ProfileEvents::increment(ProfileEvents::KeeperGetRequest);
+    ProfileEvents::increment(ProfileEvents::KeeperGetChildrenRecursiveRequest);
     return processImpl<true>(zk_request, storage, std::move(deltas), session_id);
 }
 

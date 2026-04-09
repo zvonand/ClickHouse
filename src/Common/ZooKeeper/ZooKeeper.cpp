@@ -1190,9 +1190,6 @@ Strings ZooKeeper::getChildrenRecursive(const std::string & path, uint32_t child
 
 Coordination::Error ZooKeeper::tryGetChildrenRecursive(const std::string & path, Strings & res, uint32_t children_nodes_limit)
 {
-    if (!isFeatureEnabled(DB::KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
-        return Coordination::Error::ZBADARGUMENTS;
-
     std::optional<DB::OpenTelemetry::SpanHolder> maybe_span;
     if (sampleForOpenTelemetryTracing())
     {
@@ -1206,6 +1203,8 @@ Coordination::Error ZooKeeper::tryGetChildrenRecursive(const std::string & path,
         );
         DB::OpenTelemetry::SetTraceFlagInCurrentContext(DB::OpenTelemetry::TRACE_FLAG_KEEPER_SPANS, true);
     }
+    if (!isFeatureEnabled(DB::KeeperFeatureFlag::GET_CHILDREN_RECURSIVE))
+        return Coordination::Error::ZBADARGUMENTS;
 
     auto promise = std::make_shared<std::promise<Coordination::GetChildrenRecursiveResponse>>();
     auto future = promise->get_future();

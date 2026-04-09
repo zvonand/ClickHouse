@@ -982,6 +982,7 @@ The server successfully detected this situation and will download merged part fr
     M(KeeperMultiReadRequest, "Number of multi read requests", ValueType::Number) \
     M(KeeperGetRequest, "Number of get requests", ValueType::Number) \
     M(KeeperListRequest, "Number of list requests", ValueType::Number) \
+    M(KeeperGetChildrenRecursiveRequest, "Number of get children recursive requests", ValueType::Number) \
     M(KeeperExistsRequest, "Number of exists requests", ValueType::Number) \
     M(KeeperSetWatchesRequest, "Number of set watches requests", ValueType::Number) \
     M(KeeperAddWatchRequest, "Number of add watches requests", ValueType::Number) \

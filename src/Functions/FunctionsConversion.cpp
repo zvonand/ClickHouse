@@ -815,7 +815,9 @@ FunctionCast::WrapperType FunctionCast::createTupleWrapper(const DataTypePtr & f
                     /// Nullable target with a source element: only NULLs that are NEW
                     /// (present in result but not in source) are conversion failures.
                     size_t from_idx = *to_reverse_index[i];
-                    const auto * src_nullable = checkAndGetColumn<ColumnNullable>(column_tuple.getColumns()[from_idx].get());
+                    /// Source may be ColumnNullable or ColumnLowCardinality wrapping
+                    auto src_col = column_tuple.getColumns()[from_idx]->convertToFullColumnIfLowCardinality();
+                    const auto * src_nullable = checkAndGetColumn<ColumnNullable>(src_col.get());
 
                     if (src_nullable)
                     {

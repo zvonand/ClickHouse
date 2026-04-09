@@ -268,7 +268,12 @@ abc
 -- SimpleFunctionTests::SumTimeSpan --
 6
 -- SimpleFunctionTests::RepeatedUnion --
-2
+v1	1
+v1	4
+v2	2
+v2	5
+v3	3
+v3	6
 -- SimpleFunctionTests::RoundDouble --
 3.1
 -- SimpleFunctionTests::SignInt --
@@ -331,9 +336,7 @@ ABCABC
 -- SimpleFunctionTests::DecimalSubtraction --
 3.3
 -- SimpleFunctionTests::DecimalMultiplication --
-3.00
 -- SimpleFunctionTests::DecimalDivision --
-3
 -- SimpleFunctionTests::DecimalComparison --
 true
 -- SimpleFunctionTests::DecimalEquality --

@@ -96,6 +96,16 @@ SELECT -nan::BFloat16;
 SELECT inf::BFloat16;
 SELECT -inf::BFloat16;
 
+-- Negative floating-point values
+SELECT '--- Negative FP values ---';
+SELECT -0.000001;              -- dec_exp = -6 → fixed
+SELECT -1e-7;                  -- dec_exp = -7 → scientific
+SELECT -1.23456789e-7;         -- scientific with sign
+SELECT -9.99e20;               -- dec_exp = 20, fixed
+SELECT -9.99e21;               -- dec_exp = 21, scientific
+SELECT -3.14::Float32;         -- Float32 negative
+SELECT -1e-7::Float32;         -- Float32 scientific negative
+
 -- Integer-representable floats (fast path)
 SELECT '--- Integer-representable floats ---';
 SELECT 1.0::Float64;

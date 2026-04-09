@@ -69,6 +69,14 @@ nan
 nan
 inf
 -inf
+--- Negative FP values ---
+-0.000001
+-1e-7
+-1.23456789e-7
+-999000000000000000000
+-9.99e21
+-3.14
+-1e-7
 --- Integer-representable floats ---
 1
 -1

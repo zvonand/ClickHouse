@@ -43,14 +43,27 @@ bool ParserKQLSort::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 
     for (uint64_t i = 0; i < order_expression_list->children.size(); ++i)
     {
+        auto * order_expr = order_expression_list->children[i]->as<ASTOrderByElement>();
         if (!has_directions[i])
         {
-            auto * order_expr = order_expression_list->children[i]->as<ASTOrderByElement>();
             order_expr->direction = -1; // default desc
             if (!order_expr->nulls_direction_was_explicitly_specified)
                 order_expr->nulls_direction = -1;
             else
                 order_expr->nulls_direction = order_expr->nulls_direction == 1 ? -1 : 1;
+        }
+        else
+        {
+            /// KQL default: asc → nulls first, desc → nulls last
+            if (!order_expr->nulls_direction_was_explicitly_specified)
+            {
+                if (order_expr->direction == 1) /// asc
+                {
+                    order_expr->nulls_direction = -1; /// opposite of direction = nulls first
+                    order_expr->nulls_direction_was_explicitly_specified = true;
+                }
+                /// desc already defaults to nulls last in ClickHouse
+            }
         }
     }
 

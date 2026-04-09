@@ -346,9 +346,8 @@ bool ValuesBlockInputFormat::tryReadValue(IColumn & column, size_t column_idx)
                     //skipWhitespaceIfAny(*buf);
                     parsed_string = checkDelimiterAfterValue(column_idx);
                 }
-                catch (...)
+                catch (...) // NOLINT(bugprone-empty-catch) Ok: outer catch already handles fallback via parseExpression
                 {
-                    /// We're already in fallback mode
                 }
 
                 if (parsed_string)

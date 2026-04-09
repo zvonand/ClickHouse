@@ -15,3 +15,12 @@ SELECT numericIndexedVectorToMap(numericIndexedVectorPointwiseEqual(groupNumeric
 SELECT numericIndexedVectorToMap(numericIndexedVectorPointwiseEqual(groupNumericIndexedVectorState(uin, value), -3.5)) FROM t_float;
 
 DROP TABLE t_float;
+
+-- pointwiseEqual with total_bit_num == 0 should not trigger UB from shift underflow.
+DROP TABLE IF EXISTS t_zero_bits;
+CREATE TABLE t_zero_bits (ds Date, uin UInt32, value Float64) ENGINE = MergeTree() ORDER BY ds;
+INSERT INTO t_zero_bits VALUES ('2023-12-26', 1, 0);
+
+SELECT numericIndexedVectorToMap(numericIndexedVectorPointwiseEqual(groupNumericIndexedVectorState('BSI', 0, 0)(uin, value), 1.0)) FROM t_zero_bits;
+
+DROP TABLE t_zero_bits;

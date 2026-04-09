@@ -1336,6 +1336,9 @@ public:
         UInt64 bit_pattern = static_cast<UInt64>(scaled_value);
 
         const UInt32 total_bit_num = lhs.getTotalBitNum();
+        if (total_bit_num == 0)
+            return std::make_shared<Roaring>();
+
         for (size_t i = 0; i < total_bit_num; ++i)
         {
             if ((bit_pattern >> i) & 1)

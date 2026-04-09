@@ -2511,7 +2511,9 @@ async function postImpl(posted_request_num, query, targetResultEl, abortControll
 }
 
 /// Execute a single query (legacy path, used for single-query mode).
-async function postSingle(posted_request_num, query)
+/// When `history_query_text` is provided, it overrides `query` for browser history/URL storage,
+/// preserving the full textarea content when running a selected query in multi-query mode.
+async function postSingle(posted_request_num, query, history_query_text)
 {
     const paramValuesSnapshot = getParamValues();
     last_query_start = performance.now();
@@ -2556,16 +2558,19 @@ async function postSingle(posted_request_num, query)
 
     /// The query is saved in browser history (in a state JSON object)
     /// as well as in URL fragment identifier.
-    if (query != previous_query) {
+    /// When history_query_text is provided (multi-query "Run selected" with a single query),
+    /// use the full textarea content for history/URL to avoid losing the rest of the editor.
+    const saved_query = history_query_text || query;
+    if (saved_query != previous_query) {
         const state = {
-            query: query,
+            query: saved_query,
             format: result.format,
             ok: result.response_ok,
             data: result.reply.length > 100000 ? null : result.reply,
             elapsed_ns: elapsed_ns,
             params: paramValuesSnapshot,
         };
-        const title = "ClickHouse Query: " + query;
+        const title = "ClickHouse Query: " + saved_query;
 
         const user = user_elem.value;
         const server_address = url_elem.value;
@@ -2580,7 +2585,7 @@ async function postSingle(posted_request_num, query)
         {
             history_url += '&param_' + encodeURIComponent(name) + '=' + encodeURIComponent(value);
         }
-        history_url += '#' + toBase64(query);
+        history_url += '#' + toBase64(saved_query);
 
         if (previous_query == '') {
             history.replaceState(state, title, history_url);
@@ -2588,7 +2593,7 @@ async function postSingle(posted_request_num, query)
             history.pushState(state, title, history_url);
         }
         document.title = title;
-        previous_query = query;
+        previous_query = saved_query;
     }
 }
 
@@ -2908,7 +2913,7 @@ async function postOne()
         if (selected.length > 1) {
             await postMulti(request_num, selected);
         } else if (selected.length === 1) {
-            await postSingle(request_num, selected[0].query);
+            await postSingle(request_num, selected[0].query, all_text);
         }
     } else {
         const query = await getQueryUnderCursor();

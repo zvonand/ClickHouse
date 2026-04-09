@@ -359,7 +359,7 @@ bool ValuesBlockInputFormat::tryReadValue(IColumn & column, size_t column_idx)
                         serializations[column_idx]->deserializeWholeText(column, in_buffer, format_settings);
                         return true;
                     }
-                    catch (...)
+                    catch (...) // Ok: outer catch already handles fallback via parseExpression
                     {
                         if (column.size() > size_before)
                             column.popBack(column.size() - size_before);

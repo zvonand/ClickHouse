@@ -91,6 +91,15 @@ public:
     StorageSnapshotPtr getStorageSnapshot() const { return storage_snapshot; }
 
 protected:
+    /// Creates a context copy with experimental settings enabled and the enable_analyzer setting
+    /// propagated. Used when compiling default or virtual-column expressions at read time.
+    ContextPtr createContextForDefaultExpressions() const;
+
+    /// Builds a ColumnsDescription that includes both the storage metadata columns and any virtual
+    /// columns that carry a default expression. Required by evaluateMissingDefaults so that it can
+    /// resolve default expressions for virtual columns.
+    ColumnsDescription buildCombinedColumnsForDefaultExpressions() const;
+
     /// Returns true if requested column is a subcolumn with offsets of Array which is part of Nested column.
     bool isSubcolumnOffsetsOfNested(const String & name_in_storage, const String & subcolumn_name) const;
 

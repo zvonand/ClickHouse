@@ -209,6 +209,8 @@ bool Iif::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     ++pos;
+    /// Check if the if_true argument is a timespan literal
+    String if_true_raw(pos->begin, pos->end);
     String if_true = getConvertedArgument(fn_name, pos);
     if (if_true.empty())
         return false;
@@ -218,7 +220,15 @@ bool Iif::convertImpl(String & out, IParser::Pos & pos)
     if (if_false.empty())
         return false;
 
-    out = fmt::format("if({}, {}, {})", predicate, if_true, if_false);
+    /// Detect if arguments are timespans (raw token differs from converted = was a timespan)
+    bool is_timespan_result = (if_true_raw != if_true)
+        && (if_true_raw.find_first_of("dhms") != String::npos);
+
+    auto result = fmt::format("if({}, {}, {})", predicate, if_true, if_false);
+    if (is_timespan_result)
+        out = IParserKQLFunction::formatTimespanSQL(result);
+    else
+        out = result;
     return true;
 }
 
@@ -234,6 +244,7 @@ bool Iff::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     ++pos;
+    String if_true_raw(pos->begin, pos->end);
     String if_true = getConvertedArgument(fn_name, pos);
     if (if_true.empty())
         return false;
@@ -243,7 +254,14 @@ bool Iff::convertImpl(String & out, IParser::Pos & pos)
     if (if_false.empty())
         return false;
 
-    out = fmt::format("if({}, {}, {})", predicate, if_true, if_false);
+    bool is_timespan_result = (if_true_raw != if_true)
+        && (if_true_raw.find_first_of("dhms") != String::npos);
+
+    auto result = fmt::format("if({}, {}, {})", predicate, if_true, if_false);
+    if (is_timespan_result)
+        out = IParserKQLFunction::formatTimespanSQL(result);
+    else
+        out = result;
     return true;
 }
 

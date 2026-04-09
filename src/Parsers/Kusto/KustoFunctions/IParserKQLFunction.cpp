@@ -325,7 +325,7 @@ void IParserKQLFunction::validateEndOfFunction(const String & fn_name, IParser::
         throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Too many arguments in function: {}", fn_name);
 }
 
-static String formatTimespanSQL(const String & seconds_expr)
+String IParserKQLFunction::formatTimespanSQL(const String & seconds_expr)
 {
     return "concat("
         "if(toInt64(" + seconds_expr + ") < 0, '-', ''), "
@@ -429,7 +429,10 @@ String IParserKQLFunction::getExpression(IParser::Pos & pos)
             && (prev->type == TokenType::Plus || prev->type == TokenType::Minus
                 || prev->type == TokenType::Asterisk || prev->type == TokenType::Slash
                 || prev->type == TokenType::Percent);
-        if (!next_is_arithmetic && !prev_is_arithmetic)
+        /// Don't format inside function calls or array indexing
+        bool in_function_context = prev.isValid()
+            && (prev->type == TokenType::OpeningRoundBracket || prev->type == TokenType::Comma);
+        if (!next_is_arithmetic && !prev_is_arithmetic && !in_function_context)
             arg = formatTimespanSQL(arg);
     }
 

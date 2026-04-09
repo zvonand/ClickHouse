@@ -1670,7 +1670,8 @@
         commitLink: null,
         runLink: null,
         sha: null,
-        downstreamResults: null
+        downstreamResults: null,
+        downstreamSha: null
     };
 
     function storeLink(link) {
@@ -1801,11 +1802,15 @@
             resultsDiv.appendChild(textDiv);
         }
 
-        const resultsData = result.results;
+        // Merge cached downstream results if available for this SHA
+        let resultsData = result.results;
+        if (nameParams.length === 1 && runtimeCache.downstreamResults && runtimeCache.downstreamSha === sha) {
+            resultsData = [...resultsData, ...runtimeCache.downstreamResults];
+        }
         if (Array.isArray(resultsData) && resultsData.length > 0) {
             const table = createResultsTable(resultsData, i);
             if (table) {
-                resultsDiv.appendChild(table); // Appends table correctly
+                resultsDiv.appendChild(table);
             }
         }
         addDetailsWidget(runtimeCache, sha, PR)
@@ -2091,7 +2096,9 @@
                 // Clear timers, event listeners, and DOM before refreshing content
                 clearPage();
 
-                // Rebuild the page with new data (public results render immediately)
+                // Rebuild the page with new data (public results render immediately).
+                // If we already have cached downstream results for this SHA, merge them
+                // into the initial render to avoid a visual jump.
                 await renderResults(PR, sha, nameParams);
 
                 // Restore scroll position
@@ -2100,39 +2107,50 @@
                 }
 
                 console.log(`Data refreshed at ${new Date().toLocaleTimeString()}`);
+            }
 
-                // Fetch downstream (private sync) results asynchronously.
-                // Only supported for PRs to main trunk (name_0=PR).
-                if (nameParams.length === 1 && nameParams[0] === 'PR' && privateBaseUrl) {
-                    const resolvedSha = runtimeCache.commits
-                        ? ((sha === 'latest')
+            // Fetch downstream (private sync) results independently of upstream updates.
+            // Only supported for PRs to main trunk (name_0=PR).
+            // Runs on every tick so late-arriving downstream results are picked up.
+            if (nameParams.length === 1 && nameParams[0] === 'PR' && privateBaseUrl) {
+                const resolvedSha = runtimeCache.commits
+                    ? ((sha === 'latest')
+                        ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
+                        : sha)
+                    : sha;
+                if (resolvedSha) {
+                    fetchDownstreamData(resolvedSha, privateBaseUrl).then(result => {
+                        // Stale response guard: ignore if SHA changed since request started
+                        const currentSha = runtimeCache.commits
                             ? runtimeCache.commits[runtimeCache.commits.length - 1]?.sha
-                            : sha)
-                        : sha;
-                    if (resolvedSha) {
-                        fetchDownstreamData(resolvedSha, privateBaseUrl).then(result => {
-                            if (result.error) {
-                                runtimeCache.downstreamResults = null;
-                                showDownstreamInfo(result.error);
-                            } else if (result.data && result.data.length > 0) {
-                                runtimeCache.downstreamResults = result.data;
-                                // Re-render just the results table with merged data
-                                const resultsDiv = document.getElementById('result-container');
-                                const oldTable = resultsDiv.querySelector('table');
-                                const target = getTargetResults(nameParams);
-                                if (target) {
-                                    const merged = [...(target.results || []), ...result.data];
-                                    const nest_level = 1;
-                                    const newTable = createResultsTable(merged, nest_level);
-                                    if (newTable && oldTable) {
-                                        oldTable.replaceWith(newTable);
-                                    } else if (newTable) {
-                                        resultsDiv.appendChild(newTable);
-                                    }
+                            : sha;
+                        if (resolvedSha !== currentSha) return;
+
+                        if (result.error) {
+                            runtimeCache.downstreamResults = null;
+                            runtimeCache.downstreamSha = null;
+                            showDownstreamInfo(result.error);
+                        } else if (result.data && result.data.length > 0) {
+                            runtimeCache.downstreamResults = result.data;
+                            runtimeCache.downstreamSha = resolvedSha;
+                            // Clear any previous error banner
+                            const banner = document.querySelector('.downstream-info');
+                            if (banner) banner.remove();
+                            // Re-render just the results table with merged data
+                            const resultsDiv = document.getElementById('result-container');
+                            const oldTable = resultsDiv.querySelector('table');
+                            const target = getTargetResults(nameParams);
+                            if (target) {
+                                const merged = [...(target.results || []), ...result.data];
+                                const newTable = createResultsTable(merged, 1);
+                                if (newTable && oldTable) {
+                                    oldTable.replaceWith(newTable);
+                                } else if (newTable) {
+                                    resultsDiv.appendChild(newTable);
                                 }
                             }
-                        });
-                    }
+                        }
+                    });
                 }
             }
         }

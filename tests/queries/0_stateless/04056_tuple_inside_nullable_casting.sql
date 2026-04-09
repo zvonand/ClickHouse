@@ -82,17 +82,17 @@ SELECT accurateCastOrNull((1,)::Tuple(Int32), 'Tuple(Nullable(Float32))') AS r, 
 SELECT accurateCastOrNull((256,)::Tuple(Int32), 'Tuple(Nullable(UInt8))') AS r, toTypeName(r);
 SELECT accurateCastOrNull((1, 256)::Tuple(Int32, Int32), 'Tuple(Nullable(UInt8), UInt8)') AS r, toTypeName(r);
 
--- Nullable source with Nullable target: conversion failure (new NULL) → whole tuple NULL.
+-- Nullable source with Nullable target: conversion failure (new NULL) -> whole tuple NULL.
 SELECT accurateCastOrNull((1.5,)::Tuple(Nullable(Float32)), 'Tuple(Nullable(Int32))') AS r, toTypeName(r);
 -- Nullable source with Nullable target: success.
 SELECT accurateCastOrNull((1.0,)::Tuple(Nullable(Float32)), 'Tuple(Nullable(Int32))') AS r, toTypeName(r);
--- Nullable source NULL → legitimate element NULL, tuple is valid.
+-- Nullable source NULL -> legitimate element NULL, tuple is valid.
 SELECT accurateCastOrNull((NULL,)::Tuple(Nullable(Int32)), 'Tuple(Nullable(UInt8))') AS r, toTypeName(r);
--- Nullable source non-NULL, conversion fails → whole tuple NULL.
+-- Nullable source non-NULL, conversion fails -> whole tuple NULL.
 SELECT accurateCastOrNull((256,)::Tuple(Nullable(Int32)), 'Tuple(Nullable(UInt8))') AS r, toTypeName(r);
--- Mixed: source NULL preserved + non-Nullable element succeeds → valid tuple.
+-- Mixed: source NULL preserved + non-Nullable element succeeds -> valid tuple.
 SELECT accurateCastOrNull((NULL, 1)::Tuple(Nullable(Int32), Int32), 'Tuple(Nullable(UInt8), UInt8)') AS r, toTypeName(r);
--- Mixed: source NULL + non-Nullable element fails → whole tuple NULL.
+-- Mixed: source NULL + non-Nullable element fails -> whole tuple NULL.
 SELECT accurateCastOrNull((NULL, 256)::Tuple(Nullable(Int32), Int32), 'Tuple(Nullable(UInt8), UInt8)') AS r, toTypeName(r);
 
 -- Three levels of nesting: inaccurate leaf element makes the entire tuple NULL.
@@ -110,7 +110,7 @@ SELECT number, accurateCastOrNull(
     'Tuple(Nullable(UInt8), UInt8)') AS r, toTypeName(r)
 FROM numbers(6);
 
--- Nullable source to non-Nullable target: NULL source → whole tuple NULL (not an exception).
+-- Nullable source to non-Nullable target: NULL source -> whole tuple NULL (not an exception).
 SELECT accurateCastOrNull((NULL,)::Tuple(Nullable(Int32)), 'Tuple(UInt8)') AS r, toTypeName(r);
 -- Nullable source to non-Nullable target: non-NULL, conversion fails.
 SELECT accurateCastOrNull((256,)::Tuple(Nullable(Int32)), 'Tuple(UInt8)') AS r, toTypeName(r);
@@ -368,3 +368,39 @@ SELECT tupleElement(accurateCastOrNull(tuple(3, 4), 'Point'), 1), tupleElement(a
 SELECT accurateCastOrNull(tuple(1, 2), 'Tuple(Nullable(Float64), Nullable(Float64))') AS r, toTypeName(r);
 SELECT toTypeName(accurateCastOrNull(tuple(1, 2), 'Tuple(Nullable(Float64), Nullable(Float64))'));
 SELECT accurateCastOrNull((SELECT modulo(intDiv(intDiv(plus((SELECT DISTINCT toInt128(2147483646) QUALIFY minus(256, -1) LIMIT 100, 7), accurateCastOrNull('\'', 'Int8')), (SELECT 1023 GROUP BY 1)), intDiv(-2147483648, 100)), NULL), -9223372036854775808 LIMIT -2147483647), 'Point') AS r, toTypeName(r);
+
+-- =====================
+-- LowCardinality inside Tuple.
+-- =====================
+
+SET allow_suspicious_low_cardinality_types = 1;
+
+-- LC source NULL preserved as element NULL.
+SELECT accurateCastOrNull((NULL,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(Nullable(UInt8))') AS r, toTypeName(r);
+-- LC source non-NULL, conversion succeeds.
+SELECT accurateCastOrNull((1,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(Nullable(UInt8))') AS r, toTypeName(r);
+-- LC source non-NULL, conversion fails (overflow) -> whole tuple NULL.
+SELECT accurateCastOrNull((256,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(Nullable(UInt8))') AS r, toTypeName(r);
+-- LC source to non-Nullable target: non-NULL, success.
+SELECT accurateCastOrNull((1,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(UInt8)') AS r, toTypeName(r);
+-- LC source to non-Nullable target: non-NULL, overflow.
+SELECT accurateCastOrNull((256,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(UInt8)') AS r, toTypeName(r);
+-- Mixed: LC Nullable source NULL + regular source succeeds -> element NULL preserved.
+SELECT accurateCastOrNull((NULL, 1)::Tuple(LowCardinality(Nullable(Int32)), Int32), 'Tuple(Nullable(UInt8), UInt8)') AS r, toTypeName(r);
+-- Mixed: LC Nullable source NULL + regular source overflow -> whole tuple NULL.
+SELECT accurateCastOrNull((NULL, 256)::Tuple(LowCardinality(Nullable(Int32)), Int32), 'Tuple(Nullable(UInt8), UInt8)') AS r, toTypeName(r);
+-- LC target element type: rejected (LowCardinality cannot be inside Nullable).
+SELECT accurateCastOrNull((1,)::Tuple(Int32), 'Tuple(LowCardinality(Nullable(UInt8)))'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+-- LC on both source and target: rejected.
+SELECT accurateCastOrNull((1,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(LowCardinality(Nullable(UInt8)))'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+-- Multi-row with LC source: mix of NULL, success, and overflow.
+SELECT number, accurateCastOrNull(
+    (if(number % 3 = 0, NULL, number * 100)::LowCardinality(Nullable(UInt64)),)::Tuple(LowCardinality(Nullable(UInt64))),
+    'Tuple(Nullable(UInt8))') AS r, toTypeName(r)
+FROM numbers(6);
+-- Nested tuple with LC element: NULL preserved.
+SELECT accurateCastOrNull(((NULL,),)::Tuple(Tuple(LowCardinality(Nullable(Int32)))), 'Tuple(Tuple(Nullable(UInt8)))') AS r, toTypeName(r);
+-- Nested tuple with LC element: success.
+SELECT accurateCastOrNull(((1,),)::Tuple(Tuple(LowCardinality(Nullable(Int32)))), 'Tuple(Tuple(Nullable(UInt8)))') AS r, toTypeName(r);
+-- Nested tuple with LC element: overflow -> whole tuple NULL.
+SELECT accurateCastOrNull(((256,),)::Tuple(Tuple(LowCardinality(Nullable(Int32)))), 'Tuple(Tuple(Nullable(UInt8)))') AS r, toTypeName(r);

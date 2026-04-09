@@ -108,7 +108,7 @@ class CreateIssue:
             return ""
 
         return Issue.create_from(
-            title=title, body=body, labels=labels, repo=repo_name
+            title=title, body=body, labels=labels
         ).create_on_gh(repo_name=repo_name)
 
     @classmethod

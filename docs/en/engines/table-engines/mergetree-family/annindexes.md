@@ -94,7 +94,7 @@ ALTER TABLE table ADD INDEX <index_name> vectors TYPE vector_similarity(<type>, 
 ```
 
 Vector similarity indexes are special kinds of skipping indexes (see [here](mergetree.md#table_engine-mergetree-data_skipping-indexes) and [here](../../../optimize/skipping-indexes)).
-Accordingly, above `ALTER TABLE` statement only causes the index to be build for future new data inserted into the table.
+Accordingly, above `ALTER TABLE` statement only causes the index to be built for future new data inserted into the table.
 To build the index for existing data as well, you need to materialize it:
 
 ```sql

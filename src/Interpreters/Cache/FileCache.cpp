@@ -1839,6 +1839,8 @@ void FileCache::loadMetadataImpl()
         {
             loading_threads.emplace_back([&]
             {
+                /// pop() blocks when the queue is empty until either a new item is pushed
+                /// by a listing thread or finish() is called (after all listing threads exit).
                 std::pair<fs::path, OriginInfo> item;
                 while (key_dirs_queue.pop(item))
                 {

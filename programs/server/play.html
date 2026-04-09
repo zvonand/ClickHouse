@@ -1100,10 +1100,10 @@ class QueryResultElement extends HTMLElement
                 .td-selected .cell-content
                 {
                     position: absolute;
-                    top: 0;
+                    top: -1px;
                     left: -1px;
                     width: calc(100% + 2px); /* Compensate for collapsed border (1px each side) */
-                    min-height: 100%;
+                    min-height: calc(100% + 2px);
                     max-height: 50vh;
                     white-space: pre-wrap;
                     overflow-y: auto;

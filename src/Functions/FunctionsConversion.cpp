@@ -739,7 +739,9 @@ FunctionCast::WrapperType FunctionCast::createTupleWrapper(const DataTypePtr & f
             to_reverse_index.emplace_back(i);
     }
 
-    return [element_wrappers, from_element_types, to_element_types, to_reverse_index, this]
+    bool cast_type_is_accurate_or_null = cast_type == CastType::accurateOrNull;
+
+    return [element_wrappers, from_element_types, to_element_types, to_reverse_index, cast_type_is_accurate_or_null]
         (ColumnsWithTypeAndName & arguments, const DataTypePtr &, const ColumnNullable * nullable_source, size_t input_rows_count) -> ColumnPtr
     {
         const auto * col = arguments.front().column.get();
@@ -788,7 +790,7 @@ FunctionCast::WrapperType FunctionCast::createTupleWrapper(const DataTypePtr & f
         ///   NULL is not a conversion failure. For example, casting Tuple(a Int32) to
         ///   Tuple(a Float32, b Nullable(UInt8)) — element "b" has no source, so it is
         ///   filled with NULL by default. This is valid, not a failure.
-        if (cast_type == CastType::accurateOrNull)
+        if (cast_type_is_accurate_or_null)
         {
             MutableColumnPtr combined_null_map = ColumnUInt8::create(input_rows_count, UInt8(0));
             auto & null_map_data = assert_cast<ColumnUInt8 &>(*combined_null_map).getData();

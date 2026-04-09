@@ -3301,6 +3301,7 @@ void ReadFromMergeTree::logPredicateStatistics(const AnalysisResult & result) co
 
     UInt64 prev_granules = 0;
     for (const auto & stat : result.index_stats)
+    {
 
         if (stat.type == IndexType::None)
         {

@@ -65,9 +65,25 @@ void BlockIO::onFinish(std::chrono::system_clock::time_point finish_time)
     {
         /// Keep the same teardown order as in resetPipeline:
         query_metadata_cache.reset();
-        const QueryPipelineFinalizedInfo query_pipeline_finalized_info = finalize_query_pipeline(std::move(pipeline));
+
+        /// If finalize_query_pipeline throws (e.g. during query result cache write finalization),
+        /// we must still call finish_callbacks so the QueryFinish entry is written to query_log.
+        QueryPipelineFinalizedInfo query_pipeline_finalized_info;
+        std::exception_ptr finalize_exception;
+        try
+        {
+            query_pipeline_finalized_info = finalize_query_pipeline(std::move(pipeline));
+        }
+        catch (...)
+        {
+            finalize_exception = std::current_exception();
+        }
+
         for (const auto & callback : finish_callbacks)
             callback(query_pipeline_finalized_info, finish_time);
+
+        if (finalize_exception)
+            std::rethrow_exception(finalize_exception);
     }
     else
         resetPipeline(/*cancel=*/false);

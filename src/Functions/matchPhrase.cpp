@@ -208,17 +208,12 @@ REGISTER_FUNCTION(MatchPhrase)
     FunctionDocumentation::Description description = R"(
 Checks if the haystack contains all tokens from the phrase in consecutive order.
 
-Prior to searching, the function tokenizes both the `input` and the `phrase` arguments
-using the tokenizer specified as the optional third argument.
+Prior to searching, the function tokenizes both the `input` and the `phrase` arguments using the tokenizer specified as the optional third argument.
 If no tokenizer is specified, by default the `splitByNonAlpha` tokenizer would be used.
 
 Unlike [`hasToken`](#hasToken), [`hasAnyTokens`](#hasAnyTokens) and [`hasAllTokens`](#hasAllTokens), `matchPhrase` requires the tokens to appear in the same order
 and without any intervening tokens. For example, `matchPhrase('the quick brown fox', 'quick fox')` returns 0
 because "brown" appears between "quick" and "fox".
-
-:::note
-Column `input` should have a [text index](../../engines/table-engines/mergetree-family/textindexes) defined for optimal performance.
-:::
     )";
     FunctionDocumentation::Syntax syntax = "matchPhrase(input, phrase[, tokenizer])";
     FunctionDocumentation::Arguments arguments = {

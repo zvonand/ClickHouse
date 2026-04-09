@@ -2823,12 +2823,9 @@ function formatReadableRows(rows) {
     return formatReadable(rows, 2, units);
 }
 
-document.getElementById('query').addEventListener('focus', e => {
-});
-
 /* Clicking outside data cells deactivates the selected cell */
 document.addEventListener('click', e => {
-    if (e.target.closest('textarea, input, query-result, #menu')) return;
+    if (e.target.closest('query-result')) return;
     resultEl.clearSelection();
 });
 

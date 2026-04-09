@@ -1,5 +1,6 @@
 -- Regression test for https://github.com/ClickHouse/ClickHouse/issues/84318
 -- This query previously caused a logical error with recursive CTEs referencing other CTEs.
+SET enable_analyzer = 1;
 WITH RECURSIVE
     subquery1 AS
     (
@@ -29,4 +30,4 @@ WITH RECURSIVE
 SELECT *
 FROM subquery3
 FORMAT Null
-SETTINGS max_execution_time = 1, timeout_overflow_mode = 'break'; -- { serverError LOGICAL_ERROR }
+SETTINGS max_execution_time = 1, timeout_overflow_mode = 'break';

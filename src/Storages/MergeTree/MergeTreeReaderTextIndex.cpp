@@ -190,16 +190,6 @@ void MergeTreeReaderTextIndex::updateAllMarkRanges(const MarkRanges & ranges)
     }
 }
 
-void MergeTreeReaderTextIndex::prefetchBeginOfRange(Priority priority)
-{
-    if (!sparse_index_stream)
-        return;
-
-    sparse_index_stream->seekToStart();
-    sparse_index_stream->getDataBuffer()->prefetch(priority);
-    is_prefetched = true;
-}
-
 MergeTreeDataPartPtr MergeTreeReaderTextIndex::getDataPart() const
 {
     const auto * loaded_data_part = typeid_cast<const LoadedMergeTreeDataPartInfoForReader *>(data_part_info_for_read.get());
@@ -211,9 +201,7 @@ MergeTreeDataPartPtr MergeTreeReaderTextIndex::getDataPart() const
 
 void MergeTreeReaderTextIndex::readGranule()
 {
-    if (!is_prefetched)
-        sparse_index_stream->seekToStart();
-
+    sparse_index_stream->seekToStart();
     dictionary_stream->seekToStart();
     small_postings_stream->seekToStart();
 

@@ -43,7 +43,6 @@ public:
     bool canSkipMark(size_t mark, size_t current_task_last_mark) override;
     bool canReadIncompleteGranules() const override { return false; }
     void updateAllMarkRanges(const MarkRanges & ranges) override;
-    void prefetchBeginOfRange(Priority priority) override;
 
     /// Sets a pre-computed granule from the skip index reader (Path 2: use_skip_indexes_on_data_read = 1).
     /// Looks up its own index name in the map.
@@ -99,7 +98,6 @@ private:
     /// True if the reader is allowed to skip marks.
     /// Otherwise it only fills virtual columns.
     bool can_skip_mark;
-    bool is_prefetched = false;
 
     std::unique_ptr<MergeTreeReaderStream> sparse_index_stream;
     std::unique_ptr<MergeTreeReaderStream> dictionary_stream;

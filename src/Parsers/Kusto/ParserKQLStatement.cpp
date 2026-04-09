@@ -70,11 +70,17 @@ bool ParserKQLStatement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
     ParserKQLWithOutput query_with_output_p(end, allow_settings_after_format_in_insert);
     ParserSetQuery set_p;
 
-    if (set_p.parse(pos, node, expected))
     {
-        /// Clear let bindings when settings change (e.g., dialect switch)
-        kqlLetBindingsClear();
-        return true;
+        auto set_pos = pos;
+        if (set_p.parse(pos, node, expected))
+        {
+            /// Clear let bindings when switching away from KQL dialect
+            /// Check if this is 'set dialect = clickhouse'
+            String set_text(set_pos->begin, pos->begin);
+            if (set_text.find("clickhouse") != String::npos)
+                kqlLetBindingsClear();
+            return true;
+        }
     }
 
     bool res = query_with_output_p.parse(pos, node, expected);

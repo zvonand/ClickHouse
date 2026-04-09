@@ -169,8 +169,8 @@ https://example.com?a=b
 127.5	ms	127.5 ms	
 -- BuiltIns_extract_Columnar --
 127.5	ms	127.5 ms	
-234.75	s	234.75 s
-		
+234.75	s	234.75 s	
+
 -- BuiltIns_bin_Long --
 -3	-3
 0	0

@@ -55,7 +55,11 @@ bool ToInt::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     const auto param = getArgument(function_name, pos);
-    out = fmt::format("multiIf(isNull({0}), NULL, isNotNull(toInt32OrNull(toString({0}))), toInt32OrNull(toString({0})), isNotNull(toFloat64OrNull(toString({0}))), toInt32(toFloat64({0})), NULL)", param);
+    out = fmt::format(
+        "multiIf(isNull({0}), NULL, "
+        "isNotNull(toInt32OrNull(toString({0}))), toInt32OrNull(toString({0})), "
+        "isNotNull(toFloat64OrNull(toString({0}))), CAST(toFloat64OrNull(toString({0})) AS Nullable(Int32)), NULL)",
+        param);
     return true;
 }
 
@@ -72,7 +76,8 @@ bool ToLong::convertImpl(String & out, IParser::Pos & pos)
         "isNotNull(toInt64OrNull(toString({0}))), toInt64OrNull(toString({0})), "
         "startsWith(toString({0}), '0x') OR startsWith(toString({0}), '0X'), "
         "reinterpretAsInt64(reverse(unhex(substr(toString({0}), 3)))), "
-        "isNotNull(toFloat64OrNull(toString({0}))), toInt64(toFloat64({0})), NULL)", param);
+        "isNotNull(toFloat64OrNull(toString({0}))), CAST(toFloat64OrNull(toString({0})) AS Nullable(Int64)), NULL)",
+        param);
     return true;
 }
 

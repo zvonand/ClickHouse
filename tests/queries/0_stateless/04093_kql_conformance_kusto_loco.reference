@@ -93,25 +93,25 @@ ababab
 -- BinTests::Durations --
 -12:00:00
 -- CoalesceTests::BuiltIns_coalesce_Columnar --
-true	1	1	1	2023-01-01 00:00:00Z	00:00:10	a
+true	1	1	1	2023-01-01T00:00:00.0000000	00:00:10	a
 -- DateTimeTests::MakeDateTime_InvalidMonth_ShouldReturnNull --
 
 -- DateTimeTests::DateTimeBin --
-1970-05-11 00:00:00Z
+1970-05-11T00:00:00.0000000
 -- DateTimeTests::DateTimeToLocal --
 2015-12-31 18:59:59.9000
 -- DateTimeTests::ToDateTime --
-2024-01-15 12:35:35Z
+2024-01-15T12:35:35.0000000
 -- DateTimeTests::ToDateTime3 --
 true
 -- DateTimeTests::ToDateTime2 --
-2024-01-15 12:35:35Z
+2024-01-15T12:35:35.0000000
 -- DateTimeTests::ToDateTimeFmt --
-2024-01-15 12:35:35Z
+2024-01-15T12:35:35.0000000
 -- DateTimeTests::MakeDateTime --
-2000-04-15 01:01:00Z
+2000-04-15T01:01:00.0000000
 -- DateTimeTests::MakeDateTime2 --
-2000-04-15 00:00:00Z
+2000-04-15T00:00:00.0000000
 -- DynamicTests::MemberAccess --
 123
 -- DynamicTests::NestedMemberAccess --
@@ -249,6 +249,7 @@ false
 -- SimpleFunctionTests::MaxLongTest --
 851673153924341805
 -- SimpleFunctionTests::MinLongTest --
+851673153924341808
 851673153924341805
 -- SimpleFunctionTests::CountOfTest --
 2

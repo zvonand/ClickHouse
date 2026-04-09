@@ -29,17 +29,32 @@ bool ParserKQLStatement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
             if (isValidKQLPos(pos) && String(pos->begin, pos->end) == "=")
             {
                 ++pos;
-                /// Collect the value until semicolon
-                String value;
+                /// Collect the raw value tokens and also try to evaluate as KQL expression
+                String raw_value;
                 while (isValidKQLPos(pos) && pos->type != TokenType::Semicolon)
                 {
-                    if (!value.empty()) value += " ";
-                    if (pos->type == TokenType::StringLiteral)
-                        value += String(pos->begin, pos->end);
-                    else
-                        value += String(pos->begin, pos->end);
+                    if (!raw_value.empty()) raw_value += " ";
+                    raw_value += String(pos->begin, pos->end);
                     ++pos;
                 }
+
+                /// Try to evaluate the value as a KQL expression
+                String value;
+                {
+                    Tokens val_tokens(raw_value.data(), raw_value.data() + raw_value.size(), 0, true);
+                    IParser::Pos val_pos(val_tokens, pos.max_depth, pos.max_backtracks);
+                    try
+                    {
+                        value = ParserKQLBase::getExprFromToken(val_pos);
+                    }
+                    catch (...)
+                    {
+                        value = raw_value;
+                    }
+                }
+                if (value.empty())
+                    value = raw_value;
+
                 kqlLetBindings()[name] = value;
                 /// Generate a no-op SELECT to consume the statement
                 String noop_query = "SELECT 'ok' WHERE 0";

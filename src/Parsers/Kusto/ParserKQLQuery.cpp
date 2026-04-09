@@ -1,4 +1,5 @@
 #include <Parsers/ASTLiteral.h>
+#include <Parsers/ExpressionListParsers.h>
 #include <Parsers/ASTSelectQuery.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Parsers/ASTSubquery.h>
@@ -580,6 +581,135 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 
     if (table_name == "print")
         operation_pos.emplace_back(table_name, pos);
+    else if (table_name == "range")
+    {
+        /// range col from start to end step step_val
+        /// Translate to: (SELECT arrayJoin(...) AS col) [| pipe_ops]
+        ++pos;
+        if (!isValidKQLPos(pos))
+            return false;
+        String col_name(pos->begin, pos->end);
+        ++pos;
+        if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "from")
+            return false;
+        ++pos;
+        String start_val = IParserKQLFunction::getExpression(pos);
+        ++pos;
+        if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "to")
+            return false;
+        ++pos;
+        String end_val = IParserKQLFunction::getExpression(pos);
+        ++pos;
+        if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "step")
+            return false;
+        ++pos;
+        String step_val = IParserKQLFunction::getExpression(pos);
+        ++pos;
+
+        /// Build range as a SQL subquery
+        String range_sql = fmt::format(
+            "SELECT arrayJoin(if(({3}) > 0, "
+            "arrayMap(x -> ({1}) + x * ({3}), range(0, toUInt64((({2}) - ({1})) / ({3})) + 1)), "
+            "arrayMap(x -> ({1}) + x * ({3}), range(0, toUInt64((({1}) - ({2})) / abs({3})) + 1))"
+            ")) AS {0}",
+            col_name, start_val, end_val, step_val);
+
+        /// Collect remaining text (pipe operations + semicolon)
+        String remaining;
+        if (isValidKQLPos(pos) && pos->type == TokenType::PipeMark)
+        {
+            auto rest_start = pos;
+            while (isValidKQLPos(pos) && pos->type != TokenType::Semicolon)
+                ++pos;
+            remaining = String(rest_start->begin, pos->begin);
+        }
+
+        /// Parse the range SQL to get the base AST, then wrap as subquery table source
+        ASTPtr range_ast;
+        {
+            Tokens range_tokens(range_sql.data(), range_sql.data() + range_sql.size(), 0, true);
+            IParser::Pos range_pos(range_tokens, pos.max_depth, pos.max_backtracks);
+            ParserSelectWithUnionQuery sql_parser;
+            if (!sql_parser.parse(range_pos, range_ast, expected))
+                return false;
+        }
+
+        if (remaining.empty())
+        {
+            /// No pipe operations — return range directly
+            node = range_ast;
+            return true;
+        }
+
+        /// Has pipe operations — parse them as KQL applied to a subquery source
+        /// Build KQL text where the subquery acts as table: (subquery) | pipe_ops
+        String formatted_sql = range_ast->formatWithSecretsOneLine();
+
+        /// Parse the remaining KQL pipe operations by building a new KQL query
+        /// with the range as a subquery table source
+        /// We'll parse: _kql_range | pipe_ops  (with _kql_range being the subquery)
+        /// by first parsing the range as the table, then applying pipes
+
+        /// Create a KQL query from scratch:
+        /// Set the range as table source, then parse pipe operations
+        auto range_select_query = make_intrusive<ASTSelectQuery>();
+        node = range_select_query;
+
+        /// Set the range subquery as table source
+        ASTPtr range_subquery_node = make_intrusive<ASTSubquery>(std::move(range_ast));
+        ASTPtr table_expr = make_intrusive<ASTTableExpression>();
+        table_expr->as<ASTTableExpression>()->subquery = range_subquery_node;
+        table_expr->children.emplace_back(range_subquery_node);
+        auto range_table_element = make_intrusive<ASTTablesInSelectQueryElement>();
+        range_table_element->as<ASTTablesInSelectQueryElement>()->table_expression = table_expr;
+        range_table_element->children.emplace_back(table_expr);
+        auto range_tables = make_intrusive<ASTTablesInSelectQuery>();
+        range_tables->children.emplace_back(range_table_element);
+        range_select_query->setExpression(ASTSelectQuery::Expression::TABLES, std::move(range_tables));
+
+        /// Now parse the pipe operations
+        Tokens pipe_tokens(remaining.data(), remaining.data() + remaining.size(), 0, true);
+        IParser::Pos pipe_pos(pipe_tokens, pos.max_depth, pos.max_backtracks);
+
+        /// Skip the initial | mark
+        if (isValidKQLPos(pipe_pos) && pipe_pos->type == TokenType::PipeMark)
+            ++pipe_pos;
+
+        /// Parse pipe operations one at a time
+        while (isValidKQLPos(pipe_pos) && pipe_pos->type != TokenType::Semicolon)
+        {
+            String op_name(pipe_pos->begin, pipe_pos->end);
+            ++pipe_pos;
+
+            auto kql_op = getOperator(op_name);
+            if (kql_op)
+            {
+                if (!kql_op->parse(pipe_pos, node, expected))
+                    return false;
+            }
+
+            /// Skip to next pipe or end
+            while (isValidKQLPos(pipe_pos) && pipe_pos->type != TokenType::PipeMark && pipe_pos->type != TokenType::Semicolon)
+                ++pipe_pos;
+            if (isValidKQLPos(pipe_pos) && pipe_pos->type == TokenType::PipeMark)
+                ++pipe_pos;
+        }
+
+        /// Set default SELECT * if no project was specified
+        if (!range_select_query->select())
+        {
+            String star = "*";
+            Tokens star_tokens(star.data(), star.data() + star.size(), 0, true);
+            IParser::Pos star_pos(star_tokens, pos.max_depth, pos.max_backtracks);
+            ASTPtr select_expr;
+            if (!ParserNotEmptyExpressionList(true).parse(star_pos, select_expr, expected))
+                return false;
+            range_select_query->setExpression(ASTSelectQuery::Expression::SELECT, std::move(select_expr));
+        }
+
+        range_select_query->normalizeChildrenOrder();
+        return true;
+    }
     else
         operation_pos.emplace_back("table", pos);
 

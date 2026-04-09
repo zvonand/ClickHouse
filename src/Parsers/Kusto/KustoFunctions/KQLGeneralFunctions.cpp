@@ -67,7 +67,12 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
             value = std::to_string(value_tsp.toSeconds());
     }
 
-    auto t = fmt::format("toFloat64({})", value);
+    /// If the value is a datetime or timespan, ensure it's numeric for the bin formula
+    String t;
+    if (original_expr == "datetime" || original_expr == "date")
+        t = fmt::format("toFloat64(parseDateTime64BestEffortOrNull(replaceOne(toString({}), 'T', ' '), 9, 'UTC'))", value);
+    else
+        t = fmt::format("toFloat64({})", value);
 
     bool is_const_bin_size = false;
     try
@@ -86,7 +91,10 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
     }
 
     if (is_const_bin_size && bin_size <= 0)
-        return false;
+    {
+        out = "NULL";
+        return true;
+    }
 
     // Use datetime output whenever first argument is datetime/date (whether bin size is numeric or timespan)
     if (original_expr == "datetime" || original_expr == "date")

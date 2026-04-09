@@ -76,10 +76,10 @@ Thunderstorm Wind in MISSISSIPPI
 13913	MISSISSIPPI	Thunderstorm Wind	20000
 11503	GEORGIA	Thunderstorm Wind	2000
 -- pql::Summarize --
-.	0	477
-.	1	284
-parser	0	1942
-parser	1	1588
+.	0	78
+.	1	206
+parser	0	1757
+parser	1	1491
 -- pql::SummarizeBy --
 .
 parser

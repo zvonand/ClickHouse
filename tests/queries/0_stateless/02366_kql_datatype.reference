@@ -81,6 +81,7 @@ true
 \N
 -- toint()
 1
+\N
 -- tostring()
 123
 1
@@ -96,6 +97,7 @@ true
 1120343
 -- tolong()
 123
+\N
 -- todecimal()
 123.345
 \N

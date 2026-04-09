@@ -1,5 +1,6 @@
 -- Tags: no-fasttest, no-parallel-replicas
--- Verify that Lazy Materialization optimization is active in vector search queries
+
+-- Verify that vector search queries on multiple parts use lazy materialization
 
 SET parallel_replicas_local_plan = 1; -- this setting is randomized, set it explicitly to force local plan for parallel replicas
 SET enable_analyzer = 1;
@@ -18,25 +19,25 @@ INSERT INTO tab SELECT number, randomPrintableASCII(10), randomPrintableASCII(20
 INSERT INTO tab SELECT number, randomPrintableASCII(10), randomPrintableASCII(20), randomPrintableASCII(5), rand(), [randCanonical(), randCanonical()] FROM numbers(10000);
 INSERT INTO tab SELECT number, randomPrintableASCII(10), randomPrintableASCII(20), randomPrintableASCII(5), rand(), [randCanonical(), randCanonical()] FROM numbers(10000);
 
--- Verify that Lazy Materialization is ON in the plan
+-- Verify that lazy materialization is used
 SELECT trimLeft(explain) FROM
 (
-EXPLAIN WITH [0.1, 0.2] AS reference_vec
-        SELECT id, s1, s2, s3, x
-        FROM tab
-        ORDER BY L2Distance(vec, reference_vec) ASC
-        LIMIT 10
+    EXPLAIN WITH [0.1, 0.2] AS reference_vec
+    SELECT id, s1, s2, s3, x
+    FROM tab
+    ORDER BY L2Distance(vec, reference_vec) ASC
+    LIMIT 10
 )
 WHERE explain LIKE '%LazilyReadFromMergeTree%';
 
 -- Verify that vector index is used
 SELECT trimLeft(explain) FROM
 (
-EXPLAIN indexes=1 WITH [0.1, 0.2] AS reference_vec
-        SELECT id, s1, s2, s3, x
-        FROM tab
-        ORDER BY L2Distance(vec, reference_vec) ASC
-        LIMIT 10
+    EXPLAIN indexes = 1 WITH [0.1, 0.2] AS reference_vec
+    SELECT id, s1, s2, s3, x
+    FROM tab
+    ORDER BY L2Distance(vec, reference_vec) ASC
+    LIMIT 10
 )
 WHERE explain LIKE '%idx_vec%';
 

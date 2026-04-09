@@ -451,8 +451,6 @@ bool optimizeVectorSearchSecondPass(QueryPlan::Node & /*root*/, Stack & stack, Q
 
         /// The SortingStep's input header must reflect the new ExpressionStep output header
         /// (which now has _distance consumed and L2Distance(...) produced via ALIAS).
-        /// Without this update, optimizeLazyMaterialization2 reads the stale SortingStep
-        /// header and maps sort-key positions incorrectly against the modified expression.
         sorting_step->updateInputHeader(expression_node->step->getOutputHeader());
     }
 

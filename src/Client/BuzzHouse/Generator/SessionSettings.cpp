@@ -419,6 +419,11 @@ std::unordered_map<String, CHSetting> performanceSettings
             [](RandomGenerator & rg, FuzzConfig &) { return settingCombinations(rg, {"greedy", "dpsize"}); },
             {"'greedy'", "'dpsize'"},
             false)},
+       {"query_plan_optimize_join_order_randomize",
+        CHSetting(
+            [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.randomInt<uint32_t>(0, 64)); },
+            {"0", "1", "2", "4", "16", "64"},
+            false)},
        {"query_plan_optimize_lazy_materialization", trueOrFalseSetting},
        {"query_plan_optimize_prewhere", trueOrFalseSetting},
        {"query_plan_push_down_limit", trueOrFalseSetting},
@@ -520,6 +525,7 @@ std::unordered_map<String, CHSetting> serverSettings = {
          false)},
     {"analyze_index_with_space_filling_curves", trueOrFalseSetting},
     {"analyzer_compatibility_join_using_top_level_identifier", trueOrFalseSetting},
+    {"analyzer_inline_views", trueOrFalseSetting},
     {"apply_deleted_mask", trueOrFalseSettingNoOracle},
     {"apply_mutations_on_fly", trueOrFalseSettingNoOracle},
     {"apply_patch_parts", trueOrFalseSetting},
@@ -1371,6 +1377,12 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.2, 1, 100)); }, {}, false)},
     {"text_index_hint_max_selectivity", probRangeSetting},
+    {"text_index_like_max_postings_to_read",
+     CHSetting(
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, 500)); }, {}, false)},
+    {"text_index_like_min_pattern_length",
+     CHSetting(
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 20)); }, {}, false)},
     {"throw_if_deduplication_in_dependent_materialized_views_enabled_with_async_insert", trueOrFalseSettingNoOracle},
     {"throw_if_no_data_to_insert", trueOrFalseSettingNoOracle},
     {"throw_on_error_from_cache_on_write_operations", trueOrFalseSettingNoOracle},
@@ -1426,6 +1438,7 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
     {"use_statistics_cache", trueOrFalseSettingNoOracle},
     {"use_strict_insert_block_limits", trueOrFalseSettingNoOracle},
     {"use_structure_from_insertion_table_in_table_functions", CHSetting(zeroOneTwo, {}, false)},
+    {"use_text_index_like_evaluation_by_dictionary_scan", trueOrFalseSetting},
     {"use_text_index_tokens_cache", trueOrFalseSetting},
     {"use_text_index_header_cache", trueOrFalseSetting},
     {"use_text_index_postings_cache", trueOrFalseSetting},

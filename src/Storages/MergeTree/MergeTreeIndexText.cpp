@@ -658,20 +658,6 @@ size_t MergeTreeIndexGranuleText::memoryUsageBytes() const
     return memory_usage_bytes;
 }
 
-MergeTreeIndexGranulePtr MergeTreeIndexGranuleText::shallowCopy() const
-{
-    auto copy = std::make_shared<MergeTreeIndexGranuleText>(params, postings_serialization.getPostingListCodec());
-    copy->is_empty = is_empty;
-    copy->can_use_like_dictionary_scan = can_use_like_dictionary_scan;
-    copy->remaining_tokens = remaining_tokens;
-    copy->pattern_tokens = pattern_tokens;
-    copy->pattern_tokens_per_query = pattern_tokens_per_query;
-    copy->rare_tokens_postings = rare_tokens_postings;
-    copy->index_id_for_caches = index_id_for_caches;
-    /// current_range is intentionally left as nullopt — each reader sets its own.
-    return copy;
-}
-
 bool MergeTreeIndexGranuleText::hasAnyQueryTokens(const TextSearchQuery & query) const
 {
     if (!current_range.has_value())

@@ -312,10 +312,6 @@ public:
     void setCurrentRange(RowsRange range) { current_range = std::move(range); }
     const String & getIndexIdForCaches() const { return index_id_for_caches; }
 
-    /// Creates a shallow copy sharing immutable token data but with independent current_range.
-    /// Used to provide each concurrent reader task its own granule without re-reading from disk.
-    MergeTreeIndexGranulePtr shallowCopy() const;
-
     static PostingListPtr readPostingsBlock(
         MergeTreeIndexReaderStream & stream,
         MergeTreeIndexDeserializationState & state,

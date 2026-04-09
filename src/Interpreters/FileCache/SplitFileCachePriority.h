@@ -1,9 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <Interpreters/FileCache/FileCacheKey.h>
-#include <Interpreters/FileCache/FileSegment.h>
-#include <Interpreters/FileCache/FileSegmentInfo.h>
 #include <Interpreters/FileCache/Guards.h>
 #include <Interpreters/FileCache/IFileCachePriority.h>
 #include <Common/logger_useful.h>

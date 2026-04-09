@@ -9,7 +9,6 @@
 #include <Common/callOnce.h>
 #include <Common/ThreadPool.h>
 #include <Common/StatusFile.h>
-#include <Interpreters/FileCache/LRUFileCachePriority.h>
 #include <Interpreters/FileCache/FileCache_fwd.h>
 #include <Interpreters/FileCache/FileSegment.h>
 #include <Interpreters/FileCache/Metadata.h>

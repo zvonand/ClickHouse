@@ -2,7 +2,6 @@
 
 #include <list>
 #include <Interpreters/FileCache/IFileCachePriority.h>
-#include <Interpreters/FileCache/FileCacheKey.h>
 #include <Interpreters/FileCache/UserCacheUsage.h>
 #include <Common/logger_useful.h>
 #include <Interpreters/FileCache/Guards.h>

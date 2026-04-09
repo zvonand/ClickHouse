@@ -20,6 +20,8 @@ RabbitMQConnection::RabbitMQConnection(const RabbitMQConfiguration & configurati
 
 String RabbitMQConnection::connectionInfoForLog() const
 {
+    if (!configuration.connection_string.empty())
+        return configuration.connection_string;
     return configuration.host + ':' + toString(configuration.port);
 }
 

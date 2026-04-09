@@ -203,37 +203,39 @@ static SplitResult trySplitNonIntersectingParts(
         return {};
 
     /// Update the original reading step to only have intersecting parts.
-    /// Recompute all derived stats to keep them consistent with the new part set.
+    /// Adjust index_stats by subtracting the non-intersecting contribution,
+    /// then add a NonIntersectingSplit entry showing the split.
     if (analyzed_result)
     {
         analyzed_result->parts_with_ranges = std::move(split.intersecting_parts_ranges);
 
-        size_t total_marks = 0;
-        size_t total_ranges = 0;
-        size_t total_rows = 0;
+        size_t intersecting_marks = 0;
+        size_t intersecting_ranges = 0;
+        size_t intersecting_rows = 0;
         for (const auto & part : analyzed_result->parts_with_ranges)
         {
-            total_marks += part.getMarksCount();
-            total_ranges += part.ranges.size();
-            total_rows += part.getRowsCount();
+            intersecting_marks += part.getMarksCount();
+            intersecting_ranges += part.ranges.size();
+            intersecting_rows += part.getRowsCount();
         }
 
         auto num_parts = analyzed_result->parts_with_ranges.size();
         analyzed_result->total_parts = num_parts;
         analyzed_result->parts_before_pk = num_parts;
         analyzed_result->selected_parts = num_parts;
-        analyzed_result->selected_ranges = total_ranges;
-        analyzed_result->selected_marks = total_marks;
-        analyzed_result->selected_marks_pk = total_marks;
-        analyzed_result->total_marks_pk = total_marks;
-        analyzed_result->selected_rows = total_rows;
+        analyzed_result->selected_ranges = intersecting_ranges;
+        analyzed_result->selected_marks = intersecting_marks;
+        analyzed_result->selected_marks_pk = intersecting_marks;
+        analyzed_result->total_marks_pk = intersecting_marks;
+        analyzed_result->selected_rows = intersecting_rows;
 
-        /// Update index_stats so EXPLAIN shows consistent numbers.
-        for (auto & stat : analyzed_result->index_stats)
-        {
-            stat.num_parts_after = num_parts;
-            stat.num_granules_after = total_marks;
-        }
+        /// Add a new index entry for the non-intersecting split.
+        /// Earlier entries keep their original numbers (which include non-intersecting parts).
+        analyzed_result->index_stats.emplace_back(ReadFromMergeTree::IndexStat{
+            .type = ReadFromMergeTree::IndexType::NonIntersectingSplit,
+            .description = "Split non-intersecting parts for lazy FINAL",
+            .num_parts_after = num_parts,
+            .num_granules_after = intersecting_marks});
 
         reading_step->setAnalyzedResult(analyzed_result);
     }

@@ -88,7 +88,8 @@ public:
         PrimaryKey,
         Skip,
         PrimaryKeyExpand,
-        Statistics
+        Statistics,
+        NonIntersectingSplit,
     };
 
     struct DistributedIndexStat

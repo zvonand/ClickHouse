@@ -20,6 +20,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int BAD_ARGUMENTS;
+    extern const int ILLEGAL_TYPE_OF_ARGUMENT;
 }
 
 namespace
@@ -36,7 +37,7 @@ std::vector<String> initializePhraseTokens(const ColumnsWithTypeAndName & argume
     Field phrase_field = (*column_phrase)[0];
     if (phrase_field.isNull() || phrase_field.getType() != Field::Types::String)
         throw Exception(
-            ErrorCodes::BAD_ARGUMENTS,
+            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
             "Function '{}' requires a String phrase argument, got: {}",
             function_name,
             column_phrase->getFamilyName());
@@ -159,6 +160,9 @@ DataTypePtr FunctionMatchPhraseOverloadResolver::getReturnTypeImpl(const Columns
 FunctionBasePtr
 FunctionMatchPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const
 {
+    if (arguments.size() < 2)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' requires at least 2 arguments, got {}", name, arguments.size());
+
     const auto tokenizer_name = arguments.size() < 3 || !arguments[arg_tokenizer].column ? SplitByNonAlphaTokenizer::getExternalName()
                                                                                          : arguments[arg_tokenizer].column->getDataAt(0);
     if (tokenizer_name == SparseGramsTokenizer::getExternalName() || tokenizer_name == ArrayTokenizer::getExternalName())
@@ -167,8 +171,7 @@ FunctionMatchPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & ar
     auto tokenizer = TokenizerFactory::instance().get(tokenizer_name);
     auto phrase_tokens = initializePhraseTokens(arguments, *tokenizer, getName());
     DataTypes argument_types{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })};
-    return std::make_shared<FunctionBaseMatchPhrase>(
-        std::move(tokenizer), std::move(phrase_tokens), std::move(argument_types), return_type);
+    return std::make_shared<FunctionBaseMatchPhrase>(std::move(tokenizer), std::move(phrase_tokens), std::move(argument_types), return_type);
 }
 
 ExecutableFunctionPtr FunctionBaseMatchPhrase::prepare(const ColumnsWithTypeAndName &) const

@@ -14,6 +14,11 @@ SELECT matchPhrase('a', 'b', 'unsupported_tokenizer'); -- { serverError BAD_ARGU
 -- sparseGrams is not supported because gram ordering depends on context
 SELECT matchPhrase('a', 'b', 'sparseGrams'); -- { serverError BAD_ARGUMENTS }
 SELECT matchPhrase('a', 'b', 'array'); -- { serverError BAD_ARGUMENTS }
+-- NULL arguments
+SELECT matchPhrase(NULL); -- { serverError BAD_ARGUMENTS }
+SELECT matchPhrase(NULL, NULL); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT matchPhrase(NULL, 'quick brown');
+SELECT matchPhrase('the quick brown fox', NULL); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 SELECT 'Constants: matchPhrase should be constant';
 

@@ -1,4 +1,5 @@
 Negative tests
+\N
 Constants: matchPhrase should be constant
 Default tokenizer (splitByNonAlpha)
 1

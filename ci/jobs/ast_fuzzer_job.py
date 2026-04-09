@@ -227,6 +227,7 @@ def run_fuzz_job(check_name: str):
 
     server_log, fuzzer_log, stderr_log, dmesg_log, fatal_log = JOB_ARTIFACTS
     paths = list(JOB_ARTIFACTS)
+
     if buzzhouse:
         paths.extend([WORKSPACE_PATH / "fuzzerout.sql", WORKSPACE_PATH / "fuzz.json"])
 

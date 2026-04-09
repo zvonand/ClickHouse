@@ -1114,11 +1114,11 @@ class QueryResultElement extends HTMLElement
                     display: block;
                 }
 
-                /* Selected cell stacks above all other cells */
+                /* Selected cell stacks above all other cells and sticky headers */
                 .td-selected
                 {
                     position: relative;
-                    z-index: 10;
+                    z-index: 9999;
                 }
 
                 /* Expand the inner div on top of the table without reflowing it */

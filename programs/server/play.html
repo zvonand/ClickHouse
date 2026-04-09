@@ -639,7 +639,7 @@
             line-height: 0.75;
             position: sticky;
             left: 0;
-            z-index: -1;
+            z-index: -1; /* Below the expanded selected cell */
         }
 
         #url_status
@@ -984,12 +984,13 @@ class QueryResultElement extends HTMLElement
                 {
                     background-color: var(--element-background-color);
                     max-width: 40vw;
-                    padding: 0;
+                    padding: 0; /* Padding is on .cell-content instead */
                     border: 1px solid var(--border-color);
                     white-space: pre;
                     vertical-align: top;
                 }
 
+                /* Inner div limits cell height to 3 lines; expands on selection */
                 .cell-content
                 {
                     padding: 0.25rem 0.5rem;
@@ -1062,6 +1063,8 @@ class QueryResultElement extends HTMLElement
                     background-color: var(--border-color-selected);
                 }
 
+                /* Apply hover/selection filter per-cell, excluding the active cell,
+                   because filter on tr would create a stacking context trapping it. */
                 tr:hover td:not(.td-selected)
                 {
                     filter: var(--table-hover-filter);
@@ -1070,7 +1073,7 @@ class QueryResultElement extends HTMLElement
                 .tr-selected
                 {
                     position: relative;
-                    z-index: 1;
+                    z-index: 1; /* Above hovered rows */
                 }
 
                 .tr-selected td:not(.td-selected)
@@ -1086,12 +1089,14 @@ class QueryResultElement extends HTMLElement
                     display: none;
                 }
 
+                /* Selected cell stacks above all other cells */
                 .td-selected
                 {
                     position: relative;
                     z-index: 10;
                 }
 
+                /* Expand the inner div on top of the table without reflowing it */
                 .td-selected .cell-content
                 {
                     position: absolute;
@@ -1286,7 +1291,7 @@ class QueryResultElement extends HTMLElement
     {
         let td = document.createElement('td');
         let div = document.createElement('div');
-        div.className = 'cell-content';
+        div.className = 'cell-content'; /* Height-limited container; expands absolutely when selected */
 
         let is_null = (value === null);
         let is_link = false;
@@ -1456,7 +1461,7 @@ class QueryResultElement extends HTMLElement
                 for (let row of table.rows)
                 {
                     let cell = row.cells[col_idx];
-                    let div = cell.querySelector('.cell-content') || cell;
+                    let div = cell.querySelector('.cell-content') || cell; /* Apply bars to the inner div */
                     let value = +cell.innerText;
 
                     if (!double_sided)
@@ -1563,6 +1568,9 @@ class QueryResultElement extends HTMLElement
             columnWidths.push(header.offsetWidth);
         });
 
+        /* Freeze row heights so that absolutely-positioned cell content
+           does not cause reflow. Read all heights first, then write,
+           to avoid layout thrashing. */
         let rowHeights = [];
         for (let row of table.rows)
         {

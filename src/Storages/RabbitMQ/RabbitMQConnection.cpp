@@ -1,5 +1,6 @@
 #include <Storages/RabbitMQ/RabbitMQConnection.h>
 
+#include <amqpcpp.h>
 #include <Common/logger_useful.h>
 #include <IO/WriteHelpers.h>
 
@@ -21,7 +22,10 @@ RabbitMQConnection::RabbitMQConnection(const RabbitMQConfiguration & configurati
 String RabbitMQConnection::connectionInfoForLog() const
 {
     if (!configuration.connection_string.empty())
-        return configuration.connection_string;
+    {
+        AMQP::Address address(configuration.connection_string);
+        return address.hostname() + ":" + toString(address.port());
+    }
     return configuration.host + ':' + toString(configuration.port);
 }
 

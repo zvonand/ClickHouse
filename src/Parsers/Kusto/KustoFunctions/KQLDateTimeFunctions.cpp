@@ -604,8 +604,8 @@ bool MakeDateTime::convertImpl(String & out, IParser::Pos & pos)
     }
 
     arguments = arguments + "7,'UTC'";
-    auto inner = fmt::format("makeDateTime64OrNull({})", arguments);
-    out = fmt::format("if(isNull({}), '', substring(replaceOne(toString({}), ' ', 'T'), 1, 27))", inner, inner);
+    auto inner = fmt::format("makeDateTime64({})", arguments);
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
 
     return true;
 }

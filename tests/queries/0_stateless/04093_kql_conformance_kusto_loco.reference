@@ -95,7 +95,7 @@ ababab
 -- CoalesceTests::BuiltIns_coalesce_Columnar --
 true	1	1	1	2023-01-01T00:00:00.0000000	00:00:10	a
 -- DateTimeTests::MakeDateTime_InvalidMonth_ShouldReturnNull --
-
+1900-01-01T00:00:00.0000000
 -- DateTimeTests::DateTimeBin --
 1970-05-11T00:00:00.0000000
 -- DateTimeTests::DateTimeToLocal --
@@ -167,47 +167,116 @@ abc
 -- SimpleFunctionTests::TimespanFormatting --
 1.00:00:00
 -- SimpleFunctionTests::Range --
+1
+2
+3
+4
+5
+6
+7
+8
+9
 10
 -- SimpleFunctionTests::RangeDescending --
+10
+9
+8
+7
+6
+5
+4
+3
+2
 1
 -- SimpleFunctionTests::RowNumberNoParam --
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
 10	10
 -- SimpleFunctionTests::RowNumberStartingAt7 --
+1	7
+2	8
+3	9
+4	10
 5	11
 -- SimpleFunctionTests::RowNumberWithRanking --
-11
 -- SimpleFunctionTests::BetweenLong --
+50
+51
+52
+53
+54
 55
 -- SimpleFunctionTests::BetweenInt --
+50
+51
+52
+53
+54
 55
 -- SimpleFunctionTests::RangeTimeSpan --
-20.00:00:00
+86400
+172800
+259200
+345600
+432000
+518400
+604800
+691200
+777600
+864000
+950400
+1036800
+1123200
+1209600
+1296000
+1382400
+1468800
+1555200
+1641600
+1728000
 -- SimpleFunctionTests::RangeTimeSpanFiltered --
-4.00:00:00
+86400
+172800
+259200
+345600
 -- SimpleFunctionTests::NotBetweenLong --
+1
+2
+3
+4
+5
+6
+7
 8
 -- SimpleFunctionTests::StrLen --
 3
 -- SimpleFunctionTests::StrLen0 --
 0
 -- SimpleFunctionTests::MultiplyTimespan --
-10.00:00:00
+864000
 -- SimpleFunctionTests::MultiplyTimespanR --
-10.00:00:00
+864000
 -- SimpleFunctionTests::AbsInt --
 99
 -- SimpleFunctionTests::TimeSpanBin --
 1.00:00:00
 -- SimpleFunctionTests::TimespanDiv --
-5.00:00:00
+432000
 -- SimpleFunctionTests::TimespanDiv2 --
-4.00:00:00
+345600
 -- SimpleFunctionTests::AvgNumber --
 2
 -- SimpleFunctionTests::AvgTimeSpan --
-2.00:00:00
+2
 -- SimpleFunctionTests::SumTimeSpan --
-6.00:00:00
+6
 -- SimpleFunctionTests::RepeatedUnion --
 2
 -- SimpleFunctionTests::RoundDouble --

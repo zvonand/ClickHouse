@@ -509,30 +509,27 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
         ++scan_pos;
     }
 
-    /// Build final query as SQL-based table source with KQL pipes
-    /// Use a CH subquery as the source, then apply remaining KQL pipes
-    String new_query;
     if (remaining.empty())
-        new_query = fmt::format("SELECT * FROM {}", combined);
+    {
+        /// No remaining pipes — parse as SQL
+        String new_query = fmt::format("SELECT * FROM {}", combined);
+        Tokens new_tokens(new_query.data(), new_query.data() + new_query.size(), 0, true);
+        IParser::Pos new_pos(new_tokens, pos.max_depth, pos.max_backtracks);
+        ParserSelectWithUnionQuery sql_parser;
+        if (!sql_parser.parse(new_pos, node, expected))
+            return false;
+    }
     else
     {
-        /// The remaining pipes are KQL operators applied to the combined source
-        /// We need to make the combined source into something the KQL parser can use
-        /// Simplest: use it as a ClickHouse subquery
-        /// Format: KQL query starting with a subquery source
-        /// But KQL parser expects a table name, not a subquery at the start
-        /// Solution: parse the combined as SQL and set as the table source in the KQL AST
-        /// Then parse remaining KQL operations on top
-        new_query = fmt::format("SELECT * FROM {} {}", combined, remaining);
+        /// Remaining has KQL pipe operators — build KQL with subquery source
+        /// Parse: (combined_subquery) | remaining_ops
+        /// by recursively calling KQL parser
+        String kql_query = fmt::format("{} {}", combined, remaining);
+        Tokens kql_tokens(kql_query.data(), kql_query.data() + kql_query.size(), 0, true);
+        IParser::Pos kql_pos(kql_tokens, pos.max_depth, pos.max_backtracks);
+        if (!ParserKQLQuery().parse(kql_pos, node, expected))
+            return false;
     }
-
-    /// Parse the combined query as standard SQL
-    Tokens new_tokens(new_query.data(), new_query.data() + new_query.size(), 0, true);
-    IParser::Pos new_pos(new_tokens, pos.max_depth, pos.max_backtracks);
-
-    ParserSelectWithUnionQuery sql_parser;
-    if (!sql_parser.parse(new_pos, node, expected))
-        return false;
 
     pos = scan_pos;
     return true;
@@ -609,8 +606,15 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "step")
             return false;
         ++pos;
+        /// Handle negative step: -N
+        String step_sign;
+        if (isValidKQLPos(pos) && pos->type == TokenType::Minus)
+        {
+            step_sign = "-";
+            ++pos;
+        }
         String step_raw(pos->begin, pos->end);
-        String step_val = IParserKQLFunction::getExpression(pos);
+        String step_val = step_sign + IParserKQLFunction::getExpression(pos);
         /// Advance past the step value if needed
         if (isValidKQLPos(pos) && pos->type != TokenType::PipeMark && pos->type != TokenType::Semicolon)
             ++pos;

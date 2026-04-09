@@ -87,7 +87,8 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
     // Use datetime output whenever first argument is datetime/date (whether bin size is numeric or timespan)
     if (original_expr == "datetime" || original_expr == "date")
     {
-        out = fmt::format("toDateTime64(toInt64({0}/{1}) * {1}, 9, 'UTC')", t, bin_size);
+        auto inner = fmt::format("toDateTime64(toInt64({0}/{1}) * {1}, 9, 'UTC')", t, bin_size);
+        out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     }
     else if (original_expr == "timespan" || original_expr == "time" || ParserKQLDateTypeTimespan().parseConstKQLTimespan(original_expr))
     {

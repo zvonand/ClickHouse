@@ -170,11 +170,12 @@ bool EndOfMonth::convertImpl(String & out, IParser::Pos & pos)
         if (offset.empty())
             throw Exception(ErrorCodes::SYNTAX_ERROR, "Number of arguments do not match in function: {}", fn_name);
     }
-    out = fmt::format(
+    auto inner = fmt::format(
         "toDateTime(toLastDayOfMonth(toDateTime({}, 9, 'UTC') + toIntervalMonth({})), 9, 'UTC') + toIntervalHour(23) + "
-        "toIntervalMinute(59) + toIntervalSecond(60) - toIntervalMicrosecond(1)",
+        "toIntervalMinute(59) + toIntervalSecond(60) - toIntervalNanosecond(100)",
         datetime_str,
         toString(offset));
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
 
     return true;
 }
@@ -194,9 +195,9 @@ bool EndOfDay::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
-    out = fmt::format(
-        "toDateTime(toStartOfDay({}),9,'UTC') + (INTERVAL {} +1 DAY) - (INTERVAL 1 microsecond)", datetime_str, toString(offset));
-
+    auto inner = fmt::format(
+        "toDateTime(toStartOfDay({}),9,'UTC') + (INTERVAL {} +1 DAY) - (INTERVAL 100 nanosecond)", datetime_str, toString(offset));
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
 
@@ -215,9 +216,9 @@ bool EndOfWeek::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
-    out = fmt::format(
-        "toDateTime(toStartOfDay({}),9,'UTC') + (INTERVAL {} +1 WEEK) - (INTERVAL 1 microsecond)", datetime_str, toString(offset));
-
+    auto inner = fmt::format(
+        "toDateTime(toStartOfWeek({}),9,'UTC') + (INTERVAL {} +1 WEEK) - (INTERVAL 100 nanosecond)", datetime_str, toString(offset));
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
 
@@ -243,13 +244,13 @@ bool EndOfYear::convertImpl(String & out, IParser::Pos & pos)
         offset.erase(remove(offset.begin(), offset.end(), ' '), offset.end());
     }
 
-    out = fmt::format(
+    auto inner = fmt::format(
         "(((((toDateTime(toString(toLastDayOfMonth(toDateTime({0}, 9, 'UTC') + toIntervalYear({1}) + toIntervalMonth(12 - "
         "toInt8(substring(toString(toDateTime({0}, 9, 'UTC')), 6, 2))))), 9, 'UTC') + toIntervalHour(23)) + toIntervalMinute(59)) + "
-        "toIntervalSecond(60)) - toIntervalMicrosecond(1)))",
+        "toIntervalSecond(60)) - toIntervalNanosecond(100)))",
         datetime_str,
         toString(offset));
-
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
 
@@ -636,7 +637,8 @@ bool StartOfDay::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
-    out = fmt::format("date_add(DAY,{}, parseDateTime64BestEffortOrNull(toString((toStartOfDay({}))), 9, 'UTC')) ", offset, datetime_str);
+    auto inner = fmt::format("date_add(DAY,{}, parseDateTime64BestEffortOrNull(toString((toStartOfDay({}))), 9, 'UTC')) ", offset, datetime_str);
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
 
@@ -655,8 +657,9 @@ bool StartOfMonth::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
-    out = fmt::format(
+    auto inner = fmt::format(
         "date_add(MONTH,{}, parseDateTime64BestEffortOrNull(toString((toStartOfMonth({}))), 9, 'UTC')) ", offset, datetime_str);
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
 
@@ -675,8 +678,9 @@ bool StartOfWeek::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
-    out = fmt::format(
+    auto inner = fmt::format(
         "date_add(Week,{}, parseDateTime64BestEffortOrNull(toString((toStartOfWeek({}))), 9, 'UTC')) ", offset, datetime_str);
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
 
@@ -695,8 +699,9 @@ bool StartOfYear::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
-    out = fmt::format(
+    auto inner = fmt::format(
         "date_add(YEAR,{}, parseDateTime64BestEffortOrNull(toString((toStartOfYear({}, 'UTC'))), 9, 'UTC'))", offset, datetime_str);
+    out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
 

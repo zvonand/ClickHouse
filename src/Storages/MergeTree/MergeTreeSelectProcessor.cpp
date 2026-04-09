@@ -448,7 +448,7 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     if (prewhere_info)
         filter_expr = prewhere_info->prewhere_actions.dumpDAG();
 
-    for (uint64 step_i : filter_step_indices)
+    for (UInt64 step_i : filter_step_indices)
     {
         const auto & step = prewhere_actions.steps[step_i];
 

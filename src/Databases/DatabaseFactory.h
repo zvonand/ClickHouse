@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Access/Common/AccessType.h>
 #include <Common/NamePrompter.h>
 #include <Interpreters/Context_fwd.h>
 #include <Databases/IDatabase.h>
@@ -48,6 +49,7 @@ public:
         bool supports_arguments = false;
         bool supports_settings = false;
         bool supports_table_overrides = false;
+        std::optional<AccessTypeObjects::Source> source_access_type = std::nullopt;
     };
 
     using CreatorFn = std::function<DatabasePtr(const Arguments & arguments)>;

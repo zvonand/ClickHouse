@@ -285,26 +285,25 @@ AccessRights ContextAccess::addImplicitAccessRights(const AccessRights & access,
         }
     }
 
-    /// Database engines (Atomic, Replicated, Shared, etc.) are registered in DatabaseFactory,
-    /// not StorageFactory, but CREATE DATABASE checks TABLE_ENGINE in InterpreterCreateQuery.
-    /// Grant them implicitly when table_engines_require_grant is disabled.
+    /// Database engines are registered in DatabaseFactory, not StorageFactory, but
+    /// CREATE DATABASE checks TABLE_ENGINE in InterpreterCreateQuery. Apply the same
+    /// source_access_type logic as the StorageFactory loop above.
     ///
-    /// NOTE: Some database engines share names with source storage engines (e.g. PostgreSQL,
-    /// MySQL, SQLite, S3). Those were already handled by the StorageFactory loop above — either
-    /// granted (if the user has READ/WRITE on the source) or deliberately skipped. We must not
-    /// re-grant them here unconditionally, or it would bypass source access checks.
-    ///
-    /// TODO: DatabaseFactory should gain its own source_access_type (like StorageFactory has),
-    /// so that CREATE DATABASE ENGINE = PostgreSQL(...) also requires source grants. Currently
-    /// only CREATE TABLE checks source access; CREATE DATABASE with source engines does not.
-    if (!access_control.doesTableEnginesRequireGrant())
+    /// Engines that share names with StorageFactory (PostgreSQL, MySQL, SQLite, S3, etc.)
+    /// are processed by both loops with the same source_access_type — grant() is idempotent,
+    /// so duplicates are harmless.
+    for (const auto & [name, creator] : DatabaseFactory::instance().getDatabaseEngines())
     {
-        const auto & all_storages = StorageFactory::instance().getAllStorages();
-        for (const auto & name : DatabaseFactory::instance().getAllRegisteredNames())
+        if (!creator.features.source_access_type)
         {
-            if (all_storages.contains(name))
-                continue;
-            res.grant(AccessType::TABLE_ENGINE, name);
+            if (!access_control.doesTableEnginesRequireGrant())
+                res.grant(AccessType::TABLE_ENGINE, name);
+        }
+        else
+        {
+            auto source_name = AccessTypeObjects::toStringSource(*creator.features.source_access_type);
+            if (res.isGranted(AccessType::READ | AccessType::WRITE, source_name))
+                res.grant(AccessType::TABLE_ENGINE, name);
         }
     }
 

@@ -577,7 +577,10 @@ void registerDatabasePostgreSQL(DatabaseFactory & factory)
             use_table_cache,
             args.uuid);
     };
-    factory.registerDatabase("PostgreSQL", create_fn, {.supports_arguments = true});
+    factory.registerDatabase("PostgreSQL", create_fn, {
+        .supports_arguments = true,
+        .source_access_type = AccessTypeObjects::Source::POSTGRES,
+    });
 }
 }
 

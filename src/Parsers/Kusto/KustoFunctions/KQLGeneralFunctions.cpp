@@ -106,7 +106,8 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
     else
     {
         auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : fmt::format("toFloat64({})", round_to);
-        out = fmt::format("toInt64({0} / {1}) * {1}", t, bin_sz);
+        /// Use floor() for correct behavior with negative numbers
+        out = fmt::format("toInt64(floor({0} / {1})) * {1}", t, bin_sz);
     }
 
     return true;

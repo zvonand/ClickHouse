@@ -202,13 +202,13 @@ https://example.com?a=b
 -1
 1
 2
-NaN
+nan
 -- BuiltIns_Log2 --
 0
 -1
 1
 3
-NaN
+nan
 -- BuiltIns_Pow --
 1
 10
@@ -222,7 +222,7 @@ NaN
 1
 2
 3
-NaN
+nan
 -- BuiltIns_DayOfWeek --
 00:00:00
 1.00:00:00
@@ -383,13 +383,13 @@ true	true
 -- Cast_ToDouble_String_Columnar --
 \N
 123.5
-NaN
+nan
 -- Cast_ToReal_String_Scalar --
 \N	123.5
 -- Cast_ToReal_String_Columnar --
 \N
 123.5
-NaN
+nan
 -- Cast_ToString_Scalar --
 123	234	1.5	00:00:10	8/30/2023 11:00:00 PM	abc					;
 -- Cast_ToString_Columnar --

@@ -76,8 +76,36 @@ bool DatatypeDynamic::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     ++pos;
+
+    /// Handle property bags (JSON objects)
     if (pos->type == TokenType::OpeningCurlyBrace)
-        throw Exception(ErrorCodes::BAD_ARGUMENTS, "Property bags are not supported for now in {}", function_name);
+    {
+        /// Build JSON string from tokens
+        int brace_depth = 1;
+        String json_str;
+        json_str += '{';
+        ++pos;
+        while (isValidKQLPos(pos) && brace_depth > 0)
+        {
+            if (pos->type == TokenType::OpeningCurlyBrace)
+                ++brace_depth;
+            if (pos->type == TokenType::ClosingCurlyBrace)
+            {
+                --brace_depth;
+                if (brace_depth == 0)
+                    break;
+            }
+            json_str += String(pos->begin, pos->end);
+            ++pos;
+        }
+        json_str += '}';
+        out = fmt::format("'{}'", json_str);
+        ++pos; /// skip past closing brace to closing paren
+        return true;
+    }
+
+    /// Check if this is an array - if so, use CAST to Array(Dynamic) for mixed-type support
+    bool is_array = (pos->type == TokenType::OpeningSquareBracket);
 
     while (isValidKQLPos(pos) && pos->type != TokenType::ClosingRoundBracket)
     {
@@ -102,6 +130,10 @@ bool DatatypeDynamic::convertImpl(String & out, IParser::Pos & pos)
             ++pos;
         }
     }
+
+    /// For arrays, cast to Array(Dynamic) to support mixed types
+    if (is_array)
+        out = fmt::format("CAST({} AS Array(Dynamic))", out);
 
     return true;
 }

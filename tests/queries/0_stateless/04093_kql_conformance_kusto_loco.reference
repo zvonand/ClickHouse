@@ -5,11 +5,11 @@
 -- AdditionalFunctionTests::Log10Function_Scalar --
 3
 -- AdditionalFunctionTests::ToBoolFunction_Scalar --
-True
+true
 -- AdditionalFunctionTests::IsNanFunction_Scalar --
-True
+true
 -- AdditionalFunctionTests::IsInfFunction_Scalar --
-True
+true
 -- AdditionalFunctionTests::ToLowerFunction_Scalar --
 hello
 -- AdditionalFunctionTests::ToUpperFunction_Scalar --
@@ -27,9 +27,9 @@ a,b,c
 -- AdditionalFunctionTests::ReverseFunction_Scalar --
 cba
 -- AdditionalFunctionTests::IsEmptyFunction_Scalar --
-True
+true
 -- AdditionalFunctionTests::IsNotEmptyFunction_Scalar --
-True
+true
 -- AdditionalFunctionTests::IndexOfFunction_Scalar --
 6
 -- AdditionalFunctionTests::AbsFunction_Scalar --
@@ -51,15 +51,15 @@ True
 -- AdditionalFunctionTests::ArrayReverseFunction_Scalar --
 [3,2,1]
 -- AdditionalFunctionTests::IsNullFunction_Scalar --
-True
+true
 -- AdditionalFunctionTests::IsNotNullFunction_Scalar --
-True
+true
 -- AdditionalFunctionTests::CoalesceFunction_Scalar --
 42
 -- AdditionalFunctionTests::IffFunction_Scalar --
 yes
 -- AdditionalFunctionTests::NotFunction_Scalar --
-True
+true
 -- AdditionalFunctionTests::StrRepFunction_Scalar --
 ababab
 -- AdditionalFunctionTests::StrcatArrayFunction_Scalar --
@@ -93,7 +93,7 @@ ababab
 -- BinTests::Durations --
 -12:00:00
 -- CoalesceTests::BuiltIns_coalesce_Columnar --
-True	1	1	1	2023-01-01 00:00:00Z	00:00:10	a
+true	1	1	1	2023-01-01 00:00:00Z	00:00:10	a
 -- DateTimeTests::MakeDateTime_InvalidMonth_ShouldReturnNull --
 
 -- DateTimeTests::DateTimeBin --
@@ -103,7 +103,7 @@ True	1	1	1	2023-01-01 00:00:00Z	00:00:10	a
 -- DateTimeTests::ToDateTime --
 2024-01-15 12:35:35Z
 -- DateTimeTests::ToDateTime3 --
-True
+true
 -- DateTimeTests::ToDateTime2 --
 2024-01-15 12:35:35Z
 -- DateTimeTests::ToDateTimeFmt --
@@ -225,23 +225,23 @@ a0
 -- SimpleFunctionTests::MultiStringCat --
 123456789012345
 -- SimpleFunctionTests::IsEmpty --
-True
+true
 -- SimpleFunctionTests::IsEmpty2 --
-False
+false
 -- SimpleFunctionTests::IsNotEmpty --
-False
+false
 -- SimpleFunctionTests::IsNotEmpty2 --
-True
+true
 -- SimpleFunctionTests::IsAscii --
-True
+true
 -- SimpleFunctionTests::IsUtf8 --
-True
+true
 -- SimpleFunctionTests::Reverse --
 fedca
 -- SimpleFunctionTests::IsFinite --
-True
+true
 -- SimpleFunctionTests::IsFinite2 --
-False
+false
 -- SimpleFunctionTests::MakeTimespan --
 01:15:00
 -- SimpleFunctionTests::MakeTimespan2 --
@@ -275,9 +275,9 @@ ABCABC
 -- SimpleFunctionTests::DecimalDivision --
 3
 -- SimpleFunctionTests::DecimalComparison --
-True
+true
 -- SimpleFunctionTests::DecimalEquality --
-True
+true
 -- SimpleFunctionTests::DecimalInTableSummarize --
 6.6
 -- SimpleFunctionTests::DecimalRound --

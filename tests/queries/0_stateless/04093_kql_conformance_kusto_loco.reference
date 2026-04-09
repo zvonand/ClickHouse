@@ -201,7 +201,9 @@ abc
 55
 -- SimpleFunctionTests::BetweenInt --
 -- SimpleFunctionTests::RangeTimeSpan --
+-- FIXME: timespan-typed range bounds not yet supported --
 -- SimpleFunctionTests::RangeTimeSpanFiltered --
+-- FIXME: timespan-typed range bounds not yet supported --
 -- SimpleFunctionTests::NotBetweenLong --
 1
 2

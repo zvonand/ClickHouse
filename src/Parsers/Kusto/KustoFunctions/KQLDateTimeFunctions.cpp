@@ -109,7 +109,8 @@ bool DatetimePart::convertImpl(String & out, IParser::Pos & pos)
     else
         throw Exception(ErrorCodes::SYNTAX_ERROR, "Unexpected argument {} for {}", part, fn_name);
 
-    out = fmt::format("formatDateTime({}, '{}')", date, format);
+    auto dt = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", date);
+    out = fmt::format("formatDateTime({}, '{}')", dt, format);
     return true;
 }
 
@@ -119,21 +120,27 @@ bool DatetimeDiff::convertImpl(String & out, IParser::Pos & pos)
     if (fn_name.empty())
         return false;
     ++pos;
-    String arguments;
-
-    arguments = arguments + getConvertedArgument(fn_name, pos) + ",";
+    String unit = getConvertedArgument(fn_name, pos);
     ++pos;
-    arguments = arguments + getConvertedArgument(fn_name, pos) + ",";
+    String datetime1 = getConvertedArgument(fn_name, pos);
     ++pos;
-    arguments = arguments + getConvertedArgument(fn_name, pos);
+    String datetime2 = getConvertedArgument(fn_name, pos);
 
-    out = fmt::format("DateDiff({}) * -1", arguments);
+    auto dt1 = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", datetime1);
+    auto dt2 = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", datetime2);
+    out = fmt::format("DateDiff({},{},{}) * -1", unit, dt1, dt2);
     return true;
 }
 
 bool DayOfMonth::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "toDayOfMonth");
+    const String fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    ++pos;
+    const String datetime_str = getConvertedArgument(fn_name, pos);
+    out = fmt::format("toDayOfMonth(parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC'))", datetime_str);
+    return true;
 }
 
 bool DayOfWeek::convertImpl(String & out, IParser::Pos & pos)
@@ -155,7 +162,13 @@ bool DayOfWeek::convertImpl(String & out, IParser::Pos & pos)
 
 bool DayOfYear::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "toDayOfYear");
+    const String fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    ++pos;
+    const String datetime_str = getConvertedArgument(fn_name, pos);
+    out = fmt::format("toDayOfYear(parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC'))", datetime_str);
+    return true;
 }
 
 bool EndOfMonth::convertImpl(String & out, IParser::Pos & pos)
@@ -200,8 +213,9 @@ bool EndOfDay::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
+    auto dt = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", datetime_str);
     auto inner = fmt::format(
-        "toDateTime(toStartOfDay({}),9,'UTC') + (INTERVAL {} +1 DAY) - (INTERVAL 100 nanosecond)", datetime_str, toString(offset));
+        "toDateTime(toStartOfDay({}),9,'UTC') + (INTERVAL {} +1 DAY) - (INTERVAL 100 nanosecond)", dt, toString(offset));
     out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
@@ -221,8 +235,9 @@ bool EndOfWeek::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
+    auto dt = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", datetime_str);
     auto inner = fmt::format(
-        "toDateTime(toStartOfWeek({}),9,'UTC') + (INTERVAL {} +1 WEEK) - (INTERVAL 100 nanosecond)", datetime_str, toString(offset));
+        "toDateTime(toStartOfWeek({}),9,'UTC') + (INTERVAL {} +1 WEEK) - (INTERVAL 100 nanosecond)", dt, toString(offset));
     out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
@@ -266,7 +281,8 @@ bool FormatDateTime::convertImpl(String & out, IParser::Pos & pos)
         return false;
     String formatspecifier;
     ++pos;
-    const auto datetime = getConvertedArgument(fn_name, pos);
+    const auto datetime_raw = getConvertedArgument(fn_name, pos);
+    auto datetime = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", datetime_raw);
     ++pos;
     auto format = getConvertedArgument(fn_name, pos);
     trim(format);
@@ -490,17 +506,35 @@ bool FormatTimeSpan::convertImpl(String & out, IParser::Pos & pos)
 
 bool GetMonth::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "toMonth");
+    const String fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    ++pos;
+    const String datetime_str = getConvertedArgument(fn_name, pos);
+    out = fmt::format("toMonth(parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC'))", datetime_str);
+    return true;
 }
 
 bool GetYear::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "toYear");
+    const String fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    ++pos;
+    const String datetime_str = getConvertedArgument(fn_name, pos);
+    out = fmt::format("toYear(parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC'))", datetime_str);
+    return true;
 }
 
 bool HoursOfDay::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "toHour");
+    const String fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    ++pos;
+    const String datetime_str = getConvertedArgument(fn_name, pos);
+    out = fmt::format("toHour(parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC'))", datetime_str);
+    return true;
 }
 
 bool MakeTimeSpan::convertImpl(String & out, IParser::Pos & pos)
@@ -643,7 +677,8 @@ bool StartOfDay::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
-    auto inner = fmt::format("date_add(DAY,{}, parseDateTime64BestEffortOrNull(toString((toStartOfDay({}))), 9, 'UTC')) ", offset, datetime_str);
+    auto dt = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", datetime_str);
+    auto inner = fmt::format("date_add(DAY,{}, parseDateTime64BestEffortOrNull(toString((toStartOfDay({}))), 9, 'UTC')) ", offset, dt);
     out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
@@ -663,8 +698,9 @@ bool StartOfMonth::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
+    auto dt = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", datetime_str);
     auto inner = fmt::format(
-        "date_add(MONTH,{}, parseDateTime64BestEffortOrNull(toString((toStartOfMonth({}))), 9, 'UTC')) ", offset, datetime_str);
+        "date_add(MONTH,{}, parseDateTime64BestEffortOrNull(toString((toStartOfMonth({}))), 9, 'UTC')) ", offset, dt);
     out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
@@ -684,8 +720,9 @@ bool StartOfWeek::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
+    auto dt = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", datetime_str);
     auto inner = fmt::format(
-        "date_add(Week,{}, parseDateTime64BestEffortOrNull(toString((toStartOfWeek({}))), 9, 'UTC')) ", offset, datetime_str);
+        "date_add(Week,{}, parseDateTime64BestEffortOrNull(toString((toStartOfWeek({}))), 9, 'UTC')) ", offset, dt);
     out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
@@ -705,8 +742,9 @@ bool StartOfYear::convertImpl(String & out, IParser::Pos & pos)
         ++pos;
         offset = getConvertedArgument(fn_name, pos);
     }
+    auto dt = fmt::format("parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC')", datetime_str);
     auto inner = fmt::format(
-        "date_add(YEAR,{}, parseDateTime64BestEffortOrNull(toString((toStartOfYear({}, 'UTC'))), 9, 'UTC'))", offset, datetime_str);
+        "date_add(YEAR,{}, parseDateTime64BestEffortOrNull(toString((toStartOfYear({}, 'UTC'))), 9, 'UTC'))", offset, dt);
     out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;
 }
@@ -778,13 +816,19 @@ bool WeekOfYear::convertImpl(String & out, IParser::Pos & pos)
         return false;
     ++pos;
     const String time_str = getConvertedArgument(fn_name, pos);
-    out = fmt::format("toWeek({},3,'UTC')", time_str);
+    out = fmt::format("toWeek(parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC'),3,'UTC')", time_str);
     return true;
 }
 
 bool MonthOfYear::convertImpl(String & out, IParser::Pos & pos)
 {
-    return directMapping(out, pos, "toMonth");
+    const String fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+    ++pos;
+    const String datetime_str = getConvertedArgument(fn_name, pos);
+    out = fmt::format("toMonth(parseDateTime64BestEffortOrNull(toString({}), 9, 'UTC'))", datetime_str);
+    return true;
 }
 
 }

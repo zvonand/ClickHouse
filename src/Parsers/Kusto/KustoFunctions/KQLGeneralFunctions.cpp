@@ -100,7 +100,7 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
     if (original_expr == "datetime" || original_expr == "date")
     {
         auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : round_to;
-        auto inner = fmt::format("toDateTime64(toInt64({0}/{1}) * {1}, 9, 'UTC')", t, bin_sz);
+        auto inner = fmt::format("toDateTime64(toInt64(floor({0}/{1})) * {1}, 9, 'UTC')", t, bin_sz);
         auto result = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
         /// Guard against runtime division by zero when bin_size is not a constant
         if (!is_const_bin_size)
@@ -111,7 +111,7 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
     else if (original_expr == "timespan" || original_expr == "time" || ParserKQLDateTypeTimespan().parseConstKQLTimespan(original_expr))
     {
         auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : round_to;
-        String bin_value = fmt::format("toInt64({0}/{1}) * {1}", t, bin_sz);
+        String bin_value = fmt::format("toInt64(floor({0}/{1})) * {1}", t, bin_sz);
         auto result = fmt::format(
             "concat("
             "if(abs(toInt64((({0}) as _bv))) >= 86400, concat(toString(intDiv(abs(toInt64(_bv)), 86400)), '.'), ''), "
@@ -523,7 +523,7 @@ bool RowNumber::convertImpl(String & out, IParser::Pos & pos)
         {
             start = std::stoll(*start_arg);
         }
-        catch (...) {}
+        catch (...) {} // Ok: fall back to default start=1 on bad input
     }
 
     /// Optional second arg: reset flag (ignored for now - ClickHouse doesn't easily support reset)

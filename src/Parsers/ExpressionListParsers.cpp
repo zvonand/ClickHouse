@@ -1742,6 +1742,8 @@ protected:
 class OverlayLayer : public Layer
 {
     String function_name;
+    bool keyword_mode = false; /// true after seeing PLACING, locks to SQL standard syntax
+    bool comma_mode = false;   /// true after seeing a comma, locks to functional syntax
 public:
     explicit OverlayLayer(String function_name_)
         : Layer(/*allow_alias*/ true, /*allow_alias_without_as_keyword*/ true)
@@ -1750,18 +1752,25 @@ public:
 
     bool parse(IParser::Pos & pos, Expected & expected, Action & action) override
     {
-        /// Either OVERLAY(string PLACING replacement FROM start [FOR length]) or overlay(string, replacement, start[, length])
-        ///
-        /// 0: Parse first separator: PLACING or comma (-> 1)
-        /// 1: Parse second separator: FROM or comma (-> 2)
-        /// 2: Parse third separator: FOR or comma (-> 3)
-        /// 2 or 3: Parse closing bracket (finished)
+        /// Two mutually exclusive forms, locked by the first separator:
+        ///   Keyword mode:  OVERLAY(string PLACING replacement FROM start [FOR length])
+        ///   Comma mode:    overlay(string, replacement, start[, length])
 
         if (state == 0)
         {
-            if (ParserToken(TokenType::Comma).ignore(pos, expected)
-                || ParserKeyword(Keyword::PLACING).ignore(pos, expected))
+            if (!keyword_mode && ParserToken(TokenType::Comma).ignore(pos, expected))
             {
+                comma_mode = true;
+                action = Action::OPERAND;
+
+                if (!mergeElement())
+                    return false;
+
+                state = 1;
+            }
+            else if (!comma_mode && ParserKeyword(Keyword::PLACING).ignore(pos, expected))
+            {
+                keyword_mode = true;
                 action = Action::OPERAND;
 
                 if (!mergeElement())
@@ -1773,8 +1782,16 @@ public:
 
         if (state == 1)
         {
-            if (ParserToken(TokenType::Comma).ignore(pos, expected)
-                || ParserKeyword(Keyword::FROM).ignore(pos, expected))
+            if (comma_mode && ParserToken(TokenType::Comma).ignore(pos, expected))
+            {
+                action = Action::OPERAND;
+
+                if (!mergeElement())
+                    return false;
+
+                state = 2;
+            }
+            else if (keyword_mode && ParserKeyword(Keyword::FROM).ignore(pos, expected))
             {
                 action = Action::OPERAND;
 
@@ -1787,8 +1804,16 @@ public:
 
         if (state == 2)
         {
-            if (ParserToken(TokenType::Comma).ignore(pos, expected)
-                || ParserKeyword(Keyword::FOR).ignore(pos, expected))
+            if (comma_mode && ParserToken(TokenType::Comma).ignore(pos, expected))
+            {
+                action = Action::OPERAND;
+
+                if (!mergeElement())
+                    return false;
+
+                state = 3;
+            }
+            else if (keyword_mode && ParserKeyword(Keyword::FOR).ignore(pos, expected))
             {
                 action = Action::OPERAND;
 
@@ -1799,9 +1824,9 @@ public:
             }
         }
 
-        /// Accept extra comma-separated arguments beyond the 4th so the function
-        /// itself can report NUMBER_OF_ARGUMENTS_DOESNT_MATCH instead of a syntax error.
-        if (state == 3)
+        /// In comma mode, accept extra arguments so the function itself
+        /// can report NUMBER_OF_ARGUMENTS_DOESNT_MATCH instead of a syntax error.
+        if (comma_mode && state == 3)
         {
             if (ParserToken(TokenType::Comma).ignore(pos, expected))
             {
@@ -1812,9 +1837,12 @@ public:
             }
         }
 
-        /// Allow closing bracket in any state so that calls with too few arguments
-        /// (e.g. overlay('a', 'b')) are rejected by the function, not the parser.
-        if (!finished && ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
+        /// In comma mode, allow closing bracket in any state so that calls with
+        /// too few arguments are rejected by the function, not the parser.
+        /// In keyword mode, require at least FROM (state >= 2) before closing.
+        if (!finished
+            && ((comma_mode && state >= 0) || (keyword_mode && state >= 2) || state == 0)
+            && ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
         {
             if (!mergeElement())
                 return false;

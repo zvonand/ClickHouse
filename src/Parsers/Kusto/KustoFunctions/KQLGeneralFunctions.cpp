@@ -220,9 +220,12 @@ bool Iif::convertImpl(String & out, IParser::Pos & pos)
     if (if_false.empty())
         return false;
 
-    /// Detect if arguments are timespans (raw token differs from converted = was a timespan)
+    /// Detect if arguments are timespans: raw token differs from converted,
+    /// the raw token looks like a timespan literal (e.g., "1s", "10h", "2d"),
+    /// and is NOT a function name like "datetime"
+    ParserKQLDateTypeTimespan tsp_check;
     bool is_timespan_result = (if_true_raw != if_true)
-        && (if_true_raw.find_first_of("dhms") != String::npos);
+        && tsp_check.parseConstKQLTimespan(if_true_raw);
 
     auto result = fmt::format("if({}, {}, {})", predicate, if_true, if_false);
     if (is_timespan_result)
@@ -254,8 +257,9 @@ bool Iff::convertImpl(String & out, IParser::Pos & pos)
     if (if_false.empty())
         return false;
 
+    ParserKQLDateTypeTimespan tsp_check2;
     bool is_timespan_result = (if_true_raw != if_true)
-        && (if_true_raw.find_first_of("dhms") != String::npos);
+        && tsp_check2.parseConstKQLTimespan(if_true_raw);
 
     auto result = fmt::format("if({}, {}, {})", predicate, if_true, if_false);
     if (is_timespan_result)

@@ -136,12 +136,13 @@ size_t tryUseVectorSearch(QueryPlan::Node * parent_node, QueryPlan::Nodes & /*no
     else
         return no_layers_updated;
 
-    /// Validate sort direction: L2Distance and cosineDistance require ascending order (smaller = more similar),
-    /// dotProduct requires descending order (larger = more similar).
+    /// Validate sort direction:
+    /// - L2Distance and cosineDistance require ascending sort order (smaller means more similar)
+    /// - dotProduct requires descending sort order (larger means more similar)
     const int sort_direction = sort_description.front().direction;
-    if (distance_function == "dotProduct" && sort_direction != -1)
+    if ((distance_function == "L2Distance" || distance_function == "cosineDistance") && sort_direction != 1)
         return no_layers_updated;
-    if (distance_function != "dotProduct" && sort_direction != 1)
+    if (distance_function == "dotProduct" && sort_direction != -1)
         return no_layers_updated;
 
     /// Extract stuff from the ORDER BY clause. It is expected to look like this: ORDER BY cosineDistance(vec1, [1.0, 2.0 ...])

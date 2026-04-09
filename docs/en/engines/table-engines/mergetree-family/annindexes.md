@@ -104,13 +104,14 @@ ALTER TABLE table MATERIALIZE INDEX <index_name> SETTINGS mutations_sync = 2;
 Function `<distance_function>` must be
 - `L2Distance`, the [Euclidean distance](https://en.wikipedia.org/wiki/Euclidean_distance), representing the length of a line between two points in Euclidean space,
 - `cosineDistance`, the [cosine distance](https://en.wikipedia.org/wiki/Cosine_similarity#Cosine_distance), representing the angle between two non-zero vectors, or
-- `dotProduct`, the [dot product](https://en.wikipedia.org/wiki/Dot_product) (inner product), representing the sum of element-wise products of two vectors.
+- `dotProduct`, the [dot product](https://en.wikipedia.org/wiki/Dot_product) (inner product), representing the sum of element-wise products of two vectors. Equivalent to `cosineDistance` on normalized data.
 
 For normalized data, `L2Distance` is usually the best choice, otherwise `cosineDistance` is recommended to compensate for scale.
-On normalized datasets, `dotProduct` and `cosineDistance` are equivalent.
 
-Note that `L2Distance` and `cosineDistance` require `ORDER BY ... ASC` (smaller distance = more similar), while `dotProduct` requires `ORDER BY ... DESC` (larger dot product = more similar).
-Queries with the wrong sort direction will not use the vector similarity index.
+:::note
+For distance functions `L2Distance` and `cosineDistance`, a smaller distance means a higher similarity, whereas for `dotProduct`, a higher distance means a higher similarity.
+As a result, vector indexes with `L2Distance` and `cosineDistance` can only be used by `SELECT [...] ORDER BY [...] ASC` queries (`ASC` is the default for `ORDER BY`), whereas vector indexes build for `dotProduct` can only be used by `SELECT [...] ORDER BY [...] DESC` queries.
+:::
 
 `<dimensions>` specifies the array cardinality (number of elements) in the underlying column.
 If ClickHouse finds an array with a different cardinality during index creation, the index is discarded and an error is returned.
@@ -586,6 +587,8 @@ If no `GRANULARITY` was specified for vector similarity indexes, the default val
 
 #### Example {#approximate-nearest-neighbor-search-example}
 
+Queries:
+
 ```sql
 CREATE TABLE tab(id Int32, vec Array(Float32), INDEX idx vec TYPE vector_similarity('hnsw', 'L2Distance', 2)) ENGINE = MergeTree ORDER BY id;
 
@@ -598,7 +601,7 @@ ORDER BY L2Distance(vec, reference_vec) ASC
 LIMIT 3;
 ```
 
-returns
+Result:
 
 ```result
    ┌─id─┬─vec─────┐
@@ -607,32 +610,6 @@ returns
 3. │  8 │ [0,2.2] │
    └────┴─────────┘
 ```
-
-An example using `dotProduct` as distance function:
-
-```sql
-CREATE TABLE tab_dot(id Int32, vec Array(Float32), INDEX idx vec TYPE vector_similarity('hnsw', 'dotProduct', 2)) ENGINE = MergeTree ORDER BY id;
-
-INSERT INTO tab_dot VALUES (0, [1.0, 0.0]), (1, [0.0, 1.0]), (2, [1.0, 1.0]), (3, [0.5, 0.5]);
-
-WITH [1.0, 0.0] AS reference_vec
-SELECT id, vec
-FROM tab_dot
-ORDER BY dotProduct(vec, reference_vec) DESC
-LIMIT 3;
-```
-
-returns
-
-```result
-   ┌─id─┬─vec─────┐
-1. │  0 │ [1,0]   │
-2. │  2 │ [1,1]   │
-3. │  3 │ [0.5,0.5] │
-   └────┴─────────┘
-```
-
-Note that `dotProduct` uses `ORDER BY ... DESC` because a higher dot product means greater similarity.
 
 Further example datasets that use approximate vector search:
 - [LAION-400M](../../../getting-started/example-datasets/laion-400m-dataset)

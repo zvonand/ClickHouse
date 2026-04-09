@@ -72,19 +72,24 @@ def test_parallel_replicas_with_view(start_cluster):
         )
 
     settings = {
+        "enable_analyzer": 1,
+        "enable_parallel_replicas": 1,
         "cluster_for_parallel_replicas": "parallel_replicas",
         "max_parallel_replicas": 3,
-        "allow_experimental_parallel_reading_from_replicas": 1,
-        "parallel_replicas_allow_view_over_mergetree": 1,
     }
 
     # t1: sum(n*10, n=0..99999) = 49999500000
     # t2: sum(n*20, n=0..99999) = 99999000000
     expected = "149998500000"
 
-    for node in nodes:
-        result = node.query("SELECT sum(value) FROM v", settings=settings)
-        assert result.strip() == expected
+    result = nodes[0].query("SELECT sum(value) FROM v", settings=settings)
+    assert result.strip() == expected
+
+    result = nodes[1].query("SELECT sum(value) FROM v", settings=settings)
+    assert result.strip() == expected
+
+    result = nodes[2].query("SELECT sum(value) FROM v SETTINGS parallel_replicas_allow_view_over_mergetree = 1", settings=settings)
+    assert result.strip() == expected
 
     for node in nodes:
         node.query("DROP VIEW IF EXISTS v")

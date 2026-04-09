@@ -46,6 +46,11 @@ SELECT matchPhrase('hello world', '');
 SELECT matchPhrase('', 'hello');
 SELECT matchPhrase('', '');
 SELECT matchPhrase('hello world', '!!!');
+SELECT '-- tokenizer separators in phrase are removed before matching';
+SELECT matchPhrase('error: connection refused', 'error---connection');
+SELECT matchPhrase('error: connection refused', 'error:connection');
+SELECT matchPhrase('one two three', 'one...two...three');
+SELECT matchPhrase('one two three', 'one!@#two$%^three');
 SELECT '-- FixedString input';
 SELECT matchPhrase(toFixedString('the quick brown fox', 19), 'quick brown');
 SELECT '-- non-const input';
@@ -83,6 +88,9 @@ SELECT matchPhrase('one::two::three::four', 'two::three', 'splitByString([\'::\'
 SELECT matchPhrase('one::two::three::four', 'two::four', 'splitByString([\'::\'])');
 SELECT matchPhrase('()a()bc()d()', 'a()bc', 'splitByString([\'()\'])');
 SELECT matchPhrase('()a()bc()d()', 'a()d', 'splitByString([\'()\'])');
+SELECT '-- tokenizer separators in phrase are removed before matching';
+SELECT matchPhrase('one::two::three::four', 'two::::three', 'splitByString([\'::\'])');
+SELECT matchPhrase('one::two::three::four', 'two::::::three', 'splitByString([\'::\'])');
 
 SELECT 'ngrams tokenizer';
 

@@ -2945,6 +2945,9 @@ async function postAll()
 
 async function cancel()
 {
+    /// Invalidate in-flight requests so postImpl/postSingle/postMulti will
+    /// see a stale posted_request_num and bail out before saving history.
+    ++request_num;
     /// Cancel single-query mode controller.
     if (controller) controller.abort();
     /// Cancel all multi-query mode controllers.

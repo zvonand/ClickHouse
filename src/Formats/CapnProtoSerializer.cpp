@@ -1395,6 +1395,7 @@ namespace
                 {
                     for (size_t i = 0; i != tuple_column->tupleSize(); ++i)
                         fields_serializers[i]->readRow(tuple_column->getColumn(i), struct_reader, fields_offsets[i]);
+                    tuple_column->addSize(1);
                 };
 
                 SerializationTuple::readElementsSafe(column, read_tuple);

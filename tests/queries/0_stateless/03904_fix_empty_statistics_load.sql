@@ -1,3 +1,4 @@
+-- Tags: no-s3-storage, no-azure-blob-storage
 -- Test for issue #96068
 
 SET use_statistics = 1;
@@ -17,12 +18,11 @@ CREATE TABLE tab
 ) Engine = MergeTree() ORDER BY tuple() PARTITION BY u64_minmax
 SETTINGS min_bytes_for_wide_part = 0, auto_statistics_types = '';
 
--- Insert several parts (10 partitions)
--- Note: don't use too many partitions, as dropping them from Azure storage is slow
+-- Insert looooots of parts (1000)
 INSERT INTO tab
 SELECT number % 1000,
        number % 1000,
-       number % 10,
+       number % 99,
        number % 1000,
        number % 1000,
        number % 2,

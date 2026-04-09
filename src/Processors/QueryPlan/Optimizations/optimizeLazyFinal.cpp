@@ -251,24 +251,10 @@ static SplitResult trySplitNonIntersectingParts(
 
 void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::Nodes & nodes, const QueryPlanOptimizationSettings & optimization_settings)
 {
-    /// Skip if already inside an InputSelectorStep (avoids infinite re-application).
-    for (size_t i = stack.size(); i >= 2 && i > stack.size() - 2; --i)
-        if (typeid_cast<InputSelectorStep *>(stack[i - 2].node->step.get()))
-            return;
-
-    /// Look for ReadFromMergeTree with FINAL, optionally preceded by a FilterStep.
-    auto * top_node = stack.back().node;
-    FilterStep * filter_step = nullptr;
-
-    if (auto * f = typeid_cast<FilterStep *>(top_node->step.get()))
-    {
-        if (top_node->children.size() != 1)
-            return;
-        filter_step = f;
-        top_node = top_node->children.front();
-    }
-
-    auto * read_node = top_node;
+    /// Match ReadFromMergeTree at the bottom of the stack.
+    /// This runs after optimizePrimaryKeyConditionAndLimit, so the WHERE filter
+    /// is already pushed into the reading step for PK analysis.
+    auto * read_node = stack.back().node;
     auto * reading_step = typeid_cast<ReadFromMergeTree *>(read_node->step.get());
     if (!reading_step)
         return;
@@ -285,12 +271,25 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     if (reading_step->getAnalyzedResult())
         return;
 
+    /// Check the immediate parent for a FilterStep or InputSelectorStep.
+    FilterStep * filter_step = nullptr;
+    if (stack.size() >= 2)
+    {
+        auto * parent_step = stack[stack.size() - 2].node->step.get();
+        if (auto * f = typeid_cast<FilterStep *>(parent_step))
+            filter_step = f;
+        else if (typeid_cast<InputSelectorStep *>(parent_step))
+            return; /// Already inside an InputSelectorStep — avoid infinite re-application.
+    }
+
     /// We need either a filter or prewhere/row_policy to make this worthwhile.
     if (!filter_step && !reading_step->getPrewhereInfo() && !reading_step->getRowLevelFilter())
         return;
 
     /// Run early index analysis so the analyzed (PK-filtered) parts can be used
     /// both for the non-intersecting split and for the set/true-branch plans.
+    /// The WHERE filter was already pushed by optimizePrimaryKeyConditionAndLimit,
+    /// so selectRangesToRead uses the PK condition for index analysis.
     auto analyzed_result = reading_step->selectRangesToRead();
 
     /// Split parts into non-intersecting (unique key ranges, no FINAL needed) and
@@ -356,7 +355,6 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     }
 
     QueryPlan set_plan;
-    size_t pk_filtered_marks = 0;
 
     {
         SelectQueryInfo set_query_info = reading_step->getQueryInfo();
@@ -410,13 +408,6 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         if (filter_step)
             set_reading->addFilter(filter_step->getExpression().clone(), filter_step->getFilterColumnName());
         set_reading->SourceStepWithFilterBase::applyFilters();
-
-        /// Count PK-filtered marks as the baseline for the filtered ratio check.
-        /// The IN-set filter in LazyFinalKeyAnalysisTransform measures additional
-        /// pruning beyond what the WHERE clause's PK conditions already provide.
-        if (auto set_analysis = set_reading->selectRangesToRead())
-            for (const auto & part : set_analysis->parts_with_ranges)
-                pk_filtered_marks += part.getMarksCount();
 
         set_plan.addStep(std::move(set_reading));
     }
@@ -493,8 +484,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         max_block_numbers_to_read,
         parts_for_set,
         context,
-        optimization_settings.min_filtered_ratio_for_lazy_final,
-        pk_filtered_marks));
+        optimization_settings.min_filtered_ratio_for_lazy_final));
 
     /// True branch (signal = set OK): LazyReadReplacingFinalSource + JoinLazyColumnsStep.
     QueryPlan true_plan;

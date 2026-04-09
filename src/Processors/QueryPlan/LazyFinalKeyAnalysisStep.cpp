@@ -18,8 +18,7 @@ LazyFinalKeyAnalysisStep::LazyFinalKeyAnalysisStep(
     PartitionIdToMaxBlockPtr max_block_numbers_to_read_,
     RangesInDataPartsPtr ranges_,
     ContextPtr query_context_,
-    float min_filtered_ratio_,
-    size_t pk_filtered_marks_)
+    float min_filtered_ratio_)
     : ITransformingStep(
         input_header_,
         input_header_,
@@ -38,7 +37,6 @@ LazyFinalKeyAnalysisStep::LazyFinalKeyAnalysisStep(
     , ranges(std::move(ranges_))
     , query_context(std::move(query_context_))
     , min_filtered_ratio(min_filtered_ratio_)
-    , pk_filtered_marks(pk_filtered_marks_)
 {
 }
 
@@ -49,7 +47,7 @@ void LazyFinalKeyAnalysisStep::transformPipeline(QueryPipelineBuilder & pipeline
         return std::make_shared<LazyFinalKeyAnalysisTransform>(
             future_set, shared_state, metadata_snapshot, mutations_snapshot,
             storage_snapshot, data_settings, data, max_block_numbers_to_read,
-            ranges, query_context, min_filtered_ratio, pk_filtered_marks);
+            ranges, query_context, min_filtered_ratio);
     });
 }
 

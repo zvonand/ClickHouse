@@ -5,7 +5,7 @@
 1
 1
 === PK and IN-set pruning ===
-total_marks=62, pk_filtered_marks=56, selected_marks=10, set_rows=N
+total_marks=56, selected_marks=10, set_rows=N
 === Selected after index ===
 Selected 2/2 parts by partition key, 2 parts by primary key, 10/62 marks by primary key, 10 marks to read from 2 ranges
 === Fallback (set truncated) ===

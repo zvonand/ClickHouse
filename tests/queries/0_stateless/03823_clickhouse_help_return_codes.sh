@@ -65,9 +65,13 @@ echo "clickhouse obfuscator --help: $?"
 $CLICKHOUSE_BINARY server --help >/dev/null 2>&1
 echo "clickhouse server --help: $?"
 
-# Test that clickhouse keeper --help returns 0
-$CLICKHOUSE_BINARY keeper --help >/dev/null 2>&1
-echo "clickhouse keeper --help: $?"
+# Test that clickhouse keeper --help returns 0 (keeper is optional)
+if $CLICKHOUSE_BINARY help 2>&1 | grep -q 'keeper'; then
+    $CLICKHOUSE_BINARY keeper --help >/dev/null 2>&1
+    echo "clickhouse keeper --help: $?"
+else
+    echo "clickhouse keeper --help: 0"
+fi
 
 # Test that clickhouse client --help returns 0
 $CLICKHOUSE_BINARY client --help >/dev/null 2>&1

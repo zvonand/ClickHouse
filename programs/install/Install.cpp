@@ -943,27 +943,27 @@ int mainEntryClickHouseInstall(int argc, char ** argv)
         /// If user specified --prefix, --pid-path, --config-path, --binary-path, --user, --group
         /// in install args we need to pass them to start command
         std::string maybe_prefix;
-        if (options.contains("prefix") && prefix != "/")
+        if (options.contains("prefix") && !options["prefix"].defaulted() && prefix != "/")
             maybe_prefix = " --prefix " + prefix.string();
 
         std::string maybe_pid_path;
-        if (options.contains("pid-path"))
+        if (options.contains("pid-path") && !options["pid-path"].defaulted())
             maybe_pid_path = " --pid-path " + options["pid-path"].as<std::string>();
 
         std::string maybe_config_path;
-        if (options.contains("config-path"))
+        if (options.contains("config-path") && !options["config-path"].defaulted())
             maybe_config_path = " --config-path " + options["config-path"].as<std::string>();
 
         std::string maybe_binary_path;
-        if (options.contains("binary-path"))
+        if (options.contains("binary-path") && !options["binary-path"].defaulted())
             maybe_binary_path = " --binary-path " + options["binary-path"].as<std::string>();
 
         std::string maybe_user;
-        if (options.contains("user") && user != DEFAULT_CLICKHOUSE_SERVER_USER)
+        if (options.contains("user") && !options["user"].defaulted() && user != DEFAULT_CLICKHOUSE_SERVER_USER)
             maybe_user = " --user " + user;
 
         std::string maybe_group;
-        if (options.contains("group") && group != DEFAULT_CLICKHOUSE_SERVER_GROUP)
+        if (options.contains("group") && !options["group"].defaulted() && group != DEFAULT_CLICKHOUSE_SERVER_GROUP)
             maybe_group = " --group " + group;
 
         std::string start_options = maybe_prefix + maybe_pid_path + maybe_config_path + maybe_binary_path + maybe_user + maybe_group;
@@ -977,7 +977,7 @@ int mainEntryClickHouseInstall(int argc, char ** argv)
                 " {}{}\n"
                 "\nStart clickhouse-client with:\n"
                 " clickhouse-client{}\n\n",
-                formatWithSudo("clickhouse restart", getuid() != 0),
+                formatWithSudo("clickhouse restart"),
                 start_options,
                 maybe_password);
         }
@@ -989,7 +989,7 @@ int mainEntryClickHouseInstall(int argc, char ** argv)
                 " {}{}\n"
                 "\nStart clickhouse-client with:\n"
                 " clickhouse-client{}\n\n",
-                formatWithSudo("clickhouse start", getuid() != 0),
+                formatWithSudo("clickhouse start"),
                 start_options,
                 maybe_password);
         }

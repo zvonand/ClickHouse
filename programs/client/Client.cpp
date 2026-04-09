@@ -726,9 +726,9 @@ void Client::printChangedSettings() const
 String Client::getHelpHeader() const
 {
     return fmt::format(
-        "Usage: {0} [initial table definition] [--query <query>]\n"
+        "Usage: {0} [--query <query>]\n"
         "{0} is a client application that is used to connect to ClickHouse.\n\n"
-        "It can run queries as command line tool if you pass queries as an argument\n"
+        "It can run queries as a command line tool if you pass queries as an argument\n"
         "or as interactive client.\n"
         "Queries can run one at a time, or in a multiquery mode.\n"
         "To change settings you may use SET statements and SETTINGS clause\n"

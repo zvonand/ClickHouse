@@ -1197,9 +1197,9 @@ String LocalServer::getHelpHeader() const
         "{0} allows to execute SQL queries on your data files\n"
         "via single command line call.\n"
         "To do so, initially you need to define your data source and its format.\n"
-        "After you can execute your SQL queries in usual manner.\n\n"
+        "After that, you can execute your SQL queries as usual.\n\n"
         "There are two ways to define initial table keeping your data.\n"
-        "Either just in first query like this:\n"
+        "Either just in the first query like this:\n"
         "    CREATE TABLE <table> (<structure>) ENGINE = File(<input-format>, <file>);\n"
         "Either through corresponding command line parameters\n"
         "--table --structure --input-format and --file.",

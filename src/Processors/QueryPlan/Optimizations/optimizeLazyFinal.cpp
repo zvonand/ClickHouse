@@ -153,6 +153,7 @@ struct SplitResult
 /// the reading step's analyzed result to contain only intersecting parts.
 static SplitResult trySplitNonIntersectingParts(
     ReadFromMergeTree * reading_step,
+    ReadFromMergeTree::AnalysisResultPtr analyzed_result,
     FilterStep * filter_step,
     QueryPlan::Node * read_node,
     QueryPlan & query_plan)
@@ -193,10 +194,26 @@ static SplitResult trySplitNonIntersectingParts(
         return {};
 
     /// Update the original reading step to only have intersecting parts.
-    auto analyzed_result = reading_step->selectRangesToRead();
+    /// Recompute derived stats to keep them consistent with the new part set.
     if (analyzed_result)
     {
         analyzed_result->parts_with_ranges = std::move(split.intersecting_parts_ranges);
+
+        analyzed_result->selected_parts = 0;
+        analyzed_result->selected_ranges = 0;
+        analyzed_result->selected_marks = 0;
+        analyzed_result->selected_marks_pk = 0;
+        analyzed_result->selected_rows = 0;
+        for (const auto & part : analyzed_result->parts_with_ranges)
+        {
+            ++analyzed_result->selected_parts;
+            analyzed_result->selected_ranges += part.ranges.size();
+            auto marks = part.getMarksCount();
+            analyzed_result->selected_marks += marks;
+            analyzed_result->selected_marks_pk += marks;
+            analyzed_result->selected_rows += part.getRowsCount();
+        }
+
         reading_step->setAnalyzedResult(analyzed_result);
     }
 
@@ -246,12 +263,16 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     if (!filter_step && !reading_step->getPrewhereInfo() && !reading_step->getRowLevelFilter())
         return;
 
+    /// Run early index analysis so the analyzed (PK-filtered) parts can be used
+    /// both for the non-intersecting split and for the set/true-branch plans.
+    auto analyzed_result = reading_step->selectRangesToRead();
+
     /// Split parts into non-intersecting (unique key ranges, no FINAL needed) and
     /// intersecting (overlapping, need FINAL). This avoids running the expensive
     /// aggregation-based FINAL on parts that have no duplicates.
     /// When all parts are non-intersecting, replaceNodeWithPlan is called inside
     /// and fully_replaced is set — in that case we're done.
-    auto split_result = trySplitNonIntersectingParts(reading_step, filter_step, read_node, query_plan);
+    auto split_result = trySplitNonIntersectingParts(reading_step, analyzed_result, filter_step, read_node, query_plan);
 
     if (split_result.fully_replaced)
         return;
@@ -263,8 +284,10 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     auto mutations_snapshot = reading_step->getMutationsSnapshot();
     auto max_block_numbers_to_read = getMaxAddedBlocks(reading_step);
 
-    /// Use parts from the (possibly updated) reading step.
-    const auto & parts_for_set = reading_step->getParts();
+    /// Use parts from the analyzed result (possibly narrowed to intersecting-only by the split).
+    /// These are PK-filtered parts with narrowed mark ranges from selectRangesToRead.
+    auto parts_for_set = std::make_shared<RangesInDataParts>(
+        analyzed_result ? analyzed_result->parts_with_ranges : reading_step->getParts());
 
     /// Build the set for primary key columns only (PK is a prefix of sorting key;
     /// the remaining sorting key columns are useless for index analysis).
@@ -333,7 +356,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         }
 
         auto set_reading = std::make_unique<ReadFromMergeTree>(
-            std::make_shared<RangesInDataParts>(parts_for_set),
+            parts_for_set,
             mutations_snapshot,
             set_columns,
             data,
@@ -434,7 +457,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         data.getSettings(),
         data,
         max_block_numbers_to_read,
-        std::make_shared<RangesInDataParts>(parts_for_set),
+        parts_for_set,
         context,
         optimization_settings.min_filtered_ratio_for_lazy_final));
 
@@ -447,7 +470,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
             context,
             shared_state));
 
-        auto lazy_materializing_rows = std::make_shared<LazyMaterializingRows>(parts_for_set);
+        auto lazy_materializing_rows = std::make_shared<LazyMaterializingRows>(*parts_for_set);
 
         /// Read all original columns lazily, plus columns needed by prewhere/row_policy
         /// which are applied as FilterSteps on top of the join.

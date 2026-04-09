@@ -8,8 +8,10 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 TABLE="test_pred_stats_${CLICKHOUSE_DATABASE}"
 
+SETTINGS="SET predicate_statistics_sample_rate = 1, optimize_move_to_prewhere = 1, query_plan_optimize_prewhere = 1"
+
 $CLICKHOUSE_CLIENT -m --query "
-SET predicate_statistics_sample_rate = 1;
+$SETTINGS;
 DROP TABLE IF EXISTS $TABLE;
 CREATE TABLE $TABLE (id UInt64, status String, value Float64)
 ENGINE = MergeTree ORDER BY id
@@ -18,7 +20,7 @@ INSERT INTO $TABLE SELECT number, if(number % 10 = 0, 'active', 'inactive'), ran
 
 SELECT * FROM $TABLE WHERE status = 'active' FORMAT Null;
 SELECT * FROM $TABLE WHERE id > 50000 FORMAT Null;
-SELECT * FROM $TABLE WHERE status = 'active' AND id > 50000 FORMAT Null;
+SELECT * FROM $TABLE WHERE status = 'active' AND id > 50000 FORMAT Null SETTINGS enable_multiple_prewhere_read_steps = 0;
 
 SYSTEM FLUSH LOGS predicate_statistics_log;
 "
@@ -53,10 +55,10 @@ LIMIT 1;
 # q3: conjunction — filter to rows where both atoms are present (same query_id)
 $CLICKHOUSE_CLIENT -m --query "
 SELECT
-    count() >= 1 AS has_atoms,
-    min(total_selectivity) < 0.15 AS whole_pred_selective,
-    max(total_input_rows) > 0 AS has_total_input,
-    max(total_passed_rows) > 0 AS has_total_passed,
+    count() >= 2 AS has_atoms,
+    min(total_selectivity) < 0.15 AS selective,
+    max(total_input_rows) > 0 AS has_input,
+    max(total_passed_rows) > 0 AS has_passed,
     min(total_selectivity) = max(total_selectivity) AS same_whole_sel
 FROM system.predicate_statistics_log
 WHERE table = '$TABLE' AND column_name != ''

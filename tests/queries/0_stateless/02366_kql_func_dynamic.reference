@@ -1,8 +1,8 @@
 -- constant index value
 1	c	['A',NULL,'C']
 -- array_length()
-1
-1
+true
+true
 -- array_sum()
 -- array_index_of()
 3

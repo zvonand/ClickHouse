@@ -6,6 +6,7 @@
 #include <Parsers/Kusto/ParserKQLTop.h>
 #include <Parsers/Kusto/ParserKQLQuery.h>
 #include <Parsers/Kusto/Utilities.h>
+#include <Parsers/Kusto/KustoFunctions/IParserKQLFunction.h>
 
 #include <fmt/format.h>
 
@@ -20,8 +21,11 @@ bool ParserKQLTop::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     if (!isValidKQLPos(pos))
         return false;
 
-    /// Get N (limit)
+    /// Get N (limit) — resolve let bindings
     String limit_str(pos->begin, pos->end);
+    auto & bindings = kqlLetBindings();
+    if (auto it = bindings.find(limit_str); it != bindings.end())
+        limit_str = it->second;
     ++pos;
 
     /// Expect "by"

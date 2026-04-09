@@ -60,16 +60,16 @@ true
 ['a','b','c']
 -- cast functions
 true
-1
+true
 -- tobool("false")
 false
-1
+true
 -- tobool(1)
 true
-1
+true
 -- tobool(123)
 true
-1
+true
 -- tobool("abc")
 \N
 \N
@@ -80,13 +80,13 @@ true
 123.4
 \N
 -- toint()
-1
+true
 \N
 -- tostring()
 123
-1
+true
 -- todatetime()
-1
+true
 \N
 -- make_timespan()
 01:12:00	01:12:30	1.12:30:55

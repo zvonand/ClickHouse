@@ -283,7 +283,7 @@ iPhone
 [75,117,115,116,111]
 -- base64_decode_toguid()
 10e99626-bc2b-4c75-bb3e-fe606de25700
-1
+true
 -- base64_encode_tostring
 
 S3VzdG8x

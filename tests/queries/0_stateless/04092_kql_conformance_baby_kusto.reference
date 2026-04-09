@@ -149,8 +149,9 @@ def
 1
 3
 -- BuiltIns_substring_Scalar --
-abc	abc	bc	bc	b	
+abc	abc	bc	bc	b		
 -- BuiltIns_substring_Columnar --
+
 1
 12
 12
@@ -165,9 +166,9 @@ hello world
 hello world
 https://example.com?a=b
 -- BuiltIns_extract_Scalar --
-127.5	ms	127.5 ms
+127.5	ms	127.5 ms	
 -- BuiltIns_extract_Columnar --
-127.5	ms	127.5 ms
+127.5	ms	127.5 ms	
 234.75	s	234.75 s
 		
 -- BuiltIns_bin_Long --

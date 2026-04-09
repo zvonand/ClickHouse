@@ -176,8 +176,9 @@ bool Extract::convertImpl(String & out, IParser::Pos & pos)
     else
     {
         /// Use extractAllGroupsHorizontal to get specific capture group
+        /// Wrap source in ifNull to handle Nullable inputs
         out = fmt::format(
-            "if(length(extractAllGroupsHorizontal({0}, {1})) >= {2}, extractAllGroupsHorizontal({0}, {1})[{2}][1], '')",
+            "if(length(extractAllGroupsHorizontal(ifNull(toString({0}), ''), {1})) >= {2}, extractAllGroupsHorizontal(ifNull(toString({0}), ''), {1})[{2}][1], '')",
             source, regex, capture_group);
     }
 

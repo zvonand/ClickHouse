@@ -240,6 +240,7 @@ String ParserKQLBase::getExprFromToken(Pos & pos)
             for (const auto & token : tokens)
             {
                 if (token == ">" || token == "<" || token == ">=" || token == "<="
+                    || token == "==" || token == "!="
                     || token == "and" || token == "or")
                 {
                     has_comparison = true;

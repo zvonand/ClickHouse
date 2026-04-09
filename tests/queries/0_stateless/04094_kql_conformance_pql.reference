@@ -19,12 +19,12 @@ parser_test.go	Large
 parser.go	Smol
 lex.go	Smol
 lex_test.go	Smol
-pql.go	Smol
 ast.go	Smol
-clickhouse_test.go	Smol
 golden_test.go	Smol
-tokenkind_string.go	Smol
+pql.go	Smol
+clickhouse_test.go	Smol
 pql_test.go	Smol
+tokenkind_string.go	Smol
 -- pql::In --
 11503	GEORGIA	Thunderstorm Wind	2000
 13913	MISSISSIPPI	Thunderstorm Wind	20000

@@ -34,8 +34,8 @@ SELECT
     passed_rows > 0 AS has_passed,
     round(filter_selectivity, 1) AS sel
 FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND column_name = 'status'
-    AND function_name = 'equals'
+WHERE table = '$TABLE' AND column_name = 'status' AND function_name = 'equals'
+ORDER BY filter_selectivity DESC
 LIMIT 1;
 "
 
@@ -47,8 +47,8 @@ SELECT
     input_rows > 0 AS has_input,
     round(filter_selectivity, 1) AS sel
 FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND column_name = 'value' 
-    AND function_name = 'greater'
+WHERE table = '$TABLE' AND column_name = 'value' AND function_name = 'greater'
+ORDER BY filter_selectivity DESC
 LIMIT 1;
 "
 

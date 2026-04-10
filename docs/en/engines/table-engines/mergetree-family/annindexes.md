@@ -109,8 +109,8 @@ Function `<distance_function>` must be
 For normalized data, `L2Distance` is usually the best choice, otherwise `cosineDistance` is recommended to compensate for scale.
 
 :::note
-For distance functions `L2Distance` and `cosineDistance`, a smaller distance means a higher similarity, whereas for `dotProduct`, a higher distance means a higher similarity.
-As a result, vector indexes with `L2Distance` and `cosineDistance` can only be used by `SELECT [...] ORDER BY [...] ASC` queries (`ASC` is the default for `ORDER BY`), whereas vector indexes build for `dotProduct` can only be used by `SELECT [...] ORDER BY [...] DESC` queries.
+For distance functions `L2Distance` and `cosineDistance`, a smaller value means a higher similarity, whereas for `dotProduct`, a higher value means a higher similarity.
+As a result, vector indexes with `L2Distance` and `cosineDistance` can only be used by `SELECT [...] ORDER BY [...] ASC` queries (`ASC` is the default for `ORDER BY`), whereas vector indexes built for `dotProduct` can only be used by `SELECT [...] ORDER BY [...] DESC` queries.
 :::
 
 `<dimensions>` specifies the array cardinality (number of elements) in the underlying column.

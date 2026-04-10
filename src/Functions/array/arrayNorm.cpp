@@ -248,36 +248,48 @@ private:
         size_t row = 0;
         for (auto off : offsets)
         {
-            /// Process chunks in vectorized manner.
-            /// Use 2 accumulators on x86-64-v3 instead of 4: with 4, the
-            /// compiler widens SLP/loop vectorization to 256-bit AVX2,
-            /// causing register spills (MCA: 10.7 → 21.8 cyc/iter for
-            /// LinfNorm). 2 accumulators stay within 128-bit xmm and
-            /// still saturate fmax throughput (0.5/cycle).
+            /// On x86-64-v3 (AVX2), sum-based norms (L1, L2, Lp) benefit from
+            /// limiting to 2 accumulators: with 4, the compiler widens SLP
+            /// to 256-bit AVX2, causing register spills.  LinfNorm (fmax/fabs)
+            /// vectorizes cleanly with no register-pressure issues, so it
+            /// keeps 4 accumulators.  On other architectures (ARM, compat
+            /// x86), 4 accumulators are fine for all kernels.
+            static constexpr bool is_linf = std::is_same_v<Kernel, LinfNorm>;
 #if defined(__AVX2__)
-            static constexpr size_t VEC_SIZE = 2;
+            static constexpr size_t VEC_SIZE = is_linf ? 4 : 2;
 #else
             static constexpr size_t VEC_SIZE = 4;
 #endif
             ResultType results[VEC_SIZE] = {0};
 
-#pragma clang loop vectorize(disable) unroll(disable) interleave(disable)
-            for (; prev + VEC_SIZE < off; prev += VEC_SIZE)
+#if defined(__AVX2__)
+            if constexpr (is_linf)
             {
+                for (; prev + VEC_SIZE < off; prev += VEC_SIZE)
+                    for (size_t s = 0; s < VEC_SIZE; ++s)
+                        results[s] = Kernel::template accumulate<ResultType>(results[s], static_cast<ResultType>(data[prev + s]), kernel_params);
+            }
+            else
+            {
+#pragma clang loop vectorize(disable) unroll(disable) interleave(disable)
+                for (; prev + VEC_SIZE < off; prev += VEC_SIZE)
+                    for (size_t s = 0; s < VEC_SIZE; ++s)
+                        results[s] = Kernel::template accumulate<ResultType>(results[s], static_cast<ResultType>(data[prev + s]), kernel_params);
+            }
+#else
+            for (; prev + VEC_SIZE < off; prev += VEC_SIZE)
                 for (size_t s = 0; s < VEC_SIZE; ++s)
                     results[s] = Kernel::template accumulate<ResultType>(results[s], static_cast<ResultType>(data[prev + s]), kernel_params);
-            }
+#endif
 
             ResultType result = 0;
             for (const auto & other_state : results)
                 result = Kernel::template combine<ResultType>(result, other_state, kernel_params);
 
             /// Process the tail
-#pragma clang loop vectorize(disable) unroll(disable) interleave(disable)
             for (; prev < off; ++prev)
-            {
                 result = Kernel::template accumulate<ResultType>(result, static_cast<ResultType>(data[prev]), kernel_params);
-            }
+
             result_data[row] = Kernel::finalize(result, kernel_params);
             row++;
         }

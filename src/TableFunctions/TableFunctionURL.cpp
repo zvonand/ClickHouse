@@ -67,8 +67,6 @@ void TableFunctionURL::parseArgumentsImpl(ASTs & args, const ContextPtr & contex
         compression_method = configuration.compression_method;
 
         format = configuration.format;
-        if (format == "auto")
-            format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(filename).getPath()).value_or("auto");
 
         StorageURL::evalArgsAndCollectHeaders(args, configuration.headers, context);
     }
@@ -94,6 +92,11 @@ void TableFunctionURL::parseArgumentsImpl(ASTs & args, const ContextPtr & contex
     const auto & url_base = context->getSettingsRef()[Setting::url_base].value;
     filename = StorageURL::resolveURLBase(filename, url_base);
     configuration.url = filename;
+
+    /// Re-derive format from the resolved URL if still auto, because the original
+    /// filename may have been a relative reference (e.g. "?x=1") with no extension.
+    if (format == "auto")
+        format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(filename).getPath()).value_or("auto");
 }
 
 StoragePtr TableFunctionURL::getStorage(

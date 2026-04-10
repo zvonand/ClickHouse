@@ -539,6 +539,12 @@
         const value = prompt('Downstream proxy base URL (leave empty to disable):', current);
         if (value === null) return; // cancelled
         if (value.trim()) {
+            try {
+                new URL(value.trim());
+            } catch {
+                alert('Invalid URL. Please enter a full URL starting with https://');
+                return;
+            }
             localStorage.setItem('privateBaseUrl', value.trim().replace(/\/+$/, ''));
         } else {
             localStorage.removeItem('privateBaseUrl');

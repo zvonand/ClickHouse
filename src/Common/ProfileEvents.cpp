@@ -1392,11 +1392,10 @@ The server successfully detected this situation and will download merged part fr
     \
     M(AIInputTokens, "Total prompt tokens consumed across all AI function calls in the query.", ValueType::Number) \
     M(AIOutputTokens, "Total completion tokens consumed across all AI function calls in the query.", ValueType::Number) \
-    M(AIAPICalls, "Number of HTTP requests dispatched to AI providers (after cache and deduplication).", ValueType::Number) \
+    M(AIAPICalls, "Number of HTTP requests dispatched to AI providers.", ValueType::Number) \
     M(AIRowsProcessed, "Number of rows that received an AI result.", ValueType::Number) \
-    M(AIRowsSkipped, "Number of rows that received NULL due to quota (break mode) or error (null mode).", ValueType::Number) \
+    M(AIRowsSkipped, "Number of rows that received a default value due to quota or error.", ValueType::Number) \
     \
-
 
 #ifdef APPLY_FOR_EXTERNAL_EVENTS
     #define APPLY_FOR_EVENTS(M) APPLY_FOR_BUILTIN_EVENTS(M) APPLY_FOR_EXTERNAL_EVENTS(M)

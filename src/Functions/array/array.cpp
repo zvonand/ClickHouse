@@ -149,6 +149,7 @@ private:
         for (size_t row_i = 0; row_i < input_rows_count; ++row_i)
         {
             const size_t base = row_i * columns.size();
+#pragma clang loop unroll(disable) vectorize(disable)
             for (size_t col_i = 0; col_i < columns.size(); ++col_i)
                 out_container[base + col_i] = (*containers[col_i])[row_i];
         }

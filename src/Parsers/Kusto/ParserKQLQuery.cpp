@@ -500,7 +500,36 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
 
         String on_clause;
         if (join_on.find("==") == String::npos && join_on.find('=') == String::npos)
-            on_clause = fmt::format("{0} = {0}1", join_on);
+        {
+            /// Handle comma-separated join keys: on a, b -> a = a1 AND b = b1
+            std::vector<String> keys;
+            {
+                String current;
+                for (char c : join_on)
+                {
+                    if (c == ',')
+                    {
+                        auto start = current.find_first_not_of(' ');
+                        auto end = current.find_last_not_of(' ');
+                        if (start != String::npos)
+                            keys.push_back(current.substr(start, end - start + 1));
+                        current.clear();
+                    }
+                    else
+                        current += c;
+                }
+                auto start = current.find_first_not_of(' ');
+                auto end = current.find_last_not_of(' ');
+                if (start != String::npos)
+                    keys.push_back(current.substr(start, end - start + 1));
+            }
+            for (size_t i = 0; i < keys.size(); ++i)
+            {
+                if (i > 0)
+                    on_clause += " AND ";
+                on_clause += fmt::format("{0} = {0}1", keys[i]);
+            }
+        }
         else
             on_clause = join_on;
 

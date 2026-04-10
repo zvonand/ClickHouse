@@ -75,10 +75,12 @@ bool ParserKQLStatement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
         auto set_pos = pos;
         if (set_p.parse(pos, node, expected))
         {
-            /// Clear let bindings when switching away from KQL dialect
-            /// Check if this is 'set dialect = clickhouse'
             String set_text(set_pos->begin, pos->begin);
-            if (set_text.find("clickhouse") != String::npos)
+            /// Clear let bindings on dialect switches in both directions:
+            /// - switching to clickhouse: end of KQL session
+            /// - switching to kql: start of a fresh KQL session (reset stale state
+            ///   from a previous session on the same thread)
+            if (set_text.find("clickhouse") != String::npos || set_text.find("kql") != String::npos)
                 kqlLetBindingsClear();
             return true;
         }

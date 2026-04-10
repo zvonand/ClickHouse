@@ -492,8 +492,10 @@ bool ToDateTimeFmt::convertImpl(String & out, IParser::Pos & pos)
     ++pos;
     [[maybe_unused]] String format_str = getConvertedArgument(fn_name, pos);
 
-    /// NOTE: format_str is intentionally unused. ClickHouse's parseDateTimeBestEffort
-    /// already handles most common datetime formats, so the explicit format is not needed.
+    /// The format_str argument is accepted for KQL compatibility but not wired into parsing.
+    /// ClickHouse's parseDateTimeBestEffort handles standard datetime formats automatically,
+    /// which covers the common cases. Custom/ambiguous format strings that depend on the
+    /// explicit format for correct interpretation may parse differently from KQL semantics.
     auto inner = fmt::format("parseDateTime64BestEffortOrNull({}, 9, 'UTC')", datetime_str);
     out = fmt::format("substring(replaceOne(toString({}), ' ', 'T'), 1, 27)", inner);
     return true;

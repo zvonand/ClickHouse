@@ -125,13 +125,42 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 
     /// Build join conditions - handle simple column name joins
     /// In KQL "on col" means "on left.col = right.col"
+    /// In KQL "on col1, col2" means "on left.col1 = right.col1 AND left.col2 = right.col2"
     /// We add suffix "1" for the right table columns (ClickHouse join convention)
     String sql_on;
     if (on_conditions.find("==") == String::npos && on_conditions.find('=') == String::npos)
     {
-        /// Simple column name - KQL convention: on col means left.col = right.col
+        /// Simple column name(s) - KQL convention: on col means left.col = right.col
+        /// Handle comma-separated keys: on a, b -> a = a1 AND b = b1
         /// ClickHouse renames duplicate columns with suffix "1" in joins
-        sql_on = fmt::format("{0} = {0}1", on_conditions);
+        std::vector<String> keys;
+        {
+            String current;
+            for (char c : on_conditions)
+            {
+                if (c == ',')
+                {
+                    /// Trim whitespace from key
+                    auto start = current.find_first_not_of(' ');
+                    auto end = current.find_last_not_of(' ');
+                    if (start != String::npos)
+                        keys.push_back(current.substr(start, end - start + 1));
+                    current.clear();
+                }
+                else
+                    current += c;
+            }
+            auto start = current.find_first_not_of(' ');
+            auto end = current.find_last_not_of(' ');
+            if (start != String::npos)
+                keys.push_back(current.substr(start, end - start + 1));
+        }
+        for (size_t i = 0; i < keys.size(); ++i)
+        {
+            if (i > 0)
+                sql_on += " AND ";
+            sql_on += fmt::format("{0} = {0}1", keys[i]);
+        }
     }
     else
     {

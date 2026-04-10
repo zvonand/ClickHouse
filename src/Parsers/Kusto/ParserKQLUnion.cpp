@@ -40,7 +40,10 @@ bool ParserKQLUnion::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     /// Guard: if closing bracket was not found, bail out
     if (!isValidKQLPos(pos) || pos->type != TokenType::ClosingRoundBracket)
         return false;
-    String right_query(content_start->begin, pos->end - 1);
+    /// Guard: empty parenthesized subquery, e.g. union ()
+    if (content_start->begin >= pos->begin)
+        return false;
+    String right_query(content_start->begin, pos->begin);
     ++pos; /// skip closing bracket
 
     /// Parse the right subquery as KQL

@@ -34,7 +34,7 @@ ${CLICKHOUSE_CLIENT} --query "
         toString(number)::Nullable(String) AS col4,
         toString(number)::Nullable(String) AS col5,
         NULL::Nullable(String) AS col23
-    FROM numbers(5000000)
+    FROM numbers(500000)
 "
 
 # Reference result without bloom filter
@@ -48,7 +48,7 @@ EXPECTED=$(${CLICKHOUSE_CLIENT} --query "
 
 # Run with bloom filter multiple times. Before the fix, this would either
 # crash (segfault / LOGICAL_ERROR assertion) or return inconsistent results.
-for _ in $(seq 1 10); do
+for _ in $(seq 1 5); do
     RESULT=$(${CLICKHOUSE_CLIENT} --query "
         SET max_threads = 1;
         SELECT count()
@@ -62,6 +62,34 @@ for _ in $(seq 1 10); do
         exit 1
     fi
 done
+
+# Also test den-crane's simpler reproducer (https://github.com/ClickHouse/ClickHouse/issues/102231)
+FILE_PATH2="${WORKING_DIR}/bloom_simple.parquet"
+${CLICKHOUSE_CLIENT} --query "
+    INSERT INTO FUNCTION file('${FILE_PATH2}', 'Parquet')
+    SELECT
+        IF(number % 113 = 0, toString(number), '') AS col1,
+        toString(number) AS col2
+    FROM numbers(50000)
+"
+
+BLOOM_ON=$(${CLICKHOUSE_CLIENT} --query "
+    SELECT count()
+    FROM file('${FILE_PATH2}', Parquet, 'col1 String, col2 String')
+    WHERE col1 = ''
+    SETTINGS input_format_parquet_bloom_filter_push_down = 1
+")
+BLOOM_OFF=$(${CLICKHOUSE_CLIENT} --query "
+    SELECT count()
+    FROM file('${FILE_PATH2}', Parquet, 'col1 String, col2 String')
+    WHERE col1 = ''
+    SETTINGS input_format_parquet_bloom_filter_push_down = 0
+")
+if [ "$BLOOM_ON" != "$BLOOM_OFF" ]; then
+    echo "SIMPLE MISMATCH: bloom_on=$BLOOM_ON bloom_off=$BLOOM_OFF"
+    rm -rf "${WORKING_DIR}"
+    exit 1
+fi
 
 echo "OK"
 

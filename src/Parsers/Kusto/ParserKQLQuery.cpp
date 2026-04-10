@@ -465,7 +465,8 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
     }
 
     /// Parse left and right as KQL to get SQL
-    ASTPtr left_ast, right_ast;
+    ASTPtr left_ast;
+    ASTPtr right_ast;
 
     Tokens left_tokens(left_query.data(), left_query.data() + left_query.size(), 0, true);
     IParser::Pos left_pos(left_tokens, pos.max_depth, pos.max_backtracks);
@@ -498,7 +499,7 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
         else if (join_kind == "rightsemi") ch_join = "RIGHT SEMI";
 
         String on_clause;
-        if (join_on.find("==") == String::npos && join_on.find("=") == String::npos)
+        if (join_on.find("==") == String::npos && join_on.find('=') == String::npos)
             on_clause = fmt::format("{0} = {0}1", join_on);
         else
             on_clause = join_on;

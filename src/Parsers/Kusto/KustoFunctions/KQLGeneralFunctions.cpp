@@ -523,7 +523,7 @@ bool RowNumber::convertImpl(String & out, IParser::Pos & pos)
         {
             start = std::stoll(*start_arg);
         }
-        catch (...) {} // Ok: fall back to default start=1 on bad input
+        catch (...) {} // NOLINT(bugprone-empty-catch) Ok: fall back to default start=1 on bad input
     }
 
     /// Optional second arg: reset flag (ignored for now - ClickHouse doesn't easily support reset)

@@ -797,13 +797,14 @@ FunctionCast::WrapperType FunctionCast::createTupleWrapper(const DataTypePtr & f
 
             for (size_t i = 0; i < tuple_size; ++i)
             {
-                const auto * nullable_col = checkAndGetColumn<ColumnNullable>(converted_columns[i].get());
+                auto converted_col_full = converted_columns[i]->convertToFullColumnIfLowCardinality();
+                const auto * nullable_col = checkAndGetColumn<ColumnNullable>(converted_col_full.get());
                 if (!nullable_col)
                     continue;
 
                 const auto & result_null_map = nullable_col->getNullMapData();
 
-                if (!to_element_types[i]->isNullable())
+                if (!isNullableOrLowCardinalityNullable(to_element_types[i]))
                 {
                     /// Non-Nullable target: all result NULLs are conversion failures.
                     for (size_t row = 0; row < input_rows_count; ++row)

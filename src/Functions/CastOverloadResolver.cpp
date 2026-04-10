@@ -40,7 +40,7 @@ static void validateNestedTypesForAccurateCastOrNull(const DataTypePtr & type)
     {
         validateNestedTypesForAccurateCastOrNull(removeNullable(type));
     }
-    else if (!type->canBeInsideNullable() && !isVariant(type))
+    else if (!type->canBeInsideNullable() && !canContainNull(*type))
     {
         throw Exception(
             ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,

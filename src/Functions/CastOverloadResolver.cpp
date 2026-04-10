@@ -159,7 +159,7 @@ protected:
         if (cast_type == CastType::accurateOrNull)
         {
             /// Variant handles NULLs by itself during conversions.
-            if (!isVariant(type))
+            if (!canContainNull(type))
             {
                 /// Reject types inside Tuple that cannot handle accurateOrNull's
                 /// ColumnNullable failure mechanism (e.g., Array, Map).

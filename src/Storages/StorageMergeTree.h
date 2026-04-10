@@ -63,7 +63,7 @@ public:
 
     bool supportsTransactions() const override { return support_transaction; }
 
-    void readImpl(
+    void read(
         QueryPlan & query_plan,
         const Names & column_names,
         const StorageSnapshotPtr & storage_snapshot,

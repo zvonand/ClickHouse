@@ -336,8 +336,18 @@ QueryProcessingStage::Enum StorageMaterializedView::getQueryProcessingStage(
 
 StorageSnapshotPtr StorageMaterializedView::getStorageSnapshot(const StorageMetadataPtr & metadata_snapshot, ContextPtr) const
 {
-    /// We cannot set virtuals at table creation because target table may not exist at that time.
-    return std::make_shared<StorageSnapshot>(*this, metadata_snapshot, getTargetTable()->getVirtualsPtr());
+    /// Override _table and _database to be materialized at the Plan level
+    /// by StorageWithCommonVirtualColumns, not by the target storage's reader.
+    auto virtuals = std::make_shared<VirtualColumnsDescription>();
+    for (auto desc : *getTargetTable()->getVirtualsPtr())
+    {
+        if (desc.name == "_table" || desc.name == "_database")
+            desc.place = VirtualsMaterializationPlace::Plan;
+
+        virtuals->add(std::move(desc));
+    }
+
+    return std::make_shared<StorageSnapshot>(*this, metadata_snapshot, std::move(virtuals));
 }
 
 void StorageMaterializedView::readImpl(

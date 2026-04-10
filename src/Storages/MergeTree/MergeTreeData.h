@@ -8,7 +8,6 @@
 #include <Common/SharedMutex.h>
 #include <Common/MultiVersion.h>
 #include <Common/Logger.h>
-#include <Storages/StorageWithCommonVirtualColumns.h>
 #include <Interpreters/ExpressionActionsSettings.h>
 #include <IO/WriteBufferFromFile.h>
 #include <IO/ReadBufferFromFile.h>
@@ -190,7 +189,7 @@ public:
 /// - MergeTreeDataWriter
 /// - MergeTreeDataMergerMutator
 
-class MergeTreeData : public WithMutableContext, public StorageWithCommonVirtualColumns, public IBackgroundOperation
+class MergeTreeData : public WithMutableContext, public IStorage, public IBackgroundOperation
 {
 public:
     /// Function to call if the part is suspected to contain corrupt data.

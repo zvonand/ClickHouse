@@ -1,3 +1,4 @@
+#include <Core/QueryProcessingStage.h>
 #include <Storages/ColumnsDescription.h>
 #include <Storages/StorageWithCommonVirtualColumns.h>
 #include <Storages/VirtualColumnsDescription.h>
@@ -11,6 +12,7 @@
 #include <Analyzer/TableNode.h>
 
 #include <base/scope_guard.h>
+#include <Common/Exception.h>
 
 namespace DB
 {
@@ -54,6 +56,9 @@ void StorageWithCommonVirtualColumns::read(
     auto filtered_columns = VirtualColumnUtils::filterVirtualColumns(column_names, storage_snapshot->metadata, storage_snapshot->virtual_columns, VirtualsKind::Ephemeral, VirtualsMaterializationPlace::Plan);
     readImpl(query_plan, filtered_columns, storage_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
 
+    if (processed_stage > QueryProcessingStage::FetchColumns)
+        return;
+
     /// Materialize constant virtuals.
     if (query_plan.isInitialized())
     {
@@ -70,10 +75,12 @@ void StorageWithCommonVirtualColumns::read(
 
             materializeConstantColumn(query_plan, "_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), table_name);
         }
-
-        /// Match column_names sequence
-        convertToHeader(query_plan, storage_snapshot->getSampleBlockForColumns(column_names), context);
     }
+
+    /// Match column_names sequence
+    if (query_plan.isInitialized())
+        if (filtered_columns != column_names)
+            convertToHeader(query_plan, storage_snapshot->getSampleBlockForColumns(column_names), context);
 }
 
 void StorageWithCommonVirtualColumns::readImpl(

@@ -304,7 +304,7 @@ StorageMergeTree::~StorageMergeTree()
     shutdown(false);
 }
 
-void StorageMergeTree::readImpl(
+void StorageMergeTree::read(
     QueryPlan & query_plan,
     const Names & column_names,
     const StorageSnapshotPtr & storage_snapshot,

@@ -6042,7 +6042,7 @@ PartitionIdToMaxBlock StorageReplicatedMergeTree::getMaxAddedBlocks() const
 }
 
 
-void StorageReplicatedMergeTree::readImpl(
+void StorageReplicatedMergeTree::read(
     QueryPlan & query_plan,
     const Names & column_names,
     const StorageSnapshotPtr & storage_snapshot,

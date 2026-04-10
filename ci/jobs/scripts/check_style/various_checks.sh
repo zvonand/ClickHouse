@@ -117,6 +117,7 @@ FUNCTIONS_CONTEXT_PTR_EXCEPTIONS=(
     -e /ITupleFunction.h
     -e /formatRow.cpp
     -e /structureToFormatSchema.cpp
+    -e /UserDefined/
 )
 find $ROOT_PATH/src/Functions -type f | xargs grep -l 'ContextPtr [a-z_]*;' | grep -v "${FUNCTIONS_CONTEXT_PTR_EXCEPTIONS[@]}" | grep -P '.' && echo "Avoid holding a copy of ContextPtr in Functions"
 

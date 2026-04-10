@@ -373,9 +373,6 @@ VirtualColumnsDescription StorageDistributed::createVirtuals()
 
     desc.addEphemeral("_shard_num", std::make_shared<DataTypeUInt32>(), "Deprecated. Use function shardNum instead", VirtualsMaterializationPlace::Reader);
 
-    /// Add virtual columns from table with Merge engine.
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "The name of database which the row comes from", VirtualsMaterializationPlace::Reader);
-
     return desc;
 }
 

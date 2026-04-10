@@ -249,7 +249,7 @@ static SplitResult trySplitNonIntersectingParts(
     return {.non_intersecting_plan = std::make_unique<QueryPlan>(std::move(*plan))};
 }
 
-void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::Nodes & nodes, const QueryPlanOptimizationSettings & optimization_settings)
+void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::Nodes & nodes [[maybe_unused]], const QueryPlanOptimizationSettings & optimization_settings)
 {
     /// Match ReadFromMergeTree at the bottom of the stack.
     /// This runs after optimizePrimaryKeyConditionAndLimit, so the WHERE filter
@@ -399,16 +399,6 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         /// This is an internal read — don't pollute or use the query condition cache.
         set_reading->disableQueryConditionCache();
 
-        /// Apply primary key analysis: add filters from prewhere, row policy, and the FilterStep.
-        /// Without FINAL, PK analysis can be more aggressive.
-        if (const auto & row_level_filter = set_query_info.row_level_filter)
-            set_reading->addFilter(row_level_filter->actions.clone(), row_level_filter->column_name);
-        if (const auto & prewhere_info = set_query_info.prewhere_info)
-            set_reading->addFilter(prewhere_info->prewhere_actions.clone(), prewhere_info->prewhere_column_name);
-        if (filter_step)
-            set_reading->addFilter(filter_step->getExpression().clone(), filter_step->getFilterColumnName());
-        set_reading->SourceStepWithFilterBase::applyFilters();
-
         set_plan.addStep(std::move(set_reading));
     }
 
@@ -433,9 +423,6 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
             std::move(sub_dag),
             filter_step->getFilterColumnName(),
             /*remove_filter_column=*/ true));
-
-        /// Move the filter to prewhere if possible.
-        optimizePrewhere(*set_plan.getRootNode(), optimization_settings.remove_unused_columns);
     }
 
     /// Compute primary key expression and project to PK columns only.
@@ -443,6 +430,11 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     /// and can be dropped by tryRemoveUnusedColumns.
     {
         auto dag = primary_key_dag.clone();
+        NamesWithAliases projection;
+        for (const auto & col : primary_key.column_names)
+            projection.emplace_back(col, "");
+        dag.project(projection);
+
         NameSet dag_inputs;
         for (const auto * input : dag.getInputs())
             dag_inputs.insert(input->result_name);
@@ -450,17 +442,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
             if (!dag_inputs.contains(col.name))
                 dag.addInput(col.name, col.type);
 
-        NamesWithAliases projection;
-        for (const auto & col : primary_key.column_names)
-            projection.emplace_back(col, "");
-        dag.project(projection);
         set_plan.addStep(std::make_unique<ExpressionStep>(set_plan.getCurrentHeader(), std::move(dag)));
-    }
-
-    /// Remove columns from ReadFromMergeTree that are not needed by the steps above.
-    {
-        Optimization::ExtraSettings extra{};
-        tryRemoveUnusedColumns(set_plan.getRootNode(), nodes, extra);
     }
 
     /// CreatingSetStep fills the Set from the pipeline.
@@ -469,6 +451,8 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         set_and_key,
         SizeLimits{},
         nullptr));
+
+    set_plan.optimize(optimization_settings);
 
     /// Shared state between LazyFinalKeyAnalysisTransform and LazyReadReplacingFinalSource.
     auto shared_state = std::make_shared<LazyFinalSharedState>();

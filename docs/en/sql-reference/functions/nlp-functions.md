@@ -7,16 +7,18 @@ doc_type: 'reference'
 keywords: ['NLP', 'Natural Language Processing']
 ---
 
-import ExperimentalBadge from '@theme/badges/ExperimentalBadge';
 import CloudNotSupportedBadge from '@theme/badges/CloudNotSupportedBadge';
 
 # Natural Language Processing (NLP) functions
 
-<ExperimentalBadge/>
 <CloudNotSupportedBadge/>
 
+:::note
+The `stem` function is stable and available without any special setting. It requires ClickHouse to be built with `WITH_LIBSTEMMER=ON` (enabled by default).
+:::
+
 :::warning
-This is an experimental feature that is currently in development and is not ready for general use. It will change in unpredictable backwards-incompatible ways in future releases. Set `allow_experimental_nlp_functions = 1` to enable it.
+The remaining NLP functions (`lemmatize`, `synonyms`, `detectCharset`, `detectLanguage`, `detectTonality`) are experimental and not ready for general use. They will change in unpredictable backwards-incompatible ways in future releases. Set `allow_experimental_nlp_functions = 1` to enable them.
 :::
 
 <!-- 

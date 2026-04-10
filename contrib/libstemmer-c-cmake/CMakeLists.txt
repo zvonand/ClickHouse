@@ -1,3 +1,8 @@
+if (NOT WITH_LIBSTEMMER)
+    message(STATUS "Not using libstemmer (Snowball)")
+    return()
+endif()
+
 set(LIBRARY_DIR "${ClickHouse_SOURCE_DIR}/contrib/libstemmer_c")
 
 add_library(_stemmer

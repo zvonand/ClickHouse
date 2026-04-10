@@ -114,7 +114,7 @@ public:
         std::optional<CastDiagnostic> diagnostic,
         ContextPtr context)
     {
-        if (cast_type == CastType::accurateOrNull && !isVariant(to))
+        if (cast_type == CastType::accurateOrNull && !canContainNull(to))
         {
             validateNestedTypesForAccurateCastOrNull(to);
             to = makeNullable(to);

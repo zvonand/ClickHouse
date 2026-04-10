@@ -297,7 +297,7 @@ bool ValuesBlockInputFormat::tryReadValue(IColumn & column, size_t column_idx)
     try
     {
         bool read = true;
-        if (bool default_value = checkStringByFirstCharacterAndAssertTheRestCaseInsensitive("DEFAULT", *buf); default_value)
+        if (checkStringByFirstCharacterAndAssertTheRestCaseInsensitive("DEFAULT", *buf))
         {
             column.insertDefault();
             read = false;
@@ -315,7 +315,6 @@ bool ValuesBlockInputFormat::tryReadValue(IColumn & column, size_t column_idx)
 
         rollback_on_exception = true;
 
-        skipWhitespaceIfAny(*buf);
         assertDelimiterAfterValue(column_idx);
         return read;
     }
@@ -338,32 +337,15 @@ bool ValuesBlockInputFormat::tryReadValue(IColumn & column, size_t column_idx)
             WhichDataType which(removeNullable(removeLowCardinality(types[column_idx])));
             if (which.isMap() || which.isArray() || which.isTuple())
             {
-                bool parsed_string = false;
                 String string_value;
-                try
-                {
-                    readQuotedStringWithSQLStyle(string_value, *buf);
-                    //skipWhitespaceIfAny(*buf);
-                    parsed_string = checkDelimiterAfterValue(column_idx);
-                }
-                catch (...) // NOLINT(bugprone-empty-catch) Ok: outer catch already handles fallback via parseExpression
-                {
-                }
+                const bool parsed_string = tryReadQuotedStringWithSQLStyle(string_value, *buf)
+                    && checkDelimiterAfterValue(column_idx);
 
                 if (parsed_string)
                 {
-                    size_t size_before = column.size();
-                    try
-                    {
-                        ReadBufferFromString in_buffer(string_value);
-                        serializations[column_idx]->deserializeWholeText(column, in_buffer, format_settings);
+                    ReadBufferFromString in_buffer(string_value);
+                    if (serializations[column_idx]->tryDeserializeWholeText(column, in_buffer, format_settings))
                         return true;
-                    }
-                    catch (...) // Ok: outer catch already handles fallback via parseExpression
-                    {
-                        if (column.size() > size_before)
-                            column.popBack(column.size() - size_before);
-                    }
                 }
 
                 /// Deserialization failed or delimiter not found after the string

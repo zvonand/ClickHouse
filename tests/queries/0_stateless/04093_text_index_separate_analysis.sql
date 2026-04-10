@@ -90,18 +90,18 @@ SELECT trimLeft(explain) FROM (
 WHERE explain LIKE '%Name:%' OR explain LIKE '%Description:%' OR explain LIKE '%Parts:%' OR explain LIKE '%Granules:%' OR explain LIKE '%INPUT%\_\_text_index%';
 
 ----------------------------------------------------------------------
-SELECT '--- Part 4: SelectedMarks profile events (use_skip_indexes_on_data_read = 0)';
+SELECT '--- Part 4: SelectedMarks profile events';
 ----------------------------------------------------------------------
 
 -- High-selectivity query: only 1 out of 5 granules should be selected.
 SELECT count() FROM tab
 WHERE hasAllTokens(message, 'xyzspecial')
-SETTINGS use_skip_indexes_on_data_read = 1, log_comment = 'text_idx_separate_analysis_1';
+SETTINGS log_comment = 'text_idx_separate_analysis_1';
 
 -- Both indexes: same result, 1 granule.
 SELECT count() FROM tab
 WHERE hasAllTokens(category, 'common') AND hasAllTokens(message, 'xyzspecial')
-SETTINGS use_skip_indexes_on_data_read = 1, log_comment = 'text_idx_separate_analysis_2';
+SETTINGS log_comment = 'text_idx_separate_analysis_2';
 
 SYSTEM FLUSH LOGS query_log;
 

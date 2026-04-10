@@ -28,7 +28,7 @@ Name: idx_message
 Description: text GRANULARITY 100000000
 Parts: 1/1
 Granules: 1/5
---- Part 4: SelectedMarks profile events (use_skip_indexes_on_data_read = 0)
+--- Part 4: SelectedMarks profile events
 2
 2
 1	2

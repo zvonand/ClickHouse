@@ -40,8 +40,8 @@ StorageSystemSymbols::StorageSystemSymbols(const StorageID & table_id_)
 VirtualColumnsDescription StorageSystemSymbols::createVirtuals()
 {
     VirtualColumnsDescription desc;
-    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
     return desc;
 }
 

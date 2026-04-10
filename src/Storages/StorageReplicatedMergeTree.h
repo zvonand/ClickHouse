@@ -155,7 +155,7 @@ public:
     bool supportsReplication() const override { return true; }
     bool supportsDeduplication() const override { return true; }
 
-    void read(
+    void readImpl(
         QueryPlan & query_plan,
         const Names & column_names,
         const StorageSnapshotPtr & storage_snapshot,

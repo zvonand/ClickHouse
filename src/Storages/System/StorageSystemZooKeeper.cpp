@@ -296,8 +296,8 @@ StorageSystemZooKeeper::StorageSystemZooKeeper(const StorageID & table_id_)
 VirtualColumnsDescription StorageSystemZooKeeper::createVirtuals()
 {
     VirtualColumnsDescription desc;
-    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
     return desc;
 }
 
@@ -311,7 +311,7 @@ void StorageSystemZooKeeper::readImpl(
     size_t max_block_size,
     size_t /*num_streams*/)
 {
-    auto header = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getNamesAndTypesList());
+    auto header = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList());
     auto read_step = std::make_unique<ReadFromSystemZooKeeper>(
         column_names,
         query_info,

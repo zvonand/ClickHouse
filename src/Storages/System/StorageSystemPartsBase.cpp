@@ -360,17 +360,15 @@ StorageSystemPartsBase::StorageSystemPartsBase(const StorageID & table_id_, Colu
     StorageInMemoryMetadata storage_metadata;
     storage_metadata.setColumns(columns);
     setInMemoryMetadata(storage_metadata);
-
-    VirtualColumnsDescription virtuals = createVirtuals();
-    virtuals.addEphemeral("_state", std::make_shared<DataTypeString>(), "");
-    setVirtuals(std::move(virtuals));
+    setVirtuals(createVirtuals());
 }
 
 VirtualColumnsDescription StorageSystemPartsBase::createVirtuals()
 {
     VirtualColumnsDescription desc;
-    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_state", std::make_shared<DataTypeString>(), "", VirtualsMaterializationPlace::Reader);
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
     return desc;
 }
 

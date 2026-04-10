@@ -110,8 +110,8 @@ StorageSystemJemallocBins::StorageSystemJemallocBins(const StorageID & table_id_
 VirtualColumnsDescription StorageSystemJemallocBins::createVirtuals()
 {
     VirtualColumnsDescription desc;
-    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
     return desc;
 }
 
@@ -148,7 +148,7 @@ Pipe StorageSystemJemallocBins::read(
 {
     storage_snapshot->check(column_names);
 
-    auto header = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getNamesAndTypesList());
+    auto header = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList());
     MutableColumns res_columns = header.cloneEmptyColumns();
 
     fillJemallocBins(res_columns);

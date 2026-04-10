@@ -110,7 +110,7 @@ StorageMaterializedView::StorageMaterializedView(
     LoadingStrictnessLevel mode,
     const String & comment,
     bool is_restore_from_backup)
-    : IStorage(table_id_), WithMutableContext(local_context->getGlobalContext())
+    : StorageWithCommonVirtualColumns(table_id_), WithMutableContext(local_context->getGlobalContext())
 {
     StorageInMemoryMetadata storage_metadata;
     storage_metadata.setColumns(columns_);
@@ -340,7 +340,7 @@ StorageSnapshotPtr StorageMaterializedView::getStorageSnapshot(const StorageMeta
     return std::make_shared<StorageSnapshot>(*this, metadata_snapshot, getTargetTable()->getVirtualsPtr());
 }
 
-void StorageMaterializedView::read(
+void StorageMaterializedView::readImpl(
     QueryPlan & query_plan,
     const Names & column_names,
     const StorageSnapshotPtr & storage_snapshot,
@@ -374,7 +374,6 @@ void StorageMaterializedView::read(
 
     auto target_metadata_snapshot = storage->getInMemoryMetadataPtr();
     auto target_storage_snapshot = storage->getStorageSnapshot(target_metadata_snapshot, context);
-    auto target_column_names = VirtualColumnUtils::filterVirtualColumns(column_names, {"_table", "_database"}, target_metadata_snapshot, target_storage_snapshot->virtual_columns);
 
     if (query_info.order_optimizer)
         query_info.input_order_info = query_info.order_optimizer->getInputOrder(target_metadata_snapshot, context);
@@ -391,25 +390,10 @@ void StorageMaterializedView::read(
 
     auto src_table_query_info = query_info;
     src_table_query_info.initial_storage_snapshot = storage_snapshot;
-    storage->read(query_plan, target_column_names, target_storage_snapshot, src_table_query_info, context, processed_stage, max_block_size, num_streams);
+    storage->read(query_plan, column_names, target_storage_snapshot, src_table_query_info, context, processed_stage, max_block_size, num_streams);
 
     if (query_plan.isInitialized())
     {
-        /// MaterializedView must use it's StorageId table and database names when reading
-        if (std::ranges::contains(column_names, "_table") && !query_plan.getCurrentHeader()->has("_table"))
-        {
-            auto step = std::make_unique<ExpressionStep>(query_plan.getCurrentHeader(), ActionsDAG::makeAddingConstantColumnActions("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), getStorageID().getTableName()));
-            step->setStepDescription("Add _table virtual column for MaterializedView");
-            query_plan.addStep(std::move(step));
-        }
-
-        if (std::ranges::contains(column_names, "_database") && !query_plan.getCurrentHeader()->has("_database"))
-        {
-            auto step = std::make_unique<ExpressionStep>(query_plan.getCurrentHeader(), ActionsDAG::makeAddingConstantColumnActions("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), getStorageID().getDatabaseName()));
-            step->setStepDescription("Add _database virtual column for MaterializedView");
-            query_plan.addStep(std::move(step));
-        }
-
         auto mv_header = *getHeaderForProcessingStage(column_names, storage_snapshot, query_info, context, processed_stage);
         auto target_header = *query_plan.getCurrentHeader();
 

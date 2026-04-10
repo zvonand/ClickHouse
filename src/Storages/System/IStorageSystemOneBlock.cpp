@@ -61,7 +61,7 @@ void IStorageSystemOneBlock::readImpl(
     size_t /*num_streams*/)
 {
     storage_snapshot->check(column_names);
-    Block sample_block = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getNamesAndTypesList());
+    Block sample_block = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList());
     std::vector<UInt8> columns_mask;
 
     if (supportsColumnsMask())
@@ -117,8 +117,8 @@ void ReadFromSystemOneBlock::applyFilters(ActionDAGNodes added_filter_nodes)
 VirtualColumnsDescription IStorageSystemOneBlock::createVirtuals()
 {
     VirtualColumnsDescription desc;
-    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
     return desc;
 }
 

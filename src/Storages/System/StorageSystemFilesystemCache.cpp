@@ -257,8 +257,8 @@ StorageSystemFilesystemCache::StorageSystemFilesystemCache(const StorageID & tab
 VirtualColumnsDescription StorageSystemFilesystemCache::createVirtuals()
 {
     VirtualColumnsDescription desc;
-    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
     return desc;
 }
 
@@ -273,7 +273,7 @@ void StorageSystemFilesystemCache::readImpl(
     const size_t /*num_streams*/)
 {
     storage_snapshot->check(column_names);
-    auto header = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getNamesAndTypesList());
+    auto header = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList());
     auto read_step = std::make_unique<ReadFromSystemFilesystemCache>(
         column_names,
         query_info,

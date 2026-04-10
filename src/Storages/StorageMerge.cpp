@@ -424,8 +424,8 @@ VirtualColumnsDescription StorageMerge::createVirtuals()
 {
     VirtualColumnsDescription desc;
 
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
-    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Reader);
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Reader);
 
     return desc;
 }
@@ -998,7 +998,7 @@ SelectQueryInfo ReadFromMerge::getModifiedQueryInfo(const ContextMutablePtr & mo
         modified_query_info.table_expression = replacement_table_expression;
         modified_query_info.planner_context->getOrCreateTableExpressionData(replacement_table_expression);
 
-        auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(storage_snapshot_->storage.supportsSubcolumns()).withVirtuals();
+        auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(storage_snapshot_->storage.supportsSubcolumns()).withVirtuals(VirtualsKind::All, VirtualsMaterializationPlace::All);
 
         std::unordered_map<std::string, QueryTreeNodePtr> column_name_to_node;
         if (!storage_snapshot_->metadata->columns.hasColumnOrSubcolumn(GetColumnsOptions::All, "_table") && !storage_snapshot_->virtual_columns->has("_table"))

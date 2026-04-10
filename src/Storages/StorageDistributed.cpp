@@ -371,10 +371,10 @@ VirtualColumnsDescription StorageDistributed::createVirtuals()
     StorageInMemoryMetadata metadata;
     auto desc = MergeTreeData::createVirtuals(metadata);
 
-    desc.addEphemeral("_shard_num", std::make_shared<DataTypeUInt32>(), "Deprecated. Use function shardNum instead");
+    desc.addEphemeral("_shard_num", std::make_shared<DataTypeUInt32>(), "Deprecated. Use function shardNum instead", VirtualsMaterializationPlace::Reader);
 
     /// Add virtual columns from table with Merge engine.
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "The name of database which the row comes from");
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "The name of database which the row comes from", VirtualsMaterializationPlace::Reader);
 
     return desc;
 }
@@ -894,7 +894,7 @@ QueryTreeNodePtr buildQueryTreeDistributed(SelectQueryInfo & query_info,
         /// Subquery in table function `view` may reference tables that don't exist on the initiator.
         if (table_function_node->getTableFunctionName() == "view")
         {
-            auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withVirtuals();
+            auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withVirtuals(VirtualsKind::All, VirtualsMaterializationPlace::All);
             auto column_names_and_types = distributed_storage_snapshot->getColumns(get_column_options);
 
             StorageID fake_storage_id = StorageID::createEmpty();
@@ -918,7 +918,7 @@ QueryTreeNodePtr buildQueryTreeDistributed(SelectQueryInfo & query_info,
     }
     else
     {
-        auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withVirtuals();
+        auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withVirtuals(VirtualsKind::All, VirtualsMaterializationPlace::All);
 
         auto column_names_and_types = distributed_storage_snapshot->getColumns(get_column_options);
 

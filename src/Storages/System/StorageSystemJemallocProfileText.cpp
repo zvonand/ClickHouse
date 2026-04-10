@@ -41,8 +41,8 @@ StorageSystemJemallocProfileText::StorageSystemJemallocProfileText(const Storage
 VirtualColumnsDescription StorageSystemJemallocProfileText::createVirtuals()
 {
     VirtualColumnsDescription desc;
-    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
-    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
     return desc;
 }
 
@@ -66,7 +66,7 @@ Pipe StorageSystemJemallocProfileText::read(
 #if USE_JEMALLOC
     storage_snapshot->check(column_names);
 
-    auto header = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getNamesAndTypesList());
+    auto header = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList());
 
     /// Get the last flushed profile filename
     auto last_profile = std::string(Jemalloc::flushProfile("/tmp/jemalloc_clickhouse"));

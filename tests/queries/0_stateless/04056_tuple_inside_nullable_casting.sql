@@ -350,6 +350,8 @@ SELECT a, accurateCast((a,)::Tuple(Int32), 'Tuple(UInt8)') AS r, toTypeName(r) F
 SELECT a, b, accurateCastOrDefault((a, b)::Tuple(Int32, Nullable(Int32)), 'Tuple(UInt8, Nullable(UInt8))') AS r, toTypeName(r) FROM test_cast_tuple;
 SELECT a, b, CAST((a, b)::Tuple(Int32, Nullable(Int32)), 'Tuple(UInt8, Nullable(UInt8))') AS r, toTypeName(r) FROM test_cast_tuple;
 
+DROP TABLE test_cast_tuple;
+
 -- =====================
 -- Point type (alias for Tuple(Float64, Float64)).
 -- =====================

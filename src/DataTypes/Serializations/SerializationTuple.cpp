@@ -21,6 +21,7 @@ namespace ErrorCodes
     extern const int NOT_FOUND_COLUMN_IN_BLOCK;
     extern const int INCORRECT_DATA;
     extern const int LOGICAL_ERROR;
+    extern const int UNEXPECTED_DATA_AFTER_PARSED_VALUE;
 }
 
 
@@ -109,6 +110,12 @@ static ReturnType addElementSafe(size_t num_elems, IColumn & column, F && impl)
                 chassert(element_column.size() - old_size == 1);
                 element_column.popBack(1);
             }
+        }
+
+        if (column.size() > old_size)
+        {
+            chassert(column.size() - old_size == 1);
+            column.popBack(1);
         }
     };
 
@@ -261,12 +268,14 @@ ReturnType SerializationTuple::deserializeTextImpl(IColumn & column, ReadBuffer 
         {
             if constexpr (throw_exception)
             {
-                /// Commit the row before throwUnexpectedDataAfterParsedValue, which expects
-                /// the parsed value to be in the column (it serializes it for the error message
-                /// and then pops it back). Without this, for Tuple() with no sub-columns,
-                /// the column size is still 0 and popBack would fail.
                 assert_cast<ColumnTuple &>(column).addSize(1);
-                throwUnexpectedDataAfterParsedValue(column, istr, settings, "Tuple");
+                WriteBufferFromOwnString ostr;
+                serializeText(column, column.size() - 1, ostr, settings);
+                throw Exception(
+                    ErrorCodes::UNEXPECTED_DATA_AFTER_PARSED_VALUE,
+                    "Unexpected data '{}' after parsed Tuple value '{}'",
+                    std::string(istr.position(), std::min(size_t(10), istr.available())),
+                    ostr.str());
             }
             return false;
         }

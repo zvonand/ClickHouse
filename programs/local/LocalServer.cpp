@@ -1175,6 +1175,10 @@ void LocalServer::processConfig()
         DatabaseCatalog::instance().startupBackgroundTasks();
     }
 
+    /// Initialize system logs if configured (e.g. query_log, processors_profile_log).
+    /// This must happen after the system database is attached.
+    global_context->initializeSystemLogs();
+
     std::string default_database = getClientConfiguration().getString("database", server_default_database);
     if (default_database.empty())
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "default_database cannot be empty");

@@ -733,11 +733,10 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
                 ++pipe_pos;
 
             auto kql_op = getOperator(op_name);
-            if (kql_op)
-            {
-                if (!kql_op->parse(pipe_pos, node, expected))
-                    return false;
-            }
+            if (!kql_op)
+                return false;
+            if (!kql_op->parse(pipe_pos, node, expected))
+                return false;
 
             while (isValidKQLPos(pipe_pos) && pipe_pos->type != TokenType::PipeMark && pipe_pos->type != TokenType::Semicolon)
                 ++pipe_pos;

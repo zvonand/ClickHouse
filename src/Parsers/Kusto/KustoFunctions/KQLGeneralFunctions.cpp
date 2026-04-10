@@ -422,7 +422,7 @@ bool ParseHex::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     const auto argument = getArgument(fn_name, pos);
-    out = fmt::format("reinterpretAsInt64(reverse(unhex(replaceOne(toString({}), '0x', ''))))", argument);
+    out = fmt::format("reinterpretAsInt64(reverse(unhex(leftPad(replaceOne(toString({}), '0x', ''), 16, '0'))))", argument);
     return true;
 }
 

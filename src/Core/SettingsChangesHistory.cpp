@@ -51,6 +51,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"enable_materialized_cte", false, false, "New setting"},
             {"use_strict_insert_block_limits", false, false, "New setting to use strict min and max insert bounds on inserts. When min < max, max limits take precedence."},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},
+            {"distributed_plan_prefer_replicas_over_workers", false, false, "New setting to serialize distributed plan for replicas"},
             {"use_text_index_like_evaluation_by_dictionary_scan", true, true, "New setting"},
             {"text_index_like_min_pattern_length", 4, 4, "New setting"},
             {"text_index_like_max_postings_to_read", 50, 50, "New setting"},
@@ -1122,6 +1123,7 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
             {"allow_commit_order_projection", false, false, "New setting"},
             {"replicated_fetches_min_part_level", 0, 0, "New setting"},
             {"replicated_fetches_min_part_level_timeout_seconds", 300, 300, "New setting"},
+            {"compress_per_column_in_compact_parts", true, true, "New setting"},
         });
         addSettingsChanges(merge_tree_settings_changes_history, "26.3",
         {

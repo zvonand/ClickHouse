@@ -1,6 +1,7 @@
 ---
 description: 'Provides access to the file system to list files and return their metadata and contents.'
 sidebar_label: 'filesystem'
+sidebar_position: 62
 slug: /sql-reference/table-functions/filesystem
 title: 'filesystem'
 doc_type: 'reference'
@@ -8,7 +9,7 @@ doc_type: 'reference'
 
 import CloudNotSupportedBadge from '@theme/badges/CloudNotSupportedBadge';
 
-# filesystem Table Function
+# filesystem Table Function {#filesystem-table-function}
 
 <CloudNotSupportedBadge/>
 

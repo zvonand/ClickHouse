@@ -198,7 +198,7 @@ class JobConfigs:
         result_name_for_cidb="Darwin tests",
         allow_merge_on_failure=True,
         post_hooks=[
-            "sudo rm -rf /Users/ec2-user/actions-runner/_work/ClickHouse/ClickHouse/ci/tmp",
+            "sudo rm -rf /Users/ec2-user/actions-runner/_work/ClickHouse/ClickHouse/ci/tmp/run*",
         ],
     ).parametrize(
         Job.ParamSet(

@@ -96,12 +96,27 @@ SETTINGS
     paimon_replica_name = '{replica}';
 ```
 
-Targeted snapshot delta read (query-level):
+### Query-level settings for incremental read {#query-level-settings-for-incremental-read}
+
+The following settings are **query-level** (passed via `SELECT ... SETTINGS`, not in `CREATE TABLE`). They control per-query behavior of incremental reads:
+
+- `paimon_target_snapshot_id` — read only the delta of the specified snapshot. The committed watermark in Keeper is **not** advanced, so the same snapshot can be re-read any number of times. Default: `-1` (disabled).
+- `max_consume_snapshots` — maximum number of snapshots to consume in a single incremental read. When the source has accumulated many unread snapshots, this limits how many are consumed per query to control batch size. `0` means no limit. Default: `0`.
+
+**Targeted snapshot read** — always returns the delta of snapshot 1, regardless of the current watermark:
 
 ```sql
 SELECT count()
 FROM paimon_inc
 SETTINGS paimon_target_snapshot_id = 1;
+```
+
+**Limiting snapshots per batch** — if three new snapshots are pending, consume at most two per query:
+
+```sql
+SELECT count()
+FROM paimon_inc
+SETTINGS max_consume_snapshots = 2;
 ```
 
 ## Paimon to MergeTree via Refreshable Materialized View {#paimon-to-mergetree-via-refresh-mv}

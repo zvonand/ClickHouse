@@ -124,14 +124,12 @@ DataLakeMetadataPtr PaimonMetadata::create(
                 ErrorCodes::BAD_ARGUMENTS,
                 "To use Paimon incremental read both paimon_keeper_path and paimon_replica_name must be specified");
 
-        String replica_path = keeper_path + "/replicas/" + replica_name;
-
         auto keeper = local_context->getZooKeeper();
         auto stream_log = getLogger("PaimonStreamState");
-        stream_state = std::make_shared<PaimonStreamState>(keeper, keeper_path, replica_path, stream_log);
+        stream_state = std::make_shared<PaimonStreamState>(keeper, keeper_path, replica_name, stream_log);
         stream_state->initializeKeeperNodes();
         if (!stream_state->activate())
-            LOG_WARNING(stream_log, "Replica {} not activated for Paimon incremental read (maybe already active elsewhere)", replica_path);
+            LOG_WARNING(stream_log, "Replica {} not activated for Paimon incremental read (maybe already active elsewhere)", replica_name);
     }
 
     /// Create persistent components

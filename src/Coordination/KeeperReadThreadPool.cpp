@@ -57,11 +57,19 @@ void KeeperReadThreadPool::execute(size_t count, const CoordinationSettings & co
     while (running_threads < target_num_threads)
     {
         ++running_threads;
-        pool->scheduleOrThrowOnError([this, thread_group = CurrentThread::getGroup()]
-            {
-                ThreadGroupSwitcher switcher(thread_group, ThreadName::KEEPER_READ);
-                threadFunction();
-            });
+        try
+        {
+            pool->scheduleOrThrowOnError([this, thread_group = CurrentThread::getGroup()]
+                {
+                    ThreadGroupSwitcher switcher(thread_group, ThreadName::KEEPER_READ);
+                    threadFunction();
+                });
+        }
+        catch (...)
+        {
+            tryLogCurrentException("KeeperReadThreadPool", "Failed to create thread", LogsLevel::fatal);
+            std::abort();
+        }
     }
 
     /// If thread pool is disabled, execute right here.

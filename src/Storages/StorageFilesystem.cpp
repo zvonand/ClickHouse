@@ -299,12 +299,16 @@ private:
                 {
                     std::error_code canon_ec;
                     auto canonical = fs::canonical(child_path, canon_ec);
-                    if (!canon_ec)
-                    {
-                        std::lock_guard lock(path_info->visited_mutex);
-                        if (!path_info->visited.emplace(canonical.string()).second)
-                            continue;
-                    }
+
+                    /// Use canonical path if available, otherwise fall back to the
+                    /// lexically-normalized path. Without this fallback, symlink cycles
+                    /// that cause canonical() to fail (ELOOP) would never be added to
+                    /// `visited`, leading to infinite traversal.
+                    String visited_key = canon_ec ? child_path.string() : canonical.string();
+
+                    std::lock_guard lock(path_info->visited_mutex);
+                    if (!path_info->visited.emplace(std::move(visited_key)).second)
+                        continue;
                 }
 
                 path_info->in_flight.fetch_add(1);

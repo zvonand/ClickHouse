@@ -1,9 +1,11 @@
 #include <Generator.h>
+
+#include <fmt/ranges.h>
+#include <random>
+#include <filesystem>
 #include <Common/Exception.h>
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/Config/ConfigProcessor.h>
-#include <random>
-#include <filesystem>
 #include <Poco/Util/AbstractConfiguration.h>
 
 using namespace Coordination;
@@ -213,17 +215,11 @@ void PathGetter::initialize(Coordination::ZooKeeper & zookeeper, const TaggedPat
 
         auto it = tagged_paths->find(tag_name);
         if (it == tagged_paths->end())
-            throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Tag '{}' not found in setup. Available tags: {}", tag_name, [&]
-            {
-                std::string available;
-                for (const auto & [name, _] : *tagged_paths)
-                {
-                    if (!available.empty())
-                        available += ", ";
-                    available += name;
-                }
-                return available.empty() ? "(none)" : available;
-            }());
+            throw DB::Exception(
+                DB::ErrorCodes::BAD_ARGUMENTS,
+                "Tag '{}' not found in setup. Available tags: {}",
+                tag_name,
+                tagged_paths->empty() ? "(none)" : fmt::to_string( fmt::join(*tagged_paths | std::views::keys, ", ")));
 
         for (const auto & path : it->second)
             paths.push_back(path);

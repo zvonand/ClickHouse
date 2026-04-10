@@ -13,6 +13,7 @@
 #include <Generator.h>
 #include <Stats.h>
 
+#include <barrier>
 #include <filesystem>
 
 using Ports = std::vector<UInt16>;
@@ -39,7 +40,8 @@ private:
 
         std::shared_ptr<Node> clone() const;
 
-        void collectCreateRequests(
+        void createNodes(
+            Coordination::ZooKeeper & zookeeper,
             Coordination::Requests & batch,
             const std::string & parent_path,
             const Coordination::ACLs & acls,
@@ -145,6 +147,12 @@ private:
     Stopwatch delay_watch;
 
     std::vector<ThreadState> threads;
+
+    /// Barrier so all threads finish generator initialization (which resolves
+    /// `children_of` paths via ZooKeeper listing) before any thread starts
+    /// executing requests. Without this, early threads mutate the tree while
+    /// late threads are still initializing, causing stale path caches.
+    std::unique_ptr<std::barrier<>> generator_init_barrier;
 
     std::mutex mutex; // for writing to stdout
 

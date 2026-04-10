@@ -262,6 +262,11 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
             stats->watches_fired.fetch_add(1, std::memory_order_relaxed);
         }));
 
+    /// Wait for all threads to finish initializing their generators before
+    /// any thread starts executing requests. This prevents early threads from
+    /// mutating the tree while late threads are still resolving `children_of` paths.
+    generator_init_barrier->arrive_and_wait();
+
     /// Randomly choosing connection index
     pcg64 rng(randomSeed());
     std::uniform_int_distribution<size_t> distribution(0, zookeepers.size() - 1);
@@ -1215,6 +1220,10 @@ void Runner::runBenchmarkWithGenerator()
     int64_t start_timestamp_ms = 0;
     threads = std::vector<ThreadState>(concurrency);
 
+    /// All threads must finish generator initialization (which resolves
+    /// `children_of` paths) before any thread starts executing requests.
+    generator_init_barrier = std::make_unique<std::barrier<>>(concurrency);
+
     try
     {
         for (size_t i = 0; i < concurrency; ++i)
@@ -1443,6 +1452,16 @@ void flushMulti(Coordination::ZooKeeper & zookeeper, Coordination::Requests & ba
     batch.clear();
 }
 
+void addToBatchAndMaybeFlush(Coordination::ZooKeeper & zookeeper, Coordination::Requests & batch, Coordination::RequestPtr request)
+{
+    batch.push_back(std::move(request));
+    if (batch.size() >= 10000)
+    {
+        flushMulti(zookeeper, batch);
+        batch.clear();
+    }
+}
+
 void removeRecursive(Coordination::ZooKeeper & zookeeper, const std::string & path)
 {
     auto promise = std::make_shared<std::promise<Coordination::Error>>();
@@ -1568,7 +1587,8 @@ std::shared_ptr<BenchmarkContext::Node> BenchmarkContext::Node::clone() const
     return new_node;
 }
 
-void BenchmarkContext::Node::collectCreateRequests(
+void BenchmarkContext::Node::createNodes(
+    Coordination::ZooKeeper & zookeeper,
     Coordination::Requests & batch,
     const std::string & parent_path,
     const Coordination::ACLs & acls,
@@ -1580,13 +1600,13 @@ void BenchmarkContext::Node::collectCreateRequests(
     request->path = path;
     request->data = data ? data->getString() : "";
     request->acls = acls;
-    batch.push_back(std::move(request));
+    addToBatchAndMaybeFlush(zookeeper, batch, std::move(request));
 
     if (tag.has_value())
         tagged_paths_out[*tag].push_back(path);
 
     for (const auto & child : children)
-        child->collectCreateRequests(batch, path, acls, tagged_paths_out);
+        child->createNodes(zookeeper, batch, path, acls, tagged_paths_out);
 }
 
 void BenchmarkContext::startup(Coordination::ZooKeeper & zookeeper)
@@ -1605,7 +1625,7 @@ void BenchmarkContext::startup(Coordination::ZooKeeper & zookeeper)
         removeRecursive(zookeeper, root_path);
 
         Coordination::Requests batch;
-        node->collectCreateRequests(batch, "/", default_acls, tagged_paths);
+        node->createNodes(zookeeper, batch, "/", default_acls, tagged_paths);
         flushMulti(zookeeper, batch);
     }
 

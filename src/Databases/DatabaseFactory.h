@@ -71,6 +71,7 @@ public:
         .supports_arguments = false,
         .supports_settings = false,
         .supports_table_overrides = false,
+        .is_external = false,
     });
 
     const DatabaseEngines & getDatabaseEngines() const { return database_engines; }

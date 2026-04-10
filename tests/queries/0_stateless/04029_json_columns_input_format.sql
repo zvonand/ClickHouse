@@ -1,3 +1,5 @@
+-- Tags: no-async-insert
+
 -- Test auto case
 DROP TABLE IF EXISTS test;
 

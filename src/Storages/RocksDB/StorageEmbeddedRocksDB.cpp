@@ -324,6 +324,7 @@ void StorageEmbeddedRocksDB::mutate(const MutationCommands & commands, ContextPt
     chassert(commands.size() == 1);
 
     auto metadata_snapshot = getInMemoryMetadataPtr();
+    auto physical_columns = metadata_snapshot->getColumns().getNamesOfPhysical();
     auto storage = getStorageID();
     auto storage_ptr = DatabaseCatalog::instance().getTable(storage, context_);
 
@@ -333,7 +334,7 @@ void StorageEmbeddedRocksDB::mutate(const MutationCommands & commands, ContextPt
         mutation_settings.return_all_columns = true;
         mutation_settings.return_mutated_rows = true;
 
-        auto interpreter = std::make_unique<MutationsInterpreter>(storage_ptr, metadata_snapshot, commands, context_, mutation_settings);
+        auto interpreter = std::make_unique<MutationsInterpreter>(storage_ptr, metadata_snapshot, commands, physical_columns, context_, mutation_settings);
 
         auto pipeline = QueryPipelineBuilder::getPipeline(interpreter->execute());
         PullingPipelineExecutor executor(pipeline);
@@ -388,7 +389,7 @@ void StorageEmbeddedRocksDB::mutate(const MutationCommands & commands, ContextPt
     mutation_settings.return_all_columns = true;
     mutation_settings.return_mutated_rows = true;
 
-    auto interpreter = std::make_unique<MutationsInterpreter>(storage_ptr, metadata_snapshot, commands, context_, mutation_settings);
+    auto interpreter = std::make_unique<MutationsInterpreter>(storage_ptr, metadata_snapshot, commands, physical_columns, context_, mutation_settings);
 
     auto pipeline = QueryPipelineBuilder::getPipeline(interpreter->execute());
     PullingPipelineExecutor executor(pipeline);

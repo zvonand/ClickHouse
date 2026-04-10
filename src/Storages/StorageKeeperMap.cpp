@@ -1585,6 +1585,9 @@ void StorageKeeperMap::mutate(const MutationCommands & commands, ContextPtr loca
     auto storage = getStorageID();
     auto storage_ptr = DatabaseCatalog::instance().getTable(storage, local_context);
 
+    auto mutation_columns = metadata_snapshot->getColumns().getNamesOfPhysical();
+    mutation_columns.push_back(String(version_column_name));
+
     if (commands.front().type == MutationCommand::Type::DELETE)
     {
         MutationsInterpreter::Settings mutation_settings(true);
@@ -1595,6 +1598,7 @@ void StorageKeeperMap::mutate(const MutationCommands & commands, ContextPtr loca
             storage_ptr,
             metadata_snapshot,
             commands,
+            mutation_columns,
             local_context,
             mutation_settings);
 
@@ -1686,6 +1690,7 @@ void StorageKeeperMap::mutate(const MutationCommands & commands, ContextPtr loca
         storage_ptr,
         metadata_snapshot,
         commands,
+        mutation_columns,
         local_context,
         settings);
 

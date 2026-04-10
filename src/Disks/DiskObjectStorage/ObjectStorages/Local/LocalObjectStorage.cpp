@@ -1,7 +1,6 @@
 #include <Disks/DiskObjectStorage/ObjectStorages/Local/LocalObjectStorage.h>
 
 #include <atomic>
-#include <exception>
 #include <filesystem>
 #include <Disks/IO/AsynchronousBoundedReadBuffer.h>
 #include <Disks/IO/ReadBufferFromRemoteFSGather.h>
@@ -89,7 +88,7 @@ public:
 
     ~ReadBufferFromFileWithLogging() override
     {
-        if (blob_log && std::uncaught_exceptions() == 0)
+        if (blob_log && !read_failed)
         {
             blob_log->addEvent(
                 BlobStorageLogElement::EventType::Read,
@@ -110,21 +109,37 @@ public:
     size_t readBigAt(char * to, size_t n, size_t offset, const std::function<bool(size_t)> & progress_callback) const override
     {
         Stopwatch watch;
-        size_t result = impl->readBigAt(to, n, offset, progress_callback);
-        elapsed_microseconds += watch.elapsedMicroseconds();
-        bytes_read += result;
-        return result;
+        try
+        {
+            size_t result = impl->readBigAt(to, n, offset, progress_callback);
+            elapsed_microseconds += watch.elapsedMicroseconds();
+            bytes_read += result;
+            return result;
+        }
+        catch (...)
+        {
+            read_failed = true;
+            throw;
+        }
     }
 
 private:
     bool nextImpl() override
     {
         Stopwatch next_watch;
-        bool result = ReadBufferFromFileDecorator::nextImpl();
-        elapsed_microseconds += next_watch.elapsedMicroseconds();
-        if (result)
-            bytes_read += working_buffer.size();
-        return result;
+        try
+        {
+            bool result = ReadBufferFromFileDecorator::nextImpl();
+            elapsed_microseconds += next_watch.elapsedMicroseconds();
+            if (result)
+                bytes_read += working_buffer.size();
+            return result;
+        }
+        catch (...)
+        {
+            read_failed = true;
+            throw;
+        }
     }
 
     const String file_path;
@@ -132,6 +147,7 @@ private:
     BlobStorageLogWriterPtr blob_log;
     mutable std::atomic<size_t> elapsed_microseconds = 0;
     mutable std::atomic<size_t> bytes_read = 0;
+    mutable std::atomic<bool> read_failed = false;
 };
 
 /// Wrapper around WriteBufferFromFile that adds blob storage logging on finalize.

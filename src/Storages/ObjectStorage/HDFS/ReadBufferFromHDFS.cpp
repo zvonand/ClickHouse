@@ -1,7 +1,6 @@
 #include <Storages/ObjectStorage/HDFS/ReadBufferFromHDFS.h>
 
 #if USE_HDFS
-#include <exception>
 #include <Storages/ObjectStorage/HDFS/HDFSCommon.h>
 #include <Storages/ObjectStorage/HDFS/HDFSErrorWrapper.h>
 #include <Common/Scheduler/ResourceGuard.h>
@@ -208,7 +207,7 @@ ReadBufferFromHDFS::ReadBufferFromHDFS(
 
 ReadBufferFromHDFS::~ReadBufferFromHDFS()
 {
-    if (blob_storage_log && total_bytes_read > 0 && std::uncaught_exceptions() == 0)
+    if (blob_storage_log && total_bytes_read > 0 && !read_failed)
     {
         blob_storage_log->addEvent(
             BlobStorageLogElement::EventType::Read,
@@ -239,16 +238,24 @@ bool ReadBufferFromHDFS::nextImpl()
     }
 
     Stopwatch watch;
-    auto result = impl->next();
-
-    if (result)
+    try
     {
-        BufferBase::set(impl->buffer().begin(), impl->buffer().size(), impl->offset()); /// use the buffer returned by `impl`
-        total_bytes_read.fetch_add(working_buffer.size(), std::memory_order_relaxed);
-    }
+        auto result = impl->next();
 
-    total_read_microseconds.fetch_add(watch.elapsedMicroseconds(), std::memory_order_relaxed);
-    return result;
+        if (result)
+        {
+            BufferBase::set(impl->buffer().begin(), impl->buffer().size(), impl->offset()); /// use the buffer returned by `impl`
+            total_bytes_read.fetch_add(working_buffer.size(), std::memory_order_relaxed);
+        }
+
+        total_read_microseconds.fetch_add(watch.elapsedMicroseconds(), std::memory_order_relaxed);
+        return result;
+    }
+    catch (...)
+    {
+        read_failed = true;
+        throw;
+    }
 }
 
 
@@ -295,10 +302,18 @@ String ReadBufferFromHDFS::getFileName() const
 size_t ReadBufferFromHDFS::readBigAt(char * buffer, size_t size, size_t offset, const std::function<bool(size_t)> &) const
 {
     Stopwatch watch;
-    size_t bytes_read = impl->pread(buffer, size, offset);
-    total_bytes_read += bytes_read;
-    total_read_microseconds += watch.elapsedMicroseconds();
-    return bytes_read;
+    try
+    {
+        size_t bytes_read = impl->pread(buffer, size, offset);
+        total_bytes_read += bytes_read;
+        total_read_microseconds += watch.elapsedMicroseconds();
+        return bytes_read;
+    }
+    catch (...)
+    {
+        read_failed = true;
+        throw;
+    }
 }
 
 bool ReadBufferFromHDFS::supportsReadAt()

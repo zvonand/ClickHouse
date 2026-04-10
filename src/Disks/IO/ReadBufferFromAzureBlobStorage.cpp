@@ -261,18 +261,19 @@ void ReadBufferFromAzureBlobStorage::initialize(size_t attempt)
                 ProfileEvents::increment(ProfileEvents::DiskAzureGetObject);
 
             auto download_response = blob_client->Download(download_options, azure_context);
+
+            setMetadataFromResponse(download_response.Value.Details, download_response.Value.BlobSize);
+            data_stream = std::move(download_response.Value.BodyStream);
+
             if (blob_storage_log)
             {
                 blob_storage_log->addEvent(
                     BlobStorageLogElement::EventType::Read,
                     /* bucket */ container_for_logging, /* remote_path */ path, /* local_path */ {},
-                    length.HasValue() ? static_cast<size_t>(length.Value()) : 0,
+                    /* data_size */ static_cast<size_t>(data_stream->Length()),
                     blob_log_watch.elapsedMicroseconds(),
                     /* error_code */ 0, /* error_message */ {});
             }
-
-            setMetadataFromResponse(download_response.Value.Details, download_response.Value.BlobSize);
-            data_stream = std::move(download_response.Value.BodyStream);
             break;
         }
         catch (const Azure::Core::RequestFailedException & e)

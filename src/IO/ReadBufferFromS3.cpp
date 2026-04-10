@@ -522,9 +522,10 @@ Aws::S3::Model::GetObjectResult ReadBufferFromS3::sendRequest(size_t attempt, si
 
     if (outcome.IsSuccess())
     {
+        auto result = outcome.GetResultWithOwnership();
         if (blob_storage_log)
         {
-            size_t data_size = range_end_incl ? (*range_end_incl - range_begin + 1) : 0;
+            size_t data_size = static_cast<size_t>(result.GetContentLength());
             blob_storage_log->addEvent(
                 BlobStorageLogElement::EventType::Read,
                 bucket, key, /* local_path */ {},
@@ -532,7 +533,7 @@ Aws::S3::Model::GetObjectResult ReadBufferFromS3::sendRequest(size_t attempt, si
                 blob_log_watch.elapsedMicroseconds(),
                 /* error_code */ 0, /* error_message */ {});
         }
-        return outcome.GetResultWithOwnership();
+        return result;
     }
 
     const auto & error = outcome.GetError();

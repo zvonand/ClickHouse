@@ -304,8 +304,10 @@ public:
         if constexpr (std::is_floating_point_v<ValueType>)
         {
             UInt64 scaling = 1ULL << fraction_bit_num;
-            constexpr Float64 lim = static_cast<Float64>(std::numeric_limits<Int64>::max());
-            if (fabs(value) > lim / static_cast<Float64>(scaling))
+            auto scaled = static_cast<Float64>(value * static_cast<ValueType>(scaling));
+            /// 2^63 is exactly representable in Float64; Int64 range is [-2^63, 2^63 - 1].
+            constexpr Float64 int64_upper = static_cast<Float64>(1ULL << 63);
+            if (scaled >= int64_upper || scaled < -int64_upper)
                 throw Exception(
                     ErrorCodes::INCORRECT_DATA,
                     "Value {} is out of range for BSI with integer_bit_num={} and fraction_bit_num={}",
@@ -1323,8 +1325,10 @@ public:
         Int64 scaled_value;
         if constexpr (std::is_floating_point_v<ValueType>)
         {
-            constexpr Float64 lim = static_cast<Float64>(std::numeric_limits<Int64>::max());
-            if (fabs(rhs) > lim / static_cast<Float64>(scaling))
+            auto scaled = static_cast<Float64>(rhs * static_cast<ValueType>(scaling));
+            /// 2^63 is exactly representable in Float64; Int64 range is [-2^63, 2^63 - 1].
+            constexpr Float64 int64_upper = static_cast<Float64>(1ULL << 63);
+            if (scaled >= int64_upper || scaled < -int64_upper)
                 return std::make_shared<Roaring>(); /// Out of representable range, no element can match.
             scaled_value = static_cast<Int64>(rhs * static_cast<ValueType>(scaling));
         }
@@ -1702,9 +1706,10 @@ public:
         }
         else if constexpr (std::is_same_v<ValueType, Float32> || std::is_same_v<ValueType, Float64>)
         {
-            constexpr Float64 lim = static_cast<Float64>(std::numeric_limits<Int64>::max());
-
-            if (fabs(value) > lim / static_cast<Float64>(scaling))
+            auto scaled = static_cast<Float64>(value * static_cast<ValueType>(scaling));
+            /// 2^63 is exactly representable in Float64; Int64 range is [-2^63, 2^63 - 1].
+            constexpr Float64 int64_upper = static_cast<Float64>(1ULL << 63);
+            if (scaled >= int64_upper || scaled < -int64_upper)
                 throw Exception(
                     ErrorCodes::INCORRECT_DATA,
                     "Value {} is out of range for BSI with integer_bit_num={} and fraction_bit_num={}",

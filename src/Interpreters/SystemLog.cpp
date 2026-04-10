@@ -667,6 +667,14 @@ void SystemLog<LogElement>::flushImpl(const std::vector<LogElement> & to_flush, 
 
         auto insert = make_intrusive<ASTInsertQuery>();
         insert->table_id = table_id;
+
+        /// Explicitly specify column names to avoid mismatch when the table
+        /// has been altered (e.g. columns added) between prepareTable() and this INSERT.
+        auto columns_ast = make_intrusive<ASTExpressionList>();
+        for (const auto & name : block.getNames())
+            columns_ast->children.emplace_back(make_intrusive<ASTIdentifier>(name));
+        insert->columns = std::move(columns_ast);
+
         ASTPtr query_ptr = std::move(insert);
 
         // we need query context to do inserts to target table with MV containing subqueries or joins

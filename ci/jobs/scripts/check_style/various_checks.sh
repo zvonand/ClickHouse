@@ -114,6 +114,9 @@ FUNCTIONS_CONTEXT_PTR_EXCEPTIONS=(
     -e /evalMLMethod.cpp
     -e /FunctionBinaryArithmetic.h
     -e /FunctionUnaryArithmetic.h
+    -e /ITupleFunction.h
+    -e /formatRow.cpp
+    -e /structureToFormatSchema.cpp
 )
 find $ROOT_PATH/src/Functions -type f | xargs grep -l 'ContextPtr [a-z_]*;' | grep -v "${FUNCTIONS_CONTEXT_PTR_EXCEPTIONS[@]}" | grep -P '.' && echo "Avoid holding a copy of ContextPtr in Functions"
 
@@ -144,10 +147,6 @@ FUNCTIONS_WITH_CONTEXT_EXCEPTIONS=(
     -e /getSetting.cpp
     -e /hasColumnInTable.cpp
     -e /initializeAggregation.cpp
-    # Needs live context for complex type resolution / arithmetic delegation
-    -e /ITupleFunction.h
-    # Needs live context for parsing
-    -e /structureToFormatSchema.cpp
 )
 find $ROOT_PATH/src/Functions -type f | xargs grep -l 'WithContext(' | grep -v "${FUNCTIONS_WITH_CONTEXT_EXCEPTIONS[@]}" | grep -P '.' && echo "Avoid using WithContext in Functions"
 

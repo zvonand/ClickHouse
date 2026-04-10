@@ -31,16 +31,16 @@ namespace
   * several columns to generate a string per row, such as CSV, TSV, JSONEachRow, etc.
   * formatRowNoNewline(...) trims the newline character of each row.
   */
-class FunctionFormatRow : public IFunction, private WithContext
+class FunctionFormatRow : public IFunction
 {
 public:
     FunctionFormatRow(const char * name_, bool no_newline_, String format_name_, Names arguments_column_names_, ContextPtr context_)
-        : WithContext(context_)
-        , function_name(name_)
+        : function_name(name_)
         , no_newline(no_newline_)
         , format_name(std::move(format_name_))
         , arguments_column_names(std::move(arguments_column_names_))
-        , format_settings(getFormatSettings(context_))
+        , context(std::move(context_))
+        , format_settings(getFormatSettings(context))
     {
         FormatFactory::instance().checkFormatName(format_name);
 
@@ -76,7 +76,7 @@ public:
         }
 
         materializeBlockInplace(arg_columns);
-        auto out = FormatFactory::instance().getOutputFormat(format_name, buffer, arg_columns, getContext(), format_settings);
+        auto out = FormatFactory::instance().getOutputFormat(format_name, buffer, arg_columns, context, format_settings);
 
         /// This function make sense only for row output formats.
         auto * row_output_format = dynamic_cast<IRowOutputFormat *>(out.get());
@@ -109,6 +109,7 @@ private:
     bool no_newline;
     String format_name;
     Names arguments_column_names;
+    ContextPtr context;
     FormatSettings format_settings;
 };
 

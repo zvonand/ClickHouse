@@ -7,7 +7,6 @@
 #include <IO/WriteBufferFromVector.h>
 #include <Formats/StructureToCapnProtoSchema.h>
 #include <Formats/StructureToProtobufSchema.h>
-#include <Interpreters/Context.h>
 
 
 namespace DB
@@ -28,13 +27,14 @@ namespace
     };
 }
 
-class FunctionStructureToFormatSchema : public IFunction, private WithContext
+class FunctionStructureToFormatSchema : public IFunction
 {
 private:
     Impl impl;
+    ContextPtr context;
 
 public:
-    FunctionStructureToFormatSchema(ContextPtr context_, Impl impl_) : WithContext(context_), impl(impl_)
+    explicit FunctionStructureToFormatSchema(Impl impl_, ContextPtr context_) : impl(impl_), context(std::move(context_))
     {
     }
 
@@ -95,7 +95,7 @@ public:
         String structure{arguments[0].column->getDataAt(0)};
         String message_name = arguments.size() == 2 ? std::string{arguments[1].column->getDataAt(0)} : "Message";
 
-        auto columns_list = parseColumnsListFromString(structure, getContext());
+        auto columns_list = parseColumnsListFromString(structure, context);
         auto col_res = ColumnString::create();
         auto & data = assert_cast<ColumnString &>(*col_res).getChars();
         {
@@ -122,7 +122,7 @@ public:
 REGISTER_FUNCTION(StructureToCapnProtoSchema)
 {
     factory.registerFunction(StructureToCapnProtoSchema::name,
-        [](ContextPtr context){ return std::make_shared<FunctionStructureToFormatSchema>(context, Impl::CapnProto); },
+        [](ContextPtr context){ return std::make_shared<FunctionStructureToFormatSchema>(Impl::CapnProto, std::move(context)); },
         FunctionDocumentation
         {
             .description=R"(
@@ -178,7 +178,7 @@ message MessageName
     FunctionDocumentation structureToProtobufSchema_documentation = {structureToProtobufSchema_description, structureToProtobufSchema_syntax, structureToProtobufSchema_arguments, {}, structureToProtobufSchema_returned_value, structureToProtobufSchema_examples, structureToProtobufSchema_introduced_in, structureToProtobufSchema_category};
 
     factory.registerFunction(StructureToProtobufSchema::name,
-        [](ContextPtr context){ return std::make_shared<FunctionStructureToFormatSchema>(context, Impl::Protobuf); },
+        [](ContextPtr context){ return std::make_shared<FunctionStructureToFormatSchema>(Impl::Protobuf, std::move(context)); },
         structureToProtobufSchema_documentation);
 }
 

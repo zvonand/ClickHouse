@@ -43,7 +43,7 @@ namespace QueryPlanOptimizations
 
 bool canUseProjectionForReadingStep(ReadFromMergeTree * reading)
 {
-    if (reading->getAnalyzedResult())
+    if (reading->getAnalyzedResult() && reading->getAnalyzedResult()->readFromProjection())
         return false;
 
     if (reading->isQueryWithFinal())

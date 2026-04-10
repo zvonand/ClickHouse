@@ -274,16 +274,21 @@ class Runner:
             print(f"Restoring submodule cache: {s3_path}")
             S3.copy_file_from_s3(s3_path=s3_path, local_path=local_archive, no_strict=True)
             if Path(local_archive).exists():
-                Shell.check(
+                if Shell.check(
                     f"zstd -d {local_archive} --stdout | tar -xf - -C .",
                     verbose=True,
-                )
-                Shell.check(f"rm -f {local_archive}")
-                print("Submodule cache restored successfully")
+                ):
+                    Shell.check(f"rm -f {local_archive}")
+                    print("Submodule cache restored successfully")
+                else:
+                    print("WARNING: Submodule cache extraction failed, cleaning up")
+                    Shell.check("rm -rf .git/modules")
+                    Shell.check(f"rm -f {local_archive}")
             else:
                 print("WARNING: Submodule cache download failed, will clone from GitHub")
         except Exception as e:
             print(f"WARNING: Submodule cache restore failed: {e}, will clone from GitHub")
+            traceback.print_exc()
 
     def _run(
         self,

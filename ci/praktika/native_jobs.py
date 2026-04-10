@@ -249,25 +249,27 @@ def _prepare_submodule_cache(workflow_config: RunConfig) -> Result:
             info = f"cache hit: {cache_hash}"
         else:
             print(f"Submodule cache miss, creating: {s3_path}")
-            Shell.check("git submodule sync", verbose=True)
-            Shell.check("git submodule init", verbose=True)
-            # Use update-submodules.sh if available, otherwise plain git submodule update
+            Shell.check("git submodule sync", verbose=True, strict=True)
+            Shell.check("git submodule init", verbose=True, strict=True)
             if Path("contrib/update-submodules.sh").exists():
                 Shell.check(
                     "contrib/update-submodules.sh --max-procs 64",
                     verbose=True,
+                    strict=True,
                     retries=3,
                 )
             else:
                 Shell.check(
                     "git submodule update --depth=1 --single-branch --jobs 64",
                     verbose=True,
+                    strict=True,
                     retries=3,
                 )
             archive_path = f"{Settings.TEMP_DIR}/submodules_{cache_hash}.tar.zst"
             Shell.check(
                 f"tar -cf - .git/modules | zstd -c -T0 > {archive_path}",
                 verbose=True,
+                strict=True,
             )
             S3.copy_file_to_s3(s3_path=s3_path, local_path=archive_path, with_rename=True)
             Shell.check(f"rm -f {archive_path}")
@@ -279,7 +281,7 @@ def _prepare_submodule_cache(workflow_config: RunConfig) -> Result:
     except Exception as e:
         print(f"WARNING: Submodule cache failed: {e}")
         traceback.print_exc()
-        info = str(e)
+        info = f"{e}\n{traceback.format_exc()}"
         status = Result.Status.SUCCESS  # non-fatal, jobs fall back to GitHub clone
 
     return Result.create_from(

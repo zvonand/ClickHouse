@@ -3,7 +3,7 @@
 
 -- Force table creation: these system log tables are lazily prepared
 -- (only on first flush), so they may not exist yet on a fresh server.
-SYSTEM FLUSH LOGS;
+SYSTEM FLUSH LOGS delta_lake_metadata_log, iceberg_metadata_log;
 
 SELECT name, type FROM system.columns
 WHERE table = 'delta_lake_metadata_log' AND database = 'system' AND name = 'hostname';

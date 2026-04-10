@@ -1148,14 +1148,11 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
     std::lock_guard lock(mutex);
 
     if (announcement.stream_id.empty())
-    {
-        LOG_DEBUG(
-            getLogger("ParallelReplicasReadingCoordinator"),
-            "Got announcement with empty stream id from replica {}. Ignore it",
+        throw Exception(
+            ErrorCodes::LOGICAL_ERROR,
+            "Got announcement with empty stream id from replica {}. "
+            "Old replicas without stream_id support should have been filtered out at connection time",
             announcement.replica_num);
-        ignored_replicas.emplace(announcement.replica_num);
-        return;
-    }
 
     if (announcement.replica_num >= replicas_count)
         throw Exception(
@@ -1197,15 +1194,11 @@ ParallelReadResponse ParallelReplicasReadingCoordinator::handleRequest(ParallelR
             return response;
 
         if (request.stream_id.empty())
-        {
-            if (!ignored_replicas.contains(request.replica_num))
-                throw Exception(
-                    ErrorCodes::LOGICAL_ERROR,
-                    "Got request from replica {} with empty stream id without ranges announcement",
-                    request.replica_num);
-
-            return response;
-        }
+            throw Exception(
+                ErrorCodes::LOGICAL_ERROR,
+                "Got request from replica {} with empty stream id. "
+                "Old replicas without stream_id support should have been filtered out at connection time",
+                request.replica_num);
 
         auto coordinator = getCoordinator(request.stream_id);
         if (!coordinator)

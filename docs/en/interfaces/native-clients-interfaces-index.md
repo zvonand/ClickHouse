@@ -16,6 +16,5 @@ For more information see the pages below:
 |--------------------------------------------------------------|-------------------------------------------------------------------------------------|
 | [clickhousectl](/interfaces/cli)                     | The CLI for ClickHouse: local and cloud.                                            |
 | [ClickHouse Client](/interfaces/client)              | Native command-line client supporting command-line options and configuration files.  |
-| [Web Interface](/interfaces/web)                     | Built-in web interface for executing queries in the browser.                        |
 | [Drivers & Interfaces](/interfaces/overview)         | A number of network interfaces, libraries and visual interfaces.                    |
 | [SQL Console](/integrations/sql-clients/sql-console) | A fast and easy way to interact with your data in ClickHouse Cloud.                 |

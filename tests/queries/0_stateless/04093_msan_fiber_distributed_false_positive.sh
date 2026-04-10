@@ -21,14 +21,16 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-for _ in $(seq 1 2000); do
+TIMELIMIT=$((SECONDS + 120))
+
+while [ $SECONDS -lt "$TIMELIMIT" ]; do
     ${CLICKHOUSE_CLIENT} -q "SELECT count() FROM remote('127.0.0.{1,2}', numbers(100)) FORMAT Null" &
     ${CLICKHOUSE_CLIENT} -q "SELECT sum(number) FROM remote('127.0.0.{1,2}', numbers(500)) GROUP BY number % 10 FORMAT Null" &
     ${CLICKHOUSE_CLIENT} -q "SELECT number % 3, sum(number) FROM remote('127.0.0.{1,2}', numbers(100)) GROUP BY ROLLUP(number % 3) SETTINGS group_by_use_nulls=1 FORMAT Null" &
     ${CLICKHOUSE_CLIENT} -q "SELECT uniq(number) FROM remote('127.0.0.{1,2}', numbers(1000)) FORMAT Null" &
 
     # Keep max 16 concurrent queries
-    if (( _ % 4 == 0 )); then wait; fi
+    wait
 done
 
 wait

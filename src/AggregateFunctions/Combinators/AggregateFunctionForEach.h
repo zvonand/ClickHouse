@@ -3,6 +3,7 @@
 #include <Columns/ColumnArray.h>
 #include <Common/assert_cast.h>
 #include <Common/Arena.h>
+#include <Common/memory.h>
 #include <base/arithmeticOverflow.h>
 #include <DataTypes/DataTypeArray.h>
 #include <AggregateFunctions/IAggregateFunction.h>
@@ -13,6 +14,7 @@
 #include <IO/ReadHelpers.h>
 
 #include <absl/container/inlined_vector.h>
+
 
 namespace DB
 {

@@ -1,4 +1,5 @@
 import dataclasses
+import hashlib
 import json
 import platform
 import sys
@@ -221,6 +222,74 @@ def _clean_buildx_volumes():
     )
 
 
+def _prepare_submodule_cache(workflow_config: RunConfig) -> Result:
+    """Compute a content-addressed hash of submodule SHAs and ensure a cache
+    archive exists in S3.  Stores the hash in workflow_config so that downstream
+    jobs with needs_submodules=True can restore it."""
+    stop_watch = Utils.Stopwatch()
+    info = ""
+    try:
+        submodule_shas = Digest.get_submodule_shas()
+        if not submodule_shas:
+            print("WARNING: No submodules found, skipping submodule cache")
+            return Result.create_from(
+                name="Submodule Cache",
+                status=Result.Status.SUCCESS,
+                stopwatch=stop_watch,
+                info="No submodules",
+            )
+
+        cache_hash = hashlib.sha256(submodule_shas.encode()).hexdigest()[:16]
+        s3_path = f"{Settings.CACHE_S3_PATH}/submodules/{cache_hash}.tar.zst"
+        print(f"Submodule cache hash: {cache_hash}")
+
+        # Check if cache already exists in S3
+        if S3.head_object(s3_path):
+            print(f"Submodule cache hit: {s3_path}")
+            info = f"cache hit: {cache_hash}"
+        else:
+            print(f"Submodule cache miss, creating: {s3_path}")
+            Shell.check("git submodule sync", verbose=True)
+            Shell.check("git submodule init", verbose=True)
+            # Use update-submodules.sh if available, otherwise plain git submodule update
+            if Path("contrib/update-submodules.sh").exists():
+                Shell.check(
+                    "contrib/update-submodules.sh --max-procs 64",
+                    verbose=True,
+                    retries=3,
+                )
+            else:
+                Shell.check(
+                    "git submodule update --depth=1 --single-branch --jobs 64",
+                    verbose=True,
+                    retries=3,
+                )
+            archive_path = f"{Settings.TEMP_DIR}/submodules_{cache_hash}.tar.zst"
+            Shell.check(
+                f"tar -cf - .git/modules | zstd -c -T0 > {archive_path}",
+                verbose=True,
+            )
+            S3.copy_file_to_s3(s3_path=s3_path, local_path=archive_path, with_rename=True)
+            Shell.check(f"rm -f {archive_path}")
+            info = f"cache miss, created: {cache_hash}"
+
+        workflow_config.submodule_cache_hash = cache_hash
+        workflow_config.dump()
+        status = Result.Status.SUCCESS
+    except Exception as e:
+        print(f"WARNING: Submodule cache failed: {e}")
+        traceback.print_exc()
+        info = str(e)
+        status = Result.Status.SUCCESS  # non-fatal, jobs fall back to GitHub clone
+
+    return Result.create_from(
+        name="Submodule Cache",
+        status=status,
+        stopwatch=stop_watch,
+        info=info,
+    )
+
+
 def _config_workflow(workflow: Workflow.Config, job_name) -> Result:
     # debug info
     GH.print_log_in_group("GITHUB envs", Shell.get_output("env | grep GITHUB"))
@@ -360,6 +429,7 @@ def _config_workflow(workflow: Workflow.Config, job_name) -> Result:
         cache_artifacts={},
         cache_jobs={},
         filtered_jobs={},
+        submodule_cache_hash="",
         custom_data={},
     ).dump()
 
@@ -573,6 +643,10 @@ def _config_workflow(workflow: Workflow.Config, job_name) -> Result:
                 info=info,
             )
         )
+
+    if results[-1].is_ok() and Settings.ENABLE_SUBMODULE_CACHE:
+        result = _prepare_submodule_cache(workflow_config)
+        results.append(result)
 
     if workflow.enable_slack_feed:
         if env.PR_NUMBER:

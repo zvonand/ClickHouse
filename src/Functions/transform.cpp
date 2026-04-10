@@ -9,6 +9,7 @@
 #include <Common/SipHash.h>
 #include <Core/DecimalFunctions.h>
 #include <DataTypes/DataTypeArray.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/getLeastSupertype.h>
 #include <Functions/FunctionFactory.h>
@@ -913,16 +914,28 @@ namespace
 
         FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
         {
+            /// buildImpl receives original arguments which may still have LowCardinality wrappers.
+            /// Strip them so that type checks and cache initialization work correctly.
+            ColumnsWithTypeAndName args = arguments;
+            for (auto & arg : args)
+            {
+                arg.type = recursiveRemoveLowCardinality(arg.type);
+                arg.column = recursiveRemoveLowCardinality(arg.column);
+            }
+
             /// Check if constant columns are available. During analysis passes (e.g. IfTransformStringsToEnumPass),
             /// columns may not be populated yet. In that case, defer cache initialization to execution time.
-            const ColumnArray * array_from = arguments.size() > 1 && arguments[1].column
-                ? checkAndGetColumnConstData<ColumnArray>(arguments[1].column.get()) : nullptr;
-            const ColumnArray * array_to = arguments.size() > 2 && arguments[2].column
-                ? checkAndGetColumnConstData<ColumnArray>(arguments[2].column.get()) : nullptr;
+            const ColumnArray * array_from = args.size() > 1 && args[1].column
+                ? checkAndGetColumnConstData<ColumnArray>(args[1].column.get()) : nullptr;
+            const ColumnArray * array_to = args.size() > 2 && args[2].column
+                ? checkAndGetColumnConstData<ColumnArray>(args[2].column.get()) : nullptr;
 
             std::shared_ptr<FunctionTransform> function;
             if (array_from && array_to)
-                function = std::make_shared<FunctionTransform>(initializeTransformCache(arguments, return_type));
+            {
+                auto stripped_return_type = recursiveRemoveLowCardinality(return_type);
+                function = std::make_shared<FunctionTransform>(initializeTransformCache(args, stripped_return_type));
+            }
             else
                 function = std::make_shared<FunctionTransform>();
 

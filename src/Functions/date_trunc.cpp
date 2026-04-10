@@ -5,6 +5,7 @@
 #include <DataTypes/DataTypeDate32.h>
 #include <DataTypes/DataTypeDateTime.h>
 #include <DataTypes/DataTypeInterval.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <Formats/FormatSettings.h>
 #include <Functions/DateTimeTransforms.h>
 #include <Functions/FunctionFactory.h>
@@ -217,8 +218,13 @@ public:
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
-        /// buildImpl receives original arguments which may still have Nullable types/columns.
+        /// buildImpl receives original arguments which may still have Nullable and/or LowCardinality wrappers.
         auto args = createBlockWithNestedColumns(arguments);
+        for (auto & arg : args)
+        {
+            arg.type = recursiveRemoveLowCardinality(arg.type);
+            arg.column = recursiveRemoveLowCardinality(arg.column);
+        }
         const ColumnConst * datepart_column = checkAndGetColumnConst<ColumnString>(args[0].column.get());
         if (!datepart_column)
             throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "First argument for function {} must be constant string: "

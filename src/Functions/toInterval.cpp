@@ -4,6 +4,7 @@
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnsNumber.h>
 #include <DataTypes/DataTypeInterval.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <Functions/DateTimeTransforms.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
@@ -98,8 +99,13 @@ public:
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type) const override
     {
-        /// buildImpl receives original arguments which may still have Nullable types/columns.
+        /// buildImpl receives original arguments which may still have Nullable and/or LowCardinality wrappers.
         auto args = createBlockWithNestedColumns(arguments);
+        for (auto & arg : args)
+        {
+            arg.type = recursiveRemoveLowCardinality(arg.type);
+            arg.column = recursiveRemoveLowCardinality(arg.column);
+        }
         const ColumnConst * kind_column = checkAndGetColumnConst<ColumnString>(args[1].column.get());
         if (!kind_column)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Second argument for function {} must be constant string: "

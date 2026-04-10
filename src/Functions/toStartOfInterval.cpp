@@ -7,6 +7,7 @@
 #include <DataTypes/DataTypeDateTime.h>
 #include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeInterval.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <Functions/DateTimeTransforms.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
@@ -62,6 +63,9 @@ public:
     bool isSuitableForShortCircuitArgumentsExecution(const DataTypesWithConstInfo & /*arguments*/) const override { return false; }
     bool useDefaultImplementationForConstants() const override { return true; }
     ColumnNumbers getArgumentsThatAreAlwaysConstant() const override { return {1, 2, 3}; }
+    /// The Origin overload checks that origin <= time_arg for every row. The LowCardinality
+    /// dictionary always contains a default value (epoch/0) which would violate this check.
+    bool canBeExecutedOnDefaultArguments() const override { return overload != ToStartOfIntervalOverload::Origin; }
     bool hasInformationAboutMonotonicity() const override { return true; }
     Monotonicity getMonotonicityForRange(const IDataType &, const Field &, const Field &) const override { return { .is_monotonic = true, .is_always_monotonic = true }; }
 
@@ -490,9 +494,14 @@ public:
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
-        /// buildImpl receives original arguments which may still have Nullable types/columns,
-        /// because the framework only unwraps Nullable for getReturnTypeImpl, not for buildImpl.
+        /// buildImpl receives original arguments which may still have Nullable and/or LowCardinality
+        /// wrappers, because the framework only unwraps these for getReturnTypeImpl, not for buildImpl.
         auto args = createBlockWithNestedColumns(arguments);
+        for (auto & arg : args)
+        {
+            arg.type = recursiveRemoveLowCardinality(arg.type);
+            arg.column = recursiveRemoveLowCardinality(arg.column);
+        }
 
         ToStartOfIntervalOverload overload = ToStartOfIntervalOverload::Default;
         if (args.size() >= 3 && isDateOrDate32OrDateTimeOrDateTime64(args[2].type))

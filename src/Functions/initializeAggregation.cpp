@@ -5,6 +5,7 @@
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnAggregateFunction.h>
 #include <Columns/IColumn.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <AggregateFunctions/AggregateFunctionFactory.h>
 #include <AggregateFunctions/Combinators/AggregateFunctionState.h>
 #include <AggregateFunctions/IAggregateFunction.h>
@@ -145,11 +146,18 @@ public:
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
-        /// useDefaultImplementationForNulls() is false, so buildImpl receives Nullable arguments
-        /// just like getReturnTypeImpl does. Resolve the aggregate function with the original types
-        /// so it matches what executeImpl will receive (also Nullable, since the IFunction also
-        /// has useDefaultImplementationForNulls() = false).
-        auto aggregate_function = resolveAggregateFunction(arguments);
+        /// buildImpl receives original arguments which may still have LowCardinality wrappers.
+        /// Strip them so that the aggregate function is resolved with the same types that
+        /// executeImpl will see (the framework strips LC before calling executeImpl).
+        /// useDefaultImplementationForNulls() is false, so Nullable stays as-is — matching
+        /// what both getReturnTypeImpl and executeImpl see.
+        ColumnsWithTypeAndName args = arguments;
+        for (auto & arg : args)
+        {
+            arg.type = recursiveRemoveLowCardinality(arg.type);
+            arg.column = recursiveRemoveLowCardinality(arg.column);
+        }
+        auto aggregate_function = resolveAggregateFunction(args);
         auto function = std::make_shared<FunctionInitializeAggregation>(getContext(), std::move(aggregate_function));
 
         DataTypes data_types(arguments.size());

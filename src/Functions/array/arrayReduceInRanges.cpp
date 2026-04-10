@@ -3,6 +3,7 @@
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
 #include <DataTypes/DataTypeArray.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnString.h>
@@ -345,9 +346,14 @@ public:
 
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
-        /// buildImpl receives the original arguments which may still have Nullable types/columns,
-        /// because the framework only unwraps Nullable for getReturnTypeImpl, not for buildImpl.
+        /// buildImpl receives the original arguments which may still have Nullable and/or LowCardinality
+        /// wrappers, because the framework only unwraps these for getReturnTypeImpl, not for buildImpl.
         auto args_without_nullable = createBlockWithNestedColumns(arguments);
+        for (auto & arg : args_without_nullable)
+        {
+            arg.type = recursiveRemoveLowCardinality(arg.type);
+            arg.column = recursiveRemoveLowCardinality(arg.column);
+        }
         auto aggregate_function = resolveAggregateFunction(args_without_nullable);
         auto function = std::make_shared<FunctionArrayReduceInRanges>(std::move(aggregate_function));
 

@@ -875,6 +875,11 @@ QueryPlan::Node chooseJoinOrder(QueryGraphBuilder query_graph_builder, QueryPlan
 
     const auto & optimization_settings = query_graph_builder.context->optimization_settings;
 
+    /// Save join_kinds before moving query_graph, needed later to determine
+    /// when type changes should be applied (only when the specific join that
+    /// causes them is being executed).
+    const auto join_kinds = query_graph.join_kinds;
+
     auto optimized = optimizeJoinOrder(std::move(query_graph), optimization_settings);
     auto sequence = getJoinTreePostOrderSequence(optimized);
 
@@ -1016,15 +1021,31 @@ QueryPlan::Node chooseJoinOrder(QueryGraphBuilder query_graph_builder, QueryPlan
 
             ActionsDAG::NodeRawConstPtrs required_output_nodes;
 
+            auto joined_mask = entry->relations;
+
             /// input pos -> new input node
             std::unordered_map<size_t, const ActionsDAG::Node *> current_step_type_changes;
 
-            for (auto rel_id : {left_rels.getSingleBit(), right_rels.getSingleBit()})
+            /// Type changes (e.g., toNullable for LEFT JOIN) must only be applied
+            /// at the step where the specific join that causes them is executed.
+            /// Each type_change entry is keyed by relation ID, and the corresponding
+            /// join_kinds entry tells us which other relations must be present
+            /// (the "dependency") for that join to be in effect.
+            for (const auto & [tc_rel_id, tc_nodes] : query_graph_builder.type_changes)
             {
-                if (!rel_id.has_value())
+                if (!joined_mask.test(tc_rel_id))
                     continue;
-                const auto & new_inputs = query_graph_builder.type_changes[rel_id.value()];
-                for (const auto * new_input : new_inputs)
+
+                auto jk_it = join_kinds.find(tc_rel_id);
+                if (jk_it == join_kinds.end())
+                    continue;
+
+                const auto & [dependency_rels, _] = jk_it->second;
+                /// Only apply when the dependency relations are also in the joined set
+                if (!(dependency_rels & joined_mask).any())
+                    continue;
+
+                for (const auto * new_input : tc_nodes)
                 {
                     const auto * input_node = trackInputColumn(new_input);
                     auto it = input_node_map.find(input_node);
@@ -1033,8 +1054,6 @@ QueryPlan::Node chooseJoinOrder(QueryGraphBuilder query_graph_builder, QueryPlan
                     current_step_type_changes[it->second] = new_input;
                 }
             }
-
-            auto joined_mask = entry->relations;
             ActionsDAG::NodeMapping current_inputs;
             for (size_t input_pos = 0; input_pos < current_input_nodes.size(); ++input_pos)
             {

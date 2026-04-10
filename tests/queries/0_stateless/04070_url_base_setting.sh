@@ -84,5 +84,8 @@ SELECT * FROM ${CLICKHOUSE_TEST_UNIQUE_NAME}_url;
 " 2>&1 | grep -oF 'https://base.invalid/dir/data.csv' | head -1
 $CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url" 2>/dev/null
 
+# Empty relative reference: should return base without fragment
+run_and_check "SELECT * FROM url('', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/file.csv?token=abc#frag', $FAST" 'https://base.invalid/dir/file.csv?token=abc'
+
 # Invalid url_base (no scheme) should produce an error
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'example.invalid/def/', $FAST" 2>&1 | grep -oF 'must contain a scheme'

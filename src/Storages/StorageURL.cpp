@@ -1680,6 +1680,13 @@ String StorageURL::resolveURLBase(const String & url, const String & base)
     if (base.empty())
         return url;
 
+    /// Empty relative reference per RFC 3986: return the base URI without the fragment.
+    if (url.empty())
+    {
+        auto fragment_pos = base.find('#');
+        return (fragment_pos == String::npos) ? base : base.substr(0, fragment_pos);
+    }
+
     /// If the URL already contains a scheme at the beginning, return as-is.
     /// A scheme is [A-Za-z][A-Za-z0-9+.-]*: per RFC 3986.
     /// We check that the colon appears before any '/', '?', or '#' to avoid false positives

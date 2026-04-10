@@ -8,9 +8,7 @@
 #include <Common/HashTable/ClearableHashMap.h>
 #include <Common/HashTable/Hash.h>
 
-#if defined(DEBUG_OR_SANITIZER_BUILD)
 #include <Common/FailPoint.h>
-#endif
 
 #include <vector>
 
@@ -27,19 +25,15 @@ namespace DB
 
 namespace ErrorCodes
 {
+extern const int CANNOT_ALLOCATE_MEMORY;
 extern const int SIZES_OF_ARRAYS_DONT_MATCH;
 extern const int TOO_LARGE_ARRAY_SIZE;
-#if defined(DEBUG_OR_SANITIZER_BUILD)
-extern const int CANNOT_ALLOCATE_MEMORY;
-#endif
 }
 
-#if defined(DEBUG_OR_SANITIZER_BUILD)
 namespace FailPoints
 {
 extern const char space_saving_copy_arena_throw[];
 }
-#endif
 
 /*
  * Arena interface to allow specialized storage of keys.
@@ -463,13 +457,11 @@ private:
                 {
                     counter_list[i].key = arena.emplace(counter_list[i].key);
                     ++copied;
-#if defined(DEBUG_OR_SANITIZER_BUILD)
                     fiu_do_on(FailPoints::space_saving_copy_arena_throw,
                     {
                         throw Exception(ErrorCodes::CANNOT_ALLOCATE_MEMORY,
                             "Injected fault in SpaceSaving operator=");
                     });
-#endif
                 }
             }
             catch (...)

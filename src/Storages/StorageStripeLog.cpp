@@ -309,7 +309,7 @@ StorageStripeLog::StorageStripeLog(
     const String & comment,
     LoadingStrictnessLevel mode,
     ContextMutablePtr context_)
-    : IStorage(table_id_)
+    : StorageWithCommonVirtualColumns(table_id_)
     , WithMutableContext(context_)
     , disk(std::move(disk_))
     , table_path(relative_path_)

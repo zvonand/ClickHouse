@@ -40,6 +40,16 @@ namespace ErrorCodes
 namespace
 {
 
+/// Capacity of the shared bounded queue used for directory traversal.
+/// Controls the trade-off between memory usage and parallelism: a larger value
+/// allows more entries to be buffered (reducing contention between producer/consumer threads),
+/// while a smaller value limits memory consumption. 10000 is sufficient for most directory trees.
+constexpr size_t TRAVERSAL_QUEUE_CAPACITY = 10000;
+
+/// Timeout in milliseconds for tryPop on the shared queue.
+/// A short timeout ensures prompt cancellation checks while avoiding busy-waiting.
+constexpr size_t QUEUE_POP_TIMEOUT_MS = 100;
+
 /// Must match the Enum8 values in TableFunctionFilesystem::getActualTableStructure.
 Int8 fileTypeToEnumValue(fs::file_type type)
 {
@@ -128,7 +138,7 @@ public:
         const bool need_check;
 
         PathInfo(String user_files_absolute_path_string_, bool need_check_)
-            : queue(10000)
+            : queue(TRAVERSAL_QUEUE_CAPACITY)
             , user_files_absolute_path_string(std::move(user_files_absolute_path_string_))
             , need_check(need_check_)
         {
@@ -248,7 +258,7 @@ private:
             return true;
         }
 
-        while (!path_info->queue.tryPop(queue_entry, /* milliseconds= */ 100))
+        while (!path_info->queue.tryPop(queue_entry, QUEUE_POP_TIMEOUT_MS))
         {
             if (isCancelled() || path_info->queue.isFinishedAndEmpty())
                 return false;
@@ -289,12 +299,16 @@ private:
                 {
                     std::error_code canon_ec;
                     auto canonical = fs::canonical(child_path, canon_ec);
-                    if (!canon_ec)
-                    {
-                        std::lock_guard lock(path_info->visited_mutex);
-                        if (!path_info->visited.emplace(canonical.string()).second)
-                            continue;
-                    }
+
+                    /// Use canonical path if available, otherwise fall back to the
+                    /// lexically-normalized path. Without this fallback, symlink cycles
+                    /// that cause canonical() to fail (ELOOP) would never be added to
+                    /// `visited`, leading to infinite traversal.
+                    String visited_key = canon_ec ? child_path.string() : canonical.string();
+
+                    std::lock_guard lock(path_info->visited_mutex);
+                    if (!path_info->visited.emplace(std::move(visited_key)).second)
+                        continue;
                 }
 
                 path_info->in_flight.fetch_add(1);
@@ -404,18 +418,10 @@ private:
             auto is_regular = file.is_regular_file(ec);
             if (!ec && is_regular)
             {
-                try
-                {
-                    String content;
-                    ReadBufferFromFile in(file.path().string());
-                    readStringUntilEOF(content, in);
-                    columns_map["content"]->insert(std::move(content));
-                }
-                catch (...)
-                {
-                    /// Ok: file might be unreadable (permission denied, etc.) - insert NULL.
-                    columns_map["content"]->insertDefault();
-                }
+                String content;
+                ReadBufferFromFile in(file.path().string());
+                readStringUntilEOF(content, in);
+                columns_map["content"]->insert(std::move(content));
             }
             else
             {

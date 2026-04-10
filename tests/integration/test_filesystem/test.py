@@ -90,3 +90,10 @@ def test_escape_path():
         )
         == "1\n"
     )
+
+
+def test_direct_outside_path():
+    """Direct access to a path outside user_files must be denied, even if the same file is reachable through a symlink inside user_files."""
+    assert "DATABASE_ACCESS_DENIED" in node.query_and_get_error(
+        "SELECT * FROM filesystem('/tmp/link_target/test.log')"
+    )

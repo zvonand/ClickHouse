@@ -42,7 +42,7 @@ filesystem([path])
 | `depth`             | `UInt16`                   | Recursion depth. `0` for the queried directory itself and its immediate children, `1` for entries one level deeper, and so on. |
 | `modification_time` | `Nullable(DateTime64(6))`  | Last modification time with microsecond precision. `NULL` on error. |
 | `is_symlink`        | `Bool`                     | Whether the entry is a symbolic link. |
-| `content`           | `Nullable(String)`         | File contents (for regular files). `NULL` for directories and on error. Reading this column triggers actual file I/O, so omit it if not needed. |
+| `content`           | `Nullable(String)`         | File contents (for regular files). `NULL` for non-regular files (directories, symlinks, etc.). Read errors raise an exception. Reading this column triggers actual file I/O, so omit it if not needed. |
 | `owner_read`        | `Bool`                     | Owner has read permission. |
 | `owner_write`       | `Bool`                     | Owner has write permission. |
 | `owner_exec`        | `Bool`                     | Owner has execute permission. |

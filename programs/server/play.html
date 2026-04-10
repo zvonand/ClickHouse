@@ -2674,9 +2674,9 @@ async function postSingle(posted_request_num, query, history_query_text)
         await resultEl.renderGraph();
     } else {
         if (resultEl._extremes['min'] && resultEl._extremes['max']) resultEl.renderExtremes();
-        if (is_table) resultEl.renderTotals();
-        if (is_table) resultEl.transposeIfNeeded();
-        if (is_table) resultEl._changeTableLayout();
+        if (result.is_table) resultEl.renderTotals();
+        if (result.is_table) resultEl.transposeIfNeeded();
+        if (result.is_table) resultEl._changeTableLayout();
     }
 
     progressEl.finish();

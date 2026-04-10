@@ -534,10 +534,30 @@ SELECT accurateCastOrNull((NULL, 1)::Tuple(LowCardinality(Nullable(Int32)), Int3
 -- Mixed: LC Nullable source NULL + regular source overflow -> whole tuple NULL.
 SELECT accurateCastOrNull((NULL, 256)::Tuple(LowCardinality(Nullable(Int32)), Int32), 'Tuple(Nullable(UInt8), UInt8)') AS r, toTypeName(r);
 \N	Nullable(Tuple(Nullable(UInt8), UInt8))
--- LC target element type: rejected (LowCardinality cannot be inside Nullable).
-SELECT accurateCastOrNull((1,)::Tuple(Int32), 'Tuple(LowCardinality(Nullable(UInt8)))'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
--- LC on both source and target: rejected.
-SELECT accurateCastOrNull((1,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(LowCardinality(Nullable(UInt8)))'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+-- LC target element type: LowCardinality(Nullable) can represent NULL, so it is accepted.
+SELECT accurateCastOrNull((1,)::Tuple(Int32), 'Tuple(LowCardinality(Nullable(UInt8)))') AS r, toTypeName(r);
+(1)	Nullable(Tuple(LowCardinality(Nullable(UInt8))))
+-- LC target element: overflow propagates to whole Tuple NULL.
+SELECT accurateCastOrNull((256,)::Tuple(Int32), 'Tuple(LowCardinality(Nullable(UInt8)))') AS r, toTypeName(r);
+\N	Nullable(Tuple(LowCardinality(Nullable(UInt8))))
+-- LC on both source and target: accepted.
+SELECT accurateCastOrNull((1,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(LowCardinality(Nullable(UInt8)))') AS r, toTypeName(r);
+(1)	Nullable(Tuple(LowCardinality(Nullable(UInt8))))
+-- LC on both: overflow propagates to whole Tuple NULL.
+SELECT accurateCastOrNull((256,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(LowCardinality(Nullable(UInt8)))') AS r, toTypeName(r);
+\N	Nullable(Tuple(LowCardinality(Nullable(UInt8))))
+-- LC on both: source NULL preserved in element, Tuple not NULL.
+SELECT accurateCastOrNull((NULL,)::Tuple(LowCardinality(Nullable(Int32))), 'Tuple(LowCardinality(Nullable(UInt8)))') AS r, toTypeName(r);
+(NULL)	Nullable(Tuple(LowCardinality(Nullable(UInt8))))
+-- LC on both: conversion failure produces new NULL -> whole Tuple NULL (not just element).
+SELECT accurateCastOrNull((1.5,)::Tuple(Nullable(Float32)), 'Tuple(LowCardinality(Nullable(Int32)))') AS r, toTypeName(r);
+\N	Nullable(Tuple(LowCardinality(Nullable(Int32))))
+-- Multi-row with LC target: mix of success and overflow.
+SELECT number, accurateCastOrNull((number * 100,)::Tuple(UInt64), 'Tuple(LowCardinality(Nullable(UInt8)))') AS r, toTypeName(r) FROM numbers(4);
+0	(0)	Nullable(Tuple(LowCardinality(Nullable(UInt8))))
+1	(100)	Nullable(Tuple(LowCardinality(Nullable(UInt8))))
+2	(200)	Nullable(Tuple(LowCardinality(Nullable(UInt8))))
+3	\N	Nullable(Tuple(LowCardinality(Nullable(UInt8))))
 -- Multi-row with LC source: mix of NULL, success, and overflow.
 SELECT number, accurateCastOrNull(
     (if(number % 3 = 0, NULL, number * 100)::LowCardinality(Nullable(UInt64)),)::Tuple(LowCardinality(Nullable(UInt64))),

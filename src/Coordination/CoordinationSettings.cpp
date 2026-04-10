@@ -203,7 +203,12 @@ void KeeperConfigurationAndSettings::dump(WriteBufferFromOwnString & buf) const
     {
         writeText(field.getName(), buf);
         buf.write('=');
-        writeText(field.getValueString(), buf);
+        Field val = field.getValue();
+        /// Format bool as "true"/"false" instead of "1"/"0" for compatibility.
+        if (val.getType() == Field::Types::Bool)
+            writeText(val.safeGet<UInt64>() ? "true" : "false", buf);
+        else
+            writeText(field.getValueString(), buf);
         buf.write('\n');
     }
 }

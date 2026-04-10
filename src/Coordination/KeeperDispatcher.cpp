@@ -689,37 +689,6 @@ bool KeeperDispatcher::putRequest(const Coordination::ZooKeeperRequestPtr & requ
     return true;
 }
 
-bool KeeperDispatcher::putLocalReadRequest(const Coordination::ZooKeeperRequestPtr & request, int64_t session_id)
-{
-    {
-        ProfiledMutexLock lock(live_sessions_mutex, ProfileEvents::KeeperLiveSessionsLockWaitMicroseconds);
-        if (!live_sessions.contains(session_id))
-        {
-            ProfileEvents::increment(ProfileEvents::KeeperStaleRequestsSkipped);
-            return false;
-        }
-    }
-
-    {
-        /// If session was already disconnected than we will ignore requests
-        ProfiledMutexLock lock(session_to_response_callback_mutex, ProfileEvents::KeeperSessionCallbackLockWaitMicroseconds);
-        if (!session_to_response_callback.contains(session_id))
-            return false;
-    }
-
-    KeeperRequestForSession request_info;
-    request_info.request = request;
-    using namespace std::chrono;
-    request_info.time = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-    request_info.session_id = session_id;
-
-    if (keeper_context->isShutdownCalled())
-        return false;
-
-    server->putLocalReadRequests({request_info});
-    return true;
-}
-
 void KeeperDispatcher::initialize(const Poco::Util::AbstractConfiguration & config, bool standalone_keeper, bool start_async, const MultiVersion<Macros>::Version & macros)
 {
     LOG_DEBUG(log, "Initializing storage dispatcher");

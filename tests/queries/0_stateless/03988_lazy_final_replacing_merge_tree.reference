@@ -38,6 +38,9 @@ second_last
 -- Int128 version
 positive_last
 positive_last
+-- Date32 version
+post_epoch_last
+post_epoch_last
 -- no version column
 second
 second

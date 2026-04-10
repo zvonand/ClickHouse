@@ -153,9 +153,10 @@ void LazyReadReplacingFinalSource::work()
             auto bit_shift_left = FunctionFactory::instance().get("bitShiftLeft", nullptr);
             auto plus_func = FunctionFactory::instance().get("plus", nullptr);
 
-            /// For signed types, widen to Int64 first, then flip the sign bit
+            /// For signed types (and Date32 which is Int32 internally),
+            /// widen to Int64 first, then flip the sign bit
             /// to convert signed order to unsigned order.
-            if (which.isNativeInt())
+            if (which.isNativeInt() || which.isDate32())
             {
                 auto to_int64 = FunctionFactory::instance().get("toInt64", nullptr);
                 auto reinterpret_func = FunctionFactory::instance().get("reinterpretAsUInt64", nullptr);

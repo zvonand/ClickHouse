@@ -518,13 +518,7 @@ bool RowNumber::convertImpl(String & out, IParser::Pos & pos)
     auto start_arg = getOptionalArgument(fn_name, pos);
     int64_t start = 1;
     if (start_arg)
-    {
-        try
-        {
-            start = std::stoll(*start_arg);
-        }
-        catch (...) {} // NOLINT(bugprone-empty-catch) Ok: fall back to default start=1 on bad input
-    }
+        start = std::stoll(*start_arg);
 
     /// Optional second arg: reset flag (ignored for now - ClickHouse doesn't easily support reset)
     auto reset_arg = getOptionalArgument(fn_name, pos);

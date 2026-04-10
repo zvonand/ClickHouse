@@ -610,6 +610,7 @@ void StorageRedis::mutate(const MutationCommands & commands, ContextPtr context_
     assert(commands.size() == 1);
 
     auto metadata_snapshot = getInMemoryMetadataPtr();
+    auto physical_columns = metadata_snapshot->getColumns().getNamesOfPhysical();
     auto storage = getStorageID();
     auto storage_ptr = DatabaseCatalog::instance().getTable(storage, context_);
 
@@ -619,7 +620,7 @@ void StorageRedis::mutate(const MutationCommands & commands, ContextPtr context_
         settings.return_all_columns = true;
         settings.return_mutated_rows = true;
 
-        auto interpreter = std::make_unique<MutationsInterpreter>(storage_ptr, metadata_snapshot, commands, context_, settings);
+        auto interpreter = std::make_unique<MutationsInterpreter>(storage_ptr, metadata_snapshot, commands, physical_columns, context_, settings);
         auto pipeline = QueryPipelineBuilder::getPipeline(interpreter->execute());
         PullingPipelineExecutor executor(pipeline);
 
@@ -657,7 +658,7 @@ void StorageRedis::mutate(const MutationCommands & commands, ContextPtr context_
     settings.return_all_columns = true;
     settings.return_mutated_rows = true;
 
-    auto interpreter = std::make_unique<MutationsInterpreter>(storage_ptr, metadata_snapshot, commands, context_, settings);
+    auto interpreter = std::make_unique<MutationsInterpreter>(storage_ptr, metadata_snapshot, commands, physical_columns, context_, settings);
     auto pipeline = QueryPipelineBuilder::getPipeline(interpreter->execute());
     PullingPipelineExecutor executor(pipeline);
 

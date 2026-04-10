@@ -404,9 +404,23 @@ MutationsInterpreter::MutationsInterpreter(
     ContextPtr context_,
     Settings settings_)
     : MutationsInterpreter(
+        storage_, metadata_snapshot_, std::move(commands_),
+        getAvailableColumnsWithVirtuals(metadata_snapshot_, *storage_),
+        std::move(context_), std::move(settings_))
+{
+}
+
+MutationsInterpreter::MutationsInterpreter(
+    StoragePtr storage_,
+    StorageMetadataPtr metadata_snapshot_,
+    MutationCommands commands_,
+    Names available_columns_,
+    ContextPtr context_,
+    Settings settings_)
+    : MutationsInterpreter(
         Source(storage_),
         metadata_snapshot_, std::move(commands_),
-        getAvailableColumnsWithVirtuals(metadata_snapshot_, *storage_),
+        std::move(available_columns_),
         std::move(context_), std::move(settings_))
 {
     if (settings.can_execute && !settings.return_mutated_rows && dynamic_cast<const MergeTreeData *>(source.getStorage().get()))

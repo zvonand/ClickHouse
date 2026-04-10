@@ -1,3 +1,4 @@
+-- Tags: no-parallel-replicas
 -- Test that virtual columns are available when reading from normal projections.
 
 DROP TABLE IF EXISTS test_proj_virtuals;

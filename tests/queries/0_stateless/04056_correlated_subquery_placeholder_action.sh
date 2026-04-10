@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Regression test for the hasCorrelatedExpressions fix.
 #
+# Test 1 (SortingStep default):
 # Before the fix, IQueryPlanStep::hasCorrelatedExpressions threw NOT_IMPLEMENTED
 # for steps without an override (e.g. SortingStep). buildCorrelatedPlanStepMap
 # called this on every plan step, so correlated subqueries whose plans contained
 # SortingStep crashed with "Cannot check Sorting plan step for correlated expressions".
+# After the fix, the default returns false and decorrelation produces a clearer error.
 #
-# After the fix, the default returns false. buildCorrelatedPlanStepMap succeeds and
-# the real decorrelation code runs, producing a clearer error: "Cannot decorrelate
-# query, because 'Sorting' step is not supported".
-#
-# The fix also adds guards in FutureSetFromSubquery::buildSetInplace and
-# buildOrderedSetInplace to skip correlated subquery plans with PLACEHOLDER nodes.
-# That path is only reachable through the AST fuzzer and cannot be tested from SQL.
+# Test 2 (IN-clause guard):
+# A correlated subquery in an IN clause creates a FutureSetFromSubquery whose plan
+# contains PLACEHOLDER nodes. Without the guard in buildSetInplace /
+# buildOrderedSetInplace, executing this plan throws "Trying to execute PLACEHOLDER
+# action". The fix detects correlated expressions and skips in-place set construction.
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -32,7 +32,7 @@ $CLICKHOUSE_CLIENT -q "
     INSERT INTO t2 VALUES (10, 100), (20, 200), (40, 400);
 "
 
-# Correlated scalar subquery with ORDER BY in the subquery (SortingStep in the plan).
+# Test 1: Correlated scalar subquery with ORDER BY (SortingStep in the plan).
 # On master: throws 'Cannot check Sorting plan step for correlated expressions'
 # On fix: throws 'Cannot decorrelate query, because Sorting step is not supported'
 # Both are NOT_IMPLEMENTED, but the message differs. We check for the post-fix message.
@@ -43,13 +43,33 @@ ERROR=$($CLICKHOUSE_CLIENT -q "
 " 2>&1)
 
 if echo "$ERROR" | grep -q "Cannot decorrelate query"; then
-    echo "OK: got expected post-fix error"
+    echo "OK: got expected post-fix error for SortingStep"
 elif echo "$ERROR" | grep -q "Cannot check.*plan step for correlated expressions"; then
     echo "FAIL: got pre-fix error (hasCorrelatedExpressions threw instead of returning false)"
     exit 1
 else
     echo "UNEXPECTED: $ERROR"
     exit 1
+fi
+
+# Test 2: Correlated subquery in an IN clause.
+# The subquery plan contains PLACEHOLDER nodes for the correlated column (t1.b).
+# Without the fix, buildSetInplace / buildOrderedSetInplace would attempt to execute
+# this plan and throw "Trying to execute PLACEHOLDER action".
+# With the fix, in-place set construction is skipped for correlated plans.
+ERROR=$($CLICKHOUSE_CLIENT -q "
+    SET enable_analyzer = 1;
+    SET allow_experimental_correlated_subqueries = 1;
+    SELECT a FROM t1 WHERE a IN (SELECT x FROM t2 WHERE t2.y = t1.b);
+" 2>&1)
+
+if echo "$ERROR" | grep -q "Trying to execute PLACEHOLDER action"; then
+    echo "FAIL: correlated IN subquery triggered PLACEHOLDER execution"
+    exit 1
+else
+    # The query may succeed or fail with a decorrelation error — either is acceptable.
+    # The key invariant is that it must NOT throw 'Trying to execute PLACEHOLDER action'.
+    echo "OK: correlated IN subquery did not trigger PLACEHOLDER execution"
 fi
 
 $CLICKHOUSE_CLIENT -q "

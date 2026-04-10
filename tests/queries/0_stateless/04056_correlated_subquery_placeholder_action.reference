@@ -1,1 +1,2 @@
-OK: got expected post-fix error
+OK: got expected post-fix error for SortingStep
+OK: correlated IN subquery did not trigger PLACEHOLDER execution

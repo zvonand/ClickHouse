@@ -111,43 +111,23 @@ struct ModuloByConstantImpl
 
         if (b & (b - 1))
         {
-#if defined(LIBDIVIDE_AVX2)
-            if constexpr (sizeof(A) >= 8 && sizeof(A) == sizeof(ResultType))
+            /// BRANCHFULL: the per-iteration algorithm-type branch is
+            /// perfectly predicted (loop-invariant) and lets most divisors
+            /// take the fast `mullhi >> shift` path (2 ops vs BRANCHFREE's
+            /// unconditional 5 ops).  The compiler auto-vectorizes each
+            /// path independently (via vpmuludq on x86, NEON on ARM).
+            /// For 64-bit types, suppress auto-vectorization: there is no
+            /// vpmuludq for 64-bit, so the compiler emits scalar
+            /// extract/insert sequences that are slower than the scalar loop.
+            libdivide::divider<A, libdivide::BRANCHFULL> divider(static_cast<A>(b));
+            if constexpr (sizeof(A) >= 8)
             {
-                /// For 64-bit types on AVX2, auto-vectorization degrades to
-                /// scalar extract/insert (no vpmuludq for 64-bit).  Use
-                /// BRANCHFREE with libdivide's hand-tuned divide(__m256i),
-                /// composing remainder as n - (n / d) * d.
-                libdivide::divider<A, libdivide::BRANCHFREE> divider(static_cast<A>(b));
-                size_t i = 0;
-                {
-                    const auto bv = _mm256_set1_epi64x(static_cast<int64_t>(b));
-                    const size_t stop = size - size % (32 / sizeof(A));
-                    for (; i < stop; i += 32 / sizeof(A))
-                    {
-                        auto n = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(src + i));
-                        auto q = n / divider;
-                        /// No _mm256_mullo_epi64 before AVX-512, so use the
-                        /// standard 32x32->64 trick for full 64-bit multiply.
-                        auto b_lo = _mm256_mul_epu32(q, bv);
-                        auto q_hi = _mm256_srli_epi64(q, 32);
-                        auto b_hi = _mm256_mul_epu32(q_hi, bv);
-                        auto qb = _mm256_add_epi64(b_lo, _mm256_slli_epi64(b_hi, 32));
-                        _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst + i), _mm256_sub_epi64(n, qb));
-                    }
-                }
-                for (; i < size; ++i)
+#pragma clang loop vectorize(disable)
+                for (size_t i = 0; i < size; ++i)
                     dst[i] = static_cast<ResultType>(src[i] - (src[i] / divider) * b);
             }
             else
-#endif
             {
-                /// BRANCHFULL: the per-iteration algorithm-type branch is
-                /// perfectly predicted (loop-invariant) and lets most divisors
-                /// take the fast `mullhi >> shift` path (2 ops vs BRANCHFREE's
-                /// unconditional 5 ops).  The compiler auto-vectorizes each
-                /// path independently (via vpmuludq on x86, NEON on ARM).
-                libdivide::divider<A, libdivide::BRANCHFULL> divider(static_cast<A>(b));
                 for (size_t i = 0; i < size; ++i)
                     dst[i] = static_cast<ResultType>(src[i] - (src[i] / divider) * b);
             }

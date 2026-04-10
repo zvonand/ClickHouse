@@ -326,7 +326,8 @@ std::pair<std::set<Int64>, Strings> applyRetentionPolicy(
             }
             else
             {
-                UNREACHABLE();
+                throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                    "expire_snapshots: unexpected ref type '{}' for ref '{}'", ref_type, ref_name);
             }
         }
     }
@@ -681,7 +682,9 @@ ExpireSnapshotsResult expireSnapshots(
             context,
             log.get(),
             persistent_table_components.table_uuid,
-            persistent_table_components.metadata_compression_method);
+            persistent_table_components.metadata_compression_method,
+            /* force_fetch_latest_metadata */ true,
+            /* ignore_explicit_metadata_file_path */ true);
 
         filename_generator.setVersion(last_version + 1);
         filename_generator.setCompressionMethod(compression_method);

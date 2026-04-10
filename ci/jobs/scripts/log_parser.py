@@ -294,12 +294,17 @@ class FuzzerLogParser:
                 r"(==\d+==\s*)?(ERROR|WARNING): \w+Sanitizer:|: runtime error: "
             )
             summary_pattern = re.compile(r"SUMMARY: \w+Sanitizer:")
+            # ClickHouse log line: "2024.01.15 12:34:56.789 [ 123 ] {id} <Level>"
+            clickhouse_log_line = re.compile(
+                r"\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2}\.\d+\s+\["
+            )
 
             with open(log_file, "r", errors="replace") as file:
                 all_lines = file.readlines()
 
             result_lines = []
             in_report = False
+            is_runtime_error = False
             consecutive_blank = 0
 
             for line in all_lines:
@@ -309,6 +314,7 @@ class FuzzerLogParser:
                 if not in_report:
                     if sanitizer_start.search(clean_line):
                         in_report = True
+                        is_runtime_error = ": runtime error: " in clean_line
                         result_lines.append(stripped)
                         consecutive_blank = 0
                 else:
@@ -320,6 +326,14 @@ class FuzzerLogParser:
                         if consecutive_blank >= 2:
                             break
                         result_lines.append("")
+                    elif is_runtime_error and (
+                        clickhouse_log_line.search(stripped)
+                        or sanitizer_start.search(stripped)
+                    ):
+                        # In runtime-error mode, stop at ClickHouse log lines
+                        # or new sanitizer reports since UBSan may not emit
+                        # a SUMMARY line.
+                        break
                     else:
                         consecutive_blank = 0
                         result_lines.append(stripped)

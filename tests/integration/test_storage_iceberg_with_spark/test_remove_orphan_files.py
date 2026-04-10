@@ -6,6 +6,7 @@ import pytest
 
 from helpers.iceberg_utils import (
     create_iceberg_table,
+    drop_iceberg_table,
     get_uuid_str,
 )
 
@@ -491,3 +492,92 @@ def test_remove_orphan_files_azure(started_cluster_iceberg_with_spark, storage_t
     assert not env.exists("data", "orphan-azure-001.parquet")
     assert not env.exists("data", "orphan-azure-002.parquet")
     env.assert_data_intact()
+
+
+@pytest.mark.parametrize("storage_type", ["local"])
+def test_remove_orphan_files_ignores_pinned_metadata(started_cluster_iceberg_with_spark, storage_type):
+    """When iceberg_metadata_file_path pins the table to an older metadata
+    version, remove_orphan_files must still use the *latest* metadata to
+    determine reachable files.  Otherwise it would treat data belonging to
+    newer (valid) snapshots as orphans and delete them."""
+
+    cluster = started_cluster_iceberg_with_spark
+    instance = cluster.instances["node1"]
+    table_name = f"test_orphan_pinned_{storage_type}_{get_uuid_str()}"
+    metadata_dir = f"{LOCAL_TABLE_PREFIX}/{table_name}/metadata"
+
+    insert_settings = {"allow_insert_into_iceberg": 1}
+
+    create_iceberg_table(
+        storage_type, instance, table_name, cluster, "(x Int)", format_version=2,
+    )
+    instance.query(
+        f"INSERT INTO {table_name} VALUES (1);",
+        settings=insert_settings,
+    )
+    instance.query(
+        f"INSERT INTO {table_name} VALUES (2);",
+        settings=insert_settings,
+    )
+
+    metadata_files_before = instance.exec_in_container(
+        ["bash", "-c",
+         f"ls -v {metadata_dir}/v*.metadata.json"]
+    ).strip().split("\n")
+    old_metadata_path = "metadata/" + metadata_files_before[-1].split("/")[-1]
+
+    instance.query(
+        f"INSERT INTO {table_name} VALUES (3);",
+        settings=insert_settings,
+    )
+
+    data_files_before = instance.exec_in_container(
+        ["bash", "-c",
+         f"find {LOCAL_TABLE_PREFIX}/{table_name}/data -type f 2>/dev/null | sort"]
+    ).strip().split("\n")
+    assert len(data_files_before) >= 3, (
+        f"Expected at least 3 data files (3 inserts), got {data_files_before}"
+    )
+
+    drop_iceberg_table(instance, table_name)
+
+    create_iceberg_table(
+        storage_type, instance, table_name, cluster, "(x Int)",
+        format_version=2,
+        if_not_exists=True,
+        explicit_metadata_path=old_metadata_path,
+    )
+
+    pinned_result = instance.query(f"SELECT count() FROM {table_name}")
+    assert pinned_result.strip() == "2", (
+        f"Pinned table should see 2 rows (first two inserts), got {pinned_result.strip()}"
+    )
+
+    time.sleep(2)
+    raw = instance.query(
+        f"ALTER TABLE {table_name} EXECUTE remove_orphan_files('{OrphanTestEnv.now_ts()}');",
+        settings=ICEBERG_SETTINGS,
+    )
+
+    data_files_after = instance.exec_in_container(
+        ["bash", "-c",
+         f"find {LOCAL_TABLE_PREFIX}/{table_name}/data -type f 2>/dev/null | sort"]
+    ).strip().split("\n")
+    assert data_files_after == data_files_before, (
+        f"remove_orphan_files must not delete data from newer snapshots.\n"
+        f"  Before: {data_files_before}\n"
+        f"  After:  {data_files_after}"
+    )
+
+    drop_iceberg_table(instance, table_name)
+    create_iceberg_table(
+        storage_type, instance, table_name, cluster, "(x Int)",
+        format_version=2,
+        if_not_exists=True,
+    )
+    full_result = instance.query(
+        f"SELECT * FROM {table_name} ORDER BY x"
+    )
+    assert full_result == "1\n2\n3\n", (
+        f"All data should be intact when reading latest metadata, got: {full_result}"
+    )

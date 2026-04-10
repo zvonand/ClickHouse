@@ -135,7 +135,9 @@ ReachableFilesResult collectReachableFiles(
         context,
         log.get(),
         persistent_table_components.table_uuid,
-        persistent_table_components.metadata_compression_method);
+        persistent_table_components.metadata_compression_method,
+        /* force_fetch_latest_metadata */ true,
+        /* ignore_explicit_metadata_file_path */ true);
 
     auto metadata = getMetadataJSONObject(
         metadata_path,

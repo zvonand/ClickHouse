@@ -9,7 +9,6 @@
 
 #include <tuple>
 
-#include <stdlib.h>
 #include <unistd.h>
 
 #if !defined(USE_MUSL)

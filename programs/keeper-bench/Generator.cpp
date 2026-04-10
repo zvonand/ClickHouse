@@ -219,7 +219,7 @@ void PathGetter::initialize(Coordination::ZooKeeper & zookeeper, const TaggedPat
                 DB::ErrorCodes::BAD_ARGUMENTS,
                 "Tag '{}' not found in setup. Available tags: {}",
                 tag_name,
-                tagged_paths->empty() ? "(none)" : fmt::to_string( fmt::join(*tagged_paths | std::views::keys, ", ")));
+                tagged_paths->empty() ? "(none)" : fmt::to_string(fmt::join(*tagged_paths | std::views::keys, ", ")));
 
         for (const auto & path : it->second)
             paths.push_back(path);

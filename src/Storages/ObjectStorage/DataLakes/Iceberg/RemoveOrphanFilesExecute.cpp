@@ -121,9 +121,6 @@ OrphanScanResult findOrphanFiles(
     {
         const String & path = file_ptr->relative_path;
 
-        if (path.ends_with("version-hint.text") || path.ends_with("version-hint.txt"))
-            continue;
-
         if (reachable.contains(path))
             continue;
 
@@ -261,7 +258,7 @@ RemoveOrphanFilesResult removeOrphanFiles(
 {
     auto log = getLogger("IcebergRemoveOrphanFiles");
 
-    auto reachable = collectReachableFiles(
+    auto [reachable, metadata_version] = collectReachableFiles(
         object_storage, persistent_table_components, data_lake_settings, context, log);
 
     String scan_path = resolveScanPath(persistent_table_components.table_path, params);
@@ -277,6 +274,14 @@ RemoveOrphanFilesResult removeOrphanFiles(
 
     if (params.dry_run || scan.orphan_paths.empty())
         return tallyByCategory(scan.orphan_paths, scan.skipped_missing_metadata);
+
+    auto [_recheck_files, recheck_version] = collectReachableFiles(
+        object_storage, persistent_table_components, data_lake_settings, context, log);
+    if (recheck_version != metadata_version)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS,
+            "Metadata version changed during orphan scan (v{} -> v{}); "
+            "aborting to avoid deleting files referenced by a concurrent commit",
+            metadata_version, recheck_version);
 
     auto delete_result = deleteOrphanFiles(scan.orphan_paths, object_storage, log);
     LOG_INFO(log, "Deleted {}/{} orphan files ({} failed)",

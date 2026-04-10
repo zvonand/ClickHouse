@@ -37,12 +37,19 @@ SnapshotReferencedFiles collectSnapshotReferencedFiles(
     LoggerPtr log,
     Int32 current_schema_id);
 
+struct ReachableFilesResult
+{
+    std::unordered_set<String> files;
+    Int32 metadata_version;
+};
+
 /// Collect all files reachable through the metadata graph.
 ///
 /// Traverses: metadata JSON files (from metadata-log), manifest lists (from snapshots),
 /// manifest files (from manifest lists), data/delete files (from manifest files),
 /// and statistics files. All returned paths are resolved storage paths.
-std::unordered_set<String> collectReachableFiles(
+/// Also returns the metadata version used, for TOCTOU detection.
+ReachableFilesResult collectReachableFiles(
     ObjectStoragePtr object_storage,
     const PersistentTableComponents & persistent_table_components,
     const DataLakeStorageSettings & data_lake_settings,

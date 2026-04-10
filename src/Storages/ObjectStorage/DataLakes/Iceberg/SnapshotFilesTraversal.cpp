@@ -84,7 +84,7 @@ void collectStatisticsPaths(
 
 /// Collect files reachable directly from the metadata JSON root:
 /// the current metadata file, historical metadata files from metadata-log,
-/// statistics and partition-statistics files, and the version-hint file.
+/// statistics, partition-statistics, and version-hint files.
 void collectMetadataRootFiles(
     const String & metadata_path,
     const Poco::JSON::Object::Ptr & metadata,
@@ -92,6 +92,9 @@ void collectMetadataRootFiles(
     std::unordered_set<String> & out)
 {
     out.insert(metadata_path);
+
+    auto version_hint = IcebergPathFromMetadata::deserialize(fmt::format("{}metadata/version-hint.text", resolver.getTableLocation()));
+    out.insert(resolver.resolve(version_hint));
 
     if (metadata->has(f_metadata_log))
     {
@@ -117,14 +120,14 @@ void collectMetadataRootFiles(
 }
 
 
-std::unordered_set<String> collectReachableFiles(
+ReachableFilesResult collectReachableFiles(
     ObjectStoragePtr object_storage,
     const PersistentTableComponents & persistent_table_components,
     const DataLakeStorageSettings & data_lake_settings,
     ContextPtr context,
     LoggerPtr log)
 {
-    auto [_version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
+    auto [version, metadata_path, compression_method] = getLatestOrExplicitMetadataFileAndVersion(
         object_storage,
         persistent_table_components.table_path,
         data_lake_settings,
@@ -154,14 +157,14 @@ std::unordered_set<String> collectReachableFiles(
     if (!metadata->has(f_snapshots))
     {
         LOG_INFO(log, "No snapshots in metadata, reachable set contains only metadata-root files");
-        return reachable;
+        return {std::move(reachable), version};
     }
 
     auto snapshots = metadata->get(f_snapshots).extract<Poco::JSON::Array::Ptr>();
     if (!snapshots || snapshots->size() == 0)
     {
         LOG_INFO(log, "Empty snapshots array, reachable set contains only metadata-root files");
-        return reachable;
+        return {std::move(reachable), version};
     }
 
     Int32 current_schema_id = metadata->getValue<Int32>(f_current_schema_id);
@@ -177,7 +180,7 @@ std::unordered_set<String> collectReachableFiles(
         reachable.insert(resolver.resolve(path));
 
     LOG_INFO(log, "Collected {} reachable files from metadata graph", reachable.size());
-    return reachable;
+    return {std::move(reachable), version};
 }
 
 }

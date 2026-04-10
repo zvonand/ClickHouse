@@ -215,6 +215,11 @@ void EvictionCandidates::removeQueueEntries(const CachePriorityGuard::WriteLock 
         for (const auto & candidate : key_candidates.candidates)
         {
             auto queue_iterator = candidate->getQueueIterator();
+
+            /// Save the original queue type before invalidation so we can
+            /// restore entries to their original queue if eviction fails.
+            original_queue_types[candidate.get()] = queue_iterator->getType();
+
             queue_iterator->invalidate();
 
             chassert(candidate->releasable());

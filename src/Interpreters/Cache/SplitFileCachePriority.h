@@ -62,6 +62,14 @@ public:
         const CacheStateGuard::Lock *,
         bool is_initial_load = false) override;
 
+    IteratorPtr addForRestore( /// NOLINT
+        KeyMetadataPtr key_metadata,
+        size_t offset,
+        size_t size,
+        QueueEntryType original_queue_type,
+        const CachePriorityGuard::WriteLock &,
+        const CacheStateGuard::Lock *) override;
+
     bool tryIncreasePriority(
         Iterator & iterator,
         bool is_space_reservation_complete,

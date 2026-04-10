@@ -1352,6 +1352,8 @@ if __name__ == "__main__":
             param = sys.argv[2]
             assert param in ["stateless"]
             res = ch.start_minio(param)
+        elif command == "start_azurite":
+            res = ch.start_azurite()
         else:
             raise ValueError(f"Unknown command: {command}")
     except Exception as e:

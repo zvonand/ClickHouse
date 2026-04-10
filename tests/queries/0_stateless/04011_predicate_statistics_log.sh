@@ -16,11 +16,11 @@ DROP TABLE IF EXISTS $TABLE;
 CREATE TABLE $TABLE (id UInt64, status String, value Float64)
 ENGINE = MergeTree ORDER BY id
 SETTINGS index_granularity = 8192, min_bytes_for_wide_part = 0;
-INSERT INTO $TABLE SELECT number, if(number % 10 = 0, 'active', 'inactive'), rand() FROM numbers(100000);
+INSERT INTO $TABLE SELECT number, if(number % 10 = 0, 'active', 'inactive'), number * 0.1 FROM numbers(100000);
 
-SELECT * FROM $TABLE WHERE status = 'active' FORMAT Null;
-SELECT * FROM $TABLE WHERE id > 50000 FORMAT Null;
-SELECT * FROM $TABLE WHERE status = 'active' AND id > 50000 FORMAT Null SETTINGS enable_multiple_prewhere_read_steps = 0;
+$SETTINGS; SELECT * FROM $TABLE WHERE status = 'active' FORMAT Null;
+SELECT * FROM $TABLE WHERE value > 5000.0 FORMAT Null;
+SELECT * FROM $TABLE WHERE status = 'active' AND value > 5000.0 FORMAT Null SETTINGS enable_multiple_prewhere_read_steps = 0;
 
 SYSTEM FLUSH LOGS predicate_statistics_log;
 "
@@ -39,20 +39,20 @@ WHERE table = '$TABLE' AND column_name = 'status'
 LIMIT 1;
 "
 
-# q2: PK prunes, remaining mostly pass
+# q2: value > 5000 → ~50% selectivity (non-PK, stable)
 $CLICKHOUSE_CLIENT -m --query "
 SELECT
-    column_name = 'id' AS col_ok,
+    column_name = 'value' AS col_ok,
     predicate_class = 'Range' AS class_ok,
     input_rows > 0 AS has_input,
-    filter_selectivity > 0.9 AS high_sel
+    round(filter_selectivity, 1) AS sel
 FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND column_name = 'id'
+WHERE table = '$TABLE' AND column_name = 'value' 
     AND function_name = 'greater'
 LIMIT 1;
 "
 
-# q3: conjunction — filter to rows where both atoms are present (same query_id)
+# q3: conjunction — both atoms present, total_selectivity same for all
 $CLICKHOUSE_CLIENT -m --query "
 SELECT
     count() >= 2 AS has_atoms,

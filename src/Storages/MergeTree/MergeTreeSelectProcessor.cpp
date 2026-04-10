@@ -415,24 +415,26 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
         return;
 
     const auto & counters = read_steps_performance_counters.getCounters();
+    std::vector<size_t> all_filter_indices;
     std::vector<size_t> filter_step_indices;
     for (size_t i = 0; i < prewhere_actions.steps.size(); ++i)
+    const auto & step = prewhere_actions.steps[i];
     {
-        const auto & step = prewhere_actions.steps[i];
-        if (step->type == PrewhereExprStep::Filter && !step->predicate_atoms.empty())
-            filter_step_indices.push_back(i);
+        if (step->type == PrewhereExprStep::Filter)
+        {
+            all_filter_indices.push_back(i);
+            if (!step->predicate_atoms.empty())
+                filter_step_indices.push_back(i);
+        }
     }
 
     if (filter_step_indices.empty())
         return;
 
-    size_t first_step = filter_step_indices.front();
-    size_t last_step = filter_step_indices.back();
-
-    UInt64 whole_input = (first_step < counters.size() && counters[first_step])
-        ? counters[first_step]->rows_read.load() : 0;
-    UInt64 whole_passed = (last_step < counters.size() && counters[last_step])
-        ? counters[last_step]->rows_passed_filter.load() : 0;
+    size_t first = all_filter_indices.front();
+    size_t last = all_filter_indices.back();
+    UInt64 whole_input = counters[first]->rows_read;
+    UInt64 whole_passed = counters[last]->rows_passed_filter;
 
     if (whole_input == 0)
         return;

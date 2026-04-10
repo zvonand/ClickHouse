@@ -150,4 +150,16 @@ $CLICKHOUSE_CLIENT $settings -q "
              min_filtered_ratio_for_lazy_final = 0
 "
 
+## Test 7: Set plan's ReadFromMergeTree should only read columns needed for
+## set building (PK + filter columns), not query output columns like 'value'.
+echo "=== Set plan reads only needed columns ==="
+$CLICKHOUSE_CLIENT $settings -q "
+    EXPLAIN header=1
+    SELECT count(), sum(value) FROM t_lazy_final_combined FINAL
+    WHERE key >= 500 AND key < 5500 AND status = 'active'
+    SETTINGS query_plan_optimize_lazy_final = 1,
+             max_rows_for_lazy_final = 10000000,
+             min_filtered_ratio_for_lazy_final = 0
+" | sed -n '/CreatingSet/{n; :a; /ReadFromMergeTree/{n; p; q}; n; ba}'
+
 $CLICKHOUSE_CLIENT $settings -q "DROP TABLE t_lazy_final_combined"

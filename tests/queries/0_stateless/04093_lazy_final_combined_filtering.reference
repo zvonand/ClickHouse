@@ -58,3 +58,5 @@ Expression ((Project names + Projection))
               Granules: 12/16
               Search Algorithm: binary search
             Ranges: 2
+=== Set plan reads only needed columns ===
+                    Header: key UInt64

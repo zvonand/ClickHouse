@@ -1466,8 +1466,8 @@ class FunctionBinaryArithmetic : public IFunction
     /// For Time64, the midnight timestamp is scaled to match Time64's precision (e.g. milliseconds)
     /// before adding. The arithmetic uses Int128 so that the scaling cannot overflow.
     ///
-    /// Result type:  Date + Time -> DateTime,  all other combinations -> DateTime64(scale).
-    /// Overflow:     respects date_time_overflow_behavior (throw / saturate / ignore).
+    /// Result type: Date + Time -> DateTime, all other combinations -> DateTime64(scale).
+    /// Overflow: respects date_time_overflow_behavior (throw / saturate / ignore).
     ColumnPtr executeDateAndTimeAddition(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const
     {
         /// The operation is commutative — figure out which argument is the date and which is the time.

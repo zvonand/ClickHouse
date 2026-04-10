@@ -48,6 +48,11 @@ public:
         bool supports_arguments = false;
         bool supports_settings = false;
         bool supports_table_overrides = false;
+        /// Whether this database engine accesses external data sources
+        /// (e.g. MySQL, PostgreSQL, S3, DataLakeCatalog).
+        /// Used by restore to skip external databases when
+        /// restore_replace_external_engines_to_null is set.
+        bool is_external = false;
     };
 
     using CreatorFn = std::function<DatabasePtr(const Arguments & arguments)>;
@@ -69,6 +74,9 @@ public:
     });
 
     const DatabaseEngines & getDatabaseEngines() const { return database_engines; }
+
+    /// Returns true if the given database engine accesses external data sources.
+    bool isDatabaseExternal(const String & engine_name) const;
 
     std::vector<String> getAllRegisteredNames() const override
     {

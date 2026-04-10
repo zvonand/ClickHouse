@@ -349,7 +349,7 @@ The result type depends on the operand types:
 | `Date32` | `Time64(s)` | `DateTime64(s)` |
 
 :::note
-The result uses the [session timezone](../../operations/settings/settings.md#session_timezone) (or server default timezone if no session timezone is set). For [Date](../../sql-reference/data-types/date.md) + [Time](../../sql-reference/data-types/time.md), the result is the same as adding the equivalent [INTERVAL](#interval) in seconds. [Time64](../../sql-reference/data-types/time64.md) additionally preserves sub-second precision.
+The result uses the [session timezone](../../operations/settings/settings.md#session_timezone) (or server default timezone if no session timezone is set). The [`date_time_overflow_behavior`](../../operations/settings/settings-formats.md#date_time_overflow_behavior) setting controls what happens when the result is outside the representable range.
 :::
 
 Examples:

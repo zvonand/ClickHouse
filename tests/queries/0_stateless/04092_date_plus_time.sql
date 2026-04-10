@@ -218,8 +218,8 @@ SELECT toDate32('2299-12-31') + toTime64('23:59:59.99999999', 8) AS dt, toTypeNa
 -- Precision 9 is still fully safe for all Date values, because Date tops out before 2262
 SELECT toDate('2149-06-06') + toTime64('23:59:59.999999999', 9) AS dt, toTypeName(dt);
 
--- Semantics match with INTERVAL
--- Basic: Date + Time vs Date + INTERVAL
+-- For in-range values, Date + Time matches Date + INTERVAL
+-- (overflow behavior may differ: Date+Time respects date_time_overflow_behavior, INTERVAL does not)
 SELECT (toDate('2024-01-15') + toTime(3723)) = (toDate('2024-01-15') + INTERVAL 3723 SECOND);
 -- 24h rollover: Date + Time(86400) vs Date + INTERVAL 86400 SECOND
 SELECT (toDate('2024-01-15') + toTime(86400)) = (toDate('2024-01-15') + INTERVAL 86400 SECOND);

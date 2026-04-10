@@ -251,20 +251,12 @@ def _prepare_submodule_cache(workflow_config: RunConfig) -> Result:
             print(f"Submodule cache miss, creating: {s3_path}")
             Shell.check("git submodule sync", verbose=True, strict=True)
             Shell.check("git submodule init", verbose=True, strict=True)
-            if Path("contrib/update-submodules.sh").exists():
-                Shell.check(
-                    "contrib/update-submodules.sh --max-procs 64",
-                    verbose=True,
-                    strict=True,
-                    retries=3,
-                )
-            else:
-                Shell.check(
-                    "git submodule update --depth=1 --single-branch --jobs 64",
-                    verbose=True,
-                    strict=True,
-                    retries=3,
-                )
+            Shell.check(
+                "git submodule update --depth=1 --single-branch --jobs 64",
+                verbose=True,
+                strict=True,
+                retries=3,
+            )
             archive_path = f"{Settings.TEMP_DIR}/submodules_{cache_hash}.tar.zst"
             Shell.check(
                 f"tar -cf - .git/modules | zstd -c -T0 > {archive_path}",

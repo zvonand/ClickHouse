@@ -371,11 +371,10 @@ DROP TABLE test_overflow_vec64;
 -- midnight(2299-12-31) * 10^9 overflows Int64, but subtracting 1.2B seconds lands in range.
 SELECT toDate32('2299-12-31') + CAST(toDecimal128('-1200000000.000000000', 9), 'Time64(9)');
 
--- Vector path: one row has large negative time (in range), other row overflows
+-- Vector path: one row has large negative time (in range), other row overflows.
 DROP TABLE IF EXISTS test_intermediate_overflow;
 CREATE TABLE test_intermediate_overflow (t Time64(9)) ENGINE = Memory;
-INSERT INTO test_intermediate_overflow SELECT CAST(toDecimal128('-1200000000.000000000', 9), 'Time64(9)');
-INSERT INTO test_intermediate_overflow SELECT toTime64('00:00:00.000000000', 9);
+INSERT INTO test_intermediate_overflow SELECT arrayJoin([CAST(toDecimal128('-1200000000.000000000', 9), 'Time64(9)'), toTime64('00:00:00.000000000', 9)]);
 SELECT toDate32('2299-12-31') + t FROM test_intermediate_overflow ORDER BY t; -- { serverError VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE }
 DROP TABLE test_intermediate_overflow;
 
@@ -398,8 +397,7 @@ SELECT toDate32('2299-12-31') + CAST(toDecimal128('-1200000000.000000000', 9), '
 -- Vector: first row is in range despite intermediate overflow, second row saturates
 DROP TABLE IF EXISTS test_saturate_intermediate;
 CREATE TABLE test_saturate_intermediate (t Time64(9)) ENGINE = Memory;
-INSERT INTO test_saturate_intermediate SELECT CAST(toDecimal128('-1200000000.000000000', 9), 'Time64(9)');
-INSERT INTO test_saturate_intermediate SELECT toTime64('00:00:00.000000000', 9);
+INSERT INTO test_saturate_intermediate SELECT arrayJoin([CAST(toDecimal128('-1200000000.000000000', 9), 'Time64(9)'), toTime64('00:00:00.000000000', 9)]);
 SELECT toDate32('2299-12-31') + t FROM test_saturate_intermediate ORDER BY t;
 DROP TABLE test_saturate_intermediate;
 

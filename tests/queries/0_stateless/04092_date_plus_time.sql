@@ -367,6 +367,18 @@ INSERT INTO test_overflow_vec64 VALUES
 SELECT d + t FROM test_overflow_vec64 ORDER BY d; -- { serverError VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE }
 DROP TABLE test_overflow_vec64;
 
+-- Large negative Time64 can bring an intermediate overflow back into range.
+-- midnight(2299-12-31) * 10^9 overflows Int64, but subtracting 1.2B seconds lands in range.
+SELECT toDate32('2299-12-31') + CAST(toDecimal128('-1200000000.000000000', 9), 'Time64(9)');
+
+-- Vector path: one row has large negative time (in range), other row overflows
+DROP TABLE IF EXISTS test_intermediate_overflow;
+CREATE TABLE test_intermediate_overflow (t Time64(9)) ENGINE = Memory;
+INSERT INTO test_intermediate_overflow SELECT CAST(toDecimal128('-1200000000.000000000', 9), 'Time64(9)');
+INSERT INTO test_intermediate_overflow SELECT toTime64('00:00:00.000000000', 9);
+SELECT toDate32('2299-12-31') + t FROM test_intermediate_overflow ORDER BY t; -- { serverError VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE }
+DROP TABLE test_intermediate_overflow;
+
 -- Overflow with saturate
 
 SET date_time_overflow_behavior = 'saturate';
@@ -379,6 +391,17 @@ SELECT toDate('2149-06-06') + toTime('23:59:59');
 SELECT toDate32('1900-01-01') + toTime64('-00:00:00.000001', 6);
 -- DateTime64(9) overflow saturates to the last representable value
 SELECT toDate32('2262-04-11') + toTime64('23:47:16.854775808', 9);
+
+-- Large negative time brings intermediate overflow back into range (should NOT saturate)
+SELECT toDate32('2299-12-31') + CAST(toDecimal128('-1200000000.000000000', 9), 'Time64(9)');
+
+-- Vector: first row is in range despite intermediate overflow, second row saturates
+DROP TABLE IF EXISTS test_saturate_intermediate;
+CREATE TABLE test_saturate_intermediate (t Time64(9)) ENGINE = Memory;
+INSERT INTO test_saturate_intermediate SELECT CAST(toDecimal128('-1200000000.000000000', 9), 'Time64(9)');
+INSERT INTO test_saturate_intermediate SELECT toTime64('00:00:00.000000000', 9);
+SELECT toDate32('2299-12-31') + t FROM test_saturate_intermediate ORDER BY t;
+DROP TABLE test_saturate_intermediate;
 
 SET date_time_overflow_behavior = 'throw';
 

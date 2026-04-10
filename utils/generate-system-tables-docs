@@ -373,7 +373,8 @@ def main():
         config,
         "SELECT table, name, type, comment, default_kind, default_expression"
         " FROM system.columns WHERE database = 'system'"
-        " AND default_kind NOT IN ('ALIAS')",
+        " AND default_kind NOT IN ('ALIAS')"
+        " ORDER BY table, position",
         use_client,
         extra_args,
     )
@@ -386,7 +387,8 @@ def main():
         config,
         "SELECT table, name, type, default_expression"
         " FROM system.columns WHERE database = 'system'"
-        " AND default_kind = 'ALIAS'",
+        " AND default_kind = 'ALIAS'"
+        " ORDER BY table, position",
         use_client,
         extra_args,
     )

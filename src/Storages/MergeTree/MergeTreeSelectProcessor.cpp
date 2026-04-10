@@ -417,8 +417,9 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     const auto & counters = read_steps_performance_counters.getCounters();
     std::vector<size_t> all_filter_indices;
     std::vector<size_t> filter_step_indices;
-    for (const auto & step : prewhere_actions.steps)
+    for (size_t i = 0; i < prewhere_actions.steps.size(); ++i)
     {
+        const auto & step = prewhere_actions.steps[i];
         if (step->type == PrewhereExprStep::Filter)
         {
             all_filter_indices.push_back(i);

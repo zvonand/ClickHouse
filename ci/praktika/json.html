@@ -568,6 +568,7 @@
         const current = localStorage.getItem('sortByStatus');
         const newValue = current === 'true' ? 'false' : 'true';
         localStorage.setItem('sortByStatus', newValue);
+        columnSortActive = false;
 
         // Update the visual indicator
         updateSortToggleIcon();
@@ -600,14 +601,17 @@
 
     function getStatusPriority(status) {
         const statusLower = (status || '').toLowerCase();
-        // Priority order: errors/failures, running, pending, success, then others
-        if (statusLower === 'xpass') return 0;  // unexpected pass: treat as failure
-        if (statusLower === 'xfail') return 3;  // expected failure: treat as success
-        if (statusLower.includes('error') || statusLower.includes('fail') || statusLower.includes('dropped')) return 0;
-        if (statusLower.includes('running')) return 1;
-        if (statusLower.includes('pending')) return 2;
-        if (statusLower.includes('success') || statusLower === 'ok') return 3;
-        return 4; // other statuses
+        if (statusLower.includes('error')) return 0;
+        if (statusLower.includes('fail')) return 1;
+        if (statusLower === 'xpass') return 2;
+        if (statusLower.includes('running')) return 3;
+        if (statusLower.includes('dropped')) return 4;
+        if (statusLower.includes('pending')) return 5;
+        if (statusLower.includes('success')) return 6;
+        if (statusLower === 'ok') return 7;
+        if (statusLower === 'xfail') return 8;
+        if (statusLower.includes('skipped')) return 9;
+        return 10;
     }
 
     function formatTimestamp(timestamp, showDate = true) {
@@ -1405,16 +1409,17 @@
         const filter = localStorage.getItem('filter');
         const lastColumn = existingColumnsList[existingColumnsList.length - 1];
 
-        // Sort results by status if the feature is enabled
-        const sortByStatus = localStorage.getItem('sortByStatus') === 'true';
+        // Sort results by status if the feature is enabled.
+        // Skip if user clicked a column header (columnSortActive) — reset on next fresh render.
+        const sortByStatus = !columnSortActive && localStorage.getItem('sortByStatus') === 'true';
 
         // Work with a copy so we don't mutate the original
         let displayResults = [...results];
         if (sortByStatus) {
             displayResults.sort((a, b) => {
-                const statusDiff = getStatusPriority(a.status || '') - getStatusPriority(b.status || '');
-                if (statusDiff !== 0) return statusDiff;
-                return (a.name || '').localeCompare(b.name || '');
+                const statusA = a.status || '';
+                const statusB = b.status || '';
+                return getStatusPriority(statusA) - getStatusPriority(statusB);
             });
         }
 
@@ -1617,6 +1622,9 @@
         }
     }
 
+    // When true, populateTableRows skips its own sort-by-status (column header sort takes over)
+    let columnSortActive = false;
+
     function sortTable(results, column, key, tbody, nest_level, existingColumnsList) {
         // Find the table header element for the given key
         const tableHeaders = document.querySelectorAll('th');
@@ -1630,9 +1638,17 @@
         const ascending = th.getAttribute('data-sort-direction') === 'asc';
         th.setAttribute('data-sort-direction', ascending ? 'desc' : 'asc');
 
+        // Suppress populateTableRows auto-sort until next re-render
+        columnSortActive = true;
+
         results.sort((a, b) => {
-            if (a[column] < b[column]) return ascending ? -1 : 1;
-            if (a[column] > b[column]) return ascending ? 1 : -1;
+            let va = a[column], vb = b[column];
+            if (column === 'status') {
+                va = getStatusPriority(va);
+                vb = getStatusPriority(vb);
+            }
+            if (va < vb) return ascending ? -1 : 1;
+            if (va > vb) return ascending ? 1 : -1;
             return 0;
         });
 
@@ -2061,6 +2077,9 @@
             // First, clean up any existing timers and event listeners
             activeTimers.clearAll();
             activeListeners.removeAll();
+
+            // Reset column sort override so toggle takes effect again
+            columnSortActive = false;
 
             // Then clear the DOM content
             document.getElementById('result-container').innerHTML = '';

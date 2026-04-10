@@ -125,8 +125,7 @@ public:
     {
         /// Pad the size to a multiple of alignment so that consecutive elements in the array
         /// are properly aligned (same principle as C++ sizeof for array element types).
-        size_t alignment = nested_func->alignOfData();
-        nested_size_of_data = ::Memory::alignUp(nested_func->sizeOfData(), alignment);
+        nested_size_of_data = ::Memory::alignUp(nested_func->sizeOfData(), nested_func->alignOfData());
 
         if (arguments.empty())
             throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Aggregate function {} require at least one argument", getName());

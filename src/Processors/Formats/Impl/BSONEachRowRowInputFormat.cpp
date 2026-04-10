@@ -452,8 +452,6 @@ void BSONEachRowRowInputFormat::readTuple(IColumn & column, const DataTypePtr & 
                             data_type->getName(),
                             elements_size,
                             read_nested_columns);
-
-        assert_cast<ColumnTuple &>(column).addSize(1);
     };
 
     SerializationTuple::readElementsSafe(column, read_tuple);

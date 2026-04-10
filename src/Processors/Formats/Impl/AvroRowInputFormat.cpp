@@ -695,7 +695,6 @@ AvroDeserializer::DeserializeFn AvroDeserializer::createDeserializeFn(const avro
                     {
                         for (const auto & [nested_deserializer, pos] : nested_deserializers)
                             nested_deserializer(*nested_columns[pos], decoder);
-                        column_tuple.addSize(1);
                     };
                     SerializationTuple::readElementsSafe(column, read_tuple);
                     return true;

@@ -110,13 +110,6 @@ static ReturnType addElementSafe(size_t num_elems, IColumn & column, F && impl)
                 element_column.popBack(1);
             }
         }
-
-        /// For empty tuples, decrement the row count
-        if (column.size() > old_size)
-        {
-            chassert(column.size() - old_size == 1);
-            column.popBack(1);
-        }
     };
 
     try
@@ -126,6 +119,9 @@ static ReturnType addElementSafe(size_t num_elems, IColumn & column, F && impl)
             restore_elements();
             return ReturnType(false);
         }
+
+        assert_cast<ColumnTuple &>(column).addSize(1);
+
 
         // Check that all columns now have the same size.
         size_t new_size = column.size();
@@ -177,7 +173,6 @@ void SerializationTuple::deserializeBinary(IColumn & column, ReadBuffer & istr, 
     {
         for (size_t i = 0; i < elems.size(); ++i)
             elems[i]->deserializeBinary(extractElementColumn(column, i), istr, settings);
-        assert_cast<ColumnTuple &>(column).addSize(1);
         return true;
     });
 }
@@ -261,8 +256,6 @@ ReturnType SerializationTuple::deserializeTextImpl(IColumn & column, ReadBuffer 
             assertChar(')', istr);
         else if (!checkChar(')', istr))
             return false;
-
-        assert_cast<ColumnTuple &>(column).addSize(1);
 
         if (whole && !istr.eof())
         {
@@ -510,7 +503,6 @@ ReturnType SerializationTuple::deserializeTupleJSONImpl(IColumn & column, ReadBu
                 }
             }
 
-            assert_cast<ColumnTuple &>(column).addSize(1);
             return true;
         };
 
@@ -552,7 +544,6 @@ ReturnType SerializationTuple::deserializeTupleJSONImpl(IColumn & column, ReadBu
         else if (!checkChar(']', istr))
             return false;
 
-        assert_cast<ColumnTuple &>(column).addSize(1);
         return true;
     };
 
@@ -661,7 +652,6 @@ void SerializationTuple::deserializeTextCSV(IColumn & column, ReadBuffer & istr,
                 else
                     elems[i]->deserializeTextCSV(element_column, istr, settings);
             }
-            assert_cast<ColumnTuple &>(column).addSize(1);
             return true;
         });
     }
@@ -704,7 +694,6 @@ bool SerializationTuple::tryDeserializeTextCSV(IColumn & column, ReadBuffer & is
                 }
             }
 
-            assert_cast<ColumnTuple &>(column).addSize(1);
             return true;
         });
     }

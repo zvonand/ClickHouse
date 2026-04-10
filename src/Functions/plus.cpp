@@ -1,9 +1,23 @@
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionBinaryArithmetic.h>
+#include <Core/Settings.h>
+#include <Interpreters/Context.h>
 #include <base/arithmeticOverflow.h>
 
 namespace DB
 {
+
+namespace Setting
+{
+extern const SettingsDateTimeOverflowBehavior date_time_overflow_behavior;
+}
+
+FormatSettings::DateTimeOverflowBehavior getDateTimeOverflowBehavior(ContextPtr context)
+{
+    if (context)
+        return context->getSettingsRef()[Setting::date_time_overflow_behavior].value;
+    return default_date_time_overflow_behavior;
+}
 
 template <typename A, typename B>
 struct PlusImpl

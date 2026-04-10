@@ -49,8 +49,7 @@
 #include <Functions/IFunctionAdaptors.h>
 #include <Functions/IsOperation.h>
 #include <Functions/castTypeToEither.h>
-#include <Core/Settings.h>
-#include <Interpreters/Context.h>
+#include <Interpreters/Context_fwd.h>
 #include <Interpreters/castColumn.h>
 #include <base/TypeList.h>
 #include <base/TypeLists.h>
@@ -86,10 +85,7 @@ namespace ErrorCodes
     extern const int VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE;
 }
 
-namespace Setting
-{
-    extern const SettingsDateTimeOverflowBehavior date_time_overflow_behavior;
-}
+FormatSettings::DateTimeOverflowBehavior getDateTimeOverflowBehavior(ContextPtr context);
 
 namespace traits_
 {
@@ -1497,9 +1493,7 @@ class FunctionBinaryArithmetic : public IFunction
             scale_multiplier = DecimalUtils::scaleMultiplier<Int64>(time64_type->getScale());
         }
 
-        auto overflow_behavior = default_date_time_overflow_behavior;
-        if (context)
-            overflow_behavior = context->getSettingsRef()[Setting::date_time_overflow_behavior].value;
+        auto overflow_behavior = getDateTimeOverflowBehavior(context);
 
         /// The valid range for the result, expressed in the result's own units:
         ///   DateTime:   seconds in [0, 2^32-1], covering ~1970 to ~2106.

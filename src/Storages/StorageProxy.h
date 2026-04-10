@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Storages/IStorage.h>
+#include <Storages/StorageSnapshot.h>
 #include <Storages/SelectQueryInfo.h>
 #include <QueryPipeline/Pipe.h>
 
@@ -32,6 +33,11 @@ public:
     bool supportsColumnsWithDynamicStructure() const override { return getNested()->supportsColumnsWithDynamicStructure(); }
 
     ColumnSizeByName getColumnSizes() const override { return getNested()->getColumnSizes(); }
+
+    StorageSnapshotPtr getStorageSnapshot(const StorageMetadataPtr & metadata_snapshot, ContextPtr query_context) const override
+    {
+        return getNested()->getStorageSnapshot(metadata_snapshot, query_context);
+    }
 
     QueryProcessingStage::Enum getQueryProcessingStage(
         ContextPtr context,

@@ -12,6 +12,7 @@
 #include <Core/ServerUUID.h>
 #include <Core/Settings.h>
 
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeString.h>
 
 #include <Interpreters/DatabaseCatalog.h>
@@ -352,7 +353,7 @@ StorageKeeperMap::StorageKeeperMap(
     const std::string & zk_root_path_,
     UInt64 keys_limit_,
     bool override_metadata)
-    : IStorage(table_id)
+    : StorageWithCommonVirtualColumns(table_id)
     , WithContext(context_->getGlobalContext())
     , zk_root_path(zkutil::extractZooKeeperPath(zk_root_path_, false))
     , primary_key(primary_key_)
@@ -369,9 +370,7 @@ StorageKeeperMap::StorageKeeperMap(
 
     setInMemoryMetadata(metadata);
 
-    VirtualColumnsDescription virtuals;
-    virtuals.addEphemeral(String(version_column_name), std::make_shared<DataTypeInt32>(), "");
-    setVirtuals(std::move(virtuals));
+    setVirtuals(createVirtuals());
 
     WriteBufferFromOwnString out;
     out << "KeeperMap metadata format version: 1\n"
@@ -647,6 +646,15 @@ private:
     Strings getAllKeys() const;
 };
 
+VirtualColumnsDescription StorageKeeperMap::createVirtuals()
+{
+    VirtualColumnsDescription desc;
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "");
+    desc.addEphemeral(String(version_column_name), std::make_shared<DataTypeInt32>(), "");
+    return desc;
+}
+
 bool StorageKeeperMap::isMetadataStringEqual(
     const std::string & zk_metadata_string,
     const std::string & local_metadata_string,
@@ -707,7 +715,7 @@ bool StorageKeeperMap::isMetadataStringEqual(
 }
 
 
-void StorageKeeperMap::read(
+void StorageKeeperMap::readImpl(
         QueryPlan & query_plan,
         const Names & column_names,
         const StorageSnapshotPtr & storage_snapshot,

@@ -61,6 +61,6 @@ To disable the web interface while keeping the HTTP API available, set `play_pat
 The web interface preserves query text and connection parameters in the URL, so links can be shared.
 For example:
 
-```
+```text
 http://localhost:8123/play?user=default#SELECT%201
 ```

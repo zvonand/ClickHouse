@@ -31,7 +31,7 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-TIMELIMIT=$((SECONDS + 600))
+TIMELIMIT=$((SECONDS + 120))
 
 # The error requires diverse code paths on fibers to create varied stack layouts.
 # Mix distributed queries with different shapes, settings, and error paths

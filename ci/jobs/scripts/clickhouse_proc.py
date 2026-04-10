@@ -749,60 +749,8 @@ clickhouse-client --query "SELECT count() FROM test.visits"
         else:
             return False
 
-    @staticmethod
-    def _kill_session(session_id):
-        """Kill all processes that belong to a given session ID.
-
-        clickhouse-test calls os.setsid() on startup, making its PID the
-        session ID.  All .sh test subprocesses it spawns inherit that session.
-        After clickhouse-test exits the children are re-parented to init/launchd
-        but their session membership is preserved, so we can still find and kill
-        them here.  Works on Linux and macOS.
-
-        Note: ps -o sess is unreliable on macOS (shows the tty device number,
-        not the session ID).  We enumerate all PIDs and call os.getsid() on
-        each one instead — this is correct on both platforms.
-        """
-        try:
-            result = subprocess.run(
-                ["ps", "-A", "-o", "pid="],
-                capture_output=True,
-                text=True,
-            )
-            pids = []
-            for line in result.stdout.strip().splitlines():
-                line = line.strip()
-                if not line.isdigit():
-                    continue
-                pid = int(line)
-                try:
-                    if os.getsid(pid) == session_id:
-                        pids.append(pid)
-                except (ProcessLookupError, PermissionError):
-                    pass
-            if pids:
-                print(
-                    f"Killing {len(pids)} leftover process(es) from session {session_id}: {pids}"
-                )
-                for pid in pids:
-                    try:
-                        os.kill(pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-        except Exception as e:
-            print(f"Warning: session cleanup failed: {e}")
-
-    # Path of the file used to communicate the active clickhouse-test session ID
-    # to the post-hook cleanup script.  Written before process.wait() so it
-    # survives even if this process (fast_test.py) is killed with SIGKILL before
-    # the finally block below has a chance to run.
-    SESSION_ID_FILE = p_temp_dir / "clickhouse_test_session_id"
-
     def run_test(self, cmd, timeout=7200):
         print(f"Run test: [{cmd}]")
-        # clickhouse-test calls os.setsid() so its session ID equals its PID;
-        # we record the PID before wait() so we can clean up orphans afterwards,
-        # including from a post-hook if this process itself is killed.
         with open(self.test_output_file, "w") as f:
             process = subprocess.Popen(
                 cmd,
@@ -814,11 +762,6 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                 errors="ignore",
                 start_new_session=True,
             )
-            session_id = process.pid
-
-            # Persist the session ID so the post-hook can kill orphans even if
-            # fast_test.py is killed with SIGKILL before the finally block runs.
-            ClickHouseProc.SESSION_ID_FILE.write_text(str(session_id))
 
             def _reader():
                 for line in process.stdout:
@@ -845,13 +788,11 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                 reader_thread.join()
                 return process.returncode == 0
             finally:
-                # Kill any .sh test processes that survived clickhouse-test's own
-                # cleanup (e.g. if clickhouse-test was killed with SIGKILL or died
-                # before its signal handlers ran).  They are re-parented to
-                # init/launchd but still carry the session ID, so ps -o sess finds
-                # them on both Linux and macOS.
-                self._kill_session(session_id)
-                ClickHouseProc.SESSION_ID_FILE.unlink(missing_ok=True)
+                # Kill any test processes that survived clickhouse-test's own cleanup
+                # (e.g. if it was killed with SIGKILL before its signal handlers ran).
+                # clickhouse-test writes the group pid file itself on startup; --cleanup
+                # reads it and kills all orphaned test process groups.
+                subprocess.run(["clickhouse-test", "--cleanup"], check=False)
 
     def terminate(self, force=False):
         if self.minio_proc:

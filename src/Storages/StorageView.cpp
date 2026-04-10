@@ -198,9 +198,9 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
         addQueryTreePasses(pass_manager);
         pass_manager.runOnlyResolve(inner_query_tree);
     }
-    catch (...)
+    catch (const Exception &)
     {
-        /// This is a normal path — the view may reference table functions, use SQL SECURITY DEFINER,
+        /// The view may reference table functions, use SQL SECURITY DEFINER,
         /// or have other constructs that prevent resolution with the current user's context.
         /// Example: 03667_view_with_s3_cluster_and_sql_security_definer.
         /// Just return nullptr to indicate the view is not suitable for this optimization.

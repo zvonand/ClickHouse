@@ -481,6 +481,7 @@ SELECT a, b, CAST((a, b)::Tuple(Int32, Nullable(Int32)), 'Tuple(UInt8, Nullable(
 127	128	(127,128)	Tuple(UInt8, Nullable(UInt8))
 0	0	(0,0)	Tuple(UInt8, Nullable(UInt8))
 -1	300	(255,44)	Tuple(UInt8, Nullable(UInt8))
+DROP TABLE test_cast_tuple;
 -- =====================
 -- Point type (alias for Tuple(Float64, Float64)).
 -- =====================

@@ -7,6 +7,8 @@
 
 #include <Interpreters/ActionsDAG.h>
 
+#include <base/scope_guard.h>
+
 namespace DB
 {
 
@@ -47,14 +49,15 @@ void StorageWithCommonVirtualColumns::read(
     /// Build a snapshot without common virtuals so readImpl doesn't see them.
     auto filtered_columns = VirtualColumnUtils::filterVirtualColumns(column_names, common_virtual_names, storage_snapshot->metadata, storage_snapshot->virtual_columns);
     auto filtered_snapshot = std::make_shared<StorageSnapshot>(storage_snapshot->storage, storage_snapshot->metadata, filterCommonVirtuals(storage_snapshot->virtual_columns));
-    std::swap(filtered_snapshot->data, storage_snapshot->data);
 
+    /// Complete snapshot and rollback to initial to not break constant semantics.
+    std::swap(filtered_snapshot->data, storage_snapshot->data);
+    SCOPE_EXIT({ std::swap(filtered_snapshot->data, storage_snapshot->data); });
+
+    /// Proxy to underlying storage.
     readImpl(query_plan, filtered_columns, filtered_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
 
-    /// Rollback data to initial snapshot
-    std::swap(filtered_snapshot->data, storage_snapshot->data);
-
-    /// Materialize constant virtuals
+    /// Materialize constant virtuals.
     if (query_plan.isInitialized())
     {
         if (std::ranges::contains(column_names, "_database") && !query_plan.getCurrentHeader()->has("_database"))

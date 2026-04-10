@@ -433,6 +433,9 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
             std::move(sub_dag),
             filter_step->getFilterColumnName(),
             /*remove_filter_column=*/ true));
+
+        /// Move the filter to prewhere if possible.
+        optimizePrewhere(*set_plan.getRootNode(), optimization_settings.remove_unused_columns);
     }
 
     /// Compute primary key expression and project to PK columns only.

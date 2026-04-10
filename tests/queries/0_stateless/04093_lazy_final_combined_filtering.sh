@@ -139,4 +139,15 @@ $CLICKHOUSE_CLIENT $settings -q "
              max_rows_for_lazy_final = 10
 "
 
+## Test 6: Full EXPLAIN showing all plan components.
+echo "=== Full EXPLAIN ==="
+$CLICKHOUSE_CLIENT $settings -q "
+    EXPLAIN indexes=1
+    SELECT count(), sum(value) FROM t_lazy_final_combined FINAL
+    WHERE key >= 500 AND key < 5500 AND status = 'active'
+    SETTINGS query_plan_optimize_lazy_final = 1,
+             max_rows_for_lazy_final = 10000000,
+             min_filtered_ratio_for_lazy_final = 0
+"
+
 $CLICKHOUSE_CLIENT $settings -q "DROP TABLE t_lazy_final_combined"

@@ -109,7 +109,7 @@ URI::URI(const std::string & uri_, bool allow_archive_path_syntax, bool keep_pre
             has_version_id = true;
         }
     }
-    if (!has_version_id && uri_.contains('?'))
+    if (!has_version_id && !looks_like_presigned && uri_.contains('?'))
     {
         String uri_with_question_mark_encode;
         Poco::URI::encode(uri_, "?", uri_with_question_mark_encode);

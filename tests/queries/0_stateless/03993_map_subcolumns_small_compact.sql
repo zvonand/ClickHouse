@@ -23,6 +23,7 @@ create table t (id UInt64, m Map(String, UInt64))
 engine = MergeTree order by id
 settings
     map_serialization_version = 'basic',
+    map_serialization_version_for_zero_level_parts = 'basic',
     min_bytes_for_wide_part = '200G',
     min_rows_for_wide_part = 1000000,
     write_marks_for_substreams_in_compact_parts = 1,
@@ -31,11 +32,11 @@ settings
 insert into t select * from source;
 
 select 'basic compact: m';
-select mapSort(m) from t order by id;
+select m from t order by id;
 select 'basic compact: m.keys';
-select arraySort(m.keys) from t order by id;
+select m.keys from t order by id;
 select 'basic compact: m.values';
-select arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))) from t order by id;
+select m.values from t order by id;
 select 'basic compact: m.size0';
 select m.size0 from t order by id;
 select 'basic compact: m.key_a';
@@ -46,28 +47,28 @@ select 'basic compact: m.key_nonexistent';
 select m.key_nonexistent from t order by id;
 
 select 'basic compact: m.keys, m.values';
-select arraySort(m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))) from t order by id;
+select m.keys, m.values from t order by id;
 select 'basic compact: m.size0, m.key_a';
 select m.size0, m.key_a from t order by id;
 select 'basic compact: m, m.keys';
-select mapSort(m), arraySort(m.keys) from t order by id;
+select m, m.keys from t order by id;
 select 'basic compact: m, m.key_a';
-select mapSort(m), m.key_a from t order by id;
+select m, m.key_a from t order by id;
 select 'basic compact: m.keys, m';
-select arraySort(m.keys), mapSort(m) from t order by id;
+select m.keys, m from t order by id;
 select 'basic compact: m.key_a, m.size0, m';
-select m.key_a, m.size0, mapSort(m) from t order by id;
+select m.key_a, m.size0, m from t order by id;
 select 'basic compact: m.key_a, m.key_b, m.key_c';
 select m.key_a, m.key_b, m.key_c from t order by id;
 select 'basic compact: m.key_a, m.key_d';
 select m.key_a, m.key_d from t order by id;
 select 'basic compact: m, m.keys, m.values, m.size0, m.key_a';
-select mapSort(m), arraySort(m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))), m.size0, m.key_a from t order by id;
+select m, m.keys, m.values, m.size0, m.key_a from t order by id;
 
 select 'basic compact: m, m.keys, m.values, m.size0, m.key_a limit 3';
-select mapSort(m), arraySort(m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))), m.size0, m.key_a from t order by id limit 3;
+select m, m.keys, m.values, m.size0, m.key_a from t order by id limit 3;
 select 'basic compact: m, m.keys, m.values, m.size0, m.key_a max_block_size=3';
-select mapSort(m), arraySort(m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))), m.size0, m.key_a from t order by id settings max_block_size=3;
+select m, m.keys, m.values, m.size0, m.key_a from t order by id settings max_block_size=3;
 
 drop table t;
 
@@ -92,11 +93,11 @@ settings
 insert into t select * from source;
 
 select 'with_buckets compact: m';
-select mapSort(m) from t order by id;
+select m from t order by id;
 select 'with_buckets compact: m.keys';
-select arraySort(m.keys) from t order by id;
+select m.keys from t order by id;
 select 'with_buckets compact: m.values';
-select arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))) from t order by id;
+select m.values from t order by id;
 select 'with_buckets compact: m.size0';
 select m.size0 from t order by id;
 select 'with_buckets compact: m.key_a';
@@ -107,28 +108,28 @@ select 'with_buckets compact: m.key_nonexistent';
 select m.key_nonexistent from t order by id;
 
 select 'with_buckets compact: m.keys, m.values';
-select arraySort(m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))) from t order by id;
+select m.keys, m.values from t order by id;
 select 'with_buckets compact: m.size0, m.key_a';
 select m.size0, m.key_a from t order by id;
 select 'with_buckets compact: m, m.keys';
-select mapSort(m), arraySort(m.keys) from t order by id;
+select m, m.keys from t order by id;
 select 'with_buckets compact: m, m.key_a';
-select mapSort(m), m.key_a from t order by id;
+select m, m.key_a from t order by id;
 select 'with_buckets compact: m.keys, m';
-select arraySort(m.keys), mapSort(m) from t order by id;
+select m.keys, m from t order by id;
 select 'with_buckets compact: m.key_a, m.size0, m';
-select m.key_a, m.size0, mapSort(m) from t order by id;
+select m.key_a, m.size0, m from t order by id;
 select 'with_buckets compact: m.key_a, m.key_b, m.key_c';
 select m.key_a, m.key_b, m.key_c from t order by id;
 select 'with_buckets compact: m.key_a, m.key_d';
 select m.key_a, m.key_d from t order by id;
 select 'with_buckets compact: m, m.keys, m.values, m.size0, m.key_a';
-select mapSort(m), arraySort(m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))), m.size0, m.key_a from t order by id;
+select m, m.keys, m.values, m.size0, m.key_a from t order by id;
 
 select 'with_buckets compact: m, m.keys, m.values, m.size0, m.key_a limit 3';
-select mapSort(m), arraySort(m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))), m.size0, m.key_a from t order by id limit 3;
+select m, m.keys, m.values, m.size0, m.key_a from t order by id limit 3;
 select 'with_buckets compact: m, m.keys, m.values, m.size0, m.key_a max_block_size=3';
-select mapSort(m), arraySort(m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(m.keys, m.values))), m.size0, m.key_a from t order by id settings max_block_size=3;
+select m, m.keys, m.values, m.size0, m.key_a from t order by id settings max_block_size=3;
 
 drop table t;
 
@@ -140,6 +141,7 @@ create table t (id UInt64, data Tuple(m Map(String, UInt64)))
 engine = MergeTree order by id
 settings
     map_serialization_version = 'basic',
+    map_serialization_version_for_zero_level_parts = 'basic',
     min_bytes_for_wide_part = '200G',
     min_rows_for_wide_part = 1000000,
     write_marks_for_substreams_in_compact_parts = 1,
@@ -148,11 +150,11 @@ settings
 insert into t select id, tuple(m) from source;
 
 select 'basic compact tuple: data.m';
-select mapSort(data.m) from t order by id;
+select data.m from t order by id;
 select 'basic compact tuple: data.m.keys';
-select arraySort(data.m.keys) from t order by id;
+select data.m.keys from t order by id;
 select 'basic compact tuple: data.m.values';
-select arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(data.m.keys, data.m.values))) from t order by id;
+select data.m.values from t order by id;
 select 'basic compact tuple: data.m.size0';
 select data.m.size0 from t order by id;
 select 'basic compact tuple: data.m.key_a';
@@ -161,11 +163,11 @@ select data.m.key_a from t order by id;
 select 'basic compact tuple: data.m.key_a, data.m.key_d';
 select data.m.key_a, data.m.key_d from t order by id;
 select 'basic compact tuple: data.m, data.m.keys';
-select mapSort(data.m), arraySort(data.m.keys) from t order by id;
+select data.m, data.m.keys from t order by id;
 select 'basic compact tuple: data.m.keys, data.m';
-select arraySort(data.m.keys), mapSort(data.m) from t order by id;
+select data.m.keys, data.m from t order by id;
 select 'basic compact tuple: data.m, data.m.keys, data.m.values, data.m.size0, data.m.key_a';
-select mapSort(data.m), arraySort(data.m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(data.m.keys, data.m.values))), data.m.size0, data.m.key_a from t order by id;
+select data.m, data.m.keys, data.m.values, data.m.size0, data.m.key_a from t order by id;
 
 drop table t;
 
@@ -190,11 +192,11 @@ settings
 insert into t select id, tuple(m) from source;
 
 select 'with_buckets compact tuple: data.m';
-select mapSort(data.m) from t order by id;
+select data.m from t order by id;
 select 'with_buckets compact tuple: data.m.keys';
-select arraySort(data.m.keys) from t order by id;
+select data.m.keys from t order by id;
 select 'with_buckets compact tuple: data.m.values';
-select arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(data.m.keys, data.m.values))) from t order by id;
+select data.m.values from t order by id;
 select 'with_buckets compact tuple: data.m.size0';
 select data.m.size0 from t order by id;
 select 'with_buckets compact tuple: data.m.key_a';
@@ -203,11 +205,11 @@ select data.m.key_a from t order by id;
 select 'with_buckets compact tuple: data.m.key_a, data.m.key_d';
 select data.m.key_a, data.m.key_d from t order by id;
 select 'with_buckets compact tuple: data.m, data.m.keys';
-select mapSort(data.m), arraySort(data.m.keys) from t order by id;
+select data.m, data.m.keys from t order by id;
 select 'with_buckets compact tuple: data.m.keys, data.m';
-select arraySort(data.m.keys), mapSort(data.m) from t order by id;
+select data.m.keys, data.m from t order by id;
 select 'with_buckets compact tuple: data.m, data.m.keys, data.m.values, data.m.size0, data.m.key_a';
-select mapSort(data.m), arraySort(data.m.keys), arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(data.m.keys, data.m.values))), data.m.size0, data.m.key_a from t order by id;
+select data.m, data.m.keys, data.m.values, data.m.size0, data.m.key_a from t order by id;
 
 drop table t;
 drop table source;

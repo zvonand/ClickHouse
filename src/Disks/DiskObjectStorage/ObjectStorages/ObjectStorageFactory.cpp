@@ -46,10 +46,14 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
+#if USE_AWS_S3
+
 namespace S3AuthSetting
 {
     extern const S3AuthSettingsS3UriStyle uri_style;
 }
+
+#endif
 
 ObjectStorageFactory & ObjectStorageFactory::instance()
 {

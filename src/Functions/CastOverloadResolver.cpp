@@ -114,7 +114,7 @@ public:
         std::optional<CastDiagnostic> diagnostic,
         ContextPtr context)
     {
-        if (cast_type == CastType::accurateOrNull && !canContainNull(to))
+        if (cast_type == CastType::accurateOrNull && !canContainNull(*to))
         {
             validateNestedTypesForAccurateCastOrNull(to);
             to = makeNullable(to);
@@ -159,7 +159,7 @@ protected:
         if (cast_type == CastType::accurateOrNull)
         {
             /// Variant handles NULLs by itself during conversions.
-            if (!canContainNull(type))
+            if (!canContainNull(*type))
             {
                 /// Reject types inside Tuple that cannot handle accurateOrNull's
                 /// ColumnNullable failure mechanism (e.g., Array, Map).

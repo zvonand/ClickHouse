@@ -100,7 +100,11 @@ static inline void writeProbablyQuotedStringImpl(std::string_view s, WriteBuffer
     /// These are valid identifiers but are problematic if present unquoted in SQL query
     /// because they are keywords that the parser interprets as clause starters or modifiers,
     /// causing the formatted AST to fail parsing back.
-    auto isCaseInsensitiveEqual = [](std::string_view a, std::string_view b) { return a.size() == b.size() && 0 == strncasecmp(a.data(), b.data(), a.size()); };
+    auto isCaseInsensitiveEqual = [](std::string_view a, std::string_view b)
+    {
+        return a.size() == b.size()
+            && 0 == strncasecmp(a.data(), b.data(), a.size()); // NOLINT(bugprone-suspicious-stringview-data-usage)
+    };
 
     if (isValidIdentifier(s)
         && !isCaseInsensitiveEqual(s, "distinct")

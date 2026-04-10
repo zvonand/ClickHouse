@@ -4,6 +4,8 @@ in a mixed-version cluster (old nodes don't have the stream_id field).
 UNION ALL view exercises multi-stream coordinator dispatch.
 """
 
+import uuid
+
 import pytest
 
 from helpers.cluster import ClickHouseCluster
@@ -88,29 +90,36 @@ def test_parallel_replicas_with_view(start_cluster):
     result = nodes[1].query("SELECT sum(value) FROM v", settings=settings)
     assert result.strip() == expected
 
-    query_id = "test_pr_protocol_with_stream_id_" + nodes[2].query("SELECT generateUUIDv4()").strip()
-    result = nodes[2].query(
-        "SELECT sum(value) FROM v SETTINGS parallel_replicas_allow_view_over_mergetree = 1",
-        settings=settings,
-        query_id=query_id,
-    )
-    assert result.strip() == expected
+    def run_and_check(extra_settings, expected_unavailable, expected_used):
+        """Run query from new node, verify result and that old replicas are unavailable."""
+        merged = {**settings, **extra_settings}
+        qid = f"test_pr_protocol_with_stream_id_{uuid.uuid4()}"
+        result = nodes[2].query("SELECT sum(value) FROM v", settings=merged, query_id=qid)
+        assert result.strip() == expected, f"Wrong result with settings {extra_settings}"
 
-    # node2 is the new node, nodes 0 and 1 are old (no stream_id support).
-    # Old replicas should be filtered out at connection time and marked unavailable.
-    nodes[2].query("SYSTEM FLUSH LOGS")
-    profile_events = nodes[2].query(
-        f"""
-        SELECT
-            ProfileEvents['ParallelReplicasUnavailableCount'],
-            ProfileEvents['ParallelReplicasUsedCount']
-        FROM system.query_log
-        WHERE type = 'QueryFinish'
-            AND query_id = '{query_id}'
-        SETTINGS enable_parallel_replicas = 0
-        """
-    )
-    assert profile_events.strip() == "2\t1"
+        # node2 is the new node, nodes 0 and 1 are old (no stream_id support).
+        # Old replicas should be filtered out at connection time and marked unavailable.
+        nodes[2].query("SYSTEM FLUSH LOGS")
+        profile_events = nodes[2].query(
+            f"""
+            SELECT
+                ProfileEvents['ParallelReplicasUnavailableCount'],
+                ProfileEvents['ParallelReplicasUsedCount']
+            FROM system.query_log
+            WHERE type = 'QueryFinish'
+                AND query_id = '{qid}'
+            SETTINGS enable_parallel_replicas = 0
+            """
+        )
+        assert profile_events.strip() == f"{expected_unavailable}\t{expected_used}", \
+            f"Wrong profile events with settings {extra_settings}: {profile_events.strip()}"
+
+    run_and_check({"parallel_replicas_allow_view_over_mergetree": 1}, 2, 1)
+    run_and_check({"parallel_replicas_allow_view_over_mergetree": 1, "parallel_replicas_local_plan": 1}, 2, 1)
+    run_and_check({"parallel_replicas_allow_view_over_mergetree": 1, "parallel_replicas_local_plan": 0}, 2, 1)
+    # With view-over-MergeTree disabled, the view is expanded into two separate
+    # sub-queries (one per underlying table), each with its own set of replicas.
+    run_and_check({"parallel_replicas_allow_view_over_mergetree": 0}, 4, 2)
 
     for node in nodes:
         node.query("DROP VIEW IF EXISTS v")

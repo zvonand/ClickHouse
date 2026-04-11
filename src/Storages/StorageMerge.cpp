@@ -1274,7 +1274,7 @@ StorageMerge::StorageListWithLocks ReadFromMerge::getSelectedTables(
     DatabaseTablesIterators database_table_iterators = assert_cast<StorageMerge &>(*storage_merge).getDatabaseIterators(query_context);
 
     std::function<bool(const String&,const String&)> table_filter;
-    if (filter_actions_dag)
+    if (filter_actions_dag && storage_merge->isVirtualColumn("_database", merge_storage_snapshot->metadata) && storage_merge->isVirtualColumn("_table", merge_storage_snapshot->metadata))
     {
         auto lc_string_type = std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>());
         Block sample_block = {
@@ -1320,7 +1320,10 @@ StorageMerge::StorageListWithLocks ReadFromMerge::getSelectedTables(
                     if (granted_show_on_all_tables || access->isGranted(AccessType::SHOW_TABLES, iterator->databaseName(), iterator->name()))
                     {
                         if  (!granted_select_on_all_tables)
-                            access->checkAccess(AccessType::SELECT, iterator->databaseName(), iterator->name(), all_column_names);
+                        {
+                            const auto columns_to_check = VirtualColumnUtils::filterVirtualColumns(all_column_names, storage_snapshot->metadata, storage_snapshot->virtual_columns, VirtualsKind::All, VirtualsMaterializationPlace::All);
+                            access->checkAccess(AccessType::SELECT, iterator->databaseName(), iterator->name(), columns_to_check);
+                        }
 
                         auto table_lock = storage->lockForShare(query_context->getCurrentQueryId(), settings[Setting::lock_acquire_timeout]);
                         res.emplace_back(iterator->databaseName(), storage, std::move(table_lock), iterator->name());

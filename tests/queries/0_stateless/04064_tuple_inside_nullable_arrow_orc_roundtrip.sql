@@ -378,3 +378,22 @@ SELECT * FROM file(currentDatabase() || '_04064_arr_nested_elem.orc', 'ORC', '`c
 SELECT * FROM file(currentDatabase() || '_04064_arr_nested_elem.orc', 'ORC', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Array(UInt32))') SETTINGS input_format_orc_import_nested = 1, input_format_orc_use_fast_decoder = 0;
 
 DROP TABLE test_nullable_tuple_arr_nested_elem;
+
+-- LowCardinality(Nullable(String)) hint with no physical nulls in the file: the ORC reader must still wrap the column as nullable
+DROP TABLE IF EXISTS test_nullable_tuple_lc_string;
+CREATE TABLE test_nullable_tuple_lc_string (c0 String) ENGINE = Memory;
+INSERT INTO test_nullable_tuple_lc_string VALUES ('hello'), ('world');
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_lc_str.arrow', 'Arrow') SELECT c0 FROM test_nullable_tuple_lc_string;
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04064_lc_str.orc', 'ORC') SELECT c0 FROM test_nullable_tuple_lc_string;
+
+-- Arrow: no physical nulls, LowCardinality(Nullable(String)) hint
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_lc_str.arrow', 'Arrow', 'c0 LowCardinality(Nullable(String))');
+
+-- ORC: no physical nulls, LowCardinality(Nullable(String)) hint
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_lc_str.orc', 'ORC', 'c0 LowCardinality(Nullable(String))');
+
+-- ORC legacy: no physical nulls, LowCardinality(Nullable(String)) hint
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04064_lc_str.orc', 'ORC', 'c0 LowCardinality(Nullable(String))') SETTINGS input_format_orc_use_fast_decoder = 0;
+
+DROP TABLE test_nullable_tuple_lc_string;

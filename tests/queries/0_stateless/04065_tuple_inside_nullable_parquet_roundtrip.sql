@@ -258,3 +258,18 @@ SELECT * FROM file(currentDatabase() || '_04065_arr_nested_elem.parquet', 'Parqu
 SELECT * FROM file(currentDatabase() || '_04065_arr_nested_elem.parquet', 'Parquet', '`c0.a` Array(Nullable(UInt32)), `c0.b` Array(Array(UInt32))') SETTINGS input_format_parquet_use_native_reader_v3 = 1, input_format_parquet_import_nested = 1;
 
 DROP TABLE test_nullable_tuple_arr_nested_elem;
+
+-- LowCardinality(Nullable(String)) hint with no physical nulls in the file: the reader must still wrap the column as nullable
+DROP TABLE IF EXISTS test_nullable_tuple_lc_string;
+CREATE TABLE test_nullable_tuple_lc_string (c0 String) ENGINE = Memory;
+INSERT INTO test_nullable_tuple_lc_string VALUES ('hello'), ('world');
+
+INSERT INTO TABLE FUNCTION file(currentDatabase() || '_04065_lc_str.parquet', 'Parquet') SELECT c0 FROM test_nullable_tuple_lc_string;
+
+-- Parquet Arrow reader: no physical nulls, LowCardinality(Nullable(String)) hint
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04065_lc_str.parquet', 'Parquet', 'c0 LowCardinality(Nullable(String))') SETTINGS input_format_parquet_use_native_reader_v3 = 0;
+
+-- Parquet V3 native reader: no physical nulls, LowCardinality(Nullable(String)) hint
+SELECT c0, toTypeName(c0) FROM file(currentDatabase() || '_04065_lc_str.parquet', 'Parquet', 'c0 LowCardinality(Nullable(String))') SETTINGS input_format_parquet_use_native_reader_v3 = 1;
+
+DROP TABLE test_nullable_tuple_lc_string;

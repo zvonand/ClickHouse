@@ -12,9 +12,12 @@ endif()
 set(LIBRARY_DIR "${ClickHouse_SOURCE_DIR}/contrib/fastops")
 
 set(SRCS
-    "${LIBRARY_DIR}/fastops/avx2/ops_avx2.cpp"
     "${LIBRARY_DIR}/fastops/fastops.cpp"
 )
+
+if (ARCH_AMD64)
+    list(APPEND SRCS "${LIBRARY_DIR}/fastops/avx2/ops_avx2.cpp")
+endif()
 
 if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_LESS 3)
     # Below v3: need runtime dispatch with AVX-only and Plain fallbacks.

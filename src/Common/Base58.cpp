@@ -230,48 +230,56 @@ std::optional<size_t> decodeBase58_32_fd(const uint8_t * src, size_t src_length,
     constexpr size_t RAW58_SZ = INTERMEDIATE_SZ * 5;
     constexpr size_t BYTE_CNT = 32;
 
-    if (src_length > RAW58_SZ)
+    /// Minimum encoded length is BYTE_CNT (all-zero input -> BYTE_CNT leading '1's).
+    if (src_length < BYTE_CNT || src_length > BASE58_ENCODED_32_LEN)
         return std::nullopt;
-
-    uint8_t raw[RAW58_SZ] = {};
-    size_t pad = RAW58_SZ - src_length;
 
     for (size_t i = 0; i < src_length; i++)
     {
-        uint8_t c = src[i];
-        if (c < BASE58_INVERSE_TABLE_OFFSET || c >= BASE58_INVERSE_TABLE_OFFSET + BASE58_INVERSE_TABLE_SENTINEL)
+        size_t idx = static_cast<size_t>(static_cast<uint8_t>(src[i])) - static_cast<size_t>(BASE58_INVERSE_TABLE_OFFSET);
+        if (idx > BASE58_INVERSE_TABLE_SENTINEL)
             return std::nullopt;
-        uint8_t val = base58_inverse[c - BASE58_INVERSE_TABLE_OFFSET];
-        if (val == BASE58_INVALID_CHAR)
+        if (base58_inverse[idx] == BASE58_INVALID_CHAR)
             return std::nullopt;
-        raw[pad + i] = val;
     }
 
-    uint64_t intermediate[INTERMEDIATE_SZ] = {};
-    for (size_t i = 0; i < RAW58_SZ; i++)
-        for (size_t j = 0; j < BINARY_SZ; j++)
-            intermediate[j] += static_cast<uint64_t>(raw[i]) * static_cast<uint64_t>(dec_table_32[i / 5][j]);
+    uint8_t raw[RAW58_SZ];
+    size_t prepend_0 = RAW58_SZ - src_length;
+    for (size_t j = 0; j < RAW58_SZ; j++)
+        raw[j] = (j < prepend_0) ? 0 : base58_inverse[static_cast<uint8_t>(src[j - prepend_0]) - BASE58_INVERSE_TABLE_OFFSET];
+
+    uint64_t intermediate[INTERMEDIATE_SZ];
+    for (size_t i = 0; i < INTERMEDIATE_SZ; i++)
+        intermediate[i] = static_cast<uint64_t>(raw[5 * i + 0]) * 11316496ULL + static_cast<uint64_t>(raw[5 * i + 1]) * 195112ULL
+            + static_cast<uint64_t>(raw[5 * i + 2]) * 3364ULL + static_cast<uint64_t>(raw[5 * i + 3]) * 58ULL
+            + static_cast<uint64_t>(raw[5 * i + 4]);
+
+    uint64_t binary[BINARY_SZ] = {};
+    for (size_t j = 0; j < BINARY_SZ; j++)
+        for (size_t i = 0; i < INTERMEDIATE_SZ; i++)
+            binary[j] += static_cast<uint64_t>(intermediate[i]) * static_cast<uint64_t>(dec_table_32[i][j]);
+
     for (size_t i = BINARY_SZ - 1; i > 0; i--)
     {
-        intermediate[i - 1] += intermediate[i] >> 32;
-        intermediate[i] &= 0xFFFFFFFFULL;
+        binary[i - 1] += binary[i] >> 32;
+        binary[i] &= 0xFFFFFFFFULL;
     }
+
+    /// If binary[0] overflows 32 bits the value exceeds 2^(BYTE_CNT*8);
+    /// reject so the caller falls back to the universal decoder.
+    if (binary[0] > 0xFFFFFFFFULL)
+        return std::nullopt;
 
     for (size_t i = 0; i < BINARY_SZ; i++)
     {
-        uint32_t v = __builtin_bswap32(static_cast<uint32_t>(intermediate[i]));
-        memcpy(dst + i * 4, &v, 4);
+        uint32_t word_be = b58_bswap32(static_cast<uint32_t>(binary[i]));
+        memcpy(dst + 4 * i, &word_be, sizeof(word_be));
     }
 
     size_t leading_zero_cnt = 0;
     for (; leading_zero_cnt < BYTE_CNT; leading_zero_cnt++)
-        if (dst[leading_zero_cnt])
-            break;
-    if (leading_zero_cnt > pad)
-        return std::nullopt;
-    for (size_t i = 0; i < leading_zero_cnt; i++)
     {
-        if (i + pad - leading_zero_cnt >= src_length)
+        if (dst[leading_zero_cnt])
             break;
         if (static_cast<uint8_t>(src[leading_zero_cnt]) != static_cast<uint8_t>('1'))
             return std::nullopt;
@@ -289,48 +297,56 @@ std::optional<size_t> decodeBase58_64_fd(const uint8_t * src, size_t src_length,
     constexpr size_t RAW58_SZ = INTERMEDIATE_SZ * 5;
     constexpr size_t BYTE_CNT = 64;
 
-    if (src_length > RAW58_SZ)
+    /// Minimum encoded length is BYTE_CNT (all-zero input -> BYTE_CNT leading '1's).
+    if (src_length < BYTE_CNT || src_length > BASE58_ENCODED_64_LEN)
         return std::nullopt;
-
-    uint8_t raw[RAW58_SZ] = {};
-    size_t pad = RAW58_SZ - src_length;
 
     for (size_t i = 0; i < src_length; i++)
     {
-        uint8_t c = src[i];
-        if (c < BASE58_INVERSE_TABLE_OFFSET || c >= BASE58_INVERSE_TABLE_OFFSET + BASE58_INVERSE_TABLE_SENTINEL)
+        size_t idx = static_cast<size_t>(static_cast<uint8_t>(src[i])) - static_cast<size_t>(BASE58_INVERSE_TABLE_OFFSET);
+        if (idx > BASE58_INVERSE_TABLE_SENTINEL)
             return std::nullopt;
-        uint8_t val = base58_inverse[c - BASE58_INVERSE_TABLE_OFFSET];
-        if (val == BASE58_INVALID_CHAR)
+        if (base58_inverse[idx] == BASE58_INVALID_CHAR)
             return std::nullopt;
-        raw[pad + i] = val;
     }
 
-    uint64_t intermediate[INTERMEDIATE_SZ] = {};
-    for (size_t i = 0; i < RAW58_SZ; i++)
-        for (size_t j = 0; j < BINARY_SZ; j++)
-            intermediate[j] += static_cast<uint64_t>(raw[i]) * static_cast<uint64_t>(dec_table_64[i / 5][j]);
+    uint8_t raw[RAW58_SZ];
+    size_t prepend_0 = RAW58_SZ - src_length;
+    for (size_t j = 0; j < RAW58_SZ; j++)
+        raw[j] = (j < prepend_0) ? 0 : base58_inverse[static_cast<uint8_t>(src[j - prepend_0]) - BASE58_INVERSE_TABLE_OFFSET];
+
+    uint64_t intermediate[INTERMEDIATE_SZ];
+    for (size_t i = 0; i < INTERMEDIATE_SZ; i++)
+        intermediate[i] = static_cast<uint64_t>(raw[5 * i + 0]) * 11316496ULL + static_cast<uint64_t>(raw[5 * i + 1]) * 195112ULL
+            + static_cast<uint64_t>(raw[5 * i + 2]) * 3364ULL + static_cast<uint64_t>(raw[5 * i + 3]) * 58ULL
+            + static_cast<uint64_t>(raw[5 * i + 4]);
+
+    uint64_t binary[BINARY_SZ] = {};
+    for (size_t j = 0; j < BINARY_SZ; j++)
+        for (size_t i = 0; i < INTERMEDIATE_SZ; i++)
+            binary[j] += static_cast<uint64_t>(intermediate[i]) * static_cast<uint64_t>(dec_table_64[i][j]);
+
     for (size_t i = BINARY_SZ - 1; i > 0; i--)
     {
-        intermediate[i - 1] += intermediate[i] >> 32;
-        intermediate[i] &= 0xFFFFFFFFULL;
+        binary[i - 1] += binary[i] >> 32;
+        binary[i] &= 0xFFFFFFFFULL;
     }
+
+    /// If binary[0] overflows 32 bits the value exceeds 2^(BYTE_CNT*8);
+    /// reject so the caller falls back to the universal decoder.
+    if (binary[0] > 0xFFFFFFFFULL)
+        return std::nullopt;
 
     for (size_t i = 0; i < BINARY_SZ; i++)
     {
-        uint32_t v = __builtin_bswap32(static_cast<uint32_t>(intermediate[i]));
-        memcpy(dst + i * 4, &v, 4);
+        uint32_t word_be = b58_bswap32(static_cast<uint32_t>(binary[i]));
+        memcpy(dst + 4 * i, &word_be, sizeof(word_be));
     }
 
     size_t leading_zero_cnt = 0;
     for (; leading_zero_cnt < BYTE_CNT; leading_zero_cnt++)
-        if (dst[leading_zero_cnt])
-            break;
-    if (leading_zero_cnt > pad)
-        return std::nullopt;
-    for (size_t i = 0; i < leading_zero_cnt; i++)
     {
-        if (i + pad - leading_zero_cnt >= src_length)
+        if (dst[leading_zero_cnt])
             break;
         if (static_cast<uint8_t>(src[leading_zero_cnt]) != static_cast<uint8_t>('1'))
             return std::nullopt;

@@ -4107,7 +4107,6 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
 
     {
         std::shared_lock lock(storage_mutex);
-        /// TODO: If https://github.com/ClickHouse/ClickHouse/pull/100773 is merged, change this to getDynamicSettings() and add HOT_RELOAD.
         read_thread_pool.execute(tasks.size(), keeper_context->getCoordinationSettings(),
             [&](size_t begin, size_t end)
             {

@@ -3369,6 +3369,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             explain->setSettings(settings_ast);
 
             explain->setExplainedQuery(ast);
+            debug_visited_nodes.erase(ast.get());
             ast = explain;
         }
     }
@@ -4276,6 +4277,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         {
             auto select_query = explain_query->getExplainedQuery()->clone();
             fuzz(select_query);
+            debug_visited_nodes.erase(ast.get());
             ast = select_query;
         }
         else
@@ -4675,6 +4677,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
         {
             const auto new_type = fuzzDataType(old_type);
             ParserDataType parser;
+            debug_visited_nodes.erase(ast.get());
             ast = parseQuery(
                 parser,
                 new_type->getName(),

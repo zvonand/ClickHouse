@@ -948,13 +948,16 @@ void registerDatabaseDataLake(DatabaseFactory & factory)
         if (!auth_header_str.empty())
         {
             /// Validate `auth_header` against the forbidden HTTP header filter at creation time.
-            /// Only headers with a valid `name: value` format can be checked; headers with no colon
-            /// are allowed at creation time and will fail lazily when the catalog is first used.
+            /// Only headers with a valid `name: value` format are accepted.
             auto pos = auth_header_str.find(':');
             if (pos != std::string::npos)
             {
                 DB::HTTPHeaderEntries header_entries{{auth_header_str.substr(0, pos), auth_header_str.substr(pos + 1)}};
                 args.context->getGlobalContext()->getHTTPHeaderFilter().checkAndNormalizeHeaders(header_entries);
+            }
+            else
+            {
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "Invalid auth header format. Expected 'HeaderName: HeaderValue'");
             }
         }
 

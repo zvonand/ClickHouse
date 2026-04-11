@@ -9,7 +9,7 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-# Verify that creating a database with an invalid auth_header (wrong format, no colon) succeeds, and that
+# Verify that creating a database with incorrect credentials in auth_header succeeds, and that
 # querying system.tables on such a database does not cause an exception (the error is caught lazily).
 NEW_DB_NAME="${CLICKHOUSE_DATABASE}_03913_DATALAKE"
 
@@ -20,7 +20,7 @@ CREATE DATABASE ${NEW_DB_NAME}
 ENGINE = DataLakeCatalog('http://rest:8181/v1', 'admin', 'password')
 SETTINGS
     catalog_type = 'rest',
-    auth_header = 'wrong.header',
+    auth_header = 'Authorization: Wrong header',
     storage_endpoint = 'http://minio:9000/lakehouse',
     warehouse = 'demo';
 "

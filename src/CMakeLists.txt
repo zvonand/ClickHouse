@@ -19,11 +19,15 @@ configure_file (Common/config_version.cpp.in ${CONFIG_INCLUDE_PATH}/config_versi
 # See `src/Common/TargetSpecific.h`
 option(ENABLE_MULTITARGET_CODE "Enable platform-dependent code" ON)
 
-if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_LESS 3)
-    # Optimized x86 code in DECLARE_*_SPECIFIC_CODE blocks (see `src/Common/TargetSpecific.h`) is sometimes marked FORCE_INLINE. As a
-    # result, its instruction set requirements (e.g. AVX2) leak into generic code, this breaks builds with older X86_ARCH_LEVEL levels.
-    # Therefore disabling the multitarget code machinery and always use generic code.
-    # The cleaner alternative is removing FORCE_INLINE but that impacts performance too much.
+if (ARCH_AMD64 AND NOT X86_ARCH_LEVEL VERSION_EQUAL 3)
+    # Multi-target dispatch (see `src/Common/TargetSpecific.h`) is only useful at
+    # the default x86-64-v3 level, where the default code uses AVX2 and the v4
+    # variants add AVX-512.  At other levels it causes problems:
+    #  - Below v3: FORCE_INLINE in DECLARE_*_SPECIFIC_CODE blocks leaks higher
+    #    ISA requirements into generic code.
+    #  - Above v3 (e.g. v4): the default code already includes AVX-512, and
+    #    multi-target macros may conflict with third-party libraries that do
+    #    their own ISA detection (e.g. StringZilla, see #99172).
     set(ENABLE_MULTITARGET_CODE OFF)
 endif()
 

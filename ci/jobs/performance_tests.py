@@ -867,8 +867,8 @@ def main():
             date = now.date().isoformat()
 
             with open(raw_query_metrics_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-                data = "".join(lines)
+                data = f.read()
+            line_count = data.count("\n")
 
             insert_metadata = get_insert_metadata(info, compare_against_release)
             query = INSERT_RAW_QUERY_METRICS_DATA.format(
@@ -890,8 +890,9 @@ def main():
             )
             if insert_ok:
                 print(f"Inserted [{len(lines)}] raw query metric lines")
+                print(f"Inserted [{line_count}] raw query metric lines")
             else:
-                print(f"Inserted [{len(lines)}] raw query metric lines - failed")
+                print(f"Inserted [{line_count}] raw query metric lines - failed")
             return True
 
         results.append(

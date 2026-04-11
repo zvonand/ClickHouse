@@ -257,7 +257,7 @@ std::optional<size_t> decodeBase58_32_fd(const uint8_t * src, size_t src_length,
     uint64_t binary[BINARY_SZ] = {};
     for (size_t j = 0; j < BINARY_SZ; j++)
         for (size_t i = 0; i < INTERMEDIATE_SZ; i++)
-            binary[j] += static_cast<uint64_t>(intermediate[i]) * static_cast<uint64_t>(dec_table_32[i][j]);
+            binary[j] += intermediate[i] * static_cast<uint64_t>(dec_table_32[i][j]);
 
     for (size_t i = BINARY_SZ - 1; i > 0; i--)
     {
@@ -324,7 +324,7 @@ std::optional<size_t> decodeBase58_64_fd(const uint8_t * src, size_t src_length,
     uint64_t binary[BINARY_SZ] = {};
     for (size_t j = 0; j < BINARY_SZ; j++)
         for (size_t i = 0; i < INTERMEDIATE_SZ; i++)
-            binary[j] += static_cast<uint64_t>(intermediate[i]) * static_cast<uint64_t>(dec_table_64[i][j]);
+            binary[j] += intermediate[i] * static_cast<uint64_t>(dec_table_64[i][j]);
 
     for (size_t i = BINARY_SZ - 1; i > 0; i--)
     {

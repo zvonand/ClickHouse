@@ -254,8 +254,8 @@ private:
             /// vectorizes cleanly with no register-pressure issues, so it
             /// keeps 4 accumulators.  On other architectures (ARM, compat
             /// x86), 4 accumulators are fine for all kernels.
-            static constexpr bool is_linf = std::is_same_v<Kernel, LinfNorm>;
 #if defined(__AVX2__)
+            static constexpr bool is_linf = std::is_same_v<Kernel, LinfNorm>;
             static constexpr size_t VEC_SIZE = is_linf ? 4 : 2;
 #else
             static constexpr size_t VEC_SIZE = 4;

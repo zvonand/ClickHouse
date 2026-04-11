@@ -224,6 +224,7 @@ public:
         , buffer(buffer_)
         , storage_id(storage_id_)
         , virtual_columns(storage_snapshot->virtual_columns)
+        , metadata(storage_snapshot->metadata)
         , metadata_version(storage_snapshot->metadata->metadata_version) {}
 
     String getName() const override { return "Buffer"; }
@@ -244,11 +245,19 @@ protected:
 
         Columns columns;
         columns.reserve(getPort().getHeader().columns());
+        const auto & columns_desc = metadata->getColumns();
         for (const auto & packed : getPort().getHeader().getNamesAndTypes())
         {
             const auto & [name, type] = packed;
 
-            if (buffer.data.has(name))
+            /// Resolve the column through metadata to get proper subcolumn info
+            /// (e.g., "c0.null" for Nullable, "arr.size0" for Array).
+            /// The header's NameAndTypePair lacks subcolumn_delimiter_position,
+            /// so getNameInStorage() would return the full name instead of the parent.
+            auto resolved = columns_desc.tryGetColumnOrSubcolumn(GetColumnsOptions::All, name);
+            if (resolved && buffer.data.has(resolved->getNameInStorage()))
+                columns.emplace_back(getColumnFromBlock(buffer.data, *resolved));
+            else if (buffer.data.has(name))
                 columns.emplace_back(getColumnFromBlock(buffer.data, packed));
             else
                 columns.emplace_back(fillVirtualColumn(name, type, buffer.data.rows()));
@@ -262,6 +271,7 @@ private:
     StorageBuffer::Buffer & buffer;
     StorageID storage_id;
     VirtualsDescriptionPtr virtual_columns;
+    StorageMetadataPtr metadata;
     int32_t metadata_version;
     bool has_been_read = false;
 };

@@ -71,7 +71,7 @@ std::shared_ptr<StorageSnapshot> StorageSnapshot::clone(DataPtr data_) const
 
 ColumnsDescription StorageSnapshot::getAllColumnsDescription() const
 {
-    auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withVirtuals();
+    auto get_column_options = GetColumnsOptions(GetColumnsOptions::All).withVirtuals(VirtualsKind::All, VirtualsMaterializationPlace::All);
     auto column_names_and_types = getColumns(get_column_options);
 
     return ColumnsDescription{column_names_and_types};
@@ -87,7 +87,7 @@ NamesAndTypesList StorageSnapshot::getColumns(const GetColumnsOptions & options)
         for (const auto & column : all_columns)
             column_names.insert(column.name);
 
-        auto virtuals_list = virtual_columns->getNamesAndTypesList(options.virtuals_kind);
+        auto virtuals_list = virtual_columns->getSampleBlock(options.virtuals_kind, options.virtuals_place).getNamesAndTypesList();
         for (const auto & column : virtuals_list)
         {
             if (column_names.contains(column.name))
@@ -116,7 +116,7 @@ std::optional<NameAndTypePair> StorageSnapshot::tryGetColumn(const GetColumnsOpt
 
     if (options.virtuals_kind != VirtualsKind::None)
     {
-        auto virtual_column = virtual_columns->tryGet(column_name, options.virtuals_kind);
+        auto virtual_column = virtual_columns->tryGet(column_name, options.virtuals_kind, options.virtuals_place);
         if (virtual_column)
             return NameAndTypePair{virtual_column->name, virtual_column->type};
     }
@@ -145,7 +145,7 @@ Block StorageSnapshot::getSampleBlockForColumns(const Names & column_names) cons
         {
             res.insert({column->type->createColumn(), column->type, column_name});
         }
-        else if (auto virtual_column = virtual_columns->tryGet(column_name))
+        else if (auto virtual_column = virtual_columns->tryGet(column_name, VirtualsKind::All, VirtualsMaterializationPlace::All))
         {
             /// Virtual columns must be appended after ordinary, because user can
             /// override them.
@@ -172,7 +172,7 @@ ColumnsDescription StorageSnapshot::getDescriptionForColumns(const Names & colum
         {
             res.add(*column, "", false, false);
         }
-        else if (auto virtual_column = virtual_columns->tryGet(name))
+        else if (auto virtual_column = virtual_columns->tryGet(name, VirtualsKind::All, VirtualsMaterializationPlace::All))
         {
             /// Virtual columns must be appended after ordinary, because user can
             /// override them.

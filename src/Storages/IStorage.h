@@ -241,8 +241,6 @@ public:
     ///
     /// By default return empty list of columns.
     VirtualsDescriptionPtr getVirtualsPtr() const { return virtuals.get(); }
-    NamesAndTypesList getVirtualsList() const { return virtuals.get()->getNamesAndTypesList(); }
-    Block getVirtualsHeader() const { return virtuals.get()->getSampleBlock(); }
 
     Names getAllRegisteredNames() const override;
 

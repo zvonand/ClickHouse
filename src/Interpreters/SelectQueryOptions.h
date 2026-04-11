@@ -63,6 +63,10 @@ struct SelectQueryOptions
 
     bool build_logical_plan = false;
     bool ignore_rename_columns = false;
+    /// True when this query is the local shard plan created by DistributedCreateLocalPlan.
+    /// Used to re-enable positional arguments in view contexts, which need them resolved
+    /// even though the outer query has enable_positional_arguments=false to prevent double-resolution.
+    bool is_distributed_local_plan = false;
 
     size_t max_step_description_length = 0;
 

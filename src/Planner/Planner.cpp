@@ -1975,7 +1975,9 @@ void Planner::buildPlanForQueryNode()
     select_query_info.need_aggregate = query_node.hasGroupBy() || select_query_info.has_aggregates;
     select_query_info.merge_tree_enable_remove_parts_from_snapshot_optimization = select_query_options.merge_tree_enable_remove_parts_from_snapshot_optimization;
     select_query_info.enable_positional_arguments_for_view
-        = settings[Setting::enable_positional_arguments] || isWithMergeableState(select_query_options.to_stage);
+        = settings[Setting::enable_positional_arguments]
+        || select_query_options.is_distributed_local_plan
+        || query_context->getClientInfo().query_kind == ClientInfo::QueryKind::SECONDARY_QUERY;
 
     if (!select_query_info.has_window && query_node.hasQualify())
     {

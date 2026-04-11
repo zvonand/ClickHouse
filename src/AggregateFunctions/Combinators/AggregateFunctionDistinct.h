@@ -237,7 +237,8 @@ public:
         auto & data = this->data(place);
 
         /// Detect whether Data provides the single-column `add(IColumn &, row)` overload.
-        constexpr bool is_single_numeric = requires(Data & d, const IColumn & c, size_t r) {
+        constexpr bool is_single_numeric = requires(Data & d, const IColumn & c, size_t r)
+        {
             { d.add(c, r) } -> std::same_as<bool>;
         };
 

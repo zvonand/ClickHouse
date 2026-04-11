@@ -47,6 +47,21 @@ LIMIT 10
 FORMAT Null
 SETTINGS log_comment = 'vrow_filter_reverse_1';
 
+-- PREWHERE fully filters out all blocks from 3 of 4 parts (same filter, different code path).
+SELECT * FROM t_vrow_1
+PREWHERE filter_val = 1
+ORDER BY event_time ASC
+LIMIT 10
+FORMAT Null
+SETTINGS log_comment = 'vrow_prewhere_1';
+
+SELECT * FROM t_vrow_1
+PREWHERE filter_val = 1
+ORDER BY event_time DESC
+LIMIT 10
+FORMAT Null
+SETTINGS log_comment = 'vrow_prewhere_reverse_1';
+
 SYSTEM FLUSH LOGS system.query_log;
 
 SELECT log_comment, if(read_rows <= 8192 * 8, 'Ok', format('Too many rows read: {}, query_id: {}', read_rows, query_id)) AS result

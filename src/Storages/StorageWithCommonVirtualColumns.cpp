@@ -52,12 +52,15 @@ void StorageWithCommonVirtualColumns::read(
     size_t max_block_size,
     size_t num_streams)
 {
+    if (processed_stage > QueryProcessingStage::FetchColumns)
+    {
+        readImpl(query_plan, column_names, storage_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
+        return;
+    }
+
     /// Proxy to underlying storage.
     auto filtered_columns = VirtualColumnUtils::filterVirtualColumns(column_names, storage_snapshot->metadata, storage_snapshot->virtual_columns, VirtualsKind::Ephemeral, VirtualsMaterializationPlace::Plan);
     readImpl(query_plan, filtered_columns, storage_snapshot, query_info, context, processed_stage, max_block_size, num_streams);
-
-    if (processed_stage > QueryProcessingStage::FetchColumns)
-        return;
 
     /// Materialize constant virtuals.
     if (query_plan.isInitialized())

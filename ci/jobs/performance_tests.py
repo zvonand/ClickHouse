@@ -889,7 +889,6 @@ def main():
                 retries=3,
             )
             if insert_ok:
-                print(f"Inserted [{len(lines)}] raw query metric lines")
                 print(f"Inserted [{line_count}] raw query metric lines")
             else:
                 print(f"Inserted [{line_count}] raw query metric lines - failed")

@@ -156,8 +156,15 @@ protected:
                 }
 
                 StorageMetadataPtr metadata_snapshot;
-                try { metadata_snapshot = storage->getInMemoryMetadataPtr(context, false); }
-                catch (...) { metadata_snapshot = std::make_shared<StorageInMemoryMetadata>(); } /// Ok
+                try
+                {
+                    metadata_snapshot = storage->getInMemoryMetadataPtr(context, false);
+                }
+                catch (...) /// Ok
+                {
+                    tryLogCurrentException(getLogger("ColumnsSource"));
+                    metadata_snapshot = std::make_shared<StorageInMemoryMetadata>();
+                }
                 columns = metadata_snapshot->getColumns();
 
                 /// Certain information about a table - should be calculated only when the corresponding columns are queried.

@@ -23,6 +23,7 @@
 #include <Storages/StorageFactory.h>
 #include <Storages/System/StorageSystemCompletions.h>
 #include <TableFunctions/TableFunctionFactory.h>
+#include <Common/Exception.h>
 #include <Common/Macros.h>
 
 
@@ -88,8 +89,15 @@ void fillDataWithTableColumns(
         return; // table was dropped while acquiring the lock
 
     StorageMetadataPtr snapshot;
-    try { snapshot = table->getInMemoryMetadataPtr(context, false); }
-    catch (...) { return; } /// Ok
+    try
+    {
+        snapshot = table->getInMemoryMetadataPtr(context, false);
+    }
+    catch (...)  /// Ok
+    {
+        tryLogCurrentException(getLogger("fillDataWithTableColumns"));
+        return;
+    }
 
     const auto & columns = snapshot->getColumns();
     for (const auto & column : columns)

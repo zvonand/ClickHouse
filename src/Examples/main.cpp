@@ -217,14 +217,13 @@ std::pair<std::string_view, MainFunc> examples[] =
     {"get_current_inserts_in_replicated", mainEntryExampleGetCurrentInsertsInReplicated},
 };
 
-int printHelp(int, char **)
+void printHelp()
 {
     std::cerr << "Usage: clickhouse-examples <example-name> [args]" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Available examples:" << std::endl;
     for (const auto & example : examples)
         std::cerr << "  " << example.first << std::endl;
-    return 1;
 }
 
 }
@@ -234,7 +233,10 @@ int main(int argc, char ** argv)
     std::vector<char *> args(argv, argv + argc);
 
     if (args.empty())
-        return printHelp(argc, argv);
+    {
+        printHelp();
+        return 1;
+    }
 
     /// Check if invoked via symlink (e.g., hash_map -> clickhouse-examples)
     std::string binary_name = std::filesystem::path(args[0]).filename().string();
@@ -245,6 +247,17 @@ int main(int argc, char ** argv)
             return func(argc, argv);
     }
 
+    /// Handle --help / -h explicitly with exit code 0
+    if (args.size() >= 2)
+    {
+        std::string_view first_arg(args[1]);
+        if (first_arg == "--help" || first_arg == "-h")
+        {
+            printHelp();
+            return 0;
+        }
+    }
+
     /// Check first argument as subcommand
     if (args.size() >= 2)
     {
@@ -253,6 +266,9 @@ int main(int argc, char ** argv)
         {
             if (command == name)
             {
+                /// Rewrite argv[0] to the matched command name so examples
+                /// that derive usage text from program name show correct output.
+                args[0] = args[1];
                 /// Remove the subcommand from args
                 args.erase(args.begin() + 1);
                 return func(static_cast<int>(args.size()), args.data());
@@ -260,5 +276,6 @@ int main(int argc, char ** argv)
         }
     }
 
-    return printHelp(argc, argv);
+    printHelp();
+    return 1;
 }

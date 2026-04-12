@@ -32,8 +32,6 @@
 #include <Functions/FunctionHelpers.h>
 #include <Functions/IFunctionAdaptors.h>
 #include <Functions/IsOperation.h>
-#include <IO/ReadBufferFromMemory.h>
-#include <IO/ReadHelpers.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/castColumn.h>
 #include <Interpreters/convertFieldToType.h>

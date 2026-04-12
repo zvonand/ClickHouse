@@ -3,14 +3,16 @@
 #include <Interpreters/Context_fwd.h>
 #include <Parsers/ASTSelectQuery.h>
 #include <Parsers/IAST_fwd.h>
-#include <Storages/IStorage.h>
+#include <Storages/StorageWithCommonVirtualColumns.h>
 
 
 namespace DB
 {
 
-class StorageView final : public IStorage
+class StorageView final : public StorageWithCommonVirtualColumns
 {
+    static VirtualColumnsDescription createVirtuals();
+
 public:
     StorageView(
         const StorageID & table_id_,
@@ -33,7 +35,7 @@ public:
 
     StoragePtr getUnderlyingMergeTreeStorageForParallelReplicas(const ContextPtr & context) const;
 
-    void read(
+    void readImpl(
         QueryPlan & query_plan,
         const Names & column_names,
         const StorageSnapshotPtr & storage_snapshot,

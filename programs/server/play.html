@@ -2523,13 +2523,18 @@ function toggleDatabases() {
     }
 }
 
+/// The logo is an <a> element so that Ctrl/Cmd/Shift+click and middle-click
+/// natively open the current page (with the query) in a new tab.
+/// We update the href on mousedown so it always reflects the current URL.
 document.getElementById('databases-icon').addEventListener('mousedown', () => {
     document.getElementById('databases-icon').href = window.location.href;
 });
 
 databases_toggle.addEventListener('click', e => {
     e.stopPropagation();
+    /// Let the browser handle modifier clicks as a link (open in new tab).
     if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+    /// Normal click: toggle the databases panel instead of following the link.
     e.preventDefault();
     toggleDatabases();
 });

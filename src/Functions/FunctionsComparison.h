@@ -32,6 +32,7 @@
 #include <Interpreters/Context_fwd.h>
 #include <Interpreters/castColumn.h>
 #include <Interpreters/convertFieldToType.h>
+#include <Functions/ComparisonNames.h>
 #include <type_traits>
 
 #if USE_EMBEDDED_COMPILER
@@ -674,13 +675,6 @@ template <> struct CompileOp<GreaterOrEqualsOp>
 };
 
 #endif
-
-struct NameEquals          { static constexpr auto name = "equals"; };
-struct NameNotEquals       { static constexpr auto name = "notEquals"; };
-struct NameLess            { static constexpr auto name = "less"; };
-struct NameGreater         { static constexpr auto name = "greater"; };
-struct NameLessOrEquals    { static constexpr auto name = "lessOrEquals"; };
-struct NameGreaterOrEquals { static constexpr auto name = "greaterOrEquals"; };
 
 struct ComparisonParams
 {

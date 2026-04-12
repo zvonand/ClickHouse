@@ -5,8 +5,12 @@
 #include <Common/logger_useful.h>
 #include <Common/FailPoint.h>
 
+#include <Common/assert_cast.h>
+#include <DataTypes/DataTypeNullable.h>
+#include <DataTypes/DataTypeString.h>
+#include <Functions/CastOverloadResolver.h>
 #include <Functions/IFunction.h>
-#include <Functions/FunctionsComparison.h>
+#include <Functions/ComparisonNames.h>
 #include <Functions/FunctionsLogical.h>
 
 #include <Interpreters/ActionsDAG.h>

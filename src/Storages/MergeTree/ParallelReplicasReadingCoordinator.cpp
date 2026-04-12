@@ -1145,6 +1145,9 @@ void ParallelReplicasReadingCoordinator::handleInitialAllRangesAnnouncement(Init
     ProfileEvents::increment(ProfileEvents::ParallelReplicasNumRequests);
     ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::ParallelReplicasHandleAnnouncementMicroseconds);
 
+    if (is_reading_completed)
+        return;
+
     std::lock_guard lock(mutex);
 
     if (announcement.stream_id.empty())

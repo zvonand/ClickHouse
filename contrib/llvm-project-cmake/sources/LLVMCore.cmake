@@ -52,6 +52,7 @@ set(LLVMCORE_SOURCES
     ${LLVM_SOURCE_DIR}/lib/IR/Metadata.cpp
     ${LLVM_SOURCE_DIR}/lib/IR/Module.cpp
     ${LLVM_SOURCE_DIR}/lib/IR/ModuleSummaryIndex.cpp
+    ${LLVM_SOURCE_DIR}/lib/IR/NVVMIntrinsicUtils.cpp
     ${LLVM_SOURCE_DIR}/lib/IR/Operator.cpp
     ${LLVM_SOURCE_DIR}/lib/IR/OptBisect.cpp
     ${LLVM_SOURCE_DIR}/lib/IR/Pass.cpp

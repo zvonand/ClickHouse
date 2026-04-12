@@ -50,7 +50,6 @@ set(LLVMANALYSIS_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Analysis/InlineAdvisor.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/InlineCost.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/InlineOrder.cpp
-    ${LLVM_SOURCE_DIR}/lib/Analysis/InlineSizeEstimatorAnalysis.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/InstCount.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/InstructionPrecedenceTracking.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/InstructionSimplify.cpp
@@ -102,6 +101,7 @@ set(LLVMANALYSIS_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Analysis/RegionPass.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/RegionPrinter.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/ReplayInlineAdvisor.cpp
+    ${LLVM_SOURCE_DIR}/lib/Analysis/RuntimeLibcallInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/ScalarEvolutionAliasAnalysis.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/ScalarEvolution.cpp
     ${LLVM_SOURCE_DIR}/lib/Analysis/ScalarEvolutionDivision.cpp

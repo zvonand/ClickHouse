@@ -33,6 +33,7 @@ set(LLVMLOONGARCHCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/LoongArch/LoongArchMergeBaseOffset.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/LoongArch/LoongArchOptWInstrs.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/LoongArch/LoongArchRegisterInfo.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/LoongArch/LoongArchSelectionDAGInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/LoongArch/LoongArchSubtarget.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/LoongArch/LoongArchTargetMachine.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/LoongArch/LoongArchTargetTransformInfo.cpp

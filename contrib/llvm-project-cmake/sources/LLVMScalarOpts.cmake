@@ -12,6 +12,7 @@ set(LLVMSCALAROPTS_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Transforms/Scalar/DeadStoreElimination.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Scalar/DFAJumpThreading.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Scalar/DivRemPairs.cpp
+    ${LLVM_SOURCE_DIR}/lib/Transforms/Scalar/DropUnnecessaryAssumes.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Scalar/EarlyCSE.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Scalar/FlattenCFGPass.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Scalar/Float2Int.cpp

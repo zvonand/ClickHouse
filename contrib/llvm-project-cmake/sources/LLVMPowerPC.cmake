@@ -30,7 +30,6 @@ set(LLVMPOWERPCCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCBranchCoalescing.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCBranchSelector.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCCallingConv.cpp
-    ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCCCState.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCCTRLoops.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCCTRLoopsVerify.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCEarlyReturn.cpp
@@ -59,7 +58,7 @@ set(LLVMPOWERPCCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCTargetTransformInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCTLSDynamicCall.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCTOCRegDeps.cpp
-    ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCVSXCopy.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCVSXFMAMutate.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCVSXSwapRemoval.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/PowerPC/PPCVSXWACCCopy.cpp
 )

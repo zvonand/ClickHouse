@@ -27,6 +27,7 @@ set(LLVMOBJECT_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Object/OffloadBundle.cpp
     ${LLVM_SOURCE_DIR}/lib/Object/RecordStreamer.cpp
     ${LLVM_SOURCE_DIR}/lib/Object/RelocationResolver.cpp
+    ${LLVM_SOURCE_DIR}/lib/Object/SFrameParser.cpp
     ${LLVM_SOURCE_DIR}/lib/Object/SymbolicFile.cpp
     ${LLVM_SOURCE_DIR}/lib/Object/SymbolSize.cpp
     ${LLVM_SOURCE_DIR}/lib/Object/TapiFile.cpp

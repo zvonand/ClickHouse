@@ -16,6 +16,7 @@ set(LLVMRISCVDESC_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/MCTargetDesc/RISCVMCAsmInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/MCTargetDesc/RISCVMCCodeEmitter.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/MCTargetDesc/RISCVMCExpr.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/RISCV/MCTargetDesc/RISCVMachObjectWriter.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/MCTargetDesc/RISCVMCObjectFileInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/MCTargetDesc/RISCVMCTargetDesc.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/MCTargetDesc/RISCVTargetStreamer.cpp
@@ -52,11 +53,13 @@ set(LLVMRISCVCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVLateBranchOpt.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVLoadStoreOptimizer.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVMachineFunctionInfo.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVMachineScheduler.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVMakeCompressible.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVMergeBaseOffset.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVMoveMerger.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVOptWInstrs.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVPostRAExpandPseudoInsts.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVPromoteConstant.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVPushPopOptimizer.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVRedundantCopyElimination.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVRegisterInfo.cpp
@@ -68,6 +71,8 @@ set(LLVMRISCVCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVVectorMaskDAGMutation.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVVectorPeephole.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVVLOptimizer.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVVSETVLIInfoAnalysis.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVVMV0Elimination.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVZacasABIFix.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/RISCV/RISCVZilsdOptimizer.cpp
 )

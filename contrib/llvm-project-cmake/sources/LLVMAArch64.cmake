@@ -3,7 +3,6 @@
 # AArch64 Utils sources (needed by both Desc and CodeGen)
 set(LLVMAARCH64UTILS_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/Utils/AArch64BaseInfo.cpp
-    ${LLVM_SOURCE_DIR}/lib/Target/AArch64/Utils/AArch64SMEAttributes.cpp
 )
 
 # AArch64 Info sources
@@ -71,8 +70,10 @@ set(LLVMAARCH64CODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64PBQPRegAlloc.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64PointerAuth.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64PostCoalescerPass.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64PrologueEpilogue.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64PromoteConstant.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64RedundantCopyElimination.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64RedundantCondBranchPass.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64RegisterInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64SelectionDAGInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64SIMDInstrOpt.cpp
@@ -82,10 +83,12 @@ set(LLVMAARCH64CODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64StackTaggingPreRA.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64StorePairSuppress.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64Subtarget.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64SMEAttributes.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64TargetMachine.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64TargetObjectFile.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/AArch64TargetTransformInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/SMEABIPass.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/AArch64/MachineSMEABIPass.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/SMEPeepholeOpt.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/AArch64/SVEIntrinsicOpts.cpp
 )

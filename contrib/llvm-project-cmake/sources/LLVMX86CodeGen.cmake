@@ -3,6 +3,7 @@ set(LLVMX86CODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/X86/GISel/X86CallLowering.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/GISel/X86InstructionSelector.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/GISel/X86LegalizerInfo.cpp
+    ${LLVM_SOURCE_DIR}/lib/Target/X86/GISel/X86PreLegalizerCombiner.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/GISel/X86RegisterBankInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86ArgumentStackSlotRebase.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86AsmPrinter.cpp
@@ -13,7 +14,6 @@ set(LLVMX86CODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86CmovConversion.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86CodeGenPassBuilder.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86CompressEVEX.cpp
-    ${LLVM_SOURCE_DIR}/lib/Target/X86/X86DiscriminateMemOps.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86DomainReassignment.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86DynAllocaExpander.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86ExpandPseudo.cpp
@@ -30,7 +30,6 @@ set(LLVMX86CODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86FrameLowering.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86IndirectBranchTracking.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86IndirectThunks.cpp
-    ${LLVM_SOURCE_DIR}/lib/Target/X86/X86InsertPrefetch.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86InsertWait.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86InstCombineIntrinsic.cpp
     ${LLVM_SOURCE_DIR}/lib/Target/X86/X86InstrFMA3Info.cpp

@@ -7,11 +7,11 @@ set(LLVMBINARYFORMAT_SOURCES
     ${LLVM_SOURCE_DIR}/lib/BinaryFormat/ELF.cpp
     ${LLVM_SOURCE_DIR}/lib/BinaryFormat/MachO.cpp
     ${LLVM_SOURCE_DIR}/lib/BinaryFormat/Magic.cpp
-    ${LLVM_SOURCE_DIR}/lib/BinaryFormat/Minidump.cpp
     ${LLVM_SOURCE_DIR}/lib/BinaryFormat/MsgPackDocument.cpp
     ${LLVM_SOURCE_DIR}/lib/BinaryFormat/MsgPackDocumentYAML.cpp
     ${LLVM_SOURCE_DIR}/lib/BinaryFormat/MsgPackReader.cpp
     ${LLVM_SOURCE_DIR}/lib/BinaryFormat/MsgPackWriter.cpp
+    ${LLVM_SOURCE_DIR}/lib/BinaryFormat/SFrame.cpp
     ${LLVM_SOURCE_DIR}/lib/BinaryFormat/Wasm.cpp
     ${LLVM_SOURCE_DIR}/lib/BinaryFormat/XCOFF.cpp
 )

@@ -44,19 +44,15 @@ set(LLVMMC_SOURCES
     ${LLVM_SOURCE_DIR}/lib/MC/MCPseudoProbe.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCRegisterInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCSchedule.cpp
-    ${LLVM_SOURCE_DIR}/lib/MC/MCSectionCOFF.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCSection.cpp
-    ${LLVM_SOURCE_DIR}/lib/MC/MCSectionDXContainer.cpp
-    ${LLVM_SOURCE_DIR}/lib/MC/MCSectionELF.cpp
-    ${LLVM_SOURCE_DIR}/lib/MC/MCSectionGOFF.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCSectionMachO.cpp
-    ${LLVM_SOURCE_DIR}/lib/MC/MCSectionWasm.cpp
-    ${LLVM_SOURCE_DIR}/lib/MC/MCSectionXCOFF.cpp
+    ${LLVM_SOURCE_DIR}/lib/MC/MCSFrame.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCSPIRVStreamer.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCStreamer.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCSubtargetInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCSymbol.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCSymbolELF.cpp
+    ${LLVM_SOURCE_DIR}/lib/MC/MCSymbolGOFF.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCSymbolXCOFF.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCTargetOptionsCommandFlags.cpp
     ${LLVM_SOURCE_DIR}/lib/MC/MCTargetOptions.cpp

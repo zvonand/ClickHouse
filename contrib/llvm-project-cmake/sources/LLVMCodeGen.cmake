@@ -8,6 +8,7 @@ set(LLVMCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/CodeGen/BasicBlockPathCloning.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/BasicBlockSections.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/BasicBlockSectionsProfileReader.cpp
+    ${LLVM_SOURCE_DIR}/lib/CodeGen/BasicBlockMatchingAndInference.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/BasicTargetTransformInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/BranchFolding.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/BranchRelaxation.cpp
@@ -34,8 +35,7 @@ set(LLVMCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/CodeGen/EdgeBundles.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/EHContGuardTargets.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/ExecutionDomainFix.cpp
-    ${LLVM_SOURCE_DIR}/lib/CodeGen/ExpandFp.cpp
-    ${LLVM_SOURCE_DIR}/lib/CodeGen/ExpandLargeDivRem.cpp
+    ${LLVM_SOURCE_DIR}/lib/CodeGen/ExpandIRInsts.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/ExpandMemCmp.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/ExpandPostRAPseudos.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/ExpandReductions.cpp
@@ -56,6 +56,7 @@ set(LLVMCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/CodeGen/ImplicitNullChecks.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/IndirectBrExpandPass.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/InitUndef.cpp
+    ${LLVM_SOURCE_DIR}/lib/CodeGen/InsertCodePrefetch.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/InlineSpiller.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/InterferenceCache.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/InterleavedAccessPass.cpp
@@ -66,6 +67,7 @@ set(LLVMCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/CodeGen/LatencyPriorityQueue.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/LazyMachineBlockFrequencyInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/LexicalScopes.cpp
+    ${LLVM_SOURCE_DIR}/lib/CodeGen/LibcallLoweringInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/LiveDebugValues/InstrRefBasedImpl.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/LiveDebugValues/LiveDebugValues.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/LiveDebugValues/VarLocBasedImpl.cpp
@@ -88,6 +90,7 @@ set(LLVMCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/CodeGen/LowLevelTypeUtils.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MachineBasicBlock.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MachineBlockFrequencyInfo.cpp
+    ${LLVM_SOURCE_DIR}/lib/CodeGen/MachineBlockHashInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MachineBlockPlacement.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MachineBranchProbabilityInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MachineCFGPrinter.cpp
@@ -138,6 +141,7 @@ set(LLVMCODEGEN_SOURCES
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MBFIWrapper.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MIRCanonicalizerPass.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MIRFSDiscriminator.cpp
+    ${LLVM_SOURCE_DIR}/lib/CodeGen/MIR2Vec.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MIRNamerPass.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MIRPrinter.cpp
     ${LLVM_SOURCE_DIR}/lib/CodeGen/MIRPrintingPass.cpp

@@ -21,6 +21,7 @@ set(LLVMTRANSFORMUTILS_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/CountVisits.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/CtorUtils.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/Debugify.cpp
+    ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/DebugSSAUpdater.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/DeclareRuntimeLibcalls.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/DemoteRegToStack.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/DXILUpgrade.cpp
@@ -69,6 +70,7 @@ set(LLVMTRANSFORMUTILS_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/MoveAutoInit.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/NameAnonGlobals.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/PredicateInfo.cpp
+    ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/ProfileVerify.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/PromoteMemoryToRegister.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/RelLookupTableConverter.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/SampleProfileInference.cpp
@@ -81,6 +83,7 @@ set(LLVMTRANSFORMUTILS_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/SimplifyLibCalls.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/SizeOpts.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/SplitModule.cpp
+    ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/SplitModuleByCategory.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/SSAUpdaterBulk.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/SSAUpdater.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Utils/StripGCRelocates.cpp

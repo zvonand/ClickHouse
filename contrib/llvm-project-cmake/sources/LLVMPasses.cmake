@@ -5,6 +5,5 @@ set(LLVMPASSES_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Passes/PassBuilderBindings.cpp
     ${LLVM_SOURCE_DIR}/lib/Passes/PassBuilder.cpp
     ${LLVM_SOURCE_DIR}/lib/Passes/PassBuilderPipelines.cpp
-    ${LLVM_SOURCE_DIR}/lib/Passes/PassPlugin.cpp
     ${LLVM_SOURCE_DIR}/lib/Passes/StandardInstrumentations.cpp
 )

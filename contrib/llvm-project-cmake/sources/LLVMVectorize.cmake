@@ -1,6 +1,5 @@
 # Source files for LLVMVectorize
 set(LLVMVECTORIZE_SOURCES
-    ${LLVM_SOURCE_DIR}/lib/Transforms/Vectorize/EVLIndVarSimplify.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Vectorize/LoadStoreVectorizer.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Vectorize/LoopIdiomVectorize.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Vectorize/LoopVectorizationLegality.cpp

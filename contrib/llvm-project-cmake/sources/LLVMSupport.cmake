@@ -3,6 +3,7 @@ set(LLVMSUPPORT_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Support/AArch64AttributeParser.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/AArch64BuildAttributes.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/ABIBreak.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/AllocToken.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/Allocator.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/AMDGPUMetadata.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/APFixedPoint.cpp
@@ -46,6 +47,7 @@ set(LLVMSUPPORT_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Support/DeltaTree.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/DivisionByConstantInfo.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/DJB.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/DXILABI.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/DynamicAPInt.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/DynamicLibrary.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/ELFAttributes.cpp
@@ -65,19 +67,25 @@ set(LLVMSUPPORT_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Support/FormatVariadic.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/GlobPattern.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/GraphWriter.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/Hash.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/HexagonAttributeParser.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/HexagonAttributes.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/InitLLVM.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/InstructionCost.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/IntegerInclusiveInterval.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/IntEqClasses.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/IntervalMap.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/JSON.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/Jobserver.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/KnownBits.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/KnownFPClass.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/LEB128.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/LineIterator.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/Locale.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/LockFileManager.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/LSP/Logging.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/LSP/Protocol.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/LSP/Transport.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/ManagedStatic.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/MathExtras.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/MD5.cpp
@@ -104,6 +112,7 @@ set(LLVMSUPPORT_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Support/RandomNumberGenerator.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/raw_os_ostream.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/raw_ostream.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/raw_ostream_proxy.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/raw_socket_stream.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/regcomp.c
     ${LLVM_SOURCE_DIR}/lib/Support/regerror.c
@@ -146,7 +155,6 @@ set(LLVMSUPPORT_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Support/ToolOutputFile.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/TrieRawHashMap.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/Twine.cpp
-    ${LLVM_SOURCE_DIR}/lib/Support/TypeSize.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/UnicodeCaseFold.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/Unicode.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/UnicodeNameToCodepoint.cpp
@@ -154,12 +162,18 @@ set(LLVMSUPPORT_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Support/Valgrind.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/VersionTuple.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/VirtualFileSystem.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/VirtualOutputBackend.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/VirtualOutputBackends.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/VirtualOutputConfig.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/VirtualOutputError.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/VirtualOutputFile.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/Watchdog.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/WithColor.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/xxhash.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/YAMLParser.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/YAMLTraits.cpp
     ${LLVM_SOURCE_DIR}/lib/Support/Z3Solver.cpp
+    ${LLVM_SOURCE_DIR}/lib/Support/zOSLibFunctions.cpp
     # BLAKE3
     ${LLVM_SOURCE_DIR}/lib/Support/BLAKE3/blake3.c
     ${LLVM_SOURCE_DIR}/lib/Support/BLAKE3/blake3_dispatch.c

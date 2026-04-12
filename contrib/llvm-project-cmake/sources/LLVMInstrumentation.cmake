@@ -1,6 +1,7 @@
 # Source files for LLVMInstrumentation
 set(LLVMINSTRUMENTATION_SOURCES
     ${LLVM_SOURCE_DIR}/lib/Transforms/Instrumentation/AddressSanitizer.cpp
+    ${LLVM_SOURCE_DIR}/lib/Transforms/Instrumentation/AllocToken.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Instrumentation/BlockCoverageInference.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Instrumentation/BoundsChecking.cpp
     ${LLVM_SOURCE_DIR}/lib/Transforms/Instrumentation/CGProfile.cpp

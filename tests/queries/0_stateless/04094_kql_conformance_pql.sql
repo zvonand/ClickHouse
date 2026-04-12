@@ -130,7 +130,8 @@ SourceFiles
 | sort by Directory asc, IsTest asc;
 print '-- pql::SummarizeBy --';
 SourceFiles
-| summarize by Directory;
+| summarize by Directory
+| sort by Directory asc;
 print '-- pql::SummarizeCount --';
 SourceFiles
 | summarize Files=count() by Directory, IsTest=endsWith(FileName, "_test.go")

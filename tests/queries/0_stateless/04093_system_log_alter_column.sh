@@ -47,7 +47,7 @@ $CLICKHOUSE_LOCAL --config-file "${CONFIG_FILE}" --multiquery "
     SELECT 1 FORMAT Null;
     SYSTEM FLUSH LOGS query_log;
 
-    SELECT count() > 0 FROM system.query_log;
+    SELECT count() > 0 FROM system.query_log WHERE current_database = currentDatabase();
 
     ALTER TABLE system.query_log DROP COLUMN IF EXISTS extra_test_column;
 "

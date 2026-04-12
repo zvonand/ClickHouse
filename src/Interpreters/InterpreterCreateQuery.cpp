@@ -21,7 +21,6 @@
 #include <Common/logger_useful.h>
 #include <Common/typeid_cast.h>
 #include <Common/thread_local_rng.h>
-#include <Common/CurrentThread.h>
 
 #include <Core/Defines.h>
 #include <Core/SettingsEnums.h>
@@ -1781,9 +1780,9 @@ BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
 namespace
 {
 
-void checkForUnsupportedColumns(IStorage & storage, LoadingStrictnessLevel mode)
+void checkForUnsupportedColumns(IStorage & storage, LoadingStrictnessLevel mode, ContextPtr context)
 {
-    if (mode <= LoadingStrictnessLevel::CREATE && hasColumnsWithDynamicStructure(storage.getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->getColumns()) && !storage.supportsColumnsWithDynamicStructure())
+    if (mode <= LoadingStrictnessLevel::CREATE && hasColumnsWithDynamicStructure(storage.getInMemoryMetadataPtr(context, false)->getColumns()) && !storage.supportsColumnsWithDynamicStructure())
     {
         throw Exception(ErrorCodes::ILLEGAL_COLUMN,
             "Cannot create table with column of type Dynamic or JSON, "
@@ -1792,10 +1791,10 @@ void checkForUnsupportedColumns(IStorage & storage, LoadingStrictnessLevel mode)
     }
 }
 
-void validateVirtualColumns(IStorage & storage)
+void validateVirtualColumns(IStorage & storage, ContextPtr context)
 {
     auto virtual_columns = storage.getVirtualsPtr();
-    for (const auto & storage_column : storage.getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->getColumns())
+    for (const auto & storage_column : storage.getInMemoryMetadataPtr(context, false)->getColumns())
     {
         if (virtual_columns->tryGet(storage_column.name, VirtualsKind::Persistent, VirtualsMaterializationPlace::All))
         {
@@ -1819,11 +1818,11 @@ void validateVirtualColumns(IStorage & storage)
     }
 }
 
-void validateStorage(IStorage & storage, LoadingStrictnessLevel mode)
+void validateStorage(IStorage & storage, LoadingStrictnessLevel mode, ContextPtr context)
 try
 {
-    validateVirtualColumns(storage);
-    checkForUnsupportedColumns(storage, mode);
+    validateVirtualColumns(storage, context);
+    checkForUnsupportedColumns(storage, mode, context);
 }
 catch (...)
 {
@@ -1865,7 +1864,7 @@ bool InterpreterCreateQuery::doCreateTable(ASTCreateQuery & create,
                 properties.constraints,
                 mode,
                 is_restore_from_backup);
-            validateStorage(*res, mode);
+            validateStorage(*res, mode, getContext());
             return res;
         };
         auto temporary_table = TemporaryTableHolder(getContext(), creator, query_ptr);
@@ -2055,7 +2054,7 @@ bool InterpreterCreateQuery::doCreateTable(ASTCreateQuery & create,
             res->addInferredEngineArgsToCreateQuery(*engine_args, getContext());
     }
 
-    validateStorage(*res, mode);
+    validateStorage(*res, mode, getContext());
 
     if (!create.attach && getContext()->getSettingsRef()[Setting::database_replicated_allow_only_replicated_engine])
     {
@@ -2302,7 +2301,7 @@ BlockIO InterpreterCreateQuery::doCreateOrReplaceTemporaryTable(ASTCreateQuery &
             properties.constraints,
             mode,
             is_restore_from_backup);
-        validateStorage(*res, mode);
+        validateStorage(*res, mode, getContext());
         return res;
     };
 

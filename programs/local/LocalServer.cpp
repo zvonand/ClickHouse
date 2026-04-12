@@ -1177,7 +1177,8 @@ void LocalServer::processConfig()
 
     /// Initialize system logs if configured (e.g. query_log, processors_profile_log).
     /// This must happen after the system database is attached.
-    global_context->initializeSystemLogs();
+    if (!getClientConfiguration().has("no-system-tables"))
+        global_context->initializeSystemLogs();
 
     std::string default_database = getClientConfiguration().getString("database", server_default_database);
     if (default_database.empty())

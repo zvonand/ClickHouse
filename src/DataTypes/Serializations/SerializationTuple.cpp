@@ -264,13 +264,13 @@ ReturnType SerializationTuple::deserializeTextImpl(IColumn & column, ReadBuffer 
             {
                 /// If empty tuple, temporarily increase size to make sure we can read the parsed
                 /// value via serializeText.
-                if (0 == elems.size())
+                if (elems.empty())
                     assert_cast<ColumnTuple &>(column).addSize(1);
                 WriteBufferFromOwnString ostr;
                 serializeText(column, column.size() - 1, ostr, settings);
 
                 /// Revert the temporarily added size increment for empty tuple.
-                if (0 == elems.size())
+                if (elems.empty())
                     assert_cast<ColumnTuple &>(column).popBack(1);
 
                 throw Exception(

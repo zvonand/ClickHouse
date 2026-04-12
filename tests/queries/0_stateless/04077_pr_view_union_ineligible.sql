@@ -75,11 +75,9 @@ SELECT '-- correctness: mixed view';
 SELECT sum(value) FROM v_mixed SETTINGS parallel_replicas_allow_view_over_mergetree = 0;
 SELECT sum(value) FROM v_mixed SETTINGS parallel_replicas_allow_view_over_mergetree = 1;
 
--- v_same_mt correctness: parallel replicas disabled entirely because UNION ALL of the
--- same table causes duplicate replica announcements regardless of the view optimization.
 SELECT '-- correctness: same table view';
-SELECT sum(value) FROM v_same_mt SETTINGS enable_parallel_replicas = 0, parallel_replicas_allow_view_over_mergetree = 0;
-SELECT sum(value) FROM v_same_mt SETTINGS enable_parallel_replicas = 0, parallel_replicas_allow_view_over_mergetree = 1;
+SELECT sum(value) FROM v_same_mt SETTINGS parallel_replicas_allow_view_over_mergetree = 0;
+SELECT sum(value) FROM v_same_mt SETTINGS parallel_replicas_allow_view_over_mergetree = 1;
 
 SELECT '-- correctness: diff mergetree view';
 SELECT sum(value) FROM v_diff_mt SETTINGS parallel_replicas_allow_view_over_mergetree = 0;

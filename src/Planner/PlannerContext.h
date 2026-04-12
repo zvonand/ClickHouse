@@ -77,6 +77,8 @@ public:
     /// Table which is used with parallel replicas reading.
     /// It is the left-most table of the query (in JOINs, UNIONs and subqueries).
     const TableNode * const parallel_replicas_table = nullptr;
+    /// UNION node whose every child query reads from a table eligible for parallel replicas.
+    /// When set, each branch retains parallel replicas reading instead of having it disabled.
     const UnionNode * const parallel_replicas_table_union = nullptr;
 
     const FiltersForTableExpressionMap filters_for_table_expressions;

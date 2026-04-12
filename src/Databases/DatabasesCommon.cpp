@@ -21,7 +21,6 @@
 #include <Storages/Utils.h>
 #include <TableFunctions/TableFunctionFactory.h>
 #include <Common/CurrentMetrics.h>
-#include <Common/CurrentThread.h>
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/escapeForFileName.h>
 #include <Common/logger_useful.h>
@@ -235,10 +234,10 @@ void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemo
 
 
 ASTPtr getCreateQueryFromStorage(const StoragePtr & storage, const ASTPtr & ast_storage, bool only_ordinary,
-    uint32_t max_parser_depth, uint32_t max_parser_backtracks, bool throw_on_error)
+    uint32_t max_parser_depth, uint32_t max_parser_backtracks, bool throw_on_error, ContextPtr context)
 {
     auto table_id = storage->getStorageID();
-    auto metadata_ptr = storage->getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false);
+    auto metadata_ptr = storage->getInMemoryMetadataPtr(context, false);
     if (metadata_ptr == nullptr)
     {
         if (throw_on_error)

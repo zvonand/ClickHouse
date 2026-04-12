@@ -870,7 +870,8 @@ ASTPtr DatabaseOnDisk::getCreateQueryFromStorage(const String & table_name, cons
         false,
         static_cast<unsigned>(settings[Setting::max_parser_depth]),
         static_cast<unsigned>(settings[Setting::max_parser_backtracks]),
-        throw_on_error);
+        throw_on_error,
+        getContext());
 
     create_table_query->set(create_table_query->as<ASTCreateQuery>()->comment,
                             make_intrusive<ASTLiteral>(storage->getInMemoryMetadataPtr(getContext(), false)->comment));

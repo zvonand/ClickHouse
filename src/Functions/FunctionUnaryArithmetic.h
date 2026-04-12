@@ -150,12 +150,14 @@ struct InvalidType;
 
 
 template <template <typename> class Op, typename Name, bool is_injective>
-class FunctionUnaryArithmetic : public IFunction, private WithContext
+class FunctionUnaryArithmetic : public IFunction
 {
     static constexpr bool allow_decimal = IsUnaryOperation<Op>::negate || IsUnaryOperation<Op>::abs || IsUnaryOperation<Op>::sign;
     static constexpr bool allow_string_or_fixed_string = Op<UInt8>::allow_string_or_fixed_string;
     static constexpr bool is_bit_count = IsUnaryOperation<Op>::bit_count;
     static constexpr bool is_sign_function = IsUnaryOperation<Op>::sign;
+
+    ContextPtr context;
 
     template <typename F>
     static bool castType(const IDataType * type, F && f)
@@ -187,6 +189,9 @@ class FunctionUnaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForTupleArithmetic(const DataTypePtr & type, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         if (!isTuple(type))
             return {};
 
@@ -203,7 +208,7 @@ public:
     static constexpr auto name = Name::name;
     static FunctionPtr create(ContextPtr context_) { return std::make_shared<FunctionUnaryArithmetic>(context_); }
 
-    explicit FunctionUnaryArithmetic(ContextPtr context_ = nullptr) : WithContext(context_) {}
+    explicit FunctionUnaryArithmetic(ContextPtr context_ = nullptr) : context(context_) {}
 
     String getName() const override
     {
@@ -221,7 +226,7 @@ public:
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
     {
-        return getReturnTypeImplStatic(arguments, getContext());
+        return getReturnTypeImplStatic(arguments, context);
     }
 
     static DataTypePtr getReturnTypeImplStatic(const DataTypes & arguments, ContextPtr context_)
@@ -301,7 +306,7 @@ public:
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const override
     {
         /// Special case when the function is negate, argument is tuple.
-        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, getContext()))
+        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, context))
         {
             return function_builder->build(arguments)->execute(arguments, result_type, input_rows_count, /* dry_run = */ false);
         }

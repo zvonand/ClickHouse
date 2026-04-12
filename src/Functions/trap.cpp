@@ -36,9 +36,6 @@ namespace ErrorCodes
 /// Various illegal actions to test diagnostic features of ClickHouse itself. Should not be enabled in production builds.
 class FunctionTrap : public IFunction
 {
-private:
-    String query_id;
-
 public:
     static constexpr auto name = "trap";
     static FunctionPtr create(ContextPtr context)
@@ -189,6 +186,9 @@ public:
 
         return result_type->createColumnConst(input_rows_count, 0ULL);
     }
+
+private:
+    String query_id;
 };
 
 

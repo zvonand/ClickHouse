@@ -48,15 +48,15 @@ namespace Setting
 namespace
 {
 
-class UserDefinedFunction final : public IFunction, private WithContext
+class UserDefinedFunction final : public IFunction
 {
 public:
     explicit UserDefinedFunction(
         ExternalUserDefinedExecutableFunctionsLoader::UserDefinedExecutableFunctionPtr executable_function_,
         ContextPtr context_,
         Array parameters_)
-        : WithContext(context_)
-        , executable_function(std::move(executable_function_))
+        : executable_function(std::move(executable_function_))
+        , context(std::move(context_))
     {
         const auto & configuration = executable_function->getConfiguration();
         size_t command_parameters_size = configuration.parameters.size();
@@ -145,7 +145,7 @@ public:
 
         if (coordinator_configuration.execute_direct)
         {
-            auto user_scripts_path = getContext()->getUserScriptsPath();
+            auto user_scripts_path = context->getUserScriptsPath();
             auto script_path = user_scripts_path + '/' + command;
 
             if (!fileOrSymlinkPathStartsWith(script_path, user_scripts_path))
@@ -217,7 +217,7 @@ public:
                 command_arguments_with_parameters,
                 std::move(shell_input_pipes),
                 result_block,
-                getContext(),
+                context,
                 shell_command_source_configuration);
 
             QueryPipeline pipeline(std::move(pipe));
@@ -266,6 +266,7 @@ public:
 
 private:
     ExternalUserDefinedExecutableFunctionsLoader::UserDefinedExecutableFunctionPtr executable_function;
+    ContextPtr context;
     String command_with_parameters;
     VectorWithMemoryTracking<String> command_arguments_with_parameters;
 };

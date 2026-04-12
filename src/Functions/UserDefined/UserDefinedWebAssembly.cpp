@@ -505,19 +505,19 @@ WebAssembly::WasmModule::Config getWasmModuleConfig(ContextPtr context)
     return cfg;
 }
 
-class FunctionUserDefinedWasm : public IFunction, private WithContext
+class FunctionUserDefinedWasm : public IFunction
 {
 public:
     FunctionUserDefinedWasm(String function_name_, std::shared_ptr<UserDefinedWebAssemblyFunction> udf_, ContextPtr context_)
-        : WithContext(context_)
-        , user_defined_function(std::move(udf_))
+        : user_defined_function(std::move(udf_))
         , wasm_module(user_defined_function->getModule())
         , function_name(std::move(function_name_))
         , argument_names(user_defined_function->getArgumentNames())
+        , context(std::move(context_))
         , compartment_pool(
-              static_cast<UInt32>(context_->getSettingsRef()[Setting::webassembly_udf_max_instances]),
+              static_cast<UInt32>(context->getSettingsRef()[Setting::webassembly_udf_max_instances]),
               wasm_module,
-              getWasmModuleConfig(context_))
+              getWasmModuleConfig(context))
     {
     }
 
@@ -589,7 +589,7 @@ private:
     ColumnPtr execute(WebAssembly::WasmCompartment * compartment, const ColumnsWithTypeAndName & arguments, size_t input_rows_count) const
     {
         MutableColumnPtr result_column = user_defined_function->getResultType()->createColumn();
-        size_t block_size = getContext()->getSettingsRef()[Setting::webassembly_udf_max_input_block_size];
+        size_t block_size = context->getSettingsRef()[Setting::webassembly_udf_max_input_block_size];
         if (block_size == 0)
             block_size = input_rows_count;
 
@@ -598,7 +598,7 @@ private:
             size_t current_block_size = std::min(block_size, input_rows_count - start_idx);
             auto current_input_block = getArgumentsBlock(arguments, start_idx, current_block_size);
             auto stop_token = interrupt_source.get_token();
-            auto current_column = user_defined_function->executeOnBlock(compartment, current_input_block, getContext(), current_block_size, stop_token);
+            auto current_column = user_defined_function->executeOnBlock(compartment, current_input_block, context, current_block_size, stop_token);
 
             if (!result_column->structureEquals(*current_column))
                 throw Exception(
@@ -638,6 +638,7 @@ private:
     std::shared_ptr<WebAssembly::WasmModule> wasm_module;
     String function_name;
     Strings argument_names;
+    ContextPtr context;
 
     mutable StopSource interrupt_source;
     mutable WasmCompartmentPool compartment_pool;

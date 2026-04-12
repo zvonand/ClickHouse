@@ -102,7 +102,24 @@ find $ROOT_PATH/{src,base,programs,utils,tests,docs,cmake} -name '*.md' -or -nam
 # ContextPtr holds lots of different stuff, including some caches, so prefer to
 # use weak_ptr or copy relevant info from Context, to avoid extending lifetime
 # of other objects.
-find $ROOT_PATH/src/Functions -type f | xargs grep -l 'ContextPtr [a-z_]*;' | grep -P '.' && echo "Avoid holding a copy of ContextPtr in Functions"
+FUNCTIONS_CONTEXT_PTR_EXCEPTIONS=(
+    # These functions genuinely need live context at execution time
+    # (dictionary loading, join access, ZooKeeper, ML prediction,
+    # complex type resolution for DateTime/Interval/Tuple arithmetic)
+    # and cannot use WithContext (weak_ptr) because the context may expire
+    # in deferred execution paths (default expressions, async inserts).
+    -e /FunctionsExternalDictionaries.h
+    -e /FunctionJoinGet.cpp
+    -e /generateSerialID.cpp
+    -e /evalMLMethod.cpp
+    -e /FunctionBinaryArithmetic.h
+    -e /FunctionUnaryArithmetic.h
+    -e /ITupleFunction.h
+    -e /formatRow.cpp
+    -e /structureToFormatSchema.cpp
+    -e /UserDefined/
+)
+find $ROOT_PATH/src/Functions -type f | xargs grep -l 'ContextPtr [a-z_]*;' | grep -v "${FUNCTIONS_CONTEXT_PTR_EXCEPTIONS[@]}" | grep -P '.' && echo "Avoid holding a copy of ContextPtr in Functions"
 
 # Ensure that functions do not use WithContext, since this may lead to expired context (when it is used in MergeTree).
 FUNCTIONS_WITH_CONTEXT_EXCEPTIONS=(
@@ -131,15 +148,6 @@ FUNCTIONS_WITH_CONTEXT_EXCEPTIONS=(
     -e /getSetting.cpp
     -e /hasColumnInTable.cpp
     -e /initializeAggregation.cpp
-    # Needs live context for complex type resolution / arithmetic delegation
-    -e /FunctionBinaryArithmetic.h
-    -e /FunctionUnaryArithmetic.h
-    -e /ITupleFunction.h
-    # Needs live context for dictionary loading / access checking / ZooKeeper / ML prediction / parsing
-    -e /FunctionsExternalDictionaries.h
-    -e /evalMLMethod.cpp
-    -e /generateSerialID.cpp
-    -e /structureToFormatSchema.cpp
 )
 find $ROOT_PATH/src/Functions -type f | xargs grep -l 'WithContext(' | grep -v "${FUNCTIONS_WITH_CONTEXT_EXCEPTIONS[@]}" | grep -P '.' && echo "Avoid using WithContext in Functions"
 

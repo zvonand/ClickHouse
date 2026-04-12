@@ -818,7 +818,7 @@ using namespace traits_;
 using namespace impl_;
 
 template <template <typename, typename> class Op, typename Name, bool valid_on_default_arguments = true, bool valid_on_float_arguments = true, bool division_by_nullable = false>
-class FunctionBinaryArithmetic : public IFunction, private WithContext
+class FunctionBinaryArithmetic : public IFunction
 {
     static constexpr bool is_plus = IsOperation<Op>::plus;
     static constexpr bool is_minus = IsOperation<Op>::minus;
@@ -829,6 +829,8 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static constexpr bool is_int_div = IsOperation<Op>::int_div;
     static constexpr bool is_int_div_or_zero = IsOperation<Op>::int_div_or_zero;
     static constexpr bool is_division_or_null = IsOperation<Op>::division_or_null;
+
+    ContextPtr context;
 
     bool check_decimal_overflow = true;
 
@@ -892,6 +894,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForIntervalArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         bool first_arg_is_date_or_time_or_datetime_or_string = isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(type0) || isString(type0);
         bool second_arg_is_date_or_time_or_datetime_or_string = isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(type1) || isString(type1);
 
@@ -949,6 +954,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForDateTupleOfIntervalsArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         bool first_arg_is_date_or_datetime = isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(type0);
         bool second_arg_is_date_or_datetime = isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(type1);
 
@@ -984,6 +992,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForMergeIntervalsArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         /// Special case when the function is plus or minus, first argument is Interval or Tuple of Intervals
         ///  and the second argument is the Interval of a different kind.
         /// We construct another function (example: addIntervals) and call it
@@ -1025,6 +1036,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForTupleArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         if (!isTuple(removeNullable(type0)) || !isTuple(removeNullable(type1)))
             return {};
 
@@ -1054,6 +1068,9 @@ class FunctionBinaryArithmetic : public IFunction, private WithContext
     static FunctionOverloadResolverPtr
     getFunctionForTupleAndNumberArithmetic(const DataTypePtr & type0, const DataTypePtr & type1, ContextPtr context_)
     {
+        if (!context_)
+            return {};
+
         if (!(isTuple(removeNullable(type0)) && isNumber(removeNullable(type1)))
             && !(isTuple(removeNullable(type1)) && isNumber(removeNullable(type0))))
             return {};
@@ -1963,7 +1980,7 @@ public:
     static FunctionPtr create(ContextPtr context_) { return std::make_shared<FunctionBinaryArithmetic>(context_); }
 
     explicit FunctionBinaryArithmetic(ContextPtr context_)
-    :   WithContext(context_),
+    :   context(context_),
         check_decimal_overflow(decimalCheckArithmeticOverflow(context_))
     {}
 
@@ -1991,7 +2008,7 @@ public:
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
     {
-        return getReturnTypeImplStatic(arguments, getContext());
+        return getReturnTypeImplStatic(arguments, context);
     }
 
     static DataTypePtr getReturnTypeImplStatic(const DataTypes & arguments, ContextPtr context_)
@@ -2822,31 +2839,31 @@ ColumnPtr executeStringInteger(const ColumnsWithTypeAndName & arguments, const A
         }
 
         /// Special case when the function is plus or minus, one of arguments is Date/DateTime/String and another is Interval.
-        if (auto function_builder = getFunctionForIntervalArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForIntervalArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return executeDateTimeIntervalPlusMinus(arguments, result_type, input_rows_count, function_builder);
         }
 
         /// Special case when the function is plus or minus, one of arguments is Date/DateTime and another is Tuple.
-        if (auto function_builder = getFunctionForDateTupleOfIntervalsArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForDateTupleOfIntervalsArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return executeDateTimeTupleOfIntervalsPlusMinus(arguments, result_type, input_rows_count, function_builder);
         }
 
         /// Special case when the function is plus or minus, one of arguments is Interval/Tuple of Intervals and another is Interval.
-        if (auto function_builder = getFunctionForMergeIntervalsArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForMergeIntervalsArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return executeIntervalTupleOfIntervalsPlusMinus(arguments, result_type, input_rows_count, function_builder);
         }
 
         /// Special case when the function is plus, minus or multiply, both arguments are tuples.
-        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForTupleArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return function_builder->build(arguments)->execute(arguments, result_type, input_rows_count, /* dry_run = */ false);
         }
 
         /// Special case when the function is multiply or divide, one of arguments is Tuple and another is Number.
-        if (auto function_builder = getFunctionForTupleAndNumberArithmetic(arguments[0].type, arguments[1].type, getContext()))
+        if (auto function_builder = getFunctionForTupleAndNumberArithmetic(arguments[0].type, arguments[1].type, context))
         {
             return executeTupleNumberOperator(arguments, result_type, input_rows_count, function_builder);
         }
@@ -3413,7 +3430,7 @@ private:
 };
 
 template <template <typename, typename> class Op, typename Name, bool valid_on_default_arguments = true, bool valid_on_float_arguments = true>
-class BinaryArithmeticOverloadResolver : public IFunctionOverloadResolver, private WithContext
+class BinaryArithmeticOverloadResolver : public IFunctionOverloadResolver
 {
 public:
     static constexpr auto name = Name::name;
@@ -3422,7 +3439,7 @@ public:
         return std::make_unique<BinaryArithmeticOverloadResolver>(context_);
     }
 
-    explicit BinaryArithmeticOverloadResolver(ContextPtr context_) : WithContext(context_) {}
+    explicit BinaryArithmeticOverloadResolver(ContextPtr context_) : context(context_) {}
 
     String getName() const override { return name; }
     size_t getNumberOfArguments() const override { return 2; }
@@ -3465,18 +3482,18 @@ public:
             {
                 if (division_by_nullable)
                     return make_adaptor(FunctionBinaryArithmeticWithConstants<Op, Name, valid_on_default_arguments, valid_on_float_arguments, true>::create(
-                        arguments[0], arguments[1], return_type, getContext()));
+                        arguments[0], arguments[1], return_type, context));
             }
             return make_adaptor(FunctionBinaryArithmeticWithConstants<Op, Name, valid_on_default_arguments, valid_on_float_arguments, false>::create(
-                arguments[0], arguments[1], return_type, getContext()));
+                arguments[0], arguments[1], return_type, context));
         }
 
         if constexpr (can_have_division_by_nullable)
         {
             if (division_by_nullable)
-                return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, true>::create(getContext()));
+                return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, true>::create(context));
         }
-        return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, false>::create(getContext()));
+        return make_adaptor(FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments, false>::create(context));
     }
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override
@@ -3485,7 +3502,10 @@ public:
             throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
                 "Number of arguments for function {} doesn't match: passed {}, should be 2",
                 getName(), arguments.size());
-        return FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments>::getReturnTypeImplStatic(arguments, getContext());
+        return FunctionBinaryArithmetic<Op, Name, valid_on_default_arguments, valid_on_float_arguments>::getReturnTypeImplStatic(arguments, context);
     }
+
+private:
+    ContextPtr context;
 };
 }

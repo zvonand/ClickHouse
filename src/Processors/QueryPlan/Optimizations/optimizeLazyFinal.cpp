@@ -291,6 +291,8 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     /// The WHERE filter was already pushed by optimizePrimaryKeyConditionAndLimit,
     /// so selectRangesToRead uses the PK condition for index analysis.
     auto analyzed_result = reading_step->selectRangesToRead();
+    if (reading_step->getParts().empty())
+        return;
 
     /// Split parts into non-intersecting (unique key ranges, no FINAL needed) and
     /// intersecting (overlapping, need FINAL). This avoids running the expensive

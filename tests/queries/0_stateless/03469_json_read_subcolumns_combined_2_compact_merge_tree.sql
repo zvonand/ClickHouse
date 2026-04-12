@@ -1,17 +1,13 @@
 -- Tags: no-fasttest, long
+-- Random settings limits: index_granularity=(100, None); index_granularity_bytes=(100000, None); max_threads=(4, 32)
 
 SET enable_json_type = 1;
 set allow_experimental_variant_type = 1;
 set use_variant_as_common_type = 1;
 set session_timezone = 'UTC';
 
-set min_bytes_to_use_direct_io = 0; -- min_bytes_to_use_direct_io > 0 is broken
--- Override randomized max_threads to avoid timeout with random settings
-SET max_threads=0;
-
 drop table if exists test;
--- Pin settings that cause timeouts with random MergeTree settings while keeping JSON-related ones randomized.
-create table test (id UInt64, json JSON(max_dynamic_paths=2, a.b.c UInt32)) engine=MergeTree order by id settings min_rows_for_wide_part=1000000000, min_bytes_for_wide_part=10000000000, index_granularity=8192, prewarm_primary_key_cache=0, prewarm_mark_cache=0, merge_max_block_size=8192, auto_statistics_types='';
+create table test (id UInt64, json JSON(max_dynamic_paths=2, a.b.c UInt32)) engine=MergeTree order by id settings min_rows_for_wide_part=1000000000, min_bytes_for_wide_part=10000000000;
 
 insert into test select number, '{}' from numbers(10000);
 insert into test select number, toJSONString(map('a.b.c', number)) from numbers(10000, 10000);

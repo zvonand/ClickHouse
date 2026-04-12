@@ -21,6 +21,7 @@
 #include <Common/logger_useful.h>
 #include <Common/typeid_cast.h>
 #include <Common/thread_local_rng.h>
+#include <Common/CurrentThread.h>
 
 #include <Core/Defines.h>
 #include <Core/SettingsEnums.h>
@@ -791,7 +792,7 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
 
         /// as_storage->getColumns() and setEngine(...) must be called under structure lock of other_table for CREATE ... AS other_table.
         as_storage_lock = as_storage->lockForShare(getContext()->getCurrentQueryId(), getContext()->getSettingsRef()[Setting::lock_acquire_timeout]);
-        auto as_storage_metadata = as_storage->getInMemoryMetadataPtr();
+        auto as_storage_metadata = as_storage->getInMemoryMetadataPtr(getContext(), false);
         properties.columns = as_storage_metadata->getColumns();
 
         if (!create.comment && !as_storage_metadata->comment.empty())
@@ -1050,7 +1051,7 @@ void InterpreterCreateQuery::validateMaterializedViewColumnsAndEngine(const ASTC
 
         if (to_table)
         {
-            all_output_columns = to_table->getInMemoryMetadataPtr()->getSampleBlockInsertable().getNamesAndTypesList();
+            all_output_columns = to_table->getInMemoryMetadataPtr(getContext(), false)->getSampleBlockInsertable().getNamesAndTypesList();
             check_columns = true;
         }
     }
@@ -1782,7 +1783,7 @@ namespace
 
 void checkForUnsupportedColumns(IStorage & storage, LoadingStrictnessLevel mode)
 {
-    if (mode <= LoadingStrictnessLevel::CREATE && hasColumnsWithDynamicStructure(storage.getInMemoryMetadataPtr()->getColumns()) && !storage.supportsColumnsWithDynamicStructure())
+    if (mode <= LoadingStrictnessLevel::CREATE && hasColumnsWithDynamicStructure(storage.getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->getColumns()) && !storage.supportsColumnsWithDynamicStructure())
     {
         throw Exception(ErrorCodes::ILLEGAL_COLUMN,
             "Cannot create table with column of type Dynamic or JSON, "
@@ -1794,7 +1795,7 @@ void checkForUnsupportedColumns(IStorage & storage, LoadingStrictnessLevel mode)
 void validateVirtualColumns(IStorage & storage)
 {
     auto virtual_columns = storage.getVirtualsPtr();
-    for (const auto & storage_column : storage.getInMemoryMetadataPtr()->getColumns())
+    for (const auto & storage_column : storage.getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->getColumns())
     {
         if (virtual_columns->tryGet(storage_column.name, VirtualsKind::Persistent, VirtualsMaterializationPlace::All))
         {

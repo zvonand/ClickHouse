@@ -24,7 +24,7 @@ MaterializingCTETransform::MaterializingCTETransform(
     , materialized_cte(std::move(materialized_cte_))
 {
     auto storage = materialized_cte->storage;
-    table_out = QueryPipeline(storage->write({}, storage->getInMemoryMetadataPtr(), nullptr, /*async_insert=*/false));
+    table_out = QueryPipeline(storage->write({}, storage->getInMemoryMetadataPtr(nullptr, false), nullptr, /*async_insert=*/false));
     executor = std::make_unique<PushingPipelineExecutor>(table_out);
     executor->start();
 }

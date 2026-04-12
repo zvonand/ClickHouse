@@ -90,7 +90,7 @@ public:
 
     Block getRightSampleBlock() const
     {
-        auto metadata_snapshot = getInMemoryMetadataPtr();
+        auto metadata_snapshot = getInMemoryMetadataPtr(nullptr, false);
         Block block = metadata_snapshot->getSampleBlock();
         convertRightBlock(block);
         return block;

@@ -155,7 +155,7 @@ void CreatingSetsTransform::startSubquery()
 
     if (set_and_key->external_table)
         /// TODO: make via port
-        table_out = QueryPipeline(set_and_key->external_table->write({}, set_and_key->external_table->getInMemoryMetadataPtr(), nullptr, /*async_insert=*/false));
+        table_out = QueryPipeline(set_and_key->external_table->write({}, set_and_key->external_table->getInMemoryMetadataPtr(nullptr, false), nullptr, /*async_insert=*/false));
 
     done_with_set = !set_and_key->set || set_from_cache;
     done_with_table = !set_and_key->external_table;

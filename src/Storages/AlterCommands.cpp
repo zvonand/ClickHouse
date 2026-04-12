@@ -1455,7 +1455,7 @@ void AlterCommands::prepare(const StorageInMemoryMetadata & metadata)
 
 void AlterCommands::validate(const StoragePtr & table, ContextPtr context) const
 {
-    const auto & metadata = table->getInMemoryMetadata();
+    StorageInMemoryMetadata metadata = *table->getInMemoryMetadataPtr(context, false);
     auto virtuals = table->getVirtualsPtr();
 
     auto all_columns = metadata.columns;

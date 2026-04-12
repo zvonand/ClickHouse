@@ -39,7 +39,7 @@ public:
         const StorageSnapshotPtr &,
         SelectQueryInfo & info) const override
     {
-        const auto & nested_metadata = getNested()->getInMemoryMetadataPtr();
+        const auto & nested_metadata = getNested()->getInMemoryMetadataPtr(context, false);
         return getNested()->getQueryProcessingStage(context, to_stage, getNested()->getStorageSnapshot(nested_metadata, context), info);
     }
 
@@ -98,7 +98,7 @@ public:
     void alter(const AlterCommands & params, ContextPtr context, AlterLockHolder & alter_lock_holder) override
     {
         getNested()->alter(params, context, alter_lock_holder);
-        IStorage::setInMemoryMetadata(getNested()->getInMemoryMetadata());
+        IStorage::setInMemoryMetadata(*getNested()->getInMemoryMetadataPtr(context, false));
     }
 
     void checkAlterIsPossible(const AlterCommands & commands, ContextPtr context) const override

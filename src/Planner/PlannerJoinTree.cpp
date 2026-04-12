@@ -595,7 +595,7 @@ std::optional<FilterDAGInfo> buildCustomKeyFilterIfNeeded(const StoragePtr & sto
         {settings[Setting::parallel_replicas_mode],
          settings[Setting::parallel_replicas_custom_key_range_lower],
          settings[Setting::parallel_replicas_custom_key_range_upper]},
-        storage->getInMemoryMetadataPtr()->columns,
+        storage->getInMemoryMetadataPtr(query_context, false)->columns,
         query_context);
 
     return buildFilterInfo(parallel_replicas_custom_filter_ast, table_expression_query_info.table_expression, planner_context);
@@ -1233,7 +1233,7 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
                                 query_plan_parallel_replicas,
                                 storage->getStorageID(),
                                 modified_query_info,
-                                storage->getInMemoryMetadataPtr()->getColumns(),
+                                storage->getInMemoryMetadataPtr(query_context, false)->getColumns(),
                                 storage_snapshot,
                                 till_stage,
                                 table_expression_query_info.query_tree,

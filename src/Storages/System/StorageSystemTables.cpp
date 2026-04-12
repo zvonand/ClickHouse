@@ -289,7 +289,9 @@ protected:
     {
         if (table)
         {
-            StorageMetadataPtr metadata_snapshot = table->tryGetInMemoryMetadataPtr().value_or(nullptr);
+            StorageMetadataPtr metadata_snapshot;
+            try { metadata_snapshot = table->getInMemoryMetadataPtr(context, false); }
+            catch (...) {}
             if (!metadata_snapshot)
             {
                 columns[res_index++]->insertDefault();
@@ -594,7 +596,8 @@ protected:
 
                 StorageMetadataPtr metadata_snapshot;
                 if (table)
-                    metadata_snapshot = table->tryGetInMemoryMetadataPtr().value_or(nullptr);
+                    try { metadata_snapshot = table->getInMemoryMetadataPtr(context, false); }
+                    catch (...) {}
 
                 if (columns_mask[src_index++])
                 {

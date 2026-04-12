@@ -847,7 +847,7 @@ ASTPtr DatabaseOnDisk::getCreateQueryFromMetadata(const String & table_name, boo
 
 ASTPtr DatabaseOnDisk::getCreateQueryFromStorage(const String & table_name, const StoragePtr & storage, bool throw_on_error) const
 {
-    auto metadata_ptr = storage->getInMemoryMetadataPtr();
+    auto metadata_ptr = storage->getInMemoryMetadataPtr(getContext(), false);
     if (metadata_ptr == nullptr)
     {
         if (throw_on_error)
@@ -873,7 +873,7 @@ ASTPtr DatabaseOnDisk::getCreateQueryFromStorage(const String & table_name, cons
         throw_on_error);
 
     create_table_query->set(create_table_query->as<ASTCreateQuery>()->comment,
-                            make_intrusive<ASTLiteral>(storage->getInMemoryMetadata().comment));
+                            make_intrusive<ASTLiteral>(storage->getInMemoryMetadataPtr(getContext(), false)->comment));
 
     return create_table_query;
 }

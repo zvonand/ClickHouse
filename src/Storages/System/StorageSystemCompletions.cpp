@@ -87,11 +87,11 @@ void fillDataWithTableColumns(
     if (table_lock == nullptr)
         return; // table was dropped while acquiring the lock
 
-    auto snapshot = table->tryGetInMemoryMetadataPtr();
-    if (!snapshot)
-        return;
+    StorageMetadataPtr snapshot;
+    try { snapshot = table->getInMemoryMetadataPtr(context, false); }
+    catch (...) { return; }
 
-    const auto & columns = (*snapshot)->getColumns();
+    const auto & columns = snapshot->getColumns();
     for (const auto & column : columns)
     {
         if (check_access_for_columns && !access->isGranted(AccessType::SHOW_COLUMNS, database_name, table_name, column.name))

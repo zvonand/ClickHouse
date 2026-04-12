@@ -4083,6 +4083,15 @@ Function 'h3ToGeo' returns (lon, lat) if true, otherwise (lat, lon).
 Function 'geoToH3' accepts (lon, lat) if set to 'lon_lat' and (lat, lon) if set to 'lat_lon'.
 )", BETA) \
     DECLARE(Bool, functions_h3_default_if_invalid, false, "If false, h3 functions, e.g. h3CellAreaM2, throw an exception if input is invalid. If true, they return 0 or default value.", 0) \
+    DECLARE(UInt64, max_wkb_geometry_elements, 1'000'000, R"(
+Maximum number of points, rings, or polygons allowed in a single WKB geometry element during parsing by `readWKB` and related functions. This protects against excessive memory allocations from malformed WKB data. Set to 0 to use the hard-coded limit (100 million).
+)", 0) \
+    DECLARE(UInt64, max_rand_distribution_trials, 1'000'000'000, R"(
+Maximum number of trials allowed for random distribution functions such as `randBinomial` and `randNegativeBinomial`. This prevents extremely long computation times with large trial counts.
+)", 0) \
+    DECLARE(Float, max_rand_distribution_parameter, 1e6, R"(
+Maximum value for distribution shape parameters in random distribution functions such as `randChiSquared`, `randStudentT`, and `randFisherF`. This prevents extremely long computation times with extreme parameter values.
+)", 0) \
     DECLARE(UInt64, max_partitions_per_insert_block, 100, R"(
 Limits the maximum number of partitions in a single inserted block
 and an exception is thrown if the block contains too many partitions.
@@ -7762,6 +7771,9 @@ Possible values:
     DECLARE(UInt64, distributed_plan_max_rows_to_broadcast, 20000, R"(
 Maximum rows to use broadcast join instead of shuffle join in distributed query plan.
 )", EXPERIMENTAL) \
+    DECLARE(Bool, distributed_plan_prefer_replicas_over_workers, false, R"(
+Serialize the distributed query plan for execution at replicas.
+)", EXPERIMENTAL) \
     DECLARE(Bool, allow_experimental_ytsaurus_table_engine, false, R"(
 Experimental table engine for integration with YTsaurus.
 )", EXPERIMENTAL) \
@@ -7817,17 +7829,6 @@ Sets the evaluation time to be used with promql dialect. 'auto' means the curren
 )", EXPERIMENTAL, evaluation_time) \
     DECLARE(Bool, allow_experimental_alias_table_engine, false, R"(
 Allow to create table with the Alias engine.
-)", EXPERIMENTAL) \
-    DECLARE(Bool, allow_experimental_paimon_storage_engine, false, R"(
-Allow to create tables with Paimon* table engines.
-)", EXPERIMENTAL) \
-    DECLARE(Int64, paimon_target_snapshot_id, -1, R"(
-Query-level targeted snapshot read for Paimon incremental mode. When >0, the reader will only fetch the delta
-for the specified snapshot_id without advancing the committed watermark.
-Default: -1 (disabled)
-)", EXPERIMENTAL) \
-    DECLARE(UInt64, max_consume_snapshots, 0, R"(
-Maximum number of Paimon snapshots to consume per incremental read. 0 means no limit.
 )", EXPERIMENTAL) \
     DECLARE(Bool, use_paimon_partition_pruning, false, R"(
 Use Paimon partition pruning for Paimon table functions

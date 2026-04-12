@@ -38,9 +38,9 @@ SELECT 'Expressions as arguments';
 SELECT OVERLAY('Hello World' PLACING concat('S', 'QL') FROM 5 + 2 FOR 10 - 5);
 
 -- Mixed keyword/comma syntax must be rejected
-SELECT OVERLAY('abcdef' PLACING 'XY', 3); -- { serverError SYNTAX_ERROR }
-SELECT OVERLAY('abcdef' PLACING 'XY', 3, 2); -- { serverError SYNTAX_ERROR }
-SELECT overlay('abcdef', 'XY' FROM 3); -- { serverError SYNTAX_ERROR }
+SELECT OVERLAY('abcdef' PLACING 'XY', 3); -- { clientError SYNTAX_ERROR }
+SELECT OVERLAY('abcdef' PLACING 'XY', 3, 2); -- { clientError SYNTAX_ERROR }
+SELECT overlay('abcdef', 'XY' FROM 3); -- { clientError SYNTAX_ERROR }
 
 -- Keyword mode requires FROM before closing bracket
-SELECT OVERLAY('abcdef' PLACING 'XY'); -- { serverError SYNTAX_ERROR }
+SELECT OVERLAY('abcdef' PLACING 'XY'); -- { clientError SYNTAX_ERROR }

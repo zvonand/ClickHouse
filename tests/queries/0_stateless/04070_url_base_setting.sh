@@ -70,11 +70,17 @@ run_and_check "SELECT * FROM url('#frag', CSV, 'c String') SETTINGS url_base = '
 # Path-relative URL with embedded absolute URL in query parameter (should not be treated as absolute)
 run_and_check "SELECT * FROM url('data.csv?next=https://other.invalid/a', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 'https://base.invalid/dir/data.csv?next=https://other.invalid/a'
 
-# Path-relative URL with dot-segment (../) — no normalization, passed through as-is
-run_and_check "SELECT * FROM url('../a.csv', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 'https://base.invalid/dir/../a.csv'
+# Path-relative URL with dot-segment (../) — normalized per RFC 3986
+run_and_check "SELECT * FROM url('../a.csv', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 'https://base.invalid/a.csv'
 
-# Path-relative URL with dot-segment (./) — no normalization, passed through as-is
-run_and_check "SELECT * FROM url('./a.csv', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 'https://base.invalid/dir/./a.csv'
+# Path-relative URL with dot-segment (./) — normalized per RFC 3986
+run_and_check "SELECT * FROM url('./a.csv', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 'https://base.invalid/dir/a.csv'
+
+# Multiple dot-segments: ../../ from a deeper path
+run_and_check "SELECT * FROM url('../../a.csv', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/a/b/c/', $FAST" 'https://base.invalid/a/a.csv'
+
+# Dot-segment with query parameter in the relative URL
+run_and_check "SELECT * FROM url('../a.csv?foo=bar', CSV, 'c String') SETTINGS url_base = 'https://base.invalid/dir/', $FAST" 'https://base.invalid/a.csv?foo=bar'
 
 # URL engine: path-relative URL with url_base should resolve correctly
 $CLICKHOUSE_CLIENT --send_logs_level=debug -n -q "

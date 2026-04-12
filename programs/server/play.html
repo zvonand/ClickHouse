@@ -2695,7 +2695,7 @@ async function postImpl(posted_request_num, query, targetResultEl, abortControll
             if (posted_request_num != request_num) { return { cancelled: true }; }
 
             let has_exception = false;
-            for (line of reply.split('\n')) {
+            for (const line of reply.split('\n')) {
                 if (line.startsWith(`{"exception":`)) {
                     targetResultEl.update(JSON.parse(line));
                     has_exception = true;
@@ -2726,7 +2726,7 @@ async function postImpl(posted_request_num, query, targetResultEl, abortControll
                 let fragment = document.createDocumentFragment();
 
                 let cont = true;
-                for (line of lines.slice(0, -1)) {
+                for (const line of lines.slice(0, -1)) {
                     const data = JSON.parse(line);
                     cont = targetResultEl.update(data, fragment);
                     if (!cont) { break; }
@@ -3084,7 +3084,7 @@ async function restoreFromHistory(state) {
         is_error = true;
 
         let has_exception = false;
-        for (line of state.data.split('\n')) {
+        for (const line of state.data.split('\n')) {
             if (line.startsWith(`{"exception":`)) {
                 resultEl.update(JSON.parse(line));
                 has_exception = true;
@@ -3103,7 +3103,7 @@ async function restoreFromHistory(state) {
         let lines = state.data.split('\n');
         let fragment = document.createDocumentFragment();
 
-        for (line of lines) {
+        for (const line of lines) {
             if (line.length == 0) continue;
             if (!resultEl.update(JSON.parse(line), fragment)) { break; }
         }

@@ -3206,7 +3206,9 @@ async function postOne()
         }
     } else {
         const query = await getQueryUnderCursor();
-        await postSingle(request_num, query);
+        /// In multi-query mode, preserve the full textarea content in history/URL
+        /// even when running a single query under cursor (so refresh restores all queries).
+        await postSingle(request_num, query, isMultiQuery ? query_area.value : undefined);
     }
 
     endFlight();

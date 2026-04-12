@@ -89,7 +89,7 @@ void fillDataWithTableColumns(
 
     StorageMetadataPtr snapshot;
     try { snapshot = table->getInMemoryMetadataPtr(context, false); }
-    catch (...) { return; }
+    catch (...) { return; } /// Ok
 
     const auto & columns = snapshot->getColumns();
     for (const auto & column : columns)

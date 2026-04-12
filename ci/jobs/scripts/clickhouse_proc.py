@@ -178,15 +178,21 @@ class ClickHouseProc:
         return False
 
     def start_azurite(self):
-        command = (
-            f"cd {temp_dir} && azurite-rs --host 0.0.0.0 --blob-port 10000 --silent --in-memory",
-        )
+        command = f"cd {temp_dir} && azurite-rs --host 0.0.0.0 --blob-port 10000 --silent --in-memory"
         with open(self.AZURITE_LOG, "w") as log_file:
             self.azurite_proc = subprocess.Popen(
                 command, stdout=log_file, stderr=subprocess.STDOUT, shell=True
             )
         print(f"Started azurite-rs asynchronously with PID {self.azurite_proc.pid}")
-        return True
+
+        if Shell.check(
+            "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:10000/ | grep -qE '400|200'",
+            verbose=False,
+            retries=6,
+        ):
+            return True
+        print("Failed to start azurite-rs")
+        return False
 
     def start_kafka(self):
         command = [

@@ -128,15 +128,11 @@ def test_install_rpm(image: DockerImage) -> List[Result]:
     # systemd just ignores the watchdog completely
     tests = {
         "Install server rpm": r"""#!/bin/bash -ex
-# Select only the newest version to avoid conflicts when multiple versions exist
-ver=$(ls /packages/clickhouse-server-*.rpm | grep -oP '\d+\.\d+\.\d+\.\d+' | sort -V | tail -1)
-yum localinstall --disablerepo=* --allowerasing -y /packages/clickhouse-{server,client,common}*"${ver}"*rpm
+yum localinstall --disablerepo=* --allowerasing -y /packages/clickhouse-{server,client,common}*rpm
 echo CLICKHOUSE_WATCHDOG_ENABLE=0 > /etc/default/clickhouse-server
 bash -ex /packages/server_test.sh""",
         "Install keeper rpm": r"""#!/bin/bash -ex
-# Select only the newest version to avoid conflicts when multiple versions exist
-ver=$(ls /packages/clickhouse-keeper-[0-9]*.rpm | grep -oP '\d+\.\d+\.\d+\.\d+' | sort -V | tail -1)
-yum localinstall --disablerepo=* --allowerasing -y /packages/clickhouse-keeper*"${ver}"*rpm
+yum localinstall --disablerepo=* --allowerasing -y /packages/clickhouse-keeper*rpm
 bash -ex /packages/keeper_test.sh""",
         "Install clickhouse binary in rpm": r"bash -ex /packages/binary_test.sh",
     }

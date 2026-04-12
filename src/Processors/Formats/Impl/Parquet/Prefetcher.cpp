@@ -474,7 +474,7 @@ Prefetcher::Task::State Prefetcher::runTask(Task * task)
     {
         /// When the reader supports zero-copy cached reads, get retained cache cells
         /// instead of allocating a buffer and copying data into it.
-        if (read_mode == ReadMode::RandomRead && reader->supportsReadAtRetainCells())
+        if (read_mode == ReadMode::RandomRead && reader->supportsReadAtRetainCells() && task->length > 0)
         {
             auto cached_regions = reader->readBigAtRetainCells(task->length, task->offset);
             chassert(!cached_regions.empty());
@@ -482,7 +482,13 @@ Prefetcher::Task::State Prefetcher::runTask(Task * task)
             if (cached_regions.size() == 1)
             {
                 /// We got lucky and the Task's range is all in one cache cell. Zero-copy it.
-                task->cached_region = std::move(cached_regions[0]);
+                auto & cr = cached_regions[0];
+                task->cached_region = Task::CachedReadRegion{
+                    .handle = std::move(cr.handle),
+                    .data = cr.data,
+                    .size = cr.size,
+                    .file_offset = cr.file_offset,
+                };
             }
             else
             {

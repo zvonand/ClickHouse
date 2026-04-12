@@ -17,6 +17,7 @@
 #include <Storages/TableLockHolder.h>
 #include <Storages/StorageSnapshot.h>
 #include <Common/ActionLock.h>
+#include <Common/CurrentThread.h>
 #include <Common/RWLock.h>
 #include <Common/TypePromotion.h>
 #include <DataTypes/Serializations/SerializationInfo.h>
@@ -121,7 +122,7 @@ public:
     virtual bool isDictionary() const { return false; }
 
     /// Returns true if the storage supports queries with the SAMPLE section.
-    virtual bool supportsSampling() const { return getInMemoryMetadataPtr(nullptr, false)->hasSamplingKey(); }
+    virtual bool supportsSampling() const { return getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->hasSamplingKey(); }
 
     /// Returns true if the storage supports queries with the FINAL section.
     virtual bool supportsFinal() const { return false; }

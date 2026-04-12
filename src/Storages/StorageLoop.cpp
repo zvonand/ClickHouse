@@ -3,6 +3,7 @@
 #include <Storages/StorageSnapshot.h>
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/ReadFromLoopStep.h>
+#include <Common/CurrentThread.h>
 
 
 namespace DB
@@ -15,7 +16,7 @@ namespace DB
             , inner_storage(std::move(inner_storage_))
             , inner_table_function_ast(std::move(inner_table_function_ast_))
     {
-        StorageInMemoryMetadata storage_metadata = *inner_storage->getInMemoryMetadataPtr(nullptr, false);
+        StorageInMemoryMetadata storage_metadata = *inner_storage->getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false);
         setInMemoryMetadata(storage_metadata);
     }
 

@@ -1,4 +1,5 @@
 #pragma once
+#include <DataTypes/DataTypeNothing.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/IDataType.h>
 #include <Functions/IFunction.h>

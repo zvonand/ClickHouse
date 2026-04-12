@@ -82,7 +82,6 @@ int mainEntryExampleLimitReadBuffer(int argc, char ** argv);
 int mainEntryExampleLimitReadBuffer2(int argc, char ** argv);
 int mainEntryExampleParseDateTimeBestEffort(int argc, char ** argv);
 int mainEntryExampleZlibNgBug(int argc, char ** argv);
-int mainEntryExampleDragonboxTest(int argc, char ** argv);
 int mainEntryExampleZstdBuffers(int argc, char ** argv);
 int mainEntryExampleSnappyReadBuffer(int argc, char ** argv);
 int mainEntryExampleHadoopSnappyReadBuffer(int argc, char ** argv);
@@ -191,7 +190,6 @@ std::pair<std::string_view, MainFunc> examples[] =
     {"limit_read_buffer2", mainEntryExampleLimitReadBuffer2},
     {"parse_date_time_best_effort", mainEntryExampleParseDateTimeBestEffort},
     {"zlib_ng_bug", mainEntryExampleZlibNgBug},
-    {"dragonbox_test", mainEntryExampleDragonboxTest},
     {"zstd_buffers", mainEntryExampleZstdBuffers},
     {"snappy_read_buffer", mainEntryExampleSnappyReadBuffer},
     {"hadoop_snappy_read_buffer", mainEntryExampleHadoopSnappyReadBuffer},

@@ -17,17 +17,15 @@ namespace ErrorCodes
     extern const int ILLEGAL_COLUMN;
 }
 
-template <typename Name, bool is_desc>
 class FunctionKqlArraySort : public IFunction
 {
 public:
-    static constexpr auto name = Name::name;
-
-    explicit FunctionKqlArraySort(ContextPtr context)
-        : length_func(FunctionFactory::instance().get("length", context))
+    explicit FunctionKqlArraySort(ContextPtr context, const String & name_, bool is_desc_)
+        : function_name(name_)
+        , length_func(FunctionFactory::instance().get("length", context))
         , array_resize_func(FunctionFactory::instance().get("arrayResize", context))
         , array_zip_func(FunctionFactory::instance().get("arrayZip", context))
-        , sort_func(FunctionFactory::instance().get(is_desc ? "arrayReverseSort" : "arraySort", context))
+        , sort_func(FunctionFactory::instance().get(is_desc_ ? "arrayReverseSort" : "arraySort", context))
         , tuple_element_func(FunctionFactory::instance().get("tupleElement", context))
         , index_of_func(FunctionFactory::instance().get("indexOf", context))
         , array_slice_func(FunctionFactory::instance().get("arraySlice", context))
@@ -35,9 +33,7 @@ public:
     {
     }
 
-    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionKqlArraySort>(context); }
-
-    String getName() const override { return name; }
+    String getName() const override { return function_name; }
 
     bool isVariadic() const override { return true; }
     size_t getNumberOfArguments() const override { return 0; }
@@ -239,6 +235,7 @@ public:
     }
 
 private:
+    String function_name;
     FunctionOverloadResolverPtr length_func;
     FunctionOverloadResolverPtr array_resize_func;
     FunctionOverloadResolverPtr array_zip_func;
@@ -248,19 +245,6 @@ private:
     FunctionOverloadResolverPtr array_slice_func;
     FunctionOverloadResolverPtr array_concat_func;
 };
-
-struct NameKqlArraySortAsc
-{
-    static constexpr auto name = "kql_array_sort_asc";
-};
-
-struct NameKqlArraySortDesc
-{
-    static constexpr auto name = "kql_array_sort_desc";
-};
-
-using FunctionKqlArraySortAsc = FunctionKqlArraySort<NameKqlArraySortAsc, false>;
-using FunctionKqlArraySortDesc = FunctionKqlArraySort<NameKqlArraySortDesc, true>;
 
 REGISTER_FUNCTION(KqlArraySort)
 {
@@ -279,7 +263,10 @@ Sorts one or more arrays in ascending order. The first array is sorted, and subs
     FunctionDocumentation::Category category_asc = FunctionDocumentation::Category::Array;
     FunctionDocumentation documentation_asc = {description_asc, syntax_asc, arguments_asc, {}, returned_value_asc, examples_asc, introduced_in_asc, category_asc};
 
-    factory.registerFunction<FunctionKqlArraySortAsc>(documentation_asc);
+    factory.registerFunction("kql_array_sort_asc", [](ContextPtr context) -> FunctionPtr
+    {
+        return std::make_shared<FunctionKqlArraySort>(context, "kql_array_sort_asc", /* is_desc = */ false);
+    }, documentation_asc);
 
     FunctionDocumentation::Description description_desc = R"(
 Sorts one or more arrays in descending order. The first array is sorted, and subsequent arrays are reordered to match the first array's sorted order. Null values are placed at the end. This is a KQL (Kusto Query Language) compatibility function.
@@ -296,7 +283,10 @@ Sorts one or more arrays in descending order. The first array is sorted, and sub
     FunctionDocumentation::Category category_desc = FunctionDocumentation::Category::Array;
     FunctionDocumentation documentation_desc = {description_desc, syntax_desc, arguments_desc, {}, returned_value_desc, examples_desc, introduced_in_desc, category_desc};
 
-    factory.registerFunction<FunctionKqlArraySortDesc>(documentation_desc);
+    factory.registerFunction("kql_array_sort_desc", [](ContextPtr context) -> FunctionPtr
+    {
+        return std::make_shared<FunctionKqlArraySort>(context, "kql_array_sort_desc", /* is_desc = */ true);
+    }, documentation_desc);
 }
 
 }

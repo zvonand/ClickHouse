@@ -603,7 +603,7 @@ NameSet MergeTreeData::MutationsSnapshotBase::getColumnsUpdatedInPatches() const
         for (const auto & patch : patches)
         {
             const auto & columns = patch->getColumns();
-            auto metadata_snapshot = patch->storage.getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false);
+            auto metadata_snapshot = patch->storage.getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false);
 
             for (const auto & column : columns)
             {

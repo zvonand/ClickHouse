@@ -111,7 +111,7 @@ void ObjectStorageQueueSettings::dumpToSystemEngineSettingsColumns(
     const StorageObjectStorageQueue & storage) const
 {
     MutableColumns & res_columns = params.res_columns;
-    auto settings_changes_ast = storage.getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->settings_changes;
+    auto settings_changes_ast = storage.getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->settings_changes;
     if (!settings_changes_ast)
         return;
 

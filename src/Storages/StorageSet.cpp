@@ -184,7 +184,7 @@ StorageSet::StorageSet(
     : StorageSetOrJoinBase{disk_, relative_path_, table_id_, columns_, constraints_, comment, persistent_}
     , set(std::make_shared<Set>(SizeLimits(), 0, true))
 {
-    Block header = getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->getSampleBlock();
+    Block header = getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->getSampleBlock();
     set->setHeader(header.getColumnsWithTypeAndName());
 
     restore();

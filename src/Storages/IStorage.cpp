@@ -345,7 +345,7 @@ Names IStorage::getAllRegisteredNames() const
 {
     Names result;
     auto getter = [](const auto & column) { return column.name; };
-    const NamesAndTypesList & available_columns = getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->getColumns().getAllPhysical();
+    const NamesAndTypesList & available_columns = getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->getColumns().getAllPhysical();
     std::transform(available_columns.begin(), available_columns.end(), std::back_inserter(result), getter);
     return result;
 }

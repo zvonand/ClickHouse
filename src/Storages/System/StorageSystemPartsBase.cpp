@@ -87,7 +87,7 @@ StoragesInfo::getParts(MergeTreeData::DataPartStateVector & state, bool has_stat
 MergeTreeData::ProjectionPartsVector
 StoragesInfo::getProjectionParts(MergeTreeData::DataPartStateVector & state, bool has_state_column) const
 {
-    if (data->getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->projections.empty())
+    if (data->getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->projections.empty())
         return {};
 
     using State = MergeTreeData::DataPartState;

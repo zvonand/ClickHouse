@@ -1783,7 +1783,7 @@ namespace
 
 void checkForUnsupportedColumns(IStorage & storage, LoadingStrictnessLevel mode)
 {
-    if (mode <= LoadingStrictnessLevel::CREATE && hasColumnsWithDynamicStructure(storage.getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->getColumns()) && !storage.supportsColumnsWithDynamicStructure())
+    if (mode <= LoadingStrictnessLevel::CREATE && hasColumnsWithDynamicStructure(storage.getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->getColumns()) && !storage.supportsColumnsWithDynamicStructure())
     {
         throw Exception(ErrorCodes::ILLEGAL_COLUMN,
             "Cannot create table with column of type Dynamic or JSON, "
@@ -1795,7 +1795,7 @@ void checkForUnsupportedColumns(IStorage & storage, LoadingStrictnessLevel mode)
 void validateVirtualColumns(IStorage & storage)
 {
     auto virtual_columns = storage.getVirtualsPtr();
-    for (const auto & storage_column : storage.getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->getColumns())
+    for (const auto & storage_column : storage.getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->getColumns())
     {
         if (virtual_columns->tryGet(storage_column.name, VirtualsKind::Persistent, VirtualsMaterializationPlace::All))
         {

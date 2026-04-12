@@ -504,7 +504,7 @@ void StorageMemory::backupData(BackupEntriesCollector & backup_entries_collector
 
     backup_entries_collector.addBackupEntries(std::make_shared<MemoryBackup>(
         backup_entries_collector.getContext(),
-        getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false),
+        getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false),
         data.get(),
         data_path_in_backup,
         tmp_data,

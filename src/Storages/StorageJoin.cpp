@@ -79,7 +79,7 @@ StorageJoin::StorageJoin(
     , strictness(strictness_)
     , overwrite(overwrite_)
 {
-    auto metadata_snapshot = getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false);
+    auto metadata_snapshot = getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false);
     for (const auto & key : key_names)
         if (!metadata_snapshot->getColumns().hasPhysical(key))
             throw Exception(ErrorCodes::NO_SUCH_COLUMN_IN_TABLE, "Key column ({}) does not exist in table declaration.", key);
@@ -241,7 +241,7 @@ void StorageJoin::mutate(const MutationCommands & commands, ContextPtr context)
 
 HashJoinPtr StorageJoin::getJoinLocked(std::shared_ptr<TableJoin> analyzed_join, String query_id, std::chrono::milliseconds acquire_timeout, const Names & required_columns_names) const
 {
-    auto metadata_snapshot = getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false);
+    auto metadata_snapshot = getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false);
     if (!analyzed_join->sameStrictnessAndKind(strictness, kind))
         throw Exception(ErrorCodes::INCOMPATIBLE_TYPE_OF_JOIN, "Table '{}' has incompatible type of JOIN", getStorageID().getNameForLogs());
 

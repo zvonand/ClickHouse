@@ -140,7 +140,7 @@ CommandSegments parseAlterCommandSegments(const ASTAlterQuery & alter, const Sto
             {
                 const auto & source_ast = *mutation_command->ast->as<ASTAlterCommand>();
                 auto tz_rewritten_ast = rewriteDateTimeLiteralsWithTimezone(
-                    source_ast, table->getInMemoryMetadataPtr(context, false)->columns, session_tz);
+                    source_ast, table->getInMemoryMetadataPtr(context, true)->columns, session_tz);
                 if (tz_rewritten_ast)
                 {
                     auto * tz_alter_command = tz_rewritten_ast->as<ASTAlterCommand>();

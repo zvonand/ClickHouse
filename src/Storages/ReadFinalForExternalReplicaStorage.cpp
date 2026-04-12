@@ -27,7 +27,7 @@ namespace Setting
 
 bool needRewriteQueryWithFinalForStorage(const Names & column_names, const StoragePtr & storage)
 {
-    const StorageMetadataPtr & metadata = storage->getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false);
+    const StorageMetadataPtr & metadata = storage->getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false);
     Block header = metadata->getSampleBlock();
     ColumnWithTypeAndName & version_column = header.getByPosition(header.columns() - 1);
     return std::find(column_names.begin(), column_names.end(), version_column.name) == column_names.end();

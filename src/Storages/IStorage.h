@@ -122,7 +122,7 @@ public:
     virtual bool isDictionary() const { return false; }
 
     /// Returns true if the storage supports queries with the SAMPLE section.
-    virtual bool supportsSampling() const { return getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->hasSamplingKey(); }
+    virtual bool supportsSampling() const { return getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->hasSamplingKey(); }
 
     /// Returns true if the storage supports queries with the FINAL section.
     virtual bool supportsFinal() const { return false; }

@@ -241,7 +241,7 @@ void StorageView::drop()
 {
     auto table_id = getStorageID();
 
-    if (getInMemoryMetadataPtr(CurrentThread::get().tryGetQueryContext(), false)->sql_security_type == SQLSecurityType::DEFINER)
+    if (getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->sql_security_type == SQLSecurityType::DEFINER)
         ViewDefinerDependencies::instance().removeViewDependencies(table_id);
 }
 

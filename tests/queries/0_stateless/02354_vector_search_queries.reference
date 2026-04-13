@@ -465,7 +465,7 @@ Expression (Project names)
                   Granules: 3/4
                 Ranges: 1
       LazilyReadFromMergeTree
--- Wrong sort direction (ASC for dotProduct)
+-- Wrong sort direction (DESC for L2Distance), doesnt use the index
 Expression (Project names)
   Expression
     JoinLazyColumnsStep
@@ -481,7 +481,7 @@ Expression (Project names)
                   Granules: 4/4
                 Ranges: 1
       LazilyReadFromMergeTree
--- Wrong sort direction (DESC for L2Distance)
+-- Wrong sort direction, (DESC for cosineDistance) doesnt use the index
 Expression (Project names)
   Expression
     JoinLazyColumnsStep
@@ -497,7 +497,7 @@ Expression (Project names)
                   Granules: 4/4
                 Ranges: 1
       LazilyReadFromMergeTree
--- Wrong sort direction (DESC for cosineDistance)
+-- Wrong sort direction (ASC for dotProduct), doesnt use the index
 Expression (Project names)
   Expression
     JoinLazyColumnsStep

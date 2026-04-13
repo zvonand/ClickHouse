@@ -150,7 +150,7 @@ REGISTER_FUNCTION(DetectCharset)
 Detects the character set of a non-UTF8-encoded input string.
 
 :::warning
-This funtion is experimental and may change in unpredictable backwards-incompatible ways in future releases.
+This function is experimental and may change in unpredictable backwards-incompatible ways in future releases.
 Set `allow_experimental_nlp_functions = 1` to enable it.
 :::
 )";
@@ -173,7 +173,7 @@ Similar to the [`detectLanguage`](#detectLanguage) function, except the detectLa
 Prefer this version when your character set is UTF-16 or UTF-32.
 
 :::warning
-This funtion is experimental and may change in unpredictable backwards-incompatible ways in future releases.
+This function is experimental and may change in unpredictable backwards-incompatible ways in future releases.
 Set `allow_experimental_nlp_functions = 1` to enable it.
 :::
 )";

@@ -239,7 +239,7 @@ The function uses the [CLD2 library](https://github.com/CLD2Owners/cld2) for det
 The longer the input, the more precise the language detection will be.
 
 :::warning
-This funtion is experimental and may change in unpredictable backwards-incompatible ways in future releases.
+This function is experimental and may change in unpredictable backwards-incompatible ways in future releases.
 Set `allow_experimental_nlp_functions = 1` to enable it.
 :::
 )";
@@ -261,7 +261,7 @@ Set `allow_experimental_nlp_functions = 1` to enable it.
 Similar to the [`detectLanguage`](#detectLanguage) function, but `detectLanguageMixed` returns a `Map` of 2-letter language codes that are mapped to the percentage of the certain language in the text.
 
 :::warning
-This funtion is experimental and may change in unpredictable backwards-incompatible ways in future releases.
+This function is experimental and may change in unpredictable backwards-incompatible ways in future releases.
 Set `allow_experimental_nlp_functions = 1` to enable it.
 :::
 )";

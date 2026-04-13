@@ -140,7 +140,7 @@ With the `wordnet` extension type you need to provide a path to a directory with
 The thesaurus must contain a WordNet sense index.
 
 :::warning
-This funtion is experimental and may change in unpredictable backwards-incompatible ways in future releases.
+This function is experimental and may change in unpredictable backwards-incompatible ways in future releases.
 Set `allow_experimental_nlp_functions = 1` to enable it.
 :::
 )";

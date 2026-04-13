@@ -453,7 +453,14 @@ void StorageObjectStorageQueue::startup()
     /// Register table as a Queue table on this server.
     /// This will allow to execute shutdown of Queue tables
     /// before shutting down all other tables on server shutdown.
-    StreamingStorageRegistry::instance().registerTable(getStorageID());
+    ///
+    /// Pass if_not_exists=true to throw TABLE_ALREADY_EXISTS instead of
+    /// LOGICAL_ERROR when a concurrent CREATE TABLE IF NOT EXISTS on a
+    /// Shared database races through the two-phase commit gap in
+    /// tryExecuteDDLQuery. TABLE_ALREADY_EXISTS is properly handled by
+    /// the Shared database's IF NOT EXISTS logic.
+    StreamingStorageRegistry::instance().registerTable(getStorageID(), /* if_not_exists */ true);
+
     SCOPE_EXIT_SAFE({
         if (!startup_finished)
             StreamingStorageRegistry::instance().unregisterTable(getStorageID(), /* if_exists */ true);

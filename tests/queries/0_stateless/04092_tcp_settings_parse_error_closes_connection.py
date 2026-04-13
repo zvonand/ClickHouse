@@ -248,6 +248,7 @@ def test_connection_closed_after_bad_settings():
             AND message LIKE '%Done processing connection%'
             AND event_time_microseconds > anchor.t
         )
+        SETTINGS max_result_rows=0, max_rows_to_read=0
     """)
 
     if int(error_count) > 0:

@@ -3,7 +3,6 @@
 #include "config.h"
 
 #include <IO/VarInt.h>
-#include <IO/WriteHelpers.h>
 
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeAggregateFunction.h>

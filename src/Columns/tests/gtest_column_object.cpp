@@ -466,12 +466,6 @@ TEST(ColumnObject, TryInsertRestoresSortedDynamicPaths)
     ///   2. ColumnDynamic::tryInsert(1u) for "a_new" succeeds.
     ///   3. ColumnUInt32::tryInsert(String) for "b" returns false.
     ///   4. restore_sizes() is called.
-    /// Fields are processed in alphabetical order ("a_new" before "b"), so:
-    ///   1. "a_new" is new → tryToAddNewDynamicPath succeeds, "a_new" is added to all
-    ///      three structures including sorted_dynamic_paths.
-    ///   2. ColumnDynamic::tryInsert(1u) for "a_new" succeeds.
-    ///   3. ColumnUInt32::tryInsert(String) for "b" returns false.
-    ///   4. restore_sizes() is called.
     ///      BUG 1: new_dynamic_paths was never populated, so the loop that removes
     ///             newly-added paths is a no-op — "a_new" is left in dynamic_paths,
     ///             dynamic_paths_ptrs, and sorted_dynamic_paths with a rolled-back size.
@@ -487,7 +481,7 @@ TEST(ColumnObject, TryInsertRestoresSortedDynamicPaths)
     ASSERT_EQ(dynamic_paths.size(), 0u);   /// "a_new" must be fully rolled back
 
     /// serializeValueIntoArena iterates sorted_dynamic_paths.
-    /// Without the fix the stale "a_new" entry causes a crash here (see comment above).
+    /// Without the fix the stale "a_new" entry causes undefined behavior here (see comment above).
     Arena arena;
     const char * begin = nullptr;
     auto ref = col_object.serializeValueIntoArena(0, arena, begin, nullptr);

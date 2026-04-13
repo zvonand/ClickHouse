@@ -54,7 +54,7 @@ namespace
     }
 
     /// Utility function to extract partition key from file path
-    std::string getPartitionKeyImpl(
+    std::string getPartitionKey(
         const std::string & file_path,
         ObjectStorageQueuePartitioningMode partitioning_mode,
         const ObjectStorageQueueFilenameParser * parser)
@@ -95,7 +95,7 @@ namespace
         /// This ensures files from the same partition always go to the same bucket
         if (bucketing_mode == ObjectStorageQueueBucketingMode::PARTITION)
         {
-            auto partition_key = getPartitionKeyImpl(path, partitioning_mode, parser);
+            auto partition_key = getPartitionKey(path, partitioning_mode, parser);
             return sipHash64(partition_key) % buckets_num;
         }
 
@@ -103,6 +103,9 @@ namespace
         return sipHash64(path) % buckets_num;
     }
 
+    /// Returns `zk_path/processed` or `zk_path/buckets/<N>/processed`.
+    /// Requires `partitioning_mode` and `parser` because when `bucketing_mode == PARTITION`
+    /// the bucket index is derived from the partition key rather than the full file path.
     std::string getProcessedBucketPath(
         const std::filesystem::path & zk_path,
         const std::string & path,
@@ -116,6 +119,9 @@ namespace
         return getProcessedPathWithoutBucket(zk_path);
     }
 
+    /// Returns the full processed pointer path for a file:
+    /// `getProcessedBucketPath(...)` in non-partitioned mode, or
+    /// `getProcessedBucketPath(...) / <partition_key>` in HIVE/REGEX mode.
     std::string getProcessedPath(
         const std::filesystem::path & zk_path,
         const std::string & path,
@@ -126,7 +132,7 @@ namespace
     {
         auto bucket_path = getProcessedBucketPath(zk_path, path, buckets_num, bucketing_mode, partitioning_mode, parser);
         if (hasPartitioningMode(partitioning_mode))
-            return std::filesystem::path(std::move(bucket_path)) / getPartitionKeyImpl(path, partitioning_mode, parser);
+            return std::filesystem::path(std::move(bucket_path)) / getPartitionKey(path, partitioning_mode, parser);
         return bucket_path;
     }
 
@@ -334,19 +340,12 @@ ObjectStorageQueueOrderedFileMetadata::ObjectStorageQueueOrderedFileMetadata(
     , parser(parser_)
     , processed_bucket_path(getProcessedBucketPath(zk_path_, path_, buckets_num_, bucketing_mode_, partitioning_mode_, parser_))
 {
-    /// processed_node_path already includes the partition key (set by getProcessedPath),
-    /// so processed_watch_path equals it directly.
-    processed_watch_path = processed_node_path;
+    chassert(hasPartitioningMode(partitioning_mode) || processed_bucket_path == processed_node_path);
 
     LOG_TEST(log, "Path: {}, node_name: {}, max_loading_retries: {}, "
              "processed_path: {}, processing_path: {}, failed_path: {}, partitioning_mode: {}",
              path, node_name, max_loading_retries,
              processed_node_path, processing_node_path, failed_node_path, magic_enum::enum_name(partitioning_mode));
-}
-
-const std::string & ObjectStorageQueueOrderedFileMetadata::getProcessedWatchPath() const
-{
-    return processed_watch_path;
 }
 
 bool ObjectStorageQueueOrderedFileMetadata::useBucketsForProcessing() const
@@ -409,12 +408,12 @@ ObjectStorageQueueOrderedFileMetadata::getProcessingStateFromKeeper(
     bool check_failed,
     LoggerPtr log_) const
 {
-    /// processed_node_path already includes the partition key (when partitioning is enabled),
-    /// so pass it directly as the partition_node_path argument.
+    /// Pass processed_node_path as the partition child only when it differs from processed_bucket_path,
+    /// i.e. when partitioning is active and the partition key is non-empty (REGEX may produce no key).
     return getProcessingStateFromKeeper(
         processed_bucket_path,
         path,
-        hasPartitioningMode(partitioning_mode)
+        processed_node_path != processed_bucket_path
             ? std::optional<std::string>(processed_node_path)
             : std::nullopt,
         check_failed ? std::optional<std::string>(failed_node_path) : std::nullopt,
@@ -486,25 +485,11 @@ ObjectStorageQueueOrderedFileMetadata::getProcessingStateFromKeeper(
 
     ProcessingStateFromKeeper state(file_path, last_processed_path, is_failed);
     state.processed_bucket_version = responses[0].stat.version;
-    if (partition_node_path.has_value())
-    {
-        if (responses[partition_index].error == Coordination::Error::ZOK)
-            state.processed_node_version = responses[partition_index].stat.version;
-    }
-    else
-        state.processed_node_version = state.processed_bucket_version;
     if (is_failed && !responses[1].data.empty())
         state.failure_message = NodeMetadata::fromString(responses[1].data).last_exception;
     return state;
 }
 
-std::string ObjectStorageQueueOrderedFileMetadata::getPartitionKey(
-    const std::string & path_,
-    ObjectStorageQueuePartitioningMode partitioning_mode,
-    const ObjectStorageQueueFilenameParser * parser)
-{
-    return getPartitionKeyImpl(path_, partitioning_mode, parser);
-}
 
 ObjectStorageQueueOrderedFileMetadata::ProcessingStateFromKeeper::ProcessingStateFromKeeper(
     const std::string & path,
@@ -516,18 +501,18 @@ ObjectStorageQueueOrderedFileMetadata::ProcessingStateFromKeeper::ProcessingStat
 {
 }
 
-bool ObjectStorageQueueOrderedFileMetadata::getMaxProcessedFilesByHivePartition(
-    std::unordered_map<std::string, std::string> & last_processed_path_per_hive_partition,
+bool ObjectStorageQueueOrderedFileMetadata::getMaxProcessedFilesByPartition(
+    std::unordered_map<std::string, std::string> & last_processed_path_per_partition,
     const std::string & processed_node_path_,
     LoggerPtr log_,
     const std::string & zookeeper_name_)
 {
-    Strings hive_partitions;
+    Strings partitions;
     Coordination::Error code;
     auto zk_retry = ObjectStorageQueueMetadata::getKeeperRetriesControl(log_);
     zk_retry.retryLoop([&]
     {
-        code = ObjectStorageQueueMetadata::getZooKeeper(log_, zookeeper_name_)->tryGetChildren(processed_node_path_, hive_partitions);
+        code = ObjectStorageQueueMetadata::getZooKeeper(log_, zookeeper_name_)->tryGetChildren(processed_node_path_, partitions);
     });
 
     if (code == Coordination::Error::ZNONODE)
@@ -535,34 +520,34 @@ bool ObjectStorageQueueOrderedFileMetadata::getMaxProcessedFilesByHivePartition(
     else if (code != Coordination::Error::ZOK)
         throw zkutil::KeeperException::fromPath(code, processed_node_path_);
 
-    Strings hive_partition_processed_paths;
-    for (const auto & hive_partition : hive_partitions)
-        hive_partition_processed_paths.push_back(std::filesystem::path(processed_node_path_) / hive_partition);
+    Strings partition_processed_paths;
+    for (const auto & partition : partitions)
+        partition_processed_paths.push_back(std::filesystem::path(processed_node_path_) / partition);
 
     zkutil::ZooKeeper::MultiTryGetResponse responses;
 
     zk_retry.resetFailures();
     zk_retry.retryLoop([&]
     {
-        responses = ObjectStorageQueueMetadata::getZooKeeper(log_, zookeeper_name_)->tryGet(hive_partition_processed_paths);
+        responses = ObjectStorageQueueMetadata::getZooKeeper(log_, zookeeper_name_)->tryGet(partition_processed_paths);
     });
 
-    if (responses.size() != hive_partitions.size())
+    if (responses.size() != partitions.size())
     {
         throw Exception(
             ErrorCodes::UNEXPECTED_ZOOKEEPER_ERROR,
             "Unexpected size of Keeper response, expected {}, got {}",
-            hive_partitions.size(), responses.size());
+            partitions.size(), responses.size());
     }
 
-    for (size_t i = 0; i < hive_partitions.size(); ++i)
+    for (size_t i = 0; i < partitions.size(); ++i)
     {
         if (responses[i].error == Coordination::Error::ZOK)
         {
-            last_processed_path_per_hive_partition[hive_partitions[i]] = responses[i].data;
+            last_processed_path_per_partition[partitions[i]] = responses[i].data;
         }
         else if (responses[i].error != Coordination::Error::ZNONODE)
-            throw zkutil::KeeperException::fromPath(responses[i].error, hive_partition_processed_paths[i]);
+            throw zkutil::KeeperException::fromPath(responses[i].error, partition_processed_paths[i]);
     }
     return true;
 }
@@ -682,24 +667,12 @@ std::pair<bool, ObjectStorageQueueIFileMetadata::FileStatus::State> ObjectStorag
                 processor_info,
                 use_persistent_processing_nodes ? zkutil::CreateMode::Persistent : zkutil::CreateMode::Ephemeral));
 
-        auto check_max_processed_path = requests.size();
-        if (state.processed_node_version.has_value())
-        {
-            requests.push_back(zkutil::makeCheckRequest(processed_node_path, *state.processed_node_version));
-        }
-        else if (state.processed_bucket_version.has_value())
-        {
-            /// Bucket parent exists but processed_node_path doesn't yet:
-            /// its ZK parent exists so CREATE inside addCheckNotExistsRequest will succeed.
-            zkutil::addCheckNotExistsRequest(requests, *zk_client, processed_node_path);
-        }
+        const auto check_max_processed_path_begin = requests.size();
+        if (state.processed_bucket_version.has_value())
+            requests.push_back(zkutil::makeCheckRequest(processed_bucket_path, *state.processed_bucket_version));
         else
-        {
-            /// Nothing exists yet. In partitioned mode processed_node_path's ZK parent
-            /// (= processed_bucket_path) doesn't exist, so we must target processed_bucket_path.
-            /// In non-partitioned mode processed_node_path == processed_bucket_path, so this is the same.
             zkutil::addCheckNotExistsRequest(requests, *zk_client, processed_bucket_path);
-        }
+        const auto check_max_processed_path_end = requests.size();
 
         Coordination::Responses responses;
         zk_retry.resetFailures();
@@ -741,7 +714,7 @@ std::pair<bool, ObjectStorageQueueIFileMetadata::FileStatus::State> ObjectStorag
         if (has_request_failed(create_processing_path_idx))
             return {false, FileStatus::State::Processing};
 
-        if (has_request_failed(check_max_processed_path))
+        if (failed_idx >= check_max_processed_path_begin && failed_idx < check_max_processed_path_end)
         {
             LOG_TEST(log, "Version of max processed file changed: {}. Will retry for file `{}`", code, path);
             continue;
@@ -1040,7 +1013,7 @@ void ObjectStorageQueueOrderedFileMetadata::filterOutProcessedAndFailed(
         if (hasPartitioningMode(partitioning_mode))
         {
             std::unordered_map<PartitionKey, std::string> max_processed_files;
-            if (getMaxProcessedFilesByHivePartition(max_processed_files, processed_node_path, log_, zookeeper_name_))
+            if (getMaxProcessedFilesByPartition(max_processed_files, processed_node_path, log_, zookeeper_name_))
                 last_processed_file_map[i] = std::move(max_processed_files);
         }
         else
@@ -1069,7 +1042,7 @@ void ObjectStorageQueueOrderedFileMetadata::filterOutProcessedAndFailed(
         {
             if (hasPartitioningMode(partitioning_mode))
             {
-                auto partition_key = getPartitionKeyImpl(path, partitioning_mode, parser);
+                auto partition_key = getPartitionKey(path, partitioning_mode, parser);
                 auto max_processed_file = last_processed_file_map[bucket].find(partition_key);
                 if (max_processed_file != last_processed_file_map[bucket].end()
                     && path <= max_processed_file->second)

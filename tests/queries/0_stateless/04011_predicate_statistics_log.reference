@@ -1,3 +1,22 @@
-1	1	1	1	0.1
-1	1	1	0.5
-1	1	1	1	1
+--- predicate classes ---
+id	In	in	1	1
+score	Range	greater	1	1
+status	Equality	equals	1	1
+status	LikeSubstring	like	1	1
+tag	IsNull	isNull	1	1
+--- 100% selectivity ---
+1
+--- 0% selectivity ---
+1	1
+--- multi-column skipped ---
+1
+--- disabled ---
+1
+--- filter_expression ---
+1
+--- conjunction total_selectivity ---
+1	1	1
+--- selectivity bounds ---
+1	1	1	1
+--- passed <= input ---
+1

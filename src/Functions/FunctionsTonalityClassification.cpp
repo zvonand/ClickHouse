@@ -91,7 +91,7 @@ This function is limited in its current form in that it makes use of the embedde
 :::
 
 :::warning
-This funtion is experimental and may change in unpredictable backwards-incompatible ways in future releases.
+This function is experimental and may change in unpredictable backwards-incompatible ways in future releases.
 Set `allow_experimental_nlp_functions = 1` to enable it.
 :::
 )";

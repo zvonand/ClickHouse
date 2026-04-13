@@ -138,7 +138,7 @@ This function needs dictionaries to operate, which can be obtained from [github]
 For more details on loading a dictionary from a local file see page ["Defining Dictionaries"](/sql-reference/statements/create/dictionary/sources/local-file).
 
 :::warning
-This funtion is experimental and may change in unpredictable backwards-incompatible ways in future releases.
+This function is experimental and may change in unpredictable backwards-incompatible ways in future releases.
 Set `allow_experimental_nlp_functions = 1` to enable it.
 :::
 )";

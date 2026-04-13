@@ -199,7 +199,7 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
     if (context->hasInsertionTable())
         return nullptr;
 
-    auto inner_query_ast = getInMemoryMetadataPtr()->getSelectQuery().inner_query;
+    auto inner_query_ast = getInMemoryMetadataPtr(context, false)->getSelectQuery().inner_query;
 
     QueryTreeNodePtr inner_query_tree;
     try

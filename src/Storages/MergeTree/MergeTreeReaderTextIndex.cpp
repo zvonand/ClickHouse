@@ -158,7 +158,7 @@ void MergeTreeReaderTextIndex::updateAllMarkRanges(const MarkRanges & ranges)
     if (fallback_reader)
         fallback_reader->updateAllMarkRanges(ranges);
 
-    if (granule && !ranges.empty())
+    if (!ranges.empty())
     {
         const auto & index_granularity = data_part_info_for_read->getIndexGranularity();
         size_t row_begin = index_granularity.getMarkStartingRow(ranges.front().begin);
@@ -576,9 +576,11 @@ std::vector<PostingListPtr> MergeTreeReaderTextIndex::readPostingsBlocksForToken
 
 void MergeTreeReaderTextIndex::cleanupPostingsBlocks(const RowsRange & range)
 {
-    const auto & granule_text = assert_cast<const MergeTreeIndexGranuleText &>(*granule);
-    const auto & remaining_tokens = granule_text.getRemainingTokens();
-    const auto & pattern_tokens = granule_text.getPatternTokens();
+    if (!granule)
+        return;
+
+    const auto & remaining_tokens = granule->getRemainingTokens();
+    const auto & pattern_tokens = granule->getPatternTokens();
 
     const auto cleanup_postings = [&](const String & token, const TokenPostingsInfoPtr & token_info)
     {

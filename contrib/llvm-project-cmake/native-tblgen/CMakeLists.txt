@@ -52,7 +52,9 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/include/llvm/Config")
 
 #
 # Platform-specific config variables for the HOST system
-# Note: native-tblgen builds for the host, so we use CMAKE_HOST_SYSTEM_NAME
+# Note: native-tblgen builds for the host, so we use CMAKE_HOST_SYSTEM_NAME.
+# We do not attempt to detect musl here: ClickHouse CI hosts are always glibc,
+# and if someone builds on a musl host the missing headers will fail clearly.
 #
 
 # Shared library extension

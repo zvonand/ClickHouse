@@ -312,6 +312,8 @@ if (CMAKE_CROSSCOMPILING)
     )
 
     # Paths to native tablegen executables
+    # Note: native-tblgen builds for the host (not the cross-compilation target),
+    # so we do not append CMAKE_EXECUTABLE_SUFFIX (which is the target's suffix).
     set(LLVM_TABLEGEN_EXE "${NATIVE_TBLGEN_BUILD_DIR}/llvm-tblgen")
     set(LLVM_MIN_TABLEGEN_EXE "${NATIVE_TBLGEN_BUILD_DIR}/llvm-min-tblgen")
 

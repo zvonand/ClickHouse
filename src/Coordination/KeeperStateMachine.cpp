@@ -413,7 +413,7 @@ std::shared_ptr<KeeperRequestForSession> IKeeperStateMachine::parseRequest(
         xid_helper.xid = static_cast<int32_t>(xid_helper.parts.lower);
     }
 
-    std::unique_ptr<OpenTelemetry::TracingContext> tracing_context;
+    std::shared_ptr<OpenTelemetry::TracingContext> tracing_context;
     if (!buffer.eof())
     {
         version = WITH_OPTIONAL_TRACING_CONTEXT;

@@ -3,7 +3,6 @@
 #if USE_AVRO
 
 #include <cstddef>
-#include <Common/Exception.h>
 
 
 #include <Core/NamesAndTypes.h>

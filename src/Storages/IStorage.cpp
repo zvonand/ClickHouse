@@ -330,6 +330,11 @@ StorageID IStorage::getStorageID() const
     return storage_id;
 }
 
+bool IStorage::supportsSampling() const
+{
+    return getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->hasSamplingKey();
+}
+
 ConditionSelectivityEstimatorPtr IStorage::getConditionSelectivityEstimator(const RangesInDataParts &, const Names &, ContextPtr) const
 {
     return nullptr;

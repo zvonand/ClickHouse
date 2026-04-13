@@ -1577,15 +1577,6 @@ namespace
 {
 
 template<typename Storage>
-<<<<<<< keeper_get_recursive_children
-Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is_local, bool should_lock_storage = true)
-{
-    if (is_local)
-    {
-        std::shared_lock<SharedMutex> lock;
-        if (should_lock_storage)
-            lock = std::shared_lock<SharedMutex>(storage.storage_mutex);
-=======
 Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is_local, bool should_lock_storage)
 {
     if (is_local)
@@ -1594,7 +1585,6 @@ Coordination::ACLs getNodeACLs(Storage & storage, std::string_view path, bool is
         if (should_lock_storage)
             lock.lock();
 
->>>>>>> master
         auto node_it = storage.container.find(path);
         if (node_it == storage.container.end())
             return {};
@@ -1620,15 +1610,9 @@ void handleSystemNodeModification(const KeeperContext & keeper_context, std::str
 }
 
 template<typename Container>
-<<<<<<< keeper_get_recursive_children
-bool KeeperStorage<Container>::checkACL(std::string_view path, int32_t permission, int64_t session_id, bool is_local, bool should_lock_storage)
-{
-    const auto node_acls = getNodeACLs(*this, path, is_local, should_lock_storage);
-=======
 bool KeeperStorage<Container>::checkACL(std::string_view path, int32_t permission, int64_t session_id, bool is_local, bool is_reconfig)
 {
     const auto node_acls = getNodeACLs(*this, path, is_local, /*should_lock_storage=*/ !is_local || is_reconfig);
->>>>>>> master
     if (node_acls.empty())
         return true;
 

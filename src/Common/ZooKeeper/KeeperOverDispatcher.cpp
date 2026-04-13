@@ -185,7 +185,10 @@ void KeeperOverDispatcher::listRecursive(
         };
     }
 
-    keeper_dispatcher->putLocalReadRequest(request, session_id);
+    pushRequest(request, [callback](const ZooKeeperResponsePtr & response)
+    {
+        callback(dynamic_cast<const ListRecursiveResponse &>(*response));
+    });
 }
 
 void KeeperOverDispatcher::set(

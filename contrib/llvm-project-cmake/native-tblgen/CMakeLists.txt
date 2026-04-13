@@ -198,10 +198,12 @@ add_executable(llvm-min-tblgen
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/DirectiveEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/IntrinsicEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/RISCVTargetDefEmitter.cpp
+    ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/RuntimeLibcalls.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/RuntimeLibcallsEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/SDNodeProperties.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/TableGen.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/TargetFeaturesEmitter.cpp
+    ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/TargetLibraryInfoEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/VTEmitter.cpp
     ${LLVM_SOURCE_DIR}/lib/TableGen/DetailedRecordsBackend.cpp
     ${LLVM_SOURCE_DIR}/lib/TableGen/Error.cpp
@@ -268,10 +270,12 @@ add_executable(llvm-tblgen
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/DirectiveEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/IntrinsicEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/RISCVTargetDefEmitter.cpp
+    ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/RuntimeLibcalls.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/RuntimeLibcallsEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/SDNodeProperties.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/TableGen.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/TargetFeaturesEmitter.cpp
+    ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/TargetLibraryInfoEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Basic/VTEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Common/GlobalISel/CodeExpander.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Common/GlobalISel/CombinerUtils.cpp
@@ -288,8 +292,8 @@ add_executable(llvm-tblgen
     ${LLVM_SOURCE_DIR}/utils/TableGen/Common/CodeGenRegisters.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Common/CodeGenSchedule.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Common/CodeGenTarget.cpp
-    ${LLVM_SOURCE_DIR}/utils/TableGen/Common/DAGISelMatcher.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Common/InfoByHwMode.cpp
+    ${LLVM_SOURCE_DIR}/utils/TableGen/Common/InstructionEncoding.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Common/OptEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Common/PredicateExpander.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/Common/SubtargetFeatureInfo.cpp
@@ -304,10 +308,13 @@ add_executable(llvm-tblgen
     ${LLVM_SOURCE_DIR}/utils/TableGen/CompressInstEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/CTagsEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/DAGISelEmitter.cpp
+    ${LLVM_SOURCE_DIR}/utils/TableGen/DAGISelMatcher.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/DAGISelMatcherEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/DAGISelMatcherGen.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/DAGISelMatcherOpt.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/DecoderEmitter.cpp
+    ${LLVM_SOURCE_DIR}/utils/TableGen/DecoderTableEmitter.cpp
+    ${LLVM_SOURCE_DIR}/utils/TableGen/DecoderTree.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/DFAEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/DFAPacketizerEmitter.cpp
     ${LLVM_SOURCE_DIR}/utils/TableGen/DisassemblerEmitter.cpp

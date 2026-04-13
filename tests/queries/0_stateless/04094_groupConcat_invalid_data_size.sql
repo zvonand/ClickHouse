@@ -9,3 +9,6 @@ SELECT finalizeAggregation(CAST(unhex('80808008'), 'AggregateFunction(groupConca
 
 -- With the has_limit path (groupConcat with delimiter and limit):
 SELECT finalizeAggregation(CAST(unhex('80808008'), 'AggregateFunction(groupConcat(\',\', 10), String)')); -- { serverError BAD_ARGUMENTS }
+
+-- Original fuzzer-found case that triggered LOGICAL_ERROR in the allocator:
+SELECT CAST(unhex(toFixedString('', 30)), 'AggregateFunction(groupConcat(\',\', 10), String)'); -- { serverError BAD_ARGUMENTS }

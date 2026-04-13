@@ -290,16 +290,7 @@ protected:
     {
         if (table)
         {
-            StorageMetadataPtr metadata_snapshot;
-            try
-            {
-                metadata_snapshot = table->getInMemoryMetadataPtr(context, false);
-            }
-            catch (...) /// Ok
-            {
-                tryLogCurrentException(getLogger("fillParametralizedViewData"));
-            }
-
+            StorageMetadataPtr metadata_snapshot = table->getInMemoryMetadataPtr(context, false);
             if (!metadata_snapshot)
             {
                 columns[res_index++]->insertDefault();
@@ -604,16 +595,7 @@ protected:
 
                 StorageMetadataPtr metadata_snapshot;
                 if (table)
-                {
-                    try
-                    {
-                        metadata_snapshot = table->getInMemoryMetadataPtr(context, false);
-                    }
-                    catch (...) /// Ok
-                    {
-                        tryLogCurrentException(getLogger("TablesBlockSource"));
-                    }
-                }
+                    metadata_snapshot = table->getInMemoryMetadataPtr(context, false);
 
                 if (columns_mask[src_index++])
                 {

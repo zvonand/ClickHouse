@@ -88,17 +88,7 @@ void fillDataWithTableColumns(
     if (table_lock == nullptr)
         return; // table was dropped while acquiring the lock
 
-    StorageMetadataPtr snapshot;
-    try
-    {
-        snapshot = table->getInMemoryMetadataPtr(context, false);
-    }
-    catch (...)  /// Ok
-    {
-        tryLogCurrentException(getLogger("fillDataWithTableColumns"));
-        return;
-    }
-
+    StorageMetadataPtr snapshot = table->getInMemoryMetadataPtr(context, false);
     const auto & columns = snapshot->getColumns();
     for (const auto & column : columns)
     {

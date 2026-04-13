@@ -86,8 +86,8 @@ elseif (ARCH_PPC64LE)
 elseif (ARCH_AMD64)
     # x86-64 microarchitecture levels (https://en.wikipedia.org/wiki/X86-64#Microarchitecture_levels):
     #   1 — SSE2 baseline, maximum compatibility with older/embedded hardware
-    #   2 — SSE4.2, SSSE3, POPCNT (default, matches ClickHouse's historical baseline)
-    #   3 — AVX2, BMI1/2, FMA, F16C etc.
+    #   2 — SSE4.2, SSSE3, POPCNT (ClickHouse's historical baseline)
+    #   3 — AVX2, BMI1/2, FMA, F16C, LZCNT, MOVBE etc. (default)
     #   4 — AVX-512F/BW/CD/DQ/VL
     set (X86_ARCH_LEVEL "3" CACHE STRING "x86-64 microarchitecture level (1, 2, 3, 4)")
     set_property (CACHE X86_ARCH_LEVEL PROPERTY STRINGS "1" "2" "3" "4")
@@ -100,7 +100,7 @@ elseif (ARCH_AMD64)
     # microarchitecture level.  Build-time tools (tablegen, code generators)
     # are compiled with these flags and will crash with SIGILL otherwise.
     if (OS_LINUX AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "amd64|x86_64" AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 2)
-        set (X86_REQUIRED_FLAGS "ssse3|sse4_1|sse4_2")
+        set (X86_REQUIRED_FLAGS "ssse3|sse4_1|sse4_2|popcnt")
         if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
             set (X86_REQUIRED_FLAGS "${X86_REQUIRED_FLAGS}|avx2|bmi2|fma")
         endif ()

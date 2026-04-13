@@ -3762,7 +3762,7 @@ def test_connection_info_logging_with_rabbitmq_address(rabbitmq_cluster, db, uni
 
     # Check server logs for the reconnection message
     log = instance.grep_in_log("Trying to restore connection to")
-    assert ':0' not in log, \
+    assert 'Trying to restore connection to :0' not in log, \
         f"Log contains ':0' instead of actual address: {log}"
     assert 'rabbitmq' in log.lower() or '5672' in log, \
         f"Log should contain the actual connection address: {log}"

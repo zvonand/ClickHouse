@@ -1,5 +1,6 @@
 #pragma once
 
+#include <base/demangle.h>
 #include <Common/HashTable/HashTable.h>
 #include <Common/HashTable/HashTableKeyHolder.h>
 #include <Common/ColumnsHashing/HashMethod.h>

@@ -11,6 +11,7 @@
 #include <Functions/CastOverloadResolver.h>
 #include <Functions/IFunction.h>
 #include <Functions/ComparisonNames.h>
+#include <IO/WriteHelpers.h>
 #include <Functions/FunctionsLogical.h>
 
 #include <Interpreters/ActionsDAG.h>

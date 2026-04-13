@@ -341,7 +341,7 @@ ChunkAndProgress MergeTreeSelectProcessor::read()
             if (storage_id.empty())
             {
                 storage_id = task->getInfo().data_part->storage.getStorageID();
-                prewhere_step_offset = task->getInfo().mutation_steps.size(); 
+                prewhere_step_offset = task->getInfo().mutation_steps.size();
             }
         }
         catch (const Exception & e)

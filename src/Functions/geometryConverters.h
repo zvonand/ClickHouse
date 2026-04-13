@@ -14,7 +14,6 @@
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/IDataType.h>
 #include <DataTypes/DataTypeFactory.h>
-#include <IO/WriteHelpers.h>
 #include <Interpreters/castColumn.h>
 
 #include <cmath>

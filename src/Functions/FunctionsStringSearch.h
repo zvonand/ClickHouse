@@ -14,7 +14,6 @@
 #include <Functions/IFunction.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/castColumn.h>
-#include <IO/WriteHelpers.h>
 
 
 namespace DB

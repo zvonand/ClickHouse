@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Functions/FunctionHelpers.h>
-#include <IO/WriteHelpers.h>
 #include <DataTypes/getLeastSupertype.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypesNumber.h>

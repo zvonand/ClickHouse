@@ -4,7 +4,6 @@
 
 #include <base/arithmeticOverflow.h>
 
-#include <IO/WriteHelpers.h>
 #include <IO/ReadHelpers.h>
 
 #include <AggregateFunctions/IAggregateFunction.h>

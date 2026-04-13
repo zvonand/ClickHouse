@@ -7,7 +7,6 @@
 #include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnsNumber.h>
 #include <Columns/ColumnNullable.h>
-#include <IO/WriteHelpers.h>
 #include <Interpreters/Context_fwd.h>
 
 

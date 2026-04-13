@@ -134,7 +134,7 @@ def test_total_pk_bytes_in_memory_fields(started_cluster):
     node.query("DROP table test_pk_bytes;")
 
 
-def test_total_projection_pk_bytes_in_memory_fields(started_cluster):
+def test_total_proj_pk_ig_in_memory_fields(started_cluster):
     node.query("""CREATE TABLE test_proj_pk_bytes
     (
        a UInt64,
@@ -148,10 +148,15 @@ def test_total_projection_pk_bytes_in_memory_fields(started_cluster):
     query_proj_pk_bytes = "SELECT value FROM system.asynchronous_metrics WHERE metric = 'TotalProjectionPrimaryKeyBytesInMemory';"
     query_proj_pk_bytes_allocated = """SELECT value FROM system.asynchronous_metrics
                                   WHERE metric = 'TotalProjectionPrimaryKeyBytesInMemoryAllocated';"""
+    query_proj_ig_bytes = "SELECT value FROM system.asynchronous_metrics WHERE metric = 'TotalProjectionIndexGranularityBytesInMemory';"
+    query_proj_ig_bytes_allocated = """SELECT value FROM system.asynchronous_metrics
+                                  WHERE metric = 'TotalProjectionIndexGranularityBytesInMemoryAllocated';"""
 
     # metrics before inserting anything
     proj_pk_bytes_before = int(node.query(query_proj_pk_bytes).strip())
     proj_pk_bytes_allocated_before = int(node.query(query_proj_pk_bytes_allocated).strip())
+    proj_ig_bytes_before = int(node.query(query_proj_ig_bytes).strip())
+    proj_ig_bytes_allocated_before = int(node.query(query_proj_ig_bytes_allocated).strip())
 
     # first insert
     node.query("""INSERT INTO test_proj_pk_bytes SELECT number, number * 2 FROM numbers(1000000)""")
@@ -166,6 +171,12 @@ def test_total_projection_pk_bytes_in_memory_fields(started_cluster):
     def res_proj_pk_bytes_allocated():
         return int(node.query(query_proj_pk_bytes_allocated).strip())
 
+    def res_proj_ig_bytes():
+        return int(node.query(query_proj_ig_bytes).strip())
+
+    def res_proj_ig_bytes_allocated():
+        return int(node.query(query_proj_ig_bytes_allocated).strip())
+
     # metrics should increase after first insert
     proj_pk_bytes_before, proj_pk_bytes_after = query_until_condition(
         proj_pk_bytes_before, res_proj_pk_bytes, condition=greater
@@ -176,6 +187,17 @@ def test_total_projection_pk_bytes_in_memory_fields(started_cluster):
         proj_pk_bytes_allocated_before, res_proj_pk_bytes_allocated, condition=greater
     )
     assert proj_pk_bytes_allocated_after > proj_pk_bytes_allocated_before
+
+    # index granularity metrics should increase after first insert
+    proj_ig_bytes_before, proj_ig_bytes_after = query_until_condition(
+        proj_ig_bytes_before, res_proj_ig_bytes, condition=greater
+    )
+    assert proj_ig_bytes_after > proj_ig_bytes_before
+
+    proj_ig_bytes_allocated_before, proj_ig_bytes_allocated_after = query_until_condition(
+        proj_ig_bytes_allocated_before, res_proj_ig_bytes_allocated, condition=greater
+    )
+    assert proj_ig_bytes_allocated_after > proj_ig_bytes_allocated_before
 
     # second insert
     node.query("""INSERT INTO test_proj_pk_bytes SELECT number + 100, number * 200 FROM numbers(1000000)""")
@@ -194,6 +216,17 @@ def test_total_projection_pk_bytes_in_memory_fields(started_cluster):
     )
     assert proj_pk_bytes_allocated_after_2 > proj_pk_bytes_allocated_after
 
+    # index granularity metrics should increase again
+    proj_ig_bytes_after, proj_ig_bytes_after_2 = query_until_condition(
+        proj_ig_bytes_after, res_proj_ig_bytes, condition=greater
+    )
+    assert proj_ig_bytes_after_2 > proj_ig_bytes_after
+
+    proj_ig_bytes_allocated_after, proj_ig_bytes_allocated_after_2 = query_until_condition(
+        proj_ig_bytes_allocated_after, res_proj_ig_bytes_allocated, condition=greater
+    )
+    assert proj_ig_bytes_allocated_after_2 > proj_ig_bytes_allocated_after
+
     # truncate and verify metrics decrease
     node.query("TRUNCATE TABLE test_proj_pk_bytes;")
 
@@ -204,6 +237,16 @@ def test_total_projection_pk_bytes_in_memory_fields(started_cluster):
 
     before_drop, after_drop = query_until_condition(
         proj_pk_bytes_allocated_after_2, res_proj_pk_bytes_allocated, condition=lesser
+    )
+    assert before_drop > after_drop
+
+    before_drop, after_drop = query_until_condition(
+        proj_ig_bytes_after_2, res_proj_ig_bytes, condition=lesser
+    )
+    assert before_drop > after_drop
+
+    before_drop, after_drop = query_until_condition(
+        proj_ig_bytes_allocated_after_2, res_proj_ig_bytes_allocated, condition=lesser
     )
     assert before_drop > after_drop
 

@@ -174,6 +174,7 @@ private:
     LazyMaterializingRowsPtr lazy_materializing_rows;
 
     StorageID storage_id = StorageID::createEmpty();
+    size_t prewhere_step_offset = 0;
 
     void logPredicateStatistics() const;
 

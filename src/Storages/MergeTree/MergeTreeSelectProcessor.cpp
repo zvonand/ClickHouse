@@ -339,7 +339,10 @@ ChunkAndProgress MergeTreeSelectProcessor::read()
                 break;
 
             if (storage_id.empty())
+            {
                 storage_id = task->getInfo().data_part->storage.getStorageID();
+                prewhere_step_offset = task->getInfo().mutation_steps.size(); 
+            }
         }
         catch (const Exception & e)
         {
@@ -431,8 +434,12 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     if (filter_step_indices.empty())
         return;
 
-    size_t first = all_filter_indices.front();
-    size_t last = all_filter_indices.back();
+    size_t first = prewhere_step_offset + all_filter_indices.front();
+    size_t last = prewhere_step_offset + all_filter_indices.back();
+
+    if (last >= counters.size() || !counters[first] || !counters[last])
+        return;
+
     UInt64 whole_input = counters[first]->rows_read;
     UInt64 whole_passed = counters[last]->rows_passed_filter;
 
@@ -449,15 +456,16 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     if (prewhere_info)
         filter_expr = prewhere_info->prewhere_actions.dumpDAG();
 
-    for (UInt64 step_i : filter_step_indices)
+    for (size_t step_i : filter_step_indices)
     {
         const auto & step = prewhere_actions.steps[step_i];
+        size_t counter_i = prewhere_step_offset + step_i;
 
-        if (step_i >= counters.size() || !counters[step_i])
+        if (counter_i >= counters.size() || !counters[counter_i])
             continue;
 
-        UInt64 input_rows = counters[step_i]->rows_read.load();
-        UInt64 passed_rows = counters[step_i]->rows_passed_filter.load();
+        UInt64 input_rows = counters[counter_i]->rows_read.load();
+        UInt64 passed_rows = counters[counter_i]->rows_passed_filter.load();
 
         if (input_rows == 0)
             continue;

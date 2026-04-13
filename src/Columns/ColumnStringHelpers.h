@@ -3,7 +3,6 @@
 #include <cstring>
 #include <cassert>
 
-#include <Columns/IColumn.h>
 #include <Common/Exception.h>
 #include <Common/PODArray.h>
 #include <Columns/ColumnString.h>

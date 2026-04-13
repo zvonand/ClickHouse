@@ -182,6 +182,12 @@ class JobConfigs:
         allow_merge_on_failure=True,
         enable_gh_auth=True,
     )
+    ci_tests = Job.Config(
+        name=JobNames.CI_TESTS,
+        runs_on=RunnerLabels.STYLE_CHECK_ARM,
+        command="python3 ./ci/jobs/ci_tests_job.py",
+        timeout=1200,
+    )
     fast_test = Job.Config(
         name=JobNames.FAST_TEST,
         runs_on=RunnerLabels.AMD_LARGE,

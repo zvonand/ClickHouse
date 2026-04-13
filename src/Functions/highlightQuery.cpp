@@ -30,13 +30,14 @@ struct HighlightQueryImpl
     }
 
     static void processRow(
-        std::string_view query, const char * begin,
+        std::string_view query,
         PaddedPODArray<UInt64> & data_begin,
         PaddedPODArray<UInt64> & data_end,
         PaddedPODArray<Int8> & data_type,
         size_t & total,
         const QueryTokenizationSettings & settings)
     {
+        const char * begin = query.data();
         const char * end = begin + query.size();
 
         Tokens tokens(begin, end, /* max_query_size = */ 0, /* skip_insignificant = */ true);

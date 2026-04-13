@@ -46,7 +46,7 @@ struct QueryTokenizationSettings
 /// Impl must provide:
 ///   static constexpr auto name = "...";
 ///   static DataTypePtr makeEnumType();
-///   static void processRow(std::string_view query, const char * begin,
+///   static void processRow(std::string_view query,
 ///                          PaddedPODArray<UInt64> & data_begin,
 ///                          PaddedPODArray<UInt64> & data_end,
 ///                          PaddedPODArray<Int8> & data_type,
@@ -109,9 +109,8 @@ public:
         for (size_t i = 0; i < input_rows_count; ++i)
         {
             std::string_view query = col_query.getDataAt(i);
-            const char * begin = query.data();
 
-            Impl::processRow(query, begin, data_begin, data_end, data_type, total, parser_settings);
+            Impl::processRow(query, data_begin, data_end, data_type, total, parser_settings);
 
             offsets[i] = total;
         }

@@ -64,14 +64,21 @@ def test_parallel_replicas_with_view(start_cluster):
             """
         )
         node.query(
-            "INSERT INTO t1 SELECT number, number * 10 FROM numbers_mt(100000) ORDER BY ALL"
-        )
-        node.query(
-            "INSERT INTO t2 SELECT number + 100000, number * 20 FROM numbers_mt(100000) ORDER BY ALL"
-        )
-        node.query(
             "CREATE VIEW IF NOT EXISTS v AS SELECT key, value FROM t1 UNION ALL SELECT key, value FROM t2"
         )
+
+    nodes[0].query(
+        "INSERT INTO t1 SELECT number, number * 10 FROM numbers_mt(100000) ORDER BY ALL"
+    )
+    nodes[0].query(
+        "INSERT INTO t2 SELECT number + 100000, number * 20 FROM numbers_mt(100000) ORDER BY ALL"
+    )
+
+    nodes[1].query("SYSTEM SYNC REPLICA t1")
+    nodes[2].query("SYSTEM SYNC REPLICA t1")
+
+    nodes[1].query("SYSTEM SYNC REPLICA t2")
+    nodes[2].query("SYSTEM SYNC REPLICA t2")
 
     settings = {
         "enable_analyzer": 1,

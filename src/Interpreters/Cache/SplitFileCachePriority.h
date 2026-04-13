@@ -166,6 +166,9 @@ public:
             : QueueEntryType::SplitCache_System;
     }
 
+    const Iterator * getNestedOrThis() const override { return iterator->getNestedOrThis(); }
+    Iterator * getNestedOrThis() override { return iterator->getNestedOrThis(); }
+
     const FileSegmentKeyType type;
 
 private:

@@ -216,9 +216,11 @@ void EvictionCandidates::removeQueueEntries(const CachePriorityGuard::WriteLock 
         {
             auto queue_iterator = candidate->getQueueIterator();
 
-            /// Save the original queue type before invalidation so we can
+            /// Save the inner queue type before invalidation so we can
             /// restore entries to their original queue if eviction fails.
-            original_queue_types[candidate.get()] = queue_iterator->getType();
+            /// Use getNestedOrThis() to see through SplitIterator and get
+            /// the SLRU_Protected/SLRU_Probationary type, not SplitCache_Data/System.
+            original_queue_types[candidate.get()] = queue_iterator->getNestedOrThis()->getType();
 
             queue_iterator->invalidate();
 

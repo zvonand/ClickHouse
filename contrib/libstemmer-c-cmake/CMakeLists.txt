@@ -1,3 +1,5 @@
+option(WITH_LIBSTEMMER "Enable libstemmer (Snowball stemming algorithms)" ${ENABLE_LIBRARIES})
+
 if (NOT WITH_LIBSTEMMER)
     message(STATUS "Not using libstemmer (Snowball)")
     return()

@@ -178,10 +178,7 @@ if (USE_MONGODB)
     add_contrib (mongo-cxx-driver-cmake mongo-cxx-driver) # requires: libmongoc, libbson
 endif()
 
-option(WITH_LIBSTEMMER "Enable libstemmer (Snowball stemming algorithms)" ${ENABLE_LIBRARIES})
-if (WITH_LIBSTEMMER)
-    add_contrib (libstemmer-c-cmake libstemmer_c)
-endif()
+add_contrib (libstemmer-c-cmake libstemmer_c)
 
 option(ENABLE_NLP "Enable NLP functions support" ${ENABLE_LIBRARIES})
 if (ENABLE_NLP)

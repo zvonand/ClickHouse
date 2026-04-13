@@ -310,7 +310,6 @@ private:
     double computeSelectivity(const JoinActionRef & edge);
     double computeSelectivity(const std::vector<JoinActionRef *> & edges);
     double computeSelectivity(const std::vector<JoinActionRef *> & edges, const BitSet & left, const BitSet & right);
-    double computeTransitiveSelectivity(const BitSet & left, const BitSet & right);
     size_t getColumnStats(BitSet rels, const String & column_name);
 
     /// Peridically called from potentially long running optimization to check time limits and send progress
@@ -390,21 +389,15 @@ double JoinOrderOptimizer::computeSelectivity(const std::vector<JoinActionRef *>
     return selectivity;
 }
 
-/// Compute selectivity from transitive equivalence classes.
-///
-/// Separated into a NO_INLINE function to work around an LLVM x86 backend bug
-/// (https://github.com/llvm/llvm-project/issues/191800) affecting LLVM 20–22+
-/// at -Og/-O1 with AVX2+ targets: when this code is inlined into the caller,
-/// the compiler uses vxorpd xmm0 + vmovupd ymm0 to zero-initialize the
-/// `visited` unordered_set, clobbering xmm0 which holds the live `double`
-/// return value from the edge-based selectivity computation.  On the
-/// early-exit path the spilled value is never reloaded, returning 0.0.
-/// Keeping this in a separate function prevents the zero-init from
-/// interfering with the caller's register allocation.
-double NO_INLINE JoinOrderOptimizer::computeTransitiveSelectivity(const BitSet & left, const BitSet & right)
+/// Compute selectivity combining direct edges and transitive equivalence classes.
+/// Direct edges and transitive equivalences may cover different columns between
+/// the two relation sets, so both contribute to the overall selectivity.
+double JoinOrderOptimizer::computeSelectivity(
+    const std::vector<JoinActionRef *> & edges, const BitSet & left, const BitSet & right)
 {
-    double selectivity = 1.0;
+    double selectivity = computeSelectivity(edges);
 
+    /// Also account for transitively-equivalent columns spanning both sides.
     using ConstClassPtr = EquivalenceClasses<JoinActionRef>::ConstClassPtr;
     std::unordered_set<ConstClassPtr> visited;
 
@@ -445,17 +438,6 @@ double NO_INLINE JoinOrderOptimizer::computeTransitiveSelectivity(const BitSet &
             selectivity = std::min(selectivity, 1.0 / static_cast<double>(max_ndv));
     }
 
-    return selectivity;
-}
-
-/// Compute selectivity combining direct edges and transitive equivalence classes.
-/// Direct edges and transitive equivalences may cover different columns between
-/// the two relation sets, so both contribute to the overall selectivity.
-double JoinOrderOptimizer::computeSelectivity(
-    const std::vector<JoinActionRef *> & edges, const BitSet & left, const BitSet & right)
-{
-    double selectivity = computeSelectivity(edges);
-    selectivity = std::min(selectivity, computeTransitiveSelectivity(left, right));
     return selectivity;
 }
 

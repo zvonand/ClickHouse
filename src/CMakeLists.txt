@@ -398,6 +398,14 @@ add_object_library(clickhouse_processors_ttl Processors/TTL)
 add_object_library(clickhouse_processors_merges_algorithms Processors/Merges/Algorithms)
 add_object_library(clickhouse_processors_queryplan Processors/QueryPlan)
 add_object_library(clickhouse_processors_queryplan_optimizations Processors/QueryPlan/Optimizations)
+
+# Work around LLVM x86 backend bug https://github.com/llvm/llvm-project/issues/191800
+# At -Og with AVX2+ targets, the compiler miscompiles functions that combine
+# floating-point return values with ymm-based memset zero-initialization.
+# Force -O2 for this file in debug x86 builds to avoid the buggy codegen.
+if (CMAKE_BUILD_TYPE_UC STREQUAL "DEBUG" AND ARCH_AMD64)
+    set_source_files_properties(Processors/QueryPlan/Optimizations/joinOrder.cpp PROPERTIES COMPILE_FLAGS "-O2")
+endif()
 add_object_library(clickhouse_user_defined_functions Functions/UserDefined)
 
 # Libcxx hardening means out-of-bounds checks which causes noticeable degradations for some workflows.

@@ -1,6 +1,6 @@
 #pragma once
-#include <Interpreters/Cache/IFileCachePriority.h>
-#include <Interpreters/Cache/FileCacheOriginInfo.h>
+#include <Interpreters/FileCache/IFileCachePriority.h>
+#include <Interpreters/FileCache/FileCacheOriginInfo.h>
 #include <boost/noncopyable.hpp>
 
 namespace DB

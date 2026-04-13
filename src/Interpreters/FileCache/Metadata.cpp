@@ -1,13 +1,13 @@
-#include <Interpreters/Cache/Metadata.h>
-#include <Interpreters/Cache/FileCache.h>
-#include <Interpreters/Cache/FileSegment.h>
+#include <Interpreters/FileCache/Metadata.h>
+#include <Interpreters/FileCache/FileCache.h>
+#include <Interpreters/FileCache/FileSegment.h>
 #include <Interpreters/Context.h>
 #include <Common/ProfileEvents.h>
 #include <Common/logger_useful.h>
 #include <Common/ElapsedTimeProfileEventIncrement.h>
 #include <Common/ErrnoException.h>
 #include <filesystem>
-#include <Interpreters/Cache/FileSegmentInfo.h>
+#include <Interpreters/FileCache/FileSegmentInfo.h>
 
 namespace fs = std::filesystem;
 

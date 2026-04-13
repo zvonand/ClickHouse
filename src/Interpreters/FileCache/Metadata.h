@@ -3,11 +3,11 @@
 
 #include <boost/noncopyable.hpp>
 #include <base/isSharedPtrUnique.h>
-#include <Interpreters/Cache/Guards.h>
-#include <Interpreters/Cache/IFileCachePriority.h>
-#include <Interpreters/Cache/FileCacheKey.h>
-#include <Interpreters/Cache/FileSegment.h>
-#include <Interpreters/Cache/FileCache_fwd_internal.h>
+#include <Interpreters/FileCache/Guards.h>
+#include <Interpreters/FileCache/IFileCachePriority.h>
+#include <Interpreters/FileCache/FileCacheKey.h>
+#include <Interpreters/FileCache/FileSegment.h>
+#include <Interpreters/FileCache/FileCache_fwd_internal.h>
 #include <Common/SharedMutex.h>
 #include <Common/ThreadPool.h>
 

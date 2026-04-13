@@ -1,7 +1,7 @@
 #pragma once
 
-#include <Interpreters/Cache/FileCache_fwd.h>
-#include <Interpreters/Cache/FileCacheSettings.h>
+#include <Interpreters/FileCache/FileCache_fwd.h>
+#include <Interpreters/FileCache/FileCacheSettings.h>
 
 #include <boost/noncopyable.hpp>
 #include <unordered_map>

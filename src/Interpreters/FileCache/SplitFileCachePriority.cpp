@@ -1,11 +1,11 @@
 #include <algorithm>
 #include <cstdio>
-#include <Interpreters/Cache/EvictionCandidates.h>
-#include <Interpreters/Cache/FileCache.h>
-#include <Interpreters/Cache/FileCacheKey.h>
-#include <Interpreters/Cache/Guards.h>
-#include <Interpreters/Cache/IFileCachePriority.h>
-#include <Interpreters/Cache/SplitFileCachePriority.h>
+#include <Interpreters/FileCache/EvictionCandidates.h>
+#include <Interpreters/FileCache/FileCache.h>
+#include <Interpreters/FileCache/FileCacheKey.h>
+#include <Interpreters/FileCache/Guards.h>
+#include <Interpreters/FileCache/IFileCachePriority.h>
+#include <Interpreters/FileCache/SplitFileCachePriority.h>
 #include <Common/assert_cast.h>
 #include <Common/logger_useful.h>
 

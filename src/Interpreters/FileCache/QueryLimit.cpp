@@ -1,6 +1,6 @@
-#include <Interpreters/Cache/FileCache.h>
-#include <Interpreters/Cache/Metadata.h>
-#include <Interpreters/Cache/QueryLimit.h>
+#include <Interpreters/FileCache/FileCache.h>
+#include <Interpreters/FileCache/Metadata.h>
+#include <Interpreters/FileCache/QueryLimit.h>
 #include <IO/ReadSettings.h>
 #include <Common/CurrentThread.h>
 

@@ -1,6 +1,6 @@
-#include <Interpreters/Cache/EvictionCandidates.h>
-#include <Interpreters/Cache/FileCache.h>
-#include <Interpreters/Cache/LRUFileCachePriority.h>
+#include <Interpreters/FileCache/EvictionCandidates.h>
+#include <Interpreters/FileCache/FileCache.h>
+#include <Interpreters/FileCache/LRUFileCachePriority.h>
 #include <pcg-random/pcg_random.hpp>
 #include <Common/CurrentMetrics.h>
 #include <Common/CurrentThread.h>

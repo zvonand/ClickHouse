@@ -4,7 +4,7 @@
 #include <Core/NamesAndTypes.h>
 #include <Core/SettingsFields.h>
 #include <Core/SettingsEnums.h>
-#include <Interpreters/Cache/FileCache_fwd.h>
+#include <Interpreters/FileCache/FileCache_fwd.h>
 #include <Storages/ColumnsDescription.h>
 
 namespace Poco { namespace Util { class AbstractConfiguration; } } // NOLINT(cppcoreguidelines-virtual-class-destructor)

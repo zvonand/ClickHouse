@@ -1,11 +1,10 @@
 #pragma once
 
 #include <list>
-#include <Interpreters/Cache/IFileCachePriority.h>
-#include <Interpreters/Cache/FileCacheKey.h>
-#include <Interpreters/Cache/CacheUsage.h>
+#include <Interpreters/FileCache/IFileCachePriority.h>
+#include <Interpreters/FileCache/CacheUsage.h>
 #include <Common/logger_useful.h>
-#include <Interpreters/Cache/Guards.h>
+#include <Interpreters/FileCache/Guards.h>
 
 
 namespace DB

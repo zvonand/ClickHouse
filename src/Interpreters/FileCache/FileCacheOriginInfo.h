@@ -1,6 +1,6 @@
 #pragma once
 #include <Core/UUID.h>
-#include <Interpreters/Cache/FileSegmentKeyType.h>
+#include <Interpreters/FileCache/FileSegmentKeyType.h>
 #include <sys/types.h>
 
 namespace DB

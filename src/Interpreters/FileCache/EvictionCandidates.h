@@ -1,7 +1,7 @@
 #pragma once
-#include <Interpreters/Cache/IFileCachePriority.h>
-#include <Interpreters/Cache/CacheUsage.h>
-#include <Interpreters/Cache/FileCacheOriginInfo.h>
+#include <Interpreters/FileCache/IFileCachePriority.h>
+#include <Interpreters/FileCache/CacheUsage.h>
+#include <Interpreters/FileCache/FileCacheOriginInfo.h>
 #include <deque>
 
 namespace DB

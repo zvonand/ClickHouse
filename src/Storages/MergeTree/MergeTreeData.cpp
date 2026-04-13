@@ -10493,15 +10493,16 @@ MergeTreeSettingsPtr MergeTreeData::getSettings(ProjectionDescriptionRawPtr proj
 
 StorageMetadataPtr MergeTreeData::getInMemoryMetadataPtr(ContextPtr query_context, bool bypass_metadata_cache) const
 {
-    if (bypass_metadata_cache || !query_context || !query_context->hasQueryContext()
-        || !query_context->getSettingsRef()[Setting::enable_shared_storage_snapshot_in_query])
+    if (bypass_metadata_cache)
         return IStorage::getInMemoryMetadataPtr(query_context, bypass_metadata_cache);
 
-    auto query_metadata_cache = query_context->getQueryMetadataCache();
-    if (!query_metadata_cache)
+    if (!query_context || !query_context->hasQueryContext() || !query_context->getQueryMetadataCache())
         return IStorage::getInMemoryMetadataPtr(query_context, bypass_metadata_cache);
 
-    auto [cache, lock] = query_metadata_cache->getStorageMetadataCache();
+    if (!query_context->getSettingsRef()[Setting::enable_shared_storage_snapshot_in_query])
+        return IStorage::getInMemoryMetadataPtr(query_context, bypass_metadata_cache);
+
+    auto [cache, lock] = query_context->getQueryMetadataCache()->getStorageMetadataCache();
     auto it = cache->find(this);
     if (it != cache->end())
         return it->second;

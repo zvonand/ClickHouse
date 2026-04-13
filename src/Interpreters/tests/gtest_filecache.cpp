@@ -108,6 +108,7 @@ using HolderPtr = FileSegmentsHolderPtr;
 fs::path caches_dir = fs::current_path() / "lru_cache_test";
 std::string cache_base_path = caches_dir / "cache1" / "";
 std::string cache_base_path2 = caches_dir / "cache2" / "";
+std::string cache_base_path3 = caches_dir / "cache3" / "";
 
 
 void assertEqual(const FileSegmentsHolderPtr & file_segments, const Ranges & expected_ranges, const States & expected_states = {})
@@ -355,14 +356,19 @@ public:
             fs::remove_all(cache_base_path);
         if (fs::exists(cache_base_path2))
             fs::remove_all(cache_base_path2);
+        if (fs::exists(cache_base_path3))
+            fs::remove_all(cache_base_path3);
         fs::create_directories(cache_base_path);
         fs::create_directories(cache_base_path2);
+        fs::create_directories(cache_base_path3);
     }
 
     void TearDown() override
     {
         if (fs::exists(cache_base_path))
             fs::remove_all(cache_base_path);
+        if (fs::exists(cache_base_path3))
+            fs::remove_all(cache_base_path3);
     }
 
     pcg64 rng;

@@ -88,20 +88,21 @@ WHERE table = '$TABLE' AND column_name = 'status' AND function_name = 'equals'
     AND passed_rows = 0;
 "
 
-# ---- Test 4: Multi-column predicate (a > b) should be skipped ----
+# ---- Test 4: Multi-column predicate (a > b) should produce no log entries ----
 
+TABLE_MC="${TABLE}_mc"
 $CLICKHOUSE_CLIENT -m --query "
-$ENABLE_STATS; SELECT * FROM $TABLE WHERE id > score FORMAT Null;
+$ENABLE_STATS;
+DROP TABLE IF EXISTS $TABLE_MC;
+CREATE TABLE $TABLE_MC (id UInt64, score Float64) ENGINE = MergeTree ORDER BY id
+SETTINGS index_granularity = 8192, min_bytes_for_wide_part = 0;
+INSERT INTO $TABLE_MC SELECT number, number * 0.5 FROM numbers(1000);
+$ENABLE_STATS; SELECT * FROM $TABLE_MC WHERE id > score FORMAT Null;
 SYSTEM FLUSH LOGS predicate_statistics_log;
 "
 
 echo '--- multi-column skipped ---'
-$CLICKHOUSE_CLIENT -m --query "
-SELECT count() = 0 AS skipped
-FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND function_name = 'greater'
-    AND column_name = '' AND passed_rows = 0 AND input_rows = 0;
-"
+$CLICKHOUSE_CLIENT --query "SELECT count() = 0 AS skipped FROM system.predicate_statistics_log WHERE table = '$TABLE_MC' AND column_name != ''"
 
 # ---- Test 5: predicate_statistics_sample_rate = 0 → nothing logged ----
 
@@ -177,3 +178,4 @@ WHERE table = '$TABLE' AND passed_rows > input_rows;
 # ---- Cleanup ----
 $CLICKHOUSE_CLIENT --query "DROP TABLE $TABLE"
 $CLICKHOUSE_CLIENT --query "DROP TABLE IF EXISTS $TABLE2"
+$CLICKHOUSE_CLIENT --query "DROP TABLE IF EXISTS $TABLE_MC"

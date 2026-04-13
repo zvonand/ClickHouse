@@ -4,7 +4,6 @@
 #include <type_traits>
 #include <Columns/ColumnsNumber.h>
 #include <Columns/ColumnsCommon.h>
-#include <Columns/ColumnDecimal.h>
 #include <Core/DecimalFunctions.h>
 #include <Core/callOnTypeIndex.h>
 #include <DataTypes/DataTypesDecimal.h>

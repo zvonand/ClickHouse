@@ -3,7 +3,6 @@
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnConst.h>
 #include <Columns/ColumnString.h>
-#include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnVector.h>
 #include <Core/Settings.h>
 #include <DataTypes/DataTypeArray.h>

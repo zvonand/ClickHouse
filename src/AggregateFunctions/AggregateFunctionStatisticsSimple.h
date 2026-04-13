@@ -13,7 +13,6 @@
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypesDecimal.h>
 #include <Columns/ColumnVector.h>
-#include <Columns/ColumnDecimal.h>
 
 
 /** This is simple, not numerically stable

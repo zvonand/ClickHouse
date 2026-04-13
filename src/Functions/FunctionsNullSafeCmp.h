@@ -4,7 +4,6 @@
 #include <DataTypes/IDataType.h>
 #include <Functions/IFunction.h>
 #include <Functions/FunctionsComparison.h>
-#include <Columns/ColumnNullable.h>
 #include <Common/quoteString.h>
 #include <Columns/ColumnVariant.h>
 #include <Columns/ColumnDynamic.h>

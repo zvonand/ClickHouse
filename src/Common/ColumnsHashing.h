@@ -12,7 +12,6 @@
 #include <Common/assert_cast.h>
 #include <base/unaligned.h>
 
-#include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnLowCardinality.h>
 
 #include <Core/Defines.h>

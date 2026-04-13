@@ -1,6 +1,5 @@
 #pragma once
 #include <Columns/ColumnArray.h>
-#include <Columns/ColumnNullable.h>
 #include <Columns/ColumnsNumber.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypesNumber.h>

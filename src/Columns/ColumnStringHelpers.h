@@ -4,7 +4,6 @@
 #include <cassert>
 
 #include <Common/Exception.h>
-#include <Common/PODArray.h>
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnFixedString.h>
 #include <IO/WriteBufferFromVector.h>

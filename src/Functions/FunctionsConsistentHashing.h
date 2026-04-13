@@ -5,7 +5,6 @@
 #include <DataTypes/DataTypesNumber.h>
 #include <Functions/FunctionHelpers.h>
 #include <Functions/IFunction.h>
-#include <Common/typeid_cast.h>
 #include <base/IPv4andIPv6.h>
 #include <Interpreters/Context_fwd.h>
 

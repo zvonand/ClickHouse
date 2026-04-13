@@ -10,7 +10,6 @@
 #include <Columns/ColumnConst.h>
 #include <Columns/ColumnNullable.h>
 
-#include <Common/typeid_cast.h>
 #include <Common/assert_cast.h>
 
 namespace DB::GatherUtils

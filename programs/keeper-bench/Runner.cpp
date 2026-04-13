@@ -411,7 +411,7 @@ void Runner::thread(std::vector<std::shared_ptr<Coordination::ZooKeeper>> zookee
             tracing_context.trace_id = DB::UUIDHelpers::generateV4();
             tracing_context.span_id = 0;
             tracing_context.trace_flags = DB::OpenTelemetry::TRACE_FLAG_SAMPLED | DB::OpenTelemetry::TRACE_FLAG_KEEPER_SPANS;
-            request->tracing_context = tracing_context;
+            request->tracing_context = std::make_shared<DB::OpenTelemetry::TracingContext>(tracing_context);
         }
 
         InFlightRequest slot;

@@ -11,7 +11,6 @@
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnTuple.h>
 #include <Common/NaNUtils.h>
-#include <DataTypes/DataTypeArray.h>
 #include <DataTypes/IDataType.h>
 #include <DataTypes/DataTypeFactory.h>
 #include <Interpreters/castColumn.h>

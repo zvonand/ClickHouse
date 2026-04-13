@@ -1,6 +1,5 @@
 #pragma once
 
-#include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeString.h>
 #include <Storages/System/IStorageSystemOneBlock.h>
 #include <Storages/MergeTree/MergeTreeData.h>

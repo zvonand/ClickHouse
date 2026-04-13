@@ -4,9 +4,7 @@
 #include <cstring>
 
 
-#include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypesDecimal.h>
-#include <DataTypes/DataTypeNullable.h>
 #include <Columns/ColumnVector.h>
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnNullable.h>

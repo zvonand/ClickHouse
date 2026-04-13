@@ -1,7 +1,6 @@
 #pragma once
 
 #include <DataTypes/DataTypeString.h>
-#include <DataTypes/DataTypeArray.h>
 #include <Storages/System/IStorageSystemOneBlock.h>
 
 

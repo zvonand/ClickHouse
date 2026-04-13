@@ -1882,7 +1882,7 @@ void FileCache::loadMetadataImpl()
 
 void FileCache::loadMetadataForKey(const fs::path & key_directory, const OriginInfo & origin_info)
 {
-    if (fs::directory_iterator{key_directory} == fs::directory_iterator{})
+    if (fs::is_empty(key_directory))
     {
         LOG_DEBUG(log, "Removing empty key directory: {}", key_directory.string());
         fs::remove(key_directory);

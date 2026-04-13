@@ -146,6 +146,14 @@ RemoteQueryExecutor::RemoteQueryExecutor(
                 }
                 else
                 {
+                    LOG_DEBUG(
+                        log ? log : getLogger("RemoteQueryExecutor"),
+                        "Disconnecting replica {} (protocol_version={}, parallel_replicas_version={}): "
+                        "no stream_id support (requires parallel_replicas_version >= {})",
+                        result.entry->getDescription(),
+                        protocol_version,
+                        parallel_replicas_version,
+                        DBMS_PARALLEL_REPLICAS_MIN_VERSION_WITH_STREAM_ID);
                     result.entry->disconnect();
                 }
             }

@@ -1285,6 +1285,9 @@ SYSTEM CLEAR FILESYSTEM CACHE;
             "SYSTEM ENABLE FAILPOINT file_cache_dynamic_resize_fail_to_evict"
         )
 
+        # Anchor log position so we only check lines written from now on
+        log_anchor = node.count_log_lines()
+
         # Attempt to shrink -- eviction will fail, so limits should stay
         # at old values (or somewhere between old and desired)
         node.replace_config(
@@ -1293,17 +1296,14 @@ SYSTEM CLEAR FILESYSTEM CACHE;
         )
         node.query("SYSTEM RELOAD CONFIG")
 
-        import time
-
         # Wait for the background resize thread to attempt (and fail) the resize.
         # Confirm the failure path actually ran by checking for the log message
         # emitted when eviction candidates fail.
-        for _ in range(60):
-            if node.contains_in_log("Having .* failed candidates"):
-                break
-            time.sleep(1)
-        else:
-            assert False, "Resize failure path was not exercised (log message not found)"
+        node.wait_for_log_line(
+            "Having .* failed candidates",
+            timeout=60,
+            look_behind_lines=f"+{log_anchor}",
+        )
 
         # Disable failpoint before checking state
         node.query(

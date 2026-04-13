@@ -102,7 +102,7 @@ elseif (ARCH_AMD64)
     if (OS_LINUX AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "amd64|x86_64" AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 2)
         set (X86_REQUIRED_FLAGS "ssse3|sse4_1|sse4_2|popcnt")
         if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
-            set (X86_REQUIRED_FLAGS "${X86_REQUIRED_FLAGS}|avx2|bmi2|fma")
+            set (X86_REQUIRED_FLAGS "${X86_REQUIRED_FLAGS}|avx|avx2|bmi1|bmi2|fma|f16c|lzcnt|movbe")
         endif ()
         if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 4)
             set (X86_REQUIRED_FLAGS "${X86_REQUIRED_FLAGS}|avx512f|avx512bw|avx512cd|avx512dq|avx512vl")
@@ -119,7 +119,7 @@ elseif (ARCH_AMD64)
         if (NOT FLAGS)
             message (FATAL_ERROR
                 "The build machine does not support x86-64-v${X86_ARCH_LEVEL} "
-                "(missing one of: ${X86_REQUIRED_FLAGS}).  "
+                "(missing at least one required flag from: ${X86_REQUIRED_FLAGS}).  "
                 "Run cmake with -DX86_ARCH_LEVEL=<level> to lower the requirement.")
         endif ()
     endif ()

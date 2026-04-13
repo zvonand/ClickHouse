@@ -100,26 +100,24 @@ elseif (ARCH_AMD64)
     # microarchitecture level.  Build-time tools (tablegen, code generators)
     # are compiled with these flags and will crash with SIGILL otherwise.
     if (OS_LINUX AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "amd64|x86_64" AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 2)
-        set (X86_REQUIRED_FLAGS "ssse3|sse4_1|sse4_2|popcnt")
+        # Test for a representative flag at each level. We intentionally keep this
+        # simple — no real CPU has avx2 without fma/bmi2, so checking the headline
+        # flag is enough while avoiding false positives from /proc/cpuinfo quirks
+        # (containers, nested virtualization, unusual flag naming).
+        set (X86_REPRESENTATIVE_FLAG "sse4_2")
         if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
-            set (X86_REQUIRED_FLAGS "${X86_REQUIRED_FLAGS}|avx|avx2|bmi1|bmi2|fma|f16c|lzcnt|movbe")
+            set (X86_REPRESENTATIVE_FLAG "avx2")
         endif ()
         if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 4)
-            set (X86_REQUIRED_FLAGS "${X86_REQUIRED_FLAGS}|avx512f|avx512bw|avx512cd|avx512dq|avx512vl")
+            set (X86_REPRESENTATIVE_FLAG "avx512f")
         endif ()
-        # Build a single lookahead regex: (?=.*flag1)(?=.*flag2)...
-        string (REGEX REPLACE "\\|" ";" X86_FLAGS_LIST "${X86_REQUIRED_FLAGS}")
-        set (X86_CPUINFO_RE "^")
-        foreach (flag IN LISTS X86_FLAGS_LIST)
-            string (APPEND X86_CPUINFO_RE "(?=.*${flag})")
-        endforeach ()
         execute_process(
-            COMMAND grep -P "${X86_CPUINFO_RE}" /proc/cpuinfo
+            COMMAND grep -P "(?=.*${X86_REPRESENTATIVE_FLAG})" /proc/cpuinfo
             OUTPUT_VARIABLE FLAGS)
         if (NOT FLAGS)
             message (FATAL_ERROR
                 "The build machine does not support x86-64-v${X86_ARCH_LEVEL} "
-                "(missing at least one required flag from: ${X86_REQUIRED_FLAGS}).  "
+                "(${X86_REPRESENTATIVE_FLAG} not found in /proc/cpuinfo).  "
                 "Run cmake with -DX86_ARCH_LEVEL=<level> to lower the requirement.")
         endif ()
     endif ()

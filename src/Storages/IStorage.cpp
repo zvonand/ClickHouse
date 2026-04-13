@@ -51,14 +51,7 @@ IStorage::IStorage(StorageID storage_id_, std::unique_ptr<StorageInMemoryMetadat
 bool IStorage::isVirtualColumn(const String & column_name, const StorageMetadataPtr & metadata_snapshot) const
 {
     /// Virtual column maybe overridden by real column
-    const auto virtual_columns = virtuals.get();
-    return !metadata_snapshot->getColumns().has(column_name) && (virtual_columns->has(column_name) || getCommonVirtuals(virtual_columns)->has(column_name));
-}
-
-VirtualColumnsDescription IStorage::createCommonVirtuals([[maybe_unused]] const VirtualColumnsDescription & storage_virtuals)
-{
-    VirtualColumnsDescription desc;
-    return desc;
+    return !metadata_snapshot->getColumns().has(column_name) && virtuals.get()->has(column_name);
 }
 
 RWLockImpl::LockHolder IStorage::tryLockTimed(

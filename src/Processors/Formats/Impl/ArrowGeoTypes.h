@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Columns/ColumnTuple.h>
 #include <Core/ColumnsWithTypeAndName.h>
 #include <Common/WKB.h>
 

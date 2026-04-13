@@ -4,6 +4,7 @@
 #include <base/types.h>
 #include <Common/ZooKeeper/KeeperFeatureFlags.h>
 
+#include <limits>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -113,7 +114,11 @@ enum class Error : int32_t
     ZNOTHING = -117,                    /// (not error) no server responses to process
     ZSESSIONMOVED = -118,               /// Session moved to another server, so operation is ignored
     ZNOTREADONLY = -119,                /// State-changing request is passed to read-only server
-    ZNOWATCHER = -121                   /// No wathces were found
+    ZNOWATCHER = -121,                  /// No wathces were found
+
+    /// IMPORTANT: Update these when adding new error codes.
+    MIN = ZNOWATCHER,
+    MAX = ZOK,
 };
 
 /// Network errors and similar. You should reinitialize ZooKeeper session in case of these errors
@@ -454,6 +459,22 @@ struct RemoveRecursiveResponse : virtual Response
 {
 };
 
+
+struct ListRecursiveResponse : virtual Response
+{
+    std::vector<String> children;
+
+    void removeRootPath(const String & root_path) override;
+
+    size_t bytesSize() const override
+    {
+        size_t result = 0;
+        for (const auto & child : children)
+            result += child.size();
+        return result;
+    }
+};
+
 struct ExistsRequest : virtual Request
 {
     String path;
@@ -544,6 +565,14 @@ struct ListResponse : virtual Response
             size += child_data.size();
         return size;
     }
+};
+
+struct ListRecursiveRequest : virtual ListRequest
+{
+    /// strict limit for number of listed nodes
+    uint32_t children_nodes_limit = std::numeric_limits<uint32_t>::max();
+
+    size_t bytesSize() const override { return ListRequest::bytesSize() + sizeof(children_nodes_limit); }
 };
 
 struct CheckRequest : virtual Request
@@ -662,6 +691,7 @@ using SyncCallback = std::function<void(const SyncResponse &)>;
 using ReconfigCallback = std::function<void(const ReconfigResponse &)>;
 using MultiCallback = std::function<void(const MultiResponse &)>;
 using GetACLCallback = std::function<void(const GetACLResponse &)>;
+using ListRecursiveCallback = std::function<void(const ListRecursiveResponse &)>;
 
 /// For watches.
 enum State
@@ -765,6 +795,11 @@ public:
         const String & path,
         uint32_t remove_nodes_limit,
         RemoveRecursiveCallback callback) = 0;
+
+    virtual void listRecursive(
+        const String & path,
+        uint32_t get_children_recursive_nodes_limit,
+        ListRecursiveCallback callback) = 0;
 
     virtual void exists(
         const String & path,

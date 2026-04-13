@@ -5,6 +5,7 @@ from ci.defs.defs import (
     DOCKERS,
     SECRETS,
     ArtifactConfigs,
+    ArtifactNames,
     JobNames,
 )
 from ci.defs.job_configs import JobConfigs
@@ -21,7 +22,7 @@ FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES = [
         for substr in (
             "_debug, parallel",
             "_binary, parallel",
-            "_asan, distributed plan, parallel",
+            "_asan_ubsan, distributed plan, parallel",
             "_tsan, parallel",
         )
     )
@@ -62,7 +63,7 @@ workflow = Workflow.Config(
             job.set_dependency(FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES)
             for job in JobConfigs.special_build_jobs
         ],
-        *JobConfigs.build_llvm_coverage_job,
+        *[job.set_dependency(STYLE_AND_FAST_TESTS) for job in JobConfigs.build_llvm_coverage_job],
         JobConfigs.smoke_tests_macos,
         # TODO: stabilize new jobs and remove set_allow_merge_on_failure
         JobConfigs.lightweight_functional_tests_job,
@@ -87,6 +88,7 @@ workflow = Workflow.Config(
             for job in JobConfigs.functional_tests_jobs_azure
         ],
         *JobConfigs.functional_test_llvm_coverage_jobs,
+        *JobConfigs.functional_test_excluded_from_llvm_job,
         *[
             job.set_dependency(FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES)
             for job in JobConfigs.integration_test_jobs_required[:]
@@ -96,6 +98,7 @@ workflow = Workflow.Config(
             for job in JobConfigs.integration_test_jobs_non_required
         ],
         *JobConfigs.integration_test_llvm_coverage_jobs,
+        *JobConfigs.integration_test_excluded_from_llvm_job,
         *JobConfigs.unittest_jobs,
         *JobConfigs.unittest_llvm_coverage_job,
         JobConfigs.docker_server.set_dependency(
@@ -136,6 +139,11 @@ workflow = Workflow.Config(
         JobConfigs.sqllogic_test_master_job.set_dependency(
             FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES
         ),
+        # Keeper stress (PR): 3 no-fault scenarios (prod-mix, read-multi, write-multi),
+        # default backend only, 15 min each. Runs when src/Coordination or stress test files change.
+        JobConfigs.keeper_stress_job
+            .set_name("Keeper Stress Tests (PR)")
+            .set_timeout(3 * 3600),
         *JobConfigs.toolchain_build_jobs,
         # TODO: uncomment when praktika supports depends-on-all-jobs;
         # currently set_dependency requires an explicit list, but CI Results Review

@@ -742,7 +742,13 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
     {
         auto tokens = stringToTokens(value_field);
         if (tokens.empty())
+        {
+            const String & string_needle = value_field.safeGet<String>();
+            if (!string_needle.empty())
+                return false;
+
             tokens.push_back("");
+        }
 
         out.function = RPNElement::FUNCTION_EQUALS;
         out.text_search_queries.emplace_back(std::make_shared<TextSearchQuery>(function_name, TextSearchMode::All, direct_read_mode, std::move(tokens)));

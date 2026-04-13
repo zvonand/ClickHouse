@@ -301,7 +301,14 @@ public:
         using ScaledValueType = std::conditional_t<std::is_floating_point_v<ValueType>, ValueType, UInt64>;
 
         Int64 scaled_value;
-        if constexpr (std::is_floating_point_v<ValueType>)
+        if constexpr (std::is_same_v<ValueType, UInt64>)
+        {
+            if (value > std::numeric_limits<Int64>::max())
+                throw Exception(ErrorCodes::INCORRECT_DATA,
+                    "Value {} does not fit in Int64. It should, even when using UInt64.", value);
+            scaled_value = static_cast<Int64>(value);
+        }
+        else if constexpr (std::is_floating_point_v<ValueType>)
         {
             UInt64 scaling = 1ULL << fraction_bit_num;
             auto scaled = static_cast<Float64>(value * static_cast<ValueType>(scaling));

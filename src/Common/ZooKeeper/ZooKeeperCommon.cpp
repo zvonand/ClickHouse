@@ -1600,7 +1600,7 @@ ZooKeeperRequestPtr ZooKeeperRequestFactory::get(OpNum op_num) const
         throw Exception(Error::ZBADARGUMENTS, "Unknown operation type {}", op_num);
 
     auto request = it->second();
-    request->spans = std::make_unique<DB::ZooKeeperOpentelemetrySpans>();
+    request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
     return request;
 }
 

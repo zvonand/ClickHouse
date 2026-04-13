@@ -418,7 +418,7 @@ std::shared_ptr<KeeperRequestForSession> IKeeperStateMachine::parseRequest(
     {
         version = WITH_OPTIONAL_TRACING_CONTEXT;
 
-        tracing_context = std::make_unique<OpenTelemetry::TracingContext>();
+        tracing_context = std::make_shared<OpenTelemetry::TracingContext>();
         tracing_context->deserialize(buffer);
     }
 

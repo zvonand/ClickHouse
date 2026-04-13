@@ -781,7 +781,7 @@ std::pair<Coordination::OpNum, Coordination::XID> KeeperTCPHandler::receiveReque
 
         if (has_tracing_context)
         {
-            request->tracing_context = std::make_unique<OpenTelemetry::TracingContext>();
+            request->tracing_context = std::make_shared<OpenTelemetry::TracingContext>();
             request->tracing_context->deserialize(read_buffer);
 
             ZooKeeperOpentelemetrySpans::maybeInitialize(request->spans->receive_request, request->tracing_context.get(), receive_start_time);

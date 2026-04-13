@@ -1170,7 +1170,7 @@ int64_t KeeperDispatcher::getSessionID(int64_t session_timeout_ms)
     request->internal_id = internal_session_id_counter.fetch_add(1);
     request->session_timeout_ms = session_timeout_ms;
     request->server_id = server->getServerID();
-    request->spans = std::make_unique<DB::ZooKeeperOpentelemetrySpans>();
+    request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
 
     request_info.request = request;
     using namespace std::chrono;

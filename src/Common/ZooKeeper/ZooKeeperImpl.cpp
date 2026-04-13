@@ -1504,14 +1504,14 @@ void ZooKeeper::pushRequest(RequestInfo && info)
         }
 
         maybeInjectSendFault();
-        info.request->spans = std::make_unique<DB::ZooKeeperOpentelemetrySpans>();
+        info.request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
 
         if (
             const auto & current_trace_context = OpenTelemetry::CurrentContext();
             current_trace_context.isTraceEnabled() && current_trace_context.trace_flags & DB::OpenTelemetry::TRACE_FLAG_KEEPER_SPANS
         )
         {
-            info.request->tracing_context = std::make_unique<OpenTelemetry::TracingContext>(current_trace_context);
+            info.request->tracing_context = std::make_shared<OpenTelemetry::TracingContext>(current_trace_context);
         }
 
         ZooKeeperOpentelemetrySpans::maybeInitialize(info.request->spans->client_requests_queue, info.request->tracing_context.get());
@@ -1951,7 +1951,7 @@ void ZooKeeper::close()
 
     RequestInfo request_info;
     request_info.request = std::make_shared<ZooKeeperCloseRequest>(std::move(request));
-    request_info.request->spans = std::make_unique<DB::ZooKeeperOpentelemetrySpans>();
+    request_info.request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
 
     ZooKeeperOpentelemetrySpans::maybeInitialize(request_info.request->spans->client_requests_queue, request_info.request->tracing_context.get());
 

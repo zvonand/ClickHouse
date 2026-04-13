@@ -105,7 +105,7 @@ class FuzzerLogParser:
                         continue
                     file = self.stderr_log
                 else:
-                    assert self.server_log
+                    assert self.server_log, "No server log provided"
                     file = self.server_log
                 output = Shell.get_output(
                     f"rg --text -A 10 -o '{pattern}' {file} | head -n10",

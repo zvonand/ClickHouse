@@ -1296,15 +1296,14 @@ SYSTEM CLEAR FILESYSTEM CACHE;
         import time
 
         # Wait for the background resize thread to attempt (and fail) the resize.
-        # The thread picks up target=10, fails eviction, reverts to 100.
-        # Since 100 is also the starting value, we double-check after a delay
-        # to confirm the thread actually ran.
-        for _ in range(30):
-            if get_max_size() == 100:
-                time.sleep(1)
-                if get_max_size() == 100:
-                    break
+        # Confirm the failure path actually ran by checking for the log message
+        # emitted when eviction candidates fail.
+        for _ in range(60):
+            if node.contains_in_log("Having .* failed candidates"):
+                break
             time.sleep(1)
+        else:
+            assert False, "Resize failure path was not exercised (log message not found)"
 
         # Disable failpoint before checking state
         node.query(
@@ -1340,6 +1339,10 @@ SYSTEM CLEAR FILESYSTEM CACHE;
             if get_max_size() == 10:
                 break
             time.sleep(1)
+
+        assert get_max_size() == 10, (
+            f"Dynamic resize to 10 did not complete, max_size is {get_max_size()}"
+        )
 
         assert get_downloaded_size() <= 10, (
             f"Cache size {get_downloaded_size()} exceeds new limit 10 after real resize"

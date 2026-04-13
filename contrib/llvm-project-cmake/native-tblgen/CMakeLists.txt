@@ -71,10 +71,16 @@ else()
     set(HAVE_MALLINFO_DEFINE "/* #undef HAVE_MALLINFO */")
 endif()
 
-# backtrace/execinfo.h - available on glibc Linux and macOS/BSD
-# For native-tblgen we assume the host has it (glibc or macOS)
-set(HAVE_BACKTRACE_DEFINE "#define HAVE_BACKTRACE 1")
-set(BACKTRACE_HEADER_DEFINE "#define BACKTRACE_HEADER <execinfo.h>")
+# backtrace/execinfo.h - available on glibc Linux and macOS.
+# FreeBSD requires a separate libexecinfo which we don't link here,
+# so we leave backtrace disabled there.
+if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+    set(HAVE_BACKTRACE_DEFINE "#define HAVE_BACKTRACE 1")
+    set(BACKTRACE_HEADER_DEFINE "#define BACKTRACE_HEADER <execinfo.h>")
+else()
+    set(HAVE_BACKTRACE_DEFINE "/* #undef HAVE_BACKTRACE */")
+    set(BACKTRACE_HEADER_DEFINE "/* No backtrace header */")
+endif()
 
 # getauxval is Linux-specific
 if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")

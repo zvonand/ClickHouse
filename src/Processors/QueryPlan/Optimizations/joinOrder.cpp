@@ -390,11 +390,11 @@ double JoinOrderOptimizer::computeSelectivity(const std::vector<JoinActionRef *>
     return selectivity;
 }
 
-/// Compute selectivity combining direct edges and transitive equivalence classes.
 /// Compute selectivity from transitive equivalence classes.
 ///
-/// Separated into a NO_INLINE function to work around a clang-21.1.8 codegen
-/// bug at -Og -march=x86-64-v3: when this code is inlined into the caller,
+/// Separated into a NO_INLINE function to work around an LLVM x86 backend bug
+/// (https://github.com/llvm/llvm-project/issues/191800) affecting LLVM 20–22+
+/// at -Og/-O1 with AVX2+ targets: when this code is inlined into the caller,
 /// the compiler uses vxorpd xmm0 + vmovupd ymm0 to zero-initialize the
 /// `visited` unordered_set, clobbering xmm0 which holds the live `double`
 /// return value from the edge-based selectivity computation.  On the

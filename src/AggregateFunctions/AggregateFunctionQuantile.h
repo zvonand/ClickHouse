@@ -10,7 +10,6 @@
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeAggregateFunction.h>
-#include <IO/ReadHelpers.h>
 #include <Common/assert_cast.h>
 #include <Interpreters/GatherFunctionQuantileVisitor.h>
 

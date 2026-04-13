@@ -10,7 +10,6 @@
 #include <Common/ArenaAllocator.h>
 #include <DataTypes/IDataType.h>
 #include <DataTypes/DataTypeString.h>
-#include <IO/ReadHelpers.h>
 #include <Common/VectorWithMemoryTracking.h>
 
 namespace DB

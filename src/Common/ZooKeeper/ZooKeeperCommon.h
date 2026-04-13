@@ -68,6 +68,7 @@ struct ZooKeeperRequest : virtual Request
 
     ZooKeeperRequest() = default;
     ZooKeeperRequest(const ZooKeeperRequest &) = delete;
+    ZooKeeperRequest(ZooKeeperRequest &&) = default;
 
     virtual OpNum getOpNum() const = 0;
     virtual int32_t tryGetOpNum() const { return static_cast<int32_t>(getOpNum()); }
